@@ -61,6 +61,17 @@ const REMOTE_PROFILE_URL = 'https://remotedomain.test/calendars/testcalendar';
 const REMOTE_INBOX_URL = 'https://remotedomain.test/calendars/testcalendar/inbox';
 const OBSERVER_CALENDAR_HANDLE = 'observercalendar@observerdomain.test';
 
+/** Stub signing on a service so deliverViaHttp can proceed without real keypairs. */
+function stubSigning(service: ProcessOutboxService, sandbox: sinon.SinonSandbox) {
+  sandbox.stub(service.calendarActorService, 'signActivity').resolves({
+    keyId: `${LOCAL_ACTOR_URL}#main-key`,
+    signature: 'mock-signature-base64',
+    algorithm: 'rsa-sha256',
+    headers: '(request-target) host date digest',
+    date: new Date().toUTCString(),
+  });
+}
+
 
 describe('resolveInbox', () => {
   let service: ProcessOutboxService;
@@ -370,7 +381,7 @@ describe('processOutboxMessage', () => {
     expect(updateStub.getCalls()[0].args[0]['processed_status']).toBe('ok');
   });
 
-  it('should send message to each recipient', async () => {
+  it('should send message to each recipient with signed headers', async () => {
     // Use Fedify helper to create a proper Create activity
     const activityMessage = createMockCreateActivity(LOCAL_ACTOR_URL, {
       type: 'Event',
@@ -389,6 +400,7 @@ describe('processOutboxMessage', () => {
     const updateStub = sandbox.stub(ActivityPubOutboxMessageEntity.prototype, 'update');
     const getRecipientsStub = sandbox.stub(service, 'getRecipients');
     const resolveStub = sandbox.stub(service, 'resolveInboxUrl');
+    stubSigning(service, sandbox);
 
     getCalendarStub.resolves(Calendar.fromObject({ id: TEST_CALENDAR_ID }));
     getRecipientsStub.resolves([REMOTE_CALENDAR_HANDLE, OBSERVER_CALENDAR_HANDLE]);
@@ -397,8 +409,133 @@ describe('processOutboxMessage', () => {
     await service.processOutboxMessage(message);
 
     expect(postStub.calledTwice).toBe(true);
+
+    // Verify signed headers are present on the POST request
+    const firstCallHeaders = postStub.getCalls()[0].args[2]?.headers;
+    expect(firstCallHeaders).toBeDefined();
+    expect(firstCallHeaders['Signature']).toMatch(/keyId=.*algorithm=.*headers=.*signature=/);
+    expect(firstCallHeaders['Date']).toBeDefined();
+    expect(firstCallHeaders['Digest']).toMatch(/^SHA-256=/);
+
     expect(updateStub.calledOnce).toBe(true);
     expect(updateStub.getCalls()[0].args[0]['processed_time']).toBeDefined();
+    expect(updateStub.getCalls()[0].args[0]['processed_status']).toBe('ok');
+  });
+
+  it('should send JSON string body matching the Digest', async () => {
+    const activityMessage = createMockCreateActivity(LOCAL_ACTOR_URL, {
+      type: 'Event',
+      id: `${LOCAL_ACTOR_URL}/events/456`,
+      name: 'Digest Test Event',
+    });
+
+    const message = ActivityPubOutboxMessageEntity.build({
+      calendar_id: TEST_CALENDAR_ID,
+      type: 'Create',
+      message: activityMessage,
+    });
+
+    const getCalendarStub = sandbox.stub(service.calendarService, 'getCalendar');
+    const postStub = sandbox.stub(axios, 'post');
+    const updateStub = sandbox.stub(ActivityPubOutboxMessageEntity.prototype, 'update');
+    const getRecipientsStub = sandbox.stub(service, 'getRecipients');
+    const resolveStub = sandbox.stub(service, 'resolveInboxUrl');
+    stubSigning(service, sandbox);
+
+    getCalendarStub.resolves(Calendar.fromObject({ id: TEST_CALENDAR_ID }));
+    getRecipientsStub.resolves([REMOTE_CALENDAR_HANDLE]);
+    resolveStub.resolves(REMOTE_INBOX_URL);
+
+    await service.processOutboxMessage(message);
+
+    expect(postStub.calledOnce).toBe(true);
+
+    // Body should be a string (JSON.stringify'd), not an object
+    const bodyArg = postStub.getCalls()[0].args[1];
+    expect(typeof bodyArg).toBe('string');
+
+    // Verify the Digest matches the body bytes
+    const { createHash } = await import('crypto');
+    const expectedDigest = 'SHA-256=' + createHash('sha256').update(bodyArg as string).digest('base64');
+    const actualDigest = postStub.getCalls()[0].args[2]?.headers['Digest'];
+    expect(actualDigest).toBe(expectedDigest);
+  });
+
+  it('should record partial error when signing fails, not crash', async () => {
+    const activityMessage = createMockCreateActivity(LOCAL_ACTOR_URL, {
+      type: 'Event',
+      id: `${LOCAL_ACTOR_URL}/events/789`,
+      name: 'Signing Failure Event',
+    });
+
+    const message = ActivityPubOutboxMessageEntity.build({
+      calendar_id: TEST_CALENDAR_ID,
+      type: 'Create',
+      message: activityMessage,
+    });
+
+    const getCalendarStub = sandbox.stub(service.calendarService, 'getCalendar');
+    const postStub = sandbox.stub(axios, 'post');
+    const updateStub = sandbox.stub(ActivityPubOutboxMessageEntity.prototype, 'update');
+    const getRecipientsStub = sandbox.stub(service, 'getRecipients');
+    const resolveStub = sandbox.stub(service, 'resolveInboxUrl');
+
+    // Both signing services throw — simulates no matching actor
+    sandbox.stub(service.calendarActorService, 'signActivity').rejects(new Error('No calendar actor found'));
+
+    getCalendarStub.resolves(Calendar.fromObject({ id: TEST_CALENDAR_ID }));
+    getRecipientsStub.resolves([REMOTE_CALENDAR_HANDLE]);
+    resolveStub.resolves(REMOTE_INBOX_URL);
+
+    // Should NOT throw
+    await service.processOutboxMessage(message);
+
+    // HTTP POST should not have been called (signing failed before POST)
+    expect(postStub.called).toBe(false);
+    expect(updateStub.calledOnce).toBe(true);
+    expect(updateStub.getCalls()[0].args[0]['processed_status']).toMatch(/^partial:.*Signing failed/);
+  });
+
+  it('should fall back to user actor signing when calendar actor fails', async () => {
+    const activityMessage = createMockCreateActivity(LOCAL_ACTOR_URL, {
+      type: 'Event',
+      id: `${LOCAL_ACTOR_URL}/events/fallback`,
+      name: 'Fallback Signing Event',
+    });
+
+    const message = ActivityPubOutboxMessageEntity.build({
+      calendar_id: TEST_CALENDAR_ID,
+      type: 'Create',
+      message: activityMessage,
+    });
+
+    const getCalendarStub = sandbox.stub(service.calendarService, 'getCalendar');
+    const postStub = sandbox.stub(axios, 'post');
+    const updateStub = sandbox.stub(ActivityPubOutboxMessageEntity.prototype, 'update');
+    const getRecipientsStub = sandbox.stub(service, 'getRecipients');
+    const resolveStub = sandbox.stub(service, 'resolveInboxUrl');
+
+    // Calendar actor fails, user actor succeeds
+    sandbox.stub(service.calendarActorService, 'signActivity').rejects(new Error('No calendar actor'));
+    // Access userActorService via type assertion to stub private property
+    const userActorStub = sandbox.stub(
+      (service as any).userActorService, 'signActivity',
+    ).resolves({
+      keyId: `${LOCAL_ACTOR_URL}/users/admin#main-key`,
+      signature: 'user-actor-signature',
+      algorithm: 'rsa-sha256',
+      headers: '(request-target) host date digest',
+      date: new Date().toUTCString(),
+    });
+
+    getCalendarStub.resolves(Calendar.fromObject({ id: TEST_CALENDAR_ID }));
+    getRecipientsStub.resolves([REMOTE_CALENDAR_HANDLE]);
+    resolveStub.resolves(REMOTE_INBOX_URL);
+
+    await service.processOutboxMessage(message);
+
+    expect(userActorStub.calledOnce).toBe(true);
+    expect(postStub.calledOnce).toBe(true);
     expect(updateStub.getCalls()[0].args[0]['processed_status']).toBe('ok');
   });
 
@@ -523,6 +660,7 @@ describe('processOutboxMessage — local/remote dispatcher split', () => {
     const resolveLocalStub = sandbox
       .stub(service.calendarActorService, 'getLocalCalendarByActorUri')
       .resolves(null);
+    stubSigning(service, sandbox);
 
     const announceMessage = createMockAnnounceActivity(
       LOCAL_ACTOR_URL,

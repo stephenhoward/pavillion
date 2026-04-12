@@ -182,25 +182,21 @@ describe('UserActorService', () => {
   });
 
   describe('signActivity', () => {
-    it('should produce valid HTTP signature format', async () => {
-      const actorUri = 'https://events.example/users/alice';
-      const mockData = {
-        id: 'actor-id-123',
-        account_id: 'account-id-123',
-        actor_uri: actorUri,
-        public_key: '-----BEGIN PUBLIC KEY-----\nKEY_DATA\n-----END PUBLIC KEY-----',
-        private_key: '-----BEGIN PRIVATE KEY-----\nKEY_DATA\n-----END PRIVATE KEY-----',
-      };
-
-      // Generate a real keypair for this test to make signing work
+    /**
+     * Helper to create a mock actor entity with a real RSA keypair
+     */
+    function createMockActorWithKeypair(actorUri: string) {
       const { publicKey, privateKey } = generateKeyPairSync('rsa', {
         modulusLength: 2048,
         publicKeyEncoding: { type: 'spki', format: 'pem' },
         privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
       });
 
-      const mockEntity = {
-        ...mockData,
+      return {
+        id: 'actor-id-123',
+        account_id: 'account-id-123',
+        actor_uri: actorUri,
+        public_key: publicKey,
         private_key: privateKey,
         toModel: function() {
           return {
@@ -214,6 +210,11 @@ describe('UserActorService', () => {
           };
         },
       };
+    }
+
+    it('should produce valid HTTP signature format', async () => {
+      const actorUri = 'https://events.example/users/alice';
+      const mockEntity = createMockActorWithKeypair(actorUri);
 
       sandbox.stub(UserActorEntity, 'findOne').resolves(mockEntity as any);
 
@@ -232,9 +233,52 @@ describe('UserActorService', () => {
       expect(signature.keyId).toBe(`${actorUri}#main-key`);
       expect(signature.signature).toBeDefined();
       expect(signature.algorithm).toBe('rsa-sha256');
-      expect(signature.headers).toContain('(request-target)');
-      expect(signature.headers).toContain('host');
-      expect(signature.headers).toContain('date');
+      expect(signature.headers).toBe('(request-target) host date');
+    });
+
+    it('should include digest in signed headers when digest is provided', async () => {
+      const actorUri = 'https://events.example/users/alice';
+      const mockEntity = createMockActorWithKeypair(actorUri);
+
+      sandbox.stub(UserActorEntity, 'findOne').resolves(mockEntity as any);
+
+      const activity = {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        type: 'Create',
+        actor: actorUri,
+        object: { type: 'Note', content: 'Hello' },
+      };
+
+      const targetUrl = 'https://remote.example/inbox';
+      const digest = 'SHA-256=abc123digest';
+      const signature = await service.signActivity(actorUri, activity, targetUrl, digest);
+
+      // Verify digest is included in the headers list
+      expect(signature.headers).toBe('(request-target) host date digest');
+      // Signature should still be valid
+      expect(signature.signature).toBeDefined();
+      expect(signature.keyId).toBe(`${actorUri}#main-key`);
+    });
+
+    it('should not include digest in signed headers when digest is omitted', async () => {
+      const actorUri = 'https://events.example/users/alice';
+      const mockEntity = createMockActorWithKeypair(actorUri);
+
+      sandbox.stub(UserActorEntity, 'findOne').resolves(mockEntity as any);
+
+      const activity = {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        type: 'Follow',
+        actor: actorUri,
+        object: 'https://remote.example/calendars/events',
+      };
+
+      const targetUrl = 'https://remote.example/inbox';
+      const signature = await service.signActivity(actorUri, activity, targetUrl);
+
+      // Verify digest is NOT in the headers list
+      expect(signature.headers).toBe('(request-target) host date');
+      expect(signature.headers).not.toContain('digest');
     });
   });
 });

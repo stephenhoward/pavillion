@@ -11,17 +11,9 @@ import { AccountEntity } from '@/server/common/entity/account';
 import { CalendarActorEntity } from '@/server/activitypub/entity/calendar_actor';
 import RemoteCalendarService from '@/server/activitypub/service/remote_calendar';
 import CalendarInterface from '@/server/calendar/interface';
+import { HttpSignature } from '@/server/activitypub/types';
 
-/**
- * HTTP Signature object for ActivityPub requests
- */
-export interface HttpSignature {
-  keyId: string;
-  signature: string;
-  algorithm: string;
-  headers: string;
-  date: string;
-}
+export type { HttpSignature };
 
 /**
  * Service for managing User ActivityPub Person actors with keypairs
@@ -166,9 +158,10 @@ export default class UserActorService {
    * @param actorUri - The actor URI performing the activity
    * @param activity - The ActivityPub activity object
    * @param targetUrl - The target URL (inbox) the activity is being sent to
+   * @param digest - Optional digest header value to include in the signature
    * @returns Promise resolving to HttpSignature object
    */
-  async signActivity(actorUri: string, activity: any, targetUrl: string): Promise<HttpSignature> {
+  async signActivity(actorUri: string, activity: any, targetUrl: string, digest?: string): Promise<HttpSignature> {
     // Retrieve actor with private key
     const actor = await this.getActorByUri(actorUri);
     if (!actor) {
@@ -189,11 +182,18 @@ export default class UserActorService {
 
     // Create signing string
     const requestTarget = `post ${path}`;
-    const signingString = [
+    const signingParts = [
       `(request-target): ${requestTarget}`,
       `host: ${host}`,
       `date: ${date}`,
-    ].join('\n');
+    ];
+
+    // Conditionally include digest in signing string
+    if (digest) {
+      signingParts.push(`digest: ${digest}`);
+    }
+
+    const signingString = signingParts.join('\n');
 
     // Sign the string with private key
     const signer = createSign('RSA-SHA256');
@@ -203,11 +203,16 @@ export default class UserActorService {
     const signatureBytes = signer.sign(actor.privateKey);
     const signatureBase64 = signatureBytes.toString('base64');
 
+    // Build headers list, conditionally including digest
+    const headersList = digest
+      ? '(request-target) host date digest'
+      : '(request-target) host date';
+
     return {
       keyId: `${actorUri}#main-key`,
       signature: signatureBase64,
       algorithm: 'rsa-sha256',
-      headers: '(request-target) host date',
+      headers: headersList,
       date: date,
     };
   }

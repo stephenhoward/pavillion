@@ -4,17 +4,9 @@ import { v4 as uuidv4 } from 'uuid';
 import { Calendar } from '@/common/model/calendar';
 import { CalendarActorEntity, CalendarActor } from '@/server/activitypub/entity/calendar_actor';
 import CalendarInterface from '@/server/calendar/interface';
+import { HttpSignature } from '@/server/activitypub/types';
 
-/**
- * HTTP Signature object for ActivityPub requests
- */
-export interface HttpSignature {
-  keyId: string;
-  signature: string;
-  algorithm: string;
-  headers: string;
-  date: string;
-}
+export type { HttpSignature };
 
 /**
  * Service for managing Calendar ActivityPub Group actors with keypairs
@@ -151,13 +143,18 @@ export default class CalendarActorService {
    * @param actorUri - The actor URI performing the activity
    * @param activity - The ActivityPub activity object
    * @param targetUrl - The target URL (inbox) the activity is being sent to
+   * @param digest - Optional Digest header value to include in the signature
    * @returns Promise resolving to HttpSignature object
    */
-  async signActivity(actorUri: string, activity: any, targetUrl: string): Promise<HttpSignature> {
+  async signActivity(actorUri: string, activity: any, targetUrl: string, digest?: string): Promise<HttpSignature> {
     // Retrieve actor with private key
     const actor = await this.getActorByUri(actorUri);
     if (!actor) {
       throw new Error(`Calendar actor not found: ${actorUri}`);
+    }
+
+    if (!actor.privateKey) {
+      throw new Error(`Calendar actor ${actorUri} does not have a private key`);
     }
 
     // Parse target URL for host
@@ -170,11 +167,15 @@ export default class CalendarActorService {
 
     // Create signing string
     const requestTarget = `post ${path}`;
-    const signingString = [
+    const signingStringParts = [
       `(request-target): ${requestTarget}`,
       `host: ${host}`,
       `date: ${date}`,
-    ].join('\n');
+    ];
+    if (digest) {
+      signingStringParts.push(`digest: ${digest}`);
+    }
+    const signingString = signingStringParts.join('\n');
 
     // Sign the string with private key
     const signer = createSign('RSA-SHA256');
@@ -188,7 +189,7 @@ export default class CalendarActorService {
       keyId: `${actorUri}#main-key`,
       signature: signatureBase64,
       algorithm: 'rsa-sha256',
-      headers: '(request-target) host date',
+      headers: digest ? '(request-target) host date digest' : '(request-target) host date',
       date: date,
     };
   }
