@@ -126,7 +126,7 @@ function onZoomInput(e: Event): void {
            aria-valuemax="100"
            tabindex="0"
            @pointerdown="onFocalPointerDown">
-        <Crosshair :size="24"
+        <Crosshair :size="32"
                    class="focal-icon"
                    aria-hidden="true" />
       </div>
@@ -232,34 +232,25 @@ $transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 
 .focal-point-marker {
   position: absolute;
-  width: 40px;
-  height: 40px;
   transform: translate(-50%, -50%);
-  border: 2px solid white;
-  border-radius: 50%;
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.3), 0 2px 8px rgba(0, 0, 0, 0.3);
   cursor: grab;
-  transition: box-shadow 0.15s ease;
   z-index: 1;
 
   &.dragging {
     cursor: grabbing;
-    box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.4), 0 4px 12px rgba(0, 0, 0, 0.4);
   }
 
   &:focus-visible {
     outline: 2px solid var(--pav-color-brand-primary);
     outline-offset: 2px;
+    border-radius: 4px;
   }
 }
 
 .focal-icon {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
+  display: block;
   color: white;
-  filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.4));
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5)) drop-shadow(0 0 4px rgba(0, 0, 0, 0.3));
 }
 
 .hint-pill {
