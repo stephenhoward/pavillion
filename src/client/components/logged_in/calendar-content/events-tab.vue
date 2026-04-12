@@ -539,7 +539,7 @@ initializeFiltersFromURL();
               type="checkbox"
               :checked="isEventSelected(event)"
               @change.stop="toggleEventSelection(event)"
-              :aria-label="`Select event: ${event.content('en').name}`"
+              :aria-label="t('event.select_label', { name: event.content('en').name })"
             />
           </div>
           <article
@@ -589,7 +589,7 @@ initializeFiltersFromURL();
               class="edit-btn icon-btn"
               @click.stop="handleEditButtonClick(event, $event)"
               :aria-label="t('event.edit_label', { name: event.content('en').name })"
-              title="Edit this event"
+              :title="t('event.edit_title')"
             >
               <Pencil :size="18" />
             </button>
@@ -757,13 +757,9 @@ initializeFiltersFromURL();
   margin: 2rem auto;
   padding: 3rem 1rem;
   text-align: center;
-  color: var(--pav-color-stone-600);
+  color: var(--pav-text-secondary);
   font-style: italic;
   font-size: 1.125rem;
-
-  @media (prefers-color-scheme: dark) {
-    color: var(--pav-color-stone-400);
-  }
 }
 
 .events-title {
@@ -790,11 +786,7 @@ initializeFiltersFromURL();
       cursor: pointer;
       font-weight: 500;
       font-size: 0.875rem;
-      color: var(--pav-color-stone-700);
-
-      @media (prefers-color-scheme: dark) {
-        color: var(--pav-color-stone-200);
-      }
+      color: var(--pav-text-secondary);
 
       input[type="checkbox"] {
         width: 1.125rem;
@@ -823,18 +815,13 @@ initializeFiltersFromURL();
 
     .event-item {
       border-radius: 0.75rem;
-      border: 1px solid var(--pav-color-stone-200);
-      background: var(--pav-color-surface-primary);
+      border: 1px solid var(--pav-border-subtle);
+      background: var(--pav-surface-primary);
       padding: 1rem;
       transition: all 0.15s ease;
 
       &:hover {
         box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-      }
-
-      @media (prefers-color-scheme: dark) {
-        background: var(--pav-color-stone-800);
-        border-color: var(--pav-color-stone-700);
       }
 
       display: flex;
@@ -854,7 +841,7 @@ initializeFiltersFromURL();
         background: var(--pav-color-orange-50);
         box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.1);
 
-        @media (prefers-color-scheme: dark) {
+        [data-theme="dark"] & {
           background: rgba(249, 115, 22, 0.1);
         }
       }
@@ -892,30 +879,20 @@ initializeFiltersFromURL();
           border-radius: 0.5rem;
           padding: 0.5rem;
           cursor: pointer;
-          color: var(--pav-color-stone-600);
+          color: var(--pav-text-secondary);
           transition: all 0.15s ease;
           display: flex;
           align-items: center;
           justify-content: center;
 
           &:hover {
-            background: var(--pav-color-stone-100);
+            background: var(--pav-interactive-hover);
             color: var(--pav-color-orange-500);
           }
 
           &:focus-visible {
             outline: 2px solid var(--pav-color-focus-ring, var(--pav-color-orange-500));
             outline-offset: 2px;
-          }
-
-          @media (prefers-color-scheme: dark) {
-            color: var(--pav-color-stone-400);
-
-            &:hover {
-              background: var(--pav-color-stone-700);
-              border-color: var(--pav-color-orange-500);
-              color: var(--pav-color-orange-500);
-            }
           }
         }
 
@@ -962,11 +939,7 @@ initializeFiltersFromURL();
           margin: 0;
           font-size: 1.125rem;
           font-weight: 600;
-          color: var(--pav-color-stone-900);
-
-          @media (prefers-color-scheme: dark) {
-            color: var(--pav-color-stone-100);
-          }
+          color: var(--pav-text-primary);
         }
 
         .repost-badge {
@@ -980,7 +953,7 @@ initializeFiltersFromURL();
           font-weight: 500;
           white-space: nowrap;
 
-          @media (prefers-color-scheme: dark) {
+          [data-theme="dark"] & {
             background: rgba(168, 85, 247, 0.2);
             color: var(--pav-color-purple-300, #d8b4fe);
           }
@@ -998,7 +971,7 @@ initializeFiltersFromURL();
           font-weight: 500;
           white-space: nowrap;
 
-          @media (prefers-color-scheme: dark) {
+          [data-theme="dark"] & {
             background: rgba(14, 165, 233, 0.2);
             color: var(--pav-color-sky-300);
           }
@@ -1019,12 +992,8 @@ initializeFiltersFromURL();
         }
 
         .date-text {
-          color: var(--pav-color-stone-600);
+          color: var(--pav-text-secondary);
           font-weight: 500;
-
-          @media (prefers-color-scheme: dark) {
-            color: var(--pav-color-stone-300);
-          }
         }
 
         .recurrence-badge {
@@ -1038,7 +1007,7 @@ initializeFiltersFromURL();
           font-size: 0.75rem;
           font-weight: 500;
 
-          @media (prefers-color-scheme: dark) {
+          [data-theme="dark"] & {
             background: rgba(14, 165, 233, 0.2);
             color: var(--pav-color-sky-300);
           }
@@ -1047,17 +1016,13 @@ initializeFiltersFromURL();
 
       .event-description {
         margin: 0;
-        color: var(--pav-color-stone-600);
+        color: var(--pav-text-secondary);
         font-size: 0.875rem;
         line-height: 1.5;
         display: -webkit-box;
         -webkit-line-clamp: 2;
         -webkit-box-orient: vertical;
         overflow: hidden;
-
-        @media (prefers-color-scheme: dark) {
-          color: var(--pav-color-stone-400);
-        }
       }
 
       .event-categories {
@@ -1072,17 +1037,12 @@ initializeFiltersFromURL();
           display: inline-flex;
           align-items: center;
           padding: 0.125rem 0.5rem;
-          background: var(--pav-color-stone-100);
+          background: var(--pav-interactive-hover);
           border-radius: 9999px;
-          color: var(--pav-color-stone-700);
+          color: var(--pav-text-secondary);
           font-size: 0.75rem;
           font-weight: 500;
           white-space: nowrap;
-
-          @media (prefers-color-scheme: dark) {
-            background: var(--pav-color-stone-700);
-            color: var(--pav-color-stone-200);
-          }
         }
       }
 
@@ -1101,7 +1061,7 @@ initializeFiltersFromURL();
         font-weight: 500;
         white-space: nowrap;
 
-        @media (prefers-color-scheme: dark) {
+        [data-theme="dark"] & {
           background: var(--pav-color-primary-900, #0c4a6e);
           color: var(--pav-color-primary-200, #bae6fd);
         }
@@ -1122,13 +1082,9 @@ initializeFiltersFromURL();
 
   .delete-events-message {
     margin: 0;
-    color: var(--pav-color-stone-600);
+    color: var(--pav-text-secondary);
     font-size: 0.875rem;
     line-height: 1.5;
-
-    @media (prefers-color-scheme: dark) {
-      color: var(--pav-color-stone-400);
-    }
   }
 
   .delete-events-actions {
@@ -1136,11 +1092,7 @@ initializeFiltersFromURL();
     gap: 0.75rem;
     justify-content: flex-end;
     padding-top: var(--pav-space-4, 1rem);
-    border-top: 1px solid var(--pav-color-stone-200);
-
-    @media (prefers-color-scheme: dark) {
-      border-top-color: var(--pav-color-stone-700);
-    }
+    border-top: 1px solid var(--pav-border-subtle);
   }
 }
 
@@ -1156,13 +1108,9 @@ initializeFiltersFromURL();
 
   .unpost-event-message {
     margin: 0;
-    color: var(--pav-color-stone-600);
+    color: var(--pav-text-secondary);
     font-size: 0.875rem;
     line-height: 1.5;
-
-    @media (prefers-color-scheme: dark) {
-      color: var(--pav-color-stone-400);
-    }
   }
 
   .unpost-event-actions {
@@ -1170,11 +1118,7 @@ initializeFiltersFromURL();
     gap: 0.75rem;
     justify-content: flex-end;
     padding-top: var(--pav-space-4, 1rem);
-    border-top: 1px solid var(--pav-color-stone-200);
-
-    @media (prefers-color-scheme: dark) {
-      border-top-color: var(--pav-color-stone-700);
-    }
+    border-top: 1px solid var(--pav-border-subtle);
   }
 }
 </style>
