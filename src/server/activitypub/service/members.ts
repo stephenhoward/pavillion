@@ -420,26 +420,37 @@ class ActivityPubService {
    *
    * @param account The account performing the unsharing
    * @param calendar The calendar to remove the share from
-   * @param eventUrl ActivityPub URL of the event to unshare
+   * @param eventIdOrUrl Either the local EventEntity UUID or the ActivityPub URL of the event to unshare
    */
-  async unshareEvent(account: Account, calendar: Calendar, eventUrl: string) {
+  async unshareEvent(account: Account, calendar: Calendar, eventIdOrUrl: string) {
 
     if (!await this.calendarService.userCanModifyCalendar(account, calendar)) {
       throw new InsufficientCalendarPermissionsError('User does not have permission to modify calendar: ' + calendar.id);
     }
 
-    // Resolve AP URL to local event UUID via EventObjectEntity.
-    // SharedEventEntity.event_id stores UUIDs, not AP URLs.
-    const eventObject = await EventObjectEntity.findOne({
-      where: { ap_id: eventUrl },
-    });
-
-    if (!eventObject) {
-      // Event doesn't exist locally, nothing to unshare
-      return;
+    // Resolve input to a local event UUID. The production path (DELETE
+    // /api/v1/social/shares/:id) passes the local EventEntity UUID from the
+    // frontend; service-level callers historically passed a full ActivityPub
+    // URL and expected an EventObjectEntity lookup. Accept both so legacy
+    // tests and the production API share a single code path.
+    //
+    // SharedEventEntity.event_id and RepostDismissalEntity.event_id both store
+    // UUIDs, so we must resolve to a UUID before hitting either table.
+    const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    let localEventId: string;
+    if (UUID_REGEX.test(eventIdOrUrl)) {
+      localEventId = eventIdOrUrl;
     }
-
-    const localEventId = eventObject.event_id;
+    else {
+      const eventObject = await EventObjectEntity.findOne({
+        where: { ap_id: eventIdOrUrl },
+      });
+      if (!eventObject) {
+        // Event doesn't exist locally, nothing to unshare
+        return;
+      }
+      localEventId = eventObject.event_id;
+    }
 
     let shares = await SharedEventEntity.findAll({
       where: {
