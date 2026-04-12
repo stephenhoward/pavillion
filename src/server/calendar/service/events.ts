@@ -906,6 +906,16 @@ class EventService {
       }
     }
 
+    if (eventParams.mediaFocalPointX !== undefined) {
+      eventEntity.media_focal_point_x = eventParams.mediaFocalPointX;
+    }
+    if (eventParams.mediaFocalPointY !== undefined) {
+      eventEntity.media_focal_point_y = eventParams.mediaFocalPointY;
+    }
+    if (eventParams.mediaZoom !== undefined) {
+      eventEntity.media_zoom = eventParams.mediaZoom;
+    }
+
     await eventEntity.save();
 
     // Notify media domain that media has been attached to an event

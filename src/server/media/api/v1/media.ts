@@ -4,7 +4,14 @@ import multer from 'multer';
 import ExpressHelper from '@/server/common/helper/express';
 import MediaInterface from '../../interface';
 import { Account } from '@/common/model/account';
-import { MediaNotApprovedError, MediaNotFoundError } from '@/common/exceptions/media';
+import { CalendarNotFoundError, InsufficientCalendarPermissionsError } from '@/common/exceptions/calendar';
+import {
+  MediaNotApprovedError,
+  MediaNotFoundError,
+  MediaFileTooLargeError,
+  MediaInvalidTypeError,
+  MediaStorageError,
+} from '@/common/exceptions/media';
 import { logError } from '@/server/common/helper/error-logger';
 
 // Extend Express Request interface to include file property
@@ -24,7 +31,7 @@ const upload = multer({
   },
 });
 
-export default class MediaRouteHandlers {
+export default class MediaRoutes {
   private mediaInterface: MediaInterface;
 
   constructor(mediaInterface: MediaInterface) {
@@ -56,12 +63,12 @@ export default class MediaRouteHandlers {
       const file = req.file;
 
       if (!file) {
-        res.status(400).json({ error: 'No file provided', errorName: 'ValidationError' });
+        res.status(400).json({ error: 'Invalid request', errorName: 'ValidationError' });
         return;
       }
 
-      if (!calendarId) {
-        res.status(400).json({ error: 'Calendar ID is required', errorName: 'ValidationError' });
+      if (!calendarId || !ExpressHelper.isValidUUID(calendarId)) {
+        res.status(400).json({ error: 'Invalid request', errorName: 'ValidationError' });
         return;
       }
 
@@ -80,11 +87,30 @@ export default class MediaRouteHandlers {
       });
     }
     catch (error) {
+      if (error instanceof MediaFileTooLargeError) {
+        res.status(400).json({ error: 'File is too large', errorName: 'MediaFileTooLargeError' });
+        return;
+      }
+      if (error instanceof MediaInvalidTypeError) {
+        res.status(400).json({ error: 'File type is not supported', errorName: 'MediaInvalidTypeError' });
+        return;
+      }
+      if (error instanceof CalendarNotFoundError) {
+        res.status(404).json({ error: 'Calendar not found', errorName: 'CalendarNotFoundError' });
+        return;
+      }
+      if (error instanceof InsufficientCalendarPermissionsError) {
+        res.status(403).json({ error: 'You do not have permission to upload to this calendar', errorName: 'InsufficientCalendarPermissionsError' });
+        return;
+      }
+      if (error instanceof MediaStorageError) {
+        logError(error, 'File upload storage error');
+        res.status(500).json({ error: 'Unable to store file', errorName: 'MediaStorageError' });
+        return;
+      }
+
       logError(error, 'File upload error');
-      res.status(400).json({
-        error: error instanceof Error ? error.message : 'Upload failed',
-        errorName: 'ValidationError',
-      });
+      res.status(500).json({ error: 'An unexpected error occurred', errorName: 'UnknownError' });
     }
   }
 
@@ -95,8 +121,8 @@ export default class MediaRouteHandlers {
     try {
       const { mediaId } = req.params;
 
-      if (!mediaId) {
-        res.status(400).json({ error: 'Media ID is required', errorName: 'ValidationError' });
+      if (!mediaId || !ExpressHelper.isValidUUID(mediaId)) {
+        res.status(400).json({ error: 'Invalid request', errorName: 'ValidationError' });
         return;
       }
 
@@ -109,11 +135,11 @@ export default class MediaRouteHandlers {
 
       // Set appropriate headers
       res.set({
-        'Mime-Type': fileData.media.mimeType,
         'Content-Type': fileData.media.mimeType,
         'Content-Length': fileData.media.fileSize.toString(),
         'Cache-Control': 'public, max-age=31536000', // Cache for 1 year
         'ETag': fileData.media.sha256,
+        'X-Content-Type-Options': 'nosniff',
       });
 
       // Send the file buffer
@@ -121,28 +147,21 @@ export default class MediaRouteHandlers {
     }
     catch (error) {
       if (error instanceof MediaNotApprovedError) {
-        // Return 202 Accepted to indicate media is still being processed
         res.status(202).json({
           error: 'Media is still being processed',
+          errorName: 'MediaNotApprovedError',
           status: error.status,
-          mediaId: error.mediaId,
         });
         return;
       }
 
       if (error instanceof MediaNotFoundError) {
-        res.status(404).json({
-          error: error.message,
-          mediaId: error.mediaId,
-          errorName: 'NotFoundError',
-        });
+        res.status(404).json({ error: 'Media not found', errorName: 'MediaNotFoundError' });
         return;
       }
 
       logError(error, 'File serve error');
-      res.status(500).json({
-        error: error instanceof Error ? error.message : 'Failed to serve file',
-      });
+      res.status(500).json({ error: 'An unexpected error occurred', errorName: 'UnknownError' });
     }
   }
 }

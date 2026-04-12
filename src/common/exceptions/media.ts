@@ -27,3 +27,36 @@ export class MediaNotFoundError extends Error {
     Object.setPrototypeOf(this, MediaNotFoundError.prototype);
   }
 }
+
+/**
+ * Thrown when an uploaded file exceeds the maximum allowed size
+ */
+export class MediaFileTooLargeError extends Error {
+  constructor() {
+    super('File is too large');
+    this.name = 'MediaFileTooLargeError';
+    Object.setPrototypeOf(this, MediaFileTooLargeError.prototype);
+  }
+}
+
+/**
+ * Thrown when an uploaded file has a disallowed MIME type
+ */
+export class MediaInvalidTypeError extends Error {
+  constructor() {
+    super('File type is not supported');
+    this.name = 'MediaInvalidTypeError';
+    Object.setPrototypeOf(this, MediaInvalidTypeError.prototype);
+  }
+}
+
+/**
+ * Thrown when file storage fails (disk full, permissions, misconfiguration)
+ */
+export class MediaStorageError extends Error {
+  constructor() {
+    super('Unable to store file');
+    this.name = 'MediaStorageError';
+    Object.setPrototypeOf(this, MediaStorageError.prototype);
+  }
+}

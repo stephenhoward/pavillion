@@ -44,7 +44,10 @@ mail:
 
 # Media storage configuration
 # Option 1: Local filesystem storage (default)
-# Files are stored in the pavillion-media Docker volume
+# Paths below use /app/ prefix for Docker deployments.
+# For local development without Docker, use relative paths instead:
+#   uploadPath: './storage/media/inbound'
+#   basePath: './storage/media'
 #
 # Option 2: S3-compatible storage (recommended for production)
 # Uncomment and configure for AWS S3, DigitalOcean Spaces, MinIO, etc.

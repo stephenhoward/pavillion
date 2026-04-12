@@ -10,7 +10,7 @@ import { StorageConfig, createStorageDisk } from './storage-factory';
 import CalendarInterface from '@/server/calendar/interface';
 import { Account } from '@/common/model/account';
 import { CalendarNotFoundError, InsufficientCalendarPermissionsError } from '@/common/exceptions/calendar';
-import { MediaNotApprovedError, MediaNotFoundError } from '@/common/exceptions/media';
+import { MediaNotApprovedError, MediaNotFoundError, MediaFileTooLargeError, MediaInvalidTypeError, MediaStorageError } from '@/common/exceptions/media';
 import { logError } from '@/server/common/helper/error-logger';
 
 interface MediaConfig {
@@ -67,20 +67,17 @@ export default class MediaService {
    * Validates file type and size
    */
   private validateFile(buffer: Buffer, filename: string, mimeType: string): void {
-    // Check file size
     if (buffer.length > this.config.maxFileSize) {
-      throw new Error(`File size exceeds maximum allowed size of ${this.config.maxFileSize} bytes`);
+      throw new MediaFileTooLargeError();
     }
 
-    // Check MIME type
     if (!this.config.allowedTypes.includes(mimeType)) {
-      throw new Error(`MIME type ${mimeType} is not allowed`);
+      throw new MediaInvalidTypeError();
     }
 
-    // Check file extension
     const extension = path.extname(filename).toLowerCase();
     if (!this.config.allowedExtensions.includes(extension)) {
-      throw new Error(`File extension ${extension} is not allowed`);
+      throw new MediaInvalidTypeError();
     }
   }
 
@@ -144,7 +141,13 @@ export default class MediaService {
 
     // Store file in staging area using SHA as filename
     const stagingKey = this.getStagingKey(calendarId, media.storageFilename);
-    await this.storageDisk.put(stagingKey, buffer);
+    try {
+      await this.storageDisk.put(stagingKey, buffer);
+    }
+    catch (storageError) {
+      logError(storageError, `[Media] Failed to write staging file: ${stagingKey}`);
+      throw new MediaStorageError();
+    }
 
     // Save metadata to database
     const mediaEntity = MediaEntity.fromModel(media);
@@ -191,7 +194,7 @@ export default class MediaService {
   async moveToFinalStorage(mediaId: string): Promise<boolean> {
     const media = await this.getMediaById(mediaId);
     if (!media) {
-      throw new Error(`Media with ID ${mediaId} not found`);
+      throw new MediaNotFoundError(mediaId);
     }
 
     // Ensure storage is ready
@@ -222,7 +225,7 @@ export default class MediaService {
   async deleteMedia(mediaId: string): Promise<void> {
     const media = await this.getMediaById(mediaId);
     if (!media) {
-      throw new Error(`Media with ID ${mediaId} not found`);
+      throw new MediaNotFoundError(mediaId);
     }
 
     // Ensure storage is ready
@@ -259,7 +262,7 @@ export default class MediaService {
     // later we will delete the media if it fails the ClamAV check
     const media = await this.getMediaById(mediaId);
     if (!media) {
-      throw new Error(`Media with ID ${mediaId} not found`);
+      throw new MediaNotFoundError(mediaId);
     }
 
     if (media.status === 'pending') {
