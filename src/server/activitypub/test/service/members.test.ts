@@ -15,7 +15,8 @@ import {
 import { InsufficientCalendarPermissionsError } from '@/common/exceptions/calendar';
 import { setupActivityPubSchema, teardownActivityPubSchema } from '@/server/test/helpers/database';
 import CalendarInterface from '@/server/calendar/interface';
-import { SharedEventEntity } from '@/server/activitypub/entity/activitypub';
+import { SharedEventEntity, RepostDismissalEntity } from '@/server/activitypub/entity/activitypub';
+import db from '@/server/common/entity/db';
 import { EventObjectEntity } from '@/server/activitypub/entity/event_object';
 
 // Mock CalendarActor model for testing (remote type)
@@ -804,6 +805,11 @@ describe("shareEvent - eventReposted emission", () => {
   beforeEach(() => {
     eventBus = new EventEmitter();
     service = new ActivityPubService(eventBus, new CalendarInterface(eventBus));
+
+    // Fake transaction: execute callback directly with a stub transaction object
+    sandbox.stub(db, 'transaction').callsFake(async (callback: any) => callback({}));
+    // shareEvent deletes any existing dismissal before creating a SharedEventEntity
+    sandbox.stub(RepostDismissalEntity, 'destroy').resolves(0 as any);
   });
 
   afterEach(() => {
@@ -968,6 +974,10 @@ describe("unshareEvent - UUID resolution", () => {
 
     // Allow all permission checks
     sandbox.stub(service.calendarService, 'userCanModifyCalendar').resolves(true);
+    // Fake transaction: execute callback directly with a stub transaction object
+    sandbox.stub(db, 'transaction').callsFake(async (callback: any) => callback({}));
+    // unshareEvent upserts a RepostDismissalEntity after destroying each share
+    sandbox.stub(RepostDismissalEntity, 'findOrCreate').resolves([{} as any, true]);
   });
 
   afterEach(() => {
@@ -1083,6 +1093,10 @@ describe("unshareEvent - eventUnreposted emission", () => {
 
     // Allow all permission checks
     sandbox.stub(service.calendarService, 'userCanModifyCalendar').resolves(true);
+    // Fake transaction: execute callback directly with a stub transaction object
+    sandbox.stub(db, 'transaction').callsFake(async (callback: any) => callback({}));
+    // unshareEvent upserts a RepostDismissalEntity after destroying each share
+    sandbox.stub(RepostDismissalEntity, 'findOrCreate').resolves([{} as any, true]);
   });
 
   afterEach(() => {
@@ -1261,6 +1275,10 @@ describe("ActivityPubService - shareEvent with injected CalendarInterface", () =
 
   beforeEach(() => {
     sandbox = sinon.createSandbox();
+    // Fake transaction: execute callback directly with a stub transaction object
+    sandbox.stub(db, 'transaction').callsFake(async (callback: any) => callback({}));
+    // shareEvent deletes any existing dismissal before creating a SharedEventEntity
+    sandbox.stub(RepostDismissalEntity, 'destroy').resolves(0 as any);
   });
 
   afterEach(() => {

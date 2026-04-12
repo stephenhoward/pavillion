@@ -339,14 +339,17 @@ onUnmounted(() => {
             {{ t('reposted_button') }}
           </button>
 
-          <!-- Auto-posted - show non-clickable label -->
-          <span
+          <!-- Auto-posted - show clickable label to unrepost -->
+          <button
             v-else-if="event.repostStatus === 'auto'"
+            type="button"
             class="auto-posted-label"
             data-testid="auto-posted-label"
+            :aria-label="t('unrepost_auto_aria_label', { eventTitle: getEventTitle(event) })"
+            @click="handleUnrepost(event.id)"
           >
             {{ t('auto_posted_label') }}
-          </span>
+          </button>
 
           <button
             type="button"
@@ -556,13 +559,29 @@ div.events-container {
           }
         }
 
-        span.auto-posted-label {
+        button.auto-posted-label {
           padding: var(--pav-space-2) var(--pav-space-4);
           background: var(--pav-color-stone-500);
           color: var(--pav-color-text-inverse);
+          border: none;
           border-radius: var(--pav-border-radius-sm);
           font-size: var(--pav-font-size-xs);
           font-weight: var(--pav-font-weight-medium);
+          cursor: pointer;
+          transition: background 0.2s ease, box-shadow 0.2s ease;
+
+          &:hover {
+            background: var(--pav-color-stone-600);
+          }
+
+          &:focus-visible {
+            outline: 2px solid var(--pav-color-focus-ring, var(--pav-color-orange-500));
+            outline-offset: 2px;
+          }
+
+          &:active {
+            background: var(--pav-color-stone-700);
+          }
         }
 
         button.report-button {
@@ -613,8 +632,7 @@ div.events-container {
         div.event-actions {
           width: 100%;
 
-          button,
-          span {
+          button {
             width: 100%;
             text-align: center;
           }

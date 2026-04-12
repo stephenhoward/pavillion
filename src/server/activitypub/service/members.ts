@@ -12,11 +12,12 @@ import { FollowingCalendar, FollowerCalendar } from "@/common/model/follow";
 import { ActivityPubActivity } from "@/server/activitypub/model/base";
 import FollowActivity from "@/server/activitypub/model/action/follow";
 import AnnounceActivity from "@/server/activitypub/model/action/announce";
-import { FollowingCalendarEntity, FollowerCalendarEntity, SharedEventEntity } from "@/server/activitypub/entity/activitypub";
+import { FollowingCalendarEntity, FollowerCalendarEntity, SharedEventEntity, RepostDismissalEntity } from "@/server/activitypub/entity/activitypub";
 import { CalendarActorEntity } from "@/server/activitypub/entity/calendar_actor";
 import { EventObjectEntity } from "@/server/activitypub/entity/event_object";
 import RemoteCalendarService from "@/server/activitypub/service/remote_calendar";
 import UndoActivity from "../model/action/undo";
+import db from "@/server/common/entity/db";
 import CalendarInterface from "@/server/calendar/interface";
 import { EventObject } from "@/server/activitypub/model/object/event";
 import { addToOutbox as addToOutboxHelper } from "@/server/activitypub/helper/outbox";
@@ -372,12 +373,27 @@ class ActivityPubService {
     let actor = await this.actorUrl(calendar);
     let shareActivity = new AnnounceActivity(actor, canonicalEventUrl);
 
-    await SharedEventEntity.create({
-      id: shareActivity.id,
-      event_id: localEventId,
-      calendar_id: calendar.id,
-      auto_posted: autoPosted,
+    // A manual (or auto) share is an explicit opt-in that supersedes any prior
+    // dismissal. Delete any existing RepostDismissalEntity for this
+    // (event_id, calendar_id) in the same transaction as the SharedEventEntity
+    // creation so partial failure rolls both changes back together.
+    await db.transaction(async (t) => {
+      await RepostDismissalEntity.destroy({
+        where: {
+          event_id: localEventId,
+          calendar_id: calendar.id,
+        },
+        transaction: t,
+      });
+
+      await SharedEventEntity.create({
+        id: shareActivity.id,
+        event_id: localEventId,
+        calendar_id: calendar.id,
+        auto_posted: autoPosted,
+      }, { transaction: t });
     });
+
     this.addToOutbox(calendar, shareActivity);
 
     // Assign categories to the shared event if provided
@@ -398,28 +414,43 @@ class ActivityPubService {
    * Resolves the AP URL to a local event UUID via EventObjectEntity before
    * querying SharedEventEntity, since event_id stores UUIDs not AP URLs.
    *
+   * Writes a sticky RepostDismissalEntity row for (event_id, calendar_id) in
+   * the same transaction as the SharedEventEntity destroy so future auto-repost
+   * attempts can detect and skip the dismissal.
+   *
    * @param account The account performing the unsharing
    * @param calendar The calendar to remove the share from
-   * @param eventUrl ActivityPub URL of the event to unshare
+   * @param eventIdOrUrl Either the local EventEntity UUID or the ActivityPub URL of the event to unshare
    */
-  async unshareEvent(account: Account, calendar: Calendar, eventUrl: string) {
+  async unshareEvent(account: Account, calendar: Calendar, eventIdOrUrl: string) {
 
     if (!await this.calendarService.userCanModifyCalendar(account, calendar)) {
       throw new InsufficientCalendarPermissionsError('User does not have permission to modify calendar: ' + calendar.id);
     }
 
-    // Resolve AP URL to local event UUID via EventObjectEntity.
-    // SharedEventEntity.event_id stores UUIDs, not AP URLs.
-    const eventObject = await EventObjectEntity.findOne({
-      where: { ap_id: eventUrl },
-    });
-
-    if (!eventObject) {
-      // Event doesn't exist locally, nothing to unshare
-      return;
+    // Resolve input to a local event UUID. The production path (DELETE
+    // /api/v1/social/shares/:id) passes the local EventEntity UUID from the
+    // frontend; service-level callers historically passed a full ActivityPub
+    // URL and expected an EventObjectEntity lookup. Accept both so legacy
+    // tests and the production API share a single code path.
+    //
+    // SharedEventEntity.event_id and RepostDismissalEntity.event_id both store
+    // UUIDs, so we must resolve to a UUID before hitting either table.
+    const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    let localEventId: string;
+    if (UUID_REGEX.test(eventIdOrUrl)) {
+      localEventId = eventIdOrUrl;
     }
-
-    const localEventId = eventObject.event_id;
+    else {
+      const eventObject = await EventObjectEntity.findOne({
+        where: { ap_id: eventIdOrUrl },
+      });
+      if (!eventObject) {
+        // Event doesn't exist locally, nothing to unshare
+        return;
+      }
+      localEventId = eventObject.event_id;
+    }
 
     let shares = await SharedEventEntity.findAll({
       where: {
@@ -432,8 +463,47 @@ class ActivityPubService {
       this.addToOutbox(calendar, new UndoActivity(actorUrl, share.id));
       // Emit eventUnreposted before destroy so share.event_id is still accessible
       this.eventBus.emit('eventUnreposted', { eventId: share.event_id, calendarId: calendar.id });
-      await share.destroy();
+
+      // Destroy the SharedEventEntity and upsert a RepostDismissalEntity row
+      // for (event_id, calendar_id) in the same transaction so partial failure
+      // rolls both changes back together. findOrCreate is used for idempotency:
+      // a second unshareEvent call on an already-dismissed event is a no-op for
+      // the dismissal row (the unique index on event_id+calendar_id ensures no
+      // duplicate rows are created).
+      await db.transaction(async (t) => {
+        await share.destroy({ transaction: t });
+        await RepostDismissalEntity.findOrCreate({
+          where: {
+            event_id: share.event_id,
+            calendar_id: calendar.id,
+          },
+          transaction: t,
+        });
+      });
     }
+  }
+
+  /**
+   * Gets a map of shared event IDs to their repost status ('auto' or 'manual')
+   * for a given calendar. Derived from SharedEventEntity.auto_posted.
+   *
+   * Events NOT present in the returned map are not shared via SharedEventEntity
+   * for the given calendar and their repost status must be determined by other
+   * means (e.g., ownership or legacy EventRepostEntity).
+   *
+   * @param calendarId - The calendar UUID
+   * @returns Map from event_id (UUID string) to 'auto' | 'manual'
+   */
+  async getSharedEventStatusMap(calendarId: string): Promise<Map<string, 'auto' | 'manual'>> {
+    const sharedEvents = await SharedEventEntity.findAll({
+      where: { calendar_id: calendarId },
+      attributes: ['event_id', 'auto_posted'],
+    });
+    const result = new Map<string, 'auto' | 'manual'>();
+    for (const se of sharedEvents) {
+      result.set(se.event_id, se.auto_posted ? 'auto' : 'manual');
+    }
+    return result;
   }
 
   /**

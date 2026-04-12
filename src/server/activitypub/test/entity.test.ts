@@ -1,4 +1,5 @@
-import { describe, it, expect, assertType } from 'vitest';
+import { describe, it, expect, assertType, beforeEach } from 'vitest';
+import { v4 as uuidv4 } from 'uuid';
 
 import CreateActivity from '@/server/activitypub/model/action/create';
 import UpdateActivity from '@/server/activitypub/model/action/update';
@@ -6,7 +7,13 @@ import DeleteActivity from '@/server/activitypub/model/action/delete';
 import FollowActivity from '@/server/activitypub/model/action/follow';
 import AnnounceActivity from '@/server/activitypub/model/action/announce';
 import UndoActivity from '@/server/activitypub/model/action/undo';
-import { ActivityPubInboxMessageEntity } from '@/server/activitypub/entity/activitypub';
+import {
+  ActivityPubInboxMessageEntity,
+  RepostDismissalEntity,
+} from '@/server/activitypub/entity/activitypub';
+import { EventEntity } from '@/server/calendar/entity/event';
+import { CalendarEntity } from '@/server/calendar/entity/calendar';
+import db from '@/server/common/entity/db';
 
 describe('toModel', () => {
   it('should fail to make a message', async () => {
@@ -99,5 +106,79 @@ describe('toModel', () => {
     });
 
     assertType<UndoActivity>( testEntity.toModel() );
+  });
+});
+
+describe('RepostDismissalEntity', () => {
+  let calendarId: string;
+  let eventId: string;
+
+  beforeEach(async () => {
+    await db.sync({ force: true });
+    // Enable SQLite foreign-key enforcement so ON DELETE CASCADE is honored.
+    // (SQLite :memory: defaults to foreign_keys = OFF.)
+    await db.query('PRAGMA foreign_keys = ON');
+
+    calendarId = uuidv4();
+    await CalendarEntity.create({
+      id: calendarId,
+      url_name: 'dismissal_cal',
+      languages: 'en',
+    });
+
+    eventId = uuidv4();
+    await EventEntity.create({
+      id: eventId,
+      calendar_id: calendarId,
+    });
+  });
+
+  it('allows inserting a dismissal for a valid (event_id, calendar_id) pair', async () => {
+    const row = await RepostDismissalEntity.create({
+      id: uuidv4(),
+      event_id: eventId,
+      calendar_id: calendarId,
+    });
+
+    expect(row.event_id).toBe(eventId);
+    expect(row.calendar_id).toBe(calendarId);
+    expect(row.dismissed_at).toBeInstanceOf(Date);
+  });
+
+  it('rejects a duplicate (event_id, calendar_id) pair via the unique index', async () => {
+    await RepostDismissalEntity.create({
+      id: uuidv4(),
+      event_id: eventId,
+      calendar_id: calendarId,
+    });
+
+    await expect(
+      RepostDismissalEntity.create({
+        id: uuidv4(),
+        event_id: eventId,
+        calendar_id: calendarId,
+      }),
+    ).rejects.toThrow();
+
+    const count = await RepostDismissalEntity.count({
+      where: { event_id: eventId, calendar_id: calendarId },
+    });
+    expect(count).toBe(1);
+  });
+
+  it('cascades and removes the dismissal row when its event is deleted', async () => {
+    await RepostDismissalEntity.create({
+      id: uuidv4(),
+      event_id: eventId,
+      calendar_id: calendarId,
+    });
+
+    const before = await RepostDismissalEntity.count({ where: { event_id: eventId } });
+    expect(before).toBe(1);
+
+    await EventEntity.destroy({ where: { id: eventId } });
+
+    const after = await RepostDismissalEntity.count({ where: { event_id: eventId } });
+    expect(after).toBe(0);
   });
 });

@@ -27,6 +27,7 @@ import {
   EventActivityEntity,
   ActivityPubInboxMessageEntity,
   ActivityPubOutboxMessageEntity,
+  RepostDismissalEntity,
 } from '@/server/activitypub/entity/activitypub';
 import { CalendarActorEntity } from '@/server/activitypub/entity/calendar_actor';
 import { EventObjectEntity } from '@/server/activitypub/entity/event_object';
@@ -63,6 +64,9 @@ export async function setupActivityPubSchema(): Promise<void> {
 
   // Sync EventObjectEntity (ap_event_object) — links AP identity to local events
   await EventObjectEntity.sync({ force: true });
+
+  // Sync RepostDismissalEntity (ap_repost_dismissal) — FKs to EventEntity + CalendarEntity
+  await RepostDismissalEntity.sync({ force: true });
 }
 
 /**
@@ -73,6 +77,7 @@ export async function setupActivityPubSchema(): Promise<void> {
  */
 export async function teardownActivityPubSchema(): Promise<void> {
   // Drop tables in reverse order of dependencies
+  await RepostDismissalEntity.drop();
   await EventObjectEntity.drop();
   await EventActivityEntity.drop();
   await SharedEventEntity.drop();

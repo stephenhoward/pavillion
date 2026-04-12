@@ -93,23 +93,39 @@ class EventService {
     categories?: string[];
   }): Promise<CalendarEvent[]> {
 
-    // Get event IDs that are reposted or shared by this calendar
+    // Get event IDs that are reposted or shared by this calendar.
+    //
+    // repostStatus resolution:
+    //   - SharedEventEntity (via AP interface) is the authoritative source and
+    //     carries auto_posted to distinguish 'auto' vs 'manual' shares.
+    //   - EventRepostEntity is a legacy direct-repost link with no auto/manual
+    //     distinction; when an event appears only there it is treated as 'manual'.
+    //   - Events not in either collection (owned by the calendar) report 'none'.
     const reposts = await EventRepostEntity.findAll({
       where: { calendar_id: calendar.id },
       attributes: ['event_id'],
     });
-    // Get shared event IDs via AP interface
-    // Filter to valid UUIDs for safety since old records may have AP URLs
+    // Get shared event id -> status map via AP interface (derived from auto_posted).
+    // Filter to valid UUIDs for safety since old records may have AP URLs.
     const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    const shareEventIds = (await this.activityPubInterface!.getSharedEventIds(calendar.id))
-      .filter(id => UUID_REGEX.test(id));
+    const sharedStatusMap = await this.activityPubInterface!.getSharedEventStatusMap(calendar.id);
 
-    const repostedEventIds = [
-      ...reposts.map(r => r.event_id),
-      ...shareEventIds,
-    ];
+    // Build a unified repostStatus map for O(1) lookup during mapping below.
+    // SharedEventEntity takes precedence (auto|manual); EventRepostEntity-only
+    // entries default to 'manual'.
+    const repostStatusByEventId = new Map<string, 'auto' | 'manual'>();
+    for (const [eventId, status] of sharedStatusMap.entries()) {
+      if (UUID_REGEX.test(eventId)) {
+        repostStatusByEventId.set(eventId, status);
+      }
+    }
+    for (const r of reposts) {
+      if (!repostStatusByEventId.has(r.event_id)) {
+        repostStatusByEventId.set(r.event_id, 'manual');
+      }
+    }
 
-    const repostedIdSet = new Set(repostedEventIds);
+    const repostedEventIds = Array.from(repostStatusByEventId.keys());
 
     // Query events owned by calendar OR reposted by calendar
     const queryOptions: any = {
@@ -204,7 +220,7 @@ class EventService {
         e.categories = categoryAssignments.map(assignment => assignment.category.toModel());
       }
 
-      e.isRepost = repostedIdSet.has(e.id);
+      e.repostStatus = repostStatusByEventId.get(e.id) ?? 'none';
 
       return e;
     });
@@ -1362,7 +1378,9 @@ class EventService {
     const updatedEvents = [];
     for (const eventId of eventIds) {
       const updatedEvent = await this.getEventById(eventId);
-      updatedEvent.isRepost = wasRepost;
+      // wasRepost is derived from resolveEffectiveCalendarId(); preserve the
+      // legacy boolean by mapping true → 'manual' (no auto/manual context here).
+      updatedEvent.repostStatus = wasRepost ? 'manual' : 'none';
       updatedEvents.push(updatedEvent);
     }
 
@@ -1469,7 +1487,9 @@ class EventService {
 
     // Return updated event (after successful commit)
     const updatedEvent = await this.getEventById(eventId);
-    updatedEvent.isRepost = wasRepost;
+    // wasRepost is derived from resolveEffectiveCalendarId(); map true → 'manual'
+    // (no auto/manual context available here).
+    updatedEvent.repostStatus = wasRepost ? 'manual' : 'none';
 
     return updatedEvent;
   }

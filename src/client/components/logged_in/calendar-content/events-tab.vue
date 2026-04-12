@@ -3,7 +3,7 @@ import { reactive, ref, computed, nextTick } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useTranslation } from 'i18next-vue';
 import { DateTime } from 'luxon';
-import { Plus, Calendar, Languages, Repeat, Pencil, Copy, Flag } from 'lucide-vue-next';
+import { Plus, Calendar, Languages, Repeat, Pencil, Copy, Flag, Link2Off } from 'lucide-vue-next';
 import { useEventStore } from '@/client/stores/eventStore';
 import { useCalendarStore } from '@/client/stores/calendarStore';
 import { useCategoryStore } from '@/client/stores/categoryStore';
@@ -112,6 +112,11 @@ const repostModalTriggerEl = ref(null);
 // Delete confirmation modal state
 const showDeleteConfirmModal = ref(false);
 const deleteModalTriggerEl = ref(null);
+
+// Unpost confirmation modal state
+const showUnpostConfirmModal = ref(false);
+const unpostTargetEvent = ref<any>(null);
+const unpostModalTriggerEl = ref<HTMLElement | null>(null);
 
 /**
  * Initializes filter state from URL query parameters.
@@ -339,6 +344,65 @@ const handleReportDialogClose = () => {
   reportEventTitle.value = '';
 };
 
+/**
+ * Opens the unpost confirmation modal for a reposted event.
+ */
+const handleUnpostButtonClick = (event: any, domEvent: MouseEvent) => {
+  unpostModalTriggerEl.value = (domEvent?.currentTarget as HTMLElement) ?? null;
+  unpostTargetEvent.value = event;
+  showUnpostConfirmModal.value = true;
+};
+
+/**
+ * Cancels the unpost operation and closes the confirmation modal.
+ */
+const handleUnpostCancel = async () => {
+  showUnpostConfirmModal.value = false;
+  unpostTargetEvent.value = null;
+  await nextTick();
+  unpostModalTriggerEl.value?.focus();
+};
+
+/**
+ * Executes the unpost after the user confirms in the modal.
+ *
+ * Uses eventService.unshareReposted (not feedService.unshareEvent directly) so
+ * this calendar-management surface depends only on EventService. The wrapper
+ * hits the same DELETE /api/v1/social/shares endpoint and also handles store
+ * removal, keeping the component free of feed-domain imports.
+ *
+ * This surface confirms-then-mutates (removes the event from the list on
+ * success). The feed view uses an optimistic-with-rollback pattern instead,
+ * which is intentional: the calendar list is a management surface where a
+ * destructive-feeling remove makes sense, while the feed is a browsing surface
+ * where the row should remain visible.
+ */
+const handleUnpostConfirm = async () => {
+  const targetEvent = unpostTargetEvent.value;
+  showUnpostConfirmModal.value = false;
+
+  if (!targetEvent || !props.calendar?.id) {
+    unpostTargetEvent.value = null;
+    await nextTick();
+    unpostModalTriggerEl.value?.focus();
+    return;
+  }
+
+  try {
+    await eventService.unshareReposted(props.calendar.id, targetEvent);
+    toast.success(t('event.unpost_success_toast'));
+  }
+  catch (error) {
+    console.error('Error unposting reposted event:', error);
+    toast.error(t('event.unpost_error_toast'));
+  }
+  finally {
+    unpostTargetEvent.value = null;
+    await nextTick();
+    unpostModalTriggerEl.value?.focus();
+  }
+};
+
 // Format event date for display
 const formatEventDate = (event) => {
   if (!event.schedules || event.schedules.length === 0) {
@@ -539,6 +603,16 @@ initializeFiltersFromURL();
               <Copy :size="18" />
             </button>
             <button
+              v-if="event.isRepost"
+              type="button"
+              class="unpost-btn icon-btn"
+              @click.stop="handleUnpostButtonClick(event, $event)"
+              :aria-label="t('event.unpost_aria_label', { name: event.content('en').name })"
+              :title="t('event.unpost_button_label')"
+            >
+              <Link2Off :size="18" />
+            </button>
+            <button
               type="button"
               class="report-btn icon-btn"
               @click.stop="handleReportEvent(event)"
@@ -607,6 +681,34 @@ initializeFiltersFromURL();
             @click="handleDeleteConfirm"
           >
             {{ tBulk('delete_confirm_button') }}
+          </PillButton>
+        </div>
+      </div>
+    </ModalLayout>
+
+    <!-- Unpost Confirmation Modal -->
+    <ModalLayout
+      v-if="showUnpostConfirmModal"
+      :title="t('event.unpost_confirm_title')"
+      modal-class="unpost-event-modal"
+      @close="handleUnpostCancel"
+    >
+      <div class="unpost-event-dialog">
+        <p class="unpost-event-message">
+          {{ t('event.unpost_confirm_body') }}
+        </p>
+        <div class="unpost-event-actions">
+          <PillButton
+            variant="ghost"
+            @click="handleUnpostCancel"
+          >
+            {{ t('event.unpost_cancel') }}
+          </PillButton>
+          <PillButton
+            variant="danger"
+            @click="handleUnpostConfirm"
+          >
+            {{ t('event.unpost_confirm_action') }}
           </PillButton>
         </div>
       </div>
@@ -799,6 +901,11 @@ initializeFiltersFromURL();
           &:hover {
             background: var(--pav-color-stone-100);
             color: var(--pav-color-orange-500);
+          }
+
+          &:focus-visible {
+            outline: 2px solid var(--pav-color-focus-ring, var(--pav-color-orange-500));
+            outline-offset: 2px;
           }
 
           @media (prefers-color-scheme: dark) {
@@ -1025,6 +1132,40 @@ initializeFiltersFromURL();
   }
 
   .delete-events-actions {
+    display: flex;
+    gap: 0.75rem;
+    justify-content: flex-end;
+    padding-top: var(--pav-space-4, 1rem);
+    border-top: 1px solid var(--pav-color-stone-200);
+
+    @media (prefers-color-scheme: dark) {
+      border-top-color: var(--pav-color-stone-700);
+    }
+  }
+}
+
+// Constrain unpost event modal width
+:global(.unpost-event-modal > div) {
+  max-width: 480px !important;
+}
+
+.unpost-event-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pav-space-4, 1rem);
+
+  .unpost-event-message {
+    margin: 0;
+    color: var(--pav-color-stone-600);
+    font-size: 0.875rem;
+    line-height: 1.5;
+
+    @media (prefers-color-scheme: dark) {
+      color: var(--pav-color-stone-400);
+    }
+  }
+
+  .unpost-event-actions {
     display: flex;
     gap: 0.75rem;
     justify-content: flex-end;

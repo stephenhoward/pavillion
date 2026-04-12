@@ -37,8 +37,12 @@ export async function resolveSourceCalendars(
 ): Promise<void> {
   for (const ctx of contexts) {
     if (ctx.eventCalendarId === null) {
-      // Remote repost — resolve via pre-resolved actor URI map
-      ctx.event.isRepost = true;
+      // Remote repost — resolve via pre-resolved actor URI map.
+      // Without SharedEventEntity context here we default to 'manual';
+      // callers that know the actual auto/manual distinction should set it.
+      if (ctx.event.repostStatus === 'none') {
+        ctx.event.repostStatus = 'manual';
+      }
       const attributedTo = remoteActorUriMap.get(ctx.event.id);
       if (attributedTo) {
         const parsed = parseAttributedToUri(attributedTo);
@@ -48,8 +52,11 @@ export async function resolveSourceCalendars(
       }
     }
     else if (ctx.eventCalendarId !== ctx.displayCalendarId) {
-      // Local repost — resolve from eager-loaded calendar data
-      ctx.event.isRepost = true;
+      // Local repost — resolve from eager-loaded calendar data.
+      // Default to 'manual' when no more specific status has been set.
+      if (ctx.event.repostStatus === 'none') {
+        ctx.event.repostStatus = 'manual';
+      }
       if (ctx.sourceCalendarUrlName) {
         const domain: string = config.get('domain');
         ctx.event.sourceCalendar = {

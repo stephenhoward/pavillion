@@ -37,6 +37,7 @@ describe('EventService - Location Integration', () => {
     // no real ActivityPub domain is wired up in this test environment.
     calendarInterface.setActivityPubInterface({
       getSharedEventIds: async () => [],
+      getSharedEventStatusMap: async () => new Map(),
     } as any);
 
     const configurationInterface = new ConfigurationInterface();
