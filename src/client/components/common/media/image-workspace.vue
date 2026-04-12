@@ -126,8 +126,9 @@ function onZoomInput(e: Event): void {
            aria-valuemax="100"
            tabindex="0"
            @pointerdown="onFocalPointerDown">
-        <div class="crosshair-h" />
-        <div class="crosshair-v" />
+        <Crosshair :size="24"
+                   class="focal-icon"
+                   aria-hidden="true" />
       </div>
       <div class="hint-pill">
         <Crosshair :size="14"
@@ -252,27 +253,13 @@ $transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   }
 }
 
-.crosshair-h,
-.crosshair-v {
+.focal-icon {
   position: absolute;
-  background: white;
-  box-shadow: 0 0 2px rgba(0, 0, 0, 0.4);
-}
-
-.crosshair-h {
   top: 50%;
-  left: 4px;
-  right: 4px;
-  height: 1px;
-  transform: translateY(-50%);
-}
-
-.crosshair-v {
   left: 50%;
-  top: 4px;
-  bottom: 4px;
-  width: 1px;
-  transform: translateX(-50%);
+  transform: translate(-50%, -50%);
+  color: white;
+  filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.4));
 }
 
 .hint-pill {
