@@ -44,6 +44,15 @@ class EventSeriesEntity extends Model {
   })
   declare media_id: string | null;
 
+  @Column({ type: DataType.FLOAT, allowNull: false, defaultValue: 0.5 })
+  declare media_focal_point_x: number;
+
+  @Column({ type: DataType.FLOAT, allowNull: false, defaultValue: 0.5 })
+  declare media_focal_point_y: number;
+
+  @Column({ type: DataType.FLOAT, allowNull: false, defaultValue: 1.0 })
+  declare media_zoom: number;
+
   @CreatedAt
   declare created_at: Date;
 
@@ -67,6 +76,9 @@ class EventSeriesEntity extends Model {
       this.url_name,
       this.media_id ?? null,
     );
+    model.mediaFocalPointX = this.media_focal_point_x;
+    model.mediaFocalPointY = this.media_focal_point_y;
+    model.mediaZoom = this.media_zoom;
 
     if (this.content && this.content.length > 0) {
       for (const content of this.content) {
@@ -86,6 +98,9 @@ class EventSeriesEntity extends Model {
       calendar_id: model.calendarId,
       url_name: model.urlName,
       media_id: model.mediaId ?? null,
+      media_focal_point_x: model.mediaFocalPointX,
+      media_focal_point_y: model.mediaFocalPointY,
+      media_zoom: model.mediaZoom,
     });
   }
 }

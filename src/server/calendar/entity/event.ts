@@ -49,6 +49,15 @@ class EventEntity extends Model {
   @Column({ type: DataType.UUID })
   declare media_id: string;
 
+  @Column({ type: DataType.FLOAT, allowNull: false, defaultValue: 0.5 })
+  declare media_focal_point_x: number;
+
+  @Column({ type: DataType.FLOAT, allowNull: false, defaultValue: 0.5 })
+  declare media_focal_point_y: number;
+
+  @Column({ type: DataType.FLOAT, allowNull: false, defaultValue: 1.0 })
+  declare media_zoom: number;
+
   @ForeignKey(() => EventSeriesEntity)
   @Column({ type: DataType.UUID, allowNull: true })
   declare series_id: string | null;
@@ -80,6 +89,9 @@ class EventEntity extends Model {
   toModel(): CalendarEvent {
     let model = new CalendarEvent(this.id, this.calendar_id, this.event_source_url);
     model.locationId = this.location_id || null;
+    model.mediaFocalPointX = this.media_focal_point_x;
+    model.mediaFocalPointY = this.media_focal_point_y;
+    model.mediaZoom = this.media_zoom;
     if (this.location) {
       model.location = this.location.toModel();
     }
@@ -106,6 +118,9 @@ class EventEntity extends Model {
       event_source_url: event.eventSourceUrl,
       calendar_id: event.calendarId,
       media_id: event.media?.id,
+      media_focal_point_x: event.mediaFocalPointX,
+      media_focal_point_y: event.mediaFocalPointY,
+      media_zoom: event.mediaZoom,
       series_id: event.series?.id ?? null,
     });
   }

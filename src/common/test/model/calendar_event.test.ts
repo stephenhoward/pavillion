@@ -145,3 +145,81 @@ describe('CalendarEvent.repostStatus', () => {
     expect(restored.isRepost).toBe(true);
   });
 });
+
+describe('CalendarEvent.mediaFocalPoint', () => {
+
+  it('should default mediaFocalPointX to 0.5', () => {
+    const event = new CalendarEvent('evt-1', 'cal-1');
+    expect(event.mediaFocalPointX).toBe(0.5);
+  });
+
+  it('should default mediaFocalPointY to 0.5', () => {
+    const event = new CalendarEvent('evt-1', 'cal-1');
+    expect(event.mediaFocalPointY).toBe(0.5);
+  });
+
+  it('should default mediaZoom to 1.0', () => {
+    const event = new CalendarEvent('evt-1', 'cal-1');
+    expect(event.mediaZoom).toBe(1.0);
+  });
+
+  it('should include focal point fields in toObject()', () => {
+    const event = new CalendarEvent('evt-1', 'cal-1');
+    event.mediaFocalPointX = 0.3;
+    event.mediaFocalPointY = 0.7;
+    event.mediaZoom = 1.5;
+
+    const obj = event.toObject();
+    expect(obj.mediaFocalPointX).toBe(0.3);
+    expect(obj.mediaFocalPointY).toBe(0.7);
+    expect(obj.mediaZoom).toBe(1.5);
+  });
+
+  it('should include default focal point fields in toObject()', () => {
+    const event = new CalendarEvent('evt-1', 'cal-1');
+    const obj = event.toObject();
+
+    expect(obj.mediaFocalPointX).toBe(0.5);
+    expect(obj.mediaFocalPointY).toBe(0.5);
+    expect(obj.mediaZoom).toBe(1.0);
+  });
+
+  it('should deserialize focal point fields from fromObject()', () => {
+    const obj = {
+      id: 'evt-1',
+      calendarId: 'cal-1',
+      mediaFocalPointX: 0.2,
+      mediaFocalPointY: 0.8,
+      mediaZoom: 2.0,
+    };
+
+    const event = CalendarEvent.fromObject(obj);
+    expect(event.mediaFocalPointX).toBe(0.2);
+    expect(event.mediaFocalPointY).toBe(0.8);
+    expect(event.mediaZoom).toBe(2.0);
+  });
+
+  it('should use default focal point values when absent in fromObject() (backward compat)', () => {
+    const obj = {
+      id: 'evt-1',
+      calendarId: 'cal-1',
+    };
+
+    const event = CalendarEvent.fromObject(obj);
+    expect(event.mediaFocalPointX).toBe(0.5);
+    expect(event.mediaFocalPointY).toBe(0.5);
+    expect(event.mediaZoom).toBe(1.0);
+  });
+
+  it('should round-trip focal point fields through toObject/fromObject', () => {
+    const event = new CalendarEvent('evt-1', 'cal-1');
+    event.mediaFocalPointX = 0.1;
+    event.mediaFocalPointY = 0.9;
+    event.mediaZoom = 1.5;
+
+    const restored = CalendarEvent.fromObject(event.toObject());
+    expect(restored.mediaFocalPointX).toBe(0.1);
+    expect(restored.mediaFocalPointY).toBe(0.9);
+    expect(restored.mediaZoom).toBe(1.5);
+  });
+});

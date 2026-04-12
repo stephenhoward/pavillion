@@ -57,7 +57,10 @@
     "remove_file": "Remove {{filename}} from upload queue",
     "retry_upload": "Retry uploading {{filename}}",
     "replace_file": "Replace selected file",
-    "dismiss_error": "Dismiss upload error"
+    "dismiss_error": "Dismiss upload error",
+    "image_workspace": "Image workspace with focal point adjustment",
+    "focal_point_marker": "Focal point marker. Drag to reposition.",
+    "zoom_slider": "Image zoom level"
   },
   "display": {
     "processing_image": "Image is being processed",
@@ -69,5 +72,11 @@
     "max_file_size": "Maximum file size: {{maxSize}}",
     "drag_drop_instructions": "You can drag multiple files at once or click to browse",
     "drag_drop_instructions_single": "Drag a single file or click to browse"
+  },
+  "workspace": {
+    "focal_hint": "Drag anywhere to set the focal point",
+    "focal_explanation": "The focal point determines how your image is cropped across card and banner displays.",
+    "replace_image": "Replace image",
+    "remove": "Remove"
   }
 }

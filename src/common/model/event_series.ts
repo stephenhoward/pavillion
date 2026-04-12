@@ -7,6 +7,12 @@ import { EventSeriesContent } from './event_series_content.js';
  */
 export class EventSeries extends TranslatedModel<EventSeriesContent> {
   _content: Record<string, EventSeriesContent> = {};
+  /** Horizontal focal point for media cropping (0.0 = left, 1.0 = right). */
+  mediaFocalPointX: number = 0.5;
+  /** Vertical focal point for media cropping (0.0 = top, 1.0 = bottom). */
+  mediaFocalPointY: number = 0.5;
+  /** Zoom level for media display (1.0 = no zoom). */
+  mediaZoom: number = 1.0;
 
   constructor(
     id: string,
@@ -50,6 +56,9 @@ export class EventSeries extends TranslatedModel<EventSeriesContent> {
       calendarId: this.calendarId,
       urlName: this.urlName,
       mediaId: this.mediaId,
+      mediaFocalPointX: this.mediaFocalPointX,
+      mediaFocalPointY: this.mediaFocalPointY,
+      mediaZoom: this.mediaZoom,
       content: Object.fromEntries(
         Object.entries(this._content)
           .map(([language, content]: [string, EventSeriesContent]) => [language, content.toObject()]),
@@ -67,6 +76,10 @@ export class EventSeries extends TranslatedModel<EventSeriesContent> {
       obj.urlName,
       obj.mediaId ?? null,
     );
+
+    series.mediaFocalPointX = obj.mediaFocalPointX ?? 0.5;
+    series.mediaFocalPointY = obj.mediaFocalPointY ?? 0.5;
+    series.mediaZoom = obj.mediaZoom ?? 1.0;
 
     if (obj.content) {
       for (const [language, contentObj] of Object.entries(obj.content)) {
