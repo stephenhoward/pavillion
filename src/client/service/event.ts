@@ -146,6 +146,26 @@ export default class EventService {
   }
 
   /**
+   * Remove a reposted event from a calendar (writes a sticky dismissal on the backend
+   * so the event is not silently re-auto-posted on the next broadcast). Thin wrapper
+   * over DELETE /api/v1/social/shares so calendar-management components do not need
+   * to reach into FeedService.
+   *
+   * @param calendarId The calendar holding the repost
+   * @param event The reposted event to remove
+   */
+  async unshareReposted(calendarId: string, event: CalendarEvent): Promise<void> {
+    try {
+      await ModelService.delete(`/api/v1/social/shares/${encodeURIComponent(event.id)}?calendarId=${calendarId}`);
+      this.store.removeEvent(calendarId, event);
+    }
+    catch (error) {
+      console.error('Error unsharing reposted event:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Strips IDs and auto-generated fields from an event to prepare for duplication.
    * Creates a copy of the event with all identifying fields cleared while preserving
    * content, location data, media data, schedules, and categories.

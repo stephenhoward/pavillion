@@ -9,7 +9,6 @@ import { useCalendarStore } from '@/client/stores/calendarStore';
 import { useCategoryStore } from '@/client/stores/categoryStore';
 import CalendarService from '@/client/service/calendar';
 import EventService from '@/client/service/event';
-import FeedService from '@/client/service/feed';
 import { useToast } from '@/client/composables/useToast';
 import { useBulkSelection } from '@/client/composables/useBulkSelection';
 import EventImage from '@/client/components/common/media/event-image.vue';
@@ -50,7 +49,6 @@ const { t: tReport } = useTranslation('system', {
 const { t: tFeed } = useTranslation('feed');
 
 const eventService = new EventService();
-const feedService = new FeedService();
 const calendarStore = useCalendarStore();
 const categoryStore = useCategoryStore();
 const toast = useToast();
@@ -367,7 +365,17 @@ const handleUnpostCancel = async () => {
 
 /**
  * Executes the unpost after the user confirms in the modal.
- * Calls feedService.unshareEvent and removes the event from local state on success.
+ *
+ * Uses eventService.unshareReposted (not feedService.unshareEvent directly) so
+ * this calendar-management surface depends only on EventService. The wrapper
+ * hits the same DELETE /api/v1/social/shares endpoint and also handles store
+ * removal, keeping the component free of feed-domain imports.
+ *
+ * This surface confirms-then-mutates (removes the event from the list on
+ * success). The feed view uses an optimistic-with-rollback pattern instead,
+ * which is intentional: the calendar list is a management surface where a
+ * destructive-feeling remove makes sense, while the feed is a browsing surface
+ * where the row should remain visible.
  */
 const handleUnpostConfirm = async () => {
   const targetEvent = unpostTargetEvent.value;
@@ -381,8 +389,7 @@ const handleUnpostConfirm = async () => {
   }
 
   try {
-    await feedService.unshareEvent(props.calendar.id, targetEvent.id);
-    store.removeEvent(props.calendar.id, targetEvent);
+    await eventService.unshareReposted(props.calendar.id, targetEvent);
     toast.success(t('event.unpost_success_toast'));
   }
   catch (error) {
