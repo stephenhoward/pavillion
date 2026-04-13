@@ -111,7 +111,11 @@ function onZoomInput(e: Event): void {
       <img :src="image.url"
            alt=""
            class="workspace-image"
-           draggable="false" />
+           draggable="false"
+           :style="{
+             transform: `scale(${image.mediaZoom})`,
+             transformOrigin: `${image.mediaFocalPointX * 100}% ${image.mediaFocalPointY * 100}%`,
+           }" />
       <div class="dimming-overlay" />
       <div class="focal-point-marker"
            :class="{ dragging: isDraggingFocal }"
