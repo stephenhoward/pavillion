@@ -157,7 +157,7 @@ export default class EventInstanceService {
     }
 
     const instance = eventInstance.toModel();
-    instance.event.categories = await this.categoryService.getEventCategories(instance.event.id);
+    instance.event.categories = await this.categoryService.getEventCategories(instance.event.id, eventInstance.calendar_id);
     return instance;
   }
 
@@ -320,11 +320,12 @@ export default class EventInstanceService {
           instance.event.media = event.media.toModel();
         }
 
-        // Add categories
+        // Add categories, filtered to the display calendar so reposted events
+        // only show the display calendar's categories
         const categoryAssignments = event.getDataValue('categoryAssignments') as EventCategoryAssignmentEntity[] | undefined;
         if (categoryAssignments) {
           instance.event.categories = categoryAssignments
-            .filter(assignment => assignment.category != null)
+            .filter(assignment => assignment.category != null && assignment.category.calendar_id === calendar.id)
             .map(assignment => assignment.category.toModel());
         }
 
@@ -404,8 +405,9 @@ export default class EventInstanceService {
       instance.event.location = event.location.toModel();
     }
 
-    // Populate categories via the category service
-    instance.event.categories = await this.categoryService.getEventCategories(instance.event.id);
+    // Populate categories via the category service, filtered to the display calendar
+    // so reposted events only show the display calendar's categories
+    instance.event.categories = await this.categoryService.getEventCategories(instance.event.id, eventInstance.calendar_id);
 
     // Resolve source calendar information for reposted events
     const repostContext: RepostContext = {

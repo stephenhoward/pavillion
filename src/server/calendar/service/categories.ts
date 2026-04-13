@@ -579,19 +579,28 @@ class CategoryService {
   }
 
   /**
-   * Get all categories assigned to an event
+   * Get all categories assigned to an event.
+   * When calendarId is provided, only returns categories that belong to that calendar.
+   * This is essential for public views of reposted events where only the display
+   * calendar's categories should be shown, not the source calendar's.
    */
-  async getEventCategories(eventId: string): Promise<EventCategory[]> {
+  async getEventCategories(eventId: string, calendarId?: string): Promise<EventCategory[]> {
     const assignments = await EventCategoryAssignmentEntity.findAll({
       where: { event_id: eventId },
       include: [{
         model: EventCategoryEntity,
-        as: 'category', // Required because association uses alias (see event.ts line 241)
+        as: 'category',
+        // When calendarId is provided, Sequelize applies a LEFT OUTER JOIN with
+        // this WHERE condition. Non-matching assignments still appear in results
+        // with category = null, so we filter those out below.
+        where: calendarId ? { calendar_id: calendarId } : undefined,
         include: [EventCategoryContentEntity],
       }],
     });
 
-    return assignments.map(assignment => assignment.category.toModel());
+    return assignments
+      .filter(assignment => assignment.category != null)
+      .map(assignment => assignment.category.toModel());
   }
 
   /**

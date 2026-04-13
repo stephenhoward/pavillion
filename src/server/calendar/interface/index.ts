@@ -475,8 +475,8 @@ export default class CalendarInterface {
     return this.getEventById(eventId);
   }
 
-  async getEventCategories(eventId: string): Promise<EventCategory[]> {
-    return this.categoryService.getEventCategories(eventId);
+  async getEventCategories(eventId: string, calendarId?: string): Promise<EventCategory[]> {
+    return this.categoryService.getEventCategories(eventId, calendarId);
   }
 
   async getCategoryEvents(categoryId: string, calendarId?: string): Promise<string[]> {
