@@ -29,17 +29,19 @@
     "max_files_exceeded": "Too many files selected. Maximum allowed: {{maxFiles}}"
   },
   "errors": {
-    "FILE_TOO_LARGE": "File size {{fileSizeFormatted}} exceeds maximum allowed size of {{maxFileSizeFormatted}}",
-    "INVALID_MIME_TYPE": "File type {{fileType}} is not allowed. Allowed types: {{allowedTypes}}",
-    "INVALID_EXTENSION": "File extension {{extension}} is not allowed. Allowed extensions: {{allowedExtensions}}",
-    "VALIDATION_FAILED": "File validation failed",
-    "NETWORK_ERROR": "Network error during upload",
-    "SERVER_ERROR": "Server error ({{status}}): {{serverMessage}}",
-    "UPLOAD_ABORTED": "Upload was cancelled",
-    "PREVIEW_GENERATION_FAILED": "Failed to generate image preview",
-    "NOT_AN_IMAGE": "File is not an image",
+    "FILE_TOO_LARGE": "This file is too large. Please choose a smaller image.",
+    "INVALID_MIME_TYPE": "This file type is not supported. Please use a JPG, PNG, or HEIC image.",
+    "INVALID_EXTENSION": "This file type is not supported. Please use a JPG, PNG, or HEIC image.",
+    "INVALID_TYPE": "This file type is not supported. Please use a JPG, PNG, or HEIC image.",
+    "VALIDATION_FAILED": "This file could not be uploaded. Please try a different image.",
+    "NETWORK_ERROR": "Could not connect to the server. Please check your connection and try again.",
+    "SERVER_ERROR": "Something went wrong. Please try again later.",
+    "UPLOAD_ABORTED": "Upload was cancelled.",
+    "PREVIEW_GENERATION_FAILED": "Could not preview this image. Please try a different file.",
+    "NOT_AN_IMAGE": "This file is not an image. Please select an image file.",
     "TOO_MANY_FILES": "Too many files selected. Maximum allowed: {{maxFiles}}",
-    "SINGLE_FILE_ONLY": "Only one file is allowed in single file mode"
+    "SINGLE_FILE_ONLY": "Only one image can be uploaded at a time.",
+    "PERMISSION_DENIED": "You don't have permission to upload images to this calendar."
   },
   "status": {
     "pending": "Pending",
@@ -57,7 +59,10 @@
     "remove_file": "Remove {{filename}} from upload queue",
     "retry_upload": "Retry uploading {{filename}}",
     "replace_file": "Replace selected file",
-    "dismiss_error": "Dismiss upload error"
+    "dismiss_error": "Dismiss upload error",
+    "image_workspace": "Image workspace with focal point adjustment",
+    "focal_point_marker": "Focal point marker. Drag to reposition.",
+    "zoom_slider": "Image zoom level"
   },
   "display": {
     "processing_image": "Image is being processed",
@@ -69,5 +74,11 @@
     "max_file_size": "Maximum file size: {{maxSize}}",
     "drag_drop_instructions": "You can drag multiple files at once or click to browse",
     "drag_drop_instructions_single": "Drag a single file or click to browse"
+  },
+  "workspace": {
+    "focal_hint": "Drag anywhere to set the focal point",
+    "focal_explanation": "The focal point determines how your image is cropped across card and banner displays.",
+    "replace_image": "Replace image",
+    "remove": "Remove"
   }
 }

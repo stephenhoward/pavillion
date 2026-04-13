@@ -1,7 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import sinon from 'sinon';
 import { EventEmitter } from 'events';
 import MediaService from '@/server/media/service/media';
 import { Media } from '@/common/model/media';
+import { MediaFileTooLargeError, MediaInvalidTypeError, MediaStorageError } from '@/common/exceptions/media';
+import { MediaEntity } from '@/server/media/entity/media';
+import CalendarInterface from '@/server/calendar/interface';
+import { Account } from '@/common/model/account';
+import { Calendar } from '@/common/model/calendar';
 
 describe('MediaService', () => {
   let mediaService: MediaService;
@@ -41,7 +47,7 @@ describe('MediaService', () => {
       const mimeType = 'text/plain';
 
       expect(() => mediaService['validateFile'](buffer, filename, mimeType))
-        .toThrow('MIME type text/plain is not allowed');
+        .toThrow(MediaInvalidTypeError);
     });
 
     it('should reject file with invalid extension', () => {
@@ -50,7 +56,7 @@ describe('MediaService', () => {
       const mimeType = 'image/png';
 
       expect(() => mediaService['validateFile'](buffer, filename, mimeType))
-        .toThrow('File extension .txt is not allowed');
+        .toThrow(MediaInvalidTypeError);
     });
 
     it('should reject file that is too large', () => {
@@ -60,7 +66,7 @@ describe('MediaService', () => {
       const mimeType = 'image/png';
 
       expect(() => mediaService['validateFile'](largeBuffer, filename, mimeType))
-        .toThrow('File size exceeds maximum allowed size');
+        .toThrow(MediaFileTooLargeError);
     });
   });
 
@@ -182,5 +188,60 @@ describe('MediaService', () => {
       expect(restored.fileSize).toBe(original.fileSize);
       expect(restored.status).toBe(original.status);
     });
+  });
+});
+
+describe('uploadFile storage error handling', () => {
+  let sandbox: sinon.SinonSandbox;
+  let mediaService: MediaService;
+  let calendarService: CalendarInterface;
+  let eventBus: EventEmitter;
+
+  const testAccount = new Account('account-123', 'test@example.com');
+  const calendarId = 'c3d4e5f6-0001-4000-8000-000000000001';
+  const testCalendar = new Calendar(calendarId, 'testcalendar');
+
+  beforeEach(() => {
+    sandbox = sinon.createSandbox();
+    eventBus = new EventEmitter();
+
+    calendarService = {
+      getCalendar: sandbox.stub().resolves(testCalendar),
+      editableCalendarsForUser: sandbox.stub().resolves([testCalendar]),
+    } as unknown as CalendarInterface;
+
+    mediaService = new MediaService(eventBus, calendarService);
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+    eventBus.removeAllListeners();
+  });
+
+  it('throws MediaStorageError when storageDisk.put rejects', async () => {
+    // Stub MediaEntity.findOne to simulate no duplicate
+    sandbox.stub(MediaEntity, 'findOne').resolves(null);
+
+    // Stub MediaEntity.fromModel and save so the DB path doesn't run
+    const fakeSave = sandbox.stub().resolves();
+    sandbox.stub(MediaEntity, 'fromModel').returns({ save: fakeSave } as unknown as MediaEntity);
+
+    // Force storageDisk to be initialised with a stub disk
+    const fakeDisk = {
+      put: sandbox.stub().rejects(new Error('Disk full')),
+    };
+    mediaService['storageDisk'] = fakeDisk as any;
+
+    const buffer = Buffer.from('fake png data');
+
+    await expect(
+      mediaService.uploadFile(
+        testAccount,
+        calendarId,
+        buffer,
+        'photo.png',
+        'image/png',
+      ),
+    ).rejects.toThrow(MediaStorageError);
   });
 });

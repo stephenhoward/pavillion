@@ -262,6 +262,11 @@ export function useEventEditor(defaultLanguage: string = 'en') {
         // Ensure default language content exists
         state.event.content(defaultLanguage);
 
+        // Initialize mediaId from loaded event so the image workspace renders
+        if (loadedEvent.mediaId || loadedEvent.media?.id) {
+          mediaId.value = loadedEvent.mediaId || loadedEvent.media!.id;
+        }
+
         // Load categories for existing event
         try {
           const eventCategories = await categoryService.getEventCategories(loadedEvent.id);

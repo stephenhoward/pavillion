@@ -48,6 +48,12 @@ class CalendarEvent extends TranslatedModel<CalendarEventContent> {
   location: EventLocation | null = null;
   media: Media | null = null;
   mediaId: string | null = null; // Temporary field for API communication
+  /** Horizontal focal point for media cropping (0.0 = left, 1.0 = right). */
+  mediaFocalPointX: number = 0.5;
+  /** Vertical focal point for media cropping (0.0 = top, 1.0 = bottom). */
+  mediaFocalPointY: number = 0.5;
+  /** Zoom level for media display (1.0 = no zoom). */
+  mediaZoom: number = 1.0;
   parentEvent: CalendarEvent | null = null;
   eventSourceUrl: string = '';
   _content: Record<string, CalendarEventContent> = {};
@@ -167,6 +173,9 @@ class CalendarEvent extends TranslatedModel<CalendarEventContent> {
     event.location = obj.location ? EventLocation.fromObject(obj.location) : null;
     event.media = obj.media ? Media.fromObject(obj.media) : null;
     event.mediaId = obj.mediaId || null;
+    event.mediaFocalPointX = obj.mediaFocalPointX ?? 0.5;
+    event.mediaFocalPointY = obj.mediaFocalPointY ?? 0.5;
+    event.mediaZoom = obj.mediaZoom ?? 1.0;
     // Prefer repostStatus when present; fall back to legacy isRepost boolean for
     // backward compatibility with older serialized payloads.
     if (obj.repostStatus === 'manual' || obj.repostStatus === 'auto' || obj.repostStatus === 'none') {
@@ -226,6 +235,9 @@ class CalendarEvent extends TranslatedModel<CalendarEventContent> {
       locationId: this.locationId,
       location: this.location?.toObject(),
       media: this.media?.toObject(),
+      mediaFocalPointX: this.mediaFocalPointX,
+      mediaFocalPointY: this.mediaFocalPointY,
+      mediaZoom: this.mediaZoom,
       eventSourceUrl: this.eventSourceUrl,
       content: Object.fromEntries(
         Object.entries(this._content)

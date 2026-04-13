@@ -91,7 +91,7 @@ describe('ImageUpload Integration', () => {
     // Check that error is displayed in UI
     const errorElement = wrapper.find('.validation-error');
     expect(errorElement.exists()).toBe(true);
-    expect(errorElement.text()).toContain('Only one file is allowed in single file mode');
+    expect(errorElement.text()).toContain('Only one image can be uploaded at a time.');
   });
 
   it('should display error message when too many files are selected', async () => {

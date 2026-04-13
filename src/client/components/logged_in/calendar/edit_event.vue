@@ -849,7 +849,16 @@ button {
             <h2 class="section-header">EVENT IMAGE</h2>
 
             <div class="section-card">
+              <!-- Show workspace when an image is attached, uploader otherwise -->
+              <ImageWorkspace
+                v-if="eventImage"
+                :image="eventImage"
+                @adjust="handleImageAdjust"
+                @replace="handleImageReplace"
+                @remove="handleImageRemove"
+              />
               <ImageUpload
+                v-else
                 :calendar-id="editorState.event.calendarId || 'default'"
                 :multiple="false"
                 @upload-complete="handleImageUpload"
@@ -1014,6 +1023,7 @@ import { ArrowLeft, Plus } from 'lucide-vue-next';
 import EventRecurrenceView from './event_recurrence.vue';
 import languagePicker from '@/client/components/common/language-picker.vue';
 import ImageUpload from '@/client/components/common/media/image-upload.vue';
+import ImageWorkspace from '@/client/components/common/media/image-workspace.vue';
 import CategorySelector from './category-selector.vue';
 import SeriesSelector from './series-selector.vue';
 import ModalLayout from '@/client/components/common/modal.vue';
@@ -1130,6 +1140,31 @@ const erroredTabs = computed(() => {
 });
 
 /**
+ * URL for a freshly-uploaded image that has not yet been persisted.
+ * Allows the workspace to display the image immediately after upload.
+ */
+const localPreviewUrl = ref(null);
+
+/**
+ * Computed image data for the ImageWorkspace component.
+ * Returns null when no image is attached (shows uploader instead).
+ */
+const eventImage = computed(() => {
+  if (!mediaId.value || !editorState.event) return null;
+
+  // Prefer the local preview URL for freshly-uploaded images,
+  // fall back to the API media endpoint for persisted images.
+  const url = localPreviewUrl.value || `/api/v1/media/${mediaId.value}`;
+
+  return {
+    url,
+    mediaFocalPointX: editorState.event.mediaFocalPointX ?? 0.5,
+    mediaFocalPointY: editorState.event.mediaFocalPointY ?? 0.5,
+    mediaZoom: editorState.event.mediaZoom ?? 1.0,
+  };
+});
+
+/**
  * Handle back button click
  */
 const handleBackClick = () => {
@@ -1137,11 +1172,48 @@ const handleBackClick = () => {
 };
 
 /**
- * Handle image upload completion
+ * Handle image upload completion.
+ * Sets the mediaId and captures a local preview URL so the workspace
+ * can display the image immediately without waiting for a server round-trip.
  */
 const handleImageUpload = (results) => {
   if (results && results.length > 0 && results[0].success) {
     mediaId.value = results[0].media.id;
+    // Use the blob preview URL for immediate display — the media is still
+    // 'pending' on the server until the event is saved, so the API endpoint
+    // would return 202.
+    localPreviewUrl.value = results[0].previewUrl || `/api/v1/media/${results[0].media.id}`;
+  }
+};
+
+/**
+ * Handle focal point / zoom adjustments from the image workspace.
+ */
+const handleImageAdjust = ({ mediaFocalPointX, mediaFocalPointY, mediaZoom }) => {
+  if (!editorState.event) return;
+  editorState.event.mediaFocalPointX = mediaFocalPointX;
+  editorState.event.mediaFocalPointY = mediaFocalPointY;
+  editorState.event.mediaZoom = mediaZoom;
+};
+
+/**
+ * Handle image replacement — clears the current image so the uploader re-appears.
+ */
+const handleImageReplace = () => {
+  mediaId.value = null;
+  localPreviewUrl.value = null;
+};
+
+/**
+ * Handle image removal — clears the image and resets focal point to defaults.
+ */
+const handleImageRemove = () => {
+  mediaId.value = null;
+  localPreviewUrl.value = null;
+  if (editorState.event) {
+    editorState.event.mediaFocalPointX = 0.5;
+    editorState.event.mediaFocalPointY = 0.5;
+    editorState.event.mediaZoom = 1.0;
   }
 };
 

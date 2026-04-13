@@ -31,6 +31,7 @@ export interface FileWithState {
 export interface UploadResult {
   success: boolean;
   media?: Media;
+  previewUrl?: string;
   error?: {
     code: UploadErrorCode;
     parameters?: Record<string, any>;
@@ -60,6 +61,9 @@ export enum UploadErrorCode {
   UPLOAD_ABORTED = 'UPLOAD_ABORTED',
   PREVIEW_GENERATION_FAILED = 'PREVIEW_GENERATION_FAILED',
   NOT_AN_IMAGE = 'NOT_AN_IMAGE',
+  FILE_TOO_LARGE = 'FILE_TOO_LARGE',
+  INVALID_TYPE = 'INVALID_TYPE',
+  PERMISSION_DENIED = 'PERMISSION_DENIED',
 }
 
 /**
@@ -250,7 +254,25 @@ export default class MediaService {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(`${UploadErrorCode.SERVER_ERROR}:${response.status}:${errorData.error || 'Unknown server error'}`);
+        const errorName = errorData.errorName || 'UnknownError';
+
+        // Map server errorName to client upload error codes
+        const serverErrorMap: Record<string, UploadErrorCode> = {
+          MediaFileTooLargeError: UploadErrorCode.FILE_TOO_LARGE,
+          MediaInvalidTypeError: UploadErrorCode.INVALID_TYPE,
+          CalendarNotFoundError: UploadErrorCode.SERVER_ERROR,
+          InsufficientCalendarPermissionsError: UploadErrorCode.PERMISSION_DENIED,
+          MediaStorageError: UploadErrorCode.SERVER_ERROR,
+        };
+
+        return {
+          success: false,
+          error: {
+            code: serverErrorMap[errorName] || UploadErrorCode.SERVER_ERROR,
+          },
+          fileId,
+          filename: file.name,
+        };
       }
 
       const result = await response.json();
@@ -262,39 +284,14 @@ export default class MediaService {
       };
     }
     catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Upload failed';
-
-      // Parse error codes from our custom error format
-      if (errorMessage.startsWith(UploadErrorCode.SERVER_ERROR)) {
-        const [, status, serverMessage] = errorMessage.split(':');
-        return {
-          success: false,
-          error: {
-            code: UploadErrorCode.SERVER_ERROR,
-            parameters: {
-              status: parseInt(status),
-              serverMessage,
-            },
-          },
-          fileId,
-          filename: file.name,
-        };
-      }
-
-      // Handle other error types
       let errorCode = UploadErrorCode.NETWORK_ERROR;
-      if (errorMessage === UploadErrorCode.UPLOAD_ABORTED) {
+      if (error instanceof Error && error.message === UploadErrorCode.UPLOAD_ABORTED) {
         errorCode = UploadErrorCode.UPLOAD_ABORTED;
       }
 
       return {
         success: false,
-        error: {
-          code: errorCode,
-          parameters: {
-            message: errorMessage,
-          },
-        },
+        error: { code: errorCode },
         fileId,
         filename: file.name,
       };
