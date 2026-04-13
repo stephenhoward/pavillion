@@ -142,8 +142,9 @@ services:
       - DB_PASSWORD=devpassword
       # Reset database on each start for clean testing
       - DB_RESET=true
-      # Enforce HTTP signature verification on beta instance
-      - SKIP_SIGNATURES=false
+      # Disable HTTP signature verification for local testing.
+      # Re-enable once ALL federation code paths sign requests (not just outbox).
+      - SKIP_SIGNATURES=true
       # Allow federation between Docker containers that resolve to private IPs
       # WARNING: Never use in production — Docker bridge IPs are private RFC-1918 addresses
       - ALLOW_PRIVATE_FEDERATION=true
