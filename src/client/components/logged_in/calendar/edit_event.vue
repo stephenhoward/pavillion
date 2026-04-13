@@ -1179,8 +1179,10 @@ const handleBackClick = () => {
 const handleImageUpload = (results) => {
   if (results && results.length > 0 && results[0].success) {
     mediaId.value = results[0].media.id;
-    // Use the API URL for the newly uploaded media
-    localPreviewUrl.value = `/api/v1/media/${results[0].media.id}`;
+    // Use the blob preview URL for immediate display — the media is still
+    // 'pending' on the server until the event is saved, so the API endpoint
+    // would return 202.
+    localPreviewUrl.value = results[0].previewUrl || `/api/v1/media/${results[0].media.id}`;
   }
 };
 

@@ -31,6 +31,7 @@ export interface FileWithState {
 export interface UploadResult {
   success: boolean;
   media?: Media;
+  previewUrl?: string;
   error?: {
     code: UploadErrorCode;
     parameters?: Record<string, any>;

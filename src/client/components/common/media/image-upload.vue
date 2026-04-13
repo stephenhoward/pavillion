@@ -197,6 +197,7 @@ const uploadFiles = async () => {
       if (result.success) {
         fileWithState.status = 'complete';
         fileWithState.progress = 100;
+        result.previewUrl = URL.createObjectURL(fileWithState.file);
       }
       else {
         fileWithState.status = 'failed';
