@@ -1,0 +1,49 @@
+name: Migration Smoke Test
+on:
+  workflow_call:
+    inputs:
+      runner:
+        description: 'The runner to run the tests on'
+        required: false
+        type: string
+        default: ubuntu-latest
+
+jobs:
+  migrate:
+    runs-on: ${{ inputs.runner }}
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: pavillion_migrate_test
+          POSTGRES_USER: pavillion
+          POSTGRES_PASSWORD: testpassword
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U pavillion -d pavillion_migrate_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: '.node-version'
+          cache: 'npm'
+
+      - run: npm install
+
+      - name: Run migrations up then down against PostgreSQL
+        env:
+          DB_DIALECT: postgres
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_NAME: pavillion_migrate_test
+          DB_USER: pavillion
+          DB_PASSWORD: testpassword
+        run: npx tsx scripts/test-migrations-pg.ts

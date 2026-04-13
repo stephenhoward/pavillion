@@ -1,4 +1,4 @@
-import { Sequelize, DataTypes } from 'sequelize';
+import { Sequelize } from 'sequelize';
 
 /**
  * Fix type mismatch in ap_shared_event table.
@@ -10,33 +10,34 @@ import { Sequelize, DataTypes } from 'sequelize';
  *
  * The entity (SharedEventEntity) already declares these as DataType.UUID,
  * so this migration brings the schema in line with the entity definition.
+ *
+ * PostgreSQL requires an explicit USING cast when converting VARCHAR to UUID,
+ * so we use raw SQL instead of queryInterface.changeColumn.
  */
 export default {
   async up({ context: sequelize }: { context: Sequelize }) {
-    const queryInterface = sequelize.getQueryInterface();
+    const dialect = sequelize.getDialect();
 
-    await queryInterface.changeColumn('ap_shared_event', 'event_id', {
-      type: DataTypes.UUID,
-      allowNull: true,
-    });
-
-    await queryInterface.changeColumn('ap_shared_event', 'calendar_id', {
-      type: DataTypes.UUID,
-      allowNull: true,
-    });
+    if (dialect === 'postgres') {
+      await sequelize.query(`
+        ALTER TABLE "ap_shared_event"
+          ALTER COLUMN "event_id" TYPE UUID USING "event_id"::uuid,
+          ALTER COLUMN "calendar_id" TYPE UUID USING "calendar_id"::uuid;
+      `);
+    }
+    // SQLite has no strict column types; ALTER COLUMN is not supported.
+    // The entity already declares UUID, which SQLite stores as TEXT regardless.
   },
 
   async down({ context: sequelize }: { context: Sequelize }) {
-    const queryInterface = sequelize.getQueryInterface();
+    const dialect = sequelize.getDialect();
 
-    await queryInterface.changeColumn('ap_shared_event', 'calendar_id', {
-      type: DataTypes.STRING,
-      allowNull: true,
-    });
-
-    await queryInterface.changeColumn('ap_shared_event', 'event_id', {
-      type: DataTypes.STRING,
-      allowNull: true,
-    });
+    if (dialect === 'postgres') {
+      await sequelize.query(`
+        ALTER TABLE "ap_shared_event"
+          ALTER COLUMN "event_id" TYPE VARCHAR(255),
+          ALTER COLUMN "calendar_id" TYPE VARCHAR(255);
+      `);
+    }
   },
 };
