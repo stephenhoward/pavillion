@@ -125,6 +125,9 @@ const detailPath = computed(() => {
         :media="media"
         context="card"
         :alt="title"
+        :focal-point-x="props.instance.event.mediaFocalPointX"
+        :focal-point-y="props.instance.event.mediaFocalPointY"
+        :zoom="props.instance.event.mediaZoom"
       />
       <div
         v-if="!media"

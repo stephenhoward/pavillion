@@ -114,7 +114,13 @@ onBeforeMount(async () => {
       <!-- Event Detail (based on site event-instance.vue) -->
       <div class="instance-detail">
         <div class="instance-header">
-          <EventImage :media="state.instance.event.media" context="hero" />
+          <EventImage
+            :media="state.instance.event.media"
+            :focal-point-x="state.instance.event.mediaFocalPointX"
+            :focal-point-y="state.instance.event.mediaFocalPointY"
+            :zoom="state.instance.event.mediaZoom"
+            context="hero"
+          />
           <div class="instance-meta">
             <h1>{{ state.instance.event.content("en").name }}</h1>
             <time :datetime="state.instance.start.toISO()" class="event-datetime">

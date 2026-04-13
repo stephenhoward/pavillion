@@ -44,7 +44,7 @@ vi.mock('@/site/composables/useLocale', () => ({
 vi.mock('@/site/components/event-image.vue', () => ({
   default: {
     template: '<div class="event-image-stub"></div>',
-    props: ['media', 'context', 'alt'],
+    props: ['media', 'context', 'alt', 'focalPointX', 'focalPointY', 'zoom'],
   },
 }));
 
@@ -74,6 +74,9 @@ function makeEvent(overrides: Record<string, any> = {}): CalendarEvent {
     getLanguages: () => ['en'],
     location: overrides.location ?? null,
     media: overrides.media ?? null,
+    mediaFocalPointX: overrides.mediaFocalPointX ?? 0.5,
+    mediaFocalPointY: overrides.mediaFocalPointY ?? 0.5,
+    mediaZoom: overrides.mediaZoom ?? 1.0,
     categories: overrides.categories ?? [],
     isRecurring: overrides.isRecurring ?? false,
     isRepost: overrides.isRepost ?? false,

@@ -1,36 +1,3 @@
-<template>
-  <!--
-    Graceful Image Component
-    ========================
-    If image loads successfully, display it.
-    If image fails or doesn't exist, render nothing.
-    No placeholders. No broken experiences. Just content.
-  -->
-  <div
-    v-if="shouldShow"
-    class="event-image"
-    :class="[`context-${context}`, { 'is-loading': isLoading }]"
-  >
-    <!-- Elegant loading state - subtle, unobtrusive -->
-    <div v-if="isLoading" class="image-loading">
-      <div class="loading-pulse" />
-    </div>
-
-    <!-- The image itself -->
-    <img
-      v-if="imageBlobUrl"
-      :src="imageBlobUrl"
-      :alt="alt || media?.originalFilename || ''"
-      @load="handleImageLoad"
-      @error="handleImageError"
-      class="image-content"
-    />
-
-    <!-- Subtle vignette overlay for depth -->
-    <div class="image-vignette" />
-  </div>
-</template>
-
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
 
@@ -39,12 +6,32 @@ interface MediaObject {
   originalFilename?: string;
 }
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   media: MediaObject | null;
   context?: 'card' | 'hero' | 'feature';
   lazy?: boolean;
   alt?: string;
-}>();
+  focalPointX?: number;
+  focalPointY?: number;
+  zoom?: number;
+}>(), {
+  focalPointX: 0.5,
+  focalPointY: 0.5,
+  zoom: 1.0,
+});
+
+const imageStyle = computed(() => {
+  const style: Record<string, string> = {
+    objectPosition: `${props.focalPointX * 100}% ${props.focalPointY * 100}%`,
+  };
+  if (props.zoom > 1) {
+    const origin = `${props.focalPointX * 100}% ${props.focalPointY * 100}%`;
+    style['--image-zoom'] = String(props.zoom);
+    style.transform = `scale(${props.zoom})`;
+    style.transformOrigin = origin;
+  }
+  return style;
+});
 
 const isLoading = ref(true);
 const imageFailed = ref(false);
@@ -156,6 +143,40 @@ onUnmounted(() => {
 });
 </script>
 
+<template>
+  <!--
+    Graceful Image Component
+    ========================
+    If image loads successfully, display it.
+    If image fails or doesn't exist, render nothing.
+    No placeholders. No broken experiences. Just content.
+  -->
+  <div
+    v-if="shouldShow"
+    class="event-image"
+    :class="[`context-${context}`, { 'is-loading': isLoading }]"
+  >
+    <!-- Elegant loading state - subtle, unobtrusive -->
+    <div v-if="isLoading" class="image-loading">
+      <div class="loading-pulse" />
+    </div>
+
+    <!-- The image itself -->
+    <img
+      v-if="imageBlobUrl"
+      :src="imageBlobUrl"
+      :alt="alt || media?.originalFilename || ''"
+      :style="imageStyle"
+      @load="handleImageLoad"
+      @error="handleImageError"
+      class="image-content"
+    />
+
+    <!-- Subtle vignette overlay for depth -->
+    <div class="image-vignette" />
+  </div>
+</template>
+
 <style scoped lang="scss">
 @use '../assets/mixins' as *;
 
@@ -182,7 +203,6 @@ onUnmounted(() => {
     width: 100%;
     height: 100%;
     object-fit: cover;
-    object-position: center;
     opacity: 0;
     transition: opacity $public-duration-slow $public-ease-out;
   }
@@ -229,8 +249,9 @@ onUnmounted(() => {
   }
 
   // Gentle scale on card hover (parent applies hover)
+  // Composes with zoom via --image-zoom custom property
   &:hover .image-content {
-    transform: scale(1.03);
+    transform: scale(calc(var(--image-zoom, 1) * 1.03)) !important;
     transition: transform $public-duration-slow $public-ease-out;
   }
 }

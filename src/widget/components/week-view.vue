@@ -176,6 +176,9 @@ onMounted(() => {
             <EventImage
               v-if="instance.event.media"
               :media="instance.event.media"
+              :focal-point-x="instance.event.mediaFocalPointX"
+              :focal-point-y="instance.event.mediaFocalPointY"
+              :zoom="instance.event.mediaZoom"
               context="card"
               :lazy="true"
             />

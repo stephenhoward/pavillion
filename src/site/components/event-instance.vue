@@ -170,7 +170,14 @@ onBeforeMount(async () => {
 
       <!-- Hero image -->
       <div class="hero-image-wrapper">
-        <EventImage :media="state.instance.event.media" context="feature" :alt="localizedContent(state.instance.event).name" />
+        <EventImage
+          :media="state.instance.event.media"
+          context="feature"
+          :alt="localizedContent(state.instance.event).name"
+          :focal-point-x="state.instance.event.mediaFocalPointX"
+          :focal-point-y="state.instance.event.mediaFocalPointY"
+          :zoom="state.instance.event.mediaZoom"
+        />
       </div>
 
       <!-- Recurrence badge -->

@@ -154,6 +154,9 @@ onBeforeMount(async () => {
       <EventImage
         :media="state.series.mediaId ? { id: state.series.mediaId } : null"
         context="feature"
+        :focal-point-x="state.series.mediaFocalPointX"
+        :focal-point-y="state.series.mediaFocalPointY"
+        :zoom="state.series.mediaZoom"
       />
       <div class="series-meta">
         <h1>{{ localizedContent(state.series).name }}</h1>
