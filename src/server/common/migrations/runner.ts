@@ -1,10 +1,26 @@
 import { Umzug, SequelizeStorage } from 'umzug';
 import { Sequelize } from 'sequelize-typescript';
+import cls from 'cls-hooked';
 import path from 'path';
 import fs from 'fs';
 import { createLogger } from '@/server/common/helper/logger';
 
 const logger = createLogger('migrations');
+
+/**
+ * Enable Sequelize CLS (continuation-local storage) so that queries issued
+ * inside a `sequelize.transaction()` callback automatically enroll in that
+ * transaction without needing to thread `{ transaction }` through every call.
+ *
+ * This must be called before any Sequelize transaction is started. Calling
+ * it multiple times with the same namespace is a no-op.
+ *
+ * CLS only affects queries issued inside a transaction callback; code that
+ * doesn't use transactions is unaffected.
+ */
+const MIGRATION_CLS_NAMESPACE = 'sequelize-migrations';
+const namespace = cls.createNamespace(MIGRATION_CLS_NAMESPACE);
+(Sequelize as unknown as { useCLS: (ns: cls.Namespace) => void }).useCLS(namespace);
 
 /**
  * Result of a migration run.
@@ -46,11 +62,18 @@ export function createMigrationRunner(
           name,
           up: async () => {
             const migration = await getModule();
-            return migration.up({ context });
+            // Wrap the migration in a transaction so partial failures roll back
+            // cleanly instead of leaving the schema in a half-applied state.
+            // CLS auto-enrolls all queries inside the callback.
+            return context.transaction(async () => {
+              return migration.up({ context });
+            });
           },
           down: async () => {
             const migration = await getModule();
-            return migration.down({ context });
+            return context.transaction(async () => {
+              return migration.down({ context });
+            });
           },
         };
       },

@@ -138,5 +138,21 @@ describe('Migration Runner', () => {
       expect(result.error).toBeDefined();
       expect(result.error?.message).toContain('Migration 0001_failing.ts');
     });
+
+    it('should roll back partial DDL changes when a migration fails mid-way', async () => {
+      const partialDir = path.join(__dirname, 'fixtures', 'partial-failing-migrations');
+
+      const result = await runMigrations(sequelize, partialDir);
+
+      // Migration failed
+      expect(result.success).toBe(false);
+      expect(result.error).toBeDefined();
+
+      // The first CREATE TABLE should have been rolled back — the table must not exist
+      const [tables] = await sequelize.query(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='test_atomic_first'",
+      );
+      expect(tables).toHaveLength(0);
+    });
   });
 });
