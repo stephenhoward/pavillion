@@ -142,7 +142,14 @@ function closeReportModal() {
 
       <!-- Hero image -->
       <div class="hero-image-wrapper">
-        <EventImage :media="state.event.media" context="feature" :alt="localizedContent(state.event).name" />
+        <EventImage
+          :media="state.event.media"
+          context="feature"
+          :alt="localizedContent(state.event).name"
+          :focal-point-x="state.event.mediaFocalPointX"
+          :focal-point-y="state.event.mediaFocalPointY"
+          :zoom="state.event.mediaZoom"
+        />
       </div>
 
       <!-- Source calendar pill -->

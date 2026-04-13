@@ -57,7 +57,14 @@ onBeforeMount(() => {
               v-for="instance in filteredEventsByDay[day]"
               :key="instance.id"
               @click="openEvent(instance)">
-            <EventImage :media="resolveEventImage(instance)" context="card" :lazy="true" />
+            <EventImage
+              :media="resolveEventImage(instance)"
+              :focal-point-x="instance.event.mediaFocalPointX"
+              :focal-point-y="instance.event.mediaFocalPointY"
+              :zoom="instance.event.mediaZoom"
+              context="card"
+              :lazy="true"
+            />
             <h3>{{ instance.event.content("en").name }}</h3>
             <div class="event-time">{{ instance.start.toLocal().toLocaleString(DateTime.TIME_SIMPLE) }}</div>
           </li>

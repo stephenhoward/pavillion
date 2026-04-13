@@ -126,6 +126,9 @@ vi.mock('@/site/service/calendar', () => {
             hasContent: (_lang: string) => true,
             getLanguages: () => ['en'],
             media: null,
+            mediaFocalPointX: 0.5,
+            mediaFocalPointY: 0.5,
+            mediaZoom: 1.0,
             categories: mockCategories,
             location: mockLocation,
             series: mockSeries,
@@ -147,7 +150,7 @@ vi.mock('@/site/components/not-found.vue', () => ({
 }));
 
 vi.mock('@/site/components/event-image.vue', () => ({
-  default: { template: '<div class="event-image-stub"></div>', props: ['media', 'context', 'alt'] },
+  default: { template: '<div class="event-image-stub"></div>', props: ['media', 'context', 'alt', 'focalPointX', 'focalPointY', 'zoom'] },
 }));
 
 // ---------------------------------------------------------------------------
