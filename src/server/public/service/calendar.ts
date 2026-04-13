@@ -36,8 +36,8 @@ export default class PublicCalendarService {
   async listEventInstances(calendar: Calendar): Promise<CalendarEventInstance[]> {
     const instances = await this.calendarInterface.listEventInstancesForCalendar(calendar);
 
-    // Populate category information for each event
-    await this.populateEventCategories(instances);
+    // Populate category information for each event, filtered to this calendar's categories
+    await this.populateEventCategories(instances, calendar.id);
 
     return instances;
   }
@@ -86,8 +86,8 @@ export default class PublicCalendarService {
     const allInstances = await this.calendarInterface.listEventInstancesForCalendar(calendar);
     const filteredInstances = allInstances.filter(instance => allEventIds.includes(instance.event.id));
 
-    // Populate category information for each event
-    await this.populateEventCategories(filteredInstances);
+    // Populate category information for each event, filtered to this calendar's categories
+    await this.populateEventCategories(filteredInstances, calendar.id);
 
     return filteredInstances;
   }
@@ -144,9 +144,11 @@ export default class PublicCalendarService {
   }
 
   /**
-   * Populate category information for events in instances
+   * Populate category information for events in instances.
+   * When calendarId is provided, only categories belonging to that calendar are included.
+   * This prevents source calendar categories from leaking into reposted event display.
    */
-  private async populateEventCategories(instances: CalendarEventInstance[]): Promise<void> {
+  private async populateEventCategories(instances: CalendarEventInstance[], calendarId?: string): Promise<void> {
     // Group instances by event ID to avoid duplicate category lookups
     const eventMap = new Map<string, CalendarEventInstance[]>();
 
@@ -158,11 +160,11 @@ export default class PublicCalendarService {
       eventMap.get(eventId)!.push(instance);
     }
 
-    // Fetch categories for each unique event
+    // Fetch categories for each unique event, filtered to the display calendar
     await Promise.all(
       Array.from(eventMap.entries()).map(async ([eventId, eventInstances]) => {
         try {
-          const categories = await this.calendarInterface.getEventCategories(eventId);
+          const categories = await this.calendarInterface.getEventCategories(eventId, calendarId);
 
           // Add categories to the event object for serialization
           for (const instance of eventInstances) {

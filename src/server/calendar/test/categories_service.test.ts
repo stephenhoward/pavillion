@@ -580,6 +580,60 @@ describe('CategoryService', () => {
 
       expect(categories).toHaveLength(0);
     });
+
+    it('should filter categories by calendarId when provided', async () => {
+      const findAllStub = sandbox.stub(EventCategoryAssignmentEntity, 'findAll').resolves([]);
+
+      await categoryService.getEventCategories('event-123', 'calendar-456');
+
+      expect(findAllStub.calledOnce).toBe(true);
+      const queryArgs = findAllStub.firstCall.args[0] as any;
+
+      // Verify the include has a where clause filtering by calendar_id
+      const categoryInclude = queryArgs.include[0];
+      expect(categoryInclude.where).toBeDefined();
+      expect(categoryInclude.where.calendar_id).toBe('calendar-456');
+    });
+
+    it('should not filter by calendarId when not provided', async () => {
+      const findAllStub = sandbox.stub(EventCategoryAssignmentEntity, 'findAll').resolves([]);
+
+      await categoryService.getEventCategories('event-123');
+
+      expect(findAllStub.calledOnce).toBe(true);
+      const queryArgs = findAllStub.firstCall.args[0] as any;
+
+      // Verify no where clause on the category include
+      const categoryInclude = queryArgs.include[0];
+      expect(categoryInclude.where).toBeUndefined();
+    });
+
+    it('should filter out null categories when calendarId filter excludes them', async () => {
+      // When calendarId filter is applied, Sequelize may return assignments
+      // where the category is null (filtered out by the WHERE)
+      const mockAssignments = [
+        { category: null },
+        {
+          category: {
+            toModel: () => {
+              const model = new EventCategory('cat-1', 'calendar-456');
+              const content = new EventCategoryContent('en');
+              content.name = 'Local Category';
+              model.addContent(content);
+              return model;
+            },
+          },
+        },
+      ];
+
+      sandbox.stub(EventCategoryAssignmentEntity, 'findAll').resolves(mockAssignments as any);
+
+      const categories = await categoryService.getEventCategories('event-123', 'calendar-456');
+
+      expect(categories).toHaveLength(1);
+      expect(categories[0].id).toBe('cat-1');
+      expect(categories[0].content('en').name).toBe('Local Category');
+    });
   });
 
   describe('getCategoryEvents', () => {
