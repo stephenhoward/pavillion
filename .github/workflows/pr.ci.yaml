@@ -32,6 +32,8 @@ jobs:
     with:
       platform: linux/amd64
       runner: ubuntu-latest
+  migration_smoke_test:
+    uses: ./.github/workflows/run_migration_tests.yaml
   federation_tests:
     needs: x86_tests
     uses: ./.github/workflows/run_federation_tests.yaml
