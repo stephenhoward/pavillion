@@ -7,6 +7,36 @@ import CalendarActorService from '@/server/activitypub/service/calendar_actor';
 import { CalendarActorEntity } from '@/server/activitypub/entity/calendar_actor';
 import CalendarInterface from '@/server/calendar/interface';
 
+/**
+ * Helper to create a mock actor entity with a real RSA keypair
+ */
+function createMockActorWithKeypair(actorUri: string) {
+  const { publicKey, privateKey } = generateKeyPairSync('rsa', {
+    modulusLength: 2048,
+    publicKeyEncoding: { type: 'spki', format: 'pem' },
+    privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+  });
+
+  return {
+    id: 'actor-id-123',
+    calendar_id: 'calendar-id-123',
+    actor_uri: actorUri,
+    public_key: publicKey,
+    private_key: privateKey,
+    toModel: function() {
+      return {
+        id: this.id,
+        calendarId: this.calendar_id,
+        actorUri: this.actor_uri,
+        publicKey: this.public_key,
+        privateKey: this.private_key,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+    },
+  };
+}
+
 describe('CalendarActorService', () => {
   let service: CalendarActorService;
   let sandbox: sinon.SinonSandbox;
@@ -182,36 +212,7 @@ describe('CalendarActorService', () => {
   describe('signActivity', () => {
     it('should produce valid HTTP signature format', async () => {
       const actorUri = 'https://events.example/calendars/community-events';
-      const mockData = {
-        id: 'actor-id-123',
-        calendar_id: 'calendar-id-123',
-        actor_uri: actorUri,
-        public_key: '-----BEGIN PUBLIC KEY-----\nKEY_DATA\n-----END PUBLIC KEY-----',
-        private_key: '-----BEGIN PRIVATE KEY-----\nKEY_DATA\n-----END PRIVATE KEY-----',
-      };
-
-      // Generate a real keypair for this test to make signing work
-      const { publicKey, privateKey } = generateKeyPairSync('rsa', {
-        modulusLength: 2048,
-        publicKeyEncoding: { type: 'spki', format: 'pem' },
-        privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
-      });
-
-      const mockEntity = {
-        ...mockData,
-        private_key: privateKey,
-        toModel: function() {
-          return {
-            id: this.id,
-            calendarId: this.calendar_id,
-            actorUri: this.actor_uri,
-            publicKey: this.public_key,
-            privateKey: this.private_key,
-            createdAt: new Date(),
-            updatedAt: new Date(),
-          };
-        },
-      };
+      const mockEntity = createMockActorWithKeypair(actorUri);
 
       sandbox.stub(CalendarActorEntity, 'findOne').resolves(mockEntity as any);
 
@@ -233,6 +234,70 @@ describe('CalendarActorService', () => {
       expect(signature.headers).toContain('(request-target)');
       expect(signature.headers).toContain('host');
       expect(signature.headers).toContain('date');
+      expect(signature.headers).not.toContain('digest');
+    });
+
+    it('should include digest in signed headers when provided', async () => {
+      const actorUri = 'https://events.example/calendars/community-events';
+      const mockEntity = createMockActorWithKeypair(actorUri);
+
+      sandbox.stub(CalendarActorEntity, 'findOne').resolves(mockEntity as any);
+
+      const activity = { type: 'Announce' };
+      const targetUrl = 'https://remote.example/inbox';
+      const digest = 'SHA-256=abc123def456';
+
+      const signature = await service.signActivity(actorUri, activity, targetUrl, digest);
+
+      expect(signature.headers).toBe('(request-target) host date digest');
+      expect(signature.signature).toBeDefined();
+    });
+
+    it('should not include digest in signed headers when omitted', async () => {
+      const actorUri = 'https://events.example/calendars/community-events';
+      const mockEntity = createMockActorWithKeypair(actorUri);
+
+      sandbox.stub(CalendarActorEntity, 'findOne').resolves(mockEntity as any);
+
+      const activity = { type: 'Announce' };
+      const targetUrl = 'https://remote.example/inbox';
+
+      const signature = await service.signActivity(actorUri, activity, targetUrl);
+
+      expect(signature.headers).toBe('(request-target) host date');
+      expect(signature.signature).toBeDefined();
+    });
+
+    it('should throw when actor has no private key', async () => {
+      const actorUri = 'https://events.example/calendars/community-events';
+
+      // Mock actor without a private key (remote actor)
+      const mockEntity = {
+        id: 'actor-id-123',
+        calendar_id: 'calendar-id-123',
+        actor_uri: actorUri,
+        public_key: '-----BEGIN PUBLIC KEY-----\nKEY_DATA\n-----END PUBLIC KEY-----',
+        private_key: null,
+        toModel: function() {
+          return {
+            id: this.id,
+            calendarId: this.calendar_id,
+            actorUri: this.actor_uri,
+            publicKey: this.public_key,
+            privateKey: this.private_key,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          };
+        },
+      };
+
+      sandbox.stub(CalendarActorEntity, 'findOne').resolves(mockEntity as any);
+
+      const activity = { type: 'Announce' };
+      const targetUrl = 'https://remote.example/inbox';
+
+      await expect(service.signActivity(actorUri, activity, targetUrl))
+        .rejects.toThrow(`Calendar actor ${actorUri} does not have a private key`);
     });
   });
 

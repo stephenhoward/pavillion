@@ -89,7 +89,7 @@ class NotificationEntity extends Model {
    */
   static fromModel(notification: Notification, accountId: string): NotificationEntity {
     return NotificationEntity.build({
-      id: notification.id,
+      ...(notification.id ? { id: notification.id } : {}),
       account_id: accountId,
       type: notification.type,
       calendar_id: notification.calendarId,

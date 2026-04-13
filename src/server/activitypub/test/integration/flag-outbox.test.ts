@@ -21,6 +21,17 @@ const LOCAL_ACTOR_URL = 'https://local.instance/calendars/test-calendar';
 const REMOTE_ACTOR_URI = 'https://remote.instance/calendars/remote-calendar';
 const REMOTE_INBOX_URL = 'https://remote.instance/calendars/remote-calendar/inbox';
 
+/** Stub signing so deliverViaHttp proceeds without real keypairs. */
+function stubSigning(service: ProcessOutboxService, sandbox: sinon.SinonSandbox) {
+  sandbox.stub(service.calendarActorService, 'signActivity').resolves({
+    keyId: `${LOCAL_ACTOR_URL}#main-key`,
+    signature: 'mock-signature-base64',
+    algorithm: 'rsa-sha256',
+    headers: '(request-target) host date digest',
+    date: new Date().toUTCString(),
+  });
+}
+
 describe('Flag activity outbox processing', () => {
   let service: ProcessOutboxService;
   let sandbox: sinon.SinonSandbox = sinon.createSandbox();
@@ -29,6 +40,7 @@ describe('Flag activity outbox processing', () => {
   beforeEach(() => {
     eventBus = new EventEmitter();
     service = new ProcessOutboxService(eventBus);
+    stubSigning(service, sandbox);
   });
 
   afterEach(() => {
@@ -73,13 +85,14 @@ describe('Flag activity outbox processing', () => {
     // Process the outbox message
     await service.processOutboxMessage(message);
 
-    // Verify HTTP POST was called with correct payload
+    // Verify HTTP POST was called with correct payload (body is JSON string after signing)
     expect(postStub.calledOnce).toBe(true);
     const postCall = postStub.getCall(0);
     expect(postCall.args[0]).toBe(REMOTE_INBOX_URL);
-    expect(postCall.args[1].type).toBe('Flag');
-    expect(postCall.args[1].actor).toBe(LOCAL_ACTOR_URL);
-    expect(postCall.args[1].content).toBe('Report description text');
+    const body = JSON.parse(postCall.args[1]);
+    expect(body.type).toBe('Flag');
+    expect(body.actor).toBe(LOCAL_ACTOR_URL);
+    expect(body.content).toBe('Report description text');
 
     // Verify outbox record was marked as processed
     expect(updateStub.calledOnce).toBe(true);
@@ -127,12 +140,13 @@ describe('Flag activity outbox processing', () => {
     // Process the outbox message
     await service.processOutboxMessage(message);
 
-    // Verify admin tags are preserved
+    // Verify admin tags are preserved (body is JSON string after signing)
     expect(postStub.calledOnce).toBe(true);
     const postCall = postStub.getCall(0);
-    expect(postCall.args[1].tag).toHaveLength(2);
-    expect(postCall.args[1].tag[0].name).toBe('#admin-flag');
-    expect(postCall.args[1].tag[1].name).toBe('#priority-high');
+    const body = JSON.parse(postCall.args[1]);
+    expect(body.tag).toHaveLength(2);
+    expect(body.tag[0].name).toBe('#admin-flag');
+    expect(body.tag[1].name).toBe('#priority-high');
   });
 
   it('should record delivery errors for failed Flag activities', async () => {

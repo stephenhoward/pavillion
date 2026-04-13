@@ -51,6 +51,7 @@ import ActivityPubInterface from '@/server/activitypub/interface';
 import ActivityPubEventHandlers from '@/server/activitypub/events';
 import { TestEnvironment } from '@/server/test/lib/test_environment';
 import { CalendarActorEntity } from '@/server/activitypub/entity/calendar_actor';
+import CalendarActorService from '@/server/activitypub/service/calendar_actor';
 import { ActivityPubActor } from '@/server/activitypub/model/base';
 import {
   FollowingCalendarEntity,
@@ -220,6 +221,17 @@ describe('Outbox Local Dispatch (cross-hop remote follower regression)', () => {
 
   beforeEach(() => {
     sandbox = sinon.createSandbox();
+
+    // Stub signing so deliverViaHttp proceeds without real keypairs.
+    // The manually-created CalendarActorEntity rows (A, B, C) lack private
+    // keys, so signing would fail and HTTP delivery would be skipped.
+    sandbox.stub(CalendarActorService.prototype, 'signActivity').callsFake(async (actorUri: string) => ({
+      keyId: `${actorUri}#main-key`,
+      signature: 'mock-signature-base64',
+      algorithm: 'rsa-sha256',
+      headers: '(request-target) host date digest',
+      date: new Date().toUTCString(),
+    }));
 
     // Prevent real HTTP delivery to remote.example. Both axios.post (inbox
     // delivery) and axios.get (actor profile fetch inside resolveInboxUrl)

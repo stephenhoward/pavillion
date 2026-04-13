@@ -1,3 +1,4 @@
+import { createHash } from "crypto";
 import { DateTime } from "luxon";
 import { EventEmitter } from "events";
 import axios from "axios";
@@ -20,9 +21,22 @@ import FlagActivity from "@/server/activitypub/model/action/flag";
 import { ActivityPubActivity, ActivityPubObject } from "@/server/activitypub/model/base";
 import CalendarInterface from "@/server/calendar/interface";
 import CalendarActorService from "@/server/activitypub/service/calendar_actor";
+import UserActorService from "@/server/activitypub/service/user_actor";
 import ProcessInboxService from "@/server/activitypub/service/inbox";
 import { FEDERATION_HTTP_TIMEOUT_MS } from "@/server/common/constants";
 import { validateUrlNotPrivate } from "@/server/common/helper/ip-validation";
+import { HttpSignature } from "@/server/activitypub/types";
+
+/**
+ * Signed headers returned by buildSignedHeaders, ready to merge into an
+ * axios request. When signing fails the method returns null and the caller
+ * records a partial delivery error.
+ */
+interface SignedHeaders {
+  Signature: string;
+  Date: string;
+  Digest: string;
+}
 
 /**
  * Service responsible for processing and distributing outgoing ActivityPub messages.
@@ -31,6 +45,7 @@ import { validateUrlNotPrivate } from "@/server/common/helper/ip-validation";
 class ProcessOutboxService {
   calendarService: CalendarInterface;
   calendarActorService: CalendarActorService;
+  private userActorService: UserActorService;
   private inboxService: ProcessInboxService | null;
 
   /**
@@ -44,6 +59,7 @@ class ProcessOutboxService {
   constructor(eventBus: EventEmitter, inboxService?: ProcessInboxService) {
     this.calendarService = new CalendarInterface(eventBus);
     this.calendarActorService = new CalendarActorService(this.calendarService);
+    this.userActorService = new UserActorService(this.calendarService);
     this.inboxService = inboxService ?? null;
     if (!this.inboxService) {
       logger.warn('[OUTBOX] constructed without ProcessInboxService — local recipients will degrade to HTTP delivery (test-only path)');
@@ -238,11 +254,58 @@ class ProcessOutboxService {
   }
 
   /**
+   * Builds HTTP Signature headers for an outbound ActivityPub delivery.
+   * Auto-detects actor type by trying CalendarActorService first, then
+   * falling back to UserActorService.
+   *
+   * @param actorUri - The actor URI that will sign the request
+   * @param body - The JSON-stringified request body (used for Digest)
+   * @param targetUrl - The inbox URL the request will be POSTed to
+   * @param digest - Pre-computed SHA-256 Digest header value
+   * @returns Signed headers object, or null if signing fails for both actor types
+   * @private
+   */
+  private async buildSignedHeaders(
+    actorUri: string,
+    body: string,
+    targetUrl: string,
+    digest: string,
+  ): Promise<SignedHeaders | null> {
+    let sig: HttpSignature | null = null;
+
+    // Try calendar actor first (most common case for outbox deliveries)
+    try {
+      sig = await this.calendarActorService.signActivity(actorUri, JSON.parse(body), targetUrl, digest);
+    }
+    catch {
+      // Calendar actor signing failed, try user actor
+      try {
+        sig = await this.userActorService.signActivity(actorUri, JSON.parse(body), targetUrl, digest);
+      }
+      catch {
+        // Both actor types failed to sign
+        return null;
+      }
+    }
+
+    if (!sig) {
+      return null;
+    }
+
+    return {
+      Signature: `keyId="${sig.keyId}",algorithm="${sig.algorithm}",headers="${sig.headers}",signature="${sig.signature}"`,
+      Date: sig.date,
+      Digest: digest,
+    };
+  }
+
+  /**
    * Delivers an activity to a recipient via HTTP POST to their inbox.
    * Resolves the recipient's inbox URL, validates it against SSRF protection,
-   * and posts the activity payload. Errors are accumulated into the supplied
-   * deliveryErrors array rather than thrown, preserving the per-recipient
-   * partial-failure semantics of the parent loop.
+   * signs the request with HTTP Signatures, and posts the activity payload.
+   * Errors are accumulated into the supplied deliveryErrors array rather than
+   * thrown, preserving the per-recipient partial-failure semantics of the
+   * parent loop.
    *
    * SECURITY: validateUrlNotPrivate is called before every HTTP POST to
    * block delivery to private/internal IPs that a malicious actor profile
@@ -277,11 +340,23 @@ class ProcessOutboxService {
     try {
       logger.info({ activityType: message.type, inboxUrl }, 'Delivering activity');
       const activityData = activity.toObject();
-      await axios.post(inboxUrl, activityData, {
+      const bodyString = JSON.stringify(activityData);
+      const digest = 'SHA-256=' + createHash('sha256').update(bodyString).digest('base64');
+
+      const signedHeaders = await this.buildSignedHeaders(activity.actor, bodyString, inboxUrl, digest);
+      if (!signedHeaders) {
+        const errorMsg = `Signing failed for actor ${activity.actor} delivering to ${recipient}`;
+        logger.error({ actorUri: activity.actor, recipient }, 'Failed to sign outbound delivery');
+        deliveryErrors.push(errorMsg);
+        return;
+      }
+
+      await axios.post(inboxUrl, bodyString, {
         timeout: FEDERATION_HTTP_TIMEOUT_MS,
         maxRedirects: 0,
         headers: {
           'Content-Type': 'application/activity+json',
+          ...signedHeaders,
         },
       });
       logger.info({ activityType: message.type, recipient }, 'Successfully delivered activity');

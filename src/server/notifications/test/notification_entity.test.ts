@@ -130,6 +130,21 @@ describe('NotificationEntity', () => {
       expect(model.seen).toBe(true);
     });
 
+    it('should auto-generate a valid UUID when notification has no id (empty string default)', () => {
+      const notification = new Notification(); // no id argument → id = '' from PrimaryModel
+      notification.type = 'repost';
+      notification.calendarId = uuidv4();
+      notification.actorName = 'Actor';
+
+      const entity = NotificationEntity.fromModel(notification, uuidv4());
+
+      // id must NOT be '' (PostgreSQL rejects empty string as UUID).
+      // Sequelize's defaultValue should generate a valid UUID.
+      const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      expect(entity.id).not.toBe('');
+      expect(entity.id).toMatch(UUID_REGEX);
+    });
+
     it('should not expose account_id in the returned model', () => {
       const notification = new Notification(uuidv4());
       notification.type = 'follow';

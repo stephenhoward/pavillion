@@ -14,6 +14,7 @@ import { EventEntity } from '@/server/calendar/entity/event';
 import { ActivityPubOutboxMessageEntity } from '@/server/activitypub/entity/activitypub';
 import ProcessInboxService from '@/server/activitypub/service/inbox';
 import FollowActivity from '@/server/activitypub/model/action/follow';
+import CalendarActorService from '@/server/activitypub/service/calendar_actor';
 import ConfigurationInterface from '@/server/configuration/interface';
 import SetupInterface from '@/server/setup/interface';
 
@@ -74,6 +75,13 @@ describe('Event API', () => {
   it('createEvent: should succeed', async () => {
     let getStub = sinon.stub(axios, 'get');
     let postStub = sinon.stub(axios, 'post');
+    sinon.stub(CalendarActorService.prototype, 'signActivity').resolves({
+      keyId: 'https://local.test/calendars/testcalendar#main-key',
+      signature: 'mock-signature-base64',
+      algorithm: 'rsa-sha256',
+      headers: '(request-target) host date digest',
+      date: new Date().toUTCString(),
+    });
     env.stubRemoteCalendar(getStub, 'remotedomain', 'testcalendar');
 
     let authKey = await env.login(userEmail,userPassword);
