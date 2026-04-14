@@ -205,6 +205,56 @@ describe('EventService.replaceEventCategories', () => {
     expect((mockTransaction.rollback as sinon.SinonStub).calledOnce).toBe(true);
   });
 
+  it('should prefer the supplied calendarId over the source calendar when the account owns both', async () => {
+    // Regression: when a user owns both the event's source calendar and a repost
+    // target calendar, the resolver previously defaulted to the source calendar,
+    // which caused category validation to fail for categories belonging to the
+    // repost target. Passing calendarId from the client disambiguates.
+    const sourceCalendarId = 'source00-0000-4000-8000-000000000001';
+    const repostTargetCalendarId = 'repost00-0000-4000-8000-000000000001';
+
+    const mockEvent = EventEntity.build({
+      id: validEventId,
+      calendar_id: sourceCalendarId,
+      account_id: 'test-account-id',
+    });
+
+    const repostTargetCategory = EventCategoryEntity.build({
+      id: validCategoryId1,
+      calendar_id: repostTargetCalendarId,
+    });
+
+    const mockTransaction = stubCommonDependencies({
+      eventEntity: mockEvent,
+      categories: [repostTargetCategory],
+      userCalendars: [
+        new Calendar(sourceCalendarId, 'source-calendar'),
+        new Calendar(repostTargetCalendarId, 'repost-target-calendar'),
+      ],
+      repostEntity: [
+        EventRepostEntity.build({
+          id: 'repost-uuid',
+          event_id: validEventId,
+          calendar_id: repostTargetCalendarId,
+        }),
+      ],
+    });
+
+    sandbox.stub(EventCategoryAssignmentEntity, 'destroy').resolves(0);
+    sandbox.stub(EventCategoryAssignmentEntity, 'bulkCreate').resolves([]);
+
+    const returnedEvent = new CalendarEvent(validEventId, repostTargetCalendarId);
+    sandbox.stub(service, 'getEventById').resolves(returnedEvent);
+
+    const result = await service.replaceEventCategories(
+      mockAccount, validEventId, [validCategoryId1], repostTargetCalendarId,
+    );
+
+    expect(result).toBeDefined();
+    expect(result.isRepost).toBe(true);
+    expect((mockTransaction.commit as sinon.SinonStub).calledOnce).toBe(true);
+  });
+
   it('should resolve repost events to reposter calendar correctly', async () => {
     const originalCalendarId = 'original-0000-4000-8000-000000000001';
     const reposterCalendarId = 'reposter-0000-4000-8000-000000000001';

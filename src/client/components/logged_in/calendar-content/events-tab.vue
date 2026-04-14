@@ -230,6 +230,7 @@ const handleRepostCategoryUpdate = async (categoryIds) => {
     const updatedEvent = await calendarService.replaceEventCategories(
       repostEventForModal.value.id,
       categoryIds,
+      props.calendar?.id,
     );
     store.updateEvent(props.calendar?.id, updatedEvent);
   }

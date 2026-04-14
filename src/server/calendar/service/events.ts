@@ -1206,6 +1206,11 @@ class EventService {
    * @param calendarId - The calendar ID taken directly from the EventEntity rows
    * @param eventIds - The event IDs being operated on
    * @param transaction - Active Sequelize transaction
+   * @param preferredCalendarId - Optional caller-supplied context (e.g. the calendar
+   *   whose event list the user is viewing). When the account owns both the event's
+   *   source calendar and a repost target, this disambiguates which calendar the
+   *   operation is intended to modify. Used when the preferred calendar either matches
+   *   the source calendar or has an EventRepostEntity row for every event in the set.
    * @returns effectiveCalendarId (string), wasRepost flag, and pre-fetched userCalendars
    * @throws InsufficientCalendarPermissionsError when no owned calendar can be resolved
    */
@@ -1214,22 +1219,74 @@ class EventService {
     calendarId: string,
     eventIds: string[],
     transaction: Transaction,
+    preferredCalendarId?: string,
   ): Promise<{ effectiveCalendarId: string; wasRepost: boolean; userCalendars: Calendar[] }> {
     const userCalendars = await this.calendarService.editableCalendarsForUser(account);
     let effectiveCalendarId = calendarId;
     let wasRepost = false;
 
-    if (!userCalendars.some(cal => cal.id === effectiveCalendarId)) {
-      const reposts = await EventRepostEntity.findAll({
-        where: { event_id: eventIds },
-        transaction,
-      });
-      if (reposts.length === eventIds.length) {
-        const repostCalendarIds = [...new Set(reposts.map(r => r.calendar_id))];
-        if (repostCalendarIds.length === 1 && userCalendars.some(cal => cal.id === repostCalendarIds[0])) {
-          effectiveCalendarId = repostCalendarIds[0];
-          wasRepost = true;
+    // Fast path: caller doesn't need disambiguation and already owns the source
+    // calendar. No repost lookup required.
+    if (!preferredCalendarId && userCalendars.some(cal => cal.id === effectiveCalendarId)) {
+      return { effectiveCalendarId, wasRepost, userCalendars };
+    }
+
+    // Reposts are tracked in two tables: the legacy EventRepostEntity and the
+    // authoritative SharedEventEntity (populated by the auto-repost pipeline).
+    // Both must be consulted, otherwise repost targets created via auto-repost
+    // are invisible to this resolver.
+    const legacyReposts = await EventRepostEntity.findAll({
+      where: { event_id: eventIds },
+      transaction,
+    });
+    const sharedCalendarIdsByEvent = new Map<string, Set<string>>();
+    if (this.activityPubInterface) {
+      for (const eventId of eventIds) {
+        const calendarIds = await this.activityPubInterface.getCalendarIdsForSharedEvent(eventId);
+        sharedCalendarIdsByEvent.set(eventId, new Set(calendarIds));
+      }
+    }
+
+    const isRepostTarget = (candidateCalendarId: string): boolean => {
+      return eventIds.every((eventId) => {
+        if (legacyReposts.some(r => r.event_id === eventId && r.calendar_id === candidateCalendarId)) {
+          return true;
         }
+        return sharedCalendarIdsByEvent.get(eventId)?.has(candidateCalendarId) ?? false;
+      });
+    };
+
+    // When the caller provides the calendar context they're operating in, honor it
+    // if the account owns it and it has a valid relationship with the events. This
+    // disambiguates the case where the account owns both source and repost-target
+    // calendars (otherwise the source calendar wins and repost-target categories
+    // fail validation).
+    if (preferredCalendarId && userCalendars.some(cal => cal.id === preferredCalendarId)) {
+      if (preferredCalendarId === calendarId) {
+        return { effectiveCalendarId: preferredCalendarId, wasRepost: false, userCalendars };
+      }
+      if (isRepostTarget(preferredCalendarId)) {
+        return { effectiveCalendarId: preferredCalendarId, wasRepost: true, userCalendars };
+      }
+    }
+
+    if (!userCalendars.some(cal => cal.id === effectiveCalendarId)) {
+      // Gather all candidate repost targets across both legacy and shared tables.
+      const candidateCalendarIds = new Set<string>();
+      for (const r of legacyReposts) {
+        candidateCalendarIds.add(r.calendar_id);
+      }
+      for (const set of sharedCalendarIdsByEvent.values()) {
+        for (const id of set) {
+          candidateCalendarIds.add(id);
+        }
+      }
+      const ownedRepostTargets = [...candidateCalendarIds].filter(
+        (id) => userCalendars.some(cal => cal.id === id) && isRepostTarget(id),
+      );
+      if (ownedRepostTargets.length === 1) {
+        effectiveCalendarId = ownedRepostTargets[0];
+        wasRepost = true;
       }
       // If still not resolved, the permission check in the caller will throw
     }
@@ -1410,6 +1467,7 @@ class EventService {
     account: Account,
     eventId: string,
     categoryIds: string[],
+    calendarId?: string,
   ): Promise<CalendarEvent> {
     // Validate eventId is a valid UUID
     if (!this.isValidUUID(eventId)) {
@@ -1447,7 +1505,7 @@ class EventService {
         effectiveCalendarId,
         wasRepost: resolvedAsRepost,
         userCalendars,
-      } = await this.resolveEffectiveCalendarId(account, event.calendar_id, [eventId], transaction);
+      } = await this.resolveEffectiveCalendarId(account, event.calendar_id, [eventId], transaction, calendarId);
       wasRepost = resolvedAsRepost;
 
       // 3. Check user has permission

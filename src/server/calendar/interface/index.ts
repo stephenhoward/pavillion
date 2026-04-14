@@ -495,8 +495,9 @@ export default class CalendarInterface {
     account: Account,
     eventId: string,
     categoryIds: string[],
+    calendarId?: string,
   ): Promise<CalendarEvent> {
-    return this.eventService.replaceEventCategories(account, eventId, categoryIds);
+    return this.eventService.replaceEventCategories(account, eventId, categoryIds, calendarId);
   }
 
   // Calendar settings operations
