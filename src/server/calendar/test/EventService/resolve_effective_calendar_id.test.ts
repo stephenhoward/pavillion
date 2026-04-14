@@ -154,6 +154,62 @@ describe('EventService.resolveEffectiveCalendarId', () => {
     expect(result.wasRepost).toBe(false);
   });
 
+  it('should honor preferredCalendarId when account owns both source and repost target', async () => {
+    const sourceCalendarId = 'source-calendar-uuid';
+    const repostTargetCalendarId = 'repost-target-uuid';
+    const eventIds = ['11111111-1111-4111-8111-111111111111'];
+
+    sandbox.stub(CalendarService.prototype, 'editableCalendarsForUser')
+      .resolves([
+        new Calendar(sourceCalendarId, 'source-calendar'),
+        new Calendar(repostTargetCalendarId, 'repost-target-calendar'),
+      ]);
+
+    sandbox.stub(EventRepostEntity, 'findAll').resolves([
+      EventRepostEntity.build({
+        id: 'repost-1',
+        event_id: eventIds[0],
+        calendar_id: repostTargetCalendarId,
+      }),
+    ]);
+
+    const result = await (service as any).resolveEffectiveCalendarId(
+      mockAccount,
+      sourceCalendarId,
+      eventIds,
+      mockTransaction,
+      repostTargetCalendarId,
+    );
+
+    // Without preferredCalendarId the resolver would return sourceCalendarId;
+    // passing the repost target should disambiguate in favor of the target.
+    expect(result.effectiveCalendarId).toBe(repostTargetCalendarId);
+    expect(result.wasRepost).toBe(true);
+  });
+
+  it('should ignore preferredCalendarId when the account does not own it', async () => {
+    const sourceCalendarId = 'source-calendar-uuid';
+    const unrelatedCalendarId = 'unrelated-calendar-uuid';
+    const eventIds = ['11111111-1111-4111-8111-111111111111'];
+
+    sandbox.stub(CalendarService.prototype, 'editableCalendarsForUser')
+      .resolves([new Calendar(sourceCalendarId, 'source-calendar')]);
+
+    sandbox.stub(EventRepostEntity, 'findAll').resolves([]);
+
+    const result = await (service as any).resolveEffectiveCalendarId(
+      mockAccount,
+      sourceCalendarId,
+      eventIds,
+      mockTransaction,
+      unrelatedCalendarId,
+    );
+
+    // User owns source; preferredCalendarId is ignored since user doesn't own it.
+    expect(result.effectiveCalendarId).toBe(sourceCalendarId);
+    expect(result.wasRepost).toBe(false);
+  });
+
   it('should return all user calendars in the result for downstream permission checks', async () => {
     const calendarId = 'owned-calendar-uuid';
     const anotherCalendarId = 'another-calendar-uuid';

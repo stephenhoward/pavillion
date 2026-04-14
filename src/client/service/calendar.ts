@@ -322,11 +322,21 @@ export default class CalendarService {
    * Replace all category assignments for a single event
    * @param eventId The ID of the event to update
    * @param categoryIds Array of category IDs to assign (empty array clears all)
+   * @param calendarId Optional calendar context for disambiguating repost edits
+   *   when the user owns both the event's source calendar and a repost-target calendar.
    * @returns Promise<CalendarEvent> The updated event with its categories
    */
-  async replaceEventCategories(eventId: string, categoryIds: string[]): Promise<CalendarEvent> {
+  async replaceEventCategories(
+    eventId: string,
+    categoryIds: string[],
+    calendarId?: string,
+  ): Promise<CalendarEvent> {
     try {
-      const response = await axios.put(`/api/v1/events/${eventId}/categories`, { categoryIds });
+      const body: { categoryIds: string[]; calendarId?: string } = { categoryIds };
+      if (calendarId) {
+        body.calendarId = calendarId;
+      }
+      const response = await axios.put(`/api/v1/events/${eventId}/categories`, body);
       return CalendarEvent.fromObject(response.data);
     }
     catch (error: unknown) {

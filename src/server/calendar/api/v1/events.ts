@@ -316,7 +316,7 @@ export default class EventRoutes {
     }
 
     const eventId = req.params.id;
-    const { categoryIds } = req.body;
+    const { categoryIds, calendarId } = req.body;
 
     if (!Array.isArray(categoryIds)) {
       res.status(400).json({
@@ -326,8 +326,16 @@ export default class EventRoutes {
       return;
     }
 
+    if (calendarId !== undefined && typeof calendarId !== 'string') {
+      res.status(400).json({
+        "error": "calendarId must be a string when provided",
+        errorName: 'ValidationError',
+      });
+      return;
+    }
+
     try {
-      const event = await this.service.replaceEventCategories(account, eventId, categoryIds);
+      const event = await this.service.replaceEventCategories(account, eventId, categoryIds, calendarId);
       res.json(event.toObject());
     }
     catch (error) {
