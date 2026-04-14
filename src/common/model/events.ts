@@ -22,6 +22,16 @@ export type startAndEndDates = {
 };
 
 /**
+ * Prompt used to label the event's external URL (e.g., "Tickets", "RSVP", "More Info").
+ */
+export type UrlPrompt = 'tickets' | 'rsvp' | 'more_info';
+
+/**
+ * Runtime-valid set of {@link UrlPrompt} values for enum checks on untrusted input.
+ */
+export const URL_PROMPT_VALUES: readonly UrlPrompt[] = ['tickets', 'rsvp', 'more_info'] as const;
+
+/**
  * Represents a calendar event with multilingual content support.
  * Extends TranslatedModel to manage event content in different languages.
  *
@@ -78,6 +88,16 @@ class CalendarEvent extends TranslatedModel<CalendarEventContent> {
    * Default: 'none'. Must be explicitly set after retrieval if needed.
    */
   repostStatus: 'none' | 'manual' | 'auto' = 'none';
+  /**
+   * Optional external URL attached to an event (e.g., ticket page, RSVP link).
+   * Non-translatable — the same URL applies across all languages.
+   */
+  externalUrl: string | null = null;
+  /**
+   * Prompt/label for the external URL. Used by the UI to choose CTA copy.
+   * Non-translatable; the UI localizes via the enum value.
+   */
+  urlPrompt: UrlPrompt | null = null;
 
   /**
    * Derived flag: true when this event was obtained via a repost (auto or manual)
@@ -188,6 +208,8 @@ class CalendarEvent extends TranslatedModel<CalendarEventContent> {
       event.repostStatus = 'none';
     }
     event.sourceCalendar = obj.sourceCalendar ?? null;
+    event.externalUrl = obj.externalUrl ?? null;
+    event.urlPrompt = URL_PROMPT_VALUES.includes(obj.urlPrompt) ? obj.urlPrompt : null;
 
     if ( obj.content ) {
       for( let [language,strings] of Object.entries(obj.content) ) {
@@ -239,6 +261,8 @@ class CalendarEvent extends TranslatedModel<CalendarEventContent> {
       mediaFocalPointY: this.mediaFocalPointY,
       mediaZoom: this.mediaZoom,
       eventSourceUrl: this.eventSourceUrl,
+      externalUrl: this.externalUrl,
+      urlPrompt: this.urlPrompt,
       content: Object.fromEntries(
         Object.entries(this._content)
           .map(([language, strings]: [string, CalendarEventContent]) => [language, strings.toObject()]),
@@ -440,3 +464,4 @@ class CalendarEventSchedule extends Model {
 export {
   CalendarEvent, CalendarEventContent, CalendarEventSchedule, language, event_activity, EventFrequency,
 };
+

@@ -56,6 +56,19 @@
     "no_series_available": "No series available",
     "no_series_help": "Create series in calendar management to group related events"
   },
+  "external_link": {
+    "section_title": "External Link",
+    "url_label": "URL",
+    "url_placeholder": "https://",
+    "prompt_label": "Button Label",
+    "prompt_options": {
+      "tickets": "Tickets:",
+      "rsvp": "RSVP:",
+      "more_info": "More Information:"
+    },
+    "error_invalid_url": "Please enter a valid http or https URL.",
+    "error_prompt_required": "URL and button label must both be set or both be empty."
+  },
   "recurrence": {
     "dailyTerm": "days",
     "weeklyTerm": "weeks",

@@ -1,7 +1,7 @@
 import { Model, Table, Column, PrimaryKey, BelongsTo, DataType, ForeignKey, HasMany, Index } from 'sequelize-typescript';
 import { DateTime } from 'luxon';
 
-import { CalendarEvent, CalendarEventContent, CalendarEventSchedule, language } from '@/common/model/events';
+import { CalendarEvent, CalendarEventContent, CalendarEventSchedule, UrlPrompt, language } from '@/common/model/events';
 import db from '@/server/common/entity/db';
 import { LocationEntity } from '@/server/calendar/entity/location';
 import { MediaEntity } from '@/server/media/entity/media';
@@ -62,6 +62,12 @@ class EventEntity extends Model {
   @Column({ type: DataType.UUID, allowNull: true })
   declare series_id: string | null;
 
+  @Column({ type: DataType.STRING(2048), allowNull: true })
+  declare external_url: string | null;
+
+  @Column({ type: DataType.STRING(32), allowNull: true })
+  declare url_prompt: string | null;
+
   @BelongsTo(() => EventEntity)
   declare parentEvent: EventEntity;
 
@@ -92,6 +98,8 @@ class EventEntity extends Model {
     model.mediaFocalPointX = this.media_focal_point_x;
     model.mediaFocalPointY = this.media_focal_point_y;
     model.mediaZoom = this.media_zoom;
+    model.externalUrl = this.external_url;
+    model.urlPrompt = this.url_prompt as UrlPrompt | null;
     if (this.location) {
       model.location = this.location.toModel();
     }
@@ -122,6 +130,8 @@ class EventEntity extends Model {
       media_focal_point_y: event.mediaFocalPointY,
       media_zoom: event.mediaZoom,
       series_id: event.series?.id ?? null,
+      external_url: event.externalUrl,
+      url_prompt: event.urlPrompt,
     });
   }
 };

@@ -78,4 +78,30 @@ describe('EventEntity Schema - Calendar ID Support', () => {
     expect(model.isLocal()).toBe(false);
     expect(model.isRemote()).toBe(true);
   });
+
+  it('should round-trip externalUrl and urlPrompt from model through entity back to model', () => {
+    const event = new CalendarEvent(eventId, uuidIdentifier, '/testcalendar/event-1');
+    event.externalUrl = 'https://example.com/tickets';
+    event.urlPrompt = 'tickets';
+
+    const entity = EventEntity.fromModel(event);
+    expect(entity.external_url).toBe('https://example.com/tickets');
+    expect(entity.url_prompt).toBe('tickets');
+
+    const roundTripped = entity.toModel();
+    expect(roundTripped.externalUrl).toBe('https://example.com/tickets');
+    expect(roundTripped.urlPrompt).toBe('tickets');
+  });
+
+  it('should round-trip null externalUrl and urlPrompt', () => {
+    const event = new CalendarEvent(eventId, uuidIdentifier, '/testcalendar/event-1');
+
+    const entity = EventEntity.fromModel(event);
+    expect(entity.external_url ?? null).toBeNull();
+    expect(entity.url_prompt ?? null).toBeNull();
+
+    const roundTripped = entity.toModel();
+    expect(roundTripped.externalUrl).toBeNull();
+    expect(roundTripped.urlPrompt).toBeNull();
+  });
 });

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import config from 'config';
 import { DateTime } from 'luxon';
 import { Calendar } from '@/common/model/calendar';
-import { CalendarEvent, CalendarEventContent, CalendarEventSchedule } from '@/common/model/events';
+import { CalendarEvent, CalendarEventContent, CalendarEventSchedule, UrlPrompt } from '@/common/model/events';
 import { EventCategory } from '@/common/model/event_category';
 import { EventSeries } from '@/common/model/event_series';
 import { EventSeriesContent } from '@/common/model/event_series_content';
@@ -458,6 +458,114 @@ describe('EventObject', () => {
       });
     });
 
+    describe('externalUrl + urlPrompt serialization', () => {
+
+      it('should emit attachment Link and pavillion:urlPrompt when both fields are set', () => {
+        const calendar = new Calendar('calendar-uuid', 'mycal');
+        const event = new CalendarEvent('event-uuid', 'calendar-uuid');
+        event.addContent(new CalendarEventContent('en', 'Event', ''));
+        event.externalUrl = 'https://example.com/tickets';
+        event.urlPrompt = 'tickets';
+
+        const obj = new EventObject(calendar, event);
+        const result = obj.toActivityPubObject();
+
+        expect(result.attachment).toEqual([
+          {
+            type: 'Link',
+            href: 'https://example.com/tickets',
+            name: 'Tickets',
+            rel: 'external',
+          },
+        ]);
+        expect(result['pavillion:urlPrompt']).toBe('tickets');
+      });
+
+      it('should emit correct translated label for rsvp prompt', () => {
+        const calendar = new Calendar('calendar-uuid', 'mycal');
+        const event = new CalendarEvent('event-uuid', 'calendar-uuid');
+        event.addContent(new CalendarEventContent('en', 'Event', ''));
+        event.externalUrl = 'https://example.com/rsvp';
+        event.urlPrompt = 'rsvp';
+
+        const obj = new EventObject(calendar, event);
+        const result = obj.toActivityPubObject();
+
+        expect(result.attachment[0].name).toBe('RSVP');
+        expect(result.attachment[0].rel).toBe('external');
+        expect(result['pavillion:urlPrompt']).toBe('rsvp');
+      });
+
+      it('should emit correct translated label for more_info prompt', () => {
+        const calendar = new Calendar('calendar-uuid', 'mycal');
+        const event = new CalendarEvent('event-uuid', 'calendar-uuid');
+        event.addContent(new CalendarEventContent('en', 'Event', ''));
+        event.externalUrl = 'https://example.com/info';
+        event.urlPrompt = 'more_info';
+
+        const obj = new EventObject(calendar, event);
+        const result = obj.toActivityPubObject();
+
+        expect(result.attachment[0].name).toBe('More Information');
+        expect(result['pavillion:urlPrompt']).toBe('more_info');
+      });
+
+      it('should not emit attachment or pavillion:urlPrompt when both fields are null', () => {
+        const calendar = new Calendar('calendar-uuid', 'mycal');
+        const event = new CalendarEvent('event-uuid', 'calendar-uuid');
+        event.addContent(new CalendarEventContent('en', 'Event', ''));
+
+        const obj = new EventObject(calendar, event);
+        const result = obj.toActivityPubObject();
+
+        expect(result).not.toHaveProperty('attachment');
+        expect(result).not.toHaveProperty('pavillion:urlPrompt');
+      });
+
+      it('should not emit attachment or pavillion:urlPrompt when only externalUrl is set', () => {
+        const calendar = new Calendar('calendar-uuid', 'mycal');
+        const event = new CalendarEvent('event-uuid', 'calendar-uuid');
+        event.addContent(new CalendarEventContent('en', 'Event', ''));
+        event.externalUrl = 'https://example.com/tickets';
+        event.urlPrompt = null;
+
+        const obj = new EventObject(calendar, event);
+        const result = obj.toActivityPubObject();
+
+        expect(result).not.toHaveProperty('attachment');
+        expect(result).not.toHaveProperty('pavillion:urlPrompt');
+      });
+
+      it('should not emit attachment or pavillion:urlPrompt when only urlPrompt is set', () => {
+        const calendar = new Calendar('calendar-uuid', 'mycal');
+        const event = new CalendarEvent('event-uuid', 'calendar-uuid');
+        event.addContent(new CalendarEventContent('en', 'Event', ''));
+        event.externalUrl = null;
+        event.urlPrompt = 'tickets';
+
+        const obj = new EventObject(calendar, event);
+        const result = obj.toActivityPubObject();
+
+        expect(result).not.toHaveProperty('attachment');
+        expect(result).not.toHaveProperty('pavillion:urlPrompt');
+      });
+
+      it('should not use or overload the AS top-level url field', () => {
+        const calendar = new Calendar('calendar-uuid', 'mycal');
+        const event = new CalendarEvent('event-uuid', 'calendar-uuid');
+        event.addContent(new CalendarEventContent('en', 'Event', ''));
+        event.externalUrl = 'https://example.com/tickets';
+        event.urlPrompt = 'tickets';
+
+        const obj = new EventObject(calendar, event);
+        const result = obj.toActivityPubObject();
+
+        // AS top-level `url` is reserved for Mobilizon's canonical event page.
+        expect(result).not.toHaveProperty('url');
+      });
+
+    });
+
   });
 
   describe('fromActivityPubObject()', () => {
@@ -877,6 +985,264 @@ describe('EventObject', () => {
       const result = EventObject.fromActivityPubObject(apObject);
       expect(result.content.de).toBeDefined();
       expect(result.content.de.description).toBe('Deutsch');
+    });
+
+    describe('externalUrl + urlPrompt parsing', () => {
+
+      it('should parse attachment Link with rel:external and pavillion:urlPrompt', () => {
+        const apObject = {
+          name: 'Test',
+          startTime: '2026-04-15T09:00:00Z',
+          attachment: [
+            { type: 'Link', href: 'https://example.com/tickets', rel: 'external', name: 'Tickets' },
+          ],
+          'pavillion:urlPrompt': 'tickets' as UrlPrompt,
+        };
+
+        const result = EventObject.fromActivityPubObject(apObject);
+
+        expect(result.externalUrl).toBe('https://example.com/tickets');
+        expect(result.urlPrompt).toBe('tickets');
+      });
+
+      it('should null externalUrl when href is javascript: scheme', () => {
+        const apObject = {
+          name: 'Test',
+          attachment: [
+            { type: 'Link', href: 'javascript:alert(1)', rel: 'external' },
+          ],
+          'pavillion:urlPrompt': 'tickets',
+        };
+
+        const result = EventObject.fromActivityPubObject(apObject);
+
+        expect(result.externalUrl).toBeNull();
+        expect(result.urlPrompt).toBeNull();
+      });
+
+      it('should null externalUrl when href is data: URI', () => {
+        const apObject = {
+          name: 'Test',
+          attachment: [
+            { type: 'Link', href: 'data:text/html,<script>alert(1)</script>', rel: 'external' },
+          ],
+          'pavillion:urlPrompt': 'tickets',
+        };
+
+        const result = EventObject.fromActivityPubObject(apObject);
+
+        expect(result.externalUrl).toBeNull();
+        expect(result.urlPrompt).toBeNull();
+      });
+
+      it('should null externalUrl when href is ftp: scheme', () => {
+        const apObject = {
+          name: 'Test',
+          attachment: [
+            { type: 'Link', href: 'ftp://example.com/file', rel: 'external' },
+          ],
+          'pavillion:urlPrompt': 'tickets',
+        };
+
+        const result = EventObject.fromActivityPubObject(apObject);
+
+        expect(result.externalUrl).toBeNull();
+        expect(result.urlPrompt).toBeNull();
+      });
+
+      it('should null both fields when pavillion:urlPrompt is not in the whitelist', () => {
+        const apObject = {
+          name: 'Test',
+          attachment: [
+            { type: 'Link', href: 'https://example.com/tickets', rel: 'external' },
+          ],
+          'pavillion:urlPrompt': 'buy_now_pay_later', // not a valid enum
+        };
+
+        const result = EventObject.fromActivityPubObject(apObject);
+
+        expect(result.externalUrl).toBeNull();
+        expect(result.urlPrompt).toBeNull();
+      });
+
+      it('should null both fields when pavillion:urlPrompt is missing but href is valid', () => {
+        const apObject = {
+          name: 'Test',
+          attachment: [
+            { type: 'Link', href: 'https://example.com/tickets', rel: 'external' },
+          ],
+        };
+
+        const result = EventObject.fromActivityPubObject(apObject);
+
+        expect(result.externalUrl).toBeNull();
+        expect(result.urlPrompt).toBeNull();
+      });
+
+      it('should null both fields when pavillion:urlPrompt is set but href is missing', () => {
+        const apObject = {
+          name: 'Test',
+          'pavillion:urlPrompt': 'tickets',
+        };
+
+        const result = EventObject.fromActivityPubObject(apObject);
+
+        expect(result.externalUrl).toBeNull();
+        expect(result.urlPrompt).toBeNull();
+      });
+
+      it('should ignore attachment entries without rel:external', () => {
+        const apObject = {
+          name: 'Test',
+          attachment: [
+            { type: 'Link', href: 'https://example.com/canonical', rel: 'canonical' },
+            { type: 'Link', href: 'https://example.com/alt', rel: 'alternate' },
+          ],
+          'pavillion:urlPrompt': 'tickets',
+        };
+
+        const result = EventObject.fromActivityPubObject(apObject);
+
+        expect(result.externalUrl).toBeNull();
+        expect(result.urlPrompt).toBeNull();
+      });
+
+      it('should null externalUrl when href is empty string', () => {
+        const apObject = {
+          name: 'Test',
+          attachment: [
+            { type: 'Link', href: '', rel: 'external' },
+          ],
+          'pavillion:urlPrompt': 'tickets',
+        };
+
+        const result = EventObject.fromActivityPubObject(apObject);
+
+        expect(result.externalUrl).toBeNull();
+        expect(result.urlPrompt).toBeNull();
+      });
+
+      it('should null externalUrl when href is whitespace only', () => {
+        const apObject = {
+          name: 'Test',
+          attachment: [
+            { type: 'Link', href: '   ', rel: 'external' },
+          ],
+          'pavillion:urlPrompt': 'tickets',
+        };
+
+        const result = EventObject.fromActivityPubObject(apObject);
+
+        expect(result.externalUrl).toBeNull();
+        expect(result.urlPrompt).toBeNull();
+      });
+
+      it('should null externalUrl when href exceeds 2048 characters', () => {
+        const longHref = 'https://example.com/' + 'a'.repeat(2050);
+        const apObject = {
+          name: 'Test',
+          attachment: [
+            { type: 'Link', href: longHref, rel: 'external' },
+          ],
+          'pavillion:urlPrompt': 'tickets',
+        };
+
+        const result = EventObject.fromActivityPubObject(apObject);
+
+        expect(result.externalUrl).toBeNull();
+        expect(result.urlPrompt).toBeNull();
+      });
+
+      it('should null externalUrl when href is protocol-relative', () => {
+        const apObject = {
+          name: 'Test',
+          attachment: [
+            { type: 'Link', href: '//example.com/tickets', rel: 'external' },
+          ],
+          'pavillion:urlPrompt': 'tickets',
+        };
+
+        const result = EventObject.fromActivityPubObject(apObject);
+
+        expect(result.externalUrl).toBeNull();
+        expect(result.urlPrompt).toBeNull();
+      });
+
+      it('should null externalUrl when href is not a string', () => {
+        const apObject = {
+          name: 'Test',
+          attachment: [
+            { type: 'Link', href: 12345, rel: 'external' },
+          ],
+          'pavillion:urlPrompt': 'tickets',
+        };
+
+        const result = EventObject.fromActivityPubObject(apObject);
+
+        expect(result.externalUrl).toBeNull();
+        expect(result.urlPrompt).toBeNull();
+      });
+
+      it('should handle non-array attachment gracefully', () => {
+        const apObject = {
+          name: 'Test',
+          attachment: { type: 'Link', href: 'https://example.com', rel: 'external' },
+          'pavillion:urlPrompt': 'tickets',
+        };
+
+        const result = EventObject.fromActivityPubObject(apObject);
+
+        expect(result.externalUrl).toBeNull();
+        expect(result.urlPrompt).toBeNull();
+      });
+
+      it('should accept all three valid urlPrompt values (rsvp, more_info)', () => {
+        const rsvpResult = EventObject.fromActivityPubObject({
+          name: 'Test',
+          attachment: [{ type: 'Link', href: 'https://example.com/rsvp', rel: 'external' }],
+          'pavillion:urlPrompt': 'rsvp',
+        });
+        expect(rsvpResult.externalUrl).toBe('https://example.com/rsvp');
+        expect(rsvpResult.urlPrompt).toBe('rsvp');
+
+        const infoResult = EventObject.fromActivityPubObject({
+          name: 'Test',
+          attachment: [{ type: 'Link', href: 'https://example.com/info', rel: 'external' }],
+          'pavillion:urlPrompt': 'more_info',
+        });
+        expect(infoResult.externalUrl).toBe('https://example.com/info');
+        expect(infoResult.urlPrompt).toBe('more_info');
+      });
+
+      it('should round-trip externalUrl and urlPrompt through toActivityPubObject and fromActivityPubObject', () => {
+        const calendar = new Calendar('calendar-uuid', 'mycal');
+        const event = new CalendarEvent('event-uuid', 'calendar-uuid');
+        event.addContent(new CalendarEventContent('en', 'Round Trip', 'desc'));
+        event.date = '2026-04-15';
+        event.schedules = [new CalendarEventSchedule('s1', DateTime.fromISO('2026-04-15T09:00:00Z'))];
+        event.externalUrl = 'https://example.com/tickets';
+        event.urlPrompt = 'tickets';
+
+        const obj = new EventObject(calendar, event);
+        const apOutput = obj.toActivityPubObject();
+        const normalized = EventObject.fromActivityPubObject(apOutput);
+
+        expect(normalized.externalUrl).toBe('https://example.com/tickets');
+        expect(normalized.urlPrompt).toBe('tickets');
+      });
+
+      it('should not set externalUrl or urlPrompt when neither attachment nor pavillion:urlPrompt present', () => {
+        const apObject = {
+          name: 'Test',
+          startTime: '2026-04-15T09:00:00Z',
+        };
+
+        const result = EventObject.fromActivityPubObject(apObject);
+
+        expect(result.externalUrl).toBeNull();
+        expect(result.urlPrompt).toBeNull();
+      });
+
     });
 
   });

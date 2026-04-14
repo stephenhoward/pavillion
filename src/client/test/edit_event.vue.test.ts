@@ -505,3 +505,113 @@ describe('Location Integration', () => {
     expect(wrapper.findComponent({ name: 'LocationPickerModal' }).exists()).toBe(true);
   });
 });
+
+describe('External Link Section', () => {
+  let currentWrapper: any = null;
+  let pinia: Pinia;
+  let sandbox: sinon.SinonSandbox;
+
+  beforeEach(() => {
+    sinon.restore();
+    sandbox = sinon.createSandbox();
+    pinia = createPinia();
+    setActivePinia(pinia);
+    vi.clearAllMocks();
+  });
+
+  afterEach(async () => {
+    sandbox.restore();
+    if (currentWrapper) {
+      currentWrapper.unmount();
+      currentWrapper = null;
+      await nextTick();
+    }
+  });
+
+  it('renders external URL input and prompt dropdown', async () => {
+    const calendar = new Calendar('testId', 'testName');
+    calendar.addContent({ language: 'en', name: 'Test Calendar', description: '' });
+
+    const { wrapper } = await mountedEditorOnRoute('/event', [calendar]);
+    currentWrapper = wrapper;
+
+    const urlInput = wrapper.find('input[name="externalUrl"]');
+    expect(urlInput.exists()).toBe(true);
+    expect(urlInput.attributes('type')).toBe('url');
+
+    const promptSelect = wrapper.find('select[name="urlPrompt"]');
+    expect(promptSelect.exists()).toBe(true);
+
+    // Three non-null options: more_info (default first), tickets, rsvp
+    const options = promptSelect.findAll('option');
+    expect(options.length).toBe(3);
+    expect(options[0].attributes('value')).toBe('more_info');
+  });
+
+  it('binds URL input to event.externalUrl', async () => {
+    const calendar = new Calendar('testId', 'testName');
+    calendar.addContent({ language: 'en', name: 'Test Calendar', description: '' });
+
+    const { wrapper } = await mountedEditorOnRoute('/event', [calendar]);
+    currentWrapper = wrapper;
+
+    const urlInput = wrapper.find('input[name="externalUrl"]');
+    await urlInput.setValue('https://example.com/tickets');
+    await nextTick();
+
+    expect(wrapper.vm.state.event.externalUrl).toBe('https://example.com/tickets');
+  });
+
+  it('binds prompt dropdown to event.urlPrompt', async () => {
+    const calendar = new Calendar('testId', 'testName');
+    calendar.addContent({ language: 'en', name: 'Test Calendar', description: '' });
+
+    const { wrapper } = await mountedEditorOnRoute('/event', [calendar]);
+    currentWrapper = wrapper;
+
+    // Backing state starts null (no prompt persisted until URL is set)
+    expect(wrapper.vm.state.event.urlPrompt).toBeNull();
+
+    const promptSelect = wrapper.find('select[name="urlPrompt"]');
+    await promptSelect.setValue('tickets');
+    await nextTick();
+
+    expect(wrapper.vm.state.event.urlPrompt).toBe('tickets');
+  });
+
+  it('surfaces server field error for externalUrl on the URL input', async () => {
+    const calendar = new Calendar('testId', 'testName');
+    calendar.addContent({ language: 'en', name: 'Test Calendar', description: '' });
+
+    const { wrapper } = await mountedEditorOnRoute('/event', [calendar]);
+    currentWrapper = wrapper;
+
+    // Directly populate fieldErrors (exposed via defineExpose)
+    wrapper.vm.fieldErrors.externalUrl = 'Please enter a valid http or https URL.';
+    await nextTick();
+
+    const urlInput = wrapper.find('input[name="externalUrl"]');
+    expect(urlInput.attributes('aria-invalid')).toBe('true');
+
+    const errorMsg = wrapper.find('#event-externalUrl-error');
+    expect(errorMsg.exists()).toBe(true);
+    expect(errorMsg.text()).toContain('Please enter a valid http or https URL.');
+  });
+
+  it('surfaces server field error for urlPrompt on the dropdown', async () => {
+    const calendar = new Calendar('testId', 'testName');
+    calendar.addContent({ language: 'en', name: 'Test Calendar', description: '' });
+
+    const { wrapper } = await mountedEditorOnRoute('/event', [calendar]);
+    currentWrapper = wrapper;
+
+    wrapper.vm.fieldErrors.urlPrompt = 'URL and button label must both be set or both be empty.';
+    await nextTick();
+
+    const promptSelect = wrapper.find('select[name="urlPrompt"]');
+    expect(promptSelect.attributes('aria-invalid')).toBe('true');
+
+    const errorMsg = wrapper.find('#event-urlPrompt-error');
+    expect(errorMsg.exists()).toBe(true);
+  });
+});
