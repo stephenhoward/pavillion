@@ -4,16 +4,52 @@ import { DateTime } from 'luxon';
 import striptags from 'striptags';
 
 import { Calendar } from '@/common/model/calendar';
-import { CalendarEvent, CalendarEventSchedule } from '@/common/model/events';
+import { CalendarEvent, CalendarEventSchedule, UrlPrompt, URL_PROMPT_VALUES } from '@/common/model/events';
 import { EventLocation } from '@/common/model/location';
 import { ActivityPubObject } from '@/server/activitypub/model/base';
 import { SeriesObject } from '@/server/activitypub/model/object/series';
+
+/**
+ * English fallback labels for URL prompt tokens. Emitted in the outbound AS
+ * `attachment.name` so non-Pavillion peers (Mobilizon, Gancio) can render a
+ * human-readable label. Pavillion peers round-trip the raw enum token via the
+ * `pavillion:urlPrompt` extension field.
+ */
+const URL_PROMPT_EN_LABELS: Record<UrlPrompt, string> = {
+  tickets: 'Tickets',
+  rsvp: 'RSVP',
+  more_info: 'More Information',
+};
 
 /**
  * Strips HTML tags and decodes HTML entities from a string.
  */
 function stripHtmlTags(html: string): string {
   return striptags(he.decode(html)).trim();
+}
+
+/**
+ * Sanitizes an untrusted href value from a federated peer. Returns a parsed
+ * http(s) URL string or null for any anomaly (non-string, empty/whitespace,
+ * too long, malformed, or non-http(s) scheme).
+ *
+ * Security-critical: This is the authoritative barrier against malicious peers
+ * injecting javascript:, data:, ftp:, or other dangerous URL schemes into
+ * stored event data. NEVER throws — a throw would cause the inbox to reject
+ * the entire activity, which is not the correct posture for a single bad field.
+ */
+function sanitizeExternalUrlHref(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null;
+  const trimmed = raw.trim();
+  if (trimmed === '' || trimmed.length > 2048) return null;
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
+    return parsed.toString();
+  }
+  catch {
+    return null;
+  }
 }
 
 class EventObject extends ActivityPubObject {
@@ -185,6 +221,22 @@ class EventObject extends ActivityPubObject {
       };
     }
 
+    // attachment Link + pavillion:urlPrompt: emit only when BOTH fields are set.
+    // Service-layer guard ensures externalUrl and urlPrompt are always set together.
+    // The AS top-level `url` field is intentionally NOT overloaded — it is reserved
+    // for the canonical event page (Mobilizon compatibility).
+    if (event.externalUrl && event.urlPrompt) {
+      result.attachment = [
+        {
+          type: 'Link',
+          href: event.externalUrl,
+          name: URL_PROMPT_EN_LABELS[event.urlPrompt],
+          rel: 'external',
+        },
+      ];
+      result['pavillion:urlPrompt'] = event.urlPrompt;
+    }
+
     // pavillion:* extensions
     result['pavillion:content'] = event.toObject().content;
     result['pavillion:categories'] = this.categories;
@@ -281,6 +333,35 @@ class EventObject extends ActivityPubObject {
     else if (apObject.series !== undefined) {
       result.series = apObject.series;
     }
+
+    // --- externalUrl + urlPrompt resolution ---
+    // Security-critical: sanitize inbound attachment Link href and urlPrompt enum.
+    // Cross-field invariant: both must be valid together, or both are null. A partial
+    // record (only one field valid) is never persisted — it is dropped entirely.
+    let parsedExternalUrl: string | null = null;
+    if (Array.isArray(apObject.attachment)) {
+      const externalLink = apObject.attachment.find(
+        (a: any) => a && a.type === 'Link' && a.rel === 'external',
+      );
+      if (externalLink) {
+        parsedExternalUrl = sanitizeExternalUrlHref(externalLink.href);
+      }
+    }
+
+    let parsedPrompt: UrlPrompt | null = null;
+    const rawPrompt = apObject['pavillion:urlPrompt'];
+    if (typeof rawPrompt === 'string' && URL_PROMPT_VALUES.includes(rawPrompt as UrlPrompt)) {
+      parsedPrompt = rawPrompt as UrlPrompt;
+    }
+
+    // Cross-field consistency: if only one is set, null them both
+    if (!parsedExternalUrl || !parsedPrompt) {
+      parsedExternalUrl = null;
+      parsedPrompt = null;
+    }
+
+    result.externalUrl = parsedExternalUrl;
+    result.urlPrompt = parsedPrompt;
 
     // --- Schedules resolution ---
     // Priority: pavillion:schedules > bare schedules > synthesize from startTime/endTime

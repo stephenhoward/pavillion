@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, onBeforeMount } from 'vue';
+import { reactive, computed, onBeforeMount } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import { useRoute, useRouter } from 'vue-router';
 import { DateTime } from 'luxon';
@@ -7,6 +7,7 @@ import CalendarService from '@/site/service/calendar';
 import { useWidgetStore } from '../stores/widgetStore';
 import NotFound from '@/site/components/not-found.vue';
 import EventImage from '@/site/components/event-image.vue';
+import { URL_PROMPT_VALUES, type UrlPrompt } from '@/common/model/events';
 
 const { t } = useTranslation('system');
 const route = useRoute();
@@ -25,6 +26,36 @@ const state = reactive({
 });
 
 const calendarService = new CalendarService();
+
+/**
+ * Defense-in-depth safe external URL computed.
+ * Returns the URL only if its protocol is http: or https:, else null.
+ * Guards against javascript:, data:, and other unsafe schemes even if
+ * the service-layer validator is bypassed or misconfigured.
+ */
+const safeExternalUrl = computed<string | null>(() => {
+  const raw = state.instance?.event?.externalUrl;
+  if (!raw || typeof raw !== 'string') return null;
+  try {
+    const parsed = new URL(raw);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
+    return parsed.toString();
+  }
+  catch {
+    return null;
+  }
+});
+
+/**
+ * Defense-in-depth safe URL prompt computed.
+ * Returns the prompt value only if it is in URL_PROMPT_VALUES, else null.
+ * Prevents template-key injection via arbitrary strings.
+ */
+const safePrompt = computed<UrlPrompt | null>(() => {
+  const raw = state.instance?.event?.urlPrompt;
+  if (raw == null) return null;
+  return URL_PROMPT_VALUES.includes(raw as UrlPrompt) ? (raw as UrlPrompt) : null;
+});
 
 const goBack = () => {
   router.push({
@@ -131,6 +162,17 @@ onBeforeMount(async () => {
 
         <main class="instance-body">
           <p>{{ state.instance.event.content("en").description }}</p>
+
+          <!-- External link CTA -->
+          <a
+            v-if="safeExternalUrl && safePrompt"
+            :href="safeExternalUrl"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="external-link-button"
+          >
+            {{ t('url_prompt.' + safePrompt) }}
+          </a>
         </main>
 
         <footer v-if="state.instance.event.categories?.length > 0" class="instance-footer">
@@ -330,6 +372,24 @@ onBeforeMount(async () => {
     @include public-dark-mode {
       color: $public-text-primary-dark;
     }
+  }
+}
+
+// ================================================================
+// EXTERNAL LINK CTA BUTTON
+// ================================================================
+
+.external-link-button {
+  @include public-button-primary;
+
+  display: inline-block;
+  min-height: 44px;
+  margin-top: $public-space-md;
+  text-decoration: none;
+  text-align: center;
+
+  &:focus-visible {
+    @include public-focus-visible;
   }
 }
 

@@ -277,6 +277,8 @@ form {
 
 .field-input,
 .field-textarea {
+  // appearance: none needed so WebKit accepts custom padding/height on <select>
+  appearance: none;
   padding: 0.625rem 0.875rem;
   border: 1px solid var(--pav-color-stone-200);
   border-radius: 0.375rem;
@@ -303,6 +305,14 @@ form {
   }
 }
 
+select.field-input {
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  background-size: 1.25rem 1.25rem;
+  padding-inline-end: 2.25rem;
+}
+
 .field-input--error {
   border-color: var(--pav-color-red-400);
 
@@ -325,6 +335,35 @@ form {
 .form-required {
   color: var(--pav-color-red-500);
   margin-inline-start: 0.125rem;
+}
+
+.external-link-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: flex-start;
+}
+
+.external-link-prompt {
+  flex: 0 0 auto;
+  min-width: 11rem;
+}
+
+.external-link-url {
+  flex: 1 1 18rem;
+  min-width: 0;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .field-textarea {
@@ -844,6 +883,70 @@ button {
             />
           </section>
 
+          <!-- EXTERNAL LINK Section -->
+          <section class="editor-section">
+            <h2 class="section-header">{{ tExternalLink('section_title') }}</h2>
+
+            <div class="section-card">
+              <div class="external-link-row">
+                <div class="form-field external-link-prompt">
+                  <label for="event-url-prompt" class="visually-hidden">
+                    {{ tExternalLink('prompt_label') }}
+                  </label>
+                  <select
+                    id="event-url-prompt"
+                    name="urlPrompt"
+                    v-model="urlPromptProxy"
+                    class="field-input"
+                    :class="{ 'field-input--error': fieldErrors.urlPrompt }"
+                    :aria-invalid="fieldErrors.urlPrompt ? 'true' : undefined"
+                    :aria-describedby="fieldErrors.urlPrompt ? 'event-urlPrompt-error' : undefined"
+                    @change="clearFieldError('urlPrompt')"
+                  >
+                    <option value="more_info">{{ tExternalLink('prompt_options.more_info') }}</option>
+                    <option value="tickets">{{ tExternalLink('prompt_options.tickets') }}</option>
+                    <option value="rsvp">{{ tExternalLink('prompt_options.rsvp') }}</option>
+                  </select>
+                  <p
+                    v-if="fieldErrors.urlPrompt"
+                    id="event-urlPrompt-error"
+                    class="form-error"
+                    role="alert"
+                  >
+                    {{ fieldErrors.urlPrompt }}
+                  </p>
+                </div>
+
+                <div class="form-field external-link-url">
+                  <label for="event-external-url" class="visually-hidden">
+                    {{ tExternalLink('url_label') }}
+                  </label>
+                  <input
+                    id="event-external-url"
+                    type="url"
+                    name="externalUrl"
+                    maxlength="2048"
+                    :placeholder="tExternalLink('url_placeholder')"
+                    v-model="editorState.event.externalUrl"
+                    class="field-input"
+                    :class="{ 'field-input--error': fieldErrors.externalUrl }"
+                    :aria-invalid="fieldErrors.externalUrl ? 'true' : undefined"
+                    :aria-describedby="fieldErrors.externalUrl ? 'event-externalUrl-error' : undefined"
+                    @input="clearFieldError('externalUrl')"
+                  />
+                  <p
+                    v-if="fieldErrors.externalUrl"
+                    id="event-externalUrl-error"
+                    class="form-error"
+                    role="alert"
+                  >
+                    {{ fieldErrors.externalUrl }}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </section>
+
           <!-- EVENT IMAGE Section -->
           <section class="editor-section">
             <h2 class="section-header">EVENT IMAGE</h2>
@@ -1055,6 +1158,9 @@ const router = useRouter();
 const { t } = useTranslation('event_editor', {
   keyPrefix: 'editor',
 });
+const { t: tExternalLink } = useTranslation('event_editor', {
+  keyPrefix: 'external_link',
+});
 
 // Initialize composables
 const defaultLanguage = 'en';
@@ -1118,6 +1224,18 @@ const errorContainer = ref(null);
 // Modal refs
 const locationPickerRef = ref(null);
 const createLocationFormRef = ref(null);
+
+// The dropdown shows 'more_info' when the event has no prompt set; the
+// value is only persisted as urlPrompt when the user actually provides a
+// URL (see handleSaveEvent, which strips urlPrompt to null when the URL
+// is empty to satisfy the backend's both-or-neither rule).
+const urlPromptProxy = computed({
+  get: () => editorState.event?.urlPrompt ?? 'more_info',
+  set: (value) => {
+    if (!editorState.event) return;
+    editorState.event.urlPrompt = value || null;
+  },
+});
 
 /**
  * Translated page title
@@ -1302,6 +1420,21 @@ const handleRemoveLanguage = (language) => {
  * Handle save event
  */
 const handleSaveEvent = async () => {
+  // Only persist urlPrompt when an external URL is actually set; the
+  // backend requires both fields to be set together or both cleared.
+  if (editorState.event) {
+    const url = (editorState.event.externalUrl ?? '').trim();
+    if (!url) {
+      editorState.event.externalUrl = null;
+      editorState.event.urlPrompt = null;
+    }
+    else {
+      // Ensure urlPrompt reflects the proxy value (may be null if event was
+      // loaded without a prompt, but the UI defaulted to 'more_info').
+      editorState.event.urlPrompt = urlPromptProxy.value;
+    }
+  }
+
   await saveEvent(t, () => {
     resetSnapshot(editorState.event, selectedCategories.value, mediaId.value);
   });

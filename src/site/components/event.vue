@@ -11,6 +11,7 @@ import EventImage from './event-image.vue';
 import ReportEvent from './report-event.vue';
 import { useLocale } from '@/site/composables/useLocale';
 import AddToCalendar from './add-to-calendar.vue';
+import { URL_PROMPT_VALUES, type UrlPrompt } from '@/common/model/events';
 
 const { t } = useTranslation('system');
 const route = useRoute();
@@ -67,6 +68,36 @@ const sourceCalendarLabel = computed(() => {
 const isRemoteSourceCalendar = computed(() => {
   if (!sourceCalendar.value) return false;
   return sourceCalendar.value.url.startsWith('http');
+});
+
+/**
+ * Defense-in-depth safe external URL computed.
+ * Returns the URL only if its protocol is http: or https:, else null.
+ * Guards against javascript:, data:, and other unsafe schemes even if
+ * the service-layer validator is bypassed or misconfigured.
+ */
+const safeExternalUrl = computed<string | null>(() => {
+  const raw = state.event?.externalUrl;
+  if (!raw || typeof raw !== 'string') return null;
+  try {
+    const parsed = new URL(raw);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
+    return parsed.toString();
+  }
+  catch {
+    return null;
+  }
+});
+
+/**
+ * Defense-in-depth safe URL prompt computed.
+ * Returns the prompt value only if it is in URL_PROMPT_VALUES, else null.
+ * Prevents template-key injection via arbitrary strings.
+ */
+const safePrompt = computed<UrlPrompt | null>(() => {
+  const raw = state.event?.urlPrompt;
+  if (raw == null) return null;
+  return URL_PROMPT_VALUES.includes(raw as UrlPrompt) ? (raw as UrlPrompt) : null;
 });
 
 onBeforeMount(async () => {
@@ -222,6 +253,17 @@ function closeReportModal() {
             </div>
             <p class="accessibility-info">{{ locationAccessibilityInfo }}</p>
           </div>
+
+          <!-- External link CTA -->
+          <a
+            v-if="safeExternalUrl && safePrompt"
+            :href="safeExternalUrl"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="external-link-button"
+          >
+            {{ t('url_prompt.' + safePrompt) }}
+          </a>
 
           <!-- Add to Calendar -->
           <AddToCalendar v-if="state.event.schedules?.length" :event="state.event" />
@@ -555,6 +597,22 @@ function closeReportModal() {
 
   @include public-dark-mode {
     color: $public-text-primary-dark;
+  }
+}
+
+// ================================================================
+// EXTERNAL LINK CTA BUTTON
+// ================================================================
+
+.external-link-button {
+  @include public-button-primary;
+
+  min-height: 44px;
+  text-decoration: none;
+  text-align: center;
+
+  &:focus-visible {
+    @include public-focus-visible;
   }
 }
 

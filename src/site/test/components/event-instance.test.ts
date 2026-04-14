@@ -100,6 +100,10 @@ let mockSourceCalendar: {
   url: string;
 } | null = null;
 
+// Mutable externalUrl / urlPrompt so tests can inject external CTA data
+let mockExternalUrl: string | null = null;
+let mockUrlPrompt: string | null = null;
+
 vi.mock('@/site/service/calendar', () => {
   return {
     default: vi.fn().mockImplementation(() => ({
@@ -134,6 +138,8 @@ vi.mock('@/site/service/calendar', () => {
             series: mockSeries,
             schedules: mockSchedules,
             sourceCalendar: mockSourceCalendar,
+            externalUrl: mockExternalUrl,
+            urlPrompt: mockUrlPrompt,
           },
         }),
       ),
@@ -305,6 +311,11 @@ beforeAll(async () => {
             event_location: 'Location',
             event_source_calendar: 'Source Calendar',
             event_source_calendar_label: 'View source calendar {{name}}',
+            url_prompt: {
+              tickets: 'Tickets',
+              rsvp: 'RSVP',
+              more_info: 'More Information',
+            },
           },
         },
       },
@@ -324,6 +335,11 @@ beforeAll(async () => {
       event_location: 'Location',
       event_source_calendar: 'Source Calendar',
       event_source_calendar_label: 'View source calendar {{name}}',
+      url_prompt: {
+        tickets: 'Tickets',
+        rsvp: 'RSVP',
+        more_info: 'More Information',
+      },
     }, true, true);
   }
 });
@@ -343,6 +359,8 @@ describe('eventInstance breadcrumb locale behaviour', () => {
     mockSeries = null;
     mockSchedules = [];
     mockSourceCalendar = null;
+    mockExternalUrl = null;
+    mockUrlPrompt = null;
   });
 
   afterEach(() => {
@@ -423,6 +441,8 @@ describe('eventInstance category badge locale behaviour', () => {
     mockSeries = null;
     mockSchedules = [];
     mockSourceCalendar = null;
+    mockExternalUrl = null;
+    mockUrlPrompt = null;
   });
 
   afterEach(() => {
@@ -606,6 +626,8 @@ describe('eventInstance location display', () => {
     mockSeries = null;
     mockSchedules = [];
     mockSourceCalendar = null;
+    mockExternalUrl = null;
+    mockUrlPrompt = null;
   });
 
   afterEach(() => {
@@ -744,6 +766,8 @@ describe('eventInstance end time display', () => {
     mockSeries = null;
     mockSchedules = [];
     mockSourceCalendar = null;
+    mockExternalUrl = null;
+    mockUrlPrompt = null;
   });
 
   afterEach(() => {
@@ -870,6 +894,8 @@ describe('eventInstance series link display', () => {
     mockSeries = null;
     mockSchedules = [];
     mockSourceCalendar = null;
+    mockExternalUrl = null;
+    mockUrlPrompt = null;
   });
 
   afterEach(() => {
@@ -973,6 +999,8 @@ describe('eventInstance recurrence display', () => {
     mockSeries = null;
     mockSchedules = [];
     mockSourceCalendar = null;
+    mockExternalUrl = null;
+    mockUrlPrompt = null;
   });
 
   afterEach(() => {
@@ -1071,6 +1099,8 @@ describe('eventInstance source calendar pill', () => {
     mockSeries = null;
     mockSchedules = [];
     mockSourceCalendar = null;
+    mockExternalUrl = null;
+    mockUrlPrompt = null;
   });
 
   afterEach(() => {
@@ -1172,6 +1202,137 @@ describe('eventInstance source calendar pill', () => {
 
     const pill = wrapper.find('.source-calendar-pill');
     expect(pill.attributes('aria-label')).toContain('arts-cal@arts.org');
+    wrapper.unmount();
+  });
+});
+
+describe('event instance external URL CTA button', () => {
+  beforeEach(() => {
+    mockLocalizedPath.mockReset();
+    mockCurrentLocale.value = 'en';
+    mockCategories = [];
+    mockLocation = null;
+    mockEnd = null;
+    mockEventName = 'Test Event';
+    mockSeries = null;
+    mockSchedules = [];
+    mockSourceCalendar = null;
+    mockExternalUrl = null;
+    mockUrlPrompt = null;
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('should render CTA anchor when externalUrl and urlPrompt are both valid', async () => {
+    mockExternalUrl = 'https://tickets.example.com/show/123';
+    mockUrlPrompt = 'tickets';
+
+    const wrapper = await mountInstance(
+      '/view/test_calendar/events/evt-1/inst-1',
+      (path) => path,
+    );
+
+    const cta = wrapper.find('.external-link-button');
+    expect(cta.exists()).toBe(true);
+    expect(cta.attributes('href')).toBe('https://tickets.example.com/show/123');
+    wrapper.unmount();
+  });
+
+  it('should use target="_blank" and rel="noopener noreferrer" on the CTA anchor', async () => {
+    mockExternalUrl = 'https://rsvp.example.com/party';
+    mockUrlPrompt = 'rsvp';
+
+    const wrapper = await mountInstance(
+      '/view/test_calendar/events/evt-1/inst-1',
+      (path) => path,
+    );
+
+    const cta = wrapper.find('.external-link-button');
+    expect(cta.exists()).toBe(true);
+    expect(cta.attributes('target')).toBe('_blank');
+    expect(cta.attributes('rel')).toBe('noopener noreferrer');
+    wrapper.unmount();
+  });
+
+  it('should display the translated label from system:url_prompt.<prompt>', async () => {
+    mockExternalUrl = 'https://example.com/info';
+    mockUrlPrompt = 'more_info';
+
+    const wrapper = await mountInstance(
+      '/view/test_calendar/events/evt-1/inst-1',
+      (path) => path,
+    );
+
+    const cta = wrapper.find('.external-link-button');
+    expect(cta.exists()).toBe(true);
+    expect(cta.text()).toBe('More Information');
+    wrapper.unmount();
+  });
+
+  it('should NOT render the CTA when externalUrl is null', async () => {
+    mockExternalUrl = null;
+    mockUrlPrompt = 'tickets';
+
+    const wrapper = await mountInstance(
+      '/view/test_calendar/events/evt-1/inst-1',
+      (path) => path,
+    );
+
+    expect(wrapper.find('.external-link-button').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('should NOT render the CTA when urlPrompt is null', async () => {
+    mockExternalUrl = 'https://example.com';
+    mockUrlPrompt = null;
+
+    const wrapper = await mountInstance(
+      '/view/test_calendar/events/evt-1/inst-1',
+      (path) => path,
+    );
+
+    expect(wrapper.find('.external-link-button').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('should NOT render the CTA for javascript: URLs (defense-in-depth)', async () => {
+    mockExternalUrl = 'javascript:alert(1)';
+    mockUrlPrompt = 'tickets';
+
+    const wrapper = await mountInstance(
+      '/view/test_calendar/events/evt-1/inst-1',
+      (path) => path,
+    );
+
+    expect(wrapper.find('.external-link-button').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('should NOT render the CTA for unknown urlPrompt values', async () => {
+    mockExternalUrl = 'https://example.com';
+    mockUrlPrompt = 'hack';
+
+    const wrapper = await mountInstance(
+      '/view/test_calendar/events/evt-1/inst-1',
+      (path) => path,
+    );
+
+    expect(wrapper.find('.external-link-button').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('should NOT render the CTA for malformed URLs', async () => {
+    mockExternalUrl = 'not a url at all';
+    mockUrlPrompt = 'tickets';
+
+    const wrapper = await mountInstance(
+      '/view/test_calendar/events/evt-1/inst-1',
+      (path) => path,
+    );
+
+    expect(wrapper.find('.external-link-button').exists()).toBe(false);
     wrapper.unmount();
   });
 });

@@ -6,7 +6,7 @@ import { Account } from "@/common/model/account";
 import { Calendar } from "@/common/model/calendar";
 import { CalendarMemberEntity } from "@/server/calendar/entity/calendar_member";
 import type { CalendarActor } from "@/server/activitypub/entity/calendar_actor";
-import { CalendarEvent, CalendarEventContent, CalendarEventSchedule } from "@/common/model/events";
+import { CalendarEvent, CalendarEventContent, CalendarEventSchedule, UrlPrompt, URL_PROMPT_VALUES } from "@/common/model/events";
 import { EventCategory } from "@/common/model/event_category";
 import { EventLocation, validateLocationHierarchy } from "@/common/model/location";
 import { EventContentEntity, EventEntity, EventScheduleEntity } from "@/server/calendar/entity/event";
@@ -20,7 +20,7 @@ import LocationService from "@/server/calendar/service/locations";
 import { EventEmitter } from 'events';
 import type MediaInterface from '@/server/media/interface';
 import type ActivityPubInterface from '@/server/activitypub/interface';
-import { EventNotFoundError, InsufficientCalendarPermissionsError, CalendarNotFoundError, BulkEventsNotFoundError, MixedCalendarEventsError, CategoriesNotFoundError, LocationValidationError } from '@/common/exceptions/calendar';
+import { EventNotFoundError, InsufficientCalendarPermissionsError, CalendarNotFoundError, BulkEventsNotFoundError, MixedCalendarEventsError, CategoriesNotFoundError, LocationValidationError, InvalidExternalUrlError } from '@/common/exceptions/calendar';
 import { ValidationError } from '@/common/exceptions/base';
 import CategoryService from './categories';
 import { EventCategoryEntity } from '@/server/calendar/entity/event_category';
@@ -37,6 +37,100 @@ import { createLogger } from '@/server/common/helper/logger';
 
 const logger = createLogger('calendar');
 import { Op, literal, where, fn, col, type Transaction } from 'sequelize';
+
+/**
+ * Normalizes an optional external URL attached to an event.
+ *
+ * - null/undefined → null
+ * - empty/whitespace → null
+ * - > 2048 chars → InvalidExternalUrlError
+ * - missing scheme → prepend https:// before parse
+ * - non-http(s) scheme (javascript:, data:, ftp:, …) → InvalidExternalUrlError
+ * - unparseable → InvalidExternalUrlError
+ * - otherwise → `URL.toString()` (canonicalized form)
+ */
+function normalizeExternalUrl(raw: string | null | undefined): string | null {
+  if (raw == null) return null;
+  const trimmed = raw.trim();
+  if (trimmed === '') return null;
+  if (trimmed.length > 2048) {
+    throw new InvalidExternalUrlError('url too long');
+  }
+  const candidate = trimmed.includes('://') ? trimmed : `https://${trimmed}`;
+  let parsed: URL;
+  try {
+    parsed = new URL(candidate);
+  }
+  catch {
+    throw new InvalidExternalUrlError('invalid url');
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new InvalidExternalUrlError('only http and https allowed');
+  }
+  return parsed.toString();
+}
+
+/**
+ * Validates a urlPrompt value against the {@link URL_PROMPT_VALUES} whitelist.
+ * Returns null when the input is null/undefined; throws {@link ValidationError}
+ * when the input is a non-string or an unknown enum value.
+ */
+function validateUrlPrompt(value: unknown): UrlPrompt | null {
+  if (value == null) return null;
+  if (typeof value !== 'string' || !URL_PROMPT_VALUES.includes(value as UrlPrompt)) {
+    throw new ValidationError('invalid url prompt', { urlPrompt: ['invalid'] });
+  }
+  return value as UrlPrompt;
+}
+
+/**
+ * Enforces the cross-field invariant that externalUrl and urlPrompt must be
+ * set or cleared together. When exactly one is null, throws a
+ * {@link ValidationError} whose `fields` map highlights both inputs so the
+ * editor can flag them simultaneously.
+ */
+function validateExternalUrlPair(externalUrl: string | null, urlPrompt: UrlPrompt | null): void {
+  const urlNull = externalUrl === null;
+  const promptNull = urlPrompt === null;
+  if (urlNull !== promptNull) {
+    throw new ValidationError(
+      'externalUrl and urlPrompt must be set or cleared together',
+      {
+        externalUrl: ['required when urlPrompt is set'],
+        urlPrompt: ['required when externalUrl is set'],
+      },
+    );
+  }
+}
+
+/**
+ * Scrubs an external URL for safe inclusion in structured logs.
+ *
+ * External URLs may contain sensitive material in their query string or
+ * fragment (OAuth tokens, session IDs, personal identifiers). This helper
+ * preserves only the origin and pathname so log lines retain enough
+ * context for debugging without leaking secrets.
+ *
+ * - null/undefined → null
+ * - unparseable URL → null (do not log a malformed value verbatim)
+ * - otherwise → `${origin}${pathname}` with query and fragment stripped
+ *
+ * @param externalUrl - The candidate external URL value (already normalized
+ *                      via {@link normalizeExternalUrl} in production code,
+ *                      but this helper tolerates any string defensively).
+ * @returns A safe-for-logging form of the URL, or null when the input is
+ *          missing or unparseable.
+ */
+export function scrubExternalUrlForLog(externalUrl: string | null | undefined): string | null {
+  if (externalUrl == null) return null;
+  try {
+    const u = new URL(externalUrl);
+    return `${u.origin}${u.pathname}`;
+  }
+  catch {
+    return null;
+  }
+}
 
 /**
  * Service class for managing events
@@ -582,6 +676,14 @@ class EventService {
     eventParams.id = this.generateEventId();
     eventParams.calendarId = calendar.id;
 
+    // Validate + normalize externalUrl / urlPrompt pair before constructing
+    // the model so the canonicalized values are what gets persisted.
+    const normalizedExternalUrl = normalizeExternalUrl(eventParams.externalUrl);
+    const validatedUrlPrompt = validateUrlPrompt(eventParams.urlPrompt);
+    validateExternalUrlPair(normalizedExternalUrl, validatedUrlPrompt);
+    eventParams.externalUrl = normalizedExternalUrl;
+    eventParams.urlPrompt = validatedUrlPrompt;
+
     const event = CalendarEvent.fromObject(eventParams);
     if ( calendar.urlName.length > 0 ) {
       event.eventSourceUrl = '/' + calendar.urlName + '/' + event.id;
@@ -746,6 +848,23 @@ class EventService {
     }
 
     let event = eventEntity.toModel();
+
+    // Validate + normalize externalUrl / urlPrompt pair. Only consider a field
+    // "being changed" when its key is explicitly present in the payload — an
+    // absent key means "leave the stored value alone".
+    const urlKeyPresent = Object.prototype.hasOwnProperty.call(eventParams, 'externalUrl');
+    const promptKeyPresent = Object.prototype.hasOwnProperty.call(eventParams, 'urlPrompt');
+    if (urlKeyPresent || promptKeyPresent) {
+      const rawUrl = urlKeyPresent ? eventParams.externalUrl : event.externalUrl;
+      const rawPrompt = promptKeyPresent ? eventParams.urlPrompt : event.urlPrompt;
+      const normalizedExternalUrl = normalizeExternalUrl(rawUrl);
+      const validatedUrlPrompt = validateUrlPrompt(rawPrompt);
+      validateExternalUrlPair(normalizedExternalUrl, validatedUrlPrompt);
+      event.externalUrl = normalizedExternalUrl;
+      event.urlPrompt = validatedUrlPrompt;
+      eventEntity.external_url = normalizedExternalUrl;
+      eventEntity.url_prompt = validatedUrlPrompt;
+    }
 
     if ( eventParams.content ) {
       for( let [language,content] of Object.entries(eventParams.content) ) {

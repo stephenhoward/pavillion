@@ -11,6 +11,18 @@ export class InvalidUrlNameError extends Error {
 }
 
 /**
+ * Custom error class for invalid external URL on an event
+ */
+export class InvalidExternalUrlError extends Error {
+  constructor(message: string = 'invalid external url') {
+    super(message);
+    this.name = 'InvalidExternalUrlError';
+    // Maintaining proper prototype chain in ES5+
+    Object.setPrototypeOf(this, InvalidExternalUrlError.prototype);
+  }
+}
+
+/**
  * Custom error class for calendar URL name that already exists
  */
 export class UrlNameAlreadyExistsError extends Error {

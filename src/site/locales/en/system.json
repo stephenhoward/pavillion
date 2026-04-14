@@ -83,6 +83,11 @@
     "event_add_to_calendar": "Add to Calendar",
     "event_source_calendar": "Source Calendar",
     "event_source_calendar_label": "View source calendar {{name}}",
+    "url_prompt": {
+        "tickets": "Tickets",
+        "rsvp": "RSVP",
+        "more_info": "More Information"
+    },
     "report": {
         "link_text": "Report Event",
         "form_title": "Report this Event",
