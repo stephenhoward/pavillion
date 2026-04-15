@@ -174,7 +174,7 @@ test.describe('Widget Embedding', () => {
     await expect(iframe.locator('.event-detail-overlay h1')).toBeVisible();
 
     // Click back button to return to list view
-    await iframe.locator('.back-button').first().click();
+    await iframe.locator('.back-link').first().click();
 
     // Verify list view is restored
     await expect(iframe.locator('li.event').first()).toBeVisible({ timeout: 10000 });
