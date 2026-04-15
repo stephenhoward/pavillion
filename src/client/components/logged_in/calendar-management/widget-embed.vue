@@ -4,6 +4,7 @@
       <button
         class="copy-btn"
         :disabled="state.copying"
+        :aria-disabled="state.copying"
         @click="copyToClipboard"
       >
         {{ state.copied ? t('copied') : t('copy_button') }}
@@ -12,11 +13,21 @@
 
     <pre class="embed-code"><code>{{ embedCode }}</code></pre>
 
-    <div v-if="state.error" class="error">
+    <div
+      v-if="state.error"
+      class="error"
+      role="alert"
+      aria-live="polite"
+    >
       {{ state.error }}
     </div>
 
-    <div v-if="state.copied" class="success">
+    <div
+      v-if="state.copied"
+      class="success"
+      role="status"
+      aria-live="polite"
+    >
       {{ t('copy_success') }}
     </div>
   </div>
@@ -31,18 +42,6 @@ const props = defineProps({
   calendarUrlName: {
     type: String,
     required: true,
-  },
-  viewMode: {
-    type: String,
-    default: 'list',
-  },
-  accentColor: {
-    type: String,
-    default: '#ff9131',
-  },
-  colorMode: {
-    type: String,
-    default: 'auto',
   },
 });
 
@@ -64,13 +63,10 @@ const embedCode = computed(() => {
   return `<div id="calendar-widget"></div>
 <script async src="${baseUrl}/widget/pavillion-widget.js"><\/script>
 <script>
-  window.Pavillion = window.Pavillion || { q: [] };
+  window.Pavillion = window.Pavillion || function(){(window.Pavillion.q=window.Pavillion.q||[]).push([].slice.call(arguments))};
   Pavillion('init', {
     calendar: '${props.calendarUrlName}',
-    container: '#calendar-widget',
-    view: '${props.viewMode}',
-    accentColor: '${props.accentColor}',
-    colorMode: '${props.colorMode}'
+    container: '#calendar-widget'
   });
 <\/script>`;
 });

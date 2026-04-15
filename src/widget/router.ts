@@ -11,9 +11,10 @@ const routes: RouteRecordRaw[] = [
     beforeEnter: (to) => {
       const store = useWidgetStore();
 
-      // Parse URL parameters for widget configuration
-      const urlParams = new URLSearchParams(window.location.search);
-      store.parseConfig(urlParams);
+      // Widget display config (view/accentColor/colorMode) is fetched from
+      // the server by widget-container.vue on mount. URL-param overrides
+      // for the admin preview iframe are also applied there, AFTER the
+      // authoritative server config, so they take precedence.
 
       // Set calendar URL name from route params
       if (typeof to.params.urlName === 'string') {

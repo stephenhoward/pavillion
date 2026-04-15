@@ -55,8 +55,9 @@ describe('Widget App Infrastructure', () => {
       const urlParams = new URLSearchParams('');
       store.parseConfig(urlParams);
 
+      // Defaults come from WIDGET_CONFIG_DEFAULTS (common/model/widget_config).
       expect(store.viewMode).toBe('list');
-      expect(store.accentColor).toBe('');
+      expect(store.accentColor).toBe('#ff9131');
       expect(store.colorMode).toBe('auto');
     });
   });
@@ -87,6 +88,8 @@ describe('Widget App Infrastructure', () => {
       document.body.appendChild(mockRoot);
 
       const store = useWidgetStore(pinia);
+      // Explicitly clear the default to simulate the empty case.
+      store.accentColor = '';
       store.injectAccentColor(mockRoot);
 
       expect(mockRoot.style.getPropertyValue('--widget-accent-color')).toBe('');

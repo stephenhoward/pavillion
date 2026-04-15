@@ -50,7 +50,6 @@
     var params = new URLSearchParams(window.location.search);
     var serverUrl = params.get('serverUrl') || 'http://localhost:3000';
     var calendarName = params.get('calendar') || 'test_calendar';
-    var viewMode = params.get('view') || 'list';
 
     console.log('[Test Page] Page origin:', window.location.origin);
     console.log('[Test Page] Widget server URL:', serverUrl);
@@ -73,9 +72,6 @@
     Pavillion('init', {
       calendar: calendarName,
       container: '#calendar-widget',
-      view: viewMode,
-      accentColor: '#ff9131',
-      colorMode: 'light',
       onResize: function(height) {
         console.log('[Test Page] Widget resized to:', height, 'px');
       },

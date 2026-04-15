@@ -460,7 +460,13 @@
             "color_mode_light": "Light Mode (always use light theme)",
             "color_mode_dark": "Dark Mode (always use dark theme)",
             "preview_title": "Preview",
-            "preview_description": "See how your widget will look with the current settings."
+            "preview_description": "See how your widget will look with the current settings.",
+            "save_button": "Save Configuration",
+            "saving": "Saving...",
+            "save_success": "Widget configuration saved.",
+            "save_error": "Failed to save widget configuration.",
+            "save_validation_error": "Please correct the errors below and try again.",
+            "error_loading": "Failed to load widget configuration."
         },
         "embed": {
             "title": "Embed Code",

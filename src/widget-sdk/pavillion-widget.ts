@@ -7,30 +7,30 @@
  * Usage:
  * <script async src="https://calendar.example.com/widget/pavillion-widget.js" data-lang="es"></script>
  * <script>
- *   window.Pavillion = window.Pavillion || { q: [] };
+ *   window.Pavillion = window.Pavillion || function(){(window.Pavillion.q=window.Pavillion.q||[]).push([].slice.call(arguments))};
  *   Pavillion('init', {
  *     calendar: 'my-calendar',
- *     container: '#calendar-widget',
- *     view: 'week',
- *     accentColor: '#ff9131',
- *     colorMode: 'auto'
+ *     container: '#calendar-widget'
  *   });
  * </script>
  */
 
 import { isValidLanguageCode } from '@/common/i18n/languages';
 
-interface WidgetConfig {
+interface WidgetInitOptions {
   calendar: string;
   container: string;
-  view?: 'week' | 'month' | 'list';
-  accentColor?: string;
-  colorMode?: 'auto' | 'light' | 'dark';
   lang?: string;
   onResize?: (height: number) => void;
   onEventClick?: (eventId: string) => void;
   onNavigate?: (url: string) => void;
 }
+
+// Display options (view, accentColor, colorMode) are now stored server-side
+// and returned by the widget config API. They were previously accepted as SDK
+// init arguments; we warn once per init() call when old snippets still pass
+// any of them so embedders have a signal to update, then ignore the values.
+const DEPRECATED_CONFIG_KEYS = ['view', 'accentColor', 'colorMode'] as const;
 
 interface PavillionMessage {
   type: 'pavillion:resize' | 'pavillion:navigate' | 'pavillion:eventClick';
@@ -40,7 +40,7 @@ interface PavillionMessage {
 }
 
 class PavillionWidget {
-  private config: WidgetConfig | null = null;
+  private config: WidgetInitOptions | null = null;
   private iframe: HTMLIFrameElement | null = null;
   private container: HTMLElement | null = null;
   private widgetOrigin: string;
@@ -73,7 +73,12 @@ class PavillionWidget {
   /**
    * Initialize widget with configuration
    */
-  init(config: WidgetConfig): void {
+  init(config: WidgetInitOptions): void {
+    // Warn once if a legacy snippet still passes any of the deprecated display
+    // args. We aggregate into a single warning so three deprecated keys don't
+    // produce three console lines.
+    this.warnOnDeprecatedKeys(config);
+
     // Validate configuration
     const errors = this.validateConfig(config);
     if (errors.length > 0) {
@@ -81,11 +86,7 @@ class PavillionWidget {
       return;
     }
 
-    this.config = {
-      view: 'list',
-      colorMode: 'auto',
-      ...config,
-    };
+    this.config = { ...config };
 
     // Find container element
     this.container = document.querySelector(this.config.container);
@@ -99,9 +100,25 @@ class PavillionWidget {
   }
 
   /**
+   * Emit a single deprecation warning if the caller passed any of the
+   * legacy display args (view, accentColor, colorMode). The args are ignored;
+   * display settings are now sourced from server-side widget config.
+   */
+  private warnOnDeprecatedKeys(config: WidgetInitOptions): void {
+    const callerConfig = config as Record<string, unknown>;
+    const present = DEPRECATED_CONFIG_KEYS.filter(key => callerConfig[key] !== undefined);
+    if (present.length > 0) {
+      console.warn(
+        `[Pavillion Widget] The following init options are deprecated and ignored: ${present.join(', ')}. ` +
+        'Display settings (view, accent color, color mode) are now configured in the calendar admin UI.',
+      );
+    }
+  }
+
+  /**
    * Validate widget configuration
    */
-  private validateConfig(config: WidgetConfig): string[] {
+  private validateConfig(config: WidgetInitOptions): string[] {
     const errors: string[] = [];
 
     if (!config.calendar) {
@@ -109,12 +126,6 @@ class PavillionWidget {
     }
     if (!config.container) {
       errors.push('container is required');
-    }
-    if (config.view && !['week', 'month', 'list'].includes(config.view)) {
-      errors.push('view must be "week", "month", or "list"');
-    }
-    if (config.colorMode && !['auto', 'light', 'dark'].includes(config.colorMode)) {
-      errors.push('colorMode must be "auto", "light", or "dark"');
     }
 
     return errors;
@@ -129,16 +140,6 @@ class PavillionWidget {
     }
 
     const url = new URL(`/widget/${this.config.calendar}`, this.widgetOrigin);
-
-    if (this.config.view) {
-      url.searchParams.set('view', this.config.view);
-    }
-    if (this.config.accentColor) {
-      url.searchParams.set('accentColor', this.config.accentColor);
-    }
-    if (this.config.colorMode) {
-      url.searchParams.set('colorMode', this.config.colorMode);
-    }
 
     // Detect and set widget language
     const lang = detectWidgetLanguage(this.config.lang);
@@ -254,7 +255,7 @@ class PavillionWidget {
   // Create command processor function
   const Pavillion = function(command: string, ...args: any[]): void {
     if (command === 'init' && args[0]) {
-      widget.init(args[0] as WidgetConfig);
+      widget.init(args[0] as WidgetInitOptions);
     }
     else if (command === 'destroy') {
       widget.destroy();
@@ -318,5 +319,5 @@ export function detectWidgetLanguage(configLang?: string): string {
 }
 
 // Export for TypeScript consumers
-export type { WidgetConfig, PavillionMessage };
+export type { WidgetInitOptions, PavillionMessage };
 export { PavillionWidget };

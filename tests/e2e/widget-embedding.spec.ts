@@ -18,14 +18,15 @@ import { startTestServer, TestEnvironment } from './helpers/test-server';
  * - Different ports = different origins = true cross-origin testing
  *
  * The embedding page (tests/e2e/test-widget-embedding.html) accepts
- * ?serverUrl=, ?calendar=, and ?view= query parameters.
+ * ?serverUrl= and ?calendar= query parameters. Display config (view,
+ * accentColor, colorMode) is sourced from server-side widget config; see
+ * widget-config-roundtrip.spec.ts for end-to-end view-mode coverage.
  */
 
 let env: TestEnvironment;
 
-function embeddingUrl(options?: { view?: string }): string {
-  const base = `http://localhost:8080/test-widget-embedding.html?serverUrl=${encodeURIComponent(env.baseURL)}&calendar=test_calendar`;
-  return options?.view ? `${base}&view=${options.view}` : base;
+function embeddingUrl(): string {
+  return `http://localhost:8080/test-widget-embedding.html?serverUrl=${encodeURIComponent(env.baseURL)}&calendar=test_calendar`;
 }
 
 // Configure tests to run serially since they share a test server
@@ -179,52 +180,21 @@ test.describe('Widget Embedding', () => {
     await expect(iframe.locator('li.event').first()).toBeVisible({ timeout: 10000 });
   });
 
-  test('theme parameters apply inside iframe', async ({ page }) => {
-    // The embedding HTML sets accentColor=#ff9131 and colorMode=light
+  test('default server config drives accent color CSS variable', async ({ page }) => {
+    // Display config (view, accentColor, colorMode) is now sourced from
+    // server-side widget config, not from SDK init args. With no admin
+    // override, the widget renders using WIDGET_CONFIG_DEFAULTS — verify the
+    // default accent color reaches the iframe DOM as a CSS custom property.
     await page.goto(embeddingUrl());
 
     await page.waitForSelector('iframe[src*="/widget/"]', { timeout: 15000 });
     const iframe = page.frameLocator('iframe[src*="/widget/"]');
     await expect(iframe.locator('body')).toBeVisible({ timeout: 20000 });
 
-    // Verify light theme class is applied
-    await expect(iframe.locator('.widget-root')).toHaveClass(/widget-theme-light/, { timeout: 10000 });
-
-    // Verify accent color CSS custom property is set (non-empty check, not exact value)
     const accentColor = await iframe.locator('.widget-root').evaluate(
       (el) => el.style.getPropertyValue('--widget-accent-color'),
     );
     expect(accentColor).toBeTruthy();
-  });
-
-  test('month view renders from view parameter', async ({ page }) => {
-    await page.goto(embeddingUrl({ view: 'month' }));
-
-    await page.waitForSelector('iframe[src*="/widget/"]', { timeout: 15000 });
-    const iframe = page.frameLocator('iframe[src*="/widget/"]');
-    await expect(iframe.locator('body')).toBeVisible({ timeout: 20000 });
-
-    // Verify month grid renders (Desktop Chrome guarantees desktop layout)
-    await expect(iframe.locator('.month-grid')).toBeVisible({ timeout: 15000 });
-
-    // Verify month title is displayed
-    await expect(iframe.locator('.month-title')).toBeVisible();
-    await expect(iframe.locator('.month-title')).not.toBeEmpty();
-  });
-
-  test('week view renders from view parameter', async ({ page }) => {
-    await page.goto(embeddingUrl({ view: 'week' }));
-
-    await page.waitForSelector('iframe[src*="/widget/"]', { timeout: 15000 });
-    const iframe = page.frameLocator('iframe[src*="/widget/"]');
-    await expect(iframe.locator('body')).toBeVisible({ timeout: 20000 });
-
-    // Verify week grid renders
-    await expect(iframe.locator('.week-grid')).toBeVisible({ timeout: 15000 });
-
-    // Verify week title (date range) is displayed
-    await expect(iframe.locator('.week-title')).toBeVisible();
-    await expect(iframe.locator('.week-title')).not.toBeEmpty();
   });
 
   test('postMessage resize events reach the embedding page', async ({ page }) => {

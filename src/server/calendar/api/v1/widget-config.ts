@@ -5,6 +5,7 @@ const logger = createLogger('calendar');
 
 import { Account } from '@/common/model/account';
 import ExpressHelper from '@/server/common/helper/express';
+import { ValidationError } from '@/common/exceptions/base';
 import { CalendarNotFoundError, InvalidDomainFormatError } from '@/common/exceptions/calendar';
 import { CalendarEditorPermissionError } from '@/common/exceptions/editor';
 import { SubscriptionRequiredError } from '@/common/exceptions/subscription';
@@ -27,6 +28,8 @@ class WidgetConfigRoutes {
     router.get('/calendars/:calendarId/widget/domain', ExpressHelper.loggedInOnly, widgetConfigByAccount, this.getDomain.bind(this));
     router.put('/calendars/:calendarId/widget/domain', ExpressHelper.loggedInOnly, widgetConfigByAccount, this.setDomain.bind(this));
     router.delete('/calendars/:calendarId/widget/domain', ExpressHelper.loggedInOnly, widgetConfigByAccount, this.clearDomain.bind(this));
+    router.get('/calendars/:calendarId/widget/config', ExpressHelper.loggedInOnly, widgetConfigByAccount, this.getConfig.bind(this));
+    router.put('/calendars/:calendarId/widget/config', ExpressHelper.loggedInOnly, widgetConfigByAccount, this.setConfig.bind(this));
     app.use(routePrefix, router);
   }
 
@@ -38,7 +41,7 @@ class WidgetConfigRoutes {
     const { calendarId } = req.params;
 
     if (!account) {
-      res.status(400).json({
+      res.status(401).json({
         "error": "missing account. Not logged in?",
         errorName: 'AuthenticationError',
       });
@@ -100,7 +103,7 @@ class WidgetConfigRoutes {
     const { domain } = req.body;
 
     if (!account) {
-      res.status(400).json({
+      res.status(401).json({
         "error": "missing account. Not logged in?",
         errorName: 'AuthenticationError',
       });
@@ -183,7 +186,7 @@ class WidgetConfigRoutes {
     const { calendarId } = req.params;
 
     if (!account) {
-      res.status(400).json({
+      res.status(401).json({
         "error": "missing account. Not logged in?",
         errorName: 'AuthenticationError',
       });
@@ -229,6 +232,134 @@ class WidgetConfigRoutes {
         logger.error({ err: error }, 'Error clearing widget domain');
         res.status(500).json({
           "error": "An error occurred while clearing widget domain",
+        });
+      }
+    }
+  }
+
+  /**
+   * Get the widget display configuration (view / accentColor / colorMode) for a calendar.
+   * Returns a fresh defaults object when no row exists, so the admin form always has
+   * something to populate from.
+   */
+  async getConfig(req: Request, res: Response) {
+    const account = req.user as Account;
+    const { calendarId } = req.params;
+
+    if (!account) {
+      res.status(401).json({
+        "error": "missing account. Not logged in?",
+        errorName: 'AuthenticationError',
+      });
+      return;
+    }
+
+    if (!calendarId) {
+      res.status(400).json({
+        "error": "missing calendarId",
+        errorName: 'ValidationError',
+      });
+      return;
+    }
+
+    if (!ExpressHelper.isValidUUID(calendarId)) {
+      res.status(400).json({
+        "error": "invalid calendarId format",
+        errorName: 'ValidationError',
+      });
+      return;
+    }
+
+    try {
+      const config = await this.service.getWidgetConfigForEditor(account, calendarId);
+      res.json(config.toObject());
+    }
+    catch (error) {
+      if (error instanceof CalendarNotFoundError) {
+        res.status(404).json({
+          "error": "Calendar not found",
+          "errorName": error.name,
+        });
+      }
+      else if (error instanceof CalendarEditorPermissionError) {
+        res.status(403).json({
+          "error": "Permission denied",
+          "errorName": error.name,
+        });
+      }
+      else {
+        logger.error({ err: error }, 'Error getting widget config');
+        res.status(500).json({
+          "error": "An error occurred while getting widget config",
+        });
+      }
+    }
+  }
+
+  /**
+   * Upsert the widget display configuration for a calendar.
+   * Request body: { view, accentColor, colorMode }. All fields validated in the service;
+   * invalid fields surface as a ValidationError with camelCase field keys.
+   */
+  async setConfig(req: Request, res: Response) {
+    const account = req.user as Account;
+    const { calendarId } = req.params;
+
+    if (!account) {
+      res.status(401).json({
+        "error": "missing account. Not logged in?",
+        errorName: 'AuthenticationError',
+      });
+      return;
+    }
+
+    if (!calendarId) {
+      res.status(400).json({
+        "error": "missing calendarId",
+        errorName: 'ValidationError',
+      });
+      return;
+    }
+
+    if (!ExpressHelper.isValidUUID(calendarId)) {
+      res.status(400).json({
+        "error": "invalid calendarId format",
+        errorName: 'ValidationError',
+      });
+      return;
+    }
+
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const configInput = {
+      view: body.view as any,
+      accentColor: body.accentColor as any,
+      colorMode: body.colorMode as any,
+    };
+
+    try {
+      const saved = await this.service.setWidgetConfig(account, calendarId, configInput);
+      res.json(saved.toObject());
+    }
+    catch (error) {
+      if (error instanceof ValidationError) {
+        ExpressHelper.sendValidationError(res, error);
+      }
+      else if (error instanceof CalendarNotFoundError) {
+        res.status(404).json({
+          "error": "Calendar not found",
+          "errorName": error.name,
+        });
+      }
+      else if (error instanceof CalendarEditorPermissionError) {
+        res.status(403).json({
+          "error": "Permission denied",
+          "errorName": error.name,
+        });
+      }
+      else {
+        logger.error({ err: error }, 'Error setting widget config');
+        res.status(500).json({
+          "error": "An error occurred while setting widget config",
         });
       }
     }

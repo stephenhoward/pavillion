@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { PavillionWidget } from '../pavillion-widget';
 
 describe('Pavillion Widget SDK', () => {
   let container: HTMLDivElement;
@@ -18,40 +19,38 @@ describe('Pavillion Widget SDK', () => {
     if (container && container.parentNode) {
       container.parentNode.removeChild(container);
     }
+    vi.restoreAllMocks();
   });
 
   describe('Async loading and command queue pattern', () => {
-    it('should create global Pavillion namespace with command queue', () => {
+    it('should create callable global Pavillion namespace with command queue', () => {
       // Simulate user code that runs before SDK loads
-      (window as any).Pavillion = (window as any).Pavillion || { q: [] };
-      (window as any).Pavillion.q = [];
+      (window as any).Pavillion = (window as any).Pavillion || function () {
+        ((window as any).Pavillion.q = (window as any).Pavillion.q || []).push([].slice.call(arguments));
+      };
 
       expect((window as any).Pavillion).toBeDefined();
-      expect((window as any).Pavillion.q).toBeInstanceOf(Array);
-      expect((window as any).Pavillion.q.length).toBe(0);
+      expect(typeof (window as any).Pavillion).toBe('function');
     });
 
     it('should buffer commands in queue before SDK loads', () => {
-      // Simulate user code
-      (window as any).Pavillion = (window as any).Pavillion || { q: [] };
-      const Pavillion = function(...args: any[]) {
-        (window as any).Pavillion.q.push(args);
+      // Simulate user code that runs before SDK loads
+      (window as any).Pavillion = (window as any).Pavillion || function () {
+        ((window as any).Pavillion.q = (window as any).Pavillion.q || []).push([].slice.call(arguments));
       };
-      (window as any).Pavillion = Object.assign(Pavillion, { q: [] });
 
       // User calls before SDK loads
       (window as any).Pavillion('init', {
         calendar: 'my-calendar',
         container: '#widget-container',
-        view: 'week',
       });
 
       expect((window as any).Pavillion.q.length).toBe(1);
+      expect(Array.isArray((window as any).Pavillion.q[0])).toBe(true);
       expect((window as any).Pavillion.q[0][0]).toBe('init');
       expect((window as any).Pavillion.q[0][1]).toMatchObject({
         calendar: 'my-calendar',
         container: '#widget-container',
-        view: 'week',
       });
     });
   });
@@ -71,14 +70,14 @@ describe('Pavillion Widget SDK', () => {
         return errors;
       };
 
-      const invalidConfig = { view: 'week' };
+      const invalidConfig = {};
       const errors = validateConfig(invalidConfig);
 
       expect(errors).toContain('calendar is required');
       expect(errors).toContain('container is required');
     });
 
-    it('should accept valid config with optional parameters', () => {
+    it('should accept valid config with only calendar and container', () => {
       const validateConfig = (config: any): string[] => {
         const errors: string[] = [];
 
@@ -95,9 +94,6 @@ describe('Pavillion Widget SDK', () => {
       const validConfig = {
         calendar: 'my-calendar',
         container: '#widget-container',
-        view: 'month',
-        accentColor: '#ff9131',
-        colorMode: 'dark',
       };
 
       const errors = validateConfig(validConfig);
@@ -106,64 +102,123 @@ describe('Pavillion Widget SDK', () => {
   });
 
   describe('Iframe creation with URL parameters', () => {
-    it('should construct correct widget URL with parameters', () => {
-      const buildWidgetUrl = (
-        baseUrl: string,
-        calendar: string,
-        config: { view?: string; accentColor?: string; colorMode?: string },
-      ): string => {
-        const url = new URL(`/widget/${calendar}`, baseUrl);
+    it('should construct widget URL without deprecated display params', () => {
+      const widget = new PavillionWidget();
+      widget.init({
+        calendar: 'my-calendar',
+        container: '#widget-container',
+      });
 
-        if (config.view) {
-          url.searchParams.set('view', config.view);
-        }
-        if (config.accentColor) {
-          url.searchParams.set('accentColor', config.accentColor);
-        }
-        if (config.colorMode) {
-          url.searchParams.set('colorMode', config.colorMode);
-        }
+      const iframe = container.querySelector('iframe');
+      expect(iframe).not.toBeNull();
+      const src = iframe!.src;
 
-        return url.toString();
-      };
+      expect(src).toContain('/widget/my-calendar');
+      expect(src).toContain('lang=');
+      expect(src).not.toContain('view=');
+      expect(src).not.toContain('accentColor=');
+      expect(src).not.toContain('colorMode=');
 
-      const url = buildWidgetUrl('https://calendar.example.com', 'my-calendar', {
+      widget.destroy();
+    });
+
+    it('should not propagate deprecated args to widget URL even if passed', () => {
+      // Silence the expected deprecation warning for this test
+      vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const widget = new PavillionWidget();
+      widget.init({
+        calendar: 'my-calendar',
+        container: '#widget-container',
+        // @ts-expect-error — intentionally passing dropped args to verify they are ignored
         view: 'week',
         accentColor: '#ff9131',
         colorMode: 'dark',
       });
 
-      expect(url).toContain('/widget/my-calendar');
-      expect(url).toContain('view=week');
-      // URL encodes # as %25 in happy-dom, check for the color value
-      expect(url).toContain('accentColor');
-      expect(url).toContain('ff9131');
-      expect(url).toContain('colorMode=dark');
+      const iframe = container.querySelector('iframe');
+      expect(iframe).not.toBeNull();
+      const src = iframe!.src;
+
+      expect(src).not.toContain('view=week');
+      expect(src).not.toContain('accentColor');
+      expect(src).not.toContain('ff9131');
+      expect(src).not.toContain('colorMode=dark');
+
+      widget.destroy();
     });
 
     it('should create iframe with correct attributes', () => {
-      const createIframe = (url: string, container: HTMLElement): HTMLIFrameElement => {
-        const iframe = document.createElement('iframe');
-        iframe.src = url;
-        iframe.style.width = '100%';
-        iframe.style.border = 'none';
-        iframe.setAttribute('title', 'Pavillion Calendar Widget');
-        iframe.setAttribute('loading', 'lazy');
+      const widget = new PavillionWidget();
+      widget.init({
+        calendar: 'my-calendar',
+        container: '#widget-container',
+      });
 
-        container.appendChild(iframe);
-        return iframe;
-      };
+      const iframe = container.querySelector('iframe');
+      expect(iframe).not.toBeNull();
+      expect(iframe!.style.width).toBe('100%');
+      expect(iframe!.style.border).toContain('none');
+      expect(iframe!.getAttribute('title')).toBe('Pavillion Calendar Widget');
+      expect(iframe!.getAttribute('loading')).toBe('lazy');
 
-      const testContainer = document.getElementById('widget-container')!;
-      const iframe = createIframe('https://calendar.example.com/widget/test', testContainer);
+      widget.destroy();
+    });
+  });
 
-      expect(iframe.src).toContain('/widget/test');
-      expect(iframe.style.width).toBe('100%');
-      // Check that border style contains 'none' (happy-dom may add extra values)
-      expect(iframe.style.border).toContain('none');
-      expect(iframe.getAttribute('title')).toBe('Pavillion Calendar Widget');
-      expect(iframe.getAttribute('loading')).toBe('lazy');
-      expect(testContainer.contains(iframe)).toBe(true);
+  describe('Deprecated init arguments', () => {
+    it('should emit exactly one console.warn when all three deprecated args are passed simultaneously', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const widget = new PavillionWidget();
+      widget.init({
+        calendar: 'my-calendar',
+        container: '#widget-container',
+        // @ts-expect-error — intentionally passing dropped args to verify deprecation warning
+        view: 'week',
+        accentColor: '#ff9131',
+        colorMode: 'dark',
+      });
+
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+      const firstCallArg = String(warnSpy.mock.calls[0]?.[0] ?? '');
+      expect(firstCallArg).toContain('view');
+      expect(firstCallArg).toContain('accentColor');
+      expect(firstCallArg).toContain('colorMode');
+
+      widget.destroy();
+    });
+
+    it('should emit one console.warn when only a subset of deprecated args is passed', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const widget = new PavillionWidget();
+      widget.init({
+        calendar: 'my-calendar',
+        container: '#widget-container',
+        // @ts-expect-error — intentionally passing dropped arg to verify deprecation warning
+        view: 'month',
+      });
+
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+      const firstCallArg = String(warnSpy.mock.calls[0]?.[0] ?? '');
+      expect(firstCallArg).toContain('view');
+
+      widget.destroy();
+    });
+
+    it('should not emit a deprecation warning when no deprecated args are passed', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const widget = new PavillionWidget();
+      widget.init({
+        calendar: 'my-calendar',
+        container: '#widget-container',
+      });
+
+      expect(warnSpy).not.toHaveBeenCalled();
+
+      widget.destroy();
     });
   });
 
