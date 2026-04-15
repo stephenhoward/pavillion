@@ -190,6 +190,15 @@ describe('EventService externalUrl + urlPrompt validation (via createEvent)', ()
     expect(event.urlPrompt).toBe('more_info');
   });
 
+  it('accepts urlPrompt = register', async () => {
+    const event = await service.createEvent(acct, {
+      calendarId: cal.id,
+      externalUrl: 'https://example.com/',
+      urlPrompt: 'register',
+    });
+    expect(event.urlPrompt).toBe('register');
+  });
+
   it('rejects unknown urlPrompt value with ValidationError', async () => {
     await expect(service.createEvent(acct, {
       calendarId: cal.id,

@@ -64,7 +64,8 @@
     "prompt_options": {
       "tickets": "Tickets:",
       "rsvp": "RSVP:",
-      "more_info": "More Information:"
+      "more_info": "More Information:",
+      "register": "Register:"
     },
     "error_invalid_url": "Please enter a valid http or https URL.",
     "error_prompt_required": "URL and button label must both be set or both be empty."
