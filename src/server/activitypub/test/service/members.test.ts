@@ -177,7 +177,9 @@ describe("followCalendar", () => {
     let addToOutboxStub = sandbox.stub(service, 'addToOutbox');
     addToOutboxStub.resolves();
 
-    await expect( service.followCalendar(account, calendar,'invalidUserIdentifier') ).rejects.toThrow(InvalidRemoteCalendarIdentifierError);
+    // Whitespace is invalid in both qualified (`user@domain`) and bare-urlName
+    // forms, so normalizeIdentifier rejects before any DB lookup.
+    await expect( service.followCalendar(account, calendar,'invalid user') ).rejects.toThrow(InvalidRemoteCalendarIdentifierError);
     expect( buildFollowStub.called ).toBe(false);
     expect( saveFollowStub.called ).toBe(false);
     expect( addToOutboxStub.called ).toBe(false);

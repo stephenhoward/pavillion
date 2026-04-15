@@ -75,8 +75,8 @@
     "add_calendar_modal": {
         "title": "Follow a Calendar",
         "identifier_label": "Calendar Identifier",
-        "identifier_placeholder": "calendar@domain.com",
-        "identifier_help": "Enter the ActivityPub identifier of the calendar you want to follow",
+        "identifier_placeholder": "calendar or calendar@domain.com",
+        "identifier_help": "Enter a local calendar name, or the ActivityPub identifier of a remote calendar you want to follow",
         "looking_up": "Looking up calendar...",
         "lookup_error": "Could not find calendar. Please check the identifier and try again.",
         "self_follow_error": "A calendar cannot follow itself.",

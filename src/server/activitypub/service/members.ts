@@ -23,6 +23,7 @@ import { EventObject } from "@/server/activitypub/model/object/event";
 import { addToOutbox as addToOutboxHelper } from "@/server/activitypub/helper/outbox";
 import { validateUrlNotPrivate } from "@/server/common/helper/ip-validation";
 import { PUBLIC_KEY_FETCH_TIMEOUT_MS } from "@/server/common/constants";
+import { isValidCalendarUrlName } from "@/common/validation/calendarUrlName";
 import {
   InvalidRemoteCalendarIdentifierError,
   InvalidSharedEventUrlError,
@@ -94,6 +95,35 @@ class ActivityPubService {
   }
 
   /**
+   * Normalize a calendar identifier to canonical `username@domain` form.
+   * Accepts either a fully qualified `username@domain` string or a bare
+   * urlName (no `@`), which is resolved against the local instance domain.
+   *
+   * Username and domain are lowercased so downstream equality checks
+   * (e.g. the self-follow guard) do not depend on input casing.
+   *
+   * @param identifier The user-supplied identifier
+   * @returns The canonical `username@domain` identifier, or null if the
+   *   identifier is not a valid form
+   */
+  static normalizeIdentifier(identifier: string): string | null {
+    if (identifier.includes('@')) {
+      if (!ActivityPubService.isValidOrgIdentifier(identifier)) {
+        return null;
+      }
+      const [username, domain] = identifier.split('@');
+      return `${username.toLowerCase()}@${domain.toLowerCase()}`;
+    }
+    // Bare urlName: must satisfy the canonical Calendar urlName rule so the
+    // client and server accept exactly the same set of inputs.
+    if (!isValidCalendarUrlName(identifier)) {
+      return null;
+    }
+    const localDomain = config.get('domain') as string;
+    return `${identifier.toLowerCase()}@${localDomain.toLowerCase()}`;
+  }
+
+  /**
    * Validate that repost policy settings are consistent.
    *
    * autoRepostReposts=true requires autoRepostOriginals=true because you cannot
@@ -120,7 +150,8 @@ class ActivityPubService {
     autoRepostOriginals: boolean = false,
     autoRepostReposts: boolean = false,
   ) {
-    if (!ActivityPubService.isValidOrgIdentifier(orgIdentifier)) {
+    const normalizedIdentifier = ActivityPubService.normalizeIdentifier(orgIdentifier);
+    if (!normalizedIdentifier) {
       throw new InvalidRemoteCalendarIdentifierError('Invalid remote calendar identifier: ' + orgIdentifier);
     }
 
@@ -131,15 +162,16 @@ class ActivityPubService {
     // Validate repost policy settings
     ActivityPubService.validateRepostPolicySettings(autoRepostOriginals, autoRepostReposts);
 
-    // Prevent self-follows
+    // Prevent self-follows. Both sides are lowercased so casing in the
+    // calendar's stored urlName or the user's input can't bypass the guard.
     const localDomain = config.get('domain') as string;
-    const selfIdentifier = `${calendar.urlName}@${localDomain}`;
-    if (orgIdentifier === selfIdentifier) {
+    const selfIdentifier = `${calendar.urlName.toLowerCase()}@${localDomain.toLowerCase()}`;
+    if (normalizedIdentifier === selfIdentifier) {
       throw new SelfFollowError('A calendar cannot follow itself');
     }
 
     // Resolve the ActivityPub actor URL from the WebFinger identifier first
-    const remoteProfile = await this.lookupRemoteCalendar(orgIdentifier);
+    const remoteProfile = await this.lookupRemoteCalendar(normalizedIdentifier);
     const remoteActorUrl = remoteProfile.actorUrl;
 
     // Get or create CalendarActorEntity
@@ -603,11 +635,12 @@ class ActivityPubService {
     actorUrl: string;
     calendarId?: string;
   }> {
-    if (!ActivityPubService.isValidOrgIdentifier(identifier)) {
+    const normalizedIdentifier = ActivityPubService.normalizeIdentifier(identifier);
+    if (!normalizedIdentifier) {
       throw new InvalidRemoteCalendarIdentifierError('Invalid calendar identifier format');
     }
 
-    const [username, domain] = identifier.split('@');
+    const [username, domain] = normalizedIdentifier.split('@');
     const localDomain = config.get('domain') as string;
 
     // Check if this is a local calendar
@@ -626,8 +659,10 @@ class ActivityPubService {
       };
     }
 
-    // Perform WebFinger lookup for remote calendars
-    const webfingerUrl = `https://${domain}/.well-known/webfinger?resource=acct:${identifier}`;
+    // Perform WebFinger lookup for remote calendars. Use the normalized
+    // identifier so the WebFinger resource parameter matches the values
+    // used for validation and local-domain comparison.
+    const webfingerUrl = `https://${domain}/.well-known/webfinger?resource=acct:${normalizedIdentifier}`;
     let webfingerResponse;
 
     try {

@@ -8,6 +8,7 @@ import { ADD_CATEGORY_VALUE } from '@/client/components/logged_in/category-mappi
 import { useFeedStore } from '@/client/stores/feedStore';
 import { useFeedFollows } from '@/client/composables/useFeedFollows';
 import FeedService, { type RemoteCalendarPreview, type CategoryEntry, type CategoryMappingEntry } from '@/client/service/feed';
+import { isValidCalendarUrlName } from '@/common/validation/calendarUrlName';
 import {
   InvalidRemoteCalendarIdentifierError,
   RemoteCalendarNotFoundError,
@@ -45,8 +46,18 @@ const pendingMappings = ref<CategoryMappingEntry[]>([]);
 const isSavingMappings = ref(false);
 const mappingStepRef = ref<HTMLElement | null>(null);
 
+// Mirrors server-side ActivityPubService.normalizeIdentifier.
+// Accepts `username@domain` for remote/qualified lookups, or a bare urlName
+// (validated against the shared calendar urlName rule) for a local lookup.
 const isValidIdentifier = computed(() => {
-  return identifier.value.includes('@') && identifier.value.split('@').length === 2;
+  const value = identifier.value.trim();
+  if (!value) {
+    return false;
+  }
+  if (value.includes('@')) {
+    return value.split('@').length === 2;
+  }
+  return isValidCalendarUrlName(value);
 });
 
 const canLookup = computed(() => {
@@ -87,7 +98,7 @@ const lookupRemoteCalendar = async () => {
 
   try {
     const feedService = new FeedService();
-    const result = await feedService.lookupRemoteCalendar(identifier.value);
+    const result = await feedService.lookupRemoteCalendar(identifier.value.trim());
 
     // Check for self-follow (local calendar matching selected calendar)
     if (result.calendarId && result.calendarId === feedStore.selectedCalendarId) {
@@ -145,7 +156,7 @@ const handleFollow = async () => {
   isFollowing.value = true;
 
   try {
-    const calendarActorId = await followCalendar(identifier.value, autoRepostOriginals.value, autoRepostReposts.value);
+    const calendarActorId = await followCalendar(identifier.value.trim(), autoRepostOriginals.value, autoRepostReposts.value);
     emit('follow-success');
 
     if (calendarActorId && feedStore.selectedCalendarId) {
