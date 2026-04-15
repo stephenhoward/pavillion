@@ -10,6 +10,7 @@ import '@/server/common/entity/account';
 import '@/server/accounts/entity/account_invitation';
 import '@/server/calendar/entity/calendar';
 import '@/server/calendar/entity/calendar_member';
+import '@/server/calendar/entity/calendar_widget_config';
 import '@/server/calendar/entity/event_category';
 import '@/server/calendar/entity/event_category_content';
 import '@/server/calendar/entity/event';

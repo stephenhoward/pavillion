@@ -4,6 +4,7 @@ import express, { Application } from 'express';
 import supertest from 'supertest';
 
 import { Calendar } from '@/common/model/calendar';
+import { WidgetConfig } from '@/common/model/widget_config';
 import CalendarInterface from '@/server/calendar/interface';
 import WidgetDomainService from '@/server/calendar/service/widget_domain';
 import WidgetRoutes from '@/server/calendar/api/v1/widget';
@@ -25,6 +26,7 @@ describe('Widget API Routes', () => {
     mockInterface = {
       getCalendarByName: sandbox.stub(),
       getCalendarForWidget: sandbox.stub(),
+      getWidgetConfig: sandbox.stub().resolves(new WidgetConfig()),
     } as any;
 
     mockWidgetService = new WidgetDomainService();
@@ -113,6 +115,39 @@ describe('Widget API Routes', () => {
 
       const response = await supertest(app)
         .get('/api/widget/v1/calendars/test-calendar')
+        .expect(403);
+
+      expect(response.body).toHaveProperty('error');
+      expect(response.body.error).toContain('Origin header');
+    });
+
+    it('should bypass origin allowlist when Sec-Fetch-Site is same-origin and Origin is absent', async () => {
+      const getCalendarStub = mockInterface.getCalendarByName as sinon.SinonStub;
+      const getCalendarForWidgetStub = mockInterface.getCalendarForWidget as sinon.SinonStub;
+      getCalendarStub.resolves(calendar);
+      getCalendarForWidgetStub.resolves(calendar);
+
+      // Browsers omit Origin on same-origin GETs but always set Sec-Fetch-Site,
+      // which cannot be forged by web content. The widget iframe self-fetch
+      // depends on this bypass branch.
+      const response = await supertest(app)
+        .get('/api/widget/v1/calendars/test-calendar')
+        .set('Sec-Fetch-Site', 'same-origin')
+        .expect(200);
+
+      expect(response.body).toHaveProperty('id', calendar.id);
+      expect(response.body).toHaveProperty('urlName', calendar.urlName);
+    });
+
+    it('should still 403 when Sec-Fetch-Site indicates cross-site', async () => {
+      const getCalendarStub = mockInterface.getCalendarByName as sinon.SinonStub;
+      const getCalendarForWidgetStub = mockInterface.getCalendarForWidget as sinon.SinonStub;
+      getCalendarStub.resolves(calendar);
+      getCalendarForWidgetStub.resolves(calendar);
+
+      const response = await supertest(app)
+        .get('/api/widget/v1/calendars/test-calendar')
+        .set('Sec-Fetch-Site', 'cross-site')
         .expect(403);
 
       expect(response.body).toHaveProperty('error');
@@ -255,6 +290,98 @@ describe('Widget API Routes', () => {
 
       expect(response.body).toHaveProperty('id', calendar.id);
       expect(response.body).toHaveProperty('urlName', calendar.urlName);
+    });
+  });
+
+  describe('Widget config in calendar response', () => {
+    it('should include widgetConfig with defaults when no saved config exists', async () => {
+      const getCalendarByNameStub = mockInterface.getCalendarByName as sinon.SinonStub;
+      getCalendarByNameStub.resolves(calendar);
+      const getCalendarForWidgetStub = mockInterface.getCalendarForWidget as sinon.SinonStub;
+      getCalendarForWidgetStub.resolves(calendar);
+      // getWidgetConfig default stub returns new WidgetConfig() (defaults)
+
+      const response = await supertest(app)
+        .get('/api/widget/v1/calendars/test-calendar')
+        .set('Origin', 'http://localhost:3000')
+        .expect(200);
+
+      expect(response.body).toHaveProperty('widgetConfig');
+      expect(response.body.widgetConfig).toEqual({
+        view: 'list',
+        accentColor: '#ff9131',
+        colorMode: 'auto',
+      });
+    });
+
+    it('should include widgetConfig reflecting saved values when a row is saved', async () => {
+      const getCalendarByNameStub = mockInterface.getCalendarByName as sinon.SinonStub;
+      getCalendarByNameStub.resolves(calendar);
+      const getCalendarForWidgetStub = mockInterface.getCalendarForWidget as sinon.SinonStub;
+      getCalendarForWidgetStub.resolves(calendar);
+
+      const savedConfig = new WidgetConfig('month', '#112233', 'dark');
+      (mockInterface.getWidgetConfig as sinon.SinonStub).resolves(savedConfig);
+
+      const response = await supertest(app)
+        .get('/api/widget/v1/calendars/test-calendar')
+        .set('Origin', 'http://localhost:3000')
+        .expect(200);
+
+      expect(response.body.widgetConfig).toEqual({
+        view: 'month',
+        accentColor: '#112233',
+        colorMode: 'dark',
+      });
+    });
+  });
+
+  describe('Cache headers on calendar response', () => {
+    it('should set Cache-Control: public, max-age=60 on 200 response', async () => {
+      const getCalendarByNameStub = mockInterface.getCalendarByName as sinon.SinonStub;
+      getCalendarByNameStub.resolves(calendar);
+      const getCalendarForWidgetStub = mockInterface.getCalendarForWidget as sinon.SinonStub;
+      getCalendarForWidgetStub.resolves(calendar);
+
+      const response = await supertest(app)
+        .get('/api/widget/v1/calendars/test-calendar')
+        .set('Origin', 'http://localhost:3000')
+        .expect(200);
+
+      expect(response.headers['cache-control']).toBe('public, max-age=60');
+    });
+
+    it('should set Vary: Origin on 200 response', async () => {
+      const getCalendarByNameStub = mockInterface.getCalendarByName as sinon.SinonStub;
+      getCalendarByNameStub.resolves(calendar);
+      const getCalendarForWidgetStub = mockInterface.getCalendarForWidget as sinon.SinonStub;
+      getCalendarForWidgetStub.resolves(calendar);
+
+      const response = await supertest(app)
+        .get('/api/widget/v1/calendars/test-calendar')
+        .set('Origin', 'http://localhost:3000')
+        .expect(200);
+
+      const varyHeader = response.headers['vary'];
+      expect(varyHeader).toBeDefined();
+      expect(varyHeader).toContain('Origin');
+    });
+
+    it('should set Cache-Control: no-store on 402 (subscription required) response', async () => {
+      const getCalendarByNameStub = mockInterface.getCalendarByName as sinon.SinonStub;
+      getCalendarByNameStub.resolves(calendar);
+
+      const { SubscriptionRequiredError } = await import('@/common/exceptions/subscription');
+      const getCalendarForWidgetStub = sandbox.stub();
+      getCalendarForWidgetStub.rejects(new SubscriptionRequiredError('widget_embedding'));
+      mockInterface.getCalendarForWidget = getCalendarForWidgetStub;
+
+      const response = await supertest(app)
+        .get('/api/widget/v1/calendars/test-calendar')
+        .set('Origin', 'http://localhost:3000')
+        .expect(402);
+
+      expect(response.headers['cache-control']).toBe('no-store');
     });
   });
 

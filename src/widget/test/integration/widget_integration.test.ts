@@ -11,6 +11,7 @@ import axios from 'axios';
 import { DateTime } from 'luxon';
 
 import { Calendar } from '@/common/model/calendar';
+import { WidgetConfig as WidgetConfigModel } from '@/common/model/widget_config';
 import CalendarInterface from '@/server/calendar/interface';
 import WidgetDomainService from '@/server/calendar/service/widget_domain';
 import WidgetRoutes from '@/server/calendar/api/v1/widget';
@@ -80,6 +81,7 @@ describe('Widget Integration Tests', () => {
     mockInterface = {
       getCalendarByName: sandbox.stub(),
       getCalendarForWidget: sandbox.stub(),
+      getWidgetConfig: sandbox.stub(),
     } as any;
     mockWidgetService = new WidgetDomainService();
 
@@ -90,6 +92,7 @@ describe('Widget Integration Tests', () => {
     // Stub the calendar lookup
     (mockInterface.getCalendarByName as sinon.SinonStub).resolves(calendar);
     (mockInterface.getCalendarForWidget as sinon.SinonStub).resolves(calendar);
+    (mockInterface.getWidgetConfig as sinon.SinonStub).resolves(new WidgetConfigModel());
   });
 
   afterEach(() => {
@@ -123,12 +126,12 @@ describe('Widget Integration Tests', () => {
       expect(configVm.state.accentColor).toBe('#ff9131');
 
       // Step 2: Generate embed code
+      // Per pv-jwgn.3.2, the snippet contains only `calendar` and `container` keys.
+      // Display config (view/accentColor/colorMode) lives server-side and is fetched
+      // by the widget at iframe-load time.
       const embedWrapper = mount(WidgetEmbed, {
         props: {
           calendarUrlName: 'my-calendar',
-          viewMode: 'week',
-          accentColor: '#ff9131',
-          colorMode: 'auto',
         },
         global: {
           plugins: [[I18NextVue, { i18next }]],
@@ -137,8 +140,10 @@ describe('Widget Integration Tests', () => {
 
       const embedCode = embedWrapper.find('.embed-code').text();
       expect(embedCode).toContain('my-calendar');
-      expect(embedCode).toContain('view: \'week\'');
-      expect(embedCode).toContain('accentColor: \'#ff9131\'');
+      expect(embedCode).toContain('container');
+      expect(embedCode).not.toContain('view');
+      expect(embedCode).not.toContain('accentColor');
+      expect(embedCode).not.toContain('colorMode');
 
       // Step 3: Validate widget loads with correct configuration
       const widgetStore = useWidgetStore();

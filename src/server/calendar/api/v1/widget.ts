@@ -42,6 +42,19 @@ class WidgetRoutes {
    */
   private async validateOrigin(req: Request, res: Response, next: NextFunction) {
     const origin = req.get('Origin');
+    const secFetchSite = req.get('Sec-Fetch-Site');
+
+    // Same-origin requests (e.g., the widget iframe fetching its own config
+    // from its own host) do not carry an Origin header per the Fetch spec —
+    // the browser only sends Origin on cross-origin GETs. The
+    // `Sec-Fetch-Site: same-origin` signal is browser-set and cannot be forged
+    // from web content, so it is safe to skip origin validation when the
+    // request is provably same-origin. Cross-origin requests still must
+    // supply an Origin header and pass the allow-list check below.
+    if (!origin && secFetchSite === 'same-origin') {
+      next();
+      return;
+    }
 
     // Require Origin header for all widget requests
     if (!origin) {
@@ -127,13 +140,25 @@ class WidgetRoutes {
         return;
       }
 
-      // Return calendar data
-      res.json(calendar.toObject());
+      // Fetch widget display configuration (lazy defaults when no row exists).
+      const widgetConfig = await this.service.getWidgetConfig(calendarUrlName);
+
+      // Cache headers on the 200 path only. Vary: Origin keys the cache per
+      // requesting origin so the CORS Access-Control-Allow-Origin echo stays
+      // correct across origins.
+      res.setHeader('Cache-Control', 'public, max-age=60');
+      res.setHeader('Vary', 'Origin');
+
+      // Return calendar data with widget config merged in
+      res.json({
+        ...calendar.toObject(),
+        widgetConfig: widgetConfig.toObject(),
+      });
     }
     catch (error: any) {
       if (error instanceof SubscriptionRequiredError) {
         // Return 402 with Cache-Control: no-store header
-        res.set('Cache-Control', 'no-store');
+        res.setHeader('Cache-Control', 'no-store');
         res.status(402).json({
           error: 'subscription_required',
           errorName: error.name,

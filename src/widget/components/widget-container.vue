@@ -10,6 +10,11 @@ import WeekView from './week-view.vue';
 import MonthView from './month-view.vue';
 import ListView from './list-view.vue';
 import NotFound from '@/site/components/not-found.vue';
+import {
+  isValidWidgetView,
+  isValidWidgetColorMode,
+  isValidWidgetAccentColor,
+} from '@/common/model/widget_config';
 import type Config from '@/client/service/config';
 
 const { t } = useTranslation('system');
@@ -39,16 +44,21 @@ const handleMessage = (event: MessageEvent) => {
   if (event.data.type === 'pavillion:updateConfig') {
     const { config } = event.data;
 
-    // Update widget store with new configuration
-    // The app.vue component watches these values and will apply them automatically
-    if (config.view) {
-      widgetStore.viewMode = config.view;
-    }
-    if (config.accentColor) {
-      widgetStore.accentColor = config.accentColor;
-    }
-    if (config.colorMode) {
-      widgetStore.colorMode = config.colorMode;
+    // Update widget store with new configuration. Values are re-validated
+    // before being assigned; invalid values are silently ignored so a
+    // malformed postMessage cannot corrupt store state or (for accentColor)
+    // the CSS custom property the value ultimately reaches.
+    // The app.vue component watches these values and will apply them automatically.
+    if (config && typeof config === 'object') {
+      if (isValidWidgetView(config.view)) {
+        widgetStore.viewMode = config.view;
+      }
+      if (isValidWidgetAccentColor(config.accentColor)) {
+        widgetStore.accentColor = config.accentColor;
+      }
+      if (isValidWidgetColorMode(config.colorMode)) {
+        widgetStore.colorMode = config.colorMode;
+      }
     }
   }
 };
@@ -64,6 +74,34 @@ onBeforeMount(async () => {
       state.notFound = true;
       return;
     }
+
+    // Fetch widget display config from the widget-facing calendar endpoint.
+    // This endpoint returns calendar metadata merged with a `widgetConfig`
+    // property containing the authoritative server-stored view/accentColor/colorMode.
+    try {
+      const widgetApiResponse = await fetch(`/api/widget/v1/calendars/${encodeURIComponent(calendarUrlName)}`, {
+        credentials: 'omit',
+        headers: { 'Accept': 'application/json' },
+      });
+      if (widgetApiResponse.ok) {
+        const data = await widgetApiResponse.json();
+        widgetStore.applyServerConfig(data.widgetConfig);
+      }
+      else {
+        // Fall back to defaults if the widget endpoint is unavailable.
+        widgetStore.applyServerConfig(null);
+      }
+    }
+    catch (err) {
+      console.warn('[widget-container] Failed to load widget config from server, using defaults.', err);
+      widgetStore.applyServerConfig(null);
+    }
+
+    // Admin-preview override path: after the authoritative server config has
+    // been applied, any URL params present (view/accentColor/colorMode) take
+    // precedence. See `widgetStore.parseConfig` for the accepted-risk comment.
+    const urlParams = new URLSearchParams(window.location.search);
+    widgetStore.parseConfig(urlParams);
 
     // Set server-level default date range from site config before loading calendar
     if (siteConfig) {
@@ -84,7 +122,7 @@ onBeforeMount(async () => {
   }
   catch (error) {
     console.error('Error loading calendar data:', error);
-    state.err = 'Failed to load calendar data';
+    state.err = t('error_load_calendar');
   }
   finally {
     state.isLoading = false;

@@ -14,6 +14,8 @@ import LocationService from '../service/locations';
 import CategoryService from '../service/categories';
 import CategoryMappingService from '@/server/calendar/service/category_mapping';
 import WidgetDomainService from '../service/widget_domain';
+import WidgetConfigService from '../service/widget_config';
+import { WidgetConfig } from '@/common/model/widget_config';
 import { EventEmitter } from 'events';
 import EventInstanceService from '../service/event_instance';
 import SeriesService from '../service/series';
@@ -43,6 +45,7 @@ export default class CalendarInterface {
   private eventInstanceService: EventInstanceService;
   private categoryService: CategoryService;
   private widgetDomainService: WidgetDomainService;
+  private widgetConfigService: WidgetConfigService;
   private categoryMappingService: CategoryMappingService;
   private seriesService: SeriesService;
 
@@ -58,6 +61,7 @@ export default class CalendarInterface {
     this.eventInstanceService = new EventInstanceService(eventBus);
     this.categoryService = new CategoryService(this.calendarService);
     this.widgetDomainService = new WidgetDomainService();
+    this.widgetConfigService = new WidgetConfigService(this.calendarService);
     this.categoryMappingService = new CategoryMappingService();
     this.seriesService = new SeriesService(this.calendarService, eventBus);
   }
@@ -559,6 +563,48 @@ export default class CalendarInterface {
     }
 
     return this.widgetDomainService.clearAllowedDomain(calendar);
+  }
+
+  // Widget config operations
+
+  /**
+   * Public widget-serving read. Returns stored widget config for the calendar
+   * identified by URL name, or a fresh defaults WidgetConfig when no row exists.
+   * No permission check — used by the anonymous widget iframe path.
+   *
+   * @param calendarUrlName - The calendar's URL name
+   * @returns The stored or default WidgetConfig
+   */
+  async getWidgetConfig(calendarUrlName: string): Promise<WidgetConfig> {
+    return this.widgetConfigService.getWidgetConfig(calendarUrlName);
+  }
+
+  /**
+   * Editor-permission-checked widget config read for the admin UI.
+   *
+   * @param account - The requesting account
+   * @param calendarId - The calendar UUID
+   * @returns The stored or default WidgetConfig
+   */
+  async getWidgetConfigForEditor(account: Account, calendarId: string): Promise<WidgetConfig> {
+    return this.widgetConfigService.getWidgetConfigForEditor(account, calendarId);
+  }
+
+  /**
+   * Upsert widget config for a calendar. Editor permission required; not
+   * subscription-gated.
+   *
+   * @param account - The requesting account
+   * @param calendarId - The calendar UUID
+   * @param config - Partial WidgetConfig; missing fields fall back to defaults
+   * @returns The persisted WidgetConfig
+   */
+  async setWidgetConfig(
+    account: Account,
+    calendarId: string,
+    config: Partial<WidgetConfig>,
+  ): Promise<WidgetConfig> {
+    return this.widgetConfigService.setWidgetConfig(account, calendarId, config);
   }
 
   // Category mapping operations

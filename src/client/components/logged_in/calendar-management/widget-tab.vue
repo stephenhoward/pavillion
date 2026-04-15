@@ -13,7 +13,6 @@
         <h2>{{ t('config_section_title') }}</h2>
         <p class="section-intro">{{ t('config_section_intro') }}</p>
         <WidgetConfig
-          ref="widgetConfigRef"
           :calendar-id="calendarId"
           :calendar-url-name="calendarUrlName"
         />
@@ -23,26 +22,20 @@
       <section class="widget-section">
         <h2>{{ t('embed_section_title') }}</h2>
         <p class="section-intro">{{ t('embed_section_intro') }}</p>
-        <WidgetEmbed
-          :calendar-url-name="calendarUrlName"
-          :view-mode="widgetConfigState.viewMode"
-          :accent-color="widgetConfigState.accentColor"
-          :color-mode="widgetConfigState.colorMode"
-        />
+        <WidgetEmbed :calendar-url-name="calendarUrlName" />
       </section>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import WidgetDomains from './widget-domains.vue';
 import WidgetConfig from './widget-config.vue';
 import WidgetEmbed from './widget-embed.vue';
 
 // Props
-const props = defineProps({
+defineProps({
   calendarId: {
     type: String,
     required: true,
@@ -56,18 +49,6 @@ const props = defineProps({
 // Translations
 const { t } = useTranslation('calendars', {
   keyPrefix: 'widget',
-});
-
-// Ref to widget config component to access its state
-const widgetConfigRef = ref(null);
-
-// Computed property to reactively get widget config state
-const widgetConfigState = computed(() => {
-  return widgetConfigRef.value?.state || {
-    viewMode: 'list',
-    accentColor: '#ff9131',
-    colorMode: 'auto',
-  };
 });
 </script>
 

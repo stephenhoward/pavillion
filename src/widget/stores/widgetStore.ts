@@ -1,8 +1,16 @@
 import { defineStore } from 'pinia';
 import { DateTime } from 'luxon';
+import {
+  WIDGET_CONFIG_DEFAULTS,
+  isValidWidgetView,
+  isValidWidgetColorMode,
+  isValidWidgetAccentColor,
+  type WidgetView,
+  type WidgetColorMode,
+} from '@/common/model/widget_config';
 
-export type ViewMode = 'week' | 'month' | 'list';
-export type ColorMode = 'auto' | 'light' | 'dark';
+export type ViewMode = WidgetView;
+export type ColorMode = WidgetColorMode;
 
 export interface WidgetState {
   // Configuration
@@ -18,9 +26,9 @@ export interface WidgetState {
 
 export const useWidgetStore = defineStore('widget', {
   state: (): WidgetState => ({
-    viewMode: 'list',
-    accentColor: '',
-    colorMode: 'auto',
+    viewMode: WIDGET_CONFIG_DEFAULTS.view,
+    accentColor: WIDGET_CONFIG_DEFAULTS.accentColor,
+    colorMode: WIDGET_CONFIG_DEFAULTS.colorMode,
     calendarUrlName: null,
     currentWeekStart: null,
     currentMonthStart: null,
@@ -28,26 +36,101 @@ export const useWidgetStore = defineStore('widget', {
 
   actions: {
     /**
-     * Parse configuration from URL parameters
+     * Apply widget configuration received from the server API response
+     * (`GET /api/widget/v1/calendars/:urlName` — `widgetConfig` property).
+     *
+     * This is the authoritative source of widget display configuration.
+     * Each field is re-validated at read time as defense-in-depth against
+     * corrupt or future-unknown enum values; invalid fields fall back to
+     * the default and emit a single console.warn per invalid field.
+     *
+     * @param widgetConfig - Plain object with view, accentColor, colorMode keys
+     */
+    applyServerConfig(widgetConfig: Record<string, unknown> | null | undefined) {
+      if (!widgetConfig || typeof widgetConfig !== 'object') {
+        this.viewMode = WIDGET_CONFIG_DEFAULTS.view;
+        this.accentColor = WIDGET_CONFIG_DEFAULTS.accentColor;
+        this.colorMode = WIDGET_CONFIG_DEFAULTS.colorMode;
+        return;
+      }
+
+      // view
+      if (isValidWidgetView(widgetConfig.view)) {
+        this.viewMode = widgetConfig.view;
+      }
+      else {
+        if (widgetConfig.view !== undefined) {
+          console.warn(
+            `[widgetStore] Invalid 'view' received from server: ${String(widgetConfig.view)}. Falling back to default.`,
+          );
+        }
+        this.viewMode = WIDGET_CONFIG_DEFAULTS.view;
+      }
+
+      // accentColor
+      if (isValidWidgetAccentColor(widgetConfig.accentColor)) {
+        this.accentColor = widgetConfig.accentColor;
+      }
+      else {
+        if (widgetConfig.accentColor !== undefined) {
+          console.warn(
+            `[widgetStore] Invalid 'accentColor' received from server: ${String(widgetConfig.accentColor)}. Falling back to default.`,
+          );
+        }
+        this.accentColor = WIDGET_CONFIG_DEFAULTS.accentColor;
+      }
+
+      // colorMode
+      if (isValidWidgetColorMode(widgetConfig.colorMode)) {
+        this.colorMode = widgetConfig.colorMode;
+      }
+      else {
+        if (widgetConfig.colorMode !== undefined) {
+          console.warn(
+            `[widgetStore] Invalid 'colorMode' received from server: ${String(widgetConfig.colorMode)}. Falling back to default.`,
+          );
+        }
+        this.colorMode = WIDGET_CONFIG_DEFAULTS.colorMode;
+      }
+    },
+
+    /**
+     * Parse configuration from URL parameters.
+     *
+     * NOTE: This URL-param override path is RETAINED SOLELY TO SUPPORT THE
+     * ADMIN PREVIEW IFRAME (so unsaved changes in the admin UI can be
+     * reflected in the embedded preview without a round-trip to the server).
+     * It is NOT part of the public SDK contract — the SDK does not emit
+     * these query-string arguments. Any embedder who appends these params
+     * to the public iframe URL gets a bounded, local-only override
+     * (cosmetic change on their own page only; does not affect stored
+     * config or other embeds). This risk is accepted per the spec
+     * (2026-04-14-server-side-widget-config-design.md — "Accepted risk").
+     *
+     * Values are validated with the common model helpers; invalid values
+     * are silently ignored (no warn — these arrive from untrusted callers).
+     *
+     * Should be invoked AFTER `applyServerConfig()` so URL params override
+     * the authoritative server values.
      *
      * @param urlParams - URLSearchParams object containing widget configuration
      */
     parseConfig(urlParams: URLSearchParams) {
       // Parse view mode
       const view = urlParams.get('view');
-      if (view === 'week' || view === 'month' || view === 'list') {
+      if (view !== null && isValidWidgetView(view)) {
         this.viewMode = view;
       }
 
-      // Parse accent color (URL decoded)
+      // Parse accent color (URL decoded by URLSearchParams)
       const accentColor = urlParams.get('accentColor');
-      if (accentColor) {
-        this.accentColor = decodeURIComponent(accentColor);
+      if (accentColor !== null && isValidWidgetAccentColor(accentColor)) {
+        this.accentColor = accentColor;
       }
 
       // Parse color mode
       const colorMode = urlParams.get('colorMode');
-      if (colorMode === 'auto' || colorMode === 'light' || colorMode === 'dark') {
+      if (colorMode !== null && isValidWidgetColorMode(colorMode)) {
         this.colorMode = colorMode;
       }
     },
@@ -62,7 +145,16 @@ export const useWidgetStore = defineStore('widget', {
     },
 
     /**
-     * Inject accent color as CSS custom property on root element
+     * Inject accent color as CSS custom property on root element.
+     *
+     * SECURITY: The accent color MUST reach the DOM only via
+     * `element.style.setProperty('--widget-accent-color', value)`. Never
+     * interpolate the value into a raw `<style>` block, `innerHTML`, or
+     * string-concatenated stylesheet — those paths enable CSS/HTML
+     * injection. Combined with the strict hex regex validation in
+     * `isValidWidgetAccentColor` and the re-validation in
+     * `applyServerConfig()`/`parseConfig()`, this closes the injection
+     * vector.
      *
      * @param rootElement - DOM element to inject CSS property on
      */

@@ -3,6 +3,7 @@ import { Calendar, DefaultDateRange } from '@/common/model/calendar';
 import { CalendarEvent } from '@/common/model/events';
 import { CalendarEditor } from '@/common/model/calendar_editor';
 import { CalendarInfo } from '@/common/model/calendar_info';
+import { WidgetConfig } from '@/common/model/widget_config';
 import ModelService from '@/client/service/models';
 import { UrlNameAlreadyExistsError, InvalidUrlNameError, CalendarNotFoundError } from '@/common/exceptions/calendar';
 import { CalendarEditorPermissionError, EditorAlreadyExistsError, EditorNotFoundError } from '@/common/exceptions/editor';
@@ -373,5 +374,31 @@ export default class CalendarService {
       console.error('Error updating calendar settings:', error);
       handleApiError(error, errorMap);
     }
+  }
+
+  /**
+   * Fetch the widget display configuration for a calendar.
+   * Returns defaults if no stored configuration exists.
+   *
+   * @param calendarId - The ID of the calendar
+   * @returns The widget configuration
+   */
+  async getWidgetConfig(calendarId: string): Promise<WidgetConfig> {
+    const encodedId = validateAndEncodeId(calendarId, 'Calendar ID');
+    const response = await axios.get(`/api/v1/calendars/${encodedId}/widget/config`);
+    return WidgetConfig.fromObject(response.data);
+  }
+
+  /**
+   * Save the widget display configuration for a calendar.
+   *
+   * @param calendarId - The ID of the calendar
+   * @param config - The widget configuration to save
+   * @returns The saved widget configuration
+   */
+  async setWidgetConfig(calendarId: string, config: WidgetConfig): Promise<WidgetConfig> {
+    const encodedId = validateAndEncodeId(calendarId, 'Calendar ID');
+    const response = await axios.put(`/api/v1/calendars/${encodedId}/widget/config`, config.toObject());
+    return WidgetConfig.fromObject(response.data);
   }
 }
