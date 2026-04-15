@@ -34,29 +34,74 @@ vi.mock('@/site/service/calendar', () => {
         hasContent: (_lang: string) => true,
         getLanguages: () => ['en'],
       }),
-      loadCalendarEvents: vi.fn().mockImplementation(() =>
-        Promise.resolve([
+      loadCalendarEvents: vi.fn().mockImplementation(() => {
+        const localized = {
+          setLocale: () => ({
+            toLocaleString: () => 'March 1, 2026',
+          }),
+          toLocaleString: () => 'March 1, 2026, 10:00 AM',
+        };
+        return Promise.resolve([
           {
+            id: 'inst-1',
             start: {
               toISO: () => '2026-03-01T10:00:00.000Z',
-              toLocal: () => ({
-                toLocaleString: () => 'March 1, 2026, 10:00 AM',
-              }),
+              toLocal: () => localized,
+              hasSame: () => true,
             },
+            end: null,
             event: {
               id: 'evt-1',
               content: (_lang: string) => ({ name: 'Test Event', description: 'Description' }),
+              hasContent: (_lang: string) => true,
+              getLanguages: () => ['en'],
               media: null,
               mediaFocalPointX: 0.5,
               mediaFocalPointY: 0.5,
               mediaZoom: 1.0,
               categories: [],
+              schedules: [],
+              location: null,
+              sourceCalendar: null,
               externalUrl: mockExternalUrl,
               urlPrompt: mockUrlPrompt,
             },
           },
-        ]),
-      ),
+        ]);
+      }),
+      loadEventInstance: vi.fn().mockImplementation(() => {
+        const localized = {
+          setLocale: () => ({
+            toLocaleString: () => 'March 1, 2026',
+          }),
+          toLocaleString: () => 'March 1, 2026, 10:00 AM',
+        };
+        return Promise.resolve({
+          id: 'inst-1',
+          start: {
+            toISO: () => '2026-03-01T10:00:00.000Z',
+            toLocal: () => localized,
+            hasSame: () => true,
+          },
+          end: null,
+          event: {
+            id: 'evt-1',
+            content: (_lang: string) => ({ name: 'Test Event', description: 'Description' }),
+            hasContent: (_lang: string) => true,
+            getLanguages: () => ['en'],
+            media: null,
+            mediaFocalPointX: 0.5,
+            mediaFocalPointY: 0.5,
+            mediaZoom: 1.0,
+            categories: [],
+            schedules: [],
+            location: null,
+            sourceCalendar: null,
+            externalUrl: mockExternalUrl,
+            urlPrompt: mockUrlPrompt,
+          },
+        });
+      }),
     })),
   };
 });
