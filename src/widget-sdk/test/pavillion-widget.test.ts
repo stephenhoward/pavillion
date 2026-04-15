@@ -21,23 +21,21 @@ describe('Pavillion Widget SDK', () => {
   });
 
   describe('Async loading and command queue pattern', () => {
-    it('should create global Pavillion namespace with command queue', () => {
+    it('should create callable global Pavillion namespace with command queue', () => {
       // Simulate user code that runs before SDK loads
-      (window as any).Pavillion = (window as any).Pavillion || { q: [] };
-      (window as any).Pavillion.q = [];
+      (window as any).Pavillion = (window as any).Pavillion || function () {
+        ((window as any).Pavillion.q = (window as any).Pavillion.q || []).push([].slice.call(arguments));
+      };
 
       expect((window as any).Pavillion).toBeDefined();
-      expect((window as any).Pavillion.q).toBeInstanceOf(Array);
-      expect((window as any).Pavillion.q.length).toBe(0);
+      expect(typeof (window as any).Pavillion).toBe('function');
     });
 
     it('should buffer commands in queue before SDK loads', () => {
-      // Simulate user code
-      (window as any).Pavillion = (window as any).Pavillion || { q: [] };
-      const Pavillion = function(...args: any[]) {
-        (window as any).Pavillion.q.push(args);
+      // Simulate user code that runs before SDK loads
+      (window as any).Pavillion = (window as any).Pavillion || function () {
+        ((window as any).Pavillion.q = (window as any).Pavillion.q || []).push([].slice.call(arguments));
       };
-      (window as any).Pavillion = Object.assign(Pavillion, { q: [] });
 
       // User calls before SDK loads
       (window as any).Pavillion('init', {
@@ -47,6 +45,7 @@ describe('Pavillion Widget SDK', () => {
       });
 
       expect((window as any).Pavillion.q.length).toBe(1);
+      expect(Array.isArray((window as any).Pavillion.q[0])).toBe(true);
       expect((window as any).Pavillion.q[0][0]).toBe('init');
       expect((window as any).Pavillion.q[0][1]).toMatchObject({
         calendar: 'my-calendar',

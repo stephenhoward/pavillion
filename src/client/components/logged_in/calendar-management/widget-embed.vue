@@ -64,7 +64,7 @@ const embedCode = computed(() => {
   return `<div id="calendar-widget"></div>
 <script async src="${baseUrl}/widget/pavillion-widget.js"><\/script>
 <script>
-  window.Pavillion = window.Pavillion || { q: [] };
+  window.Pavillion = window.Pavillion || function(){(window.Pavillion.q=window.Pavillion.q||[]).push([].slice.call(arguments))};
   Pavillion('init', {
     calendar: '${props.calendarUrlName}',
     container: '#calendar-widget',

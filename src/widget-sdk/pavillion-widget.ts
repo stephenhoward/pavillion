@@ -7,7 +7,7 @@
  * Usage:
  * <script async src="https://calendar.example.com/widget/pavillion-widget.js" data-lang="es"></script>
  * <script>
- *   window.Pavillion = window.Pavillion || { q: [] };
+ *   window.Pavillion = window.Pavillion || function(){(window.Pavillion.q=window.Pavillion.q||[]).push([].slice.call(arguments))};
  *   Pavillion('init', {
  *     calendar: 'my-calendar',
  *     container: '#calendar-widget',
