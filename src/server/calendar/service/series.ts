@@ -18,6 +18,7 @@ import {
 } from '@/common/exceptions/series';
 import CalendarService from './calendar';
 import db from '@/server/common/entity/db';
+import { isValidCalendarUrlName } from '@/common/validation/calendarUrlName';
 
 /**
  * Service for managing event series within calendars.
@@ -38,14 +39,15 @@ class SeriesService {
   }
 
   /**
-   * Validate a series URL name against the allowed pattern.
-   * Same regex as Calendar.isValidUrlName: /^[a-z0-9][a-z0-9_-]{1,22}[a-z0-9_]$/i
+   * Validate a series URL name against the allowed pattern. Shares the
+   * canonical rule with CalendarService.isValidUrlName via the common
+   * validator so series and calendar urlNames cannot drift.
    *
    * @param urlName - The URL name to validate
    * @returns true if valid, false otherwise
    */
   isValidUrlName(urlName: string): boolean {
-    return /^[a-z0-9][a-z0-9_-]{1,22}[a-z0-9_]$/i.test(urlName);
+    return isValidCalendarUrlName(urlName);
   }
 
   /**
