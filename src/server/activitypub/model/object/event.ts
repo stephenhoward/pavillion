@@ -19,6 +19,7 @@ const URL_PROMPT_EN_LABELS: Record<UrlPrompt, string> = {
   tickets: 'Tickets',
   rsvp: 'RSVP',
   more_info: 'More Information',
+  register: 'Register',
 };
 
 /**

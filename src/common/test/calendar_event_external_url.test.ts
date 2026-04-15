@@ -13,8 +13,8 @@ describe('CalendarEvent Model - externalUrl and urlPrompt', () => {
     expect(event.urlPrompt).toBeNull();
   });
 
-  test('URL_PROMPT_VALUES contains the three supported prompts', () => {
-    expect(URL_PROMPT_VALUES).toEqual(['tickets', 'rsvp', 'more_info']);
+  test('URL_PROMPT_VALUES contains the four supported prompts', () => {
+    expect(URL_PROMPT_VALUES).toEqual(['tickets', 'rsvp', 'more_info', 'register']);
   });
 
   test('toObject emits externalUrl and urlPrompt when set', () => {

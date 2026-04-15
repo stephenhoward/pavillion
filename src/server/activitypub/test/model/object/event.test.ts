@@ -510,6 +510,20 @@ describe('EventObject', () => {
         expect(result['pavillion:urlPrompt']).toBe('more_info');
       });
 
+      it('should emit correct translated label for register prompt', () => {
+        const calendar = new Calendar('calendar-uuid', 'mycal');
+        const event = new CalendarEvent('event-uuid', 'calendar-uuid');
+        event.addContent(new CalendarEventContent('en', 'Event', ''));
+        event.externalUrl = 'https://example.com/register';
+        event.urlPrompt = 'register';
+
+        const obj = new EventObject(calendar, event);
+        const result = obj.toActivityPubObject();
+
+        expect(result.attachment[0].name).toBe('Register');
+        expect(result['pavillion:urlPrompt']).toBe('register');
+      });
+
       it('should not emit attachment or pavillion:urlPrompt when both fields are null', () => {
         const calendar = new Calendar('calendar-uuid', 'mycal');
         const event = new CalendarEvent('event-uuid', 'calendar-uuid');
@@ -1196,7 +1210,7 @@ describe('EventObject', () => {
         expect(result.urlPrompt).toBeNull();
       });
 
-      it('should accept all three valid urlPrompt values (rsvp, more_info)', () => {
+      it('should accept all four valid urlPrompt values (rsvp, more_info, register)', () => {
         const rsvpResult = EventObject.fromActivityPubObject({
           name: 'Test',
           attachment: [{ type: 'Link', href: 'https://example.com/rsvp', rel: 'external' }],
@@ -1212,6 +1226,14 @@ describe('EventObject', () => {
         });
         expect(infoResult.externalUrl).toBe('https://example.com/info');
         expect(infoResult.urlPrompt).toBe('more_info');
+
+        const registerResult = EventObject.fromActivityPubObject({
+          name: 'Test',
+          attachment: [{ type: 'Link', href: 'https://example.com/register', rel: 'external' }],
+          'pavillion:urlPrompt': 'register',
+        });
+        expect(registerResult.externalUrl).toBe('https://example.com/register');
+        expect(registerResult.urlPrompt).toBe('register');
       });
 
       it('should round-trip externalUrl and urlPrompt through toActivityPubObject and fromActivityPubObject', () => {

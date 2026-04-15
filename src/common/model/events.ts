@@ -24,12 +24,12 @@ export type startAndEndDates = {
 /**
  * Prompt used to label the event's external URL (e.g., "Tickets", "RSVP", "More Info").
  */
-export type UrlPrompt = 'tickets' | 'rsvp' | 'more_info';
+export type UrlPrompt = 'tickets' | 'rsvp' | 'more_info' | 'register';
 
 /**
  * Runtime-valid set of {@link UrlPrompt} values for enum checks on untrusted input.
  */
-export const URL_PROMPT_VALUES: readonly UrlPrompt[] = ['tickets', 'rsvp', 'more_info'] as const;
+export const URL_PROMPT_VALUES: readonly UrlPrompt[] = ['tickets', 'rsvp', 'more_info', 'register'] as const;
 
 /**
  * Represents a calendar event with multilingual content support.

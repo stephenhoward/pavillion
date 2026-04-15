@@ -86,7 +86,8 @@
     "url_prompt": {
         "tickets": "Tickets",
         "rsvp": "RSVP",
-        "more_info": "More Information"
+        "more_info": "More Information",
+        "register": "Register"
     },
     "report": {
         "link_text": "Report Event",
