@@ -84,6 +84,9 @@ let mockSourceCalendar: {
 let mockExternalUrl: string | null = null;
 let mockUrlPrompt: string | null = null;
 
+// Mutable event-level accessibility info
+let mockEventAccessibilityInfo: string = '';
+
 vi.mock('@/site/service/calendar', () => {
   return {
     default: vi.fn().mockImplementation(() => ({
@@ -95,7 +98,7 @@ vi.mock('@/site/service/calendar', () => {
       }),
       loadEvent: vi.fn().mockImplementation(() =>
         Promise.resolve({
-          content: (_lang: string) => ({ name: mockEventName, description: 'Description here' }),
+          content: (_lang: string) => ({ name: mockEventName, description: 'Description here', accessibilityInfo: mockEventAccessibilityInfo }),
           hasContent: (_lang: string) => true,
           getLanguages: () => ['en'],
           media: null,
@@ -260,6 +263,8 @@ beforeAll(async () => {
             about_this_event: 'About This Event',
             event_categories: 'Categories',
             event_accessibility: 'Accessibility',
+            event_accessibility_event: 'Event Accessibility',
+            event_accessibility_venue: 'Venue Accessibility',
             event_location: 'Location',
             event_source_calendar: 'Source Calendar',
             event_source_calendar_label: 'View source calendar {{name}}',
@@ -309,6 +314,7 @@ describe('event breadcrumb locale behaviour', () => {
     mockSourceCalendar = null;
     mockExternalUrl = null;
     mockUrlPrompt = null;
+    mockEventAccessibilityInfo = '';
   });
 
   afterEach(() => {
@@ -388,6 +394,7 @@ describe('event two-column layout', () => {
     mockSourceCalendar = null;
     mockExternalUrl = null;
     mockUrlPrompt = null;
+    mockEventAccessibilityInfo = '';
   });
 
   afterEach(() => {
@@ -474,6 +481,7 @@ describe('event category badge behaviour', () => {
     mockSourceCalendar = null;
     mockExternalUrl = null;
     mockUrlPrompt = null;
+    mockEventAccessibilityInfo = '';
   });
 
   afterEach(() => {
@@ -614,6 +622,7 @@ describe('event location display', () => {
     mockSourceCalendar = null;
     mockExternalUrl = null;
     mockUrlPrompt = null;
+    mockEventAccessibilityInfo = '';
   });
 
   afterEach(() => {
@@ -697,6 +706,7 @@ describe('event location display', () => {
     const accessibilityCard = wrapper.find('.accessibility-card');
     expect(accessibilityCard.exists()).toBe(true);
     expect(accessibilityCard.find('.accessibility-info').text()).toContain('Wheelchair accessible');
+    expect(accessibilityCard.find('.accessibility-subheading').exists()).toBe(false);
     wrapper.unmount();
   });
 
@@ -738,6 +748,47 @@ describe('event location display', () => {
     expect(wrapper.find('.accessibility-card').exists()).toBe(false);
     wrapper.unmount();
   });
+
+  it('should display accessibility card when event has accessibilityInfo but no location', async () => {
+    mockLocation = null;
+    mockEventAccessibilityInfo = 'ASL interpreter will be provided';
+
+    const wrapper = await mountEvent(
+      '/view/test_calendar/events/evt-1',
+      (path) => path,
+    );
+
+    const accessibilityCard = wrapper.find('.accessibility-card');
+    expect(accessibilityCard.exists()).toBe(true);
+    expect(accessibilityCard.find('.accessibility-info').text()).toContain('ASL interpreter will be provided');
+    wrapper.unmount();
+  });
+
+  it('should display both event and venue accessibility with subheadings when both are present', async () => {
+    mockEventAccessibilityInfo = 'ASL interpreter provided';
+    mockLocation = makeLocationObject(
+      'Community Center',
+      '123 Main St',
+      'Springfield',
+      'IL',
+      '62701',
+      'US',
+      { en: 'Wheelchair ramp at entrance' },
+    );
+
+    const wrapper = await mountEvent(
+      '/view/test_calendar/events/evt-1',
+      (path) => path,
+    );
+
+    const accessibilityCard = wrapper.find('.accessibility-card');
+    expect(accessibilityCard.exists()).toBe(true);
+    expect(accessibilityCard.text()).toContain('Event Accessibility');
+    expect(accessibilityCard.text()).toContain('Venue Accessibility');
+    expect(accessibilityCard.text()).toContain('ASL interpreter provided');
+    expect(accessibilityCard.text()).toContain('Wheelchair ramp at entrance');
+    wrapper.unmount();
+  });
 });
 
 describe('event series link display', () => {
@@ -751,6 +802,7 @@ describe('event series link display', () => {
     mockSourceCalendar = null;
     mockExternalUrl = null;
     mockUrlPrompt = null;
+    mockEventAccessibilityInfo = '';
   });
 
   afterEach(() => {
@@ -854,6 +906,7 @@ describe('event source calendar pill', () => {
     mockSourceCalendar = null;
     mockExternalUrl = null;
     mockUrlPrompt = null;
+    mockEventAccessibilityInfo = '';
   });
 
   afterEach(() => {
@@ -970,6 +1023,7 @@ describe('event external URL CTA button', () => {
     mockSourceCalendar = null;
     mockExternalUrl = null;
     mockUrlPrompt = null;
+    mockEventAccessibilityInfo = '';
   });
 
   afterEach(() => {

@@ -848,8 +848,8 @@ button {
 
                 <div class="form-field">
                   <label :for="`event-accessibility-${currentLanguage}`" class="field-label">
-                    Accessibility Information
-                    <span class="info-icon" title="Information about accessibility features">ⓘ</span>
+                    {{ t('field_accessibility_info') }}
+                    <span class="info-icon" :title="t('field_accessibility_tooltip')">ⓘ</span>
                   </label>
                   <textarea
                     :id="`event-accessibility-${currentLanguage}`"
