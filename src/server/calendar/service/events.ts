@@ -11,7 +11,7 @@ import { EventCategory } from "@/common/model/event_category";
 import { EventLocation, validateLocationHierarchy } from "@/common/model/location";
 import { EventContentEntity, EventEntity, EventScheduleEntity } from "@/server/calendar/entity/event";
 import CalendarService from "@/server/calendar/service/calendar";
-import { LocationEntity } from "@/server/calendar/entity/location";
+import { LocationEntity, LocationContentEntity } from "@/server/calendar/entity/location";
 // TODO: MediaEntity is still needed here for Sequelize eager-load association includes
 // (e.g., include: [MediaEntity] in queries). Removing this cross-domain import requires
 // either restructuring entity associations or moving eager-loading to the media domain.
@@ -892,6 +892,7 @@ class EventService {
           await contentEntity.update({
             name: name,
             description: c.description,
+            accessibility_info: c.accessibilityInfo ?? '',
           });
           event.addContent(contentEntity.toModel());
         }
@@ -1144,6 +1145,7 @@ class EventService {
           await contentEntity.update({
             name: c.name,
             description: c.description,
+            accessibility_info: c.accessibilityInfo ?? '',
           });
           event.addContent(contentEntity.toModel());
         }
@@ -1279,7 +1281,7 @@ class EventService {
       where: { id: eventId },
       include: [
         EventContentEntity,
-        LocationEntity,
+        { model: LocationEntity, include: [LocationContentEntity] },
         EventScheduleEntity,
         MediaEntity,
         { model: EventSeriesEntity, include: [EventSeriesContentEntity] },

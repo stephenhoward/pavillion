@@ -30,6 +30,15 @@ const state = reactive({
 const calendarService = new CalendarService();
 
 /**
+ * Computed event-level accessibility info from event content.
+ */
+const eventAccessibilityInfo = computed(() => {
+  if (!state.event) return '';
+  const content = localizedContent(state.event);
+  return content?.accessibilityInfo ?? '';
+});
+
+/**
  * Computed localized accessibility info for the location.
  * Handles both EventLocation models (TranslatedModel) and plain objects.
  */
@@ -45,6 +54,13 @@ const locationAccessibilityInfo = computed(() => {
   catch {
     return '';
   }
+});
+
+/**
+ * Whether to show the accessibility card (either event or location has info).
+ */
+const hasAccessibilityInfo = computed(() => {
+  return !!(eventAccessibilityInfo.value || locationAccessibilityInfo.value);
 });
 
 /**
@@ -246,12 +262,18 @@ function closeReportModal() {
           </div>
 
           <!-- Accessibility card -->
-          <div v-if="locationAccessibilityInfo" class="sidebar-card accessibility-card">
+          <div v-if="hasAccessibilityInfo" class="sidebar-card accessibility-card">
             <div class="card-header">
               <Accessibility :size="16" class="card-icon" aria-hidden="true" />
               <h3 class="card-heading">{{ t('event_accessibility') }}</h3>
             </div>
-            <p class="accessibility-info">{{ locationAccessibilityInfo }}</p>
+            <div v-if="eventAccessibilityInfo && locationAccessibilityInfo">
+              <h4 class="accessibility-subheading">{{ t('event_accessibility_event') }}</h4>
+              <p class="accessibility-info">{{ eventAccessibilityInfo }}</p>
+              <h4 class="accessibility-subheading">{{ t('event_accessibility_venue') }}</h4>
+              <p class="accessibility-info">{{ locationAccessibilityInfo }}</p>
+            </div>
+            <p v-else class="accessibility-info">{{ eventAccessibilityInfo || locationAccessibilityInfo }}</p>
           </div>
 
           <!-- External link CTA -->
@@ -588,6 +610,21 @@ function closeReportModal() {
 }
 
 // Accessibility card
+.accessibility-subheading {
+  font-size: $public-font-size-sm;
+  font-weight: $public-font-weight-semibold;
+  color: $public-text-secondary-light;
+  margin: 0 0 $public-space-xs 0;
+
+  &:not(:first-child) {
+    margin-top: $public-space-md;
+  }
+
+  @include public-dark-mode {
+    color: $public-text-secondary-dark;
+  }
+}
+
 .accessibility-info {
   font-size: $public-font-size-base;
   color: $public-text-primary-light;

@@ -39,7 +39,9 @@
     "unsaved_changes_message": "You have unsaved changes. Are you sure you want to leave?",
     "unsaved_changes_confirm": "Leave",
     "unsaved_changes_cancel": "Stay",
-    "series_section": "Series"
+    "series_section": "Series",
+    "field_accessibility_info": "Accessibility Information",
+    "field_accessibility_tooltip": "Information about accessibility features"
   },
   "categories": {
     "categories_label": "Categories",

@@ -314,6 +314,7 @@ class CalendarEventContent extends Model implements TranslatedContentModel {
   language: string;
   name: string = '';
   description: string = '';
+  accessibilityInfo: string = '';
 
   /**
    * Constructor for CalendarEventContent.
@@ -321,11 +322,13 @@ class CalendarEventContent extends Model implements TranslatedContentModel {
    * @param {string} language - The language code for this content
    * @param {string} [name] - Optional name/title of the event
    * @param {string} [description] - Optional description of the event
+   * @param {string} [accessibilityInfo] - Optional accessibility information
    */
-  constructor( language: string, name?: string, description?: string) {
+  constructor( language: string, name?: string, description?: string, accessibilityInfo?: string) {
     super();
     this.name = name ?? '';
     this.description = description ?? '';
+    this.accessibilityInfo = accessibilityInfo ?? '';
     this.language = language;
   }
 
@@ -338,7 +341,7 @@ class CalendarEventContent extends Model implements TranslatedContentModel {
   static fromObject(obj: Record<string, any>): CalendarEventContent {
     // Support both 'name' and 'title' field names for API compatibility
     const name = obj.name || obj.title || '';
-    return new CalendarEventContent(obj.language, name, obj.description);
+    return new CalendarEventContent(obj.language, name, obj.description, obj.accessibilityInfo);
   }
 
   /**
@@ -352,16 +355,17 @@ class CalendarEventContent extends Model implements TranslatedContentModel {
       title: this.name,
       name: this.name,
       description: this.description,
+      accessibilityInfo: this.accessibilityInfo,
     };
   }
 
   /**
    * Determines if the content has any meaningful data.
    *
-   * @returns {boolean} True if both name and description are empty
+   * @returns {boolean} True if name, description, and accessibilityInfo are all empty
    */
   isEmpty(): boolean {
-    return this.name === '' && this.description === '';
+    return this.name === '' && this.description === '' && this.accessibilityInfo === '';
   }
 };
 

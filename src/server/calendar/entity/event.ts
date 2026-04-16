@@ -157,6 +157,9 @@ class EventContentEntity extends Model {
   @Column({ type: DataType.TEXT })
   declare description: string;
 
+  @Column({ type: DataType.TEXT })
+  declare accessibility_info: string;
+
   @BelongsTo(() => EventEntity)
   declare event: EventEntity;
 
@@ -164,6 +167,7 @@ class EventContentEntity extends Model {
     let content = new CalendarEventContent( this.language as language );
     content.name = this.name;
     content.description = this.description;
+    content.accessibilityInfo = this.accessibility_info ?? '';
 
     return content;
   }
@@ -173,6 +177,7 @@ class EventContentEntity extends Model {
       language: content.language as string,
       name: content.name,
       description: content.description,
+      accessibility_info: content.accessibilityInfo,
     });
   }
 };

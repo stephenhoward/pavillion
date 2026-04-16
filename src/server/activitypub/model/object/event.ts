@@ -412,6 +412,7 @@ class EventObject extends ActivityPubObject {
           ...entry,
           name: typeof entry.name === 'string' ? stripHtmlTags(entry.name) : entry.name,
           description: typeof entry.description === 'string' ? stripHtmlTags(entry.description) : entry.description,
+          accessibilityInfo: typeof entry.accessibilityInfo === 'string' ? stripHtmlTags(entry.accessibilityInfo) : entry.accessibilityInfo,
         };
       }
       else {
