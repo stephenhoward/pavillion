@@ -140,72 +140,29 @@ If `--dry-run` was passed, stop here and emit the plan-only report:
 
 **Condition:** `state == unshaped`.
 
-**Main agent delegates to subagent** via Task tool. The subagent is
-one-shot and must either populate the bead or return `ESCALATE`.
+**Main agent delegates to subagent.** The subagent follows the shaping
+contract in `.claude/commands/shape-bead.md` Steps 2–8
+(scope / references / standards / technical design / acceptance),
+populates DESCRIPTION / DESIGN / ACCEPTANCE / NOTES via separate
+`bd update` calls, and adds the `shaped` label.
 
-**Subagent prompt skeleton:**
+**Autonomous-mode deltas** (differ from interactive `/shape-bead`):
 
-> # Auto-shape bead: {bead_id}
->
-> Read the bead:
->
-> ```bash
-> bd show {bead_id}
-> ```
->
-> The description alone exists — there is no design, no acceptance criteria,
-> no spec. Your job is to turn this raw idea into a shaped bead: populate
-> DESCRIPTION (expanded), DESIGN, ACCEPTANCE CRITERIA, and NOTES, then add
-> the `shaped` label.
->
-> **Explore the codebase** as needed to understand the context: grep for
-> related terms, read adjacent files, consult product docs
-> (`agent-os/product/mission.md`, `agent-os/product/roadmap.md`), and look
-> at similar recent work.
->
-> **Follow the shaping contract** documented in
-> `.claude/commands/shape-bead.md` Steps 2–8 (scope, references, standards,
-> technical design, acceptance criteria). You are acting autonomously — do
-> not use AskUserQuestion; make best-guess choices, note assumptions in the
-> bead's notes under an `## Assumptions` heading.
->
-> **Write each field with a separate `bd update` call**, then add the
-> `shaped` label:
->
-> ```bash
-> bd update {bead_id} --description="..."
-> bd update {bead_id} --design="..."
-> bd update {bead_id} --acceptance="..."
-> bd update {bead_id} --append-notes="..."
-> bd update {bead_id} --add-label shaped
-> ```
->
-> **Escalation protocol:** if the original description gives you fewer than
-> 50 characters of actionable signal (no verb, no object, no clear
-> outcome — e.g. title "Fix it"), do NOT fabricate a design. Stop and
-> return the exact string:
->
-> ```
-> ESCALATE: <one-sentence reason>
-> ```
->
-> When done (shaped or escalated), report:
-> - If shaped: "SHAPED. Summary: <one line>." (the main agent will re-read
->   the bead).
-> - If escalated: "ESCALATE: <reason>".
+- No AskUserQuestion — make best-guess choices; record assumptions
+  under an `## Assumptions` heading in notes.
+- If the original description provides fewer than ~50 characters of
+  actionable signal (no verb, no object, no clear outcome — e.g. title
+  "Fix it"), do NOT fabricate a design. Return the exact string
+  `ESCALATE: <one-sentence reason>`.
+- On success, report `SHAPED. Summary: <one line>.`
 
 **Main agent routes on subagent report:**
 
-- `SHAPED` → re-run `bd-state.sh <bead-id>`, verify state advanced, proceed
-  to Phase 3.5.
-- `ESCALATE: <reason>` → run:
-
-  ```bash
-  bash .claude/skills/bead-backlog-selection/bd-escalate.sh <bead-id> "<reason>" 3
-  ```
-
-  Print the escalation summary (bead labelled `needs-human`, Escalation
-  section appended). **Exit cleanly.** Safeguard 3.
+- `SHAPED` → re-run `bd-state.sh <bead-id>`, verify state advanced,
+  proceed to Phase 3.5.
+- `ESCALATE: <reason>` → run
+  `bash .claude/skills/bead-backlog-selection/bd-escalate.sh <bead-id> "<reason>" 3`,
+  print summary, **exit cleanly.** Safeguard 3.
 - Any other shape → **Exit (bug, not bead problem).** Safeguard 6.
 
 ### PHASE 3.5 — Advisory Review of the Shaped Bead (delegated, parallel)
@@ -230,48 +187,23 @@ Parse the JSON array `[{name, path, description, rationale}, ...]`.
 - Non-empty → proceed to parallel spawn.
 
 **Main agent spawns all matched advisors in a single Task batch**
-(parallel fan-out per the skill's parallel-spawn pattern). Each advisor
-gets the same template, adapted by the advisor's focus area:
+(parallel fan-out). Each advisor receives the bead's fields
+(description, design, acceptance, notes), applies its normal review
+process, and emits one of APPROVE / APPROVE WITH CONDITIONS / REQUEST
+CHANGES per `.claude/skills/review-mode-advisor/SKILL.md`.
 
-**Advisor prompt skeleton:**
+**Main agent aggregates verdicts and routes:**
 
-> Review this bead's implementation plan for [advisor's focus area]. The
-> design is fully formed but no code has been written yet.
->
-> **Bead ID:** {bead_id}
-> **Title:** {title}
-> **Description:** {description field content — scope, user stories,
-> success criteria}
-> **Technical Design:** {design field content — approach, patterns, files,
-> decisions}
-> **Acceptance Criteria:** {acceptance field content}
-> **Notes:** {notes field content — references, standards, visuals}
->
-> Apply your normal review process against the bead's fields. Emit one of
-> the `review-mode-advisor` verdicts:
->
-> - APPROVE
-> - APPROVE WITH CONDITIONS (list each condition)
-> - REQUEST CHANGES (list each concern)
->
-> See `.claude/skills/review-mode-advisor/SKILL.md` for the verdict
-> protocol.
-
-**Main agent aggregates verdicts and routes** per
-`review-mode-advisor` (the protocol documented in `agent-discovery`'s
-"Verdict interpretation" section):
-
-- **All APPROVE** → record "Advisory review passed" in the run summary;
-  proceed to Phase 4.
-- **Any APPROVE WITH CONDITIONS** → spawn a **refinement subagent** (see
-  prompt skeleton below); then re-run **only the advisors that raised
-  conditions** once with the revised bead. If all resolve to APPROVE or
-  APPROVE WITH CONDITIONS, proceed. If any still REQUEST CHANGES, treat
-  it as REQUEST CHANGES (below).
-- **Any REQUEST CHANGES (first round)** → spawn a refinement subagent;
-  re-run all advisors that raised the concern once with the revised
-  bead. If all now APPROVE or APPROVE WITH CONDITIONS, proceed. If any
-  still REQUEST CHANGES after this single refinement, run:
+- **All APPROVE** → record "Advisory review passed"; proceed to Phase 4.
+- **APPROVE WITH CONDITIONS** → spawn a refinement subagent that
+  updates the bead's DESIGN / ACCEPTANCE / NOTES to address each
+  condition (appending an `## Advisory Refinement (<date>)` section
+  to notes; leaving DESCRIPTION alone unless scope itself is the
+  concern); re-run only the advisors that raised conditions once. If
+  all resolve, proceed; otherwise treat as REQUEST CHANGES.
+- **REQUEST CHANGES** → spawn the same refinement subagent; re-run
+  affected advisors once. If any still REQUEST CHANGES after this
+  single refinement, run:
 
   ```bash
   bash .claude/skills/bead-backlog-selection/bd-escalate.sh <bead-id> \
@@ -279,26 +211,6 @@ gets the same template, adapted by the advisor's focus area:
   ```
 
   **Exit cleanly.** Safeguard 4.
-
-**Refinement subagent prompt skeleton:**
-
-> # Refine bead {bead_id} based on advisor feedback
->
-> Advisors reviewed the shaped bead and returned the following verdicts:
->
-> {structured list of verdict + conditions/concerns per advisor}
->
-> Update the bead's DESIGN, ACCEPTANCE CRITERIA, and NOTES fields to
-> address every listed condition and concern. Use separate
-> `bd update --design=`, `--acceptance=`, and `--append-notes=` calls.
-> Do NOT change the DESCRIPTION unless the concerns require it (the
-> description defines *what* we're building; conditions usually
-> refine *how*).
->
-> Append an `## Advisory Refinement (<date>)` section to notes summarizing
-> what was changed and why.
->
-> When done, report "REFINED. Summary: <one line>."
 
 ### PHASE 4 — Decompose if Needed (delegated)
 
@@ -312,28 +224,14 @@ Parse the JSON `{needs_decomposition, reasons[]}`.
 
 Routing:
 
-- `needs_decomposition == false` **or** the bead is already an epic (has
-  children) → skip to Phase 5.
-- `needs_decomposition == true` **and** the bead is a leaf → delegate
-  decomposition:
-
-**Subagent prompt skeleton:**
-
-> # Decompose bead: {bead_id}
->
-> Read `.claude/commands/decompose-bead.md` and follow its full process
-> for this bead. The sizing check recommends decomposition because:
->
-> {list reasons from bd-sizing-check.sh verdict}
->
-> **Autonomous mode:** make best-guess decisions about hierarchy
-> structure; do not use AskUserQuestion. Flag genuinely ambiguous work
-> areas in your report rather than stopping.
->
-> When done, report:
-> - New epic id (if the original bead was promoted).
-> - Number of child beads created.
-> - The hierarchy in ASCII form.
+- `needs_decomposition == false` **or** the bead is already an epic
+  (has children) → skip to Phase 5.
+- `needs_decomposition == true` **and** the bead is a leaf →
+  **delegate to subagent**: "Read `.claude/commands/decompose-bead.md`
+  and run its full process for `{bead_id}` autonomously. Reasons from
+  sizing check: `{reasons}`. No AskUserQuestion — flag genuinely
+  ambiguous work areas in the report rather than stopping. Report: new
+  epic id (if promoted), child-bead count, ASCII hierarchy."
 
 **After decomposition completes**, re-run `bd-state.sh` on the (possibly
 promoted) epic id; proceed to Phase 5 to enrich the leaves.
@@ -353,29 +251,14 @@ for leaf in $(bd show <epic-id> | parse children); do
 done
 ```
 
-If every leaf is already enriched (exit 0), skip to Phase 5.5.
-
-If any leaf is unenriched (exit 1), **delegate to an analyze subagent**:
-
-**Subagent prompt skeleton:**
-
-> # Analyze bead: {epic_id}
->
-> Read `.claude/commands/analyze-bead.md` and follow its full process
-> for this epic. Some leaf children lack Implementation Context in their
-> notes:
->
-> {list unenriched leaf ids}
->
-> **Skip Phase 1.5** (decomposition assessment) — decomposition is already
-> complete. **Start from Phase 2** (Map the Hierarchy) and continue through
-> Phase 5 (Store Analysis in Bead Notes) for every unenriched leaf.
->
-> **Autonomous mode:** proceed through all leaves without pausing. Flag
-> any issues in your report rather than stopping to ask.
->
-> When done, report the execution waves and confirm every leaf's notes
-> contains an `Implementation Context` block.
+- All leaves enriched (exit 0 each) → skip to Phase 5.5.
+- Any unenriched (exit 1) → **delegate to subagent**: "Read
+  `.claude/commands/analyze-bead.md` and run its full process for
+  `{epic_id}` autonomously. Unenriched leaves: `{ids}`. Skip Phase 1.5
+  (decomposition is already complete); start from Phase 2 (Map
+  Hierarchy) through Phase 5 (Store Analysis). No AskUserQuestion —
+  flag issues rather than pausing. Report execution waves and confirm
+  every leaf's notes contains an `Implementation Context` block."
 
 **After analyze completes**, re-run `bd-enrichment-check.sh` on every leaf
 as a belt-and-braces check. If any leaf is still unenriched, **exit (bug,
@@ -611,54 +494,23 @@ the human can inspect the partial work. Safeguard 5.
 
 ### PHASE 8 — Finalize PR (delegated)
 
-**Main agent delegates to a PR-finalization subagent.**
+**Main agent delegates to a PR-finalization subagent** that runs this
+sequence:
 
-**Subagent prompt skeleton:**
-
-> # Finalize PR for bead: {primary_bead_id} (branch: {branch_name})
->
-> 1. Verify every target bead is closed:
->
->    ```bash
->    bd show <bead-id>
->    ```
->
->    For an epic run, that's the epic + every leaf child. For a leaf
->    run, just the one bead. If any target bead is still OPEN or
->    IN_PROGRESS, stop and report "UNCLOSED: <bead-id>".
->
-> 2. Render the PR body:
->
->    ```bash
->    bash .claude/skills/bead-branch-and-pr/pr-body.sh {primary_id} [<additional-ids>...]
->    ```
->
->    Capture the stdout markdown.
->
-> 3. Derive the PR title from the primary bead's title (strip the
->    `Epic:` prefix if present). Use `commit-msg.sh` formatting if
->    single-bead:
->
->    ```bash
->    bash .claude/skills/bead-branch-and-pr/commit-msg.sh {primary_id} "<short summary>"
->    ```
->
-> 4. Push the branch:
->
->    ```bash
->    git push -u origin "{branch_name}"
->    ```
->
-> 5. Create the PR:
->
->    ```bash
->    gh pr create --title "<title>" --body "<body>"
->    ```
->
->    Capture the PR URL from the output.
->
-> 6. Report: "PR: <url>" on success; "UNCLOSED: <bead-id>" if step 1
->    failed; "ERROR: <message>" for any other failure.
+1. Verify every target bead is CLOSED via `bd show <bead-id>` (epic +
+   every leaf child for an epic run; just the one bead for a leaf
+   run). Any OPEN or IN_PROGRESS → stop and report
+   `UNCLOSED: <bead-id>`.
+2. Render PR body:
+   `bash .claude/skills/bead-branch-and-pr/pr-body.sh {primary_id} [<additional-ids>...]`.
+3. Derive PR title from the primary bead's title (strip `Epic:` prefix
+   if present); for single-bead runs, format with
+   `.claude/skills/bead-branch-and-pr/commit-msg.sh`.
+4. Push: `git push -u origin "{branch_name}"`.
+5. Create PR: `gh pr create --title "<title>" --body "<body>"`, capture
+   the URL.
+6. Report `PR: <url>` on success; `UNCLOSED: <bead-id>` if step 1
+   failed; `ERROR: <message>` for any other failure.
 
 **Main agent routes on subagent report:**
 
