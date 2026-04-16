@@ -1,0 +1,13 @@
+{
+  "state": "unshaped",
+  "missing_phases": [
+    "shaped",
+    "decomposed",
+    "analyzed"
+  ],
+  "reasons": [
+    "missing or empty DESCRIPTION",
+    "missing DESIGN section",
+    "missing ACCEPTANCE CRITERIA section"
+  ]
+}

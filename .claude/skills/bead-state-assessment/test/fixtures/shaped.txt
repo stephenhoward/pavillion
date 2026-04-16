@@ -1,0 +1,14 @@
+○ pv-shape · Example shaped leaf bead   [● P2 · OPEN]
+Owner: Stephen Howard · Type: task
+Created: 2026-04-16 · Updated: 2026-04-16
+
+DESCRIPTION
+Add a cancel button to the event edit modal that discards unsaved changes after a confirmation dialog. The cancel button should appear alongside the save button in the modal footer and use the existing modal action pattern.
+
+DESIGN
+Introduce a new confirmation modal variant that re-uses the existing ModalDialog component. When the cancel button is clicked, if the form is dirty, show the confirmation; if confirmed, emit 'cancel' and close. Otherwise close immediately.
+
+ACCEPTANCE CRITERIA
+- [ ] Cancel button visible in edit_event.vue modal footer
+- [ ] Clicking cancel on a dirty form shows a confirmation
+- [ ] Confirming closes the modal without saving

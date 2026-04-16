@@ -1,0 +1,8 @@
+{
+  "needs_decomposition": true,
+  "reasons": [
+    "implies 6 or more files",
+    "spans multiple domains (backend=4, frontend=5, translation=2, federation=0)",
+    "7 independent deliverables listed"
+  ]
+}

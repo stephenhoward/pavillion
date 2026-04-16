@@ -1,0 +1,6 @@
+{
+  "needs_decomposition": false,
+  "reasons": [
+    "fewer than 4 files, single domain, few deliverables — fits leaf size"
+  ]
+}

@@ -136,21 +136,11 @@ Does this look right?
 
 ### Step 8: Advisory Review
 
-After the design and acceptance criteria are drafted, consult advisory sub-agents to evaluate the formed plan for potential issues. The advisors review the complete picture — scope, technical design, and acceptance criteria — to catch problems before code is written.
+Consult advisory sub-agents to evaluate the formed plan — scope, technical design, acceptance criteria — and catch problems before code is written.
 
-**Step 8a: Discover and select applicable advisors**
+Pick advisors via the [`agent-discovery`](../skills/agent-discovery/SKILL.md) skill. Pipe the design's **Key Files** (Step 6) one per line into `match-agents.sh advisor`; the JSON array it emits is the advisor set. (The same matcher backs `/shape-bead` and `/process-backlog` so all three commands select advisors identically.) If the array is empty, ask the user whether to proceed without advisory review or revisit the design.
 
-Discover all available advisor agents dynamically:
-
-```bash
-ls .claude/agents/*-advisor.md
-```
-
-Read each advisor's frontmatter `description` to understand what it reviews and when it applies. Match advisors to the feature based on what the work involves — e.g., an advisor whose description mentions "security" is relevant if the feature touches auth, APIs, or data storage; one mentioning "privacy" is relevant if PII handling is involved.
-
-**Step 8b: Run matched advisors in parallel using the Task tool**
-
-Provide the full plan inline in each advisor's prompt. Use this template, adapted to each advisor's focus area:
+Spawn every matched advisor **in a single Task tool batch** (parallel fan-out per the skill's parallel-spawn pattern). Provide the full plan inline using this template, adapted per advisor:
 
 > Review this implementation plan for [advisor's focus area]. The plan is fully formed but no code has been written yet.
 >
@@ -163,18 +153,13 @@ Provide the full plan inline in each advisor's prompt. Use this template, adapte
 >
 > Adapt your normal review process to work with an implementation plan rather than a completed spec.
 
-**Step 8c: Present findings to user**
+Apply the [`review-mode-advisor`](../skills/review-mode-advisor/SKILL.md) verdict protocol exactly as documented in agent-discovery's "Verdict interpretation" section:
 
-After receiving advisor reports:
+- **All APPROVE** — Note "Advisory review passed — no concerns flagged" and proceed to Step 9.
+- **APPROVE WITH CONDITIONS or REQUEST CHANGES** — Surface concerns via AskUserQuestion; agree adjustments; revise the relevant draft fields; **re-run only the affected advisors once** with the revised plan.
+- **REQUEST CHANGES still present after that single refinement** — Escalate to the user and stop before writing to the bead.
 
-If any advisor returns "REQUEST CHANGES" or "APPROVE WITH CONDITIONS":
-- Present the concerns clearly to the user via AskUserQuestion
-- Ask how they'd like to address each concern (adjust scope, modify design, add acceptance criteria, accept risk)
-- Incorporate agreed adjustments into the relevant field drafts before writing to the bead
-- Note advisor findings and decisions for inclusion in bead notes
-
-If all advisors return "APPROVE":
-- Briefly note this to the user ("Advisory review passed — no concerns flagged") and proceed
+Record advisor verdicts and any agreed adjustments for inclusion in bead notes (Step 9).
 
 ### Step 9: Create Bead and Write Fields
 
@@ -293,7 +278,7 @@ Use the Task tool to spawn a general-purpose subagent:
 
 **Prompt:**
 
-> Read `.claude/commands/agent-os/decompose-bead.md` and follow its full
+> Read `.claude/commands/decompose-bead.md` and follow its full
 > process for bead `<bead-id>`.
 >
 > The bead is already shaped (has description, design, acceptance, notes,
@@ -313,7 +298,7 @@ Use the Task tool to spawn a general-purpose subagent:
 
 **Prompt:**
 
-> Read `.claude/commands/agent-os/analyze-bead.md` and follow its full
+> Read `.claude/commands/analyze-bead.md` and follow its full
 > process for bead `<epic-id>`.
 >
 > The bead already has children and leaves from decomposition. Skip

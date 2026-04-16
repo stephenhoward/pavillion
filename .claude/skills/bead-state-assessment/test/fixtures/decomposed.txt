@@ -1,0 +1,20 @@
+○ pv-decomp [EPIC] · Example decomposed epic   [● P3 · OPEN]
+Owner: Stephen Howard · Type: epic
+Created: 2026-04-16 · Updated: 2026-04-16
+
+DESCRIPTION
+Add password reset functionality with email verification for all user accounts. Users should be able to request a reset, receive a token via email, and set a new password.
+
+DESIGN
+Create a reset token table, a request-reset endpoint, an email template, and a set-new-password endpoint. Tokens expire after 30 minutes. Only one active token per account.
+
+ACCEPTANCE CRITERIA
+- [ ] Token table created with proper indexes
+- [ ] Request-reset endpoint rate limited
+- [ ] Email template includes translated reset link
+
+CHILDREN
+  ↳ ○ pv-decomp.1: Create reset-token entity and migration ● P3
+  ↳ ○ pv-decomp.2: Add request-reset API endpoint ● P3
+  ↳ ○ pv-decomp.3: Add set-new-password API endpoint ● P3
+  ○ 0/3 complete (0%)

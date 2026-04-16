@@ -1,0 +1,21 @@
+✓ pv-done.1 · Example closed leaf   [● P1 · CLOSED]
+Owner: Stephen Howard · Type: task
+Created: 2026-02-05 · Updated: 2026-02-05
+Close reason: Closed
+
+DESCRIPTION
+Cancel button added to edit_event.vue modal.
+
+DESIGN
+See parent epic for design.
+
+ACCEPTANCE CRITERIA
+- [x] Cancel button renders
+
+NOTES
+
+# Implementation Context
+Generated: 2026-02-05
+
+## Files Modified
+- `src/client/components/calendar/edit_event.vue`

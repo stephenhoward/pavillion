@@ -1,0 +1,12 @@
+[
+  {
+    "id": "pv-weird",
+    "title": "Fix: don't break Alice's slash/underscore_thing (really!)",
+    "issue_type": "bug",
+    "status": "open",
+    "priority": 2,
+    "description": "Normalize odd characters in titles.",
+    "notes": "",
+    "parent": null
+  }
+]

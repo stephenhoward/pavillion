@@ -1,0 +1,138 @@
+---
+name: bead-state-assessment
+description: Classify a bead's lifecycle state and decide the next phase. Use this skill when routing a bead through shape/decompose/analyze/execute, when deciding whether a bead should be split, or when an orchestrator needs a deterministic verdict on bead readiness before dispatching work.
+---
+
+# Bead State Assessment
+
+This skill classifies any bead into one of six lifecycle states and recommends
+the next phase. Its prose documents the state machine for humans; its scripts
+deliver deterministic JSON verdicts for orchestrators.
+
+Consumers: `/process-backlog`, `/shape-bead`, `/spawn-bead-workers`,
+`/analyze-bead`.
+
+## The state machine
+
+A bead moves through these states, in order:
+
+```
+unshaped -> shaped -> decomposed -> analyzed -> executing -> complete
+```
+
+Each state is a milestone — a durable property of the bead — not a status
+flag. A bead's state is the highest milestone it has reached. The `bd status`
+field (OPEN / IN_PROGRESS / CLOSED) overrides the milestone walk for the two
+terminal states (`executing`, `complete`) because those are real-time facts,
+not document-structure signals.
+
+### State definitions
+
+| State | Signal |
+|---|---|
+| `unshaped` | DESCRIPTION is missing, empty, or the bead lacks one of DESIGN / ACCEPTANCE CRITERIA sections. This is a raw idea, not yet ready for any review. |
+| `shaped` | DESCRIPTION is present and non-empty, AND the bead has both DESIGN and ACCEPTANCE CRITERIA sections. Advisors can meaningfully review it. |
+| `decomposed` | The bead has a CHILDREN section listing at least one child bead. Epics live here once they have leaves. |
+| `analyzed` | The bead's notes contain "Implementation Context". `/analyze-bead` has enriched the notes with files to modify, relevant tests, skills to apply, standards to follow, and acceptance criteria. An implementer can now be dispatched. |
+| `executing` | Bead's status is IN_PROGRESS. Work is underway. |
+| `complete` | Bead's status is CLOSED. Work is done. |
+
+### Why these signals
+
+The signals come from the artifacts each phase produces, not from labels or
+metadata. A bead is "shaped" because a human (or an auto-shape subagent)
+wrote a design and acceptance criteria — those are the visible output of
+shaping. A bead is "analyzed" because `/analyze-bead` wrote an Implementation
+Context block — that is the visible output of analysis. Classification by
+artifact means state cannot drift out of sync with reality.
+
+## Next-phase decision tree
+
+Given a bead's state, the orchestrator picks the next phase:
+
+```
+state == unshaped     -> run /shape-bead (or auto-shape subagent)
+state == shaped       -> run advisors on the shaped bead; if sizing check
+                         recommends decomposition, run /decompose-bead next;
+                         otherwise run /analyze-bead
+state == decomposed   -> walk to each leaf child; apply this decision tree
+                         to every leaf whose state is < analyzed. When every
+                         leaf is analyzed, the epic is ready to spawn workers
+state == analyzed     -> dispatch an implementer (single-leaf) or spawn a
+                         worker wave (epic with analyzed leaves)
+state == executing    -> wait; the bead is already being worked on
+state == complete     -> skip; nothing to do
+```
+
+The `missing_phases` array returned by `bd-state.sh` is the direct input
+to this tree. If `analyzed` appears in `missing_phases`, the next phase is
+`/analyze-bead`. If `decomposed` appears, sizing dictates whether
+decomposition is needed.
+
+## Sizing heuristic: when should a bead be decomposed?
+
+The `bd-sizing-check.sh` script applies a **2-of-3** rule over the bead's
+DESCRIPTION + DESIGN text. If at least two of these criteria trigger, the
+bead should be decomposed before analysis:
+
+1. **4+ files implied.** The description mentions at least four distinct
+   file paths (by extension — `.ts`, `.vue`, `.scss`, `.sql`, etc.). A bead
+   that touches this many files usually crosses layer boundaries.
+2. **Multi-domain span.** The description activates more than one of these
+   keyword domains: backend (API / service / entity / migration),
+   frontend (Vue / component / Pinia / site / client / SCSS), translation
+   (locale / i18n), or federation (ActivityPub / inbox / outbox / actor).
+3. **Multiple independent deliverables.** The description lists at least
+   four bullet / numbered items that are independent of each other.
+
+A bead that hits only one criterion is usually a cohesive leaf. A bead that
+hits two or three should be split so each child stays within a single
+domain and a single cohesive deliverable — leaf size is what an implementer
+can complete in a single session without running out of context.
+
+## Scripts
+
+All scripts accept either a bead id (they call `bd show` internally) or
+`--fixture <path>` for testing against captured output. They emit JSON on
+stdout and exit 2 with a usage message on missing arguments. They never
+string-concatenate `bd show` output into JSON — `jq -n` handles quoting.
+
+### `bd-state.sh <id>`
+
+Emits `{state, missing_phases[], reasons[]}`. `missing_phases` lists the
+milestones the bead has not yet reached (its content drives the next-phase
+decision tree). `reasons` documents which signals triggered, so the
+orchestrator and human reviewers can see the justification.
+
+Example: a decomposed epic produces
+`{"state":"decomposed","missing_phases":["analyzed"],"reasons":["has non-empty DESCRIPTION","has DESIGN section","has ACCEPTANCE CRITERIA section","has CHILDREN with at least one child bead"]}`.
+
+### `bd-enrichment-check.sh <id>`
+
+Silent single-purpose check: exits 0 if the bead's notes contain
+"Implementation Context", exits 1 otherwise. Implementer subagents use this
+as a pre-flight assertion per the `implementer-prompt-template` skill's
+refusal protocol. Keeping it separate from `bd-state.sh` means the
+implementer refusal check is one `grep -q`, not a JSON parse.
+
+### `bd-sizing-check.sh <id>`
+
+Emits `{needs_decomposition, reasons[]}` per the 2-of-3 heuristic above.
+The `reasons` array captures which criteria triggered and by how much, so
+the surfacing prompt in `/analyze-bead` can explain *why* decomposition is
+recommended.
+
+## Tests
+
+Fixture-based bash tests in `test/`. Each fixture is a captured `bd show`
+output; the runner pipes each fixture through the scripts and diffs the
+JSON against `test/expected/`. Run `bash test/run.sh` from anywhere.
+
+## Cross-references
+
+- `epic-bead-workflow` — bead semantics and the state progression this
+  skill classifies against
+- `bead-backlog-selection` — consumes `bd-state.sh` to pick next actions
+  on ready beads
+- `implementer-prompt-template` — uses `bd-enrichment-check.sh` as its
+  pre-flight refusal gate

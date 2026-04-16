@@ -1,0 +1,12 @@
+{
+  "state": "analyzed",
+  "missing_phases": [
+    "decomposed"
+  ],
+  "reasons": [
+    "has non-empty DESCRIPTION",
+    "has DESIGN section",
+    "has ACCEPTANCE CRITERIA section",
+    "notes contain Implementation Context"
+  ]
+}

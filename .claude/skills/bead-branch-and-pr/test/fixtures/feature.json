@@ -1,0 +1,12 @@
+[
+  {
+    "id": "pv-abcd",
+    "title": "Add event external URL field",
+    "issue_type": "feature",
+    "status": "open",
+    "priority": 2,
+    "description": "Add an optional external URL field to events with a prompt enum.",
+    "notes": "\n# Implementation Context\n\n## Acceptance Criteria\n- [ ] Schema migration applied\n- [ ] API accepts new field\n- [ ] Frontend form renders input\n",
+    "parent": null
+  }
+]
