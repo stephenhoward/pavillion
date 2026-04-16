@@ -123,7 +123,18 @@ function openCreateCategory() {
  * list, auto-select the new category, and notify the parent editor.
  */
 function onCategorySaved(savedCategory) {
-  state.availableCategories = [...state.availableCategories, savedCategory];
+  // Why: CategoryService.loadCategories() returns the same array reference that
+  // Pinia stores in categoryStore.categories[calendarId]. CategoryService.saveCategory()
+  // then mutates that same array via store.addCategory(...).push(savedCategory) before
+  // emitting 'saved'. As a result, state.availableCategories has already grown by one
+  // when this handler runs, so a naive [...state.availableCategories, savedCategory]
+  // would render the new chip twice. Dedupe by id to stay correct regardless of whether
+  // the saved category is already present (defensive — fixing the broader service/store
+  // coupling is out of scope for this bead; see pv-asqb).
+  const existingIds = new Set(state.availableCategories.map(c => c.id));
+  if (!existingIds.has(savedCategory.id)) {
+    state.availableCategories = [...state.availableCategories, savedCategory];
+  }
   if (!state.selectedCategoryIds.includes(savedCategory.id)) {
     state.selectedCategoryIds.push(savedCategory.id);
     emit('categoriesChanged', [...state.selectedCategoryIds]);

@@ -327,6 +327,52 @@ describe('CategorySelector', () => {
       expect(festivalsChip?.attributes('aria-checked')).toBe('true');
     });
 
+    it('should not duplicate the chip when the saved category is already in availableCategories', async () => {
+      // Why: CategoryService.loadCategories() returns the same array reference that
+      // Pinia's categoryStore holds, and CategoryService.saveCategory() mutates that
+      // shared array via store.addCategory(...).push(savedCategory) BEFORE emitting
+      // 'saved'. This test simulates that real-world condition by mutating the
+      // returned array between mount and the 'saved' emit. Without the dedupe-by-id
+      // guard in onCategorySaved, the chip would render twice.
+      const sharedArray = [...testCategories];
+      mockLoadCategories.mockResolvedValue(sharedArray);
+
+      wrapper = createWrapper({
+        selectedCategories: [],
+      });
+
+      await nextTick();
+      await nextTick();
+
+      // Baseline: 3 seeded chips
+      expect(wrapper.findAll('.toggle-chip').length).toBe(3);
+
+      // Open modal
+      await wrapper.find('[data-test="add-category-button"]').trigger('click');
+      await nextTick();
+
+      const modal = wrapper.findComponent(CategoryEditor);
+      const newCategory = createTestCategory('cat-new', 'Festivals');
+
+      // Simulate the service mutating the shared array (as the real
+      // CategoryService.saveCategory does via store.addCategory) BEFORE
+      // emitting 'saved'.
+      sharedArray.push(newCategory);
+      modal.vm.$emit('saved', newCategory);
+      await nextTick();
+
+      // Exactly ONE new chip rendered (3 existing + 1 new = 4), not two
+      const chips = wrapper.findAll('.toggle-chip');
+      expect(chips.length).toBe(4);
+
+      // And exactly one chip with the new category's label
+      const festivalsChips = chips.filter((c: any) => c.text() === 'Festivals');
+      expect(festivalsChips.length).toBe(1);
+
+      // Still auto-selected
+      expect(festivalsChips[0].attributes('aria-checked')).toBe('true');
+    });
+
     it('should hide the "+ New category" button during loading', async () => {
       // Make loadCategories return a never-resolving promise so the component
       // stays in its loading state.
