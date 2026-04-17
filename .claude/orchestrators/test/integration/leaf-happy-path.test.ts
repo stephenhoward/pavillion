@@ -12,8 +12,6 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { PhaseName } from '../../lib/types.js';
 import { runStateMachine, type OrchestratorCtx } from '../../process-backlog.js';
 import {
@@ -33,12 +31,6 @@ import {
   ScriptRouter,
   DispatchRouter,
 } from './helpers.js';
-
-const FIXTURES = join(import.meta.dirname, '..', 'fixtures');
-
-function fixture(path: string): string {
-  return readFileSync(join(FIXTURES, path), 'utf-8');
-}
 
 // ---------------------------------------------------------------------------
 // Bead text helpers for classifyBeadState()
@@ -141,7 +133,18 @@ describe('Integration: leaf happy path', () => {
       }
       // bd show --json: used in branch phase for title+type, and by PR phase
       if (a.includes('show') && a.includes('--json')) {
-        return { exitCode: 0, stdout: fixture('sh/bd-show-leaf-closed.json'), stderr: '' };
+        return {
+          exitCode: 0,
+          stdout: JSON.stringify([{
+            id: 'pv-test.1',
+            title: 'Implement widget feature',
+            issue_type: 'task',
+            status: 'closed',
+            description: 'Implement a calendar widget.',
+            notes: '',
+          }]),
+          stderr: '',
+        };
       }
       // bd show (text): used by bdState, bdSizingCheck, bdEnrichmentCheck
       // Use shapedBeadText so assessState returns 'shaped' and sizing says no-decompose.
