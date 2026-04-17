@@ -1,0 +1,726 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { ChildProcess, SpawnSyncReturns } from 'node:child_process';
+import { EventEmitter } from 'node:events';
+import { Readable } from 'node:stream';
+import { PhaseName, type RunContext, type RunLogger } from '../../lib/types.js';
+import type { ExecuteDeps, PhaseCtx } from '../../lib/execute.js';
+
+// ---------------------------------------------------------------------------
+// Test helpers
+// ---------------------------------------------------------------------------
+
+function stubLogger(): {
+  logger: RunLogger;
+  logs: { phase: PhaseName; kind: 'out' | 'err'; data: string }[];
+  runJsonEntries: Record<string, unknown>[];
+} {
+  const logs: { phase: PhaseName; kind: 'out' | 'err'; data: string }[] = [];
+  const runJsonEntries: Record<string, unknown>[] = [];
+
+  const logger: RunLogger = {
+    writePhaseLog(phase, kind, data) {
+      logs.push({ phase, kind, data });
+    },
+    appendRunJson(entry) {
+      runJsonEntries.push(entry);
+    },
+    runDir() {
+      return '/tmp/fake-run-dir';
+    },
+  };
+
+  return { logger, logs, runJsonEntries };
+}
+
+function createMockChild(
+  stdout: string,
+  stderr: string,
+  exitCode: number,
+): ChildProcess & EventEmitter {
+  const child = new EventEmitter() as ChildProcess & EventEmitter;
+
+  const stdoutStream = new Readable({ read() {} });
+  const stderrStream = new Readable({ read() {} });
+
+  child.stdin = { write: vi.fn(), end: vi.fn() } as unknown as ChildProcess['stdin'];
+  child.stdout = stdoutStream;
+  child.stderr = stderrStream;
+  child.pid = 12345;
+  child.kill = vi.fn().mockReturnValue(true);
+
+  setImmediate(() => {
+    if (stdout) stdoutStream.push(stdout);
+    stdoutStream.push(null);
+    if (stderr) stderrStream.push(stderr);
+    stderrStream.push(null);
+    child.emit('close', exitCode);
+  });
+
+  return child;
+}
+
+function fakeSpawnResult(
+  stdout: string,
+  stderr: string,
+  status: number,
+): SpawnSyncReturns<Buffer> {
+  return {
+    stdout: Buffer.from(stdout, 'utf-8'),
+    stderr: Buffer.from(stderr, 'utf-8'),
+    status,
+    signal: null,
+    pid: 1234,
+    output: [null, Buffer.from(stdout), Buffer.from(stderr)],
+  };
+}
+
+function makeCtx(logStub: ReturnType<typeof stubLogger>): RunContext {
+  return {
+    runId: 'test-run-1',
+    beadId: 'pv-test-1',
+    logger: logStub.logger,
+    phaseHistory: [],
+  };
+}
+
+function makePhaseCtx(logStub: ReturnType<typeof stubLogger>): PhaseCtx {
+  return {
+    runId: 'test-run-1',
+    beadId: 'pv-test-1',
+    logger: logStub.logger,
+    phaseHistory: [],
+    dryRun: false,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Standard fixtures
+// ---------------------------------------------------------------------------
+
+const CLOSED_LEAF_JSON = JSON.stringify([{
+  title: 'Fix widget alignment',
+  status: 'closed',
+  issue_type: 'task',
+}]);
+
+const CLOSED_EPIC_JSON = JSON.stringify([{
+  title: 'Epic: Redesign dashboard',
+  status: 'closed',
+  issue_type: 'epic',
+  children: [{ id: 'pv-test-1.1' }, { id: 'pv-test-1.2' }],
+}]);
+
+const CLOSED_CHILD_JSON = JSON.stringify([{
+  title: 'Child bead',
+  status: 'closed',
+  issue_type: 'task',
+}]);
+
+const OPEN_BEAD_JSON = JSON.stringify([{
+  title: 'Still open',
+  status: 'in_progress',
+  issue_type: 'task',
+}]);
+
+// =============================================================================
+// dispatchImplementer
+// =============================================================================
+
+describe('dispatchImplementer', () => {
+  let logStub: ReturnType<typeof stubLogger>;
+  let ctx: RunContext;
+
+  beforeEach(() => {
+    logStub = stubLogger();
+    ctx = makeCtx(logStub);
+  });
+
+  it('should return ok:true on successful dispatch', async () => {
+    const { dispatchImplementer } = await import('../../lib/execute.js');
+
+    const mockSpawnFn = vi.fn().mockReturnValue(
+      createMockChild(JSON.stringify({ status: 'closed' }), '', 0),
+    );
+
+    const result = await dispatchImplementer('pv-test-1', ctx, {
+      spawnFn: mockSpawnFn,
+    });
+
+    expect(result.ok).toBe(true);
+
+    // Verify prompt contains bead id
+    const child = mockSpawnFn.mock.results[0].value;
+    const writtenPrompt = child.stdin.write.mock.calls[0][0] as string;
+    expect(writtenPrompt).toContain('pv-test-1');
+    expect(writtenPrompt).toContain('Implement Bead');
+  });
+
+  it('should return ok:false on dispatch timeout', async () => {
+    const { dispatchImplementer } = await import('../../lib/execute.js');
+
+    const child = new EventEmitter() as ChildProcess & EventEmitter;
+    const stdoutStream = new Readable({ read() {} });
+    const stderrStream = new Readable({ read() {} });
+    child.stdin = { write: vi.fn(), end: vi.fn() } as unknown as ChildProcess['stdin'];
+    child.stdout = stdoutStream;
+    child.stderr = stderrStream;
+    child.pid = 12345;
+    child.kill = vi.fn().mockImplementation(() => {
+      setImmediate(() => {
+        stdoutStream.push(null);
+        stderrStream.push(null);
+        child.emit('close', null, 'SIGTERM');
+      });
+      return true;
+    });
+
+    const mockSpawnFn = vi.fn().mockReturnValue(child);
+
+    const result = await dispatchImplementer('pv-test-1', ctx, {
+      spawnFn: mockSpawnFn,
+      timeoutMs: 50,
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.reason).toContain('timed out');
+  });
+
+  it('should include retry context concerns in prompt when provided', async () => {
+    const { dispatchImplementer } = await import('../../lib/execute.js');
+
+    const mockSpawnFn = vi.fn().mockReturnValue(
+      createMockChild(JSON.stringify({ status: 'closed' }), '', 0),
+    );
+
+    const result = await dispatchImplementer('pv-test-1', ctx, {
+      spawnFn: mockSpawnFn,
+      retryContext: { concerns: ['Missing null check'], attempt: 2 },
+    });
+
+    expect(result.ok).toBe(true);
+
+    const child = mockSpawnFn.mock.results[0].value;
+    const writtenPrompt = child.stdin.write.mock.calls[0][0] as string;
+    expect(writtenPrompt).toContain('Missing null check');
+    expect(writtenPrompt).toContain('Previous audit failed');
+  });
+});
+
+// =============================================================================
+// runAudit
+// =============================================================================
+
+describe('runAudit', () => {
+  let logStub: ReturnType<typeof stubLogger>;
+  let ctx: RunContext;
+
+  beforeEach(() => {
+    logStub = stubLogger();
+    ctx = makeCtx(logStub);
+  });
+
+  it('should return passed:true when no changed files', async () => {
+    const { runAudit } = await import('../../lib/execute.js');
+
+    const result = await runAudit('pv-test-1', ctx, {
+      changedFiles: [],
+    });
+
+    expect(result.passed).toBe(true);
+    expect(result.verdicts).toHaveLength(0);
+  });
+
+  it('should aggregate verdicts from matched auditors', async () => {
+    const { runAudit } = await import('../../lib/execute.js');
+
+    const passVerdict = {
+      agent: 'architecture-auditor',
+      verdict: 'pass',
+      concerns: [],
+      recommendations: [],
+      beadId: 'pv-test-1',
+    };
+
+    const mockSpawnFn = vi.fn().mockReturnValue(
+      createMockChild(JSON.stringify(passVerdict), '', 0),
+    );
+
+    const matchResult = [
+      { name: 'architecture-auditor', path: '.claude/agents/arch.md', description: 'Arch', rationale: 'Match' },
+    ];
+
+    const mockSpawnSync = vi.fn().mockReturnValue({
+      stdout: Buffer.from(JSON.stringify(matchResult)),
+      stderr: Buffer.from(''),
+      status: 0,
+    });
+
+    const result = await runAudit('pv-test-1', ctx, {
+      spawnFn: mockSpawnFn,
+      scriptSpawnFn: mockSpawnSync,
+      changedFiles: ['src/server/calendar/service/calendar.ts'],
+    });
+
+    expect(result.passed).toBe(true);
+    expect(result.verdicts).toHaveLength(1);
+  });
+
+  it('should return passed:false when auditor fails', async () => {
+    const { runAudit } = await import('../../lib/execute.js');
+
+    const failVerdict = {
+      agent: 'security-auditor',
+      verdict: 'fail',
+      concerns: ['XSS vulnerability'],
+      recommendations: [],
+      beadId: 'pv-test-1',
+    };
+
+    const mockSpawnFn = vi.fn().mockReturnValue(
+      createMockChild(JSON.stringify(failVerdict), '', 0),
+    );
+
+    const matchResult = [
+      { name: 'security-auditor', path: '.claude/agents/sec.md', description: 'Sec', rationale: 'Match' },
+    ];
+
+    const mockSpawnSync = vi.fn().mockReturnValue({
+      stdout: Buffer.from(JSON.stringify(matchResult)),
+      stderr: Buffer.from(''),
+      status: 0,
+    });
+
+    const result = await runAudit('pv-test-1', ctx, {
+      spawnFn: mockSpawnFn,
+      scriptSpawnFn: mockSpawnSync,
+      changedFiles: ['src/server/calendar/service/calendar.ts'],
+    });
+
+    expect(result.passed).toBe(false);
+    expect(result.concerns).toContain('XSS vulnerability');
+  });
+});
+
+// =============================================================================
+// runLeafExecution
+// =============================================================================
+
+describe('runLeafExecution', () => {
+  let logStub: ReturnType<typeof stubLogger>;
+  let ctx: RunContext;
+
+  beforeEach(() => {
+    logStub = stubLogger();
+    ctx = makeCtx(logStub);
+  });
+
+  it('should complete on happy path (impl ok + audit pass)', async () => {
+    const { runLeafExecution } = await import('../../lib/execute.js');
+
+    const implementerResult = { status: 'closed' };
+    const auditVerdict = {
+      agent: 'arch-auditor',
+      verdict: 'pass',
+      concerns: [],
+      recommendations: [],
+      beadId: 'pv-test-1',
+    };
+
+    let dispatchCount = 0;
+    const mockSpawnFn = vi.fn().mockImplementation(() => {
+      dispatchCount++;
+      if (dispatchCount === 1) {
+        return createMockChild(JSON.stringify(implementerResult), '', 0);
+      }
+      return createMockChild(JSON.stringify(auditVerdict), '', 0);
+    });
+
+    const matchResult = [
+      { name: 'arch-auditor', path: '.claude/agents/arch.md', description: 'Arch', rationale: 'Match' },
+    ];
+
+    const mockSpawnSync = vi.fn().mockReturnValue({
+      stdout: Buffer.from(JSON.stringify(matchResult)),
+      stderr: Buffer.from(''),
+      status: 0,
+    });
+
+    const result = await runLeafExecution('pv-test-1', ctx, {
+      spawnFn: mockSpawnFn,
+      scriptSpawnFn: mockSpawnSync,
+      changedFiles: ['src/server/calendar/service/calendar.ts'],
+    });
+
+    expect(result.outcome).toBe('complete');
+    expect(result.retryCount).toBe(0);
+  });
+
+  it('should complete with retryCount=1 on audit fail then pass', async () => {
+    const { runLeafExecution } = await import('../../lib/execute.js');
+
+    const implementerResult = { status: 'closed' };
+    const failVerdict = {
+      agent: 'sec-auditor',
+      verdict: 'fail',
+      concerns: ['Missing validation'],
+      recommendations: [],
+      beadId: 'pv-test-1',
+    };
+    const passVerdict = {
+      agent: 'sec-auditor',
+      verdict: 'pass',
+      concerns: [],
+      recommendations: [],
+      beadId: 'pv-test-1',
+    };
+
+    let dispatchCount = 0;
+    const mockSpawnFn = vi.fn().mockImplementation(() => {
+      dispatchCount++;
+      switch (dispatchCount) {
+        case 1: return createMockChild(JSON.stringify(implementerResult), '', 0);
+        case 2: return createMockChild(JSON.stringify(failVerdict), '', 0);
+        case 3: return createMockChild(JSON.stringify(implementerResult), '', 0);
+        case 4: return createMockChild(JSON.stringify(passVerdict), '', 0);
+        default: return createMockChild(JSON.stringify(implementerResult), '', 0);
+      }
+    });
+
+    const matchResult = [
+      { name: 'sec-auditor', path: '.claude/agents/sec.md', description: 'Sec', rationale: 'Match' },
+    ];
+
+    const mockSpawnSync = vi.fn().mockReturnValue({
+      stdout: Buffer.from(JSON.stringify(matchResult)),
+      stderr: Buffer.from(''),
+      status: 0,
+    });
+
+    const result = await runLeafExecution('pv-test-1', ctx, {
+      spawnFn: mockSpawnFn,
+      scriptSpawnFn: mockSpawnSync,
+      changedFiles: ['src/server/calendar/service/calendar.ts'],
+    });
+
+    expect(result.outcome).toBe('complete');
+    expect(result.retryCount).toBe(1);
+  });
+
+  it('should halt on audit fail after retry exhaustion', async () => {
+    const { runLeafExecution } = await import('../../lib/execute.js');
+
+    const implementerResult = { status: 'closed' };
+    const failVerdict = {
+      agent: 'sec-auditor',
+      verdict: 'fail',
+      concerns: ['Persistent issue'],
+      recommendations: [],
+      beadId: 'pv-test-1',
+    };
+
+    let dispatchCount = 0;
+    const mockSpawnFn = vi.fn().mockImplementation(() => {
+      dispatchCount++;
+      if (dispatchCount % 2 === 1) {
+        return createMockChild(JSON.stringify(implementerResult), '', 0);
+      }
+      return createMockChild(JSON.stringify(failVerdict), '', 0);
+    });
+
+    const matchResult = [
+      { name: 'sec-auditor', path: '.claude/agents/sec.md', description: 'Sec', rationale: 'Match' },
+    ];
+
+    const mockSpawnSync = vi.fn().mockImplementation((cmd: string) => {
+      if (typeof cmd === 'string' && cmd.includes('match-agents')) {
+        return {
+          stdout: Buffer.from(JSON.stringify(matchResult)),
+          stderr: Buffer.from(''),
+          status: 0,
+        };
+      }
+      return { stdout: Buffer.from('{}'), stderr: Buffer.from(''), status: 0 };
+    });
+
+    const result = await runLeafExecution('pv-test-1', ctx, {
+      spawnFn: mockSpawnFn,
+      scriptSpawnFn: mockSpawnSync,
+      changedFiles: ['src/server/calendar/service/calendar.ts'],
+      scriptExistsFn: () => true,
+    });
+
+    expect(result.outcome).toBe('halt');
+    expect(result.reason).toContain('retry exhausted');
+  });
+});
+
+// =============================================================================
+// runWithConcurrencyCap
+// =============================================================================
+
+describe('runWithConcurrencyCap', () => {
+  it('should respect concurrency cap', async () => {
+    const { runWithConcurrencyCap } = await import('../../lib/execute.js');
+
+    let concurrent = 0;
+    let maxConcurrent = 0;
+
+    const tasks = Array.from({ length: 6 }, (_, i) => async () => {
+      concurrent++;
+      maxConcurrent = Math.max(maxConcurrent, concurrent);
+      await new Promise(r => setTimeout(r, 10));
+      concurrent--;
+      return i;
+    });
+
+    const results = await runWithConcurrencyCap(tasks, 2);
+
+    expect(results).toEqual([0, 1, 2, 3, 4, 5]);
+    expect(maxConcurrent).toBeLessThanOrEqual(2);
+  });
+
+  it('should return results in order', async () => {
+    const { runWithConcurrencyCap } = await import('../../lib/execute.js');
+
+    const tasks = [
+      async () => { await new Promise(r => setTimeout(r, 30)); return 'slow'; },
+      async () => { await new Promise(r => setTimeout(r, 10)); return 'fast'; },
+      async () => { return 'instant'; },
+    ];
+
+    const results = await runWithConcurrencyCap(tasks, 3);
+    expect(results).toEqual(['slow', 'fast', 'instant']);
+  });
+});
+
+// =============================================================================
+// parseBeadJson
+// =============================================================================
+
+describe('parseBeadJson', () => {
+  it('should parse valid bd show --json output', async () => {
+    const { parseBeadJson } = await import('../../lib/execute.js');
+
+    const result = parseBeadJson(CLOSED_LEAF_JSON);
+    expect(result).toEqual({
+      title: 'Fix widget alignment',
+      status: 'closed',
+      issue_type: 'task',
+    });
+  });
+
+  it('should return null for invalid JSON', async () => {
+    const { parseBeadJson } = await import('../../lib/execute.js');
+    expect(parseBeadJson('not json')).toBeNull();
+  });
+
+  it('should return null for empty string', async () => {
+    const { parseBeadJson } = await import('../../lib/execute.js');
+    expect(parseBeadJson('')).toBeNull();
+  });
+
+  it('should return null for empty array', async () => {
+    const { parseBeadJson } = await import('../../lib/execute.js');
+    expect(parseBeadJson('[]')).toBeNull();
+  });
+});
+
+// =============================================================================
+// derivePrTitleFromBead
+// =============================================================================
+
+describe('derivePrTitleFromBead', () => {
+  it('should strip "Epic:" prefix for epic beads', async () => {
+    const { derivePrTitleFromBead } = await import('../../lib/execute.js');
+    expect(derivePrTitleFromBead('Epic: Redesign dashboard', 'epic'))
+      .toBe('Redesign dashboard');
+  });
+
+  it('should pass through title for non-epic beads', async () => {
+    const { derivePrTitleFromBead } = await import('../../lib/execute.js');
+    expect(derivePrTitleFromBead('Fix alignment', 'task'))
+      .toBe('Fix alignment');
+  });
+
+  it('should handle missing "Epic:" prefix for epic beads', async () => {
+    const { derivePrTitleFromBead } = await import('../../lib/execute.js');
+    expect(derivePrTitleFromBead('Redesign dashboard', 'epic'))
+      .toBe('Redesign dashboard');
+  });
+});
+
+// =============================================================================
+// runPR
+// =============================================================================
+
+describe('runPR', () => {
+  let logStub: ReturnType<typeof stubLogger>;
+
+  beforeEach(() => {
+    logStub = stubLogger();
+    vi.restoreAllMocks();
+  });
+
+  function makeDeps(results: SpawnSyncReturns<Buffer>[]): ExecuteDeps {
+    let callIndex = 0;
+    const spawnFn = vi.fn().mockImplementation(() => {
+      const result = results[callIndex] ?? results[results.length - 1];
+      callIndex++;
+      return result;
+    });
+    return { scriptSpawnFn: spawnFn };
+  }
+
+  it('should halt when git branch --show-current fails', async () => {
+    const { runPR } = await import('../../lib/execute.js');
+
+    const deps = makeDeps([
+      fakeSpawnResult('', 'not a git repo', 128),
+    ]);
+    const ctx = makePhaseCtx(logStub);
+
+    const result = await runPR(ctx, deps);
+    expect(result.next).toBe('halt');
+  });
+
+  it('should halt when bead is not closed', async () => {
+    const { runPR } = await import('../../lib/execute.js');
+
+    const deps = makeDeps([
+      fakeSpawnResult('feat/branch', '', 0),
+      fakeSpawnResult(OPEN_BEAD_JSON, '', 0),
+    ]);
+    const ctx = makePhaseCtx(logStub);
+
+    const result = await runPR(ctx, deps);
+    expect(result.next).toBe('halt');
+    expect(logStub.logs.some(l => l.kind === 'err' && l.data.includes('UNCLOSED'))).toBe(true);
+  });
+
+  it('should create PR and route to Report for a closed leaf bead', async () => {
+    const { runPR } = await import('../../lib/execute.js');
+
+    const branchName = 'chore/fix-widget-pv-test-1';
+    const prUrl = 'https://github.com/owner/repo/pull/42';
+    const commitMsg = 'chore: Fix widget alignment (pv-test-1)';
+
+    const deps = makeDeps([
+      fakeSpawnResult(branchName, '', 0),
+      fakeSpawnResult(CLOSED_LEAF_JSON, '', 0),
+      fakeSpawnResult('## Summary\n...', '', 0),
+      fakeSpawnResult(commitMsg, '', 0),
+      fakeSpawnResult('', '', 0),
+      fakeSpawnResult(prUrl, '', 0),
+    ]);
+    const ctx = makePhaseCtx(logStub);
+
+    const result = await runPR(ctx, deps);
+
+    expect(result.next).toBe(PhaseName.Report);
+    expect(result.ctx.prUrl).toBe(prUrl);
+    expect(result.ctx.beadsClosed).toEqual(['pv-test-1']);
+  });
+
+  it('should create PR for a closed epic with closed children', async () => {
+    const { runPR } = await import('../../lib/execute.js');
+
+    const prUrl = 'https://github.com/owner/repo/pull/99';
+
+    const deps = makeDeps([
+      fakeSpawnResult('feat/branch', '', 0),
+      fakeSpawnResult(CLOSED_EPIC_JSON, '', 0),
+      fakeSpawnResult(CLOSED_CHILD_JSON, '', 0),
+      fakeSpawnResult(CLOSED_CHILD_JSON, '', 0),
+      fakeSpawnResult('## Summary\n...', '', 0),
+      fakeSpawnResult('', '', 0),
+      fakeSpawnResult(prUrl, '', 0),
+    ]);
+    const ctx = makePhaseCtx(logStub);
+
+    const result = await runPR(ctx, deps);
+
+    expect(result.next).toBe(PhaseName.Report);
+
+    const complete = logStub.runJsonEntries.find(e => e.event === 'pr_finalize_complete');
+    expect(complete!.prTitle).toBe('Redesign dashboard');
+    expect(complete!.beadsClosed).toEqual(['pv-test-1', 'pv-test-1.1', 'pv-test-1.2']);
+  });
+
+  it('should halt when an epic child is not closed', async () => {
+    const { runPR } = await import('../../lib/execute.js');
+
+    const deps = makeDeps([
+      fakeSpawnResult('feat/branch', '', 0),
+      fakeSpawnResult(CLOSED_EPIC_JSON, '', 0),
+      fakeSpawnResult(CLOSED_CHILD_JSON, '', 0),
+      fakeSpawnResult(OPEN_BEAD_JSON, '', 0),
+    ]);
+    const ctx = makePhaseCtx(logStub);
+
+    const result = await runPR(ctx, deps);
+    expect(result.next).toBe('halt');
+  });
+});
+
+// =============================================================================
+// leafPhase / epicPhase — basic routing
+// =============================================================================
+
+describe('leafPhase', () => {
+  let logStub: ReturnType<typeof stubLogger>;
+
+  beforeEach(() => {
+    logStub = stubLogger();
+  });
+
+  it('should route to PR on successful leaf execution', async () => {
+    const { leafPhase } = await import('../../lib/execute.js');
+
+    const implementerResult = { status: 'closed' };
+
+    // No auditors matched -> passes immediately after implementer
+    const mockSpawnFn = vi.fn().mockReturnValue(
+      createMockChild(JSON.stringify(implementerResult), '', 0),
+    );
+
+    // match-agents returns empty -> no auditors
+    const mockSpawnSync = vi.fn().mockReturnValue({
+      stdout: Buffer.from('[]'),
+      stderr: Buffer.from(''),
+      status: 0,
+    });
+
+    const ctx = makePhaseCtx(logStub);
+
+    const result = await leafPhase(ctx, {
+      spawnFn: mockSpawnFn,
+      scriptSpawnFn: mockSpawnSync,
+      changedFiles: [],
+    });
+
+    expect(result.next).toBe(PhaseName.PR);
+  });
+});
+
+describe('epicPhase', () => {
+  let logStub: ReturnType<typeof stubLogger>;
+
+  beforeEach(() => {
+    logStub = stubLogger();
+  });
+
+  it('should halt when no ready beads found', async () => {
+    const { epicPhase } = await import('../../lib/execute.js');
+
+    const mockSpawnSync = vi.fn().mockReturnValue({
+      stdout: Buffer.from(''),
+      stderr: Buffer.from(''),
+      status: 1,
+    });
+
+    const ctx = makePhaseCtx(logStub);
+
+    const result = await epicPhase(ctx, { scriptSpawnFn: mockSpawnSync });
+    expect(result.next).toBe('halt');
+  });
+});
