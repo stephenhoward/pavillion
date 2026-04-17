@@ -90,6 +90,9 @@ export async function runStateMachine(
       break;
     }
 
+    const beadLabel = ctx.beadId ? ` [${ctx.beadId}]` : '';
+    console.log(`> ${currentPhase}${beadLabel}`);
+
     const startMs = Date.now();
     let result: { next: PhaseName | 'halt'; ctx: OrchestratorCtx };
 
@@ -239,6 +242,8 @@ async function main(): Promise<void> {
     dryRun,
     startedAt: new Date().toISOString(),
   });
+
+  console.log(`process-backlog run ${ctx.runId}${dryRun ? ' (dry-run)' : ''}`);
 
   try {
     const finalCtx = await runStateMachine(ctx, PhaseName.Preflight);
