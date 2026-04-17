@@ -19,7 +19,7 @@
     >
       <h3>{{ t('title') }}</h3>
 
-      <ErrorAlert :error="state.err" />
+      <ErrorAlert id="apply-error" :error="state.err" />
 
       <div class="form-stack">
         <label for="apply-email" class="sr-only">{{ t('email') }}</label>

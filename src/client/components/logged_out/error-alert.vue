@@ -1,6 +1,7 @@
 <template>
   <div
     v-if="error"
+    :id="id"
     role="alert"
     aria-live="polite"
     class="error-alert"
@@ -14,6 +15,10 @@ defineProps({
   error: {
     type: String,
     default: '',
+  },
+  id: {
+    type: String,
+    required: true,
   },
 });
 </script>

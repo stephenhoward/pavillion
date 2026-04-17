@@ -25,7 +25,7 @@
     <h3>{{ t('title') }}</h3>
     <p class="instructions">{{ t('instructions') }}</p>
 
-    <ErrorAlert :error="state.error" />
+    <ErrorAlert id="forgot-error" :error="state.error" />
 
     <div class="form-stack">
       <label for="reset-email" class="sr-only">{{ t('email') }}</label>

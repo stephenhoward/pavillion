@@ -52,6 +52,7 @@
       <p class="instructions">{{ t('description') }}</p>
 
       <ErrorAlert
+        id="setup-error"
         :error="state.passwordError ? translateError(state.passwordError) : (state.formError ? translateError(state.formError) : '')"
       />
 

@@ -52,7 +52,7 @@
     <h3>{{ t('new_account_password_title') }}</h3>
     <p class="instructions">{{ t('registration_new_password') }}</p>
 
-    <ErrorAlert :error="state.passwordError ? translateError(state.passwordError) : (state.form_error ? translateError(state.form_error) : '')" />
+    <ErrorAlert id="accept-invite-error" :error="state.passwordError ? translateError(state.passwordError) : (state.form_error ? translateError(state.form_error) : '')" />
 
     <div class="form-stack">
       <label for="invite-password" class="sr-only">{{ t('password_placeholder') }}</label>

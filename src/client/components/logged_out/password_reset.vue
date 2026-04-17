@@ -9,7 +9,7 @@
     <h3>{{ t('check_email_title') }}</h3>
     <p class="instructions">{{ t('check_email') }} {{ state.email }}.</p>
 
-    <ErrorAlert :error="state.form_error ? t(state.form_error) : ''" />
+    <ErrorAlert id="reset-code-error" :error="state.form_error ? t(state.form_error) : ''" />
 
     <div class="form-stack">
       <label for="reset-code" class="sr-only">{{ t('reset_code') }}</label>
@@ -18,11 +18,17 @@
         id="reset-code"
         :placeholder="t('reset_code')"
         v-model="state.reset_code"
+        :aria-invalid="state.form_error ? 'true' : 'false'"
+        :aria-describedby="state.form_error ? 'reset-code-error' : undefined"
         autocomplete="one-time-code"
         required
       />
 
-      <button class="btn btn--primary" type="submit">
+      <button
+        class="btn btn--primary"
+        type="submit"
+        :aria-describedby="state.form_error ? 'reset-code-error' : undefined"
+      >
         {{ t('reset_button') }}
       </button>
     </div>
@@ -45,7 +51,7 @@
     <h3>{{ state.isRegistration ? t('new_account_password_title') : t('code_validated_title') }}</h3>
     <p class="instructions">{{ state.isRegistration ? t('registration_new_password') : t('set_password_prompt') }}</p>
 
-    <ErrorAlert :error="state.passwordError ? translateError(state.passwordError) : (state.form_error ? translateError(state.form_error) : '')" />
+    <ErrorAlert id="reset-password-error" :error="state.passwordError ? translateError(state.passwordError) : (state.form_error ? translateError(state.form_error) : '')" />
 
     <div class="form-stack">
       <label for="new-password" class="sr-only">{{ t('password_placeholder') }}</label>
@@ -54,6 +60,8 @@
         id="new-password"
         :placeholder="t('password_placeholder')"
         v-model="state.password"
+        :aria-invalid="(state.passwordError || state.form_error) ? 'true' : 'false'"
+        :aria-describedby="(state.passwordError || state.form_error) ? 'reset-password-error' : undefined"
         @blur="validatePasswordField"
         autocomplete="new-password"
         required
@@ -65,12 +73,18 @@
         id="confirm-password"
         :placeholder="t('password2_placeholder')"
         v-model="state.password2"
+        :aria-invalid="(state.passwordError || state.form_error) ? 'true' : 'false'"
+        :aria-describedby="(state.passwordError || state.form_error) ? 'reset-password-error' : undefined"
         autocomplete="new-password"
         @keyup.enter="setPassword"
         required
       />
 
-      <button class="btn btn--primary" type="submit">
+      <button
+        class="btn btn--primary"
+        type="submit"
+        :aria-describedby="(state.passwordError || state.form_error) ? 'reset-password-error' : undefined"
+      >
         {{ t("set_password_button") }}
       </button>
     </div>
