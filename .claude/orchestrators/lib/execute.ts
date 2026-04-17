@@ -42,10 +42,6 @@ import {
 // Configuration defaults (overridable via env)
 // =============================================================================
 
-const BUDGET_IMPLEMENTER = parseFloat(process.env.ORCH_BUDGET_IMPLEMENTER ?? '5.00');
-const BUDGET_AUDITOR = parseFloat(process.env.ORCH_BUDGET_AUDITOR ?? '1.50');
-const BUDGET_BUILD_GUARDIAN = parseFloat(process.env.ORCH_BUDGET_BUILD_GUARDIAN ?? '2.00');
-const BUDGET_VERIFIER = parseFloat(process.env.ORCH_BUDGET_VERIFIER ?? '1.50');
 const TIMEOUT_IMPLEMENTER = parseInt(process.env.ORCH_TIMEOUT_IMPLEMENTER ?? '600000', 10);
 const TIMEOUT_AUDITOR = parseInt(process.env.ORCH_TIMEOUT_AUDITOR ?? '300000', 10);
 const TIMEOUT_BUILD_GUARDIAN = parseInt(process.env.ORCH_TIMEOUT_BUILD_GUARDIAN ?? '600000', 10);
@@ -277,7 +273,6 @@ verdicts (PASS / PASS WITH WARNINGS / FAIL) per
     const raw = await dispatch<unknown>({
       agent: auditor.name,
       prompt,
-      budgetUsd: BUDGET_AUDITOR,
       timeoutMs: TIMEOUT_AUDITOR,
       ctx,
       logTag: PhaseName.Leaf,
@@ -433,7 +428,6 @@ async function dispatchVerifier(
     const raw = await dispatch({
       agent: agentName,
       prompt,
-      budgetUsd: BUDGET_VERIFIER,
       timeoutMs: TIMEOUT_VERIFIER,
       ctx,
       logTag: PhaseName.Epic,
@@ -477,7 +471,6 @@ Report results using the wave-verdict schema.`;
     const raw = await dispatch({
       agent: 'build-guardian',
       prompt,
-      budgetUsd: BUDGET_BUILD_GUARDIAN,
       timeoutMs: TIMEOUT_BUILD_GUARDIAN,
       ctx,
       logTag: PhaseName.Epic,
@@ -531,7 +524,6 @@ Identify which bead's commit is responsible and suggest a fix.`;
     const raw = await dispatch({
       agent: 'test-failure-investigator',
       prompt,
-      budgetUsd: BUDGET_VERIFIER,
       timeoutMs: TIMEOUT_VERIFIER,
       ctx,
       logTag: PhaseName.Epic,
@@ -686,7 +678,6 @@ export async function dispatchImplementer(
     await dispatch({
       agent: 'implementer',
       prompt,
-      budgetUsd: BUDGET_IMPLEMENTER,
       timeoutMs,
       ctx,
       logTag: PhaseName.Leaf,

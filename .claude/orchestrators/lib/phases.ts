@@ -218,8 +218,6 @@ async function dispatchAgent<T>(
   config: {
     agent: string;
     prompt: string;
-    budgetEnvVar: string;
-    defaultBudget: number;
     defaultTimeout: number;
     logTag: PhaseName;
     escalateTag: string;
@@ -227,13 +225,11 @@ async function dispatchAgent<T>(
   deps: PhaseDeps,
 ): Promise<{ result: T | null; escalated: boolean }> {
   const dispatchFn = deps.dispatchFn ?? dispatch;
-  const budgetUsd = parseFloat(process.env[config.budgetEnvVar] ?? '') || config.defaultBudget;
 
   try {
     const result = await dispatchFn<T>({
       agent: config.agent,
       prompt: config.prompt,
-      budgetUsd,
       timeoutMs: config.defaultTimeout,
       ctx,
       logTag: config.logTag,
@@ -653,8 +649,6 @@ export async function shape(ctx: PhaseCtx, deps: PhaseDeps = {}): Promise<PhaseR
   const { result: verdict, escalated } = await dispatchAgent<ShapeVerdict>(ctx, {
     agent: 'shape-bead',
     prompt,
-    budgetEnvVar: 'ORCH_BUDGET_SHAPE',
-    defaultBudget: 2.00,
     defaultTimeout: 180_000,
     logTag: PhaseName.Shape,
     escalateTag: '3',
@@ -748,8 +742,6 @@ export async function decompose(ctx: PhaseCtx, deps: PhaseDeps = {}): Promise<Ph
   const { result: report, escalated } = await dispatchAgent<DecomposeReport>(ctx, {
     agent: 'decompose-bead',
     prompt,
-    budgetEnvVar: 'ORCH_BUDGET_DECOMPOSE',
-    defaultBudget: 3.00,
     defaultTimeout: 5 * 60 * 1000,
     logTag: PhaseName.Decompose,
     escalateTag: '4',
@@ -827,8 +819,6 @@ export async function analyze(ctx: PhaseCtx, deps: PhaseDeps = {}): Promise<Phas
   const { result: report, escalated } = await dispatchAgent<AnalyzeReport>(ctx, {
     agent: 'analyze-bead',
     prompt,
-    budgetEnvVar: 'ORCH_BUDGET_ANALYZE',
-    defaultBudget: 3.00,
     defaultTimeout: 5 * 60 * 1000,
     logTag: PhaseName.Analyze,
     escalateTag: '5',

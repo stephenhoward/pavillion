@@ -13,7 +13,6 @@ import {
   fanOutAdvisors,
   buildAdvisorPrompt,
   parseAdvisorVerdict,
-  ADVISOR_BUDGET_DEFAULT,
   ADVISOR_TIMEOUT_MS,
   type DispatchOptions,
   type RunScriptOptions,
@@ -117,7 +116,6 @@ describe('dispatch', () => {
       agent: 'test-agent',
       schemaPath: '/path/to/schema.json',
       prompt: 'Do the thing',
-      budgetUsd: 0.50,
       timeoutMs: 30_000,
       ctx: {
         runId: 'test-run-1',
@@ -160,8 +158,7 @@ describe('dispatch', () => {
     expect(args).toContain('test-agent');
     expect(args).toContain('--json-schema');
     expect(args).toContain('/path/to/schema.json');
-    expect(args).toContain('--max-budget-usd');
-    expect(args).toContain('0.5');
+    expect(args).not.toContain('--max-budget-usd');
   });
 
   it('should include --fallback-model when provided', async () => {
@@ -768,7 +765,6 @@ describe('fanOutAdvisors', () => {
   });
 
   it('should export sensible default constants', () => {
-    expect(ADVISOR_BUDGET_DEFAULT).toBeGreaterThan(0);
     expect(ADVISOR_TIMEOUT_MS).toBeGreaterThan(0);
   });
 

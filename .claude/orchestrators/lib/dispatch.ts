@@ -67,8 +67,6 @@ export interface DispatchOptions {
   schemaPath?: string;
   /** Prompt text sent to the agent via stdin. */
   prompt: string;
-  /** Max budget in USD for this dispatch. */
-  budgetUsd: number;
   /** Timeout in ms; kills process if exceeded. */
   timeoutMs: number;
   /** Run context threaded through the orchestrator. */
@@ -104,7 +102,6 @@ export async function dispatch<T = unknown>(opts: DispatchOptions): Promise<T> {
     promptPreview: opts.prompt.length > 200
       ? opts.prompt.slice(0, 200) + '...'
       : opts.prompt,
-    budgetUsd: opts.budgetUsd,
     timeoutMs: opts.timeoutMs,
   });
 
@@ -187,7 +184,6 @@ function runSingleDispatch<T>(
   const {
     agent,
     schemaPath,
-    budgetUsd,
     timeoutMs,
     ctx,
     logTag,
@@ -200,7 +196,6 @@ function runSingleDispatch<T>(
   const args = buildArgs({
     agent,
     schemaPath,
-    budgetUsd,
     fallbackModel,
     prompt,
     isRetry,
@@ -307,7 +302,6 @@ function runSingleDispatch<T>(
 function buildArgs(params: {
   agent: string;
   schemaPath?: string;
-  budgetUsd: number;
   fallbackModel?: boolean;
   prompt: string;
   isRetry: boolean;
@@ -316,7 +310,6 @@ function buildArgs(params: {
     '--permission-mode', 'bypassPermissions',
     '--no-session-persistence',
     '--agent', params.agent,
-    '--max-budget-usd', String(params.budgetUsd),
   ];
 
   if (params.schemaPath) {
@@ -521,9 +514,6 @@ export function spawnCmd(
 // =============================================================================
 
 
-/** Default per-advisor budget in USD. Override via ORCH_BUDGET_ADVISOR env var. */
-export const ADVISOR_BUDGET_DEFAULT = 0.75;
-
 /** Default per-advisor timeout in ms. */
 export const ADVISOR_TIMEOUT_MS = 120_000;
 
@@ -651,7 +641,6 @@ export async function fanOutAdvisors(
   deps: FanOutDeps = {},
 ): Promise<RefinementReport> {
   const dispatchFn = deps.dispatchFn ?? dispatch;
-  const budgetUsd = parseFloat(process.env.ORCH_BUDGET_ADVISOR ?? '') || ADVISOR_BUDGET_DEFAULT;
   const timeoutMs = parseInt(process.env.ORCH_TIMEOUT_ADVISOR ?? '', 10) || ADVISOR_TIMEOUT_MS;
 
   ctx.logger.appendRunJson({
@@ -670,7 +659,6 @@ export async function fanOutAdvisors(
       return dispatchFn({
         agent: advisor.name,
         prompt,
-        budgetUsd,
         timeoutMs,
         ctx,
         logTag,
