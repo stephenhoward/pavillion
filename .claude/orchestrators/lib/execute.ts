@@ -12,8 +12,6 @@
  */
 
 import { spawn as nodeSpawn, spawnSync as nodeSpawnSync } from 'node:child_process';
-import { existsSync as nodeExistsSync } from 'node:fs';
-import { resolve } from 'node:path';
 import {
   PhaseName,
   type RunContext,
@@ -25,11 +23,20 @@ import {
 } from './types.js';
 import {
   dispatch,
-  runScript,
   spawnCmd,
   DispatchTimeoutError,
   type DispatchOptions,
 } from './dispatch.js';
+import {
+  bdEscalate,
+  bdEnrichmentCheck,
+  discoverAgents,
+  matchAgents,
+  commitMsg,
+  prBody,
+  type MatchedAgent as HelperMatchedAgent,
+  type BeadRef,
+} from './helpers.js';
 
 // =============================================================================
 // Configuration defaults (overridable via env)
@@ -43,18 +50,6 @@ const TIMEOUT_IMPLEMENTER = parseInt(process.env.ORCH_TIMEOUT_IMPLEMENTER ?? '60
 const TIMEOUT_AUDITOR = parseInt(process.env.ORCH_TIMEOUT_AUDITOR ?? '300000', 10);
 const TIMEOUT_BUILD_GUARDIAN = parseInt(process.env.ORCH_TIMEOUT_BUILD_GUARDIAN ?? '600000', 10);
 const TIMEOUT_VERIFIER = parseInt(process.env.ORCH_TIMEOUT_VERIFIER ?? '300000', 10);
-
-// =============================================================================
-// Script paths
-// =============================================================================
-
-const MATCH_AGENTS_SCRIPT = resolve('.claude/skills/agent-discovery/match-agents.sh');
-const ESCALATE_SCRIPT = resolve('.claude/skills/bead-backlog-selection/bd-escalate.sh');
-const ENRICHMENT_CHECK_SCRIPT = resolve('.claude/skills/bead-state-assessment/bd-enrichment-check.sh');
-const AUDITOR_SCHEMA_PATH = resolve('.claude/orchestrators/schemas/auditor-verdict.json');
-const WAVE_VERDICT_SCHEMA = resolve('.claude/orchestrators/schemas/wave-verdict.json');
-const PR_BODY_SCRIPT = '.claude/skills/bead-branch-and-pr/pr-body.sh';
-const COMMIT_MSG_SCRIPT = '.claude/skills/bead-branch-and-pr/commit-msg.sh';
 
 // =============================================================================
 // Types
@@ -108,7 +103,6 @@ export interface EpicExecutionResult {
 export interface ExecuteDeps {
   spawnFn?: typeof nodeSpawn;
   scriptSpawnFn?: typeof nodeSpawnSync;
-  scriptExistsFn?: (path: string) => boolean;
   changedFiles?: string[];
   changedFilesForBead?: (beadId: string) => string[];
   timeoutMs?: number;
@@ -156,12 +150,7 @@ export const PR_MESSAGES = {
 // Private helper types
 // =============================================================================
 
-interface MatchedAgent {
-  name: string;
-  path: string;
-  description: string;
-  rationale: string;
-}
+type MatchedAgent = HelperMatchedAgent;
 
 interface BeadJson {
   title?: string;
@@ -256,37 +245,13 @@ Please address each concern listed above and re-run the implementation. This is 
 function discoverAuditors(
   changedFiles: string[],
   ctx: RunContext,
-  opts: { spawnSync: typeof nodeSpawnSync; existsFn: (path: string) => boolean },
 ): MatchedAgent[] {
   if (changedFiles.length === 0) {
     return [];
   }
 
-  const input = changedFiles.join('\n');
-
-  const result = runScript<MatchedAgent[]>(
-    MATCH_AGENTS_SCRIPT,
-    ['auditor'],
-    {
-      logger: ctx.logger,
-      logTag: PhaseName.Leaf,
-      spawnFn: ((cmd: string, args: string[], spawnOpts: Record<string, unknown>) => {
-        return opts.spawnSync(cmd, args, {
-          ...spawnOpts,
-          input: Buffer.from(input),
-        });
-      }) as typeof nodeSpawnSync,
-      existsFn: opts.existsFn,
-    },
-  );
-
-  if (result.exitCode !== 0) {
-    ctx.logger.writePhaseLog(PhaseName.Leaf, 'err',
-      `match-agents.sh auditor exited ${result.exitCode}\n`);
-    return [];
-  }
-
-  return result.json ?? [];
+  const agents = discoverAgents('auditor');
+  return matchAgents(agents, changedFiles);
 }
 
 async function dispatchAuditor(
@@ -309,9 +274,8 @@ verdicts (PASS / PASS WITH WARNINGS / FAIL) per
 \`.claude/skills/review-mode-auditor/SKILL.md\`.`;
 
   try {
-    return await dispatch<AuditorVerdict>({
+    const raw = await dispatch<unknown>({
       agent: auditor.name,
-      schemaPath: AUDITOR_SCHEMA_PATH,
       prompt,
       budgetUsd: BUDGET_AUDITOR,
       timeoutMs: TIMEOUT_AUDITOR,
@@ -319,6 +283,12 @@ verdicts (PASS / PASS WITH WARNINGS / FAIL) per
       logTag: PhaseName.Leaf,
       spawnFn: deps.spawnFn as typeof nodeSpawn,
     });
+
+    // dispatch returns raw string when no schemaPath; parse it ourselves
+    if (typeof raw === 'string') {
+      return JSON.parse(raw) as AuditorVerdict;
+    }
+    return raw as AuditorVerdict;
   }
   catch {
     return {
@@ -340,31 +310,17 @@ function filterEnrichedBeads(
   ctx: RunContext,
   deps: ExecuteDeps,
 ): string[] {
-  const spawnSync = deps.scriptSpawnFn ?? nodeSpawnSync;
-  const existsFn = deps.scriptExistsFn ?? nodeExistsSync;
-
-  if (!existsFn(ENRICHMENT_CHECK_SCRIPT)) {
-    ctx.logger.writePhaseLog(PhaseName.Epic, 'err',
-      `Enrichment check script not found: ${ENRICHMENT_CHECK_SCRIPT}\n`);
-    return [];
-  }
-
   return beadIds.filter(beadId => {
-    const result = spawnSync(ENRICHMENT_CHECK_SCRIPT, [beadId], {
-      encoding: 'buffer' as never,
-      shell: true,
-      timeout: 30_000,
-    });
+    const enriched = bdEnrichmentCheck(beadId, { spawnFn: deps.scriptSpawnFn });
 
-    const exitCode = result.status ?? 1;
     ctx.logger.appendRunJson({
       event: 'enrichment-check',
       phase: PhaseName.Epic,
       beadId,
-      enriched: exitCode === 0,
+      enriched,
     });
 
-    return exitCode === 0;
+    return enriched;
   });
 }
 
@@ -410,24 +366,12 @@ function escalateBead(
   ctx: RunContext,
   deps: ExecuteDeps,
 ): void {
-  const spawnSync = deps.scriptSpawnFn ?? nodeSpawnSync;
-  const existsFn = deps.scriptExistsFn ?? nodeExistsSync;
-
   try {
-    runScript(
-      ESCALATE_SCRIPT,
-      [beadId, reason, '7'],
-      {
-        logger: ctx.logger,
-        logTag: PhaseName.Epic,
-        spawnFn: spawnSync,
-        existsFn,
-      },
-    );
+    bdEscalate(beadId, reason, '7', { spawnFn: deps.scriptSpawnFn });
   }
   catch (err) {
     ctx.logger.writePhaseLog(PhaseName.Epic, 'err',
-      `bd-escalate.sh failed for ${beadId}: ${err instanceof Error ? err.message : String(err)}\n`);
+      `bd-escalate failed for ${beadId}: ${err instanceof Error ? err.message : String(err)}\n`);
   }
 
   ctx.logger.appendRunJson({
@@ -486,9 +430,8 @@ async function dispatchVerifier(
   deps: ExecuteDeps,
 ): Promise<unknown> {
   try {
-    return await dispatch({
+    const raw = await dispatch({
       agent: agentName,
-      schemaPath: WAVE_VERDICT_SCHEMA,
       prompt,
       budgetUsd: BUDGET_VERIFIER,
       timeoutMs: TIMEOUT_VERIFIER,
@@ -496,6 +439,11 @@ async function dispatchVerifier(
       logTag: PhaseName.Epic,
       spawnFn: deps.spawnFn as typeof nodeSpawn,
     });
+    // dispatch returns raw string when no schemaPath; parse it ourselves
+    if (typeof raw === 'string') {
+      try { return JSON.parse(raw); } catch { return raw; }
+    }
+    return raw;
   }
   catch (err) {
     ctx.logger.writePhaseLog(PhaseName.Epic, 'err',
@@ -526,9 +474,8 @@ npm run build
 Report results using the wave-verdict schema.`;
 
   try {
-    const result = await dispatch<WaveResult>({
+    const raw = await dispatch({
       agent: 'build-guardian',
-      schemaPath: WAVE_VERDICT_SCHEMA,
       prompt,
       budgetUsd: BUDGET_BUILD_GUARDIAN,
       timeoutMs: TIMEOUT_BUILD_GUARDIAN,
@@ -536,6 +483,9 @@ Report results using the wave-verdict schema.`;
       logTag: PhaseName.Epic,
       spawnFn: deps.spawnFn as typeof nodeSpawn,
     });
+
+    // dispatch returns raw string when no schemaPath; parse it ourselves
+    const result = typeof raw === 'string' ? JSON.parse(raw) as WaveResult : raw as WaveResult;
 
     return {
       verdict: result.verdict === 'pass' ? 'pass' : 'fail',
@@ -578,9 +528,8 @@ git diff main...HEAD
 Identify which bead's commit is responsible and suggest a fix.`;
 
   try {
-    return await dispatch<InvestigatorResult>({
+    const raw = await dispatch({
       agent: 'test-failure-investigator',
-      schemaPath: WAVE_VERDICT_SCHEMA,
       prompt,
       budgetUsd: BUDGET_VERIFIER,
       timeoutMs: TIMEOUT_VERIFIER,
@@ -588,6 +537,11 @@ Identify which bead's commit is responsible and suggest a fix.`;
       logTag: PhaseName.Epic,
       spawnFn: deps.spawnFn as typeof nodeSpawn,
     });
+    // dispatch returns raw string when no schemaPath; parse it ourselves
+    if (typeof raw === 'string') {
+      try { return JSON.parse(raw) as InvestigatorResult; } catch { return {}; }
+    }
+    return raw as InvestigatorResult;
   }
   catch {
     return {};
@@ -689,24 +643,12 @@ function escalateLeaf(
   reason: string,
   retryCount: number,
 ): LeafExecutionResult {
-  const spawnSync = deps.scriptSpawnFn ?? nodeSpawnSync;
-  const existsFn = deps.scriptExistsFn ?? nodeExistsSync;
-
   try {
-    runScript(
-      ESCALATE_SCRIPT,
-      [beadId, reason, '7'],
-      {
-        logger: ctx.logger,
-        logTag: PhaseName.Leaf,
-        spawnFn: spawnSync,
-        existsFn,
-      },
-    );
+    bdEscalate(beadId, reason, '7', { spawnFn: deps.scriptSpawnFn });
   }
   catch (err) {
     ctx.logger.writePhaseLog(PhaseName.Leaf, 'err',
-      `bd-escalate.sh failed: ${err instanceof Error ? err.message : String(err)}\n`);
+      `bd-escalate failed: ${err instanceof Error ? err.message : String(err)}\n`);
   }
 
   ctx.logger.appendRunJson({
@@ -774,11 +716,9 @@ export async function runAudit(
   deps: ExecuteDeps = {},
 ): Promise<AuditResult> {
   const changedFiles = deps.changedFiles ?? [];
-  const spawnSync = deps.scriptSpawnFn ?? nodeSpawnSync;
-  const existsFn = deps.scriptExistsFn ?? nodeExistsSync;
   const spawnFn = deps.spawnFn ?? nodeSpawn;
 
-  const matchedAuditors = discoverAuditors(changedFiles, ctx, { spawnSync, existsFn });
+  const matchedAuditors = discoverAuditors(changedFiles, ctx);
 
   if (matchedAuditors.length === 0) {
     ctx.logger.appendRunJson({
@@ -1232,19 +1172,12 @@ export async function runPR(
     }
   }
 
-  // Step 2: Generate PR body via pr-body.sh
-  const prBodyResult = spawnCmd(
-    PR_BODY_SCRIPT, beadsClosed, logger, PhaseName.PR, spawnFn,
-  );
-
-  if (prBodyResult.exitCode !== 0) {
-    const msg = PR_MESSAGES.prBodyFailed(prBodyResult.exitCode, prBodyResult.stderr);
-    console.error(msg);
-    logger.writePhaseLog(PhaseName.PR, 'err', msg + '\n');
-    return { next: 'halt', ctx };
-  }
-
-  const prBody = prBodyResult.stdout;
+  // Step 2: Generate PR body (pure function)
+  const beadRefs: BeadRef[] = beadsClosed.map(id => ({
+    id,
+    title: id === ctx.beadId ? (bead.title ?? id) : id,
+  }));
+  const generatedPrBody = prBody(bead.title ?? ctx.beadId, '', beadRefs);
 
   // Step 3: Derive PR title
   let prTitle: string;
@@ -1253,22 +1186,7 @@ export async function runPR(
     prTitle = derivePrTitleFromBead(bead.title ?? ctx.beadId, 'epic');
   }
   else {
-    const titleResult = spawnCmd(
-      COMMIT_MSG_SCRIPT,
-      [ctx.beadId, bead.title ?? ctx.beadId],
-      logger,
-      PhaseName.PR,
-      spawnFn,
-    );
-
-    if (titleResult.exitCode !== 0) {
-      const msg = PR_MESSAGES.commitMsgFailed(titleResult.exitCode, titleResult.stderr);
-      console.error(msg);
-      logger.writePhaseLog(PhaseName.PR, 'err', msg + '\n');
-      return { next: 'halt', ctx };
-    }
-
-    prTitle = titleResult.stdout;
+    prTitle = commitMsg(ctx.beadId, bead.title ?? ctx.beadId, bead.issue_type ?? 'task');
   }
 
   // Step 4: Push branch
@@ -1285,7 +1203,7 @@ export async function runPR(
 
   // Step 5: Create PR via gh
   const ghResult = spawnCmd(
-    'gh', ['pr', 'create', '--title', prTitle, '--body', prBody],
+    'gh', ['pr', 'create', '--title', prTitle, '--body', generatedPrBody],
     logger, PhaseName.PR, spawnFn,
   );
 

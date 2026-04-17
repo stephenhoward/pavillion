@@ -6,6 +6,29 @@ import { PhaseName, type RunContext, type RunLogger } from '../../lib/types.js';
 import type { ExecuteDeps, PhaseCtx } from '../../lib/execute.js';
 
 // ---------------------------------------------------------------------------
+// Mock helpers module so discoverAgents/matchAgents are controllable per-test
+// ---------------------------------------------------------------------------
+
+vi.mock('../../lib/helpers.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../lib/helpers.js')>();
+  return {
+    ...actual,
+    discoverAgents: vi.fn().mockReturnValue([]),
+    matchAgents: vi.fn().mockReturnValue([]),
+    bdEscalate: vi.fn(),
+    bdEnrichmentCheck: vi.fn().mockReturnValue(false),
+    commitMsg: vi.fn().mockImplementation(
+      (beadId: string, summary: string, issueType: string) => {
+        const typeMap: Record<string, string> = { bug: 'fix', feature: 'feat', epic: 'feat', task: 'chore' };
+        const type = typeMap[issueType] ?? 'chore';
+        return `${type}: ${summary} (${beadId})`;
+      },
+    ),
+    prBody: vi.fn().mockReturnValue('## Summary\n\n- title\n'),
+  };
+});
+
+// ---------------------------------------------------------------------------
 // Test helpers
 // ---------------------------------------------------------------------------
 
@@ -214,9 +237,15 @@ describe('runAudit', () => {
   let logStub: ReturnType<typeof stubLogger>;
   let ctx: RunContext;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     logStub = stubLogger();
     ctx = makeCtx(logStub);
+    vi.clearAllMocks();
+    const helpers = await import('../../lib/helpers.js');
+    vi.mocked(helpers.discoverAgents).mockReturnValue([]);
+    vi.mocked(helpers.matchAgents).mockReturnValue([]);
+    vi.mocked(helpers.bdEscalate).mockReturnValue(undefined);
+    vi.mocked(helpers.bdEnrichmentCheck).mockReturnValue(false);
   });
 
   it('should return passed:true when no changed files', async () => {
@@ -232,6 +261,16 @@ describe('runAudit', () => {
 
   it('should aggregate verdicts from matched auditors', async () => {
     const { runAudit } = await import('../../lib/execute.js');
+    const helpers = await import('../../lib/helpers.js');
+
+    const matchResult = [
+      { name: 'architecture-auditor', path: '.claude/agents/arch.md', description: 'Arch', rationale: 'Match' },
+    ];
+
+    vi.mocked(helpers.discoverAgents).mockReturnValue([
+      { name: 'architecture-auditor', path: '.claude/agents/arch.md', description: 'Arch' },
+    ]);
+    vi.mocked(helpers.matchAgents).mockReturnValue(matchResult);
 
     const passVerdict = {
       agent: 'architecture-auditor',
@@ -245,19 +284,8 @@ describe('runAudit', () => {
       createMockChild(JSON.stringify(passVerdict), '', 0),
     );
 
-    const matchResult = [
-      { name: 'architecture-auditor', path: '.claude/agents/arch.md', description: 'Arch', rationale: 'Match' },
-    ];
-
-    const mockSpawnSync = vi.fn().mockReturnValue({
-      stdout: Buffer.from(JSON.stringify(matchResult)),
-      stderr: Buffer.from(''),
-      status: 0,
-    });
-
     const result = await runAudit('pv-test-1', ctx, {
       spawnFn: mockSpawnFn,
-      scriptSpawnFn: mockSpawnSync,
       changedFiles: ['src/server/calendar/service/calendar.ts'],
     });
 
@@ -267,6 +295,16 @@ describe('runAudit', () => {
 
   it('should return passed:false when auditor fails', async () => {
     const { runAudit } = await import('../../lib/execute.js');
+    const helpers = await import('../../lib/helpers.js');
+
+    const matchResult = [
+      { name: 'security-auditor', path: '.claude/agents/sec.md', description: 'Sec', rationale: 'Match' },
+    ];
+
+    vi.mocked(helpers.discoverAgents).mockReturnValue([
+      { name: 'security-auditor', path: '.claude/agents/sec.md', description: 'Sec' },
+    ]);
+    vi.mocked(helpers.matchAgents).mockReturnValue(matchResult);
 
     const failVerdict = {
       agent: 'security-auditor',
@@ -280,19 +318,8 @@ describe('runAudit', () => {
       createMockChild(JSON.stringify(failVerdict), '', 0),
     );
 
-    const matchResult = [
-      { name: 'security-auditor', path: '.claude/agents/sec.md', description: 'Sec', rationale: 'Match' },
-    ];
-
-    const mockSpawnSync = vi.fn().mockReturnValue({
-      stdout: Buffer.from(JSON.stringify(matchResult)),
-      stderr: Buffer.from(''),
-      status: 0,
-    });
-
     const result = await runAudit('pv-test-1', ctx, {
       spawnFn: mockSpawnFn,
-      scriptSpawnFn: mockSpawnSync,
       changedFiles: ['src/server/calendar/service/calendar.ts'],
     });
 
@@ -309,13 +336,20 @@ describe('runLeafExecution', () => {
   let logStub: ReturnType<typeof stubLogger>;
   let ctx: RunContext;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     logStub = stubLogger();
     ctx = makeCtx(logStub);
+    vi.clearAllMocks();
+    const helpers = await import('../../lib/helpers.js');
+    vi.mocked(helpers.discoverAgents).mockReturnValue([]);
+    vi.mocked(helpers.matchAgents).mockReturnValue([]);
+    vi.mocked(helpers.bdEscalate).mockReturnValue(undefined);
+    vi.mocked(helpers.bdEnrichmentCheck).mockReturnValue(false);
   });
 
   it('should complete on happy path (impl ok + audit pass)', async () => {
     const { runLeafExecution } = await import('../../lib/execute.js');
+    const helpers = await import('../../lib/helpers.js');
 
     const implementerResult = { status: 'closed' };
     const auditVerdict = {
@@ -326,6 +360,14 @@ describe('runLeafExecution', () => {
       beadId: 'pv-test-1',
     };
 
+    const matchResult = [
+      { name: 'arch-auditor', path: '.claude/agents/arch.md', description: 'Arch', rationale: 'Match' },
+    ];
+    vi.mocked(helpers.discoverAgents).mockReturnValue([
+      { name: 'arch-auditor', path: '.claude/agents/arch.md', description: 'Arch' },
+    ]);
+    vi.mocked(helpers.matchAgents).mockReturnValue(matchResult);
+
     let dispatchCount = 0;
     const mockSpawnFn = vi.fn().mockImplementation(() => {
       dispatchCount++;
@@ -335,19 +377,8 @@ describe('runLeafExecution', () => {
       return createMockChild(JSON.stringify(auditVerdict), '', 0);
     });
 
-    const matchResult = [
-      { name: 'arch-auditor', path: '.claude/agents/arch.md', description: 'Arch', rationale: 'Match' },
-    ];
-
-    const mockSpawnSync = vi.fn().mockReturnValue({
-      stdout: Buffer.from(JSON.stringify(matchResult)),
-      stderr: Buffer.from(''),
-      status: 0,
-    });
-
     const result = await runLeafExecution('pv-test-1', ctx, {
       spawnFn: mockSpawnFn,
-      scriptSpawnFn: mockSpawnSync,
       changedFiles: ['src/server/calendar/service/calendar.ts'],
     });
 
@@ -357,6 +388,7 @@ describe('runLeafExecution', () => {
 
   it('should complete with retryCount=1 on audit fail then pass', async () => {
     const { runLeafExecution } = await import('../../lib/execute.js');
+    const helpers = await import('../../lib/helpers.js');
 
     const implementerResult = { status: 'closed' };
     const failVerdict = {
@@ -374,6 +406,14 @@ describe('runLeafExecution', () => {
       beadId: 'pv-test-1',
     };
 
+    const matchResult = [
+      { name: 'sec-auditor', path: '.claude/agents/sec.md', description: 'Sec', rationale: 'Match' },
+    ];
+    vi.mocked(helpers.discoverAgents).mockReturnValue([
+      { name: 'sec-auditor', path: '.claude/agents/sec.md', description: 'Sec' },
+    ]);
+    vi.mocked(helpers.matchAgents).mockReturnValue(matchResult);
+
     let dispatchCount = 0;
     const mockSpawnFn = vi.fn().mockImplementation(() => {
       dispatchCount++;
@@ -386,19 +426,8 @@ describe('runLeafExecution', () => {
       }
     });
 
-    const matchResult = [
-      { name: 'sec-auditor', path: '.claude/agents/sec.md', description: 'Sec', rationale: 'Match' },
-    ];
-
-    const mockSpawnSync = vi.fn().mockReturnValue({
-      stdout: Buffer.from(JSON.stringify(matchResult)),
-      stderr: Buffer.from(''),
-      status: 0,
-    });
-
     const result = await runLeafExecution('pv-test-1', ctx, {
       spawnFn: mockSpawnFn,
-      scriptSpawnFn: mockSpawnSync,
       changedFiles: ['src/server/calendar/service/calendar.ts'],
     });
 
@@ -408,6 +437,7 @@ describe('runLeafExecution', () => {
 
   it('should halt on audit fail after retry exhaustion', async () => {
     const { runLeafExecution } = await import('../../lib/execute.js');
+    const helpers = await import('../../lib/helpers.js');
 
     const implementerResult = { status: 'closed' };
     const failVerdict = {
@@ -418,6 +448,14 @@ describe('runLeafExecution', () => {
       beadId: 'pv-test-1',
     };
 
+    const matchResult = [
+      { name: 'sec-auditor', path: '.claude/agents/sec.md', description: 'Sec', rationale: 'Match' },
+    ];
+    vi.mocked(helpers.discoverAgents).mockReturnValue([
+      { name: 'sec-auditor', path: '.claude/agents/sec.md', description: 'Sec' },
+    ]);
+    vi.mocked(helpers.matchAgents).mockReturnValue(matchResult);
+
     let dispatchCount = 0;
     const mockSpawnFn = vi.fn().mockImplementation(() => {
       dispatchCount++;
@@ -427,26 +465,9 @@ describe('runLeafExecution', () => {
       return createMockChild(JSON.stringify(failVerdict), '', 0);
     });
 
-    const matchResult = [
-      { name: 'sec-auditor', path: '.claude/agents/sec.md', description: 'Sec', rationale: 'Match' },
-    ];
-
-    const mockSpawnSync = vi.fn().mockImplementation((cmd: string) => {
-      if (typeof cmd === 'string' && cmd.includes('match-agents')) {
-        return {
-          stdout: Buffer.from(JSON.stringify(matchResult)),
-          stderr: Buffer.from(''),
-          status: 0,
-        };
-      }
-      return { stdout: Buffer.from('{}'), stderr: Buffer.from(''), status: 0 };
-    });
-
     const result = await runLeafExecution('pv-test-1', ctx, {
       spawnFn: mockSpawnFn,
-      scriptSpawnFn: mockSpawnSync,
       changedFiles: ['src/server/calendar/service/calendar.ts'],
-      scriptExistsFn: () => true,
     });
 
     expect(result.outcome).toBe('halt');
@@ -556,9 +577,22 @@ describe('derivePrTitleFromBead', () => {
 describe('runPR', () => {
   let logStub: ReturnType<typeof stubLogger>;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     logStub = stubLogger();
-    vi.restoreAllMocks();
+    vi.clearAllMocks();
+    const helpers = await import('../../lib/helpers.js');
+    vi.mocked(helpers.discoverAgents).mockReturnValue([]);
+    vi.mocked(helpers.matchAgents).mockReturnValue([]);
+    vi.mocked(helpers.bdEscalate).mockReturnValue(undefined);
+    vi.mocked(helpers.bdEnrichmentCheck).mockReturnValue(false);
+    vi.mocked(helpers.commitMsg).mockImplementation(
+      (beadId: string, summary: string, issueType: string) => {
+        const typeMap: Record<string, string> = { bug: 'fix', feature: 'feat', epic: 'feat', task: 'chore' };
+        const type = typeMap[issueType] ?? 'chore';
+        return `${type}: ${summary} (${beadId})`;
+      },
+    );
+    vi.mocked(helpers.prBody).mockReturnValue('## Summary\n\n- title\n');
   });
 
   function makeDeps(results: SpawnSyncReturns<Buffer>[]): ExecuteDeps {
@@ -602,13 +636,11 @@ describe('runPR', () => {
 
     const branchName = 'chore/fix-widget-pv-test-1';
     const prUrl = 'https://github.com/owner/repo/pull/42';
-    const commitMsg = 'chore: Fix widget alignment (pv-test-1)';
 
+    // Sequence: git branch, bd show, git push, gh pr create
     const deps = makeDeps([
       fakeSpawnResult(branchName, '', 0),
       fakeSpawnResult(CLOSED_LEAF_JSON, '', 0),
-      fakeSpawnResult('## Summary\n...', '', 0),
-      fakeSpawnResult(commitMsg, '', 0),
       fakeSpawnResult('', '', 0),
       fakeSpawnResult(prUrl, '', 0),
     ]);
@@ -626,12 +658,13 @@ describe('runPR', () => {
 
     const prUrl = 'https://github.com/owner/repo/pull/99';
 
+    // Sequence: git branch, bd show (epic), bd show (child1), bd show (child2),
+    //           git push, gh pr create
     const deps = makeDeps([
       fakeSpawnResult('feat/branch', '', 0),
       fakeSpawnResult(CLOSED_EPIC_JSON, '', 0),
       fakeSpawnResult(CLOSED_CHILD_JSON, '', 0),
       fakeSpawnResult(CLOSED_CHILD_JSON, '', 0),
-      fakeSpawnResult('## Summary\n...', '', 0),
       fakeSpawnResult('', '', 0),
       fakeSpawnResult(prUrl, '', 0),
     ]);
@@ -669,8 +702,14 @@ describe('runPR', () => {
 describe('leafPhase', () => {
   let logStub: ReturnType<typeof stubLogger>;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     logStub = stubLogger();
+    vi.clearAllMocks();
+    const helpers = await import('../../lib/helpers.js');
+    vi.mocked(helpers.discoverAgents).mockReturnValue([]);
+    vi.mocked(helpers.matchAgents).mockReturnValue([]);
+    vi.mocked(helpers.bdEscalate).mockReturnValue(undefined);
+    vi.mocked(helpers.bdEnrichmentCheck).mockReturnValue(false);
   });
 
   it('should route to PR on successful leaf execution', async () => {
@@ -683,18 +722,10 @@ describe('leafPhase', () => {
       createMockChild(JSON.stringify(implementerResult), '', 0),
     );
 
-    // match-agents returns empty -> no auditors
-    const mockSpawnSync = vi.fn().mockReturnValue({
-      stdout: Buffer.from('[]'),
-      stderr: Buffer.from(''),
-      status: 0,
-    });
-
     const ctx = makePhaseCtx(logStub);
 
     const result = await leafPhase(ctx, {
       spawnFn: mockSpawnFn,
-      scriptSpawnFn: mockSpawnSync,
       changedFiles: [],
     });
 
@@ -705,8 +736,14 @@ describe('leafPhase', () => {
 describe('epicPhase', () => {
   let logStub: ReturnType<typeof stubLogger>;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     logStub = stubLogger();
+    vi.clearAllMocks();
+    const helpers = await import('../../lib/helpers.js');
+    vi.mocked(helpers.discoverAgents).mockReturnValue([]);
+    vi.mocked(helpers.matchAgents).mockReturnValue([]);
+    vi.mocked(helpers.bdEscalate).mockReturnValue(undefined);
+    vi.mocked(helpers.bdEnrichmentCheck).mockReturnValue(false);
   });
 
   it('should halt when no ready beads found', async () => {
