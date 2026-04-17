@@ -276,4 +276,27 @@ describe('AddCalendarModal — mapping step', () => {
     expect(wrapper.find('.mapping-step').exists()).toBe(false);
     expect(wrapper.emitted('close')).toBeTruthy();
   });
+
+  describe('identifier validation', () => {
+    const cases: [string, boolean, string][] = [
+      ['user@example.com', true, 'qualified identifier'],
+      ['mycal', true, 'bare urlName'],
+      ['MyCAL', true, 'mixed-case bare urlName (server lowercases)'],
+      ['my_cal_', true, 'bare urlName with trailing underscore'],
+      ['', false, 'empty string'],
+      ['ab', false, 'bare urlName too short'],
+      ['_leadunderscore', false, 'bare urlName with leading underscore'],
+      ['has spaces', false, 'bare urlName with spaces'],
+      ['user@domain@extra', false, 'identifier with multiple @'],
+    ];
+
+    for (const [input, expected, description] of cases) {
+      it(`${expected ? 'accepts' : 'rejects'} ${description}`, async () => {
+        const wrapper = mountModal();
+        wrapper.vm.identifier = input;
+        await wrapper.vm.$nextTick();
+        expect(wrapper.vm.isValidIdentifier).toBe(expected);
+      });
+    }
+  });
 });

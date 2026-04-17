@@ -16,6 +16,7 @@ import { CalendarMember } from '@/common/model/calendar_member';
 import { AccountEntity } from '@/server/common/entity/account';
 import AccountInvitation from '@/common/model/invitation';
 import { UrlNameAlreadyExistsError, InvalidUrlNameError, CalendarNotFoundError } from '@/common/exceptions/calendar';
+import { isValidCalendarUrlName } from '@/common/validation/calendarUrlName';
 import { ValidationError } from '@/common/exceptions/base';
 import { MediaNotFoundError } from '@/common/exceptions/media';
 import { CalendarEditorPermissionError, EditorAlreadyExistsError, EditorNotFoundError } from '@/common/exceptions/editor';
@@ -92,7 +93,7 @@ class CalendarService {
   }
 
   isValidUrlName(username: string): boolean {
-    return username.match(/^[a-z0-9][a-z0-9_-]{1,22}[a-z0-9_]$/i) ? true : false;
+    return isValidCalendarUrlName(username);
   }
 
   async setUrlName(account: Account, calendar: Calendar, urlName: string): Promise<boolean> {

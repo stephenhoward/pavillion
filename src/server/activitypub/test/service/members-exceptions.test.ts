@@ -51,7 +51,7 @@ describe('ActivityPubService Exception Handling', () => {
   describe('followCalendar', () => {
     it('throws InvalidRemoteCalendarIdentifierError for invalid identifier', async () => {
       await expect(
-        service.followCalendar(account, calendar, 'invalid-identifier'),
+        service.followCalendar(account, calendar, 'has spaces'),
       ).rejects.toThrow(InvalidRemoteCalendarIdentifierError);
     });
 
@@ -74,6 +74,33 @@ describe('ActivityPubService Exception Handling', () => {
 
       await expect(
         service.followCalendar(account, calendar, 'testcalendar@pavillion.dev'),
+      ).rejects.toThrow(SelfFollowError);
+    });
+
+    it('throws SelfFollowError when a bare urlName resolves to the calendar itself', async () => {
+      const userCanModifyStub = sandbox.stub(service.calendarService, 'userCanModifyCalendar');
+      userCanModifyStub.returns(true);
+
+      const configStub = sandbox.stub(require('config'), 'get');
+      configStub.withArgs('domain').returns('pavillion.dev');
+
+      await expect(
+        service.followCalendar(account, calendar, 'testcalendar'),
+      ).rejects.toThrow(SelfFollowError);
+    });
+
+    it('throws SelfFollowError for case-variant bare urlName matching the calendar', async () => {
+      const userCanModifyStub = sandbox.stub(service.calendarService, 'userCanModifyCalendar');
+      userCanModifyStub.returns(true);
+
+      const configStub = sandbox.stub(require('config'), 'get');
+      configStub.withArgs('domain').returns('pavillion.dev');
+
+      // Normalization lowercases both the user's input and the calendar's
+      // stored urlName before comparing, so TESTCALENDAR must still trip
+      // the self-follow guard regardless of collation behaviour.
+      await expect(
+        service.followCalendar(account, calendar, 'TESTCALENDAR'),
       ).rejects.toThrow(SelfFollowError);
     });
   });
@@ -144,13 +171,45 @@ describe('ActivityPubService Exception Handling', () => {
 
   describe('lookupRemoteCalendar', () => {
     it('throws InvalidRemoteCalendarIdentifierError for invalid identifier format', async () => {
+      // Whitespace is invalid in both qualified and bare-urlName forms.
       await expect(
-        service.lookupRemoteCalendar('invalid-format'),
+        service.lookupRemoteCalendar('has spaces'),
       ).rejects.toThrow(InvalidRemoteCalendarIdentifierError);
 
+      // Dots in a bare urlName aren't allowed, and without an `@` this can't
+      // be interpreted as a qualified identifier.
       await expect(
         service.lookupRemoteCalendar('no-at-sign.com'),
       ).rejects.toThrow(InvalidRemoteCalendarIdentifierError);
+    });
+
+    it('resolves a bare urlName as a local calendar lookup', async () => {
+      const configStub = sandbox.stub(require('config'), 'get');
+      configStub.withArgs('domain').returns('pavillion.dev');
+
+      const localCalendar = new Calendar('local-calendar-id', 'mycal');
+
+      const getCalendarByNameStub = sandbox.stub(service.calendarService, 'getCalendarByName');
+      getCalendarByNameStub.withArgs('mycal').resolves(localCalendar);
+
+      const result = await service.lookupRemoteCalendar('mycal');
+
+      expect(result.domain).toBe('pavillion.dev');
+      expect(result.calendarId).toBe('local-calendar-id');
+      expect(result.actorUrl).toBe('https://pavillion.dev/calendars/mycal');
+      expect(getCalendarByNameStub.calledWith('mycal')).toBe(true);
+    });
+
+    it('throws RemoteCalendarNotFoundError for a bare urlName with no matching local calendar', async () => {
+      const configStub = sandbox.stub(require('config'), 'get');
+      configStub.withArgs('domain').returns('pavillion.dev');
+
+      const getCalendarByNameStub = sandbox.stub(service.calendarService, 'getCalendarByName');
+      getCalendarByNameStub.resolves(null);
+
+      await expect(
+        service.lookupRemoteCalendar('missingcal'),
+      ).rejects.toThrow(RemoteCalendarNotFoundError);
     });
 
     it('throws RemoteCalendarNotFoundError when local calendar does not exist', async () => {
@@ -290,5 +349,51 @@ describe('ActivityPubService Exception Handling', () => {
         service.lookupRemoteCalendar('user@example.com'),
       ).rejects.toThrow(RemoteProfileFetchError);
     });
+  });
+});
+
+describe('ActivityPubService.normalizeIdentifier', () => {
+  let sandbox: sinon.SinonSandbox;
+
+  beforeEach(() => {
+    sandbox = sinon.createSandbox();
+    const configStub = sandbox.stub(require('config'), 'get');
+    configStub.withArgs('domain').returns('pavillion.dev');
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+  });
+
+  it('returns the qualified identifier lowercased when valid', () => {
+    expect(ActivityPubService.normalizeIdentifier('User@Example.Com')).toBe('user@example.com');
+  });
+
+  it('qualifies a bare urlName with the local domain', () => {
+    expect(ActivityPubService.normalizeIdentifier('mycal')).toBe('mycal@pavillion.dev');
+  });
+
+  it('lowercases a mixed-case bare urlName before qualifying', () => {
+    expect(ActivityPubService.normalizeIdentifier('MyCAL')).toBe('mycal@pavillion.dev');
+  });
+
+  it('accepts a bare urlName with a trailing underscore', () => {
+    // Calendar urlNames may end in `_` per isValidCalendarUrlName; the
+    // bare-urlName path must match that rule so client and server agree.
+    expect(ActivityPubService.normalizeIdentifier('my_cal_')).toBe('my_cal_@pavillion.dev');
+  });
+
+  it('returns null for a qualified identifier with an invalid domain', () => {
+    expect(ActivityPubService.normalizeIdentifier('user@not a domain')).toBeNull();
+  });
+
+  it('returns null for a bare string that is not a valid urlName', () => {
+    expect(ActivityPubService.normalizeIdentifier('has spaces')).toBeNull();
+    expect(ActivityPubService.normalizeIdentifier('_leadunderscore')).toBeNull();
+    expect(ActivityPubService.normalizeIdentifier('ab')).toBeNull(); // too short
+  });
+
+  it('returns null for an identifier with more than one @', () => {
+    expect(ActivityPubService.normalizeIdentifier('user@domain@extra')).toBeNull();
   });
 });
