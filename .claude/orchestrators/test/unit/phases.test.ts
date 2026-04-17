@@ -247,7 +247,7 @@ describe('preflight', () => {
     expect(result.next).toBe('halt');
   });
 
-  it('should halt when backlog is empty', async () => {
+  it('should halt when backlog is empty (automatic selection mode)', async () => {
     const spawn = seqSpawn(
       fakeSpawn('', '', 0),        // git status --porcelain (clean)
       fakeSpawn('main', '', 0),    // git branch --show-current
@@ -257,9 +257,29 @@ describe('preflight', () => {
     );
 
     vi.spyOn(console, 'error').mockImplementation(() => {});
-    const result = await preflight(makeCtx(), { spawnFn: spawn });
+    const result = await preflight(makeCtx({ beadId: '' }), { spawnFn: spawn });
 
     expect(result.next).toBe('halt');
+  });
+
+  it('should ignore empty backlog when an explicit bead-id is supplied', async () => {
+    // runPreflightCheck reports empty_backlog, but with beadId preset we skip it
+    // and proceed through gitSafeToStart to Select.
+    const spawn = seqSpawn(
+      // runPreflightCheck (empty_backlog is the only failure):
+      fakeSpawn('', '', 0),        // git status --porcelain (clean)
+      fakeSpawn('main', '', 0),    // git branch --show-current
+      fakeSpawn('', '', 0),        // git fetch origin main
+      fakeSpawn('', '', 0),        // git diff origin/main --quiet
+      fakeSpawn('[]', '', 0),      // bd ready: empty array
+      // gitSafeToStart passes:
+      ...gitSafeOkSpawns(),
+    );
+
+    const result = await preflight(makeCtx({ beadId: 'pv-explicit-7' }), { spawnFn: spawn });
+
+    expect(result.next).toBe(PhaseName.Select);
+    expect(result.ctx.beadId).toBe('pv-explicit-7');
   });
 });
 
@@ -291,7 +311,7 @@ describe('select', () => {
     );
 
     vi.spyOn(console, 'error').mockImplementation(() => {});
-    const result = await select(makeCtx(), { spawnFn: spawn });
+    const result = await select(makeCtx({ beadId: '' }), { spawnFn: spawn });
 
     expect(result.next).toBe('halt');
   });
@@ -302,7 +322,7 @@ describe('select', () => {
     );
 
     vi.spyOn(console, 'error').mockImplementation(() => {});
-    const result = await select(makeCtx(), { spawnFn: spawn });
+    const result = await select(makeCtx({ beadId: '' }), { spawnFn: spawn });
 
     expect(result.next).toBe('halt');
   });
@@ -315,9 +335,21 @@ describe('select', () => {
     );
 
     vi.spyOn(console, 'error').mockImplementation(() => {});
-    const result = await select(makeCtx(), { spawnFn: spawn });
+    const result = await select(makeCtx({ beadId: '' }), { spawnFn: spawn });
 
     expect(result.next).toBe('halt');
+  });
+
+  it('should skip bdTopReady and route to State when beadId is pre-set', async () => {
+    // No spawn calls expected: explicit bead-id mode bypasses bd ready entirely.
+    const spawn = seqSpawn();
+
+    const ctx = makeCtx({ beadId: 'pv-explicit-99' });
+    const result = await select(ctx, { spawnFn: spawn });
+
+    expect(result.next).toBe(PhaseName.State);
+    expect(result.ctx.beadId).toBe('pv-explicit-99');
+    expect(spawn).not.toHaveBeenCalled();
   });
 });
 

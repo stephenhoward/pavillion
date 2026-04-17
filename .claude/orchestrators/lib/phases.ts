@@ -547,11 +547,19 @@ export function buildAnalyzePrompt(
  * Runs preflight checks + git-safe-to-start. Both must pass to proceed.
  */
 export async function preflight(ctx: PhaseCtx, deps: PhaseDeps = {}): Promise<PhaseReturn> {
+  const explicitBead = ctx.beadId !== '';
+
   // Step 1: Run preflight checks
   const preflightResult = runPreflightCheck({ spawnFn: deps.spawnFn });
 
-  if (!preflightResult.ok) {
-    for (const f of preflightResult.failures) {
+  // When an explicit bead is given, backlog emptiness is not a blocker:
+  // the user may be picking up a partially-processed or non-ready bead.
+  const blockingFailures = explicitBead
+    ? preflightResult.failures.filter(f => f.kind !== 'empty_backlog')
+    : preflightResult.failures;
+
+  if (blockingFailures.length > 0) {
+    for (const f of blockingFailures) {
       const msg = PREFLIGHT_MESSAGES[f.kind] ?? f.reason;
       console.error(msg);
       ctx.logger.writePhaseLog(PhaseName.Preflight, 'err', msg + '\n');
@@ -573,8 +581,19 @@ export async function preflight(ctx: PhaseCtx, deps: PhaseDeps = {}): Promise<Ph
 
 /**
  * Phase 1 — Select the top-priority ready bead.
+ *
+ * If ctx.beadId is already populated (explicit --bead-id), skip bdTopReady
+ * and route straight to state assessment.
  */
 export async function select(ctx: PhaseCtx, deps: PhaseDeps = {}): Promise<PhaseReturn> {
+  if (ctx.beadId) {
+    ctx.logger.appendRunJson({
+      event: 'bead_explicit',
+      beadId: ctx.beadId,
+    });
+    return { next: PhaseName.State, ctx };
+  }
+
   const topReady = bdTopReady({ spawnFn: deps.spawnFn });
 
   if (topReady.exhausted || !topReady.bead) {

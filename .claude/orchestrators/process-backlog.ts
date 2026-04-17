@@ -221,16 +221,24 @@ async function main(): Promise<void> {
     options: {
       'dry-run': { type: 'boolean', default: false },
       'verbose': { type: 'boolean', default: false },
+      'bead-id':  { type: 'string' },
     },
     strict: true,
   });
 
   const dryRun = values['dry-run'] ?? false;
+  const explicitBeadId = (values['bead-id'] ?? '').trim();
+
+  if (values['bead-id'] !== undefined && !explicitBeadId) {
+    console.error('--bead-id requires a non-empty value');
+    process.exit(1);
+  }
+
   const loggerInstance = createRunLogger();
 
   const ctx: OrchestratorCtx = {
     runId: loggerInstance.runId,
-    beadId: '',
+    beadId: explicitBeadId,
     logger: loggerInstance,
     phaseHistory: [],
     dryRun,
@@ -240,10 +248,12 @@ async function main(): Promise<void> {
     event: 'run_start',
     runId: ctx.runId,
     dryRun,
+    explicitBeadId: explicitBeadId || null,
     startedAt: new Date().toISOString(),
   });
 
-  console.log(`process-backlog run ${ctx.runId}${dryRun ? ' (dry-run)' : ''}`);
+  const beadSuffix = explicitBeadId ? ` (bead ${explicitBeadId})` : '';
+  console.log(`process-backlog run ${ctx.runId}${dryRun ? ' (dry-run)' : ''}${beadSuffix}`);
 
   try {
     const finalCtx = await runStateMachine(ctx, PhaseName.Preflight);
