@@ -12,6 +12,10 @@ import {
   analyze,
   analyzeAdvisors,
   branch,
+  buildShapePrompt,
+  buildAnalyzePrompt,
+  formatRefinementFeedback,
+  REFINEMENT_ROUND_CAP_DEFAULT,
   PREFLIGHT_MESSAGES,
   GIT_SAFE_MESSAGES,
   type PhaseCtx,
@@ -20,7 +24,7 @@ import {
   type ShapeVerdict,
 } from '../../lib/phases.js';
 import { PhaseName, type RunLogger } from '../../lib/types.js';
-import { DispatchTimeoutError } from '../../lib/dispatch.js';
+import { DispatchTimeoutError, type RefinementReport, type DispatchOptions } from '../../lib/dispatch.js';
 
 // =============================================================================
 // Shared helpers
@@ -419,6 +423,40 @@ describe('shape', () => {
 
     expect(result.next).toBe('halt');
   });
+
+  // Regression: shape() used to build its prompt from beadId only,
+  // ignoring ctx.refinementReport. That made the refinement loop
+  // re-dispatch the agent with identical input each round.
+  it('threads ctx.refinementReport into the shape prompt on re-dispatch', async () => {
+    const report: RefinementReport = {
+      beadId: 'pv-test-1',
+      phase: 'phase-3-shape',
+      advisors: [{
+        agent: 'testing-advisor',
+        verdict: 'refinement-needed',
+        concerns: ['no tests planned for register.vue'],
+        recommendations: ['add register.vue.test.ts'],
+      }],
+      overallVerdict: 'refinement-needed',
+      summary: '1 concern from testing-advisor',
+    };
+
+    let capturedPrompt = '';
+    const spawn = seqSpawn(fakeSpawn(beadTextShaped(), '', 0));
+
+    await shape(makeCtx({ refinementReport: report }), {
+      dispatchFn: (async (opts: DispatchOptions) => {
+        capturedPrompt = opts.prompt;
+        return { beadId: 'pv-test-1', status: 'shaped', summary: 'ok' } as never;
+      }) as PhaseDeps['dispatchFn'],
+      spawnFn: spawn,
+    });
+
+    expect(capturedPrompt).toContain('Refinement feedback');
+    expect(capturedPrompt).toContain('testing-advisor');
+    expect(capturedPrompt).toContain('no tests planned for register.vue');
+    expect(capturedPrompt).toContain('add register.vue.test.ts');
+  });
 });
 
 // =============================================================================
@@ -740,5 +778,85 @@ describe('message constants', () => {
     for (const msg of Object.values(PREFLIGHT_MESSAGES)) {
       expect(msg).toContain('\u2014');
     }
+  });
+});
+
+// =============================================================================
+// Prompt builders + refinement feedback plumbing
+// =============================================================================
+
+function refinementReportFixture(): RefinementReport {
+  return {
+    beadId: 'pv-test-1',
+    phase: 'phase-3-shape',
+    advisors: [
+      { agent: 'testing-advisor', verdict: 'refinement-needed', concerns: ['missing test A'], recommendations: ['write test A'] },
+      { agent: 'stylesheet-advisor', verdict: 'clean', concerns: [], recommendations: [] },
+    ],
+    overallVerdict: 'refinement-needed',
+    summary: '1 concern from testing-advisor',
+  };
+}
+
+describe('formatRefinementFeedback', () => {
+  it('returns empty string when report is absent', () => {
+    expect(formatRefinementFeedback(undefined)).toBe('');
+  });
+
+  it('returns empty string when overallVerdict is clean', () => {
+    const clean: RefinementReport = {
+      beadId: 'pv-x', phase: 'phase-3-shape', advisors: [], overallVerdict: 'clean', summary: 'ok',
+    };
+    expect(formatRefinementFeedback(clean)).toBe('');
+  });
+
+  it('omits clean advisors and only surfaces non-clean feedback', () => {
+    const md = formatRefinementFeedback(refinementReportFixture());
+    expect(md).toContain('testing-advisor');
+    expect(md).toContain('missing test A');
+    expect(md).toContain('write test A');
+    expect(md).not.toContain('stylesheet-advisor');
+  });
+
+  it('includes both concerns and recommendations under labelled sections', () => {
+    const md = formatRefinementFeedback(refinementReportFixture());
+    expect(md).toMatch(/Concerns:/);
+    expect(md).toMatch(/Recommendations:/);
+  });
+});
+
+describe('buildShapePrompt', () => {
+  it('produces a prompt with no feedback section when no report is provided', () => {
+    const prompt = buildShapePrompt('pv-test-1');
+    expect(prompt).not.toContain('Refinement feedback');
+    expect(prompt).toContain('pv-test-1');
+  });
+
+  it('splices refinement feedback into the prompt when a report is provided', () => {
+    const prompt = buildShapePrompt('pv-test-1', refinementReportFixture());
+    expect(prompt).toContain('Refinement feedback');
+    expect(prompt).toContain('missing test A');
+  });
+});
+
+describe('buildAnalyzePrompt', () => {
+  it('produces a prompt with no feedback section when no report is provided', () => {
+    const prompt = buildAnalyzePrompt('pv-epic-1', ['pv-leaf-1']);
+    expect(prompt).not.toContain('Refinement feedback');
+    expect(prompt).toContain('pv-epic-1');
+  });
+
+  it('splices refinement feedback into the prompt when a report is provided', () => {
+    const report = { ...refinementReportFixture(), phase: 'phase-5-analyze' as const };
+    const prompt = buildAnalyzePrompt('pv-epic-1', ['pv-leaf-1'], report);
+    expect(prompt).toContain('Refinement feedback');
+    expect(prompt).toContain('missing test A');
+  });
+});
+
+describe('refinement round cap', () => {
+  it('has a default cap greater than 1', () => {
+    // >= 2 — the loop must allow at least one refinement round before escalating
+    expect(REFINEMENT_ROUND_CAP_DEFAULT).toBeGreaterThanOrEqual(2);
   });
 });

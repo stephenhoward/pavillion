@@ -47,7 +47,12 @@ import {
 export interface PhaseCtx extends RunContext {
   dryRun: boolean;
   refinementReport?: RefinementReport;
+  /** Per-phase refinement-loop counter, keyed by logTag (e.g. 'phase-3.5-advisors'). */
+  refinementRounds?: Record<string, number>;
 }
+
+/** Max refinement rounds before an advisor loop escalates to needs-human. */
+export const REFINEMENT_ROUND_CAP_DEFAULT = 2;
 
 /** Return type of every phase runner. */
 export interface PhaseReturn {
@@ -361,10 +366,31 @@ async function runAdvisorPass(
     return { next: 'halt', ctx };
   }
 
-  // Refinement needed -> loop back
+  // Refinement needed -> increment round counter, escalate if cap exceeded.
+  const cap = parseInt(process.env.ORCH_REFINEMENT_ROUND_CAP ?? '', 10) || REFINEMENT_ROUND_CAP_DEFAULT;
+  ctx.refinementRounds = ctx.refinementRounds ?? {};
+  const previousRounds = ctx.refinementRounds[config.logTag] ?? 0;
+  const nextRound = previousRounds + 1;
+  ctx.refinementRounds[config.logTag] = nextRound;
+
+  if (nextRound >= cap) {
+    const reason = `unresolved after ${nextRound} refinement round(s): ${report.summary}`;
+    ctx.logger.appendRunJson({
+      event: `${config.logTag.replace(/\./g, '_')}_cap_exceeded`,
+      beadId: ctx.beadId,
+      round: nextRound,
+      cap,
+      reason,
+    });
+    escalate(ctx.beadId, reason, config.escalateTag, config.logTag, deps, ctx);
+    return { next: 'halt', ctx };
+  }
+
   ctx.logger.appendRunJson({
     event: `${config.logTag.replace(/\./g, '_')}_refinement_needed`,
     beadId: ctx.beadId,
+    round: nextRound,
+    cap,
     summary: report.summary,
   });
   ctx.refinementReport = report;
@@ -417,7 +443,40 @@ export function routeToExecution(issueType: string): PhaseName {
 // Prompt builders
 // =============================================================================
 
-export function buildShapePrompt(beadId: string): string {
+/**
+ * Render a RefinementReport as a markdown section to splice into a re-dispatch
+ * prompt. Returns empty string when the report is absent or clean (belt +
+ * braces — callers only pass non-clean reports).
+ */
+export function formatRefinementFeedback(report?: RefinementReport): string {
+  if (!report || report.overallVerdict === 'clean') return '';
+  const nonClean = report.advisors.filter(v => v.verdict !== 'clean');
+  if (nonClean.length === 0) return '';
+
+  const lines: string[] = ['## Refinement feedback from prior review', ''];
+  lines.push(
+    'Your previous output was reviewed by advisors and flagged for refinement.',
+    'Address each concern below when re-running — update the relevant `bd` fields',
+    '(design, acceptance, notes) so the next advisor pass can approve.',
+    '',
+  );
+  for (const v of nonClean) {
+    lines.push(`### [${v.agent}] verdict: ${v.verdict}`);
+    if (v.concerns.length > 0) {
+      lines.push('', 'Concerns:');
+      for (const c of v.concerns) lines.push(`- ${c}`);
+    }
+    if (v.recommendations.length > 0) {
+      lines.push('', 'Recommendations:');
+      for (const r of v.recommendations) lines.push(`- ${r}`);
+    }
+    lines.push('');
+  }
+  return lines.join('\n');
+}
+
+export function buildShapePrompt(beadId: string, refinementReport?: RefinementReport): string {
+  const feedback = formatRefinementFeedback(refinementReport);
   return [
     `# Shape bead: ${beadId}`,
     '',
@@ -436,6 +495,7 @@ export function buildShapePrompt(beadId: string): string {
     '  actionable signal (no verb, no object, no clear outcome), do NOT',
     '  fabricate a design. Return status `escalate` with the reason.',
     '- On success, return status `shaped` with a one-line summary.',
+    ...(feedback ? ['', feedback] : []),
     '',
     '## Output format',
     '',
@@ -462,7 +522,12 @@ export function buildDecomposePrompt(beadId: string, reasons: string[]): string 
   ].join('\n');
 }
 
-export function buildAnalyzePrompt(epicId: string, unenrichedIds: string[]): string {
+export function buildAnalyzePrompt(
+  epicId: string,
+  unenrichedIds: string[],
+  refinementReport?: RefinementReport,
+): string {
+  const feedback = formatRefinementFeedback(refinementReport);
   return [
     `Read \`.claude/commands/analyze-bead.md\` and run its full process for \`${epicId}\` autonomously.`,
     '',
@@ -471,6 +536,7 @@ export function buildAnalyzePrompt(epicId: string, unenrichedIds: string[]): str
     'Skip Phase 1.5 (decomposition is already complete); start from Phase 2 (Map Hierarchy) through Phase 5 (Store Analysis).',
     '',
     'No AskUserQuestion -- flag issues rather than pausing.',
+    ...(feedback ? ['', feedback] : []),
     '',
     'Report execution waves and confirm every leaf\'s notes contains an `Implementation Context` block.',
   ].join('\n');
@@ -577,7 +643,7 @@ export async function assessState(ctx: PhaseCtx, deps: PhaseDeps = {}): Promise<
  * Phase 3 — Auto-shape if needed (dispatches shape-bead subagent).
  */
 export async function shape(ctx: PhaseCtx, deps: PhaseDeps = {}): Promise<PhaseReturn> {
-  const prompt = buildShapePrompt(ctx.beadId);
+  const prompt = buildShapePrompt(ctx.beadId, ctx.refinementReport);
 
   ctx.logger.appendRunJson({
     event: 'shape_dispatched',
@@ -739,7 +805,7 @@ export async function analyze(ctx: PhaseCtx, deps: PhaseDeps = {}): Promise<Phas
   }
 
   // Step 4: Dispatch analyze-bead subagent
-  const prompt = buildAnalyzePrompt(ctx.beadId, unenrichedIds);
+  const prompt = buildAnalyzePrompt(ctx.beadId, unenrichedIds, ctx.refinementReport);
 
   const { result: report, escalated } = await dispatchAgent<AnalyzeReport>(ctx, {
     agent: 'analyze-bead',
