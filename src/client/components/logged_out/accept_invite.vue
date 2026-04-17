@@ -62,6 +62,8 @@
         :placeholder="t('password_placeholder')"
         v-model="state.password"
         @blur="validatePasswordField"
+        :aria-invalid="(state.passwordError || state.form_error) ? 'true' : 'false'"
+        :aria-describedby="(state.passwordError || state.form_error) ? 'accept-invite-error' : undefined"
         autocomplete="new-password"
         required
       />
@@ -72,12 +74,18 @@
         id="invite-password2"
         :placeholder="t('password2_placeholder')"
         v-model="state.password2"
+        :aria-invalid="(state.passwordError || state.form_error) ? 'true' : 'false'"
+        :aria-describedby="(state.passwordError || state.form_error) ? 'accept-invite-error' : undefined"
         autocomplete="new-password"
         @keyup.enter="setPassword"
         required
       />
 
-      <button class="btn btn--primary" type="submit">
+      <button
+        class="btn btn--primary"
+        type="submit"
+        :aria-describedby="(state.passwordError || state.form_error) ? 'accept-invite-error' : undefined"
+      >
         {{ t('set_password_button') || 'Set Password' }}
       </button>
     </div>

@@ -1,8 +1,7 @@
-import { expect, describe, it, beforeEach, afterEach } from 'vitest';
+import { expect, describe, it } from 'vitest';
 import { flushPromises } from '@vue/test-utils';
 import { createMemoryHistory, createRouter, Router } from 'vue-router';
 import { RouteRecordRaw } from 'vue-router';
-import sinon from 'sinon';
 
 import { mountComponent } from '@/client/test/lib/vue';
 import PasswordReset from '@/client/components/logged_out/password_reset.vue';
@@ -30,15 +29,6 @@ const mountPasswordReset = (authnOverrides: Record<string, any> = {}) => {
 };
 
 describe('Password Reset Error Alert', () => {
-  const sandbox = sinon.createSandbox();
-
-  beforeEach(() => {
-    // reset sandbox each test
-  });
-
-  afterEach(() => {
-    sandbox.restore();
-  });
 
   it('failed reset code submission renders alert text with linked aria-describedby', async () => {
     const { wrapper } = mountPasswordReset({

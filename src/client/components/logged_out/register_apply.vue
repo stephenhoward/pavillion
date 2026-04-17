@@ -98,8 +98,8 @@ onBeforeMount(() => {
     router.push({ name: 'reset_password', query: { code: route.query.code }});
   }
 
-  state.err   = state.error || '';
-  state.email = state.em || '';
+  state.err   = props.error || '';
+  state.email = props.em || '';
 });
 
 async function doApply() {

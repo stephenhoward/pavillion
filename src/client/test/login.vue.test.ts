@@ -411,6 +411,7 @@ describe('Login Behavior', () => {
     expect(wrapper.find('[role="alert"]').exists()).toBe(false);
     expect(wrapper.find('input[type="email"]').classes()).not.toContain('form-control--error');
     expect(wrapper.find('input[type="email"]').attributes('aria-describedby')).toBeUndefined();
+    expect(wrapper.find('input[type="password"]').attributes('aria-describedby')).toBeUndefined();
   });
 
   it('catch login error', async () => {
