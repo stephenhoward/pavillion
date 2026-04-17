@@ -12,7 +12,6 @@
 
 import { spawn as nodeSpawn, spawnSync, type ChildProcess, type SpawnSyncReturns } from 'node:child_process';
 import { existsSync as nodeExistsSync } from 'node:fs';
-import { resolve } from 'node:path';
 import type { PhaseName, RunContext, RunLogger } from './types.js';
 
 const DEFAULT_CLAUDE_BIN = 'claude';
@@ -522,9 +521,6 @@ export function spawnCmd(
 // fanOutAdvisors — parallel advisor dispatch + verdict aggregation
 // =============================================================================
 
-const ADVISOR_VERDICT_SCHEMA = resolve(
-  '.claude/orchestrators/schemas/advisor-verdict.json',
-);
 
 /** Default per-advisor budget in USD. Override via ORCH_BUDGET_ADVISOR env var. */
 export const ADVISOR_BUDGET_DEFAULT = 0.75;
@@ -627,7 +623,6 @@ export async function fanOutAdvisors(
 
       return dispatchFn({
         agent: advisor.name,
-        schemaPath: ADVISOR_VERDICT_SCHEMA,
         prompt,
         budgetUsd,
         timeoutMs,
