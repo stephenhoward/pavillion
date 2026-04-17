@@ -9,21 +9,35 @@
  */
 
 import { spawnSync as nodeSpawnSync } from 'node:child_process';
-import { resolve } from 'node:path';
 import { PhaseName, type RunContext, type RunLogger } from './types.js';
 import {
   dispatch,
-  runScript,
   spawnCmd,
   fanOutAdvisors,
   DispatchMalformedError,
   DispatchTimeoutError,
   type DispatchOptions,
-  type RunScriptOptions,
   type MatchedAdvisor,
   type RefinementReport,
   type FanOutDeps,
 } from './dispatch.js';
+import {
+  preflight as runPreflightCheck,
+  gitSafeToStart,
+  bdTopReady,
+  bdState,
+  bdSizingCheck,
+  bdEnrichmentCheck,
+  bdEscalate,
+  branchName,
+  discoverAgents,
+  matchAgents,
+  type StateVerdict,
+  type SizingVerdict,
+  type BeadJson,
+  type PreflightResult as PreflightCheckResult,
+  type MatchedAgent as HelperMatchedAgent,
+} from './helpers.js';
 
 // =============================================================================
 // Types
@@ -45,8 +59,6 @@ export interface PhaseReturn {
 export interface PhaseDeps {
   /** Override spawnSync (preflight, escalation, branch, enrichment). */
   spawnFn?: typeof nodeSpawnSync;
-  /** Override file-existence check (runScript). */
-  existsFn?: (path: string) => boolean;
   /** Override claude dispatch. */
   dispatchFn?: <T>(opts: DispatchOptions) => Promise<T>;
   /** Override fanOutAdvisors. */
@@ -64,60 +76,15 @@ export interface PhaseDeps {
 }
 
 // =============================================================================
-// Script paths
-// =============================================================================
-
-const PREFLIGHT_SCRIPT = '.claude/skills/bead-backlog-selection/preflight.sh';
-const GIT_SAFE_SCRIPT = '.claude/skills/bead-branch-and-pr/git-safe-to-start.sh';
-const BD_TOP_READY_SCRIPT = '.claude/skills/bead-backlog-selection/bd-top-ready.sh';
-const BD_STATE_SCRIPT = '.claude/skills/bead-state-assessment/bd-state.sh';
-const BD_SIZING_SCRIPT = '.claude/skills/bead-state-assessment/bd-sizing-check.sh';
-const BD_ENRICHMENT_SCRIPT = '.claude/skills/bead-state-assessment/bd-enrichment-check.sh';
-const BD_ESCALATE_SCRIPT = '.claude/skills/bead-backlog-selection/bd-escalate.sh';
-const MATCH_AGENTS_SCRIPT = '.claude/skills/agent-discovery/match-agents.sh';
-const BRANCH_NAME_SCRIPT = '.claude/skills/bead-branch-and-pr/branch-name.sh';
-
-const SHAPE_SCHEMA = resolve('.claude/orchestrators/schemas/shape-verdict.json');
-const DECOMPOSE_SCHEMA = resolve('.claude/orchestrators/schemas/decompose-report.json');
-const ANALYZE_SCHEMA = resolve('.claude/orchestrators/schemas/analyze-report.json');
-
-// =============================================================================
 // Verdict / report types
 // =============================================================================
 
-interface PreflightFailure {
-  kind: string;
-  reason: string;
-}
-
-interface PreflightOutput {
-  ok: boolean;
-  failures: PreflightFailure[];
-}
-
-interface BeadJson {
-  id: string;
-  issue_type?: string;
-  priority?: number;
-  created_at?: string;
-  [key: string]: unknown;
-}
-
-export interface StateVerdict {
-  state: 'unshaped' | 'shaped' | 'decomposed' | 'analyzed' | 'executing' | 'complete';
-  missing_phases: string[];
-  reasons: string[];
-}
+export type { StateVerdict, SizingVerdict, BeadJson };
 
 export interface ShapeVerdict {
   beadId: string;
   status: 'shaped' | 'escalate';
   summary: string;
-}
-
-export interface SizingVerdict {
-  needs_decomposition: boolean;
-  reasons: string[];
 }
 
 export interface DecomposeReport {
@@ -159,18 +126,8 @@ export const GIT_SAFE_MESSAGES: Record<number, string> = {
 // Shared helpers
 // =============================================================================
 
-/** Build RunScriptOptions from ctx + deps. */
-function scriptOpts(ctx: PhaseCtx, logTag: PhaseName, deps: PhaseDeps): RunScriptOptions {
-  return {
-    logger: ctx.logger,
-    logTag,
-    ...(deps.spawnFn ? { spawnFn: deps.spawnFn } : {}),
-    ...(deps.existsFn ? { existsFn: deps.existsFn } : {}),
-  };
-}
-
 /**
- * Escalate a bead by running bd-escalate.sh. One copy replaces 4 identical
+ * Escalate a bead via bdEscalate(). One copy replaces 4 identical
  * copies across phases 3, 3.5, 5.5, and 4.
  */
 function escalate(
@@ -181,24 +138,7 @@ function escalate(
   deps: PhaseDeps,
   ctx: PhaseCtx,
 ): void {
-  const spawn = deps.spawnFn ?? nodeSpawnSync;
-
-  const result = spawn(
-    BD_ESCALATE_SCRIPT,
-    [beadId, reason, phaseTag],
-    { shell: true, encoding: 'utf-8' as never, timeout: 30_000 },
-  );
-
-  const stderr = result.stderr?.toString() ?? '';
-  const exitCode = result.status ?? 1;
-
-  if (stderr) {
-    ctx.logger.writePhaseLog(logPhase, 'err', stderr);
-  }
-  if (exitCode !== 0) {
-    ctx.logger.writePhaseLog(logPhase, 'err',
-      `bd-escalate.sh exited with code ${exitCode}\n`);
-  }
+  bdEscalate(beadId, reason, phaseTag, { spawnFn: deps.spawnFn });
 }
 
 /**
@@ -243,7 +183,7 @@ function getBeadContext(beadId: string, deps: PhaseDeps): string {
 }
 
 /**
- * Match advisors by piping file hints into match-agents.sh.
+ * Match advisors using discoverAgents + matchAgents from helpers.ts.
  */
 function matchAdvisors(
   fileHints: string[],
@@ -253,36 +193,15 @@ function matchAdvisors(
 ): MatchedAdvisor[] {
   if (fileHints.length === 0) return [];
 
-  const spawn = deps.spawnFn ?? nodeSpawnSync;
-  const input = fileHints.join('\n') + '\n';
+  const agents = discoverAgents('advisor');
+  const matched = matchAgents(agents, fileHints);
 
-  const result = spawn(
-    MATCH_AGENTS_SCRIPT,
-    ['advisor'],
-    { shell: true, encoding: 'utf-8' as never, timeout: 15_000, input },
-  );
-
-  const stdout = result.stdout?.toString() ?? '';
-  const stderr = result.stderr?.toString() ?? '';
-  const exitCode = result.status ?? 1;
-
-  if (stdout) ctx.logger.writePhaseLog(logTag, 'out', stdout);
-  if (stderr) ctx.logger.writePhaseLog(logTag, 'err', stderr);
-
-  if (exitCode !== 0) {
-    ctx.logger.writePhaseLog(logTag, 'err',
-      `match-agents.sh exited with code ${exitCode}\n`);
-    return [];
+  if (matched.length > 0) {
+    ctx.logger.writePhaseLog(logTag, 'out',
+      JSON.stringify(matched, null, 2) + '\n');
   }
 
-  try {
-    return JSON.parse(stdout) as MatchedAdvisor[];
-  }
-  catch {
-    ctx.logger.writePhaseLog(logTag, 'err',
-      'Failed to parse match-agents.sh output as JSON\n');
-    return [];
-  }
+  return matched as unknown as MatchedAdvisor[];
 }
 
 /**
@@ -293,7 +212,6 @@ async function dispatchAgent<T>(
   ctx: PhaseCtx,
   config: {
     agent: string;
-    schemaPath: string;
     prompt: string;
     budgetEnvVar: string;
     defaultBudget: number;
@@ -309,7 +227,6 @@ async function dispatchAgent<T>(
   try {
     const result = await dispatchFn<T>({
       agent: config.agent,
-      schemaPath: config.schemaPath,
       prompt: config.prompt,
       budgetUsd,
       timeoutMs: config.defaultTimeout,
@@ -459,7 +376,7 @@ async function runAdvisorPass(
 // =============================================================================
 
 /**
- * Map a bd-state.sh verdict to the next orchestrator phase.
+ * Map a bdState() verdict to the next orchestrator phase.
  *
  * Routing table:
  *   unshaped   -> Shape
@@ -565,40 +482,14 @@ export function buildAnalyzePrompt(epicId: string, unenrichedIds: string[]): str
 
 /**
  * Phase 0 — Preflight.
- * Runs preflight.sh + git-safe-to-start.sh. Both must pass to proceed.
+ * Runs preflight checks + git-safe-to-start. Both must pass to proceed.
  */
 export async function preflight(ctx: PhaseCtx, deps: PhaseDeps = {}): Promise<PhaseReturn> {
-  const opts = scriptOpts(ctx, PhaseName.Preflight, deps);
+  // Step 1: Run preflight checks
+  const preflightResult = runPreflightCheck({ spawnFn: deps.spawnFn });
 
-  // Step 1: Run preflight.sh
-  const preflightResult = runScript<PreflightOutput>(PREFLIGHT_SCRIPT, [], opts);
-
-  if (preflightResult.exitCode !== 0) {
-    let failures: PreflightFailure[] = [];
-    try {
-      const parsed = JSON.parse(preflightResult.stdout) as PreflightOutput;
-      failures = parsed.failures ?? [];
-    }
-    catch { /* not JSON */ }
-
-    if (failures.length > 0) {
-      for (const f of failures) {
-        const msg = PREFLIGHT_MESSAGES[f.kind] ?? f.reason;
-        console.error(msg);
-        ctx.logger.writePhaseLog(PhaseName.Preflight, 'err', msg + '\n');
-      }
-    }
-    else {
-      const msg = `Preflight failed with exit code ${preflightResult.exitCode}`;
-      console.error(msg);
-      ctx.logger.writePhaseLog(PhaseName.Preflight, 'err', msg + '\n');
-    }
-    return { next: 'halt', ctx };
-  }
-
-  // Belt-and-braces: exit 0 but ok: false
-  if (preflightResult.json && !preflightResult.json.ok) {
-    for (const f of preflightResult.json.failures) {
+  if (!preflightResult.ok) {
+    for (const f of preflightResult.failures) {
       const msg = PREFLIGHT_MESSAGES[f.kind] ?? f.reason;
       console.error(msg);
       ctx.logger.writePhaseLog(PhaseName.Preflight, 'err', msg + '\n');
@@ -606,23 +497,10 @@ export async function preflight(ctx: PhaseCtx, deps: PhaseDeps = {}): Promise<Ph
     return { next: 'halt', ctx };
   }
 
-  // Step 2: Run git-safe-to-start.sh
-  const gitSpawn = deps.spawnFn ?? nodeSpawnSync;
-  const gitSafeResult = gitSpawn(GIT_SAFE_SCRIPT, [], {
-    encoding: 'buffer' as never,
-    shell: true,
-    timeout: 30_000,
-  });
-  const gitSafeExit = gitSafeResult.status ?? 1;
-  const gitSafeStderr = gitSafeResult.stderr?.toString('utf-8') ?? '';
-
-  if (gitSafeStderr) {
-    ctx.logger.writePhaseLog(PhaseName.Preflight, 'err', gitSafeStderr);
-  }
-
-  if (gitSafeExit !== 0) {
-    const msg = GIT_SAFE_MESSAGES[gitSafeExit]
-      ?? `git-safe-to-start failed: ${gitSafeStderr.trim()}`;
+  // Step 2: Git safety check
+  const gitSafe = gitSafeToStart({ spawnFn: deps.spawnFn });
+  if (!gitSafe.ok) {
+    const msg = gitSafe.reason ?? 'git safety check failed';
     console.error(msg);
     ctx.logger.writePhaseLog(PhaseName.Preflight, 'err', msg + '\n');
     return { next: 'halt', ctx };
@@ -635,42 +513,16 @@ export async function preflight(ctx: PhaseCtx, deps: PhaseDeps = {}): Promise<Ph
  * Phase 1 — Select the top-priority ready bead.
  */
 export async function select(ctx: PhaseCtx, deps: PhaseDeps = {}): Promise<PhaseReturn> {
-  const opts = scriptOpts(ctx, PhaseName.Select, deps);
+  const topReady = bdTopReady({ spawnFn: deps.spawnFn });
 
-  const result = runScript<BeadJson>(BD_TOP_READY_SCRIPT, ['--limit=5'], opts);
-
-  // Exit code 3: backlog exhausted
-  if (result.exitCode === 3) {
+  if (topReady.exhausted || !topReady.bead) {
     const msg = 'backlog exhausted for automation';
     console.error(msg);
     ctx.logger.writePhaseLog(PhaseName.Select, 'err', msg + '\n');
     return { next: 'halt', ctx };
   }
 
-  // Exit code 2: usage error
-  if (result.exitCode === 2) {
-    const msg = 'bd-top-ready.sh usage error (bug, not bead problem)';
-    console.error(msg);
-    ctx.logger.writePhaseLog(PhaseName.Select, 'err', msg + '\n');
-    return { next: 'halt', ctx };
-  }
-
-  // Any other non-zero exit
-  if (result.exitCode !== 0) {
-    const msg = `bd-top-ready.sh failed with exit code ${result.exitCode}`;
-    console.error(msg);
-    ctx.logger.writePhaseLog(PhaseName.Select, 'err', msg + '\n');
-    return { next: 'halt', ctx };
-  }
-
-  const bead = result.json;
-  if (!bead || !bead.id) {
-    const msg = 'No ready beads in backlog.';
-    console.error(msg);
-    ctx.logger.writePhaseLog(PhaseName.Select, 'err', msg + '\n');
-    return { next: 'halt', ctx };
-  }
-
+  const bead = topReady.bead;
   ctx.beadId = bead.id;
 
   ctx.logger.appendRunJson({
@@ -688,25 +540,7 @@ export async function select(ctx: PhaseCtx, deps: PhaseDeps = {}): Promise<Phase
  * Phase 2 — Assess bead state and route.
  */
 export async function assessState(ctx: PhaseCtx, deps: PhaseDeps = {}): Promise<PhaseReturn> {
-  const opts = scriptOpts(ctx, PhaseName.State, deps);
-
-  const result = runScript<StateVerdict>(BD_STATE_SCRIPT, [ctx.beadId], opts);
-
-  if (result.exitCode === 2) {
-    const msg = 'bd-state.sh usage error (exit code 2)';
-    console.error(msg);
-    ctx.logger.writePhaseLog(PhaseName.State, 'err', msg + '\n');
-    return { next: 'halt', ctx };
-  }
-
-  if (result.exitCode !== 0) {
-    const msg = `bd-state.sh failed with exit code ${result.exitCode}`;
-    console.error(msg);
-    ctx.logger.writePhaseLog(PhaseName.State, 'err', msg + '\n');
-    return { next: 'halt', ctx };
-  }
-
-  const verdict = result.json;
+  const verdict = bdState(ctx.beadId, { spawnFn: deps.spawnFn });
 
   ctx.logger.appendRunJson({
     event: 'state_assessed',
@@ -752,7 +586,6 @@ export async function shape(ctx: PhaseCtx, deps: PhaseDeps = {}): Promise<PhaseR
 
   const { result: verdict, escalated } = await dispatchAgent<ShapeVerdict>(ctx, {
     agent: 'shape-bead',
-    schemaPath: SHAPE_SCHEMA,
     prompt,
     budgetEnvVar: 'ORCH_BUDGET_SHAPE',
     defaultBudget: 2.00,
@@ -773,29 +606,21 @@ export async function shape(ctx: PhaseCtx, deps: PhaseDeps = {}): Promise<PhaseR
     return { next: 'halt', ctx };
   }
 
-  // Shaped — re-run bd-state.sh to verify state advanced
+  // Shaped — re-run bdState to verify state advanced
   ctx.logger.appendRunJson({
     event: 'shape_success',
     beadId: ctx.beadId,
     summary: verdict!.summary,
   });
 
-  const opts = scriptOpts(ctx, PhaseName.Shape, deps);
-  const stateResult = runScript<StateVerdict>(BD_STATE_SCRIPT, [ctx.beadId], opts);
+  const stateVerdict = bdState(ctx.beadId, { spawnFn: deps.spawnFn });
 
-  if (stateResult.exitCode !== 0) {
-    const msg = `bd-state.sh failed after shaping (exit ${stateResult.exitCode}) — halting (Safeguard 6).`;
-    console.error(msg);
-    ctx.logger.writePhaseLog(PhaseName.Shape, 'err', msg + '\n');
-    return { next: 'halt', ctx };
-  }
-
-  const next = routeByState(stateResult.json);
+  const next = routeByState(stateVerdict);
 
   ctx.logger.appendRunJson({
     event: 'shape_state_recheck',
     beadId: ctx.beadId,
-    newState: stateResult.json.state,
+    newState: stateVerdict.state,
     next,
   });
 
@@ -819,26 +644,8 @@ export async function shapeAdvisors(ctx: PhaseCtx, deps: PhaseDeps = {}): Promis
  * Phase 4 — Decompose if needed.
  */
 export async function decompose(ctx: PhaseCtx, deps: PhaseDeps = {}): Promise<PhaseReturn> {
-  const opts = scriptOpts(ctx, PhaseName.Decompose, deps);
-
   // Step 1: Run sizing check
-  const sizingResult = runScript<SizingVerdict>(BD_SIZING_SCRIPT, [ctx.beadId], opts);
-
-  if (sizingResult.exitCode === 2) {
-    const msg = 'bd-sizing-check.sh usage error (exit code 2)';
-    console.error(msg);
-    ctx.logger.writePhaseLog(PhaseName.Decompose, 'err', msg + '\n');
-    return { next: 'halt', ctx };
-  }
-
-  if (sizingResult.exitCode !== 0) {
-    const msg = `bd-sizing-check.sh failed with exit code ${sizingResult.exitCode}`;
-    console.error(msg);
-    ctx.logger.writePhaseLog(PhaseName.Decompose, 'err', msg + '\n');
-    return { next: 'halt', ctx };
-  }
-
-  const sizing = sizingResult.json;
+  const sizing = bdSizingCheck(ctx.beadId, { spawnFn: deps.spawnFn });
 
   ctx.logger.appendRunJson({
     event: 'sizing_checked',
@@ -857,20 +664,16 @@ export async function decompose(ctx: PhaseCtx, deps: PhaseDeps = {}): Promise<Ph
   }
 
   // Check if bead already has children (already an epic)
-  const stateResult = runScript<{ state: string; missing_phases: string[] }>(
-    BD_STATE_SCRIPT, [ctx.beadId], opts,
-  );
+  const stateVerdict = bdState(ctx.beadId, { spawnFn: deps.spawnFn });
+  const isEpic = !stateVerdict.missing_phases.includes('decomposed');
 
-  if (stateResult.exitCode === 0 && stateResult.json) {
-    const isEpic = !stateResult.json.missing_phases.includes('decomposed');
-    if (isEpic) {
-      ctx.logger.appendRunJson({
-        event: 'decompose_skipped',
-        beadId: ctx.beadId,
-        reason: 'bead already has children',
-      });
-      return { next: PhaseName.Analyze, ctx };
-    }
+  if (isEpic) {
+    ctx.logger.appendRunJson({
+      event: 'decompose_skipped',
+      beadId: ctx.beadId,
+      reason: 'bead already has children',
+    });
+    return { next: PhaseName.Analyze, ctx };
   }
 
   // Step 3: Dispatch decompose subagent
@@ -878,7 +681,6 @@ export async function decompose(ctx: PhaseCtx, deps: PhaseDeps = {}): Promise<Ph
 
   const { result: report, escalated } = await dispatchAgent<DecomposeReport>(ctx, {
     agent: 'decompose-bead',
-    schemaPath: DECOMPOSE_SCHEMA,
     prompt,
     budgetEnvVar: 'ORCH_BUDGET_DECOMPOSE',
     defaultBudget: 3.00,
@@ -906,7 +708,6 @@ export async function decompose(ctx: PhaseCtx, deps: PhaseDeps = {}): Promise<Ph
  */
 export async function analyze(ctx: PhaseCtx, deps: PhaseDeps = {}): Promise<PhaseReturn> {
   const childIds = deps.childIds ?? [];
-  const spawn = deps.spawnFn ?? nodeSpawnSync;
 
   // Step 1: If leaf (no children), skip to Branch
   if (childIds.length === 0) {
@@ -921,12 +722,8 @@ export async function analyze(ctx: PhaseCtx, deps: PhaseDeps = {}): Promise<Phas
   // Step 2: Check enrichment of each child
   const unenrichedIds: string[] = [];
   for (const leafId of childIds) {
-    const result = spawn(BD_ENRICHMENT_SCRIPT, [leafId], {
-      encoding: 'buffer' as never,
-      shell: true,
-      timeout: 30_000,
-    });
-    if ((result.status ?? 1) !== 0) {
+    const enriched = bdEnrichmentCheck(leafId, { spawnFn: deps.spawnFn });
+    if (!enriched) {
       unenrichedIds.push(leafId);
     }
   }
@@ -946,7 +743,6 @@ export async function analyze(ctx: PhaseCtx, deps: PhaseDeps = {}): Promise<Phas
 
   const { result: report, escalated } = await dispatchAgent<AnalyzeReport>(ctx, {
     agent: 'analyze-bead',
-    schemaPath: ANALYZE_SCHEMA,
     prompt,
     budgetEnvVar: 'ORCH_BUDGET_ANALYZE',
     defaultBudget: 3.00,
@@ -960,12 +756,8 @@ export async function analyze(ctx: PhaseCtx, deps: PhaseDeps = {}): Promise<Phas
   // Step 5: Belt-and-braces re-check
   const stillUnenriched: string[] = [];
   for (const leafId of childIds) {
-    const result = spawn(BD_ENRICHMENT_SCRIPT, [leafId], {
-      encoding: 'buffer' as never,
-      shell: true,
-      timeout: 30_000,
-    });
-    if ((result.status ?? 1) !== 0) {
+    const enriched = bdEnrichmentCheck(leafId, { spawnFn: deps.spawnFn });
+    if (!enriched) {
       stillUnenriched.push(leafId);
     }
   }
@@ -1020,7 +812,6 @@ export async function analyzeAdvisors(ctx: PhaseCtx, deps: PhaseDeps = {}): Prom
  * Phase 6 — Branch setup (deterministic, no LLM dispatch).
  */
 export async function branch(ctx: PhaseCtx, deps: PhaseDeps = {}): Promise<PhaseReturn> {
-  const spawn = deps.spawnFn ?? nodeSpawnSync;
   const logger = ctx.logger;
 
   logger.appendRunJson({
@@ -1029,35 +820,41 @@ export async function branch(ctx: PhaseCtx, deps: PhaseDeps = {}): Promise<Phase
   });
 
   // Step 1: Safety re-check
-  const safeResult = spawnCmd(GIT_SAFE_SCRIPT, [], logger, PhaseName.Branch, spawn);
-
-  if (safeResult.exitCode === 2) {
-    const msg = `UNSAFE: git failure \u2014 ${safeResult.stderr.trim() || 'unexpected git error'}`;
+  const gitSafe = gitSafeToStart({ spawnFn: deps.spawnFn });
+  if (!gitSafe.ok) {
+    const msg = `UNSAFE: git-safe-to-start failed \u2014 ${gitSafe.reason ?? 'working tree is dirty or not on main'}`;
     console.error(msg);
     logger.writePhaseLog(PhaseName.Branch, 'err', msg + '\n');
     return { next: 'halt', ctx };
   }
 
-  if (safeResult.exitCode !== 0) {
-    const msg = `UNSAFE: git-safe-to-start failed \u2014 ${safeResult.stderr.trim() || 'working tree is dirty or not on main'}`;
+  // Step 2: Fetch bead title + type for branch name derivation
+  const spawn = deps.spawnFn ?? nodeSpawnSync;
+  const bdCmd = spawnCmd('bd', ['show', '--json', ctx.beadId], logger, PhaseName.Branch, spawn);
+
+  if (bdCmd.exitCode !== 0) {
+    const msg = `bd show --json failed (exit ${bdCmd.exitCode}): ${bdCmd.stderr.trim()}`;
     console.error(msg);
     logger.writePhaseLog(PhaseName.Branch, 'err', msg + '\n');
     return { next: 'halt', ctx };
   }
 
-  // Step 2: Derive branch name
-  const branchCmd = spawnCmd(BRANCH_NAME_SCRIPT, [ctx.beadId], logger, PhaseName.Branch, spawn);
+  let issueType = 'task';
+  let title = ctx.beadId;
 
-  if (branchCmd.exitCode !== 0) {
-    const msg = `branch-name.sh failed (exit ${branchCmd.exitCode}): ${branchCmd.stderr.trim()}`;
-    console.error(msg);
-    logger.writePhaseLog(PhaseName.Branch, 'err', msg + '\n');
-    return { next: 'halt', ctx };
+  if (bdCmd.stdout) {
+    try {
+      const parsed = JSON.parse(bdCmd.stdout) as Array<{ issue_type?: string; title?: string }>;
+      issueType = parsed[0]?.issue_type ?? 'task';
+      title = parsed[0]?.title ?? ctx.beadId;
+    }
+    catch { /* default to task */ }
   }
 
-  const branchName = branchCmd.stdout;
+  // Step 3: Derive branch name (pure function)
+  const derivedBranchName = branchName(ctx.beadId, title, issueType);
 
-  // Step 3: Check if already on target branch
+  // Step 4: Check if already on target branch
   const currentCmd = spawnCmd('git', ['branch', '--show-current'], logger, PhaseName.Branch, spawn);
 
   if (currentCmd.exitCode !== 0) {
@@ -1067,12 +864,12 @@ export async function branch(ctx: PhaseCtx, deps: PhaseDeps = {}): Promise<Phase
     return { next: 'halt', ctx };
   }
 
-  // Step 4: Create branch if not already on it
-  if (currentCmd.stdout !== branchName) {
-    const checkoutCmd = spawnCmd('git', ['checkout', '-b', branchName], logger, PhaseName.Branch, spawn);
+  // Step 5: Create branch if not already on it
+  if (currentCmd.stdout !== derivedBranchName) {
+    const checkoutCmd = spawnCmd('git', ['checkout', '-b', derivedBranchName], logger, PhaseName.Branch, spawn);
 
     if (checkoutCmd.exitCode !== 0) {
-      const msg = `git checkout -b "${branchName}" failed: ${checkoutCmd.stderr.trim()}`;
+      const msg = `git checkout -b "${derivedBranchName}" failed: ${checkoutCmd.stderr.trim()}`;
       console.error(msg);
       logger.writePhaseLog(PhaseName.Branch, 'err', msg + '\n');
       return { next: 'halt', ctx };
@@ -1080,41 +877,22 @@ export async function branch(ctx: PhaseCtx, deps: PhaseDeps = {}): Promise<Phase
 
     logger.appendRunJson({
       event: 'branch_created',
-      branchName,
+      branchName: derivedBranchName,
       baseBranch: 'main',
     });
   }
   else {
     logger.appendRunJson({
       event: 'branch_already_current',
-      branchName,
+      branchName: derivedBranchName,
     });
-  }
-
-  // Step 5: Determine issue_type for routing
-  const bdCmd = spawnCmd('bd', ['show', '--json', ctx.beadId], logger, PhaseName.Branch, spawn);
-
-  let issueType = 'task';
-
-  if (bdCmd.exitCode === 0 && bdCmd.stdout) {
-    try {
-      const parsed = JSON.parse(bdCmd.stdout) as Array<{ issue_type?: string }>;
-      issueType = parsed[0]?.issue_type ?? 'task';
-    }
-    catch { /* default to task */ }
-  }
-  else if (bdCmd.exitCode !== 0) {
-    const msg = `bd show --json failed (exit ${bdCmd.exitCode}): ${bdCmd.stderr.trim()}`;
-    console.error(msg);
-    logger.writePhaseLog(PhaseName.Branch, 'err', msg + '\n');
-    return { next: 'halt', ctx };
   }
 
   const next = routeToExecution(issueType);
 
   logger.appendRunJson({
     event: 'branch_setup_complete',
-    branchName,
+    branchName: derivedBranchName,
     issueType,
     next,
   });

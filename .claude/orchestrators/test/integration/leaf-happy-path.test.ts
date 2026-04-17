@@ -4,12 +4,11 @@
  * Walks the full state machine for a single leaf bead from preflight
  * through PR and report:
  *
- *   preflight -> select -> state(shaped) -> shapeAdvisors(skip, no hints)
+ *   preflight -> select -> state(shaped) -> shapeAdvisors(skip, no agents on disk)
  *   -> decompose(no decompose) -> analyze(leaf, skip) -> branch
  *   -> leaf(implementer ok, audit pass) -> PR -> report -> halt
  *
- * All script and dispatch calls are mocked via ScriptRouter and
- * DispatchRouter. No real I/O occurs.
+ * All git and bd calls are mocked via ScriptRouter. No real I/O occurs.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -41,6 +40,36 @@ function fixture(path: string): string {
   return readFileSync(join(FIXTURES, path), 'utf-8');
 }
 
+// ---------------------------------------------------------------------------
+// Bead text helpers for classifyBeadState()
+// ---------------------------------------------------------------------------
+
+/** Text that classifyBeadState() reads as 'shaped' */
+function shapedBeadText(): string {
+  return [
+    'OPEN pv-test.1 Implement widget feature',
+    'DESCRIPTION',
+    'Implement a calendar widget.',
+    'DESIGN',
+    'Add widget component to src/client/components.',
+    'ACCEPTANCE CRITERIA',
+    'Widget renders correctly.',
+  ].join('\n');
+}
+
+/** Text that bdEnrichmentCheck() reads as enriched */
+function enrichedBeadText(): string {
+  return shapedBeadText() + '\nNOTES\nImplementation Context\nSome context.\n';
+}
+
+// ---------------------------------------------------------------------------
+// Branch name that branchName() would derive for pv-test.1 / 'task' / title
+// ---------------------------------------------------------------------------
+// branchName('pv-test.1', 'Implement widget feature', 'task')
+// → prefix='chore', idSlug='pv-test-1', kebab='implement-widget-feature'
+// → 'chore/implement-widget-feature-pv-test-1'
+const EXPECTED_BRANCH = 'chore/implement-widget-feature-pv-test-1';
+
 describe('Integration: leaf happy path', () => {
   let scripts: ScriptRouter;
   let dispatches: DispatchRouter;
@@ -55,88 +84,86 @@ describe('Integration: leaf happy path', () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
     vi.spyOn(console, 'log').mockImplementation(() => {});
 
-    // --- Script routes ---
-
-    // Preflight scripts
-    scripts.onFixture('preflight.sh', 'sh/preflight-ok.json');
-    scripts.on('git-safe-to-start.sh', () => ({
-      exitCode: 0, stdout: '', stderr: '',
-    }));
-
-    // Select: bd-top-ready.sh returns a leaf bead
-    scripts.onFixture('bd-top-ready.sh', 'sh/bd-top-ready-leaf.json');
-
-    // State: bd-state.sh returns shaped leaf
-    scripts.onFixture('bd-state.sh', 'sh/bd-state-shaped-leaf.json');
-
-    // Decompose: bd-sizing-check.sh says no decomposition
-    scripts.onFixture('bd-sizing-check.sh', 'sh/bd-sizing-no-decompose.json');
-
-    // Branch: branch-name.sh returns branch name
-    scripts.on('branch-name.sh', () => ({
-      exitCode: 0, stdout: 'feat/pv-test-1', stderr: '',
-    }));
-
-    // Branch: git branch --show-current returns main (then feat/pv-test-1 after checkout)
-    let branchCallCount = 0;
+    // ---------------------------------------------------------------------------
+    // Unified git handler
+    // Covers all git calls across all phases.
+    // ---------------------------------------------------------------------------
     scripts.on('git', (args) => {
-      if (args.includes('--show-current')) {
-        branchCallCount++;
-        // First call in branch phase: on main
-        // Second call in PR phase: on feature branch
-        return {
-          exitCode: 0,
-          stdout: branchCallCount <= 1 ? 'main' : 'feat/pv-test-1',
-          stderr: '',
-        };
+      const a = args.join(' ');
+
+      // gitSafeToStart + preflight status checks
+      if (a.includes('status --porcelain')) return { exitCode: 0, stdout: '', stderr: '' };
+      // gitSafeToStart branch check
+      if (a.includes('rev-parse --is-inside-work-tree')) return { exitCode: 0, stdout: 'true', stderr: '' };
+      if (a.includes('rev-parse --abbrev-ref')) return { exitCode: 0, stdout: 'main', stderr: '' };
+      // preflight branch check
+      if (a.includes('branch --show-current')) {
+        // branch phase: first call → main (trigger checkout); second call in PR → feature branch
+        return { exitCode: 0, stdout: 'main', stderr: '' };
       }
-      if (args.includes('checkout')) {
-        return { exitCode: 0, stdout: '', stderr: '' };
-      }
-      if (args.includes('push')) {
-        return { exitCode: 0, stdout: '', stderr: '' };
-      }
+      // preflight fetch/diff
+      if (a.includes('fetch origin')) return { exitCode: 0, stdout: '', stderr: '' };
+      if (a.includes('diff')) return { exitCode: 0, stdout: '', stderr: '' };
+      // branch phase: checkout
+      if (a.includes('checkout')) return { exitCode: 0, stdout: '', stderr: '' };
+      // PR phase: push
+      if (a.includes('push')) return { exitCode: 0, stdout: '', stderr: '' };
+
       return { exitCode: 0, stdout: '', stderr: '' };
     });
 
-    // Branch: bd show --json for routing
+    // ---------------------------------------------------------------------------
+    // Unified bd handler
+    // Covers all bd calls across all phases.
+    // ---------------------------------------------------------------------------
     scripts.on('bd', (args) => {
-      if (args.includes('--json')) {
+      const a = args.join(' ');
+
+      // preflight backlog check: bd ready --limit=50 --json
+      if (a.includes('ready') && a.includes('50')) {
         return {
           exitCode: 0,
-          stdout: fixture('sh/bd-show-leaf-closed.json'),
+          stdout: JSON.stringify([{ id: 'pv-test.1', issue_type: 'task', priority: 1 }]),
           stderr: '',
         };
       }
-      if (args.includes('show')) {
+      // select: bd ready --limit=5 --json
+      if (a.includes('ready') && a.includes('5')) {
         return {
           exitCode: 0,
-          stdout: 'DESCRIPTION\nSome leaf bead\nNOTES\nImplementation Context\n',
+          stdout: JSON.stringify([{ id: 'pv-test.1', issue_type: 'task', priority: 1, created_at: '2026-04-01' }]),
           stderr: '',
         };
       }
+      // label list (needs-human check): return no needs-human
+      if (a.includes('label list')) {
+        return { exitCode: 0, stdout: '- other-label', stderr: '' };
+      }
+      // bd show --json: used in branch phase for title+type, and by PR phase
+      if (a.includes('show') && a.includes('--json')) {
+        return { exitCode: 0, stdout: fixture('sh/bd-show-leaf-closed.json'), stderr: '' };
+      }
+      // bd show (text): used by bdState, bdSizingCheck, bdEnrichmentCheck
+      // Use shapedBeadText so assessState returns 'shaped' and sizing says no-decompose.
+      // analyze() is called with childIds:[] (default) so enrichment check is skipped.
+      if (a.includes('show')) {
+        return { exitCode: 0, stdout: shapedBeadText(), stderr: '' };
+      }
+      // bd label add (bdEscalate)
+      if (a.includes('label add')) return { exitCode: 0, stdout: '', stderr: '' };
+      // bd update (bdEscalate append-notes)
+      if (a.includes('update')) return { exitCode: 0, stdout: '', stderr: '' };
+
       return { exitCode: 0, stdout: '', stderr: '' };
     });
 
-    // Match agents: returns empty (no advisors/auditors matched)
-    scripts.on('match-agents.sh', () => ({
-      exitCode: 0, stdout: '[]', stderr: '',
-    }));
-
-    // Enrichment check: enriched
-    scripts.on('bd-enrichment-check.sh', () => ({
-      exitCode: 0, stdout: '', stderr: '',
-    }));
-
-    // PR scripts
-    scripts.on('pr-body.sh', () => ({
-      exitCode: 0, stdout: '## PR body\n\nAutomated PR', stderr: '',
-    }));
-    scripts.on('commit-msg.sh', () => ({
-      exitCode: 0, stdout: 'feat(calendar): implement widget feature (pv-test.1)', stderr: '',
-    }));
+    // ---------------------------------------------------------------------------
+    // gh handler (for PR phase)
+    // ---------------------------------------------------------------------------
     scripts.on('gh', () => ({
-      exitCode: 0, stdout: 'https://github.com/org/repo/pull/42', stderr: '',
+      exitCode: 0,
+      stdout: 'https://github.com/org/repo/pull/42',
+      stderr: '',
     }));
 
     // --- Dispatch routes ---
@@ -146,20 +173,17 @@ describe('Integration: leaf happy path', () => {
 
   function buildRegistry(
     spawnFn: ReturnType<ScriptRouter['toSpawnFn']>,
-    existsFn: ReturnType<ScriptRouter['toExistsFn']>,
     dispatchFn: ReturnType<DispatchRouter['toDispatchFn']>,
   ): Record<string, PhaseRunner> {
-    // PhaseDeps uses spawnFn + existsFn (spawnSync-based)
     const phaseDeps: PhaseDeps = {
       spawnFn: spawnFn as never,
-      existsFn,
       dispatchFn: dispatchFn as never,
     };
 
     // ExecuteDeps uses scriptSpawnFn + scriptExistsFn (spawnSync-based)
     const execDeps: ExecuteDeps = {
       scriptSpawnFn: spawnFn as never,
-      scriptExistsFn: existsFn,
+      scriptExistsFn: () => true,
     };
 
     return {
@@ -186,10 +210,9 @@ describe('Integration: leaf happy path', () => {
 
   it('should walk the full leaf happy path from preflight to report', async () => {
     const spawnFn = scripts.toSpawnFn();
-    const existsFn = scripts.toExistsFn();
     const dispatchFn = dispatches.toDispatchFn();
 
-    const registry = buildRegistry(spawnFn, existsFn, dispatchFn);
+    const registry = buildRegistry(spawnFn, dispatchFn);
     const result = await runStateMachine(ctx, PhaseName.Preflight, registry);
 
     // Verify the full phase chain executed
@@ -219,19 +242,17 @@ describe('Integration: leaf happy path', () => {
     // Implementer was dispatched
     expect(dispatches.calls.some((c) => c.agent === 'implementer')).toBe(true);
 
-    // Scripts were called
-    expect(scripts.calls.some((c) => c.cmd.includes('preflight.sh'))).toBe(true);
-    expect(scripts.calls.some((c) => c.cmd.includes('bd-top-ready.sh'))).toBe(true);
-    expect(scripts.calls.some((c) => c.cmd.includes('bd-state.sh'))).toBe(true);
-    expect(scripts.calls.some((c) => c.cmd.includes('gh'))).toBe(true);
+    // git and bd commands were called
+    expect(scripts.calls.some((c) => c.cmd === 'git')).toBe(true);
+    expect(scripts.calls.some((c) => c.cmd === 'bd')).toBe(true);
+    expect(scripts.calls.some((c) => c.cmd === 'gh')).toBe(true);
   });
 
   it('should complete in under 500ms (all I/O mocked)', async () => {
     const spawnFn = scripts.toSpawnFn();
-    const existsFn = scripts.toExistsFn();
     const dispatchFn = dispatches.toDispatchFn();
 
-    const registry = buildRegistry(spawnFn, existsFn, dispatchFn);
+    const registry = buildRegistry(spawnFn, dispatchFn);
 
     const start = Date.now();
     await runStateMachine(ctx, PhaseName.Preflight, registry);

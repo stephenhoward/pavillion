@@ -24,6 +24,80 @@ import {
   DispatchRouter,
 } from './helpers.js';
 
+// ---------------------------------------------------------------------------
+// Helpers: shaped bead text (classifyBeadState returns 'shaped')
+// ---------------------------------------------------------------------------
+
+function shapedBeadText(): string {
+  return [
+    'OPEN pv-test-1 A task',
+    'DESCRIPTION',
+    'This is a real description.',
+    'DESIGN',
+    'Some design.',
+    'ACCEPTANCE CRITERIA',
+    'It works.',
+  ].join('\n');
+}
+
+function unshapedBeadText(): string {
+  return 'OPEN pv-test-1 A task\n';
+}
+
+/**
+ * Mount a full passing preflight on a ScriptRouter.
+ *
+ * Covers all git/bd calls made by:
+ *   - runPreflightCheck(): git status, git branch, git fetch, git diff, bd ready, bd label list
+ *   - gitSafeToStart():    git rev-parse (work tree), git rev-parse (branch), git status
+ */
+function mountPassingPreflight(scripts: ScriptRouter, beadId = 'pv-test.1'): void {
+  let preflightCallCount = 0;
+  let gitSafeCallCount = 0;
+
+  scripts.on('git', (args) => {
+    // Both preflight and gitSafeToStart call git. We distinguish by call order.
+    const argStr = args.join(' ');
+
+    if (argStr.includes('status --porcelain')) {
+      preflightCallCount++;
+      // First call: from runPreflightCheck; second: from gitSafeToStart
+      return { exitCode: 0, stdout: '', stderr: '' };
+    }
+    if (argStr.includes('branch --show-current')) {
+      return { exitCode: 0, stdout: 'main', stderr: '' };
+    }
+    if (argStr.includes('fetch origin')) {
+      return { exitCode: 0, stdout: '', stderr: '' };
+    }
+    if (argStr.includes('diff')) {
+      return { exitCode: 0, stdout: '', stderr: '' };
+    }
+    if (argStr.includes('rev-parse --is-inside-work-tree')) {
+      return { exitCode: 0, stdout: 'true', stderr: '' };
+    }
+    if (argStr.includes('rev-parse --abbrev-ref')) {
+      return { exitCode: 0, stdout: 'main', stderr: '' };
+    }
+    return { exitCode: 0, stdout: '', stderr: '' };
+  });
+
+  scripts.on('bd', (args) => {
+    const argStr = args.join(' ');
+    if (argStr.includes('ready')) {
+      return {
+        exitCode: 0,
+        stdout: JSON.stringify([{ id: beadId, issue_type: 'task', priority: 1 }]),
+        stderr: '',
+      };
+    }
+    if (argStr.includes('label list')) {
+      return { exitCode: 0, stdout: '- other-label', stderr: '' };
+    }
+    return { exitCode: 0, stdout: '', stderr: '' };
+  });
+}
+
 describe('Integration: safeguards', () => {
   let scripts: ScriptRouter;
   let dispatches: DispatchRouter;
@@ -38,14 +112,18 @@ describe('Integration: safeguards', () => {
   });
 
   it('should halt on dirty tree (preflight failure)', async () => {
-    scripts.onFixture('preflight.sh', 'sh/preflight-dirty.json', 1);
-    scripts.on('git-safe-to-start.sh', () => ({
-      exitCode: 0, stdout: '', stderr: '',
-    }));
+    // git status --porcelain returns dirty output → preflight halts
+    scripts.on('git', (args) => {
+      const argStr = args.join(' ');
+      if (argStr.includes('status --porcelain')) {
+        return { exitCode: 0, stdout: 'M dirty-file', stderr: '' };
+      }
+      return { exitCode: 0, stdout: 'main', stderr: '' };
+    });
+    scripts.on('bd', () => ({ exitCode: 0, stdout: '[]', stderr: '' }));
 
     const spawnFn = scripts.toSpawnFn();
-    const existsFn = scripts.toExistsFn();
-    const phaseDeps: PhaseDeps = { spawnFn: spawnFn as never, existsFn };
+    const phaseDeps: PhaseDeps = { spawnFn: spawnFn as never };
 
     const registry: Record<string, PhaseRunner> = {
       [PhaseName.Preflight]: async (c) => preflight(c as PhasesCtx, phaseDeps),
@@ -57,20 +135,37 @@ describe('Integration: safeguards', () => {
     expect(result.phaseHistory[0].phase).toBe(PhaseName.Preflight);
   });
 
-  it('should halt on empty backlog (exit code 3)', async () => {
-    scripts.onFixture('preflight.sh', 'sh/preflight-ok.json');
-    scripts.on('git-safe-to-start.sh', () => ({
-      exitCode: 0, stdout: '', stderr: '',
-    }));
-    scripts.on('bd-top-ready.sh', () => ({
-      exitCode: 3,
-      stdout: '',
-      stderr: 'backlog exhausted for automation',
-    }));
+  it('should halt on empty backlog (exhausted)', async () => {
+    // Preflight passes, but bdTopReady returns empty list
+    let prefCalls = 0;
+    scripts.on('git', (args) => {
+      const a = args.join(' ');
+      if (a.includes('status --porcelain')) return { exitCode: 0, stdout: '', stderr: '' };
+      if (a.includes('branch --show-current')) return { exitCode: 0, stdout: 'main', stderr: '' };
+      if (a.includes('fetch origin')) return { exitCode: 0, stdout: '', stderr: '' };
+      if (a.includes('diff')) return { exitCode: 0, stdout: '', stderr: '' };
+      if (a.includes('rev-parse --is-inside-work-tree')) return { exitCode: 0, stdout: 'true', stderr: '' };
+      if (a.includes('rev-parse --abbrev-ref')) return { exitCode: 0, stdout: 'main', stderr: '' };
+      return { exitCode: 0, stdout: '', stderr: '' };
+    });
+    scripts.on('bd', (args) => {
+      const a = args.join(' ');
+      if (a.includes('ready') && a.includes('50')) {
+        // preflight backlog check: non-empty
+        return { exitCode: 0, stdout: JSON.stringify([{ id: 'pv-x' }]), stderr: '' };
+      }
+      if (a.includes('label list')) {
+        return { exitCode: 0, stdout: '- other-label', stderr: '' };
+      }
+      if (a.includes('ready') && a.includes('5')) {
+        // select backlog check: empty
+        return { exitCode: 0, stdout: '[]', stderr: '' };
+      }
+      return { exitCode: 0, stdout: '', stderr: '' };
+    });
 
     const spawnFn = scripts.toSpawnFn();
-    const existsFn = scripts.toExistsFn();
-    const phaseDeps: PhaseDeps = { spawnFn: spawnFn as never, existsFn };
+    const phaseDeps: PhaseDeps = { spawnFn: spawnFn as never };
 
     const registry: Record<string, PhaseRunner> = {
       [PhaseName.Preflight]: async (c) => preflight(c as PhasesCtx, phaseDeps),
@@ -84,24 +179,44 @@ describe('Integration: safeguards', () => {
   });
 
   it('should halt on auto-shape ESCALATE verdict', async () => {
-    scripts.onFixture('preflight.sh', 'sh/preflight-ok.json');
-    scripts.on('git-safe-to-start.sh', () => ({
-      exitCode: 0, stdout: '', stderr: '',
-    }));
-    scripts.onFixture('bd-top-ready.sh', 'sh/bd-top-ready-leaf.json');
-    scripts.onFixture('bd-state.sh', 'sh/bd-state-unshaped.json');
-    scripts.on('bd-escalate.sh', () => ({
-      exitCode: 0, stdout: '{}', stderr: '',
-    }));
+    mountPassingPreflight(scripts, 'pv-test.1');
+
+    // bdTopReady (select phase)
+    scripts.on('bd', (args) => {
+      const a = args.join(' ');
+      if (a.includes('ready') && a.includes('5')) {
+        return {
+          exitCode: 0,
+          stdout: JSON.stringify([{ id: 'pv-test.1', issue_type: 'task', priority: 1 }]),
+          stderr: '',
+        };
+      }
+      if (a.includes('label list') && a.includes('pv-test.1')) {
+        return { exitCode: 0, stdout: '- other-label', stderr: '' };
+      }
+      // bdState (assessState phase): bd show
+      if (a.includes('show') && !a.includes('--json')) {
+        return { exitCode: 0, stdout: unshapedBeadText(), stderr: '' };
+      }
+      // bdEscalate: bd label add, bd show --json, bd update
+      if (a.includes('label add')) {
+        return { exitCode: 0, stdout: '', stderr: '' };
+      }
+      if (a.includes('show') && a.includes('--json')) {
+        return { exitCode: 0, stdout: JSON.stringify([{ notes: '' }]), stderr: '' };
+      }
+      if (a.includes('update')) {
+        return { exitCode: 0, stdout: '', stderr: '' };
+      }
+      return { exitCode: 0, stdout: '', stderr: '' };
+    });
 
     dispatches.onFixture('shape-bead', 'claude-p/shape-verdict-escalate.json');
 
     const spawnFn = scripts.toSpawnFn();
-    const existsFn = scripts.toExistsFn();
     const dispatchFn = dispatches.toDispatchFn();
     const phaseDeps: PhaseDeps = {
       spawnFn: spawnFn as never,
-      existsFn,
       dispatchFn: dispatchFn as never,
     };
 
@@ -120,16 +235,30 @@ describe('Integration: safeguards', () => {
   });
 
   it('should run --dry-run and stop after phase 2', async () => {
-    scripts.onFixture('preflight.sh', 'sh/preflight-ok.json');
-    scripts.on('git-safe-to-start.sh', () => ({
-      exitCode: 0, stdout: '', stderr: '',
-    }));
-    scripts.onFixture('bd-top-ready.sh', 'sh/bd-top-ready-leaf.json');
-    scripts.onFixture('bd-state.sh', 'sh/bd-state-shaped-leaf.json');
+    mountPassingPreflight(scripts, 'pv-test.1');
+
+    // bdTopReady (select)
+    scripts.on('bd', (args) => {
+      const a = args.join(' ');
+      if (a.includes('ready') && a.includes('5')) {
+        return {
+          exitCode: 0,
+          stdout: JSON.stringify([{ id: 'pv-test.1', issue_type: 'task', priority: 1 }]),
+          stderr: '',
+        };
+      }
+      if (a.includes('label list')) {
+        return { exitCode: 0, stdout: '- other-label', stderr: '' };
+      }
+      // bdState (assessState): bd show
+      if (a.includes('show')) {
+        return { exitCode: 0, stdout: shapedBeadText(), stderr: '' };
+      }
+      return { exitCode: 0, stdout: '', stderr: '' };
+    });
 
     const spawnFn = scripts.toSpawnFn();
-    const existsFn = scripts.toExistsFn();
-    const phaseDeps: PhaseDeps = { spawnFn: spawnFn as never, existsFn };
+    const phaseDeps: PhaseDeps = { spawnFn: spawnFn as never };
 
     ctx = makeCtx({ dryRun: true });
 
