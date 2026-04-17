@@ -1,0 +1,1 @@
+{ "agent": "architecture-auditor", "verdict": "escalate", "concerns": ["violates domain boundary"], "recommendations": ["refactor to use interface"] }

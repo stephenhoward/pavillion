@@ -83,29 +83,12 @@ ELSE (no children):
 
 **Decomposition Assessment (for beads with no children):**
 
-1. Read the bead's structured fields:
-   ```bash
-   bd show <bead-id>
-   ```
-   Examine: description, design, acceptance criteria, notes
-
-2. Search the codebase for scope indicators based on the bead's description:
-   - Which files/domains would need modification?
-   - Does the work span backend + frontend?
-   - Are there multiple independent deliverables?
-
-3. Apply decomposition criteria — the bead likely needs decomposition if **2 or more** of these are true:
-   - Touches 4+ files across different concerns (e.g., entity + service + API + component)
-   - Spans both backend and frontend changes
-   - Has multiple independent deliverables (e.g., "add filtering AND sorting AND search")
-   - Estimated > 60 minutes of agent work
-
-4. Make recommendation:
+Delegate the sizing verdict to the `bead-state-assessment` skill (see `.claude/skills/bead-state-assessment/SKILL.md` for the 2-of-3 heuristic). Run `bash .claude/skills/bead-state-assessment/bd-sizing-check.sh <bead-id>`, parse the emitted JSON `{needs_decomposition, reasons}`, and route on the verdict:
 
 ```
-IF decomposition criteria met:
+IF needs_decomposition == true:
   MESSAGE: "This bead is complex enough to benefit from decomposition:
-    - [list which criteria were met]
+    - [render each entry from the script's reasons array as a bullet]
 
     I recommend running /decompose-bead first to break it into manageable pieces.
 
@@ -129,7 +112,7 @@ IF decomposition criteria met:
   ELSE IF user chooses 3:
     STOP analysis
 
-ELSE (decomposition NOT needed):
+ELSE (needs_decomposition == false):
   SET analysis_mode = "single"
   PROCEED to Phase 4b (Single Bead Enrichment)
 ```
