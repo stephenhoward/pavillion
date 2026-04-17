@@ -8,8 +8,10 @@ continuous processing.
 ## Arguments
 
 - `--dry-run` — run Phases 0–2 only, emit a plan report, make zero changes.
-
-No other arguments. The command always picks the next bead itself.
+- `--bead-id <id>` — skip selection and drive this specific bead. Use for
+  a bead you want to prioritize out of order, or to resume one that was
+  partially processed and no longer surfaces in `bd ready`. The empty-backlog
+  preflight check is relaxed in this mode; all other safety checks still run.
 
 ## Usage
 
@@ -30,6 +32,7 @@ For autonomous runs (cron, /loop, CI), invoke the orchestrator directly:
 ```bash
 tsx .claude/orchestrators/process-backlog.ts
 tsx .claude/orchestrators/process-backlog.ts --dry-run
+tsx .claude/orchestrators/process-backlog.ts --bead-id pv-abc-42
 ```
 
 ## Design references

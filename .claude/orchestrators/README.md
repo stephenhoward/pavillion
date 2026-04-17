@@ -40,7 +40,6 @@ Every `claude -p` invocation uses:
 - `--no-session-persistence` — don't pollute resumable sessions list
 - `--agent <name>` — pick agent from `.claude/agents/`
 - `--json-schema <path>` — enforce structured output (omitted for prose-output agents)
-- `--max-budget-usd <N>` — per-dispatch cost ceiling
 
 `--bare` is intentionally **not** used. It disables keychain reads, forcing
 `ANTHROPIC_API_KEY` auth only. Without the flag, subagents reuse the parent
