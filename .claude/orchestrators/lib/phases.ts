@@ -757,16 +757,33 @@ export async function decompose(ctx: PhaseCtx, deps: PhaseDeps = {}): Promise<Ph
 
   if (escalated) return { next: 'halt', ctx };
 
-  ctx.logger.appendRunJson({
-    event: 'decompose_complete',
-    beadId: ctx.beadId,
-    parentBeadId: report!.parentBeadId,
-    childCount: report!.childCount,
-    childBeadIds: report!.childBeadIds,
-    summary: report!.summary,
-  });
+  // Re-read bead state to verify whether decomposition actually happened.
+  // decompose-bead is dispatched without a JSON schema, so `report` is raw
+  // stdout — its fields are unreliable. `bd show` is the source of truth.
+  const postDecomposeState = bdState(ctx.beadId, { spawnFn: deps.spawnFn });
+  const actuallyDecomposed = !postDecomposeState.missing_phases.includes('decomposed');
 
-  return { next: PhaseName.Select, ctx };
+  if (actuallyDecomposed) {
+    ctx.logger.appendRunJson({
+      event: 'decompose_complete',
+      beadId: ctx.beadId,
+      parentBeadId: report!.parentBeadId,
+      childCount: report!.childCount,
+      childBeadIds: report!.childBeadIds,
+      summary: report!.summary,
+    });
+  }
+  else {
+    // Agent judged the bead a leaf despite the sizer's heuristic. Trust it,
+    // log the decision for observability, and proceed without re-dispatch.
+    ctx.logger.appendRunJson({
+      event: 'decompose_declined',
+      beadId: ctx.beadId,
+      reason: 'decompose-bead left bead without children; treating as leaf per agent judgment',
+    });
+  }
+
+  return { next: PhaseName.Analyze, ctx };
 }
 
 /**

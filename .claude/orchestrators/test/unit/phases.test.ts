@@ -567,7 +567,7 @@ describe('decompose', () => {
     expect(result.next).toBe(PhaseName.Analyze);
   });
 
-  it('should dispatch and route to Select after successful decomposition', async () => {
+  it('should dispatch and route to Analyze after successful decomposition', async () => {
     // Need text that triggers sizing (4+ files, 2+ domains)
     const bigBeadText = [
       'OPEN pv-test-1 Big epic bead',
@@ -586,13 +586,18 @@ describe('decompose', () => {
       'All tests pass.',
     ].join('\n');
 
+    // bd show output for a bead that has been decomposed (has CHILDREN section).
+    const decomposedBeadText = beadTextShaped() + '\nCHILDREN\n  \u21b3 pv-c1: first\n  \u21b3 pv-c2: second\n';
+
     const report = { parentBeadId: 'pv-epic-1', childBeadIds: ['pv-c1', 'pv-c2'], childCount: 2, summary: 'split' };
 
     const spawn = seqSpawn(
       // bdSizingCheck: bd show
       fakeSpawn(bigBeadText, '', 0),
-      // bdState (epic check): bd show → unshaped (missing decomposed)
+      // bdState (epic check): bd show → shaped (missing decomposed)
       fakeSpawn(beadTextShaped(), '', 0),
+      // bdState (post-decompose verification): bd show → now has CHILDREN
+      fakeSpawn(decomposedBeadText, '', 0),
     );
 
     const result = await decompose(makeCtx(), {
@@ -600,7 +605,44 @@ describe('decompose', () => {
       dispatchFn: async () => report as never,
     });
 
-    expect(result.next).toBe(PhaseName.Select);
+    expect(result.next).toBe(PhaseName.Analyze);
+  });
+
+  it('should route to Analyze and log decompose_declined when agent leaves bead without children', async () => {
+    const bigBeadText = [
+      'OPEN pv-test-1 Big epic bead',
+      'DESCRIPTION',
+      'This bead touches the backend API, frontend component, service layer, and migration.',
+      'DESIGN',
+      'Files: src/server/foo/api/foo.ts, src/server/foo/entity/foo-entity.ts,',
+      'src/server/foo/service/foo-service.ts, src/client/components/foo.vue,',
+      'src/site/components/bar.vue, migrations/foo.sql',
+      '- Add endpoint',
+      '- Update entity',
+      '- Create service',
+      '- Build component',
+      '- Write migration',
+      'ACCEPTANCE CRITERIA',
+      'All tests pass.',
+    ].join('\n');
+
+    const declineReport = 'Verdict: NOT DECOMPOSED — already a leaf bead.';
+
+    const spawn = seqSpawn(
+      // bdSizingCheck
+      fakeSpawn(bigBeadText, '', 0),
+      // bdState (epic check) — still shaped
+      fakeSpawn(beadTextShaped(), '', 0),
+      // bdState (post-decompose verification) — still shaped, agent declined
+      fakeSpawn(beadTextShaped(), '', 0),
+    );
+
+    const result = await decompose(makeCtx(), {
+      spawnFn: spawn,
+      dispatchFn: async () => declineReport as never,
+    });
+
+    expect(result.next).toBe(PhaseName.Analyze);
   });
 });
 
