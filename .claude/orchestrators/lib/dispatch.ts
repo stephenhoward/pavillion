@@ -574,8 +574,10 @@ export function buildAdvisorPrompt(
     '',
     '## Output format',
     '',
-    'Respond with JSON matching the advisor-verdict schema:',
-    '```json',
+    'Respond with ONLY a single JSON object matching the advisor-verdict schema.',
+    'Do not include prose, explanations, or markdown fences — the orchestrator parses your full stdout as JSON.',
+    '',
+    'Schema:',
     '{',
     `  "agent": "${advisorName}",`,
     '  "verdict": "clean" | "refinement-needed" | "escalate",',
@@ -583,8 +585,53 @@ export function buildAdvisorPrompt(
     '  "recommendations": ["..."],',
     `  "shapedBeadId": "${beadId}"`,
     '}',
-    '```',
   ].join('\n');
+}
+
+/**
+ * Extract and parse an AdvisorVerdict from raw dispatch output.
+ *
+ * Advisors are dispatched without a --json-schema, so dispatch() resolves
+ * with raw stdout (a string). Agents often return prose followed by a
+ * ```json fenced block; this helper tolerates both pure JSON and
+ * prose-wrapped JSON, using the last fenced block when present.
+ *
+ * Returns the parsed verdict, or null if nothing parseable was found.
+ */
+export function parseAdvisorVerdict(raw: unknown): AdvisorVerdict | null {
+  if (raw && typeof raw === 'object' && 'verdict' in (raw as Record<string, unknown>)) {
+    return raw as AdvisorVerdict;
+  }
+  if (typeof raw !== 'string') return null;
+
+  const candidates: string[] = [];
+  const fenceRegex = /```(?:json)?\s*([\s\S]*?)```/gi;
+  let match: RegExpExecArray | null;
+  while ((match = fenceRegex.exec(raw)) !== null) {
+    candidates.push(match[1].trim());
+  }
+  candidates.push(raw.trim());
+
+  for (const candidate of candidates.reverse()) {
+    if (!candidate) continue;
+    try {
+      const parsed = JSON.parse(candidate) as unknown;
+      if (parsed && typeof parsed === 'object' && 'verdict' in (parsed as Record<string, unknown>)) {
+        const verdict = parsed as Partial<AdvisorVerdict>;
+        return {
+          agent: typeof verdict.agent === 'string' ? verdict.agent : 'unknown',
+          verdict: (verdict.verdict ?? 'refinement-needed') as AdvisorVerdict['verdict'],
+          concerns: Array.isArray(verdict.concerns) ? verdict.concerns : [],
+          recommendations: Array.isArray(verdict.recommendations) ? verdict.recommendations : [],
+          ...(verdict.shapedBeadId ? { shapedBeadId: verdict.shapedBeadId } : {}),
+        };
+      }
+    }
+    catch {
+      // try next candidate
+    }
+  }
+  return null;
 }
 
 /**
@@ -636,12 +683,32 @@ export async function fanOutAdvisors(
     const advisorName = advisors[i].name;
 
     if (result.status === 'fulfilled') {
+      const parsed = parseAdvisorVerdict(result.value);
+      if (parsed) {
+        const normalized: AdvisorVerdict = {
+          ...parsed,
+          agent: advisorName,
+        };
+        ctx.logger.appendRunJson({
+          event: 'advisor_verdict_received',
+          agent: advisorName,
+          verdict: normalized.verdict,
+        });
+        return normalized;
+      }
+
+      const reason = `Advisor "${advisorName}" returned unparseable output`;
       ctx.logger.appendRunJson({
-        event: 'advisor_verdict_received',
+        event: 'advisor_dispatch_failed',
         agent: advisorName,
-        verdict: result.value.verdict,
+        reason,
       });
-      return result.value;
+      return {
+        agent: advisorName,
+        verdict: 'escalate' as const,
+        concerns: [reason],
+        recommendations: [],
+      };
     }
 
     // Failed dispatch: create a synthetic escalate verdict

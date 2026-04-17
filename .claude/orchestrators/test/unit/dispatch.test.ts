@@ -12,6 +12,7 @@ import {
   spawnCmd,
   fanOutAdvisors,
   buildAdvisorPrompt,
+  parseAdvisorVerdict,
   ADVISOR_BUDGET_DEFAULT,
   ADVISOR_TIMEOUT_MS,
   type DispatchOptions,
@@ -778,5 +779,152 @@ describe('fanOutAdvisors', () => {
     );
 
     expect(report.phase).toBe('phase-5-analyze');
+  });
+
+  // Regression: production dispatch() returns raw stdout strings for prose
+  // agents. Before the fix, fanOutAdvisors assumed parsed objects and crashed
+  // on `.concerns.map(...)` when any verdict was non-clean.
+  it('should parse raw JSON string output from fulfilled dispatch', async () => {
+    const ctx = makeCtx(logStub);
+    const advisors = [makeAdvisor('security-advisor')];
+    const rawJson = JSON.stringify({
+      agent: 'security-advisor',
+      verdict: 'refinement-needed',
+      concerns: ['token leak risk'],
+      recommendations: ['rotate keys'],
+    });
+    const deps: FanOutDeps = { dispatchFn: vi.fn().mockResolvedValue(rawJson) };
+
+    const report = await fanOutAdvisors(
+      advisors, 'pv-test-1', 'context', 'phase-3-shape', ctx, PhaseName.ShapeAdvisors, deps,
+    );
+
+    expect(report.overallVerdict).toBe('refinement-needed');
+    expect(report.advisors[0].verdict).toBe('refinement-needed');
+    expect(report.advisors[0].concerns).toEqual(['token leak risk']);
+    expect(report.summary).toContain('token leak risk');
+  });
+
+  it('should tolerate prose-wrapped JSON fenced block in advisor output', async () => {
+    const ctx = makeCtx(logStub);
+    const advisors = [makeAdvisor('stylesheet-advisor')];
+    const proseWithFence = [
+      '**Stylesheet Standards Consulted:** `structure.md`',
+      '',
+      'Evaluation summary: the spec looks clean.',
+      '',
+      '```json',
+      '{',
+      '  "agent": "stylesheet-advisor",',
+      '  "verdict": "clean",',
+      '  "concerns": [],',
+      '  "recommendations": []',
+      '}',
+      '```',
+    ].join('\n');
+    const deps: FanOutDeps = { dispatchFn: vi.fn().mockResolvedValue(proseWithFence) };
+
+    const report = await fanOutAdvisors(
+      advisors, 'pv-test-1', 'context', 'phase-3-shape', ctx, PhaseName.ShapeAdvisors, deps,
+    );
+
+    expect(report.overallVerdict).toBe('clean');
+    expect(report.advisors[0].verdict).toBe('clean');
+  });
+
+  it('should synthesize escalate verdict when output is unparseable', async () => {
+    const ctx = makeCtx(logStub);
+    const advisors = [makeAdvisor('consistency-advisor')];
+    const deps: FanOutDeps = { dispatchFn: vi.fn().mockResolvedValue('just some prose with no json') };
+
+    const report = await fanOutAdvisors(
+      advisors, 'pv-test-1', 'context', 'phase-3-shape', ctx, PhaseName.ShapeAdvisors, deps,
+    );
+
+    expect(report.advisors[0].verdict).toBe('escalate');
+    expect(report.advisors[0].concerns[0]).toMatch(/unparseable/i);
+    const failedEntry = logStub.runJsonEntries.find(
+      e => e.event === 'advisor_dispatch_failed' && e.agent === 'consistency-advisor',
+    );
+    expect(failedEntry).toBeDefined();
+  });
+
+  // Regression: repro of the pv-404l run crash. One advisor times out
+  // (Promise.allSettled rejection -> synthetic escalate) while sibling
+  // advisors return prose strings. Aggregation must not throw.
+  it('should not crash when mixing fulfilled string verdicts and a timeout', async () => {
+    const ctx = makeCtx(logStub);
+    const advisors = [
+      makeAdvisor('complexity-advisor'),
+      makeAdvisor('consistency-advisor'),
+      makeAdvisor('testing-advisor'),
+    ];
+    const cleanProse = [
+      'Quick note before the JSON:',
+      '```json',
+      '{"agent":"complexity-advisor","verdict":"clean","concerns":[],"recommendations":[]}',
+      '```',
+    ].join('\n');
+    const refinementProse = [
+      '```json',
+      '{"agent":"testing-advisor","verdict":"refinement-needed","concerns":["add a test"],"recommendations":["write it"]}',
+      '```',
+    ].join('\n');
+    const dispatchFn = vi.fn()
+      .mockResolvedValueOnce(cleanProse)
+      .mockRejectedValueOnce(new DispatchTimeoutError('consistency-advisor', 120_000))
+      .mockResolvedValueOnce(refinementProse);
+
+    const report = await fanOutAdvisors(
+      advisors, 'pv-404l', 'context', 'phase-3-shape', ctx, PhaseName.ShapeAdvisors, { dispatchFn },
+    );
+
+    expect(report.overallVerdict).toBe('refinement-needed');
+    expect(report.advisors).toHaveLength(3);
+    expect(report.advisors[0].verdict).toBe('clean');
+    expect(report.advisors[1].verdict).toBe('escalate');
+    expect(report.advisors[2].verdict).toBe('refinement-needed');
+  });
+});
+
+describe('parseAdvisorVerdict', () => {
+  it('returns a verdict object unchanged when passed a parsed object', () => {
+    const input: AdvisorVerdict = {
+      agent: 'security-advisor',
+      verdict: 'clean',
+      concerns: [],
+      recommendations: [],
+    };
+    expect(parseAdvisorVerdict(input)).toEqual(input);
+  });
+
+  it('parses pure JSON string output', () => {
+    const raw = '{"agent":"a","verdict":"clean","concerns":[],"recommendations":[]}';
+    const parsed = parseAdvisorVerdict(raw);
+    expect(parsed?.verdict).toBe('clean');
+  });
+
+  it('parses JSON wrapped in prose and a fenced block', () => {
+    const raw = 'Preamble prose.\n```json\n{"verdict":"clean","concerns":[],"recommendations":[]}\n```\nTrailing';
+    const parsed = parseAdvisorVerdict(raw);
+    expect(parsed?.verdict).toBe('clean');
+  });
+
+  it('defaults missing arrays to empty when parsing partial verdicts', () => {
+    const raw = '{"verdict":"refinement-needed"}';
+    const parsed = parseAdvisorVerdict(raw);
+    expect(parsed?.verdict).toBe('refinement-needed');
+    expect(parsed?.concerns).toEqual([]);
+    expect(parsed?.recommendations).toEqual([]);
+  });
+
+  it('returns null for unparseable strings', () => {
+    expect(parseAdvisorVerdict('just prose, no json')).toBeNull();
+  });
+
+  it('returns null for non-string, non-verdict objects', () => {
+    expect(parseAdvisorVerdict(42)).toBeNull();
+    expect(parseAdvisorVerdict({ foo: 'bar' })).toBeNull();
+    expect(parseAdvisorVerdict(null)).toBeNull();
   });
 });
