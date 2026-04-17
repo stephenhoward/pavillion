@@ -42,7 +42,7 @@ export interface PhaseResult {
 export interface RunLogger {
   /** Write stdout-style output for a phase. */
   writePhaseLog(phase: PhaseName, kind: 'out' | 'err', data: string): void;
-  /** Append a structured entry to run.json. */
+  /** Append a structured entry to run.jsonl (newline-delimited JSON). */
   appendRunJson(entry: Record<string, unknown>): void;
   /** Absolute path to the per-run log directory. */
   runDir(): string;

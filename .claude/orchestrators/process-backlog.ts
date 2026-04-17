@@ -62,15 +62,15 @@ function stubPhase(name: string): PhaseLoader {
 export const PHASE_REGISTRY: Record<Exclude<PhaseName, PhaseName.Halt>, PhaseLoader> = {
   [PhaseName.Preflight]:       () => import('./lib/phase-0-preflight.js'),
   [PhaseName.Select]:          () => import('./lib/phase-1-select.js'),
-  [PhaseName.State]:           stubPhase(PhaseName.State),
+  [PhaseName.State]:           () => import('./lib/phase-2-state.js'),
   [PhaseName.Shape]:           () => import('./lib/phase-3-shape.js'),
   [PhaseName.ShapeAdvisors]:   () => import('./lib/phase-3.5-advisors.js'),
   [PhaseName.Decompose]:       () => import('./lib/phase-4-decompose.js'),
   [PhaseName.Analyze]:         () => import('./lib/phase-5-analyze.js'),
   [PhaseName.AnalyzeAdvisors]: () => import('./lib/phase-5.5-advisors.js'),
   [PhaseName.Branch]:          () => import('./lib/phase-6-branch.js'),
-  [PhaseName.Epic]:            stubPhase(PhaseName.Epic),
-  [PhaseName.Leaf]:            stubPhase(PhaseName.Leaf),
+  [PhaseName.Epic]:            () => import('./lib/phase-7a-epic.js'),
+  [PhaseName.Leaf]:            () => import('./lib/phase-7b-leaf.js'),
   [PhaseName.PR]:              () => import('./lib/phase-8-pr.js'),
   [PhaseName.Report]:          () => import('./lib/phase-9-report.js'),
 };

@@ -248,11 +248,7 @@ export async function runShapeAdvisors(
     ...deps.runScriptOpts,
   };
 
-  const matchAdvisorsFn = deps.runScriptOpts?.spawnFn
-    ? (hints: string[]) => matchAdvisors(hints, baseOpts)
-    : (hints: string[]) => matchAdvisors(hints, baseOpts);
-
-  const advisors = matchAdvisorsFn(fileHints);
+  const advisors = matchAdvisors(fileHints, baseOpts);
 
   ctx.logger.appendRunJson({
     event: 'shape_advisors_matched',

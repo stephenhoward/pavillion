@@ -10,7 +10,7 @@
 import { spawn as nodeSpawn, type ChildProcess } from 'node:child_process';
 import type { PhaseName, RunContext, RunLogger } from './context.js';
 
-const DEFAULT_CLAUDE_BIN = '/Users/stephen/.local/bin/claude';
+const DEFAULT_CLAUDE_BIN = 'claude';
 
 /**
  * Error thrown when a dispatch exceeds its timeout.
@@ -59,8 +59,8 @@ export class DispatchSpawnError extends Error {
 export interface DispatchOptions {
   /** Agent name (maps to .claude/agents/<name>.md). */
   agent: string;
-  /** Absolute path to the JSON schema file for --json-schema. */
-  schemaPath: string;
+  /** Absolute path to the JSON schema file for --json-schema. Omit for prose-output agents. */
+  schemaPath?: string;
   /** Prompt text sent to the agent via stdin. */
   prompt: string;
   /** Max budget in USD for this dispatch. */
@@ -155,14 +155,14 @@ function isMalformedError(err: unknown): err is MalformedInternal {
 function buildNudgePrompt(
   originalPrompt: string,
   parseError: string,
-  schemaPath: string,
+  schemaPath?: string,
 ): string {
   return [
     originalPrompt,
     '',
     '---',
     'IMPORTANT: Your previous response was not valid JSON matching the required schema.',
-    `Schema: ${schemaPath}`,
+    ...(schemaPath ? [`Schema: ${schemaPath}`] : []),
     `Validation error: ${parseError}`,
     '',
     'Please respond with ONLY valid JSON that conforms to the schema. No extra text.',
@@ -263,6 +263,17 @@ function runSingleDispatch<T>(
         return;
       }
 
+      // When no schema was provided, return raw stdout (prose agent)
+      if (!schemaPath) {
+        logger.appendRunJson({
+          event: isRetry ? 'dispatch-retry-success' : 'dispatch-success',
+          agent,
+          phase: logTag,
+        });
+        resolve(stdoutBuf as unknown as T);
+        return;
+      }
+
       // Attempt JSON parse
       try {
         const json = JSON.parse(stdoutBuf) as T;
@@ -291,7 +302,7 @@ function runSingleDispatch<T>(
  */
 function buildArgs(params: {
   agent: string;
-  schemaPath: string;
+  schemaPath?: string;
   budgetUsd: number;
   fallbackModel?: boolean;
   prompt: string;
@@ -302,9 +313,12 @@ function buildArgs(params: {
     '--permission-mode', 'bypassPermissions',
     '--no-session-persistence',
     '--agent', params.agent,
-    '--json-schema', params.schemaPath,
     '--max-budget-usd', String(params.budgetUsd),
   ];
+
+  if (params.schemaPath) {
+    args.push('--json-schema', params.schemaPath);
+  }
 
   if (params.fallbackModel) {
     args.push('--fallback-model');

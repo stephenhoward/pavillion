@@ -160,7 +160,6 @@ export async function dispatchImplementer(
   try {
     await dispatch({
       agent: 'implementer',
-      schemaPath: AUDITOR_SCHEMA_PATH, // implementer doesn't need strict schema; reuse for CLI requirement
       prompt,
       budgetUsd: BUDGET_IMPLEMENTER,
       timeoutMs,

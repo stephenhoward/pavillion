@@ -48,7 +48,7 @@ tsx .claude/orchestrators/process-backlog.ts
     └── <run-id>/
         ├── phase-0-preflight.out
         ├── phase-0-preflight.err
-        └── run.json            # Structured trace
+        └── run.jsonl            # Structured trace
 ```
 
 ## Dispatch flags
@@ -59,13 +59,13 @@ Every `claude -p` invocation uses:
 - `--permission-mode bypassPermissions` — autonomous execution
 - `--no-session-persistence` — don't pollute resumable sessions list
 - `--agent <name>` — pick agent from `.claude/agents/`
-- `--json-schema <path>` — enforce structured output
+- `--json-schema <path>` — enforce structured output (omitted for prose-output agents)
 - `--max-budget-usd <N>` — per-dispatch cost ceiling
 
 ## Logs
 
 Each run creates `.claude/orchestrators/logs/<run-id>/` with stdout/stderr
-per phase and a `run.json` trace. The logs directory is gitignored.
+per phase and a `run.jsonl` trace. The logs directory is gitignored.
 
 To clean up: `rm -rf .claude/orchestrators/logs/`
 

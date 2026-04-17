@@ -7,7 +7,7 @@
  * No external dependencies — uses only Node built-ins.
  */
 
-import { mkdirSync, appendFileSync, writeFileSync, existsSync, readFileSync } from 'node:fs';
+import { mkdirSync, appendFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { PhaseName, type RunLogger } from './context.js';
@@ -58,19 +58,8 @@ export function createRunLogger(runId?: string): RunLogger & { runId: string } {
 
     appendRunJson(entry: Record<string, unknown>): void {
       ensureDir();
-      const filePath = join(dir, 'run.json');
-
-      let entries: Record<string, unknown>[] = [];
-      if (existsSync(filePath)) {
-        try {
-          entries = JSON.parse(readFileSync(filePath, 'utf-8'));
-        }
-        catch {
-          entries = [];
-        }
-      }
-      entries.push(entry);
-      writeFileSync(filePath, JSON.stringify(entries, null, 2) + '\n');
+      const filePath = join(dir, 'run.jsonl');
+      appendFileSync(filePath, JSON.stringify(entry) + '\n');
     },
 
     runDir(): string {
