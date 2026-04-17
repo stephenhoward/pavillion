@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { ChildProcess } from 'node:child_process';
+import type { ChildProcess, SpawnSyncReturns } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { Readable } from 'node:stream';
 import {
@@ -7,9 +7,20 @@ import {
   DispatchTimeoutError,
   DispatchMalformedError,
   DispatchSpawnError,
+  runScript,
+  RunScriptError,
+  spawnCmd,
+  fanOutAdvisors,
+  buildAdvisorPrompt,
+  ADVISOR_BUDGET_DEFAULT,
+  ADVISOR_TIMEOUT_MS,
   type DispatchOptions,
+  type RunScriptOptions,
+  type AdvisorVerdict,
+  type MatchedAdvisor,
+  type FanOutDeps,
 } from '../../lib/dispatch.js';
-import { PhaseName, type RunLogger } from '../../lib/context.js';
+import { PhaseName, type RunLogger, type RunContext } from '../../lib/types.js';
 
 /**
  * Build a stub logger that captures calls for assertions.
@@ -279,5 +290,493 @@ describe('dispatch', () => {
     expect(entry.promptLength).toBe(500);
     const preview = entry.promptPreview as string;
     expect(preview.length).toBeLessThanOrEqual(203); // 200 + "..."
+  });
+});
+
+// =============================================================================
+// runScript tests
+// =============================================================================
+
+/**
+ * Build a fake SpawnSyncReturns from simple string values.
+ */
+function fakeSpawnResult(
+  stdout: string,
+  stderr: string,
+  status: number,
+): SpawnSyncReturns<Buffer> {
+  return {
+    stdout: Buffer.from(stdout, 'utf-8'),
+    stderr: Buffer.from(stderr, 'utf-8'),
+    status,
+    signal: null,
+    pid: 1234,
+    output: [null, Buffer.from(stdout), Buffer.from(stderr)],
+  };
+}
+
+describe('runScript', () => {
+  let mockSpawnFn: ReturnType<typeof vi.fn>;
+  let logStub: ReturnType<typeof stubLogger>;
+  let opts: RunScriptOptions;
+
+  beforeEach(() => {
+    mockSpawnFn = vi.fn();
+    logStub = stubLogger();
+    opts = {
+      logger: logStub.logger,
+      logTag: PhaseName.Preflight,
+      spawnFn: mockSpawnFn,
+      existsFn: () => true,
+    };
+  });
+
+  it('should parse JSON and return success for exit code 0', () => {
+    const payload = { ok: true, failures: [] };
+    mockSpawnFn.mockReturnValue(
+      fakeSpawnResult(JSON.stringify(payload), '', 0),
+    );
+
+    const result = runScript('/path/to/script.sh', ['--flag'], opts);
+
+    expect(result.exitCode).toBe(0);
+    expect(result.json).toEqual(payload);
+    expect(result.stderr).toBe('');
+  });
+
+  it('should log stdout on success', () => {
+    const payload = { ok: true };
+    mockSpawnFn.mockReturnValue(
+      fakeSpawnResult(JSON.stringify(payload), '', 0),
+    );
+
+    runScript('/path/to/script.sh', [], opts);
+
+    expect(logStub.logs).toContainEqual({
+      phase: PhaseName.Preflight,
+      kind: 'out',
+      data: JSON.stringify(payload),
+    });
+  });
+
+  it('should return failure with stderr and stdout for non-zero exit', () => {
+    mockSpawnFn.mockReturnValue(
+      fakeSpawnResult('partial output', 'something went wrong', 1),
+    );
+
+    const result = runScript('/path/to/script.sh', ['arg1'], opts);
+
+    expect(result.exitCode).toBe(1);
+    expect(result.json).toBeNull();
+    expect(result.stderr).toBe('something went wrong');
+    expect((result as { stdout: string }).stdout).toBe('partial output');
+  });
+
+  it('should not attempt JSON parse on non-zero exit', () => {
+    mockSpawnFn.mockReturnValue(
+      fakeSpawnResult('not json at all', 'error msg', 2),
+    );
+
+    // Should not throw even though stdout is not JSON
+    const result = runScript('/path/to/script.sh', [], opts);
+    expect(result.exitCode).toBe(2);
+    expect(result.json).toBeNull();
+  });
+
+  it('should log stderr on non-zero exit', () => {
+    mockSpawnFn.mockReturnValue(
+      fakeSpawnResult('', 'fatal error', 1),
+    );
+
+    runScript('/path/to/script.sh', [], opts);
+
+    expect(logStub.logs).toContainEqual({
+      phase: PhaseName.Preflight,
+      kind: 'err',
+      data: 'fatal error',
+    });
+  });
+
+  it('should throw RunScriptError for malformed JSON on exit 0', () => {
+    mockSpawnFn.mockReturnValue(
+      fakeSpawnResult('{ broken json !!!', '', 0),
+    );
+
+    expect(() => runScript('/path/to/script.sh', [], opts))
+      .toThrow(RunScriptError);
+
+    try {
+      runScript('/path/to/script.sh', [], opts);
+    }
+    catch (err) {
+      expect(err).toBeInstanceOf(RunScriptError);
+      const rse = err as RunScriptError;
+      expect(rse.exitCode).toBe(0);
+      expect(rse.stdout).toBe('{ broken json !!!');
+      expect(rse.cause).toBeDefined();
+    }
+  });
+
+  it('should throw RunScriptError when script does not exist', () => {
+    opts.existsFn = () => false;
+
+    expect(() => runScript('/missing/script.sh', [], opts))
+      .toThrow(RunScriptError);
+
+    try {
+      runScript('/missing/script.sh', [], opts);
+    }
+    catch (err) {
+      const rse = err as RunScriptError;
+      expect(rse.message).toContain('Script not found');
+      expect(rse.exitCode).toBe(-1);
+    }
+  });
+
+  it('should log the error when script does not exist', () => {
+    opts.existsFn = () => false;
+
+    try {
+      runScript('/missing/script.sh', [], opts);
+    }
+    catch {
+      // expected
+    }
+
+    expect(logStub.logs.some(l =>
+      l.kind === 'err' && l.data.includes('Script not found'),
+    )).toBe(true);
+  });
+
+  it('should not call spawnFn when script does not exist', () => {
+    opts.existsFn = () => false;
+
+    try {
+      runScript('/missing/script.sh', [], opts);
+    }
+    catch {
+      // expected
+    }
+
+    expect(mockSpawnFn).not.toHaveBeenCalled();
+  });
+
+  it('should pass args to the spawn function', () => {
+    mockSpawnFn.mockReturnValue(
+      fakeSpawnResult('{}', '', 0),
+    );
+
+    runScript('/path/to/script.sh', ['--limit', '5'], opts);
+
+    expect(mockSpawnFn).toHaveBeenCalledWith(
+      '/path/to/script.sh',
+      ['--limit', '5'],
+      expect.objectContaining({ shell: true }),
+    );
+  });
+
+  it('should handle empty stdout on exit 0 as malformed JSON', () => {
+    mockSpawnFn.mockReturnValue(
+      fakeSpawnResult('', '', 0),
+    );
+
+    expect(() => runScript('/path/to/script.sh', [], opts))
+      .toThrow(RunScriptError);
+  });
+});
+
+// =============================================================================
+// spawnCmd tests
+// =============================================================================
+
+describe('spawnCmd', () => {
+  let mockSpawnFn: ReturnType<typeof vi.fn>;
+  let logStub: ReturnType<typeof stubLogger>;
+
+  beforeEach(() => {
+    mockSpawnFn = vi.fn();
+    logStub = stubLogger();
+  });
+
+  it('should return stdout, stderr, and exitCode', () => {
+    mockSpawnFn.mockReturnValue(
+      fakeSpawnResult('hello world\n', 'warn msg\n', 0),
+    );
+
+    const result = spawnCmd('git', ['status'], logStub.logger, PhaseName.Branch, mockSpawnFn);
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toBe('hello world');
+    expect(result.stderr).toBe('warn msg');
+  });
+
+  it('should log stdout and stderr', () => {
+    mockSpawnFn.mockReturnValue(
+      fakeSpawnResult('output line\n', 'error line\n', 1),
+    );
+
+    spawnCmd('git', ['push'], logStub.logger, PhaseName.PR, mockSpawnFn);
+
+    expect(logStub.logs.some(l => l.kind === 'out' && l.data.includes('output line'))).toBe(true);
+    expect(logStub.logs.some(l => l.kind === 'err' && l.data.includes('error line'))).toBe(true);
+  });
+
+  it('should merge env when provided', () => {
+    mockSpawnFn.mockReturnValue(fakeSpawnResult('', '', 0));
+
+    spawnCmd('env', [], logStub.logger, PhaseName.Branch, mockSpawnFn, { MY_VAR: 'hello' });
+
+    const spawnOpts = mockSpawnFn.mock.calls[0][2] as Record<string, unknown>;
+    expect(spawnOpts.env).toMatchObject({ MY_VAR: 'hello' });
+  });
+
+  it('should pass undefined env when no env override provided', () => {
+    mockSpawnFn.mockReturnValue(fakeSpawnResult('', '', 0));
+
+    spawnCmd('git', ['log'], logStub.logger, PhaseName.Branch, mockSpawnFn);
+
+    const spawnOpts = mockSpawnFn.mock.calls[0][2] as Record<string, unknown>;
+    expect(spawnOpts.env).toBeUndefined();
+  });
+});
+
+// =============================================================================
+// fanOutAdvisors tests
+// =============================================================================
+
+function makeCtx(logStub: ReturnType<typeof stubLogger>): RunContext {
+  return {
+    runId: 'test-run-001',
+    beadId: 'pv-test-1',
+    logger: logStub.logger,
+    phaseHistory: [],
+  };
+}
+
+function makeAdvisor(name: string): MatchedAdvisor {
+  return {
+    name,
+    path: `.claude/agents/${name}.md`,
+    description: `${name} agent`,
+    rationale: 'matched by test',
+  };
+}
+
+function cleanVerdict(agent: string): AdvisorVerdict {
+  return { agent, verdict: 'clean', concerns: [], recommendations: [] };
+}
+
+function refinementVerdict(agent: string): AdvisorVerdict {
+  return {
+    agent,
+    verdict: 'refinement-needed',
+    concerns: ['Missing error handling pattern'],
+    recommendations: ['Add try/catch around API calls'],
+  };
+}
+
+function escalateVerdict(agent: string): AdvisorVerdict {
+  return {
+    agent,
+    verdict: 'escalate',
+    concerns: ['Critical security gap in design'],
+    recommendations: ['Redesign auth flow'],
+  };
+}
+
+describe('buildAdvisorPrompt', () => {
+  it('should include advisor name in prompt', () => {
+    const prompt = buildAdvisorPrompt('security-advisor', 'pv-abc-1', 'some context');
+    expect(prompt).toContain('security-advisor');
+  });
+
+  it('should include bead id in prompt', () => {
+    const prompt = buildAdvisorPrompt('security-advisor', 'pv-abc-1', 'some context');
+    expect(prompt).toContain('pv-abc-1');
+  });
+
+  it('should include bead context in prompt', () => {
+    const prompt = buildAdvisorPrompt('security-advisor', 'pv-abc-1', 'Full bead description here');
+    expect(prompt).toContain('Full bead description here');
+  });
+
+  it('should reference the advisor-verdict schema output format', () => {
+    const prompt = buildAdvisorPrompt('security-advisor', 'pv-abc-1', 'ctx');
+    expect(prompt).toContain('advisor-verdict');
+  });
+});
+
+describe('fanOutAdvisors', () => {
+  let logStub: ReturnType<typeof stubLogger>;
+
+  beforeEach(() => {
+    logStub = stubLogger();
+  });
+
+  it('should return clean report for empty advisor list', async () => {
+    const ctx = makeCtx(logStub);
+    const report = await fanOutAdvisors(
+      [], 'pv-test-1', 'context', 'phase-3-shape', ctx, PhaseName.ShapeAdvisors,
+    );
+
+    expect(report.overallVerdict).toBe('clean');
+    expect(report.advisors).toHaveLength(0);
+    expect(report.beadId).toBe('pv-test-1');
+    expect(report.phase).toBe('phase-3-shape');
+  });
+
+  it('should return clean when single advisor approves', async () => {
+    const ctx = makeCtx(logStub);
+    const advisors = [makeAdvisor('architecture-advisor')];
+    const deps: FanOutDeps = {
+      dispatchFn: vi.fn().mockResolvedValue(cleanVerdict('architecture-advisor')),
+    };
+
+    const report = await fanOutAdvisors(
+      advisors, 'pv-test-1', 'context', 'phase-3-shape', ctx, PhaseName.ShapeAdvisors, deps,
+    );
+
+    expect(report.overallVerdict).toBe('clean');
+    expect(report.advisors).toHaveLength(1);
+    expect(report.advisors[0].verdict).toBe('clean');
+  });
+
+  it('should return clean when all advisors approve', async () => {
+    const ctx = makeCtx(logStub);
+    const advisors = [
+      makeAdvisor('architecture-advisor'),
+      makeAdvisor('security-advisor'),
+      makeAdvisor('consistency-advisor'),
+    ];
+
+    const dispatchFn = vi.fn()
+      .mockResolvedValueOnce(cleanVerdict('architecture-advisor'))
+      .mockResolvedValueOnce(cleanVerdict('security-advisor'))
+      .mockResolvedValueOnce(cleanVerdict('consistency-advisor'));
+
+    const deps: FanOutDeps = { dispatchFn };
+
+    const report = await fanOutAdvisors(
+      advisors, 'pv-test-1', 'context', 'phase-3-shape', ctx, PhaseName.ShapeAdvisors, deps,
+    );
+
+    expect(report.overallVerdict).toBe('clean');
+    expect(report.advisors).toHaveLength(3);
+    expect(dispatchFn).toHaveBeenCalledTimes(3);
+  });
+
+  it('should return refinement-needed when one advisor escalates', async () => {
+    const ctx = makeCtx(logStub);
+    const advisors = [makeAdvisor('architecture-advisor'), makeAdvisor('security-advisor')];
+
+    const dispatchFn = vi.fn()
+      .mockResolvedValueOnce(cleanVerdict('architecture-advisor'))
+      .mockResolvedValueOnce(escalateVerdict('security-advisor'));
+
+    const report = await fanOutAdvisors(
+      advisors, 'pv-test-1', 'context', 'phase-3-shape', ctx, PhaseName.ShapeAdvisors, { dispatchFn },
+    );
+
+    expect(report.overallVerdict).toBe('refinement-needed');
+    expect(report.advisors).toHaveLength(2);
+    expect(report.advisors[1].verdict).toBe('escalate');
+  });
+
+  it('should return refinement-needed when one advisor needs refinement', async () => {
+    const ctx = makeCtx(logStub);
+    const advisors = [makeAdvisor('architecture-advisor'), makeAdvisor('consistency-advisor')];
+
+    const dispatchFn = vi.fn()
+      .mockResolvedValueOnce(cleanVerdict('architecture-advisor'))
+      .mockResolvedValueOnce(refinementVerdict('consistency-advisor'));
+
+    const report = await fanOutAdvisors(
+      advisors, 'pv-test-1', 'context', 'phase-3-shape', ctx, PhaseName.ShapeAdvisors, { dispatchFn },
+    );
+
+    expect(report.overallVerdict).toBe('refinement-needed');
+    expect(report.summary).toContain('consistency-advisor');
+  });
+
+  it('should handle dispatch timeout gracefully as escalate verdict', async () => {
+    const ctx = makeCtx(logStub);
+    const advisors = [makeAdvisor('slow-advisor')];
+    const deps: FanOutDeps = {
+      dispatchFn: vi.fn().mockRejectedValue(
+        new DispatchTimeoutError('slow-advisor', 120_000),
+      ),
+    };
+
+    const report = await fanOutAdvisors(
+      advisors, 'pv-test-1', 'context', 'phase-3-shape', ctx, PhaseName.ShapeAdvisors, deps,
+    );
+
+    expect(report.overallVerdict).toBe('refinement-needed');
+    expect(report.advisors[0].verdict).toBe('escalate');
+    expect(report.advisors[0].concerns[0]).toContain('timed out');
+  });
+
+  it('should handle dispatch malformed error gracefully', async () => {
+    const ctx = makeCtx(logStub);
+    const advisors = [makeAdvisor('broken-advisor')];
+    const deps: FanOutDeps = {
+      dispatchFn: vi.fn().mockRejectedValue(
+        new DispatchMalformedError('broken-advisor', 'garbage', 'not json'),
+      ),
+    };
+
+    const report = await fanOutAdvisors(
+      advisors, 'pv-test-1', 'context', 'phase-3-shape', ctx, PhaseName.ShapeAdvisors, deps,
+    );
+
+    expect(report.overallVerdict).toBe('refinement-needed');
+    expect(report.advisors[0].verdict).toBe('escalate');
+    expect(report.advisors[0].concerns[0]).toContain('malformed');
+  });
+
+  it('should log fan_out_start event', async () => {
+    const ctx = makeCtx(logStub);
+    const advisors = [makeAdvisor('test-advisor')];
+    const deps: FanOutDeps = {
+      dispatchFn: vi.fn().mockResolvedValue(cleanVerdict('test-advisor')),
+    };
+
+    await fanOutAdvisors(
+      advisors, 'pv-test-1', 'context', 'phase-3-shape', ctx, PhaseName.ShapeAdvisors, deps,
+    );
+
+    const startEntry = logStub.runJsonEntries.find(e => e.event === 'advisors_fan_out_start');
+    expect(startEntry).toBeDefined();
+    expect(startEntry!.advisorCount).toBe(1);
+  });
+
+  it('should log fan_out_complete event', async () => {
+    const ctx = makeCtx(logStub);
+    const advisors = [makeAdvisor('test-advisor')];
+    const deps: FanOutDeps = {
+      dispatchFn: vi.fn().mockResolvedValue(cleanVerdict('test-advisor')),
+    };
+
+    await fanOutAdvisors(
+      advisors, 'pv-test-1', 'context', 'phase-3-shape', ctx, PhaseName.ShapeAdvisors, deps,
+    );
+
+    const completeEntry = logStub.runJsonEntries.find(e => e.event === 'advisors_fan_out_complete');
+    expect(completeEntry).toBeDefined();
+    expect(completeEntry!.overallVerdict).toBe('clean');
+  });
+
+  it('should export sensible default constants', () => {
+    expect(ADVISOR_BUDGET_DEFAULT).toBeGreaterThan(0);
+    expect(ADVISOR_TIMEOUT_MS).toBeGreaterThan(0);
+  });
+
+  it('should set the phase tag from the caller', async () => {
+    const ctx = makeCtx(logStub);
+    const report = await fanOutAdvisors(
+      [], 'pv-test-1', 'context', 'phase-5-analyze', ctx, PhaseName.AnalyzeAdvisors,
+    );
+
+    expect(report.phase).toBe('phase-5-analyze');
   });
 });

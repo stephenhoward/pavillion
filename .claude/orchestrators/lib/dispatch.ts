@@ -1,14 +1,19 @@
 /**
- * Canonical wrapper for invoking claude CLI as a subagent.
+ * All external-process execution primitives for the orchestrator.
  *
- * Handles the standard flag set, per-dispatch timeout with process kill,
- * and one-retry-on-malformed-output with a nudge prompt.
+ * Merges:
+ *   - dispatch()        — async claude CLI subagent invocation with timeout + retry
+ *   - runScript()       — sync .sh helper script runner with JSON output
+ *   - spawnCmd()        — thin sync command wrapper for git/gh/bd calls
+ *   - fanOutAdvisors()  — parallel advisor dispatch + verdict aggregation
  *
  * No external dependencies beyond Node built-ins.
  */
 
-import { spawn as nodeSpawn, type ChildProcess } from 'node:child_process';
-import type { PhaseName, RunContext, RunLogger } from './context.js';
+import { spawn as nodeSpawn, spawnSync, type ChildProcess, type SpawnSyncReturns } from 'node:child_process';
+import { existsSync as nodeExistsSync } from 'node:fs';
+import { resolve } from 'node:path';
+import type { PhaseName, RunContext, RunLogger } from './types.js';
 
 const DEFAULT_CLAUDE_BIN = 'claude';
 
@@ -350,4 +355,359 @@ function logStreams(
   if (stderr) {
     logger.writePhaseLog(logTag, 'err', stderr);
   }
+}
+
+// =============================================================================
+// runScript — synchronous .sh helper script runner
+// =============================================================================
+
+/**
+ * Typed result returned by runScript on success (exit code 0).
+ */
+export interface RunScriptSuccess<T = unknown> {
+  json: T;
+  exitCode: 0;
+  stderr: string;
+}
+
+/**
+ * Typed result returned by runScript on non-zero exit.
+ */
+export interface RunScriptFailure {
+  json: null;
+  exitCode: number;
+  stderr: string;
+  stdout: string;
+}
+
+export type RunScriptResult<T = unknown> = RunScriptSuccess<T> | RunScriptFailure;
+
+/**
+ * Error thrown when a script produces malformed JSON on stdout.
+ */
+export class RunScriptError extends Error {
+  readonly exitCode: number;
+  readonly stderr: string;
+  readonly stdout: string;
+
+  constructor(message: string, opts: { exitCode: number; stderr: string; stdout: string; cause?: unknown }) {
+    super(message, { cause: opts.cause });
+    this.name = 'RunScriptError';
+    this.exitCode = opts.exitCode;
+    this.stderr = opts.stderr;
+    this.stdout = opts.stdout;
+  }
+}
+
+/**
+ * Options for runScript, including the injectable spawn function.
+ */
+export interface RunScriptOptions {
+  /** Logger to write stdout/stderr to the run-id log dir. */
+  logger: RunLogger;
+  /** Phase name used as the log-file tag. */
+  logTag: PhaseName;
+  /** Override the spawn implementation (for testing). */
+  spawnFn?: typeof spawnSync;
+  /** Override the file-existence check (for testing). */
+  existsFn?: (path: string) => boolean;
+}
+
+/**
+ * Invoke a .sh helper script synchronously and return parsed JSON output.
+ *
+ * - On exit 0: parses stdout as JSON, returns { json, exitCode: 0, stderr }.
+ * - On non-zero exit: returns { json: null, exitCode, stderr, stdout } without
+ *   attempting JSON parse.
+ * - On exit 0 with malformed JSON: throws RunScriptError.
+ * - If scriptPath does not exist: throws RunScriptError.
+ *
+ * Both stdout and stderr are written to the logger regardless of outcome.
+ */
+export function runScript<T = unknown>(
+  scriptPath: string,
+  args: string[],
+  opts: RunScriptOptions,
+): RunScriptResult<T> {
+  const { logger, logTag, spawnFn = spawnSync, existsFn = nodeExistsSync } = opts;
+
+  // Verify script exists before spawning
+  if (!existsFn(scriptPath)) {
+    const err = new RunScriptError(
+      `Script not found: ${scriptPath}`,
+      { exitCode: -1, stderr: '', stdout: '' },
+    );
+    logger.writePhaseLog(logTag, 'err', `RunScriptError: ${err.message}\n`);
+    throw err;
+  }
+
+  const result: SpawnSyncReturns<Buffer> = spawnFn(scriptPath, args, {
+    encoding: 'buffer' as never,
+    shell: true,
+    timeout: 60_000,
+  });
+
+  const stdout = result.stdout?.toString('utf-8') ?? '';
+  const stderr = result.stderr?.toString('utf-8') ?? '';
+  const exitCode = result.status ?? 1;
+
+  // Log both streams
+  if (stdout) {
+    logger.writePhaseLog(logTag, 'out', stdout);
+  }
+  if (stderr) {
+    logger.writePhaseLog(logTag, 'err', stderr);
+  }
+
+  // Non-zero exit: return failure without parsing JSON
+  if (exitCode !== 0) {
+    return { json: null, exitCode, stderr, stdout };
+  }
+
+  // Exit 0: parse strict JSON from stdout
+  try {
+    const json = JSON.parse(stdout) as T;
+    return { json, exitCode: 0, stderr };
+  }
+  catch (cause) {
+    throw new RunScriptError(
+      `Malformed JSON from ${scriptPath}: ${(cause as Error).message}`,
+      { exitCode, stderr, stdout, cause },
+    );
+  }
+}
+
+// =============================================================================
+// spawnCmd — thin synchronous command wrapper (git/gh/bd calls)
+// =============================================================================
+
+/**
+ * Result of a synchronous command invocation.
+ */
+export interface CmdResult {
+  stdout: string;
+  stderr: string;
+  exitCode: number;
+}
+
+/**
+ * Run a command synchronously and return stdout/stderr/exitCode.
+ *
+ * Logs output to the run logger. Used for short-lived commands like
+ * git, gh, and bd where async is unnecessary overhead.
+ */
+export function spawnCmd(
+  cmd: string,
+  args: string[],
+  logger: RunLogger,
+  logTag: PhaseName,
+  spawnFn: typeof spawnSync = spawnSync,
+  env?: Record<string, string>,
+): CmdResult {
+  const result: SpawnSyncReturns<Buffer> = spawnFn(cmd, args, {
+    encoding: 'buffer' as never,
+    shell: true,
+    timeout: 120_000,
+    env: env ? { ...process.env, ...env } : undefined,
+  });
+  const stdout = (result.stdout?.toString('utf-8') ?? '').trim();
+  const stderr = (result.stderr?.toString('utf-8') ?? '').trim();
+  const exitCode = result.status ?? 1;
+  if (stdout) logger.writePhaseLog(logTag, 'out', stdout + '\n');
+  if (stderr) logger.writePhaseLog(logTag, 'err', stderr + '\n');
+  return { stdout, stderr, exitCode };
+}
+
+// =============================================================================
+// fanOutAdvisors — parallel advisor dispatch + verdict aggregation
+// =============================================================================
+
+const ADVISOR_VERDICT_SCHEMA = resolve(
+  '.claude/orchestrators/schemas/advisor-verdict.json',
+);
+
+/** Default per-advisor budget in USD. Override via ORCH_BUDGET_ADVISOR env var. */
+export const ADVISOR_BUDGET_DEFAULT = 0.75;
+
+/** Default per-advisor timeout in ms. */
+export const ADVISOR_TIMEOUT_MS = 120_000;
+
+export interface AdvisorVerdict {
+  agent: string;
+  verdict: 'clean' | 'refinement-needed' | 'escalate';
+  concerns: string[];
+  recommendations: string[];
+  shapedBeadId?: string;
+}
+
+export interface RefinementReport {
+  beadId: string;
+  phase: 'phase-3-shape' | 'phase-5-analyze';
+  advisors: AdvisorVerdict[];
+  overallVerdict: 'clean' | 'refinement-needed';
+  summary: string;
+}
+
+export interface MatchedAdvisor {
+  name: string;
+  path: string;
+  description: string;
+  rationale: string;
+}
+
+export interface FanOutDeps {
+  /** Override the dispatch function (for testing). */
+  dispatchFn?: (opts: DispatchOptions) => Promise<AdvisorVerdict>;
+}
+
+/**
+ * Build the prompt for a single advisor dispatch.
+ */
+export function buildAdvisorPrompt(
+  advisorName: string,
+  beadId: string,
+  beadContext: string,
+): string {
+  return [
+    `# Advisory review: ${advisorName}`,
+    '',
+    `Review bead \`${beadId}\` using your domain-specific standards.`,
+    '',
+    '## Bead Context',
+    '',
+    beadContext,
+    '',
+    '## Output format',
+    '',
+    'Respond with JSON matching the advisor-verdict schema:',
+    '```json',
+    '{',
+    `  "agent": "${advisorName}",`,
+    '  "verdict": "clean" | "refinement-needed" | "escalate",',
+    '  "concerns": ["..."],',
+    '  "recommendations": ["..."],',
+    `  "shapedBeadId": "${beadId}"`,
+    '}',
+    '```',
+  ].join('\n');
+}
+
+/**
+ * Dispatch all matched advisors in parallel, collect verdicts,
+ * and aggregate into a RefinementReport.
+ *
+ * A single advisor failure (timeout, malformed output, spawn error)
+ * becomes a "concern" entry in the report rather than a catastrophic abort.
+ */
+export async function fanOutAdvisors(
+  advisors: MatchedAdvisor[],
+  beadId: string,
+  beadContext: string,
+  phase: 'phase-3-shape' | 'phase-5-analyze',
+  ctx: RunContext,
+  logTag: PhaseName,
+  deps: FanOutDeps = {},
+): Promise<RefinementReport> {
+  const dispatchFn = deps.dispatchFn ?? dispatch;
+  const budgetUsd = parseFloat(process.env.ORCH_BUDGET_ADVISOR ?? '') || ADVISOR_BUDGET_DEFAULT;
+  const timeoutMs = parseInt(process.env.ORCH_TIMEOUT_ADVISOR ?? '', 10) || ADVISOR_TIMEOUT_MS;
+
+  ctx.logger.appendRunJson({
+    event: 'advisors_fan_out_start',
+    beadId,
+    phase: logTag,
+    advisorCount: advisors.length,
+    advisorNames: advisors.map(a => a.name),
+  });
+
+  // Dispatch all advisors in parallel
+  const settledResults = await Promise.allSettled(
+    advisors.map(async (advisor): Promise<AdvisorVerdict> => {
+      const prompt = buildAdvisorPrompt(advisor.name, beadId, beadContext);
+
+      return dispatchFn({
+        agent: advisor.name,
+        schemaPath: ADVISOR_VERDICT_SCHEMA,
+        prompt,
+        budgetUsd,
+        timeoutMs,
+        ctx,
+        logTag,
+      });
+    }),
+  );
+
+  // Collect verdicts, turning failures into concern entries
+  const verdicts: AdvisorVerdict[] = settledResults.map((result, i) => {
+    const advisorName = advisors[i].name;
+
+    if (result.status === 'fulfilled') {
+      ctx.logger.appendRunJson({
+        event: 'advisor_verdict_received',
+        agent: advisorName,
+        verdict: result.value.verdict,
+      });
+      return result.value;
+    }
+
+    // Failed dispatch: create a synthetic escalate verdict
+    const err = result.reason;
+    let reason: string;
+
+    if (err instanceof DispatchTimeoutError) {
+      reason = `Advisor "${advisorName}" timed out`;
+    }
+    else if (err instanceof DispatchMalformedError) {
+      reason = `Advisor "${advisorName}" returned malformed output`;
+    }
+    else if (err instanceof DispatchSpawnError) {
+      reason = `Advisor "${advisorName}" failed with exit code ${err.exitCode}`;
+    }
+    else {
+      reason = `Advisor "${advisorName}" failed: ${err instanceof Error ? err.message : String(err)}`;
+    }
+
+    ctx.logger.appendRunJson({
+      event: 'advisor_dispatch_failed',
+      agent: advisorName,
+      reason,
+    });
+
+    return {
+      agent: advisorName,
+      verdict: 'escalate' as const,
+      concerns: [reason],
+      recommendations: [],
+    };
+  });
+
+  // Aggregate into report
+  const allClean = verdicts.every(v => v.verdict === 'clean');
+  const overallVerdict: 'clean' | 'refinement-needed' = allClean ? 'clean' : 'refinement-needed';
+
+  const concerns = verdicts
+    .filter(v => v.verdict !== 'clean')
+    .flatMap(v => v.concerns.map(c => `[${v.agent}] ${c}`));
+
+  const summary = allClean
+    ? `All ${verdicts.length} advisor(s) approved the bead plan.`
+    : `${concerns.length} concern(s) from ${verdicts.filter(v => v.verdict !== 'clean').length} advisor(s): ${concerns.slice(0, 3).join('; ')}${concerns.length > 3 ? ` (+${concerns.length - 3} more)` : ''}`;
+
+  const report: RefinementReport = {
+    beadId,
+    phase,
+    advisors: verdicts,
+    overallVerdict,
+    summary,
+  };
+
+  ctx.logger.appendRunJson({
+    event: 'advisors_fan_out_complete',
+    beadId,
+    overallVerdict,
+    advisorCount: verdicts.length,
+    summary,
+  });
+
+  return report;
 }
