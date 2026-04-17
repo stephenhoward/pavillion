@@ -15,22 +15,24 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { PhaseName } from '../../lib/context.js';
-import { runStateMachine, type OrchestratorContext, type PhaseRunner } from '../../process-backlog.js';
-import { runPreflight } from '../../lib/phase-0-preflight.js';
-import { runSelect } from '../../lib/phase-1-select.js';
-import { runState } from '../../lib/phase-2-state.js';
-import { runShapeAdvisors } from '../../lib/phase-3.5-advisors.js';
-import { runDecompose } from '../../lib/phase-4-decompose.js';
-import { runAnalyze } from '../../lib/phase-5-analyze.js';
-import { runBranch } from '../../lib/phase-6-branch.js';
-import { runPR } from '../../lib/phase-8-pr.js';
-import { runReport } from '../../lib/phase-9-report.js';
+import { PhaseName } from '../../lib/types.js';
+import { runStateMachine, type OrchestratorCtx } from '../../process-backlog.js';
+import {
+  preflight,
+  select,
+  assessState,
+  shapeAdvisors,
+  decompose,
+  analyze,
+  branch,
+  type PhaseCtx as PhasesCtx,
+  type PhaseDeps,
+} from '../../lib/phases.js';
+import { runPR, type PhaseRunner, type ExecuteDeps } from '../../lib/execute.js';
 import {
   makeCtx,
   ScriptRouter,
   DispatchRouter,
-  type StubLogger,
 } from './helpers.js';
 
 const FIXTURES = join(import.meta.dirname, '..', 'fixtures');
@@ -42,7 +44,7 @@ function fixture(path: string): string {
 describe('Integration: leaf happy path', () => {
   let scripts: ScriptRouter;
   let dispatches: DispatchRouter;
-  let ctx: OrchestratorContext;
+  let ctx: OrchestratorCtx;
 
   beforeEach(() => {
     scripts = new ScriptRouter();
@@ -142,62 +144,52 @@ describe('Integration: leaf happy path', () => {
     dispatches.on('implementer', () => ({}));
   });
 
+  function buildRegistry(
+    spawnFn: ReturnType<ScriptRouter['toSpawnFn']>,
+    existsFn: ReturnType<ScriptRouter['toExistsFn']>,
+    dispatchFn: ReturnType<DispatchRouter['toDispatchFn']>,
+  ): Record<string, PhaseRunner> {
+    // PhaseDeps uses spawnFn + existsFn (spawnSync-based)
+    const phaseDeps: PhaseDeps = {
+      spawnFn: spawnFn as never,
+      existsFn,
+      dispatchFn: dispatchFn as never,
+    };
+
+    // ExecuteDeps uses scriptSpawnFn + scriptExistsFn (spawnSync-based)
+    const execDeps: ExecuteDeps = {
+      scriptSpawnFn: spawnFn as never,
+      scriptExistsFn: existsFn,
+    };
+
+    return {
+      [PhaseName.Preflight]: async (c) => preflight(c as PhasesCtx, phaseDeps),
+      [PhaseName.Select]: async (c) => select(c as PhasesCtx, phaseDeps),
+      [PhaseName.State]: async (c) => assessState(c as PhasesCtx, phaseDeps),
+      [PhaseName.ShapeAdvisors]: async (c) => shapeAdvisors(c as PhasesCtx, phaseDeps),
+      [PhaseName.Decompose]: async (c) => decompose(c as PhasesCtx, phaseDeps),
+      [PhaseName.Analyze]: async (c) => analyze(c as PhasesCtx, phaseDeps),
+      [PhaseName.Branch]: async (c) => branch(c as PhasesCtx, phaseDeps),
+      [PhaseName.Leaf]: async (c) => {
+        // Simulate successful leaf execution: implementer + audit pass
+        await dispatchFn({ agent: 'implementer', prompt: `implement ${c.beadId}` });
+        return { next: PhaseName.PR, ctx: c };
+      },
+      [PhaseName.PR]: async (c) => runPR(c as never, execDeps),
+      [PhaseName.Report]: async (c) => {
+        // Report phase is absorbed into process-backlog.ts for production runs.
+        // In integration tests, just halt cleanly.
+        return { next: 'halt' as const, ctx: c };
+      },
+    };
+  }
+
   it('should walk the full leaf happy path from preflight to report', async () => {
     const spawnFn = scripts.toSpawnFn();
     const existsFn = scripts.toExistsFn();
     const dispatchFn = dispatches.toDispatchFn();
 
-    const scriptOpts = { spawnFn, existsFn };
-
-    type PhaseLoader = () => Promise<{ run: PhaseRunner }>;
-
-    const registry: Record<string, PhaseLoader> = {
-      [PhaseName.Preflight]: async () => ({
-        run: async (c) => runPreflight(c, { runScriptOpts: scriptOpts, gitSafeSpawnFn: spawnFn as never }),
-      }),
-      [PhaseName.Select]: async () => ({
-        run: async (c) => runSelect(c, { runScriptOpts: scriptOpts }),
-      }),
-      [PhaseName.State]: async () => ({
-        run: async (c) => runState(c, { runScriptOpts: scriptOpts }),
-      }),
-      [PhaseName.ShapeAdvisors]: async () => ({
-        run: async (c) => runShapeAdvisors(c, {
-          getFileHintsFn: () => [],
-          runScriptOpts: scriptOpts,
-        }),
-      }),
-      [PhaseName.Decompose]: async () => ({
-        run: async (c) => runDecompose(c, {
-          runScriptOpts: scriptOpts,
-          dispatchFn: dispatchFn as never,
-        }),
-      }),
-      [PhaseName.Analyze]: async () => ({
-        run: async (c) => runAnalyze(c, {
-          runScriptOpts: scriptOpts,
-          childIds: [],
-        }),
-      }),
-      [PhaseName.Branch]: async () => ({
-        run: async (c) => runBranch(c, { spawnFn }),
-      }),
-      [PhaseName.Leaf]: async () => ({
-        run: async (c) => {
-          // Simulate successful leaf execution: implementer + audit pass
-          // Then route to PR
-          await dispatchFn({ agent: 'implementer', prompt: `implement ${c.beadId}` });
-          return { next: PhaseName.PR, ctx: c };
-        },
-      }),
-      [PhaseName.PR]: async () => ({
-        run: async (c) => runPR(c, { spawnFn }),
-      }),
-      [PhaseName.Report]: async () => ({
-        run: async (c) => runReport(c as never),
-      }),
-    };
-
+    const registry = buildRegistry(spawnFn, existsFn, dispatchFn);
     const result = await runStateMachine(ctx, PhaseName.Preflight, registry);
 
     // Verify the full phase chain executed
@@ -222,8 +214,7 @@ describe('Integration: leaf happy path', () => {
     expect(result.beadId).toBe('pv-test.1');
 
     // PR URL was set
-    expect((result as OrchestratorContext & { prUrl?: string }).prUrl)
-      .toBe('https://github.com/org/repo/pull/42');
+    expect(result.prUrl).toBe('https://github.com/org/repo/pull/42');
 
     // Implementer was dispatched
     expect(dispatches.calls.some((c) => c.agent === 'implementer')).toBe(true);
@@ -239,54 +230,8 @@ describe('Integration: leaf happy path', () => {
     const spawnFn = scripts.toSpawnFn();
     const existsFn = scripts.toExistsFn();
     const dispatchFn = dispatches.toDispatchFn();
-    const scriptOpts = { spawnFn, existsFn };
 
-    type PhaseLoader = () => Promise<{ run: PhaseRunner }>;
-
-    const registry: Record<string, PhaseLoader> = {
-      [PhaseName.Preflight]: async () => ({
-        run: async (c) => runPreflight(c, { runScriptOpts: scriptOpts, gitSafeSpawnFn: spawnFn as never }),
-      }),
-      [PhaseName.Select]: async () => ({
-        run: async (c) => runSelect(c, { runScriptOpts: scriptOpts }),
-      }),
-      [PhaseName.State]: async () => ({
-        run: async (c) => runState(c, { runScriptOpts: scriptOpts }),
-      }),
-      [PhaseName.ShapeAdvisors]: async () => ({
-        run: async (c) => runShapeAdvisors(c, {
-          getFileHintsFn: () => [],
-          runScriptOpts: scriptOpts,
-        }),
-      }),
-      [PhaseName.Decompose]: async () => ({
-        run: async (c) => runDecompose(c, {
-          runScriptOpts: scriptOpts,
-          dispatchFn: dispatchFn as never,
-        }),
-      }),
-      [PhaseName.Analyze]: async () => ({
-        run: async (c) => runAnalyze(c, {
-          runScriptOpts: scriptOpts,
-          childIds: [],
-        }),
-      }),
-      [PhaseName.Branch]: async () => ({
-        run: async (c) => runBranch(c, { spawnFn }),
-      }),
-      [PhaseName.Leaf]: async () => ({
-        run: async (c) => {
-          await dispatchFn({ agent: 'implementer', prompt: `implement ${c.beadId}` });
-          return { next: PhaseName.PR, ctx: c };
-        },
-      }),
-      [PhaseName.PR]: async () => ({
-        run: async (c) => runPR(c, { spawnFn }),
-      }),
-      [PhaseName.Report]: async () => ({
-        run: async (c) => runReport(c as never),
-      }),
-    };
+    const registry = buildRegistry(spawnFn, existsFn, dispatchFn);
 
     const start = Date.now();
     await runStateMachine(ctx, PhaseName.Preflight, registry);

@@ -6,25 +6,28 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { PhaseName } from '../../lib/context.js';
-import { runStateMachine, type OrchestratorContext, type PhaseRunner } from '../../process-backlog.js';
-import { runPreflight } from '../../lib/phase-0-preflight.js';
-import { runSelect } from '../../lib/phase-1-select.js';
-import { runState } from '../../lib/phase-2-state.js';
-import { runShape } from '../../lib/phase-3-shape.js';
-import { runShapeAdvisors } from '../../lib/phase-3.5-advisors.js';
+import { PhaseName } from '../../lib/types.js';
+import { runStateMachine, type OrchestratorCtx } from '../../process-backlog.js';
+import {
+  preflight,
+  select,
+  assessState,
+  shape,
+  shapeAdvisors,
+  type PhaseCtx as PhasesCtx,
+  type PhaseDeps,
+} from '../../lib/phases.js';
+import { type PhaseRunner } from '../../lib/execute.js';
 import {
   makeCtx,
   ScriptRouter,
   DispatchRouter,
 } from './helpers.js';
 
-type PhaseLoader = () => Promise<{ run: PhaseRunner }>;
-
 describe('Integration: safeguards', () => {
   let scripts: ScriptRouter;
   let dispatches: DispatchRouter;
-  let ctx: OrchestratorContext;
+  let ctx: OrchestratorCtx;
 
   beforeEach(() => {
     scripts = new ScriptRouter();
@@ -42,12 +45,10 @@ describe('Integration: safeguards', () => {
 
     const spawnFn = scripts.toSpawnFn();
     const existsFn = scripts.toExistsFn();
-    const scriptOpts = { spawnFn, existsFn };
+    const phaseDeps: PhaseDeps = { spawnFn: spawnFn as never, existsFn };
 
-    const registry: Record<string, PhaseLoader> = {
-      [PhaseName.Preflight]: async () => ({
-        run: async (c) => runPreflight(c, { runScriptOpts: scriptOpts, gitSafeSpawnFn: spawnFn as never }),
-      }),
+    const registry: Record<string, PhaseRunner> = {
+      [PhaseName.Preflight]: async (c) => preflight(c as PhasesCtx, phaseDeps),
     };
 
     const result = await runStateMachine(ctx, PhaseName.Preflight, registry);
@@ -69,15 +70,11 @@ describe('Integration: safeguards', () => {
 
     const spawnFn = scripts.toSpawnFn();
     const existsFn = scripts.toExistsFn();
-    const scriptOpts = { spawnFn, existsFn };
+    const phaseDeps: PhaseDeps = { spawnFn: spawnFn as never, existsFn };
 
-    const registry: Record<string, PhaseLoader> = {
-      [PhaseName.Preflight]: async () => ({
-        run: async (c) => runPreflight(c, { runScriptOpts: scriptOpts, gitSafeSpawnFn: spawnFn as never }),
-      }),
-      [PhaseName.Select]: async () => ({
-        run: async (c) => runSelect(c, { runScriptOpts: scriptOpts }),
-      }),
+    const registry: Record<string, PhaseRunner> = {
+      [PhaseName.Preflight]: async (c) => preflight(c as PhasesCtx, phaseDeps),
+      [PhaseName.Select]: async (c) => select(c as PhasesCtx, phaseDeps),
     };
 
     const result = await runStateMachine(ctx, PhaseName.Preflight, registry);
@@ -102,25 +99,17 @@ describe('Integration: safeguards', () => {
     const spawnFn = scripts.toSpawnFn();
     const existsFn = scripts.toExistsFn();
     const dispatchFn = dispatches.toDispatchFn();
-    const scriptOpts = { spawnFn, existsFn };
+    const phaseDeps: PhaseDeps = {
+      spawnFn: spawnFn as never,
+      existsFn,
+      dispatchFn: dispatchFn as never,
+    };
 
-    const registry: Record<string, PhaseLoader> = {
-      [PhaseName.Preflight]: async () => ({
-        run: async (c) => runPreflight(c, { runScriptOpts: scriptOpts, gitSafeSpawnFn: spawnFn as never }),
-      }),
-      [PhaseName.Select]: async () => ({
-        run: async (c) => runSelect(c, { runScriptOpts: scriptOpts }),
-      }),
-      [PhaseName.State]: async () => ({
-        run: async (c) => runState(c, { runScriptOpts: scriptOpts }),
-      }),
-      [PhaseName.Shape]: async () => ({
-        run: async (c) => runShape(c, {
-          dispatchFn: dispatchFn as never,
-          escalateSpawnFn: spawnFn as never,
-          stateSpawnFn: spawnFn as never,
-        }),
-      }),
+    const registry: Record<string, PhaseRunner> = {
+      [PhaseName.Preflight]: async (c) => preflight(c as PhasesCtx, phaseDeps),
+      [PhaseName.Select]: async (c) => select(c as PhasesCtx, phaseDeps),
+      [PhaseName.State]: async (c) => assessState(c as PhasesCtx, phaseDeps),
+      [PhaseName.Shape]: async (c) => shape(c as PhasesCtx, phaseDeps),
     };
 
     const result = await runStateMachine(ctx, PhaseName.Preflight, registry);
@@ -140,20 +129,14 @@ describe('Integration: safeguards', () => {
 
     const spawnFn = scripts.toSpawnFn();
     const existsFn = scripts.toExistsFn();
-    const scriptOpts = { spawnFn, existsFn };
+    const phaseDeps: PhaseDeps = { spawnFn: spawnFn as never, existsFn };
 
     ctx = makeCtx({ dryRun: true });
 
-    const registry: Record<string, PhaseLoader> = {
-      [PhaseName.Preflight]: async () => ({
-        run: async (c) => runPreflight(c, { runScriptOpts: scriptOpts, gitSafeSpawnFn: spawnFn as never }),
-      }),
-      [PhaseName.Select]: async () => ({
-        run: async (c) => runSelect(c, { runScriptOpts: scriptOpts }),
-      }),
-      [PhaseName.State]: async () => ({
-        run: async (c) => runState(c, { runScriptOpts: scriptOpts }),
-      }),
+    const registry: Record<string, PhaseRunner> = {
+      [PhaseName.Preflight]: async (c) => preflight(c as PhasesCtx, phaseDeps),
+      [PhaseName.Select]: async (c) => select(c as PhasesCtx, phaseDeps),
+      [PhaseName.State]: async (c) => assessState(c as PhasesCtx, phaseDeps),
     };
 
     const result = await runStateMachine(ctx, PhaseName.Preflight, registry);

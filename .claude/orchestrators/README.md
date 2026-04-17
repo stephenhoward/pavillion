@@ -18,37 +18,18 @@ tsx .claude/orchestrators/process-backlog.ts
 
 ```
 .claude/orchestrators/
-├── process-backlog.ts          # Entry point: args, state machine, summary
+├── process-backlog.ts       # Entry: CLI args, state machine loop, summary
 ├── lib/
-│   ├── context.ts              # PhaseName enum, RunContext, RunLogger types
-│   ├── logger.ts               # Per-run log directory setup
-│   ├── run-script.ts           # Wrapper for .sh helper invocation
-│   ├── dispatch.ts             # Wrapper for claude -p subagent invocation
-│   ├── fan-out-advisors.ts     # Parallel advisor dispatch helper
-│   ├── wave-types.ts           # Wave state types for epic execution
-│   ├── phase-0-preflight.ts    # preflight.sh + git-safe-to-start.sh
-│   ├── phase-1-select.ts       # bd-top-ready.sh
-│   ├── phase-2-state.ts        # bd-state.sh + dry-run gate
-│   ├── phase-3-shape.ts        # Auto-shape via claude -p
-│   ├── phase-3.5-advisors.ts   # Advisory review (parallel fan-out)
-│   ├── phase-4-decompose.ts    # Decompose via claude -p
-│   ├── phase-5-analyze.ts      # Analyze via claude -p
-│   ├── phase-5.5-advisors.ts   # Post-analyze advisory review
-│   ├── phase-6-branch.ts       # git branch setup (pure scripted)
-│   ├── phase-7a-epic.ts        # Epic wave execution
-│   ├── phase-7b-leaf.ts        # Single-leaf execution
-│   ├── phase-8-pr.ts           # PR creation (pure scripted)
-│   └── phase-9-report.ts       # Run summary
-├── schemas/                    # JSON schemas for --json-schema validation
+│   ├── types.ts             # PhaseName enum, RunContext, RunLogger, wave types
+│   ├── dispatch.ts          # runScript(), dispatch(), spawnCmd(), fanOutAdvisors()
+│   ├── phases.ts            # Pre-execution: preflight → select → state → shape → advisors → decompose → analyze → branch
+│   └── execute.ts           # Execution: leaf, epic waves, PR finalization
+├── schemas/                 # JSON schemas for --json-schema validation
 ├── test/
-│   ├── unit/                   # Per-phase unit tests
-│   ├── integration/            # Full state-machine walk tests
-│   └── fixtures/               # Mocked script + dispatch outputs
-└── logs/                       # Per-run logs (gitignored)
-    └── <run-id>/
-        ├── phase-0-preflight.out
-        ├── phase-0-preflight.err
-        └── run.jsonl            # Structured trace
+│   ├── unit/                # 5 test files matching the 5 source files
+│   ├── integration/         # Full state-machine walk tests
+│   └── fixtures/            # Mocked script + dispatch outputs
+└── logs/                    # Per-run logs (gitignored)
 ```
 
 ## Dispatch flags
@@ -67,17 +48,8 @@ Every `claude -p` invocation uses:
 Each run creates `.claude/orchestrators/logs/<run-id>/` with stdout/stderr
 per phase and a `run.jsonl` trace. The logs directory is gitignored.
 
-To clean up: `rm -rf .claude/orchestrators/logs/`
-
 ## Tests
 
 ```bash
-# All orchestrator tests (unit + integration)
 npx vitest run .claude/orchestrators/
-
-# Unit tests only
-npx vitest run .claude/orchestrators/test/unit/
-
-# Integration tests only
-npx vitest run .claude/orchestrators/test/integration/
 ```

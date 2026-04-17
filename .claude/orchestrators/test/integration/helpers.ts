@@ -14,8 +14,8 @@ import { vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { SpawnSyncReturns } from 'node:child_process';
-import { PhaseName, type RunLogger } from '../../lib/context.js';
-import type { OrchestratorContext } from '../../process-backlog.js';
+import { PhaseName, type RunLogger } from '../../lib/types.js';
+import type { OrchestratorCtx } from '../../process-backlog.js';
 
 // ---------------------------------------------------------------------------
 // Fixture loader
@@ -60,7 +60,7 @@ export function stubLogger(): StubLogger {
 // Context factory
 // ---------------------------------------------------------------------------
 
-export function makeCtx(overrides: Partial<OrchestratorContext> = {}): OrchestratorContext {
+export function makeCtx(overrides: Partial<OrchestratorCtx> = {}): OrchestratorCtx {
   return {
     runId: 'integration-test-001',
     beadId: '',
