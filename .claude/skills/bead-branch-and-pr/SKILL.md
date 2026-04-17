@@ -5,16 +5,16 @@ description: Git branch, commit, and PR conventions for bead-scoped work. Use wh
 
 # Bead Branch and PR Skill
 
-This skill captures the git and GitHub conventions used when turning a bead (or a chain of beads) into shippable work. It pairs prose guidance with four deterministic scripts that do the actual formatting so every branch, commit, and PR body is generated the same way, whether a human or an orchestrator is running the workflow.
+This skill captures the git and GitHub conventions used when turning a bead (or a chain of beads) into shippable work. It pairs prose guidance with four deterministic functions that do the actual formatting so every branch, commit, and PR body is generated the same way, whether a human or an orchestrator is running the workflow.
 
-The scripts live next to this file and are invoked directly:
+The functions live in `.claude/orchestrators/lib/helpers.ts`:
 
-- `branch-name.sh <bead-id> [--type-override=<prefix>]`
-- `commit-msg.sh <bead-id> <summary> [scope]`
-- `pr-body.sh <bead-id> [additional-bead-id ...]`
-- `git-safe-to-start.sh`
+- `branchName(beadId, typeOverride, deps)` — Generate kebab-case branch name with bead id
+- `commitMsg(beadId, summary, scope)` — Format conventional commit message with bead id
+- `prBody(primaryBeadId, additionalBeadIds, deps)` — Render markdown PR body with summary and test plan
+- `gitSafeToStart(deps)` — Check if working tree is clean and on main
 
-All scripts use `bd show --json <id>` under the hood (overridable via `BD_SHOW_CMD` for tests) and fail loudly on missing arguments (exit 2) or unknown beads (exit 3).
+All functions accept an injectable `spawnFn` dependency for testability and fail loudly on invalid input.
 
 ## Branch naming
 
@@ -140,32 +140,24 @@ A branch may not be pushed to `origin` until the wave's build-guardian agent has
 
 If build-guardian reports FAIL, do not push. Fix locally, re-run build-guardian, and push only once it passes.
 
-## `git-safe-to-start.sh`: phase-6 gate
+## `gitSafeToStart()`: phase-6 gate
 
-When the orchestrator reaches the branch-creation step, the working tree should still be clean and still on `main` — but the full preflight (`bead-backlog-selection/preflight.sh`) ran in Phase 0, which may have been many phases ago. `git-safe-to-start.sh` is the narrow re-check: clean tree + on main, nothing else. It is intentionally cheaper than a full preflight.
+When the orchestrator reaches the branch-creation step, the working tree should still be clean and still on `main` — but the full preflight (`bead-backlog-selection/preflight()`) ran in Phase 0, which may have been many phases ago. `gitSafeToStart()` is the narrow re-check: clean tree + on main, nothing else. It is intentionally cheaper than a full preflight.
 
-Exit codes:
+Returns `{ok: boolean, reason?: string}`. The `ok` field is true if safe to branch, false otherwise. The `reason` field explains why if not safe (wrong branch or dirty tree).
 
-| Exit | Meaning |
-|------|---------|
-| 0    | Safe to branch: clean tree, on main |
-| 1    | Not safe: wrong branch or dirty tree |
-| 2    | Git itself failed (not inside a work tree, `git` binary missing, etc.) |
-
-The expected main-branch name is `main` by default but can be overridden with the `GIT_SAFE_MAIN_BRANCH` env var, which is useful for test rigs and for repositories that use a non-`main` trunk.
+The expected main-branch name is `main` by default but can be overridden via the `GIT_SAFE_MAIN_BRANCH` env var, which is useful for test rigs and for repositories that use a non-`main` trunk.
 
 ## Testing
 
-Fixture-driven bash tests live in `test/` and run with `./test/run-tests.sh`. The tests cover:
+Tests are co-located with the orchestrator codebase in `.claude/orchestrators/lib/__tests__/`. The test suite covers:
 
 - Branch naming for each bead type, including epic, weird titles with apostrophes and slashes, and titles long enough to exercise the 60-char truncation.
 - Commit message generation with and without scope, including multi-line summary flattening.
 - PR body rendering for both single-bead and multi-bead (epic-closing) cases, with the primary bead's title and description driving the Summary block.
-- `git-safe-to-start.sh` against real temporary git repos: clean+main, dirty+main, clean+wrong-branch, clean+custom-main, and non-repo directories.
+- `gitSafeToStart()` against real temporary git repos: clean+main, dirty+main, clean+wrong-branch, clean+custom-main, and non-repo directories.
 
-Scripts are stubbed via the `BD_SHOW_CMD` environment variable, which the fixture runner points at a small shell script that `cat`s the appropriate JSON fixture. The real `bd` CLI is never called during tests.
-
-All scripts are deterministic — the same input always produces the same output — and handle missing arguments by printing a usage message to stderr and exiting 2.
+Functions accept an injectable `spawnFn` for testing; fixtures mock `bd show` output. All functions are deterministic — the same input always produces the same output — and throw clearly on invalid input.
 
 ## Related skills
 

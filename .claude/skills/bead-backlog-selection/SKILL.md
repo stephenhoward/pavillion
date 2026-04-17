@@ -9,15 +9,17 @@ This skill governs how the autonomous `/process-backlog` command picks its next 
 
 See [`epic-bead-workflow`](../epic-bead-workflow/SKILL.md) for the underlying beads mental model (dependency DAGs, READY beads, enrichment, closing). This skill layers selection, preflight, and escalation on top of that model.
 
-## Scripts in this skill
+## Implementation
 
-| Script | Purpose |
+Logic lives in `.claude/orchestrators/lib/helpers.ts`:
+
+| Function | Purpose |
 |---|---|
-| `preflight.sh` | Gate. Emits JSON `{ok, failures[]}`; exits 0 if safe, 1 if any blocker. |
-| `bd-top-ready.sh [--limit N]` | Picks the top bead. Emits bead JSON on stdout; exit 3 when no automatable bead remains. |
-| `bd-escalate.sh <id> <reason> [phase]` | Marks a bead as needing human intervention. Idempotent. |
+| `preflight(deps)` | Gate. Returns `{ok, failures[]}`; ok=true if safe, false if any blocker. |
+| `bdTopReady(limit, deps)` | Picks the top bead. Returns `{bead, exhausted}`; bead=null when no automatable bead remains. |
+| `bdEscalate(id, reason, phase, deps)` | Marks a bead as needing human intervention. Idempotent. |
 
-All scripts use `set -euo pipefail`, emit JSON via `jq`, and fail loud on bd CLI errors.
+All functions accept an injectable `spawnFn` dependency for testability; pure functions have no I/O.
 
 ## Prioritization rules
 
@@ -29,6 +31,8 @@ When picking the next bead, `bd-top-ready.sh` applies these rules in order:
 4. **Age tiebreak — oldest first.** Among beads with equal priority, the oldest `created_at` wins. This keeps beads from lingering indefinitely just because newer, equally urgent work keeps arriving.
 
 **Not used for selection:** bead type (epic vs. leaf), estimated complexity, assignee. The orchestrator asks this skill only "what's next?" and then routes by type afterwards via [`bead-state-assessment`](../bead-state-assessment/SKILL.md).
+
+The `bdTopReady()` function filters out beads with the `needs-human` label via the helpers' label check, respecting the escalation protocol (see below).
 
 ## Preconditions for autonomous work
 
@@ -99,16 +103,10 @@ The orchestrator surfaces these reasons to the user verbatim and exits. It does 
 - `/process-backlog` — the autonomous command, calls all three scripts.
 - Future backlog-management commands — may reuse `bd-top-ready.sh` for "what's next?" queries or `bd-escalate.sh` for manual escalation.
 
-## Fixture tests
+## Tests
 
-Tests live in `test/`. Each `test-*.sh` file mocks `git` and `bd` via a temporary `PATH` shim populated from env vars (see `test/helpers.sh`). Run them with:
+Tests are co-located with the orchestrator codebase in `.claude/orchestrators/lib/__tests__/`. The test suite covers:
 
-```bash
-bash .claude/skills/bead-backlog-selection/test/run-tests.sh
-```
-
-Coverage:
-
-- **Preflight:** clean pass, dirty tree, wrong branch, stale main, empty backlog, all-labelled backlog.
-- **Top-ready:** priority ordering, age tiebreak, label filter, exit-3 on all-labelled, exit-3 on empty, bad-args exit-2.
-- **Escalate:** label + notes added, idempotent second call, missing args exit-2, phase recorded.
+- **preflight():** clean pass, dirty tree, wrong branch, stale main, empty backlog, all-labelled backlog.
+- **bdTopReady():** priority ordering, age tiebreak, label filter, null bead when all-labelled, null bead when empty.
+- **bdEscalate():** label added, notes appended, idempotent second call, phase recorded in Escalation section.

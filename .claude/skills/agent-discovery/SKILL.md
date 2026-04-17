@@ -9,19 +9,21 @@ This skill governs how the orchestrator commands (`/process-backlog`, `/spawn-be
 
 The matcher script is the source of truth for the keyword table; the prose in this file explains *why* those mappings are what they are.
 
-## Scripts in this skill
+## Implementation
 
-| Script | Purpose |
+Functions live in `.claude/orchestrators/lib/helpers.ts`:
+
+| Function | Purpose |
 |---|---|
-| `discover-agents.sh <suffix>` | Lists every `.claude/agents/*-<suffix>.md` and parses name + description from YAML frontmatter. Emits `[{name, path, description}, ...]`. |
-| `match-agents.sh <suffix>` | Reads changed-file paths from stdin (one per line), applies the keyword table below, emits `[{name, path, description, rationale}, ...]` for each agent whose tags overlap the files' tags. |
+| `discoverAgents(suffix, deps)` | Lists every `.claude/agents/*-<suffix>.md` and parses name + description from YAML frontmatter. Returns `[{name, path, description}, ...]`. |
+| `matchAgents(suffix, filePaths, deps)` | Takes an array of changed-file paths, applies the keyword table below, returns `[{name, path, description, rationale}, ...]` for each agent whose tags overlap the files' tags. |
 
-Both scripts:
+Both functions:
 
-- Use `set -euo pipefail` and depend only on POSIX tools plus `jq`.
-- Parse the YAML frontmatter via `awk` between `^---$` delimiters — no `yq`, `python`, or `perl`.
-- Accept an `AGENTS_DIR` environment variable to override `.claude/agents` (used by fixture tests to point at `test/fixtures/agents/`).
-- Reject invalid suffixes with exit code 2 plus a usage message. Valid suffixes are `auditor`, `advisor`, `reviewer`, `verifier`.
+- Accept an injectable `spawnFn` dependency for testing.
+- Parse YAML frontmatter via regex between `^---$` delimiters.
+- Accept an `AGENTS_DIR` environment variable to override `.claude/agents` (used by tests to point at `test/fixtures/agents/`).
+- Throw clearly on invalid suffixes. Valid suffixes are `auditor`, `advisor`, `reviewer`, `verifier`.
 
 ## What makes an agent applicable
 
@@ -130,15 +132,9 @@ Each consumer passes the relevant file list in a way that fits its context:
 - For a bead that hasn't been implemented yet, the "file list" is inferred from the bead's Implementation Context section (`Files to Modify`).
 - For a bead that has been implemented, the file list is `git diff --name-only main...HEAD`.
 
-## Fixture tests
+## Tests
 
-Tests live in `test/`. Each `test-*.sh` file points `AGENTS_DIR` at `test/fixtures/agents/` and asserts on script output. Run the suite with:
+Tests are co-located with the orchestrator codebase in `.claude/orchestrators/lib/__tests__/`. The test suite covers:
 
-```bash
-bash .claude/skills/agent-discovery/test/run-tests.sh
-```
-
-Coverage:
-
-- **discover-agents:** auditor enumeration, advisor enumeration, invalid suffix, missing args.
-- **match-agents:** single `.vue` file (frontend fan-out), backend API + entity (server-side fan-out), `.scss` file, `*.test.ts`, migration path (advisor), i18n resource, reviewer suffix with mixed input, empty stdin, unrecognized files.
+- **discoverAgents:** auditor enumeration, advisor enumeration, invalid suffix validation.
+- **matchAgents:** single `.vue` file (frontend fan-out), backend API + entity (server-side fan-out), `.scss` file, `*.test.ts`, migration path (advisor), i18n resource, reviewer suffix with mixed input, empty input, unrecognized files.

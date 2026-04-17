@@ -90,16 +90,13 @@ hits two or three should be split so each child stays within a single
 domain and a single cohesive deliverable — leaf size is what an implementer
 can complete in a single session without running out of context.
 
-## Scripts
+## Implementation
 
-All scripts accept either a bead id (they call `bd show` internally) or
-`--fixture <path>` for testing against captured output. They emit JSON on
-stdout and exit 2 with a usage message on missing arguments. They never
-string-concatenate `bd show` output into JSON — `jq -n` handles quoting.
+Functions live in `.claude/orchestrators/lib/helpers.ts`:
 
-### `bd-state.sh <id>`
+### `bdState(beadId, deps)`
 
-Emits `{state, missing_phases[], reasons[]}`. `missing_phases` lists the
+Returns `{state, missing_phases[], reasons[]}`. `missing_phases` lists the
 milestones the bead has not yet reached (its content drives the next-phase
 decision tree). `reasons` documents which signals triggered, so the
 orchestrator and human reviewers can see the justification.
@@ -107,26 +104,20 @@ orchestrator and human reviewers can see the justification.
 Example: a decomposed epic produces
 `{"state":"decomposed","missing_phases":["analyzed"],"reasons":["has non-empty DESCRIPTION","has DESIGN section","has ACCEPTANCE CRITERIA section","has CHILDREN with at least one child bead"]}`.
 
-### `bd-enrichment-check.sh <id>`
+### `bdEnrichmentCheck(beadId, deps)`
 
-Silent single-purpose check: exits 0 if the bead's notes contain
-"Implementation Context", exits 1 otherwise. Implementer subagents use this
-as a pre-flight assertion per the `implementer-prompt-template` skill's
-refusal protocol. Keeping it separate from `bd-state.sh` means the
-implementer refusal check is one `grep -q`, not a JSON parse.
+Returns `true` if the bead's notes contain "Implementation Context", `false` otherwise. Implementer subagents use this as a pre-flight assertion per the `implementer-prompt-template` skill's refusal protocol. Keeping it separate from `bdState()` means the implementer refusal check is a simple boolean, not a JSON parse.
 
-### `bd-sizing-check.sh <id>`
+### `bdSizingCheck(beadId, deps)`
 
-Emits `{needs_decomposition, reasons[]}` per the 2-of-3 heuristic above.
+Returns `{needs_decomposition, reasons[]}` per the 2-of-3 heuristic above.
 The `reasons` array captures which criteria triggered and by how much, so
 the surfacing prompt in `/analyze-bead` can explain *why* decomposition is
 recommended.
 
 ## Tests
 
-Fixture-based bash tests in `test/`. Each fixture is a captured `bd show`
-output; the runner pipes each fixture through the scripts and diffs the
-JSON against `test/expected/`. Run `bash test/run.sh` from anywhere.
+Tests are co-located with the orchestrator codebase in `.claude/orchestrators/lib/__tests__/`. Fixtures capture `bd show` output for various bead states; the test suite verifies that each function correctly classifies state, identifies missing phases, detects enrichment, and applies the sizing heuristic.
 
 ## Cross-references
 
