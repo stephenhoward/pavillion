@@ -1,0 +1,1 @@
+{ "beadId": "pv-epic.1", "mode": "hierarchy", "leavesEnriched": ["pv-epic.1.1", "pv-epic.1.2", "pv-epic.1.3"], "summary": "All 3 leaves enriched with implementation context", "waves": [["pv-epic.1.1", "pv-epic.1.2"], ["pv-epic.1.3"]] }

@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Wave Verdict",
+  "description": "Structured output schema for the wave-end verification chain (build-guardian / wave verifier). Consumed by phase-7a-epic to decide whether to cascade to the next wave or trigger failure handling.",
+  "type": "object",
+  "properties": {
+    "epicId": {
+      "title": "Epic ID",
+      "description": "The epic bead identifier this wave belongs to.",
+      "type": "string"
+    },
+    "waveNumber": {
+      "title": "Wave Number",
+      "description": "1-indexed wave number within the epic run.",
+      "type": "integer",
+      "minimum": 1
+    },
+    "verdict": {
+      "title": "Verdict",
+      "description": "The wave-end verification result. 'pass' means build-guardian is green and the wave is safe to cascade. 'fail' means build-guardian or a verification step failed. 'escalate' means failures exceeded retry limits and require human intervention.",
+      "type": "string",
+      "enum": ["pass", "fail", "escalate"]
+    },
+    "buildStatus": {
+      "title": "Build Status",
+      "description": "Output of the build-guardian step. 'green' means lint, tests, and build all passed. 'red' means one or more steps failed.",
+      "type": "string",
+      "enum": ["green", "red"]
+    },
+    "beadsCompleted": {
+      "title": "Beads Completed",
+      "description": "Bead IDs that were successfully closed in this wave.",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "beadsFailed": {
+      "title": "Beads Failed",
+      "description": "Bead IDs that failed or were escalated in this wave.",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "concerns": {
+      "title": "Concerns",
+      "description": "List of issues identified during wave-end verification. Empty array when verdict is 'pass'.",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "nextWaveReady": {
+      "title": "Next Wave Ready",
+      "description": "Bead IDs that became unblocked by this wave's completion and are candidates for the next wave.",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": ["epicId", "waveNumber", "verdict", "buildStatus", "beadsCompleted", "beadsFailed", "concerns", "nextWaveReady"],
+  "additionalProperties": false
+}

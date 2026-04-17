@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Analyze Report",
+  "description": "Structured output schema for the analyze-bead subagent. Reports the result of analyzing an epic's hierarchy and enriching leaf beads with implementation context.",
+  "type": "object",
+  "properties": {
+    "beadId": {
+      "title": "Bead ID",
+      "description": "The epic bead that was analyzed.",
+      "type": "string"
+    },
+    "mode": {
+      "title": "Mode",
+      "description": "Whether the analysis targeted a hierarchy (epic with children) or a single leaf bead.",
+      "type": "string",
+      "enum": ["hierarchy", "single"]
+    },
+    "leavesEnriched": {
+      "title": "Leaves Enriched",
+      "description": "Array of bead IDs that received Implementation Context in their notes.",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "summary": {
+      "title": "Summary",
+      "description": "Dependency graph and execution waves summary.",
+      "type": "string"
+    },
+    "waves": {
+      "title": "Waves",
+      "description": "Execution waves: each inner array is a set of bead IDs that can run in parallel. Present only in hierarchy mode.",
+      "type": "array",
+      "items": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  "required": ["beadId", "mode", "leavesEnriched", "summary"],
+  "additionalProperties": false
+}

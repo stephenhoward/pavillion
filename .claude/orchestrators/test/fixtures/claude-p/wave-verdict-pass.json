@@ -1,0 +1,1 @@
+{ "epicId": "pv-epic.1", "waveNumber": 1, "verdict": "pass", "buildStatus": "green", "beadsCompleted": ["pv-epic.1.1", "pv-epic.1.2"], "beadsFailed": [], "concerns": [], "nextWaveReady": ["pv-epic.1.3"] }

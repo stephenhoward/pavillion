@@ -3,6 +3,7 @@ dist
 build
 .DS_Store
 coverage
+.claude/orchestrators/logs/
 logs
 .vscode
 storage

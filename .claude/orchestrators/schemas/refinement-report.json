@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Refinement Report",
+  "description": "Aggregated report synthesized from individual advisor verdicts. Produced by phase-3.5 and phase-5.5 orchestrator modules and sent back to the shape or analyze phase for refinement.",
+  "type": "object",
+  "properties": {
+    "beadId": {
+      "title": "Bead ID",
+      "description": "The bead identifier that was reviewed by the advisor panel.",
+      "type": "string"
+    },
+    "phase": {
+      "title": "Originating Phase",
+      "description": "The orchestrator phase that initiated the advisor review round.",
+      "type": "string",
+      "enum": ["phase-3-shape", "phase-5-analyze"]
+    },
+    "advisors": {
+      "title": "Advisor Verdicts",
+      "description": "Array of individual advisor verdicts collected during this review round.",
+      "type": "array",
+      "items": {
+        "title": "Individual Advisor Verdict",
+        "description": "A single advisor's assessment, matching the advisor-verdict schema shape.",
+        "type": "object",
+        "properties": {
+          "agent": {
+            "title": "Advisor Agent Name",
+            "description": "The advisor agent that produced this verdict.",
+            "type": "string"
+          },
+          "verdict": {
+            "title": "Verdict",
+            "description": "The advisor's overall assessment.",
+            "type": "string",
+            "enum": ["clean", "refinement-needed", "escalate"]
+          },
+          "concerns": {
+            "title": "Concerns",
+            "description": "List of issues or gaps the advisor identified.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "recommendations": {
+            "title": "Recommendations",
+            "description": "List of suggested refinements or changes.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": ["agent", "verdict", "concerns", "recommendations"],
+        "additionalProperties": false
+      }
+    },
+    "overallVerdict": {
+      "title": "Overall Verdict",
+      "description": "Derived aggregate verdict. 'clean' only if every advisor verdict is 'clean'; 'refinement-needed' otherwise.",
+      "type": "string",
+      "enum": ["clean", "refinement-needed"]
+    },
+    "summary": {
+      "title": "Summary",
+      "description": "One-paragraph synthesis of all advisor feedback for the next-round dispatcher. Highlights the most critical concerns and recommended next steps.",
+      "type": "string"
+    }
+  },
+  "required": ["beadId", "phase", "advisors", "overallVerdict", "summary"],
+  "additionalProperties": false
+}

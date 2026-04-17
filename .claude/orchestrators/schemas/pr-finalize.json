@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PRFinalizeResult",
+  "description": "Output contract for phase-8 PR finalization. Contains the PR URL and metadata about the created pull request.",
+  "type": "object",
+  "required": ["branchName", "prUrl", "prTitle", "prBody", "beadsClosed"],
+  "properties": {
+    "branchName": {
+      "type": "string",
+      "description": "The branch name that was pushed (e.g. feat/my-feature-pv-1mt6-6)"
+    },
+    "prUrl": {
+      "type": "string",
+      "description": "The URL of the created pull request on GitHub"
+    },
+    "prTitle": {
+      "type": "string",
+      "description": "The title used for the pull request"
+    },
+    "prBody": {
+      "type": "string",
+      "description": "The markdown body of the pull request"
+    },
+    "beadsClosed": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "List of bead IDs closed in this run"
+    }
+  },
+  "additionalProperties": false
+}

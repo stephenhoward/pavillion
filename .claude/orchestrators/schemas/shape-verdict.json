@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Shape Verdict",
+  "description": "Structured output schema for the shape-bead subagent. The subagent either successfully shapes the bead or escalates it because the original description lacks actionable signal.",
+  "type": "object",
+  "properties": {
+    "beadId": {
+      "title": "Bead ID",
+      "description": "The bead identifier that was shaped (e.g. 'pv-aaaa.2').",
+      "type": "string"
+    },
+    "status": {
+      "title": "Status",
+      "description": "Outcome of the shaping attempt. 'shaped' means the bead was successfully shaped and labelled. 'escalate' means the bead lacks actionable signal and requires human intervention.",
+      "type": "string",
+      "enum": ["shaped", "escalate"]
+    },
+    "summary": {
+      "title": "Summary",
+      "description": "One-line summary of what was shaped or the reason for escalation.",
+      "type": "string"
+    }
+  },
+  "required": ["beadId", "status", "summary"],
+  "additionalProperties": false
+}
