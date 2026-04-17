@@ -151,7 +151,7 @@ describe('dispatch', () => {
     expect(mockSpawnFn).toHaveBeenCalledTimes(1);
     const [bin, args] = mockSpawnFn.mock.calls[0];
     expect(bin).toContain('claude');
-    expect(args).toContain('--bare');
+    expect(args).not.toContain('--bare');
     expect(args).toContain('--permission-mode');
     expect(args).toContain('bypassPermissions');
     expect(args).toContain('--no-session-persistence');

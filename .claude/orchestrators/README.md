@@ -36,12 +36,15 @@ tsx .claude/orchestrators/process-backlog.ts
 
 Every `claude -p` invocation uses:
 
-- `--bare` — skip SessionStart hooks
 - `--permission-mode bypassPermissions` — autonomous execution
 - `--no-session-persistence` — don't pollute resumable sessions list
 - `--agent <name>` — pick agent from `.claude/agents/`
 - `--json-schema <path>` — enforce structured output (omitted for prose-output agents)
 - `--max-budget-usd <N>` — per-dispatch cost ceiling
+
+`--bare` is intentionally **not** used. It disables keychain reads, forcing
+`ANTHROPIC_API_KEY` auth only. Without the flag, subagents reuse the parent
+session's OAuth credentials (e.g. Claude Max), which is what most users want.
 
 ## Logs
 

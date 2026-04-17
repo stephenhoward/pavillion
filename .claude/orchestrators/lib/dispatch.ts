@@ -313,7 +313,6 @@ function buildArgs(params: {
   isRetry: boolean;
 }): string[] {
   const args = [
-    '--bare',
     '--permission-mode', 'bypassPermissions',
     '--no-session-persistence',
     '--agent', params.agent,
