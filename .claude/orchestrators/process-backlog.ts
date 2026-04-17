@@ -3,76 +3,65 @@
  * Main entry for the process-backlog orchestrator.
  *
  * Parses CLI args, initializes RunContext + logger, runs the phase
- * state-machine loop, and assembles a final summary. Supports --dry-run
+ * state-machine loop, and prints a final summary. Supports --dry-run
  * (terminates after Phase 2).
  *
- * Phases are loaded lazily via dynamic import so that phases not yet
- * implemented do not break the build. Stub phases return a "not
- * implemented" halt until sibling leaves replace them.
+ * All phase runners are imported statically — no dynamic imports, no stubs.
  */
 
 import { parseArgs } from 'node:util';
-import { createRunLogger } from './lib/logger.js';
-import { PhaseName, type PhaseResult, type RunContext } from './lib/context.js';
+import { fileURLToPath } from 'node:url';
+import { PhaseName, createRunLogger, type RunContext, type PhaseResult } from './lib/types.js';
+import {
+  preflight,
+  select,
+  assessState,
+  shape,
+  shapeAdvisors,
+  decompose,
+  analyze,
+  analyzeAdvisors,
+  branch,
+} from './lib/phases.js';
+import { leafPhase, epicPhase, prPhase, type PhaseRunner } from './lib/execute.js';
 
 // ---------------------------------------------------------------------------
-// Phase runner contract
+// Extended context for the orchestrator
 // ---------------------------------------------------------------------------
 
 /**
- * Every phase module must export a `run` function matching this signature.
+ * Full context carried through every phase of an orchestrator run.
+ * Extends RunContext with the dryRun flag and optional output fields
+ * set by later phases (prUrl, beadsClosed).
  */
-export type PhaseRunner = (ctx: RunContext & { dryRun: boolean }) => Promise<{
-  next: PhaseName | 'halt';
-  ctx: RunContext & { dryRun: boolean };
-}>;
-
-/**
- * Extended context carrying the dryRun flag for the state machine.
- */
-export interface OrchestratorContext extends RunContext {
+export interface OrchestratorCtx extends RunContext {
   dryRun: boolean;
+  prUrl?: string;
+  beadsClosed?: string[];
 }
 
 // ---------------------------------------------------------------------------
-// Phase registry — dynamic imports keyed by PhaseName
+// Phase registry — simple map, no dynamic imports, no stubs
 // ---------------------------------------------------------------------------
 
 /**
- * Registry mapping each phase name to a lazy loader that returns
- * `{ run: PhaseRunner }`. Phases not yet implemented use the stub.
+ * All phases are statically imported and registered here.
+ * The Report phase is not in the registry; buildSummary is called inline
+ * after the state machine loop completes.
  */
-type PhaseLoader = () => Promise<{ run: PhaseRunner }>;
-
-function stubPhase(name: string): PhaseLoader {
-  return async () => ({
-    run: async (ctx) => {
-      const msg = `Phase "${name}" is not yet implemented — halting.`;
-      ctx.logger.writePhaseLog(PhaseName.Report, 'err', msg + '\n');
-      console.error(msg);
-      return { next: 'halt' as const, ctx };
-    },
-  });
-}
-
-/**
- * The phase routing table. Stub entries are replaced by real modules
- * as sibling leaves land.
- */
-export const PHASE_REGISTRY: Record<Exclude<PhaseName, PhaseName.Halt>, PhaseLoader> = {
-  [PhaseName.Preflight]:       () => import('./lib/phase-0-preflight.js'),
-  [PhaseName.Select]:          () => import('./lib/phase-1-select.js'),
-  [PhaseName.State]:           () => import('./lib/phase-2-state.js'),
-  [PhaseName.Shape]:           () => import('./lib/phase-3-shape.js'),
-  [PhaseName.ShapeAdvisors]:   () => import('./lib/phase-3.5-advisors.js'),
-  [PhaseName.Decompose]:       () => import('./lib/phase-4-decompose.js'),
-  [PhaseName.Analyze]:         () => import('./lib/phase-5-analyze.js'),
-  [PhaseName.AnalyzeAdvisors]: () => import('./lib/phase-5.5-advisors.js'),
-  [PhaseName.Branch]:          () => import('./lib/phase-6-branch.js'),
-  [PhaseName.Epic]:            () => import('./lib/phase-7a-epic.js'),
-  [PhaseName.Leaf]:            () => import('./lib/phase-7b-leaf.js'),
-  [PhaseName.PR]:              () => import('./lib/phase-8-pr.js'),
-  [PhaseName.Report]:          () => import('./lib/phase-9-report.js'),
+const PHASES: Record<string, PhaseRunner> = {
+  [PhaseName.Preflight]:       preflight as PhaseRunner,
+  [PhaseName.Select]:          select as PhaseRunner,
+  [PhaseName.State]:           assessState as PhaseRunner,
+  [PhaseName.Shape]:           shape as PhaseRunner,
+  [PhaseName.ShapeAdvisors]:   shapeAdvisors as PhaseRunner,
+  [PhaseName.Decompose]:       decompose as PhaseRunner,
+  [PhaseName.Analyze]:         analyze as PhaseRunner,
+  [PhaseName.AnalyzeAdvisors]: analyzeAdvisors as PhaseRunner,
+  [PhaseName.Branch]:          branch as PhaseRunner,
+  [PhaseName.Epic]:            epicPhase,
+  [PhaseName.Leaf]:            leafPhase,
+  [PhaseName.PR]:              prPhase,
 };
 
 // ---------------------------------------------------------------------------
@@ -86,15 +75,15 @@ export const PHASE_REGISTRY: Record<Exclude<PhaseName, PhaseName.Halt>, PhaseLoa
  * is `'halt'` or an unknown phase is encountered.
  */
 export async function runStateMachine(
-  ctx: OrchestratorContext,
+  ctx: OrchestratorCtx,
   startPhase: PhaseName,
-  registry: Record<string, PhaseLoader> = PHASE_REGISTRY,
-): Promise<OrchestratorContext> {
+  registry: Record<string, PhaseRunner> = PHASES,
+): Promise<OrchestratorCtx> {
   let currentPhase: PhaseName | 'halt' = startPhase;
 
   while (currentPhase !== 'halt') {
-    const loader = registry[currentPhase];
-    if (!loader) {
+    const runner = registry[currentPhase];
+    if (!runner) {
       const msg = `Unknown phase "${currentPhase}" — halting.`;
       ctx.logger.appendRunJson({ event: 'unknown_phase', phase: currentPhase, error: msg });
       console.error(msg);
@@ -102,11 +91,10 @@ export async function runStateMachine(
     }
 
     const startMs = Date.now();
-    let result: { next: PhaseName | 'halt'; ctx: OrchestratorContext };
+    let result: { next: PhaseName | 'halt'; ctx: OrchestratorCtx };
 
     try {
-      const mod = await loader();
-      result = await mod.run(ctx);
+      result = await runner(ctx) as { next: PhaseName | 'halt'; ctx: OrchestratorCtx };
     }
     catch (err) {
       const durationMs = Date.now() - startMs;
@@ -155,30 +143,70 @@ export async function runStateMachine(
 }
 
 // ---------------------------------------------------------------------------
+// Summary builder (absorbed from phase-9-report.ts)
+// ---------------------------------------------------------------------------
+
+/**
+ * Build the structured markdown summary from the run context.
+ *
+ * Exported for testing.
+ */
+export function buildSummary(ctx: OrchestratorCtx): string {
+  const phasesExecuted = ctx.phaseHistory.map((p) => p.phase);
+  const totalMs = ctx.phaseHistory.reduce((sum, p) => sum + p.durationMs, 0);
+  const prUrl = ctx.prUrl ?? '(none)';
+  const beadsClosed = ctx.beadsClosed ?? [ctx.beadId].filter(Boolean);
+  const failed = ctx.phaseHistory.filter((p) => !p.ok);
+
+  const lines: string[] = [
+    '',
+    '=== Process Backlog Run Summary ===',
+    `Run ID: ${ctx.runId}`,
+    `Bead: ${ctx.beadId || '(none selected)'}`,
+    `Phases Executed: ${phasesExecuted.join(' \u2192 ') || '(none)'}`,
+    `Beads Touched: ${beadsClosed.join(', ') || '(none)'}`,
+    `PR: ${prUrl}`,
+    `Total Duration: ${totalMs}ms`,
+    `Status: ${failed.length > 0 ? 'completed with errors' : 'completed'}`,
+  ];
+
+  if (failed.length > 0) {
+    lines.push('');
+    lines.push('Errors:');
+    for (const f of failed) {
+      lines.push(`  ${f.phase}: ${f.error}`);
+    }
+  }
+
+  lines.push('===================================');
+  lines.push('');
+
+  return lines.join('\n');
+}
+
+// ---------------------------------------------------------------------------
 // Summary printer
 // ---------------------------------------------------------------------------
 
 /**
- * Print a structured run summary to stdout.
+ * Print the run summary to stdout and log to run.json.
  */
-function printSummary(ctx: OrchestratorContext): void {
-  const phasesExecuted = ctx.phaseHistory.map((p) => p.phase);
-  const totalMs = ctx.phaseHistory.reduce((sum, p) => sum + p.durationMs, 0);
+function printSummary(ctx: OrchestratorCtx): void {
+  const summary = buildSummary(ctx);
+  console.log(summary);
 
-  console.log('\n--- Run Summary ---');
-  console.log(`Run ID:           ${ctx.runId}`);
-  console.log(`Bead:             ${ctx.beadId || '(none selected)'}`);
-  console.log(`Dry run:          ${ctx.dryRun}`);
-  console.log(`Phases executed:  ${phasesExecuted.join(' → ') || '(none)'}`);
-  console.log(`Total duration:   ${totalMs}ms`);
-
-  const failed = ctx.phaseHistory.filter((p) => !p.ok);
-  if (failed.length > 0) {
-    console.log('Failures:');
-    for (const f of failed) {
-      console.log(`  ${f.phase}: ${f.error}`);
-    }
-  }
+  ctx.logger.appendRunJson({
+    event: 'run_summary',
+    runId: ctx.runId,
+    beadId: ctx.beadId,
+    prUrl: ctx.prUrl ?? null,
+    beadsClosed: ctx.beadsClosed ?? [ctx.beadId].filter(Boolean),
+    phasesExecuted: ctx.phaseHistory.map((p) => p.phase),
+    totalDurationMs: ctx.phaseHistory.reduce((sum, p) => sum + p.durationMs, 0),
+    errors: ctx.phaseHistory
+      .filter((p) => !p.ok)
+      .map((p) => ({ phase: p.phase, error: p.error })),
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -197,7 +225,7 @@ async function main(): Promise<void> {
   const dryRun = values['dry-run'] ?? false;
   const loggerInstance = createRunLogger();
 
-  const ctx: OrchestratorContext = {
+  const ctx: OrchestratorCtx = {
     runId: loggerInstance.runId,
     beadId: '',
     logger: loggerInstance,
@@ -213,8 +241,8 @@ async function main(): Promise<void> {
   });
 
   try {
-    await runStateMachine(ctx, PhaseName.Preflight);
-    printSummary(ctx);
+    const finalCtx = await runStateMachine(ctx, PhaseName.Preflight);
+    printSummary(finalCtx);
   }
   catch (err) {
     const errorMsg = err instanceof Error ? err.message : String(err);
@@ -229,10 +257,6 @@ async function main(): Promise<void> {
 }
 
 // Only run when executed directly (not when imported by tests).
-// When tsx runs this file, process.argv[1] is the .ts path; import.meta.url
-// is a file:// URL of the same path.
-import { fileURLToPath } from 'node:url';
-
 const thisFile = fileURLToPath(import.meta.url);
 if (process.argv[1] && thisFile === process.argv[1]) {
   main();
