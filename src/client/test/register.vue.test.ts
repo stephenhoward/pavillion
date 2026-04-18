@@ -92,4 +92,53 @@ describe('Register Form Validation', () => {
     expect(registerStub.calledWith('user@example.com')).toBe(true);
     expect(wrapper.find('.success-stub').isVisible()).toBe(true);
   });
+
+  it('failed registration renders translated alert text with proper ARIA wiring', async () => {
+    const { wrapper, authn } = mountedRegister();
+    currentWrapper = wrapper;
+    let registerStub = sandbox.stub(authn, 'register');
+    registerStub.rejects({ message: 'unknown_error' });
+
+    await wrapper.find('input[type="email"]').setValue('user@example.com');
+    await wrapper.find('form').trigger('submit.prevent');
+    await flushPromises();
+
+    const alert = wrapper.find('[role="alert"]');
+    expect(alert.exists()).toBe(true);
+    expect(alert.text().length).toBeGreaterThan(0);
+    expect(alert.attributes('id')).toBe('register-error');
+    expect(alert.attributes('aria-live')).toBe('polite');
+
+    const emailInput = wrapper.find('input[type="email"]');
+    expect(emailInput.attributes('aria-describedby')).toBe('register-error');
+    expect(wrapper.find('#register-error').exists()).toBe(true);
+  });
+
+  it('surfaces initial error from props.error via ErrorAlert', async () => {
+    let router = createRouter({
+      history: createMemoryHistory(),
+      routes: routes,
+    });
+    let authn = { register: async () => true };
+
+    const wrapper = mountComponent(Register, router, {
+      provide: {
+        site_config: { settings: () => ({ registrationMode: 'open' }) },
+        authn,
+      },
+      props: { error: 'boom', em: 'prefilled@example.com' },
+      stubs: {
+        SuccessState: { template: '<div class="success-stub"><slot /></div>' },
+      },
+    });
+    currentWrapper = wrapper;
+    await flushPromises();
+
+    const alert = wrapper.find('[role="alert"]');
+    expect(alert.exists()).toBe(true);
+    expect(alert.text()).toContain('boom');
+
+    const emailInput = wrapper.find('input[type="email"]');
+    expect((emailInput.element as HTMLInputElement).value).toBe('prefilled@example.com');
+  });
 });

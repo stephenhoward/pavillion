@@ -52,6 +52,7 @@
       <p class="instructions">{{ t('description') }}</p>
 
       <ErrorAlert
+        id="setup-error"
         :error="state.passwordError ? translateError(state.passwordError) : (state.formError ? translateError(state.formError) : '')"
       />
 
@@ -62,6 +63,8 @@
           id="setup-email"
           :placeholder="t('email_placeholder')"
           v-model="state.email"
+          :aria-invalid="(state.passwordError || state.formError) ? 'true' : 'false'"
+          :aria-describedby="(state.passwordError || state.formError) ? 'setup-error' : undefined"
           autocomplete="email"
           required
         />
@@ -73,6 +76,8 @@
           :placeholder="t('password_placeholder')"
           v-model="state.password"
           @blur="validatePasswordField"
+          :aria-invalid="(state.passwordError || state.formError) ? 'true' : 'false'"
+          :aria-describedby="(state.passwordError || state.formError) ? 'setup-error' : undefined"
           autocomplete="new-password"
           required
         />
@@ -83,6 +88,8 @@
           id="setup-password-confirm"
           :placeholder="t('password_confirm_placeholder')"
           v-model="state.passwordConfirm"
+          :aria-invalid="(state.passwordError || state.formError) ? 'true' : 'false'"
+          :aria-describedby="(state.passwordError || state.formError) ? 'setup-error' : undefined"
           autocomplete="new-password"
           required
         />
@@ -94,6 +101,8 @@
             id="setup-site-title"
             :placeholder="t('site_title_placeholder')"
             v-model="state.siteTitle"
+            :aria-invalid="(state.passwordError || state.formError) ? 'true' : 'false'"
+            :aria-describedby="(state.passwordError || state.formError) ? 'setup-error' : undefined"
             required
           />
           <div class="field-description">{{ t('site_title_description') }}</div>
@@ -114,7 +123,12 @@
           <button class="btn btn--secondary" type="button" @click="goBackToLanguage">
             {{ t('back_button') }}
           </button>
-          <button class="btn btn--primary" type="submit" :disabled="state.submitting">
+          <button
+            class="btn btn--primary"
+            type="submit"
+            :disabled="state.submitting"
+            :aria-describedby="(state.passwordError || state.formError) ? 'setup-error' : undefined"
+          >
             {{ state.submitting ? t('submitting_button') : t('submit_button') }}
           </button>
         </div>

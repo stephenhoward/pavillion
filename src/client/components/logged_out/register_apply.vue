@@ -19,7 +19,7 @@
     >
       <h3>{{ t('title') }}</h3>
 
-      <ErrorAlert :error="state.err" />
+      <ErrorAlert id="apply-error" :error="state.err" />
 
       <div class="form-stack">
         <label for="apply-email" class="sr-only">{{ t('email') }}</label>
@@ -98,8 +98,8 @@ onBeforeMount(() => {
     router.push({ name: 'reset_password', query: { code: route.query.code }});
   }
 
-  state.err   = state.error || '';
-  state.email = state.em || '';
+  state.err   = props.error || '';
+  state.email = props.em || '';
 });
 
 async function doApply() {

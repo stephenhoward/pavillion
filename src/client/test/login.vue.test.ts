@@ -5,6 +5,7 @@ import sinon from 'sinon';
 
 import { mountComponent } from '@/client/test/lib/vue';
 import Login from '@/client/components/logged_out/login.vue';
+import ErrorAlert from '@/client/components/logged_out/error-alert.vue';
 
 const routes: RouteRecordRaw[] = [
   { path: '/login',  component: {}, name: 'login', props: true },
@@ -351,6 +352,68 @@ describe('Login Behavior', () => {
     expect(loginStub.called).toBe(true);
   });
 
+  it('failed login renders translated alert text with proper ARIA wiring', async () => {
+    const { wrapper, router, authn } = mountedLogin();
+    let pushStub = sinon.createSandbox().stub(router, 'push');
+    let loginStub = sinon.createSandbox().stub(authn, 'login');
+
+    loginStub.resolves(false);
+
+    await wrapper.find('input[type="email"]').setValue('user@example.com');
+    await wrapper.find('input[type="password"]').setValue('password');
+    await wrapper.find('form').trigger('submit.prevent');
+    await wrapper.vm.$nextTick();
+
+    const alert = wrapper.find('[role="alert"]');
+    expect(alert.exists()).toBe(true);
+    expect(alert.text().length).toBeGreaterThan(0);
+    expect(alert.attributes('id')).toBe('login-error');
+    expect(alert.attributes('aria-live')).toBe('polite');
+
+    const emailInput = wrapper.find('input[type="email"]');
+    const passwordInput = wrapper.find('input[type="password"]');
+    const submitButton = wrapper.find('button[type="submit"]');
+
+    expect(emailInput.attributes('aria-describedby')).toBe('login-error');
+    expect(passwordInput.attributes('aria-describedby')).toBe('login-error');
+    expect(submitButton.attributes('aria-describedby')).toBe('login-error');
+
+    // aria-describedby should resolve to a real element in the DOM
+    expect(wrapper.find('#login-error').exists()).toBe(true);
+
+    // The red field state is applied alongside the alert
+    expect(emailInput.classes()).toContain('form-control--error');
+    expect(passwordInput.classes()).toContain('form-control--error');
+
+    expect(pushStub.called).toBe(false);
+  });
+
+  it('successful retry clears both the red field class and the alert element', async () => {
+    const { wrapper, router, authn } = mountedLogin();
+    sinon.createSandbox().stub(router, 'push');
+    let loginStub = sinon.createSandbox().stub(authn, 'login');
+
+    // First: failed login
+    loginStub.onFirstCall().resolves(false);
+    await wrapper.find('input[type="email"]').setValue('user@example.com');
+    await wrapper.find('input[type="password"]').setValue('password');
+    await wrapper.find('form').trigger('submit.prevent');
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.find('[role="alert"]').exists()).toBe(true);
+    expect(wrapper.find('input[type="email"]').classes()).toContain('form-control--error');
+
+    // Then: successful retry
+    loginStub.onSecondCall().resolves(true);
+    await wrapper.find('form').trigger('submit.prevent');
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false);
+    expect(wrapper.find('input[type="email"]').classes()).not.toContain('form-control--error');
+    expect(wrapper.find('input[type="email"]').attributes('aria-describedby')).toBeUndefined();
+    expect(wrapper.find('input[type="password"]').attributes('aria-describedby')).toBeUndefined();
+  });
+
   it('catch login error', async () => {
     const { wrapper, router, authn } = mountedLogin();
     let pushStub = sinon.createSandbox().stub(router, 'push');
@@ -368,6 +431,15 @@ describe('Login Behavior', () => {
     expect(wrapper.find('[role="alert"]').exists()).toBe(true);
     expect(pushStub.called).toBe(false);
     expect(loginStub.called).toBe(true);
+  });
+
+  it('empty-string error on ErrorAlert renders no alert element', () => {
+    const wrapper = mountComponent(
+      { components: { ErrorAlert }, template: '<ErrorAlert id="test-error" error="" />' },
+      createRouter({ history: createMemoryHistory(), routes }),
+      {},
+    );
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false);
   });
 
   it('login succeeds', async () => {

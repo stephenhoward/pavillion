@@ -25,7 +25,7 @@
     <h3>{{ t('title') }}</h3>
     <p class="instructions">{{ t('instructions') }}</p>
 
-    <ErrorAlert :error="state.error" />
+    <ErrorAlert id="forgot-error" :error="state.error" />
 
     <div class="form-stack">
       <label for="reset-email" class="sr-only">{{ t('email') }}</label>
@@ -35,11 +35,17 @@
         name="email"
         :placeholder="t('email')"
         v-model="state.email"
+        :aria-invalid="state.error ? 'true' : 'false'"
+        :aria-describedby="state.error ? 'forgot-error' : undefined"
         autocomplete="email"
         required
       />
 
-      <button class="btn btn--primary" type="submit">
+      <button
+        class="btn btn--primary"
+        type="submit"
+        :aria-describedby="state.error ? 'forgot-error' : undefined"
+      >
         {{ t('go_button') }}
       </button>
     </div>

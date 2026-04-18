@@ -95,7 +95,7 @@ async function doLogin() {
           novalidate>
       <h3>{{ t('title') }}</h3>
 
-      <ErrorAlert :error="state.err" />
+      <ErrorAlert id="login-error" :error="state.err" />
 
       <div class="form-stack">
         <label for="login-email" class="sr-only">{{ t('email') }}</label>
