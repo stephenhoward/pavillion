@@ -403,6 +403,89 @@ describe('FundingService', () => {
     });
   });
 
+  describe('getPlanStatusForCalendars', () => {
+    it('should return empty map for empty input without issuing queries', async () => {
+      const grantFindAll = sandbox.stub(ComplimentaryGrantEntity, 'findAll').resolves([]);
+      const subFindAll = sandbox.stub(CalendarFundingPlanEntity, 'findAll').resolves([]);
+
+      const result = await service.getPlanStatusForCalendars([]);
+
+      expect(result).toBeInstanceOf(Map);
+      expect(result.size).toBe(0);
+      expect(grantFindAll.called).toBe(false);
+      expect(subFindAll.called).toBe(false);
+    });
+
+    it('should return all calendars as subscribed when all have active funding plans', async () => {
+      const id1 = uuidv4();
+      const id2 = uuidv4();
+      const id3 = uuidv4();
+
+      sandbox.stub(ComplimentaryGrantEntity, 'findAll').resolves([]);
+      sandbox.stub(CalendarFundingPlanEntity, 'findAll').resolves([
+        { calendar_id: id1 } as any,
+        { calendar_id: id2 } as any,
+        { calendar_id: id3 } as any,
+      ]);
+
+      const result = await service.getPlanStatusForCalendars([id1, id2, id3]);
+
+      expect(result.size).toBe(3);
+      expect(result.get(id1)).toBe('subscribed');
+      expect(result.get(id2)).toBe('subscribed');
+      expect(result.get(id3)).toBe('subscribed');
+    });
+
+    it('should return a mix of subscribed, grant, and none, omitting calendars with no record', async () => {
+      const grantedId = uuidv4();
+      const subscribedId = uuidv4();
+      const unknownId = uuidv4();
+
+      sandbox.stub(ComplimentaryGrantEntity, 'findAll').resolves([
+        { calendar_id: grantedId } as any,
+      ]);
+      sandbox.stub(CalendarFundingPlanEntity, 'findAll').resolves([
+        { calendar_id: subscribedId } as any,
+      ]);
+
+      const result = await service.getPlanStatusForCalendars([grantedId, subscribedId, unknownId]);
+
+      expect(result.get(grantedId)).toBe('grant');
+      expect(result.get(subscribedId)).toBe('subscribed');
+      // Unknown IDs must be absent from the map so callers default to 'none'
+      expect(result.has(unknownId)).toBe(false);
+      expect(result.size).toBe(2);
+    });
+
+    it('should prefer grant over subscribed when a calendar has both', async () => {
+      const calendarId = uuidv4();
+
+      sandbox.stub(ComplimentaryGrantEntity, 'findAll').resolves([
+        { calendar_id: calendarId } as any,
+      ]);
+      sandbox.stub(CalendarFundingPlanEntity, 'findAll').resolves([
+        { calendar_id: calendarId } as any,
+      ]);
+
+      const result = await service.getPlanStatusForCalendars([calendarId]);
+
+      expect(result.get(calendarId)).toBe('grant');
+      expect(result.size).toBe(1);
+    });
+
+    it('should issue a single bulk IN query per table (no per-id loop)', async () => {
+      const ids = [uuidv4(), uuidv4(), uuidv4(), uuidv4()];
+      const grantFindAll = sandbox.stub(ComplimentaryGrantEntity, 'findAll').resolves([]);
+      const subFindAll = sandbox.stub(CalendarFundingPlanEntity, 'findAll').resolves([]);
+
+      await service.getPlanStatusForCalendars(ids);
+
+      // One bulk query per table — no loop over single-ID calls
+      expect(grantFindAll.callCount).toBe(1);
+      expect(subFindAll.callCount).toBe(1);
+    });
+  });
+
   describe('createGrant', () => {
     it('should create a grant with valid calendarId', async () => {
       const calendarId = uuidv4();

@@ -1,6 +1,6 @@
 import { randomBytes, createHmac } from 'crypto';
 import { EventEmitter } from 'events';
-import { Op, UniqueConstraintError } from 'sequelize';
+import { Op, UniqueConstraintError, fn, col } from 'sequelize';
 import config from 'config';
 
 import { Account } from '@/common/model/account';
@@ -57,6 +57,18 @@ const VALID_SOURCES: ReporterType[] = ['anonymous', 'authenticated', 'administra
 
 /** Valid escalation type values for filtering. */
 const VALID_ESCALATION_TYPES: EscalationType[] = ['manual', 'automatic'];
+
+/**
+ * Report statuses that count as "open" for admin dashboards and bulk
+ * decoration queries. A report is open when it has been verified and
+ * is awaiting or undergoing action by an owner/admin. Pending verification
+ * and terminal states (resolved/dismissed) are excluded.
+ */
+const OPEN_REPORT_STATUSES: ReportStatus[] = [
+  ReportStatus.SUBMITTED,
+  ReportStatus.UNDER_REVIEW,
+  ReportStatus.ESCALATED,
+];
 
 /** Maximum allowed length for report description text. */
 const MAX_DESCRIPTION_LENGTH = 2000;
@@ -762,6 +774,73 @@ class ModerationService {
       order: [['created_at', 'DESC']],
     });
     return entities.map((entity) => entity.toModel());
+  }
+
+  /**
+   * Returns a map of calendar ID to the number of open reports on that
+   * calendar, for the given set of calendar IDs. Only calendars that
+   * actually have one or more open reports appear in the returned map;
+   * callers should default missing IDs to zero.
+   *
+   * Open reports are those in SUBMITTED, UNDER_REVIEW, or ESCALATED status
+   * (verified but not yet resolved/dismissed).
+   *
+   * Executes a single aggregated query (WHERE calendar_id IN (...) GROUP BY
+   * calendar_id) — no per-calendar round trips, no Report entities leave
+   * the domain boundary.
+   *
+   * @param calendarIds - Calendar UUIDs to count open reports for
+   * @returns Map of calendar_id to open report count (calendars with zero are omitted)
+   */
+  async getOpenReportCountsForCalendars(calendarIds: string[]): Promise<Map<string, number>> {
+    const result = new Map<string, number>();
+    if (calendarIds.length === 0) {
+      return result;
+    }
+
+    const rows = await ReportEntity.findAll({
+      attributes: [
+        'calendar_id',
+        [fn('COUNT', col('id')), 'count'],
+      ],
+      where: {
+        calendar_id: { [Op.in]: calendarIds },
+        status: { [Op.in]: OPEN_REPORT_STATUSES },
+      },
+      group: ['calendar_id'],
+      raw: true,
+    });
+
+    for (const row of rows as unknown as Array<{ calendar_id: string; count: string | number }>) {
+      result.set(row.calendar_id, typeof row.count === 'number' ? row.count : parseInt(row.count, 10));
+    }
+
+    return result;
+  }
+
+  /**
+   * Returns the set of calendar IDs that currently have at least one open
+   * report. Used by the admin calendars listing to pre-filter when the
+   * caller requests only calendars with open moderation activity.
+   *
+   * Executes a single DISTINCT query — no Report entities cross the
+   * domain boundary, only IDs.
+   *
+   * @returns Array of calendar UUIDs with at least one open report
+   */
+  async calendarIdsWithOpenReports(): Promise<string[]> {
+    const rows = await ReportEntity.findAll({
+      attributes: [
+        [fn('DISTINCT', col('calendar_id')), 'calendar_id'],
+      ],
+      where: {
+        status: { [Op.in]: OPEN_REPORT_STATUSES },
+        calendar_id: { [Op.not]: null },
+      },
+      raw: true,
+    });
+
+    return (rows as unknown as Array<{ calendar_id: string }>).map((row) => row.calendar_id);
   }
 
   /**

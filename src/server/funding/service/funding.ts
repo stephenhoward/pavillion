@@ -1627,4 +1627,82 @@ export default class FundingService {
       return false;
     }
   }
+
+  /**
+   * Get the funding-plan status for a set of calendars in bulk.
+   *
+   * Issues two bulk IN queries (one against complimentary grants, one against
+   * calendar funding plans) so the cost is constant regardless of the number
+   * of calendar IDs provided. No per-ID loop over single-calendar helpers.
+   *
+   * Calendars with no matching record are intentionally omitted from the
+   * returned Map — callers (e.g. admin calendar listing) default to 'none'
+   * on lookup miss. Grant takes priority over funding plan when both exist
+   * for the same calendar, matching the precedence used by
+   * hasFundingAccess / getFundingStatusForCalendar.
+   *
+   * Returns enum values only; no FundingPlan / CalendarFundingPlan /
+   * ComplimentaryGrant entities cross the boundary.
+   *
+   * @param ids - Calendar IDs to look up
+   * @returns Map of calendar_id -> 'subscribed' | 'grant' | 'none'; unknown
+   *          IDs are absent from the map
+   */
+  async getPlanStatusForCalendars(
+    ids: string[],
+  ): Promise<Map<string, 'subscribed' | 'grant' | 'none'>> {
+    const result = new Map<string, 'subscribed' | 'grant' | 'none'>();
+
+    if (!ids || ids.length === 0) {
+      return result;
+    }
+
+    const now = new Date();
+
+    // Bulk query 1: active complimentary grants (takes precedence)
+    const grants = await ComplimentaryGrantEntity.findAll({
+      where: {
+        calendar_id: { [Op.in]: ids },
+        revoked_at: { [Op.is]: null as any },
+        [Op.or]: [
+          { expires_at: { [Op.is]: null as any } },
+          { expires_at: { [Op.gt]: now } },
+        ],
+      },
+      attributes: ['calendar_id'],
+    });
+
+    for (const grant of grants) {
+      if (grant.calendar_id) {
+        result.set(grant.calendar_id, 'grant');
+      }
+    }
+
+    // Bulk query 2: active calendar funding plan allocations
+    const calendarSubs = await CalendarFundingPlanEntity.findAll({
+      where: {
+        calendar_id: { [Op.in]: ids },
+        [Op.or]: [
+          { end_time: { [Op.is]: null as any } },
+          { end_time: { [Op.gt]: now } },
+        ],
+      },
+      attributes: ['calendar_id'],
+      include: [{
+        model: FundingPlanEntity,
+        where: { status: 'active' },
+        required: true,
+        attributes: [],
+      }],
+    });
+
+    for (const sub of calendarSubs) {
+      // Grant precedence: only set 'subscribed' if no grant was recorded
+      if (sub.calendar_id && !result.has(sub.calendar_id)) {
+        result.set(sub.calendar_id, 'subscribed');
+      }
+    }
+
+    return result;
+  }
 }
