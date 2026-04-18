@@ -18,6 +18,7 @@
     "message_label": "Message",
     "go_login": "back to sign in",
     "InvalidEmail": "please enter a valid email address",
+    "MissingFields": "Please fill in all required fields.",
     "400": "bad sign in",
     "unknown_error": "An unknown error occurred",
     "application_submitted": "If this email is not already registered, your application will be reviewed.",
