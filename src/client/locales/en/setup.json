@@ -1,6 +1,7 @@
 {
   "language_select_title": "Choose Your Language",
   "language_select_description": "Select a default language for your Pavillion server.",
+  "language_label": "Language",
   "continue_button": "Continue",
   "back_button": "Back",
 

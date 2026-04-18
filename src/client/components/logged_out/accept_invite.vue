@@ -86,7 +86,7 @@
         type="submit"
         :aria-describedby="(state.passwordError || state.form_error) ? 'accept-invite-error' : undefined"
       >
-        {{ t('set_password_button') || 'Set Password' }}
+        {{ t('set_password_button') }}
       </button>
     </div>
   </form>

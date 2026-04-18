@@ -9,6 +9,7 @@
     "apply_button": "Solicitar una Cuenta",
     "UnknownLogin": "correo o contraseña desconocidos",
     "MissingLogin": "falta correo o contraseña",
+    "InvalidEmail": "por favor ingresa una dirección de correo válida",
     "400": "error al iniciar sesión",
     "unknown_error": "Ocurrió un error desconocido",
     "RateLimitError": "Demasiadas solicitudes. Por favor intenta de nuevo más tarde.",
@@ -25,10 +26,15 @@
     "email": "tu correo electrónico",
     "go_button": "Enviar Restablecimiento de Contraseña",
     "login_link": "volver a iniciar sesión",
+    "success_title": "Revisa tu correo",
+    "success_message": "Hemos enviado un enlace para restablecer tu contraseña a \"{{email}}\". Revisa tu bandeja de entrada y sigue las instrucciones.",
     "error_400": "Hay un problema con el correo que enviaste",
     "error_404": "No pudimos encontrar una cuenta con ese correo electrónico",
     "error_500": "Ups. El servidor tuvo un error. Por favor contacta a soporte",
     "no_email_provided": "Por favor ingresa tu correo electrónico",
+    "InvalidEmail": "por favor ingresa una dirección de correo válida",
+    "unknown_error": "Ocurrió un error. Por favor intenta de nuevo.",
+    "PasswordResetGenerationError": "No se pudo enviar el correo de restablecimiento. Por favor intenta más tarde.",
     "RateLimitError": "Demasiadas solicitudes. Por favor intenta de nuevo más tarde."
   },
   "reset_password": {
@@ -43,6 +49,7 @@
     "reset_button": "enviar código",
     "password_placeholder": "contraseña",
     "password2_placeholder": "confirmar contraseña",
+    "set_password_button": "Restablecer Contraseña",
     "next": "Siguiente",
 
     "bad_token": "token inválido o expirado",
@@ -53,6 +60,8 @@
     "no_password_provided": "Debes proporcionar una contraseña",
     "unknown_error": "Ocurrió un error desconocido",
     "password_too_short": "La contraseña debe tener al menos 8 caracteres",
-    "password_needs_variety": "La contraseña debe incluir al menos dos de: letras, números, caracteres especiales"
+    "password_needs_variety": "La contraseña debe incluir al menos dos de: letras, números, caracteres especiales",
+    "PasswordResetError": "No se pudo restablecer la contraseña. El código puede ser inválido o haber expirado.",
+    "TokenRefreshError": "La sesión expiró. Por favor inicia sesión nuevamente."
   }
 }

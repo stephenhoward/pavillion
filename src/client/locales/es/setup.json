@@ -1,6 +1,7 @@
 {
   "language_select_title": "Elige Tu Idioma",
   "language_select_description": "Selecciona un idioma predeterminado para tu servidor de Pavillion.",
+  "language_label": "Idioma",
   "continue_button": "Continuar",
   "back_button": "Atrás",
 
