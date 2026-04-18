@@ -38,5 +38,15 @@ defineProps({
     border-color: rgb(127 29 29); /* red-900 */
     color: rgb(252 165 165); /* red-300 */
   }
+
+  /* Override global [aria-live] off-screen hiding in _accessibility.scss —
+     this alert must be visible to sighted users, not just screen readers. */
+  &[aria-live] {
+    position: static;
+    left: auto;
+    width: auto;
+    height: auto;
+    overflow: visible;
+  }
 }
 </style>
