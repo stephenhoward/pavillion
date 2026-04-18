@@ -752,3 +752,272 @@ describe('HTTP Signature Verification', () => {
     });
   });
 });
+
+/**
+ * End-to-end cryptographic round-trip for HTTP Signatures.
+ *
+ * Bead context: pv-dyyw.3.1 retry. The federation e2e spec
+ * (signed_delivery.spec.ts) proves the OUTBOUND delivery pipeline runs under
+ * signing, but the receive-side gate is short-circuited by SKIP_SIGNATURES on
+ * the local Docker harness, so the e2e cannot distinguish a correctly-signed
+ * POST from a forged one. These unit tests close that gap by exercising the
+ * full sign-then-verify loop with real RSA crypto:
+ *
+ *   1. Generate an in-test RSA-2048 keypair.
+ *   2. Use the real `buildSignedHeaders` helper from http-signing.ts, with the
+ *      actor services stubbed so signing resolves to the test private key.
+ *   3. Feed the signed request to the real `verifyHttpSignature` middleware
+ *      with SKIP_SIGNATURES off and the public-key cache primed with the
+ *      matching public key (no network round-trip required).
+ *   4. Assert next() is called for a clean signature.
+ *   5. Assert 401 is returned when the body is tampered after signing
+ *      (digest mismatch) — proves rejection works.
+ *
+ * The verifier is activity-type agnostic, so a single positive + single
+ * negative case is sufficient cryptographic proof for all four signed
+ * activity types (Create / Update / Delete / Add).
+ */
+describe('HTTP Signature Cryptographic Round-Trip', () => {
+  let sandbox: sinon.SinonSandbox;
+  let originalNodeEnv: string | undefined;
+  let originalSkipSignatures: string | undefined;
+
+  // RSA keypair generated once per test for cryptographic isolation
+  let privateKeyPem: string;
+  let publicKeyPem: string;
+
+  const ACTOR_URI = 'https://alpha.federation.local/o/roundtrip-cal';
+  const TARGET_URL = 'https://beta.federation.local/o/roundtrip-cal/inbox';
+
+  beforeEach(() => {
+    sandbox = sinon.createSandbox();
+
+    originalNodeEnv = process.env.NODE_ENV;
+    originalSkipSignatures = process.env.SKIP_SIGNATURES;
+
+    // Force the verifier into enforce mode regardless of how the test process
+    // was launched. Without this, a CI runner exporting SKIP_SIGNATURES=true
+    // would let the round-trip test pass vacuously.
+    process.env.NODE_ENV = 'test';
+    delete process.env.SKIP_SIGNATURES;
+
+    const { privateKey, publicKey } = crypto.generateKeyPairSync('rsa', {
+      modulusLength: 2048,
+      publicKeyEncoding: { type: 'spki', format: 'pem' },
+      privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+    });
+    privateKeyPem = privateKey;
+    publicKeyPem = publicKey;
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+
+    if (originalNodeEnv !== undefined) {
+      process.env.NODE_ENV = originalNodeEnv;
+    }
+    else {
+      delete process.env.NODE_ENV;
+    }
+
+    if (originalSkipSignatures !== undefined) {
+      process.env.SKIP_SIGNATURES = originalSkipSignatures;
+    }
+    else {
+      delete process.env.SKIP_SIGNATURES;
+    }
+  });
+
+  /**
+   * Build a fake CalendarActorService that succeeds at signActivity using the
+   * in-test keypair. UserActorService is stubbed to throw so the
+   * buildSignedHeaders helper resolves on the calendar branch (matches the
+   * normal calendar-actor delivery path).
+   */
+  function buildActorServices(): { calendarActorService: any; userActorService: any } {
+    const calendarActorService = {
+      signActivity: async (
+        actorUri: string,
+        _activity: any,
+        targetUrl: string,
+        digest?: string,
+      ) => {
+        const url = new URL(targetUrl);
+        const host = url.host;
+        const path = url.pathname + url.search;
+        const date = new Date().toUTCString();
+
+        const signingStringParts = [
+          `(request-target): post ${path}`,
+          `host: ${host}`,
+          `date: ${date}`,
+        ];
+        if (digest) {
+          signingStringParts.push(`digest: ${digest}`);
+        }
+        const signingString = signingStringParts.join('\n');
+
+        const signer = crypto.createSign('RSA-SHA256');
+        signer.update(signingString);
+        signer.end();
+        const signature = signer.sign(privateKeyPem).toString('base64');
+
+        return {
+          keyId: `${actorUri}#main-key`,
+          signature,
+          algorithm: 'rsa-sha256',
+          headers: digest ? '(request-target) host date digest' : '(request-target) host date',
+          date,
+        };
+      },
+    };
+
+    const userActorService = {
+      signActivity: async () => {
+        throw new Error('user actor signing not used in this test');
+      },
+    };
+
+    return { calendarActorService, userActorService };
+  }
+
+  /**
+   * Construct the Express request that mirrors what an inbound POST looks like
+   * after Express has parsed headers and body. http-signature's parseRequest
+   * needs `method`, `url`, and `httpVersion` in addition to `headers`.
+   */
+  function buildIncomingRequest(
+    targetUrl: string,
+    actorUri: string,
+    body: any,
+    signedHeaders: { Signature: string; Date: string; Digest: string },
+  ): Request {
+    const url = new URL(targetUrl);
+    return {
+      method: 'POST',
+      url: url.pathname + url.search,
+      httpVersion: '1.1',
+      headers: {
+        host: url.host,
+        date: signedHeaders.Date,
+        digest: signedHeaders.Digest,
+        signature: signedHeaders.Signature,
+        'content-type': 'application/activity+json',
+      },
+      body,
+    } as unknown as Request;
+  }
+
+  it('accepts a request signed by buildSignedHeaders end-to-end', async () => {
+    const { buildSignedHeaders } = await import('@/server/activitypub/service/http-signing');
+
+    const activity = {
+      '@context': 'https://www.w3.org/ns/activitystreams',
+      type: 'Create',
+      actor: ACTOR_URI,
+      to: ['https://www.w3.org/ns/activitystreams#Public'],
+      object: {
+        type: 'Event',
+        id: 'https://alpha.federation.local/o/roundtrip-cal/events/abc',
+        name: 'Round-trip test event',
+      },
+    };
+    const body = JSON.stringify(activity);
+    const digest = 'SHA-256=' + crypto.createHash('sha256').update(body).digest('base64');
+
+    const { calendarActorService, userActorService } = buildActorServices();
+
+    const signed = await buildSignedHeaders(
+      ACTOR_URI,
+      body,
+      TARGET_URL,
+      digest,
+      calendarActorService as any,
+      userActorService as any,
+    );
+    expect(signed, 'buildSignedHeaders must produce headers for a valid actor').not.toBeNull();
+
+    // Prime the public-key cache so verifyHttpSignature does NOT try to
+    // resolve over the network. This isolates the test from axios entirely.
+    const cacheGetStub = sandbox.stub(Cache.prototype, 'get').returns(publicKeyPem);
+    sandbox.stub(Cache.prototype, 'set');
+    const axiosGetStub = sandbox.stub(axios, 'get');
+
+    // Body is parsed back to an object because Express body-parser delivers
+    // it that way to the inbox handler. The verifier re-stringifies via
+    // JSON.stringify(req.body) for digest comparison, so the structural shape
+    // (and key order) must match what we hashed above. JSON.parse/stringify
+    // round-trip preserves key order for plain objects in V8.
+    const incomingReq = buildIncomingRequest(TARGET_URL, ACTOR_URI, JSON.parse(body), signed!);
+    const res: any = {
+      status: sandbox.stub().returnsThis(),
+      json: sandbox.stub().returnsThis(),
+    };
+    const next = sandbox.spy();
+
+    await verifyHttpSignature(incomingReq, res as Response, next as any);
+
+    expect(
+      next.called,
+      'verifyHttpSignature must call next() for a request signed end-to-end with the matching keypair',
+    ).toBe(true);
+    expect(res.status.called, 'no error status should be emitted').toBe(false);
+    expect(cacheGetStub.calledWith(`${ACTOR_URI}#main-key`)).toBe(true);
+    expect(axiosGetStub.called, 'no network fetch should be needed when cache is primed').toBe(false);
+  });
+
+  it('rejects a request whose body is tampered after signing (digest mismatch)', async () => {
+    const { buildSignedHeaders } = await import('@/server/activitypub/service/http-signing');
+
+    const activity = {
+      '@context': 'https://www.w3.org/ns/activitystreams',
+      type: 'Create',
+      actor: ACTOR_URI,
+      to: ['https://www.w3.org/ns/activitystreams#Public'],
+      object: {
+        type: 'Event',
+        id: 'https://alpha.federation.local/o/roundtrip-cal/events/abc',
+        name: 'Round-trip test event',
+      },
+    };
+    const body = JSON.stringify(activity);
+    const digest = 'SHA-256=' + crypto.createHash('sha256').update(body).digest('base64');
+
+    const { calendarActorService, userActorService } = buildActorServices();
+
+    const signed = await buildSignedHeaders(
+      ACTOR_URI,
+      body,
+      TARGET_URL,
+      digest,
+      calendarActorService as any,
+      userActorService as any,
+    );
+    expect(signed).not.toBeNull();
+
+    sandbox.stub(Cache.prototype, 'get').returns(publicKeyPem);
+    sandbox.stub(Cache.prototype, 'set');
+    sandbox.stub(axios, 'get');
+
+    // Mutate the body AFTER signing. The Signature and Digest headers still
+    // refer to the original body. The verifier hashes the tampered body and
+    // compares against the original digest -- mismatch must trigger 401.
+    const tamperedBody = { ...JSON.parse(body), object: { ...activity.object, name: 'Malicious payload' } };
+
+    const incomingReq = buildIncomingRequest(TARGET_URL, ACTOR_URI, tamperedBody, signed!);
+    const res: any = {
+      status: sandbox.stub().returnsThis(),
+      json: sandbox.stub().returnsThis(),
+    };
+    const next = sandbox.spy();
+
+    await verifyHttpSignature(incomingReq, res as Response, next as any);
+
+    expect(
+      res.status.calledWith(401),
+      'tampering with the body after signing must cause a 401 Invalid digest response',
+    ).toBe(true);
+    expect(res.json.calledWith({ error: 'Invalid digest' })).toBe(true);
+    expect(next.called, 'next() must NOT be invoked when the digest fails').toBe(false);
+  });
+});
