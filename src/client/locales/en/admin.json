@@ -16,12 +16,14 @@
     "instance_name_title": "Instance Name/Title",
     "registration_mode": "Registration Mode",
     "accounts_link": "Accounts",
+    "calendars_link": "Calendars",
     "federation_settings": "Federation",
     "blocked_instances": "List of blocked instances",
     "payment_details": "Funding",
     "moderation": "Moderation"
   },
   "calendars": {
+    "nav_label": "Calendars",
     "page_title": "Local Calendars",
     "page_subtitle": "Review calendars hosted on this instance",
     "loading": "Loading calendars...",

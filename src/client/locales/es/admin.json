@@ -5,6 +5,7 @@
     }
   },
   "calendars": {
+    "nav_label": "Calendarios",
     "page_title": "Calendarios Locales",
     "page_subtitle": "Revisa los calendarios alojados en esta instancia",
     "loading": "Cargando calendarios...",

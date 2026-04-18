@@ -38,6 +38,7 @@ import FundingPlanView from '@/client/components/account/funding-plan.vue';
 import AdminViews from '@/client/components/admin/root.vue';
 import InvitesListView from '@/client/components/admin/accounts.vue';
 import AdminSettingsView from '@/client/components/admin/settings.vue';
+import CalendarsDashboardView from '@/client/components/admin/calendars-dashboard.vue';
 import FederationSettingsView from '@/client/components/admin/federation.vue';
 import FundingSettingsView from '@/client/components/admin/funding.vue';
 import ModerationDashboardView from '@/client/components/admin/moderation-dashboard.vue';
@@ -162,6 +163,7 @@ checkSetupMode().then((setupRequired) => {
         children: [
           { path: 'settings', component: AdminSettingsView, name: 'admin_settings', beforeEnter: mustBeAdmin },
           { path: 'accounts', component: InvitesListView, name: 'accounts', beforeEnter: mustBeAdmin },
+          { path: 'calendars', component: CalendarsDashboardView, name: 'admin_calendars', beforeEnter: mustBeAdmin },
           { path: 'moderation', component: ModerationDashboardView, name: 'moderation', beforeEnter: mustBeAdmin },
           { path: 'moderation/reports/:reportId', component: ReportDetailView, name: 'moderation_report_detail', beforeEnter: mustBeAdmin },
           { path: 'moderation/settings', component: ModerationSettingsView, name: 'moderation_settings', beforeEnter: mustBeAdmin },

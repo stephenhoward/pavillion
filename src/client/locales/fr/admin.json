@@ -3,6 +3,7 @@
     "skip_to_content": "Aller au contenu principal"
   },
   "calendars": {
+    "nav_label": "Calendriers",
     "page_title": "Calendriers locaux",
     "page_subtitle": "Consultez les calendriers hébergés sur cette instance",
     "loading": "Chargement des calendriers...",
