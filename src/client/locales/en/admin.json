@@ -43,6 +43,8 @@
     "sort_dir_desc": "Descending",
     "reset_filters": "Reset Filters",
     "table_aria_label": "Local calendars",
+    "filters_section_aria_label": "Calendar filters",
+    "pagination_aria_label": "Calendar list pagination",
     "column_calendar": "Calendar",
     "column_owner": "Owner",
     "column_event_count": "Event count",

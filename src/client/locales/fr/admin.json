@@ -24,6 +24,8 @@
     "sort_dir_desc": "Décroissant",
     "reset_filters": "Réinitialiser les filtres",
     "table_aria_label": "Calendriers locaux",
+    "filters_section_aria_label": "Filtres de calendriers",
+    "pagination_aria_label": "Pagination de la liste des calendriers",
     "column_calendar": "Calendrier",
     "column_owner": "Propriétaire",
     "column_event_count": "Nombre d’évènements",

@@ -152,17 +152,18 @@ const hasActiveFilters = computed(() => {
     </div>
 
     <!-- Filters Section -->
-    <section class="filters-section" :aria-label="t('table_aria_label')">
+    <section class="filters-section" :aria-label="t('filters_section_aria_label')">
       <div class="filters-grid">
         <div class="filter-group">
           <label for="scope-filter" class="filter-label">
             {{ t('scope_filter_label') }}
+            <span class="filter-label-hint">{{ t('scope_remote_coming_soon') }}</span>
           </label>
           <select
             id="scope-filter"
             class="filter-select"
             disabled
-            :aria-label="t('scope_remote_coming_soon')"
+            aria-disabled="true"
           >
             <option value="local">{{ t('scope_local') }}</option>
             <option value="remote" disabled>{{ t('scope_remote_coming_soon') }}</option>
@@ -314,12 +315,13 @@ const hasActiveFilters = computed(() => {
       <nav
         v-if="store.pagination.totalPages > 1"
         class="pagination"
-        :aria-label="t('table_aria_label')"
+        :aria-label="t('pagination_aria_label')"
       >
         <button
           type="button"
           class="pagination-button"
           :disabled="store.pagination.currentPage === 1"
+          :aria-disabled="store.pagination.currentPage === 1"
           @click="changePage(store.pagination.currentPage - 1)"
         >
           {{ t('pagination_previous') }}
@@ -334,6 +336,7 @@ const hasActiveFilters = computed(() => {
           type="button"
           class="pagination-button"
           :disabled="store.pagination.currentPage >= store.pagination.totalPages"
+          :aria-disabled="store.pagination.currentPage >= store.pagination.totalPages"
           @click="changePage(store.pagination.currentPage + 1)"
         >
           {{ t('pagination_next') }}
@@ -415,6 +418,13 @@ const hasActiveFilters = computed(() => {
         font-size: var(--pav-font-size-xs);
         font-weight: var(--pav-font-weight-medium);
         color: var(--pav-text-secondary);
+      }
+
+      .filter-label-hint {
+        margin-inline-start: var(--pav-space-2);
+        font-weight: var(--pav-font-weight-regular);
+        color: var(--pav-text-muted);
+        font-style: italic;
       }
 
       .filter-select,

@@ -26,6 +26,8 @@
     "sort_dir_desc": "Descendente",
     "reset_filters": "Restablecer filtros",
     "table_aria_label": "Calendarios locales",
+    "filters_section_aria_label": "Filtros de calendarios",
+    "pagination_aria_label": "Paginación de la lista de calendarios",
     "column_calendar": "Calendario",
     "column_owner": "Propietario",
     "column_event_count": "Número de eventos",
