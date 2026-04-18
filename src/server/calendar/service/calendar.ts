@@ -1814,11 +1814,14 @@ class CalendarService {
       ],
     };
     if (searchTerm.length > 0) {
-      const pattern = `%${searchTerm}%`;
+      const pattern = `%${searchTerm.toLowerCase()}%`;
       calendarInclude.where = {
         [Op.or]: [
-          { url_name: { [Op.iLike]: pattern } },
-          literal('EXISTS (SELECT 1 FROM calendar_content cc WHERE cc.calendar_id = "calendar"."id" AND cc.name ILIKE :search)'),
+          // Case-insensitive urlName match using LOWER() for dialect neutrality
+          // (Op.iLike is PostgreSQL-only; LOWER(col) LIKE lower_pattern works on
+          // both PostgreSQL and SQLite, which the e2e suite uses).
+          literal('LOWER("calendar"."url_name") LIKE :search'),
+          literal('EXISTS (SELECT 1 FROM calendar_content cc WHERE cc.calendar_id = "calendar"."id" AND LOWER(cc.name) LIKE :search)'),
         ],
       };
     }
@@ -1830,7 +1833,7 @@ class CalendarService {
       include: [calendarInclude],
       distinct: true,
       col: 'calendar_id',
-      replacements: searchTerm.length > 0 ? { search: `%${searchTerm}%` } : undefined,
+      replacements: searchTerm.length > 0 ? { search: `%${searchTerm.toLowerCase()}%` } : undefined,
     } as any);
 
     if (totalCount === 0) {
@@ -1859,8 +1862,10 @@ class CalendarService {
       attributes: {
         include: [
           [
+            // CAST AS INTEGER and CURRENT_TIMESTAMP are dialect-neutral — they
+            // work on both PostgreSQL and SQLite (used by the e2e suite).
             literal(
-              '(SELECT COUNT(*)::int FROM event_instance ei WHERE ei.calendar_id = "CalendarMemberEntity"."calendar_id" AND ei.start_time >= NOW())',
+              '(SELECT CAST(COUNT(*) AS INTEGER) FROM event_instance ei WHERE ei.calendar_id = "CalendarMemberEntity"."calendar_id" AND ei.start_time >= CURRENT_TIMESTAMP)',
             ),
             'upcoming_event_count',
           ],
@@ -1884,7 +1889,7 @@ class CalendarService {
       limit: sanitizedLimit,
       offset,
       subQuery: false,
-      replacements: searchTerm.length > 0 ? { search: `%${searchTerm}%` } : undefined,
+      replacements: searchTerm.length > 0 ? { search: `%${searchTerm.toLowerCase()}%` } : undefined,
     } as any);
 
     const ids = rows.map((r: any) => r.calendar_id).filter((id: string | null): id is string => id !== null);
