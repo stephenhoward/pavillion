@@ -25,6 +25,7 @@ import EmailInterface from '@/server/email/interface';
 import FundingInterface from '@/server/funding/interface';
 import type MediaInterface from '@/server/media/interface';
 import type ActivityPubInterface from '@/server/activitypub/interface';
+import type ModerationInterface from '@/server/moderation/interface';
 import { CalendarNotFoundError } from '@/common/exceptions/calendar';
 import { CalendarEditorPermissionError } from '@/common/exceptions/editor';
 
@@ -88,6 +89,16 @@ export default class CalendarInterface {
     this.eventInstanceService.setActivityPubInterface(apInterface);
     this.calendarService.setActivityPubInterface(apInterface);
     this.categoryMappingService.setActivityPubInterface(apInterface);
+  }
+
+  /**
+   * Injects ModerationInterface into the services that need it for cross-domain moderation lookups.
+   * Called after ModerationDomain is initialized to avoid circular construction dependencies.
+   *
+   * @param moderationInterface - The ModerationInterface instance from the moderation domain
+   */
+  setModerationInterface(moderationInterface: ModerationInterface): void {
+    this.calendarService.setModerationInterface(moderationInterface);
   }
 
   // Calendar operations

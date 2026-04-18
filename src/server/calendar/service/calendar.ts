@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
-import { Op, UniqueConstraintError } from 'sequelize';
+import { Op, UniqueConstraintError, literal } from 'sequelize';
 import { EventEmitter } from 'events';
 import config from 'config';
 import axios from 'axios';
@@ -32,6 +32,7 @@ import FundingInterface from '@/server/funding/interface';
 import EditorNotificationEmail from '@/server/calendar/model/editor_notification_email';
 import db from '@/server/common/entity/db';
 import type ActivityPubInterface from '@/server/activitypub/interface';
+import type ModerationInterface from '@/server/moderation/interface';
 
 // Import the interface type (this avoids circular dependency)
 type CalendarEditorsResponse = {
@@ -57,6 +58,7 @@ class CalendarService {
   private eventBus?: EventEmitter;
   private readonly fundingInterface?: FundingInterface;
   private activityPubInterface?: ActivityPubInterface;
+  private moderationInterface?: ModerationInterface;
 
   constructor(
     private accountsInterface?: AccountsInterface,
@@ -70,6 +72,10 @@ class CalendarService {
 
   setActivityPubInterface(apInterface: ActivityPubInterface): void {
     this.activityPubInterface = apInterface;
+  }
+
+  setModerationInterface(moderationInterface: ModerationInterface): void {
+    this.moderationInterface = moderationInterface;
   }
 
   private isValidUUID(uuid: string): boolean {
@@ -1705,6 +1711,279 @@ class CalendarService {
 
     return deleted > 0;
   }
+
+  /**
+   * List all local calendars for admin visibility.
+   *
+   * Returns paginated rows joined with the owner membership and account,
+   * decorated with funding status and open-report count via cross-domain
+   * interface bulk calls. Remote-owned calendars are excluded (admin page
+   * is local-only in v1 per DEC-006 / epic scope).
+   *
+   * @param filters - Search / sort / pagination filters
+   * @returns Paginated envelope of AdminCalendarRow DTOs
+   * @throws ValidationError on invalid sortBy or sortDir values
+   */
+  async listAllCalendarsForAdmin(filters: AdminCalendarListFilters = {}): Promise<AdminCalendarListResult> {
+    // Sort whitelist — NEVER interpolate user-supplied sort values into
+    // raw SQL or Sequelize.literal. Column mapping is explicit.
+    const sortColumnMap: Record<string, string> = {
+      created: '"CalendarEntity"."createdAt"',
+      lastActivity: 'last_activity_at',
+      eventCount: 'upcoming_event_count',
+    };
+    const sortByKey = filters.sortBy ?? 'created';
+    if (!(sortByKey in sortColumnMap)) {
+      throw new ValidationError(`Invalid sortBy value: must be one of ${Object.keys(sortColumnMap).join(', ')}`);
+    }
+
+    const sortDirKey = (filters.sortDir ?? 'desc').toLowerCase();
+    if (sortDirKey !== 'asc' && sortDirKey !== 'desc') {
+      throw new ValidationError('Invalid sortDir value: must be asc or desc');
+    }
+
+    const sortColumn = sortColumnMap[sortByKey];
+    const sortDirection = sortDirKey === 'asc' ? 'ASC' : 'DESC';
+
+    // Pagination clamps
+    const sanitizedPage = Math.max(1, filters.page ?? 1);
+    const sanitizedLimit = Math.min(100, Math.max(1, filters.limit ?? 20));
+    const offset = (sanitizedPage - 1) * sanitizedLimit;
+
+    // Search normalization
+    const rawSearch = typeof filters.search === 'string' ? filters.search.trim() : '';
+    const searchTerm = rawSearch.length > 0 ? rawSearch.slice(0, 200) : '';
+
+    // hasOpenReports pre-filter — fetch the set of calendar IDs with open
+    // reports BEFORE the main query, so the main query's WHERE clause can
+    // restrict to that set.
+    let hasOpenReportsIdSet: string[] | null = null;
+    if (filters.hasOpenReports) {
+      if (!this.moderationInterface) {
+        // If we can't determine the set, return empty — fail-closed.
+        return {
+          items: [],
+          pagination: {
+            currentPage: sanitizedPage,
+            totalPages: 0,
+            totalCount: 0,
+            limit: sanitizedLimit,
+          },
+        };
+      }
+      hasOpenReportsIdSet = await this.moderationInterface.calendarIdsWithOpenReports();
+      if (hasOpenReportsIdSet.length === 0) {
+        return {
+          items: [],
+          pagination: {
+            currentPage: sanitizedPage,
+            totalPages: 0,
+            totalCount: 0,
+            limit: sanitizedLimit,
+          },
+        };
+      }
+    }
+
+    // Build the WHERE clause for CalendarMemberEntity (owner memberships).
+    // The primary query is rooted at CalendarMemberEntity so we get exactly
+    // one row per local calendar with a local owner — filtering out remote
+    // calendars and orphaned calendars in one join.
+    const memberWhere: any = {
+      role: 'owner',
+      calendar_id: { [Op.ne]: null },
+      account_id: { [Op.ne]: null },
+    };
+    if (hasOpenReportsIdSet) {
+      memberWhere.calendar_id = { [Op.in]: hasOpenReportsIdSet };
+    }
+
+    // Search is applied to the included CalendarEntity via an inner-join
+    // include — url_name directly, title via an EXISTS subquery on
+    // calendar_content. Uses parameterized :search replacement so the
+    // user-supplied value is bound, never interpolated.
+    const calendarInclude: any = {
+      model: CalendarEntity,
+      as: 'calendar',
+      required: true,
+      include: [
+        {
+          model: CalendarContentEntity,
+          required: false,
+        },
+      ],
+    };
+    if (searchTerm.length > 0) {
+      const pattern = `%${searchTerm}%`;
+      calendarInclude.where = {
+        [Op.or]: [
+          { url_name: { [Op.iLike]: pattern } },
+          literal('EXISTS (SELECT 1 FROM calendar_content cc WHERE cc.calendar_id = "calendar"."id" AND cc.name ILIKE :search)'),
+        ],
+      };
+    }
+
+    // Count query — mirrors the main query shape minus the decoration
+    // subqueries, so pagination totals stay consistent with the listing.
+    const totalCount = await CalendarMemberEntity.count({
+      where: memberWhere,
+      include: [calendarInclude],
+      distinct: true,
+      col: 'calendar_id',
+      replacements: searchTerm.length > 0 ? { search: `%${searchTerm}%` } : undefined,
+    } as any);
+
+    if (totalCount === 0) {
+      return {
+        items: [],
+        pagination: {
+          currentPage: sanitizedPage,
+          totalPages: 0,
+          totalCount: 0,
+          limit: sanitizedLimit,
+        },
+      };
+    }
+
+    // Map sort column onto the included calendar alias where needed so
+    // the ORDER BY references the joined table.
+    const resolvedSortColumn = sortByKey === 'created'
+      ? '"calendar"."createdAt"'
+      : sortColumn;
+
+    // Main page query — rooted at CalendarMemberEntity, includes the
+    // joined calendar + content + account, and adds correlated
+    // subqueries for upcoming_event_count and last_activity_at.
+    const rows = await CalendarMemberEntity.findAll({
+      where: memberWhere,
+      attributes: {
+        include: [
+          [
+            literal(
+              '(SELECT COUNT(*)::int FROM event_instance ei WHERE ei.calendar_id = "CalendarMemberEntity"."calendar_id" AND ei.start_time >= NOW())',
+            ),
+            'upcoming_event_count',
+          ],
+          [
+            literal(
+              '(SELECT MAX(ei.start_time) FROM event_instance ei WHERE ei.calendar_id = "CalendarMemberEntity"."calendar_id")',
+            ),
+            'last_activity_at',
+          ],
+        ],
+      },
+      include: [
+        calendarInclude,
+        {
+          model: AccountEntity,
+          as: 'account',
+          attributes: ['id', 'display_name', 'username'],
+        },
+      ],
+      order: [[literal(resolvedSortColumn), sortDirection]],
+      limit: sanitizedLimit,
+      offset,
+      subQuery: false,
+      replacements: searchTerm.length > 0 ? { search: `%${searchTerm}%` } : undefined,
+    } as any);
+
+    const ids = rows.map((r: any) => r.calendar_id).filter((id: string | null): id is string => id !== null);
+
+    // Decorate via cross-domain bulk calls (single round trip each).
+    const fundingMap = this.fundingInterface
+      ? await this.fundingInterface.getPlanStatusForCalendars(ids)
+      : new Map<string, 'subscribed' | 'grant' | 'none'>();
+    const reportMap = this.moderationInterface
+      ? await this.moderationInterface.getOpenReportCountsForCalendars(ids)
+      : new Map<string, number>();
+
+    const items: AdminCalendarRow[] = rows.map((row: any) => {
+      const calendar = row.calendar;
+      const contents = calendar?.contentEntities || [];
+      // Prefer English if present; otherwise first available translation.
+      const englishContent = contents.find((c: any) => c.language === 'en');
+      const chosenContent = englishContent ?? contents[0];
+      const title = chosenContent?.name ?? '';
+
+      const ownerAccount = row.account;
+      const ownerId = ownerAccount?.id ?? '';
+      const ownerDisplayName = ownerAccount?.display_name ?? ownerAccount?.username ?? '';
+
+      const rawUpcomingCount = row.get('upcoming_event_count');
+      const upcomingEventCount = typeof rawUpcomingCount === 'number'
+        ? rawUpcomingCount
+        : parseInt(rawUpcomingCount ?? '0', 10) || 0;
+
+      const rawLastActivity = row.get('last_activity_at');
+      const lastActivityAt = rawLastActivity ? new Date(rawLastActivity) : null;
+
+      return {
+        id: calendar?.id ?? '',
+        urlName: calendar?.url_name ?? '',
+        title,
+        owner: {
+          accountId: ownerId,
+          displayName: ownerDisplayName,
+        },
+        upcomingEventCount,
+        lastActivityAt,
+        fundingStatus: fundingMap.get(calendar?.id) ?? 'none',
+        openReportCount: reportMap.get(calendar?.id) ?? 0,
+      };
+    });
+
+    return {
+      items,
+      pagination: {
+        currentPage: sanitizedPage,
+        totalPages: Math.ceil(totalCount / sanitizedLimit),
+        totalCount,
+        limit: sanitizedLimit,
+      },
+    };
+  }
+}
+
+/**
+ * Filters accepted by CalendarService.listAllCalendarsForAdmin.
+ */
+export interface AdminCalendarListFilters {
+  search?: string;
+  hasOpenReports?: boolean;
+  sortBy?: 'created' | 'lastActivity' | 'eventCount';
+  sortDir?: 'asc' | 'desc';
+  page?: number;
+  limit?: number;
+}
+
+/**
+ * Row DTO returned by CalendarService.listAllCalendarsForAdmin.
+ *
+ * Deliberately omits owner email — admins reach contact info through the
+ * account-management path, not this list.
+ */
+export interface AdminCalendarRow {
+  id: string;
+  urlName: string;
+  title: string;
+  owner: {
+    accountId: string;
+    displayName: string;
+  };
+  upcomingEventCount: number;
+  lastActivityAt: Date | null;
+  fundingStatus: 'subscribed' | 'grant' | 'none';
+  openReportCount: number;
+}
+
+export interface AdminCalendarListResult {
+  items: AdminCalendarRow[];
+  pagination: {
+    currentPage: number;
+    totalPages: number;
+    totalCount: number;
+    limit: number;
+  };
 }
 
 export default CalendarService;
