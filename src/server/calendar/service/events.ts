@@ -1,6 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
 import config from 'config';
-import axios from 'axios';
 
 import { Account } from "@/common/model/account";
 import { Calendar } from "@/common/model/calendar";
@@ -31,8 +30,7 @@ import { EventCategoryContentEntity } from '@/server/calendar/entity/event_categ
 import { EventCategoryAssignmentEntity } from '@/server/calendar/entity/event_category_assignment';
 import { EventInstanceEntity } from '@/server/calendar/entity/event_instance';
 import { EventRepostEntity } from '@/server/calendar/entity/event_repost';
-import { validateUrlNotPrivate } from '@/server/common/helper/ip-validation';
-import { FEDERATION_HTTP_TIMEOUT_MS } from '@/server/common/constants';
+import { FederationDeliveryError } from '@/common/exceptions/activitypub';
 import db from '@/server/common/entity/db';
 import { logError } from '@/server/common/helper/error-logger';
 import { createLogger } from '@/server/common/helper/logger';
@@ -383,61 +381,67 @@ class EventService {
 
     logger.info({ inboxUrl }, 'Sending Create activity to remote calendar');
 
-    // SECURITY: Validate that the inbox URL does not point to a private IP address
-    // to prevent SSRF attacks where a malicious remote calendar advertises an internal
-    // network address as its inbox.
+    // Delegate signed federation delivery to the AP domain. The helper handles
+    // SSRF validation, HTTP signing, and per-status response shaping internally.
+    // Network/TLS/timeout/signing failures throw FederationDeliveryError; non-2xx
+    // and empty 202 responses resolve as { status, data: null }. The signing
+    // actor URI must equal the activity's `actor` field so the receiver can
+    // resolve the keyId — both are `actorUri` here (per pv-dyyw signing table).
+    let response: { status: number; data: any };
     try {
-      await validateUrlNotPrivate(inboxUrl);
-    }
-    catch (error) {
-      const errorMsg = `Security: Blocked delivery to private inbox URL: ${error instanceof Error ? error.message : String(error)}`;
-      logError(error, `[Calendar] Security: Blocked delivery to private inbox URL for create activity`);
-      throw new Error(errorMsg);
-    }
-
-    try {
-      const response = await axios.post(inboxUrl, createActivity, {
-        timeout: FEDERATION_HTTP_TIMEOUT_MS,
-        maxRedirects: 0,
-        headers: {
-          'Content-Type': 'application/activity+json',
-        },
-      });
-
-      logger.info({ status: response.status }, 'Remote calendar accepted Create activity');
-
-      // The remote calendar should return the created event as JSON
-      if (response.data && typeof response.data === 'object' && response.data.id) {
-        // Use the event data returned by the remote calendar
-        const event = CalendarEvent.fromObject(response.data);
-        return event;
-      }
-
-      // Fallback: construct a local representation of the event if no response data
-      const event = new CalendarEvent(
-        eventId,
-        remoteCalendarActor.id,
-        this.generateEventUrl(eventId),
-        false,
-      );
-
-      // Add content from params
-      if (eventParams.content) {
-        for (const [language, content] of Object.entries(eventParams.content)) {
-          const contentObj = content as any;
-          event.addContent(new CalendarEventContent(language, contentObj.name || '', contentObj.description || ''));
-        }
-      }
-
-      return event;
+      response = await this.activityPubInterface!.deliverActivitySigned(actorUri, createActivity, inboxUrl);
     }
     catch (error: any) {
       logError(error, '[Calendar] Failed to create event on remote calendar');
-      if (error.response?.status === 403) {
-        throw new InsufficientCalendarPermissionsError('You are not authorized to create events on this calendar');
+      if (error instanceof FederationDeliveryError) {
+        throw new Error(`Failed to create event on remote calendar: ${error.message}`);
       }
-      throw new Error(`Failed to create event on remote calendar: ${error.message}`);
+      throw error;
     }
+
+    // 403 response from the remote calendar: caller is not authorized to create
+    // events there. The new contract surfaces this as a resolved { status: 403,
+    // data: null } object rather than an axios error, so check `status` directly.
+    if (response.status === 403) {
+      throw new InsufficientCalendarPermissionsError('You are not authorized to create events on this calendar');
+    }
+
+    // Other non-2xx statuses still need to surface as a meaningful error.
+    if (response.status < 200 || response.status >= 300) {
+      logError(
+        new Error(`Remote inbox returned status ${response.status}`),
+        '[Calendar] Failed to create event on remote calendar',
+      );
+      throw new Error(`Failed to create event on remote calendar: remote returned status ${response.status}`);
+    }
+
+    logger.info({ status: response.status }, 'Remote calendar accepted Create activity');
+
+    // The remote calendar should return the created event as JSON. `data` may
+    // be null (empty 202) — guard before constructing the model from it.
+    if (response.data && typeof response.data === 'object' && response.data?.id) {
+      // Use the event data returned by the remote calendar
+      const event = CalendarEvent.fromObject(response.data);
+      return event;
+    }
+
+    // Fallback: construct a local representation of the event if no response data
+    const event = new CalendarEvent(
+      eventId,
+      remoteCalendarActor.id,
+      this.generateEventUrl(eventId),
+      false,
+    );
+
+    // Add content from params
+    if (eventParams.content) {
+      for (const [language, content] of Object.entries(eventParams.content)) {
+        const contentObj = content as any;
+        event.addContent(new CalendarEventContent(language, contentObj.name || '', contentObj.description || ''));
+      }
+    }
+
+    return event;
   }
 
   /**
