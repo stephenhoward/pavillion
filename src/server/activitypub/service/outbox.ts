@@ -27,6 +27,7 @@ import ProcessInboxService from "@/server/activitypub/service/inbox";
 import { FEDERATION_HTTP_TIMEOUT_MS } from "@/server/common/constants";
 import { validateUrlNotPrivate } from "@/server/common/helper/ip-validation";
 import { buildSignedHeaders } from "@/server/activitypub/service/http-signing";
+import { FederationDeliveryError } from "@/common/exceptions/activitypub";
 
 /**
  * Service responsible for processing and distributing outgoing ActivityPub messages.
@@ -54,6 +55,129 @@ class ProcessOutboxService {
     if (!this.inboxService) {
       logger.warn('[OUTBOX] constructed without ProcessInboxService — local recipients will degrade to HTTP delivery (test-only path)');
     }
+  }
+
+  /**
+   * Synchronously signs and delivers a single ActivityPub activity to a single
+   * remote inbox, returning the parsed HTTP response. This is the "escape hatch"
+   * counterpart to addToOutbox: callers use it only when they MUST read the
+   * remote response body (currently only events.ts:createRemoteEventViaActivityPub,
+   * which needs the created event document echoed back from the remote calendar).
+   *
+   * Behavior contract:
+   *   - JSON.stringify the activity ONCE; the same string is used for digest
+   *     computation and for the axios request body. This guarantees the
+   *     receiver computes the same SHA-256 we signed.
+   *   - Generates a fresh Date header and signature on each call (no stale-
+   *     header retry).
+   *   - validateUrlNotPrivate(inboxUrl) is called immediately before
+   *     axios.post with no async work in between. The signing actor URI MUST
+   *     match the activity's `actor` field for the keyId to be valid at the
+   *     receiver.
+   *
+   * SECURITY (residual TOCTOU SSRF):
+   *   Inbox URLs are pre-vetted at follow time (resolveInboxUrl runs
+   *   validateUrlNotPrivate against the actor profile URL during follow), so
+   *   the inbox values reaching this helper are not raw user input. The
+   *   validateUrlNotPrivate call here is defense-in-depth: it re-checks the
+   *   URL right before the POST so a DNS rebind between follow time and
+   *   delivery time still fails closed.
+   *
+   * Error contract:
+   *   - Network / TLS / timeout / signing failure  -> throws FederationDeliveryError
+   *   - SSRF block (private IP rejected)            -> throws FederationDeliveryError
+   *   - Non-2xx HTTP response                       -> resolves with { status, data: null }
+   *   - 202 Accepted with empty body                -> resolves with { status: 202, data: null }
+   *   - 2xx with JSON body                          -> resolves with { status, data: <parsed JSON> }
+   *
+   * Callers MUST guard `data?.id` (or whatever response field they consume)
+   * because data is null on every non-success branch.
+   *
+   * @param signingActorUri - The actor URI used to sign the request. Must equal activity.actor.
+   * @param activity - The ActivityPub activity object to deliver.
+   * @param inboxUrl - The remote inbox URL to POST to (pre-vetted at follow time).
+   * @returns Object with the HTTP status and the parsed JSON body (or null).
+   * @throws FederationDeliveryError on signing/network/SSRF failure.
+   */
+  async deliverActivitySigned(
+    signingActorUri: string,
+    activity: Record<string, any>,
+    inboxUrl: string,
+  ): Promise<{ status: number; data: any }> {
+    // JSON.stringify the activity ONCE so the digest header and the HTTP body
+    // are guaranteed to be byte-identical. Re-stringifying could produce a
+    // different key order and break signature verification at the receiver.
+    const bodyString = JSON.stringify(activity);
+    const digest = 'SHA-256=' + createHash('sha256').update(bodyString).digest('base64');
+
+    let signedHeaders;
+    try {
+      signedHeaders = await buildSignedHeaders(
+        signingActorUri,
+        bodyString,
+        inboxUrl,
+        digest,
+        this.calendarActorService,
+        this.userActorService,
+      );
+    }
+    catch (error: any) {
+      throw new FederationDeliveryError(
+        `Signing failed for actor ${signingActorUri}: ${error?.message ?? String(error)}`,
+      );
+    }
+    if (!signedHeaders) {
+      throw new FederationDeliveryError(
+        `Signing failed for actor ${signingActorUri}: no matching key found`,
+      );
+    }
+
+    // SECURITY: re-validate the inbox URL immediately before POST. No async
+    // work between this check and axios.post — anything in the gap would
+    // re-open the TOCTOU window we are trying to close.
+    try {
+      await validateUrlNotPrivate(inboxUrl);
+    }
+    catch (error: any) {
+      throw new FederationDeliveryError(
+        `Blocked delivery to private inbox URL: ${error?.message ?? String(error)}`,
+      );
+    }
+
+    let response;
+    try {
+      response = await axios.post(inboxUrl, bodyString, {
+        timeout: FEDERATION_HTTP_TIMEOUT_MS,
+        maxRedirects: 0,
+        // Treat any HTTP status code (including non-2xx) as a resolved
+        // response so the caller can read `status` and decide. Network/TLS/
+        // timeout errors still reject and become FederationDeliveryError below.
+        validateStatus: () => true,
+        headers: {
+          'Content-Type': 'application/activity+json',
+          ...signedHeaders,
+        },
+      });
+    }
+    catch (error: any) {
+      throw new FederationDeliveryError(
+        `Network failure delivering to ${inboxUrl}: ${error?.message ?? String(error)}`,
+      );
+    }
+
+    const status = response.status;
+
+    // Non-2xx: surface status to caller, but no body.
+    if (status < 200 || status >= 300) {
+      return { status, data: null };
+    }
+
+    // 2xx with empty/no body (typical for 202 Accepted).
+    if (response.data === undefined || response.data === null || response.data === '') {
+      return { status, data: null };
+    }
+
+    return { status, data: response.data };
   }
 
   /**

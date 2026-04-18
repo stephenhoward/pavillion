@@ -20,6 +20,8 @@ import LocationService from "@/server/calendar/service/locations";
 import { EventEmitter } from 'events';
 import type MediaInterface from '@/server/media/interface';
 import type ActivityPubInterface from '@/server/activitypub/interface';
+import UpdateActivity from '@/server/activitypub/model/action/update';
+import DeleteActivity from '@/server/activitypub/model/action/delete';
 import { EventNotFoundError, InsufficientCalendarPermissionsError, CalendarNotFoundError, BulkEventsNotFoundError, MixedCalendarEventsError, CategoriesNotFoundError, LocationValidationError, InvalidExternalUrlError } from '@/common/exceptions/calendar';
 import { ValidationError } from '@/common/exceptions/base';
 import CategoryService from './categories';
@@ -476,11 +478,13 @@ class EventService {
     // Include the local event ID in eventParams so the remote can look it up
     const eventParamsWithId = { ...eventParams, id: eventId };
 
-    const updateActivity = {
+    const updateActivityObject = {
       '@context': 'https://www.w3.org/ns/activitystreams',
       type: 'Update',
       id: `https://${localDomain}/activities/${uuidv4()}`,
       actor: actorUri,
+      // Explicit single-recipient delivery: the outbox worker honors `to` and
+      // skips follower fan-out for Update activities (per pv-dyyw.1.2).
       to: [remoteCalendarActor.actorUri],
       object: {
         type: 'Event',
@@ -495,62 +499,57 @@ class EventService {
       },
     };
 
-    // Send to the remote calendar's inbox
-    const inboxUrl = remoteCalendarActor.inboxUrl;
-    if (!inboxUrl) {
+    // Verify the remote calendar inbox is configured. The outbox worker
+    // resolves and validates the inbox URL (SSRF guard) at delivery time.
+    if (!remoteCalendarActor.inboxUrl) {
       throw new CalendarNotFoundError('Remote calendar inbox URL not configured');
     }
 
-    logger.info({ inboxUrl }, 'Sending Update activity to remote calendar');
+    logger.info({ inboxUrl: remoteCalendarActor.inboxUrl }, 'Enqueuing Update activity for remote calendar');
 
-    // SECURITY: Validate that the inbox URL does not point to a private IP address
-    // to prevent SSRF attacks where a malicious remote calendar advertises an internal
-    // network address as its inbox.
-    try {
-      await validateUrlNotPrivate(inboxUrl);
-    }
-    catch (error) {
-      const errorMsg = `Security: Blocked delivery to private inbox URL: ${error instanceof Error ? error.message : String(error)}`;
-      logError(error, `[Calendar] Security: Blocked delivery to private inbox URL for update activity`);
-      throw new Error(errorMsg);
+    // Wrap as an UpdateActivity model so addToOutbox receives the expected
+    // ActivityPubActivity shape. The activity's `actor` field (user actor URI)
+    // is what the outbox worker uses to resolve the signing key via
+    // buildSignedHeaders (per pv-dyyw.1.1).
+    const updateActivity = UpdateActivity.fromObject(updateActivityObject);
+    if (!updateActivity) {
+      throw new Error('Failed to construct UpdateActivity for remote event update');
     }
 
-    try {
-      const response = await axios.post(inboxUrl, updateActivity, {
-        timeout: FEDERATION_HTTP_TIMEOUT_MS,
-        maxRedirects: 0,
-        headers: {
-          'Content-Type': 'application/activity+json',
-        },
-      });
+    // The outbox helper requires a local Calendar to anchor the message
+    // (calendar_id FK). For user-actor activities, no specific calendar is
+    // semantically the "owner" — pick the first local calendar the user can
+    // edit as the bookkeeping anchor. Delivery routing is driven by the
+    // activity's explicit `to` field, not by this calendar.
+    const userCalendars = await this.calendarService.editableCalendarsForUser(account);
+    if (userCalendars.length === 0) {
+      throw new InsufficientCalendarPermissionsError('User has no local calendar to anchor outbox delivery');
+    }
 
-      logger.info({ status: response.status }, 'Remote calendar accepted Update activity');
+    // Fire-and-forget enqueue. Errors surface asynchronously through the
+    // outbox worker's per-recipient delivery error accumulation (no synchronous
+    // 403 mapping — that pattern was tied to the inline axios.post path).
+    // TODO(pv-yowo): userCalendars[0] is bookkeeping-only — the FK on the outbox
+    // row needs an anchor but delivery is driven by activity.to. Activity
+    // construction migration into the AP domain (pv-yowo) will resolve this.
+    await this.activityPubInterface!.addToOutbox(userCalendars[0], updateActivity);
 
-      // Construct a local representation of the updated event
-      const event = new CalendarEvent(
-        eventId,
-        remoteCalendarActor.id,
-        this.generateEventUrl(eventId),
-        false,
-      );
+    // Construct a local representation of the updated event for the caller.
+    const event = new CalendarEvent(
+      eventId,
+      remoteCalendarActor.id,
+      this.generateEventUrl(eventId),
+      false,
+    );
 
-      // Add content from params
-      if (eventParams.content) {
-        for (const [language, content] of Object.entries(eventParams.content)) {
-          const contentObj = content as any;
-          event.addContent(new CalendarEventContent(language, contentObj.name || '', contentObj.description || ''));
-        }
+    if (eventParams.content) {
+      for (const [language, content] of Object.entries(eventParams.content)) {
+        const contentObj = content as any;
+        event.addContent(new CalendarEventContent(language, contentObj.name || '', contentObj.description || ''));
       }
+    }
 
-      return event;
-    }
-    catch (error: any) {
-      logError(error, '[Calendar] Failed to update event on remote calendar');
-      if (error.response?.status === 403) {
-        throw new InsufficientCalendarPermissionsError('You are not authorized to update events on this calendar');
-      }
-      throw new Error(`Failed to update event on remote calendar: ${error.message}`);
-    }
+    return event;
   }
 
   /**
@@ -576,11 +575,13 @@ class EventService {
 
     // Build the ActivityPub Delete activity
     // Include the local event ID so the remote can look it up
-    const deleteActivity = {
+    const deleteActivityObject = {
       '@context': 'https://www.w3.org/ns/activitystreams',
       type: 'Delete',
       id: `https://${localDomain}/activities/${uuidv4()}`,
       actor: actorUri,
+      // Explicit single-recipient delivery: the outbox worker honors `to` and
+      // skips follower fan-out for Delete activities (per pv-dyyw.1.2).
       to: [remoteCalendarActor.actorUri],
       object: {
         type: 'Tombstone',
@@ -591,44 +592,40 @@ class EventService {
       },
     };
 
-    // Send to the remote calendar's inbox
-    const inboxUrl = remoteCalendarActor.inboxUrl;
-    if (!inboxUrl) {
+    // Verify the remote calendar inbox is configured. The outbox worker
+    // resolves and validates the inbox URL (SSRF guard) at delivery time.
+    if (!remoteCalendarActor.inboxUrl) {
       throw new CalendarNotFoundError('Remote calendar inbox URL not configured');
     }
 
-    logger.info({ inboxUrl }, 'Sending Delete activity to remote calendar');
+    logger.info({ inboxUrl: remoteCalendarActor.inboxUrl }, 'Enqueuing Delete activity for remote calendar');
 
-    // SECURITY: Validate that the inbox URL does not point to a private IP address
-    // to prevent SSRF attacks where a malicious remote calendar advertises an internal
-    // network address as its inbox.
-    try {
-      await validateUrlNotPrivate(inboxUrl);
-    }
-    catch (error) {
-      const errorMsg = `Security: Blocked delivery to private inbox URL: ${error instanceof Error ? error.message : String(error)}`;
-      logError(error, `[Calendar] Security: Blocked delivery to private inbox URL for delete activity`);
-      throw new Error(errorMsg);
+    // Wrap as a DeleteActivity model so addToOutbox receives the expected
+    // ActivityPubActivity shape. The full Tombstone object is preserved on
+    // the activity (DeleteActivity.fromObject keeps `object` as-is) so the
+    // remote inbox can read formerType / eventId fields.
+    const deleteActivity = DeleteActivity.fromObject(deleteActivityObject);
+    if (!deleteActivity) {
+      throw new Error('Failed to construct DeleteActivity for remote event delete');
     }
 
-    try {
-      const response = await axios.post(inboxUrl, deleteActivity, {
-        timeout: FEDERATION_HTTP_TIMEOUT_MS,
-        maxRedirects: 0,
-        headers: {
-          'Content-Type': 'application/activity+json',
-        },
-      });
+    // The outbox helper requires a local Calendar to anchor the message
+    // (calendar_id FK). For user-actor activities, no specific calendar is
+    // semantically the "owner" — pick the first local calendar the user can
+    // edit as the bookkeeping anchor. Delivery routing is driven by the
+    // activity's explicit `to` field, not by this calendar.
+    const userCalendars = await this.calendarService.editableCalendarsForUser(account);
+    if (userCalendars.length === 0) {
+      throw new InsufficientCalendarPermissionsError('User has no local calendar to anchor outbox delivery');
+    }
 
-      logger.info({ status: response.status }, 'Remote calendar accepted Delete activity');
-    }
-    catch (error: any) {
-      logError(error, '[Calendar] Failed to delete event on remote calendar');
-      if (error.response?.status === 403) {
-        throw new InsufficientCalendarPermissionsError('You are not authorized to delete events on this calendar');
-      }
-      throw new Error(`Failed to delete event on remote calendar: ${error.message}`);
-    }
+    // Fire-and-forget enqueue. Errors surface asynchronously through the
+    // outbox worker's per-recipient delivery error accumulation (no synchronous
+    // 403 mapping — that pattern was tied to the inline axios.post path).
+    // TODO(pv-yowo): userCalendars[0] is bookkeeping-only — the FK on the outbox
+    // row needs an anchor but delivery is driven by activity.to. Activity
+    // construction migration into the AP domain (pv-yowo) will resolve this.
+    await this.activityPubInterface!.addToOutbox(userCalendars[0], deleteActivity);
   }
 
   /**

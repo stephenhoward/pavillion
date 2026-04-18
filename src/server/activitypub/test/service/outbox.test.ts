@@ -1028,3 +1028,123 @@ describe('MockFederation Activity Tracking', () => {
     expect(sent[1].type).toBe('Follow');
   });
 });
+
+
+describe('deliverActivitySigned', () => {
+  let service: ProcessOutboxService;
+  let sandbox: sinon.SinonSandbox = sinon.createSandbox();
+
+  const SIGNING_ACTOR_URI = `${LOCAL_ACTOR_URL}/users/admin`;
+
+  beforeEach(() => {
+    const eventBus = new EventEmitter();
+    service = new ProcessOutboxService(eventBus);
+    vi.mocked(validateUrlNotPrivate).mockResolvedValue(true);
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+    vi.restoreAllMocks();
+  });
+
+  function buildActivity() {
+    return {
+      '@context': 'https://www.w3.org/ns/activitystreams',
+      type: 'Create',
+      id: `${LOCAL_ACTOR_URL}/activities/abc`,
+      actor: SIGNING_ACTOR_URI,
+      object: {
+        type: 'Event',
+        id: `${LOCAL_ACTOR_URL}/events/xyz`,
+        name: 'Sync Event',
+      },
+    };
+  }
+
+  it('throws FederationDeliveryError when signing fails for both actor types', async () => {
+    sandbox.stub(service.calendarActorService, 'signActivity').rejects(new Error('no calendar actor'));
+    sandbox.stub((service as any).userActorService, 'signActivity').rejects(new Error('no user actor'));
+
+    const postStub = sandbox.stub(axios, 'post');
+
+    const { FederationDeliveryError } = await import('@/common/exceptions/activitypub');
+
+    await expect(
+      service.deliverActivitySigned(SIGNING_ACTOR_URI, buildActivity(), REMOTE_INBOX_URL),
+    ).rejects.toBeInstanceOf(FederationDeliveryError);
+
+    expect(postStub.called).toBe(false);
+  });
+
+  it('throws FederationDeliveryError on network/timeout failure', async () => {
+    stubSigning(service, sandbox);
+    sandbox.stub(axios, 'post').rejects(new Error('ETIMEDOUT'));
+
+    const { FederationDeliveryError } = await import('@/common/exceptions/activitypub');
+
+    await expect(
+      service.deliverActivitySigned(SIGNING_ACTOR_URI, buildActivity(), REMOTE_INBOX_URL),
+    ).rejects.toBeInstanceOf(FederationDeliveryError);
+  });
+
+  it('throws FederationDeliveryError when SSRF validation rejects the inbox URL', async () => {
+    stubSigning(service, sandbox);
+    vi.mocked(validateUrlNotPrivate).mockRejectedValueOnce(
+      new Error('Access to private IP 10.0.0.1 is not allowed'),
+    );
+    const postStub = sandbox.stub(axios, 'post');
+
+    const { FederationDeliveryError } = await import('@/common/exceptions/activitypub');
+
+    await expect(
+      service.deliverActivitySigned(SIGNING_ACTOR_URI, buildActivity(), 'https://10.0.0.1/inbox'),
+    ).rejects.toBeInstanceOf(FederationDeliveryError);
+
+    expect(postStub.called).toBe(false);
+  });
+
+  it('returns { status, data: null } on non-2xx HTTP response', async () => {
+    stubSigning(service, sandbox);
+    sandbox.stub(axios, 'post').resolves({ status: 403, data: { error: 'forbidden' } });
+
+    const result = await service.deliverActivitySigned(SIGNING_ACTOR_URI, buildActivity(), REMOTE_INBOX_URL);
+
+    expect(result).toEqual({ status: 403, data: null });
+  });
+
+  it('returns { status: 202, data: null } on 202 Accepted with empty body', async () => {
+    stubSigning(service, sandbox);
+    sandbox.stub(axios, 'post').resolves({ status: 202, data: '' });
+
+    const result = await service.deliverActivitySigned(SIGNING_ACTOR_URI, buildActivity(), REMOTE_INBOX_URL);
+
+    expect(result).toEqual({ status: 202, data: null });
+  });
+
+  it('returns { status, data } on 2xx with parsed JSON body', async () => {
+    stubSigning(service, sandbox);
+    const remoteEvent = { id: `${REMOTE_PROFILE_URL}/events/created-1`, type: 'Event', name: 'Echoed' };
+    sandbox.stub(axios, 'post').resolves({ status: 201, data: remoteEvent });
+
+    const result = await service.deliverActivitySigned(SIGNING_ACTOR_URI, buildActivity(), REMOTE_INBOX_URL);
+
+    expect(result.status).toBe(201);
+    expect(result.data).toEqual(remoteEvent);
+  });
+
+  it('JSON-stringifies the activity exactly once and uses the same bytes for digest and body', async () => {
+    stubSigning(service, sandbox);
+    const postStub = sandbox.stub(axios, 'post').resolves({ status: 202, data: '' });
+
+    const activity = buildActivity();
+    await service.deliverActivitySigned(SIGNING_ACTOR_URI, activity, REMOTE_INBOX_URL);
+
+    const bodyArg = postStub.getCalls()[0].args[1];
+    expect(typeof bodyArg).toBe('string');
+
+    const { createHash } = await import('crypto');
+    const expectedDigest = 'SHA-256=' + createHash('sha256').update(bodyArg as string).digest('base64');
+    const actualDigest = postStub.getCalls()[0].args[2]?.headers['Digest'];
+    expect(actualDigest).toBe(expectedDigest);
+  });
+});
