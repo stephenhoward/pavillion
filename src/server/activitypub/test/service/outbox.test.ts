@@ -38,7 +38,9 @@ import {
 import {
   createMockAnnounceActivity,
   createMockCreateActivity,
+  createMockDeleteActivity,
   createMockFollowActivity,
+  createMockUpdateActivity,
   createMockFederation,
   getSentActivities,
   type MockFederationContext,
@@ -577,6 +579,223 @@ describe('processOutboxMessage', () => {
     expect(updateStub.getCalls()[0].args[0]['processed_time']).toBeDefined();
     // The delivery error should be recorded in processed_status
     expect(updateStub.getCalls()[0].args[0]['processed_status']).toMatch(/^partial:/);
+  });
+});
+
+
+describe('processOutboxMessage — explicit `to` honoring for Update/Delete/Add', () => {
+  let service: ProcessOutboxService;
+  let sandbox: sinon.SinonSandbox = sinon.createSandbox();
+
+  const TARGETED_ACTOR_URI = 'https://target.federation.test/calendars/owner';
+  const TARGETED_INBOX_URL = 'https://target.federation.test/calendars/owner/inbox';
+
+  beforeEach(() => {
+    const eventBus = new EventEmitter();
+    service = new ProcessOutboxService(eventBus);
+    vi.mocked(validateUrlNotPrivate).mockResolvedValue(true);
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+    vi.restoreAllMocks();
+  });
+
+  // ---------- Update ----------
+
+  it('Update: honors explicit `to` and skips follower fan-out', async () => {
+    const updateMsg = createMockUpdateActivity(LOCAL_ACTOR_URL, {
+      type: 'Event',
+      id: `${LOCAL_ACTOR_URL}/events/upd-1`,
+      name: 'Updated Event',
+    });
+    updateMsg.to = [TARGETED_ACTOR_URI];
+
+    const message = ActivityPubOutboxMessageEntity.build({
+      calendar_id: TEST_CALENDAR_ID,
+      type: 'Update',
+      message: updateMsg,
+    });
+
+    const getCalendarStub = sandbox.stub(service.calendarService, 'getCalendar');
+    const postStub = sandbox.stub(axios, 'post').resolves();
+    const updateStub = sandbox.stub(ActivityPubOutboxMessageEntity.prototype, 'update');
+    const getRecipientsStub = sandbox.stub(service, 'getRecipients');
+    const resolveStub = sandbox.stub(service, 'resolveInboxUrl');
+    stubSigning(service, sandbox);
+
+    getCalendarStub.resolves(Calendar.fromObject({ id: TEST_CALENDAR_ID }));
+    resolveStub.resolves(TARGETED_INBOX_URL);
+
+    await service.processOutboxMessage(message);
+
+    expect(getRecipientsStub.called, 'getRecipients must NOT be called when `to` is explicit').toBe(false);
+    expect(resolveStub.calledOnceWith(TARGETED_ACTOR_URI)).toBe(true);
+    expect(postStub.calledOnce).toBe(true);
+    expect(updateStub.getCalls()[0].args[0]['processed_status']).toBe('ok');
+  });
+
+  it('Update: falls back to getRecipients fan-out when `to` is absent', async () => {
+    const updateMsg = createMockUpdateActivity(LOCAL_ACTOR_URL, {
+      type: 'Event',
+      id: `${LOCAL_ACTOR_URL}/events/upd-2`,
+      name: 'Broadcast Update',
+    });
+    // no `to` field set
+
+    const message = ActivityPubOutboxMessageEntity.build({
+      calendar_id: TEST_CALENDAR_ID,
+      type: 'Update',
+      message: updateMsg,
+    });
+
+    const getCalendarStub = sandbox.stub(service.calendarService, 'getCalendar');
+    const postStub = sandbox.stub(axios, 'post').resolves();
+    const updateStub = sandbox.stub(ActivityPubOutboxMessageEntity.prototype, 'update');
+    const getRecipientsStub = sandbox.stub(service, 'getRecipients');
+    const resolveStub = sandbox.stub(service, 'resolveInboxUrl');
+    stubSigning(service, sandbox);
+
+    getCalendarStub.resolves(Calendar.fromObject({ id: TEST_CALENDAR_ID }));
+    getRecipientsStub.resolves([REMOTE_CALENDAR_HANDLE]);
+    resolveStub.resolves(REMOTE_INBOX_URL);
+
+    await service.processOutboxMessage(message);
+
+    expect(getRecipientsStub.calledOnce, 'getRecipients must be called for fan-out fallback').toBe(true);
+    expect(postStub.calledOnce).toBe(true);
+    expect(updateStub.getCalls()[0].args[0]['processed_status']).toBe('ok');
+  });
+
+  // ---------- Delete ----------
+
+  it('Delete: honors explicit `to` and skips follower fan-out', async () => {
+    const deleteMsg = createMockDeleteActivity(LOCAL_ACTOR_URL, `${LOCAL_ACTOR_URL}/events/del-1`);
+    deleteMsg.to = [TARGETED_ACTOR_URI];
+
+    const message = ActivityPubOutboxMessageEntity.build({
+      calendar_id: TEST_CALENDAR_ID,
+      type: 'Delete',
+      message: deleteMsg,
+    });
+
+    const getCalendarStub = sandbox.stub(service.calendarService, 'getCalendar');
+    const postStub = sandbox.stub(axios, 'post').resolves();
+    const updateStub = sandbox.stub(ActivityPubOutboxMessageEntity.prototype, 'update');
+    const getRecipientsStub = sandbox.stub(service, 'getRecipients');
+    const resolveStub = sandbox.stub(service, 'resolveInboxUrl');
+    stubSigning(service, sandbox);
+
+    getCalendarStub.resolves(Calendar.fromObject({ id: TEST_CALENDAR_ID }));
+    resolveStub.resolves(TARGETED_INBOX_URL);
+
+    await service.processOutboxMessage(message);
+
+    expect(getRecipientsStub.called, 'getRecipients must NOT be called when `to` is explicit').toBe(false);
+    expect(resolveStub.calledOnceWith(TARGETED_ACTOR_URI)).toBe(true);
+    expect(postStub.calledOnce).toBe(true);
+    expect(updateStub.getCalls()[0].args[0]['processed_status']).toBe('ok');
+  });
+
+  it('Delete: falls back to getRecipients fan-out when `to` is absent', async () => {
+    const deleteMsg = createMockDeleteActivity(LOCAL_ACTOR_URL, `${LOCAL_ACTOR_URL}/events/del-2`);
+    // no `to` field set
+
+    const message = ActivityPubOutboxMessageEntity.build({
+      calendar_id: TEST_CALENDAR_ID,
+      type: 'Delete',
+      message: deleteMsg,
+    });
+
+    const getCalendarStub = sandbox.stub(service.calendarService, 'getCalendar');
+    const postStub = sandbox.stub(axios, 'post').resolves();
+    const updateStub = sandbox.stub(ActivityPubOutboxMessageEntity.prototype, 'update');
+    const getRecipientsStub = sandbox.stub(service, 'getRecipients');
+    const resolveStub = sandbox.stub(service, 'resolveInboxUrl');
+    stubSigning(service, sandbox);
+
+    getCalendarStub.resolves(Calendar.fromObject({ id: TEST_CALENDAR_ID }));
+    getRecipientsStub.resolves([REMOTE_CALENDAR_HANDLE]);
+    resolveStub.resolves(REMOTE_INBOX_URL);
+
+    await service.processOutboxMessage(message);
+
+    expect(getRecipientsStub.calledOnce, 'getRecipients must be called for fan-out fallback').toBe(true);
+    expect(postStub.calledOnce).toBe(true);
+    expect(updateStub.getCalls()[0].args[0]['processed_status']).toBe('ok');
+  });
+
+  // ---------- Add ----------
+
+  it('Add: honors explicit `to` and delivers only to that recipient', async () => {
+    const addMsg = {
+      '@context': 'https://www.w3.org/ns/activitystreams',
+      type: 'Add',
+      actor: LOCAL_ACTOR_URL,
+      object: TARGETED_ACTOR_URI,
+      target: `${LOCAL_ACTOR_URL}/editors`,
+      id: `${LOCAL_ACTOR_URL}/adds/add-1`,
+      to: [TARGETED_ACTOR_URI],
+    };
+
+    const message = ActivityPubOutboxMessageEntity.build({
+      calendar_id: TEST_CALENDAR_ID,
+      type: 'Add',
+      message: addMsg,
+    });
+
+    const getCalendarStub = sandbox.stub(service.calendarService, 'getCalendar');
+    const postStub = sandbox.stub(axios, 'post').resolves();
+    const updateStub = sandbox.stub(ActivityPubOutboxMessageEntity.prototype, 'update');
+    const getRecipientsStub = sandbox.stub(service, 'getRecipients');
+    const resolveStub = sandbox.stub(service, 'resolveInboxUrl');
+    stubSigning(service, sandbox);
+
+    getCalendarStub.resolves(Calendar.fromObject({ id: TEST_CALENDAR_ID }));
+    resolveStub.resolves(TARGETED_INBOX_URL);
+
+    await service.processOutboxMessage(message);
+
+    expect(getRecipientsStub.called, 'getRecipients must NOT be called for Add').toBe(false);
+    expect(resolveStub.calledOnceWith(TARGETED_ACTOR_URI)).toBe(true);
+    expect(postStub.calledOnce).toBe(true);
+    expect(updateStub.getCalls()[0].args[0]['processed_status']).toBe('ok');
+  });
+
+  it('Add: skips delivery (no fan-out) when `to` is absent', async () => {
+    const addMsg = {
+      '@context': 'https://www.w3.org/ns/activitystreams',
+      type: 'Add',
+      actor: LOCAL_ACTOR_URL,
+      object: TARGETED_ACTOR_URI,
+      target: `${LOCAL_ACTOR_URL}/editors`,
+      id: `${LOCAL_ACTOR_URL}/adds/add-2`,
+      // no `to` field
+    };
+
+    const message = ActivityPubOutboxMessageEntity.build({
+      calendar_id: TEST_CALENDAR_ID,
+      type: 'Add',
+      message: addMsg,
+    });
+
+    const getCalendarStub = sandbox.stub(service.calendarService, 'getCalendar');
+    const postStub = sandbox.stub(axios, 'post').resolves();
+    const updateStub = sandbox.stub(ActivityPubOutboxMessageEntity.prototype, 'update');
+    const getRecipientsStub = sandbox.stub(service, 'getRecipients');
+    const resolveStub = sandbox.stub(service, 'resolveInboxUrl');
+
+    getCalendarStub.resolves(Calendar.fromObject({ id: TEST_CALENDAR_ID }));
+
+    await service.processOutboxMessage(message);
+
+    // No follower fan-out for Add — getRecipients must NOT be called and
+    // no HTTP delivery should happen. The message is still marked processed.
+    expect(getRecipientsStub.called, 'getRecipients must NOT be called for Add fan-out').toBe(false);
+    expect(resolveStub.called, 'resolveInboxUrl must NOT be called when no recipients').toBe(false);
+    expect(postStub.called, 'No HTTP POST when Add has no recipients').toBe(false);
+    expect(updateStub.calledOnce).toBe(true);
+    expect(updateStub.getCalls()[0].args[0]['processed_status']).toBe('ok');
   });
 });
 

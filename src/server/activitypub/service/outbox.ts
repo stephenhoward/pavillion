@@ -12,6 +12,7 @@ import { ActivityPubOutboxMessageEntity, EventActivityEntity, FollowerCalendarEn
 import { CalendarActorEntity } from "@/server/activitypub/entity/calendar_actor";
 import UpdateActivity from "@/server/activitypub/model/action/update";
 import DeleteActivity from "@/server/activitypub/model/action/delete";
+import AddActivity from "@/server/activitypub/model/action/add";
 import FollowActivity from "@/server/activitypub/model/action/follow";
 import AcceptActivity from "@/server/activitypub/model/action/accept";
 import AnnounceActivity from "@/server/activitypub/model/action/announce";
@@ -25,18 +26,7 @@ import UserActorService from "@/server/activitypub/service/user_actor";
 import ProcessInboxService from "@/server/activitypub/service/inbox";
 import { FEDERATION_HTTP_TIMEOUT_MS } from "@/server/common/constants";
 import { validateUrlNotPrivate } from "@/server/common/helper/ip-validation";
-import { HttpSignature } from "@/server/activitypub/types";
-
-/**
- * Signed headers returned by buildSignedHeaders, ready to merge into an
- * axios request. When signing fails the method returns null and the caller
- * records a partial delivery error.
- */
-interface SignedHeaders {
-  Signature: string;
-  Date: string;
-  Digest: string;
-}
+import { buildSignedHeaders } from "@/server/activitypub/service/http-signing";
 
 /**
  * Service responsible for processing and distributing outgoing ActivityPub messages.
@@ -120,14 +110,48 @@ class ProcessOutboxService {
         if (!activity) {
           throw new Error('Failed to parse Update activity');
         }
-        recipients = await this.getRecipients(calendar, activity.object);
+        // Honor explicit `to` for targeted single-recipient delivery (e.g.,
+        // notifying the remote calendar that owns an event). Fall back to
+        // follower fan-out for the back-compat broadcast case.
+        if (activity.to && activity.to.length > 0) {
+          recipients = activity.to;
+          logger.info({ recipientCount: recipients.length }, 'Using explicit recipients from to field for Update activity');
+        }
+        else {
+          recipients = await this.getRecipients(calendar, activity.object);
+        }
         break;
       case 'Delete':
         activity = DeleteActivity.fromObject(message.message);
         if (!activity) {
           throw new Error('Failed to parse Delete activity');
         }
-        recipients = await this.getRecipients(calendar, activity.object);
+        // Honor explicit `to` for targeted single-recipient delivery. Fall back
+        // to follower fan-out for the back-compat broadcast case.
+        if (activity.to && activity.to.length > 0) {
+          recipients = activity.to;
+          logger.info({ recipientCount: recipients.length }, 'Using explicit recipients from to field for Delete activity');
+        }
+        else {
+          recipients = await this.getRecipients(calendar, activity.object);
+        }
+        break;
+      case 'Add':
+        activity = AddActivity.fromObject(message.message);
+        if (!activity) {
+          throw new Error('Failed to parse Add activity');
+        }
+        // Add activities are inherently single-recipient (e.g. editor invite
+        // to a remote actor). Honor explicit `to`. If `to` is absent, do NOT
+        // fall back to follower fan-out — that would broadcast an editor
+        // invite to every follower, which is never the intent. Log and skip.
+        if (activity.to && activity.to.length > 0) {
+          recipients = activity.to;
+          logger.info({ recipientCount: recipients.length }, 'Using explicit recipients from to field for Add activity');
+        }
+        else {
+          logger.warn({ activityId: activity.id }, 'Add activity has no explicit to field; skipping delivery (no follower fan-out for Add)');
+        }
         break;
       case 'Follow':
         activity = FollowActivity.fromObject(message.message);
@@ -164,7 +188,7 @@ class ProcessOutboxService {
         // Check if the activity has explicit recipients in the 'to' field
         if (activity.to && activity.to.length > 0) {
           recipients = activity.to;
-          logger.info({ recipients }, 'Using explicit recipients from to field for Undo activity');
+          logger.info({ recipientCount: recipients.length }, 'Using explicit recipients from to field for Undo activity');
         }
         else {
           recipients = await this.getRecipients(calendar, activity.object);
@@ -178,7 +202,7 @@ class ProcessOutboxService {
         // For Flag activities, use explicit 'to' field if present
         if (activity.to && activity.to.length > 0) {
           recipients = activity.to;
-          logger.info({ recipients }, 'Using explicit recipients from to field for Flag activity');
+          logger.info({ recipientCount: recipients.length }, 'Using explicit recipients from to field for Flag activity');
         }
         break;
     }
@@ -254,52 +278,6 @@ class ProcessOutboxService {
   }
 
   /**
-   * Builds HTTP Signature headers for an outbound ActivityPub delivery.
-   * Auto-detects actor type by trying CalendarActorService first, then
-   * falling back to UserActorService.
-   *
-   * @param actorUri - The actor URI that will sign the request
-   * @param body - The JSON-stringified request body (used for Digest)
-   * @param targetUrl - The inbox URL the request will be POSTed to
-   * @param digest - Pre-computed SHA-256 Digest header value
-   * @returns Signed headers object, or null if signing fails for both actor types
-   * @private
-   */
-  private async buildSignedHeaders(
-    actorUri: string,
-    body: string,
-    targetUrl: string,
-    digest: string,
-  ): Promise<SignedHeaders | null> {
-    let sig: HttpSignature | null = null;
-
-    // Try calendar actor first (most common case for outbox deliveries)
-    try {
-      sig = await this.calendarActorService.signActivity(actorUri, JSON.parse(body), targetUrl, digest);
-    }
-    catch {
-      // Calendar actor signing failed, try user actor
-      try {
-        sig = await this.userActorService.signActivity(actorUri, JSON.parse(body), targetUrl, digest);
-      }
-      catch {
-        // Both actor types failed to sign
-        return null;
-      }
-    }
-
-    if (!sig) {
-      return null;
-    }
-
-    return {
-      Signature: `keyId="${sig.keyId}",algorithm="${sig.algorithm}",headers="${sig.headers}",signature="${sig.signature}"`,
-      Date: sig.date,
-      Digest: digest,
-    };
-  }
-
-  /**
    * Delivers an activity to a recipient via HTTP POST to their inbox.
    * Resolves the recipient's inbox URL, validates it against SSRF protection,
    * signs the request with HTTP Signatures, and posts the activity payload.
@@ -343,7 +321,14 @@ class ProcessOutboxService {
       const bodyString = JSON.stringify(activityData);
       const digest = 'SHA-256=' + createHash('sha256').update(bodyString).digest('base64');
 
-      const signedHeaders = await this.buildSignedHeaders(activity.actor, bodyString, inboxUrl, digest);
+      const signedHeaders = await buildSignedHeaders(
+        activity.actor,
+        bodyString,
+        inboxUrl,
+        digest,
+        this.calendarActorService,
+        this.userActorService,
+      );
       if (!signedHeaders) {
         const errorMsg = `Signing failed for actor ${activity.actor} delivering to ${recipient}`;
         logger.error({ actorUri: activity.actor, recipient }, 'Failed to sign outbound delivery');
