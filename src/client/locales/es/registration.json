@@ -16,6 +16,7 @@
     "email": "correo electrónico",
     "message_label": "Mensaje",
     "go_login": "volver a iniciar sesión",
+    "MissingFields": "Por favor completa todos los campos obligatorios.",
     "400": "error al registrar",
     "unknown_error": "Ocurrió un error desconocido",
     "application_submitted": "TODO: Si este correo no está registrado, tu solicitud será revisada.",
