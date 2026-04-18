@@ -2,10 +2,10 @@
   "menu": {
     "navigation": {
       "skip_to_content": "Saltar al contenido principal"
-    }
+    },
+    "calendars_link": "Calendarios"
   },
   "calendars": {
-    "nav_label": "Calendarios",
     "page_title": "Calendarios Locales",
     "page_subtitle": "Revisa los calendarios alojados en esta instancia",
     "loading": "Cargando calendarios...",

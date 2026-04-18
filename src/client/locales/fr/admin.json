@@ -2,8 +2,10 @@
   "navigation": {
     "skip_to_content": "Aller au contenu principal"
   },
+  "menu": {
+    "calendars_link": "Calendriers"
+  },
   "calendars": {
-    "nav_label": "Calendriers",
     "page_title": "Calendriers locaux",
     "page_subtitle": "Consultez les calendriers hébergés sur cette instance",
     "loading": "Chargement des calendriers...",

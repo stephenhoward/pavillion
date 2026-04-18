@@ -108,6 +108,7 @@ const isActive = (path) => {
 
                 <!-- Calendars / Calendar icon -->
                 <svg v-if="item.id === 'calendars'"
+                     aria-hidden="true"
                      class="admin-nav-icon"
                      fill="none"
                      viewBox="0 0 24 24"
@@ -226,6 +227,7 @@ const isActive = (path) => {
 
           <!-- Calendars / Calendar icon -->
           <svg v-if="item.id === 'calendars'"
+               aria-hidden="true"
                class="admin-nav-icon"
                fill="none"
                viewBox="0 0 24 24"

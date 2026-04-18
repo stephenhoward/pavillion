@@ -23,7 +23,6 @@
     "moderation": "Moderation"
   },
   "calendars": {
-    "nav_label": "Calendars",
     "page_title": "Local Calendars",
     "page_subtitle": "Review calendars hosted on this instance",
     "loading": "Loading calendars...",
