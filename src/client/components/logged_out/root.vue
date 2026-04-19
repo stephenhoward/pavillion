@@ -1,8 +1,11 @@
 <script setup>
 import { inject, ref } from 'vue';
+import { useTranslation } from 'i18next-vue';
+
 const site_config = inject('site_config');
 
 const siteTitle = ref(site_config.settings().siteTitle);
+const { t } = useTranslation('system');
 </script>
 
 <template>
@@ -15,7 +18,7 @@ const siteTitle = ref(site_config.settings().siteTitle);
     </section>
     <footer class="logo">
       <a href="https://pavillion.social" target="_blank" rel="noopener noreferrer">
-        <div class="pavillion-logo"/> Powered by Pavillion
+        <div class="pavillion-logo"/> {{ t('powered_by') }}
       </a>
     </footer>
   </main>

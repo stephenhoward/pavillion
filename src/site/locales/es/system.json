@@ -5,6 +5,7 @@
         "beta_languages": "Beta",
         "beta_label": "Beta"
     },
+    "powered_by": "Desarrollado por Pavillion",
     "not_found_error_message": "No encontrado",
     "not_found_suggestion": "El calendario o evento que buscas no existe o puede haber sido eliminado.",
     "not_found_go_home": "Ir a la página principal",
