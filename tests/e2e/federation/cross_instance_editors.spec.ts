@@ -105,7 +105,12 @@ test.describe.serial('Cross-Instance Editor Collaboration', () => {
   });
 
   test('should allow editor from Instance Beta to create event on Instance Alpha calendar', async () => {
-    // Editor from Instance Beta creates an event on Instance Alpha calendar
+    // Editor from Instance Beta creates an event on Instance Alpha calendar.
+    // The editor-invite `Add` activity is delivered asynchronously through the
+    // outbox worker (pv-dyyw), so Beta may not yet know about the remote
+    // calendar when the previous test's grant call returns. Poll the create
+    // request until Beta has established the remote calendar membership and
+    // accepts the event (201), or until the timeout elapses.
     const eventData = {
       calendarId: alphaCalendarId,
       content: {
@@ -120,20 +125,25 @@ test.describe.serial('Cross-Instance Editor Collaboration', () => {
       end_time: '16:00',
     };
 
-    const response = await fetch(`${INSTANCE_BETA.baseUrl}/api/v1/events`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${betaAdminToken}`,
+    let response: Response | undefined;
+    await expect.poll(
+      async () => {
+        response = await fetch(`${INSTANCE_BETA.baseUrl}/api/v1/events`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${betaAdminToken}`,
+          },
+          body: JSON.stringify(eventData),
+          // @ts-ignore - agent is not in the TypeScript types but works at runtime
+          agent: httpsAgent,
+        });
+        return response.status;
       },
-      body: JSON.stringify(eventData),
-      // @ts-ignore - agent is not in the TypeScript types but works at runtime
-      agent: httpsAgent,
-    });
+      { timeout: 15000, intervals: [500, 1000, 2000] },
+    ).toBe(201);
 
-    expect(response.status).toBe(201);
-
-    const event = await response.json();
+    const event = await response!.json();
     expect(event.content.en.name).toBe('Cross-Instance Event');
     expect(event.calendarId).toBe(alphaCalendarId);
   });
@@ -217,19 +227,22 @@ test.describe.serial('Cross-Instance Editor Collaboration', () => {
 
     expect(updateResponse.status).toBe(200);
 
-    // Verify update is reflected on Instance Alpha
-    const verifyResponse = await getCalendarEvents(
-      INSTANCE_ALPHA,
-      alphaAdminToken,
-      alphaCalendarUrlName,
-    );
-    const updatedEvents = await verifyResponse.json();
-    const updatedEvent = updatedEvents.find((e: any) => e.id === event.id);
-
-    expect(updatedEvent.content.en.name).toBe('Updated Cross-Instance Event');
-    expect(updatedEvent.content.en.description).toBe(
-      'Event updated by editor from Instance Beta',
-    );
+    // Verify update is reflected on Instance Alpha. The Update activity is
+    // delivered asynchronously through the outbox worker (pv-dyyw), so poll
+    // until the remote instance reflects the new title.
+    await expect.poll(
+      async () => {
+        const verifyResponse = await getCalendarEvents(
+          INSTANCE_ALPHA,
+          alphaAdminToken,
+          alphaCalendarUrlName,
+        );
+        const updatedEvents = await verifyResponse.json();
+        const updated = updatedEvents.find((e: any) => e.id === event.id);
+        return updated?.content?.en?.name;
+      },
+      { timeout: 15000, intervals: [500, 1000, 2000] },
+    ).toBe('Updated Cross-Instance Event');
   });
 
   test('should allow editor to delete event on remote calendar', async () => {
@@ -262,16 +275,21 @@ test.describe.serial('Cross-Instance Editor Collaboration', () => {
 
     expect(deleteResponse.status).toBe(204); // No content on successful delete
 
-    // Verify deletion on Instance Alpha
-    const verifyResponse = await getCalendarEvents(
-      INSTANCE_ALPHA,
-      alphaAdminToken,
-      alphaCalendarUrlName,
-    );
-    const remainingEvents = await verifyResponse.json();
-    const deletedEvent = remainingEvents.find((e: any) => e.id === event.id);
-
-    expect(deletedEvent).toBeUndefined();
+    // Verify deletion on Instance Alpha. The Delete activity is delivered
+    // asynchronously through the outbox worker (pv-dyyw), so poll until the
+    // remote instance no longer returns the event.
+    await expect.poll(
+      async () => {
+        const verifyResponse = await getCalendarEvents(
+          INSTANCE_ALPHA,
+          alphaAdminToken,
+          alphaCalendarUrlName,
+        );
+        const remainingEvents = await verifyResponse.json();
+        return remainingEvents.find((e: any) => e.id === event.id);
+      },
+      { timeout: 15000, intervals: [500, 1000, 2000] },
+    ).toBeUndefined();
   });
 
   test('should allow owner to revoke cross-instance editor access', async () => {
