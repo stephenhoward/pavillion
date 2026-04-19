@@ -14,7 +14,9 @@ const siteTitle = ref(site_config.settings().siteTitle);
       <RouterView />
     </section>
     <footer class="logo">
-      <div class="pavillion-logo"/> Powered by Pavillion
+      <a href="https://pavillion.social" target="_blank" rel="noopener noreferrer">
+        <div class="pavillion-logo"/> Powered by Pavillion
+      </a>
     </footer>
   </main>
 </template>
