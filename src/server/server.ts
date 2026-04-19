@@ -315,6 +315,9 @@ const initPavillionServer = async (app: express.Application, port: number): Prom
   const moderationDomain = new ModerationDomain(eventBus, calendarDomain.interface, accountsDomain.interface, emailDomain.interface, configurationDomain.interface);
   moderationDomain.initialize(app);
 
+  // Wire moderation interface into calendar domain for admin-scoped cross-domain decoration
+  calendarDomain.interface.setModerationInterface(moderationDomain.interface);
+
   // Initialize ActivityPub domain with ModerationInterface for instance blocking
   const activityPubDomain = new ActivityPubDomain(eventBus, calendarDomain.interface, accountsDomain.interface, moderationDomain.interface);
   activityPubDomain.initialize(app);

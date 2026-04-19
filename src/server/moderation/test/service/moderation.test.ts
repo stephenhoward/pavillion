@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import sinon from 'sinon';
 import { EventEmitter } from 'events';
-import { UniqueConstraintError } from 'sequelize';
+import { Op, UniqueConstraintError } from 'sequelize';
 
 import { Report, ReportCategory, ReportStatus } from '@/common/model/report';
 import { DuplicateReportError, ReportValidationError } from '@/common/exceptions/report';
@@ -942,6 +942,110 @@ describe('ModerationService', () => {
       const result = await service.getReportsForEvent('event-no-reports');
 
       expect(result).toHaveLength(0);
+    });
+  });
+
+  describe('getOpenReportCountsForCalendars', () => {
+
+    it('should return empty map and skip the query when input is empty', async () => {
+      const findAllStub = sandbox.stub(ReportEntity, 'findAll');
+
+      const result = await service.getOpenReportCountsForCalendars([]);
+
+      expect(result.size).toBe(0);
+      expect(findAllStub.called).toBe(false);
+    });
+
+    it('should return counts keyed by calendar_id for mixed totals', async () => {
+      const findAllStub = sandbox.stub(ReportEntity, 'findAll');
+      findAllStub.resolves([
+        { calendar_id: 'cal-a', count: 3 },
+        { calendar_id: 'cal-b', count: 1 },
+      ] as any);
+
+      const result = await service.getOpenReportCountsForCalendars(['cal-a', 'cal-b', 'cal-c']);
+
+      expect(result.get('cal-a')).toBe(3);
+      expect(result.get('cal-b')).toBe(1);
+      expect(result.has('cal-c')).toBe(false); // zero-count calendars omitted; caller defaults to 0
+      expect(result.size).toBe(2);
+    });
+
+    it('should parse count strings from raw query results', async () => {
+      // Postgres returns COUNT() as a string in raw queries; ensure we coerce to number.
+      sandbox.stub(ReportEntity, 'findAll').resolves([
+        { calendar_id: 'cal-a', count: '7' },
+      ] as any);
+
+      const result = await service.getOpenReportCountsForCalendars(['cal-a']);
+
+      expect(result.get('cal-a')).toBe(7);
+      expect(typeof result.get('cal-a')).toBe('number');
+    });
+
+    it('should scope the query to the provided calendar IDs and open statuses only', async () => {
+      const findAllStub = sandbox.stub(ReportEntity, 'findAll');
+      findAllStub.resolves([]);
+
+      await service.getOpenReportCountsForCalendars(['cal-a', 'cal-b']);
+
+      expect(findAllStub.calledOnce).toBe(true);
+      const callArgs = findAllStub.firstCall.args[0] as any;
+      expect(callArgs.where.calendar_id[Op.in]).toEqual(['cal-a', 'cal-b']);
+      expect(callArgs.where.status[Op.in]).toEqual([
+        ReportStatus.SUBMITTED,
+        ReportStatus.UNDER_REVIEW,
+        ReportStatus.ESCALATED,
+      ]);
+      expect(callArgs.group).toEqual(['calendar_id']);
+      expect(callArgs.raw).toBe(true);
+    });
+
+    it('should return empty map when no calendars have open reports', async () => {
+      sandbox.stub(ReportEntity, 'findAll').resolves([]);
+
+      const result = await service.getOpenReportCountsForCalendars(['cal-a', 'cal-b']);
+
+      expect(result.size).toBe(0);
+    });
+  });
+
+  describe('calendarIdsWithOpenReports', () => {
+
+    it('should return distinct calendar IDs with at least one open report', async () => {
+      sandbox.stub(ReportEntity, 'findAll').resolves([
+        { calendar_id: 'cal-a' },
+        { calendar_id: 'cal-b' },
+      ] as any);
+
+      const result = await service.calendarIdsWithOpenReports();
+
+      expect(result).toEqual(['cal-a', 'cal-b']);
+    });
+
+    it('should return empty array when no calendars have open reports', async () => {
+      sandbox.stub(ReportEntity, 'findAll').resolves([]);
+
+      const result = await service.calendarIdsWithOpenReports();
+
+      expect(result).toEqual([]);
+    });
+
+    it('should filter to open statuses only and exclude null calendar_id', async () => {
+      const findAllStub = sandbox.stub(ReportEntity, 'findAll');
+      findAllStub.resolves([]);
+
+      await service.calendarIdsWithOpenReports();
+
+      expect(findAllStub.calledOnce).toBe(true);
+      const callArgs = findAllStub.firstCall.args[0] as any;
+      expect(callArgs.where.status[Op.in]).toEqual([
+        ReportStatus.SUBMITTED,
+        ReportStatus.UNDER_REVIEW,
+        ReportStatus.ESCALATED,
+      ]);
+      expect(callArgs.where.calendar_id[Op.not]).toBe(null);
+      expect(callArgs.raw).toBe(true);
     });
   });
 

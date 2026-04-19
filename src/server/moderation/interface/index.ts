@@ -147,6 +147,33 @@ export default class ModerationInterface {
   }
 
   /**
+   * Returns a map of calendar ID to the number of open reports on that
+   * calendar, for the given set of calendar IDs. Calendars with zero
+   * open reports are omitted from the map (callers default to 0).
+   *
+   * Used by the admin calendars listing to decorate rows without
+   * exposing Report entities across the domain boundary.
+   *
+   * @param calendarIds - Calendar UUIDs to count open reports for
+   * @returns Map of calendar_id to open report count
+   */
+  async getOpenReportCountsForCalendars(calendarIds: string[]): Promise<Map<string, number>> {
+    return this.moderationService.getOpenReportCountsForCalendars(calendarIds);
+  }
+
+  /**
+   * Returns the set of calendar IDs that currently have at least one
+   * open report. Used by the admin calendars listing to pre-filter
+   * when the caller requests only calendars with open moderation
+   * activity.
+   *
+   * @returns Array of calendar UUIDs with at least one open report
+   */
+  async calendarIdsWithOpenReports(): Promise<string[]> {
+    return this.moderationService.calendarIdsWithOpenReports();
+  }
+
+  /**
    * Retrieves paginated escalated reports for admin review.
    *
    * @param filters - Optional category, page, limit filters

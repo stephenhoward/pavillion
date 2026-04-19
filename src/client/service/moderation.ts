@@ -197,7 +197,7 @@ function buildAdminFilterQuery(filters?: AdminReportFilters): string {
     params.set('category', filters.category);
   }
   if (filters.calendarId) {
-    params.set('calendarId', filters.calendarId);
+    params.set('calendar_id', filters.calendarId);
   }
   if (filters.source) {
     params.set('source', filters.source);

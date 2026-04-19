@@ -103,11 +103,21 @@ export default class AdminReportRoutes {
       const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
       const status = req.query.status as string | undefined;
       const category = req.query.category as string | undefined;
-      const calendarId = req.query.calendarId as string | undefined;
+      const calendarId = req.query.calendar_id as string | undefined;
       const source = req.query.source as string | undefined;
       const escalationType = req.query.escalationType as string | undefined;
       const sortBy = req.query.sortBy as string | undefined;
       const sortOrder = req.query.sortOrder as string | undefined;
+
+      // Validate calendar_id is a valid UUID before passing to the database.
+      // Syntactically-invalid -> 400; syntactically-valid-but-unknown -> empty result (handled by the query).
+      if (calendarId !== undefined && !ExpressHelper.isValidUUID(calendarId)) {
+        ExpressHelper.sendValidationError(
+          res,
+          new ValidationError('Invalid calendar_id format', { calendar_id: ['must be a valid UUID'] }),
+        );
+        return;
+      }
 
       const result = await this.moderationInterface.getAdminReports({
         page,

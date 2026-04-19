@@ -8,7 +8,7 @@ import { EventCategory } from '@/common/model/event_category';
 import { EventCategoryAssignmentModel } from '@/common/model/event_category_assignment';
 import { EventSeries } from '@/common/model/event_series';
 import AccountInvitation from '@/common/model/invitation';
-import CalendarService from '../service/calendar';
+import CalendarService, { AdminCalendarListFilters, AdminCalendarListResult } from '../service/calendar';
 import EventService from '../service/events';
 import LocationService from '../service/locations';
 import CategoryService from '../service/categories';
@@ -25,6 +25,7 @@ import EmailInterface from '@/server/email/interface';
 import FundingInterface from '@/server/funding/interface';
 import type MediaInterface from '@/server/media/interface';
 import type ActivityPubInterface from '@/server/activitypub/interface';
+import type ModerationInterface from '@/server/moderation/interface';
 import { CalendarNotFoundError } from '@/common/exceptions/calendar';
 import { CalendarEditorPermissionError } from '@/common/exceptions/editor';
 
@@ -88,6 +89,16 @@ export default class CalendarInterface {
     this.eventInstanceService.setActivityPubInterface(apInterface);
     this.calendarService.setActivityPubInterface(apInterface);
     this.categoryMappingService.setActivityPubInterface(apInterface);
+  }
+
+  /**
+   * Injects ModerationInterface into the services that need it for cross-domain moderation lookups.
+   * Called after ModerationDomain is initialized to avoid circular construction dependencies.
+   *
+   * @param moderationInterface - The ModerationInterface instance from the moderation domain
+   */
+  setModerationInterface(moderationInterface: ModerationInterface): void {
+    this.calendarService.setModerationInterface(moderationInterface);
   }
 
   // Calendar operations
@@ -194,6 +205,17 @@ export default class CalendarInterface {
    */
   async getEditorsForCalendar(calendarId: string): Promise<Account[]> {
     return this.calendarService.getEditorsForCalendar(calendarId);
+  }
+
+  /**
+   * List all local calendars for admin visibility with pagination and filtering.
+   * Delegates to CalendarService; see service docs for full filter/sort semantics.
+   *
+   * @param filters - Search, sort, pagination, and report-filter options
+   * @returns Paginated envelope of AdminCalendarRow DTOs
+   */
+  async listAllCalendarsForAdmin(filters: AdminCalendarListFilters = {}): Promise<AdminCalendarListResult> {
+    return this.calendarService.listAllCalendarsForAdmin(filters);
   }
 
   // Event operations

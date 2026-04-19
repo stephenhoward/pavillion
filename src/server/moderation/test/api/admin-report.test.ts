@@ -212,7 +212,7 @@ describe('Admin Report API', () => {
         expect(getAdminReportsStub.firstCall.args[0].category).toBe('spam');
       });
 
-      it('should pass calendarId filter to service', async () => {
+      it('should pass calendar_id filter to service', async () => {
         const getAdminReportsStub = sandbox.stub(moderationInterface, 'getAdminReports').resolves({
           reports: [],
           pagination: { currentPage: 1, totalPages: 0, totalCount: 0, limit: 20 },
@@ -223,7 +223,7 @@ describe('Admin Report API', () => {
         });
 
         await request(testApp(router))
-          .get(`/admin/reports?calendarId=${TEST_CALENDAR_ID}`);
+          .get(`/admin/reports?calendar_id=${TEST_CALENDAR_ID}`);
 
         expect(getAdminReportsStub.calledOnce).toBe(true);
         expect(getAdminReportsStub.firstCall.args[0].calendarId).toBe(TEST_CALENDAR_ID);

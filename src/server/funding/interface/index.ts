@@ -56,6 +56,23 @@ export default class FundingInterface {
     return this.fundingService.hasFundingAccess(calendarId);
   }
 
+  /**
+   * Get the funding-plan status for a set of calendars in bulk.
+   *
+   * Returns enum values only — no funding entities cross the domain boundary.
+   * Calendars with no matching record are omitted from the returned Map so
+   * callers can default to 'none' on lookup miss.
+   *
+   * @param ids - Calendar IDs to look up
+   * @returns Map of calendar_id -> 'subscribed' | 'grant' | 'none'; unknown
+   *          IDs are absent from the map
+   */
+  async getPlanStatusForCalendars(
+    ids: string[],
+  ): Promise<Map<string, 'subscribed' | 'grant' | 'none'>> {
+    return this.fundingService.getPlanStatusForCalendars(ids);
+  }
+
   // Settings management
 
   async getSettings(): Promise<FundingSettings> {
