@@ -99,8 +99,20 @@ button.primary {
       text-align: center;
       color: $public-text-secondary-light;
 
+      a {
+        color: inherit;
+
+        &:hover {
+          color: $public-accent-hover-light;
+        }
+      }
+
       @media (prefers-color-scheme: dark) {
         color: $public-text-secondary-dark;
+
+        a:hover {
+          color: $public-accent-hover-dark;
+        }
       }
     }
 

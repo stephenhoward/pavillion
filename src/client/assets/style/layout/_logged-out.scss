@@ -47,6 +47,17 @@
     font-size: 0.875rem; /* 14px */
     color: var(--pav-color-stone-500);
 
+    a {
+      color: inherit;
+      display: inline-flex;
+      align-items: center;
+      gap: var(--pav-space-2);
+
+      &:hover {
+        color: var(--pav-color-brand-primary);
+      }
+    }
+
     @media (prefers-color-scheme: dark) {
       color: var(--pav-color-stone-400);
     }
