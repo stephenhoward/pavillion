@@ -1,4 +1,4 @@
-import { DateTime } from 'luxon';
+import { DateTime, Duration } from 'luxon';
 import { CalendarEvent, CalendarEventSchedule } from '@/common/model/events';
 import CalendarEventInstance from '@/common/model/event_instance';
 import { EventLocation } from '@/common/model/location';
@@ -113,13 +113,18 @@ function formatLocation(location: EventLocation): string {
 /**
  * Appends RRULE and EXDATE lines from event schedules to the ICS lines array.
  * EXRULE is deprecated in RFC 5545 and not supported by most calendar clients,
- * so frequency-based exclusion schedules are omitted. Only individual EXDATE
- * entries are emitted for exclusions.
+ * so frequency-based exclusion schedules are omitted.
+ *
+ * Exclusion schedules split by their hideFromPublic flag:
+ * - hideFromPublic=true  → EXDATE (silent suppression of the occurrence)
+ * - hideFromPublic=false → no EXDATE here; caller emits a sibling VEVENT with
+ *                          RECURRENCE-ID + STATUS:CANCELLED so clients show
+ *                          the cancellation instead of silently dropping it.
  */
 function appendScheduleRules(lines: string[], schedules: CalendarEventSchedule[]): void {
   for (const schedule of schedules) {
     if (schedule.isExclusion) {
-      if (schedule.startDate) {
+      if (schedule.hideFromPublic && schedule.startDate) {
         lines.push(`EXDATE:${formatIcsDate(schedule.startDate)}`);
       }
     }
@@ -129,6 +134,57 @@ function appendScheduleRules(lines: string[], schedules: CalendarEventSchedule[]
         lines.push(`RRULE:${rrule}`);
       }
     }
+  }
+}
+
+/**
+ * Derives the per-occurrence duration from the first non-exclusion schedule
+ * that has both startDate and eventEndTime. Mirrors the logic used when
+ * generating instance end times so sibling cancellation VEVENTs report the
+ * same duration as live occurrences.
+ */
+function deriveOccurrenceDuration(event: CalendarEvent): Duration | null {
+  for (const schedule of event.schedules) {
+    if (!schedule.isExclusion && schedule.startDate && schedule.eventEndTime) {
+      return schedule.eventEndTime.diff(schedule.startDate);
+    }
+  }
+  return null;
+}
+
+/**
+ * Emits a sibling VEVENT for each shown cancellation (is_exclusion=true AND
+ * hide_from_public=false). The sibling shares the parent UID and supplies a
+ * RECURRENCE-ID pointing at the original occurrence start, with
+ * STATUS:CANCELLED so RFC 5545 clients render a visible cancellation rather
+ * than silently dropping the occurrence (EXDATE behavior).
+ */
+function appendCancellationSiblings(
+  lines: string[],
+  event: CalendarEvent,
+  eventName: string,
+  hostname: string,
+): void {
+  const duration = deriveOccurrenceDuration(event);
+  for (const schedule of event.schedules) {
+    if (!schedule.isExclusion || schedule.hideFromPublic || !schedule.startDate) {
+      continue;
+    }
+
+    const originalStart = schedule.startDate;
+    lines.push(
+      'BEGIN:VEVENT',
+      `UID:${escapeIcsText(event.id)}@${escapeIcsText(hostname)}`,
+      `DTSTAMP:${formatIcsDate(DateTime.now())}`,
+      `RECURRENCE-ID:${formatIcsDate(originalStart)}`,
+      `DTSTART:${formatIcsDate(originalStart)}`,
+    );
+    if (duration) {
+      lines.push(`DTEND:${formatIcsDate(originalStart.plus(duration))}`);
+    }
+    lines.push(foldLine(`SUMMARY:${escapeIcsText(eventName)}`));
+    lines.push('STATUS:CANCELLED');
+    lines.push('END:VEVENT');
   }
 }
 
@@ -178,7 +234,11 @@ export function generateIcs(
 
   appendScheduleRules(lines, event.schedules);
 
-  lines.push('END:VEVENT', 'END:VCALENDAR');
+  lines.push('END:VEVENT');
+
+  appendCancellationSiblings(lines, event, eventName, hostname);
+
+  lines.push('END:VCALENDAR');
 
   return lines.join('\r\n');
 }
