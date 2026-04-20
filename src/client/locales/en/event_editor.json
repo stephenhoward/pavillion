@@ -109,5 +109,19 @@
     "end_date_label": "End Date",
     "end_time_label": "End Time",
     "timezone_label": "Timezone"
+  },
+  "cancellations": {
+    "panel_title": "Cancellations",
+    "toggle_button": "Manage cancellations",
+    "cancel_button": "Cancel",
+    "restore_button": "Restore",
+    "hide_toggle_label": "Hide from public",
+    "hide_toggle_description": "When enabled, this cancelled instance will not be shown on public calendars or federated out.",
+    "cancelled_badge": "Cancelled",
+    "hidden_badge": "Hidden",
+    "confirm_title": "Cancel this instance?",
+    "confirm_message": "This will mark the selected occurrence as cancelled. You can restore it later.",
+    "confirm_submit": "Cancel instance",
+    "no_upcoming": "No upcoming instances to cancel."
   }
 }
