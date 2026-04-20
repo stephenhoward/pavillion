@@ -5,6 +5,7 @@ import { useModerationStore } from '@/client/stores/moderation-store';
 import { useTranslation } from 'i18next-vue';
 import { ReportCategory, ReportStatus } from '@/common/model/report';
 import LoadingMessage from '@/client/components/common/loading_message.vue';
+import Modal from '@/client/components/common/modal.vue';
 import { DateTime } from 'luxon';
 import { reactive, ref } from 'vue';
 
@@ -447,50 +448,50 @@ async function handleForward() {
     </div>
 
     <!-- Forward Confirmation Modal -->
-    <div v-if="state.showForwardModal"
-         class="modal-overlay"
-         data-testid="forward-confirmation-modal"
-         @click.self="closeForwardModal">
-      <div class="modal-content" role="dialog" aria-labelledby="forward-modal-title">
-        <h2 id="forward-modal-title" class="modal-title">{{ t('forward_confirm_title') }}</h2>
+    <Modal
+      v-if="state.showForwardModal"
+      :title="t('forward_confirm_title')"
+      size="md"
+      :modal-class="'forward-confirmation-modal'"
+      data-testid="forward-confirmation-modal"
+      @close="closeForwardModal"
+    >
+      <div class="forward-modal-body">
+        <p>{{ t('forward_confirm_message') }}</p>
 
-        <div class="modal-body">
-          <p>{{ t('forward_confirm_message') }}</p>
-
-          <div class="report-summary">
-            <div class="summary-item">
-              <span class="summary-label">{{ t('category') }}:</span>
-              <span class="category-badge">{{ t(`category.${report?.category}`) }}</span>
-            </div>
-            <div class="summary-item">
-              <span class="summary-label">{{ t('description') }}:</span>
-              <p class="summary-text">{{ report?.description }}</p>
-            </div>
+        <div class="report-summary">
+          <div class="summary-item">
+            <span class="summary-label">{{ t('category') }}:</span>
+            <span class="category-badge">{{ t(`category.${report?.category}`) }}</span>
+          </div>
+          <div class="summary-item">
+            <span class="summary-label">{{ t('description') }}:</span>
+            <p class="summary-text">{{ report?.description }}</p>
           </div>
         </div>
-
-        <div class="modal-actions">
-          <button
-            type="button"
-            class="modal-button modal-button-cancel"
-            data-testid="forward-cancel-button"
-            @click="closeForwardModal"
-            :disabled="state.isForwarding"
-          >
-            {{ t('cancel') }}
-          </button>
-          <button
-            type="button"
-            class="modal-button modal-button-confirm"
-            data-testid="forward-confirm-button"
-            @click="handleForward"
-            :disabled="state.isForwarding"
-          >
-            {{ state.isForwarding ? t('forwarding') : t('confirm_forward') }}
-          </button>
-        </div>
       </div>
-    </div>
+
+      <div class="modal-actions">
+        <button
+          type="button"
+          class="modal-button modal-button-cancel"
+          data-testid="forward-cancel-button"
+          @click="closeForwardModal"
+          :disabled="state.isForwarding"
+        >
+          {{ t('cancel') }}
+        </button>
+        <button
+          type="button"
+          class="modal-button modal-button-confirm"
+          data-testid="forward-confirm-button"
+          @click="handleForward"
+          :disabled="state.isForwarding"
+        >
+          {{ state.isForwarding ? t('forwarding') : t('confirm_forward') }}
+        </button>
+      </div>
+    </Modal>
   </div>
 </template>
 
@@ -954,38 +955,8 @@ async function handleForward() {
     }
   }
 
-  // Modal styles
-  .modal-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: rgba(0, 0, 0, 0.5);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 1000;
-    padding: var(--pav-space-4);
-  }
-
-  .modal-content {
-    background: var(--pav-color-surface-primary);
-    border-radius: var(--pav-border-radius-xl);
-    padding: var(--pav-space-6);
-    max-width: 500px;
-    width: 100%;
-    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
-  }
-
-  .modal-title {
-    margin: 0 0 var(--pav-space-4) 0;
-    font-size: var(--pav-font-size-lg);
-    font-weight: var(--pav-font-weight-medium);
-    color: var(--pav-color-text-primary);
-  }
-
-  .modal-body {
+  // Forward confirmation modal body styles
+  .forward-modal-body {
     margin-bottom: var(--pav-space-6);
 
     p {

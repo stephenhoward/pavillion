@@ -1,12 +1,12 @@
 <script setup>
 import { ref, computed } from 'vue';
 import { useTranslation } from 'i18next-vue';
-import { X } from 'lucide-vue-next';
 import CalendarService from '@/client/service/calendar';
 import { useEventStore } from '@/client/stores/eventStore';
 import { useCategoryStore } from '@/client/stores/categoryStore';
 import PillButton from '@/client/components/common/pill-button.vue';
 import ToggleChip from '@/client/components/common/toggle-chip.vue';
+import Sheet from '@/client/components/common/Sheet.vue';
 
 const { t } = useTranslation('calendars', {
   keyPrefix: 'bulk_operations',
@@ -35,7 +35,6 @@ const calendarService = new CalendarService();
 const selectedCategoryIds = ref([]);
 const isLoading = ref(false);
 const errorMessage = ref('');
-const dialogTitleId = 'category-dialog-title';
 
 // Get available categories using the calendarId prop, which matches the key
 // used by CategoryService.loadCategories to store categories in the store
@@ -116,26 +115,12 @@ const toggleCategory = (categoryId) => {
 </script>
 
 <template>
-  <div
+  <Sheet
     v-if="visible"
-    role="dialog"
-    aria-modal="true"
-    :aria-labelledby="dialogTitleId"
-    @click.self="handleClose"
+    :title="t('assign_categories_dialog_title')"
+    @close="handleClose"
   >
-    <header>
-      <h2 :id="dialogTitleId">{{ t('assign_categories_dialog_title') }}</h2>
-      <button
-        type="button"
-        class="close-button"
-        @click="handleClose"
-        :aria-label="t('close_dialog')"
-      >
-        <X :size="20" aria-hidden="true" />
-      </button>
-    </header>
-
-    <div class="dialog-content">
+    <div class="category-selection-body">
       <p class="selection-summary">
         {{ t('assign_categories_summary', { count: selectedEventIds.length }) }}
       </p>
@@ -162,65 +147,39 @@ const toggleCategory = (categoryId) => {
           />
         </div>
       </div>
-    </div>
 
-    <footer>
-      <PillButton
-        variant="ghost"
-        @click="handleClose"
-        :disabled="isLoading"
-      >
-        {{ t('cancel') }}
-      </PillButton>
-      <PillButton
-        variant="primary"
-        @click="handleAssignCategories"
-        :disabled="!isFormValid || isLoading"
-      >
-        <span v-if="isLoading">{{ t('assigning') }}</span>
-        <span v-else>{{ t('assign_categories') }}</span>
-      </PillButton>
-    </footer>
-  </div>
+      <footer class="category-footer">
+        <PillButton
+          variant="ghost"
+          @click="handleClose"
+          :disabled="isLoading"
+        >
+          {{ t('cancel') }}
+        </PillButton>
+        <PillButton
+          variant="primary"
+          @click="handleAssignCategories"
+          :disabled="!isFormValid || isLoading"
+        >
+          <span v-if="isLoading">{{ t('assigning') }}</span>
+          <span v-else>{{ t('assign_categories') }}</span>
+        </PillButton>
+      </footer>
+    </div>
+  </Sheet>
 </template>
 
 <style scoped lang="scss">
 @use '@/client/assets/style/components/event-management' as *;
 
-.close-button {
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 0.5rem;
-  color: var(--pav-color-stone-600);
-  border-radius: 0.5rem; // rounded-lg
+.category-selection-body {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: background-color 0.2s, color 0.2s;
-
-  &:hover {
-    background-color: var(--pav-color-stone-100);
-    color: var(--pav-color-stone-900);
-  }
-
-  @media (prefers-color-scheme: dark) {
-    color: var(--pav-color-stone-400);
-
-    &:hover {
-      background-color: var(--pav-color-stone-800);
-      color: var(--pav-color-stone-100);
-    }
-  }
-}
-
-.dialog-content {
-  overflow-y: auto;
-  flex: 1;
+  flex-direction: column;
+  gap: 1rem;
 }
 
 .selection-summary {
-  margin: 0 0 1.5rem 0;
+  margin: 0;
   color: var(--pav-color-stone-600);
   font-size: 0.875rem;
 
@@ -231,7 +190,6 @@ const toggleCategory = (categoryId) => {
 
 .error-message {
   padding: 1rem;
-  margin-bottom: 1.5rem;
   background-color: var(--pav-color-red-50);
   border: 1px solid var(--pav-color-red-200);
   border-radius: 0.75rem; // rounded-xl
@@ -274,11 +232,11 @@ const toggleCategory = (categoryId) => {
   }
 }
 
-footer {
+.category-footer {
   display: flex;
   gap: 0.75rem;
   justify-content: flex-end;
-  padding-top: 1.5rem;
+  padding-top: 1rem;
   border-top: 1px solid var(--pav-color-stone-200);
 
   @media (prefers-color-scheme: dark) {

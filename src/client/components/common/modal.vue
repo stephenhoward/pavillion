@@ -1,7 +1,8 @@
 <template>
   <dialog
     ref="dialogRef"
-    :class="['modal modal-dialog', props.modalClass]"
+    role="dialog"
+    :class="['modal', 'modal-dialog', `modal-size-${size}`, props.modalClass]"
     :aria-labelledby="titleId"
     :aria-modal="true"
     @keydown.esc="close"
@@ -23,61 +24,49 @@
   </dialog>
 </template>
 
-<script setup>
-import { ref, onMounted, onBeforeUnmount, computed } from 'vue';
+<script setup lang="ts">
+import { ref, onMounted, onBeforeUnmount, withDefaults } from 'vue';
 import { useTranslation } from 'i18next-vue';
+import { useDialog } from '@/client/composables/useDialog';
+
+export type ModalSize = 'md' | 'lg' | 'xl';
 
 const { t } = useTranslation('system');
 
-const props = defineProps({
-  title: String,
-  modalClass: String,
-  // In this application, modals are typically conditionally rendered with v-if.
-  // When initiallyOpen=true (default), the dialog opens automatically when mounted,
-  // which aligns with the v-if pattern - the component is only in the DOM when it should be visible.
-  initiallyOpen: {
-    type: Boolean,
-    default: true,
-  },
+const props = withDefaults(defineProps<{
+  title?: string;
+  modalClass?: string;
+  /**
+   * In this application, modals are typically conditionally rendered with v-if.
+   * When initiallyOpen=true (default), the dialog opens automatically when mounted,
+   * which aligns with the v-if pattern - the component is only in the DOM when it
+   * should be visible.
+   */
+  initiallyOpen?: boolean;
+  /**
+   * Maximum width size for the modal surface.
+   * - 'md' ~ 32rem (default, most dialogs/confirmations)
+   * - 'lg' ~ 40rem (forms like create-report, blocked-instances/reporters)
+   * - 'xl' ~ 56rem (report-detail review dialog)
+   */
+  size?: ModalSize;
+}>(), {
+  initiallyOpen: true,
+  size: 'md',
 });
 
-const emit = defineEmits(['close']);
-const dialogRef = ref(null);
-const titleId = computed(() => `modal-title-${dialogId}`);
-const dialogId = Math.random().toString(36).substring(2, 11);
+const emit = defineEmits<{
+  close: [];
+}>();
 
-// Methods to control the dialog
-const open = () => {
-  if (dialogRef.value && !dialogRef.value.open) {
-    dialogRef.value.showModal();
-    trapFocus();
-    document.body.classList.add('modal-open');
-  }
-};
+const dialogRef = ref<HTMLDialogElement | null>(null);
 
-const close = () => {
-  if (dialogRef.value && dialogRef.value.open) {
-    dialogRef.value.close();
-    document.body.classList.remove('modal-open');
-    emit('close');
-  }
-};
+const { titleId, open, close, handleBackdropClick, cleanup } = useDialog(
+  dialogRef,
+  emit,
+  { idPrefix: 'modal' },
+);
 
-// Handle clicks on the backdrop (outside the modal content)
-const handleBackdropClick = (event) => {
-  if (event.target === dialogRef.value) {
-    close();
-  }
-};
-
-// Focus trap implementation
-const trapFocus = () => {
-  setTimeout(() => {
-    dialogRef.value?.focus();
-  }, 0);
-};
-
-// Lifecycle hooks
 onMounted(() => {
   if (props.initiallyOpen) {
     open();
@@ -85,7 +74,7 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
-  document.body.classList.remove('modal-open');
+  cleanup();
 });
 
 // Expose methods to parent components
@@ -110,7 +99,7 @@ dialog.modal-dialog {
 
   /* Custom backdrop styling (semantic dialog::backdrop is styled in base layer) */
   &::backdrop {
-    background-color: rgba(0, 0, 0, 0.5);
+    background-color: var(--pav-color-darken);
     backdrop-filter: blur(4px);
   }
 
@@ -162,13 +151,24 @@ dialog.modal-dialog {
   }
 }
 
-/* Responsive design using CSS custom properties */
+/* Responsive design: size-aware max-width on desktop */
 @media (min-width: 768px) {
   dialog.modal-dialog {
     > div {
       margin: 15% auto;
-      max-width: 90vw;
       max-height: 90vh;
+    }
+
+    &.modal-size-md > div {
+      max-width: 32rem;
+    }
+
+    &.modal-size-lg > div {
+      max-width: 40rem;
+    }
+
+    &.modal-size-xl > div {
+      max-width: 56rem;
     }
   }
 }

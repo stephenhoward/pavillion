@@ -4,6 +4,7 @@ import { useTranslation } from 'i18next-vue';
 import { useModerationStore } from '@/client/stores/moderation-store';
 import { ReportCategory } from '@/common/model/report';
 import type { AdminPriority } from '@/common/model/report';
+import Modal from '@/client/components/common/modal.vue';
 
 const emit = defineEmits<{
   (e: 'close'): void;
@@ -130,319 +131,220 @@ function handleCancel() {
 </script>
 
 <template>
-  <div class="modal-overlay" @click.self="handleCancel">
-    <div class="modal-content"
-         role="dialog"
-         aria-labelledby="create-report-title"
-         aria-modal="true">
-      <div class="modal-header">
-        <h2 id="create-report-title">{{ t('title') }}</h2>
-        <button
-          type="button"
-          class="close-button"
-          @click="handleCancel"
-          :aria-label="t('close')"
-        >
-          <svg width="20"
-               height="20"
-               viewBox="0 0 24 24"
-               fill="none"
-               stroke="currentColor"
-               stroke-width="2">
-            <line x1="18"
-                  y1="6"
-                  x2="6"
-                  y2="18"/>
-            <line x1="6"
-                  y1="6"
-                  x2="18"
-                  y2="18"/>
-          </svg>
-        </button>
+  <Modal
+    :title="t('title')"
+    size="lg"
+    @close="handleCancel"
+  >
+    <div class="create-report-body">
+      <!-- Success Message -->
+      <div v-if="state.successMessage" class="message message-success" role="status">
+        <svg class="message-icon"
+             width="20"
+             height="20"
+             viewBox="0 0 24 24"
+             fill="none"
+             stroke="currentColor"
+             stroke-width="2">
+          <polyline points="20 6 9 17 4 12"/>
+        </svg>
+        {{ state.successMessage }}
       </div>
 
-      <div class="modal-body">
-        <!-- Success Message -->
-        <div v-if="state.successMessage" class="message message-success" role="status">
-          <svg class="message-icon"
-               width="20"
-               height="20"
-               viewBox="0 0 24 24"
-               fill="none"
-               stroke="currentColor"
-               stroke-width="2">
-            <polyline points="20 6 9 17 4 12"/>
-          </svg>
-          {{ state.successMessage }}
-        </div>
-
-        <!-- Error Message -->
-        <div v-if="state.errorMessage" class="message message-error" role="alert">
-          <svg class="message-icon"
-               width="20"
-               height="20"
-               viewBox="0 0 24 24"
-               fill="none"
-               stroke="currentColor"
-               stroke-width="2">
-            <circle cx="12" cy="12" r="10"/>
-            <line x1="15"
-                  y1="9"
-                  x2="9"
-                  y2="15"/>
-            <line x1="9"
-                  y1="9"
-                  x2="15"
-                  y2="15"/>
-          </svg>
-          {{ state.errorMessage }}
-        </div>
-
-        <form @submit.prevent="handleSubmit" class="report-form">
-          <!-- Event ID -->
-          <div class="form-group">
-            <label for="event-id" class="form-label">
-              {{ t('event_id') }}
-              <span class="required-indicator" aria-label="required">*</span>
-            </label>
-            <input
-              id="event-id"
-              type="text"
-              v-model="state.eventId"
-              class="form-input"
-              :class="{ 'has-error': state.validationErrors.eventId }"
-              :placeholder="t('event_id_placeholder')"
-              :disabled="state.isSubmitting"
-              :aria-invalid="!!state.validationErrors.eventId"
-              :aria-describedby="state.validationErrors.eventId ? 'event-id-error' : 'event-id-help'"
-            />
-            <p v-if="state.validationErrors.eventId"
-               id="event-id-error"
-               class="error-text"
-               role="alert">
-              {{ state.validationErrors.eventId }}
-            </p>
-            <p v-else id="event-id-help" class="help-text">
-              {{ t('event_id_help') }}
-            </p>
-          </div>
-
-          <!-- Category -->
-          <div class="form-group">
-            <label for="category" class="form-label">
-              {{ t('category') }}
-              <span class="required-indicator" aria-label="required">*</span>
-            </label>
-            <select
-              id="category"
-              v-model="state.category"
-              class="form-select"
-              :class="{ 'has-error': state.validationErrors.category }"
-              :disabled="state.isSubmitting"
-              :aria-invalid="!!state.validationErrors.category"
-              :aria-describedby="state.validationErrors.category ? 'category-error' : undefined"
-            >
-              <option v-for="option in categoryOptions" :key="option.value" :value="option.value">
-                {{ option.label }}
-              </option>
-            </select>
-            <p v-if="state.validationErrors.category"
-               id="category-error"
-               class="error-text"
-               role="alert">
-              {{ state.validationErrors.category }}
-            </p>
-          </div>
-
-          <!-- Description -->
-          <div class="form-group">
-            <label for="description" class="form-label">
-              {{ t('description') }}
-              <span class="required-indicator" aria-label="required">*</span>
-            </label>
-            <textarea
-              id="description"
-              v-model="state.description"
-              class="form-textarea"
-              :class="{ 'has-error': state.validationErrors.description }"
-              :placeholder="t('description_placeholder')"
-              rows="4"
-              :disabled="state.isSubmitting"
-              :aria-invalid="!!state.validationErrors.description"
-              :aria-describedby="state.validationErrors.description ? 'description-error' : undefined"
-            />
-            <p v-if="state.validationErrors.description"
-               id="description-error"
-               class="error-text"
-               role="alert">
-              {{ state.validationErrors.description }}
-            </p>
-          </div>
-
-          <!-- Priority -->
-          <div class="form-group">
-            <label for="priority" class="form-label">
-              {{ t('priority') }}
-              <span class="required-indicator" aria-label="required">*</span>
-            </label>
-            <select
-              id="priority"
-              v-model="state.priority"
-              class="form-select"
-              :class="{ 'has-error': state.validationErrors.priority }"
-              :disabled="state.isSubmitting"
-              :aria-invalid="!!state.validationErrors.priority"
-              :aria-describedby="state.validationErrors.priority ? 'priority-error' : undefined"
-            >
-              <option v-for="option in priorityOptions" :key="option.value" :value="option.value">
-                {{ option.label }}
-              </option>
-            </select>
-            <p v-if="state.validationErrors.priority"
-               id="priority-error"
-               class="error-text"
-               role="alert">
-              {{ state.validationErrors.priority }}
-            </p>
-          </div>
-
-          <!-- Deadline -->
-          <div class="form-group">
-            <label for="deadline" class="form-label">
-              {{ t('deadline') }}
-            </label>
-            <input
-              id="deadline"
-              type="date"
-              v-model="state.deadline"
-              class="form-input"
-              :disabled="state.isSubmitting"
-              :aria-describedby="'deadline-help'"
-            />
-            <p id="deadline-help" class="help-text">
-              {{ t('deadline_help') }}
-            </p>
-          </div>
-
-          <!-- Admin Notes -->
-          <div class="form-group">
-            <label for="admin-notes" class="form-label">
-              {{ t('admin_notes') }}
-            </label>
-            <textarea
-              id="admin-notes"
-              v-model="state.adminNotes"
-              class="form-textarea"
-              :placeholder="t('admin_notes_placeholder')"
-              rows="3"
-              :disabled="state.isSubmitting"
-              :aria-describedby="'admin-notes-help'"
-            />
-            <p id="admin-notes-help" class="help-text">
-              {{ t('admin_notes_help') }}
-            </p>
-          </div>
-
-          <!-- Form Actions -->
-          <div class="form-actions">
-            <button
-              type="button"
-              class="button button-secondary"
-              @click="handleCancel"
-              :disabled="state.isSubmitting"
-            >
-              {{ t('cancel') }}
-            </button>
-            <button
-              type="submit"
-              class="button button-primary"
-              :disabled="state.isSubmitting"
-            >
-              {{ state.isSubmitting ? t('creating') : t('create') }}
-            </button>
-          </div>
-        </form>
+      <!-- Error Message -->
+      <div v-if="state.errorMessage" class="message message-error" role="alert">
+        <svg class="message-icon"
+             width="20"
+             height="20"
+             viewBox="0 0 24 24"
+             fill="none"
+             stroke="currentColor"
+             stroke-width="2">
+          <circle cx="12" cy="12" r="10"/>
+          <line x1="15"
+                y1="9"
+                x2="9"
+                y2="15"/>
+          <line x1="9"
+                y1="9"
+                x2="15"
+                y2="15"/>
+        </svg>
+        {{ state.errorMessage }}
       </div>
+
+      <form @submit.prevent="handleSubmit" class="report-form">
+        <!-- Event ID -->
+        <div class="form-group">
+          <label for="event-id" class="form-label">
+            {{ t('event_id') }}
+            <span class="required-indicator" aria-label="required">*</span>
+          </label>
+          <input
+            id="event-id"
+            type="text"
+            v-model="state.eventId"
+            class="form-input"
+            :class="{ 'has-error': state.validationErrors.eventId }"
+            :placeholder="t('event_id_placeholder')"
+            :disabled="state.isSubmitting"
+            :aria-invalid="!!state.validationErrors.eventId"
+            :aria-describedby="state.validationErrors.eventId ? 'event-id-error' : 'event-id-help'"
+          />
+          <p v-if="state.validationErrors.eventId"
+             id="event-id-error"
+             class="error-text"
+             role="alert">
+            {{ state.validationErrors.eventId }}
+          </p>
+          <p v-else id="event-id-help" class="help-text">
+            {{ t('event_id_help') }}
+          </p>
+        </div>
+
+        <!-- Category -->
+        <div class="form-group">
+          <label for="category" class="form-label">
+            {{ t('category') }}
+            <span class="required-indicator" aria-label="required">*</span>
+          </label>
+          <select
+            id="category"
+            v-model="state.category"
+            class="form-select"
+            :class="{ 'has-error': state.validationErrors.category }"
+            :disabled="state.isSubmitting"
+            :aria-invalid="!!state.validationErrors.category"
+            :aria-describedby="state.validationErrors.category ? 'category-error' : undefined"
+          >
+            <option v-for="option in categoryOptions" :key="option.value" :value="option.value">
+              {{ option.label }}
+            </option>
+          </select>
+          <p v-if="state.validationErrors.category"
+             id="category-error"
+             class="error-text"
+             role="alert">
+            {{ state.validationErrors.category }}
+          </p>
+        </div>
+
+        <!-- Description -->
+        <div class="form-group">
+          <label for="description" class="form-label">
+            {{ t('description') }}
+            <span class="required-indicator" aria-label="required">*</span>
+          </label>
+          <textarea
+            id="description"
+            v-model="state.description"
+            class="form-textarea"
+            :class="{ 'has-error': state.validationErrors.description }"
+            :placeholder="t('description_placeholder')"
+            rows="4"
+            :disabled="state.isSubmitting"
+            :aria-invalid="!!state.validationErrors.description"
+            :aria-describedby="state.validationErrors.description ? 'description-error' : undefined"
+          />
+          <p v-if="state.validationErrors.description"
+             id="description-error"
+             class="error-text"
+             role="alert">
+            {{ state.validationErrors.description }}
+          </p>
+        </div>
+
+        <!-- Priority -->
+        <div class="form-group">
+          <label for="priority" class="form-label">
+            {{ t('priority') }}
+            <span class="required-indicator" aria-label="required">*</span>
+          </label>
+          <select
+            id="priority"
+            v-model="state.priority"
+            class="form-select"
+            :class="{ 'has-error': state.validationErrors.priority }"
+            :disabled="state.isSubmitting"
+            :aria-invalid="!!state.validationErrors.priority"
+            :aria-describedby="state.validationErrors.priority ? 'priority-error' : undefined"
+          >
+            <option v-for="option in priorityOptions" :key="option.value" :value="option.value">
+              {{ option.label }}
+            </option>
+          </select>
+          <p v-if="state.validationErrors.priority"
+             id="priority-error"
+             class="error-text"
+             role="alert">
+            {{ state.validationErrors.priority }}
+          </p>
+        </div>
+
+        <!-- Deadline -->
+        <div class="form-group">
+          <label for="deadline" class="form-label">
+            {{ t('deadline') }}
+          </label>
+          <input
+            id="deadline"
+            type="date"
+            v-model="state.deadline"
+            class="form-input"
+            :disabled="state.isSubmitting"
+            :aria-describedby="'deadline-help'"
+          />
+          <p id="deadline-help" class="help-text">
+            {{ t('deadline_help') }}
+          </p>
+        </div>
+
+        <!-- Admin Notes -->
+        <div class="form-group">
+          <label for="admin-notes" class="form-label">
+            {{ t('admin_notes') }}
+          </label>
+          <textarea
+            id="admin-notes"
+            v-model="state.adminNotes"
+            class="form-textarea"
+            :placeholder="t('admin_notes_placeholder')"
+            rows="3"
+            :disabled="state.isSubmitting"
+            :aria-describedby="'admin-notes-help'"
+          />
+          <p id="admin-notes-help" class="help-text">
+            {{ t('admin_notes_help') }}
+          </p>
+        </div>
+
+        <!-- Form Actions -->
+        <div class="form-actions">
+          <button
+            type="button"
+            class="button button-secondary"
+            @click="handleCancel"
+            :disabled="state.isSubmitting"
+          >
+            {{ t('cancel') }}
+          </button>
+          <button
+            type="submit"
+            class="button button-primary"
+            :disabled="state.isSubmitting"
+          >
+            {{ state.isSubmitting ? t('creating') : t('create') }}
+          </button>
+        </div>
+      </form>
     </div>
-  </div>
+  </Modal>
 </template>
 
 <style scoped lang="scss">
 @use '../../assets/style/tokens/breakpoints' as *;
 
-.modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-  padding: var(--pav-space-4);
-
-  @media (prefers-color-scheme: dark) {
-    background: rgba(0, 0, 0, 0.7);
-  }
-}
-
-.modal-content {
-  background: var(--pav-color-surface-primary);
-  border-radius: var(--pav-border-radius-xl);
-  width: 100%;
-  max-width: 600px;
-  max-height: 90vh;
-  display: flex;
-  flex-direction: column;
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
-
-  @media (prefers-color-scheme: dark) {
-    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.4), 0 10px 10px -5px rgba(0, 0, 0, 0.2);
-  }
-
-  .modal-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: var(--pav-space-5) var(--pav-space-6);
-    border-bottom: 1px solid var(--pav-border-color-light);
-
-    h2 {
-      margin: 0;
-      font-size: var(--pav-font-size-lg);
-      font-weight: var(--pav-font-weight-medium);
-      color: var(--pav-color-text-primary);
-    }
-
-    .close-button {
-      padding: var(--pav-space-1);
-      background: none;
-      border: none;
-      color: var(--pav-color-text-muted);
-      cursor: pointer;
-      transition: color 0.2s ease;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-
-      &:hover {
-        color: var(--pav-color-text-primary);
-      }
-
-      &:focus-visible {
-        outline: 2px solid var(--pav-color-brand-primary);
-        outline-offset: 2px;
-        border-radius: var(--pav-border-radius-xs);
-      }
-    }
-  }
-
-  .modal-body {
-    padding: var(--pav-space-6);
-    overflow-y: auto;
-
+.create-report-body {
     .message {
       display: flex;
       align-items: center;
@@ -589,13 +491,11 @@ function handleCancel() {
         }
       }
     }
-  }
 }
 
 // Dark mode adjustments
 @media (prefers-color-scheme: dark) {
-  .modal-content {
-    .modal-body {
+  .create-report-body {
       .message {
         &.message-success {
           background: rgba(16, 185, 129, 0.1);
@@ -641,7 +541,6 @@ function handleCancel() {
           }
         }
       }
-    }
   }
 }
 </style>

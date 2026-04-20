@@ -33,7 +33,7 @@ Check `src/client/assets/style/components/` first. Search for: buttons, modals, 
 | Need | Use | Never |
 |------|-----|-------|
 | Buttons | `.btn`, `.btn--primary`, `.btn--danger` | Custom button CSS |
-| Modals/Dialogs | `.modal__overlay`, `.modal__content` | Custom overlays |
+| Modals/Dialogs | `<Modal>` / `<Sheet>` components | Custom overlays |
 | Spacing | `var(--pav-space-*)` tokens | Hardcoded px values |
 | Colors | `var(--pav-color-*)`, `var(--pav-surface-*)` | Hex values |
 | New patterns | Extract to `components/` if used 2+ times | One-off duplicates |

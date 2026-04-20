@@ -42,6 +42,17 @@ describe('BlockedInstances', () => {
             template: '<div class="loading-stub">{{ description }}</div>',
             props: ['description'],
           },
+          // Stub Modal so tests don't depend on native <dialog> semantics
+          // in happy-dom. Expose the slot content so tests can still
+          // assert against dialog body markup.
+          Modal: {
+            template: '<div class="modal-overlay" role="dialog" aria-modal="true" :aria-labelledby="titleId"><h2 :id="titleId" class="modal">{{ title }}</h2><slot/></div>',
+            props: ['title', 'modalClass', 'size', 'initiallyOpen'],
+            data() {
+              return { titleId: 'confirm-title' };
+            },
+            emits: ['close'],
+          },
         },
       },
     });

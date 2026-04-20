@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed } from 'vue';
 import { useTranslation } from 'i18next-vue';
+import Modal from '@/client/components/common/modal.vue';
 
 const { t } = useTranslation('admin', {
   keyPrefix: 'funding.paypal_modal',
@@ -144,190 +145,104 @@ function validateField(field) {
 </script>
 
 <template>
-  <div v-if="show" class="modal-overlay" @click.self="handleClose">
-    <div class="modal-container"
-         role="dialog"
-         aria-modal="true"
-         :aria-label="t('title')">
-      <div class="modal-header">
-        <h2>{{ t('title') }}</h2>
-        <button
-          type="button"
-          class="close-button"
-          :aria-label="t('close_button')"
-          @click="handleClose"
-          :disabled="submitting"
-        >
-          &times;
-        </button>
-      </div>
+  <Modal
+    v-if="show"
+    :title="t('title')"
+    size="md"
+    @close="handleClose"
+  >
+    <div class="paypal-config-body">
+      <p class="modal-description">{{ t('description') }}</p>
 
-      <div class="modal-body">
-        <p class="modal-description">{{ t('description') }}</p>
-
-        <form @submit.prevent="handleSubmit">
-          <div class="form-group">
-            <label for="paypal-client-id" class="form-label">
-              {{ t('client_id_label') }}
-              <span class="required">*</span>
-            </label>
-            <input
-              id="paypal-client-id"
-              v-model="clientId"
-              type="text"
-              class="form-input"
-              :class="{ 'has-error': errors.clientId }"
-              :placeholder="t('client_id_placeholder')"
-              :disabled="submitting"
-              @blur="validateField('clientId')"
-            />
-            <div v-if="errors.clientId" class="error-message">
-              {{ errors.clientId }}
-            </div>
-            <div class="field-help">{{ t('client_id_help') }}</div>
+      <form @submit.prevent="handleSubmit">
+        <div class="form-group">
+          <label for="paypal-client-id" class="form-label">
+            {{ t('client_id_label') }}
+            <span class="required">*</span>
+          </label>
+          <input
+            id="paypal-client-id"
+            v-model="clientId"
+            type="text"
+            class="form-input"
+            :class="{ 'has-error': errors.clientId }"
+            :placeholder="t('client_id_placeholder')"
+            :disabled="submitting"
+            @blur="validateField('clientId')"
+          />
+          <div v-if="errors.clientId" class="error-message">
+            {{ errors.clientId }}
           </div>
+          <div class="field-help">{{ t('client_id_help') }}</div>
+        </div>
 
-          <div class="form-group">
-            <label for="paypal-client-secret" class="form-label">
-              {{ t('client_secret_label') }}
-              <span class="required">*</span>
-            </label>
-            <input
-              id="paypal-client-secret"
-              v-model="clientSecret"
-              type="password"
-              class="form-input"
-              :class="{ 'has-error': errors.clientSecret }"
-              :placeholder="t('client_secret_placeholder')"
-              :disabled="submitting"
-              @blur="validateField('clientSecret')"
-            />
-            <div v-if="errors.clientSecret" class="error-message">
-              {{ errors.clientSecret }}
-            </div>
-            <div class="field-help">{{ t('client_secret_help') }}</div>
+        <div class="form-group">
+          <label for="paypal-client-secret" class="form-label">
+            {{ t('client_secret_label') }}
+            <span class="required">*</span>
+          </label>
+          <input
+            id="paypal-client-secret"
+            v-model="clientSecret"
+            type="password"
+            class="form-input"
+            :class="{ 'has-error': errors.clientSecret }"
+            :placeholder="t('client_secret_placeholder')"
+            :disabled="submitting"
+            @blur="validateField('clientSecret')"
+          />
+          <div v-if="errors.clientSecret" class="error-message">
+            {{ errors.clientSecret }}
           </div>
+          <div class="field-help">{{ t('client_secret_help') }}</div>
+        </div>
 
-          <div class="form-group">
-            <label for="paypal-environment" class="form-label">
-              {{ t('environment_label') }}
-              <span class="required">*</span>
-            </label>
-            <select
-              id="paypal-environment"
-              v-model="environment"
-              class="form-input"
-              :class="{ 'has-error': errors.environment }"
-              :disabled="submitting"
-              @blur="validateField('environment')"
-            >
-              <option value="sandbox">{{ t('environment_sandbox') }}</option>
-              <option value="production">{{ t('environment_production') }}</option>
-            </select>
-            <div v-if="errors.environment" class="error-message">
-              {{ errors.environment }}
-            </div>
-            <div class="field-help">{{ t('environment_help') }}</div>
+        <div class="form-group">
+          <label for="paypal-environment" class="form-label">
+            {{ t('environment_label') }}
+            <span class="required">*</span>
+          </label>
+          <select
+            id="paypal-environment"
+            v-model="environment"
+            class="form-input"
+            :class="{ 'has-error': errors.environment }"
+            :disabled="submitting"
+            @blur="validateField('environment')"
+          >
+            <option value="sandbox">{{ t('environment_sandbox') }}</option>
+            <option value="production">{{ t('environment_production') }}</option>
+          </select>
+          <div v-if="errors.environment" class="error-message">
+            {{ errors.environment }}
           </div>
+          <div class="field-help">{{ t('environment_help') }}</div>
+        </div>
 
-          <div class="modal-actions">
-            <button
-              type="button"
-              class="btn btn--secondary"
-              @click="handleClose"
-              :disabled="submitting"
-            >
-              {{ t('cancel_button') }}
-            </button>
-            <button
-              type="submit"
-              class="btn btn--primary"
-              :disabled="!isFormValid || submitting"
-            >
-              {{ submitting ? t('submitting_button') : t('submit_button') }}
-            </button>
-          </div>
-        </form>
-      </div>
+        <div class="modal-actions">
+          <button
+            type="button"
+            class="btn btn--secondary"
+            @click="handleClose"
+            :disabled="submitting"
+          >
+            {{ t('cancel_button') }}
+          </button>
+          <button
+            type="submit"
+            class="btn btn--primary"
+            :disabled="!isFormValid || submitting"
+          >
+            {{ submitting ? t('submitting_button') : t('submit_button') }}
+          </button>
+        </div>
+      </form>
     </div>
-  </div>
+  </Modal>
 </template>
 
 <style scoped lang="scss">
-.modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-  padding: 1rem;
-
-  @media (prefers-color-scheme: dark) {
-    background: rgba(0, 0, 0, 0.7);
-  }
-}
-
-.modal-container {
-  background: var(--pav-color-surface-secondary);
-  border-radius: 8px;
-  max-width: 500px;
-  width: 100%;
-  max-height: 90vh;
-  overflow-y: auto;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1), 0 2px 4px rgba(0, 0, 0, 0.06);
-
-  @media (prefers-color-scheme: dark) {
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3), 0 2px 4px rgba(0, 0, 0, 0.2);
-  }
-}
-
-.modal-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 1.5rem;
-  border-bottom: 1px solid var(--pav-color-border-primary);
-
-  h2 {
-    margin: 0;
-    font-size: 1.5rem;
-    font-weight: var(--pav-font-weight-medium);
-    color: var(--pav-color-text-primary);
-  }
-
-  .close-button {
-    background: none;
-    border: none;
-    font-size: 2rem;
-    line-height: 1;
-    color: var(--pav-color-text-secondary);
-    cursor: pointer;
-    padding: 0;
-    width: 2rem;
-    height: 2rem;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-
-    &:hover:not(:disabled) {
-      color: var(--pav-color-text-primary);
-    }
-
-    &:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-    }
-  }
-}
-
-.modal-body {
-  padding: 1.5rem;
-
+.paypal-config-body {
   .modal-description {
     margin: 0 0 1.5rem 0;
     color: var(--pav-color-text-secondary);

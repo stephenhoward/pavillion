@@ -1,6 +1,7 @@
 <template>
   <dialog
     ref="dialogRef"
+    role="dialog"
     class="sheet-dialog"
     :aria-labelledby="titleId"
     :aria-modal="true"
@@ -24,8 +25,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount, computed } from 'vue';
+import { ref, onMounted, onBeforeUnmount } from 'vue';
 import { useTranslation } from 'i18next-vue';
+import { useDialog } from '@/client/composables/useDialog';
 
 const { t } = useTranslation('system');
 
@@ -38,36 +40,19 @@ const emit = defineEmits<{
 }>();
 
 const dialogRef = ref<HTMLDialogElement | null>(null);
-const dialogId = Math.random().toString(36).substring(2, 11);
-const titleId = computed(() => `sheet-title-${dialogId}`);
 
-const open = () => {
-  if (dialogRef.value && !dialogRef.value.open) {
-    dialogRef.value.showModal();
-    document.body.classList.add('modal-open');
-  }
-};
-
-const close = () => {
-  if (dialogRef.value && dialogRef.value.open) {
-    dialogRef.value.close();
-    document.body.classList.remove('modal-open');
-    emit('close');
-  }
-};
-
-const handleBackdropClick = (event: MouseEvent) => {
-  if (event.target === dialogRef.value) {
-    close();
-  }
-};
+const { titleId, open, close, handleBackdropClick, cleanup } = useDialog(
+  dialogRef,
+  emit,
+  { idPrefix: 'sheet' },
+);
 
 onMounted(() => {
   open();
 });
 
 onBeforeUnmount(() => {
-  document.body.classList.remove('modal-open');
+  cleanup();
 });
 
 defineExpose({ open, close });
@@ -95,7 +80,7 @@ defineExpose({ open, close });
   justify-content: flex-end;
 
   &::backdrop {
-    background-color: rgba(0, 0, 0, 0.5);
+    background-color: var(--pav-color-darken);
     backdrop-filter: blur(4px);
   }
 
