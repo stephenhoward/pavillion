@@ -1,5 +1,6 @@
 import { EventEmitter } from "events";
 import { v4 as uuidv4 } from 'uuid';
+import { Account } from "@/common/model/account";
 import { CalendarEvent, EventFrequency } from "@/common/model/events";
 import CalendarEventInstance from "@/common/model/event_instance";
 import { EventContentEntity, EventEntity, EventScheduleEntity } from "@/server/calendar/entity/event";
@@ -13,12 +14,20 @@ import { DateTime, Duration } from 'luxon';
 import rrule from 'rrule';
 import { LocationEntity, LocationContentEntity } from "@/server/calendar/entity/location";
 import { EventSeriesEntity, EventSeriesContentEntity } from '@/server/calendar/entity/event_series';
+import CalendarService from "./calendar";
 import CategoryService from "./categories";
 import { Op, literal } from 'sequelize';
 import { EventRepostEntity } from "@/server/calendar/entity/event_repost";
 import { getRecurrenceText } from '@/common/utils/recurrence-text';
 import { resolveSourceCalendars, type RepostContext } from '../helper/source_calendar';
 import type ActivityPubInterface from '@/server/activitypub/interface';
+import {
+  EventNotFoundError,
+  InsufficientCalendarPermissionsError,
+} from '@/common/exceptions/calendar';
+import { createLogger } from '@/server/common/helper/logger';
+
+const logger = createLogger('calendar');
 
 const { RRule, RRuleSet, Weekday, ALL_WEEKDAYS } = rrule;
 
@@ -73,11 +82,13 @@ function parseByDay(entry: string): InstanceType<typeof Weekday> | null {
 export default class EventInstanceService {
   private eventBus: EventEmitter;
   private categoryService: CategoryService;
+  private calendarService: CalendarService;
   private activityPubInterface?: ActivityPubInterface;
 
   constructor(eventBus: EventEmitter) {
     this.eventBus = eventBus;
     this.categoryService = new CategoryService();
+    this.calendarService = new CalendarService();
   }
 
   setActivityPubInterface(apInterface: ActivityPubInterface): void {
@@ -500,6 +511,219 @@ export default class EventInstanceService {
         event_id: eventId,
         calendar_id: calendarId,
       },
+    });
+  }
+
+  /**
+   * Cancels a single materialized occurrence of an event by creating (or
+   * updating) an is_exclusion=true schedule row anchored on the instance's
+   * start time. The `hideFromPublic` flag chooses between EXDATE-style
+   * suppression (true) and RECURRENCE-ID-style shown cancellation (false).
+   *
+   * Idempotency:
+   *   - Repeating cancelInstance with the same (eventId, instanceId,
+   *     hideFromPublic) triple is a no-op — the same row is matched and
+   *     left untouched.
+   *   - Calling cancelInstance with a different hideFromPublic value updates
+   *     the existing row's hide_from_public column in place rather than
+   *     creating a duplicate.
+   *
+   * Security:
+   *   - IDOR guard: the loaded instance's event_id MUST match the eventId
+   *     path parameter. Mismatches throw EventNotFoundError (404) rather
+   *     than leaking that the instance exists under a different event.
+   *   - Editor check: the caller must have edit access on the owning
+   *     calendar, matching the editor check in EventService.updateEvent.
+   *
+   * Emits `eventInstanceCancelled` on success so the calendar event
+   * handlers can rebuild instances and propagate the change via the
+   * existing AP Update(Event) outbound path.
+   *
+   * @param account - The authenticated account attempting the operation
+   * @param eventId - The event ID the instance must belong to (IDOR guard)
+   * @param instanceId - The materialized instance to cancel
+   * @param hideFromPublic - true for EXDATE-style hidden, false for
+   *                         RECURRENCE-ID-style shown cancellation
+   */
+  async cancelInstance(
+    account: Account,
+    eventId: string,
+    instanceId: string,
+    hideFromPublic: boolean,
+  ): Promise<void> {
+    const instanceEntity = await EventInstanceEntity.findByPk(instanceId);
+    if (!instanceEntity) {
+      throw new EventNotFoundError('Event instance not found');
+    }
+
+    // IDOR guard: the instance must belong to the event specified in the
+    // path. Do not leak the existence of instances for other events.
+    if (instanceEntity.event_id !== eventId) {
+      throw new EventNotFoundError('Event instance not found');
+    }
+
+    const eventEntity = await EventEntity.findByPk(eventId);
+    if (!eventEntity || !eventEntity.calendar_id) {
+      throw new EventNotFoundError('Event not found');
+    }
+
+    const calendar = await this.calendarService.getCalendar(eventEntity.calendar_id);
+    if (!calendar) {
+      throw new EventNotFoundError('Event not found');
+    }
+
+    const calendars = await this.calendarService.editableCalendarsForUser(account);
+    if (!calendars.some(c => c.id === calendar.id)) {
+      throw new InsufficientCalendarPermissionsError(
+        'Insufficient permissions to modify events in this calendar',
+      );
+    }
+
+    // Cancellation schedules are anchored on the instance's start_time.
+    // The EventInstanceEntity stores start_time as a UTC-interpreted JS
+    // Date, so reuse that value directly for the schedule row.
+    const instanceStart = instanceEntity.start_time;
+
+    // Look for an existing exclusion row for this instance's start time so
+    // repeat calls are idempotent. Match on (event_id, start_date,
+    // is_exclusion=true) — start_date uniquely identifies an occurrence
+    // within a single event.
+    const existing = await EventScheduleEntity.findOne({
+      where: {
+        event_id: eventId,
+        start_date: instanceStart,
+        is_exclusion: true,
+      },
+    });
+
+    if (existing) {
+      // Idempotent: same mode → no-op. Different mode → flip in place.
+      if (existing.hide_from_public === hideFromPublic) {
+        logger.info(
+          {
+            calendarId: calendar.id,
+            eventId,
+            instanceId,
+            hideFromPublic,
+          },
+          'cancelInstance no-op: existing cancellation matches requested mode',
+        );
+        return;
+      }
+
+      existing.hide_from_public = hideFromPublic;
+      await existing.save();
+    }
+    else {
+      const row = EventScheduleEntity.build({
+        id: uuidv4(),
+        event_id: eventId,
+        timezone: 'UTC',
+        start_date: instanceStart,
+        end_date: null,
+        event_end_time: null,
+        frequency: null,
+        interval: 0,
+        count: 0,
+        by_day: '',
+        is_exclusion: true,
+        hide_from_public: hideFromPublic,
+      });
+      await row.save();
+    }
+
+    logger.info(
+      {
+        calendarId: calendar.id,
+        eventId,
+        instanceId,
+        hideFromPublic,
+      },
+      'Cancelled event instance',
+    );
+
+    this.eventBus.emit('eventInstanceCancelled', {
+      calendar,
+      event: eventEntity.toModel(),
+      instanceId,
+      hideFromPublic,
+    });
+  }
+
+  /**
+   * Restores a previously cancelled instance by deleting its exclusion
+   * schedule row. When no matching row exists (instance was never
+   * cancelled), the operation is a silent no-op — repeat restores are
+   * safe.
+   *
+   * Emits `eventInstanceRestored` on success so the calendar event
+   * handlers can rebuild instances and propagate the change via the
+   * existing AP Update(Event) outbound path.
+   *
+   * @param account - The authenticated account attempting the operation
+   * @param eventId - The event ID the instance must belong to (IDOR guard)
+   * @param instanceId - The materialized instance to restore
+   */
+  async restoreInstance(
+    account: Account,
+    eventId: string,
+    instanceId: string,
+  ): Promise<void> {
+    const instanceEntity = await EventInstanceEntity.findByPk(instanceId);
+    if (!instanceEntity) {
+      throw new EventNotFoundError('Event instance not found');
+    }
+
+    // IDOR guard: the instance must belong to the event specified in the
+    // path. Do not leak the existence of instances for other events.
+    if (instanceEntity.event_id !== eventId) {
+      throw new EventNotFoundError('Event instance not found');
+    }
+
+    const eventEntity = await EventEntity.findByPk(eventId);
+    if (!eventEntity || !eventEntity.calendar_id) {
+      throw new EventNotFoundError('Event not found');
+    }
+
+    const calendar = await this.calendarService.getCalendar(eventEntity.calendar_id);
+    if (!calendar) {
+      throw new EventNotFoundError('Event not found');
+    }
+
+    const calendars = await this.calendarService.editableCalendarsForUser(account);
+    if (!calendars.some(c => c.id === calendar.id)) {
+      throw new InsufficientCalendarPermissionsError(
+        'Insufficient permissions to modify events in this calendar',
+      );
+    }
+
+    const instanceStart = instanceEntity.start_time;
+
+    const existing = await EventScheduleEntity.findOne({
+      where: {
+        event_id: eventId,
+        start_date: instanceStart,
+        is_exclusion: true,
+      },
+    });
+
+    if (existing) {
+      await existing.destroy();
+    }
+
+    logger.info(
+      {
+        calendarId: calendar.id,
+        eventId,
+        instanceId,
+      },
+      'Restored event instance',
+    );
+
+    this.eventBus.emit('eventInstanceRestored', {
+      calendar,
+      event: eventEntity.toModel(),
+      instanceId,
     });
   }
 
