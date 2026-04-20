@@ -5,6 +5,7 @@
         "beta_languages": "Beta",
         "beta_label": "Beta"
     },
+    "powered_by": "Powered by Pavillion",
     "not_found_error_message": "Not Found",
     "not_found_suggestion": "The calendar or event you are looking for does not exist or may have been removed.",
     "not_found_go_home": "Go to Homepage",
