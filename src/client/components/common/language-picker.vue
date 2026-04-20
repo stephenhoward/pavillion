@@ -245,12 +245,12 @@
             />
           </svg>
           <input
+            ref="searchInputRef"
             type="search"
             :placeholder="t('search_language')"
             v-model="state.searchString"
             @input="filterLanguages()"
             @search="filterLanguages()"
-            autofocus
           />
         </div>
       </div>
@@ -278,11 +278,19 @@
 </template>
 
 <script setup>
-import { reactive, computed } from 'vue';
+import { reactive, computed, ref, onMounted, nextTick } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import iso6391 from 'iso-639-1-dir';
 
 const emit = defineEmits(['close', 'select']);
+
+const searchInputRef = ref(null);
+
+onMounted(() => {
+  nextTick(() => {
+    searchInputRef.value?.focus();
+  });
+});
 
 const { t } = useTranslation('system', {
   keyPrefix: 'language_picker',
