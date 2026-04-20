@@ -219,6 +219,18 @@ class EventScheduleEntity extends Model {
   @Column({ type: DataType.BOOLEAN })
   declare is_exclusion: boolean;
 
+  /**
+   * Distinguishes EXDATE-style silent exclusion (true) from
+   * RECURRENCE-ID cancellation override (false).
+   *
+   * Only meaningful when is_exclusion = true:
+   *   - true  → occurrence is silently omitted from public-facing output (EXDATE).
+   *   - false → occurrence is emitted publicly but marked as cancelled
+   *             (iCalendar RECURRENCE-ID with STATUS:CANCELLED semantics).
+   */
+  @Column({ type: DataType.BOOLEAN, allowNull: false, defaultValue: true })
+  declare hide_from_public: boolean;
+
   @BelongsTo(() => EventEntity)
   declare event: EventEntity;
 
@@ -255,6 +267,7 @@ class EventScheduleEntity extends Model {
     schedule.count = this.count;
     schedule.byDay = this.by_day ? this.by_day.split(',') : [];
     schedule.isExclusion = this.is_exclusion;
+    schedule.hideFromPublic = this.hide_from_public;
     return schedule;
   }
 
@@ -282,6 +295,7 @@ class EventScheduleEntity extends Model {
       count: schedule.count,
       by_day: schedule.byDay ? schedule.byDay.join(',') : '',
       is_exclusion: schedule.isExclusion,
+      hide_from_public: schedule.hideFromPublic,
     });
   }
 };

@@ -382,6 +382,10 @@ class CalendarEventSchedule extends Model {
   interval: number = 0;
   byDay: string[] = [];
   isExclusion: boolean = false;
+  // Distinguishes EXDATE-style silent exclusion (true) from RECURRENCE-ID
+  // cancellation override (false). Default true preserves prior EXDATE-only
+  // semantics. Only meaningful when isExclusion = true.
+  hideFromPublic: boolean = true;
 
   /**
    * Constructor for CalendarEventSchedule.
