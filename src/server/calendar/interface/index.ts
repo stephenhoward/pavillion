@@ -361,6 +361,42 @@ export default class CalendarInterface {
   }
 
   /**
+   * Cancel a single materialized event instance for a recurring event. The
+   * caller must be an editor on the owning calendar; the instance must
+   * belong to the given event (IDOR guard).
+   *
+   * @param account - The authenticated account attempting the operation
+   * @param eventId - The event ID the instance must belong to
+   * @param instanceId - The materialized instance to cancel
+   * @param hideFromPublic - true for EXDATE-style hidden, false for
+   *                         RECURRENCE-ID-style shown cancellation
+   */
+  async cancelEventInstance(
+    account: Account,
+    eventId: string,
+    instanceId: string,
+    hideFromPublic: boolean,
+  ): Promise<void> {
+    return this.eventInstanceService.cancelInstance(account, eventId, instanceId, hideFromPublic);
+  }
+
+  /**
+   * Restore a previously cancelled event instance by deleting its exclusion
+   * schedule row. No-op if no cancellation exists for the instance.
+   *
+   * @param account - The authenticated account attempting the operation
+   * @param eventId - The event ID the instance must belong to
+   * @param instanceId - The materialized instance to restore
+   */
+  async restoreEventInstance(
+    account: Account,
+    eventId: string,
+    instanceId: string,
+  ): Promise<void> {
+    return this.eventInstanceService.restoreInstance(account, eventId, instanceId);
+  }
+
+  /**
    * Builds event instances for a reposting calendar. Idempotent: removes any
    * existing repost instances for this (event, calendar) pair, then recreates
    * them from the event's schedules.
