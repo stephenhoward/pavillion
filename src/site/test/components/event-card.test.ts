@@ -15,6 +15,8 @@
  * - Source calendar pill displays urlName@host format.
  * - Source calendar pill links to source calendar URL.
  * - Remote source calendar links open in new tab.
+ * - Cancelled badge renders when instance.isCancelled is true; hidden otherwise.
+ * - Card receives a cancelled de-emphasis class when instance.isCancelled is true.
  */
 import { describe, it, expect, vi, beforeAll, afterEach } from 'vitest';
 import { mount, flushPromises } from '@vue/test-utils';
@@ -93,10 +95,15 @@ function makeInstance(
   event: CalendarEvent,
   startISO: string,
   endISO?: string,
+  opts: { isCancelled?: boolean } = {},
 ): CalendarEventInstance {
   const start = DateTime.fromISO(startISO);
   const end = endISO ? DateTime.fromISO(endISO) : null;
-  return new CalendarEventInstance('inst-1', event, start, end);
+  const instance = new CalendarEventInstance('inst-1', event, start, end);
+  if (opts.isCancelled !== undefined) {
+    instance.isCancelled = opts.isCancelled;
+  }
+  return instance;
 }
 
 /**
@@ -163,6 +170,7 @@ beforeAll(async () => {
             event_location: 'Location',
             event_source_calendar: 'Source Calendar',
             event_source_calendar_label: 'View source calendar {{name}}',
+            event_cancelled: 'Cancelled',
           },
         },
       },
@@ -174,6 +182,7 @@ beforeAll(async () => {
       event_location: 'Location',
       event_source_calendar: 'Source Calendar',
       event_source_calendar_label: 'View source calendar {{name}}',
+      event_cancelled: 'Cancelled',
     }, true, true);
   }
 });
@@ -529,6 +538,59 @@ describe('EventCard', () => {
 
       const pill = wrapper.find('.source-calendar-pill');
       expect(pill.attributes('aria-label')).toContain('arts-cal@arts.org');
+      wrapper.unmount();
+    });
+  });
+
+  describe('cancelled badge and de-emphasis', () => {
+    it('should render the cancelled badge when isCancelled is true', async () => {
+      const event = makeEvent();
+      const instance = makeInstance(event, '2026-07-15T19:00:00', undefined, { isCancelled: true });
+      const wrapper = await mountEventCard(instance);
+
+      const badge = wrapper.find('.cancelled-badge');
+      expect(badge.exists()).toBe(true);
+      expect(badge.text()).toContain('Cancelled');
+      wrapper.unmount();
+    });
+
+    it('should not render the cancelled badge when isCancelled is false', async () => {
+      const event = makeEvent();
+      const instance = makeInstance(event, '2026-07-15T19:00:00', undefined, { isCancelled: false });
+      const wrapper = await mountEventCard(instance);
+
+      expect(wrapper.find('.cancelled-badge').exists()).toBe(false);
+      wrapper.unmount();
+    });
+
+    it('should not render the cancelled badge when isCancelled is not set', async () => {
+      const event = makeEvent();
+      const instance = makeInstance(event, '2026-07-15T19:00:00');
+      const wrapper = await mountEventCard(instance);
+
+      expect(wrapper.find('.cancelled-badge').exists()).toBe(false);
+      wrapper.unmount();
+    });
+
+    it('should apply the is-cancelled de-emphasis class to the card when isCancelled is true', async () => {
+      const event = makeEvent();
+      const instance = makeInstance(event, '2026-07-15T19:00:00', undefined, { isCancelled: true });
+      const wrapper = await mountEventCard(instance);
+
+      const card = wrapper.find('.event-card');
+      expect(card.exists()).toBe(true);
+      expect(card.classes()).toContain('is-cancelled');
+      wrapper.unmount();
+    });
+
+    it('should not apply the is-cancelled class to the card when isCancelled is false', async () => {
+      const event = makeEvent();
+      const instance = makeInstance(event, '2026-07-15T19:00:00', undefined, { isCancelled: false });
+      const wrapper = await mountEventCard(instance);
+
+      const card = wrapper.find('.event-card');
+      expect(card.exists()).toBe(true);
+      expect(card.classes()).not.toContain('is-cancelled');
       wrapper.unmount();
     });
   });
