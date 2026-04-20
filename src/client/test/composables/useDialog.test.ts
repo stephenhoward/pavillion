@@ -76,7 +76,7 @@ describe('useDialog', () => {
       expect(document.body.classList.contains('modal-open')).toBe(true);
     });
 
-    it('traps focus via setTimeout', () => {
+    it('focuses the dialog element when no descendant holds focus (fallback)', () => {
       const { el, focusSpy } = makeDialogStub();
       dialogRef.value = el;
       const { open } = useDialog(dialogRef, emit);
@@ -85,6 +85,25 @@ describe('useDialog', () => {
       expect(focusSpy).not.toHaveBeenCalled();
       vi.runAllTimers();
       expect(focusSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not steal focus from a descendant that already holds it (autofocus)', () => {
+      const { el, focusSpy } = makeDialogStub();
+      const input = document.createElement('input');
+      el.appendChild(input);
+      // Simulate the native <dialog>.showModal() having focused an autofocus
+      // descendant before our setTimeout callback runs.
+      Object.defineProperty(document, 'activeElement', {
+        configurable: true,
+        get: () => input,
+      });
+      dialogRef.value = el;
+      const { open } = useDialog(dialogRef, emit);
+
+      open();
+      vi.runAllTimers();
+
+      expect(focusSpy).not.toHaveBeenCalled();
     });
 
     it('is a no-op when already open (concurrent open)', () => {

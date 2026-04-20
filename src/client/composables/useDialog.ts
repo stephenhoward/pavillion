@@ -53,10 +53,15 @@ export function useDialog(
   const titleId = computed(() => `${idPrefix}-title-${dialogId.value}`);
 
   const trapFocus = () => {
-    // First-focusable focus trap: defer to the next tick so the dialog is in
-    // the top layer before focusing.
+    // Fallback only: <dialog>.showModal() already focuses the first [autofocus]
+    // or focusable descendant per spec. Only focus the dialog element itself
+    // when the native behavior did not land focus inside the dialog.
     setTimeout(() => {
-      dialogRef.value?.focus();
+      const el = dialogRef.value;
+      if (!el) return;
+      const active = document.activeElement;
+      if (active && active !== el && el.contains(active)) return;
+      el.focus();
     }, 0);
   };
 
