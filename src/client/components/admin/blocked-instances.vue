@@ -4,6 +4,7 @@ import { useTranslation } from 'i18next-vue';
 import i18next from 'i18next';
 import { useModerationStore } from '@/client/stores/moderation-store';
 import LoadingMessage from '@/client/components/common/loading_message.vue';
+import Modal from '@/client/components/common/modal.vue';
 import type { BlockedInstance } from '@/common/model/blocked_instance';
 
 const { t } = useTranslation('admin', {
@@ -362,17 +363,14 @@ function formatDate(dateString: string): string {
       </section>
 
       <!-- Unblock Confirmation Modal -->
-      <div v-if="state.confirmUnblockDomain" class="modal-overlay" @click.self="cancelUnblock">
-        <div class="modal"
-             role="dialog"
-             aria-labelledby="confirm-title"
-             aria-modal="true">
-          <div class="modal-header">
-            <h3 id="confirm-title">{{ t('confirm.title') }}</h3>
-          </div>
-          <div class="modal-body">
-            <p>{{ t('confirm.message', { domain: state.confirmUnblockDomain }) }}</p>
-          </div>
+      <Modal
+        v-if="state.confirmUnblockDomain"
+        :title="t('confirm.title')"
+        size="lg"
+        @close="cancelUnblock"
+      >
+        <div class="unblock-confirm-body">
+          <p>{{ t('confirm.message', { domain: state.confirmUnblockDomain }) }}</p>
           <div class="modal-actions">
             <button class="modal-button cancel-button" @click="cancelUnblock">
               {{ t('confirm.cancel') }}
@@ -382,7 +380,7 @@ function formatDate(dateString: string): string {
             </button>
           </div>
         </div>
-      </div>
+      </Modal>
     </div>
   </div>
 </template>
@@ -744,86 +742,49 @@ function formatDate(dateString: string): string {
     }
   }
 
-  .modal-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: rgba(0, 0, 0, 0.5);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 1000;
-    padding: var(--pav-space-4);
+  .unblock-confirm-body {
+    p {
+      margin: 0 0 var(--pav-space-4) 0;
+      font-size: var(--pav-font-size-xs);
+      color: var(--pav-color-text-secondary);
+    }
 
-    .modal {
-      background: var(--pav-color-surface-primary);
-      border-radius: var(--pav-border-radius-card);
-      max-width: 30rem;
-      width: 100%;
-      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1),
-                  0 10px 10px -5px rgba(0, 0, 0, 0.04);
+    .modal-actions {
+      display: flex;
+      gap: var(--pav-space-3);
+      justify-content: flex-end;
 
-      .modal-header {
-        padding: var(--pav-space-6) var(--pav-space-6) var(--pav-space-4);
+      .modal-button {
+        padding: var(--pav-space-2_5) var(--pav-space-5);
+        font-size: var(--pav-font-size-xs);
+        font-weight: var(--pav-font-weight-medium);
+        font-family: inherit;
+        border-radius: var(--pav-border-radius-full);
+        cursor: pointer;
+        transition: all 0.15s ease;
+        border: none;
 
-        h3 {
-          margin: 0;
-          font-size: var(--pav-font-size-lg);
-          font-weight: var(--pav-font-weight-medium);
-          color: var(--pav-color-text-primary);
-        }
-      }
-
-      .modal-body {
-        padding: 0 var(--pav-space-6) var(--pav-space-6);
-
-        p {
-          margin: 0;
-          font-size: var(--pav-font-size-xs);
+        &.cancel-button {
           color: var(--pav-color-text-secondary);
+          background: var(--pav-color-surface-secondary);
+
+          &:hover {
+            background: var(--pav-color-stone-300);
+          }
         }
-      }
 
-      .modal-actions {
-        display: flex;
-        gap: var(--pav-space-3);
-        padding: var(--pav-space-4) var(--pav-space-6) var(--pav-space-6);
-        justify-content: flex-end;
+        &.confirm-button {
+          color: #fff;
+          background: var(--pav-color-error);
 
-        .modal-button {
-          padding: var(--pav-space-2_5) var(--pav-space-5);
-          font-size: var(--pav-font-size-xs);
-          font-weight: var(--pav-font-weight-medium);
-          font-family: inherit;
-          border-radius: var(--pav-border-radius-full);
-          cursor: pointer;
-          transition: all 0.15s ease;
-          border: none;
-
-          &.cancel-button {
-            color: var(--pav-color-text-secondary);
-            background: var(--pav-color-surface-secondary);
-
-            &:hover {
-              background: var(--pav-color-stone-300);
-            }
+          &:hover {
+            background: var(--pav-color-red-700);
           }
+        }
 
-          &.confirm-button {
-            color: #fff;
-            background: var(--pav-color-error);
-
-            &:hover {
-              background: var(--pav-color-red-700);
-            }
-          }
-
-          &:focus-visible {
-            outline: 2px solid var(--pav-color-brand-primary);
-            outline-offset: 2px;
-          }
+        &:focus-visible {
+          outline: 2px solid var(--pav-color-brand-primary);
+          outline-offset: 2px;
         }
       }
     }

@@ -1,192 +1,113 @@
 <style scoped lang="scss">
-.language-selector-modal {
-  position: fixed;
-  inset: 0;
-  z-index: 1100;
+.language-picker-body {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 1rem;
+  flex-direction: column;
+  gap: 1rem;
+  min-height: 0;
+}
 
-  .backdrop {
-    position: absolute;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.5);
-    cursor: pointer;
-  }
-
-  .modal-content {
+.search-section {
+  .search-input-wrapper {
     position: relative;
-    width: 100%;
-    max-width: 28rem; // 448px
-    background: white;
-    border-radius: 1rem; // rounded-2xl
-    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
-    max-height: 80vh;
-    display: flex;
-    flex-direction: column;
 
-    @media (prefers-color-scheme: dark) {
-      background: var(--pav-color-stone-900);
-    }
-  }
-
-  .modal-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 1.5rem;
-    border-bottom: 1px solid var(--pav-color-stone-200);
-
-    @media (prefers-color-scheme: dark) {
-      border-bottom-color: var(--pav-color-stone-700);
+    .search-icon {
+      position: absolute;
+      left: 1rem;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 1.25rem;
+      height: 1.25rem;
+      color: var(--pav-color-stone-400);
+      pointer-events: none;
     }
 
-    h2 {
-      font-size: 1.25rem; // text-xl
-      font-weight: 300; // font-light
+    input {
+      width: 100%;
+      padding: 0.75rem 1rem 0.75rem 3rem;
+      border-radius: 9999px; // rounded-full
+      background: var(--pav-color-stone-100);
+      border: none;
       color: var(--pav-color-stone-900);
-      margin: 0;
+      font-size: 1rem;
+      transition: all 0.15s ease;
+
+      &::placeholder {
+        color: var(--pav-color-stone-400);
+      }
+
+      &:focus {
+        outline: none;
+        box-shadow: 0 0 0 2px var(--pav-color-orange-500);
+      }
 
       @media (prefers-color-scheme: dark) {
+        background: var(--pav-color-stone-800);
         color: var(--pav-color-stone-100);
       }
     }
-
-    .close-button {
-      padding: 0.5rem;
-      color: var(--pav-color-stone-400);
-      background: transparent;
-      border: none;
-      border-radius: 0.5rem;
-      cursor: pointer;
-      transition: all 0.15s ease;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-
-      &:hover {
-        color: var(--pav-color-stone-600);
-        background: var(--pav-color-stone-100);
-
-        @media (prefers-color-scheme: dark) {
-          color: var(--pav-color-stone-300);
-          background: var(--pav-color-stone-800);
-        }
-      }
-    }
   }
+}
 
-  .search-section {
-    padding: 1rem;
-    border-bottom: 1px solid var(--pav-color-stone-200);
+.language-list {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+
+  .empty-state {
+    text-align: center;
+    padding: 2rem;
+    color: var(--pav-color-stone-500);
 
     @media (prefers-color-scheme: dark) {
-      border-bottom-color: var(--pav-color-stone-700);
-    }
-
-    .search-input-wrapper {
-      position: relative;
-
-      .search-icon {
-        position: absolute;
-        left: 1rem;
-        top: 50%;
-        transform: translateY(-50%);
-        width: 1.25rem;
-        height: 1.25rem;
-        color: var(--pav-color-stone-400);
-        pointer-events: none;
-      }
-
-      input {
-        width: 100%;
-        padding: 0.75rem 1rem 0.75rem 3rem;
-        border-radius: 9999px; // rounded-full
-        background: var(--pav-color-stone-100);
-        border: none;
-        color: var(--pav-color-stone-900);
-        font-size: 1rem;
-        transition: all 0.15s ease;
-
-        &::placeholder {
-          color: var(--pav-color-stone-400);
-        }
-
-        &:focus {
-          outline: none;
-          box-shadow: 0 0 0 2px var(--pav-color-orange-500);
-        }
-
-        @media (prefers-color-scheme: dark) {
-          background: var(--pav-color-stone-800);
-          color: var(--pav-color-stone-100);
-        }
-      }
+      color: var(--pav-color-stone-400);
     }
   }
 
-  .language-list {
-    flex: 1;
-    overflow-y: auto;
-    padding: 0.5rem;
+  ul {
+    list-style-type: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
 
-    .empty-state {
-      text-align: center;
-      padding: 2rem;
-      color: var(--pav-color-stone-500);
+    li {
+      button {
+        width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0.75rem 1rem;
+        border-radius: 0.75rem; // rounded-xl
+        text-align: start;
+        background: transparent;
+        border: none;
+        cursor: pointer;
+        transition: background 0.15s ease;
+        color: var(--pav-color-stone-900);
 
-      @media (prefers-color-scheme: dark) {
-        color: var(--pav-color-stone-400);
-      }
-    }
-
-    ul {
-      list-style-type: none;
-      padding: 0;
-      margin: 0;
-      display: flex;
-      flex-direction: column;
-      gap: 0.25rem;
-
-      li {
-        button {
-          width: 100%;
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          padding: 0.75rem 1rem;
-          border-radius: 0.75rem; // rounded-xl
-          text-align: start;
-          background: transparent;
-          border: none;
-          cursor: pointer;
-          transition: background 0.15s ease;
-          color: var(--pav-color-stone-900);
-
-          &:hover {
-            background: var(--pav-color-stone-100);
-
-            @media (prefers-color-scheme: dark) {
-              background: var(--pav-color-stone-800);
-            }
-          }
+        &:hover {
+          background: var(--pav-color-stone-100);
 
           @media (prefers-color-scheme: dark) {
-            color: var(--pav-color-stone-100);
+            background: var(--pav-color-stone-800);
           }
+        }
 
-          .native-name {
-            font-weight: 500;
-          }
+        @media (prefers-color-scheme: dark) {
+          color: var(--pav-color-stone-100);
+        }
 
-          .english-name {
-            font-size: 0.875rem;
-            color: var(--pav-color-stone-500);
+        .native-name {
+          font-weight: 500;
+        }
 
-            @media (prefers-color-scheme: dark) {
-              color: var(--pav-color-stone-400);
-            }
+        .english-name {
+          font-size: 0.875rem;
+          color: var(--pav-color-stone-500);
+
+          @media (prefers-color-scheme: dark) {
+            color: var(--pav-color-stone-400);
           }
         }
       }
@@ -196,38 +117,11 @@
 </style>
 
 <template>
-  <div class="language-selector-modal">
-    <!-- Backdrop -->
-    <div class="backdrop" @click="closeModal" />
-
-    <!-- Modal -->
-    <div class="modal-content" :dir="iso6391.getDir(defaultLanguage) == 'rtl' ? 'rtl' : ''">
-      <!-- Header -->
-      <div class="modal-header">
-        <h2>{{ t('select_language') }}</h2>
-        <button
-          type="button"
-          class="close-button"
-          @click="closeModal"
-          :aria-label="t('close')"
-        >
-          <svg
-            width="20"
-            height="20"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            stroke-width="2"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              d="M6 18L18 6M6 6l12 12"
-            />
-          </svg>
-        </button>
-      </div>
-
+  <Sheet :title="t('select_language')" @close="closeModal">
+    <div
+      class="language-picker-body"
+      :dir="iso6391.getDir(defaultLanguage) == 'rtl' ? 'rtl' : ''"
+    >
       <!-- Search -->
       <div class="search-section">
         <div class="search-input-wrapper">
@@ -274,13 +168,14 @@
         </ul>
       </div>
     </div>
-  </div>
+  </Sheet>
 </template>
 
 <script setup>
 import { reactive, computed } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import iso6391 from 'iso-639-1-dir';
+import Sheet from '@/client/components/common/Sheet.vue';
 
 const emit = defineEmits(['close', 'select']);
 

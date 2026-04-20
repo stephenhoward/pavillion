@@ -12,6 +12,7 @@ import type { BlockedReporter } from '@/common/model/blocked_reporter';
 import BlockedReportersService from '@/client/service/blocked-reporters';
 import LoadingMessage from '@/client/components/common/loading_message.vue';
 import EmptyLayout from '@/client/components/common/empty_state.vue';
+import Modal from '@/client/components/common/modal.vue';
 
 const { t } = useTranslation('system', {
   keyPrefix: 'moderation.blocked_reporters',
@@ -321,153 +322,141 @@ onMounted(async () => {
     </div>
 
     <!-- Block Reporter Modal -->
-    <div v-if="state.showBlockModal" class="modal-overlay" @click.self="closeBlockModal">
-      <div
-        class="modal"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="block-modal-title"
-      >
-        <div class="modal-header">
-          <h3 id="block-modal-title">{{ t('block_modal_title') }}</h3>
+    <Modal
+      v-if="state.showBlockModal"
+      :title="t('block_modal_title')"
+      size="lg"
+      @close="closeBlockModal"
+    >
+      <div class="block-reporter-body">
+        <!-- Error Message -->
+        <div v-if="state.blockError" class="modal-error" role="alert">
+          {{ state.blockError }}
         </div>
 
-        <div class="modal-body">
-          <!-- Error Message -->
-          <div v-if="state.blockError" class="modal-error" role="alert">
-            {{ state.blockError }}
-          </div>
-
-          <!-- Email Field -->
-          <div class="form-group">
-            <label for="block-email-input" class="form-label">
-              {{ t('block_email_label') }}
-            </label>
-            <input
-              id="block-email-input"
-              v-model="state.blockForm.email"
-              type="email"
-              class="form-input"
-              :class="{ 'has-error': state.validationErrors.email }"
-              :placeholder="t('block_email_placeholder')"
-              :disabled="state.isBlocking"
-              :aria-invalid="!!state.validationErrors.email"
-              :aria-describedby="state.validationErrors.email ? 'email-error' : undefined"
-            />
-            <p
-              v-if="state.validationErrors.email"
-              id="email-error"
-              class="error-text"
-              role="alert"
-            >
-              {{ state.validationErrors.email }}
-            </p>
-          </div>
-
-          <!-- Reason Field -->
-          <div class="form-group">
-            <label for="block-reason-input" class="form-label">
-              {{ t('block_reason_label') }}
-            </label>
-            <textarea
-              id="block-reason-input"
-              v-model="state.blockForm.reason"
-              class="form-textarea"
-              :class="{ 'has-error': state.validationErrors.reason }"
-              :placeholder="t('block_reason_placeholder')"
-              :disabled="state.isBlocking"
-              rows="3"
-              :aria-invalid="!!state.validationErrors.reason"
-              :aria-describedby="state.validationErrors.reason ? 'reason-error' : undefined"
-            />
-            <p
-              v-if="state.validationErrors.reason"
-              id="reason-error"
-              class="error-text"
-              role="alert"
-            >
-              {{ state.validationErrors.reason }}
-            </p>
-          </div>
+        <!-- Email Field -->
+        <div class="form-group">
+          <label for="block-email-input" class="form-label">
+            {{ t('block_email_label') }}
+          </label>
+          <input
+            id="block-email-input"
+            v-model="state.blockForm.email"
+            type="email"
+            class="form-input"
+            :class="{ 'has-error': state.validationErrors.email }"
+            :placeholder="t('block_email_placeholder')"
+            :disabled="state.isBlocking"
+            :aria-invalid="!!state.validationErrors.email"
+            :aria-describedby="state.validationErrors.email ? 'email-error' : undefined"
+          />
+          <p
+            v-if="state.validationErrors.email"
+            id="email-error"
+            class="error-text"
+            role="alert"
+          >
+            {{ state.validationErrors.email }}
+          </p>
         </div>
 
-        <div class="modal-actions">
-          <button
-            class="modal-button cancel-button"
-            @click="closeBlockModal"
+        <!-- Reason Field -->
+        <div class="form-group">
+          <label for="block-reason-input" class="form-label">
+            {{ t('block_reason_label') }}
+          </label>
+          <textarea
+            id="block-reason-input"
+            v-model="state.blockForm.reason"
+            class="form-textarea"
+            :class="{ 'has-error': state.validationErrors.reason }"
+            :placeholder="t('block_reason_placeholder')"
             :disabled="state.isBlocking"
+            rows="3"
+            :aria-invalid="!!state.validationErrors.reason"
+            :aria-describedby="state.validationErrors.reason ? 'reason-error' : undefined"
+          />
+          <p
+            v-if="state.validationErrors.reason"
+            id="reason-error"
+            class="error-text"
+            role="alert"
           >
-            {{ t('block_cancel') }}
-          </button>
-          <button
-            class="modal-button confirm-button"
-            @click="blockReporter"
-            :disabled="state.isBlocking"
-          >
-            {{ state.isBlocking ? t('blocking') : t('block_submit') }}
-          </button>
+            {{ state.validationErrors.reason }}
+          </p>
         </div>
       </div>
-    </div>
+
+      <div class="modal-actions">
+        <button
+          class="modal-button cancel-button"
+          @click="closeBlockModal"
+          :disabled="state.isBlocking"
+        >
+          {{ t('block_cancel') }}
+        </button>
+        <button
+          class="modal-button confirm-button"
+          @click="blockReporter"
+          :disabled="state.isBlocking"
+        >
+          {{ state.isBlocking ? t('blocking') : t('block_submit') }}
+        </button>
+      </div>
+    </Modal>
 
     <!-- Unblock Reporter Modal -->
-    <div v-if="state.showUnblockModal" class="modal-overlay" @click.self="closeUnblockModal">
-      <div
-        class="modal"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="unblock-modal-title"
-      >
-        <div class="modal-header">
-          <h3 id="unblock-modal-title">{{ t('unblock_modal_title') }}</h3>
+    <Modal
+      v-if="state.showUnblockModal"
+      :title="t('unblock_modal_title')"
+      size="lg"
+      @close="closeUnblockModal"
+    >
+      <div class="unblock-reporter-body">
+        <!-- Description -->
+        <p class="unblock-description">
+          {{ t('unblock_modal_description') }}
+        </p>
+
+        <!-- Error Message -->
+        <div v-if="state.unblockError" class="modal-error" role="alert">
+          {{ state.unblockError }}
         </div>
 
-        <div class="modal-body">
-          <!-- Description -->
-          <p class="unblock-description">
-            {{ t('unblock_modal_description') }}
-          </p>
-
-          <!-- Error Message -->
-          <div v-if="state.unblockError" class="modal-error" role="alert">
-            {{ state.unblockError }}
+        <!-- Reporter Details -->
+        <div v-if="state.unblockTarget" class="unblock-details">
+          <div class="detail-row">
+            <span class="detail-label">{{ t('unblock_email_hash') }}:</span>
+            <span class="detail-value blocked-reporters__email-hash">
+              {{ state.unblockTarget.emailHash }}
+            </span>
           </div>
-
-          <!-- Reporter Details -->
-          <div v-if="state.unblockTarget" class="unblock-details">
-            <div class="detail-row">
-              <span class="detail-label">{{ t('unblock_email_hash') }}:</span>
-              <span class="detail-value blocked-reporters__email-hash">
-                {{ state.unblockTarget.emailHash }}
-              </span>
-            </div>
-            <div class="detail-row">
-              <span class="detail-label">{{ t('unblock_reason') }}:</span>
-              <span class="detail-value">{{ state.unblockTarget.reason }}</span>
-            </div>
+          <div class="detail-row">
+            <span class="detail-label">{{ t('unblock_reason') }}:</span>
+            <span class="detail-value">{{ state.unblockTarget.reason }}</span>
           </div>
-        </div>
-
-        <div class="modal-actions">
-          <button
-            class="modal-button cancel-button"
-            data-test="cancel-unblock"
-            @click="closeUnblockModal"
-            :disabled="state.isUnblocking"
-          >
-            {{ t('unblock_cancel') }}
-          </button>
-          <button
-            class="modal-button confirm-button"
-            data-test="confirm-unblock"
-            @click="unblockReporter"
-            :disabled="state.isUnblocking"
-          >
-            {{ state.isUnblocking ? t('unblocking') : t('unblock_submit') }}
-          </button>
         </div>
       </div>
-    </div>
+
+      <div class="modal-actions">
+        <button
+          class="modal-button cancel-button"
+          data-test="cancel-unblock"
+          @click="closeUnblockModal"
+          :disabled="state.isUnblocking"
+        >
+          {{ t('unblock_cancel') }}
+        </button>
+        <button
+          class="modal-button confirm-button"
+          data-test="confirm-unblock"
+          @click="unblockReporter"
+          :disabled="state.isUnblocking"
+        >
+          {{ state.isUnblocking ? t('unblocking') : t('unblock_submit') }}
+        </button>
+      </div>
+    </Modal>
   </div>
 </template>
 
@@ -630,204 +619,170 @@ onMounted(async () => {
   }
 }
 
-// Modal styles
-.modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
+// Modal body content styles (block / unblock reporter dialogs)
+.block-reporter-body,
+.unblock-reporter-body {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-  padding: var(--pav-space-4);
+  flex-direction: column;
+  gap: var(--pav-space-4);
 
-  .modal {
-    background: var(--pav-color-surface-primary);
-    border-radius: var(--pav-border-radius-card);
-    max-width: 32rem;
-    width: 100%;
-    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1),
-                0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  .unblock-description {
+    margin: 0;
+    font-size: var(--pav-font-size-xs);
+    color: var(--pav-color-text-secondary);
+    line-height: 1.5;
+  }
 
-    .modal-header {
-      padding: var(--pav-space-6) var(--pav-space-6) var(--pav-space-4);
+  .unblock-details {
+    display: flex;
+    flex-direction: column;
+    gap: var(--pav-space-3);
+    padding: var(--pav-space-4);
+    background: var(--pav-color-surface-secondary);
+    border-radius: var(--pav-border-radius-input);
 
-      h3 {
-        margin: 0;
-        font-size: var(--pav-font-size-lg);
+    .detail-row {
+      display: flex;
+      flex-direction: column;
+      gap: var(--pav-space-1);
+
+      .detail-label {
+        font-size: var(--pav-font-size-2xs);
         font-weight: var(--pav-font-weight-medium);
+        text-transform: uppercase;
+        letter-spacing: var(--pav-letter-spacing-wider);
+        color: var(--pav-color-text-secondary);
+      }
+
+      .detail-value {
+        font-size: var(--pav-font-size-xs);
         color: var(--pav-color-text-primary);
       }
     }
+  }
 
-    .modal-body {
-      padding: 0 var(--pav-space-6) var(--pav-space-6);
-      display: flex;
-      flex-direction: column;
-      gap: var(--pav-space-4);
+  .modal-error {
+    padding: var(--pav-space-3);
+    border-radius: 0.5rem;
+    font-size: var(--pav-font-size-xs);
+    background-color: var(--pav-color-red-50);
+    border: 1px solid var(--pav-color-red-200);
+    color: var(--pav-color-red-700);
 
-      .unblock-description {
-        margin: 0;
-        font-size: var(--pav-font-size-xs);
-        color: var(--pav-color-text-secondary);
-        line-height: 1.5;
+    @media (prefers-color-scheme: dark) {
+      background-color: rgba(239, 68, 68, 0.1);
+      border-color: rgba(239, 68, 68, 0.3);
+      color: var(--pav-color-red-300);
+    }
+  }
+
+  .form-group {
+    display: flex;
+    flex-direction: column;
+    gap: var(--pav-space-2);
+
+    .form-label {
+      font-size: var(--pav-font-size-xs);
+      font-weight: var(--pav-font-weight-medium);
+      color: var(--pav-color-text-secondary);
+    }
+
+    .form-input,
+    .form-textarea {
+      display: block;
+      width: 100%;
+      padding: var(--pav-space-2_5) var(--pav-space-3);
+      font-size: var(--pav-font-size-xs);
+      font-family: inherit;
+      color: var(--pav-color-text-primary);
+      background: var(--pav-color-surface-primary);
+      border: 1px solid var(--pav-color-stone-300);
+      border-radius: var(--pav-border-radius-input);
+      outline: none;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+      box-sizing: border-box;
+
+      &:focus {
+        border-color: var(--pav-color-brand-primary);
+        box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.15);
       }
 
-      .unblock-details {
-        display: flex;
-        flex-direction: column;
-        gap: var(--pav-space-3);
-        padding: var(--pav-space-4);
+      &.has-error {
+        border-color: var(--pav-color-error);
+      }
+
+      &:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
         background: var(--pav-color-surface-secondary);
-        border-radius: var(--pav-border-radius-input);
-
-        .detail-row {
-          display: flex;
-          flex-direction: column;
-          gap: var(--pav-space-1);
-
-          .detail-label {
-            font-size: var(--pav-font-size-2xs);
-            font-weight: var(--pav-font-weight-medium);
-            text-transform: uppercase;
-            letter-spacing: var(--pav-letter-spacing-wider);
-            color: var(--pav-color-text-secondary);
-          }
-
-          .detail-value {
-            font-size: var(--pav-font-size-xs);
-            color: var(--pav-color-text-primary);
-          }
-        }
       }
 
-      .modal-error {
-        padding: var(--pav-space-3);
-        border-radius: 0.5rem;
-        font-size: var(--pav-font-size-xs);
-        background-color: var(--pav-color-red-50);
-        border: 1px solid var(--pav-color-red-200);
-        color: var(--pav-color-red-700);
+      @media (prefers-color-scheme: dark) {
+        background: var(--pav-color-surface-secondary);
+        border-color: var(--pav-color-stone-600);
 
-        @media (prefers-color-scheme: dark) {
-          background-color: rgba(239, 68, 68, 0.1);
-          border-color: rgba(239, 68, 68, 0.3);
-          color: var(--pav-color-red-300);
-        }
-      }
-
-      .form-group {
-        display: flex;
-        flex-direction: column;
-        gap: var(--pav-space-2);
-
-        .form-label {
-          font-size: var(--pav-font-size-xs);
-          font-weight: var(--pav-font-weight-medium);
-          color: var(--pav-color-text-secondary);
-        }
-
-        .form-input,
-        .form-textarea {
-          display: block;
-          width: 100%;
-          padding: var(--pav-space-2_5) var(--pav-space-3);
-          font-size: var(--pav-font-size-xs);
-          font-family: inherit;
-          color: var(--pav-color-text-primary);
-          background: var(--pav-color-surface-primary);
-          border: 1px solid var(--pav-color-stone-300);
-          border-radius: var(--pav-border-radius-input);
-          outline: none;
-          transition: border-color 0.2s ease, box-shadow 0.2s ease;
-          box-sizing: border-box;
-
-          &:focus {
-            border-color: var(--pav-color-brand-primary);
-            box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.15);
-          }
-
-          &.has-error {
-            border-color: var(--pav-color-error);
-          }
-
-          &:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
-            background: var(--pav-color-surface-secondary);
-          }
-
-          @media (prefers-color-scheme: dark) {
-            background: var(--pav-color-surface-secondary);
-            border-color: var(--pav-color-stone-600);
-
-            &:focus {
-              border-color: var(--pav-color-brand-primary);
-              box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.2);
-            }
-          }
-        }
-
-        .form-textarea {
-          resize: vertical;
-          min-height: 4rem;
-        }
-
-        .error-text {
-          margin: 0;
-          font-size: var(--pav-font-size-2xs);
-          color: var(--pav-color-error);
+        &:focus {
+          border-color: var(--pav-color-brand-primary);
+          box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.2);
         }
       }
     }
 
-    .modal-actions {
-      display: flex;
-      gap: var(--pav-space-3);
-      padding: var(--pav-space-4) var(--pav-space-6) var(--pav-space-6);
-      justify-content: flex-end;
+    .form-textarea {
+      resize: vertical;
+      min-height: 4rem;
+    }
 
-      .modal-button {
-        padding: var(--pav-space-2_5) var(--pav-space-5);
-        font-size: var(--pav-font-size-xs);
-        font-weight: var(--pav-font-weight-medium);
-        font-family: inherit;
-        border-radius: var(--pav-border-radius-full);
-        cursor: pointer;
-        transition: all 0.15s ease;
-        border: none;
+    .error-text {
+      margin: 0;
+      font-size: var(--pav-font-size-2xs);
+      color: var(--pav-color-error);
+    }
+  }
+}
 
-        &:disabled {
-          opacity: 0.6;
-          cursor: not-allowed;
-        }
+.modal-actions {
+  display: flex;
+  gap: var(--pav-space-3);
+  margin-top: var(--pav-space-4);
+  justify-content: flex-end;
 
-        &.cancel-button {
-          color: var(--pav-color-text-secondary);
-          background: var(--pav-color-surface-secondary);
+  .modal-button {
+    padding: var(--pav-space-2_5) var(--pav-space-5);
+    font-size: var(--pav-font-size-xs);
+    font-weight: var(--pav-font-weight-medium);
+    font-family: inherit;
+    border-radius: var(--pav-border-radius-full);
+    cursor: pointer;
+    transition: all 0.15s ease;
+    border: none;
 
-          &:hover:not(:disabled) {
-            background: var(--pav-color-stone-300);
-          }
-        }
+    &:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
 
-        &.confirm-button {
-          color: #fff;
-          background: var(--pav-color-brand-primary);
+    &.cancel-button {
+      color: var(--pav-color-text-secondary);
+      background: var(--pav-color-surface-secondary);
 
-          &:hover:not(:disabled) {
-            background: var(--pav-color-brand-primary-dark);
-          }
-        }
-
-        &:focus-visible {
-          outline: 2px solid var(--pav-color-brand-primary);
-          outline-offset: 2px;
-        }
+      &:hover:not(:disabled) {
+        background: var(--pav-color-stone-300);
       }
+    }
+
+    &.confirm-button {
+      color: #fff;
+      background: var(--pav-color-brand-primary);
+
+      &:hover:not(:disabled) {
+        background: var(--pav-color-brand-primary-dark);
+      }
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--pav-color-brand-primary);
+      outline-offset: 2px;
     }
   }
 }

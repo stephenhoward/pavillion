@@ -49,7 +49,6 @@
 @layer components {
   @include meta.load-css('./components/buttons');
   @include meta.load-css('./components/forms');
-  @include meta.load-css('./components/modals');
   @include meta.load-css('./components/navigation');
   @include meta.load-css('./components/cards');
   @include meta.load-css('./components/tabs');

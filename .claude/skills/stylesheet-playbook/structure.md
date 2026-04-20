@@ -91,6 +91,43 @@ Always use `scoped` and `lang="scss"`.
 @use '../../assets/style/components/buttons';
 ```
 
+### ARIA Role Selectors Carrying Visual Payload
+
+ARIA **role** selectors (e.g., `[role="dialog"]`, `[role="navigation"]`, `[role="alert"]`) must **not** carry visual, layout, positioning, or responsive payload. ARIA **state** attribute selectors (e.g., `[aria-expanded]`, `[aria-invalid]`, `[aria-current]`, `[aria-selected]`, `[aria-disabled]`) remain acceptable for CSS state representation — they communicate user-facing state that CSS legitimately needs to reflect.
+
+The rationale: a role attribute identifies *what an element is* for assistive technology; it is not a skin. Attaching visual payload to a role selector collides with a11y-only role additions (e.g., adding `role="dialog"` to a container for screen-reader labeling should never silently import layout, backdrop, or positioning rules). State attributes are different — they describe *how an element currently behaves*, and CSS is the natural place to reflect that state.
+
+```scss
+// BAD: visual/layout payload keyed off a role identifier
+[role="dialog"] {
+  position: fixed;
+  inset: 0;
+  background: var(--pav-surface-primary);
+  padding: var(--pav-space-xl);
+}
+
+[role="navigation"] {
+  display: flex;
+  gap: var(--pav-space-4);
+}
+
+// GOOD: keep role as a pure identity hook; put visuals on a semantic class
+// (or use the canonical component, e.g. <Modal>/<Sheet> for dialogs)
+.site-nav {
+  display: flex;
+  gap: var(--pav-space-4);
+}
+
+// GOOD: state attributes legitimately reflect user-facing state
+.accordion-header[aria-expanded="true"] {
+  background: var(--pav-interactive-hover);
+}
+
+.form-field[aria-invalid="true"] {
+  border-color: var(--pav-color-danger);
+}
+```
+
 ## Known Drift
 
 - Some components have large scoped style blocks (30+ lines) that could be extracted

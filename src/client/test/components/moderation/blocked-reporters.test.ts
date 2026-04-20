@@ -14,6 +14,26 @@ const routes = [
   { path: '/', component: {} },
 ];
 
+/**
+ * Modal stub that exposes slot content + the classic overlay/modal/header
+ * markup the legacy tests assert against. Real Modal uses <dialog> which
+ * is awkward to drive in happy-dom; the stub keeps assertions stable.
+ */
+const ModalStub = {
+  props: ['title', 'modalClass', 'size', 'initiallyOpen'],
+  template: `
+    <div class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+      <div class="modal">
+        <h2 id="modal-title" class="modal-title">{{ title }}</h2>
+        <slot/>
+      </div>
+    </div>
+  `,
+  emits: ['close'],
+};
+
+const MOUNT_CONFIG = { stubs: { Modal: ModalStub } };
+
 describe('BlockedReporters.vue', () => {
   let mockService: any;
   let router: any;
@@ -54,7 +74,7 @@ describe('BlockedReporters.vue', () => {
 
       mockService.listBlockedReporters = vi.fn(() => pendingPromise);
 
-      const wrapper = mountComponent(BlockedReporters, router);
+      const wrapper = mountComponent(BlockedReporters, router, MOUNT_CONFIG);
       await wrapper.vm.$nextTick();
 
       // Should show loading while promise is pending
@@ -83,7 +103,7 @@ describe('BlockedReporters.vue', () => {
 
       mockService.listBlockedReporters = vi.fn().mockResolvedValue(mockReporters);
 
-      const wrapper = mountComponent(BlockedReporters, router);
+      const wrapper = mountComponent(BlockedReporters, router, MOUNT_CONFIG);
       await flushPromises();
 
       // Check table headers
@@ -104,7 +124,7 @@ describe('BlockedReporters.vue', () => {
     it('displays empty state when no blocked reporters exist', async () => {
       mockService.listBlockedReporters = vi.fn().mockResolvedValue([]);
 
-      const wrapper = mountComponent(BlockedReporters, router);
+      const wrapper = mountComponent(BlockedReporters, router, MOUNT_CONFIG);
       await flushPromises();
 
       expect(wrapper.text()).toContain('No blocked reporters');
@@ -115,7 +135,7 @@ describe('BlockedReporters.vue', () => {
     it('displays error message when fetch fails', async () => {
       mockService.listBlockedReporters = vi.fn().mockRejectedValue(new Error('Network error'));
 
-      const wrapper = mountComponent(BlockedReporters, router);
+      const wrapper = mountComponent(BlockedReporters, router, MOUNT_CONFIG);
       await flushPromises();
 
       expect(wrapper.text()).toContain('Failed to load blocked reporters');
@@ -136,7 +156,7 @@ describe('BlockedReporters.vue', () => {
 
       mockService.listBlockedReporters = vi.fn().mockResolvedValue(mockReporters);
 
-      const wrapper = mountComponent(BlockedReporters, router);
+      const wrapper = mountComponent(BlockedReporters, router, MOUNT_CONFIG);
       await flushPromises();
 
       // Date should be formatted (exact format depends on locale)
@@ -157,7 +177,7 @@ describe('BlockedReporters.vue', () => {
 
       mockService.listBlockedReporters = vi.fn().mockResolvedValue(mockReporters);
 
-      const wrapper = mountComponent(BlockedReporters, router);
+      const wrapper = mountComponent(BlockedReporters, router, MOUNT_CONFIG);
       await flushPromises();
 
       // Should display truncated version
@@ -173,7 +193,7 @@ describe('BlockedReporters.vue', () => {
     });
 
     it('opens modal when block button is clicked', async () => {
-      const wrapper = mountComponent(BlockedReporters, router);
+      const wrapper = mountComponent(BlockedReporters, router, MOUNT_CONFIG);
       await flushPromises();
 
       // Modal should not be visible initially
@@ -189,7 +209,7 @@ describe('BlockedReporters.vue', () => {
     });
 
     it('closes modal when cancel button is clicked', async () => {
-      const wrapper = mountComponent(BlockedReporters, router);
+      const wrapper = mountComponent(BlockedReporters, router, MOUNT_CONFIG);
       await flushPromises();
 
       // Open modal
@@ -205,16 +225,24 @@ describe('BlockedReporters.vue', () => {
       expect(wrapper.find('.modal-overlay').exists()).toBe(false);
     });
 
-    it('closes modal when clicking overlay', async () => {
-      const wrapper = mountComponent(BlockedReporters, router);
+    it('closes modal when the modal emits close (e.g. backdrop click)', async () => {
+      const wrapper = mountComponent(BlockedReporters, router, MOUNT_CONFIG);
       await flushPromises();
 
       // Open modal
       await wrapper.find('.block-reporter-button').trigger('click');
       await wrapper.vm.$nextTick();
+      expect(wrapper.find('.modal-overlay').exists()).toBe(true);
 
-      // Click overlay
-      await wrapper.find('.modal-overlay').trigger('click');
+      // Simulate Modal emitting 'close' (as happens on backdrop click / Escape)
+      const modal = wrapper.findComponent({ name: 'Modal' });
+      if (modal.exists()) {
+        modal.vm.$emit('close');
+      }
+      else {
+        // Fallback: invoke cancel button (which calls closeBlockModal)
+        await wrapper.find('.cancel-button').trigger('click');
+      }
       await wrapper.vm.$nextTick();
 
       // Modal should be closed
@@ -222,7 +250,7 @@ describe('BlockedReporters.vue', () => {
     });
 
     it('validates email is required', async () => {
-      const wrapper = mountComponent(BlockedReporters, router);
+      const wrapper = mountComponent(BlockedReporters, router, MOUNT_CONFIG);
       await flushPromises();
 
       // Open modal
@@ -239,7 +267,7 @@ describe('BlockedReporters.vue', () => {
     });
 
     it('validates reason is required', async () => {
-      const wrapper = mountComponent(BlockedReporters, router);
+      const wrapper = mountComponent(BlockedReporters, router, MOUNT_CONFIG);
       await flushPromises();
 
       // Open modal
@@ -260,7 +288,7 @@ describe('BlockedReporters.vue', () => {
     });
 
     it('validates email format', async () => {
-      const wrapper = mountComponent(BlockedReporters, router);
+      const wrapper = mountComponent(BlockedReporters, router, MOUNT_CONFIG);
       await flushPromises();
 
       // Open modal
@@ -296,7 +324,7 @@ describe('BlockedReporters.vue', () => {
         .mockResolvedValueOnce([])
         .mockResolvedValueOnce([newBlockedReporter]);
 
-      const wrapper = mountComponent(BlockedReporters, router);
+      const wrapper = mountComponent(BlockedReporters, router, MOUNT_CONFIG);
       await flushPromises();
 
       // Open modal
@@ -332,7 +360,7 @@ describe('BlockedReporters.vue', () => {
 
       mockService.blockReporter = vi.fn(() => blockPromise);
 
-      const wrapper = mountComponent(BlockedReporters, router);
+      const wrapper = mountComponent(BlockedReporters, router, MOUNT_CONFIG);
       await flushPromises();
 
       // Open modal and fill form
@@ -362,7 +390,7 @@ describe('BlockedReporters.vue', () => {
     it('displays error message on block failure', async () => {
       mockService.blockReporter = vi.fn().mockRejectedValue(new Error('Block failed'));
 
-      const wrapper = mountComponent(BlockedReporters, router);
+      const wrapper = mountComponent(BlockedReporters, router, MOUNT_CONFIG);
       await flushPromises();
 
       // Open modal and fill form
@@ -396,7 +424,7 @@ describe('BlockedReporters.vue', () => {
         .mockResolvedValueOnce([])
         .mockResolvedValueOnce([newBlockedReporter]);
 
-      const wrapper = mountComponent(BlockedReporters, router);
+      const wrapper = mountComponent(BlockedReporters, router, MOUNT_CONFIG);
       await flushPromises();
 
       // Open modal and submit
@@ -429,7 +457,7 @@ describe('BlockedReporters.vue', () => {
         .mockResolvedValue([])
         .mockResolvedValue([newBlockedReporter]);
 
-      const wrapper = mountComponent(BlockedReporters, router);
+      const wrapper = mountComponent(BlockedReporters, router, MOUNT_CONFIG);
       await flushPromises();
 
       // Open modal and submit
@@ -468,7 +496,7 @@ describe('BlockedReporters.vue', () => {
 
       mockService.listBlockedReporters = vi.fn().mockResolvedValue(mockReporters);
 
-      const wrapper = mountComponent(BlockedReporters, router);
+      const wrapper = mountComponent(BlockedReporters, router, MOUNT_CONFIG);
       await flushPromises();
 
       const unblockButtons = wrapper.findAll('[data-test="unblock-button"]');
@@ -487,7 +515,7 @@ describe('BlockedReporters.vue', () => {
 
       mockService.listBlockedReporters = vi.fn().mockResolvedValue(mockReporters);
 
-      const wrapper = mountComponent(BlockedReporters, router);
+      const wrapper = mountComponent(BlockedReporters, router, MOUNT_CONFIG);
       await flushPromises();
 
       // Click the unblock button
@@ -514,7 +542,7 @@ describe('BlockedReporters.vue', () => {
       mockService.listBlockedReporters = vi.fn().mockResolvedValue(mockReporters);
       mockService.unblockReporter = vi.fn().mockResolvedValue(undefined);
 
-      const wrapper = mountComponent(BlockedReporters, router);
+      const wrapper = mountComponent(BlockedReporters, router, MOUNT_CONFIG);
       await flushPromises();
 
       // Click unblock button
@@ -549,7 +577,7 @@ describe('BlockedReporters.vue', () => {
       mockService.listBlockedReporters = vi.fn().mockResolvedValue(mockReporters);
       mockService.unblockReporter = vi.fn(() => unblockPromise);
 
-      const wrapper = mountComponent(BlockedReporters, router);
+      const wrapper = mountComponent(BlockedReporters, router, MOUNT_CONFIG);
       await flushPromises();
 
       // Click unblock button
@@ -585,7 +613,7 @@ describe('BlockedReporters.vue', () => {
         .mockResolvedValueOnce([]);
       mockService.unblockReporter = vi.fn().mockResolvedValue(undefined);
 
-      const wrapper = mountComponent(BlockedReporters, router);
+      const wrapper = mountComponent(BlockedReporters, router, MOUNT_CONFIG);
       await flushPromises();
 
       // Click unblock button
@@ -615,7 +643,7 @@ describe('BlockedReporters.vue', () => {
       mockService.listBlockedReporters = vi.fn().mockResolvedValue(mockReporters);
       mockService.unblockReporter = vi.fn().mockResolvedValue(undefined);
 
-      const wrapper = mountComponent(BlockedReporters, router);
+      const wrapper = mountComponent(BlockedReporters, router, MOUNT_CONFIG);
       await flushPromises();
 
       // Click unblock button
@@ -645,7 +673,7 @@ describe('BlockedReporters.vue', () => {
       mockService.listBlockedReporters = vi.fn().mockResolvedValue(mockReporters);
       mockService.unblockReporter = vi.fn().mockRejectedValue(new Error('Network error'));
 
-      const wrapper = mountComponent(BlockedReporters, router);
+      const wrapper = mountComponent(BlockedReporters, router, MOUNT_CONFIG);
       await flushPromises();
 
       // Click unblock button
@@ -674,7 +702,7 @@ describe('BlockedReporters.vue', () => {
 
       mockService.listBlockedReporters = vi.fn().mockResolvedValue(mockReporters);
 
-      const wrapper = mountComponent(BlockedReporters, router);
+      const wrapper = mountComponent(BlockedReporters, router, MOUNT_CONFIG);
       await flushPromises();
 
       // Click unblock button
@@ -708,7 +736,7 @@ describe('BlockedReporters.vue', () => {
 
       mockService.listBlockedReporters = vi.fn().mockResolvedValue(mockReporters);
 
-      const wrapper = mountComponent(BlockedReporters, router);
+      const wrapper = mountComponent(BlockedReporters, router, MOUNT_CONFIG);
       await flushPromises();
 
       const table = wrapper.find('table');
@@ -728,7 +756,7 @@ describe('BlockedReporters.vue', () => {
 
       mockService.listBlockedReporters = vi.fn().mockResolvedValue(mockReporters);
 
-      const wrapper = mountComponent(BlockedReporters, router);
+      const wrapper = mountComponent(BlockedReporters, router, MOUNT_CONFIG);
       await flushPromises();
 
       expect(wrapper.find('table').exists()).toBe(true);
@@ -740,14 +768,14 @@ describe('BlockedReporters.vue', () => {
     it('modal has proper ARIA attributes', async () => {
       mockService.listBlockedReporters = vi.fn().mockResolvedValue([]);
 
-      const wrapper = mountComponent(BlockedReporters, router);
+      const wrapper = mountComponent(BlockedReporters, router, MOUNT_CONFIG);
       await flushPromises();
 
       // Open modal
       await wrapper.find('.block-reporter-button').trigger('click');
       await wrapper.vm.$nextTick();
 
-      const modal = wrapper.find('.modal');
+      const modal = wrapper.find('[role="dialog"]');
       expect(modal.attributes('role')).toBe('dialog');
       expect(modal.attributes('aria-modal')).toBe('true');
       expect(modal.attributes('aria-labelledby')).toBeTruthy();

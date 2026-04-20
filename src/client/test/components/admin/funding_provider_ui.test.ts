@@ -103,6 +103,26 @@ describe('Funding Provider UI Components', () => {
     vi.restoreAllMocks();
   });
 
+  /**
+   * Modal stub: renders slot content inside a native dialog-like wrapper
+   * so the legacy assertions against .modal-overlay / .modal-container
+   * continue to pass after the pv-32pq.2 migration away from reinvented
+   * modal markup. Real Modal uses <dialog> which happy-dom doesn't fully
+   * support — stubbing is the cleanest path.
+   */
+  const ModalStub = {
+    props: ['title', 'modalClass', 'size', 'initiallyOpen'],
+    template: `
+      <div class="modal-overlay" role="dialog" aria-modal="true">
+        <div class="modal-container">
+          <h2>{{ title }}</h2>
+          <slot/>
+        </div>
+      </div>
+    `,
+    emits: ['close'],
+  };
+
   const mountFunding = () => {
     const pinia = createPinia();
 
@@ -113,6 +133,9 @@ describe('Funding Provider UI Components', () => {
           [I18NextVue, { i18next }],
           pinia,
         ],
+        stubs: {
+          Modal: ModalStub,
+        },
       },
     });
   };

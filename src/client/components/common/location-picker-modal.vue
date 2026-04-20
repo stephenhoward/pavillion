@@ -2,6 +2,7 @@
 import { ref, computed } from 'vue';
 import { Search, MapPin, Check } from 'lucide-vue-next';
 import PillButton from '@/client/components/common/pill-button.vue';
+import Sheet from '@/client/components/common/Sheet.vue';
 import type { EventLocation } from '@/common/model/location';
 
 /**
@@ -42,7 +43,7 @@ const emit = defineEmits<{
   (e: 'close'): void;
 }>();
 
-const dialogRef = ref<HTMLDialogElement | null>(null);
+const sheetRef = ref<InstanceType<typeof Sheet> | null>(null);
 const searchQuery = ref('');
 
 // Filter locations based on search query
@@ -97,38 +98,20 @@ const handleRemoveLocation = () => {
 };
 
 const close = () => {
-  if (dialogRef.value) {
-    dialogRef.value.close();
-    emit('close');
-  }
+  emit('close');
 };
 
-// Expose methods to parent
-defineExpose({ close, dialogRef });
+// Expose methods to parent (for backward compatibility)
+defineExpose({ close, sheetRef });
 </script>
 
 <template>
-  <dialog
-    ref="dialogRef"
-    class="location-picker-modal"
-    aria-labelledby="location-picker-title"
-    aria-modal="true"
-    @click.self="close"
+  <Sheet
+    ref="sheetRef"
+    title="Select Location"
+    @close="close"
   >
-    <div class="modal-content">
-      <!-- Header -->
-      <header class="modal-header">
-        <h2 id="location-picker-title">Select Location</h2>
-        <button
-          type="button"
-          class="close-button"
-          @click="close"
-          aria-label="Close dialog"
-        >
-          &times;
-        </button>
-      </header>
-
+    <div class="location-picker-body">
       <!-- Search Input -->
       <div class="search-section">
         <div class="search-input-wrapper">
@@ -180,7 +163,7 @@ defineExpose({ close, dialogRef });
       </div>
 
       <!-- Footer -->
-      <footer class="modal-footer">
+      <footer class="picker-footer">
         <PillButton
           variant="ghost"
           size="sm"
@@ -197,114 +180,20 @@ defineExpose({ close, dialogRef });
         </PillButton>
       </footer>
     </div>
-  </dialog>
+  </Sheet>
 </template>
 
 <style scoped lang="scss">
 @use '../../assets/style/mixins' as *;
 
-.location-picker-modal {
-  position: fixed;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  max-width: 100%;
-  max-height: 100%;
-  padding: 0;
-  margin: 0;
-  border: none;
-  background: transparent;
-  overflow: auto;
-  z-index: 1000;
-
-  &::backdrop {
-    background-color: rgba(0, 0, 0, 0.5);
-    backdrop-filter: blur(4px);
-  }
-
-  &[open] {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-}
-
-.modal-content {
-  background: white;
-  border-radius: 0.75rem;
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
-  width: 90vw;
-  max-width: 32rem;
-  max-height: 85vh;
+.location-picker-body {
   display: flex;
   flex-direction: column;
-  border: 1px solid var(--pav-color-stone-200);
-
-  @media (prefers-color-scheme: dark) {
-    background: var(--pav-color-stone-800);
-    border-color: var(--pav-color-stone-700);
-  }
-}
-
-.modal-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 1.5rem;
-  border-bottom: 1px solid var(--pav-color-stone-200);
-
-  @media (prefers-color-scheme: dark) {
-    border-bottom-color: var(--pav-color-stone-700);
-  }
-
-  h2 {
-    font-size: 1.25rem;
-    font-weight: 600;
-    margin: 0;
-    color: var(--pav-color-stone-900);
-
-    @media (prefers-color-scheme: dark) {
-      color: var(--pav-color-stone-100);
-    }
-  }
-
-  .close-button {
-    background: transparent;
-    border: none;
-    font-size: 2rem;
-    line-height: 1;
-    color: var(--pav-color-stone-500);
-    cursor: pointer;
-    padding: 0;
-    width: 2rem;
-    height: 2rem;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 0.25rem;
-    transition: all 0.15s ease;
-
-    &:hover {
-      background: var(--pav-color-stone-100);
-      color: var(--pav-color-stone-700);
-
-      @media (prefers-color-scheme: dark) {
-        background: var(--pav-color-stone-700);
-        color: var(--pav-color-stone-300);
-      }
-    }
-
-    &:focus-visible {
-      outline: 2px solid var(--pav-color-orange-500);
-      outline-offset: 2px;
-    }
-  }
+  gap: 1rem;
+  min-height: 0;
 }
 
 .search-section {
-  padding: 1.5rem;
-  padding-bottom: 1rem;
-
   .search-input-wrapper {
     position: relative;
 
@@ -359,7 +248,6 @@ defineExpose({ close, dialogRef });
   flex: 1;
   overflow-y: auto;
   min-height: 0;
-  padding: 0 1.5rem 1rem;
 }
 
 .location-list {
@@ -483,11 +371,11 @@ defineExpose({ close, dialogRef });
   }
 }
 
-.modal-footer {
+.picker-footer {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 1.5rem;
+  padding-top: 1rem;
   border-top: 1px solid var(--pav-color-stone-200);
 
   @media (prefers-color-scheme: dark) {

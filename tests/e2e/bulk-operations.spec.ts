@@ -120,7 +120,7 @@ test.describe('Bulk Event Operations', () => {
     await page.waitForFunction(
       (count) => document.querySelectorAll('.event-item').length < count,
       initialCount,
-      { timeout: 10000 }
+      { timeout: 10000 },
     );
 
     // Verify bulk menu disappears after deletion
@@ -142,9 +142,8 @@ test.describe('Bulk Event Operations', () => {
     const dialog = page.locator('[role="dialog"][aria-modal="true"]');
     await expect(dialog).toBeVisible({ timeout: 5000 });
 
-    // Verify dialog has proper ARIA attributes
-    const dialogTitle = page.locator('#category-dialog-title');
-    await expect(dialogTitle).toBeVisible();
+    // Verify dialog has proper ARIA attributes (title labelled via aria-labelledby)
+    await expect(dialog).toHaveAttribute('aria-labelledby', /.+/);
 
     // Verify selection summary is shown
     const selectionSummary = page.locator('.selection-summary');
@@ -162,12 +161,12 @@ test.describe('Bulk Event Operations', () => {
       await expect(firstChip).toHaveAttribute('aria-checked', 'true');
     }
 
-    // Verify cancel and assign buttons in footer
-    const footerButtons = dialog.locator('footer button');
+    // Verify cancel and assign buttons in footer (footer rendered inside dialog body)
+    const footerButtons = dialog.locator('.category-footer button');
     await expect(footerButtons).toHaveCount(2);
 
-    // Close dialog via close button
-    await page.locator('button.close-button').click();
+    // Close dialog via Escape (dialog close button is Sheet's built-in ×)
+    await page.keyboard.press('Escape');
     await expect(dialog).toBeHidden();
   });
 });

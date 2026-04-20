@@ -78,7 +78,6 @@ src/client/assets/style/
 │   ├── _cards.scss         # Card layouts and variants
 │   ├── _forms.scss         # Input, select, textarea styles
 │   ├── _navigation.scss    # Nav, breadcrumb components
-│   ├── _modals.scss        # Modal and dialog styles
 │   ├── _tables.scss        # Table layouts and styles
 │   ├── _alerts.scss        # Alert and notification styles
 │   └── [13 other component files]

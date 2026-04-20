@@ -1446,14 +1446,6 @@ const handleSaveEvent = async () => {
   }
 };
 
-// Watch for location picker visibility and show/hide the modal
-watch(() => showLocationPicker.value, async (newValue) => {
-  if (newValue) {
-    await nextTick();
-    locationPickerRef.value?.dialogRef?.showModal();
-  }
-});
-
 // Watch for create location form visibility and show/hide the modal
 watch(() => showCreateLocationForm.value, async (newValue) => {
   if (newValue) {

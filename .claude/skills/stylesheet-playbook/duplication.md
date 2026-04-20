@@ -24,7 +24,6 @@ These patterns are already defined and globally available:
 | Buttons | `.btn`, `.btn--primary`, `.btn--secondary`, `.btn--danger`, `.btn--ghost`, `.btn--small` | `components/_buttons.scss` |
 | Cards | `.card`, `.card--elevated`, `.card__header`, `.card__content` | `components/_cards.scss` |
 | Forms | `.input`, `.select`, `.textarea`, `.label` | `components/_forms.scss` |
-| Modals | `.modal__overlay`, `.modal__content` | `components/_modals.scss` |
 | Tables | Table styles | `components/_tables.scss` |
 | Alerts | Alert styles | `components/_alerts.scss` |
 | Navigation | Nav styles | `components/_navigation.scss` |
@@ -60,8 +59,13 @@ Use mixins inside semantic class definitions, never as utility classes in markup
 
 ### Reinventing Modals
 
+Modal dialogs are provided by two canonical Vue components sharing the `useDialog` composable -- do **not** hand-roll overlays, backdrops, focus traps, or escape handling in a component's scoped styles.
+
+- **`src/client/components/common/modal.vue`** (`<Modal>`) — form, confirmation, and small dialogs. Accepts a `size` prop (`'md' | 'lg' | 'xl'`).
+- **`src/client/components/common/Sheet.vue`** (`<Sheet>`) — list pickers and content-heavy dialogs with mobile concerns (bottom-sheet on mobile, centered on desktop).
+
 ```scss
-// BAD: custom modal/overlay when .modal__overlay exists
+// BAD: custom modal/overlay/backdrop in a component's scoped styles
 .my-dialog-backdrop {
   position: fixed;
   top: 0;
@@ -71,10 +75,22 @@ Use mixins inside semantic class definitions, never as utility classes in markup
   background: rgba(0, 0, 0, 0.5);
   z-index: 1000;
 }
-
-// GOOD: use existing modal classes
-// <div class="modal__overlay"><div class="modal__content">...</div></div>
 ```
+
+```vue
+<!-- GOOD: use the canonical component -->
+<script setup>
+import Modal from '@/client/components/common/modal.vue';
+</script>
+
+<template>
+  <Modal :title="t('confirm.title')" size="md" @close="onClose">
+    <p>{{ t('confirm.message') }}</p>
+  </Modal>
+</template>
+```
+
+See `src/client/components/common/confirm-delete-dialog.vue` for the canonical consumer pattern. For detailed modal/dialog accessibility and selection guidance, consult the `frontend-modals` skill.
 
 ### Duplicated Card Patterns
 

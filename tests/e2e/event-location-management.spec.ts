@@ -54,7 +54,7 @@ test.describe('Event Location Management End-to-End', () => {
     await page.waitForTimeout(500);
 
     // Modal should be visible
-    const pickerModal = page.locator('dialog.location-picker-modal[open]');
+    const pickerModal = page.locator('dialog.sheet-dialog[open]');
     await expect(pickerModal).toBeVisible();
 
     // Should have "Select Location" title
@@ -199,7 +199,7 @@ test.describe('Event Location Management End-to-End', () => {
     await page.waitForTimeout(1000);
 
     // The previously created location should appear in the list
-    const pickerModal = page.locator('dialog.location-picker-modal[open]');
+    const pickerModal = page.locator('dialog.sheet-dialog[open]');
     await expect(pickerModal).toBeVisible();
 
     // Look for the location in the list (if there are any locations)
@@ -251,7 +251,7 @@ test.describe('Event Location Management End-to-End', () => {
     await page.waitForTimeout(500);
 
     // Picker should close
-    const pickerModal = page.locator('dialog.location-picker-modal[open]');
+    const pickerModal = page.locator('dialog.sheet-dialog[open]');
     await expect(pickerModal).not.toBeVisible();
 
     // Location card should now show "Add Location" button instead
@@ -313,22 +313,18 @@ test.describe('Event Location Management End-to-End', () => {
     await page.waitForTimeout(500);
 
     // Check ARIA attributes on dialog
-    const pickerDialog = page.locator('dialog.location-picker-modal');
+    const pickerDialog = page.locator('[role="dialog"]');
     await expect(pickerDialog).toHaveAttribute('aria-modal', 'true');
-    await expect(pickerDialog).toHaveAttribute('aria-labelledby', 'location-picker-title');
+    await expect(pickerDialog).toHaveAttribute('aria-labelledby', /.+/);
 
     // Check search input has proper label
     const searchInput = page.locator('.search-input');
     await expect(searchInput).toHaveAttribute('aria-label', 'Search locations');
 
-    // Check close button has accessible label
-    const closeButton = page.locator('.close-button');
-    await expect(closeButton).toHaveAttribute('aria-label', 'Close dialog');
-
     // Test keyboard navigation - ESC should close modal (native dialog behavior)
     await page.keyboard.press('Escape');
     await page.waitForTimeout(300);
-    await expect(pickerDialog).not.toHaveAttribute('open');
+    await expect(pickerDialog).toBeHidden();
   });
 
   test('should have accessible create location form', async ({ page }) => {

@@ -4,6 +4,25 @@ import LocationPickerModal from '@/client/components/common/location-picker-moda
 import PillButton from '@/client/components/common/pill-button.vue';
 import { EventLocation } from '@/common/model/location';
 
+/**
+ * Sheet stub: renders a native <dialog> with the given title + slot so
+ * tests can continue to assert against dialog/h2 semantics without
+ * wiring the full i18next-vue plugin that Sheet needs for its close
+ * button aria-label.
+ */
+const SheetStub = {
+  props: ['title'],
+  template: `
+    <dialog role="dialog" aria-modal="true">
+      <h2>{{ title }}</h2>
+      <slot/>
+    </dialog>
+  `,
+  emits: ['close'],
+};
+
+const SHEET_GLOBAL = { global: { stubs: { Sheet: SheetStub } } };
+
 describe('LocationPickerModal', () => {
   const mockLocations = [
     new EventLocation('loc-1', 'First Venue', '123 Main St', 'Portland', 'OR', '97201'),
@@ -13,11 +32,10 @@ describe('LocationPickerModal', () => {
 
   describe('rendering', () => {
     it('should render modal with title', () => {
-      const wrapper = mount(LocationPickerModal, {
-        props: {
-          locations: mockLocations,
-          selectedLocationId: null,
-        },
+      const wrapper = mount(LocationPickerModal, { ...SHEET_GLOBAL, props: {
+        locations: mockLocations,
+        selectedLocationId: null,
+      },
       });
 
       expect(wrapper.find('dialog').exists()).toBe(true);
@@ -25,11 +43,10 @@ describe('LocationPickerModal', () => {
     });
 
     it('should render search input with icon', () => {
-      const wrapper = mount(LocationPickerModal, {
-        props: {
-          locations: mockLocations,
-          selectedLocationId: null,
-        },
+      const wrapper = mount(LocationPickerModal, { ...SHEET_GLOBAL, props: {
+        locations: mockLocations,
+        selectedLocationId: null,
+      },
       });
 
       const searchWrapper = wrapper.find('.search-input-wrapper');
@@ -39,11 +56,10 @@ describe('LocationPickerModal', () => {
     });
 
     it('should render all locations in the list', () => {
-      const wrapper = mount(LocationPickerModal, {
-        props: {
-          locations: mockLocations,
-          selectedLocationId: null,
-        },
+      const wrapper = mount(LocationPickerModal, { ...SHEET_GLOBAL, props: {
+        locations: mockLocations,
+        selectedLocationId: null,
+      },
       });
 
       const locationItems = wrapper.findAll('.location-item');
@@ -51,11 +67,10 @@ describe('LocationPickerModal', () => {
     });
 
     it('should display location names and addresses', () => {
-      const wrapper = mount(LocationPickerModal, {
-        props: {
-          locations: mockLocations,
-          selectedLocationId: null,
-        },
+      const wrapper = mount(LocationPickerModal, { ...SHEET_GLOBAL, props: {
+        locations: mockLocations,
+        selectedLocationId: null,
+      },
       });
 
       const firstItem = wrapper.findAll('.location-item')[0];
@@ -65,11 +80,10 @@ describe('LocationPickerModal', () => {
     });
 
     it('should show checkmark for selected location', () => {
-      const wrapper = mount(LocationPickerModal, {
-        props: {
-          locations: mockLocations,
-          selectedLocationId: 'loc-2',
-        },
+      const wrapper = mount(LocationPickerModal, { ...SHEET_GLOBAL, props: {
+        locations: mockLocations,
+        selectedLocationId: 'loc-2',
+      },
       });
 
       const items = wrapper.findAll('.location-item');
@@ -86,6 +100,7 @@ describe('LocationPickerModal', () => {
         },
         global: {
           components: { PillButton },
+          stubs: { Sheet: SheetStub },
         },
       });
 
@@ -102,11 +117,10 @@ describe('LocationPickerModal', () => {
 
   describe('search functionality', () => {
     it('should filter locations by name', async () => {
-      const wrapper = mount(LocationPickerModal, {
-        props: {
-          locations: mockLocations,
-          selectedLocationId: null,
-        },
+      const wrapper = mount(LocationPickerModal, { ...SHEET_GLOBAL, props: {
+        locations: mockLocations,
+        selectedLocationId: null,
+      },
       });
 
       const searchInput = wrapper.find('.search-input-wrapper input');
@@ -118,11 +132,10 @@ describe('LocationPickerModal', () => {
     });
 
     it('should filter locations by address', async () => {
-      const wrapper = mount(LocationPickerModal, {
-        props: {
-          locations: mockLocations,
-          selectedLocationId: null,
-        },
+      const wrapper = mount(LocationPickerModal, { ...SHEET_GLOBAL, props: {
+        locations: mockLocations,
+        selectedLocationId: null,
+      },
       });
 
       const searchInput = wrapper.find('.search-input-wrapper input');
@@ -134,11 +147,10 @@ describe('LocationPickerModal', () => {
     });
 
     it('should filter locations by city', async () => {
-      const wrapper = mount(LocationPickerModal, {
-        props: {
-          locations: mockLocations,
-          selectedLocationId: null,
-        },
+      const wrapper = mount(LocationPickerModal, { ...SHEET_GLOBAL, props: {
+        locations: mockLocations,
+        selectedLocationId: null,
+      },
       });
 
       const searchInput = wrapper.find('.search-input-wrapper input');
@@ -150,11 +162,10 @@ describe('LocationPickerModal', () => {
     });
 
     it('should be case-insensitive', async () => {
-      const wrapper = mount(LocationPickerModal, {
-        props: {
-          locations: mockLocations,
-          selectedLocationId: null,
-        },
+      const wrapper = mount(LocationPickerModal, { ...SHEET_GLOBAL, props: {
+        locations: mockLocations,
+        selectedLocationId: null,
+      },
       });
 
       const searchInput = wrapper.find('.search-input-wrapper input');
@@ -166,11 +177,10 @@ describe('LocationPickerModal', () => {
     });
 
     it('should show no results when search has no matches', async () => {
-      const wrapper = mount(LocationPickerModal, {
-        props: {
-          locations: mockLocations,
-          selectedLocationId: null,
-        },
+      const wrapper = mount(LocationPickerModal, { ...SHEET_GLOBAL, props: {
+        locations: mockLocations,
+        selectedLocationId: null,
+      },
       });
 
       const searchInput = wrapper.find('.search-input-wrapper input');
@@ -183,11 +193,10 @@ describe('LocationPickerModal', () => {
 
   describe('selection behavior', () => {
     it('should emit location-selected when location clicked', async () => {
-      const wrapper = mount(LocationPickerModal, {
-        props: {
-          locations: mockLocations,
-          selectedLocationId: null,
-        },
+      const wrapper = mount(LocationPickerModal, { ...SHEET_GLOBAL, props: {
+        locations: mockLocations,
+        selectedLocationId: null,
+      },
       });
 
       await wrapper.findAll('.location-item')[1].trigger('click');
@@ -197,11 +206,10 @@ describe('LocationPickerModal', () => {
     });
 
     it('should allow clicking already selected location', async () => {
-      const wrapper = mount(LocationPickerModal, {
-        props: {
-          locations: mockLocations,
-          selectedLocationId: 'loc-2',
-        },
+      const wrapper = mount(LocationPickerModal, { ...SHEET_GLOBAL, props: {
+        locations: mockLocations,
+        selectedLocationId: 'loc-2',
+      },
       });
 
       await wrapper.findAll('.location-item')[1].trigger('click');
@@ -220,6 +228,7 @@ describe('LocationPickerModal', () => {
         },
         global: {
           components: { PillButton },
+          stubs: { Sheet: SheetStub },
         },
       });
 
@@ -239,6 +248,7 @@ describe('LocationPickerModal', () => {
         },
         global: {
           components: { PillButton },
+          stubs: { Sheet: SheetStub },
         },
       });
 
@@ -253,11 +263,10 @@ describe('LocationPickerModal', () => {
 
   describe('empty state', () => {
     it('should show message when no locations available', () => {
-      const wrapper = mount(LocationPickerModal, {
-        props: {
-          locations: [],
-          selectedLocationId: null,
-        },
+      const wrapper = mount(LocationPickerModal, { ...SHEET_GLOBAL, props: {
+        locations: [],
+        selectedLocationId: null,
+      },
       });
 
       const emptyMessage = wrapper.find('.empty-state');
