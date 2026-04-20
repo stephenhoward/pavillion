@@ -100,8 +100,52 @@ export default class ActivityPubInterface {
     return this.memberService.unshareEvent(account, calendar, eventUrl);
   }
 
+  /**
+   * Default federation delivery path: enqueues an activity onto the outbox so
+   * the worker signs it and fans it out to every configured recipient
+   * asynchronously. Use this for fire-and-forget. The activity is signed and
+   * delivered by the outbox worker — the caller does not see the remote
+   * response and does not need to.
+   *
+   * For the rare case where the caller MUST read the remote response body,
+   * use `deliverActivitySigned` instead.
+   *
+   * @param calendar The calendar that owns the outbox.
+   * @param message The activity to enqueue for delivery.
+   */
   async addToOutbox(calendar: Calendar, message: ActivityPubActivity): Promise<void> {
     return this.memberService.addToOutbox(calendar, message);
+  }
+
+  /**
+   * Escape hatch for synchronous signed federation delivery. ONLY use this
+   * when the caller must read the remote response body — currently only
+   * `events.ts:createRemoteEventViaActivityPub` qualifies, because it needs
+   * the created event echoed back from the remote calendar to construct the
+   * local domain model. Every other call site MUST use `addToOutbox`.
+   *
+   * The signing actor URI must equal `activity.actor` so the keyId is valid
+   * at the receiver. The activity is JSON-stringified once and the same
+   * bytes are used for both the SHA-256 Digest header and the HTTP body.
+   *
+   * Errors:
+   *   - Network / TLS / timeout / signing failure  -> throws FederationDeliveryError
+   *   - Non-2xx HTTP response                       -> resolves with `{ status, data: null }`
+   *   - 202 Accepted with empty body                -> resolves with `{ status: 202, data: null }`
+   *   - 2xx with body                               -> resolves with `{ status, data: <parsed JSON> }`
+   *
+   * Callers MUST guard `data?.id` (or whatever response field they consume).
+   *
+   * @param signingActorUri The actor URI used to sign the request. Must equal `activity.actor`.
+   * @param activity The ActivityPub activity to deliver.
+   * @param inboxUrl The remote inbox URL to POST to.
+   */
+  async deliverActivitySigned(
+    signingActorUri: string,
+    activity: Record<string, any>,
+    inboxUrl: string,
+  ): Promise<{ status: number; data: any }> {
+    return this.outboxService.deliverActivitySigned(signingActorUri, activity, inboxUrl);
   }
 
   async addToInbox(calendar: Calendar, message: ActivityPubActivity): Promise<null> {

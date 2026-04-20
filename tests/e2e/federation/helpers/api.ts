@@ -452,6 +452,44 @@ export async function updateEvent(
 }
 
 /**
+ * Delete an event by id
+ *
+ * Deletes an event using the Pavillion API. When the calendar
+ * has followers, this will trigger a Delete (Tombstone) activity
+ * to those followers.
+ *
+ * @param instance - The instance where the event exists
+ * @param token - Authentication token from getToken()
+ * @param eventId - ID of the event to delete
+ * @param calendarId - ID of the calendar (required for cross-instance deletes; optional otherwise)
+ * @throws Error if delete fails (response is not 204)
+ */
+export async function deleteEvent(
+  instance: InstanceConfig,
+  token: string,
+  eventId: string,
+  calendarId?: string,
+): Promise<void> {
+  const url = calendarId
+    ? `${instance.baseUrl}/api/v1/events/${encodeURIComponent(eventId)}?calendarId=${encodeURIComponent(calendarId)}`
+    : `${instance.baseUrl}/api/v1/events/${encodeURIComponent(eventId)}`;
+
+  const response = await fetch(url, {
+    method: 'DELETE',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+    },
+    // @ts-ignore - agent is not in the TypeScript types but works at runtime
+    agent: httpsAgent,
+  });
+
+  if (response.status !== 204) {
+    const errorText = await response.text();
+    throw new Error(`Failed to delete event: ${response.status} ${errorText}`);
+  }
+}
+
+/**
  * Get list of calendars for the authenticated user
  *
  * @param instance - The instance to query

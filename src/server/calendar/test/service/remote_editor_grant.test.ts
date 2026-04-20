@@ -9,6 +9,7 @@ import { validateUrlNotPrivate } from '@/server/common/helper/ip-validation';
 import { v4 as uuidv4 } from 'uuid';
 import sinon from 'sinon';
 import axios from 'axios';
+import config from 'config';
 
 import db from '@/server/common/entity/db';
 import CalendarService from '@/server/calendar/service/calendar';
@@ -19,14 +20,19 @@ import { UserActorEntity } from '@/server/activitypub/entity/user_actor';
 import { Account } from '@/common/model/account';
 import AccountsInterface from '@/server/accounts/interface';
 import type ActivityPubInterface from '@/server/activitypub/interface';
+import AddActivity from '@/server/activitypub/model/action/add';
 import { EventEmitter } from 'events';
 
 /**
  * Creates a mock ActivityPubInterface that delegates user actor lookups
  * to the real UserActorEntity database. This allows integration-style tests
  * to create DB rows directly while the service uses interface-based calls.
+ *
+ * `addToOutbox` is a sinon stub so editor-invite tests can assert the activity
+ * shape (actor, to, object, target, calendarId, calendarInboxUrl) that the
+ * service enqueues for delivery via the signed outbox path (pv-dyyw).
  */
-function createMockActivityPubInterface(): Partial<ActivityPubInterface> {
+function createMockActivityPubInterface(addToOutboxStub: sinon.SinonStub): Partial<ActivityPubInterface> {
   return {
     async findUserActorByUri(actorUri: string) {
       const entity = await UserActorEntity.findOne({ where: { actor_uri: actorUri } });
@@ -49,6 +55,7 @@ function createMockActivityPubInterface(): Partial<ActivityPubInterface> {
       });
       return { id: entity.id };
     },
+    addToOutbox: addToOutboxStub as unknown as ActivityPubInterface['addToOutbox'],
   };
 }
 
@@ -63,12 +70,14 @@ describe('CalendarService.grantEditAccessByEmail - Remote Editors', () => {
   let sandbox: sinon.SinonSandbox;
   let service: CalendarService;
   let mockAccountsInterface: Partial<AccountsInterface>;
+  let addToOutboxStub: sinon.SinonStub;
   let testAccountId: string;
   let testCalendarId: string;
   let testAccount: Account;
 
   beforeEach(async () => {
     sandbox = sinon.createSandbox();
+    addToOutboxStub = sandbox.stub().resolves();
     await db.sync({ force: true });
 
     // Create test account
@@ -110,7 +119,7 @@ describe('CalendarService.grantEditAccessByEmail - Remote Editors', () => {
     );
 
     // Wire up mock ActivityPub interface for user actor lookups
-    service.setActivityPubInterface(createMockActivityPubInterface() as ActivityPubInterface);
+    service.setActivityPubInterface(createMockActivityPubInterface(addToOutboxStub) as ActivityPubInterface);
   });
 
   afterEach(async () => {
@@ -151,9 +160,6 @@ describe('CalendarService.grantEditAccessByEmail - Remote Editors', () => {
           },
         },
       });
-
-      // Mock the Add activity notification POST (best-effort, won't fail if it errors)
-      sandbox.stub(axios, 'post').resolves({ status: 200 });
 
       // Federated email (beta.federation.local is different from pavillion.dev)
       const result = await service.grantEditAccessByEmail(
@@ -221,9 +227,6 @@ describe('CalendarService.grantEditAccessByEmail - Remote Editors', () => {
         },
       });
 
-      // Mock the Add activity notification POST (best-effort, won't fail if it errors)
-      sandbox.stub(axios, 'post').resolves({ status: 200 });
-
       const result = await service.grantEditAccessByEmail(
         testAccount,
         testCalendarId,
@@ -250,6 +253,24 @@ describe('CalendarService.grantEditAccessByEmail - Remote Editors', () => {
         },
       });
       expect(membership).not.toBeNull();
+
+      // Verify the Add activity was enqueued via the signed outbox path with
+      // the calendar actor as the signing actor and the remote user as the
+      // single explicit recipient (so the outbox honors targeted delivery
+      // rather than fanning out to followers).
+      const localDomain = config.get<string>('domain');
+      const expectedCalendarActorUri = `https://${localDomain}/calendars/test_calendar`;
+      expect(addToOutboxStub.calledOnce).toBe(true);
+      const [calendarArg, activityArg] = addToOutboxStub.firstCall.args;
+      expect(calendarArg.id).toBe(testCalendarId);
+      expect(activityArg).toBeInstanceOf(AddActivity);
+      expect(activityArg.type).toBe('Add');
+      expect(activityArg.actor).toBe(expectedCalendarActorUri);
+      expect(activityArg.object).toBe('https://beta.federation.local/users/Admin');
+      expect(activityArg.target).toBe(`${expectedCalendarActorUri}/editors`);
+      expect(activityArg.to).toEqual(['https://beta.federation.local/users/Admin']);
+      expect(activityArg.calendarId).toBe(testCalendarId);
+      expect(activityArg.calendarInboxUrl).toBe(`${expectedCalendarActorUri}/inbox`);
     });
 
     it('should throw error if remote editor already exists', async () => {
@@ -353,12 +374,11 @@ describe('CalendarService.grantEditAccessByEmail - Remote Editors', () => {
       expect(axiosStub.callCount).toBe(1);
     });
 
-    it('should return remote_editor without posting to inbox if inbox URL resolves to private IP', async () => {
-      // WebFinger and actor URL validations pass; inbox POST validation is blocked
+    it('should not fail the grant if the outbox enqueue throws (best-effort delivery)', async () => {
+      // WebFinger and actor URL validations pass
       vi.mocked(validateUrlNotPrivate)
         .mockResolvedValueOnce(true)  // WebFinger
-        .mockResolvedValueOnce(true)  // actor URI
-        .mockRejectedValueOnce(new Error('IP address is private'));  // inbox
+        .mockResolvedValueOnce(true);  // actor URI
 
       const axiosStub = sandbox.stub(axios, 'get');
       axiosStub.onFirstCall().resolves({
@@ -381,7 +401,14 @@ describe('CalendarService.grantEditAccessByEmail - Remote Editors', () => {
           publicKey: { publicKeyPem: '-----BEGIN PUBLIC KEY-----...' },
         },
       });
-      const axiosPostStub = sandbox.stub(axios, 'post');
+
+      // Simulate a failure enqueuing the Add activity (e.g. transient DB error
+      // on the ap_outbox insert). The local membership row should still be
+      // created — local state is not contingent on remote delivery success.
+      // SSRF protection for the remote inbox URL is enforced by the outbox
+      // worker (deliverViaHttp -> validateUrlNotPrivate), so the calendar
+      // service no longer needs to gate on it itself.
+      addToOutboxStub.rejects(new Error('outbox insert failed'));
 
       const result = await service.grantEditAccessByEmail(
         testAccount,
@@ -389,10 +416,18 @@ describe('CalendarService.grantEditAccessByEmail - Remote Editors', () => {
         'Admin@beta.federation.local',
       );
 
-      // The grant itself succeeds (DB record created), but the inbox notification is skipped
       expect(result.type).toBe('remote_editor');
       expect((result.data as any).actorUri).toBe('https://beta.federation.local/users/Admin');
-      expect(axiosPostStub.called).toBe(false);
+
+      // Local membership should still exist despite the enqueue failure
+      const userActor = await UserActorEntity.findOne({
+        where: { actor_uri: 'https://beta.federation.local/users/Admin' },
+      });
+      expect(userActor).not.toBeNull();
+      const membership = await CalendarMemberEntity.findOne({
+        where: { calendar_id: testCalendarId, user_actor_id: userActor!.id },
+      });
+      expect(membership).not.toBeNull();
     });
 
     it('should throw error if Person actor type is wrong', async () => {

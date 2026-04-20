@@ -42,6 +42,12 @@ class DeleteActivity extends ActivityPubActivity {
     if ( object.id ) {
       activity.id = object.id;
     }
+    if ( object.to ) {
+      activity.to = object.to;
+    }
+    if ( object.cc ) {
+      activity.cc = object.cc;
+    }
 
     return activity;
   }

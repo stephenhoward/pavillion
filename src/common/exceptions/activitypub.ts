@@ -72,6 +72,25 @@ class AlreadyFollowingError extends Error {
   }
 }
 
+/**
+ * Thrown when synchronous signed federation delivery fails before a
+ * meaningful HTTP response is received from the remote server. Covers:
+ *   - signing failures (no key, missing actor)
+ *   - network/TLS/timeout errors
+ *   - SSRF block (private IP rejected by validateUrlNotPrivate)
+ *
+ * Non-2xx HTTP responses do NOT throw this error; the caller receives
+ * `{ status, data: null }` instead so it can decide how to react to a
+ * legitimate remote rejection (403, 404, etc.).
+ */
+class FederationDeliveryError extends Error {
+  constructor(message?: string) {
+    super(message || 'Federation delivery failed');
+    this.name = 'FederationDeliveryError';
+    Object.setPrototypeOf(this, FederationDeliveryError.prototype);
+  }
+}
+
 export {
   InvalidRemoteCalendarIdentifierError,
   InvalidRepostPolicyError,
@@ -84,4 +103,5 @@ export {
   RemoteProfileFetchError,
   SelfFollowError,
   AlreadyFollowingError,
+  FederationDeliveryError,
 };

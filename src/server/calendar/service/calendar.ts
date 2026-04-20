@@ -4,7 +4,8 @@ import { EventEmitter } from 'events';
 import config from 'config';
 import axios from 'axios';
 import { validateUrlNotPrivate } from '@/server/common/helper/ip-validation';
-import { PUBLIC_KEY_FETCH_TIMEOUT_MS, FEDERATION_HTTP_TIMEOUT_MS } from '@/server/common/constants';
+import { PUBLIC_KEY_FETCH_TIMEOUT_MS } from '@/server/common/constants';
+import AddActivity from '@/server/activitypub/model/action/add';
 
 import { Calendar, DefaultDateRange } from '@/common/model/calendar';
 import { Account } from '@/common/model/account';
@@ -775,51 +776,38 @@ class CalendarService {
       granted_by: grantingAccount.id,
     });
 
-    // Send ActivityPub Add activity to notify the remote user
+    // Send ActivityPub Add activity to notify the remote user via the signed
+    // outbox path. The outbox extension (pv-dyyw.1.2) honors the explicit `to`
+    // field for single-recipient delivery, so the Add activity is delivered to
+    // the remote user actor specifically rather than fanned out to followers.
+    // The calendar actor's private key signs the request because the activity's
+    // `actor` field is the calendar actor URI (per epic per-call-site signing
+    // table). Local membership is created above regardless of remote delivery
+    // outcome — best-effort semantics are preserved by the outbox worker, which
+    // logs delivery failures asynchronously.
     const localDomain = config.get<string>('domain');
     const calendarActorUri = `https://${localDomain}/calendars/${calendar.urlName}`;
     const calendarInboxUrl = `https://${localDomain}/calendars/${calendar.urlName}/inbox`;
 
-    const addActivity = {
-      '@context': 'https://www.w3.org/ns/activitystreams',
-      type: 'Add',
-      id: `${calendarActorUri}/activities/${uuidv4()}`,
-      actor: calendarActorUri,
-      object: remoteUser.actorUri,
-      target: `${calendarActorUri}/editors`,
-      calendarId: calendar.id,
-      calendarInboxUrl: calendarInboxUrl,
-    };
+    const addActivity = new AddActivity(
+      calendarActorUri,
+      remoteUser.actorUri,
+      `${calendarActorUri}/editors`,
+    );
+    addActivity.id = `${calendarActorUri}/activities/${uuidv4()}`;
+    addActivity.to = [remoteUser.actorUri];
+    addActivity.calendarId = calendar.id;
+    addActivity.calendarInboxUrl = calendarInboxUrl;
 
-    // Send to remote user's inbox
-    // SECURITY: Validate inbox URL from untrusted actor document.
-    // NOTE: DNS TOCTOU gap — validateUrlNotPrivate resolves DNS at validation time;
-    // axios re-resolves at connect time. A DNS rebinding attack could bypass this check.
     try {
-      await validateUrlNotPrivate(remoteUser.inbox);
-    }
-    catch (error) {
-      logError(error, `[Calendar] Security: Blocked inbox POST to private address ${remoteUser.inbox}`);
-      return {
-        type: 'remote_editor',
-        data: {
-          actorUri: remoteUser.actorUri,
-        },
-      };
-    }
-    try {
-      await axios.post(remoteUser.inbox, addActivity, {
-        timeout: FEDERATION_HTTP_TIMEOUT_MS,
-        maxRedirects: 0,
-        headers: {
-          'Content-Type': 'application/activity+json',
-        },
-      });
-      logger.info({ inbox: remoteUser.inbox }, 'Sent Add activity to remote user');
+      await this.activityPubInterface!.addToOutbox(calendar, addActivity);
+      logger.info({ inbox: remoteUser.inbox, calendarId: calendar.id }, 'Enqueued Add activity for remote user');
     }
     catch (error: any) {
-      // Log but don't fail - the local record is created, notification is best-effort
-      logError(error, `[Calendar] Failed to send Add activity to ${remoteUser.inbox}`);
+      // Best-effort: local membership row is already created above, so we do
+      // not fail the grant if enqueuing the outbox message hits an unexpected
+      // error (e.g. transient DB failure on the ap_outbox insert).
+      logError(error, `[Calendar] Failed to enqueue Add activity to ${remoteUser.inbox}`);
     }
 
     return {
