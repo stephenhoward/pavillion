@@ -779,9 +779,12 @@ class ProcessInboxService {
 
     // Create the event
     // calendarId is intentionally omitted for calendar-actor federation;
-    // addRemoteEvent will set it to null for remote federated events
+    // addRemoteEvent will set it to null for remote federated events.
+    // Pass actorUri so fromActivityPubObject can origin-gate privileged
+    // schedule fields (hideFromPublic) — a remote Person editor cannot
+    // forge cancellation state for an event on a non-matching origin.
     const eventParams: Record<string, any> = {
-      ...EventObject.fromActivityPubObject(message.object),
+      ...EventObject.fromActivityPubObject(message.object, { actorUri }),
       id: localEventId,
       eventSourceUrl: apObjectId,
     };
@@ -1357,9 +1360,15 @@ class ProcessInboxService {
       }
     }
 
-    // Create event params with local UUID for database
+    // Create event params with local UUID for database.
+    // Pass actorUri so fromActivityPubObject can origin-gate privileged fields
+    // (hideFromPublic on schedules). For the Person-actor path (remote editor),
+    // this prevents non-origin editors from forging cancellation state. For
+    // the calendar-actor path, domain-of-origin is already enforced above
+    // (line 1324), but passing actorUri here is harmless and makes the origin
+    // invariant explicit at the parse boundary.
     const eventParams = {
-      ...EventObject.fromActivityPubObject(message.object),
+      ...EventObject.fromActivityPubObject(message.object, { actorUri }),
       id: apObject.event_id,
       eventSourceUrl: apObjectId,
     };
@@ -1860,10 +1869,18 @@ class ProcessInboxService {
       // Determine the attributed_to from the fetched object or the announcer
       const attributedTo = remoteData.attributedTo || message.actor;
 
-      // Store the event locally with null calendar_id (remote event)
-      // Normalize the fetched AP object into internal eventParams shape
+      // Store the event locally with null calendar_id (remote event).
+      // Normalize the fetched AP object into internal eventParams shape.
+      // Pass attributedTo (the owning actor URI on the fetched object) so
+      // fromActivityPubObject can origin-gate privileged schedule fields
+      // (hideFromPublic). An Announce reshared into this calendar can carry
+      // arbitrary payload, but cancellation state must only stick when the
+      // owning-actor domain matches the event origin.
       const eventParams = {
-        ...EventObject.fromActivityPubObject(remoteData as Record<string, any>),
+        ...EventObject.fromActivityPubObject(
+          remoteData as Record<string, any>,
+          { actorUri: attributedTo },
+        ),
         id: localEventId,
         eventSourceUrl: apObjectId,
       };

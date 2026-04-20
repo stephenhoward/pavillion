@@ -819,6 +819,55 @@ describe('EventObject', () => {
       expect(reconstituted.schedules[0].endDate?.toMillis()).toBe(endDt.toMillis());
     });
 
+    it('should round-trip hideFromPublic on pavillion:schedules entries', () => {
+      // Outbound: a local event has a cancellation-only exclusion schedule
+      // (isExclusion + hideFromPublic=false) alongside a normal schedule.
+      const calendar = new Calendar('calendar-uuid', 'mycal');
+      const event = new CalendarEvent('event-uuid', 'calendar-uuid');
+      event.addContent(new CalendarEventContent('en', 'Series Event', ''));
+      event.date = '2026-04-15';
+
+      const normalStart = DateTime.fromISO('2026-04-15T09:00:00.000Z');
+      const cancelledStart = DateTime.fromISO('2026-04-22T09:00:00.000Z');
+
+      const normal = new CalendarEventSchedule('s-normal', normalStart);
+      normal.isExclusion = false;
+      normal.hideFromPublic = true;
+
+      const cancelled = new CalendarEventSchedule('s-cancel', cancelledStart);
+      cancelled.isExclusion = true;
+      cancelled.hideFromPublic = false;
+
+      event.schedules = [normal, cancelled];
+
+      const apOutput = new EventObject(calendar, event).toActivityPubObject();
+
+      // Outbound: hideFromPublic is present on every pavillion:schedules entry
+      expect(apOutput['pavillion:schedules']).toBeInstanceOf(Array);
+      expect(apOutput['pavillion:schedules']).toHaveLength(2);
+      expect(apOutput['pavillion:schedules'][0]).toMatchObject({
+        id: 's-normal',
+        isException: false,
+        hideFromPublic: true,
+      });
+      expect(apOutput['pavillion:schedules'][1]).toMatchObject({
+        id: 's-cancel',
+        isException: true,
+        hideFromPublic: false,
+      });
+
+      // Inbound (origin actor, no gating applied by omitting actorUri):
+      // hideFromPublic is preserved on both schedules through the reconstitute.
+      const normalized = EventObject.fromActivityPubObject(apOutput);
+      const reconstituted = CalendarEvent.fromObject(normalized);
+
+      const rebuiltNormal = reconstituted.schedules.find(s => s.id === 's-normal');
+      const rebuiltCancel = reconstituted.schedules.find(s => s.id === 's-cancel');
+      expect(rebuiltNormal?.hideFromPublic).toBe(true);
+      expect(rebuiltCancel?.isExclusion).toBe(true);
+      expect(rebuiltCancel?.hideFromPublic).toBe(false);
+    });
+
     it('should round-trip with synthesized endTime when no endDate exists', () => {
       const calendar = new Calendar('calendar-uuid', 'mycal');
       const event = new CalendarEvent('event-uuid', 'calendar-uuid');
@@ -1263,6 +1312,113 @@ describe('EventObject', () => {
 
         expect(result.externalUrl).toBeNull();
         expect(result.urlPrompt).toBeNull();
+      });
+
+    });
+
+    describe('origin-actor gating of hideFromPublic', () => {
+
+      // Shared fixture: a remote event that carries two schedules, one marked
+      // as a cancellation override (isException + hideFromPublic=false).
+      function makeApObjectWithCancellation(): Record<string, any> {
+        return {
+          type: 'Event',
+          id: 'https://origin.example/calendars/owner/events/evt-1',
+          attributedTo: 'https://origin.example/calendars/owner',
+          name: 'Origin Event',
+          startTime: '2026-04-15T09:00:00Z',
+          'pavillion:schedules': [
+            { id: 's-normal', start: '2026-04-15T09:00:00Z', isException: false, hideFromPublic: true },
+            { id: 's-cancel', start: '2026-04-22T09:00:00Z', isException: true, hideFromPublic: false },
+          ],
+        };
+      }
+
+      it('preserves hideFromPublic when the actor shares the event origin domain', () => {
+        const apObject = makeApObjectWithCancellation();
+
+        const result = EventObject.fromActivityPubObject(apObject, {
+          actorUri: 'https://origin.example/calendars/owner',
+        });
+
+        expect(result.schedules).toHaveLength(2);
+        expect(result.schedules[0].hideFromPublic).toBe(true);
+        expect(result.schedules[1].hideFromPublic).toBe(false);
+      });
+
+      it('preserves hideFromPublic when no actorUri is supplied (legacy caller)', () => {
+        const apObject = makeApObjectWithCancellation();
+
+        const result = EventObject.fromActivityPubObject(apObject);
+
+        expect(result.schedules).toHaveLength(2);
+        expect(result.schedules[0].hideFromPublic).toBe(true);
+        expect(result.schedules[1].hideFromPublic).toBe(false);
+      });
+
+      it('strips hideFromPublic from every schedule when actor domain differs from event origin', () => {
+        const apObject = makeApObjectWithCancellation();
+
+        const result = EventObject.fromActivityPubObject(apObject, {
+          actorUri: 'https://other.example/users/editor',
+        });
+
+        expect(result.schedules).toHaveLength(2);
+        expect(result.schedules[0]).not.toHaveProperty('hideFromPublic');
+        expect(result.schedules[1]).not.toHaveProperty('hideFromPublic');
+        // Other fields on the schedule remain intact — only hideFromPublic is stripped
+        expect(result.schedules[1].isException).toBe(true);
+        expect(result.schedules[1].id).toBe('s-cancel');
+      });
+
+      it('strips hideFromPublic when actorUri is present but malformed', () => {
+        const apObject = makeApObjectWithCancellation();
+
+        const result = EventObject.fromActivityPubObject(apObject, {
+          actorUri: 'not-a-valid-uri',
+        });
+
+        // A malformed actor URI cannot be proven to share origin, so the safer
+        // posture is to treat it as non-origin and strip the privileged field.
+        expect(result.schedules[0]).not.toHaveProperty('hideFromPublic');
+        expect(result.schedules[1]).not.toHaveProperty('hideFromPublic');
+      });
+
+      it('falls back to attributedTo for origin when event id is missing', () => {
+        const apObject: Record<string, any> = {
+          type: 'Event',
+          attributedTo: 'https://origin.example/calendars/owner',
+          name: 'No-ID Event',
+          startTime: '2026-04-15T09:00:00Z',
+          'pavillion:schedules': [
+            { id: 's1', start: '2026-04-15T09:00:00Z', isException: true, hideFromPublic: false },
+          ],
+        };
+
+        const result = EventObject.fromActivityPubObject(apObject, {
+          actorUri: 'https://origin.example/users/someone',
+        });
+
+        expect(result.schedules[0].hideFromPublic).toBe(false);
+      });
+
+      it('does not alter schedules when the payload has no pavillion:schedules or hideFromPublic field', () => {
+        const apObject = {
+          type: 'Event',
+          id: 'https://origin.example/calendars/owner/events/evt-2',
+          attributedTo: 'https://origin.example/calendars/owner',
+          name: 'Plain AS Event',
+          startTime: '2026-04-15T09:00:00Z',
+          endTime: '2026-04-15T10:00:00Z',
+        };
+
+        const result = EventObject.fromActivityPubObject(apObject, {
+          actorUri: 'https://other.example/users/editor',
+        });
+
+        // Synthesized from startTime/endTime; no hideFromPublic was ever present
+        expect(result.schedules).toHaveLength(1);
+        expect(result.schedules[0]).not.toHaveProperty('hideFromPublic');
       });
 
     });
