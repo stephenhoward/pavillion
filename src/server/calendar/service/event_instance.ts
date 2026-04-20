@@ -106,7 +106,16 @@ export default class EventInstanceService {
         include: [EventContentEntity, LocationEntity, EventScheduleEntity, MediaEntity],
       }],
     });
-    return eventInstances.map((instance) => instance.toModel());
+    const instances = eventInstances.map((instanceEntity) => {
+      const instance = instanceEntity.toModel();
+      // Populate schedules from the eager-loaded association so the cancellation
+      // check below can match without any additional DB query.
+      const scheduleEntities = (instanceEntity.event?.getDataValue('schedules') ?? []) as EventScheduleEntity[];
+      instance.event.schedules = scheduleEntities.map(s => s.toModel());
+      return instance;
+    });
+    this.markShownCancellations(instances);
+    return instances;
   }
 
   async listEventInstancesForCalendar(calendar: Calendar): Promise<CalendarEventInstance[]> {
@@ -119,7 +128,15 @@ export default class EventInstanceService {
       }],
     });
 
-    const instances = eventInstances.map((instance) => instance.toModel());
+    const instances = eventInstances.map((instanceEntity) => {
+      const instance = instanceEntity.toModel();
+      // Populate schedules from the eager-loaded association so shown-cancellation
+      // matching can run without a second DB roundtrip.
+      const scheduleEntities = (instanceEntity.event?.getDataValue('schedules') ?? []) as EventScheduleEntity[];
+      instance.event.schedules = scheduleEntities.map(s => s.toModel());
+      return instance;
+    });
+    this.markShownCancellations(instances);
     const repostContexts: RepostContext[] = eventInstances.map((entity, i) => ({
       event: instances[i].event,
       displayCalendarId: entity.calendar_id,
@@ -199,6 +216,9 @@ export default class EventInstanceService {
             LocationEntity,
             MediaEntity,
             CalendarEntity,
+            // Schedules are required to mark shown-cancellation instances in-memory.
+            // Load here so markShownCancellations() has no extra query to make.
+            EventScheduleEntity,
             {
               model: EventCategoryAssignmentEntity,
               as: 'categoryAssignments',
@@ -329,6 +349,11 @@ export default class EventInstanceService {
             .map(assignment => assignment.category.toModel());
         }
 
+        // Populate schedules from the eager-loaded association so
+        // markShownCancellations() below can work without a second DB roundtrip.
+        const scheduleEntities = (event.getDataValue('schedules') ?? []) as EventScheduleEntity[];
+        instance.event.schedules = scheduleEntities.map(s => s.toModel());
+
         // Attach isRecurring — read from the virtual attribute added by the EXISTS subquery.
         // Sequelize returns it as a number (0/1) in SQLite or boolean in PostgreSQL.
         const isRecurringRaw = event.getDataValue('isRecurring');
@@ -336,6 +361,9 @@ export default class EventInstanceService {
 
         return instance;
       });
+
+    // Mark shown cancellations in-memory from the already-loaded schedules.
+    this.markShownCancellations(mappedInstances);
 
     // Resolve source calendar information for reposted events
     const validEntities = instanceEntities.filter(e => e.event != null);
@@ -396,6 +424,9 @@ export default class EventInstanceService {
     const scheduleEntities = (event.getDataValue('schedules') ?? []) as EventScheduleEntity[];
     const scheduleModels = scheduleEntities.map((s: EventScheduleEntity) => s.toModel());
     instance.event.schedules = scheduleModels;
+
+    // Mark as cancelled in-memory if a shown-cancellation schedule targets this instance.
+    this.markShownCancellations([instance]);
 
     // Attach pre-computed human-readable recurrence text
     (instance.event as any).recurrenceText = getRecurrenceText(scheduleModels);
@@ -595,6 +626,18 @@ export default class EventInstanceService {
     }
   }
 
+  /**
+   * Builds an RRuleSet from an event's schedules, distinguishing between
+   * hidden (EXDATE-style) and shown (RECURRENCE-ID-style) cancellations.
+   *
+   * Exclusion schedules only contribute exdate/exrule suppression to the set
+   * when they are BOTH `isExclusion = true` AND `hideFromPublic = true`.
+   * Shown cancellations (isExclusion = true, hideFromPublic = false) do not
+   * emit exdate or rdate — their underlying occurrence is still produced by
+   * the parent recurring rule, and the listing layer marks the materialized
+   * instance as `isCancelled = true` instead. See
+   * {@link markShownCancellations}.
+   */
   private rrules(event: CalendarEvent): any {
     const rruleSet = new RRuleSet();
 
@@ -606,6 +649,16 @@ export default class EventInstanceService {
       [EventFrequency.YEARLY]: RRule.YEARLY,
     };
     for (let schedule of event.schedules) {
+      // Only hidden cancellations (is_exclusion=true AND hide_from_public=true)
+      // contribute suppression to the rrule set. Shown cancellations are no-ops
+      // here — the underlying occurrence is still produced by the parent rule
+      // and is flagged as cancelled at listing time.
+      const isHiddenCancellation = schedule.isExclusion && schedule.hideFromPublic;
+      const isShownCancellation = schedule.isExclusion && !schedule.hideFromPublic;
+      if (isShownCancellation) {
+        continue;
+      }
+
       const frequency = schedule.frequency !== null
         ? frequencyMap[schedule.frequency]
         : undefined;
@@ -630,7 +683,7 @@ export default class EventInstanceService {
           }
         }
         const rule = new RRule(options);
-        if ( schedule.isExclusion ) {
+        if ( isHiddenCancellation ) {
           rruleSet.exrule(rule);
         }
         else {
@@ -639,7 +692,7 @@ export default class EventInstanceService {
       }
       else {
         if (schedule.startDate) {
-          if ( schedule.isExclusion ) {
+          if ( isHiddenCancellation ) {
             rruleSet.exdate(schedule.startDate.toJSDate());
           }
           else {
@@ -649,6 +702,36 @@ export default class EventInstanceService {
       }
     }
     return rruleSet;
+  }
+
+  /**
+   * Mutates the given instances in-place to set `isCancelled = true` for any
+   * instance whose start matches a shown-cancellation schedule
+   * (is_exclusion = true, hide_from_public = false) on the parent event.
+   *
+   * Reads only from the event's already-loaded schedules — no additional DB
+   * query. Matching is by UTC millisecond timestamp so timezone/zone handling
+   * on either side does not cause a false negative.
+   */
+  private markShownCancellations(instances: CalendarEventInstance[]): void {
+    for (const instance of instances) {
+      const schedules = instance.event?.schedules;
+      if (!schedules || schedules.length === 0) {
+        continue;
+      }
+      const instanceStartMs = instance.start.toUTC().toMillis();
+      for (const schedule of schedules) {
+        if (
+          schedule.isExclusion
+          && !schedule.hideFromPublic
+          && schedule.startDate
+          && schedule.startDate.toUTC().toMillis() === instanceStartMs
+        ) {
+          instance.isCancelled = true;
+          break;
+        }
+      }
+    }
   }
 
   /**

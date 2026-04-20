@@ -4,6 +4,7 @@ import { DateTime, Duration } from 'luxon';
 import { v4 as uuidv4 } from 'uuid';
 import sinon from 'sinon';
 import { CalendarEvent, CalendarEventSchedule, EventFrequency } from '@/common/model/events';
+import CalendarEventInstance from '@/common/model/event_instance';
 import EventInstanceService from '@/server/calendar/service/event_instance';
 import EventService from '@/server/calendar/service/events';
 import { EventScheduleEntity } from '@/server/calendar/entity/event';
@@ -31,6 +32,7 @@ describe('EventInstanceService.generateInstances', () => {
     interval?: number;
     count?: number;
     isExclusion?: boolean;
+    hideFromPublic?: boolean;
     byDay?: string[];
   }): CalendarEventSchedule {
     const schedule = new CalendarEventSchedule(uuidv4(), opts.startDate, opts.endDate ?? undefined);
@@ -39,6 +41,9 @@ describe('EventInstanceService.generateInstances', () => {
     schedule.interval = opts.interval ?? 0;
     schedule.count = opts.count ?? 0;
     schedule.isExclusion = opts.isExclusion ?? false;
+    // Preserve prior EXDATE-only semantics: when unspecified, treat exclusions
+    // as hidden (true). Tests for shown cancellations pass hideFromPublic: false.
+    schedule.hideFromPublic = opts.hideFromPublic ?? true;
     schedule.byDay = opts.byDay ?? [];
     return schedule;
   }
@@ -447,6 +452,186 @@ describe('EventInstanceService.generateInstances', () => {
 
       const instances = (service as any).generateInstances(event, new Date('2025-08-15T00:00:00Z'));
       expect(instances).toHaveLength(0);
+    });
+  });
+
+  describe('hidden vs shown cancellations (rrules branching)', () => {
+    // Hidden branch: is_exclusion=true AND hide_from_public=true should still
+    // silently suppress the occurrence as before — this is the EXDATE-style
+    // behavior that must be preserved.
+    it('should exclude a hidden cancellation (is_exclusion=true, hide_from_public=true)', () => {
+      const start = DateTime.fromISO('2025-09-01T09:00:00', { zone: 'utc' });
+      const cancelDate = DateTime.fromISO('2025-09-08T09:00:00', { zone: 'utc' });
+      const event = createEvent([
+        createSchedule({
+          startDate: start,
+          frequency: EventFrequency.WEEKLY,
+          interval: 1,
+          count: 4,
+        }),
+        createSchedule({
+          startDate: cancelDate,
+          isExclusion: true,
+          hideFromPublic: true,
+        }),
+      ]);
+
+      const instances = (service as any).generateInstances(event, new Date('2025-08-15T00:00:00Z'));
+      const dates = instances.map((i: any) => i.start.toUTC().toISODate());
+
+      // The cancelled 2025-09-08 occurrence is suppressed; only 3 remain.
+      expect(dates).toEqual(['2025-09-01', '2025-09-15', '2025-09-22']);
+    });
+
+    // Shown branch: is_exclusion=true AND hide_from_public=false should NOT
+    // suppress the occurrence. The underlying rrule still produces it, and
+    // markShownCancellations flips isCancelled=true on the matching instance.
+    it('should materialize a shown cancellation and mark it isCancelled=true via markShownCancellations', () => {
+      const start = DateTime.fromISO('2025-09-01T09:00:00', { zone: 'utc' });
+      const cancelDate = DateTime.fromISO('2025-09-08T09:00:00', { zone: 'utc' });
+      const event = createEvent([
+        createSchedule({
+          startDate: start,
+          frequency: EventFrequency.WEEKLY,
+          interval: 1,
+          count: 4,
+        }),
+        createSchedule({
+          startDate: cancelDate,
+          isExclusion: true,
+          hideFromPublic: false,
+        }),
+      ]);
+
+      const instances = (service as any).generateInstances(event, new Date('2025-08-15T00:00:00Z'));
+      const dates = instances.map((i: any) => i.start.toUTC().toISODate());
+
+      // The cancelled occurrence is still materialized.
+      expect(dates).toEqual(['2025-09-01', '2025-09-08', '2025-09-15', '2025-09-22']);
+
+      // Before markShownCancellations runs, none are flagged.
+      for (const inst of instances) {
+        expect(inst.isCancelled).toBe(false);
+      }
+
+      // Simulate the listing flow: schedules are populated on the event from
+      // eager-loaded DB associations before markShownCancellations runs. The
+      // in-memory serialization path used by generateInstances discards
+      // schedule field values through toObject/fromObject, so tests must
+      // re-attach the authoritative schedules — mirroring what list* methods
+      // do by mapping EventScheduleEntity.toModel() onto instance.event.
+      for (const inst of instances) {
+        inst.event.schedules = event.schedules;
+      }
+
+      // markShownCancellations flips the matching instance.
+      (service as any).markShownCancellations(instances);
+
+      const cancelled = instances.filter((i: any) => i.isCancelled);
+      expect(cancelled).toHaveLength(1);
+      expect(cancelled[0].start.toUTC().toISODate()).toBe('2025-09-08');
+    });
+
+    // Regression guard: a shown cancellation must not emit an rdate that would
+    // add a new occurrence on top of what the parent rrule already produces.
+    // A matching rrule occurrence is always already present, so no duplicate.
+    it('should not duplicate an occurrence when a shown cancellation matches an rrule date', () => {
+      const start = DateTime.fromISO('2025-09-01T09:00:00', { zone: 'utc' });
+      const event = createEvent([
+        createSchedule({
+          startDate: start,
+          frequency: EventFrequency.WEEKLY,
+          interval: 1,
+          count: 2,
+        }),
+        createSchedule({
+          startDate: DateTime.fromISO('2025-09-08T09:00:00', { zone: 'utc' }),
+          isExclusion: true,
+          hideFromPublic: false,
+        }),
+      ]);
+
+      const instances = (service as any).generateInstances(event, new Date('2025-08-15T00:00:00Z'));
+      const dates = instances.map((i: any) => i.start.toUTC().toISODate());
+
+      expect(dates).toEqual(['2025-09-01', '2025-09-08']);
+      // No duplicate entry for 2025-09-08.
+      expect(dates.filter((d: string) => d === '2025-09-08')).toHaveLength(1);
+    });
+
+    // DST boundary sanity: when a shown-cancellation schedule's startDate and
+    // the materialized instance's start refer to the same UTC instant but are
+    // expressed in different zones (one before and one after a DST jump), the
+    // match must succeed. We compare by UTC millisecond on both sides, so the
+    // zone labels should not matter. This guards against a naive string-equal
+    // or wall-clock comparison that could desync across DST.
+    it('should match a shown cancellation whose schedule and instance use different zones', () => {
+      // US DST starts 2026-03-08. 2026-03-15T09:00:00 America/Denver
+      // (MDT, UTC-6) == 2026-03-15T15:00:00Z. Put the cancellation schedule
+      // in local Denver time and the instance start in UTC to simulate the
+      // realistic flow where DB-loaded schedule times and RRule-expanded
+      // instance starts land in different zones after DST.
+      const denverCancel = DateTime.fromISO('2026-03-15T09:00:00', { zone: 'America/Denver' });
+      const utcCancel = DateTime.fromISO('2026-03-15T15:00:00', { zone: 'utc' });
+      expect(denverCancel.toUTC().toMillis()).toBe(utcCancel.toUTC().toMillis());
+
+      const dummyEvent = createEvent([
+        createSchedule({
+          startDate: DateTime.fromISO('2026-03-01T09:00:00', { zone: 'America/Denver' }),
+          frequency: EventFrequency.WEEKLY,
+          interval: 1,
+          count: 1,
+        }),
+        createSchedule({
+          startDate: denverCancel,
+          isExclusion: true,
+          hideFromPublic: false,
+        }),
+      ]);
+
+      // Synthesize instances directly so the test stays focused on the
+      // matching logic (independent of any RRule + DST expansion quirks).
+      const matchingInstance = new CalendarEventInstance(
+        uuidv4(),
+        dummyEvent,
+        utcCancel,
+        null,
+      );
+      const nonMatchingInstance = new CalendarEventInstance(
+        uuidv4(),
+        dummyEvent,
+        DateTime.fromISO('2026-03-22T15:00:00', { zone: 'utc' }),
+        null,
+      );
+      // Re-attach authoritative schedules (see note in preceding test).
+      matchingInstance.event.schedules = dummyEvent.schedules;
+      nonMatchingInstance.event.schedules = dummyEvent.schedules;
+
+      (service as any).markShownCancellations([matchingInstance, nonMatchingInstance]);
+
+      expect(matchingInstance.isCancelled).toBe(true);
+      expect(nonMatchingInstance.isCancelled).toBe(false);
+    });
+
+    // markShownCancellations must be a no-op when there are no shown-cancellation
+    // schedules (the common case) so it doesn't produce false positives.
+    it('should leave instances untouched when there are no shown cancellations', () => {
+      const start = DateTime.fromISO('2025-09-01T09:00:00', { zone: 'utc' });
+      const event = createEvent([
+        createSchedule({
+          startDate: start,
+          frequency: EventFrequency.WEEKLY,
+          interval: 1,
+          count: 3,
+        }),
+      ]);
+
+      const instances = (service as any).generateInstances(event, new Date('2025-08-15T00:00:00Z'));
+      (service as any).markShownCancellations(instances);
+
+      for (const inst of instances) {
+        expect(inst.isCancelled).toBe(false);
+      }
     });
   });
 });
