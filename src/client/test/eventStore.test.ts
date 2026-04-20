@@ -1,7 +1,26 @@
 import { describe, it, expect, beforeEach } from 'vitest';
+import { DateTime } from 'luxon';
 import { createPinia, setActivePinia } from 'pinia';
 import { useEventStore } from '@/client/stores/eventStore';
 import { CalendarEvent } from '@/common/model/events';
+import CalendarEventInstance from '@/common/model/event_instance';
+
+function makeInstance(
+  instanceId: string,
+  eventId: string,
+  calendarId: string,
+  options: { isCancelled?: boolean } = {},
+): CalendarEventInstance {
+  const event = new CalendarEvent(eventId, calendarId, 'Recurring Event');
+  const instance = new CalendarEventInstance(
+    instanceId,
+    event,
+    DateTime.fromISO('2026-06-01T10:00:00'),
+    DateTime.fromISO('2026-06-01T11:00:00'),
+  );
+  instance.isCancelled = options.isCancelled ?? false;
+  return instance;
+}
 
 describe('EventStore', () => {
   beforeEach(() => {
@@ -148,6 +167,106 @@ describe('EventStore', () => {
       const events = store.eventsForCalendar('non-existent-calendar');
 
       expect(events).toEqual([]);
+    });
+  });
+
+  describe('setInstancesForEvent', () => {
+    it('should set instances for an event', () => {
+      const store = useEventStore();
+      const instances = [
+        makeInstance('inst-1', 'event-1', 'calendar-123'),
+        makeInstance('inst-2', 'event-1', 'calendar-123'),
+      ];
+
+      store.setInstancesForEvent('event-1', instances);
+
+      expect(store.instancesForEvent('event-1')).toHaveLength(2);
+      expect(store.instancesForEvent('event-1')).toStrictEqual(instances);
+    });
+
+    it('should replace existing instances', () => {
+      const store = useEventStore();
+      const oldInstances = [makeInstance('old-inst', 'event-1', 'calendar-123')];
+      store.setInstancesForEvent('event-1', oldInstances);
+
+      const newInstances = [
+        makeInstance('inst-1', 'event-1', 'calendar-123'),
+        makeInstance('inst-2', 'event-1', 'calendar-123'),
+      ];
+      store.setInstancesForEvent('event-1', newInstances);
+
+      expect(store.instancesForEvent('event-1')).toStrictEqual(newInstances);
+    });
+  });
+
+  describe('updateInstance', () => {
+    it('should update the cached instance in-place by id', () => {
+      const store = useEventStore();
+      const original = makeInstance('inst-1', 'event-1', 'calendar-123');
+      const other = makeInstance('inst-2', 'event-1', 'calendar-123');
+      store.setInstancesForEvent('event-1', [original, other]);
+
+      const updated = makeInstance('inst-1', 'event-1', 'calendar-123', { isCancelled: true });
+      store.updateInstance('event-1', updated);
+
+      const cached = store.instancesForEvent('event-1');
+      expect(cached).toHaveLength(2);
+      expect(cached[0]).toStrictEqual(updated);
+      expect(cached[0].isCancelled).toBe(true);
+      expect(cached[1]).toStrictEqual(other);
+    });
+
+    it('should do nothing when the event has no cached instances', () => {
+      const store = useEventStore();
+      const updated = makeInstance('inst-1', 'event-1', 'calendar-123', { isCancelled: true });
+
+      store.updateInstance('event-1', updated);
+
+      expect(store.instancesForEvent('event-1')).toEqual([]);
+    });
+
+    it('should do nothing when the instance id is not present', () => {
+      const store = useEventStore();
+      const existing = makeInstance('inst-1', 'event-1', 'calendar-123');
+      store.setInstancesForEvent('event-1', [existing]);
+
+      const stranger = makeInstance('inst-999', 'event-1', 'calendar-123', { isCancelled: true });
+      store.updateInstance('event-1', stranger);
+
+      const cached = store.instancesForEvent('event-1');
+      expect(cached).toHaveLength(1);
+      expect(cached[0]).toStrictEqual(existing);
+    });
+  });
+
+  describe('removeInstance', () => {
+    it('should remove an instance by id', () => {
+      const store = useEventStore();
+      const keep = makeInstance('inst-1', 'event-1', 'calendar-123');
+      const drop = makeInstance('inst-2', 'event-1', 'calendar-123');
+      store.setInstancesForEvent('event-1', [keep, drop]);
+
+      store.removeInstance('event-1', 'inst-2');
+
+      const cached = store.instancesForEvent('event-1');
+      expect(cached).toHaveLength(1);
+      expect(cached[0]).toStrictEqual(keep);
+    });
+
+    it('should handle removing from an event with no cached instances', () => {
+      const store = useEventStore();
+      // Should not throw
+      store.removeInstance('event-unknown', 'inst-x');
+
+      expect(store.instancesForEvent('event-unknown')).toEqual([]);
+    });
+  });
+
+  describe('instancesForEvent', () => {
+    it('should return an empty array for an unknown event', () => {
+      const store = useEventStore();
+
+      expect(store.instancesForEvent('unknown-event')).toEqual([]);
     });
   });
 });

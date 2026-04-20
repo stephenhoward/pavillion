@@ -1,5 +1,7 @@
+import axios from 'axios';
 import { CalendarEvent } from '@/common/model/events';
 import { EventLocation } from '@/common/model/location';
+import CalendarEventInstance from '@/common/model/event_instance';
 import { useEventStore } from '@/client/stores/eventStore';
 import ModelService from '@/client/service/models';
 import { Calendar } from '@/common/model/calendar';
@@ -161,6 +163,86 @@ export default class EventService {
     }
     catch (error) {
       console.error('Error unsharing reposted event:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Cancel a single materialized instance of a recurring event. The server
+   * distinguishes between EXDATE-style hidden cancellation (hideFromPublic=true,
+   * instance disappears) and RECURRENCE-ID-style shown cancellation
+   * (hideFromPublic=false, instance remains visible with a cancelled marker).
+   *
+   * Updates the eventStore's cached instance in place so the panel UI reflects
+   * the new state without a full refetch — or removes it from the cache when
+   * the server reports the instance no longer materializes (null response).
+   *
+   * @param eventId The event whose instance is being cancelled
+   * @param instanceId The materialized instance id to cancel
+   * @param hideFromPublic True for EXDATE-style hidden cancellation, false for shown
+   * @returns The updated instance, or null if the cancellation removes it from view
+   */
+  async cancelEventInstance(
+    eventId: string,
+    instanceId: string,
+    hideFromPublic: boolean,
+  ): Promise<CalendarEventInstance | null> {
+    const encodedEventId = validateAndEncodeId(eventId, 'Event ID');
+    const encodedInstanceId = validateAndEncodeId(instanceId, 'Instance ID');
+
+    try {
+      const response = await axios.post(
+        `/api/v1/events/${encodedEventId}/instances/${encodedInstanceId}/cancel`,
+        { hideFromPublic },
+      );
+
+      if (response.data) {
+        const instance = CalendarEventInstance.fromObject(response.data);
+        this.store.updateInstance(eventId, instance);
+        return instance;
+      }
+
+      // Hidden cancellation: the server no longer materializes this instance,
+      // so drop it from the cache to keep the panel consistent.
+      this.store.removeInstance(eventId, instanceId);
+      return null;
+    }
+    catch (error) {
+      console.error('Error cancelling event instance:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Restore a previously cancelled instance by removing its exclusion schedule
+   * row on the server. Updates the cached instance in place on response.
+   *
+   * @param eventId The event whose instance is being restored
+   * @param instanceId The materialized instance id to restore
+   * @returns The updated instance, or null if the server could not re-materialize it
+   */
+  async restoreEventInstance(
+    eventId: string,
+    instanceId: string,
+  ): Promise<CalendarEventInstance | null> {
+    const encodedEventId = validateAndEncodeId(eventId, 'Event ID');
+    const encodedInstanceId = validateAndEncodeId(instanceId, 'Instance ID');
+
+    try {
+      const response = await axios.delete(
+        `/api/v1/events/${encodedEventId}/instances/${encodedInstanceId}/cancel`,
+      );
+
+      if (response.data) {
+        const instance = CalendarEventInstance.fromObject(response.data);
+        this.store.updateInstance(eventId, instance);
+        return instance;
+      }
+
+      return null;
+    }
+    catch (error) {
+      console.error('Error restoring event instance:', error);
       throw error;
     }
   }
