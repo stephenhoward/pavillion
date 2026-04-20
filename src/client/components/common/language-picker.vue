@@ -196,15 +196,26 @@
 </style>
 
 <template>
-  <div class="language-selector-modal">
+  <div
+    class="language-selector-modal"
+    @keydown.esc.stop="closeModal"
+    @keydown.tab="trapTab"
+  >
     <!-- Backdrop -->
     <div class="backdrop" @click="closeModal" />
 
     <!-- Modal -->
-    <div class="modal-content" :dir="iso6391.getDir(defaultLanguage) == 'rtl' ? 'rtl' : ''">
+    <div
+      ref="modalRef"
+      class="modal-content"
+      role="dialog"
+      aria-modal="true"
+      :aria-labelledby="titleId"
+      :dir="iso6391.getDir(defaultLanguage) == 'rtl' ? 'rtl' : ''"
+    >
       <!-- Header -->
       <div class="modal-header">
-        <h2>{{ t('select_language') }}</h2>
+        <h2 :id="titleId">{{ t('select_language') }}</h2>
         <button
           type="button"
           class="close-button"
@@ -218,6 +229,7 @@
             viewBox="0 0 24 24"
             stroke="currentColor"
             stroke-width="2"
+            aria-hidden="true"
           >
             <path
               stroke-linecap="round"
@@ -230,6 +242,7 @@
 
       <!-- Search -->
       <div class="search-section">
+        <label :for="searchId" class="sr-only">{{ t('search_language') }}</label>
         <div class="search-input-wrapper">
           <svg
             class="search-icon"
@@ -237,6 +250,7 @@
             viewBox="0 0 24 24"
             stroke="currentColor"
             stroke-width="2"
+            aria-hidden="true"
           >
             <path
               stroke-linecap="round"
@@ -246,6 +260,7 @@
           </svg>
           <input
             ref="searchInputRef"
+            :id="searchId"
             type="search"
             :placeholder="t('search_language')"
             v-model="state.searchString"
@@ -278,19 +293,55 @@
 </template>
 
 <script setup>
-import { reactive, computed, ref, onMounted, nextTick } from 'vue';
+import { reactive, computed, ref, onMounted, onUnmounted, nextTick, useId } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import iso6391 from 'iso-639-1-dir';
 
 const emit = defineEmits(['close', 'select']);
 
+const modalRef = ref(null);
 const searchInputRef = ref(null);
 
+const uid = useId();
+const titleId = `${uid}-title`;
+const searchId = `${uid}-search`;
+
+// Capture the element that triggered the modal so focus can be restored on close.
+let previouslyFocused = null;
+
 onMounted(() => {
+  previouslyFocused = document.activeElement;
   nextTick(() => {
     searchInputRef.value?.focus();
   });
 });
+
+onUnmounted(() => {
+  if (previouslyFocused && typeof previouslyFocused.focus === 'function') {
+    previouslyFocused.focus();
+  }
+});
+
+// Keep Tab / Shift+Tab cycling inside the modal while it is open.
+const trapTab = (event) => {
+  const container = modalRef.value;
+  if (!container) return;
+  const focusables = container.querySelectorAll(
+    'a[href], area[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled]), [tabindex]:not([tabindex="-1"])',
+  );
+  if (focusables.length === 0) return;
+  const first = focusables[0];
+  const last = focusables[focusables.length - 1];
+  const active = document.activeElement;
+  if (event.shiftKey && active === first) {
+    event.preventDefault();
+    last.focus();
+  }
+  else if (!event.shiftKey && active === last) {
+    event.preventDefault();
+    first.focus();
+  }
+};
 
 const { t } = useTranslation('system', {
   keyPrefix: 'language_picker',
