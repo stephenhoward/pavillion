@@ -535,6 +535,56 @@ select.field-input {
   }
 }
 
+/* Cancellations panel collapsible trigger & container */
+.cancellations-trigger-wrapper {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--pav-color-stone-200);
+
+  @media (prefers-color-scheme: dark) {
+    border-top-color: var(--pav-color-stone-700);
+  }
+}
+
+.cancellations-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--pav-color-stone-300);
+  border-radius: 0.375rem;
+  background: transparent;
+  color: var(--pav-color-stone-700);
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+
+  &:hover {
+    background: var(--pav-color-stone-50);
+    border-color: var(--pav-color-stone-400);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--pav-color-orange-500);
+    outline-offset: 2px;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    border-color: var(--pav-color-stone-600);
+    color: var(--pav-color-stone-300);
+
+    &:hover {
+      background: var(--pav-color-stone-800);
+      border-color: var(--pav-color-stone-500);
+    }
+  }
+}
+
+.cancellations-panel-wrapper {
+  margin-top: 1rem;
+}
+
 /* Error styling */
 .error {
   position: relative;
@@ -1045,6 +1095,34 @@ button {
               >
                 {{ fieldErrors.schedule }}
               </p>
+
+              <!-- Cancellations Panel Trigger (only for recurring events) -->
+              <div
+                v-if="hasRecurringSchedule"
+                class="cancellations-trigger-wrapper"
+              >
+                <button
+                  type="button"
+                  class="cancellations-trigger"
+                  data-testid="cancellations-trigger"
+                  :aria-expanded="showCancellationsPanel"
+                  aria-controls="event-cancellations-panel"
+                  @click="showCancellationsPanel = !showCancellationsPanel"
+                >
+                  {{ tCancellations('toggle_button') }}
+                </button>
+
+                <div
+                  v-if="showCancellationsPanel"
+                  id="event-cancellations-panel"
+                  class="cancellations-panel-wrapper"
+                >
+                  <EventCancellationsPanel
+                    :event="editorState.event"
+                    :instances="eventInstances"
+                  />
+                </div>
+              </div>
             </div>
           </section>
 
@@ -1124,6 +1202,7 @@ import { useRouter, onBeforeRouteLeave } from 'vue-router';
 import { useTranslation } from 'i18next-vue';
 import { ArrowLeft, Plus } from 'lucide-vue-next';
 import EventRecurrenceView from './event_recurrence.vue';
+import EventCancellationsPanel from './EventCancellationsPanel.vue';
 import languagePicker from '@/client/components/common/language-picker.vue';
 import ImageUpload from '@/client/components/common/media/image-upload.vue';
 import ImageWorkspace from '@/client/components/common/media/image-workspace.vue';
@@ -1143,6 +1222,9 @@ import { useLocationManagement } from '@/client/composables/useLocationManagemen
 import { useUnsavedChanges } from '@/client/composables/useUnsavedChanges';
 import { useLanguageManagement } from '@/client/composables/useLanguageManagement';
 
+// Stores
+import { useEventStore } from '@/client/stores/eventStore';
+
 // Props for edit mode (eventId passed from route)
 const props = defineProps({
   eventId: {
@@ -1161,6 +1243,12 @@ const { t } = useTranslation('event_editor', {
 const { t: tExternalLink } = useTranslation('event_editor', {
   keyPrefix: 'external_link',
 });
+const { t: tCancellations } = useTranslation('event_editor', {
+  keyPrefix: 'cancellations',
+});
+
+// Event store (for cached instances)
+const eventStore = useEventStore();
 
 // Initialize composables
 const defaultLanguage = 'en';
@@ -1235,6 +1323,34 @@ const urlPromptProxy = computed({
     if (!editorState.event) return;
     editorState.event.urlPrompt = value || null;
   },
+});
+
+/**
+ * Whether the event has at least one recurring schedule. A schedule is
+ * recurring when its frequency is set. Used to gate the cancellations panel
+ * trigger, which is only meaningful for recurring events.
+ */
+const hasRecurringSchedule = computed(() => {
+  if (!editorState.event?.schedules) return false;
+  return editorState.event.schedules.some(
+    (schedule) => schedule.frequency !== null && schedule.frequency !== undefined,
+  );
+});
+
+/**
+ * Visibility of the cancellations panel. Collapsed by default so the DATE &
+ * TIME section stays compact for the common case.
+ */
+const showCancellationsPanel = ref(false);
+
+/**
+ * Materialized upcoming instances for the current event, pulled from the
+ * event store cache. The cancellations panel displays these alongside any
+ * hidden exclusion schedules derived from the event itself.
+ */
+const eventInstances = computed(() => {
+  if (!editorState.event?.id) return [];
+  return eventStore.instancesForEvent(editorState.event.id);
 });
 
 /**

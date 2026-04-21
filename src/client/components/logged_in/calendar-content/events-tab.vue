@@ -3,7 +3,7 @@ import { reactive, ref, computed, nextTick } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useTranslation } from 'i18next-vue';
 import { DateTime } from 'luxon';
-import { Plus, Calendar, Languages, Repeat, Pencil, Copy, Flag, Link2Off } from 'lucide-vue-next';
+import { Plus, Calendar, Languages, Repeat, Pencil, Copy, Flag, Link2Off, CalendarX } from 'lucide-vue-next';
 import { useEventStore } from '@/client/stores/eventStore';
 import { useCalendarStore } from '@/client/stores/calendarStore';
 import { useCategoryStore } from '@/client/stores/categoryStore';
@@ -47,6 +47,10 @@ const { t: tReport } = useTranslation('system', {
 });
 
 const { t: tFeed } = useTranslation('feed');
+
+const { t: tCancellations } = useTranslation('event_editor', {
+  keyPrefix: 'cancellations',
+});
 
 const eventService = new EventService();
 const calendarStore = useCalendarStore();
@@ -552,6 +556,14 @@ initializeFiltersFromURL();
             <div class="event-content">
               <div class="event-title-row">
                 <h3 :id="`event-title-${event.id}`">{{ event.content("en").name }}</h3>
+                <span
+                  v-if="event.isCancelled"
+                  data-testid="event-cancelled-pill"
+                  class="cancelled-pill"
+                >
+                  <CalendarX :size="14" aria-hidden="true" />
+                  {{ tCancellations('cancelled_badge') }}
+                </span>
                 <span v-if="event.isRepost" class="repost-badge">
                   <span class="sr-only">{{ tFeed('events.repost_badge_prefix') }}</span>{{ tFeed('events.repost_button') }}
                 </span>
@@ -957,6 +969,24 @@ initializeFiltersFromURL();
           [data-theme="dark"] & {
             background: rgba(168, 85, 247, 0.2);
             color: var(--pav-color-purple-300, #d8b4fe);
+          }
+        }
+
+        .cancelled-pill {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.25rem;
+          padding: 0.125rem 0.5rem;
+          background: var(--pav-color-red-100, #fee2e2);
+          border-radius: 9999px;
+          color: var(--pav-color-red-700, #b91c1c);
+          font-size: 0.75rem;
+          font-weight: 500;
+          white-space: nowrap;
+
+          [data-theme="dark"] & {
+            background: rgba(239, 68, 68, 0.2);
+            color: var(--pav-color-red-300, #fca5a5);
           }
         }
 
