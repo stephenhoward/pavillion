@@ -12,7 +12,7 @@ import { useLocalizedContent } from '@/site/composables/useLocalizedContent';
 import NotFound from '@/site/components/not-found.vue';
 import EventImage from '@/site/components/event-image.vue';
 import AddToCalendar from '@/site/components/add-to-calendar.vue';
-import { getRecurrenceText } from '@/common/utils/recurrence-text';
+import { useRecurrenceText } from '@/site/composables/useRecurrenceText';
 import { URL_PROMPT_VALUES, type UrlPrompt } from '@/common/model/events';
 
 const { t } = useTranslation('system');
@@ -41,12 +41,14 @@ function isSameDay(start: DateTime, end: DateTime): boolean {
   return start.hasSame(end, 'day');
 }
 
-const recurrenceText = computed(() => {
-  if (!state.instance?.event?.schedules?.length) {
-    return '';
-  }
-  return getRecurrenceText(state.instance.event.schedules);
-});
+/**
+ * Computed human-readable recurrence text derived from the public API's
+ * `recurrenceSummary: { key, params }` intent shape. Day codes, ordinals,
+ * and multi-day list joining are resolved in the active locale.
+ */
+const recurrenceText = useRecurrenceText(
+  () => state.instance?.event?.recurrenceSummary ?? null,
+);
 
 const locationAccessibilityInfo = computed(() => {
   const location = state.instance?.event?.location;
@@ -120,10 +122,10 @@ onBeforeMount(async () => {
     }
 
     // Widget routes carry only eventId (not instanceId), so list the
-    // calendar's instances and pick the first one whose event matches. The
-    // listing endpoint omits heavy fields like schedules for performance, so
-    // we then refetch that single instance to get the full detail shape
-    // (schedules, full location content, etc.) used by the detail template.
+    // calendar's instances and pick the first one whose event matches.
+    // Listing events omit some detail fields (full location content, etc.)
+    // so we refetch that single instance to get the full detail shape
+    // used by the detail template.
     const events = await calendarService.loadCalendarEvents(calendarId as string);
     const match = events.find((e: any) => e.event.id === eventId);
 

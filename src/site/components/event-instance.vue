@@ -12,7 +12,7 @@ import NotFound from './not-found.vue';
 import EventImage from './event-image.vue';
 import ReportEvent from './report-event.vue';
 import { useLocale } from '@/site/composables/useLocale';
-import { getRecurrenceText } from '@/common/utils/recurrence-text';
+import { useRecurrenceText } from '@/site/composables/useRecurrenceText';
 import AddToCalendar from './add-to-calendar.vue';
 import { URL_PROMPT_VALUES, type UrlPrompt } from '@/common/model/events';
 
@@ -59,14 +59,14 @@ function closeReportModal() {
 }
 
 /**
- * Computed human-readable recurrence text derived from event schedules.
+ * Computed human-readable recurrence text derived from the public API's
+ * `recurrenceSummary: { key, params }` intent shape. Day codes and
+ * ordinals are resolved against `recurrence.*` translations and
+ * multi-day lists are joined via `Intl.ListFormat` in the active locale.
  */
-const recurrenceText = computed(() => {
-  if (!state.instance?.event?.schedules?.length) {
-    return '';
-  }
-  return getRecurrenceText(state.instance.event.schedules);
-});
+const recurrenceText = useRecurrenceText(
+  () => state.instance?.event?.recurrenceSummary ?? null,
+);
 
 /**
  * Computed event-level accessibility info from event content.
