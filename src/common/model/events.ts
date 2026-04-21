@@ -114,6 +114,22 @@ class CalendarEvent extends TranslatedModel<CalendarEventContent> {
   sourceCalendar: { urlName: string; host: string; url: string } | null = null;
 
   /**
+   * True when the event has any recurring (non-exclusion) schedule.
+   * Populated by the public API's `toPublicEventObject` projection; not set
+   * on authenticated payloads. Carried on the model so presentation code
+   * can conditionally render recurrence affordances.
+   */
+  isRecurring: boolean = false;
+
+  /**
+   * Structured recurrence intent emitted by the public API:
+   * `{ key: string, params: Record<string, any> }` where `key` resolves
+   * against the presentation layer's `recurrence.*` translations.
+   * Null for non-recurring events or authenticated payloads.
+   */
+  recurrenceSummary: { key: string; params: Record<string, any> } | null = null;
+
+  /**
    * Constructor for CalendarEvent.
    *
    * @param {string} [id] - Unique identifier for the event
@@ -210,6 +226,8 @@ class CalendarEvent extends TranslatedModel<CalendarEventContent> {
     event.sourceCalendar = obj.sourceCalendar ?? null;
     event.externalUrl = obj.externalUrl ?? null;
     event.urlPrompt = URL_PROMPT_VALUES.includes(obj.urlPrompt) ? obj.urlPrompt : null;
+    event.isRecurring = obj.isRecurring === true;
+    event.recurrenceSummary = obj.recurrenceSummary ?? null;
 
     if ( obj.content ) {
       for( let [language,strings] of Object.entries(obj.content) ) {
@@ -263,6 +281,8 @@ class CalendarEvent extends TranslatedModel<CalendarEventContent> {
       eventSourceUrl: this.eventSourceUrl,
       externalUrl: this.externalUrl,
       urlPrompt: this.urlPrompt,
+      isRecurring: this.isRecurring,
+      recurrenceSummary: this.recurrenceSummary,
       content: Object.fromEntries(
         Object.entries(this._content)
           .map(([language, strings]: [string, CalendarEventContent]) => [language, strings.toObject()]),
