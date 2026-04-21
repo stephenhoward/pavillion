@@ -6,7 +6,8 @@ import { PhaseName, type RunContext, type RunLogger } from '../../lib/types.js';
 import type { ExecuteDeps, PhaseCtx } from '../../lib/execute.js';
 
 // ---------------------------------------------------------------------------
-// Mock helpers module so discoverAgents/matchAgents are controllable per-test
+// Mock helpers module so discoverAgents is controllable per-test. Auditor
+// selection happens via selectAuditorsFn injected through ExecuteDeps.
 // ---------------------------------------------------------------------------
 
 vi.mock('../../lib/helpers.js', async (importOriginal) => {
@@ -14,7 +15,6 @@ vi.mock('../../lib/helpers.js', async (importOriginal) => {
   return {
     ...actual,
     discoverAgents: vi.fn().mockReturnValue([]),
-    matchAgents: vi.fn().mockReturnValue([]),
     bdEscalate: vi.fn(),
     bdEnrichmentCheck: vi.fn().mockReturnValue(false),
     commitMsg: vi.fn().mockImplementation(
@@ -243,7 +243,6 @@ describe('runAudit', () => {
     vi.clearAllMocks();
     const helpers = await import('../../lib/helpers.js');
     vi.mocked(helpers.discoverAgents).mockReturnValue([]);
-    vi.mocked(helpers.matchAgents).mockReturnValue([]);
     vi.mocked(helpers.bdEscalate).mockReturnValue(undefined);
     vi.mocked(helpers.bdEnrichmentCheck).mockReturnValue(false);
   });
@@ -270,7 +269,6 @@ describe('runAudit', () => {
     vi.mocked(helpers.discoverAgents).mockReturnValue([
       { name: 'architecture-auditor', path: '.claude/agents/arch.md', description: 'Arch' },
     ]);
-    vi.mocked(helpers.matchAgents).mockReturnValue(matchResult);
 
     const passVerdict = {
       agent: 'architecture-auditor',
@@ -287,6 +285,7 @@ describe('runAudit', () => {
     const result = await runAudit('pv-test-1', ctx, {
       spawnFn: mockSpawnFn,
       changedFiles: ['src/server/calendar/service/calendar.ts'],
+      selectAuditorsFn: async () => matchResult,
     });
 
     expect(result.passed).toBe(true);
@@ -304,7 +303,6 @@ describe('runAudit', () => {
     vi.mocked(helpers.discoverAgents).mockReturnValue([
       { name: 'security-auditor', path: '.claude/agents/sec.md', description: 'Sec' },
     ]);
-    vi.mocked(helpers.matchAgents).mockReturnValue(matchResult);
 
     const failVerdict = {
       agent: 'security-auditor',
@@ -321,6 +319,7 @@ describe('runAudit', () => {
     const result = await runAudit('pv-test-1', ctx, {
       spawnFn: mockSpawnFn,
       changedFiles: ['src/server/calendar/service/calendar.ts'],
+      selectAuditorsFn: async () => matchResult,
     });
 
     expect(result.passed).toBe(false);
@@ -342,7 +341,6 @@ describe('runLeafExecution', () => {
     vi.clearAllMocks();
     const helpers = await import('../../lib/helpers.js');
     vi.mocked(helpers.discoverAgents).mockReturnValue([]);
-    vi.mocked(helpers.matchAgents).mockReturnValue([]);
     vi.mocked(helpers.bdEscalate).mockReturnValue(undefined);
     vi.mocked(helpers.bdEnrichmentCheck).mockReturnValue(false);
   });
@@ -366,7 +364,6 @@ describe('runLeafExecution', () => {
     vi.mocked(helpers.discoverAgents).mockReturnValue([
       { name: 'arch-auditor', path: '.claude/agents/arch.md', description: 'Arch' },
     ]);
-    vi.mocked(helpers.matchAgents).mockReturnValue(matchResult);
 
     let dispatchCount = 0;
     const mockSpawnFn = vi.fn().mockImplementation(() => {
@@ -380,6 +377,7 @@ describe('runLeafExecution', () => {
     const result = await runLeafExecution('pv-test-1', ctx, {
       spawnFn: mockSpawnFn,
       changedFiles: ['src/server/calendar/service/calendar.ts'],
+      selectAuditorsFn: async () => matchResult,
     });
 
     expect(result.outcome).toBe('complete');
@@ -412,7 +410,6 @@ describe('runLeafExecution', () => {
     vi.mocked(helpers.discoverAgents).mockReturnValue([
       { name: 'sec-auditor', path: '.claude/agents/sec.md', description: 'Sec' },
     ]);
-    vi.mocked(helpers.matchAgents).mockReturnValue(matchResult);
 
     let dispatchCount = 0;
     const mockSpawnFn = vi.fn().mockImplementation(() => {
@@ -429,6 +426,7 @@ describe('runLeafExecution', () => {
     const result = await runLeafExecution('pv-test-1', ctx, {
       spawnFn: mockSpawnFn,
       changedFiles: ['src/server/calendar/service/calendar.ts'],
+      selectAuditorsFn: async () => matchResult,
     });
 
     expect(result.outcome).toBe('complete');
@@ -454,7 +452,6 @@ describe('runLeafExecution', () => {
     vi.mocked(helpers.discoverAgents).mockReturnValue([
       { name: 'sec-auditor', path: '.claude/agents/sec.md', description: 'Sec' },
     ]);
-    vi.mocked(helpers.matchAgents).mockReturnValue(matchResult);
 
     let dispatchCount = 0;
     const mockSpawnFn = vi.fn().mockImplementation(() => {
@@ -468,6 +465,7 @@ describe('runLeafExecution', () => {
     const result = await runLeafExecution('pv-test-1', ctx, {
       spawnFn: mockSpawnFn,
       changedFiles: ['src/server/calendar/service/calendar.ts'],
+      selectAuditorsFn: async () => matchResult,
     });
 
     expect(result.outcome).toBe('halt');
@@ -582,7 +580,6 @@ describe('runPR', () => {
     vi.clearAllMocks();
     const helpers = await import('../../lib/helpers.js');
     vi.mocked(helpers.discoverAgents).mockReturnValue([]);
-    vi.mocked(helpers.matchAgents).mockReturnValue([]);
     vi.mocked(helpers.bdEscalate).mockReturnValue(undefined);
     vi.mocked(helpers.bdEnrichmentCheck).mockReturnValue(false);
     vi.mocked(helpers.commitMsg).mockImplementation(
@@ -707,7 +704,6 @@ describe('leafPhase', () => {
     vi.clearAllMocks();
     const helpers = await import('../../lib/helpers.js');
     vi.mocked(helpers.discoverAgents).mockReturnValue([]);
-    vi.mocked(helpers.matchAgents).mockReturnValue([]);
     vi.mocked(helpers.bdEscalate).mockReturnValue(undefined);
     vi.mocked(helpers.bdEnrichmentCheck).mockReturnValue(false);
   });
@@ -741,7 +737,6 @@ describe('epicPhase', () => {
     vi.clearAllMocks();
     const helpers = await import('../../lib/helpers.js');
     vi.mocked(helpers.discoverAgents).mockReturnValue([]);
-    vi.mocked(helpers.matchAgents).mockReturnValue([]);
     vi.mocked(helpers.bdEscalate).mockReturnValue(undefined);
     vi.mocked(helpers.bdEnrichmentCheck).mockReturnValue(false);
   });

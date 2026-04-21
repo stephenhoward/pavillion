@@ -8,10 +8,9 @@
  * Exports:
  *   CLI helpers: gitSafeToStart, preflight, bdTopReady, bdEscalate,
  *                bdState, bdSizingCheck, bdEnrichmentCheck,
- *                discoverAgents, matchAgents
+ *                discoverAgents
  *   Pure helpers: branchName, commitMsg, prBody,
- *                 classifyBeadState, classifySizing,
- *                 fileTags, matchAgents (overloaded pure form)
+ *                 classifyBeadState, classifySizing
  */
 
 import { spawnSync as nodeSpawnSync } from 'node:child_process';
@@ -352,6 +351,78 @@ export function bdEscalate(
 
   const escBlock = `\n## Escalation (${today})\n\nPhase: ${phase}\nReason: ${reason}\n`;
   run('bd', ['update', beadId, '--append-notes', escBlock], spawn);
+}
+
+// =============================================================================
+// bdCreateFollowup
+// =============================================================================
+
+export interface BdCreateFollowupInput {
+  parentBeadId: string;
+  title: string;
+  description: string;
+  labels: string[];
+  /** Issue type for `bd create`. Defaults to 'task'. */
+  type?: 'task' | 'bug' | 'feature';
+  /** Priority 0-4. Defaults to 2. */
+  priority?: number;
+}
+
+export interface BdCreateFollowupResult {
+  /** New bead id, or null when creation failed. */
+  beadId: string | null;
+  /** Raw `bd create` stdout/stderr for diagnostics. */
+  rawOutput: string;
+}
+
+/** Extract a bead id (e.g. `pv-xkt7`) from `bd create` stdout. */
+function parseCreatedBeadId(stdout: string): string | null {
+  const match = stdout.match(/\b(pv-[a-z0-9]{3,})\b/i);
+  return match ? match[1] : null;
+}
+
+/**
+ * Create a follow-up bead for concerns deferred from a parent bead.
+ *
+ * Runs `bd create` with the given title/description, then applies labels via
+ * `bd label add`. Always appends `followup-from:<parent>` in addition to any
+ * caller-supplied labels. Returns the new bead id (or null on failure).
+ */
+export function bdCreateFollowup(
+  input: BdCreateFollowupInput,
+  deps: SpawnDeps = {},
+): BdCreateFollowupResult {
+  const spawn = deps.spawnFn ?? nodeSpawnSync;
+  const type = input.type ?? 'task';
+  const priority = input.priority ?? 2;
+
+  // Quote title/description so the shell (spawn uses shell:true) preserves
+  // whitespace and special characters. Single quotes with escaping handles
+  // multi-line content safely across POSIX shells.
+  const shellQuote = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`;
+
+  const createResult = run('bd', [
+    'create',
+    '--title', shellQuote(input.title),
+    '--description', shellQuote(input.description),
+    '--type', type,
+    '--priority', String(priority),
+  ], spawn);
+
+  const beadId = parseCreatedBeadId(createResult.stdout);
+  const rawOutput = [createResult.stdout, createResult.stderr].filter(Boolean).join('\n');
+
+  if (!beadId) {
+    return { beadId: null, rawOutput };
+  }
+
+  const parentLabel = `followup-from:${input.parentBeadId}`;
+  const labels = Array.from(new Set([parentLabel, ...input.labels]));
+  for (const label of labels) {
+    run('bd', ['label', 'add', beadId, label], spawn);
+  }
+
+  return { beadId, rawOutput };
 }
 
 // =============================================================================
@@ -721,85 +792,6 @@ export function prBody(
 }
 
 // =============================================================================
-// fileTags (pure)
-// =============================================================================
-
-/**
- * Derive tag set from a file path. Pure function.
- *
- * Tags: vue, scss, test, api, entity, model, service, migration, i18n, script, infra
- */
-export function fileTags(path: string): string[] {
-  const tags: string[] = [];
-
-  if (path.endsWith('.vue')) tags.push('vue');
-  if (path.endsWith('.scss') || path.endsWith('.css')) tags.push('scss');
-  if (/\.(test|spec)\.(ts|js|vue)$/.test(path)) tags.push('test');
-  if (/^src\/server\/[^/]+\/api\//.test(path)) tags.push('api');
-  if (/^src\/server\/[^/]+\/entity\//.test(path)) tags.push('entity');
-  if (/^src\/server\/[^/]+\/model\//.test(path) || /^src\/common\/model\//.test(path)) tags.push('model');
-  if (/^src\/server\/[^/]+\/service\//.test(path)) tags.push('service');
-  if (/migrat/i.test(path)) tags.push('migration');
-  if (/locales?\/[^/]+\.json$/.test(path)) tags.push('i18n');
-  if (path.endsWith('.sh')) tags.push('script');
-  if (/^\.claude\//.test(path) || /^docs\//.test(path)) tags.push('infra');
-
-  return tags;
-}
-
-// =============================================================================
-// Agent tag table
-// =============================================================================
-
-/** Maps agent name patterns to their tag sets and keyword phrases. */
-const AGENT_TAG_TABLE: Array<{
-  pattern: RegExp;
-  tags: string[];
-  keyword: string;
-}> = [
-  { pattern: /accessibility-(auditor|advisor)/, tags: ['vue'], keyword: 'WCAG / Vue accessibility' },
-  { pattern: /stylesheet-(auditor|advisor)/, tags: ['vue', 'scss'], keyword: 'stylesheet quality' },
-  { pattern: /frontend-standards-reviewer/, tags: ['vue', 'scss', 'i18n'], keyword: 'frontend standards' },
-  { pattern: /i18n-(auditor|advisor)/, tags: ['vue', 'i18n'], keyword: 'i18n compliance' },
-  {
-    pattern: /consistency-(auditor|advisor)/,
-    tags: ['vue', 'api', 'service', 'entity', 'model', 'test', 'i18n', 'script', 'infra'],
-    keyword: 'pattern consistency',
-  },
-  {
-    pattern: /architecture-(auditor|advisor)/,
-    tags: ['api', 'service', 'entity', 'model', 'migration'],
-    keyword: 'architectural clarity',
-  },
-  {
-    pattern: /privacy-(auditor|advisor)/,
-    tags: ['api', 'service', 'model', 'entity', 'migration'],
-    keyword: 'PII / data exposure',
-  },
-  {
-    pattern: /security-(auditor|advisor)/,
-    tags: ['api', 'service', 'migration'],
-    keyword: 'SQL injection / auth',
-  },
-  { pattern: /testing-(auditor|advisor)/, tags: ['test'], keyword: 'test quality' },
-  {
-    pattern: /complexity-(auditor|advisor)/,
-    tags: ['api', 'service', 'entity', 'model', 'vue', 'scss', 'test', 'script', 'infra'],
-    keyword: 'unnecessary complexity',
-  },
-  { pattern: /test-failure-investigator/, tags: ['test'], keyword: 'failing test diagnosis' },
-];
-
-function agentProfile(name: string): { tags: string[]; keyword: string } | null {
-  for (const entry of AGENT_TAG_TABLE) {
-    if (entry.pattern.test(name)) {
-      return { tags: entry.tags, keyword: entry.keyword };
-    }
-  }
-  return null;
-}
-
-// =============================================================================
 // discoverAgents
 // =============================================================================
 
@@ -873,56 +865,3 @@ function extractFrontmatter(content: string, key: string): string | null {
   return null;
 }
 
-// =============================================================================
-// matchAgents
-// =============================================================================
-
-/**
- * Match agents to a set of changed files by tag intersection. Pure function.
- *
- * @param agents - AgentInfo[] from discoverAgents
- * @param changedFiles - list of file paths
- */
-export function matchAgents(
-  agents: AgentInfo[],
-  changedFiles: string[],
-): MatchedAgent[] {
-  if (changedFiles.length === 0) return [];
-
-  // Build tag→file map for changed files
-  const tagToFile = new Map<string, string>();
-  for (const f of changedFiles) {
-    for (const tag of fileTags(f)) {
-      if (!tagToFile.has(tag)) {
-        tagToFile.set(tag, f);
-      }
-    }
-  }
-
-  const matched: MatchedAgent[] = [];
-
-  for (const agent of agents) {
-    const profile = agentProfile(agent.name);
-    if (!profile || profile.tags.length === 0) continue;
-
-    // Find first tag match
-    let matchedFile: string | undefined;
-    let matchedTag: string | undefined;
-    for (const tag of profile.tags) {
-      if (tagToFile.has(tag)) {
-        matchedFile = tagToFile.get(tag);
-        matchedTag = tag;
-        break;
-      }
-    }
-
-    if (!matchedFile) continue;
-
-    matched.push({
-      ...agent,
-      rationale: `file '${matchedFile}' (tag: ${matchedTag}) matches ${agent.name} (${profile.keyword})`,
-    });
-  }
-
-  return matched;
-}

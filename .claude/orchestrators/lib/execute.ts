@@ -31,12 +31,12 @@ import {
   bdEscalate,
   bdEnrichmentCheck,
   discoverAgents,
-  matchAgents,
   commitMsg,
   prBody,
   type MatchedAgent as HelperMatchedAgent,
   type BeadRef,
 } from './helpers.js';
+import { buildAgentSelectorPrompt, parseAgentSelectorVerdict } from './phases.js';
 
 // =============================================================================
 // Configuration defaults (overridable via env)
@@ -103,6 +103,12 @@ export interface ExecuteDeps {
   changedFilesForBead?: (beadId: string) => string[];
   timeoutMs?: number;
   retryContext?: RetryContext;
+  /** Override auditor selection (for testing). */
+  selectAuditorsFn?: (
+    changedFiles: string[],
+    ctx: RunContext,
+    deps: ExecuteDeps,
+  ) => Promise<HelperMatchedAgent[]>;
 }
 
 /**
@@ -235,19 +241,111 @@ Please address each concern listed above and re-run the implementation. This is 
 }
 
 // =============================================================================
-// Private helpers — auditor discovery + dispatch
+// Private helpers — auditor selection + dispatch
 // =============================================================================
 
-function discoverAuditors(
+/**
+ * Build the context string for auditor selection from git.
+ * Combines `git diff --stat` and `git log --oneline` for the branch-vs-main delta.
+ */
+function buildAuditorContext(
+  ctx: RunContext,
+  deps: { scriptSpawnFn?: typeof nodeSpawnSync },
+): string {
+  const spawn = deps.scriptSpawnFn ?? nodeSpawnSync;
+  const stat = spawn('git', ['diff', '--stat', 'main...HEAD'], {
+    encoding: 'buffer' as never,
+    shell: true,
+    timeout: 30_000,
+  });
+  const log = spawn('git', ['log', '--oneline', 'main..HEAD'], {
+    encoding: 'buffer' as never,
+    shell: true,
+    timeout: 30_000,
+  });
+
+  const statOut = (stat.stdout?.toString('utf-8') ?? '').trim();
+  const logOut = (log.stdout?.toString('utf-8') ?? '').trim();
+
+  return [
+    'Changed files (`git diff --stat main...HEAD`):',
+    '',
+    statOut || '_(no changes)_',
+    '',
+    'Commits in this branch (`git log --oneline main..HEAD`):',
+    '',
+    logOut || '_(no commits)_',
+    '',
+    'You may run `git diff <path>` or read individual files for more context.',
+  ].join('\n');
+}
+
+/**
+ * Dispatch the agent-selector subagent to pick auditors for the current
+ * branch's changes. Returns the selected auditors or an empty array on
+ * malformed/failed dispatch.
+ */
+async function selectAuditors(
   changedFiles: string[],
   ctx: RunContext,
-): MatchedAgent[] {
+  deps: ExecuteDeps,
+): Promise<MatchedAgent[]> {
   if (changedFiles.length === 0) {
     return [];
   }
 
-  const agents = discoverAgents('auditor');
-  return matchAgents(agents, changedFiles);
+  const candidates = discoverAgents('auditor');
+  if (candidates.length === 0) return [];
+
+  const context = buildAuditorContext(ctx, deps);
+  const prompt = buildAgentSelectorPrompt('auditor', candidates, context);
+
+  try {
+    const raw = await dispatch<unknown>({
+      agent: 'agent-selector',
+      prompt,
+      timeoutMs: 120_000,
+      ctx,
+      logTag: PhaseName.Leaf,
+      spawnFn: deps.spawnFn as typeof nodeSpawn,
+    });
+
+    const verdict = parseAgentSelectorVerdict(raw);
+    if (!verdict) {
+      ctx.logger.appendRunJson({
+        event: 'agent_selector_parse_failed',
+        phase: PhaseName.Leaf,
+        role: 'auditor',
+      });
+      return [];
+    }
+
+    ctx.logger.writePhaseLog(PhaseName.Leaf, 'out',
+      JSON.stringify(verdict, null, 2) + '\n');
+
+    const byName = new Map(candidates.map(c => [c.name, c]));
+    const matched: MatchedAgent[] = [];
+    for (const entry of verdict.selected) {
+      const agent = byName.get(entry.name);
+      if (!agent) continue;
+      matched.push({
+        name: agent.name,
+        path: agent.path,
+        description: agent.description,
+        rationale: entry.rationale,
+      });
+    }
+    return matched;
+  }
+  catch (err) {
+    ctx.logger.appendRunJson({
+      event: 'agent_selector_dispatch_failed',
+      phase: PhaseName.Leaf,
+      role: 'auditor',
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return [];
+  }
 }
 
 async function dispatchAuditor(
@@ -699,7 +797,12 @@ export async function dispatchImplementer(
 // =============================================================================
 
 /**
- * Run per-bead auditors matched to the changed files.
+ * Run per-bead auditors selected by the agent-selector subagent.
+ *
+ * Empty selection is treated as a failed audit (not a silent skip): the
+ * selector returns empty only when dispatch failed, output was malformed,
+ * or it genuinely could not identify any applicable reviewer — none of
+ * which should let the bead advance without review.
  */
 export async function runAudit(
   beadId: string,
@@ -709,15 +812,35 @@ export async function runAudit(
   const changedFiles = deps.changedFiles ?? [];
   const spawnFn = deps.spawnFn ?? nodeSpawn;
 
-  const matchedAuditors = discoverAuditors(changedFiles, ctx);
-
-  if (matchedAuditors.length === 0) {
+  // No changes at all -> nothing to audit, pass through.
+  if (changedFiles.length === 0) {
     ctx.logger.appendRunJson({
       event: 'audit-skip',
       phase: PhaseName.Leaf,
-      reason: 'no auditors matched',
+      reason: 'no changed files to audit',
     });
     return { passed: true, verdicts: [], concerns: [], warnings: [] };
+  }
+
+  const matchedAuditors = deps.selectAuditorsFn
+    ? await deps.selectAuditorsFn(changedFiles, ctx, deps)
+    : await selectAuditors(changedFiles, ctx, deps);
+
+  // Changes present but selector produced no auditors -> fail (do not silently
+  // pass). The caller's retry/escalate logic takes over from here.
+  if (matchedAuditors.length === 0) {
+    const reason = 'agent-selector returned empty auditor selection';
+    ctx.logger.appendRunJson({
+      event: 'audit-empty-selection',
+      phase: PhaseName.Leaf,
+      reason,
+    });
+    return {
+      passed: false,
+      verdicts: [],
+      concerns: [reason],
+      warnings: [],
+    };
   }
 
   const verdictPromises = matchedAuditors.map(auditor =>

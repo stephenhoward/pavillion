@@ -5,88 +5,65 @@ description: Dynamically pick the right advisor, auditor, reviewer, or verifier 
 
 # Agent Discovery
 
-This skill governs how the orchestrator commands (`/process-backlog`, `/spawn-bead-workers`, `/shape-spec`, `/shape-bead`, and any future review runner) find the right advisor, auditor, reviewer, or verifier for a given context. It converts two inputs — a **suffix** (`auditor`/`advisor`/`reviewer`/`verifier`) and a **set of relevant files** — into a ranked, rationale-carrying JSON list of agents to invoke.
+This skill governs how the orchestrator commands (`/process-backlog`, `/spawn-bead-workers`, `/shape-spec`, `/shape-bead`, and any future review runner) find the right advisor, auditor, reviewer, or verifier for a given context. It converts two inputs — a **role** (`advisor` / `auditor`) and a **work context** (bead content or git diff) — into a list of subagents to invoke, using LLM judgment rather than a mechanical tag table.
 
-The matcher script is the source of truth for the keyword table; the prose in this file explains *why* those mappings are what they are.
+## Two-stage process
+
+1. **Enumerate candidates.** `discoverAgents(suffix)` lists every `.claude/agents/*-<suffix>.md` and parses name + description from YAML frontmatter. Returns `[{name, path, description}, ...]`. This is a pure disk read — no judgment happens here.
+
+2. **Select applicable subset.** The orchestrator dispatches the `agent-selector` subagent with `role`, `candidates`, and the work context. The selector reads the agent descriptions, reasons about what concerns plausibly apply to the specific work, and returns a ranked list with rationale.
+
+The selector replaces the legacy mechanical tag-matcher (removed in pv-2213). That matcher relied on regex-extracted file paths from bead notes and a hand-curated `AGENT_TAG_TABLE` in `helpers.ts`. Both produced silent failures: no file hints → no advisors → silent skip of review; missing tag entry → new agents never fired.
 
 ## Implementation
 
-Functions live in `.claude/orchestrators/lib/helpers.ts`:
+Helper functions live in `.claude/orchestrators/lib/helpers.ts`:
 
 | Function | Purpose |
 |---|---|
-| `discoverAgents(suffix, deps)` | Lists every `.claude/agents/*-<suffix>.md` and parses name + description from YAML frontmatter. Returns `[{name, path, description}, ...]`. |
-| `matchAgents(suffix, filePaths, deps)` | Takes an array of changed-file paths, applies the keyword table below, returns `[{name, path, description, rationale}, ...]` for each agent whose tags overlap the files' tags. |
+| `discoverAgents(suffix, agentsDir?)` | Lists `.claude/agents/*-<suffix>.md` files. Parses YAML frontmatter for `name` and `description`. Returns `[{name, path, description}, ...]`. Valid suffixes: `auditor`, `advisor`, `reviewer`, `verifier`. |
 
-Both functions:
+Selection logic lives in the role-specific call sites:
 
-- Accept an injectable `spawnFn` dependency for testing.
-- Parse YAML frontmatter via regex between `^---$` delimiters.
-- Accept an `AGENTS_DIR` environment variable to override `.claude/agents` (used by tests to point at `test/fixtures/agents/`).
-- Throw clearly on invalid suffixes. Valid suffixes are `auditor`, `advisor`, `reviewer`, `verifier`.
+- `phases.ts:selectAdvisors(ctx, logTag, deps)` — dispatches `agent-selector` with `bd show <beadId>` output as context. Returns `MatchedAdvisor[]`.
+- `execute.ts:selectAuditors(changedFiles, ctx, deps)` — dispatches `agent-selector` with `git diff --stat main...HEAD` + `git log --oneline main..HEAD` as context. Returns `MatchedAgent[]`.
 
-## What makes an agent applicable
+Both build their prompt via `phases.ts:buildAgentSelectorPrompt(role, candidates, context)` and parse the verdict via `phases.ts:parseAgentSelectorVerdict(raw)`.
 
-Every agent under `.claude/agents/` carries a YAML frontmatter block describing its scope:
+## The agent-selector subagent
 
-```yaml
----
-name: accessibility-auditor
-description: "Post-code auditor for WCAG 2.1 AA compliance on changed Vue/SCSS components..."
-tools: ...
-model: sonnet
----
+Lives at `.claude/agents/agent-selector.md`. Its input prompt contains:
+
+- `role`: `advisor` or `auditor`
+- `candidates`: list of `{name, description}` from `discoverAgents`
+- `context`: bead content (advisor) or git diff-stat + log (auditor)
+
+Its output is a single JSON object:
+
+```json
+{
+  "role": "advisor" | "auditor",
+  "selected": [
+    { "name": "<agent name>", "rationale": "<one line>" }
+  ],
+  "reasoning": "<short paragraph>"
+}
 ```
 
-The `description` field is the authoritative signal of what the agent is good at — it drives the matcher table below. When a new agent is added, its description should name the *file types* and *concerns* it reviews so the matcher table stays easy to update.
+The selector has read/grep/bash/glob tools available — it may investigate a file path or expand a git diff region before deciding. It is instructed to default toward inclusion when there's a plausible concern (advisors and auditors are read-only and cheap) and to omit candidates whose descriptions clearly do not apply.
 
-An agent "applies" to a context when at least one tag on its scope overlaps a tag on one of the changed files in the context. Tags are internal shorthand inside `match-agents.sh` — each agent gets a tag list and each file path gets a tag list; a non-empty intersection yields a match.
+## Empty-selection escalation
 
-## Keyword → agent table
+When `selected` is empty the orchestrator **escalates the bead as `needs-human`** instead of silently advancing. This is the behavior change from the legacy matcher:
 
-This is the human-readable version of the mapping embedded in `match-agents.sh` (the script is authoritative). Each row lists a file-path pattern, the tag it produces, and the agents that listen for that tag.
+- **Legacy**: empty file hints or empty tag match → skip advisor review; empty auditor match → pass audit. Silent, undetectable.
+- **New**: empty selection → log the empty verdict, call `bdEscalate`, halt the run. Visible in logs, visible on the bead.
 
-| File pattern | Tag | Matching agents (by tag listen) |
-|---|---|---|
-| `*.vue` | `vue` | accessibility, stylesheet, i18n, consistency, complexity, frontend-standards |
-| `*.scss`, `*.css` | `scss` | stylesheet, consistency (via frontend set), complexity, frontend-standards |
-| `*.test.ts`, `*.spec.ts`, `*.test.js`, `*.spec.js` | `test` | testing, consistency, complexity, test-failure-investigator |
-| `src/server/*/api/*` | `api` | privacy, security, architecture, consistency, complexity |
-| `src/server/*/entity/*`, `src/server/*/model/*`, `src/common/model/*` | `entity` / `model` | architecture, privacy, consistency, complexity |
-| `src/server/*/service/*` | `service` | architecture, privacy, security, consistency, complexity |
-| `src/server/*/migrations/*`, `src/server/*/migration/*` | `migration` | architecture, privacy, security |
-| `src/client/locales/*`, `src/site/locales/*`, `*/locales/*.json`, `*/locale/*.json` | `i18n` | i18n, consistency, frontend-standards |
-| `*.sh` | `script` | consistency, complexity |
-| `.claude/*`, `docs/*` | `infra` | consistency, complexity |
-
-Notes on the matrix:
-
-- `consistency` and `complexity` are intentionally broad — they listen on nearly every tag because convention drift and unnecessary complexity can show up anywhere.
-- `accessibility` is `vue`-only; accessibility is a template concern, not a server concern.
-- `privacy` listens on `api`, `service`, `model`, `entity`, and `migration` because PII leaks can enter any data-layer file; the post-code auditor will still filter out false positives by looking at the actual diff.
-- `cross-bead-integration-verifier` and `build-guardian` are intentionally **not tagged**. They run on wave-level signals (multiple beads implemented in parallel, build pipeline health), not per-file tags — the orchestrator invokes them outside this matcher.
-
-## Ranking when multiple agents match
-
-When more than one agent tags into the same context, they are returned in alphabetical order of agent name for determinism. The orchestrator that consumes the JSON may re-rank if needed, but the skill itself does not rank — every matched agent is equally applicable, and the `rationale` field explains why each matched.
-
-If the orchestrator needs to cap concurrency, it picks the first N from the list. For lightweight read-only agents (advisors, auditors) the cap can be higher than for implementer subagents — see [Parallel-spawn pattern](#parallel-spawn-pattern) below.
-
-## Parallel-spawn pattern
-
-The consuming orchestrator should invoke all matched agents in the **same Task tool batch** so they run concurrently, not sequentially. The Task tool supports this: one tool-call message with multiple `Task` invocations equals one parallel fan-out.
-
-Concurrency caps by role:
-
-- **Implementer subagents** (write code): max **3** in flight. They contend for test/lint/build resources and conflict on the working tree if they touch overlapping files.
-- **Advisors and auditors** (read-only review): can safely exceed 3 since they only read files, run static analysis, and produce reports. In practice, matching 4–7 advisors on an API change and fanning them all out in parallel is fine.
-- **Verifiers** (integration / build checks): usually 1 at a time per wave.
-
-When an agent's description explicitly says it accepts a spec path (e.g. "Analyzes spec documents in agent-os/specs/..."), pass the spec path as part of the spawning prompt. Otherwise the agent will default to `git diff --name-only` against the current branch.
+An empty selection should only happen when the selector genuinely cannot identify any applicable reviewer (rare), or when its dispatch failed / output was malformed. In either case human review is the correct fallback.
 
 ## Verdict interpretation
 
-Matched agents return a structured verdict that the orchestrator must act on. The two verdict systems are defined in sibling skills:
+Selected agents return a structured verdict that the orchestrator must act on. The two verdict systems are defined in sibling skills:
 
 ### Advisors (review shaped / analyzed beads — pre-code)
 
@@ -96,7 +73,7 @@ Defined in [`review-mode-advisor`](../review-mode-advisor/SKILL.md).
 |---|---|
 | **APPROVE** | Proceed to the next phase. |
 | **APPROVE WITH CONDITIONS** | Spawn a refinement subagent that updates the bead design/notes to address the listed conditions. Re-invoke only the advisors that raised conditions. If they APPROVE or APPROVE WITH CONDITIONS again, proceed. |
-| **REQUEST CHANGES** | Spawn refinement once. If the revised bead still draws REQUEST CHANGES from any advisor, call `bead-backlog-selection/bd-escalate.sh <id> <reason> <phase>` and exit cleanly. The bead gets the `needs-human` label and an Escalation section in notes. |
+| **REQUEST CHANGES** | Spawn refinement once. If the revised bead still draws REQUEST CHANGES from any advisor, run the advisor-triage step; on unresolvable concerns, call `bdEscalate` and exit cleanly. The bead gets the `needs-human` label and an Escalation section in notes. |
 
 ### Auditors (review code diffs — post-code)
 
@@ -106,35 +83,46 @@ Defined in [`review-mode-auditor`](../review-mode-auditor/SKILL.md).
 |---|---|
 | **PASS** | No action. |
 | **PASS WITH WARNINGS** | Record warnings in the wave summary and in the final PR body. Do not block the PR. |
-| **FAIL** | Do not submit the PR. Return findings to the implementer subagent for a single retry round. If a second audit still fails, escalate via `bd-escalate.sh` and exit with the branch preserved. |
+| **FAIL** | Do not submit the PR. Return findings to the implementer subagent for a single retry round. If a second audit still fails, escalate via `bdEscalate` and exit with the branch preserved. |
 
 ### Reviewers and verifiers
 
-Reviewers (e.g. `frontend-standards-reviewer`) return free-form guidance; the orchestrator incorporates their output into the PR description but does not block on them. Verifiers (e.g. `cross-bead-integration-verifier`, `build-guardian`) return PASS/FAIL-like verdicts and are treated like auditors for blocking purposes.
+Reviewers (e.g. `frontend-standards-reviewer`) return free-form guidance; the orchestrator incorporates their output into the PR description but does not block on them. Verifiers (e.g. `cross-bead-integration-verifier`, `build-guardian`) return PASS/FAIL-like verdicts and are treated like auditors for blocking purposes. They run outside the agent-selector path — the orchestrator invokes them on wave-level signals, not per-file context.
 
-## Maintaining the keyword table
+## Parallel-spawn pattern
 
-When a new agent is added to `.claude/agents/` or an existing agent's scope changes:
+Once the selector returns a list, the orchestrator invokes the matched agents in the **same Task tool batch** so they run concurrently. Concurrency caps by role:
 
-1. Add or update the `agent_profile()` case in `match-agents.sh` with the agent's tag list and a short keyword phrase (goes into the rationale string).
-2. Update the [Keyword → agent table](#keyword--agent-table) above to match.
-3. Add or update a fixture test under `test/` that exercises the new mapping.
+- **Implementer subagents** (write code): max **3** in flight. Contend for test/lint/build resources; conflict on the working tree if they touch overlapping files.
+- **Advisors and auditors** (read-only review): can safely exceed 3. In practice 4–7 parallel advisors on an API change is fine.
+- **Verifiers** (integration / build checks): usually 1 at a time per wave.
 
-Skipping step 3 means the next refactor can silently break the matching. The fixture suite covers at least: single file type (`.vue`, `.scss`, API, entity, test, i18n), empty stdin, unrecognized paths, invalid suffix, and multi-file mixed scenarios.
+## Adding a new agent
+
+Drop a new `*-<suffix>.md` file in `.claude/agents/` with YAML frontmatter that names the file types and concerns it reviews:
+
+```yaml
+---
+name: my-new-advisor
+description: "Post-code auditor for ... reviews changes to ..."
+tools: ...
+model: sonnet
+---
+```
+
+No code changes required — the selector reads the description at dispatch time and decides whether your agent applies to a given bead or diff. Write the description with the selector's prompt in mind: name the file types, domains, and concerns you review.
 
 ## Consumers
 
-- `/process-backlog` — invokes `match-agents.sh advisor` at planning checkpoints (Phase 3.5 post-shape, Phase 5.5 post-analyze) and `match-agents.sh auditor` at the per-bead review stage (Phase 7).
-- `/spawn-bead-workers` — invokes `match-agents.sh auditor` after each bead's implementer reports complete.
-- `/shape-spec`, `/shape-bead` — invoke `match-agents.sh advisor` after the bead is shaped, before handing back to the user.
-
-Each consumer passes the relevant file list in a way that fits its context:
-- For a bead that hasn't been implemented yet, the "file list" is inferred from the bead's Implementation Context section (`Files to Modify`).
-- For a bead that has been implemented, the file list is `git diff --name-only main...HEAD`.
+- `/process-backlog` — invokes `selectAdvisors` at planning checkpoints (Phase 3.5 post-shape, Phase 5.5 post-analyze) and `selectAuditors` at the per-bead review stage (Phase 7).
+- `/spawn-bead-workers` — invokes `selectAuditors` after each bead's implementer reports complete.
+- `/shape-spec`, `/shape-bead` — invoke `selectAdvisors` after the bead is shaped, before handing back to the user.
 
 ## Tests
 
-Tests are co-located with the orchestrator codebase in `.claude/orchestrators/lib/__tests__/`. The test suite covers:
+Tests are co-located with the orchestrator codebase in `.claude/orchestrators/test/unit/` and `.claude/orchestrators/test/integration/`. The test suite covers:
 
-- **discoverAgents:** auditor enumeration, advisor enumeration, invalid suffix validation.
-- **matchAgents:** single `.vue` file (frontend fan-out), backend API + entity (server-side fan-out), `.scss` file, `*.test.ts`, migration path (advisor), i18n resource, reviewer suffix with mixed input, empty input, unrecognized files.
+- `discoverAgents`: auditor/advisor enumeration, invalid suffix validation.
+- `phases.ts:selectAdvisors` path: via injected `selectAdvisorsFn` dependency, exercising clean, refinement-needed, escalate, and empty-selection verdicts.
+- `execute.ts:selectAuditors` path: via injected `selectAuditorsFn` dependency, exercising pass, fail, retry, and empty-selection verdicts.
+- Agent-selector prompt building and verdict parsing (`buildAgentSelectorPrompt`, `parseAgentSelectorVerdict`) via unit tests with canned input.

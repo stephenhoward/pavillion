@@ -2,7 +2,7 @@
  * Unit tests for .claude/orchestrators/lib/helpers.ts
  *
  * Pure functions (classifyBeadState, classifySizing, branchName, commitMsg,
- * prBody, fileTags, matchAgents) are tested directly with inputs.
+ * prBody) are tested directly with inputs.
  *
  * CLI-calling functions (gitSafeToStart, preflight, bdTopReady, bdEscalate,
  * bdState, bdSizingCheck, bdEnrichmentCheck, discoverAgents) inject a fake
@@ -16,6 +16,7 @@ import {
   preflight,
   bdTopReady,
   bdEscalate,
+  bdCreateFollowup,
   bdState,
   classifyBeadState,
   bdSizingCheck,
@@ -24,9 +25,6 @@ import {
   branchName,
   commitMsg,
   prBody,
-  fileTags,
-  matchAgents,
-  type AgentInfo,
 } from '../../lib/helpers.js';
 
 // =============================================================================
@@ -231,6 +229,89 @@ describe('bdEscalate', () => {
     bdEscalate('pv-abc1', 'reason', '3', { spawnFn: spawn as never });
     const cmds = calls.map(c => c.join(' '));
     expect(cmds.some(c => c.includes('--append-notes'))).toBe(false);
+  });
+});
+
+// =============================================================================
+// bdCreateFollowup
+// =============================================================================
+
+describe('bdCreateFollowup', () => {
+  it('creates a bead, parses its id, and applies followup-from + caller labels', () => {
+    const calls: string[][] = [];
+    const spawn = (_cmd: string, args: string[], _opts: unknown) => {
+      calls.push(args);
+      if (args[0] === 'create') {
+        return fakeSpawn('✓ Created issue: pv-new9 — my title\n');
+      }
+      return fakeSpawn('');
+    };
+
+    const result = bdCreateFollowup(
+      {
+        parentBeadId: 'pv-parent1',
+        title: 'Clean up lingering test gaps',
+        description: 'Multi-line\ndescription\n',
+        labels: ['needs-shape'],
+      },
+      { spawnFn: spawn as never },
+    );
+
+    expect(result.beadId).toBe('pv-new9');
+
+    const flat = calls.map(a => a.join(' '));
+    expect(flat[0]).toContain('create');
+    expect(flat[0]).toContain('--type task');
+    expect(flat[0]).toContain('--priority 2');
+
+    const labelCalls = flat.filter(c => c.startsWith('label add'));
+    expect(labelCalls.some(c => c.includes('followup-from:pv-parent1'))).toBe(true);
+    expect(labelCalls.some(c => c.includes('needs-shape'))).toBe(true);
+  });
+
+  it('returns beadId=null when bd create output has no parseable id', () => {
+    const spawn = (_cmd: string, args: string[], _opts: unknown) => {
+      if (args[0] === 'create') return fakeSpawn('', 'bd: command failed', 1);
+      return fakeSpawn('');
+    };
+
+    const result = bdCreateFollowup(
+      {
+        parentBeadId: 'pv-parent1',
+        title: 't',
+        description: 'd',
+        labels: [],
+      },
+      { spawnFn: spawn as never },
+    );
+
+    expect(result.beadId).toBeNull();
+    expect(result.rawOutput).toContain('bd: command failed');
+  });
+
+  it('deduplicates labels when caller supplies the parent label themselves', () => {
+    const calls: string[][] = [];
+    const spawn = (_cmd: string, args: string[], _opts: unknown) => {
+      calls.push(args);
+      if (args[0] === 'create') return fakeSpawn('✓ Created issue: pv-dup1 — x');
+      return fakeSpawn('');
+    };
+
+    bdCreateFollowup(
+      {
+        parentBeadId: 'pv-parent1',
+        title: 't',
+        description: 'd',
+        labels: ['followup-from:pv-parent1', 'needs-shape'],
+      },
+      { spawnFn: spawn as never },
+    );
+
+    const labelAdds = calls
+      .filter(a => a[0] === 'label' && a[1] === 'add')
+      .map(a => a[3]);
+    const parentLabelCount = labelAdds.filter(l => l === 'followup-from:pv-parent1').length;
+    expect(parentLabelCount).toBe(1);
   });
 });
 
@@ -498,126 +579,10 @@ describe('prBody', () => {
   });
 });
 
-// =============================================================================
-// fileTags (pure)
-// =============================================================================
-
-describe('fileTags', () => {
-  it('tags .vue files as vue', () => {
-    expect(fileTags('src/client/components/edit-event.vue')).toContain('vue');
-  });
-
-  it('tags .scss files as scss', () => {
-    expect(fileTags('src/client/assets/styles.scss')).toContain('scss');
-  });
-
-  it('tags test files as test', () => {
-    expect(fileTags('src/server/calendar/test/calendar.test.ts')).toContain('test');
-    expect(fileTags('src/server/calendar/test/calendar.spec.ts')).toContain('test');
-  });
-
-  it('tags api files correctly', () => {
-    expect(fileTags('src/server/calendar/api/v1/events.ts')).toContain('api');
-  });
-
-  it('tags entity and model files', () => {
-    expect(fileTags('src/server/calendar/entity/calendar.ts')).toContain('entity');
-    expect(fileTags('src/common/model/calendar.ts')).toContain('model');
-    expect(fileTags('src/server/calendar/model/calendar.ts')).toContain('model');
-  });
-
-  it('tags service files', () => {
-    expect(fileTags('src/server/calendar/service/calendar.ts')).toContain('service');
-  });
-
-  it('tags migration files', () => {
-    expect(fileTags('src/server/calendar/migrations/001-add-column.ts')).toContain('migration');
-  });
-
-  it('tags i18n locale files', () => {
-    expect(fileTags('src/client/locales/en.json')).toContain('i18n');
-    expect(fileTags('src/site/locales/en.json')).toContain('i18n');
-  });
-
-  it('tags shell scripts as script', () => {
-    expect(fileTags('.claude/skills/some-skill/helper.sh')).toContain('script');
-  });
-
-  it('tags .claude/ and docs/ files as infra', () => {
-    expect(fileTags('.claude/orchestrators/lib/helpers.ts')).toContain('infra');
-    expect(fileTags('docs/superpowers/design.md')).toContain('infra');
-  });
-
-  it('returns empty array for untagged files', () => {
-    expect(fileTags('src/server/app.ts')).toHaveLength(0);
-  });
-
-  it('can return multiple tags for one file', () => {
-    // A .test.vue file in a locales context would be both test and vue
-    const tags = fileTags('src/client/components/MyComponent.test.vue');
-    expect(tags).toContain('test');
-    expect(tags).toContain('vue');
-  });
-});
-
-// =============================================================================
-// matchAgents (pure)
-// =============================================================================
-
-describe('matchAgents', () => {
-  const agents: AgentInfo[] = [
-    { name: 'accessibility-auditor', path: '/agents/accessibility-auditor.md', description: 'WCAG auditor' },
-    { name: 'security-auditor', path: '/agents/security-auditor.md', description: 'Security checks' },
-    { name: 'testing-auditor', path: '/agents/testing-auditor.md', description: 'Test quality' },
-    { name: 'complexity-auditor', path: '/agents/complexity-auditor.md', description: 'Complexity' },
-  ];
-
-  it('returns empty array when no files provided', () => {
-    expect(matchAgents(agents, [])).toHaveLength(0);
-  });
-
-  it('matches accessibility-auditor for .vue files', () => {
-    const matched = matchAgents(agents, ['src/client/components/edit-event.vue']);
-    const names = matched.map(a => a.name);
-    expect(names).toContain('accessibility-auditor');
-    expect(names).not.toContain('security-auditor');
-  });
-
-  it('matches security-auditor for api files', () => {
-    const matched = matchAgents(agents, ['src/server/calendar/api/v1/events.ts']);
-    const names = matched.map(a => a.name);
-    expect(names).toContain('security-auditor');
-  });
-
-  it('matches testing-auditor for test files', () => {
-    const matched = matchAgents(agents, ['src/server/calendar/test/calendar.test.ts']);
-    const names = matched.map(a => a.name);
-    expect(names).toContain('testing-auditor');
-    expect(names).not.toContain('accessibility-auditor');
-  });
-
-  it('includes rationale with file name, tag, and agent name', () => {
-    const matched = matchAgents(agents, ['src/client/components/edit-event.vue']);
-    const auditor = matched.find(a => a.name === 'accessibility-auditor');
-    expect(auditor?.rationale).toContain('edit-event.vue');
-    expect(auditor?.rationale).toContain('accessibility-auditor');
-    expect(auditor?.rationale).toContain('vue');
-  });
-
-  it('skips agents with no tag table entry', () => {
-    const unknownAgents: AgentInfo[] = [
-      { name: 'unknown-agent', path: '/agents/unknown-agent.md', description: 'Unknown' },
-    ];
-    const matched = matchAgents(unknownAgents, ['src/client/components/edit-event.vue']);
-    expect(matched).toHaveLength(0);
-  });
-
-  it('matches multiple agents when multiple tags present', () => {
-    // A .vue file will match accessibility, complexity, and potentially others
-    const matched = matchAgents(agents, ['src/client/components/edit-event.vue']);
-    expect(matched.length).toBeGreaterThanOrEqual(2);
-  });
-});
+// Note: the legacy fileTags/matchAgents mechanical matcher was removed in
+// pv-2213. Agent selection now happens via the agent-selector subagent,
+// which is tested in phases.test.ts (selectAdvisors) and execute.test.ts
+// (selectAuditors) against mocked dispatch.
 
 // =============================================================================
 // bdState (via spawnFn)

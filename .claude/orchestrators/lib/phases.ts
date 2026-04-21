@@ -29,14 +29,14 @@ import {
   bdSizingCheck,
   bdEnrichmentCheck,
   bdEscalate,
+  bdCreateFollowup,
   branchName,
   discoverAgents,
-  matchAgents,
   type StateVerdict,
   type SizingVerdict,
   type BeadJson,
   type PreflightResult as PreflightCheckResult,
-  type MatchedAgent as HelperMatchedAgent,
+  type AgentInfo,
 } from './helpers.js';
 
 // =============================================================================
@@ -51,8 +51,8 @@ export interface PhaseCtx extends RunContext {
   refinementRounds?: Record<string, number>;
 }
 
-/** Max refinement rounds before an advisor loop escalates to needs-human. */
-export const REFINEMENT_ROUND_CAP_DEFAULT = 2;
+/** Max refinement rounds before an advisor loop triages remaining concerns. */
+export const REFINEMENT_ROUND_CAP_DEFAULT = 3;
 
 /** Return type of every phase runner. */
 export interface PhaseReturn {
@@ -70,14 +70,28 @@ export interface PhaseDeps {
   fanOutFn?: typeof fanOutAdvisors;
   /** Override bead context fetcher for advisors. */
   getBeadContextFn?: (beadId: string) => string;
-  /** Override file hints extraction. */
-  getFileHintsFn?: (beadId: string) => string[];
+  /** Override advisor selection (for testing). Returns MatchedAdvisor[]. */
+  selectAdvisorsFn?: (
+    ctx: PhaseCtx,
+    logTag: PhaseName,
+    deps: PhaseDeps,
+  ) => Promise<MatchedAdvisor[]>;
   /** Override epic detection. */
   isEpicFn?: (beadId: string) => boolean;
   /** Override child bead IDs (for analyze phase). */
   childIds?: string[];
   /** Override fan-out deps. */
   fanOutDeps?: FanOutDeps;
+  /**
+   * Override the advisor-triage classifier (called when the refinement round
+   * cap is exceeded). Returning null triggers the default escalate fallback.
+   */
+  triageFn?: (
+    ctx: PhaseCtx,
+    report: RefinementReport,
+    logTag: PhaseName,
+    deps: PhaseDeps,
+  ) => Promise<AdvisorTriageVerdict | null>;
 }
 
 // =============================================================================
@@ -105,6 +119,16 @@ export interface AnalyzeReport {
   leavesEnriched: string[];
   summary: string;
   waves?: string[][];
+}
+
+export interface AdvisorTriageVerdict {
+  verdict: 'followup' | 'escalate';
+  reason: string;
+  followup?: {
+    title: string;
+    description: string;
+    labels?: string[];
+  };
 }
 
 // =============================================================================
@@ -147,33 +171,6 @@ function escalate(
 }
 
 /**
- * Extract file hints from a bead's `bd show` output.
- * One copy replaces extractFileHints (3.5) and extractLeafFileHints (5.5).
- */
-function extractFileHints(beadId: string, deps: PhaseDeps): string[] {
-  const spawn = deps.spawnFn ?? nodeSpawnSync;
-
-  const result = spawn(
-    'bd', ['show', beadId],
-    { shell: true, encoding: 'utf-8' as never, timeout: 15_000 },
-  );
-
-  const stdout = result.stdout?.toString() ?? '';
-  const files: string[] = [];
-
-  const filePatterns = /^\s*-\s*[`']?([^\s`']+\.[a-z]{1,5})[`']?/gm;
-  let match: RegExpExecArray | null;
-  while ((match = filePatterns.exec(stdout)) !== null) {
-    const path = match[1].replace(/^`|`$/g, '');
-    if (path.includes('/') || path.includes('.')) {
-      files.push(path);
-    }
-  }
-
-  return [...new Set(files)];
-}
-
-/**
  * Get bead context string for advisor prompts via `bd show`.
  */
 function getBeadContext(beadId: string, deps: PhaseDeps): string {
@@ -188,25 +185,167 @@ function getBeadContext(beadId: string, deps: PhaseDeps): string {
 }
 
 /**
- * Match advisors using discoverAgents + matchAgents from helpers.ts.
+ * Build the prompt for the agent-selector subagent.
  */
-function matchAdvisors(
-  fileHints: string[],
+export function buildAgentSelectorPrompt(
+  role: 'advisor' | 'auditor',
+  candidates: AgentInfo[],
+  context: string,
+): string {
+  const candidateBlock = candidates.length === 0
+    ? '_(no candidates found)_'
+    : candidates.map(c => `- **${c.name}**: ${c.description}`).join('\n');
+
+  return [
+    `# Agent selection`,
+    '',
+    `role: ${role}`,
+    '',
+    '## Candidates',
+    '',
+    candidateBlock,
+    '',
+    '## Context',
+    '',
+    context,
+    '',
+    '## Output format',
+    '',
+    'Respond with ONLY a single JSON object matching the agent-selector schema.',
+    'Do not include prose, explanations, or markdown fences — the orchestrator parses your full stdout as JSON.',
+    '',
+    '```json',
+    '{',
+    '  "role": "advisor" | "auditor",',
+    '  "selected": [ { "name": "<agent name>", "rationale": "<one line>" } ],',
+    '  "reasoning": "<short paragraph>"',
+    '}',
+    '```',
+  ].join('\n');
+}
+
+interface AgentSelectorVerdict {
+  role: 'advisor' | 'auditor';
+  selected: Array<{ name: string; rationale: string }>;
+  reasoning?: string;
+}
+
+/**
+ * Parse an AgentSelectorVerdict from raw dispatch output. Tolerates either
+ * a pre-parsed object or a string with JSON optionally wrapped in a fenced
+ * code block.
+ */
+export function parseAgentSelectorVerdict(raw: unknown): AgentSelectorVerdict | null {
+  const fromObject = (obj: Record<string, unknown>): AgentSelectorVerdict | null => {
+    if (obj.role !== 'advisor' && obj.role !== 'auditor') return null;
+    if (!Array.isArray(obj.selected)) return null;
+    const selected: Array<{ name: string; rationale: string }> = [];
+    for (const entry of obj.selected) {
+      if (!entry || typeof entry !== 'object') return null;
+      const e = entry as Record<string, unknown>;
+      if (typeof e.name !== 'string' || !e.name.trim()) return null;
+      const rationale = typeof e.rationale === 'string' ? e.rationale : '';
+      selected.push({ name: e.name.trim(), rationale });
+    }
+    const reasoning = typeof obj.reasoning === 'string' ? obj.reasoning : '';
+    return { role: obj.role, selected, reasoning };
+  };
+
+  if (raw && typeof raw === 'object') {
+    return fromObject(raw as Record<string, unknown>);
+  }
+  if (typeof raw !== 'string') return null;
+
+  const candidates: string[] = [];
+  const fenceRegex = /```(?:json)?\s*([\s\S]*?)```/gi;
+  let match: RegExpExecArray | null;
+  while ((match = fenceRegex.exec(raw)) !== null) {
+    candidates.push(match[1].trim());
+  }
+  candidates.push(raw.trim());
+
+  for (const candidate of candidates.reverse()) {
+    if (!candidate) continue;
+    try {
+      const parsed = JSON.parse(candidate) as unknown;
+      if (parsed && typeof parsed === 'object') {
+        const verdict = fromObject(parsed as Record<string, unknown>);
+        if (verdict) return verdict;
+      }
+    }
+    catch {
+      continue;
+    }
+  }
+  return null;
+}
+
+/**
+ * Dispatch the agent-selector subagent to pick advisors for a bead.
+ * Returns the selected advisors as MatchedAdvisor[] (rationale from the
+ * selector's output), or an empty array on malformed/failed dispatch.
+ */
+async function selectAdvisors(
   ctx: PhaseCtx,
   logTag: PhaseName,
   deps: PhaseDeps,
-): MatchedAdvisor[] {
-  if (fileHints.length === 0) return [];
+): Promise<MatchedAdvisor[]> {
+  const candidates = discoverAgents('advisor');
+  if (candidates.length === 0) return [];
 
-  const agents = discoverAgents('advisor');
-  const matched = matchAgents(agents, fileHints);
+  const getCtx = deps.getBeadContextFn ?? ((id: string) => getBeadContext(id, deps));
+  const beadContext = getCtx(ctx.beadId);
 
-  if (matched.length > 0) {
+  const prompt = buildAgentSelectorPrompt('advisor', candidates, beadContext);
+  const dispatchFn = deps.dispatchFn ?? dispatch;
+
+  try {
+    const raw = await dispatchFn<unknown>({
+      agent: 'agent-selector',
+      prompt,
+      timeoutMs: 120_000,
+      ctx,
+      logTag,
+    });
+
+    const verdict = parseAgentSelectorVerdict(raw);
+    if (!verdict) {
+      ctx.logger.appendRunJson({
+        event: 'agent_selector_parse_failed',
+        beadId: ctx.beadId,
+        phase: logTag,
+        role: 'advisor',
+      });
+      return [];
+    }
+
     ctx.logger.writePhaseLog(logTag, 'out',
-      JSON.stringify(matched, null, 2) + '\n');
-  }
+      JSON.stringify(verdict, null, 2) + '\n');
 
-  return matched as unknown as MatchedAdvisor[];
+    const byName = new Map(candidates.map(c => [c.name, c]));
+    const matched: MatchedAdvisor[] = [];
+    for (const entry of verdict.selected) {
+      const agent = byName.get(entry.name);
+      if (!agent) continue;
+      matched.push({
+        name: agent.name,
+        path: agent.path,
+        description: agent.description,
+        rationale: entry.rationale,
+      });
+    }
+    return matched;
+  }
+  catch (err) {
+    ctx.logger.appendRunJson({
+      event: 'agent_selector_dispatch_failed',
+      beadId: ctx.beadId,
+      phase: logTag,
+      role: 'advisor',
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return [];
+  }
 }
 
 /**
@@ -256,6 +395,223 @@ async function dispatchAgent<T>(
 }
 
 /**
+ * Build the prompt fed to the advisor-triage classifier.
+ *
+ * Given the non-clean advisor verdicts that remain after the refinement cap,
+ * ask the model to decide whether the concerns should block (escalate) or can
+ * be deferred to a follow-up bead so the parent can proceed.
+ */
+export function buildAdvisorTriagePrompt(
+  beadId: string,
+  report: RefinementReport,
+): string {
+  const nonClean = report.advisors.filter(v => v.verdict !== 'clean');
+  const findingsBlock = nonClean.length === 0
+    ? '_(no non-clean advisor verdicts captured)_'
+    : nonClean.map(v => {
+      const lines = [`### [${v.agent}] verdict: ${v.verdict}`];
+      if (v.concerns.length > 0) {
+        lines.push('', 'Concerns:');
+        for (const c of v.concerns) lines.push(`- ${c}`);
+      }
+      if (v.recommendations.length > 0) {
+        lines.push('', 'Recommendations:');
+        for (const r of v.recommendations) lines.push(`- ${r}`);
+      }
+      return lines.join('\n');
+    }).join('\n\n');
+
+  return [
+    `# Advisor triage: ${beadId}`,
+    '',
+    `Bead \`${beadId}\` has exhausted its advisor refinement rounds. The`,
+    'remaining advisor concerns are listed below. Decide whether they should',
+    'block the bead (escalate to a human) or can be deferred to a follow-up',
+    'bead so the parent proceeds.',
+    '',
+    '## Remaining advisor concerns',
+    '',
+    findingsBlock,
+    '',
+    '## Decision guidance',
+    '',
+    '- `escalate` when the concerns indicate the bead itself is unsound —',
+    '  missing acceptance criteria, mis-scoped design, structural ambiguity',
+    '  that would make implementation unsafe.',
+    '- `followup` when the concerns are real but can be addressed separately —',
+    '  extra test coverage, adjacent refactors, documentation gaps, or',
+    '  follow-on quality work that does not block the current bead.',
+    '',
+    'When returning `followup`, write a single aggregated follow-up bead that',
+    'summarizes every deferred concern (one bead per triage, not per advisor).',
+    'The parent bead will be advanced as if the advisor pass were clean; the',
+    'follow-up bead will be filed with a `followup-from:' + beadId + '` label.',
+    '',
+    '## Output format',
+    '',
+    'Respond with ONLY a single JSON object. No prose, no markdown fences.',
+    '',
+    '```json',
+    '{',
+    '  "verdict": "followup" | "escalate",',
+    '  "reason": "<one line>",',
+    '  "followup": {',
+    '    "title": "<short imperative title>",',
+    '    "description": "<multi-line summary of the deferred concerns>",',
+    '    "labels": ["needs-shape"]',
+    '  }',
+    '}',
+    '```',
+    '',
+    'Omit the `followup` object when verdict is `escalate`.',
+  ].join('\n');
+}
+
+/**
+ * Parse an AdvisorTriageVerdict from raw dispatch output. Tolerates either
+ * a pre-parsed object (when dispatch used --json-schema) or a string with
+ * JSON — optionally wrapped in a fenced code block.
+ */
+export function parseAdvisorTriageVerdict(raw: unknown): AdvisorTriageVerdict | null {
+  const fromObject = (obj: Record<string, unknown>): AdvisorTriageVerdict | null => {
+    if (obj.verdict !== 'followup' && obj.verdict !== 'escalate') return null;
+    const reason = typeof obj.reason === 'string' ? obj.reason : '';
+    const result: AdvisorTriageVerdict = { verdict: obj.verdict, reason };
+    if (obj.verdict === 'followup' && obj.followup && typeof obj.followup === 'object') {
+      const f = obj.followup as Record<string, unknown>;
+      const title = typeof f.title === 'string' ? f.title.trim() : '';
+      const description = typeof f.description === 'string' ? f.description : '';
+      if (!title || !description) return null;
+      const labels = Array.isArray(f.labels)
+        ? f.labels.filter((x): x is string => typeof x === 'string')
+        : [];
+      result.followup = { title, description, labels };
+    }
+    if (result.verdict === 'followup' && !result.followup) return null;
+    return result;
+  };
+
+  if (raw && typeof raw === 'object') {
+    return fromObject(raw as Record<string, unknown>);
+  }
+  if (typeof raw !== 'string') return null;
+
+  const candidates: string[] = [];
+  const fenceRegex = /```(?:json)?\s*([\s\S]*?)```/gi;
+  let match: RegExpExecArray | null;
+  while ((match = fenceRegex.exec(raw)) !== null) {
+    candidates.push(match[1].trim());
+  }
+  candidates.push(raw.trim());
+
+  for (const candidate of candidates.reverse()) {
+    if (!candidate) continue;
+    try {
+      const parsed = JSON.parse(candidate) as unknown;
+      if (parsed && typeof parsed === 'object') {
+        const verdict = fromObject(parsed as Record<string, unknown>);
+        if (verdict) return verdict;
+      }
+    }
+    catch {
+      continue;
+    }
+  }
+  return null;
+}
+
+/** Default advisor-triage dispatcher. Null return → caller falls back to escalate. */
+async function defaultAdvisorTriage(
+  ctx: PhaseCtx,
+  report: RefinementReport,
+  logTag: PhaseName,
+  deps: PhaseDeps,
+): Promise<AdvisorTriageVerdict | null> {
+  const prompt = buildAdvisorTriagePrompt(ctx.beadId, report);
+  const dispatchFn = deps.dispatchFn ?? dispatch;
+
+  try {
+    const raw = await dispatchFn<unknown>({
+      agent: 'advisor-triage',
+      prompt,
+      timeoutMs: 90_000,
+      ctx,
+      logTag,
+    });
+    return parseAdvisorTriageVerdict(raw);
+  }
+  catch (err) {
+    ctx.logger.appendRunJson({
+      event: 'advisor_triage_dispatch_failed',
+      beadId: ctx.beadId,
+      phase: logTag,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return null;
+  }
+}
+
+/**
+ * When the advisor refinement cap is exceeded, run an LLM triage step to
+ * decide whether remaining concerns should escalate to a human or can be
+ * deferred to a follow-up bead so the parent advances.
+ *
+ * - `followup` + successful `bd create` → advance to `nextOnClean`.
+ * - `followup` with failed `bd create` → fall back to escalate.
+ * - `escalate` → call bdEscalate + halt.
+ * - triage returned null (dispatch failed or malformed) → escalate + halt.
+ */
+export async function applyAdvisorTriage(
+  ctx: PhaseCtx,
+  report: RefinementReport,
+  fallbackReason: string,
+  config: {
+    logTag: PhaseName;
+    escalateTag: string;
+    nextOnClean: PhaseName;
+  },
+  deps: PhaseDeps,
+): Promise<PhaseReturn> {
+  const tagKey = config.logTag.replace(/\./g, '_');
+  const triageFn = deps.triageFn ?? defaultAdvisorTriage;
+  const triage = await triageFn(ctx, report, config.logTag, deps);
+
+  if (triage?.verdict === 'followup' && triage.followup) {
+    const followup = bdCreateFollowup(
+      {
+        parentBeadId: ctx.beadId,
+        title: triage.followup.title,
+        description: triage.followup.description,
+        labels: triage.followup.labels ?? ['needs-shape'],
+      },
+      { spawnFn: deps.spawnFn },
+    );
+
+    if (followup.beadId) {
+      ctx.logger.appendRunJson({
+        event: `${tagKey}_triaged_followup`,
+        beadId: ctx.beadId,
+        followupBeadId: followup.beadId,
+        reason: triage.reason,
+      });
+      return { next: config.nextOnClean, ctx };
+    }
+
+    ctx.logger.appendRunJson({
+      event: `${tagKey}_triage_followup_failed`,
+      beadId: ctx.beadId,
+      rawOutput: followup.rawOutput,
+    });
+  }
+
+  const escalateReason = triage?.verdict === 'escalate'
+    ? `advisor triage escalated: ${triage.reason || fallbackReason}`
+    : fallbackReason;
+  escalate(ctx.beadId, escalateReason, config.escalateTag, config.logTag, deps, ctx);
+  return { next: 'halt', ctx };
+}
+
+/**
  * Parameterized advisor pass. Replaces the structurally identical
  * phases 3.5 (shapeAdvisors) and 5.5 (analyzeAdvisors).
  */
@@ -282,52 +638,37 @@ async function runAdvisorPass(
     return { next: config.nextOnClean, ctx };
   }
 
-  // 1. Extract file hints
-  const getHints = deps.getFileHintsFn ?? ((id: string) => extractFileHints(id, deps));
-  const fileHints = getHints(ctx.beadId);
+  // 1. Select advisors via the agent-selector subagent
+  const selectFn = deps.selectAdvisorsFn ?? selectAdvisors;
+  const advisors = await selectFn(ctx, config.logTag, deps);
 
   ctx.logger.appendRunJson({
-    event: `${config.logTag.replace(/\./g, '_')}_file_hints`,
-    beadId: ctx.beadId,
-    fileCount: fileHints.length,
-    files: fileHints,
-  });
-
-  // 2. No file hints -> skip
-  if (fileHints.length === 0) {
-    ctx.logger.appendRunJson({
-      event: `${config.logTag.replace(/\./g, '_')}_skipped`,
-      beadId: ctx.beadId,
-      reason: 'no file hints in bead',
-    });
-    return { next: config.nextOnClean, ctx };
-  }
-
-  // 3. Match advisors
-  const advisors = matchAdvisors(fileHints, ctx, config.logTag, deps);
-
-  ctx.logger.appendRunJson({
-    event: `${config.logTag.replace(/\./g, '_')}_matched`,
+    event: `${config.logTag.replace(/\./g, '_')}_selected`,
     beadId: ctx.beadId,
     advisorCount: advisors.length,
     advisorNames: advisors.map(a => a.name),
   });
 
-  // 4. No matched advisors -> skip
+  // 2. Empty selection -> escalate (not silent skip).
+  // The selector returns empty only when it cannot identify any applicable
+  // reviewer, or when its dispatch failed/returned malformed output. Either
+  // way the bead should not advance without review.
   if (advisors.length === 0) {
+    const reason = 'agent-selector returned empty advisor selection';
     ctx.logger.appendRunJson({
-      event: `${config.logTag.replace(/\./g, '_')}_skipped`,
+      event: `${config.logTag.replace(/\./g, '_')}_escalated`,
       beadId: ctx.beadId,
-      reason: 'no advisors matched file set',
+      reason,
     });
-    return { next: config.nextOnClean, ctx };
+    escalate(ctx.beadId, reason, config.escalateTag, config.logTag, deps, ctx);
+    return { next: 'halt', ctx };
   }
 
-  // 5. Get bead context
+  // 3. Get bead context for the advisor fan-out
   const getCtx = deps.getBeadContextFn ?? ((id: string) => getBeadContext(id, deps));
   const beadContext = getCtx(ctx.beadId);
 
-  // 6. Fan out advisors
+  // 4. Fan out advisors
   const fanOut = deps.fanOutFn ?? fanOutAdvisors;
   const report: RefinementReport = await fanOut(
     advisors,
@@ -339,7 +680,7 @@ async function runAdvisorPass(
     deps.fanOutDeps,
   );
 
-  // 7. Route based on verdict
+  // 5. Route based on verdict
   if (report.overallVerdict === 'clean') {
     ctx.logger.appendRunJson({
       event: `${config.logTag.replace(/\./g, '_')}_passed`,
@@ -378,8 +719,12 @@ async function runAdvisorPass(
       cap,
       reason,
     });
-    escalate(ctx.beadId, reason, config.escalateTag, config.logTag, deps, ctx);
-    return { next: 'halt', ctx };
+
+    return await applyAdvisorTriage(ctx, report, reason, {
+      logTag: config.logTag,
+      escalateTag: config.escalateTag,
+      nextOnClean: config.nextOnClean,
+    }, deps);
   }
 
   ctx.logger.appendRunJson({
