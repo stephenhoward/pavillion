@@ -6,6 +6,14 @@
  * - onStartDateChange: auto-syncs end date unless manually overridden
  * - onEndDateManualChange: sets manual override flag
  * - buildEventEndTime / compileRecurrence: writes schedule.eventEndTime from form fields
+ *
+ * Audit notes (pv-j1pi.4):
+ *   All tests in this file are RETAINED. They exercise the start/end date and
+ *   start/end time inputs on `event_recurrence.vue` — not recurrence form
+ *   internals. The epic DESIGN explicitly puts date/time inputs OUT OF SCOPE
+ *   ("Changes to date/time inputs (stay inline on main editor)"), so these
+ *   controls remain on the wrapper component after the sheet refactor and
+ *   this file continues to mount it.
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 

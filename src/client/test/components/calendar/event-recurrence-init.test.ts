@@ -5,6 +5,15 @@
  * When duplicating a recurring event, the recurrence section stays hidden
  * because state.showRecurrence is always initialized to false, even when
  * the schedule already has a frequency set.
+ *
+ * Audit notes (pv-j1pi.4):
+ *   - Form-behavior tests (endType init, weekday checkboxes) were MIGRATED to
+ *     `recurrence-editor-sheet.test.ts` because they exercise recurrence form
+ *     internals that now live on `RecurrenceEditorSheet.vue`.
+ *   - The remaining tests stay here because they exercise `event_recurrence.vue`-
+ *     level behavior (trigger rendering / form visibility toggle) or composable
+ *     logic (`useEventDuplication`) that is independent of the sheet refactor.
+ *     Each retained block is annotated below.
  */
 import { describe, it, expect, vi } from 'vitest';
 import { mount } from '@vue/test-utils';
@@ -42,6 +51,9 @@ const mountRecurrence = (schedule: CalendarEventSchedule) => {
 
 describe('event_recurrence.vue — initialization from existing schedule data', () => {
   describe('showRecurrence state', () => {
+    // Retained: exercises event_recurrence.vue-level trigger rendering (the
+    // "Add recurrence" button) — not form internals. After pv-j1pi.5 this
+    // continues to guard the inline-vs-trigger toggle on the wrapper component.
     it('shows "Add recurrence" button when schedule has no frequency', () => {
       const schedule = new CalendarEventSchedule();
       const wrapper = mountRecurrence(schedule);
@@ -50,6 +62,10 @@ describe('event_recurrence.vue — initialization from existing schedule data', 
       expect(wrapper.find('form.repeats').exists()).toBe(false);
     });
 
+    // Retained: exercises event_recurrence.vue's form-vs-button visibility
+    // toggle (the "Add recurrence" button is NOT shown when frequency is
+    // already set). Form-internals (weekday/endType assertions) migrated to
+    // recurrence-editor-sheet.test.ts.
     it('shows recurrence form when schedule already has a frequency set', () => {
       const schedule = new CalendarEventSchedule('schedule-id');
       schedule.frequency = EventFrequency.WEEKLY;
@@ -62,6 +78,9 @@ describe('event_recurrence.vue — initialization from existing schedule data', 
       expect(wrapper.find('.add-recurrence-btn').exists()).toBe(false);
     });
 
+    // Retained: exercises event_recurrence.vue's form visibility for daily
+    // frequency. Migrated to recurrence-editor-sheet.test.ts as a mirror
+    // assertion against the sheet component.
     it('shows recurrence form for daily frequency', () => {
       const schedule = new CalendarEventSchedule();
       schedule.frequency = EventFrequency.DAILY;
@@ -72,6 +91,7 @@ describe('event_recurrence.vue — initialization from existing schedule data', 
       expect(wrapper.find('form.repeats').exists()).toBe(true);
     });
 
+    // Retained: same as above for monthly.
     it('shows recurrence form for monthly frequency', () => {
       const schedule = new CalendarEventSchedule();
       schedule.frequency = EventFrequency.MONTHLY;
@@ -82,6 +102,7 @@ describe('event_recurrence.vue — initialization from existing schedule data', 
       expect(wrapper.find('form.repeats').exists()).toBe(true);
     });
 
+    // Retained: same as above for yearly.
     it('shows recurrence form for yearly frequency', () => {
       const schedule = new CalendarEventSchedule();
       schedule.frequency = EventFrequency.YEARLY;
@@ -93,86 +114,14 @@ describe('event_recurrence.vue — initialization from existing schedule data', 
     });
   });
 
-  describe('endType initialization', () => {
-    it('initializes endType to "none" when schedule has no count or endDate', () => {
-      const schedule = new CalendarEventSchedule();
-      schedule.frequency = EventFrequency.WEEKLY;
-      schedule.interval = 1;
-      schedule.count = 0;
-      schedule.endDate = null;
+  // endType initialization tests MIGRATED to recurrence-editor-sheet.test.ts
+  // (pv-j1pi.4). These three tests exercised form-internal radio state that
+  // now lives on RecurrenceEditorSheet.vue. The inline form still contains
+  // the same controls (until pv-j1pi.5), but canonical coverage has moved
+  // to the sheet test file to avoid duplicate assertions.
 
-      const wrapper = mountRecurrence(schedule);
-
-      // The "never" radio should be selected
-      const neverRadio = wrapper.find('input[type="radio"][value="none"]');
-      expect(neverRadio.exists()).toBe(true);
-      expect((neverRadio.element as HTMLInputElement).checked).toBe(true);
-    });
-
-    it('initializes endType to "after" when schedule has a count > 0', () => {
-      const schedule = new CalendarEventSchedule();
-      schedule.frequency = EventFrequency.WEEKLY;
-      schedule.interval = 1;
-      schedule.count = 5;
-      schedule.endDate = null;
-
-      const wrapper = mountRecurrence(schedule);
-
-      // The "after" radio should be selected
-      const afterRadio = wrapper.find('input[type="radio"][value="after"]');
-      expect(afterRadio.exists()).toBe(true);
-      expect((afterRadio.element as HTMLInputElement).checked).toBe(true);
-    });
-
-    it('initializes endType to "on" when schedule has an endDate', () => {
-      const schedule = new CalendarEventSchedule();
-      schedule.frequency = EventFrequency.WEEKLY;
-      schedule.interval = 1;
-      schedule.count = 0;
-      schedule.endDate = DateTime.fromISO('2026-12-31');
-
-      const wrapper = mountRecurrence(schedule);
-
-      // The "on" radio should be selected
-      const onRadio = wrapper.find('input[type="radio"][value="on"]');
-      expect(onRadio.exists()).toBe(true);
-      expect((onRadio.element as HTMLInputElement).checked).toBe(true);
-    });
-  });
-
-  describe('weekday checkbox initialization', () => {
-    it('initializes weekday checkboxes from byDay for weekly recurrence', () => {
-      const schedule = new CalendarEventSchedule();
-      schedule.frequency = EventFrequency.WEEKLY;
-      schedule.interval = 1;
-      schedule.byDay = ['MO', 'WE', 'FR'];
-
-      const wrapper = mountRecurrence(schedule);
-
-      // The weekly parameters section should be visible
-      const weekParams = wrapper.find('div.week-parameters');
-      expect(weekParams.exists()).toBe(true);
-
-      // MO, WE, FR checkboxes should be checked
-      const checkboxes = weekParams.findAll('input[type="checkbox"]');
-
-      // Verify the correct number of days are checked
-      const checkedCheckboxes = checkboxes.filter(cb => (cb.element as HTMLInputElement).checked);
-      expect(checkedCheckboxes).toHaveLength(3);
-    });
-
-    it('does not show weekday checkboxes for non-weekly frequency', () => {
-      const schedule = new CalendarEventSchedule();
-      schedule.frequency = EventFrequency.DAILY;
-      schedule.interval = 1;
-      schedule.byDay = [];
-
-      const wrapper = mountRecurrence(schedule);
-
-      const weekParams = wrapper.find('div.week-parameters');
-      expect(weekParams.exists()).toBe(false);
-    });
-  });
+  // weekday checkbox initialization tests MIGRATED to
+  // recurrence-editor-sheet.test.ts (pv-j1pi.4). Same rationale as above.
 
   describe('useEventDuplication — schedule recurrence preservation', () => {
     const { stripEventForDuplication } = useEventDuplication();

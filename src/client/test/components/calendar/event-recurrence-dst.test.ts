@@ -5,6 +5,14 @@
  * The 'Outdoor Yoga Class' appearing at 5:00 PM on Mar 2 and 6:00 PM on Mar 9 caused by
  * DateTime.fromISO() without timezone zone option — wall-clock time must be preserved
  * across DST transitions.
+ *
+ * Audit notes (pv-j1pi.4):
+ *   All tests in this file are RETAINED. They exercise date / time / timezone inputs
+ *   that live on `event_recurrence.vue` and are explicitly OUT OF SCOPE for the
+ *   sheet refactor (see epic pv-j1pi DESIGN: "Changes to date/time inputs (stay
+ *   inline on main editor)"). The inline date/time/timezone controls are not
+ *   moving into RecurrenceEditorSheet.vue, so these tests keep mounting the
+ *   wrapper component.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { mount } from '@vue/test-utils';
