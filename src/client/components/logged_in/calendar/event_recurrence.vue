@@ -156,12 +156,14 @@
     <div class="recurrence-summary">
       <template v-if="props.schedule.frequency">
         <span class="summary-text">{{ generateRecurrenceText(props.schedule) }}</span>
-        <button type="button" class="btn btn--ghost" @click="openRecurrenceSheet">
+        <button type="button" class="btn btn--secondary" @click="openRecurrenceSheet">
+          <CalendarSync :size="16" aria-hidden="true" />
           {{ t('edit_recurrence') }}
         </button>
       </template>
       <template v-else>
-        <button type="button" class="btn btn--ghost" @click="openRecurrenceSheet">
+        <button type="button" class="btn btn--secondary" @click="openRecurrenceSheet">
+          <CalendarSync :size="16" aria-hidden="true" />
           {{ t('add_recurrence') }}
         </button>
       </template>
@@ -180,7 +182,7 @@ import { reactive } from 'vue';
 import { CalendarEventSchedule } from '@/common/model/events';
 import { useTranslation } from 'i18next-vue';
 import { DateTime } from 'luxon';
-import { Trash2 } from 'lucide-vue-next';
+import { CalendarSync, Trash2 } from 'lucide-vue-next';
 import RecurrenceEditorSheet from './RecurrenceEditorSheet.vue';
 import { generateRecurrenceText } from '@/common/utils/recurrence-text';
 

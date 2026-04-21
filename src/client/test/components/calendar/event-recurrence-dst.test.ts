@@ -30,6 +30,10 @@ vi.mock('lucide-vue-next', () => ({
     name: 'Trash2',
     template: '<span />',
   },
+  CalendarSync: {
+    name: 'CalendarSync',
+    template: '<span />',
+  },
 }));
 
 const mountRecurrence = (schedule: CalendarEventSchedule) => {

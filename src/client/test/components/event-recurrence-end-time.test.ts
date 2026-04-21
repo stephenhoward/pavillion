@@ -19,6 +19,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 vi.mock('lucide-vue-next', () => ({
   Trash2: { template: '<span />' },
+  CalendarSync: { template: '<span />' },
 }));
 
 import { nextTick } from 'vue';

@@ -31,6 +31,10 @@ vi.mock('lucide-vue-next', () => ({
     name: 'Trash2',
     template: '<span />',
   },
+  CalendarSync: {
+    name: 'CalendarSync',
+    template: '<span />',
+  },
 }));
 
 const mountRecurrence = (schedule: CalendarEventSchedule) => {
@@ -55,10 +59,10 @@ const mountRecurrence = (schedule: CalendarEventSchedule) => {
 /**
  * Finds the single recurrence trigger button (Add/Edit recurrence) rendered
  * on event_recurrence.vue. Since pv-j1pi.5 the trigger is a native
- * `<button class="btn btn--ghost">` inside `.recurrence-summary`.
+ * `<button class="btn btn--secondary">` inside `.recurrence-summary`.
  */
 const findRecurrenceTrigger = (wrapper: ReturnType<typeof mountRecurrence>) => {
-  return wrapper.find('.recurrence-summary button.btn--ghost');
+  return wrapper.find('.recurrence-summary button.btn--secondary');
 };
 
 describe('event_recurrence.vue — initialization from existing schedule data', () => {
@@ -67,7 +71,7 @@ describe('event_recurrence.vue — initialization from existing schedule data', 
     // "Add recurrence" button) — not form internals. After pv-j1pi.5 this
     // continues to guard the summary/trigger rendering on the wrapper
     // component. Assertion migrated from `.add-recurrence-btn` / `form.repeats`
-    // to the new `.btn.btn--ghost` trigger + absence of mounted sheet.
+    // to the new `.btn.btn--secondary` trigger + absence of mounted sheet.
     it('shows "Add recurrence" trigger when schedule has no frequency', () => {
       const schedule = new CalendarEventSchedule();
       const wrapper = mountRecurrence(schedule);
