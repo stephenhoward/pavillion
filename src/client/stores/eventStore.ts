@@ -1,16 +1,10 @@
 import { defineStore } from 'pinia';
 import { CalendarEvent } from '@/common/model/events';
-import CalendarEventInstance from '@/common/model/event_instance';
 
 export const useEventStore = defineStore('events', {
   state: () => {
     return {
       events: {} as Record<string, CalendarEvent[]>,
-      // Materialized event occurrences keyed by event id. Populated on demand
-      // by components that need to operate on individual instances (e.g. the
-      // per-event cancellation panel). The in-place update actions allow the
-      // UI to reflect cancel/restore mutations without a full refetch.
-      instances: {} as Record<string, CalendarEventInstance[]>,
     };
   },
   actions: {
@@ -66,55 +60,6 @@ export const useEventStore = defineStore('events', {
         );
       }
     },
-
-    /**
-     * Replace the cached list of instances for a given event id.
-     *
-     * @param eventId - The event whose instance cache should be replaced
-     * @param instances - The instances to cache under that event id
-     */
-    setInstancesForEvent(eventId: string, instances: CalendarEventInstance[]) {
-      this.instances[eventId] = instances;
-    },
-
-    /**
-     * Update a single cached instance in place by id. Silent no-op when the
-     * event has no cached instances or when the instance id is not present.
-     *
-     * Used by cancel/restore flows to reflect the server's updated instance
-     * state without refetching the full list.
-     *
-     * @param eventId - The event whose instance cache holds the target
-     * @param instance - The updated instance to write back into the cache
-     */
-    updateInstance(eventId: string, instance: CalendarEventInstance) {
-      const cached = this.instances[eventId];
-      if (!cached) {
-        return;
-      }
-      const index = cached.findIndex((i: CalendarEventInstance) => i.id === instance.id);
-      if (index >= 0) {
-        cached[index] = instance;
-      }
-    },
-
-    /**
-     * Remove a cached instance by id. Silent no-op when the event has no
-     * cached instances. Used by cancel flows with hideFromPublic=true where
-     * the server returns no instance because it no longer materializes.
-     *
-     * @param eventId - The event whose instance cache holds the target
-     * @param instanceId - The id of the instance to drop from the cache
-     */
-    removeInstance(eventId: string, instanceId: string) {
-      const cached = this.instances[eventId];
-      if (!cached) {
-        return;
-      }
-      this.instances[eventId] = cached.filter(
-        (i: CalendarEventInstance) => i.id !== instanceId,
-      );
-    },
   },
   getters: {
     /**
@@ -124,16 +69,6 @@ export const useEventStore = defineStore('events', {
      */
     eventsForCalendar: (state) => (calendarId: string) => {
       return state.events[calendarId] || [];
-    },
-
-    /**
-     * Get cached instances for a specific event.
-     *
-     * @param state - The store state
-     * @returns Function that returns instances for an event id or empty array
-     */
-    instancesForEvent: (state) => (eventId: string) => {
-      return state.instances[eventId] || [];
     },
   },
 });

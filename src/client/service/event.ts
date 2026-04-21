@@ -1,7 +1,6 @@
 import axios from 'axios';
 import { CalendarEvent } from '@/common/model/events';
 import { EventLocation } from '@/common/model/location';
-import CalendarEventInstance from '@/common/model/event_instance';
 import { useEventStore } from '@/client/stores/eventStore';
 import ModelService from '@/client/service/models';
 import { Calendar } from '@/common/model/calendar';
