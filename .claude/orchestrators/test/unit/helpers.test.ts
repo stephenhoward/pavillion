@@ -16,6 +16,7 @@ import {
   preflight,
   bdTopReady,
   bdEscalate,
+  bdCreateFollowup,
   bdState,
   classifyBeadState,
   bdSizingCheck,
@@ -231,6 +232,89 @@ describe('bdEscalate', () => {
     bdEscalate('pv-abc1', 'reason', '3', { spawnFn: spawn as never });
     const cmds = calls.map(c => c.join(' '));
     expect(cmds.some(c => c.includes('--append-notes'))).toBe(false);
+  });
+});
+
+// =============================================================================
+// bdCreateFollowup
+// =============================================================================
+
+describe('bdCreateFollowup', () => {
+  it('creates a bead, parses its id, and applies followup-from + caller labels', () => {
+    const calls: string[][] = [];
+    const spawn = (_cmd: string, args: string[], _opts: unknown) => {
+      calls.push(args);
+      if (args[0] === 'create') {
+        return fakeSpawn('✓ Created issue: pv-new9 — my title\n');
+      }
+      return fakeSpawn('');
+    };
+
+    const result = bdCreateFollowup(
+      {
+        parentBeadId: 'pv-parent1',
+        title: 'Clean up lingering test gaps',
+        description: 'Multi-line\ndescription\n',
+        labels: ['needs-shape'],
+      },
+      { spawnFn: spawn as never },
+    );
+
+    expect(result.beadId).toBe('pv-new9');
+
+    const flat = calls.map(a => a.join(' '));
+    expect(flat[0]).toContain('create');
+    expect(flat[0]).toContain('--type task');
+    expect(flat[0]).toContain('--priority 2');
+
+    const labelCalls = flat.filter(c => c.startsWith('label add'));
+    expect(labelCalls.some(c => c.includes('followup-from:pv-parent1'))).toBe(true);
+    expect(labelCalls.some(c => c.includes('needs-shape'))).toBe(true);
+  });
+
+  it('returns beadId=null when bd create output has no parseable id', () => {
+    const spawn = (_cmd: string, args: string[], _opts: unknown) => {
+      if (args[0] === 'create') return fakeSpawn('', 'bd: command failed', 1);
+      return fakeSpawn('');
+    };
+
+    const result = bdCreateFollowup(
+      {
+        parentBeadId: 'pv-parent1',
+        title: 't',
+        description: 'd',
+        labels: [],
+      },
+      { spawnFn: spawn as never },
+    );
+
+    expect(result.beadId).toBeNull();
+    expect(result.rawOutput).toContain('bd: command failed');
+  });
+
+  it('deduplicates labels when caller supplies the parent label themselves', () => {
+    const calls: string[][] = [];
+    const spawn = (_cmd: string, args: string[], _opts: unknown) => {
+      calls.push(args);
+      if (args[0] === 'create') return fakeSpawn('✓ Created issue: pv-dup1 — x');
+      return fakeSpawn('');
+    };
+
+    bdCreateFollowup(
+      {
+        parentBeadId: 'pv-parent1',
+        title: 't',
+        description: 'd',
+        labels: ['followup-from:pv-parent1', 'needs-shape'],
+      },
+      { spawnFn: spawn as never },
+    );
+
+    const labelAdds = calls
+      .filter(a => a[0] === 'label' && a[1] === 'add')
+      .map(a => a[3]);
+    const parentLabelCount = labelAdds.filter(l => l === 'followup-from:pv-parent1').length;
+    expect(parentLabelCount).toBe(1);
   });
 });
 

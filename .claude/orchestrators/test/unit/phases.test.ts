@@ -14,6 +14,9 @@ import {
   branch,
   buildShapePrompt,
   buildAnalyzePrompt,
+  buildAdvisorTriagePrompt,
+  parseAdvisorTriageVerdict,
+  applyAdvisorTriage,
   formatRefinementFeedback,
   REFINEMENT_ROUND_CAP_DEFAULT,
   PREFLIGHT_MESSAGES,
@@ -22,6 +25,7 @@ import {
   type PhaseDeps,
   type StateVerdict,
   type ShapeVerdict,
+  type AdvisorTriageVerdict,
 } from '../../lib/phases.js';
 import { PhaseName, type RunLogger } from '../../lib/types.js';
 import { DispatchTimeoutError, type RefinementReport, type DispatchOptions } from '../../lib/dispatch.js';
@@ -929,8 +933,246 @@ describe('buildAnalyzePrompt', () => {
 });
 
 describe('refinement round cap', () => {
-  it('has a default cap greater than 1', () => {
-    // >= 2 — the loop must allow at least one refinement round before escalating
-    expect(REFINEMENT_ROUND_CAP_DEFAULT).toBeGreaterThanOrEqual(2);
+  it('has a default cap that allows multiple refinement rounds before triage', () => {
+    // >= 3 — advisors almost always find something to flag, so give the loop
+    // at least two refinement passes before triaging remaining concerns.
+    expect(REFINEMENT_ROUND_CAP_DEFAULT).toBeGreaterThanOrEqual(3);
+  });
+});
+
+// =============================================================================
+// advisor triage: parseAdvisorTriageVerdict + buildAdvisorTriagePrompt
+// =============================================================================
+
+describe('parseAdvisorTriageVerdict', () => {
+  it('parses a well-formed followup verdict object', () => {
+    const verdict = parseAdvisorTriageVerdict({
+      verdict: 'followup',
+      reason: 'minor concerns',
+      followup: {
+        title: 'Address deferred advisor concerns',
+        description: 'Summary of concerns',
+        labels: ['needs-shape'],
+      },
+    });
+    expect(verdict?.verdict).toBe('followup');
+    expect(verdict?.followup?.title).toBe('Address deferred advisor concerns');
+    expect(verdict?.followup?.labels).toEqual(['needs-shape']);
+  });
+
+  it('parses a well-formed escalate verdict without followup', () => {
+    const verdict = parseAdvisorTriageVerdict({
+      verdict: 'escalate',
+      reason: 'design is unsound',
+    });
+    expect(verdict?.verdict).toBe('escalate');
+    expect(verdict?.followup).toBeUndefined();
+  });
+
+  it('parses JSON from a fenced code block string', () => {
+    const raw = '```json\n{"verdict":"followup","reason":"ok","followup":{"title":"t","description":"d","labels":[]}}\n```';
+    const verdict = parseAdvisorTriageVerdict(raw);
+    expect(verdict?.verdict).toBe('followup');
+  });
+
+  it('rejects followup without a followup object', () => {
+    const verdict = parseAdvisorTriageVerdict({ verdict: 'followup', reason: 'x' });
+    expect(verdict).toBeNull();
+  });
+
+  it('rejects followup with missing title', () => {
+    const verdict = parseAdvisorTriageVerdict({
+      verdict: 'followup',
+      reason: 'x',
+      followup: { title: '', description: 'd' },
+    });
+    expect(verdict).toBeNull();
+  });
+
+  it('rejects unknown verdict values', () => {
+    const verdict = parseAdvisorTriageVerdict({ verdict: 'ignore', reason: 'x' });
+    expect(verdict).toBeNull();
+  });
+
+  it('returns null for non-JSON strings', () => {
+    expect(parseAdvisorTriageVerdict('nope')).toBeNull();
+  });
+});
+
+describe('buildAdvisorTriagePrompt', () => {
+  it('includes bead id, non-clean advisor concerns, and output schema', () => {
+    const report: RefinementReport = {
+      beadId: 'pv-test-1',
+      phase: 'phase-3-shape',
+      advisors: [
+        { agent: 'advisor-a', verdict: 'clean', concerns: [], recommendations: [] },
+        {
+          agent: 'advisor-b',
+          verdict: 'refinement-needed',
+          concerns: ['missing edge case test'],
+          recommendations: ['add test for null input'],
+        },
+      ],
+      overallVerdict: 'refinement-needed',
+      summary: 'work needed',
+    };
+    const prompt = buildAdvisorTriagePrompt('pv-test-1', report);
+    expect(prompt).toContain('pv-test-1');
+    expect(prompt).toContain('advisor-b');
+    expect(prompt).toContain('missing edge case test');
+    expect(prompt).not.toContain('advisor-a'); // clean verdicts are filtered out
+    expect(prompt).toContain('"verdict": "followup" | "escalate"');
+    expect(prompt).toContain('followup-from:pv-test-1');
+  });
+
+  it('handles a report with no non-clean advisors gracefully', () => {
+    const report: RefinementReport = {
+      beadId: 'pv-x',
+      phase: 'phase-5-analyze',
+      advisors: [],
+      overallVerdict: 'refinement-needed',
+      summary: '',
+    };
+    const prompt = buildAdvisorTriagePrompt('pv-x', report);
+    expect(prompt).toContain('no non-clean advisor verdicts captured');
+  });
+});
+
+// =============================================================================
+// applyAdvisorTriage — cap-exceeded branch of runAdvisorPass
+// =============================================================================
+
+describe('applyAdvisorTriage', () => {
+  beforeEach(() => vi.restoreAllMocks());
+
+  const refinementReport: RefinementReport = {
+    beadId: 'pv-test-1',
+    phase: 'phase-5-analyze',
+    advisors: [
+      {
+        agent: 'complexity-advisor',
+        verdict: 'refinement-needed',
+        concerns: ['helper too broad'],
+        recommendations: ['narrow scope'],
+      },
+    ],
+    overallVerdict: 'refinement-needed',
+    summary: 'unresolved after 3 rounds',
+  };
+
+  it('advances to nextOnClean after filing a followup bead when triage returns followup', async () => {
+    const spawnCalls: string[][] = [];
+    const spawn = vi.fn().mockImplementation((_cmd: string, args: string[]) => {
+      spawnCalls.push(args as string[]);
+      if ((args as string[])[0] === 'create') {
+        return fakeSpawn('✓ Created issue: pv-new2 — deferred', '', 0);
+      }
+      return fakeSpawn('', '', 0);
+    });
+
+    const triageFn = async (): Promise<AdvisorTriageVerdict> => ({
+      verdict: 'followup',
+      reason: 'non-blocking',
+      followup: {
+        title: 'Follow up on complexity concerns',
+        description: 'Detailed notes',
+        labels: ['needs-shape'],
+      },
+    });
+
+    const ctx = makeCtx();
+    const result = await applyAdvisorTriage(ctx, refinementReport, 'fallback', {
+      logTag: PhaseName.AnalyzeAdvisors,
+      escalateTag: '5.5',
+      nextOnClean: PhaseName.Branch,
+    }, { spawnFn: spawn, triageFn });
+
+    expect(result.next).toBe(PhaseName.Branch);
+    const flat = spawnCalls.map(a => a.join(' '));
+    expect(flat.some(s => s.startsWith('create'))).toBe(true);
+    expect(flat.some(s => s.includes('label add') && s.includes('followup-from:pv-test-1'))).toBe(true);
+    // bdEscalate should NOT have been called: no label add for needs-human
+    expect(flat.some(s => s.includes('needs-human'))).toBe(false);
+  });
+
+  it('escalates when triage returns escalate verdict', async () => {
+    const spawn = vi.fn().mockImplementation((_cmd: string, args: string[]) => {
+      if ((args as string[])[0] === 'show') {
+        return fakeSpawn(JSON.stringify([{ notes: '' }]), '', 0);
+      }
+      return fakeSpawn('', '', 0);
+    });
+
+    const triageFn = async (): Promise<AdvisorTriageVerdict> => ({
+      verdict: 'escalate',
+      reason: 'bead design is unsound',
+    });
+
+    const ctx = makeCtx();
+    const result = await applyAdvisorTriage(ctx, refinementReport, 'fallback reason', {
+      logTag: PhaseName.AnalyzeAdvisors,
+      escalateTag: '5.5',
+      nextOnClean: PhaseName.Branch,
+    }, { spawnFn: spawn, triageFn });
+
+    expect(result.next).toBe('halt');
+    // bdEscalate: adds needs-human label
+    const calls = spawn.mock.calls.map((c) => (c[1] as string[]).join(' '));
+    expect(calls.some(c => c.includes('label add') && c.includes('needs-human'))).toBe(true);
+  });
+
+  it('escalates when triage returns null (dispatch failed)', async () => {
+    const spawn = vi.fn().mockImplementation((_cmd: string, args: string[]) => {
+      if ((args as string[])[0] === 'show') {
+        return fakeSpawn(JSON.stringify([{ notes: '' }]), '', 0);
+      }
+      return fakeSpawn('', '', 0);
+    });
+
+    const triageFn = async (): Promise<null> => null;
+
+    const ctx = makeCtx();
+    const result = await applyAdvisorTriage(ctx, refinementReport, 'fallback reason', {
+      logTag: PhaseName.AnalyzeAdvisors,
+      escalateTag: '5.5',
+      nextOnClean: PhaseName.Branch,
+    }, { spawnFn: spawn, triageFn });
+
+    expect(result.next).toBe('halt');
+    const calls = spawn.mock.calls.map((c) => (c[1] as string[]).join(' '));
+    expect(calls.some(c => c.includes('needs-human'))).toBe(true);
+  });
+
+  it('falls back to escalate when followup bead creation fails', async () => {
+    const spawn = vi.fn().mockImplementation((_cmd: string, args: string[]) => {
+      if ((args as string[])[0] === 'create') {
+        return fakeSpawn('', 'bd create: database locked', 1);
+      }
+      if ((args as string[])[0] === 'show') {
+        return fakeSpawn(JSON.stringify([{ notes: '' }]), '', 0);
+      }
+      return fakeSpawn('', '', 0);
+    });
+
+    const triageFn = async (): Promise<AdvisorTriageVerdict> => ({
+      verdict: 'followup',
+      reason: 'deferrable',
+      followup: {
+        title: 't',
+        description: 'd',
+        labels: ['needs-shape'],
+      },
+    });
+
+    const ctx = makeCtx();
+    const result = await applyAdvisorTriage(ctx, refinementReport, 'fallback reason', {
+      logTag: PhaseName.AnalyzeAdvisors,
+      escalateTag: '5.5',
+      nextOnClean: PhaseName.Branch,
+    }, { spawnFn: spawn, triageFn });
+
+    expect(result.next).toBe('halt');
+    const calls = spawn.mock.calls.map((c) => (c[1] as string[]).join(' '));
+    expect(calls.some(c => c.includes('needs-human'))).toBe(true);
   });
 });

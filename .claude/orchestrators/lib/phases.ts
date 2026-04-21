@@ -29,6 +29,7 @@ import {
   bdSizingCheck,
   bdEnrichmentCheck,
   bdEscalate,
+  bdCreateFollowup,
   branchName,
   discoverAgents,
   matchAgents,
@@ -51,8 +52,8 @@ export interface PhaseCtx extends RunContext {
   refinementRounds?: Record<string, number>;
 }
 
-/** Max refinement rounds before an advisor loop escalates to needs-human. */
-export const REFINEMENT_ROUND_CAP_DEFAULT = 2;
+/** Max refinement rounds before an advisor loop triages remaining concerns. */
+export const REFINEMENT_ROUND_CAP_DEFAULT = 3;
 
 /** Return type of every phase runner. */
 export interface PhaseReturn {
@@ -78,6 +79,16 @@ export interface PhaseDeps {
   childIds?: string[];
   /** Override fan-out deps. */
   fanOutDeps?: FanOutDeps;
+  /**
+   * Override the advisor-triage classifier (called when the refinement round
+   * cap is exceeded). Returning null triggers the default escalate fallback.
+   */
+  triageFn?: (
+    ctx: PhaseCtx,
+    report: RefinementReport,
+    logTag: PhaseName,
+    deps: PhaseDeps,
+  ) => Promise<AdvisorTriageVerdict | null>;
 }
 
 // =============================================================================
@@ -105,6 +116,16 @@ export interface AnalyzeReport {
   leavesEnriched: string[];
   summary: string;
   waves?: string[][];
+}
+
+export interface AdvisorTriageVerdict {
+  verdict: 'followup' | 'escalate';
+  reason: string;
+  followup?: {
+    title: string;
+    description: string;
+    labels?: string[];
+  };
 }
 
 // =============================================================================
@@ -256,6 +277,223 @@ async function dispatchAgent<T>(
 }
 
 /**
+ * Build the prompt fed to the advisor-triage classifier.
+ *
+ * Given the non-clean advisor verdicts that remain after the refinement cap,
+ * ask the model to decide whether the concerns should block (escalate) or can
+ * be deferred to a follow-up bead so the parent can proceed.
+ */
+export function buildAdvisorTriagePrompt(
+  beadId: string,
+  report: RefinementReport,
+): string {
+  const nonClean = report.advisors.filter(v => v.verdict !== 'clean');
+  const findingsBlock = nonClean.length === 0
+    ? '_(no non-clean advisor verdicts captured)_'
+    : nonClean.map(v => {
+      const lines = [`### [${v.agent}] verdict: ${v.verdict}`];
+      if (v.concerns.length > 0) {
+        lines.push('', 'Concerns:');
+        for (const c of v.concerns) lines.push(`- ${c}`);
+      }
+      if (v.recommendations.length > 0) {
+        lines.push('', 'Recommendations:');
+        for (const r of v.recommendations) lines.push(`- ${r}`);
+      }
+      return lines.join('\n');
+    }).join('\n\n');
+
+  return [
+    `# Advisor triage: ${beadId}`,
+    '',
+    `Bead \`${beadId}\` has exhausted its advisor refinement rounds. The`,
+    'remaining advisor concerns are listed below. Decide whether they should',
+    'block the bead (escalate to a human) or can be deferred to a follow-up',
+    'bead so the parent proceeds.',
+    '',
+    '## Remaining advisor concerns',
+    '',
+    findingsBlock,
+    '',
+    '## Decision guidance',
+    '',
+    '- `escalate` when the concerns indicate the bead itself is unsound —',
+    '  missing acceptance criteria, mis-scoped design, structural ambiguity',
+    '  that would make implementation unsafe.',
+    '- `followup` when the concerns are real but can be addressed separately —',
+    '  extra test coverage, adjacent refactors, documentation gaps, or',
+    '  follow-on quality work that does not block the current bead.',
+    '',
+    'When returning `followup`, write a single aggregated follow-up bead that',
+    'summarizes every deferred concern (one bead per triage, not per advisor).',
+    'The parent bead will be advanced as if the advisor pass were clean; the',
+    'follow-up bead will be filed with a `followup-from:' + beadId + '` label.',
+    '',
+    '## Output format',
+    '',
+    'Respond with ONLY a single JSON object. No prose, no markdown fences.',
+    '',
+    '```json',
+    '{',
+    '  "verdict": "followup" | "escalate",',
+    '  "reason": "<one line>",',
+    '  "followup": {',
+    '    "title": "<short imperative title>",',
+    '    "description": "<multi-line summary of the deferred concerns>",',
+    '    "labels": ["needs-shape"]',
+    '  }',
+    '}',
+    '```',
+    '',
+    'Omit the `followup` object when verdict is `escalate`.',
+  ].join('\n');
+}
+
+/**
+ * Parse an AdvisorTriageVerdict from raw dispatch output. Tolerates either
+ * a pre-parsed object (when dispatch used --json-schema) or a string with
+ * JSON — optionally wrapped in a fenced code block.
+ */
+export function parseAdvisorTriageVerdict(raw: unknown): AdvisorTriageVerdict | null {
+  const fromObject = (obj: Record<string, unknown>): AdvisorTriageVerdict | null => {
+    if (obj.verdict !== 'followup' && obj.verdict !== 'escalate') return null;
+    const reason = typeof obj.reason === 'string' ? obj.reason : '';
+    const result: AdvisorTriageVerdict = { verdict: obj.verdict, reason };
+    if (obj.verdict === 'followup' && obj.followup && typeof obj.followup === 'object') {
+      const f = obj.followup as Record<string, unknown>;
+      const title = typeof f.title === 'string' ? f.title.trim() : '';
+      const description = typeof f.description === 'string' ? f.description : '';
+      if (!title || !description) return null;
+      const labels = Array.isArray(f.labels)
+        ? f.labels.filter((x): x is string => typeof x === 'string')
+        : [];
+      result.followup = { title, description, labels };
+    }
+    if (result.verdict === 'followup' && !result.followup) return null;
+    return result;
+  };
+
+  if (raw && typeof raw === 'object') {
+    return fromObject(raw as Record<string, unknown>);
+  }
+  if (typeof raw !== 'string') return null;
+
+  const candidates: string[] = [];
+  const fenceRegex = /```(?:json)?\s*([\s\S]*?)```/gi;
+  let match: RegExpExecArray | null;
+  while ((match = fenceRegex.exec(raw)) !== null) {
+    candidates.push(match[1].trim());
+  }
+  candidates.push(raw.trim());
+
+  for (const candidate of candidates.reverse()) {
+    if (!candidate) continue;
+    try {
+      const parsed = JSON.parse(candidate) as unknown;
+      if (parsed && typeof parsed === 'object') {
+        const verdict = fromObject(parsed as Record<string, unknown>);
+        if (verdict) return verdict;
+      }
+    }
+    catch {
+      continue;
+    }
+  }
+  return null;
+}
+
+/** Default advisor-triage dispatcher. Null return → caller falls back to escalate. */
+async function defaultAdvisorTriage(
+  ctx: PhaseCtx,
+  report: RefinementReport,
+  logTag: PhaseName,
+  deps: PhaseDeps,
+): Promise<AdvisorTriageVerdict | null> {
+  const prompt = buildAdvisorTriagePrompt(ctx.beadId, report);
+  const dispatchFn = deps.dispatchFn ?? dispatch;
+
+  try {
+    const raw = await dispatchFn<unknown>({
+      agent: 'advisor-triage',
+      prompt,
+      timeoutMs: 90_000,
+      ctx,
+      logTag,
+    });
+    return parseAdvisorTriageVerdict(raw);
+  }
+  catch (err) {
+    ctx.logger.appendRunJson({
+      event: 'advisor_triage_dispatch_failed',
+      beadId: ctx.beadId,
+      phase: logTag,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return null;
+  }
+}
+
+/**
+ * When the advisor refinement cap is exceeded, run an LLM triage step to
+ * decide whether remaining concerns should escalate to a human or can be
+ * deferred to a follow-up bead so the parent advances.
+ *
+ * - `followup` + successful `bd create` → advance to `nextOnClean`.
+ * - `followup` with failed `bd create` → fall back to escalate.
+ * - `escalate` → call bdEscalate + halt.
+ * - triage returned null (dispatch failed or malformed) → escalate + halt.
+ */
+export async function applyAdvisorTriage(
+  ctx: PhaseCtx,
+  report: RefinementReport,
+  fallbackReason: string,
+  config: {
+    logTag: PhaseName;
+    escalateTag: string;
+    nextOnClean: PhaseName;
+  },
+  deps: PhaseDeps,
+): Promise<PhaseReturn> {
+  const tagKey = config.logTag.replace(/\./g, '_');
+  const triageFn = deps.triageFn ?? defaultAdvisorTriage;
+  const triage = await triageFn(ctx, report, config.logTag, deps);
+
+  if (triage?.verdict === 'followup' && triage.followup) {
+    const followup = bdCreateFollowup(
+      {
+        parentBeadId: ctx.beadId,
+        title: triage.followup.title,
+        description: triage.followup.description,
+        labels: triage.followup.labels ?? ['needs-shape'],
+      },
+      { spawnFn: deps.spawnFn },
+    );
+
+    if (followup.beadId) {
+      ctx.logger.appendRunJson({
+        event: `${tagKey}_triaged_followup`,
+        beadId: ctx.beadId,
+        followupBeadId: followup.beadId,
+        reason: triage.reason,
+      });
+      return { next: config.nextOnClean, ctx };
+    }
+
+    ctx.logger.appendRunJson({
+      event: `${tagKey}_triage_followup_failed`,
+      beadId: ctx.beadId,
+      rawOutput: followup.rawOutput,
+    });
+  }
+
+  const escalateReason = triage?.verdict === 'escalate'
+    ? `advisor triage escalated: ${triage.reason || fallbackReason}`
+    : fallbackReason;
+  escalate(ctx.beadId, escalateReason, config.escalateTag, config.logTag, deps, ctx);
+  return { next: 'halt', ctx };
+}
+
+/**
  * Parameterized advisor pass. Replaces the structurally identical
  * phases 3.5 (shapeAdvisors) and 5.5 (analyzeAdvisors).
  */
@@ -378,8 +616,12 @@ async function runAdvisorPass(
       cap,
       reason,
     });
-    escalate(ctx.beadId, reason, config.escalateTag, config.logTag, deps, ctx);
-    return { next: 'halt', ctx };
+
+    return await applyAdvisorTriage(ctx, report, reason, {
+      logTag: config.logTag,
+      escalateTag: config.escalateTag,
+      nextOnClean: config.nextOnClean,
+    }, deps);
   }
 
   ctx.logger.appendRunJson({

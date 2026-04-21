@@ -355,6 +355,78 @@ export function bdEscalate(
 }
 
 // =============================================================================
+// bdCreateFollowup
+// =============================================================================
+
+export interface BdCreateFollowupInput {
+  parentBeadId: string;
+  title: string;
+  description: string;
+  labels: string[];
+  /** Issue type for `bd create`. Defaults to 'task'. */
+  type?: 'task' | 'bug' | 'feature';
+  /** Priority 0-4. Defaults to 2. */
+  priority?: number;
+}
+
+export interface BdCreateFollowupResult {
+  /** New bead id, or null when creation failed. */
+  beadId: string | null;
+  /** Raw `bd create` stdout/stderr for diagnostics. */
+  rawOutput: string;
+}
+
+/** Extract a bead id (e.g. `pv-xkt7`) from `bd create` stdout. */
+function parseCreatedBeadId(stdout: string): string | null {
+  const match = stdout.match(/\b(pv-[a-z0-9]{3,})\b/i);
+  return match ? match[1] : null;
+}
+
+/**
+ * Create a follow-up bead for concerns deferred from a parent bead.
+ *
+ * Runs `bd create` with the given title/description, then applies labels via
+ * `bd label add`. Always appends `followup-from:<parent>` in addition to any
+ * caller-supplied labels. Returns the new bead id (or null on failure).
+ */
+export function bdCreateFollowup(
+  input: BdCreateFollowupInput,
+  deps: SpawnDeps = {},
+): BdCreateFollowupResult {
+  const spawn = deps.spawnFn ?? nodeSpawnSync;
+  const type = input.type ?? 'task';
+  const priority = input.priority ?? 2;
+
+  // Quote title/description so the shell (spawn uses shell:true) preserves
+  // whitespace and special characters. Single quotes with escaping handles
+  // multi-line content safely across POSIX shells.
+  const shellQuote = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`;
+
+  const createResult = run('bd', [
+    'create',
+    '--title', shellQuote(input.title),
+    '--description', shellQuote(input.description),
+    '--type', type,
+    '--priority', String(priority),
+  ], spawn);
+
+  const beadId = parseCreatedBeadId(createResult.stdout);
+  const rawOutput = [createResult.stdout, createResult.stderr].filter(Boolean).join('\n');
+
+  if (!beadId) {
+    return { beadId: null, rawOutput };
+  }
+
+  const parentLabel = `followup-from:${input.parentBeadId}`;
+  const labels = Array.from(new Set([parentLabel, ...input.labels]));
+  for (const label of labels) {
+    run('bd', ['label', 'add', beadId, label], spawn);
+  }
+
+  return { beadId, rawOutput };
+}
+
+// =============================================================================
 // classifyBeadState (pure)
 // =============================================================================
 
