@@ -1,9 +1,10 @@
 import express, { Request, Response, Application } from 'express';
+import { DateTime } from 'luxon';
 
 import { Account } from '@/common/model/account';
 import ExpressHelper from '@/server/common/helper/express';
 import CalendarInterface from '@/server/calendar/interface';
-import { EventNotFoundError, InsufficientCalendarPermissionsError, CalendarNotFoundError, BulkEventsNotFoundError, MixedCalendarEventsError, CategoriesNotFoundError, LocationValidationError } from '@/common/exceptions/calendar';
+import { EventNotFoundError, InsufficientCalendarPermissionsError, CalendarNotFoundError, BulkEventsNotFoundError, MixedCalendarEventsError, CategoriesNotFoundError, LocationValidationError, InvalidOccurrenceDateError } from '@/common/exceptions/calendar';
 import { ValidationError } from '@/common/exceptions/base';
 import { logError } from '@/server/common/helper/error-logger';
 
@@ -32,6 +33,21 @@ export default class EventRoutes {
       '/events/:eventId/instances/:instanceId/cancel',
       ExpressHelper.loggedInOnly,
       this.restoreEventInstance.bind(this),
+    );
+    router.get(
+      '/events/:eventId/upcoming-occurrences',
+      ExpressHelper.loggedInOnly,
+      this.listUpcomingOccurrences.bind(this),
+    );
+    router.post(
+      '/events/:eventId/occurrences/cancel',
+      ExpressHelper.loggedInOnly,
+      this.cancelEventOccurrence.bind(this),
+    );
+    router.delete(
+      '/events/:eventId/occurrences/cancel',
+      ExpressHelper.loggedInOnly,
+      this.restoreEventOccurrence.bind(this),
     );
     app.use(routePrefix, router);
   }
@@ -575,6 +591,264 @@ export default class EventRoutes {
         logError(error, "Error restoring event instance");
         res.status(500).json({
           "error": "An error occurred while restoring the event instance",
+        });
+      }
+    }
+  }
+
+  /**
+   * GET /events/:eventId/upcoming-occurrences?limit=10&after=<iso-date>
+   *
+   * Returns a window of upcoming occurrences computed from the event's
+   * RRuleSet, independent of the materialization horizon. Each occurrence
+   * carries a state tag (active / cancelled-shown / hidden) and — for
+   * non-active states — the owning exclusion schedule's id. Active
+   * occurrences carry scheduleId: null.
+   *
+   * Security: performs the editor check BEFORE delegating to the service's
+   * listUpcomingOccurrences method, which has no built-in auth. Both
+   * EventNotFoundError and InsufficientCalendarPermissionsError are remapped
+   * to 404 here (IDOR prevention — never leak existence of events the
+   * caller cannot edit).
+   */
+  async listUpcomingOccurrences(req: Request, res: Response) {
+    const account = req.user as Account;
+    if (!account) {
+      res.status(401).json({
+        "error": "not authenticated",
+        errorName: 'AuthenticationError',
+      });
+      return;
+    }
+
+    const eventId = req.params.eventId;
+    if (!ExpressHelper.isValidUUID(eventId)) {
+      res.status(400).json({
+        "error": "invalid UUID format in event ID",
+        errorName: 'ValidationError',
+      });
+      return;
+    }
+
+    // Silent clamp of limit to [1, 50]; non-numeric or missing defaults to 10.
+    const rawLimit = typeof req.query.limit === 'string' ? req.query.limit : '';
+    const parsedLimit = parseInt(rawLimit, 10);
+    const limit = Math.max(1, Math.min(Number.isFinite(parsedLimit) ? parsedLimit : 10, 50));
+
+    // Parse `after` via Luxon; default to "now" when omitted. Invalid ISO or
+    // pre-1900 dates → 400 ValidationError.
+    let afterDate = DateTime.now().toUTC();
+    if (typeof req.query.after === 'string' && req.query.after.length > 0) {
+      const parsed = DateTime.fromISO(req.query.after, { zone: 'utc' });
+      if (!parsed.isValid || parsed.year < 1900) {
+        res.status(400).json({
+          "error": "after must be an ISO-8601 datetime (year 1900 or later)",
+          errorName: 'ValidationError',
+        });
+        return;
+      }
+      afterDate = parsed;
+    }
+
+    try {
+      // Auth-before-use: load the event, then verify editor permission BEFORE
+      // invoking the service's listUpcomingOccurrences (which has no auth).
+      const event = await this.service.getEventById(eventId);
+      const editableCalendars = await this.service.editableCalendarsForUser(account);
+      if (!editableCalendars.some(c => c.id === event.calendarId)) {
+        throw new InsufficientCalendarPermissionsError(event.calendarId ?? undefined);
+      }
+
+      const result = await this.service.listUpcomingOccurrences(event, afterDate, limit);
+
+      res.json({
+        occurrences: result.occurrences.map(o => ({
+          start: o.start.toISO(),
+          state: o.state,
+          scheduleId: o.state === 'active' ? null : o.scheduleId,
+        })),
+        hasMore: result.hasMore,
+      });
+    }
+    catch (error) {
+      // IDOR prevention: both EventNotFoundError and
+      // InsufficientCalendarPermissionsError return 404 — never leak
+      // existence of events the caller cannot edit.
+      if (error instanceof EventNotFoundError || error instanceof InsufficientCalendarPermissionsError) {
+        res.status(404).json({
+          "error": "Event not found",
+          errorName: 'NotFoundError',
+        });
+      }
+      else if (error instanceof ValidationError) {
+        ExpressHelper.sendValidationError(res, error);
+      }
+      else {
+        logError(error, "Error listing upcoming occurrences");
+        res.status(500).json({
+          "error": "An error occurred while listing upcoming occurrences",
+        });
+      }
+    }
+  }
+
+  /**
+   * POST /events/:eventId/occurrences/cancel
+   * Body: { start: ISO8601, hideFromPublic: boolean }
+   *
+   * Strict-date: the server returns 422 (InvalidOccurrenceDateError) if
+   * `start` does not land on the event's RRuleSet. The new UI never submits
+   * mismatched dates (it picks from the upcoming-occurrences endpoint) but
+   * the API remains honest for direct callers.
+   *
+   * Privacy: the 422 body carries ONLY { errorName } — no message field.
+   * Security: both EventNotFoundError and InsufficientCalendarPermissionsError
+   * remap to 404 (IDOR prevention).
+   */
+  async cancelEventOccurrence(req: Request, res: Response) {
+    const account = req.user as Account;
+    if (!account) {
+      res.status(401).json({
+        "error": "not authenticated",
+        errorName: 'AuthenticationError',
+      });
+      return;
+    }
+
+    const eventId = req.params.eventId;
+    if (!ExpressHelper.isValidUUID(eventId)) {
+      res.status(400).json({
+        "error": "invalid UUID format in event ID",
+        errorName: 'ValidationError',
+      });
+      return;
+    }
+
+    const { start, hideFromPublic } = req.body ?? {};
+    if (typeof start !== 'string') {
+      res.status(400).json({
+        "error": "start must be an ISO-8601 datetime string",
+        errorName: 'ValidationError',
+      });
+      return;
+    }
+    const parsedStart = DateTime.fromISO(start, { zone: 'utc' });
+    if (!parsedStart.isValid || parsedStart.year < 1900) {
+      res.status(400).json({
+        "error": "start must be an ISO-8601 datetime (year 1900 or later)",
+        errorName: 'ValidationError',
+      });
+      return;
+    }
+    if (typeof hideFromPublic !== 'boolean') {
+      res.status(400).json({
+        "error": "hideFromPublic must be a boolean",
+        errorName: 'ValidationError',
+      });
+      return;
+    }
+
+    // Truncate to millisecond precision for consistency with
+    // assertDateMatchesOccurrence (which compares in ms).
+    const startDate = DateTime.fromMillis(parsedStart.toMillis(), { zone: 'utc' });
+
+    try {
+      await this.service.cancelOccurrenceByDate(account, eventId, startDate, hideFromPublic);
+      res.status(204).send();
+    }
+    catch (error) {
+      if (error instanceof InvalidOccurrenceDateError) {
+        // Privacy binding: errorName-only body (no message leak).
+        res.status(422).json({
+          errorName: error.name,
+        });
+      }
+      else if (error instanceof EventNotFoundError || error instanceof InsufficientCalendarPermissionsError) {
+        res.status(404).json({
+          "error": "Event not found",
+          errorName: 'NotFoundError',
+        });
+      }
+      else if (error instanceof ValidationError) {
+        ExpressHelper.sendValidationError(res, error);
+      }
+      else {
+        logError(error, "Error cancelling event occurrence");
+        res.status(500).json({
+          "error": "An error occurred while cancelling the event occurrence",
+        });
+      }
+    }
+  }
+
+  /**
+   * DELETE /events/:eventId/occurrences/cancel
+   * Body: { start: ISO8601 }
+   *
+   * Removes the exclusion schedule row for the given occurrence start if it
+   * exists. Silent 204 no-op otherwise (consistent with the instance-ID
+   * restore endpoint).
+   *
+   * Security: both EventNotFoundError and InsufficientCalendarPermissionsError
+   * remap to 404 (IDOR prevention).
+   */
+  async restoreEventOccurrence(req: Request, res: Response) {
+    const account = req.user as Account;
+    if (!account) {
+      res.status(401).json({
+        "error": "not authenticated",
+        errorName: 'AuthenticationError',
+      });
+      return;
+    }
+
+    const eventId = req.params.eventId;
+    if (!ExpressHelper.isValidUUID(eventId)) {
+      res.status(400).json({
+        "error": "invalid UUID format in event ID",
+        errorName: 'ValidationError',
+      });
+      return;
+    }
+
+    const { start } = req.body ?? {};
+    if (typeof start !== 'string') {
+      res.status(400).json({
+        "error": "start must be an ISO-8601 datetime string",
+        errorName: 'ValidationError',
+      });
+      return;
+    }
+    const parsedStart = DateTime.fromISO(start, { zone: 'utc' });
+    if (!parsedStart.isValid || parsedStart.year < 1900) {
+      res.status(400).json({
+        "error": "start must be an ISO-8601 datetime (year 1900 or later)",
+        errorName: 'ValidationError',
+      });
+      return;
+    }
+
+    // Truncate to millisecond precision.
+    const startDate = DateTime.fromMillis(parsedStart.toMillis(), { zone: 'utc' });
+
+    try {
+      await this.service.restoreOccurrenceByDate(account, eventId, startDate);
+      res.status(204).send();
+    }
+    catch (error) {
+      if (error instanceof EventNotFoundError || error instanceof InsufficientCalendarPermissionsError) {
+        res.status(404).json({
+          "error": "Event not found",
+          errorName: 'NotFoundError',
+        });
+      }
+      else if (error instanceof ValidationError) {
+        ExpressHelper.sendValidationError(res, error);
+      }
+      else {
+        logError(error, "Error restoring event occurrence");
+        res.status(500).json({
+          "error": "An error occurred while restoring the event occurrence",
         });
       }
     }

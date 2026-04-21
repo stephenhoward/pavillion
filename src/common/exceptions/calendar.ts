@@ -133,3 +133,18 @@ export class InvalidDomainFormatError extends Error {
     Object.setPrototypeOf(this, InvalidDomainFormatError.prototype);
   }
 }
+
+/**
+ * Custom error class raised when a supplied occurrence start date does not
+ * match any expansion of the event's RRuleSet. Serialized as HTTP 422 at the
+ * API boundary, with a body containing only `{ errorName }` — the human
+ * message is intentionally not echoed to the client for privacy/consistency.
+ */
+export class InvalidOccurrenceDateError extends Error {
+  constructor(message: string = 'Supplied date does not match any occurrence of this event') {
+    super(message);
+    this.name = 'InvalidOccurrenceDateError';
+    // Maintaining proper prototype chain in ES5+
+    Object.setPrototypeOf(this, InvalidOccurrenceDateError.prototype);
+  }
+}

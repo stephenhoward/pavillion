@@ -17,7 +17,8 @@ import WidgetDomainService from '../service/widget_domain';
 import WidgetConfigService from '../service/widget_config';
 import { WidgetConfig } from '@/common/model/widget_config';
 import { EventEmitter } from 'events';
-import EventInstanceService from '../service/event_instance';
+import EventInstanceService, { UpcomingOccurrencesResult } from '../service/event_instance';
+import { DateTime } from 'luxon';
 import SeriesService from '../service/series';
 import CalendarEventInstance from '@/common/model/event_instance';
 import AccountsInterface from '@/server/accounts/interface';
@@ -394,6 +395,59 @@ export default class CalendarInterface {
     instanceId: string,
   ): Promise<void> {
     return this.eventInstanceService.restoreInstance(account, eventId, instanceId);
+  }
+
+  /**
+   * List upcoming occurrences of a recurring event, tagging each with its
+   * state (active / cancelled-shown / hidden). Transient DTOs — not persisted.
+   *
+   * @param event - The recurring event; its schedules must be loaded
+   * @param afterDate - Occurrences strictly after this datetime are returned
+   * @param limit - Maximum occurrences to return
+   * @returns Occurrences with state flags and a hasMore indicator
+   */
+  async listUpcomingOccurrences(
+    event: CalendarEvent,
+    afterDate: DateTime,
+    limit: number,
+  ): Promise<UpcomingOccurrencesResult> {
+    return this.eventInstanceService.listUpcomingOccurrences(event, afterDate, limit);
+  }
+
+  /**
+   * Cancel a single occurrence of a recurring event by its start datetime
+   * rather than by a materialized instance ID. Decouples the UI from the
+   * instance materialization horizon.
+   *
+   * @param account - Authenticated account (must be calendar editor)
+   * @param eventId - The owning event ID
+   * @param start - Occurrence start datetime; must match the rrule
+   * @param hideFromPublic - true for EXDATE-style hidden, false for
+   *                         RECURRENCE-ID-style shown cancellation
+   */
+  async cancelOccurrenceByDate(
+    account: Account,
+    eventId: string,
+    start: DateTime,
+    hideFromPublic: boolean,
+  ): Promise<void> {
+    return this.eventInstanceService.cancelOccurrenceByDate(account, eventId, start, hideFromPublic);
+  }
+
+  /**
+   * Restore a previously cancelled occurrence by deleting the exclusion row
+   * for the given start datetime. Silent no-op if no exclusion exists.
+   *
+   * @param account - Authenticated account (must be calendar editor)
+   * @param eventId - The owning event ID
+   * @param start - Occurrence start datetime for the exclusion row
+   */
+  async restoreOccurrenceByDate(
+    account: Account,
+    eventId: string,
+    start: DateTime,
+  ): Promise<void> {
+    return this.eventInstanceService.restoreOccurrenceByDate(account, eventId, start);
   }
 
   /**

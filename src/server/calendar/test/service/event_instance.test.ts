@@ -965,3 +965,485 @@ describe('EventInstanceService.cancelInstance / restoreInstance', () => {
     });
   });
 });
+
+/**
+ * Tests for EventInstanceService.listUpcomingOccurrences.
+ *
+ * The method is pure in the sense that it only reads from the event's
+ * in-memory schedules and expands the RRuleSet — no DB access is required.
+ * Fixtures are built as CalendarEventSchedule instances attached to a
+ * CalendarEvent so the tests stay strictly unit-tier.
+ */
+describe('EventInstanceService.listUpcomingOccurrences', () => {
+  let service: EventInstanceService;
+
+  function makeSchedule(opts: {
+    id?: string;
+    startDate: DateTime;
+    endDate?: DateTime | null;
+    frequency?: EventFrequency | null;
+    interval?: number;
+    count?: number;
+    byDay?: string[];
+    isExclusion?: boolean;
+    hideFromPublic?: boolean;
+  }): CalendarEventSchedule {
+    const schedule = new CalendarEventSchedule(
+      opts.id ?? uuidv4(),
+      opts.startDate,
+      opts.endDate ?? undefined,
+    );
+    schedule.frequency = opts.frequency ?? null;
+    schedule.interval = opts.interval ?? 0;
+    schedule.count = opts.count ?? 0;
+    schedule.byDay = opts.byDay ?? [];
+    schedule.isExclusion = opts.isExclusion ?? false;
+    schedule.hideFromPublic = opts.hideFromPublic ?? true;
+    return schedule;
+  }
+
+  function buildWeeklyEvent(opts: {
+    startIso: string;
+    byDay?: string[];
+    count?: number;
+  }): CalendarEvent {
+    const event = new CalendarEvent(uuidv4(), uuidv4());
+    event.schedules = [
+      makeSchedule({
+        startDate: DateTime.fromISO(opts.startIso, { zone: 'utc' }),
+        frequency: EventFrequency.WEEKLY,
+        interval: 1,
+        byDay: opts.byDay ?? [],
+        count: opts.count ?? 0,
+      }),
+    ];
+    return event;
+  }
+
+  function buildMonthlyEvent(opts: {
+    startIso: string;
+    count?: number;
+  }): CalendarEvent {
+    const event = new CalendarEvent(uuidv4(), uuidv4());
+    event.schedules = [
+      makeSchedule({
+        startDate: DateTime.fromISO(opts.startIso, { zone: 'utc' }),
+        frequency: EventFrequency.MONTHLY,
+        interval: 1,
+        count: opts.count ?? 0,
+      }),
+    ];
+    return event;
+  }
+
+  function buildYearlyEvent(opts: {
+    startIso: string;
+    count?: number;
+  }): CalendarEvent {
+    const event = new CalendarEvent(uuidv4(), uuidv4());
+    event.schedules = [
+      makeSchedule({
+        startDate: DateTime.fromISO(opts.startIso, { zone: 'utc' }),
+        frequency: EventFrequency.YEARLY,
+        interval: 1,
+        count: opts.count ?? 0,
+      }),
+    ];
+    return event;
+  }
+
+  beforeEach(() => {
+    service = new EventInstanceService(new EventEmitter());
+  });
+
+  it('returns the next N occurrences for a weekly event starting at afterDate', async () => {
+    const event = buildWeeklyEvent({
+      startIso: '2026-05-04T10:00:00Z',
+      byDay: ['MO'],
+    });
+
+    const after = DateTime.fromISO('2026-05-04T00:00:00Z', { zone: 'utc' });
+    const result = await service.listUpcomingOccurrences(event, after, 5);
+
+    expect(result.occurrences).toHaveLength(5);
+    expect(result.occurrences[0].start.toISO()).toBe('2026-05-04T10:00:00.000Z');
+    expect(result.occurrences[4].start.toISO()).toBe('2026-06-01T10:00:00.000Z');
+    expect(result.occurrences.every(o => o.state === 'active')).toBe(true);
+    expect(result.occurrences.every(o => o.scheduleId === null)).toBe(true);
+    expect(result.hasMore).toBe(true);
+  });
+
+  it('returns the next N occurrences for a monthly event', async () => {
+    const event = buildMonthlyEvent({ startIso: '2026-05-15T09:00:00Z' });
+
+    const after = DateTime.fromISO('2026-05-01T00:00:00Z', { zone: 'utc' });
+    const result = await service.listUpcomingOccurrences(event, after, 3);
+
+    expect(result.occurrences).toHaveLength(3);
+    expect(result.occurrences[0].start.toISO()).toBe('2026-05-15T09:00:00.000Z');
+    expect(result.occurrences[1].start.toISO()).toBe('2026-06-15T09:00:00.000Z');
+    expect(result.occurrences[2].start.toISO()).toBe('2026-07-15T09:00:00.000Z');
+    expect(result.hasMore).toBe(true);
+  });
+
+  it('returns the next N occurrences for a yearly event', async () => {
+    const event = buildYearlyEvent({ startIso: '2026-07-04T12:00:00Z' });
+
+    const after = DateTime.fromISO('2026-01-01T00:00:00Z', { zone: 'utc' });
+    const result = await service.listUpcomingOccurrences(event, after, 3);
+
+    expect(result.occurrences).toHaveLength(3);
+    expect(result.occurrences[0].start.toISO()).toBe('2026-07-04T12:00:00.000Z');
+    expect(result.occurrences[1].start.toISO()).toBe('2027-07-04T12:00:00.000Z');
+    expect(result.occurrences[2].start.toISO()).toBe('2028-07-04T12:00:00.000Z');
+    expect(result.hasMore).toBe(true);
+  });
+
+  it('honors afterDate cursor by excluding occurrences at or before afterDate', async () => {
+    const event = buildWeeklyEvent({
+      startIso: '2026-05-04T10:00:00Z',
+      byDay: ['MO'],
+    });
+
+    // afterDate = second occurrence's start. Result must start strictly after.
+    const after = DateTime.fromISO('2026-05-11T10:00:00Z', { zone: 'utc' });
+    const result = await service.listUpcomingOccurrences(event, after, 3);
+
+    expect(result.occurrences[0].start.toISO()).toBe('2026-05-18T10:00:00.000Z');
+  });
+
+  it('returns hasMore=false for a bounded recurrence whose count < limit', async () => {
+    const event = buildWeeklyEvent({
+      startIso: '2026-05-04T10:00:00Z',
+      byDay: ['MO'],
+      count: 3,
+    });
+
+    const after = DateTime.fromISO('2026-05-03T00:00:00Z', { zone: 'utc' });
+    const result = await service.listUpcomingOccurrences(event, after, 10);
+
+    expect(result.occurrences).toHaveLength(3);
+    expect(result.hasMore).toBe(false);
+  });
+
+  it('tags a shown-cancellation occurrence with state=cancelled-shown and its scheduleId', async () => {
+    const event = buildWeeklyEvent({
+      startIso: '2026-05-04T10:00:00Z',
+      byDay: ['MO'],
+    });
+    // Add a shown exclusion for the second occurrence (2026-05-11T10:00Z).
+    event.schedules.push(makeSchedule({
+      id: 'shown-excl-id-0000',
+      startDate: DateTime.fromISO('2026-05-11T10:00:00Z', { zone: 'utc' }),
+      isExclusion: true,
+      hideFromPublic: false,
+    }));
+
+    const after = DateTime.fromISO('2026-05-03T00:00:00Z', { zone: 'utc' });
+    const result = await service.listUpcomingOccurrences(event, after, 3);
+
+    const target = result.occurrences.find(o => o.start.toISO() === '2026-05-11T10:00:00.000Z');
+    expect(target?.state).toBe('cancelled-shown');
+    expect(target?.scheduleId).toBe('shown-excl-id-0000');
+  });
+
+  it('surfaces a hidden-cancellation date with state=hidden even though rrule suppresses it', async () => {
+    const event = buildWeeklyEvent({
+      startIso: '2026-05-04T10:00:00Z',
+      byDay: ['MO'],
+    });
+    event.schedules.push(makeSchedule({
+      id: 'hidden-excl-id-000',
+      startDate: DateTime.fromISO('2026-05-11T10:00:00Z', { zone: 'utc' }),
+      isExclusion: true,
+      hideFromPublic: true,
+    }));
+
+    const after = DateTime.fromISO('2026-05-03T00:00:00Z', { zone: 'utc' });
+    const result = await service.listUpcomingOccurrences(event, after, 3);
+
+    const target = result.occurrences.find(o => o.start.toISO() === '2026-05-11T10:00:00.000Z');
+    expect(target?.state).toBe('hidden');
+    expect(target?.scheduleId).toBe('hidden-excl-id-000');
+  });
+
+  it('sets hasMore=true when hidden exclusions push returned count below limit but more occurrences exist', async () => {
+    // Weekly bounded at count=4. Two of those get hidden exclusions.
+    // With limit=2, we expect: 2 active + 2 hidden = 4 merged; hasMore=true
+    // because merged.length > limit even though RRule itself exhausted.
+    const event = buildWeeklyEvent({
+      startIso: '2026-05-04T10:00:00Z',
+      byDay: ['MO'],
+      count: 4,
+    });
+    // Hide 3rd (2026-05-18) and 4th (2026-05-25) occurrences.
+    event.schedules.push(makeSchedule({
+      id: 'hidden-a',
+      startDate: DateTime.fromISO('2026-05-18T10:00:00Z', { zone: 'utc' }),
+      isExclusion: true,
+      hideFromPublic: true,
+    }));
+    event.schedules.push(makeSchedule({
+      id: 'hidden-b',
+      startDate: DateTime.fromISO('2026-05-25T10:00:00Z', { zone: 'utc' }),
+      isExclusion: true,
+      hideFromPublic: true,
+    }));
+
+    const after = DateTime.fromISO('2026-05-03T00:00:00Z', { zone: 'utc' });
+    const result = await service.listUpcomingOccurrences(event, after, 2);
+
+    // Window of 2 returns the first 2 merged entries (both active).
+    expect(result.occurrences).toHaveLength(2);
+    expect(result.occurrences[0].state).toBe('active');
+    expect(result.occurrences[1].state).toBe('active');
+    // hasMore is true because 2 hidden exclusions fell outside the first `limit` slots.
+    expect(result.hasMore).toBe(true);
+  });
+});
+
+/**
+ * Tests for EventInstanceService.cancelOccurrenceByDate and
+ * .restoreOccurrenceByDate.
+ *
+ * These tests stub the database-facing surface (EventEntity.findByPk,
+ * EventScheduleEntity.findOne, prototype save/destroy) so the service's
+ * authorization, idempotency, rrule-match validation, and bus-emit logic
+ * can be exercised without a live database connection.
+ *
+ * Write-side DB-backed integration coverage for these methods is exercised
+ * via the existing cancel-instance API integration tests (which ultimately
+ * call through to the same writeExclusionRow / deleteExclusionRow helpers).
+ */
+describe('EventInstanceService.cancelOccurrenceByDate / restoreOccurrenceByDate', () => {
+  let service: EventInstanceService;
+  let eventBus: EventEmitter;
+  let sandbox: sinon.SinonSandbox;
+
+  const ACCOUNT_ID = '55555555-5555-4555-8555-555555555555';
+  const EVENT_ID = '66666666-6666-4666-8666-666666666666';
+  const CALENDAR_ID = '77777777-7777-4777-8777-777777777777';
+
+  // A weekly (Monday) recurring schedule starting 2026-05-04T10:00:00Z.
+  const SCHEDULE_START = DateTime.fromISO('2026-05-04T10:00:00Z', { zone: 'utc' });
+  // Second Monday — falls on the rrule.
+  const MATCHING_START = DateTime.fromISO('2026-05-11T10:00:00Z', { zone: 'utc' });
+  // Thursday — does NOT fall on the Mondays-only rrule.
+  const NON_MATCHING_START = DateTime.fromISO('2026-05-14T10:00:00Z', { zone: 'utc' });
+
+  function makeAccount(): Account {
+    return new Account(ACCOUNT_ID, 'editor', 'editor@example.com');
+  }
+
+  function makeCalendar(): Calendar {
+    return new Calendar(CALENDAR_ID, 'test-calendar');
+  }
+
+  /**
+   * Builds an EventEntity with a weekly Monday schedule eager-loaded.
+   * The schedule entity is attached via setDataValue so the service's
+   * `eventEntity.getDataValue('schedules')` call returns it as if it
+   * were loaded by Sequelize's `include: [EventScheduleEntity]`.
+   */
+  function stubEventWithWeeklyMondaySchedule(): EventEntity {
+    const eventEntity = EventEntity.build({
+      id: EVENT_ID,
+      calendar_id: CALENDAR_ID,
+    });
+    const scheduleEntity = EventScheduleEntity.build({
+      id: uuidv4(),
+      event_id: EVENT_ID,
+      timezone: 'UTC',
+      start_date: SCHEDULE_START.toJSDate(),
+      end_date: null,
+      event_end_time: null,
+      frequency: EventFrequency.WEEKLY,
+      interval: 1,
+      count: 0,
+      by_day: 'MO',
+      is_exclusion: false,
+      hide_from_public: false,
+    });
+    eventEntity.setDataValue('schedules', [scheduleEntity] as any);
+    return eventEntity;
+  }
+
+  beforeEach(() => {
+    sandbox = sinon.createSandbox();
+    eventBus = new EventEmitter();
+    service = new EventInstanceService(eventBus);
+
+    // Default stubs — individual tests override as needed.
+    sandbox.stub(service['calendarService'], 'getCalendar').resolves(makeCalendar());
+    sandbox.stub(service['calendarService'], 'editableCalendarsForUser').resolves([makeCalendar()]);
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+  });
+
+  describe('cancelOccurrenceByDate', () => {
+    it('creates a new exclusion row when the date matches an rrule occurrence and emits eventInstanceCancelled with instanceId undefined', async () => {
+      sandbox.stub(EventEntity, 'findByPk').resolves(stubEventWithWeeklyMondaySchedule());
+      sandbox.stub(EventScheduleEntity, 'findOne').resolves(null);
+      const saveStub = sandbox.stub(EventScheduleEntity.prototype, 'save').resolves();
+
+      const emitSpy = sandbox.spy(eventBus, 'emit');
+
+      await service.cancelOccurrenceByDate(makeAccount(), EVENT_ID, MATCHING_START, false);
+
+      expect(saveStub.calledOnce).toBe(true);
+      expect(emitSpy.calledWith('eventInstanceCancelled')).toBe(true);
+      const payload = emitSpy.getCalls().find(c => c.args[0] === 'eventInstanceCancelled')!.args[1];
+      expect(payload.calendar.id).toBe(CALENDAR_ID);
+      expect(payload.event.id).toBe(EVENT_ID);
+      expect(payload.instanceId).toBeUndefined();
+      expect(payload.hideFromPublic).toBe(false);
+    });
+
+    it('throws InvalidOccurrenceDateError when the date does not match the rrule', async () => {
+      sandbox.stub(EventEntity, 'findByPk').resolves(stubEventWithWeeklyMondaySchedule());
+      const findOneStub = sandbox.stub(EventScheduleEntity, 'findOne').resolves(null);
+      const saveStub = sandbox.stub(EventScheduleEntity.prototype, 'save').resolves();
+
+      await expect(
+        service.cancelOccurrenceByDate(makeAccount(), EVENT_ID, NON_MATCHING_START, false),
+      ).rejects.toMatchObject({ name: 'InvalidOccurrenceDateError' });
+
+      // Nothing should have been written when validation fails.
+      expect(findOneStub.called).toBe(false);
+      expect(saveStub.called).toBe(false);
+    });
+
+    it('throws EventNotFoundError when the event does not exist', async () => {
+      sandbox.stub(EventEntity, 'findByPk').resolves(null);
+
+      await expect(
+        service.cancelOccurrenceByDate(makeAccount(), EVENT_ID, MATCHING_START, false),
+      ).rejects.toMatchObject({ name: 'EventNotFoundError' });
+    });
+
+    it('throws InsufficientCalendarPermissionsError for non-editor accounts', async () => {
+      sandbox.stub(EventEntity, 'findByPk').resolves(stubEventWithWeeklyMondaySchedule());
+      (service['calendarService'].editableCalendarsForUser as sinon.SinonStub).resolves([]);
+
+      await expect(
+        service.cancelOccurrenceByDate(makeAccount(), EVENT_ID, MATCHING_START, false),
+      ).rejects.toMatchObject({ name: 'InsufficientCalendarPermissionsError' });
+    });
+
+    it('is idempotent when cancelling the same date with the same mode', async () => {
+      sandbox.stub(EventEntity, 'findByPk').resolves(stubEventWithWeeklyMondaySchedule());
+      const existing = EventScheduleEntity.build({
+        id: uuidv4(),
+        event_id: EVENT_ID,
+        start_date: MATCHING_START.toJSDate(),
+        is_exclusion: true,
+        hide_from_public: false,
+      });
+      sandbox.stub(EventScheduleEntity, 'findOne').resolves(existing);
+      const saveStub = sandbox.stub(EventScheduleEntity.prototype, 'save').resolves();
+
+      const emitSpy = sandbox.spy(eventBus, 'emit');
+
+      await service.cancelOccurrenceByDate(makeAccount(), EVENT_ID, MATCHING_START, false);
+
+      // Same row, same mode → no save, no emit.
+      expect(saveStub.called).toBe(false);
+      expect(emitSpy.calledWith('eventInstanceCancelled')).toBe(false);
+    });
+
+    it('flips hide_from_public in place when re-cancelled in a different mode', async () => {
+      sandbox.stub(EventEntity, 'findByPk').resolves(stubEventWithWeeklyMondaySchedule());
+      const existing = EventScheduleEntity.build({
+        id: uuidv4(),
+        event_id: EVENT_ID,
+        start_date: MATCHING_START.toJSDate(),
+        is_exclusion: true,
+        hide_from_public: false,
+      });
+      sandbox.stub(EventScheduleEntity, 'findOne').resolves(existing);
+      const saveStub = sandbox.stub(EventScheduleEntity.prototype, 'save').resolves();
+
+      const emitSpy = sandbox.spy(eventBus, 'emit');
+
+      await service.cancelOccurrenceByDate(makeAccount(), EVENT_ID, MATCHING_START, true);
+
+      expect(existing.hide_from_public).toBe(true);
+      expect(saveStub.calledOnce).toBe(true);
+      const payload = emitSpy.getCalls().find(c => c.args[0] === 'eventInstanceCancelled')!.args[1];
+      expect(payload.hideFromPublic).toBe(true);
+    });
+  });
+
+  describe('restoreOccurrenceByDate', () => {
+    it('deletes the exclusion row for the date when one exists and emits eventInstanceRestored', async () => {
+      sandbox.stub(EventEntity, 'findByPk').resolves(stubEventWithWeeklyMondaySchedule());
+      const existing = EventScheduleEntity.build({
+        id: uuidv4(),
+        event_id: EVENT_ID,
+        start_date: MATCHING_START.toJSDate(),
+        is_exclusion: true,
+        hide_from_public: true,
+      });
+      sandbox.stub(EventScheduleEntity, 'findOne').resolves(existing);
+      const destroyStub = sandbox.stub(EventScheduleEntity.prototype, 'destroy').resolves();
+
+      const emitSpy = sandbox.spy(eventBus, 'emit');
+
+      await service.restoreOccurrenceByDate(makeAccount(), EVENT_ID, MATCHING_START);
+
+      expect(destroyStub.calledOnce).toBe(true);
+      expect(emitSpy.calledWith('eventInstanceRestored')).toBe(true);
+      const payload = emitSpy.getCalls().find(c => c.args[0] === 'eventInstanceRestored')!.args[1];
+      expect(payload.calendar.id).toBe(CALENDAR_ID);
+      expect(payload.event.id).toBe(EVENT_ID);
+      expect(payload.instanceId).toBeUndefined();
+    });
+
+    it('is a silent no-op when no exclusion row exists for the date', async () => {
+      sandbox.stub(EventEntity, 'findByPk').resolves(stubEventWithWeeklyMondaySchedule());
+      sandbox.stub(EventScheduleEntity, 'findOne').resolves(null);
+      const destroyStub = sandbox.stub(EventScheduleEntity.prototype, 'destroy').resolves();
+
+      const emitSpy = sandbox.spy(eventBus, 'emit');
+
+      await expect(
+        service.restoreOccurrenceByDate(makeAccount(), EVENT_ID, MATCHING_START),
+      ).resolves.not.toThrow();
+
+      // No row → no destroy, and no bus emit (documented restore-only-on-change).
+      expect(destroyStub.called).toBe(false);
+      expect(emitSpy.calledWith('eventInstanceRestored')).toBe(false);
+    });
+
+    it('does not validate rrule match for restore (accepts any date — documented asymmetry)', async () => {
+      sandbox.stub(EventEntity, 'findByPk').resolves(stubEventWithWeeklyMondaySchedule());
+      sandbox.stub(EventScheduleEntity, 'findOne').resolves(null);
+      sandbox.stub(EventScheduleEntity.prototype, 'destroy').resolves();
+
+      // A Thursday start — not produced by the Mondays-only rrule. Cancel
+      // would throw InvalidOccurrenceDateError here; restore must not.
+      await expect(
+        service.restoreOccurrenceByDate(makeAccount(), EVENT_ID, NON_MATCHING_START),
+      ).resolves.not.toThrow();
+    });
+
+    it('throws InsufficientCalendarPermissionsError for non-editor accounts', async () => {
+      sandbox.stub(EventEntity, 'findByPk').resolves(stubEventWithWeeklyMondaySchedule());
+      (service['calendarService'].editableCalendarsForUser as sinon.SinonStub).resolves([]);
+
+      await expect(
+        service.restoreOccurrenceByDate(makeAccount(), EVENT_ID, MATCHING_START),
+      ).rejects.toMatchObject({ name: 'InsufficientCalendarPermissionsError' });
+    });
+
+    it('throws EventNotFoundError when the event does not exist', async () => {
+      sandbox.stub(EventEntity, 'findByPk').resolves(null);
+
+      await expect(
+        service.restoreOccurrenceByDate(makeAccount(), EVENT_ID, MATCHING_START),
+      ).rejects.toMatchObject({ name: 'EventNotFoundError' });
+    });
+  });
+});

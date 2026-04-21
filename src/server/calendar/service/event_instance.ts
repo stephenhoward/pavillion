@@ -24,6 +24,7 @@ import type ActivityPubInterface from '@/server/activitypub/interface';
 import {
   EventNotFoundError,
   InsufficientCalendarPermissionsError,
+  InvalidOccurrenceDateError,
 } from '@/common/exceptions/calendar';
 import { createLogger } from '@/server/common/helper/logger';
 
@@ -51,6 +52,37 @@ const { RRule, RRuleSet, Weekday, ALL_WEEKDAYS } = rrule;
  * the window.
  */
 export const GENERATION_HORIZON_MONTHS = 6;
+
+/**
+ * State tag for an entry in {@link UpcomingOccurrencesResult}:
+ *   - 'active': produced by the rrule, no matching exclusion row
+ *   - 'cancelled-shown': produced by the rrule, matching RECURRENCE-ID-style
+ *     shown cancellation (isExclusion=true, hideFromPublic=false)
+ *   - 'hidden': matching EXDATE-style hidden cancellation (isExclusion=true,
+ *     hideFromPublic=true) — surfaced to the owner so the cancellation can
+ *     be restored even though the public calendar does not show it
+ */
+export type UpcomingOccurrenceState = 'active' | 'cancelled-shown' | 'hidden';
+
+/**
+ * DTO returned by {@link EventInstanceService.listUpcomingOccurrences}.
+ * Plain data shape — not a domain model.
+ */
+export interface UpcomingOccurrence {
+  start: DateTime;
+  state: UpcomingOccurrenceState;
+  /**
+   * The EventSchedule row id for cancellation entries. Null for `active`
+   * entries because active occurrences are produced by the recurring rrule
+   * and have no row of their own.
+   */
+  scheduleId: string | null;
+}
+
+export interface UpcomingOccurrencesResult {
+  occurrences: UpcomingOccurrence[];
+  hasMore: boolean;
+}
 
 /**
  * Parses a stored `by_day` entry (e.g. "MO", "1MO", "-1FR") into an rrule
@@ -515,6 +547,206 @@ export default class EventInstanceService {
   }
 
   /**
+   * Loads the event and confirms the caller has editor permission on the
+   * owning calendar. Returns the resolved { event, calendar } pair; throws
+   * EventNotFoundError / InsufficientCalendarPermissionsError otherwise.
+   *
+   * Security binding: performs existence + editor-permission check BEFORE
+   * populating schedules on the model, preserving auth-before-use ordering.
+   * Both EventNotFoundError and InsufficientCalendarPermissionsError are
+   * remapped to HTTP 404 at the handler layer (IDOR prevention).
+   */
+  private async loadEventForEditor(account: Account, eventId: string): Promise<{ event: CalendarEvent; calendar: Calendar }> {
+    const eventEntity = await EventEntity.findByPk(eventId, {
+      include: [EventScheduleEntity],
+    });
+    if (!eventEntity || !eventEntity.calendar_id) {
+      throw new EventNotFoundError('Event not found');
+    }
+
+    const calendar = await this.calendarService.getCalendar(eventEntity.calendar_id);
+    if (!calendar) {
+      throw new EventNotFoundError('Event not found');
+    }
+
+    const calendars = await this.calendarService.editableCalendarsForUser(account);
+    if (!calendars.some(c => c.id === calendar.id)) {
+      throw new InsufficientCalendarPermissionsError(
+        'Insufficient permissions to modify events in this calendar',
+      );
+    }
+
+    const event = eventEntity.toModel();
+    const scheduleEntities = (eventEntity.getDataValue('schedules') ?? []) as EventScheduleEntity[];
+    event.schedules = scheduleEntities.map(s => s.toModel());
+    return { event, calendar };
+  }
+
+  /**
+   * Core idempotent write: find-or-create / flip-in-place an exclusion
+   * schedule row anchored on startDate. Returns true if a change was made,
+   * false if the row already matched and nothing was written.
+   */
+  private async writeExclusionRow(
+    eventId: string,
+    startDate: Date,
+    hideFromPublic: boolean,
+  ): Promise<boolean> {
+    const existing = await EventScheduleEntity.findOne({
+      where: { event_id: eventId, start_date: startDate, is_exclusion: true },
+    });
+    if (existing) {
+      if (existing.hide_from_public === hideFromPublic) {
+        return false;
+      }
+      existing.hide_from_public = hideFromPublic;
+      await existing.save();
+      return true;
+    }
+    const row = EventScheduleEntity.build({
+      id: uuidv4(),
+      event_id: eventId,
+      timezone: 'UTC',
+      start_date: startDate,
+      end_date: null,
+      event_end_time: null,
+      frequency: null,
+      interval: 0,
+      count: 0,
+      by_day: '',
+      is_exclusion: true,
+      hide_from_public: hideFromPublic,
+    });
+    await row.save();
+    return true;
+  }
+
+  /**
+   * Core delete: remove an exclusion schedule row anchored on startDate.
+   * Returns true if a row was removed, false if nothing matched.
+   */
+  private async deleteExclusionRow(eventId: string, startDate: Date): Promise<boolean> {
+    const existing = await EventScheduleEntity.findOne({
+      where: { event_id: eventId, start_date: startDate, is_exclusion: true },
+    });
+    if (!existing) return false;
+    await existing.destroy();
+    return true;
+  }
+
+  /**
+   * Validates that startDate coincides with an actual occurrence produced by
+   * the event's RRuleSet. Throws InvalidOccurrenceDateError otherwise.
+   *
+   * Uses a ±1ms window to accommodate tiny floating-point rounding between
+   * Luxon DateTime and JS Date. Caller is expected to have already
+   * truncated startDate to millisecond precision.
+   */
+  private assertDateMatchesOccurrence(event: CalendarEvent, startDate: DateTime): void {
+    const rruleSet = this.rrules(event);
+    const ms = startDate.toUTC().toMillis();
+    const hits = rruleSet.between(
+      new Date(ms - 1),
+      new Date(ms + 1),
+      true,
+    );
+    if (hits.length === 0) {
+      throw new InvalidOccurrenceDateError();
+    }
+  }
+
+  /**
+   * Date-based cancellation. Same semantics as cancelInstance but keyed by
+   * an ISO occurrence start rather than a materialized instance ID —
+   * decouples the UI from the materialization horizon.
+   *
+   * Security binding: truncates startDate to millisecond precision before
+   * validating occurrence membership to avoid sub-ms drift bypassing the
+   * strict-date check.
+   *
+   * @param account - Authenticated account (must be calendar editor)
+   * @param eventId - The owning event ID
+   * @param startDate - Occurrence start datetime; must match the rrule
+   * @param hideFromPublic - true for EXDATE-style hidden, false for
+   *                         RECURRENCE-ID-style shown cancellation
+   */
+  async cancelOccurrenceByDate(
+    account: Account,
+    eventId: string,
+    startDate: DateTime,
+    hideFromPublic: boolean,
+  ): Promise<void> {
+    const { event, calendar } = await this.loadEventForEditor(account, eventId);
+    // Truncate sub-millisecond precision before strict-date validation —
+    // anything finer than ms is not representable by a JS Date and cannot
+    // be matched against an RRuleSet expansion.
+    const truncatedStart = startDate.startOf('millisecond');
+    this.assertDateMatchesOccurrence(event, truncatedStart);
+
+    const changed = await this.writeExclusionRow(
+      eventId,
+      truncatedStart.toUTC().toJSDate(),
+      hideFromPublic,
+    );
+    if (!changed) {
+      logger.info(
+        { calendarId: calendar.id, eventId, startDate: truncatedStart.toISO() },
+        'cancelOccurrenceByDate no-op: existing cancellation matches requested mode',
+      );
+      return;
+    }
+
+    logger.info(
+      { calendarId: calendar.id, eventId, startDate: truncatedStart.toISO() },
+      'Cancelled event occurrence by date',
+    );
+
+    this.eventBus.emit('eventInstanceCancelled', {
+      calendar,
+      event,
+      instanceId: undefined,
+      hideFromPublic,
+    });
+  }
+
+  /**
+   * Date-based restore. Deletes the exclusion row for the given start date
+   * if one exists; silent no-op otherwise.
+   *
+   * Asymmetry with cancelOccurrenceByDate: restore intentionally SKIPS
+   * strict-date validation. Rationale: the success criterion of "restore"
+   * is "exclusion row absent for this date," which any non-matching input
+   * trivially satisfies. Validating the date would only raise pointless
+   * errors for input that is already in the desired state.
+   *
+   * @param account - Authenticated account (must be calendar editor)
+   * @param eventId - The owning event ID
+   * @param startDate - Occurrence start datetime for the exclusion row
+   */
+  async restoreOccurrenceByDate(
+    account: Account,
+    eventId: string,
+    startDate: DateTime,
+  ): Promise<void> {
+    const { event, calendar } = await this.loadEventForEditor(account, eventId);
+
+    const removed = await this.deleteExclusionRow(eventId, startDate.toUTC().toJSDate());
+
+    logger.info(
+      { calendarId: calendar.id, eventId, startDate: startDate.toISO() },
+      'Restored event occurrence by date',
+    );
+
+    if (removed) {
+      this.eventBus.emit('eventInstanceRestored', {
+        calendar,
+        event,
+        instanceId: undefined,
+      });
+    }
+  }
+
+  /**
    * Cancels a single materialized occurrence of an event by creating (or
    * updating) an is_exclusion=true schedule row anchored on the instance's
    * start time. The `hideFromPublic` flag chooses between EXDATE-style
@@ -886,7 +1118,10 @@ export default class EventInstanceService {
       const frequency = schedule.frequency !== null
         ? frequencyMap[schedule.frequency]
         : undefined;
-      if ( frequency ) {
+      // NB: RRule.YEARLY === 0 so a truthy check would skip yearly schedules.
+      // Compare against undefined explicitly so all mapped frequencies (0..3)
+      // flow into the rrule branch.
+      if ( frequency !== undefined ) {
         let options: Record<string,any> = {
           freq: frequency,
           interval: schedule.interval,
@@ -956,6 +1191,101 @@ export default class EventInstanceService {
         }
       }
     }
+  }
+
+  /**
+   * Expands the event's RRuleSet beyond the materialization horizon to return
+   * a window of upcoming occurrences. Differs from {@link generateInstances} in
+   * two ways:
+   *   1. Does not persist — results are transient DTOs for UI consumption.
+   *   2. Not bound by GENERATION_HORIZON_MONTHS — the caller supplies the
+   *      window via (afterDate, limit).
+   *
+   * Each occurrence is tagged with a state:
+   *   - 'active': produced by the rrule, no matching exclusion row
+   *   - 'cancelled-shown': produced by the rrule, matching exclusion row with
+   *                        hide_from_public=false
+   *   - 'hidden': matching exclusion row with hide_from_public=true (absent
+   *               from the RRuleSet output but surfaced in results so the
+   *               owner can see and restore it)
+   *
+   * Signature note: this method takes an event-first signature rather than the
+   * typical `(account, ...)` pattern. The editor authorization check is
+   * performed handler-side before calling this service method. See the
+   * cancel-recurring-occurrence-ux plan (Task 2) for rationale.
+   *
+   * @param event - The recurring event; its schedules must be loaded
+   * @param afterDate - Occurrences with start strictly greater than afterDate are included
+   * @param limit - Maximum occurrences to return (caller-clamped to [1, 50])
+   * @returns Occurrences with state flags and a hasMore indicator
+   */
+  async listUpcomingOccurrences(
+    event: CalendarEvent,
+    afterDate: DateTime,
+    limit: number,
+  ): Promise<UpcomingOccurrencesResult> {
+    const rruleSet = this.rrules(event);
+
+    // Pull limit + 1 to compute hasMore. rrule's `after` takes a JS Date and
+    // inc=false (strictly greater than). Walk forward in a bounded loop.
+    const produced: Date[] = [];
+    let cursor = afterDate.toJSDate();
+    for (let i = 0; i <= limit; i++) {
+      const next = rruleSet.after(cursor, false);
+      if (!next) break;
+      produced.push(next);
+      cursor = next;
+    }
+    const hasMoreFromRrule = produced.length > limit;
+    const rruleDates = produced.slice(0, limit);
+
+    // Collect hidden-cancellation dates after afterDate; they are not in the
+    // RRuleSet output (exrule/exdate suppressed them) but we want the user to
+    // see and restore them.
+    const afterMs = afterDate.toMillis();
+    const hiddenSchedules = (event.schedules ?? []).filter(s =>
+      s.isExclusion && s.hideFromPublic && s.startDate
+      && s.startDate.toMillis() > afterMs,
+    );
+
+    // Build unified set, dedupe by ms timestamp (hidden dates should never
+    // appear in rruleDates, but guard defensively).
+    const byMs = new Map<number, UpcomingOccurrence>();
+    for (const d of rruleDates) {
+      const start = DateTime.fromJSDate(d).toUTC();
+      byMs.set(start.toMillis(), { start, state: 'active', scheduleId: null });
+    }
+    // Tag shown cancellations: the underlying rrule-produced date whose start
+    // matches a shown-exclusion schedule.
+    for (const schedule of event.schedules ?? []) {
+      if (!schedule.isExclusion || schedule.hideFromPublic || !schedule.startDate) continue;
+      const ms = schedule.startDate.toUTC().toMillis();
+      if (byMs.has(ms)) {
+        byMs.set(ms, {
+          start: schedule.startDate.toUTC(),
+          state: 'cancelled-shown',
+          scheduleId: schedule.id ?? null,
+        });
+      }
+    }
+    for (const schedule of hiddenSchedules) {
+      const start = schedule.startDate!.toUTC();
+      byMs.set(start.toMillis(), {
+        start,
+        state: 'hidden',
+        scheduleId: schedule.id ?? null,
+      });
+    }
+
+    // Sort and truncate to `limit`. hasMore is true if the RRule produced more
+    // than limit OR any hidden schedule fell outside the first `limit` slots.
+    const merged = Array.from(byMs.values()).sort(
+      (a, b) => a.start.toMillis() - b.start.toMillis(),
+    );
+    const occurrences = merged.slice(0, limit);
+    const hasMore = hasMoreFromRrule || merged.length > limit;
+
+    return { occurrences, hasMore };
   }
 
   /**

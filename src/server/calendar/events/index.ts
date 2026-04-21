@@ -40,11 +40,23 @@ export interface EventUnrepostedPayload {
  *   2. Propagate the change to federation followers through the existing
  *      AP Update(Event) outbound path (via a re-emission of `eventUpdated`,
  *      which the ActivityPub domain handler listens on).
+ *
+ * Note on naming: the bus event name `eventInstanceCancelled` intentionally
+ * retains the legacy camelCase shape rather than the `{domain}:{resource}:{action}`
+ * convention, because ActivityPub domain handlers already subscribe to this
+ * exact name. Renaming would silently break federation propagation.
+ *
+ * `instanceId` is marked optional as a Phase 1–2 transitional measure: the
+ * date-based cancel/restore path (pv-cn0r.1.3) emits this payload without
+ * a synthetic instanceId, because cancellations are keyed by occurrence
+ * start date, not by a materialized instance row. The field will be
+ * removed entirely in Phase 3 (pv-cn0r.3.2) once all emitters and
+ * subscribers are migrated off of it.
  */
 export interface EventInstanceCancelledPayload {
   calendar: Calendar;
   event: CalendarEvent;
-  instanceId: string;
+  instanceId?: string;
   hideFromPublic: boolean;
 }
 
@@ -56,11 +68,23 @@ export interface EventInstanceCancelledPayload {
  * Downstream responsibilities match {@link EventInstanceCancelledPayload}:
  * rebuild the owner's instances, and re-emit `eventUpdated` so the AP
  * outbound Update(Event) is sent to followers.
+ *
+ * Note on naming: the bus event name `eventInstanceRestored` intentionally
+ * retains the legacy camelCase shape rather than the `{domain}:{resource}:{action}`
+ * convention, because ActivityPub domain handlers already subscribe to this
+ * exact name. Renaming would silently break federation propagation.
+ *
+ * `instanceId` is marked optional as a Phase 1–2 transitional measure: the
+ * date-based cancel/restore path (pv-cn0r.1.3) emits this payload without
+ * a synthetic instanceId, because cancellations are keyed by occurrence
+ * start date, not by a materialized instance row. The field will be
+ * removed entirely in Phase 3 (pv-cn0r.3.2) once all emitters and
+ * subscribers are migrated off of it.
  */
 export interface EventInstanceRestoredPayload {
   calendar: Calendar;
   event: CalendarEvent;
-  instanceId: string;
+  instanceId?: string;
 }
 
 export default class CalendarEventHandlers implements DomainEventHandlers {
