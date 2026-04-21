@@ -181,7 +181,7 @@
         }
       }
 
-      div.week-parameters {
+      .week-parameters {
         margin-bottom: 1rem;
         font-size: 0.875rem;
 
@@ -197,7 +197,7 @@
         }
       }
 
-      div.month-parameters {
+      .month-parameters {
         gap: 0.75rem;
         margin-bottom: 1rem;
 
@@ -215,7 +215,7 @@
         }
       }
 
-      div.end-type {
+      .end-type {
         font-size: 0.875rem;
 
         > label:first-of-type {

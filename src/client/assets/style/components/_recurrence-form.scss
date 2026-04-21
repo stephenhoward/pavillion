@@ -14,6 +14,28 @@ form.repeats {
   border: 1px solid var(--pav-border-secondary);
   border-radius: 0.75rem; // rounded-xl
 
+  // Reset default <fieldset> chrome so grouping elements (.week-parameters,
+  // .month-parameters, .end-type) look identical whether they render as a
+  // <fieldset> (RecurrenceEditorSheet.vue) or a <div> (event_recurrence.vue).
+  // The <legend> acts as a visible group label matching the bare-text label it
+  // replaced.
+  fieldset.week-parameters,
+  fieldset.month-parameters,
+  fieldset.end-type {
+    border: 0;
+    padding: 0;
+    margin: 0;
+    min-inline-size: 0;
+
+    > legend {
+      padding: 0;
+      margin-bottom: 0.5rem;
+      font-size: inherit;
+      font-weight: 500;
+      color: var(--pav-text-secondary);
+    }
+  }
+
   .frequency-field {
     display: flex;
     flex-direction: column;
@@ -59,7 +81,7 @@ form.repeats {
     }
   }
 
-  div.week-parameters {
+  .week-parameters {
     margin-bottom: 1.5rem;
     color: var(--pav-text-secondary);
 
@@ -124,7 +146,7 @@ form.repeats {
     }
   }
 
-  div.month-parameters {
+  .month-parameters {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
     gap: 1rem;
@@ -152,7 +174,7 @@ form.repeats {
     }
   }
 
-  div.end-type {
+  .end-type {
     color: var(--pav-text-secondary);
 
     > label:first-of-type {

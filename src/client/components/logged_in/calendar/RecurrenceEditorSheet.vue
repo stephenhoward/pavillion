@@ -135,8 +135,8 @@ const compileRecurrence = () => {
         {{ props.schedule.frequency ? t(props.schedule.frequency + 'Term') : '' }}
       </label>
 
-      <div class="week-parameters" v-if="props.schedule.frequency === 'weekly'">
-        {{ t('on_weekday_label') }}:
+      <fieldset class="week-parameters" v-if="props.schedule.frequency === 'weekly'">
+        <legend>{{ t('on_weekday_label') }}</legend>
         <div class="weekday-chips">
           <label v-for="day in Object.keys(state.weekdays)" :key="day">
             <input type="checkbox"
@@ -145,9 +145,10 @@ const compileRecurrence = () => {
             <span>{{ t(day) }}</span>
           </label>
         </div>
-      </div>
+      </fieldset>
 
-      <div class="month-parameters" v-if="props.schedule.frequency === 'monthly'">
+      <fieldset class="month-parameters" v-if="props.schedule.frequency === 'monthly'">
+        <legend>{{ t('on_weekday_label') }}</legend>
         <div v-for="week in [1, 2, 3, 4, 5]" :key="week">
           <label v-for="day in Object.keys(state.weekdays)" :key="week + day">
             <input type="checkbox"
@@ -156,10 +157,10 @@ const compileRecurrence = () => {
             {{ t(week + 'ord') }} {{ t(day) }}
           </label>
         </div>
-      </div>
+      </fieldset>
 
-      <div class="end-type" v-if="props.schedule.frequency">
-        {{ t('end_type_label') }}:
+      <fieldset class="end-type" v-if="props.schedule.frequency">
+        <legend>{{ t('end_type_label') }}</legend>
         <label>
           <input type="radio"
                  value="none"
@@ -175,6 +176,7 @@ const compileRecurrence = () => {
           {{ t('after') }}
           <input type="number"
                  v-model="props.schedule.count"
+                 :aria-label="t('occurrences')"
                  @change="state.endType = 'after'; compileRecurrence()" />
           {{ t('occurrences') }}
         </label>
@@ -186,9 +188,10 @@ const compileRecurrence = () => {
           {{ t('on_date') }}
           <input type="date"
                  v-model="state.endDate"
+                 :aria-label="t('on_date')"
                  @input="state.endType = 'on'; compileRecurrence()" />
         </label>
-      </div>
+      </fieldset>
     </form>
   </Sheet>
 </template>
