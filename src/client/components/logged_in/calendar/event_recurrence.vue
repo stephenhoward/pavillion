@@ -85,14 +85,14 @@
 
     .summary-text {
       font-size: 0.875rem;
-      color: var(--pav-color-stone-700);
+      color: var(--pav-text-secondary);
     }
   }
 }
 </style>
 
 <template>
-  <div :class="['recurrence-rule', { 'recurrence-rule--compact': compact }]">
+  <div class="recurrence-rule">
     <div class="schedule-header">
       <span>Schedule {{ props.index + 1 }}</span>
       <button
@@ -155,7 +155,7 @@
     <!-- Recurrence summary + trigger -->
     <div class="recurrence-summary">
       <template v-if="props.schedule.frequency">
-        <span class="summary-text">{{ generateRecurrenceText(props.schedule) }}</span>
+        <span class="summary-text" aria-live="polite" aria-atomic="true">{{ generateRecurrenceText(props.schedule) }}</span>
         <button type="button" class="btn btn--ghost" @click="openRecurrenceSheet">
           {{ t('edit_recurrence') }}
         </button>
@@ -186,10 +186,6 @@ import { generateRecurrenceText } from '@/common/utils/recurrence-text';
 
 const props = defineProps({
   schedule: CalendarEventSchedule,
-  compact: {
-    type: Boolean,
-    default: false,
-  },
   canRemove: {
     type: Boolean,
     default: true,
