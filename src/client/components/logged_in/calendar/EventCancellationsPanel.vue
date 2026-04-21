@@ -146,14 +146,14 @@ async function onRestoreClick(instanceId: string) {
           <span
             v-if="row.kind === 'cancelled-shown'"
             data-testid="badge-cancelled"
-            class="badge badge--cancelled"
+            class="badge badge--warning"
           >
             {{ t('cancelled_badge') }}
           </span>
           <span
             v-else-if="row.kind === 'hidden'"
             data-testid="badge-hidden"
-            class="badge badge--hidden"
+            class="badge badge--subtle"
           >
             {{ t('hidden_badge') }}
           </span>
@@ -246,26 +246,6 @@ async function onRestoreClick(instanceId: string) {
 .instance-start {
   font-weight: var(--pav-font-weight-medium);
   color: var(--pav-text-primary);
-}
-
-.badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 0.125rem 0.5rem;
-  border-radius: 9999px;
-  font-size: var(--pav-font-size-small);
-  font-weight: var(--pav-font-weight-medium);
-  background: var(--pav-surface-primary);
-  color: var(--pav-text-secondary);
-  border: var(--pav-border-width-1) solid var(--pav-border-primary);
-
-  &--cancelled {
-    color: var(--pav-text-warning, var(--pav-text-primary));
-  }
-
-  &--hidden {
-    color: var(--pav-text-secondary);
-  }
 }
 
 .instance-actions {
