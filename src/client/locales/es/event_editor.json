@@ -2,7 +2,8 @@
   "recurrence": {
     "recurrence_sheet_title": "Recurrence",
     "edit_recurrence": "Edit recurrence",
-    "add_recurrence": "Add recurrence"
+    "add_recurrence": "Add recurrence",
+    "done": "Done"
   },
   "cancellations": {
     "panel_title": "Cancelaciones",

@@ -193,14 +193,29 @@ const compileRecurrence = () => {
         </label>
       </fieldset>
     </form>
+
+    <footer class="sheet-footer">
+      <button type="button" class="btn btn--primary" @click="emit('close')">
+        {{ t('done') }}
+      </button>
+    </footer>
   </Sheet>
 </template>
+
+<style scoped lang="scss">
+.sheet-footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: var(--pav-space-lg);
+  padding-top: var(--pav-space-md);
+  border-top: var(--pav-border-width-1) solid var(--pav-border-primary);
+}
+</style>
 
 <!--
   Styles for `form.repeats`, `.week-parameters`, `.month-parameters`, and
   `.end-type` come from the shared partial:
     src/client/assets/style/components/_recurrence-form.scss
-  which is registered globally in main.scss (pv-j1pi.1). No scoped styles
-  are needed here so both this sheet and the inline form in
-  event_recurrence.vue render from a single source of truth.
+  which is registered globally in main.scss (pv-j1pi.1). Only the
+  sheet-local `.sheet-footer` layout lives in the scoped block above.
 -->
