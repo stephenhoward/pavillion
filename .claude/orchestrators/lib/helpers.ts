@@ -8,10 +8,9 @@
  * Exports:
  *   CLI helpers: gitSafeToStart, preflight, bdTopReady, bdEscalate,
  *                bdState, bdSizingCheck, bdEnrichmentCheck,
- *                discoverAgents, matchAgents
+ *                discoverAgents
  *   Pure helpers: branchName, commitMsg, prBody,
- *                 classifyBeadState, classifySizing,
- *                 fileTags, matchAgents (overloaded pure form)
+ *                 classifyBeadState, classifySizing
  */
 
 import { spawnSync as nodeSpawnSync } from 'node:child_process';
@@ -793,85 +792,6 @@ export function prBody(
 }
 
 // =============================================================================
-// fileTags (pure)
-// =============================================================================
-
-/**
- * Derive tag set from a file path. Pure function.
- *
- * Tags: vue, scss, test, api, entity, model, service, migration, i18n, script, infra
- */
-export function fileTags(path: string): string[] {
-  const tags: string[] = [];
-
-  if (path.endsWith('.vue')) tags.push('vue');
-  if (path.endsWith('.scss') || path.endsWith('.css')) tags.push('scss');
-  if (/\.(test|spec)\.(ts|js|vue)$/.test(path)) tags.push('test');
-  if (/^src\/server\/[^/]+\/api\//.test(path)) tags.push('api');
-  if (/^src\/server\/[^/]+\/entity\//.test(path)) tags.push('entity');
-  if (/^src\/server\/[^/]+\/model\//.test(path) || /^src\/common\/model\//.test(path)) tags.push('model');
-  if (/^src\/server\/[^/]+\/service\//.test(path)) tags.push('service');
-  if (/migrat/i.test(path)) tags.push('migration');
-  if (/locales?\/[^/]+\.json$/.test(path)) tags.push('i18n');
-  if (path.endsWith('.sh')) tags.push('script');
-  if (/^\.claude\//.test(path) || /^docs\//.test(path)) tags.push('infra');
-
-  return tags;
-}
-
-// =============================================================================
-// Agent tag table
-// =============================================================================
-
-/** Maps agent name patterns to their tag sets and keyword phrases. */
-const AGENT_TAG_TABLE: Array<{
-  pattern: RegExp;
-  tags: string[];
-  keyword: string;
-}> = [
-  { pattern: /accessibility-(auditor|advisor)/, tags: ['vue'], keyword: 'WCAG / Vue accessibility' },
-  { pattern: /stylesheet-(auditor|advisor)/, tags: ['vue', 'scss'], keyword: 'stylesheet quality' },
-  { pattern: /frontend-standards-reviewer/, tags: ['vue', 'scss', 'i18n'], keyword: 'frontend standards' },
-  { pattern: /i18n-(auditor|advisor)/, tags: ['vue', 'i18n'], keyword: 'i18n compliance' },
-  {
-    pattern: /consistency-(auditor|advisor)/,
-    tags: ['vue', 'api', 'service', 'entity', 'model', 'test', 'i18n', 'script', 'infra'],
-    keyword: 'pattern consistency',
-  },
-  {
-    pattern: /architecture-(auditor|advisor)/,
-    tags: ['api', 'service', 'entity', 'model', 'migration'],
-    keyword: 'architectural clarity',
-  },
-  {
-    pattern: /privacy-(auditor|advisor)/,
-    tags: ['api', 'service', 'model', 'entity', 'migration'],
-    keyword: 'PII / data exposure',
-  },
-  {
-    pattern: /security-(auditor|advisor)/,
-    tags: ['api', 'service', 'migration'],
-    keyword: 'SQL injection / auth',
-  },
-  { pattern: /testing-(auditor|advisor)/, tags: ['test'], keyword: 'test quality' },
-  {
-    pattern: /complexity-(auditor|advisor)/,
-    tags: ['api', 'service', 'entity', 'model', 'vue', 'scss', 'test', 'script', 'infra'],
-    keyword: 'unnecessary complexity',
-  },
-  { pattern: /test-failure-investigator/, tags: ['test'], keyword: 'failing test diagnosis' },
-];
-
-function agentProfile(name: string): { tags: string[]; keyword: string } | null {
-  for (const entry of AGENT_TAG_TABLE) {
-    if (entry.pattern.test(name)) {
-      return { tags: entry.tags, keyword: entry.keyword };
-    }
-  }
-  return null;
-}
-
-// =============================================================================
 // discoverAgents
 // =============================================================================
 
@@ -945,56 +865,3 @@ function extractFrontmatter(content: string, key: string): string | null {
   return null;
 }
 
-// =============================================================================
-// matchAgents
-// =============================================================================
-
-/**
- * Match agents to a set of changed files by tag intersection. Pure function.
- *
- * @param agents - AgentInfo[] from discoverAgents
- * @param changedFiles - list of file paths
- */
-export function matchAgents(
-  agents: AgentInfo[],
-  changedFiles: string[],
-): MatchedAgent[] {
-  if (changedFiles.length === 0) return [];
-
-  // Build tag→file map for changed files
-  const tagToFile = new Map<string, string>();
-  for (const f of changedFiles) {
-    for (const tag of fileTags(f)) {
-      if (!tagToFile.has(tag)) {
-        tagToFile.set(tag, f);
-      }
-    }
-  }
-
-  const matched: MatchedAgent[] = [];
-
-  for (const agent of agents) {
-    const profile = agentProfile(agent.name);
-    if (!profile || profile.tags.length === 0) continue;
-
-    // Find first tag match
-    let matchedFile: string | undefined;
-    let matchedTag: string | undefined;
-    for (const tag of profile.tags) {
-      if (tagToFile.has(tag)) {
-        matchedFile = tagToFile.get(tag);
-        matchedTag = tag;
-        break;
-      }
-    }
-
-    if (!matchedFile) continue;
-
-    matched.push({
-      ...agent,
-      rationale: `file '${matchedFile}' (tag: ${matchedTag}) matches ${agent.name} (${profile.keyword})`,
-    });
-  }
-
-  return matched;
-}

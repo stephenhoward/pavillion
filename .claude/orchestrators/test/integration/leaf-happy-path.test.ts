@@ -181,6 +181,28 @@ describe('Integration: leaf happy path', () => {
     const phaseDeps: PhaseDeps = {
       spawnFn: spawnFn as never,
       dispatchFn: dispatchFn as never,
+      // Stub advisor selection for integration tests: return a single
+      // advisor so the advisor fan-out runs, then use fanOutFn to produce
+      // a clean verdict. This exercises the phase transition without
+      // requiring real agent files on disk or a real selector dispatch.
+      selectAdvisorsFn: async () => [{
+        name: 'test-advisor',
+        path: '.claude/agents/test-advisor.md',
+        description: 'integration stub',
+        rationale: 'test',
+      }],
+      fanOutFn: async (advisors, beadId, _ctx, phase) => ({
+        beadId,
+        phase,
+        advisors: advisors.map(a => ({
+          agent: a.name,
+          verdict: 'clean' as const,
+          concerns: [],
+          recommendations: [],
+        })),
+        overallVerdict: 'clean' as const,
+        summary: 'integration stub: all clean',
+      }),
     };
 
     // ExecuteDeps uses scriptSpawnFn + scriptExistsFn (spawnSync-based)

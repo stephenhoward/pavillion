@@ -502,17 +502,35 @@ describe('shape', () => {
 describe('shapeAdvisors', () => {
   beforeEach(() => vi.restoreAllMocks());
 
-  it('should skip to Decompose when no file hints', async () => {
+  // Helper: a selectAdvisorsFn that returns a stubbed MatchedAdvisor list.
+  const fakeSelectAdvisors = (advisors: Array<{ name: string }>) =>
+    async () => advisors.map(a => ({
+      name: a.name,
+      path: `/agents/${a.name}.md`,
+      description: 'stub',
+      rationale: 'test',
+    }));
+
+  it('should halt and escalate when selector returns empty', async () => {
+    // bdEscalate calls: bd label add, bd show --json, bd update --append-notes
+    const spawn = seqSpawn(
+      fakeSpawn('', '', 0),                                 // bd label add
+      fakeSpawn(JSON.stringify([{ notes: '' }]), '', 0),    // bd show --json
+      fakeSpawn('', '', 0),                                 // bd update --append-notes
+    );
+
     const result = await shapeAdvisors(makeCtx(), {
-      getFileHintsFn: () => [],
+      spawnFn: spawn,
+      selectAdvisorsFn: fakeSelectAdvisors([]),
     });
 
-    expect(result.next).toBe(PhaseName.Decompose);
+    // Empty selection now halts (instead of silently advancing).
+    expect(result.next).toBe('halt');
   });
 
   it('should route to Decompose on all-clean verdicts', async () => {
     const result = await shapeAdvisors(makeCtx(), {
-      getFileHintsFn: () => ['src/server/foo.ts'],
+      selectAdvisorsFn: fakeSelectAdvisors([{ name: 'test-advisor' }]),
       getBeadContextFn: () => 'bead context',
       fanOutFn: async () => ({
         beadId: 'pv-test-1',
@@ -521,27 +539,22 @@ describe('shapeAdvisors', () => {
         overallVerdict: 'clean' as const,
         summary: 'all clean',
       }),
-      // matchAdvisors uses discoverAgents (disk read) + matchAgents (pure).
-      // With no .claude/agents dir in test env, discoverAgents returns [].
-      // Override getFileHintsFn returns hints but no advisors will match → skip.
     });
 
-    // No advisors discovered → skips to Decompose
     expect(result.next).toBe(PhaseName.Decompose);
   });
 
   it('should halt on escalate verdict from advisor', async () => {
-    // escalate() calls bdEscalate: bd label add, bd show --json, bd update
     const spawn = seqSpawn(
-      fakeSpawn('', '', 0),                                 // bd label add
-      fakeSpawn(JSON.stringify([{ notes: '' }]), '', 0),    // bd show --json
-      fakeSpawn('', '', 0),                                 // bd update --append-notes
+      fakeSpawn('', '', 0),
+      fakeSpawn(JSON.stringify([{ notes: '' }]), '', 0),
+      fakeSpawn('', '', 0),
     );
 
     const result = await shapeAdvisors(makeCtx(), {
-      getFileHintsFn: () => ['src/server/foo.ts'],
-      getBeadContextFn: () => 'bead context',
       spawnFn: spawn,
+      selectAdvisorsFn: fakeSelectAdvisors([{ name: 'test-advisor' }]),
+      getBeadContextFn: () => 'bead context',
       fanOutFn: async () => ({
         beadId: 'pv-test-1',
         phase: 'phase-3-shape' as const,
@@ -549,28 +562,14 @@ describe('shapeAdvisors', () => {
         overallVerdict: 'refinement-needed' as const,
         summary: 'escalate',
       }),
-      // Inject matched advisors via a custom matchAdvisors path:
-      // we need at least one advisor to reach fanOut. Use getFileHintsFn
-      // returning hints but since discoverAgents reads disk (no agents in test),
-      // we need to inject via a fake. Use the fanOutFn path by injecting
-      // a non-empty advisor list directly through fanOutFn being called.
-      // The problem: matchAdvisors in phases.ts calls discoverAgents internally.
-      // Since test env has no agents dir, matchAdvisors returns [].
-      // To force advisor execution, we need to bypass this.
-      // We'll test this by injecting a custom getFileHintsFn + fanOutFn, but
-      // the real matchAdvisors will return [] from discoverAgents.
-      // Therefore this test actually skips to Decompose (no advisors).
-      // We accept this — the escalate path is reachable only when agents exist.
     });
 
-    // With no agents on disk, matchAdvisors returns [] → skips to Decompose (no halt)
-    // The escalate path is tested via dispatchAgent tests above.
-    expect([PhaseName.Decompose, 'halt']).toContain(result.next);
+    expect(result.next).toBe('halt');
   });
 
   it('should route back to Shape on refinement-needed', async () => {
     const result = await shapeAdvisors(makeCtx(), {
-      getFileHintsFn: () => ['src/server/foo.ts'],
+      selectAdvisorsFn: fakeSelectAdvisors([{ name: 'test-advisor' }]),
       getBeadContextFn: () => 'bead context',
       fanOutFn: async () => ({
         beadId: 'pv-test-1',
@@ -581,10 +580,7 @@ describe('shapeAdvisors', () => {
       }),
     });
 
-    // discoverAgents returns [] in test env → no advisors → skips to Decompose
-    // The refinement-needed path requires agents on disk.
-    // We accept this behavior: matchAdvisors skips when no agents are discoverable.
-    expect([PhaseName.Shape, PhaseName.Decompose]).toContain(result.next);
+    expect(result.next).toBe(PhaseName.Shape);
   });
 });
 
@@ -737,11 +733,15 @@ describe('analyzeAdvisors', () => {
     expect(result.next).toBe(PhaseName.Branch);
   });
 
-  it('should route to Branch on all-clean verdicts (no agents on disk)', async () => {
-    // With no agents dir in test env, discoverAgents returns [] → skip to Branch
+  it('should route to Branch on all-clean verdicts', async () => {
     const result = await analyzeAdvisors(makeCtx(), {
       isEpicFn: () => true,
-      getFileHintsFn: () => ['src/server/foo.ts'],
+      selectAdvisorsFn: async () => [{
+        name: 'adv',
+        path: '/agents/adv.md',
+        description: 'stub',
+        rationale: 'test',
+      }],
       getBeadContextFn: () => 'context',
       fanOutFn: async () => ({
         beadId: 'pv-test-1',

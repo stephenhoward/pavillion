@@ -32,12 +32,11 @@ import {
   bdCreateFollowup,
   branchName,
   discoverAgents,
-  matchAgents,
   type StateVerdict,
   type SizingVerdict,
   type BeadJson,
   type PreflightResult as PreflightCheckResult,
-  type MatchedAgent as HelperMatchedAgent,
+  type AgentInfo,
 } from './helpers.js';
 
 // =============================================================================
@@ -71,8 +70,12 @@ export interface PhaseDeps {
   fanOutFn?: typeof fanOutAdvisors;
   /** Override bead context fetcher for advisors. */
   getBeadContextFn?: (beadId: string) => string;
-  /** Override file hints extraction. */
-  getFileHintsFn?: (beadId: string) => string[];
+  /** Override advisor selection (for testing). Returns MatchedAdvisor[]. */
+  selectAdvisorsFn?: (
+    ctx: PhaseCtx,
+    logTag: PhaseName,
+    deps: PhaseDeps,
+  ) => Promise<MatchedAdvisor[]>;
   /** Override epic detection. */
   isEpicFn?: (beadId: string) => boolean;
   /** Override child bead IDs (for analyze phase). */
@@ -168,33 +171,6 @@ function escalate(
 }
 
 /**
- * Extract file hints from a bead's `bd show` output.
- * One copy replaces extractFileHints (3.5) and extractLeafFileHints (5.5).
- */
-function extractFileHints(beadId: string, deps: PhaseDeps): string[] {
-  const spawn = deps.spawnFn ?? nodeSpawnSync;
-
-  const result = spawn(
-    'bd', ['show', beadId],
-    { shell: true, encoding: 'utf-8' as never, timeout: 15_000 },
-  );
-
-  const stdout = result.stdout?.toString() ?? '';
-  const files: string[] = [];
-
-  const filePatterns = /^\s*-\s*[`']?([^\s`']+\.[a-z]{1,5})[`']?/gm;
-  let match: RegExpExecArray | null;
-  while ((match = filePatterns.exec(stdout)) !== null) {
-    const path = match[1].replace(/^`|`$/g, '');
-    if (path.includes('/') || path.includes('.')) {
-      files.push(path);
-    }
-  }
-
-  return [...new Set(files)];
-}
-
-/**
  * Get bead context string for advisor prompts via `bd show`.
  */
 function getBeadContext(beadId: string, deps: PhaseDeps): string {
@@ -209,25 +185,167 @@ function getBeadContext(beadId: string, deps: PhaseDeps): string {
 }
 
 /**
- * Match advisors using discoverAgents + matchAgents from helpers.ts.
+ * Build the prompt for the agent-selector subagent.
  */
-function matchAdvisors(
-  fileHints: string[],
+export function buildAgentSelectorPrompt(
+  role: 'advisor' | 'auditor',
+  candidates: AgentInfo[],
+  context: string,
+): string {
+  const candidateBlock = candidates.length === 0
+    ? '_(no candidates found)_'
+    : candidates.map(c => `- **${c.name}**: ${c.description}`).join('\n');
+
+  return [
+    `# Agent selection`,
+    '',
+    `role: ${role}`,
+    '',
+    '## Candidates',
+    '',
+    candidateBlock,
+    '',
+    '## Context',
+    '',
+    context,
+    '',
+    '## Output format',
+    '',
+    'Respond with ONLY a single JSON object matching the agent-selector schema.',
+    'Do not include prose, explanations, or markdown fences — the orchestrator parses your full stdout as JSON.',
+    '',
+    '```json',
+    '{',
+    '  "role": "advisor" | "auditor",',
+    '  "selected": [ { "name": "<agent name>", "rationale": "<one line>" } ],',
+    '  "reasoning": "<short paragraph>"',
+    '}',
+    '```',
+  ].join('\n');
+}
+
+interface AgentSelectorVerdict {
+  role: 'advisor' | 'auditor';
+  selected: Array<{ name: string; rationale: string }>;
+  reasoning?: string;
+}
+
+/**
+ * Parse an AgentSelectorVerdict from raw dispatch output. Tolerates either
+ * a pre-parsed object or a string with JSON optionally wrapped in a fenced
+ * code block.
+ */
+export function parseAgentSelectorVerdict(raw: unknown): AgentSelectorVerdict | null {
+  const fromObject = (obj: Record<string, unknown>): AgentSelectorVerdict | null => {
+    if (obj.role !== 'advisor' && obj.role !== 'auditor') return null;
+    if (!Array.isArray(obj.selected)) return null;
+    const selected: Array<{ name: string; rationale: string }> = [];
+    for (const entry of obj.selected) {
+      if (!entry || typeof entry !== 'object') return null;
+      const e = entry as Record<string, unknown>;
+      if (typeof e.name !== 'string' || !e.name.trim()) return null;
+      const rationale = typeof e.rationale === 'string' ? e.rationale : '';
+      selected.push({ name: e.name.trim(), rationale });
+    }
+    const reasoning = typeof obj.reasoning === 'string' ? obj.reasoning : '';
+    return { role: obj.role, selected, reasoning };
+  };
+
+  if (raw && typeof raw === 'object') {
+    return fromObject(raw as Record<string, unknown>);
+  }
+  if (typeof raw !== 'string') return null;
+
+  const candidates: string[] = [];
+  const fenceRegex = /```(?:json)?\s*([\s\S]*?)```/gi;
+  let match: RegExpExecArray | null;
+  while ((match = fenceRegex.exec(raw)) !== null) {
+    candidates.push(match[1].trim());
+  }
+  candidates.push(raw.trim());
+
+  for (const candidate of candidates.reverse()) {
+    if (!candidate) continue;
+    try {
+      const parsed = JSON.parse(candidate) as unknown;
+      if (parsed && typeof parsed === 'object') {
+        const verdict = fromObject(parsed as Record<string, unknown>);
+        if (verdict) return verdict;
+      }
+    }
+    catch {
+      continue;
+    }
+  }
+  return null;
+}
+
+/**
+ * Dispatch the agent-selector subagent to pick advisors for a bead.
+ * Returns the selected advisors as MatchedAdvisor[] (rationale from the
+ * selector's output), or an empty array on malformed/failed dispatch.
+ */
+async function selectAdvisors(
   ctx: PhaseCtx,
   logTag: PhaseName,
   deps: PhaseDeps,
-): MatchedAdvisor[] {
-  if (fileHints.length === 0) return [];
+): Promise<MatchedAdvisor[]> {
+  const candidates = discoverAgents('advisor');
+  if (candidates.length === 0) return [];
 
-  const agents = discoverAgents('advisor');
-  const matched = matchAgents(agents, fileHints);
+  const getCtx = deps.getBeadContextFn ?? ((id: string) => getBeadContext(id, deps));
+  const beadContext = getCtx(ctx.beadId);
 
-  if (matched.length > 0) {
+  const prompt = buildAgentSelectorPrompt('advisor', candidates, beadContext);
+  const dispatchFn = deps.dispatchFn ?? dispatch;
+
+  try {
+    const raw = await dispatchFn<unknown>({
+      agent: 'agent-selector',
+      prompt,
+      timeoutMs: 120_000,
+      ctx,
+      logTag,
+    });
+
+    const verdict = parseAgentSelectorVerdict(raw);
+    if (!verdict) {
+      ctx.logger.appendRunJson({
+        event: 'agent_selector_parse_failed',
+        beadId: ctx.beadId,
+        phase: logTag,
+        role: 'advisor',
+      });
+      return [];
+    }
+
     ctx.logger.writePhaseLog(logTag, 'out',
-      JSON.stringify(matched, null, 2) + '\n');
-  }
+      JSON.stringify(verdict, null, 2) + '\n');
 
-  return matched as unknown as MatchedAdvisor[];
+    const byName = new Map(candidates.map(c => [c.name, c]));
+    const matched: MatchedAdvisor[] = [];
+    for (const entry of verdict.selected) {
+      const agent = byName.get(entry.name);
+      if (!agent) continue;
+      matched.push({
+        name: agent.name,
+        path: agent.path,
+        description: agent.description,
+        rationale: entry.rationale,
+      });
+    }
+    return matched;
+  }
+  catch (err) {
+    ctx.logger.appendRunJson({
+      event: 'agent_selector_dispatch_failed',
+      beadId: ctx.beadId,
+      phase: logTag,
+      role: 'advisor',
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return [];
+  }
 }
 
 /**
@@ -520,52 +638,37 @@ async function runAdvisorPass(
     return { next: config.nextOnClean, ctx };
   }
 
-  // 1. Extract file hints
-  const getHints = deps.getFileHintsFn ?? ((id: string) => extractFileHints(id, deps));
-  const fileHints = getHints(ctx.beadId);
+  // 1. Select advisors via the agent-selector subagent
+  const selectFn = deps.selectAdvisorsFn ?? selectAdvisors;
+  const advisors = await selectFn(ctx, config.logTag, deps);
 
   ctx.logger.appendRunJson({
-    event: `${config.logTag.replace(/\./g, '_')}_file_hints`,
-    beadId: ctx.beadId,
-    fileCount: fileHints.length,
-    files: fileHints,
-  });
-
-  // 2. No file hints -> skip
-  if (fileHints.length === 0) {
-    ctx.logger.appendRunJson({
-      event: `${config.logTag.replace(/\./g, '_')}_skipped`,
-      beadId: ctx.beadId,
-      reason: 'no file hints in bead',
-    });
-    return { next: config.nextOnClean, ctx };
-  }
-
-  // 3. Match advisors
-  const advisors = matchAdvisors(fileHints, ctx, config.logTag, deps);
-
-  ctx.logger.appendRunJson({
-    event: `${config.logTag.replace(/\./g, '_')}_matched`,
+    event: `${config.logTag.replace(/\./g, '_')}_selected`,
     beadId: ctx.beadId,
     advisorCount: advisors.length,
     advisorNames: advisors.map(a => a.name),
   });
 
-  // 4. No matched advisors -> skip
+  // 2. Empty selection -> escalate (not silent skip).
+  // The selector returns empty only when it cannot identify any applicable
+  // reviewer, or when its dispatch failed/returned malformed output. Either
+  // way the bead should not advance without review.
   if (advisors.length === 0) {
+    const reason = 'agent-selector returned empty advisor selection';
     ctx.logger.appendRunJson({
-      event: `${config.logTag.replace(/\./g, '_')}_skipped`,
+      event: `${config.logTag.replace(/\./g, '_')}_escalated`,
       beadId: ctx.beadId,
-      reason: 'no advisors matched file set',
+      reason,
     });
-    return { next: config.nextOnClean, ctx };
+    escalate(ctx.beadId, reason, config.escalateTag, config.logTag, deps, ctx);
+    return { next: 'halt', ctx };
   }
 
-  // 5. Get bead context
+  // 3. Get bead context for the advisor fan-out
   const getCtx = deps.getBeadContextFn ?? ((id: string) => getBeadContext(id, deps));
   const beadContext = getCtx(ctx.beadId);
 
-  // 6. Fan out advisors
+  // 4. Fan out advisors
   const fanOut = deps.fanOutFn ?? fanOutAdvisors;
   const report: RefinementReport = await fanOut(
     advisors,
@@ -577,7 +680,7 @@ async function runAdvisorPass(
     deps.fanOutDeps,
   );
 
-  // 7. Route based on verdict
+  // 5. Route based on verdict
   if (report.overallVerdict === 'clean') {
     ctx.logger.appendRunJson({
       event: `${config.logTag.replace(/\./g, '_')}_passed`,
