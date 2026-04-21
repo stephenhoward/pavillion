@@ -11,10 +11,6 @@
     font-size: 0.875rem;
     font-weight: 500;
     color: var(--pav-color-stone-700);
-
-    @media (prefers-color-scheme: dark) {
-      color: var(--pav-color-stone-300);
-    }
   }
 
   .remove-schedule-btn {
@@ -36,14 +32,6 @@
       outline: 2px solid var(--pav-color-orange-500);
       outline-offset: 2px;
       border-radius: 0.25rem;
-    }
-
-    @media (prefers-color-scheme: dark) {
-      color: var(--pav-color-stone-500);
-
-      &:hover {
-        color: var(--pav-color-red-400);
-      }
     }
   }
 
@@ -72,10 +60,6 @@
     font-size: 0.875rem;
     font-weight: 500;
     color: var(--pav-color-stone-700);
-
-    @media (prefers-color-scheme: dark) {
-      color: var(--pav-color-stone-300);
-    }
   }
 
   .grid-input {
@@ -83,7 +67,6 @@
     border: 1px solid var(--pav-color-stone-200);
     border-radius: 0.375rem;
     font-size: 0.9375rem;
-    background: white;
     color: var(--pav-color-stone-900);
     font-family: inherit;
     transition: all 0.15s ease;
@@ -92,392 +75,24 @@
       outline: none;
       border-color: var(--pav-color-orange-500);
     }
-
-    @media (prefers-color-scheme: dark) {
-      background: var(--pav-color-stone-900);
-      color: var(--pav-color-stone-100);
-      border-color: var(--pav-color-stone-700);
-
-      &:focus {
-        border-color: var(--pav-color-orange-500);
-      }
-    }
   }
 
-  .add-recurrence-btn {
-    padding: 0;
-    border: none;
-    background: none;
-    color: var(--pav-color-orange-500);
-    font-size: 0.875rem;
-    font-weight: 500;
-    cursor: pointer;
-    transition: color 0.15s ease;
+  .recurrence-summary {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
 
-    &:hover {
-      color: var(--pav-color-orange-600);
-    }
-
-    @media (prefers-color-scheme: dark) {
-      color: var(--pav-color-orange-400);
-
-      &:hover {
-        color: var(--pav-color-orange-300);
-      }
-    }
-  }
-
-  form.repeats {
-    margin-top: 1.5rem;
-    padding: 1.5rem;
-    background-color: var(--pav-color-stone-50);
-    border: 1px solid var(--pav-color-stone-200);
-    border-radius: 0.75rem; // rounded-xl
-
-    @media (prefers-color-scheme: dark) {
-      background-color: var(--pav-color-stone-800);
-      border-color: var(--pav-color-stone-700);
-    }
-
-    .frequency-field {
-      display: flex;
-      flex-direction: column;
-      gap: 0.5rem;
-      margin-bottom: 1.5rem;
-
-      .frequency-label {
-        font-size: 0.875rem;
-        font-weight: 500;
-        color: var(--pav-color-stone-700);
-
-        @media (prefers-color-scheme: dark) {
-          color: var(--pav-color-stone-300);
-        }
-      }
-
-      .frequency-select {
-        padding: 0.625rem 0.875rem;
-        border: 1px solid var(--pav-color-stone-200);
-        border-radius: 0.375rem;
-        font-size: 0.9375rem;
-        background: white;
-        color: var(--pav-color-stone-900);
-        font-family: inherit;
-        cursor: pointer;
-        transition: all 0.15s ease;
-
-        &:focus {
-          outline: none;
-          border-color: var(--pav-color-orange-500);
-          box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.1);
-        }
-
-        @media (prefers-color-scheme: dark) {
-          background: var(--pav-color-stone-900);
-          color: var(--pav-color-stone-100);
-          border-color: var(--pav-color-stone-700);
-
-          &:focus {
-            border-color: var(--pav-color-orange-500);
-            box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.1);
-          }
-        }
-      }
-    }
-
-    label.repeat-interval {
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-      margin-bottom: 1.5rem;
-      color: var(--pav-color-stone-700);
-
-      @media (prefers-color-scheme: dark) {
-        color: var(--pav-color-stone-300);
-      }
-
-      input[type="number"] {
-        @include form-input-rounded;
-        width: 60px;
-        text-align: center;
-      }
-    }
-
-    div.week-parameters {
-      margin-bottom: 1.5rem;
-      color: var(--pav-color-stone-700);
-
-      @media (prefers-color-scheme: dark) {
-        color: var(--pav-color-stone-300);
-      }
-
-      .weekday-chips {
-        display: flex;
-        gap: 0.5rem;
-        padding-bottom: 0.25rem;
-        flex-wrap: nowrap;
-        overflow-x: auto;
-        scrollbar-width: none;
-
-        &::-webkit-scrollbar {
-          display: none;
-        }
-      }
-
-      label {
-        display: inline-flex;
-        align-items: center;
-        flex-shrink: 0;
-
-        input[type="checkbox"] {
-          // Hide the actual checkbox
-          position: absolute;
-          opacity: 0;
-          pointer-events: none;
-
-          // Style the label as a button
-          & + * {
-            display: inline-block;
-            padding: 0.5rem 1rem;
-            background-color: var(--pav-color-stone-100);
-            color: var(--pav-color-stone-600);
-            border: 1px solid var(--pav-color-stone-300);
-            border-radius: 9999px; // rounded-full (pill)
-            font-size: 0.875rem;
-            font-weight: 500;
-            cursor: pointer;
-            transition: all 0.2s;
-            user-select: none;
-
-            @media (prefers-color-scheme: dark) {
-              background-color: var(--pav-color-stone-700);
-              color: var(--pav-color-stone-300);
-              border-color: var(--pav-color-stone-600);
-            }
-          }
-
-          // Hover state
-          &:not(:checked) + *:hover {
-            background-color: var(--pav-color-stone-200);
-            border-color: var(--pav-color-stone-400);
-
-            @media (prefers-color-scheme: dark) {
-              background-color: var(--pav-color-stone-600);
-              border-color: var(--pav-color-stone-500);
-            }
-          }
-
-          // Selected (checked) state
-          &:checked + * {
-            background-color: var(--pav-color-orange-500);
-            color: white;
-            border-color: var(--pav-color-orange-600);
-
-            @media (prefers-color-scheme: dark) {
-              background-color: var(--pav-color-orange-500);
-              border-color: var(--pav-color-orange-400);
-            }
-          }
-
-          // Focus state
-          &:focus-visible + * {
-            outline: 2px solid var(--pav-color-orange-500);
-            outline-offset: 2px;
-          }
-        }
-      }
-    }
-
-    div.month-parameters {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-      gap: 1rem;
-      margin-bottom: 1.5rem;
-
-      > div {
-        display: flex;
-        flex-direction: column;
-        gap: 0.5rem;
-
-        label {
-          display: flex;
-          align-items: center;
-          gap: 0.5rem;
-          font-size: 0.875rem;
-          color: var(--pav-color-stone-700);
-
-          @media (prefers-color-scheme: dark) {
-            color: var(--pav-color-stone-300);
-          }
-
-          input[type="checkbox"] {
-            width: 18px;
-            height: 18px;
-            cursor: pointer;
-            accent-color: var(--pav-color-orange-500);
-          }
-        }
-      }
-    }
-
-    div.end-type {
-      color: var(--pav-color-stone-700);
-
-      @media (prefers-color-scheme: dark) {
-        color: var(--pav-color-stone-300);
-      }
-
-      > label:first-of-type {
-        display: block;
-        margin-bottom: 0.75rem;
-        font-weight: 500;
-      }
-
-      label {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        margin-bottom: 0.5rem;
-        font-size: 0.875rem;
-
-        input[type="radio"] {
-          width: 18px;
-          height: 18px;
-          cursor: pointer;
-          accent-color: var(--pav-color-orange-500);
-        }
-
-        input[type="number"] {
-          @include form-input-rounded;
-          width: 60px;
-          text-align: center;
-        }
-
-        input[type="date"] {
-          @include form-input-rounded;
-        }
-      }
-    }
-  }
-
-  // Compact mode for sidebar display
-  &--compact {
-    .summary {
-      gap: 0.75rem;
-
-      input[type="datetime-local"] {
-        font-size: 0.875rem;
-        padding: 0.625rem 0.875rem;
-      }
-
-      label {
-        font-size: 0.875rem;
-        gap: 0.375rem;
-
-        select {
-          font-size: 0.875rem;
-          padding: 0.625rem 0.875rem;
-        }
-      }
-    }
-
-    form.repeats {
-      margin-top: 1rem;
-      padding: 1rem;
-
-      .frequency-field {
-        margin-bottom: 1rem;
-
-        .frequency-label {
-          font-size: 0.875rem;
-        }
-
-        .frequency-select {
-          font-size: 0.875rem;
-          padding: 0.5rem 0.625rem;
-        }
-      }
-
-      label.repeat-interval {
-        margin-bottom: 1rem;
-        font-size: 0.875rem;
-
-        input[type="number"] {
-          width: 50px;
-          font-size: 0.875rem;
-          padding: 0.5rem 0.625rem;
-        }
-      }
-
-      div.week-parameters {
-        margin-bottom: 1rem;
-        font-size: 0.875rem;
-
-        > label:first-of-type {
-          margin-bottom: 0.5rem;
-        }
-
-        label {
-          input[type="checkbox"] + * {
-            padding: 0.375rem 0.75rem;
-            font-size: 0.8125rem;
-          }
-        }
-      }
-
-      div.month-parameters {
-        gap: 0.75rem;
-        margin-bottom: 1rem;
-
-        > div {
-          gap: 0.375rem;
-
-          label {
-            font-size: 0.8125rem;
-
-            input[type="checkbox"] {
-              width: 16px;
-              height: 16px;
-            }
-          }
-        }
-      }
-
-      div.end-type {
-        font-size: 0.875rem;
-
-        > label:first-of-type {
-          margin-bottom: 0.5rem;
-        }
-
-        label {
-          font-size: 0.8125rem;
-          margin-bottom: 0.375rem;
-
-          input[type="radio"] {
-            width: 16px;
-            height: 16px;
-          }
-
-          input[type="number"] {
-            width: 50px;
-            font-size: 0.8125rem;
-            padding: 0.5rem 0.625rem;
-          }
-
-          input[type="date"] {
-            font-size: 0.8125rem;
-            padding: 0.5rem 0.625rem;
-          }
-        }
-      }
+    .summary-text {
+      font-size: 0.875rem;
+      color: var(--pav-text-secondary);
     }
   }
 }
 </style>
 
 <template>
-  <div :class="['recurrence-rule', { 'recurrence-rule--compact': compact }]">
+  <div class="recurrence-rule">
     <div class="schedule-header">
       <span>Schedule {{ props.index + 1 }}</span>
       <button
@@ -523,13 +138,13 @@
         <label class="grid-label">{{ t('end_time_label') }}</label>
         <input type="time"
                v-model="state.eventEndTime"
-               @input="compileRecurrence()"
+               @input="syncScheduleFromDateTime()"
                class="grid-input" />
       </div>
 
       <div class="grid-field grid-field--full">
         <label class="grid-label">{{ t('timezone_label') }}</label>
-        <select v-model="state.timezone" @change="compileRecurrence()" class="grid-input">
+        <select v-model="state.timezone" @change="syncScheduleFromDateTime()" class="grid-input">
           <option v-for="tz in timezones" :key="tz" :value="tz">
             {{ formatTimezone(tz) }}
           </option>
@@ -537,88 +152,42 @@
       </div>
     </div>
 
-    <!-- Add Recurrence Toggle -->
-    <button
-      type="button"
-      class="add-recurrence-btn"
-      @click="state.showRecurrence = !state.showRecurrence"
-      v-if="!state.showRecurrence"
-    >
-      + Add recurrence
-    </button>
+    <!-- Recurrence summary + trigger -->
+    <div class="recurrence-summary">
+      <template v-if="props.schedule.frequency">
+        <span class="summary-text">{{ generateRecurrenceText(props.schedule) }}</span>
+        <button type="button" class="btn btn--secondary" @click="openRecurrenceSheet">
+          <CalendarSync :size="16" aria-hidden="true" />
+          {{ t('edit_recurrence') }}
+        </button>
+      </template>
+      <template v-else>
+        <button type="button" class="btn btn--secondary" @click="openRecurrenceSheet">
+          <CalendarSync :size="16" aria-hidden="true" />
+          {{ t('add_recurrence') }}
+        </button>
+      </template>
+    </div>
 
-    <!-- Recurrence Form -->
-    <form class="repeats" v-if="state.showRecurrence">
-      <!-- Frequency Selector -->
-      <div class="frequency-field">
-        <label class="frequency-label" :for="frequencySelectId">{{ t('frequency_label') }}</label>
-        <select
-          :id="frequencySelectId"
-          class="frequency-select"
-          v-model="state.frequency"
-          @change="onFrequencyChange()"
-        >
-          <option value="">{{ t('frequency_none') }}</option>
-          <option value="daily">{{ t('frequency_daily') }}</option>
-          <option value="weekly">{{ t('frequency_weekly') }}</option>
-          <option value="monthly">{{ t('frequency_monthly') }}</option>
-          <option value="yearly">{{ t('frequency_yearly') }}</option>
-        </select>
-      </div>
-
-      <label class="repeat-interval" v-if="props.schedule.frequency">
-        {{ t('every') }} <input type="number" v-model="props.schedule.interval" @change="compileRecurrence()" /> {{  props.schedule.frequency ? t( props.schedule.frequency + 'Term') : '' }}
-      </label>
-
-      <div class="week-parameters" v-if="props.schedule.frequency === 'weekly'">
-        {{ t('on_weekday_label') }}:
-        <div class="weekday-chips">
-          <label v-for="day in Object.keys(state.weekdays)">
-            <input type="checkbox" v-model="state.weekdays[day]" @change="compileRecurrence()" /> <span>{{ t(day) }}</span>
-          </label>
-        </div>
-      </div>
-
-      <div class="month-parameters" v-if="props.schedule.frequency == 'monthly'" >
-        <div v-for="week in [1,2,3,4,5]">
-          <label v-for="day in Object.keys(state.weekdays)">
-            <input type="checkbox" v-model="state.monthlyWeekdayCheckboxes[week + day]" @change="compileRecurrence()" /> {{ t(week + 'ord') }} {{ t(day) }}
-          </label>
-        </div>
-      </div>
-
-      <div class="end-type" v-if="props.schedule.frequency">
-        {{ t('end_type_label') }}:
-        <label><input type="radio"
-                      value="none"
-                      v-model="state.endType"
-                      @change="compileRecurrence()"/> {{ t('never') }}</label>
-        <label><input type="radio"
-                      value="after"
-                      v-model="state.endType"
-                      @change="compileRecurrence()" /> {{ t('after') }} <input type="number" v-model="props.schedule.count" @change="state.endType='after'; compileRecurrence()" /> {{ t('occurrences') }}</label>
-        <label><input type="radio"
-                      value="on"
-                      v-model="state.endType"
-                      @change="compileRecurrence()" /> {{ t('on_date') }} <input type="date" v-model="state.endDate" @input="state.endType='on'; compileRecurrence()" /></label>
-      </div>
-    </form>
+    <RecurrenceEditorSheet
+      v-if="state.showRecurrenceSheet"
+      :schedule="props.schedule"
+      @close="state.showRecurrenceSheet = false"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { reactive, useId } from 'vue';
+import { reactive } from 'vue';
 import { CalendarEventSchedule } from '@/common/model/events';
 import { useTranslation } from 'i18next-vue';
 import { DateTime } from 'luxon';
-import { Trash2 } from 'lucide-vue-next';
+import { CalendarSync, Trash2 } from 'lucide-vue-next';
+import RecurrenceEditorSheet from './RecurrenceEditorSheet.vue';
+import { generateRecurrenceText } from '@/common/utils/recurrence-text';
 
 const props = defineProps({
   schedule: CalendarEventSchedule,
-  compact: {
-    type: Boolean,
-    default: false,
-  },
   canRemove: {
     type: Boolean,
     default: true,
@@ -634,8 +203,6 @@ const emit = defineEmits(['remove-schedule']);
 const { t } = useTranslation('event_editor', {
   keyPrefix: 'recurrence',
 });
-
-const frequencySelectId = useId();
 
 /**
  * Returns the full list of IANA timezone identifiers supported by the browser.
@@ -776,64 +343,11 @@ const initEndDateTime = () => {
   };
 };
 
-/**
- * Determines the end-type string from existing schedule data.
- * Used to restore the correct radio button state when editing or duplicating
- * a recurring event that already has count or endDate set.
- */
-const initEndType = (): string => {
-  if (props.schedule.count && props.schedule.count > 0) {
-    return 'after';
-  }
-  if (props.schedule.endDate) {
-    return 'on';
-  }
-  return 'none';
-};
-
-/**
- * Initializes weekday checkboxes from the schedule's byDay array.
- * Called when the schedule already has weekly recurrence data (e.g. when
- * editing or duplicating a recurring event).
- */
-const initWeekdays = (): Record<string, boolean> => {
-  const byDay = props.schedule.byDay ?? [];
-  return {
-    SU: byDay.includes('SU'),
-    MO: byDay.includes('MO'),
-    TU: byDay.includes('TU'),
-    WE: byDay.includes('WE'),
-    TH: byDay.includes('TH'),
-    FR: byDay.includes('FR'),
-    SA: byDay.includes('SA'),
-  };
-};
-
-/**
- * Initializes monthly weekday checkboxes from the schedule's byDay array.
- * byDay entries for monthly recurrence use the format "NDD" (e.g. "1MO", "3FR").
- */
-const initMonthlyWeekdayCheckboxes = (): Record<string, boolean> => {
-  const byDay = props.schedule.byDay ?? [];
-  const keys = [
-    '1SU','1MO','1TU','1WE','1TH','1FR','1SA',
-    '2SU','2MO','2TU','2WE','2TH','2FR','2SA',
-    '3SU','3MO','3TU','3WE','3TH','3FR','3SA',
-    '4SU','4MO','4TU','4WE','4TH','4FR','4SA',
-    '5SU','5MO','5TU','5WE','5TH','5FR','5SA',
-  ];
-  return Object.fromEntries(keys.map(key => [key, byDay.includes(key)]));
-};
-
 const { date: initialDate, time: initialTime } = initDateTime();
 const { eventEndDate: initialEndDate, eventEndTime: initialEndTime, eventEndDateManuallySet: initialEndDateManuallySet } = initEndDateTime();
 
 const state = reactive({
-  // Show the recurrence form immediately when the schedule already has a frequency
-  // (e.g. when editing or duplicating a recurring event). Without this, the form
-  // stays hidden behind the "Add recurrence" button even though recurrence data exists.
-  showRecurrence: !!props.schedule.frequency,
-  frequency: (props.schedule.frequency as string) || '',
+  showRecurrenceSheet: false,
   date: initialDate,
   time: initialTime,
   eventEndDate: initialEndDate,
@@ -841,12 +355,6 @@ const state = reactive({
   eventEndDateManuallySet: initialEndDateManuallySet,
   previousStartDate: initialDate,
   timezone: getLocalTimezone(),
-  endDate: props.schedule.endDate ? props.schedule.endDate.toISO() : '',
-  // Restore end-type from existing schedule so the correct radio is selected
-  endType: initEndType(),
-  // Restore weekday and monthly checkboxes from existing byDay values
-  weekdays: initWeekdays(),
-  monthlyWeekdayCheckboxes: initMonthlyWeekdayCheckboxes(),
 });
 
 /**
@@ -864,7 +372,7 @@ const updateStartDate = () => {
     const dateTimeString = `${state.date}T${state.time}`;
     props.schedule.startDate = DateTime.fromISO(dateTimeString, { zone: state.timezone });
   }
-  compileRecurrence();
+  syncScheduleFromDateTime();
 };
 
 /**
@@ -887,7 +395,7 @@ const onStartDateChange = () => {
  */
 const onEndDateManualChange = () => {
   state.eventEndDateManuallySet = true;
-  compileRecurrence();
+  syncScheduleFromDateTime();
 };
 
 /**
@@ -903,15 +411,13 @@ const buildEventEndTime = (): DateTime | null => {
 };
 
 /**
- * Handles frequency selector changes. Syncs the local state.frequency
- * value to props.schedule.frequency and triggers recurrence compilation.
+ * Syncs schedule.startDate, schedule.eventEndTime, and (for non-recurring
+ * events) schedule.endDate from the current date/time/timezone inputs.
+ *
+ * Recurrence-rule fields (interval, byDay, count, endDate for recurring
+ * events) are owned by RecurrenceEditorSheet and are not touched here.
  */
-const onFrequencyChange = () => {
-  props.schedule.frequency = state.frequency || null;
-  compileRecurrence();
-};
-
-const compileRecurrence = () => {
+const syncScheduleFromDateTime = () => {
   // Update startDate from separate date/time fields
   if (state.date && state.time) {
     const dateTimeString = `${state.date}T${state.time}`;
@@ -925,20 +431,9 @@ const compileRecurrence = () => {
   if (!props.schedule.frequency && props.schedule.eventEndTime) {
     props.schedule.endDate = props.schedule.eventEndTime;
   }
+};
 
-  props.schedule.interval = props.schedule.frequency ? props.schedule.interval || 1 : 0;
-  props.schedule.count = props.schedule.frequency && state.endType == 'after' ? props.schedule.count : 0;
-  props.schedule.endDate = props.schedule.frequency && state.endType == 'on' ? props.schedule.endDate : '';
-
-  props.schedule.byDay = props.schedule.frequency == 'weekly'
-    ? Object.keys(state.weekdays).filter( (day) => state.weekdays[day] )
-    : props.schedule.frequency == 'monthly'
-      ? Object.keys(state.monthlyWeekdayCheckboxes).filter( (day) => state.monthlyWeekdayCheckboxes[day] )
-      : [];
-
-  props.schedule.endDate = state.endType == 'on' && state.endDate
-    ? DateTime.fromISO(state.endDate)
-    : null;
-
+const openRecurrenceSheet = () => {
+  state.showRecurrenceSheet = true;
 };
 </script>

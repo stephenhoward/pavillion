@@ -5,12 +5,21 @@
  * - initEndDateTime: initializes end date/time fields from schedule.eventEndTime
  * - onStartDateChange: auto-syncs end date unless manually overridden
  * - onEndDateManualChange: sets manual override flag
- * - buildEventEndTime / compileRecurrence: writes schedule.eventEndTime from form fields
+ * - buildEventEndTime / syncScheduleFromDateTime: writes schedule.eventEndTime from form fields
+ *
+ * Audit notes (pv-j1pi.4):
+ *   All tests in this file are RETAINED. They exercise the start/end date and
+ *   start/end time inputs on `event_recurrence.vue` — not recurrence form
+ *   internals. The epic DESIGN explicitly puts date/time inputs OUT OF SCOPE
+ *   ("Changes to date/time inputs (stay inline on main editor)"), so these
+ *   controls remain on the wrapper component after the sheet refactor and
+ *   this file continues to mount it.
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 vi.mock('lucide-vue-next', () => ({
   Trash2: { template: '<span />' },
+  CalendarSync: { template: '<span />' },
 }));
 
 import { nextTick } from 'vue';
@@ -169,7 +178,7 @@ describe('event_recurrence.vue — onStartDateChange auto-sync', () => {
   });
 });
 
-describe('event_recurrence.vue — compileRecurrence writes eventEndTime', () => {
+describe('event_recurrence.vue — syncScheduleFromDateTime writes eventEndTime', () => {
   it('sets schedule.eventEndTime when end date and time are both filled', async () => {
     const schedule = makeSchedule({
       startISO: '2026-05-01T09:00:00',

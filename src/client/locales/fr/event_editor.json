@@ -1,4 +1,10 @@
 {
+  "recurrence": {
+    "recurrence_sheet_title": "Recurrence",
+    "edit_recurrence": "Edit recurrence",
+    "add_recurrence": "Add recurrence",
+    "done": "Done"
+  },
   "cancellations": {
     "panel_title": "Annulations",
     "toggle_button": "Gérer les annulations",

@@ -271,23 +271,13 @@ button:disabled,
 
 /* ===== ARIA LIVE REGIONS ===== */
 
-/* Polite announcements */
-[aria-live="polite"] {
-  position: absolute;
-  left: -10000px;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-}
-
-/* Assertive announcements */
-[aria-live="assertive"] {
-  position: absolute;
-  left: -10000px;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-}
+/* aria-live regions must remain in normal flow so their visible content
+ * is displayed to sighted users. Screen readers announce updates via the
+ * DOM mutation, not via element position. Moving live regions off-screen
+ * (e.g. left: -10000px) collapses any visible sibling text they contain.
+ * Use .sr-only on a *dedicated, empty* live region element if you need an
+ * invisible announcement container; never apply sr-only geometry to elements
+ * that also render visible text. */
 
 /* ===== SEMANTIC STRUCTURE ENHANCEMENTS ===== */
 
