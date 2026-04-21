@@ -1,8 +1,11 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
 import { mount } from '@vue/test-utils';
+import i18next from 'i18next';
+import I18NextVue from 'i18next-vue';
 import LocationPickerModal from '@/client/components/common/location-picker-modal.vue';
 import PillButton from '@/client/components/common/pill-button.vue';
 import { EventLocation } from '@/common/model/location';
+import enEventEditor from '@/client/locales/en/event_editor.json';
 
 /**
  * Sheet stub: renders a native <dialog> with the given title + slot so
@@ -21,7 +24,23 @@ const SheetStub = {
   emits: ['close'],
 };
 
-const SHEET_GLOBAL = { global: { stubs: { Sheet: SheetStub } } };
+beforeAll(async () => {
+  await i18next.init({
+    lng: 'en',
+    resources: {
+      en: {
+        event_editor: enEventEditor,
+      },
+    },
+  });
+});
+
+const SHEET_GLOBAL = {
+  global: {
+    plugins: [[I18NextVue, { i18next }] as const],
+    stubs: { Sheet: SheetStub },
+  },
+};
 
 describe('LocationPickerModal', () => {
   const mockLocations = [
@@ -99,6 +118,7 @@ describe('LocationPickerModal', () => {
           selectedLocationId: null,
         },
         global: {
+          plugins: [[I18NextVue, { i18next }] as const],
           components: { PillButton },
           stubs: { Sheet: SheetStub },
         },
@@ -227,6 +247,7 @@ describe('LocationPickerModal', () => {
           selectedLocationId: null,
         },
         global: {
+          plugins: [[I18NextVue, { i18next }] as const],
           components: { PillButton },
           stubs: { Sheet: SheetStub },
         },
@@ -247,6 +268,7 @@ describe('LocationPickerModal', () => {
           selectedLocationId: 'loc-1',
         },
         global: {
+          plugins: [[I18NextVue, { i18next }] as const],
           components: { PillButton },
           stubs: { Sheet: SheetStub },
         },

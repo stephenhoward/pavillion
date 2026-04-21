@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
+import { useTranslation } from 'i18next-vue';
 import { Search, MapPin, Check } from 'lucide-vue-next';
 import PillButton from '@/client/components/common/pill-button.vue';
 import Sheet from '@/client/components/common/Sheet.vue';
 import type { EventLocation } from '@/common/model/location';
+
+const { t } = useTranslation('event_editor', { keyPrefix: 'location_picker' });
 
 /**
  * LocationPickerModal Component
@@ -108,7 +111,7 @@ defineExpose({ close, sheetRef });
 <template>
   <Sheet
     ref="sheetRef"
-    title="Select Location"
+    :title="t('title')"
     @close="close"
   >
     <div class="location-picker-body">
@@ -120,8 +123,8 @@ defineExpose({ close, sheetRef });
             v-model="searchQuery"
             type="text"
             class="search-input"
-            placeholder="Search locations..."
-            aria-label="Search locations"
+            :placeholder="t('search_placeholder')"
+            :aria-label="t('aria_search_label')"
           />
         </div>
       </div>
@@ -153,12 +156,12 @@ defineExpose({ close, sheetRef });
 
         <div v-else-if="!hasLocations" class="empty-state">
           <MapPin :size="48" class="empty-icon" />
-          <p>No locations yet</p>
-          <p class="empty-hint">Create your first location to get started</p>
+          <p>{{ t('empty_title') }}</p>
+          <p class="empty-hint">{{ t('empty_help') }}</p>
         </div>
 
         <div v-else class="empty-state">
-          <p>No locations match your search</p>
+          <p>{{ t('no_results') }}</p>
         </div>
       </div>
 
@@ -169,14 +172,14 @@ defineExpose({ close, sheetRef });
           size="sm"
           @click="handleRemoveLocation"
         >
-          Remove location
+          {{ t('remove_button') }}
         </PillButton>
         <PillButton
           variant="primary"
           size="sm"
           @click="handleCreateNew"
         >
-          Create New
+          {{ t('create_new_button') }}
         </PillButton>
       </footer>
     </div>
