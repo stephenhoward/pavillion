@@ -422,19 +422,6 @@ const formatEventDate = (event) => {
   return schedule.startDate.toLocaleString(DateTime.DATETIME_MED);
 };
 
-/**
- * Determines whether an event has at least one shown cancellation occurrence.
- *
- * A schedule with `isExclusion === true` represents a cancelled occurrence.
- * When `hideFromPublic === false`, the cancellation is a shown cancellation
- * (RECURRENCE-ID override) — the badge surfaces these to the owner. When
- * `hideFromPublic === true`, the exclusion is silent (EXDATE-style) and
- * should not be badged.
- */
-const hasShownCancellation = (event) => {
-  return event.schedules?.some((s) => s.isExclusion && !s.hideFromPublic) ?? false;
-};
-
 // Check if event is recurring
 const isRecurring = (event) => {
   if (!event.schedules || event.schedules.length === 0) {
@@ -570,7 +557,7 @@ initializeFiltersFromURL();
               <div class="event-title-row">
                 <h3 :id="`event-title-${event.id}`">{{ event.content("en").name }}</h3>
                 <span
-                  v-if="hasShownCancellation(event)"
+                  v-if="event.isCancelled"
                   data-testid="event-cancelled-pill"
                   class="cancelled-pill"
                 >

@@ -69,15 +69,16 @@ const routes: RouteRecordRaw[] = [
 type ScheduleSpec = { isExclusion: boolean; hideFromPublic: boolean };
 
 /**
- * Builds a CalendarEvent with optional schedules. The cancelled pill is now
- * derived from the event's schedules (a schedule is a shown cancellation when
- * `isExclusion === true && hideFromPublic === false`), so tests exercise the
- * real computation rather than injecting a synthetic `isCancelled` field.
+ * Builds a CalendarEvent with optional schedules and an optional synthetic
+ * `isCancelled` flag. The cancelled pill is gated on `event.isCancelled`
+ * (a field that represents whole-event cancellation). Per-occurrence
+ * exclusions (isExclusion schedules) must NOT trigger the pill — cancelling
+ * individual occurrences of a recurring event leaves the event itself active.
  */
 const createEvent = (
   id: string,
   name: string,
-  opts: { schedules?: ScheduleSpec[] } = {},
+  opts: { isCancelled?: boolean; schedules?: ScheduleSpec[] } = {},
 ) => {
   const event = new CalendarEvent();
   event.id = id;
@@ -96,6 +97,12 @@ const createEvent = (
       return schedule;
     });
   }
+
+  // `isCancelled` is not a declared field on CalendarEvent; it is read
+  // defensively by the template so that when the server eventually populates
+  // a whole-event cancellation flag the pill will appear. Attach via `as any`
+  // to match that runtime shape.
+  (event as any).isCancelled = opts.isCancelled ?? false;
 
   return event;
 };
@@ -158,7 +165,7 @@ describe('EventsTab - Cancelled Pill', () => {
     vi.restoreAllMocks();
   });
 
-  it('does not render the cancelled pill when events have no schedules', async () => {
+  it('does not render the cancelled pill for events where isCancelled is false', async () => {
     const events = [
       createEvent('event-1', 'Active Event'),
       createEvent('event-2', 'Another Active Event'),
@@ -170,25 +177,10 @@ describe('EventsTab - Cancelled Pill', () => {
     expect(pills).toHaveLength(0);
   });
 
-  it('does not render the cancelled pill for events with no exclusion schedules', async () => {
-    const events = [
-      createEvent('event-1', 'Recurring Event', {
-        schedules: [{ isExclusion: false, hideFromPublic: false }],
-      }),
-    ];
-
-    const wrapper = await mountEventsTab(events);
-
-    const pills = wrapper.findAll('[data-testid="event-cancelled-pill"]');
-    expect(pills).toHaveLength(0);
-  });
-
-  it('renders the cancelled pill when an event has a shown cancellation (isExclusion && !hideFromPublic)', async () => {
+  it('renders the cancelled pill only for events where isCancelled is true', async () => {
     const events = [
       createEvent('event-1', 'Active Event'),
-      createEvent('event-2', 'Cancelled Event', {
-        schedules: [{ isExclusion: true, hideFromPublic: false }],
-      }),
+      createEvent('event-2', 'Cancelled Event', { isCancelled: true }),
       createEvent('event-3', 'Another Active Event'),
     ];
 
@@ -203,26 +195,26 @@ describe('EventsTab - Cancelled Pill', () => {
     expect(pills[0].text()).toMatch(/cancelled/i);
   });
 
-  it('does not render the cancelled pill when the only exclusions are hidden (EXDATE-style)', async () => {
+  it('renders a pill for each cancelled event when multiple are cancelled', async () => {
     const events = [
-      createEvent('event-1', 'Event With Hidden Exclusion', {
-        schedules: [{ isExclusion: true, hideFromPublic: true }],
-      }),
+      createEvent('event-1', 'Cancelled A', { isCancelled: true }),
+      createEvent('event-2', 'Active'),
+      createEvent('event-3', 'Cancelled B', { isCancelled: true }),
     ];
 
     const wrapper = await mountEventsTab(events);
 
     const pills = wrapper.findAll('[data-testid="event-cancelled-pill"]');
-    expect(pills).toHaveLength(0);
+    expect(pills).toHaveLength(2);
   });
 
-  it('renders a pill for each event with a shown cancellation when multiple are cancelled', async () => {
+  it('does not render the cancelled pill when only individual occurrences are cancelled (shown exclusion)', async () => {
+    // Regression: cancelling per-occurrence instances of a recurring event
+    // must NOT label the whole event as cancelled. Previously derived the
+    // pill from `schedules.some(s => s.isExclusion && !s.hideFromPublic)`,
+    // which treated any RECURRENCE-ID override as a full-event cancellation.
     const events = [
-      createEvent('event-1', 'Cancelled A', {
-        schedules: [{ isExclusion: true, hideFromPublic: false }],
-      }),
-      createEvent('event-2', 'Active'),
-      createEvent('event-3', 'Cancelled B', {
+      createEvent('event-1', 'Recurring Event With Cancelled Occurrence', {
         schedules: [
           { isExclusion: false, hideFromPublic: false },
           { isExclusion: true, hideFromPublic: false },
@@ -233,6 +225,19 @@ describe('EventsTab - Cancelled Pill', () => {
     const wrapper = await mountEventsTab(events);
 
     const pills = wrapper.findAll('[data-testid="event-cancelled-pill"]');
-    expect(pills).toHaveLength(2);
+    expect(pills).toHaveLength(0);
+  });
+
+  it('does not render the cancelled pill when only hidden EXDATE-style exclusions are present', async () => {
+    const events = [
+      createEvent('event-1', 'Event With Hidden Exclusion', {
+        schedules: [{ isExclusion: true, hideFromPublic: true }],
+      }),
+    ];
+
+    const wrapper = await mountEventsTab(events);
+
+    const pills = wrapper.findAll('[data-testid="event-cancelled-pill"]');
+    expect(pills).toHaveLength(0);
   });
 });
