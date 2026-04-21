@@ -5,7 +5,7 @@
  * - initEndDateTime: initializes end date/time fields from schedule.eventEndTime
  * - onStartDateChange: auto-syncs end date unless manually overridden
  * - onEndDateManualChange: sets manual override flag
- * - buildEventEndTime / compileRecurrence: writes schedule.eventEndTime from form fields
+ * - buildEventEndTime / syncScheduleFromDateTime: writes schedule.eventEndTime from form fields
  *
  * Audit notes (pv-j1pi.4):
  *   All tests in this file are RETAINED. They exercise the start/end date and
@@ -177,7 +177,7 @@ describe('event_recurrence.vue — onStartDateChange auto-sync', () => {
   });
 });
 
-describe('event_recurrence.vue — compileRecurrence writes eventEndTime', () => {
+describe('event_recurrence.vue — syncScheduleFromDateTime writes eventEndTime', () => {
   it('sets schedule.eventEndTime when end date and time are both filled', async () => {
     const schedule = makeSchedule({
       startISO: '2026-05-01T09:00:00',

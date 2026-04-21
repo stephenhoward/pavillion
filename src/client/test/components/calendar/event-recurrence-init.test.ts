@@ -2,9 +2,9 @@
  * Tests for event_recurrence.vue initialization from existing schedule data.
  *
  * Regression for: Recurrence rule not copied to duplicate event.
- * When duplicating a recurring event, the recurrence section stays hidden
- * because state.showRecurrence is always initialized to false, even when
- * the schedule already has a frequency set.
+ * When duplicating a recurring event, the summary + "Edit recurrence"
+ * trigger must reflect the existing frequency rather than showing the
+ * "Add recurrence" trigger (as it would if the schedule were empty).
  *
  * Audit notes (pv-j1pi.4):
  *   - Form-behavior tests (endType init, weekday checkboxes) were MIGRATED to
@@ -40,6 +40,9 @@ const mountRecurrence = (schedule: CalendarEventSchedule) => {
       plugins: [[I18NextVue, { i18next }]],
       stubs: {
         Trash2: true,
+        // Stub the sheet so these tests stay focused on wrapper-level
+        // trigger rendering without mounting the full sheet + its dialog.
+        RecurrenceEditorSheet: true,
       },
     },
     props: {
@@ -49,68 +52,97 @@ const mountRecurrence = (schedule: CalendarEventSchedule) => {
   });
 };
 
+/**
+ * Finds the single recurrence trigger button (Add/Edit recurrence) rendered
+ * on event_recurrence.vue. Since pv-j1pi.5 the trigger is a native
+ * `<button class="btn btn--ghost">` inside `.recurrence-summary`.
+ */
+const findRecurrenceTrigger = (wrapper: ReturnType<typeof mountRecurrence>) => {
+  return wrapper.find('.recurrence-summary button.btn--ghost');
+};
+
 describe('event_recurrence.vue — initialization from existing schedule data', () => {
-  describe('showRecurrence state', () => {
+  describe('recurrence trigger state', () => {
     // Retained: exercises event_recurrence.vue-level trigger rendering (the
     // "Add recurrence" button) — not form internals. After pv-j1pi.5 this
-    // continues to guard the inline-vs-trigger toggle on the wrapper component.
-    it('shows "Add recurrence" button when schedule has no frequency', () => {
+    // continues to guard the summary/trigger rendering on the wrapper
+    // component. Assertion migrated from `.add-recurrence-btn` / `form.repeats`
+    // to the new `.btn.btn--ghost` trigger + absence of mounted sheet.
+    it('shows "Add recurrence" trigger when schedule has no frequency', () => {
       const schedule = new CalendarEventSchedule();
       const wrapper = mountRecurrence(schedule);
 
-      expect(wrapper.find('.add-recurrence-btn').exists()).toBe(true);
-      expect(wrapper.find('form.repeats').exists()).toBe(false);
+      const trigger = findRecurrenceTrigger(wrapper);
+      expect(trigger.exists()).toBe(true);
+      expect(trigger.text()).toContain('Add recurrence');
+      // No summary text should render when frequency is unset
+      expect(wrapper.find('.recurrence-summary .summary-text').exists()).toBe(false);
+      // Sheet is not mounted until the trigger is clicked
+      expect(wrapper.findComponent({ name: 'RecurrenceEditorSheet' }).exists()).toBe(false);
     });
 
-    // Retained: exercises event_recurrence.vue's form-vs-button visibility
-    // toggle (the "Add recurrence" button is NOT shown when frequency is
-    // already set). Form-internals (weekday/endType assertions) migrated to
-    // recurrence-editor-sheet.test.ts.
-    it('shows recurrence form when schedule already has a frequency set', () => {
+    // Retained: exercises event_recurrence.vue's summary/trigger rendering
+    // when a frequency is already set. Assertion migrated to check for the
+    // "Edit recurrence" trigger + summary text rather than the inline form.
+    it('shows "Edit recurrence" trigger and summary when schedule already has a frequency set', () => {
       const schedule = new CalendarEventSchedule('schedule-id');
       schedule.frequency = EventFrequency.WEEKLY;
       schedule.interval = 1;
 
       const wrapper = mountRecurrence(schedule);
 
-      // Recurrence form should be visible — not hidden behind "Add recurrence" button
-      expect(wrapper.find('form.repeats').exists()).toBe(true);
-      expect(wrapper.find('.add-recurrence-btn').exists()).toBe(false);
+      const trigger = findRecurrenceTrigger(wrapper);
+      expect(trigger.exists()).toBe(true);
+      expect(trigger.text()).toContain('Edit recurrence');
+      expect(wrapper.find('.recurrence-summary .summary-text').exists()).toBe(true);
     });
 
-    // Retained: exercises event_recurrence.vue's form visibility for daily
-    // frequency. Migrated to recurrence-editor-sheet.test.ts as a mirror
-    // assertion against the sheet component.
-    it('shows recurrence form for daily frequency', () => {
+    // Retained: same as above for daily.
+    it('shows summary + edit trigger for daily frequency', () => {
       const schedule = new CalendarEventSchedule();
       schedule.frequency = EventFrequency.DAILY;
       schedule.interval = 2;
 
       const wrapper = mountRecurrence(schedule);
 
-      expect(wrapper.find('form.repeats').exists()).toBe(true);
+      expect(wrapper.find('.recurrence-summary .summary-text').exists()).toBe(true);
+      expect(findRecurrenceTrigger(wrapper).text()).toContain('Edit recurrence');
     });
 
     // Retained: same as above for monthly.
-    it('shows recurrence form for monthly frequency', () => {
+    it('shows summary + edit trigger for monthly frequency', () => {
       const schedule = new CalendarEventSchedule();
       schedule.frequency = EventFrequency.MONTHLY;
       schedule.interval = 1;
 
       const wrapper = mountRecurrence(schedule);
 
-      expect(wrapper.find('form.repeats').exists()).toBe(true);
+      expect(wrapper.find('.recurrence-summary .summary-text').exists()).toBe(true);
+      expect(findRecurrenceTrigger(wrapper).text()).toContain('Edit recurrence');
     });
 
     // Retained: same as above for yearly.
-    it('shows recurrence form for yearly frequency', () => {
+    it('shows summary + edit trigger for yearly frequency', () => {
       const schedule = new CalendarEventSchedule();
       schedule.frequency = EventFrequency.YEARLY;
       schedule.interval = 1;
 
       const wrapper = mountRecurrence(schedule);
 
-      expect(wrapper.find('form.repeats').exists()).toBe(true);
+      expect(wrapper.find('.recurrence-summary .summary-text').exists()).toBe(true);
+      expect(findRecurrenceTrigger(wrapper).text()).toContain('Edit recurrence');
+    });
+
+    // Added in pv-j1pi.5: clicking the trigger must mount the sheet.
+    it('mounts RecurrenceEditorSheet when the trigger is clicked', async () => {
+      const schedule = new CalendarEventSchedule();
+      const wrapper = mountRecurrence(schedule);
+
+      expect(wrapper.findComponent({ name: 'RecurrenceEditorSheet' }).exists()).toBe(false);
+
+      await findRecurrenceTrigger(wrapper).trigger('click');
+
+      expect(wrapper.findComponent({ name: 'RecurrenceEditorSheet' }).exists()).toBe(true);
     });
   });
 
