@@ -199,7 +199,7 @@ async function onRestoreClick(instanceId: string) {
 
 .panel-title {
   margin: 0;
-  font-size: var(--pav-font-size-heading-sm);
+  font-size: var(--pav-font-size-h6);
   font-weight: var(--pav-font-weight-semibold);
   color: var(--pav-text-primary);
 }
