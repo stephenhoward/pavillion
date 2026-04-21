@@ -31,8 +31,8 @@ export interface EventUnrepostedPayload {
 
 /**
  * Payload for the eventInstanceCancelled event bus emission.
- * Emitted by EventInstanceService.cancelInstance when a calendar editor
- * cancels a single occurrence of a (possibly recurring) event.
+ * Emitted by EventInstanceService.cancelOccurrenceByDate when a calendar
+ * editor cancels a single occurrence of a (possibly recurring) event.
  *
  * Downstream responsibilities:
  *   1. Rebuild the owner calendar's event_instance rows so the cancellation
@@ -45,25 +45,17 @@ export interface EventUnrepostedPayload {
  * retains the legacy camelCase shape rather than the `{domain}:{resource}:{action}`
  * convention, because ActivityPub domain handlers already subscribe to this
  * exact name. Renaming would silently break federation propagation.
- *
- * `instanceId` is marked optional as a Phase 1–2 transitional measure: the
- * date-based cancel/restore path (pv-cn0r.1.3) emits this payload without
- * a synthetic instanceId, because cancellations are keyed by occurrence
- * start date, not by a materialized instance row. The field will be
- * removed entirely in Phase 3 (pv-cn0r.3.2) once all emitters and
- * subscribers are migrated off of it.
  */
 export interface EventInstanceCancelledPayload {
   calendar: Calendar;
   event: CalendarEvent;
-  instanceId?: string;
   hideFromPublic: boolean;
 }
 
 /**
  * Payload for the eventInstanceRestored event bus emission.
- * Emitted by EventInstanceService.restoreInstance when a calendar editor
- * reverses a previous instance cancellation.
+ * Emitted by EventInstanceService.restoreOccurrenceByDate when a calendar
+ * editor reverses a previous occurrence cancellation.
  *
  * Downstream responsibilities match {@link EventInstanceCancelledPayload}:
  * rebuild the owner's instances, and re-emit `eventUpdated` so the AP
@@ -73,18 +65,10 @@ export interface EventInstanceCancelledPayload {
  * retains the legacy camelCase shape rather than the `{domain}:{resource}:{action}`
  * convention, because ActivityPub domain handlers already subscribe to this
  * exact name. Renaming would silently break federation propagation.
- *
- * `instanceId` is marked optional as a Phase 1–2 transitional measure: the
- * date-based cancel/restore path (pv-cn0r.1.3) emits this payload without
- * a synthetic instanceId, because cancellations are keyed by occurrence
- * start date, not by a materialized instance row. The field will be
- * removed entirely in Phase 3 (pv-cn0r.3.2) once all emitters and
- * subscribers are migrated off of it.
  */
 export interface EventInstanceRestoredPayload {
   calendar: Calendar;
   event: CalendarEvent;
-  instanceId?: string;
 }
 
 export default class CalendarEventHandlers implements DomainEventHandlers {

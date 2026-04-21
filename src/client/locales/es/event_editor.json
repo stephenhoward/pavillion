@@ -122,6 +122,15 @@
     "confirm_title": "¿Cancelar esta instancia?",
     "confirm_message": "Esto marcará la ocurrencia seleccionada como cancelada. Puedes restaurarla más tarde.",
     "confirm_submit": "Cancelar instancia",
-    "no_upcoming": "No hay instancias próximas para cancelar."
+    "no_upcoming": "No hay instancias próximas para cancelar.",
+    "aria_scroller": "Próximas ocurrencias",
+    "show_more_button": "Mostrar más",
+    "jump_label": "Ir al mes",
+    "jump_submit_button": "Ir",
+    "jump_placeholder": "AAAA-MM",
+    "no_further_occurrences": "No hay más ocurrencias",
+    "no_occurrences_after": "No hay ocurrencias después de {{month}}",
+    "start_from_today_button": "Empezar desde hoy",
+    "loading": "Cargando…"
   }
 }

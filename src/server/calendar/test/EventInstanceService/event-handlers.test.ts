@@ -180,7 +180,6 @@ describe('CalendarEventHandlers', () => {
       eventBus.emit('eventInstanceCancelled', {
         event,
         calendar,
-        instanceId: 'instance-1',
         hideFromPublic: true,
       });
 
@@ -207,7 +206,6 @@ describe('CalendarEventHandlers', () => {
       eventBus.emit('eventInstanceCancelled', {
         event,
         calendar: null,
-        instanceId: 'instance-1',
         hideFromPublic: true,
       });
 
@@ -229,7 +227,6 @@ describe('CalendarEventHandlers', () => {
       eventBus.emit('eventInstanceRestored', {
         event,
         calendar,
-        instanceId: 'instance-1',
       });
 
       await new Promise(resolve => setTimeout(resolve, 10));
@@ -249,7 +246,6 @@ describe('CalendarEventHandlers', () => {
       eventBus.emit('eventInstanceRestored', {
         event: { id: null },
         calendar,
-        instanceId: 'instance-1',
       });
 
       await new Promise(resolve => setTimeout(resolve, 10));

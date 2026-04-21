@@ -1119,7 +1119,6 @@ button {
                 >
                   <EventCancellationsPanel
                     :event="editorState.event"
-                    :instances="eventInstances"
                   />
                 </div>
               </div>
@@ -1222,9 +1221,6 @@ import { useLocationManagement } from '@/client/composables/useLocationManagemen
 import { useUnsavedChanges } from '@/client/composables/useUnsavedChanges';
 import { useLanguageManagement } from '@/client/composables/useLanguageManagement';
 
-// Stores
-import { useEventStore } from '@/client/stores/eventStore';
-
 // Props for edit mode (eventId passed from route)
 const props = defineProps({
   eventId: {
@@ -1246,9 +1242,6 @@ const { t: tExternalLink } = useTranslation('event_editor', {
 const { t: tCancellations } = useTranslation('event_editor', {
   keyPrefix: 'cancellations',
 });
-
-// Event store (for cached instances)
-const eventStore = useEventStore();
 
 // Initialize composables
 const defaultLanguage = 'en';
@@ -1342,16 +1335,6 @@ const hasRecurringSchedule = computed(() => {
  * TIME section stays compact for the common case.
  */
 const showCancellationsPanel = ref(false);
-
-/**
- * Materialized upcoming instances for the current event, pulled from the
- * event store cache. The cancellations panel displays these alongside any
- * hidden exclusion schedules derived from the event itself.
- */
-const eventInstances = computed(() => {
-  if (!editorState.event?.id) return [];
-  return eventStore.instancesForEvent(editorState.event.id);
-});
 
 /**
  * Translated page title

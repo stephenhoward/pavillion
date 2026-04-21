@@ -122,6 +122,15 @@
     "confirm_title": "Cancel this instance?",
     "confirm_message": "This will mark the selected occurrence as cancelled. You can restore it later.",
     "confirm_submit": "Cancel instance",
-    "no_upcoming": "No upcoming instances to cancel."
+    "no_upcoming": "No upcoming instances to cancel.",
+    "aria_scroller": "Upcoming occurrences",
+    "show_more_button": "Show more",
+    "jump_label": "Jump to month",
+    "jump_submit_button": "Go",
+    "jump_placeholder": "YYYY-MM",
+    "no_further_occurrences": "No further occurrences",
+    "no_occurrences_after": "No occurrences after {{month}}",
+    "start_from_today_button": "Start from today",
+    "loading": "Loading…"
   }
 }

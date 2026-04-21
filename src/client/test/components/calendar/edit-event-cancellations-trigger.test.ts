@@ -63,8 +63,6 @@ vi.mock('@/client/service/event', () => ({
       return event;
     }),
     saveEvent: vi.fn(),
-    cancelEventInstance: vi.fn(),
-    restoreEventInstance: vi.fn(),
   })),
 }));
 

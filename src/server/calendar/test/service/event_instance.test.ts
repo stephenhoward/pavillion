@@ -698,273 +698,6 @@ describe('EventService.createEventSchedule — endDate/eventEndTime sync', () =>
   });
 });
 
-/**
- * Tests for EventInstanceService.cancelInstance and .restoreInstance.
- *
- * These tests stub the database-facing surface (EventInstanceEntity.findByPk,
- * EventEntity.findByPk, EventScheduleEntity.findOne, plus prototype save/destroy)
- * so the service's authorization, IDOR guard, idempotency, and bus-emit logic
- * can be exercised without a live database connection.
- */
-describe('EventInstanceService.cancelInstance / restoreInstance', () => {
-  let service: EventInstanceService;
-  let eventBus: EventEmitter;
-  let sandbox: sinon.SinonSandbox;
-
-  const ACCOUNT_ID = '11111111-1111-4111-8111-111111111111';
-  const EVENT_ID = '22222222-2222-4222-8222-222222222222';
-  const INSTANCE_ID = '33333333-3333-4333-8333-333333333333';
-  const CALENDAR_ID = '44444444-4444-4444-8444-444444444444';
-  const INSTANCE_START = new Date('2026-05-01T10:00:00.000Z');
-
-  function makeAccount(): Account {
-    return new Account(ACCOUNT_ID, 'editor', 'editor@example.com');
-  }
-
-  function makeCalendar(): Calendar {
-    return new Calendar(CALENDAR_ID, 'test-calendar');
-  }
-
-  function stubInstance(eventId: string = EVENT_ID, start: Date = INSTANCE_START) {
-    // EventInstanceEntity instances returned by findByPk need to expose
-    // event_id and start_time. Using build() yields a real entity
-    // instance with the defaults wired up.
-    return EventInstanceEntity.build({
-      id: INSTANCE_ID,
-      event_id: eventId,
-      calendar_id: CALENDAR_ID,
-      start_time: start,
-      end_time: null,
-    });
-  }
-
-  function stubEvent() {
-    return EventEntity.build({
-      id: EVENT_ID,
-      calendar_id: CALENDAR_ID,
-    });
-  }
-
-  beforeEach(() => {
-    sandbox = sinon.createSandbox();
-    eventBus = new EventEmitter();
-    service = new EventInstanceService(eventBus);
-
-    // Default stubs — individual tests override as needed.
-    sandbox.stub(service['calendarService'], 'getCalendar').resolves(makeCalendar());
-    sandbox.stub(service['calendarService'], 'editableCalendarsForUser').resolves([makeCalendar()]);
-  });
-
-  afterEach(() => {
-    sandbox.restore();
-  });
-
-  describe('cancelInstance', () => {
-    it('should create a new exclusion schedule (hideFromPublic=true) and emit eventInstanceCancelled', async () => {
-      sandbox.stub(EventInstanceEntity, 'findByPk').resolves(stubInstance());
-      sandbox.stub(EventEntity, 'findByPk').resolves(stubEvent());
-      sandbox.stub(EventScheduleEntity, 'findOne').resolves(null);
-      const saveStub = sandbox.stub(EventScheduleEntity.prototype, 'save').resolves();
-
-      const emitSpy = sandbox.spy(eventBus, 'emit');
-
-      await service.cancelInstance(makeAccount(), EVENT_ID, INSTANCE_ID, true);
-
-      expect(saveStub.calledOnce).toBe(true);
-      expect(emitSpy.calledWith('eventInstanceCancelled')).toBe(true);
-      const payload = emitSpy.getCalls().find(c => c.args[0] === 'eventInstanceCancelled')!.args[1];
-      expect(payload.calendar.id).toBe(CALENDAR_ID);
-      expect(payload.instanceId).toBe(INSTANCE_ID);
-      expect(payload.hideFromPublic).toBe(true);
-    });
-
-    it('should create a new exclusion schedule (hideFromPublic=false) for shown cancellations', async () => {
-      sandbox.stub(EventInstanceEntity, 'findByPk').resolves(stubInstance());
-      sandbox.stub(EventEntity, 'findByPk').resolves(stubEvent());
-      sandbox.stub(EventScheduleEntity, 'findOne').resolves(null);
-      sandbox.stub(EventScheduleEntity.prototype, 'save').resolves();
-
-      const emitSpy = sandbox.spy(eventBus, 'emit');
-
-      await service.cancelInstance(makeAccount(), EVENT_ID, INSTANCE_ID, false);
-
-      const payload = emitSpy.getCalls().find(c => c.args[0] === 'eventInstanceCancelled')!.args[1];
-      expect(payload.hideFromPublic).toBe(false);
-    });
-
-    it('should reject non-editor accounts with InsufficientCalendarPermissionsError', async () => {
-      sandbox.stub(EventInstanceEntity, 'findByPk').resolves(stubInstance());
-      sandbox.stub(EventEntity, 'findByPk').resolves(stubEvent());
-      // Override the default editor stub to return no calendars.
-      (service['calendarService'].editableCalendarsForUser as sinon.SinonStub).resolves([]);
-
-      await expect(
-        service.cancelInstance(makeAccount(), EVENT_ID, INSTANCE_ID, true),
-      ).rejects.toThrow('Insufficient permissions');
-    });
-
-    it('should reject cross-event instance with EventNotFoundError (IDOR guard)', async () => {
-      const otherEventId = '99999999-9999-4999-8999-999999999999';
-      sandbox.stub(EventInstanceEntity, 'findByPk').resolves(stubInstance(otherEventId));
-
-      await expect(
-        service.cancelInstance(makeAccount(), EVENT_ID, INSTANCE_ID, true),
-      ).rejects.toThrow('Event instance not found');
-    });
-
-    it('should be a no-op when an existing cancellation matches the requested mode', async () => {
-      sandbox.stub(EventInstanceEntity, 'findByPk').resolves(stubInstance());
-      sandbox.stub(EventEntity, 'findByPk').resolves(stubEvent());
-      const existing = EventScheduleEntity.build({
-        id: uuidv4(),
-        event_id: EVENT_ID,
-        start_date: INSTANCE_START,
-        is_exclusion: true,
-        hide_from_public: true,
-      });
-      sandbox.stub(EventScheduleEntity, 'findOne').resolves(existing);
-      const saveStub = sandbox.stub(EventScheduleEntity.prototype, 'save').resolves();
-
-      const emitSpy = sandbox.spy(eventBus, 'emit');
-
-      await service.cancelInstance(makeAccount(), EVENT_ID, INSTANCE_ID, true);
-
-      // No save, no emit: same mode means nothing changes.
-      expect(saveStub.called).toBe(false);
-      expect(emitSpy.calledWith('eventInstanceCancelled')).toBe(false);
-    });
-
-    it('should toggle hide_from_public in place when mode changes', async () => {
-      sandbox.stub(EventInstanceEntity, 'findByPk').resolves(stubInstance());
-      sandbox.stub(EventEntity, 'findByPk').resolves(stubEvent());
-      const existing = EventScheduleEntity.build({
-        id: uuidv4(),
-        event_id: EVENT_ID,
-        start_date: INSTANCE_START,
-        is_exclusion: true,
-        hide_from_public: true,
-      });
-      sandbox.stub(EventScheduleEntity, 'findOne').resolves(existing);
-      const saveStub = sandbox.stub(EventScheduleEntity.prototype, 'save').resolves();
-
-      const emitSpy = sandbox.spy(eventBus, 'emit');
-
-      await service.cancelInstance(makeAccount(), EVENT_ID, INSTANCE_ID, false);
-
-      // Same row, flipped mode: save is called once, and the emitted
-      // payload reflects the new hideFromPublic value.
-      expect(existing.hide_from_public).toBe(false);
-      expect(saveStub.calledOnce).toBe(true);
-      const payload = emitSpy.getCalls().find(c => c.args[0] === 'eventInstanceCancelled')!.args[1];
-      expect(payload.hideFromPublic).toBe(false);
-    });
-  });
-
-  describe('restoreInstance', () => {
-    it('should delete the exclusion schedule row and emit eventInstanceRestored', async () => {
-      sandbox.stub(EventInstanceEntity, 'findByPk').resolves(stubInstance());
-      sandbox.stub(EventEntity, 'findByPk').resolves(stubEvent());
-      const existing = EventScheduleEntity.build({
-        id: uuidv4(),
-        event_id: EVENT_ID,
-        start_date: INSTANCE_START,
-        is_exclusion: true,
-        hide_from_public: true,
-      });
-      sandbox.stub(EventScheduleEntity, 'findOne').resolves(existing);
-      const destroyStub = sandbox.stub(EventScheduleEntity.prototype, 'destroy').resolves();
-
-      const emitSpy = sandbox.spy(eventBus, 'emit');
-
-      await service.restoreInstance(makeAccount(), EVENT_ID, INSTANCE_ID);
-
-      expect(destroyStub.calledOnce).toBe(true);
-      expect(emitSpy.calledWith('eventInstanceRestored')).toBe(true);
-      const payload = emitSpy.getCalls().find(c => c.args[0] === 'eventInstanceRestored')!.args[1];
-      expect(payload.calendar.id).toBe(CALENDAR_ID);
-      expect(payload.instanceId).toBe(INSTANCE_ID);
-    });
-
-    it('should reject non-editor accounts with InsufficientCalendarPermissionsError', async () => {
-      sandbox.stub(EventInstanceEntity, 'findByPk').resolves(stubInstance());
-      sandbox.stub(EventEntity, 'findByPk').resolves(stubEvent());
-      (service['calendarService'].editableCalendarsForUser as sinon.SinonStub).resolves([]);
-
-      await expect(
-        service.restoreInstance(makeAccount(), EVENT_ID, INSTANCE_ID),
-      ).rejects.toThrow('Insufficient permissions');
-    });
-
-    it('should reject cross-event instance with EventNotFoundError (IDOR guard)', async () => {
-      const otherEventId = '99999999-9999-4999-8999-999999999999';
-      sandbox.stub(EventInstanceEntity, 'findByPk').resolves(stubInstance(otherEventId));
-
-      await expect(
-        service.restoreInstance(makeAccount(), EVENT_ID, INSTANCE_ID),
-      ).rejects.toThrow('Event instance not found');
-    });
-
-    it('should silently no-op the delete when there is no matching exclusion row', async () => {
-      sandbox.stub(EventInstanceEntity, 'findByPk').resolves(stubInstance());
-      sandbox.stub(EventEntity, 'findByPk').resolves(stubEvent());
-      sandbox.stub(EventScheduleEntity, 'findOne').resolves(null);
-      const destroyStub = sandbox.stub(EventScheduleEntity.prototype, 'destroy').resolves();
-
-      const emitSpy = sandbox.spy(eventBus, 'emit');
-
-      await service.restoreInstance(makeAccount(), EVENT_ID, INSTANCE_ID);
-
-      expect(destroyStub.called).toBe(false);
-      // Restore still emits — downstream is idempotent, and emitting keeps
-      // the federation channel in sync with local state.
-      expect(emitSpy.calledWith('eventInstanceRestored')).toBe(true);
-    });
-  });
-
-  describe('cancel / restore / cancel cycle', () => {
-    it('should complete a cancel → restore → cancel round-trip with matching bus emissions', async () => {
-      const instanceEntity = stubInstance();
-      const eventEntity = stubEvent();
-
-      sandbox.stub(EventInstanceEntity, 'findByPk').resolves(instanceEntity);
-      sandbox.stub(EventEntity, 'findByPk').resolves(eventEntity);
-
-      // Simulate the findOne result transitioning across the cycle:
-      //   1st call (first cancel)   → null (create row)
-      //   2nd call (restore)        → existing row (destroy)
-      //   3rd call (second cancel)  → null again (re-create)
-      const findOneStub = sandbox.stub(EventScheduleEntity, 'findOne');
-      const firstExisting = EventScheduleEntity.build({
-        id: uuidv4(),
-        event_id: EVENT_ID,
-        start_date: INSTANCE_START,
-        is_exclusion: true,
-        hide_from_public: true,
-      });
-      findOneStub.onFirstCall().resolves(null);
-      findOneStub.onSecondCall().resolves(firstExisting);
-      findOneStub.onThirdCall().resolves(null);
-
-      const saveStub = sandbox.stub(EventScheduleEntity.prototype, 'save').resolves();
-      const destroyStub = sandbox.stub(EventScheduleEntity.prototype, 'destroy').resolves();
-
-      const emitSpy = sandbox.spy(eventBus, 'emit');
-
-      await service.cancelInstance(makeAccount(), EVENT_ID, INSTANCE_ID, true);
-      await service.restoreInstance(makeAccount(), EVENT_ID, INSTANCE_ID);
-      await service.cancelInstance(makeAccount(), EVENT_ID, INSTANCE_ID, true);
-
-      // 2 cancels → 2 saves; 1 restore → 1 destroy.
-      expect(saveStub.callCount).toBe(2);
-      expect(destroyStub.callCount).toBe(1);
-
-      const cancelEmits = emitSpy.getCalls().filter(c => c.args[0] === 'eventInstanceCancelled');
-      const restoreEmits = emitSpy.getCalls().filter(c => c.args[0] === 'eventInstanceRestored');
-      expect(cancelEmits).toHaveLength(2);
-      expect(restoreEmits).toHaveLength(1);
-    });
-  });
-});
 
 /**
  * Tests for EventInstanceService.listUpcomingOccurrences.
@@ -1283,7 +1016,7 @@ describe('EventInstanceService.cancelOccurrenceByDate / restoreOccurrenceByDate'
   });
 
   describe('cancelOccurrenceByDate', () => {
-    it('creates a new exclusion row when the date matches an rrule occurrence and emits eventInstanceCancelled with instanceId undefined', async () => {
+    it('creates a new exclusion row when the date matches an rrule occurrence and emits eventInstanceCancelled', async () => {
       sandbox.stub(EventEntity, 'findByPk').resolves(stubEventWithWeeklyMondaySchedule());
       sandbox.stub(EventScheduleEntity, 'findOne').resolves(null);
       const saveStub = sandbox.stub(EventScheduleEntity.prototype, 'save').resolves();
@@ -1297,7 +1030,7 @@ describe('EventInstanceService.cancelOccurrenceByDate / restoreOccurrenceByDate'
       const payload = emitSpy.getCalls().find(c => c.args[0] === 'eventInstanceCancelled')!.args[1];
       expect(payload.calendar.id).toBe(CALENDAR_ID);
       expect(payload.event.id).toBe(EVENT_ID);
-      expect(payload.instanceId).toBeUndefined();
+      expect(payload).not.toHaveProperty('instanceId');
       expect(payload.hideFromPublic).toBe(false);
     });
 
@@ -1398,7 +1131,7 @@ describe('EventInstanceService.cancelOccurrenceByDate / restoreOccurrenceByDate'
       const payload = emitSpy.getCalls().find(c => c.args[0] === 'eventInstanceRestored')!.args[1];
       expect(payload.calendar.id).toBe(CALENDAR_ID);
       expect(payload.event.id).toBe(EVENT_ID);
-      expect(payload.instanceId).toBeUndefined();
+      expect(payload).not.toHaveProperty('instanceId');
     });
 
     it('is a silent no-op when no exclusion row exists for the date', async () => {

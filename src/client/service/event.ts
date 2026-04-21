@@ -7,6 +7,17 @@ import ModelService from '@/client/service/models';
 import { Calendar } from '@/common/model/calendar';
 import { validateAndEncodeId } from '@/client/service/utils';
 
+export interface UpcomingOccurrence {
+  start: string;          // ISO-8601 datetime
+  state: 'active' | 'cancelled-shown' | 'hidden';
+  scheduleId: string | null;
+}
+
+export interface UpcomingOccurrencesResult {
+  occurrences: UpcomingOccurrence[];
+  hasMore: boolean;
+}
+
 export default class EventService {
   store: ReturnType<typeof useEventStore>;
 
@@ -168,81 +179,74 @@ export default class EventService {
   }
 
   /**
-   * Cancel a single materialized instance of a recurring event. The server
-   * distinguishes between EXDATE-style hidden cancellation (hideFromPublic=true,
-   * instance disappears) and RECURRENCE-ID-style shown cancellation
-   * (hideFromPublic=false, instance remains visible with a cancelled marker).
+   * Fetch upcoming occurrences for a recurring event computed from its
+   * RRuleSet on the server. Independent of the materialization horizon —
+   * the caller controls the window via (after, limit).
    *
-   * Updates the eventStore's cached instance in place so the panel UI reflects
-   * the new state without a full refetch — or removes it from the cache when
-   * the server reports the instance no longer materializes (null response).
-   *
-   * @param eventId The event whose instance is being cancelled
-   * @param instanceId The materialized instance id to cancel
-   * @param hideFromPublic True for EXDATE-style hidden cancellation, false for shown
-   * @returns The updated instance, or null if the cancellation removes it from view
+   * @param eventId The recurring event id
+   * @param after ISO-8601 datetime; defaults to server "now" when omitted
+   * @param limit Max occurrences to return (default server-side: 10)
    */
-  async cancelEventInstance(
+  async listUpcomingOccurrences(
     eventId: string,
-    instanceId: string,
-    hideFromPublic: boolean,
-  ): Promise<CalendarEventInstance | null> {
+    after?: string,
+    limit?: number,
+  ): Promise<UpcomingOccurrencesResult> {
     const encodedEventId = validateAndEncodeId(eventId, 'Event ID');
-    const encodedInstanceId = validateAndEncodeId(instanceId, 'Instance ID');
+    const params = new URLSearchParams();
+    if (after) params.append('after', after);
+    if (limit) params.append('limit', String(limit));
+    const suffix = params.toString() ? `?${params.toString()}` : '';
 
     try {
-      const response = await axios.post(
-        `/api/v1/events/${encodedEventId}/instances/${encodedInstanceId}/cancel`,
-        { hideFromPublic },
+      const response = await axios.get(
+        `/api/v1/events/${encodedEventId}/upcoming-occurrences${suffix}`,
       );
-
-      if (response.data) {
-        const instance = CalendarEventInstance.fromObject(response.data);
-        this.store.updateInstance(eventId, instance);
-        return instance;
-      }
-
-      // Hidden cancellation: the server no longer materializes this instance,
-      // so drop it from the cache to keep the panel consistent.
-      this.store.removeInstance(eventId, instanceId);
-      return null;
+      return response.data as UpcomingOccurrencesResult;
     }
     catch (error) {
-      console.error('Error cancelling event instance:', error);
+      console.error('Error listing upcoming occurrences:', error);
       throw error;
     }
   }
 
   /**
-   * Restore a previously cancelled instance by removing its exclusion schedule
-   * row on the server. Updates the cached instance in place on response.
-   *
-   * @param eventId The event whose instance is being restored
-   * @param instanceId The materialized instance id to restore
-   * @returns The updated instance, or null if the server could not re-materialize it
+   * Cancel a specific occurrence of a recurring event by its start date.
+   * Server validates the date matches the RRuleSet; mismatched dates throw
+   * a 422.
    */
-  async restoreEventInstance(
+  async cancelOccurrence(
     eventId: string,
-    instanceId: string,
-  ): Promise<CalendarEventInstance | null> {
+    start: string,
+    hideFromPublic: boolean,
+  ): Promise<void> {
     const encodedEventId = validateAndEncodeId(eventId, 'Event ID');
-    const encodedInstanceId = validateAndEncodeId(instanceId, 'Instance ID');
-
     try {
-      const response = await axios.delete(
-        `/api/v1/events/${encodedEventId}/instances/${encodedInstanceId}/cancel`,
+      await axios.post(
+        `/api/v1/events/${encodedEventId}/occurrences/cancel`,
+        { start, hideFromPublic },
       );
-
-      if (response.data) {
-        const instance = CalendarEventInstance.fromObject(response.data);
-        this.store.updateInstance(eventId, instance);
-        return instance;
-      }
-
-      return null;
     }
     catch (error) {
-      console.error('Error restoring event instance:', error);
+      console.error('Error cancelling event occurrence:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Restore a previously cancelled occurrence by its start date. Silent no-op
+   * server-side if the occurrence was never cancelled.
+   */
+  async restoreOccurrence(eventId: string, start: string): Promise<void> {
+    const encodedEventId = validateAndEncodeId(eventId, 'Event ID');
+    try {
+      await axios.delete(
+        `/api/v1/events/${encodedEventId}/occurrences/cancel`,
+        { data: { start } },
+      );
+    }
+    catch (error) {
+      console.error('Error restoring event occurrence:', error);
       throw error;
     }
   }
