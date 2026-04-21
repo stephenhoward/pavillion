@@ -668,6 +668,49 @@ export function bdEnrichmentCheck(beadId: string, deps: SpawnDeps = {}): boolean
 }
 
 // =============================================================================
+// bdListChildren
+// =============================================================================
+
+/**
+ * List the parent-child leaf IDs of a bead via `bd show <id> --json`.
+ *
+ * Returns the ids of `dependents` whose `dependency_type === 'parent-child'`,
+ * or an empty array if the bead has no children or the call fails. The Analyze
+ * phase uses this to discover children produced by Decompose when the caller
+ * doesn't inject `childIds` explicitly (tests inject; production doesn't).
+ */
+export function bdListChildren(beadId: string, deps: SpawnDeps = {}): string[] {
+  const spawn = deps.spawnFn ?? nodeSpawnSync;
+  const result = run('bd', ['show', beadId, '--json'], spawn);
+
+  if (result.exitCode !== 0) return [];
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(result.stdout);
+  }
+  catch {
+    return [];
+  }
+
+  const record = Array.isArray(parsed) ? parsed[0] : parsed;
+  if (!record || typeof record !== 'object') return [];
+
+  const dependents = (record as { dependents?: unknown }).dependents;
+  if (!Array.isArray(dependents)) return [];
+
+  const childIds: string[] = [];
+  for (const dep of dependents) {
+    if (!dep || typeof dep !== 'object') continue;
+    const d = dep as { id?: unknown; dependency_type?: unknown };
+    if (d.dependency_type === 'parent-child' && typeof d.id === 'string') {
+      childIds.push(d.id);
+    }
+  }
+  return childIds;
+}
+
+// =============================================================================
 // branchName (pure)
 // =============================================================================
 

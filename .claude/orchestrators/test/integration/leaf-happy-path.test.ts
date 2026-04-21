@@ -148,7 +148,8 @@ describe('Integration: leaf happy path', () => {
       }
       // bd show (text): used by bdState, bdSizingCheck, bdEnrichmentCheck
       // Use shapedBeadText so assessState returns 'shaped' and sizing says no-decompose.
-      // analyze() is called with childIds:[] (default) so enrichment check is skipped.
+      // analyze() reads parent-child dependents via bd show --json (handled above with
+      // no dependents field), so the leaf path is taken and enrichment check is skipped.
       if (a.includes('show')) {
         return { exitCode: 0, stdout: shapedBeadText(), stderr: '' };
       }

@@ -28,6 +28,7 @@ import {
   bdState,
   bdSizingCheck,
   bdEnrichmentCheck,
+  bdListChildren,
   bdEscalate,
   bdCreateFollowup,
   branchName,
@@ -1146,7 +1147,11 @@ export async function decompose(ctx: PhaseCtx, deps: PhaseDeps = {}): Promise<Ph
  * Phase 5 — Analyze if needed (enriches leaf children).
  */
 export async function analyze(ctx: PhaseCtx, deps: PhaseDeps = {}): Promise<PhaseReturn> {
-  const childIds = deps.childIds ?? [];
+  // In production the orchestrator doesn't inject childIds, so fall back to
+  // reading parent-child dependents from `bd show`. Tests still inject
+  // explicitly (including [] to simulate a leaf) — an explicit undefined check
+  // preserves that contract.
+  const childIds = deps.childIds ?? bdListChildren(ctx.beadId, { spawnFn: deps.spawnFn });
 
   // Step 1: If leaf (no children), skip to Branch
   if (childIds.length === 0) {
