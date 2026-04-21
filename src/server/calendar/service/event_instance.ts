@@ -18,7 +18,6 @@ import CalendarService from "./calendar";
 import CategoryService from "./categories";
 import { Op, literal } from 'sequelize';
 import { EventRepostEntity } from "@/server/calendar/entity/event_repost";
-import { getRecurrenceText } from '@/common/utils/recurrence-text';
 import { resolveSourceCalendars, type RepostContext } from '../helper/source_calendar';
 import type ActivityPubInterface from '@/server/activitypub/interface';
 import {
@@ -463,16 +462,16 @@ export default class EventInstanceService {
     const instance = eventInstance.toModel();
     const event = eventInstance.event;
 
-    // Populate schedules on the model so recurrence text can be computed
+    // Populate schedules on the model so the public API layer can compute
+    // the recurrence summary and mark shown cancellations without requiring a
+    // second DB query. Schedules are stripped at the public API boundary
+    // (see toPublicEventObject) so they never reach the wire.
     const scheduleEntities = (event.getDataValue('schedules') ?? []) as EventScheduleEntity[];
     const scheduleModels = scheduleEntities.map((s: EventScheduleEntity) => s.toModel());
     instance.event.schedules = scheduleModels;
 
     // Mark as cancelled in-memory if a shown-cancellation schedule targets this instance.
     this.markShownCancellations([instance]);
-
-    // Attach pre-computed human-readable recurrence text
-    (instance.event as any).recurrenceText = getRecurrenceText(scheduleModels);
 
     // Populate location with content (accessibility info)
     if (event.location) {

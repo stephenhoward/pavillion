@@ -15,7 +15,7 @@
  * - document.title is set to "Event Name | Pavillion" after loading.
  * - Events with a series show a clickable series link.
  * - Events without a series show no series link.
- * - Recurrence badge is shown when event has schedules with a frequency.
+ * - Recurrence badge is shown when event has a recurrenceSummary from the public API.
  * - Location sidebar card displays location name and address.
  * - Accessibility sidebar card displays location accessibility info.
  * - Recurrence sidebar card displays human-readable recurrence text.
@@ -82,16 +82,9 @@ let mockSeries: {
   getLanguages: () => string[];
 } | null = null;
 
-// Mutable schedules state so individual tests can inject schedule data
-let mockSchedules: Array<{
-  id: string;
-  frequency: string | null;
-  interval: number;
-  byDay: string[];
-  isExclusion: boolean;
-  startDate: unknown;
-  endDate: unknown;
-}> = [];
+// Mutable recurrenceSummary state so individual tests can inject a summary
+// matching the public API's `{ key, params } | null` shape (pv-kzc0.2).
+let mockRecurrenceSummary: { key: string; params: Record<string, unknown> } | null = null;
 
 // Mutable source calendar state so individual tests can inject source calendar data
 let mockSourceCalendar: {
@@ -143,7 +136,7 @@ vi.mock('@/site/service/calendar', () => {
             categories: mockCategories,
             location: mockLocation,
             series: mockSeries,
-            schedules: mockSchedules,
+            recurrenceSummary: mockRecurrenceSummary,
             sourceCalendar: mockSourceCalendar,
             externalUrl: mockExternalUrl,
             urlPrompt: mockUrlPrompt,
@@ -282,18 +275,15 @@ function makeLocationObject(
 }
 
 /**
- * Creates a mock schedule object mimicking CalendarEventSchedule.
+ * Creates a recurrenceSummary object matching the public API's
+ * `{ key, params }` intent shape. This is the shape the frontend
+ * consumes via `useRecurrenceText` (pv-kzc0.4).
  */
-function makeScheduleObject(frequency: string | null, byDay: string[] = [], interval: number = 1) {
-  return {
-    id: 'sched-1',
-    frequency,
-    interval,
-    byDay,
-    isExclusion: false,
-    startDate: null,
-    endDate: null,
-  };
+function makeRecurrenceSummary(
+  key: string,
+  params: Record<string, unknown> = {},
+): { key: string; params: Record<string, unknown> } {
+  return { key, params };
 }
 
 // ---------------------------------------------------------------------------
@@ -326,6 +316,36 @@ beforeAll(async () => {
               rsvp: 'RSVP',
               more_info: 'More Information',
             },
+            recurrence: {
+              every_day: 'Every day',
+              every_n_days: 'Every {{n}} days',
+              weekly_every_week: 'Every week',
+              weekly_on_days: 'Weekly on {{days}}',
+              every_n_weeks: 'Every {{n}} weeks',
+              every_n_weeks_on_days: 'Every {{n}} weeks on {{days}}',
+              monthly: 'Monthly',
+              every_n_months: 'Every {{n}} months',
+              nth_weekday_of_month: 'The {{ordinal}} {{day}} of every month',
+              nth_weekday_every_n_months: 'The {{ordinal}} {{day}} every {{n}} months',
+              yearly: 'Yearly',
+              every_n_years: 'Every {{n}} years',
+              days: {
+                MO: 'Monday',
+                TU: 'Tuesday',
+                WE: 'Wednesday',
+                TH: 'Thursday',
+                FR: 'Friday',
+                SA: 'Saturday',
+                SU: 'Sunday',
+              },
+              ordinals: {
+                1: 'first',
+                2: 'second',
+                3: 'third',
+                4: 'fourth',
+                '-1': 'last',
+              },
+            },
           },
         },
       },
@@ -351,6 +371,36 @@ beforeAll(async () => {
         rsvp: 'RSVP',
         more_info: 'More Information',
       },
+      recurrence: {
+        every_day: 'Every day',
+        every_n_days: 'Every {{n}} days',
+        weekly_every_week: 'Every week',
+        weekly_on_days: 'Weekly on {{days}}',
+        every_n_weeks: 'Every {{n}} weeks',
+        every_n_weeks_on_days: 'Every {{n}} weeks on {{days}}',
+        monthly: 'Monthly',
+        every_n_months: 'Every {{n}} months',
+        nth_weekday_of_month: 'The {{ordinal}} {{day}} of every month',
+        nth_weekday_every_n_months: 'The {{ordinal}} {{day}} every {{n}} months',
+        yearly: 'Yearly',
+        every_n_years: 'Every {{n}} years',
+        days: {
+          MO: 'Monday',
+          TU: 'Tuesday',
+          WE: 'Wednesday',
+          TH: 'Thursday',
+          FR: 'Friday',
+          SA: 'Saturday',
+          SU: 'Sunday',
+        },
+        ordinals: {
+          1: 'first',
+          2: 'second',
+          3: 'third',
+          4: 'fourth',
+          '-1': 'last',
+        },
+      },
     }, true, true);
   }
 });
@@ -368,7 +418,7 @@ describe('eventInstance breadcrumb locale behaviour', () => {
     mockEnd = null;
     mockEventName = 'Test Event';
     mockSeries = null;
-    mockSchedules = [];
+    mockRecurrenceSummary = null;
     mockSourceCalendar = null;
     mockExternalUrl = null;
     mockUrlPrompt = null;
@@ -452,7 +502,7 @@ describe('eventInstance category badge locale behaviour', () => {
     mockEnd = null;
     mockEventName = 'Test Event';
     mockSeries = null;
-    mockSchedules = [];
+    mockRecurrenceSummary = null;
     mockSourceCalendar = null;
     mockExternalUrl = null;
     mockUrlPrompt = null;
@@ -639,7 +689,7 @@ describe('eventInstance location display', () => {
     mockEnd = null;
     mockEventName = 'Test Event';
     mockSeries = null;
-    mockSchedules = [];
+    mockRecurrenceSummary = null;
     mockSourceCalendar = null;
     mockExternalUrl = null;
     mockUrlPrompt = null;
@@ -823,7 +873,7 @@ describe('eventInstance end time display', () => {
     mockEnd = null;
     mockEventName = 'Test Event';
     mockSeries = null;
-    mockSchedules = [];
+    mockRecurrenceSummary = null;
     mockSourceCalendar = null;
     mockExternalUrl = null;
     mockUrlPrompt = null;
@@ -909,7 +959,7 @@ describe('eventInstance document.title', () => {
     mockEnd = null;
     mockEventName = 'Test Event';
     mockSeries = null;
-    mockSchedules = [];
+    mockRecurrenceSummary = null;
     mockSourceCalendar = null;
     mockIsCancelled = false;
     document.title = 'Pavillion'; // Reset to default before each test
@@ -954,7 +1004,7 @@ describe('eventInstance series link display', () => {
     mockEnd = null;
     mockEventName = 'Test Event';
     mockSeries = null;
-    mockSchedules = [];
+    mockRecurrenceSummary = null;
     mockSourceCalendar = null;
     mockExternalUrl = null;
     mockUrlPrompt = null;
@@ -1061,7 +1111,7 @@ describe('eventInstance recurrence display', () => {
     mockEnd = null;
     mockEventName = 'Test Event';
     mockSeries = null;
-    mockSchedules = [];
+    mockRecurrenceSummary = null;
     mockSourceCalendar = null;
     mockExternalUrl = null;
     mockUrlPrompt = null;
@@ -1073,8 +1123,8 @@ describe('eventInstance recurrence display', () => {
     vi.clearAllMocks();
   });
 
-  it('should not show recurrence badge when event has no schedules', async () => {
-    mockSchedules = [];
+  it('should not show recurrence badge when recurrenceSummary is null', async () => {
+    mockRecurrenceSummary = null;
 
     const wrapper = await mountInstance(
       '/view/test_calendar/events/evt-1/inst-1',
@@ -1085,8 +1135,8 @@ describe('eventInstance recurrence display', () => {
     wrapper.unmount();
   });
 
-  it('should show recurrence badge when event has a weekly schedule', async () => {
-    mockSchedules = [makeScheduleObject('weekly', ['SA'])];
+  it('should show recurrence badge when summary is a weekly-on-day intent', async () => {
+    mockRecurrenceSummary = makeRecurrenceSummary('recurrence.weekly_on_days', { days: ['SA'] });
 
     const wrapper = await mountInstance(
       '/view/test_calendar/events/evt-1/inst-1',
@@ -1099,8 +1149,8 @@ describe('eventInstance recurrence display', () => {
     wrapper.unmount();
   });
 
-  it('should show recurrence badge when event has a daily schedule', async () => {
-    mockSchedules = [makeScheduleObject('daily')];
+  it('should show recurrence badge when summary is a daily intent', async () => {
+    mockRecurrenceSummary = makeRecurrenceSummary('recurrence.every_day');
 
     const wrapper = await mountInstance(
       '/view/test_calendar/events/evt-1/inst-1',
@@ -1113,8 +1163,8 @@ describe('eventInstance recurrence display', () => {
     wrapper.unmount();
   });
 
-  it('should show recurrence sidebar card with human-readable text', async () => {
-    mockSchedules = [makeScheduleObject('weekly', ['MO', 'WE'])];
+  it('should show recurrence sidebar card joining multi-day lists via Intl.ListFormat', async () => {
+    mockRecurrenceSummary = makeRecurrenceSummary('recurrence.weekly_on_days', { days: ['MO', 'WE'] });
 
     const wrapper = await mountInstance(
       '/view/test_calendar/events/evt-1/inst-1',
@@ -1123,32 +1173,42 @@ describe('eventInstance recurrence display', () => {
 
     const card = wrapper.find('.recurrence-card');
     expect(card.exists()).toBe(true);
-    expect(card.find('.recurrence-text').text()).toContain('Monday');
-    expect(card.find('.recurrence-text').text()).toContain('Wednesday');
+    const text = card.find('.recurrence-text').text();
+    expect(text).toContain('Monday');
+    expect(text).toContain('Wednesday');
+    // Intl.ListFormat should produce "Monday and Wednesday" in en locale,
+    // not a hardcoded comma-joined list.
+    expect(text).toMatch(/Monday and Wednesday/);
     wrapper.unmount();
   });
 
-  it('should not show recurrence sidebar card when event has no schedules', async () => {
-    mockSchedules = [];
+  it('should resolve ordinal integer and day code for nth-weekday intents', async () => {
+    mockRecurrenceSummary = makeRecurrenceSummary('recurrence.nth_weekday_of_month', {
+      ordinal: 1,
+      day: 'MO',
+    });
 
     const wrapper = await mountInstance(
       '/view/test_calendar/events/evt-1/inst-1',
       (path) => path,
     );
 
-    expect(wrapper.find('.recurrence-card').exists()).toBe(false);
+    const card = wrapper.find('.recurrence-card');
+    expect(card.exists()).toBe(true);
+    const text = card.find('.recurrence-text').text();
+    expect(text).toContain('first');
+    expect(text).toContain('Monday');
     wrapper.unmount();
   });
 
-  it('should not show recurrence badge or card for schedule with null frequency', async () => {
-    mockSchedules = [makeScheduleObject(null)];
+  it('should not show recurrence sidebar card when recurrenceSummary is null', async () => {
+    mockRecurrenceSummary = null;
 
     const wrapper = await mountInstance(
       '/view/test_calendar/events/evt-1/inst-1',
       (path) => path,
     );
 
-    expect(wrapper.find('.recurrence-badge').exists()).toBe(false);
     expect(wrapper.find('.recurrence-card').exists()).toBe(false);
     wrapper.unmount();
   });
@@ -1163,7 +1223,7 @@ describe('eventInstance source calendar pill', () => {
     mockEnd = null;
     mockEventName = 'Test Event';
     mockSeries = null;
-    mockSchedules = [];
+    mockRecurrenceSummary = null;
     mockSourceCalendar = null;
     mockExternalUrl = null;
     mockUrlPrompt = null;
@@ -1283,7 +1343,7 @@ describe('event instance external URL CTA button', () => {
     mockEnd = null;
     mockEventName = 'Test Event';
     mockSeries = null;
-    mockSchedules = [];
+    mockRecurrenceSummary = null;
     mockSourceCalendar = null;
     mockExternalUrl = null;
     mockUrlPrompt = null;
@@ -1416,7 +1476,7 @@ describe('eventInstance cancelled badge', () => {
     mockEnd = null;
     mockEventName = 'Test Event';
     mockSeries = null;
-    mockSchedules = [];
+    mockRecurrenceSummary = null;
     mockSourceCalendar = null;
     mockExternalUrl = null;
     mockUrlPrompt = null;

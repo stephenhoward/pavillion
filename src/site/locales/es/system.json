@@ -113,5 +113,35 @@
         "field_error_description": "Por favor proporciona una descripción.",
         "field_error_email": "Por favor ingresa una dirección de correo electrónico válida.",
         "close_dialog": "Cerrar diálogo"
+    },
+    "recurrence": {
+        "every_day": "Todos los días",
+        "every_n_days": "Cada {{n}} días",
+        "weekly_every_week": "Todas las semanas",
+        "weekly_on_days": "Semanalmente los {{days}}",
+        "every_n_weeks": "Cada {{n}} semanas",
+        "every_n_weeks_on_days": "Cada {{n}} semanas los {{days}}",
+        "monthly": "Mensualmente",
+        "every_n_months": "Cada {{n}} meses",
+        "nth_weekday_of_month": "El {{ordinal}} {{day}} de cada mes",
+        "nth_weekday_every_n_months": "El {{ordinal}} {{day}} cada {{n}} meses",
+        "yearly": "Anualmente",
+        "every_n_years": "Cada {{n}} años",
+        "days": {
+            "MO": "lunes",
+            "TU": "martes",
+            "WE": "miércoles",
+            "TH": "jueves",
+            "FR": "viernes",
+            "SA": "sábado",
+            "SU": "domingo"
+        },
+        "ordinals": {
+            "1": "primer",
+            "2": "segundo",
+            "3": "tercer",
+            "4": "cuarto",
+            "-1": "último"
+        }
     }
 }

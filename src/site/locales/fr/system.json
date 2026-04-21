@@ -105,5 +105,35 @@
         "error_validation": "Veuillez remplir tous les champs obligatoires.",
         "error_description_too_long": "La description doit contenir 2000 caractères ou moins.",
         "close_dialog": "Fermer la boîte de dialogue"
+    },
+    "recurrence": {
+        "every_day": "Tous les jours",
+        "every_n_days": "Tous les {{n}} jours",
+        "weekly_every_week": "Toutes les semaines",
+        "weekly_on_days": "Chaque semaine le {{days}}",
+        "every_n_weeks": "Toutes les {{n}} semaines",
+        "every_n_weeks_on_days": "Toutes les {{n}} semaines le {{days}}",
+        "monthly": "Tous les mois",
+        "every_n_months": "Tous les {{n}} mois",
+        "nth_weekday_of_month": "Le {{ordinal}} {{day}} de chaque mois",
+        "nth_weekday_every_n_months": "Le {{ordinal}} {{day}} tous les {{n}} mois",
+        "yearly": "Tous les ans",
+        "every_n_years": "Tous les {{n}} ans",
+        "days": {
+            "MO": "lundi",
+            "TU": "mardi",
+            "WE": "mercredi",
+            "TH": "jeudi",
+            "FR": "vendredi",
+            "SA": "samedi",
+            "SU": "dimanche"
+        },
+        "ordinals": {
+            "1": "premier",
+            "2": "deuxième",
+            "3": "troisième",
+            "4": "quatrième",
+            "-1": "dernier"
+        }
     }
 }

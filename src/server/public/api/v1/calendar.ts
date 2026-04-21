@@ -2,6 +2,8 @@ import express, { Request, Response, Application } from 'express';
 import PublicCalendarInterface from '../../interface';
 import { SeriesNotFoundError } from '@/common/exceptions/series';
 import { logError } from '@/server/common/helper/error-logger';
+import { CalendarEventSchedule } from '@/common/model/events';
+import { getRecurrenceSummary } from '@/common/utils/recurrence-text';
 
 /**
  * Strips sensitive fields from a defaultEventImage object for public responses.
@@ -17,6 +19,56 @@ function stripDefaultEventImage(calendarObj: Record<string, any>): Record<string
       mimeType: calendarObj.defaultEventImage.mimeType,
     },
   };
+}
+
+/**
+ * Shapes a raw event object (from CalendarEvent.toObject()) for public consumption.
+ *
+ * Responsibilities:
+ *   - Removes `schedules[]` so internal recurrence-row details (including
+ *     hideFromPublic and isException cancellation metadata) cannot leak.
+ *   - Removes the legacy English-only `recurrenceText` field if present.
+ *   - Adds `isRecurring: boolean`, derived from whether the event has any
+ *     non-exclusion schedule with a frequency.
+ *   - Adds `recurrenceSummary: { key, params } | null` so the presentation
+ *     layer can render a localized recurrence phrase.
+ *   - Projects `media` to `{ id, mimeType }` only — internal fields such as
+ *     calendarId, sha256, originalFilename, fileSize, and status are removed.
+ *
+ * CalendarEventSchedule.toObject() on the shared model remains the full
+ * authenticated shape; shaping here is strictly the public API layer's
+ * responsibility (per DEC-003 domain boundaries and DEC-004 privacy-first).
+ */
+function toPublicEventObject(eventObj: Record<string, any>): Record<string, any> {
+  const rawSchedules = Array.isArray(eventObj.schedules) ? eventObj.schedules : [];
+
+  // Rehydrate schedules into model instances so getRecurrenceSummary can read
+  // typed fields (frequency, interval, byDay, isExclusion) regardless of the
+  // caller having already passed a plain object or a model instance.
+  const scheduleModels: CalendarEventSchedule[] = rawSchedules.map((s: any) =>
+    s instanceof CalendarEventSchedule ? s : CalendarEventSchedule.fromObject(s),
+  );
+  const summary = getRecurrenceSummary(scheduleModels);
+  const isRecurring = summary !== null;
+
+  // Strip schedules and recurrenceText from the output; build a fresh object
+  // so downstream spread/mutation cannot reintroduce internal fields.
+  const publicObj: Record<string, any> = {
+    ...eventObj,
+    isRecurring,
+    recurrenceSummary: summary,
+  };
+  delete publicObj.schedules;
+  delete publicObj.recurrenceText;
+
+  if (publicObj.media) {
+    publicObj.media = {
+      id: publicObj.media.id,
+      mimeType: publicObj.media.mimeType,
+    };
+  }
+
+  return publicObj;
 }
 
 export default class CalendarRoutes {
@@ -152,7 +204,7 @@ export default class CalendarRoutes {
 
       res.json({
         ...series.toObject(),
-        events: events.map(event => event.toObject()),
+        events: events.map(event => toPublicEventObject(event.toObject())),
         pagination: {
           total,
           limit,
@@ -256,10 +308,7 @@ export default class CalendarRoutes {
         const obj = instance.toObject();
         return {
           ...obj,
-          event: {
-            ...obj.event,
-            isRecurring: (instance.event as any).isRecurring ?? false,
-          },
+          event: toPublicEventObject(obj.event),
         };
       }));
     }
@@ -293,7 +342,7 @@ export default class CalendarRoutes {
     const eventId = req.params.id;
     const event = await this.service.getEventById(eventId);
     if ( event ) {
-      res.json(event.toObject());
+      res.json(toPublicEventObject(event.toObject()));
     }
     else {
       res.status(404).json({
@@ -310,10 +359,7 @@ export default class CalendarRoutes {
       const obj = instance.toObject();
       res.json({
         ...obj,
-        event: {
-          ...obj.event,
-          recurrenceText: (instance.event as any).recurrenceText ?? null,
-        },
+        event: toPublicEventObject(obj.event),
       });
     }
     else {
