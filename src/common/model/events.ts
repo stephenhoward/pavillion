@@ -382,6 +382,10 @@ class CalendarEventSchedule extends Model {
   interval: number = 0;
   byDay: string[] = [];
   isExclusion: boolean = false;
+  // Distinguishes EXDATE-style silent exclusion (true) from RECURRENCE-ID
+  // cancellation override (false). Default true preserves prior EXDATE-only
+  // semantics. Only meaningful when isExclusion = true.
+  hideFromPublic: boolean = true;
 
   /**
    * Constructor for CalendarEventSchedule.
@@ -434,6 +438,9 @@ class CalendarEventSchedule extends Model {
     schedule.count = obj.count;
     schedule.byDay = obj.byDay;
     schedule.isExclusion = obj.isException;
+    // Default to true to preserve prior EXDATE-only semantics when the field
+    // is absent from older serialized payloads.
+    schedule.hideFromPublic = obj.hideFromPublic ?? true;
 
     if ( obj.eventEndTime ) {
       const parsed = DateTime.fromISO(obj.eventEndTime);
@@ -461,6 +468,7 @@ class CalendarEventSchedule extends Model {
       count: this.count,
       byDay: this.byDay,
       isException: this.isExclusion,
+      hideFromPublic: this.hideFromPublic,
     };
   }
 }

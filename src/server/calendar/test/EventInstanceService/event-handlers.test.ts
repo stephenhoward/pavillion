@@ -169,6 +169,91 @@ describe('CalendarEventHandlers', () => {
     });
   });
 
+  describe('eventInstanceCancelled handler', () => {
+    it('should rebuild instances and re-emit eventUpdated for AP outbound', async () => {
+      const event = createTestEvent('event-1', 'calendar-1');
+      const calendar = new Calendar('calendar-1', 'test-calendar');
+
+      const eventUpdatedSpy = sandbox.spy();
+      eventBus.on('eventUpdated', eventUpdatedSpy);
+
+      eventBus.emit('eventInstanceCancelled', {
+        event,
+        calendar,
+        hideFromPublic: true,
+      });
+
+      await new Promise(resolve => setTimeout(resolve, 10));
+
+      // The cancel handler calls buildEventInstances directly and also
+      // re-emits eventUpdated, whose own handler calls buildEventInstances
+      // again — hence 2 calls.
+      expect(mockService.buildEventInstances.callCount).toBe(2);
+      expect(mockService.buildEventInstances.firstCall.args[0]).toBe(event);
+      // Similarly, rebuildAllRepostInstances is called by our handler and
+      // again by the downstream eventUpdated handler.
+      expect(mockService.rebuildAllRepostInstances.callCount).toBe(2);
+      // eventUpdated is re-emitted so the ActivityPub handler dispatches
+      // the outbound Update(Event) activity.
+      expect(eventUpdatedSpy.calledOnce).toBe(true);
+      expect(eventUpdatedSpy.firstCall.args[0].calendar).toBe(calendar);
+      expect(eventUpdatedSpy.firstCall.args[0].event).toBe(event);
+    });
+
+    it('should skip when calendar is missing from payload', async () => {
+      const event = createTestEvent('event-1', 'calendar-1');
+
+      eventBus.emit('eventInstanceCancelled', {
+        event,
+        calendar: null,
+        hideFromPublic: true,
+      });
+
+      await new Promise(resolve => setTimeout(resolve, 10));
+
+      expect(mockService.buildEventInstances.called).toBe(false);
+      expect(mockService.rebuildAllRepostInstances.called).toBe(false);
+    });
+  });
+
+  describe('eventInstanceRestored handler', () => {
+    it('should rebuild instances and re-emit eventUpdated for AP outbound', async () => {
+      const event = createTestEvent('event-1', 'calendar-1');
+      const calendar = new Calendar('calendar-1', 'test-calendar');
+
+      const eventUpdatedSpy = sandbox.spy();
+      eventBus.on('eventUpdated', eventUpdatedSpy);
+
+      eventBus.emit('eventInstanceRestored', {
+        event,
+        calendar,
+      });
+
+      await new Promise(resolve => setTimeout(resolve, 10));
+
+      // Same fan-out as eventInstanceCancelled: direct build + downstream
+      // eventUpdated build.
+      expect(mockService.buildEventInstances.callCount).toBe(2);
+      expect(mockService.rebuildAllRepostInstances.callCount).toBe(2);
+      expect(eventUpdatedSpy.calledOnce).toBe(true);
+      expect(eventUpdatedSpy.firstCall.args[0].calendar).toBe(calendar);
+      expect(eventUpdatedSpy.firstCall.args[0].event).toBe(event);
+    });
+
+    it('should skip when event id is missing from payload', async () => {
+      const calendar = new Calendar('calendar-1', 'test-calendar');
+
+      eventBus.emit('eventInstanceRestored', {
+        event: { id: null },
+        calendar,
+      });
+
+      await new Promise(resolve => setTimeout(resolve, 10));
+
+      expect(mockService.buildEventInstances.called).toBe(false);
+    });
+  });
+
   describe('eventUnreposted handler', () => {
     it('should call removeRepostInstances with eventId and calendarId', async () => {
       // Note: eventUnreposted payload is intentionally asymmetric with eventReposted.

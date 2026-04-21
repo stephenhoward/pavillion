@@ -81,6 +81,7 @@
     "event_accessibility_event": "Event Accessibility",
     "event_accessibility_venue": "Venue Accessibility",
     "event_recurring": "Recurring Event",
+    "event_cancelled": "Cancelled",
     "event_add_to_calendar": "Add to Calendar",
     "event_source_calendar": "Source Calendar",
     "event_source_calendar_label": "View source calendar {{name}}",

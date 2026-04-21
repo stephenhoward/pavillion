@@ -2,7 +2,7 @@
 import { computed } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import { DateTime } from 'luxon';
-import { Calendar, MapPin, Repeat } from 'lucide-vue-next';
+import { Calendar, CalendarX, MapPin, Repeat } from 'lucide-vue-next';
 import EventImage from './event-image.vue';
 import { useLocalizedContent } from '@/site/composables/useLocalizedContent';
 import { useLocale } from '@/site/composables/useLocale';
@@ -73,6 +73,15 @@ const isRecurring = computed(() => {
 });
 
 /**
+ * Returns true when this specific occurrence has been cancelled by the calendar owner.
+ * The server-side filter hides cancellations that the owner has marked hideFromPublic,
+ * so any isCancelled=true instance reaching this component should render the badge.
+ */
+const isCancelled = computed(() => {
+  return props.instance.isCancelled === true;
+});
+
+/**
  * Returns the effective media for the event card.
  * Fallback logic: event.media ?? (isRepost ? null : defaultImage) ?? null
  * Reposted events do NOT get the local calendar's default image.
@@ -119,7 +128,10 @@ const detailPath = computed(() => {
 </script>
 
 <template>
-  <article class="event-card">
+  <article
+    class="event-card"
+    :class="{ 'is-cancelled': isCancelled }"
+  >
     <div class="card-image">
       <EventImage
         :media="media"
@@ -179,6 +191,17 @@ const detailPath = computed(() => {
           aria-hidden="true"
         />
         {{ t('event_recurring') }}
+      </span>
+      <span
+        v-if="isCancelled"
+        class="cancelled-badge"
+        role="status"
+      >
+        <CalendarX
+          :size="14"
+          aria-hidden="true"
+        />
+        {{ t('event_cancelled') }}
       </span>
     </div>
 
@@ -317,6 +340,53 @@ const detailPath = computed(() => {
   @include public-dark-mode {
     background: rgba(30, 30, 35, 0.85);
     color: $public-text-primary-dark;
+  }
+}
+
+// ================================================================
+// CANCELLED BADGE + DE-EMPHASIS
+// ================================================================
+
+.cancelled-badge {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.625rem;
+  border-radius: $public-radius-full;
+  font-size: $public-font-size-xs;
+  font-weight: $public-font-weight-semibold;
+  background: $public-error-light;
+  color: #fff;
+  white-space: nowrap;
+  text-transform: uppercase;
+  letter-spacing: $public-letter-spacing-wide;
+
+  @include public-dark-mode {
+    background: $public-error-dark;
+    color: $public-bg-primary-dark;
+  }
+}
+
+// De-emphasis: desaturate content but keep the cancelled badge prominent.
+// Also strike-through the title so the cancelled state is not
+// communicated by color alone (accessibility).
+.event-card.is-cancelled {
+  .card-image :deep(.event-image),
+  .no-image-fallback {
+    opacity: 0.55;
+    filter: grayscale(0.6);
+  }
+
+  .event-card-content {
+    opacity: 0.7;
+  }
+
+  .event-title-link {
+    text-decoration: line-through;
+    text-decoration-thickness: 2px;
   }
 }
 

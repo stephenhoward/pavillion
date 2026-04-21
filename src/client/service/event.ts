@@ -1,9 +1,21 @@
+import axios from 'axios';
 import { CalendarEvent } from '@/common/model/events';
 import { EventLocation } from '@/common/model/location';
 import { useEventStore } from '@/client/stores/eventStore';
 import ModelService from '@/client/service/models';
 import { Calendar } from '@/common/model/calendar';
 import { validateAndEncodeId } from '@/client/service/utils';
+
+export interface UpcomingOccurrence {
+  start: string;          // ISO-8601 datetime
+  state: 'active' | 'cancelled-shown' | 'hidden';
+  scheduleId: string | null;
+}
+
+export interface UpcomingOccurrencesResult {
+  occurrences: UpcomingOccurrence[];
+  hasMore: boolean;
+}
 
 export default class EventService {
   store: ReturnType<typeof useEventStore>;
@@ -161,6 +173,79 @@ export default class EventService {
     }
     catch (error) {
       console.error('Error unsharing reposted event:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Fetch upcoming occurrences for a recurring event computed from its
+   * RRuleSet on the server. Independent of the materialization horizon —
+   * the caller controls the window via (after, limit).
+   *
+   * @param eventId The recurring event id
+   * @param after ISO-8601 datetime; defaults to server "now" when omitted
+   * @param limit Max occurrences to return (default server-side: 10)
+   */
+  async listUpcomingOccurrences(
+    eventId: string,
+    after?: string,
+    limit?: number,
+  ): Promise<UpcomingOccurrencesResult> {
+    const encodedEventId = validateAndEncodeId(eventId, 'Event ID');
+    const params = new URLSearchParams();
+    if (after) params.append('after', after);
+    if (limit) params.append('limit', String(limit));
+    const suffix = params.toString() ? `?${params.toString()}` : '';
+
+    try {
+      const response = await axios.get(
+        `/api/v1/events/${encodedEventId}/upcoming-occurrences${suffix}`,
+      );
+      return response.data as UpcomingOccurrencesResult;
+    }
+    catch (error) {
+      console.error('Error listing upcoming occurrences:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Cancel a specific occurrence of a recurring event by its start date.
+   * Server validates the date matches the RRuleSet; mismatched dates throw
+   * a 422.
+   */
+  async cancelOccurrence(
+    eventId: string,
+    start: string,
+    hideFromPublic: boolean,
+  ): Promise<void> {
+    const encodedEventId = validateAndEncodeId(eventId, 'Event ID');
+    try {
+      await axios.post(
+        `/api/v1/events/${encodedEventId}/occurrences/cancel`,
+        { start, hideFromPublic },
+      );
+    }
+    catch (error) {
+      console.error('Error cancelling event occurrence:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Restore a previously cancelled occurrence by its start date. Silent no-op
+   * server-side if the occurrence was never cancelled.
+   */
+  async restoreOccurrence(eventId: string, start: string): Promise<void> {
+    const encodedEventId = validateAndEncodeId(eventId, 'Event ID');
+    try {
+      await axios.delete(
+        `/api/v1/events/${encodedEventId}/occurrences/cancel`,
+        { data: { start } },
+      );
+    }
+    catch (error) {
+      console.error('Error restoring event occurrence:', error);
       throw error;
     }
   }

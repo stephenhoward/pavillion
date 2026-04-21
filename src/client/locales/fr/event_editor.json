@@ -1,0 +1,25 @@
+{
+  "cancellations": {
+    "panel_title": "Annulations",
+    "toggle_button": "Gérer les annulations",
+    "cancel_button": "Annuler",
+    "restore_button": "Restaurer",
+    "hide_toggle_label": "Masquer au public",
+    "hide_toggle_description": "Lorsqu'elle est activée, cette instance annulée ne sera pas affichée sur les calendriers publics ni fédérée.",
+    "cancelled_badge": "Annulé",
+    "hidden_badge": "Masqué",
+    "confirm_title": "Annuler cette instance ?",
+    "confirm_message": "Cela marquera l'occurrence sélectionnée comme annulée. Vous pourrez la restaurer plus tard.",
+    "confirm_submit": "Annuler l'instance",
+    "no_upcoming": "Aucune instance à venir à annuler.",
+    "aria_scroller": "Occurrences à venir",
+    "show_more_button": "Afficher plus",
+    "jump_label": "Aller au mois",
+    "jump_submit_button": "Aller",
+    "jump_placeholder": "AAAA-MM",
+    "no_further_occurrences": "Aucune autre occurrence",
+    "no_occurrences_after": "Aucune occurrence après {{month}}",
+    "start_from_today_button": "Commencer à partir d'aujourd'hui",
+    "loading": "Chargement…"
+  }
+}

@@ -107,6 +107,9 @@ let mockUrlPrompt: string | null = null;
 // Mutable event-level accessibility info
 let mockEventAccessibilityInfo: string = '';
 
+// Mutable isCancelled flag so tests can assert cancelled badge rendering
+let mockIsCancelled: boolean = false;
+
 vi.mock('@/site/service/calendar', () => {
   return {
     default: vi.fn().mockImplementation(() => ({
@@ -128,6 +131,7 @@ vi.mock('@/site/service/calendar', () => {
             hasSame: (_other: unknown, unit: string) => unit === 'day' ? true : false,
           },
           end: mockEnd,
+          isCancelled: mockIsCancelled,
           event: {
             content: (_lang: string) => ({ name: mockEventName, description: 'Description here', accessibilityInfo: mockEventAccessibilityInfo }),
             hasContent: (_lang: string) => true,
@@ -316,6 +320,7 @@ beforeAll(async () => {
             event_location: 'Location',
             event_source_calendar: 'Source Calendar',
             event_source_calendar_label: 'View source calendar {{name}}',
+            event_cancelled: 'Cancelled',
             url_prompt: {
               tickets: 'Tickets',
               rsvp: 'RSVP',
@@ -340,6 +345,7 @@ beforeAll(async () => {
       event_location: 'Location',
       event_source_calendar: 'Source Calendar',
       event_source_calendar_label: 'View source calendar {{name}}',
+      event_cancelled: 'Cancelled',
       url_prompt: {
         tickets: 'Tickets',
         rsvp: 'RSVP',
@@ -367,6 +373,7 @@ describe('eventInstance breadcrumb locale behaviour', () => {
     mockExternalUrl = null;
     mockUrlPrompt = null;
     mockEventAccessibilityInfo = '';
+    mockIsCancelled = false;
   });
 
   afterEach(() => {
@@ -450,6 +457,7 @@ describe('eventInstance category badge locale behaviour', () => {
     mockExternalUrl = null;
     mockUrlPrompt = null;
     mockEventAccessibilityInfo = '';
+    mockIsCancelled = false;
   });
 
   afterEach(() => {
@@ -636,6 +644,7 @@ describe('eventInstance location display', () => {
     mockExternalUrl = null;
     mockUrlPrompt = null;
     mockEventAccessibilityInfo = '';
+    mockIsCancelled = false;
   });
 
   afterEach(() => {
@@ -819,6 +828,7 @@ describe('eventInstance end time display', () => {
     mockExternalUrl = null;
     mockUrlPrompt = null;
     mockEventAccessibilityInfo = '';
+    mockIsCancelled = false;
   });
 
   afterEach(() => {
@@ -901,6 +911,7 @@ describe('eventInstance document.title', () => {
     mockSeries = null;
     mockSchedules = [];
     mockSourceCalendar = null;
+    mockIsCancelled = false;
     document.title = 'Pavillion'; // Reset to default before each test
   });
 
@@ -948,6 +959,7 @@ describe('eventInstance series link display', () => {
     mockExternalUrl = null;
     mockUrlPrompt = null;
     mockEventAccessibilityInfo = '';
+    mockIsCancelled = false;
   });
 
   afterEach(() => {
@@ -1054,6 +1066,7 @@ describe('eventInstance recurrence display', () => {
     mockExternalUrl = null;
     mockUrlPrompt = null;
     mockEventAccessibilityInfo = '';
+    mockIsCancelled = false;
   });
 
   afterEach(() => {
@@ -1155,6 +1168,7 @@ describe('eventInstance source calendar pill', () => {
     mockExternalUrl = null;
     mockUrlPrompt = null;
     mockEventAccessibilityInfo = '';
+    mockIsCancelled = false;
   });
 
   afterEach(() => {
@@ -1274,6 +1288,7 @@ describe('event instance external URL CTA button', () => {
     mockExternalUrl = null;
     mockUrlPrompt = null;
     mockEventAccessibilityInfo = '';
+    mockIsCancelled = false;
   });
 
   afterEach(() => {
@@ -1388,6 +1403,54 @@ describe('event instance external URL CTA button', () => {
     );
 
     expect(wrapper.find('.external-link-button').exists()).toBe(false);
+    wrapper.unmount();
+  });
+});
+
+describe('eventInstance cancelled badge', () => {
+  beforeEach(() => {
+    mockLocalizedPath.mockReset();
+    mockCurrentLocale.value = 'en';
+    mockCategories = [];
+    mockLocation = null;
+    mockEnd = null;
+    mockEventName = 'Test Event';
+    mockSeries = null;
+    mockSchedules = [];
+    mockSourceCalendar = null;
+    mockExternalUrl = null;
+    mockUrlPrompt = null;
+    mockEventAccessibilityInfo = '';
+    mockIsCancelled = false;
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('should render a cancelled badge on the detail header when isCancelled is true', async () => {
+    mockIsCancelled = true;
+
+    const wrapper = await mountInstance(
+      '/view/test_calendar/events/evt-1/inst-1',
+      (path) => path,
+    );
+
+    const badge = wrapper.find('.cancelled-badge');
+    expect(badge.exists()).toBe(true);
+    expect(badge.text()).toContain('Cancelled');
+    wrapper.unmount();
+  });
+
+  it('should not render the cancelled badge when isCancelled is false', async () => {
+    mockIsCancelled = false;
+
+    const wrapper = await mountInstance(
+      '/view/test_calendar/events/evt-1/inst-1',
+      (path) => path,
+    );
+
+    expect(wrapper.find('.cancelled-badge').exists()).toBe(false);
     wrapper.unmount();
   });
 });

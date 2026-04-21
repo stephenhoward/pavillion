@@ -263,9 +263,19 @@ class EventObject extends ActivityPubObject {
    * domain model constructor.
    *
    * @param apObject - Raw ActivityPub object from the wire
+   * @param options - Optional parsing context. When `actorUri` is provided, it is
+   *   used to origin-gate sensitive fields (currently `hideFromPublic` on schedules):
+   *   only the source instance may set cancellation state, so payloads from actors
+   *   whose domain differs from the event's origin domain have `hideFromPublic`
+   *   stripped from every schedule entry. Omit `actorUri` for legacy callers or
+   *   contexts where origin enforcement is handled elsewhere (e.g. calendar-actor
+   *   Update activities that already reject on domain mismatch).
    * @returns eventParams shape compatible with CalendarEvent.fromObject()
    */
-  static fromActivityPubObject(apObject: Record<string, any>): Record<string, any> {
+  static fromActivityPubObject(
+    apObject: Record<string, any>,
+    options: { actorUri?: string } = {},
+  ): Record<string, any> {
     // Spread entire input first; subsequent normalization overwrites handled keys
     const result: Record<string, any> = Object.assign({}, apObject);
 
@@ -383,6 +393,34 @@ class EventObject extends ActivityPubObject {
       result.schedules = [schedule];
     }
 
+    // --- Origin-gated schedule fields ---
+    // hideFromPublic (cancellation state) is a privileged field: only the source
+    // instance that owns the event may set it. When `options.actorUri` is
+    // provided and does not share the event's origin domain, strip
+    // `hideFromPublic` from every schedule entry. The rest of the event is
+    // allowed through so standard updates (name, summary, location, ...) from
+    // authorized non-origin actors (e.g. remote Person editors) continue to
+    // apply, but cancellation state cannot be forged across origins.
+    if (options.actorUri && Array.isArray(result.schedules) && result.schedules.length > 0) {
+      const eventOriginDomain = EventObject._extractOriginDomain(apObject);
+      const actorDomain = EventObject._safeExtractDomain(options.actorUri);
+      const originMismatch = !actorDomain || !eventOriginDomain || actorDomain !== eventOriginDomain;
+      if (originMismatch) {
+        result.schedules = result.schedules.map((s: Record<string, any>) => {
+          if (s && typeof s === 'object' && 'hideFromPublic' in s) {
+            const rest: Record<string, any> = {};
+            for (const key of Object.keys(s)) {
+              if (key !== 'hideFromPublic') {
+                rest[key] = s[key];
+              }
+            }
+            return rest;
+          }
+          return s;
+        });
+      }
+    }
+
     // --- Date extraction from startTime ---
     if (apObject.startTime && !result.date) {
       const parsed = DateTime.fromISO(apObject.startTime);
@@ -397,6 +435,39 @@ class EventObject extends ActivityPubObject {
     }
 
     return result;
+  }
+
+  /**
+   * Extracts the origin domain of an inbound event. Prefers the canonical AP
+   * `id` field (the event's own URI), falling back to `attributedTo` (the
+   * owning actor URI). Returns null when neither yields a parseable URL.
+   */
+  private static _extractOriginDomain(apObject: Record<string, any>): string | null {
+    const candidates = [apObject.id, apObject.attributedTo];
+    for (const candidate of candidates) {
+      const domain = EventObject._safeExtractDomain(candidate);
+      if (domain) {
+        return domain;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Parses a URI string and returns its hostname, or null for any malformed
+   * or non-string input. Never throws — callers use null to signal that
+   * domain-equality checks cannot be performed.
+   */
+  private static _safeExtractDomain(uri: unknown): string | null {
+    if (typeof uri !== 'string' || uri.length === 0) {
+      return null;
+    }
+    try {
+      return new URL(uri).hostname || null;
+    }
+    catch {
+      return null;
+    }
   }
 
   /**

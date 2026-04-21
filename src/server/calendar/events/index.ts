@@ -29,6 +29,48 @@ export interface EventUnrepostedPayload {
   calendarId: string;
 }
 
+/**
+ * Payload for the eventInstanceCancelled event bus emission.
+ * Emitted by EventInstanceService.cancelOccurrenceByDate when a calendar
+ * editor cancels a single occurrence of a (possibly recurring) event.
+ *
+ * Downstream responsibilities:
+ *   1. Rebuild the owner calendar's event_instance rows so the cancellation
+ *      is reflected in list/detail queries (via buildEventInstances).
+ *   2. Propagate the change to federation followers through the existing
+ *      AP Update(Event) outbound path (via a re-emission of `eventUpdated`,
+ *      which the ActivityPub domain handler listens on).
+ *
+ * Note on naming: the bus event name `eventInstanceCancelled` intentionally
+ * retains the legacy camelCase shape rather than the `{domain}:{resource}:{action}`
+ * convention, because ActivityPub domain handlers already subscribe to this
+ * exact name. Renaming would silently break federation propagation.
+ */
+export interface EventInstanceCancelledPayload {
+  calendar: Calendar;
+  event: CalendarEvent;
+  hideFromPublic: boolean;
+}
+
+/**
+ * Payload for the eventInstanceRestored event bus emission.
+ * Emitted by EventInstanceService.restoreOccurrenceByDate when a calendar
+ * editor reverses a previous occurrence cancellation.
+ *
+ * Downstream responsibilities match {@link EventInstanceCancelledPayload}:
+ * rebuild the owner's instances, and re-emit `eventUpdated` so the AP
+ * outbound Update(Event) is sent to followers.
+ *
+ * Note on naming: the bus event name `eventInstanceRestored` intentionally
+ * retains the legacy camelCase shape rather than the `{domain}:{resource}:{action}`
+ * convention, because ActivityPub domain handlers already subscribe to this
+ * exact name. Renaming would silently break federation propagation.
+ */
+export interface EventInstanceRestoredPayload {
+  calendar: Calendar;
+  event: CalendarEvent;
+}
+
 export default class CalendarEventHandlers implements DomainEventHandlers {
   private service: CalendarInterface;
 
@@ -70,6 +112,34 @@ export default class CalendarEventHandlers implements DomainEventHandlers {
         return;
       }
       await this.service.removeRepostInstances(e.eventId, e.calendarId);
+    });
+
+    eventBus.on('eventInstanceCancelled', async (e: EventInstanceCancelledPayload) => {
+      // Runtime guard: protect against malformed payloads missing the
+      // required event/calendar identity before rebuild + outbound emit.
+      if (!e.event?.id || !e.calendar?.id) {
+        return;
+      }
+      // Rebuild instances on the owning calendar so shown cancellations
+      // flip the materialized row's isCancelled flag at list/detail time
+      // and hidden cancellations drop the row entirely.
+      await this.service.buildEventInstances(e.event);
+      // Also refresh every local calendar that reposts this event.
+      await this.service.rebuildAllRepostInstances(e.event);
+      // Re-emit eventUpdated so the existing AP handler dispatches an
+      // outbound Update(Event) to federation followers. Payload shape
+      // matches ActivityPubEventUpdatedPayload.
+      eventBus.emit('eventUpdated', { calendar: e.calendar, event: e.event });
+    });
+
+    eventBus.on('eventInstanceRestored', async (e: EventInstanceRestoredPayload) => {
+      // Runtime guard: mirror the cancellation handler.
+      if (!e.event?.id || !e.calendar?.id) {
+        return;
+      }
+      await this.service.buildEventInstances(e.event);
+      await this.service.rebuildAllRepostInstances(e.event);
+      eventBus.emit('eventUpdated', { calendar: e.calendar, event: e.event });
     });
   }
 }

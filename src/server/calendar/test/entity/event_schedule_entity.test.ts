@@ -78,6 +78,28 @@ describe('EventScheduleEntity', () => {
       expect(entity.by_day).toBe('MO,WE,FR');
       expect(entity.is_exclusion).toBe(false);
     });
+
+    it('stores hideFromPublic on the entity (EXDATE semantics)', () => {
+      const startDate = DateTime.fromISO('2025-05-24T08:00:00.000', { zone: 'UTC' });
+      const schedule = new CalendarEventSchedule('sched-hide', startDate);
+      schedule.isExclusion = true;
+      schedule.hideFromPublic = true;
+
+      const entity = EventScheduleEntity.fromModel(schedule);
+
+      expect(entity.hide_from_public).toBe(true);
+    });
+
+    it('stores hideFromPublic = false for RECURRENCE-ID cancellation overrides', () => {
+      const startDate = DateTime.fromISO('2025-05-24T08:00:00.000', { zone: 'UTC' });
+      const schedule = new CalendarEventSchedule('sched-cancel', startDate);
+      schedule.isExclusion = true;
+      schedule.hideFromPublic = false;
+
+      const entity = EventScheduleEntity.fromModel(schedule);
+
+      expect(entity.hide_from_public).toBe(false);
+    });
   });
 
   describe('toModel', () => {
@@ -168,6 +190,25 @@ describe('EventScheduleEntity', () => {
       expect(model.startDate?.hour).toBe(14);
     });
 
+    it('reads hide_from_public onto the schedule model', () => {
+      const entity = EventScheduleEntity.build({
+        id: 'sched-hide-toModel',
+        timezone: 'UTC',
+        start_date: new Date('2025-05-24T08:00:00.000Z'),
+        end_date: null,
+        frequency: null,
+        interval: 0,
+        count: 0,
+        by_day: '',
+        is_exclusion: true,
+        hide_from_public: false,
+      });
+
+      const model = entity.toModel();
+
+      expect(model.hideFromPublic).toBe(false);
+    });
+
     it('handles null start_date and end_date gracefully', () => {
       const entity = EventScheduleEntity.build({
         id: 'sched-3',
@@ -218,6 +259,19 @@ describe('EventScheduleEntity', () => {
       expect(recovered.eventEndTime?.zoneName).toBe('America/Los_Angeles');
       expect(recovered.eventEndTime?.hour).toBe(17);
       expect(recovered.eventEndTime?.minute).toBe(30);
+    });
+
+    it('preserves hideFromPublic through fromModel -> toModel', () => {
+      const localStart = DateTime.fromISO('2025-05-24T08:00:00.000', { zone: 'UTC' });
+      const schedule = new CalendarEventSchedule('sched-rt-hide', localStart);
+      schedule.isExclusion = true;
+      schedule.hideFromPublic = false;
+
+      const entity = EventScheduleEntity.fromModel(schedule);
+      const recovered = entity.toModel();
+
+      expect(recovered.isExclusion).toBe(true);
+      expect(recovered.hideFromPublic).toBe(false);
     });
 
     it('preserves timezone info through fromModel -> toModel', () => {

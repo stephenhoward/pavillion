@@ -4,7 +4,7 @@ import { useTranslation } from 'i18next-vue';
 import { useRoute } from 'vue-router';
 import { DateTime } from 'luxon';
 import i18next from 'i18next';
-import { ArrowLeft, Calendar, Clock, Repeat, MapPin, Accessibility } from 'lucide-vue-next';
+import { ArrowLeft, Calendar, CalendarX, Clock, Repeat, MapPin, Accessibility } from 'lucide-vue-next';
 
 import CalendarService from '../service/calendar';
 import { useLocalizedContent } from '../composables/useLocalizedContent';
@@ -126,6 +126,14 @@ const isRemoteSourceCalendar = computed(() => {
 });
 
 /**
+ * Returns true when this specific occurrence has been cancelled by the calendar owner.
+ * Hidden cancellations are filtered server-side and should not reach this component.
+ */
+const isCancelled = computed(() => {
+  return state.instance?.isCancelled === true;
+});
+
+/**
  * Defense-in-depth safe external URL computed.
  * Returns the URL only if its protocol is http: or https:, else null.
  * Guards against javascript:, data:, and other unsafe schemes even if
@@ -225,6 +233,12 @@ onBeforeMount(async () => {
           :focal-point-y="state.instance.event.mediaFocalPointY"
           :zoom="state.instance.event.mediaZoom"
         />
+      </div>
+
+      <!-- Cancelled badge -->
+      <div v-if="isCancelled" class="cancelled-badge" role="status">
+        <CalendarX :size="14" aria-hidden="true" />
+        <span>{{ t('event_cancelled') }}</span>
       </div>
 
       <!-- Recurrence badge -->
@@ -500,6 +514,31 @@ onBeforeMount(async () => {
   @include public-dark-mode {
     background-color: rgba(30, 30, 35, 0.85);
     color: $public-text-primary-dark;
+  }
+}
+
+// ================================================================
+// CANCELLED BADGE
+// ================================================================
+
+.cancelled-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: $public-space-sm;
+  padding: $public-space-xs $public-space-md;
+  border-radius: $public-radius-full;
+  background-color: $public-error-light;
+  color: #fff;
+  font-size: $public-font-size-sm;
+  font-weight: $public-font-weight-semibold;
+  text-transform: uppercase;
+  letter-spacing: $public-letter-spacing-wide;
+  margin-bottom: $public-space-md;
+  margin-right: $public-space-sm;
+
+  @include public-dark-mode {
+    background-color: $public-error-dark;
+    color: $public-bg-primary-dark;
   }
 }
 

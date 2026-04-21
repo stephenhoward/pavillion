@@ -486,6 +486,168 @@ describe('updateEvent with schedules', () => {
 
 });
 
+describe('updateEvent exclusion preservation (reconcileSchedules)', () => {
+  let service: EventService;
+  let sandbox = sinon.createSandbox();
+  let getCalendarStub: sinon.SinonStub;
+  let editableCalendarsStub: sinon.SinonStub;
+  const cal = new Calendar('testCalendarId', 'testme');
+  const acct = new Account('testAccountId', 'testme', 'testme');
+  const eventId = '11111111-1111-4111-8111-111111111111';
+
+  beforeEach(() => {
+    service = new EventService(new EventEmitter());
+    getCalendarStub = sandbox.stub(service['calendarService'], 'getCalendar');
+    editableCalendarsStub = sandbox.stub(service['calendarService'], 'editableCalendarsForUser');
+    getCalendarStub.resolves(cal);
+    editableCalendarsStub.resolves([cal]);
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+  });
+
+  it('should preserve existing is_exclusion=true rows when payload contains only positive schedules (omit-case)', async () => {
+    // An event with one positive schedule and one exclusion/cancellation row.
+    const positiveEntity = EventScheduleEntity.build({
+      id: 'positiveScheduleId',
+      event_id: eventId,
+      frequency: EventFrequency.WEEKLY as string,
+      interval: 1,
+      is_exclusion: false,
+    });
+    const exclusionEntity = EventScheduleEntity.build({
+      id: 'exclusionScheduleId',
+      event_id: eventId,
+      is_exclusion: true,
+      hide_from_public: false,
+    });
+
+    sandbox.stub(EventEntity, 'findByPk').resolves(
+      EventEntity.build({ account_id: 'testAccountId', id: eventId, calendar_id: 'testCalendarId' }),
+    );
+    sandbox.stub(EventEntity.prototype, 'save');
+    const findSchedulesStub = sandbox.stub(EventScheduleEntity, 'findAll');
+    findSchedulesStub.resolves([positiveEntity, exclusionEntity]);
+    const updateScheduleStub = sandbox.stub(EventScheduleEntity.prototype, 'update');
+    updateScheduleStub.resolves();
+    const destroyStub = sandbox.stub(EventScheduleEntity, 'destroy');
+
+    const updated = await service.updateEvent(acct, eventId, {
+      schedules: [
+        { id: 'positiveScheduleId', frequency: EventFrequency.DAILY },
+      ],
+    });
+
+    // Positive row was updated; destroy was not called because the payload
+    // keeps the only existing positive. Exclusion row untouched.
+    expect(updateScheduleStub.called).toBe(true);
+    expect(destroyStub.called).toBe(false);
+
+    // Returned model includes both the updated positive and the preserved
+    // exclusion.
+    expect(updated.schedules.length).toBe(2);
+    const preservedExclusion = updated.schedules.find(s => s.isExclusion === true);
+    expect(preservedExclusion).toBeDefined();
+    expect(preservedExclusion?.id).toBe('exclusionScheduleId');
+  });
+
+  it('should scope destroy to positive rows only when payload clears schedules (omit-case with deletion)', async () => {
+    const positiveEntity = EventScheduleEntity.build({
+      id: 'positiveScheduleId',
+      event_id: eventId,
+      frequency: EventFrequency.WEEKLY as string,
+      is_exclusion: false,
+    });
+    const exclusionEntity = EventScheduleEntity.build({
+      id: 'exclusionScheduleId',
+      event_id: eventId,
+      is_exclusion: true,
+    });
+
+    sandbox.stub(EventEntity, 'findByPk').resolves(
+      EventEntity.build({ account_id: 'testAccountId', id: eventId, calendar_id: 'testCalendarId' }),
+    );
+    sandbox.stub(EventEntity.prototype, 'save');
+    sandbox.stub(EventScheduleEntity, 'findAll').resolves([positiveEntity, exclusionEntity]);
+    const destroyStub = sandbox.stub(EventScheduleEntity, 'destroy');
+
+    const updated = await service.updateEvent(acct, eventId, { schedules: [] });
+
+    // Destroy is called, but scoped to positive ids only and double-gated by
+    // event_id and is_exclusion=false.
+    expect(destroyStub.calledOnce).toBe(true);
+    const whereArg = destroyStub.firstCall.args[0].where;
+    expect(whereArg.event_id).toBe(eventId);
+    expect(whereArg.is_exclusion).toBe(false);
+    expect(whereArg.id).toEqual(['positiveScheduleId']);
+
+    // Exclusion row is preserved and returned on the model.
+    expect(updated.schedules.length).toBe(1);
+    expect(updated.schedules[0].isExclusion).toBe(true);
+    expect(updated.schedules[0].id).toBe('exclusionScheduleId');
+  });
+
+  it('should reject payload that includes a schedule with isException=true (include-case)', async () => {
+    sandbox.stub(EventEntity, 'findByPk').resolves(
+      EventEntity.build({ account_id: 'testAccountId', id: eventId, calendar_id: 'testCalendarId' }),
+    );
+    sandbox.stub(EventEntity.prototype, 'save');
+    const findSchedulesStub = sandbox.stub(EventScheduleEntity, 'findAll');
+    findSchedulesStub.resolves([]);
+
+    await expect(service.updateEvent(acct, eventId, {
+      schedules: [
+        {
+          start: new Date(),
+          end: new Date(),
+          isException: true,
+        },
+      ],
+    })).rejects.toThrow('Exclusion schedules cannot be created or modified through updateEvent');
+
+    // Payload rejection must be short-circuited: no findAll/destroy against
+    // the existing rows should run in the failure path. (findAll is inside
+    // reconcileSchedules, which throws on the first rejection loop.)
+    expect(findSchedulesStub.called).toBe(false);
+  });
+
+  it('should leave exclusions deleted after a restore (edit unrelated field post-restore)', async () => {
+    // Scenario: a cancellation was restored elsewhere (the exclusion row was
+    // deleted). Editing an unrelated field (e.g. content) must not recreate
+    // the exclusion, and the positive schedule must still update cleanly.
+    const positiveEntity = EventScheduleEntity.build({
+      id: 'positiveScheduleId',
+      event_id: eventId,
+      frequency: EventFrequency.WEEKLY as string,
+      is_exclusion: false,
+    });
+
+    sandbox.stub(EventEntity, 'findByPk').resolves(
+      EventEntity.build({ account_id: 'testAccountId', id: eventId, calendar_id: 'testCalendarId' }),
+    );
+    sandbox.stub(EventEntity.prototype, 'save');
+    // No exclusion row returned — it has been deleted by the restore flow.
+    sandbox.stub(EventScheduleEntity, 'findAll').resolves([positiveEntity]);
+    const destroyStub = sandbox.stub(EventScheduleEntity, 'destroy');
+    const findContentStub = sandbox.stub(EventContentEntity, 'findOne');
+    findContentStub.resolves(EventContentEntity.build({ event_id: eventId, language: 'en' }));
+    sandbox.stub(EventContentEntity.prototype, 'save');
+
+    // Editing content only — no schedules key in the payload at all. The
+    // reconcileSchedules helper is not invoked.
+    const updated = await service.updateEvent(acct, eventId, {
+      content: {
+        en: { name: 'newName', description: 'newDescription' },
+      },
+    });
+
+    expect(destroyStub.called).toBe(false);
+    // No exclusions are fabricated by the edit; schedules list is untouched.
+    expect(updated.schedules.some(s => s.isExclusion === true)).toBe(false);
+  });
+});
+
 describe('updateEvent with mediaId', () => {
   let service: EventService;
   let sandbox = sinon.createSandbox();

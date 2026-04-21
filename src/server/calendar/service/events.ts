@@ -791,11 +791,31 @@ class EventService {
   }
 
   /**
-     * updates the event with the provided id
-     * @param eventId - the id of the event to update
-     * @param eventParams - the parameters and values to update for the event
-     * @returns a promise that resolves to the Event
-     */
+   * Updates the event with the provided id.
+   *
+   * Schedule semantics — two disjoint classes of EventScheduleEntity rows
+   * coexist per event:
+   *
+   *   1. Positive schedules (is_exclusion=false): the RRULE-bearing rows
+   *      that define when the event recurs. These are owned by the event
+   *      editor and may be freely replaced from the request payload.
+   *
+   *   2. Exclusion schedules (is_exclusion=true): cancellation markers for
+   *      individual occurrences (created via the cancel-instance flow on
+   *      EventInstanceService). These are NOT owned by the generic edit
+   *      surface and must survive unrelated event edits. Clients must not
+   *      submit them through updateEvent; any payload that tries to do so
+   *      is rejected with a 400 ValidationError.
+   *
+   * Preservation of existing exclusion rows is delegated to
+   * {@link reconcileSchedules}, which loads all existing rows scoped
+   * strictly by event_id, separates them into the two classes, applies
+   * the payload's positive schedules, and leaves exclusions untouched.
+   *
+   * @param eventId - the id of the event to update
+   * @param eventParams - the parameters and values to update for the event
+   * @returns a promise that resolves to the Event
+   */
   async updateEvent(account: Account, eventId: string, eventParams:Record<string,any>): Promise<CalendarEvent> {
     // Validate eventId parameter
     if (!eventId || (typeof eventId === 'string' && eventId.trim() === '')) {
@@ -951,59 +971,7 @@ class EventService {
     }
 
     if ( eventParams.schedules ) {
-      let existingSchedules = await EventScheduleEntity.findAll({ where: { event_id: eventId } });
-      let existingScheduleIds = existingSchedules.map( s => s.id );
-
-      for( let schedule of eventParams.schedules ) {
-
-        if ( schedule.id ) {
-          let scheduleEntity = existingSchedules.find( s => s.id === schedule.id );
-
-          if ( ! scheduleEntity ) {
-            throw Error ('Schedule not found for event');
-          }
-
-          existingScheduleIds = existingScheduleIds.filter( id => id !== schedule.id );
-
-          // Parse incoming data through the model to get proper DateTime objects
-          // and correct property name mapping (start → startDate, end → endDate)
-          const parsed = CalendarEventSchedule.fromObject(schedule);
-
-          // For non-recurring events, sync endDate to eventEndTime (same as createEventSchedule)
-          if (!parsed.frequency && parsed.eventEndTime) {
-            parsed.endDate = parsed.eventEndTime;
-          }
-
-          const byDayValue = parsed.byDay !== undefined && parsed.byDay.length > 0
-            ? parsed.byDay.join(',')
-            : scheduleEntity.by_day;
-
-          // Use parsed model values for fields present in the request.
-          // For clearable fields (end_date, count, frequency), check the raw
-          // request keys to distinguish "explicitly cleared" from "not sent".
-          // Raw key names: start/end/eventEndTime/frequency/interval/count/isException
-          const toStorage = EventScheduleEntity.toStorageDate;
-          await scheduleEntity.update({
-            timezone: parsed.startDate?.zoneName ?? scheduleEntity.timezone,
-            start_date: toStorage(parsed.startDate) ?? scheduleEntity.start_date,
-            end_date: 'end' in schedule ? (toStorage(parsed.endDate) ?? null) : scheduleEntity.end_date,
-            event_end_time: 'eventEndTime' in schedule ? (toStorage(parsed.eventEndTime) ?? null) : scheduleEntity.event_end_time,
-            frequency: 'frequency' in schedule ? ((parsed.frequency as string) ?? null) : scheduleEntity.frequency,
-            interval: 'interval' in schedule ? (parsed.interval ?? 0) : scheduleEntity.interval,
-            count: 'count' in schedule ? (parsed.count ?? 0) : scheduleEntity.count,
-            by_day: byDayValue,
-            is_exclusion: 'isException' in schedule ? (parsed.isExclusion ?? false) : scheduleEntity.is_exclusion,
-          });
-          event.addSchedule(scheduleEntity.toModel());
-        }
-        else {
-          event.addSchedule(await this.createEventSchedule(eventId, schedule));
-        }
-      }
-
-      if ( existingScheduleIds.length > 0 ) {
-        await EventScheduleEntity.destroy({ where: { id: existingScheduleIds } });
-      }
+      await this.reconcileSchedules(eventId, eventParams.schedules, event);
     }
 
     // Handle media updates
@@ -1049,6 +1017,133 @@ class EventService {
 
     this.eventBus.emit('eventUpdated', { calendar, event });
     return event;
+  }
+
+  /**
+   * Reconciles the positive (RRULE-bearing) schedules of an event with the
+   * caller's incoming payload, while preserving any exclusion rows
+   * (is_exclusion=true) that already exist on the event.
+   *
+   * Two disjoint classes of EventScheduleEntity rows coexist per event:
+   *
+   *   - Positive schedules (is_exclusion=false) — the RRULE-bearing rows that
+   *     define when the event recurs. Owned by the generic event-edit surface
+   *     and fully replaced from the payload on each update.
+   *
+   *   - Exclusion schedules (is_exclusion=true) — per-occurrence cancellation
+   *     markers (EXDATE-style or RECURRENCE-ID overrides) produced by the
+   *     cancel-instance flow. These are NOT part of the generic edit surface;
+   *     editing unrelated event fields must never delete them.
+   *
+   * The caller must reject payloads containing is_exclusion=true entries
+   * before invoking this method. Scoping of every query/destroy is strictly
+   * by event_id to prevent cross-event leakage.
+   *
+   * @param eventId - the id of the event whose schedules are being reconciled
+   * @param incomingPositiveSchedules - the array of positive-schedule
+   *        payloads from the client (empty array clears all positives)
+   * @param event - the CalendarEvent domain model being mutated; positive
+   *        and preserved-exclusion schedules are added back to this model
+   */
+  async reconcileSchedules(
+    eventId: string,
+    incomingPositiveSchedules: any[],
+    event: CalendarEvent,
+  ): Promise<void> {
+    // Reject payloads that try to create or modify exclusion rows directly.
+    // Exclusions are only created via the cancel-instance flow; allowing them
+    // through updateEvent would let unrelated edits fabricate cancellations.
+    for (const s of incomingPositiveSchedules) {
+      if (s && s.isException === true) {
+        throw new ValidationError(
+          'Exclusion schedules cannot be created or modified through updateEvent',
+        );
+      }
+    }
+
+    // Load every schedule row for this event, scoped strictly by event_id
+    // (never by calendar or owner) to guarantee we only touch rows belonging
+    // to this event and can't leak into other events' cancellations.
+    const existingSchedules = await EventScheduleEntity.findAll({
+      where: { event_id: eventId },
+    });
+
+    // Separate existing rows by class so exclusions are kept completely
+    // outside the replace-from-payload codepath below.
+    const existingExclusions = existingSchedules.filter(s => s.is_exclusion === true);
+    const existingPositives = existingSchedules.filter(s => s.is_exclusion !== true);
+    let unseenPositiveIds = existingPositives.map(s => s.id);
+
+    for (const schedule of incomingPositiveSchedules) {
+      if (schedule.id) {
+        const scheduleEntity = existingPositives.find(s => s.id === schedule.id);
+
+        if (!scheduleEntity) {
+          // Either the id doesn't exist or it refers to an exclusion row,
+          // which the generic edit surface is not allowed to touch.
+          throw Error('Schedule not found for event');
+        }
+
+        unseenPositiveIds = unseenPositiveIds.filter(id => id !== schedule.id);
+
+        // Parse incoming data through the model to get proper DateTime objects
+        // and correct property name mapping (start → startDate, end → endDate)
+        const parsed = CalendarEventSchedule.fromObject(schedule);
+
+        // For non-recurring events, sync endDate to eventEndTime (same as createEventSchedule)
+        if (!parsed.frequency && parsed.eventEndTime) {
+          parsed.endDate = parsed.eventEndTime;
+        }
+
+        const byDayValue = parsed.byDay !== undefined && parsed.byDay.length > 0
+          ? parsed.byDay.join(',')
+          : scheduleEntity.by_day;
+
+        // Use parsed model values for fields present in the request.
+        // For clearable fields (end_date, count, frequency), check the raw
+        // request keys to distinguish "explicitly cleared" from "not sent".
+        // Raw key names: start/end/eventEndTime/frequency/interval/count.
+        // is_exclusion is intentionally NOT written from the payload: this
+        // helper is positive-only, and payload rejection above guarantees
+        // we never see isException=true here.
+        const toStorage = EventScheduleEntity.toStorageDate;
+        await scheduleEntity.update({
+          timezone: parsed.startDate?.zoneName ?? scheduleEntity.timezone,
+          start_date: toStorage(parsed.startDate) ?? scheduleEntity.start_date,
+          end_date: 'end' in schedule ? (toStorage(parsed.endDate) ?? null) : scheduleEntity.end_date,
+          event_end_time: 'eventEndTime' in schedule ? (toStorage(parsed.eventEndTime) ?? null) : scheduleEntity.event_end_time,
+          frequency: 'frequency' in schedule ? ((parsed.frequency as string) ?? null) : scheduleEntity.frequency,
+          interval: 'interval' in schedule ? (parsed.interval ?? 0) : scheduleEntity.interval,
+          count: 'count' in schedule ? (parsed.count ?? 0) : scheduleEntity.count,
+          by_day: byDayValue,
+        });
+        event.addSchedule(scheduleEntity.toModel());
+      }
+      else {
+        event.addSchedule(await this.createEventSchedule(eventId, schedule));
+      }
+    }
+
+    // Destroy only positive rows that were absent from the payload. The
+    // destroy clause is double-scoped (id list AND event_id AND
+    // is_exclusion=false) as defense-in-depth so a bug elsewhere can never
+    // turn this into a cross-event or cross-class delete.
+    if (unseenPositiveIds.length > 0) {
+      await EventScheduleEntity.destroy({
+        where: {
+          id: unseenPositiveIds,
+          event_id: eventId,
+          is_exclusion: false,
+        },
+      });
+    }
+
+    // Re-attach the preserved exclusion rows to the returned model so
+    // downstream consumers (and the emitted eventUpdated payload) see the
+    // full, accurate schedule list.
+    for (const exclusion of existingExclusions) {
+      event.addSchedule(exclusion.toModel());
+    }
   }
 
   /**

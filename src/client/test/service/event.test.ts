@@ -245,3 +245,4 @@ describe('createEvent', () => {
     await expect(service.saveEvent(event)).rejects.toThrow('API Error');
   });
 });
+
