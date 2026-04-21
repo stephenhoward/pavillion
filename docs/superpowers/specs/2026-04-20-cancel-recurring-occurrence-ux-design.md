@@ -36,31 +36,82 @@ data model already in place.
 
 ### Interaction model
 
-Pure discovery. The user sees a list of upcoming occurrences and picks one to
-cancel or restore. No free-form date entry — the user can only act on
-occurrences the RRule actually produces, so mismatched-date mistakes are
-impossible by construction.
+Pure discovery. The user sees occurrences and picks one to cancel or restore.
+No free-form date entry — the user can only act on occurrences the RRule
+actually produces, so mismatched-date mistakes are impossible by construction.
 
-Three navigation controls keep near-future and far-future occurrences both
-reachable:
+The list renders as a **horizontal, scroll-snapping row of occurrence cards**
+rather than a vertical list. Rationale:
 
-1. **Default list**: the next 10 occurrences, computed from the event's
-   `RRuleSet` regardless of materialization state.
-2. **"Show more" button**: appends the next 10 occurrences to the list.
-3. **"Jump to month…" control**: a month/year picker. Selecting a month
-   replaces the list with 10 occurrences starting from the first day of that
-   month. Used to reach far-future dates in a single action rather than many
-   "Show more" clicks.
+- Keeps the panel's vertical footprint fixed so the rest of the event editor
+  stays in view when the user is deep into the list.
+- Natural thumb-scroll interaction on mobile/touch; mouse-wheel horizontal or
+  on-card chevron controls on desktop.
+- The controls at the far right of the scroller (see below) stay one
+  consistent gesture away regardless of how many cards are loaded.
 
-Terminal states:
+Three controls drive navigation, placed **as trailing cards at the end of
+the scroller** so they appear naturally after the last occurrence:
+
+1. **Default row**: first 10 occurrences, computed from the event's
+   `RRuleSet` regardless of materialization state, rendered as cards.
+2. **"Show more" card**: the last trailing card. Click/tap appends the next
+   10 occurrences before it and keeps the "Show more" card at the end.
+3. **"Jump to month…" card**: second trailing card, positioned just before
+   "Show more". Contains a compact month/year input. Submitting replaces the
+   scroller contents with 10 occurrences starting from the first day of that
+   month, and returns scroll position to the start.
+
+Terminal states, rendered as replacements for the trailing cards:
 
 - Bounded recurrence (has `count` or `until`) where the list has reached the
-  end: show "No further occurrences" and hide the "Show more" button.
-- "Jump to month…" target where no occurrences follow: show "No occurrences
-  after [month]" with a link back to "Start from today".
+  end: "Show more" is replaced by a "No further occurrences" terminal card;
+  "Jump to month" remains available.
+- "Jump to month…" target where no occurrences follow: the scroller renders
+  a single "No occurrences after [month]" card with a "Start from today"
+  action that resets `anchor = now`.
 
-Existing cancellations render inline at their dates with badges
-(`cancelled-shown` or `hidden`), the same as today.
+Existing cancellations render inline at their dates as cards with badges
+(`cancelled-shown` or `hidden`), mixed chronologically with active
+occurrences.
+
+### Card layout
+
+Each occurrence card (and each trailing-control card) has a fixed width so
+scroll-snap points are predictable:
+
+- Width: `clamp(160px, 42vw, 220px)`. Touch viewports get ~2.3 cards visible
+  (encourages discoverability of the next card); desktop fits 5–6.
+- Height: uniform across all card kinds; set by the tallest content (a card
+  with badge + date + action button).
+- Gap: `var(--pav-space-sm)` between cards.
+- Card structure: date/time at top, state badge below (if non-active),
+  action button at the bottom. Control cards follow the same skeleton so
+  visual rhythm is preserved.
+
+Accessibility:
+
+- The scroll container has `role="region"` and an `aria-label` from the
+  i18n key `cancellations.scroller_label`.
+- Cards are focusable; Tab order walks left-to-right through cards, then
+  into trailing controls.
+- Keyboard: Left/Right arrows while focus is inside the scroller move focus
+  between cards and scroll the container with `scrollIntoView({ inline:
+  'nearest' })`. Home/End jump to first/last focusable card.
+- On desktop, when the content overflows, render small "scroll left" /
+  "scroll right" chevron buttons as an overlay outside the scroll region
+  (not inside) so they do not interfere with scroll-snap or focus order.
+  Chevrons are `aria-label`-ed and hidden from screen readers (scroll is
+  already keyboard-navigable).
+- `prefers-reduced-motion: reduce` disables scroll-snap smoothing (falls
+  back to `scroll-behavior: auto`).
+
+Responsive behavior:
+
+- On viewports narrower than `$breakpoint-sm`, cards shrink to the lower
+  bound of the clamp and the chevrons are hidden (touch-scroll only).
+- On viewports wider than `$breakpoint-lg`, cards cap at the upper bound so
+  they don't stretch awkwardly.
 
 ### Row states
 
@@ -200,20 +251,30 @@ const jumpMonth = ref<string>('');             // YYYY-MM input
 Behavior:
 
 - On mount: fetch 10 occurrences with `after = anchor`. Update `cursor` to
-  the last occurrence's `start`.
-- "Show more": fetch 10 with `after = cursor`; append to list; update
-  `cursor`. Hide the button when server reports `hasMore: false`.
-- "Jump to month": set `anchor = DateTime.fromFormat(jumpMonth, 'yyyy-MM').startOf('month')`,
+  the last occurrence's `start`. Scroll container starts at its left edge.
+- "Show more" card: fetch 10 with `after = cursor`; append to `occurrences`
+  before the trailing-control cards; update `cursor`. After the DOM updates,
+  scroll the first newly-appended card into view so the user sees their
+  new content without losing reference. When server reports
+  `hasMore: false`, the "Show more" card is replaced in-place by a
+  "No further occurrences" terminal card.
+- "Jump to month…" card: set
+  `anchor = DateTime.fromFormat(jumpMonth, 'yyyy-MM').startOf('month')`,
   replace `occurrences` with a fresh fetch from `anchor`, set
-  `cursor = occurrences.at(-1)?.start ?? anchor` so subsequent "Show more"
-  extends from the jump target correctly.
-- Cancel button: opens the existing `EventCancelConfirmModal`; on confirm,
-  calls `cancelOccurrence(eventId, occurrence.start, hideFromPublic)`;
-  mutates the row's `state` in place to `cancelled-shown` or `hidden` on
-  success. For `hidden` → that row moves out of the RRuleSet-produced list,
-  so replace the row with a hidden-badge variant inline (no refetch).
-- Restore button: calls `restoreOccurrence(eventId, occurrence.start)`;
-  mutates the row's `state` in place to `active`.
+  `cursor = occurrences.at(-1)?.start ?? anchor`, then scroll the container
+  back to its left edge (`scrollLeft = 0`). Empty result shows the single
+  "No occurrences after [month]" card described in Terminal states.
+- Cancel card action: opens the existing `EventCancelConfirmModal`; on
+  confirm, calls `cancelOccurrence(eventId, occurrence.start,
+  hideFromPublic)`; mutates the card's `state` in place to
+  `cancelled-shown` or `hidden` on success. No scroll reset — the card
+  stays at its current position.
+- Restore card action: calls `restoreOccurrence(eventId, occurrence.start)`;
+  mutates the card's `state` in place to `active`.
+- Scroll chevrons (desktop): `scrollBy({ left: ±cardWidth, behavior:
+  'smooth' })`. Hidden when `scrollLeft === 0` (left chevron) or
+  `scrollLeft + clientWidth >= scrollWidth` (right chevron), recomputed on
+  `scroll` and `resize` events.
 - The "cancelled" pill on the event row (events-tab) continues to derive
   from the event's `schedules` array (per commit 5973a64) — no change
   needed there.
@@ -289,17 +350,27 @@ event store but are not used by this panel.
 ### Component (`event-cancellations-panel.test.ts`, rewritten)
 
 - On mount: calls `listUpcomingOccurrences` with `after = now`,
-  `limit = 10`; renders 10 rows.
-- "Show more" click: calls service with `after = last.start`; appends 10
-  rows.
-- "Jump to month": calls service with `after = YYYY-MM-01T00:00:00`;
-  replaces rows.
-- Cancel row action: opens confirm modal; on confirm calls
-  `cancelOccurrence`; row state flips in place.
-- Restore row action: calls `restoreOccurrence`; row state flips in place.
-- `hasMore: false` from server: "Show more" hidden.
-- Empty response from "Jump to month" target: shows "No occurrences after
-  [month]" with "Start from today" link that resets `anchor = now`.
+  `limit = 10`; renders 10 cards inside the scroll container. Trailing
+  "Jump to month" and "Show more" cards are present.
+- "Show more" card click: calls service with `after = last.start`; appends
+  10 cards before the trailing controls; trailing controls remain at the
+  end of the scroller.
+- "Jump to month" submission: calls service with
+  `after = YYYY-MM-01T00:00:00`; replaces cards with the fresh set; scroll
+  container resets to `scrollLeft = 0`.
+- Cancel card action: opens confirm modal; on confirm calls
+  `cancelOccurrence`; card state flips in place (badge + action button
+  change without card reordering or refetch).
+- Restore card action: calls `restoreOccurrence`; card state flips to
+  `active` in place.
+- `hasMore: false` from server: "Show more" card is replaced by
+  "No further occurrences" terminal card; "Jump to month" card remains.
+- Empty response from "Jump to month" target: scroller renders single
+  "No occurrences after [month]" card with "Start from today" action that
+  resets `anchor = now`.
+- Keyboard: Right arrow from the last visible card moves focus to the next
+  card and scrolls it into view; Home returns focus and scroll to the first
+  card.
 - Event with no recurring schedule: panel is not rendered (gated by
   `hasRecurringSchedule` in `edit_event.vue`, unchanged).
 
