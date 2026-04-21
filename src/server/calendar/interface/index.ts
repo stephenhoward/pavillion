@@ -351,11 +351,12 @@ export default class CalendarInterface {
 
   /**
    * Get a single event instance with full schedule, location content, and category data.
-   * Augments the event with pre-computed recurrenceText.
+   * Schedules are loaded onto the model so the public API layer can compute
+   * `isRecurring` + `recurrenceSummary` via `toPublicEventObject` before
+   * stripping them from the response.
    *
    * @param instanceId - The UUID of the event instance
-   * @returns The event instance augmented with schedule detail and recurrence text,
-   *          or null if not found
+   * @returns The event instance augmented with schedule detail, or null if not found
    */
   async getEventInstanceWithDetails(instanceId: string): Promise<CalendarEventInstance | null> {
     return this.eventInstanceService.getEventInstanceWithDetails(instanceId);

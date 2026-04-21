@@ -6,8 +6,11 @@ import { EventEmitter } from 'events';
 import { DateTime } from 'luxon';
 
 import { Calendar } from '@/common/model/calendar';
-import { CalendarEvent } from '@/common/model/events';
+import { CalendarEvent, CalendarEventSchedule, EventFrequency } from '@/common/model/events';
 import CalendarEventInstance from '@/common/model/event_instance';
+import { EventSeries } from '@/common/model/event_series';
+import { EventSeriesContent } from '@/common/model/event_series_content';
+import { Media } from '@/common/model/media';
 import { testApp } from '@/server/common/test/lib/express';
 import CalendarRoutes from '@/server/public/api/v1/calendar';
 import PublicCalendarInterface from '@/server/public/interface';
@@ -264,6 +267,214 @@ describe('Public Events API - Search and Filtering', () => {
 
       expect(response.status).toBe(500);
       expect(response.body.error).toBe('Failed to retrieve events');
+    });
+  });
+});
+
+/**
+ * Verifies the privacy-first shape contract for public event responses:
+ *   - `schedules[]` must be absent (cancellation/hide_from_public cannot leak)
+ *   - `recurrenceText` must be absent (legacy English-only field)
+ *   - `isRecurring: boolean` must be present on every event
+ *   - `recurrenceSummary: { key, params } | null` must be present
+ *   - `media` must be projected to exactly `{ id, mimeType }` — no
+ *     calendarId, sha256, originalFilename, fileSize, or status
+ *
+ * All four public event handlers (listInstances, getEvent, getEventInstance,
+ * getSeries) share the same shaping via `toPublicEventObject`, so the
+ * contract is pinned down for each.
+ */
+describe('Public API - toPublicEventObject shape contract', () => {
+  let routes: CalendarRoutes;
+  let router: express.Router;
+  let publicInterface: PublicCalendarInterface;
+  let calendarInterface: CalendarInterface;
+  let apiSandbox: sinon.SinonSandbox = sinon.createSandbox();
+
+  function makeRecurringEventWithMedia(): CalendarEvent {
+    const event = new CalendarEvent('event-1', 'cal-id');
+    const schedule = new CalendarEventSchedule();
+    schedule.frequency = EventFrequency.WEEKLY;
+    schedule.interval = 2;
+    schedule.byDay = ['TU'];
+    schedule.isExclusion = false;
+    event.schedules = [schedule];
+
+    // Media with the full internal shape — toPublicEventObject must strip
+    // everything except id and mimeType.
+    event.media = new Media(
+      'media-1',
+      'cal-id',
+      'sha256hashvalue',
+      'photo.jpg',
+      'image/jpeg',
+      12345,
+      'approved',
+    );
+    return event;
+  }
+
+  function assertPublicEventShape(eventBody: Record<string, any>) {
+    // schedules[] and recurrenceText must never appear
+    expect(eventBody.schedules).toBeUndefined();
+    expect(eventBody.recurrenceText).toBeUndefined();
+
+    // isRecurring + recurrenceSummary are required
+    expect(typeof eventBody.isRecurring).toBe('boolean');
+    expect(eventBody).toHaveProperty('recurrenceSummary');
+  }
+
+  function assertMediaProjection(mediaBody: Record<string, any>) {
+    expect(mediaBody.id).toBe('media-1');
+    expect(mediaBody.mimeType).toBe('image/jpeg');
+    // All internal fields must be absent
+    expect(mediaBody.calendarId).toBeUndefined();
+    expect(mediaBody.sha256).toBeUndefined();
+    expect(mediaBody.originalFilename).toBeUndefined();
+    expect(mediaBody.fileSize).toBeUndefined();
+    expect(mediaBody.status).toBeUndefined();
+  }
+
+  beforeEach(() => {
+    calendarInterface = new CalendarInterface(new EventEmitter());
+    publicInterface = new PublicCalendarInterface(new EventEmitter(), calendarInterface);
+    routes = new CalendarRoutes(publicInterface);
+    router = express.Router();
+  });
+
+  afterEach(() => {
+    apiSandbox.restore();
+  });
+
+  describe('listInstances', () => {
+    it('strips schedules[], projects media, and computes recurrenceSummary', async () => {
+      const calendar = new Calendar('cal-id', 'test-calendar');
+      const event = makeRecurringEventWithMedia();
+      const instance = new CalendarEventInstance('inst-1', event, DateTime.now(), null);
+
+      apiSandbox.stub(publicInterface, 'getCalendarByName').resolves(calendar);
+      apiSandbox.stub(publicInterface, 'listEventInstances').resolves([instance]);
+
+      router.get('/handler', (req, res) => {
+        req.params.calendar = 'test-calendar';
+        routes.listInstances(req, res);
+      });
+
+      const response = await request(testApp(router)).get('/handler');
+
+      expect(response.status).toBe(200);
+      expect(response.body).toHaveLength(1);
+      const eventBody = response.body[0].event;
+      assertPublicEventShape(eventBody);
+      expect(eventBody.isRecurring).toBe(true);
+      expect(eventBody.recurrenceSummary).toEqual({
+        key: 'recurrence.every_n_weeks_on_days',
+        params: { n: 2, days: ['TU'] },
+      });
+      assertMediaProjection(eventBody.media);
+    });
+
+    it('returns null recurrenceSummary and isRecurring=false for non-recurring events', async () => {
+      const calendar = new Calendar('cal-id', 'test-calendar');
+      const event = new CalendarEvent('event-1', 'cal-id');
+      event.schedules = [];
+      const instance = new CalendarEventInstance('inst-1', event, DateTime.now(), null);
+
+      apiSandbox.stub(publicInterface, 'getCalendarByName').resolves(calendar);
+      apiSandbox.stub(publicInterface, 'listEventInstances').resolves([instance]);
+
+      router.get('/handler', (req, res) => {
+        req.params.calendar = 'test-calendar';
+        routes.listInstances(req, res);
+      });
+
+      const response = await request(testApp(router)).get('/handler');
+
+      expect(response.status).toBe(200);
+      const eventBody = response.body[0].event;
+      assertPublicEventShape(eventBody);
+      expect(eventBody.isRecurring).toBe(false);
+      expect(eventBody.recurrenceSummary).toBeNull();
+    });
+  });
+
+  describe('getEvent', () => {
+    it('strips schedules[], projects media, and computes recurrenceSummary', async () => {
+      const event = makeRecurringEventWithMedia();
+      apiSandbox.stub(publicInterface, 'getEventById').resolves(event);
+
+      router.get('/handler/:id', (req, res) => {
+        routes.getEvent(req, res);
+      });
+
+      const response = await request(testApp(router)).get('/handler/event-1');
+
+      expect(response.status).toBe(200);
+      assertPublicEventShape(response.body);
+      expect(response.body.isRecurring).toBe(true);
+      expect(response.body.recurrenceSummary).toEqual({
+        key: 'recurrence.every_n_weeks_on_days',
+        params: { n: 2, days: ['TU'] },
+      });
+      assertMediaProjection(response.body.media);
+    });
+  });
+
+  describe('getEventInstance', () => {
+    it('strips schedules[], projects media, and computes recurrenceSummary', async () => {
+      const event = makeRecurringEventWithMedia();
+      const instance = new CalendarEventInstance('inst-1', event, DateTime.now(), null);
+      apiSandbox.stub(publicInterface, 'getEventInstanceById').resolves(instance);
+
+      router.get('/handler/:id', (req, res) => {
+        routes.getEventInstance(req, res);
+      });
+
+      const response = await request(testApp(router)).get('/handler/inst-1');
+
+      expect(response.status).toBe(200);
+      assertPublicEventShape(response.body.event);
+      expect(response.body.event.isRecurring).toBe(true);
+      expect(response.body.event.recurrenceSummary).toEqual({
+        key: 'recurrence.every_n_weeks_on_days',
+        params: { n: 2, days: ['TU'] },
+      });
+      assertMediaProjection(response.body.event.media);
+    });
+  });
+
+  describe('getSeries', () => {
+    it('applies the public shape to every event in the series events[]', async () => {
+      const calendar = new Calendar('cal-id', 'test-calendar');
+      const series = new EventSeries('series-1', 'cal-id', 'yoga-classes');
+      const content = new EventSeriesContent('en');
+      content.name = 'Yoga Classes';
+      series.addContent(content);
+
+      const event = makeRecurringEventWithMedia();
+
+      apiSandbox.stub(publicInterface, 'getCalendarByName').resolves(calendar);
+      apiSandbox.stub(publicInterface, 'getSeriesByUrlName').resolves(series);
+      apiSandbox.stub(publicInterface, 'getSeriesEvents').resolves({ events: [event], total: 1 });
+
+      router.get('/handler', (req, res) => {
+        req.params.urlName = 'test-calendar';
+        req.params.seriesUrlName = 'yoga-classes';
+        routes.getSeries(req, res);
+      });
+
+      const response = await request(testApp(router)).get('/handler');
+
+      expect(response.status).toBe(200);
+      expect(response.body.events).toHaveLength(1);
+      const eventBody = response.body.events[0];
+      assertPublicEventShape(eventBody);
+      expect(eventBody.isRecurring).toBe(true);
+      expect(eventBody.recurrenceSummary).toEqual({
+        key: 'recurrence.every_n_weeks_on_days',
+        params: { n: 2, days: ['TU'] },
+      });
+      assertMediaProjection(eventBody.media);
     });
   });
 });

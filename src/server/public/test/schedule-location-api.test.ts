@@ -1,8 +1,15 @@
 /**
- * Tests for schedule and location data in the public API.
- * Covers:
- * - isRecurring flag on list endpoint (via interface stub)
- * - getEventInstanceById detail endpoint exposing schedule and location content
+ * Tests for recurrence + location projection in the public API.
+ *
+ * The public API strips schedules[] from every event response and replaces
+ * them with two presentation-ready fields:
+ *   - isRecurring: boolean
+ *   - recurrenceSummary: { key, params } | null
+ *
+ * It also projects media to { id, mimeType } only and never emits the legacy
+ * English-only `recurrenceText` field. These tests pin that shape down for
+ * both the list handler (/calendar/:calendar/events) and the detail handler
+ * (/instances/:id).
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import sinon from 'sinon';
@@ -54,7 +61,7 @@ describe('Public API - Schedule + Location data', () => {
       expect(response.body.error).toBe('instance not found');
     });
 
-    it('should return instance with schedule data when schedules are present', async () => {
+    it('should project recurring schedules into isRecurring + recurrenceSummary and strip schedules[]', async () => {
       const event = new CalendarEvent('event-1', 'cal-id');
       const schedule = new CalendarEventSchedule();
       schedule.frequency = EventFrequency.WEEKLY;
@@ -62,10 +69,6 @@ describe('Public API - Schedule + Location data', () => {
       schedule.byDay = ['SA'];
       schedule.isExclusion = false;
       event.schedules = [schedule];
-
-      // Attach recurrenceText as the service would
-      (event as any).recurrenceText = 'Every Saturday';
-      (event as any).isRecurring = true;
 
       const instance = new CalendarEventInstance('inst-1', event, DateTime.now(), null);
       const instanceStub = apiSandbox.stub(publicInterface, 'getEventInstanceById');
@@ -80,10 +83,15 @@ describe('Public API - Schedule + Location data', () => {
 
       expect(response.status).toBe(200);
       expect(response.body.id).toBe('inst-1');
-      expect(Array.isArray(response.body.event.schedules)).toBe(true);
-      expect(response.body.event.schedules).toHaveLength(1);
-      expect(response.body.event.schedules[0].frequency).toBe('weekly');
-      expect(response.body.event.recurrenceText).toBe('Every Saturday');
+      // schedules[] and recurrenceText must not leak on the public shape
+      expect(response.body.event.schedules).toBeUndefined();
+      expect(response.body.event.recurrenceText).toBeUndefined();
+      // Presentation-ready fields are present instead
+      expect(response.body.event.isRecurring).toBe(true);
+      expect(response.body.event.recurrenceSummary).toEqual({
+        key: 'recurrence.weekly_on_days',
+        params: { days: ['SA'] },
+      });
     });
 
     it('should return instance with location and accessibility info when available', async () => {
@@ -114,10 +122,9 @@ describe('Public API - Schedule + Location data', () => {
       expect(response.body.event.location.content.en.accessibilityInfo).toBe('Wheelchair accessible, elevator available.');
     });
 
-    it('should return instance with empty schedules when event has no recurrence', async () => {
+    it('should expose isRecurring=false and recurrenceSummary=null for non-recurring events', async () => {
       const event = new CalendarEvent('event-1', 'cal-id');
       event.schedules = [];
-      (event as any).recurrenceText = '';
 
       const instance = new CalendarEventInstance('inst-1', event, DateTime.now(), null);
       const instanceStub = apiSandbox.stub(publicInterface, 'getEventInstanceById');
@@ -131,18 +138,25 @@ describe('Public API - Schedule + Location data', () => {
         .get('/handler/inst-1');
 
       expect(response.status).toBe(200);
-      expect(response.body.event.schedules).toEqual([]);
-      expect(response.body.event.recurrenceText).toBe('');
+      // schedules[] and recurrenceText must not appear on the public shape
+      expect(response.body.event.schedules).toBeUndefined();
+      expect(response.body.event.recurrenceText).toBeUndefined();
+      expect(response.body.event.isRecurring).toBe(false);
+      expect(response.body.event.recurrenceSummary).toBeNull();
     });
   });
 
-  describe('GET /calendar/:calendar/events - isRecurring flag', () => {
-    it('should expose isRecurring=true on events returned from list endpoint', async () => {
+  describe('GET /calendar/:calendar/events - isRecurring flag + shape', () => {
+    it('derives isRecurring=true + recurrenceSummary and strips schedules[] on list results', async () => {
       const calendar = new Calendar('cal-id', 'test-calendar');
       const event = new CalendarEvent('event-1', 'cal-id');
 
-      // Simulate the service adding isRecurring to the event
-      (event as any).isRecurring = true;
+      const schedule = new CalendarEventSchedule();
+      schedule.frequency = EventFrequency.WEEKLY;
+      schedule.interval = 1;
+      schedule.byDay = ['MO'];
+      schedule.isExclusion = false;
+      event.schedules = [schedule];
 
       const instance = new CalendarEventInstance('inst-1', event, DateTime.now(), null);
 
@@ -163,13 +177,20 @@ describe('Public API - Schedule + Location data', () => {
       expect(response.status).toBe(200);
       expect(response.body).toHaveLength(1);
       expect(response.body[0].event.isRecurring).toBe(true);
+      expect(response.body[0].event.recurrenceSummary).toEqual({
+        key: 'recurrence.weekly_on_days',
+        params: { days: ['MO'] },
+      });
+      // Internal fields must not leak
+      expect(response.body[0].event.schedules).toBeUndefined();
+      expect(response.body[0].event.recurrenceText).toBeUndefined();
       expect(filterStub.calledOnce).toBe(true);
     });
 
-    it('should expose isRecurring=false on non-recurring events', async () => {
+    it('derives isRecurring=false + recurrenceSummary=null on non-recurring events', async () => {
       const calendar = new Calendar('cal-id', 'test-calendar');
       const event = new CalendarEvent('event-1', 'cal-id');
-      (event as any).isRecurring = false;
+      event.schedules = [];
 
       const instance = new CalendarEventInstance('inst-1', event, DateTime.now(), null);
 
@@ -189,6 +210,9 @@ describe('Public API - Schedule + Location data', () => {
       expect(response.status).toBe(200);
       expect(response.body).toHaveLength(1);
       expect(response.body[0].event.isRecurring).toBe(false);
+      expect(response.body[0].event.recurrenceSummary).toBeNull();
+      expect(response.body[0].event.schedules).toBeUndefined();
+      expect(response.body[0].event.recurrenceText).toBeUndefined();
       expect(instancesStub.calledOnce).toBe(true);
     });
   });
