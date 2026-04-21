@@ -6,7 +6,7 @@ import { setActivePinia, createPinia, Pinia } from 'pinia';
 import { mountComponent } from '@/client/test/lib/vue';
 import EventsTab from '@/client/components/logged_in/calendar-content/events-tab.vue';
 import { useEventStore } from '@/client/stores/eventStore';
-import { CalendarEvent } from '@/common/model/events';
+import { CalendarEvent, CalendarEventSchedule } from '@/common/model/events';
 import { Calendar } from '@/common/model/calendar';
 
 const mockToast = {
@@ -66,10 +66,18 @@ const routes: RouteRecordRaw[] = [
   },
 ];
 
+type ScheduleSpec = { isExclusion: boolean; hideFromPublic: boolean };
+
+/**
+ * Builds a CalendarEvent with optional schedules. The cancelled pill is now
+ * derived from the event's schedules (a schedule is a shown cancellation when
+ * `isExclusion === true && hideFromPublic === false`), so tests exercise the
+ * real computation rather than injecting a synthetic `isCancelled` field.
+ */
 const createEvent = (
   id: string,
   name: string,
-  opts: { isCancelled?: boolean } = {},
+  opts: { schedules?: ScheduleSpec[] } = {},
 ) => {
   const event = new CalendarEvent();
   event.id = id;
@@ -79,10 +87,16 @@ const createEvent = (
     name,
     description: 'Test description',
   } as any);
-  // isCancelled is attached dynamically — the events list reads it
-  // defensively. Assign with `as any` to mirror the runtime shape the server
-  // provides on event rows that carry an upcoming instance's cancelled state.
-  (event as any).isCancelled = opts.isCancelled ?? false;
+
+  if (opts.schedules) {
+    event.schedules = opts.schedules.map((spec, idx) => {
+      const schedule = new CalendarEventSchedule(`${id}-schedule-${idx}`);
+      schedule.isExclusion = spec.isExclusion;
+      schedule.hideFromPublic = spec.hideFromPublic;
+      return schedule;
+    });
+  }
+
   return event;
 };
 
@@ -144,7 +158,7 @@ describe('EventsTab - Cancelled Pill', () => {
     vi.restoreAllMocks();
   });
 
-  it('does not render the cancelled pill for events where isCancelled is false', async () => {
+  it('does not render the cancelled pill when events have no schedules', async () => {
     const events = [
       createEvent('event-1', 'Active Event'),
       createEvent('event-2', 'Another Active Event'),
@@ -156,10 +170,25 @@ describe('EventsTab - Cancelled Pill', () => {
     expect(pills).toHaveLength(0);
   });
 
-  it('renders the cancelled pill only for events where isCancelled is true', async () => {
+  it('does not render the cancelled pill for events with no exclusion schedules', async () => {
+    const events = [
+      createEvent('event-1', 'Recurring Event', {
+        schedules: [{ isExclusion: false, hideFromPublic: false }],
+      }),
+    ];
+
+    const wrapper = await mountEventsTab(events);
+
+    const pills = wrapper.findAll('[data-testid="event-cancelled-pill"]');
+    expect(pills).toHaveLength(0);
+  });
+
+  it('renders the cancelled pill when an event has a shown cancellation (isExclusion && !hideFromPublic)', async () => {
     const events = [
       createEvent('event-1', 'Active Event'),
-      createEvent('event-2', 'Cancelled Event', { isCancelled: true }),
+      createEvent('event-2', 'Cancelled Event', {
+        schedules: [{ isExclusion: true, hideFromPublic: false }],
+      }),
       createEvent('event-3', 'Another Active Event'),
     ];
 
@@ -174,11 +203,31 @@ describe('EventsTab - Cancelled Pill', () => {
     expect(pills[0].text()).toMatch(/cancelled/i);
   });
 
-  it('renders a pill for each cancelled event when multiple are cancelled', async () => {
+  it('does not render the cancelled pill when the only exclusions are hidden (EXDATE-style)', async () => {
     const events = [
-      createEvent('event-1', 'Cancelled A', { isCancelled: true }),
+      createEvent('event-1', 'Event With Hidden Exclusion', {
+        schedules: [{ isExclusion: true, hideFromPublic: true }],
+      }),
+    ];
+
+    const wrapper = await mountEventsTab(events);
+
+    const pills = wrapper.findAll('[data-testid="event-cancelled-pill"]');
+    expect(pills).toHaveLength(0);
+  });
+
+  it('renders a pill for each event with a shown cancellation when multiple are cancelled', async () => {
+    const events = [
+      createEvent('event-1', 'Cancelled A', {
+        schedules: [{ isExclusion: true, hideFromPublic: false }],
+      }),
       createEvent('event-2', 'Active'),
-      createEvent('event-3', 'Cancelled B', { isCancelled: true }),
+      createEvent('event-3', 'Cancelled B', {
+        schedules: [
+          { isExclusion: false, hideFromPublic: false },
+          { isExclusion: true, hideFromPublic: false },
+        ],
+      }),
     ];
 
     const wrapper = await mountEventsTab(events);
