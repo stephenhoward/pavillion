@@ -155,7 +155,7 @@
     <!-- Recurrence summary + trigger -->
     <div class="recurrence-summary">
       <template v-if="props.schedule.frequency">
-        <span class="summary-text" aria-live="polite" aria-atomic="true">{{ generateRecurrenceText(props.schedule) }}</span>
+        <span class="summary-text">{{ generateRecurrenceText(props.schedule) }}</span>
         <button type="button" class="btn btn--ghost" @click="openRecurrenceSheet">
           {{ t('edit_recurrence') }}
         </button>
