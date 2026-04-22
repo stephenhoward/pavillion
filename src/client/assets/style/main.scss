@@ -65,5 +65,6 @@
   @include meta.load-css('./components/event-management');  // Event Management UI patterns
   @include meta.load-css('./components/recurrence-form');  // Recurrence rule form styles
   @include meta.load-css('./components/calendar-admin');  // Calendar Administration UI patterns
+  @include meta.load-css('./components/authentication');  // Auth field/button component surface (pv-rh4z)
   @include meta.load-css('./layout/logged-out');  // Auth screens with component-specific styling
 }

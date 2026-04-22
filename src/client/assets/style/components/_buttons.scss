@@ -188,9 +188,12 @@ button:not([role="tab"]) {
     font-size: var(--pav-font-size-base);
   }
 
+  /* --xl sized to match auth-card pill treatment (18px font, 18px/24px padding).
+     Prior value (space-4/space-8, font-size-lg ~22.78px) was unused and did not
+     match any real consumer; retuned for the authentication surface. */
   &--xl {
-    padding: var(--pav-space-4) var(--pav-space-8);
-    font-size: var(--pav-font-size-lg);
+    padding: 1.125rem 1.5rem; /* 18px 24px — no matching --pav-space-* token */
+    font-size: var(--pav-font-size-base); /* 18px */
   }
 
   /* Primary variant (brand orange) */

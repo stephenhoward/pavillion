@@ -1,0 +1,49 @@
+/**
+ * Authentication Field Component
+ *
+ * Reusable `.auth-field` class providing the pill-shaped input treatment
+ * used across authentication surfaces (login, register, password reset,
+ * accept-invite, etc.). Uses semantic tokens throughout so the light/dark
+ * treatment auto-adapts via theme tokens — no manual @media blocks needed.
+ *
+ * Visual parity with the existing descendant selectors under
+ * `.welcome-card input[type="text|email|password"]` in _logged-out.scss,
+ * so consumer migration to this class is a no-op visually.
+ */
+
+.auth-field {
+  width: 100%;
+  border-radius: var(--pav-border-radius-input); /* Full pill */
+  border: var(--pav-border-width-1) solid var(--pav-border-color-medium);
+  padding: 1.125rem 1.5rem; /* 18px 24px — matches .welcome-card input (no matching --pav-space-* token) */
+  font-size: var(--pav-font-size-base); /* 18px — matches .welcome-card input */
+  background-color: var(--pav-surface-primary);
+  color: var(--pav-text-primary);
+  transition: all 0.2s ease-in-out;
+
+  &::placeholder {
+    color: var(--pav-text-muted);
+  }
+
+  &:focus-visible {
+    outline: none;
+    border-color: var(--pav-color-brand-primary);
+    /* Pre-existing focus-ring literal shared with `.welcome-card input:focus` and
+       `.btn--pill.btn--primary:focus-visible`. WCAG 2.1 SC 1.4.11 (3:1 contrast) is a
+       known gap pending a brand-primary-alpha token; resolve together when that token lands. */
+    box-shadow: 0 0 0 3px rgb(249 115 22 / 0.4);
+  }
+
+  /* Error state */
+  &.form-control--error {
+    border-color: var(--pav-color-border-error);
+
+    /* Preserve the error border-color when focused; do not let the base :focus-visible
+       override it back to brand-primary. Focus ring shape is otherwise identical. */
+    &:focus-visible {
+      outline: none;
+      border-color: var(--pav-color-border-error);
+      box-shadow: 0 0 0 3px rgb(249 115 22 / 0.4);
+    }
+  }
+}
