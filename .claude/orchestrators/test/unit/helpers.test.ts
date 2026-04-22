@@ -153,6 +153,82 @@ describe('preflight', () => {
     const result = preflight({ spawnFn: spawn as never });
     expect(result.failures.map(f => f.kind)).toContain('empty_backlog');
   });
+
+  // ---------------------------------------------------------------------------
+  // Orphan branch recovery
+  // ---------------------------------------------------------------------------
+
+  it('recovers from an orphaned orchestrator branch and continues preflight', () => {
+    // Branch matches pattern, tree clean, no commits ahead, no open PR →
+    // checkout main and proceed without reporting wrong_branch.
+    const beadsJson = JSON.stringify([{ id: 'pv-x1', priority: 1, created_at: '2026-01-01' }]);
+    const spawn = seqSpawn(
+      fakeSpawn(''),                           // git status (clean)
+      fakeSpawn('chore/some-title-pv-abc'),    // git branch --show-current
+      // canRecoverOrphanBranch:
+      fakeSpawn(''),                           // git status (clean)
+      fakeSpawn('0'),                          // git rev-list --count main..branch
+      fakeSpawn('[]'),                         // gh pr list (no open PR)
+      fakeSpawn('', '', 0),                    // git checkout main (success)
+      // Resume preflight:
+      fakeSpawn('', '', 0),                    // git fetch origin main
+      fakeSpawn('', '', 0),                    // git diff (no diff)
+      fakeSpawn(beadsJson),                    // bd ready
+      fakeSpawn('  - other'),                  // bd label list pv-x1
+    );
+    const result = preflight({ spawnFn: spawn as never });
+    expect(result.ok).toBe(true);
+    expect(result.recovered).toEqual({ orphanedBranch: 'chore/some-title-pv-abc' });
+    expect(result.failures.map(f => f.kind)).not.toContain('wrong_branch');
+  });
+
+  it('does not recover when branch has commits ahead of main', () => {
+    const spawn = seqSpawn(
+      fakeSpawn(''),                              // git status (clean)
+      fakeSpawn('feat/wip-pv-xyz'),               // git branch
+      // canRecoverOrphanBranch:
+      fakeSpawn(''),                              // git status (clean)
+      fakeSpawn('3'),                             // git rev-list: 3 commits ahead → refuse
+      // No checkout; proceed with wrong_branch failure:
+      fakeSpawn('', '', 0),                       // git fetch
+      fakeSpawn('', '', 0),                       // git diff
+      fakeSpawn('[]'),                            // bd ready (empty)
+    );
+    const result = preflight({ spawnFn: spawn as never });
+    expect(result.recovered).toBeUndefined();
+    expect(result.failures.map(f => f.kind)).toContain('wrong_branch');
+  });
+
+  it('does not recover when branch has an open PR', () => {
+    const spawn = seqSpawn(
+      fakeSpawn(''),                              // git status
+      fakeSpawn('fix/bug-pv-pqr'),                // git branch
+      fakeSpawn(''),                              // git status (recovery check)
+      fakeSpawn('0'),                             // no commits ahead
+      fakeSpawn('[{"number":101}]'),              // gh pr list: open PR exists → refuse
+      fakeSpawn('', '', 0),                       // git fetch
+      fakeSpawn('', '', 0),                       // git diff
+      fakeSpawn('[]'),                            // bd ready
+    );
+    const result = preflight({ spawnFn: spawn as never });
+    expect(result.recovered).toBeUndefined();
+    expect(result.failures.map(f => f.kind)).toContain('wrong_branch');
+  });
+
+  it('does not recover non-orchestrator-looking branch names', () => {
+    // Branch doesn't match pattern → skip recovery entirely, report wrong_branch.
+    const spawn = seqSpawn(
+      fakeSpawn(''),                              // git status
+      fakeSpawn('my-local-experiment'),           // git branch — no type prefix
+      // canRecoverOrphanBranch returns false on pattern mismatch — no extra calls
+      fakeSpawn('', '', 0),                       // git fetch
+      fakeSpawn('', '', 0),                       // git diff
+      fakeSpawn('[]'),                            // bd ready
+    );
+    const result = preflight({ spawnFn: spawn as never });
+    expect(result.recovered).toBeUndefined();
+    expect(result.failures.map(f => f.kind)).toContain('wrong_branch');
+  });
 });
 
 // =============================================================================

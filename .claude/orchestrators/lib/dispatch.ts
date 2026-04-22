@@ -521,7 +521,7 @@ export function spawnCmd(
 
 
 /** Default per-advisor timeout in ms. */
-export const ADVISOR_TIMEOUT_MS = 120_000;
+export const ADVISOR_TIMEOUT_MS = 240_000;
 
 export interface AdvisorVerdict {
   agent: string;

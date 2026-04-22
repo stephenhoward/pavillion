@@ -32,6 +32,7 @@ import {
   bdEscalate,
   bdCreateFollowup,
   branchName,
+  checkEpicPromotion,
   discoverAgents,
   type StateVerdict,
   type SizingVerdict,
@@ -304,7 +305,7 @@ async function selectAdvisors(
     const raw = await dispatchFn<unknown>({
       agent: 'agent-selector',
       prompt,
-      timeoutMs: 120_000,
+      timeoutMs: 180_000,
       ctx,
       logTag,
     });
@@ -377,20 +378,34 @@ async function dispatchAgent<T>(
     return { result, escalated: false };
   }
   catch (err) {
-    if (err instanceof DispatchMalformedError || err instanceof DispatchTimeoutError) {
-      const reason = err instanceof DispatchTimeoutError
-        ? `${config.agent} subagent timed out: ${err.message}`
-        : `${config.agent} subagent returned malformed output: ${err.message}`;
+    if (err instanceof DispatchTimeoutError) {
+      // Timeout is classified as a transient_halt — the bead itself is fine,
+      // automation just didn't finish. We halt the current run but do NOT add
+      // the needs-human label, so the bead stays eligible for bd ready on the
+      // next /process-backlog invocation. The run verdict (classifyVerdict)
+      // will pick up the "timed out" error text and classify transient_halt.
+      const reason = `${config.agent} subagent timed out: ${err.message}`;
+      ctx.logger.appendRunJson({
+        event: `${config.agent.replace(/-/g, '_')}_timed_out`,
+        beadId: ctx.beadId,
+        reason,
+        phase: config.escalateTag,
+      });
+      ctx.logger.writePhaseLog(config.logTag, 'err', reason + '\n');
+      return { result: null, escalated: true };
+    }
 
+    if (err instanceof DispatchMalformedError) {
+      const reason = `${config.agent} subagent returned malformed output: ${err.message}`;
       ctx.logger.appendRunJson({
         event: `${config.agent.replace(/-/g, '_')}_escalated`,
         beadId: ctx.beadId,
         reason,
       });
-
       escalate(ctx.beadId, reason, config.escalateTag, config.logTag, deps, ctx);
       return { result: null, escalated: true };
     }
+
     throw err;
   }
 }
@@ -535,7 +550,7 @@ async function defaultAdvisorTriage(
     const raw = await dispatchFn<unknown>({
       agent: 'advisor-triage',
       prompt,
-      timeoutMs: 90_000,
+      timeoutMs: 180_000,
       ctx,
       logTag,
     });
@@ -898,6 +913,13 @@ export async function preflight(ctx: PhaseCtx, deps: PhaseDeps = {}): Promise<Ph
   // Step 1: Run preflight checks
   const preflightResult = runPreflightCheck({ spawnFn: deps.spawnFn });
 
+  if (preflightResult.recovered) {
+    ctx.logger.appendRunJson({
+      event: 'preflight_recovered',
+      orphanedBranch: preflightResult.recovered.orphanedBranch,
+    });
+  }
+
   // When an explicit bead is given, backlog emptiness is not a blocker:
   // the user may be picking up a partially-processed or non-ready bead.
   const blockingFailures = explicitBead
@@ -960,6 +982,28 @@ export async function select(ctx: PhaseCtx, deps: PhaseDeps = {}): Promise<Phase
     createdAt: bead.created_at,
   });
 
+  // Epic promotion: if the selected leaf's parent is an analyzed epic with
+  // >= 2 ready children, pivot ctx.beadId to the epic id so the epic phase
+  // runs as a wave (one branch, parallel implementers, one PR closing all
+  // children) rather than running one leaf at a time.
+  //
+  // Skipped for leaves without a parent, non-epic parents, unanalyzed epics,
+  // or single-child cases — in those cases the orchestrator keeps current
+  // single-leaf behavior.
+  if (bead.issue_type !== 'epic') {
+    const promotion = checkEpicPromotion(bead.id, deps);
+    if (promotion) {
+      ctx.beadId = promotion.epicId;
+      ctx.logger.appendRunJson({
+        event: 'promoted_to_epic',
+        from: bead.id,
+        to: promotion.epicId,
+        epicTitle: promotion.epicTitle,
+        readyChildCount: promotion.readyChildCount,
+      });
+    }
+  }
+
   return { next: PhaseName.State, ctx };
 }
 
@@ -1014,7 +1058,7 @@ export async function shape(ctx: PhaseCtx, deps: PhaseDeps = {}): Promise<PhaseR
   const { result: verdict, escalated } = await dispatchAgent<ShapeVerdict>(ctx, {
     agent: 'shape-bead',
     prompt,
-    defaultTimeout: 180_000,
+    defaultTimeout: 300_000,
     logTag: PhaseName.Shape,
     escalateTag: '3',
   }, deps);
