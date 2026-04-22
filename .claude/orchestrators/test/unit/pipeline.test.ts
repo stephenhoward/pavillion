@@ -9,6 +9,7 @@ import { PhaseName, type RunLogger, type PhaseResult } from '../../lib/types.js'
 import {
   runStateMachine,
   buildSummary,
+  classifyVerdict,
   type OrchestratorCtx,
 } from '../../process-backlog.js';
 import type { PhaseRunner } from '../../lib/execute.js';
@@ -299,5 +300,67 @@ describe('buildSummary', () => {
 
     expect(summary).toContain('=== Process Backlog Run Summary ===');
     expect(summary).toContain('===================================');
+  });
+
+  it('includes the verdict line', () => {
+    const ctx = makeCtx({
+      beadId: 'pv-1',
+      prUrl: 'https://github.com/pull/1',
+      phaseHistory: [],
+    });
+    expect(buildSummary(ctx)).toContain('Verdict: completed');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// classifyVerdict
+// ---------------------------------------------------------------------------
+
+describe('classifyVerdict', () => {
+  it('returns completed when PR was opened', () => {
+    const ctx = makeCtx({
+      prUrl: 'https://github.com/pull/42',
+      phaseHistory: [],
+    });
+    expect(classifyVerdict(ctx)).toBe('completed');
+  });
+
+  it('returns transient_halt when a phase failed with a timeout', () => {
+    const ctx = makeCtx({
+      phaseHistory: [
+        { phase: PhaseName.Shape, ok: false, durationMs: 180000,
+          error: 'shape-bead subagent timed out after 180000ms' },
+      ] as PhaseResult[],
+    });
+    expect(classifyVerdict(ctx)).toBe('transient_halt');
+  });
+
+  it('returns transient_halt when preflight halts on wrong_branch', () => {
+    const ctx = makeCtx({
+      phaseHistory: [
+        { phase: PhaseName.Preflight, ok: false, durationMs: 300,
+          error: 'wrong_branch: expected main but on feat/x' },
+      ] as PhaseResult[],
+    });
+    expect(classifyVerdict(ctx)).toBe('transient_halt');
+  });
+
+  it('returns needs_human for non-transient failures without a PR', () => {
+    const ctx = makeCtx({
+      phaseHistory: [
+        { phase: PhaseName.ShapeAdvisors, ok: false, durationMs: 10000,
+          error: 'advisor REQUEST CHANGES after refinement' },
+      ] as PhaseResult[],
+    });
+    expect(classifyVerdict(ctx)).toBe('needs_human');
+  });
+
+  it('returns needs_human when there are no failures and no PR', () => {
+    const ctx = makeCtx({
+      phaseHistory: [
+        { phase: PhaseName.Preflight, ok: true, durationMs: 100 },
+      ] as PhaseResult[],
+    });
+    expect(classifyVerdict(ctx)).toBe('needs_human');
   });
 });

@@ -48,6 +48,13 @@ export interface PreflightFailure {
 export interface PreflightResult {
   ok: boolean;
   failures: PreflightFailure[];
+  /**
+   * Set when preflight detected an orphaned orchestrator branch (see
+   * tryRecoverOrphanBranch) and successfully returned the working tree to
+   * main. The Phase 0 runner uses this to emit a `preflight_recovered`
+   * event so the condition is visible in run logs.
+   */
+  recovered?: { orphanedBranch: string };
 }
 
 export interface BeadJson {
@@ -55,7 +62,25 @@ export interface BeadJson {
   issue_type?: string;
   priority?: number;
   created_at?: string;
+  status?: string;
+  parent?: string;
+  dependencies?: BeadDependency[];
+  dependents?: BeadDependency[];
   [key: string]: unknown;
+}
+
+export interface BeadDependency {
+  id: string;
+  status?: string;
+  issue_type?: string;
+  dependency_type?: string;
+  [key: string]: unknown;
+}
+
+export interface EpicPromotionResult {
+  epicId: string;
+  epicTitle?: string;
+  readyChildCount: number;
 }
 
 export interface TopReadyResult {
@@ -166,17 +191,77 @@ export function gitSafeToStart(deps: SpawnDeps = {}): GitSafeResult {
 // =============================================================================
 
 /**
+ * Orchestrator-generated branch pattern. Matches the format produced by
+ * `branchName()`: `<type>/<kebab-title>-<beadId-with-dashes>`.
+ *
+ * Loose by design — a branch that matches this pattern still has to pass
+ * every other recovery guard (clean tree, no commits ahead of main, no open
+ * PR) before preflight will touch it.
+ */
+const ORCHESTRATOR_BRANCH_PATTERN = /^(chore|feat|fix)\/[a-z0-9][a-z0-9-]*-pv-[a-z0-9-]+$/;
+
+/**
+ * Decide whether the current non-main branch is a stale, abandoned
+ * orchestrator branch that's safe to check out of automatically.
+ *
+ * Safe-to-recover requires ALL of:
+ *   - branch name matches the orchestrator-generated pattern
+ *   - working tree is clean (no uncommitted changes)
+ *   - branch has no commits ahead of main
+ *   - no open PR exists for the branch
+ *
+ * Any gh/git failure returns false — safer to halt than to guess.
+ */
+function canRecoverOrphanBranch(
+  branch: string,
+  mainBranch: string,
+  spawn: SpawnFn,
+): boolean {
+  if (!ORCHESTRATOR_BRANCH_PATTERN.test(branch)) return false;
+
+  const status = run('git', ['status', '--porcelain'], spawn);
+  if (status.exitCode !== 0 || status.stdout.length > 0) return false;
+
+  const revList = run('git', ['rev-list', '--count', `${mainBranch}..${branch}`], spawn);
+  if (revList.exitCode !== 0) return false;
+  const ahead = parseInt(revList.stdout || '0', 10);
+  if (Number.isNaN(ahead) || ahead > 0) return false;
+
+  const prList = run(
+    'gh',
+    ['pr', 'list', '--head', branch, '--state', 'open', '--json', 'number'],
+    spawn,
+  );
+  if (prList.exitCode !== 0) return false;
+
+  try {
+    const prs = JSON.parse(prList.stdout || '[]');
+    if (Array.isArray(prs) && prs.length > 0) return false;
+  }
+  catch {
+    return false;
+  }
+
+  return true;
+}
+
+/**
  * Full preflight gate. Checks:
  *   - dirty_tree:     working tree has uncommitted changes
  *   - wrong_branch:   not on main (or GIT_SAFE_MAIN_BRANCH)
  *   - stale_main:     local main differs from origin/main
  *   - empty_backlog:  no ready beads excluding needs-human beads
+ *
+ * Before reporting `wrong_branch`, preflight attempts to recover from an
+ * orphaned orchestrator branch (see canRecoverOrphanBranch). Successful
+ * recovery sets `result.recovered` and silences the `wrong_branch` failure.
  */
 export function preflight(deps: SpawnDeps = {}): PreflightResult {
   const spawn = deps.spawnFn ?? nodeSpawnSync;
   const mainBranch = process.env.PREFLIGHT_MAIN_BRANCH ?? 'main';
   const readyLimit = parseInt(process.env.PREFLIGHT_READY_LIMIT ?? '50', 10);
   const failures: PreflightFailure[] = [];
+  let recovered: { orphanedBranch: string } | undefined;
 
   // 1. Clean working tree
   const statusResult = run('git', ['status', '--porcelain'], spawn);
@@ -187,12 +272,23 @@ export function preflight(deps: SpawnDeps = {}): PreflightResult {
     });
   }
 
-  // 2. On main branch
+  // 2. On main branch — attempt orphan recovery first
   const branchResult = run('git', ['branch', '--show-current'], spawn);
-  if (branchResult.stdout !== mainBranch) {
+  let currentBranch = branchResult.stdout;
+  if (currentBranch && currentBranch !== mainBranch) {
+    if (canRecoverOrphanBranch(currentBranch, mainBranch, spawn)) {
+      const checkout = run('git', ['checkout', mainBranch], spawn);
+      if (checkout.exitCode === 0) {
+        recovered = { orphanedBranch: currentBranch };
+        currentBranch = mainBranch;
+      }
+    }
+  }
+
+  if (currentBranch !== mainBranch) {
     failures.push({
       kind: 'wrong_branch',
-      reason: `expected to be on '${mainBranch}' but currently on '${branchResult.stdout}'`,
+      reason: `expected to be on '${mainBranch}' but currently on '${currentBranch}'`,
     });
   }
 
@@ -246,6 +342,7 @@ export function preflight(deps: SpawnDeps = {}): PreflightResult {
   return {
     ok: failures.length === 0,
     failures,
+    ...(recovered ? { recovered } : {}),
   };
 }
 
@@ -708,6 +805,110 @@ export function bdListChildren(beadId: string, deps: SpawnDeps = {}): string[] {
     }
   }
   return childIds;
+}
+
+// =============================================================================
+// bdShowJson
+// =============================================================================
+
+/**
+ * Load the full JSON record for a bead via `bd show <id> --json`. Returns null
+ * when the call fails or the output is unparseable. `bd show --json` wraps its
+ * output in a single-element array; this helper unwraps it.
+ */
+export function bdShowJson(beadId: string, deps: SpawnDeps = {}): BeadJson | null {
+  const spawn = deps.spawnFn ?? nodeSpawnSync;
+  const result = run('bd', ['show', beadId, '--json'], spawn);
+  if (result.exitCode !== 0 || !result.stdout) return null;
+
+  try {
+    const parsed = JSON.parse(result.stdout);
+    const record = Array.isArray(parsed) ? parsed[0] : parsed;
+    if (!record || typeof record !== 'object') return null;
+    return record as BeadJson;
+  }
+  catch {
+    return null;
+  }
+}
+
+// =============================================================================
+// checkEpicPromotion
+// =============================================================================
+
+/**
+ * Decide whether a selected leaf bead should be promoted to its parent epic.
+ *
+ * Promotion condition: the selected bead's parent is an analyzed epic with
+ * at least 2 ready children (including the selected bead itself). This lets
+ * the orchestrator run the epic as a wave — one branch, one PR closing all
+ * children — instead of fragmenting the epic across multiple single-leaf runs.
+ *
+ * Note: an analyzed epic is always "blocked" by its own unclosed children in
+ * bd's dependency DAG. That is NOT disqualifying — it's exactly the condition
+ * under which wave orchestration applies.
+ *
+ * Returns null when any of these hold:
+ *   - the selected bead has no parent
+ *   - the parent is not an epic
+ *   - the parent has not reached the 'analyzed' state
+ *   - fewer than 2 children are currently ready (no unmet blockers,
+ *     not labelled needs-human)
+ */
+export function checkEpicPromotion(
+  selectedBeadId: string,
+  deps: SpawnDeps = {},
+): EpicPromotionResult | null {
+  const spawn = deps.spawnFn ?? nodeSpawnSync;
+
+  // 1. Load selected bead, check for a parent
+  const selected = bdShowJson(selectedBeadId, deps);
+  if (!selected || !selected.parent) return null;
+
+  // 2. Load parent, require epic
+  const parent = bdShowJson(selected.parent, deps);
+  if (!parent || parent.issue_type !== 'epic') return null;
+
+  // 3. Require analyzed state — we don't promote to an epic that hasn't had
+  //    its children enriched yet, since the wave executor needs enrichment.
+  const parentState = bdState(parent.id, deps);
+  if (parentState.missing_phases.includes('analyzed')) return null;
+
+  // 4. Count ready children. Build a set of currently-ready bead ids from
+  //    `bd ready --json` to match bd's own readiness semantics, then count
+  //    how many of the epic's children appear in that set.
+  const readyResult = run('bd', ['ready', '--limit=200', '--json'], spawn);
+  if (readyResult.exitCode !== 0) return null;
+
+  let readyBeads: BeadJson[];
+  try {
+    readyBeads = JSON.parse(readyResult.stdout) as BeadJson[];
+  }
+  catch {
+    return null;
+  }
+
+  const readyIds = new Set(readyBeads.map(b => b.id));
+  const childIds = bdListChildren(parent.id, deps);
+
+  let readyChildCount = 0;
+  for (const childId of childIds) {
+    if (!readyIds.has(childId)) continue;
+    // Exclude children that are labelled needs-human
+    const labelResult = run('bd', ['label', 'list', childId], spawn);
+    const hasNeedsHuman = labelResult.stdout
+      .split('\n')
+      .some(line => line.trim() === '- needs-human');
+    if (!hasNeedsHuman) readyChildCount++;
+  }
+
+  if (readyChildCount < 2) return null;
+
+  return {
+    epicId: parent.id,
+    epicTitle: typeof parent.title === 'string' ? parent.title : undefined,
+    readyChildCount,
+  };
 }
 
 // =============================================================================
