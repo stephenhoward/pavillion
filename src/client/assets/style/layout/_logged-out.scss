@@ -6,11 +6,7 @@
   justify-content: center;
   min-height: 100vh;
   padding: var(--pav-space-4) var(--pav-space-4);
-  background-color: var(--pav-color-stone-200);
-
-  @media (prefers-color-scheme: dark) {
-    background-color: var(--pav-color-stone-900);
-  }
+  background-color: var(--pav-surface-secondary);
 
   /* Header with site title */
   header {
@@ -20,12 +16,8 @@
     h1 {
       font-size: 1.875rem; /* 30px */
       font-weight: var(--pav-font-weight-semibold);
-      color: var(--pav-color-stone-800);
+      color: var(--pav-text-primary);
       letter-spacing: -0.025em;
-
-      @media (prefers-color-scheme: dark) {
-        color: var(--pav-color-stone-100);
-      }
 
       @media (min-width: 640px) {
         font-size: 2.25rem; /* 36px */
@@ -45,7 +37,7 @@
     align-items: center;
     gap: var(--pav-space-2);
     font-size: 0.875rem; /* 14px */
-    color: var(--pav-color-stone-500);
+    color: var(--pav-text-muted);
 
     a {
       color: inherit;
@@ -56,10 +48,6 @@
       &:hover {
         color: var(--pav-color-brand-primary);
       }
-    }
-
-    @media (prefers-color-scheme: dark) {
-      color: var(--pav-color-stone-400);
     }
   }
 
@@ -80,16 +68,12 @@
   .welcome-card {
     max-width: 28rem; /* 448px - default for narrow auth pages */
     margin-inline: auto;
-    background-color: white;
+    background-color: var(--pav-surface-card);
     border-radius: 1rem; /* 16px - rounded-2xl */
     padding: var(--pav-space-10);
-    box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
-    box-shadow: var(--pav-shadow-lg), 0 0 0 1px rgb(231 229 228 / 0.5);
-
-    @media (prefers-color-scheme: dark) {
-      background-color: var(--pav-color-stone-800);
-      box-shadow: none;
-    }
+    /* No semantic "shadow-ring" token exists; use color-mix on the stone-200 token
+       so the ring tracks the token layer even though it does not flip for dark mode. */
+    box-shadow: var(--pav-shadow-lg), 0 0 0 1px color-mix(in srgb, var(--pav-color-stone-200) 50%, transparent);
 
     /* Two-column layout for login card with info panel */
     &:has(.welcome-card-info) {
@@ -108,13 +92,9 @@
     h3 {
       font-size: 2.25rem; /* 36px */
       font-weight: var(--pav-font-weight-light);
-      color: var(--pav-color-stone-800);
+      color: var(--pav-text-primary);
       text-align: center;
       margin-block-end: var(--pav-space-10);
-
-      @media (prefers-color-scheme: dark) {
-        color: var(--pav-color-stone-100);
-      }
     }
 
     /* Pill-shaped inputs for auth forms */
@@ -123,40 +103,33 @@
     input[type="password"] {
       width: 100%;
       border-radius: 9999px; /* Full pill shape */
-      border: 1px solid var(--pav-color-stone-300);
+      border: var(--pav-border-width-1) solid var(--pav-border-primary);
       padding: 1.125rem 1.5rem; /* 18px 24px */
       font-size: 1.125rem; /* 18px */
-      background-color: white;
-      color: var(--pav-color-stone-900);
+      background-color: var(--pav-surface-primary);
+      color: var(--pav-text-primary);
       transition: all 0.2s ease-in-out;
 
       &::placeholder {
-        color: var(--pav-color-stone-400);
+        color: var(--pav-text-muted);
       }
 
       &:focus {
         outline: none;
         border-color: var(--pav-color-orange-400);
-        box-shadow: 0 0 0 3px rgb(249 115 22 / 0.4);
-      }
-
-      @media (prefers-color-scheme: dark) {
-        background-color: var(--pav-color-stone-700);
-        border-color: var(--pav-color-stone-600);
-        color: var(--pav-color-stone-100);
-
-        &::placeholder {
-          color: var(--pav-color-stone-500);
-        }
+        /* color-mix on brand orange keeps focus ring tied to the orange token. */
+        box-shadow: 0 0 0 3px color-mix(in srgb, var(--pav-color-orange-500) 40%, transparent);
       }
     }
 
     /* Error state for inputs */
     input.form-control--error {
-      border-color: rgb(239 68 68); /* red-500 */
+      /* Using literal red tokens rather than --pav-color-border-error because
+         the semantic error token resolves to purple, not red. */
+      border-color: var(--pav-color-red-500);
 
       @media (prefers-color-scheme: dark) {
-        border-color: rgb(185 28 28); /* red-700 */
+        border-color: var(--pav-color-red-700);
       }
     }
 
@@ -168,6 +141,7 @@
       font-size: 1.125rem; /* 18px */
       font-weight: var(--pav-font-weight-medium);
       background-color: var(--pav-color-orange-500);
+      /* Brand orange is constant across modes; white literal matches _buttons.scss. */
       color: white;
       border: none;
 
@@ -177,7 +151,7 @@
 
       &:focus-visible {
         outline: none;
-        box-shadow: 0 0 0 2px var(--pav-color-orange-500), 0 0 0 4px rgb(249 115 22 / 0.4);
+        box-shadow: 0 0 0 2px var(--pav-color-orange-500), 0 0 0 4px color-mix(in srgb, var(--pav-color-orange-500) 40%, transparent);
       }
 
       &:active:not(:disabled) {
@@ -194,33 +168,23 @@
       padding: 1.125rem 1.5rem; /* 18px 24px */
       font-size: 1.125rem; /* 18px */
       font-weight: var(--pav-font-weight-medium);
-      background-color: white;
-      color: var(--pav-color-stone-700);
-      border: 1px solid var(--pav-color-stone-300);
+      background-color: var(--pav-surface-primary);
+      color: var(--pav-text-secondary);
+      border: var(--pav-border-width-1) solid var(--pav-border-primary);
       text-decoration: none;
       text-align: center;
 
       &:hover:not(:disabled) {
-        background-color: var(--pav-color-stone-50);
+        background-color: var(--pav-interactive-hover);
       }
 
       &:focus-visible {
         outline: none;
-        box-shadow: 0 0 0 2px var(--pav-color-stone-400), 0 0 0 4px rgb(168 162 158 / 0.3);
+        box-shadow: 0 0 0 2px var(--pav-color-stone-400), 0 0 0 4px color-mix(in srgb, var(--pav-color-stone-400) 30%, transparent);
       }
 
       &:active:not(:disabled) {
         transform: scale(0.98);
-      }
-
-      @media (prefers-color-scheme: dark) {
-        background-color: var(--pav-color-stone-700);
-        border-color: var(--pav-color-stone-600);
-        color: var(--pav-color-stone-200);
-
-        &:hover:not(:disabled) {
-          background-color: var(--pav-color-stone-600);
-        }
       }
     }
 
@@ -247,6 +211,8 @@
         text-decoration: underline;
       }
 
+      /* Brand orange variants are not auto-flipped by the theme layer, so this
+         manual dark-mode override is retained to preserve contrast. */
       @media (prefers-color-scheme: dark) {
         color: var(--pav-color-orange-400);
 
