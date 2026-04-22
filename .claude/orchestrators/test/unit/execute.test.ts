@@ -549,6 +549,120 @@ describe('runLeafExecution', () => {
       expect.any(Object),
     );
   });
+
+  it('retries implementer when gate fails on first attempt, succeeds on retry', async () => {
+    const { runLeafExecution } = await import('../../lib/execute.js');
+
+    const gateCtx: RunContext = { ...makeCtx(logStub), beadId: 'pv-gate.2' };
+
+    // Implementer succeeds both attempts
+    const spawnFn = vi.fn().mockImplementation(() => createMockChild('done', '', 0));
+
+    // scriptSpawnFn: route by argv. First status call is dirty; subsequent clean.
+    const scriptSpawnFn = vi.fn().mockImplementation((cmd: string, args: string[]) => {
+      if (cmd === 'git' && args[0] === 'status') {
+        const call = scriptSpawnFn.mock.calls
+          .filter(c => c[0] === 'git' && (c[1] as string[])[0] === 'status').length;
+        return call === 1
+          ? fakeSpawnResult(' M a.ts\n', '', 0)
+          : fakeSpawnResult('', '', 0);
+      }
+      if (cmd === 'git' && args[0] === 'rev-list') return fakeSpawnResult('1\n', '', 0);
+      // Empty diff -> audit-skip pass-through (we're exercising the gate, not audit).
+      if (cmd === 'git' && args[0] === 'diff') return fakeSpawnResult('', '', 0);
+      if (cmd === 'bd') return fakeSpawnResult('', '', 0);
+      return fakeSpawnResult('', '', 0);
+    });
+
+    const selectAuditorsFn = vi.fn().mockResolvedValue([]);
+
+    const result = await runLeafExecution('pv-gate.2', gateCtx, {
+      spawnFn,
+      scriptSpawnFn,
+      selectAuditorsFn,
+    });
+
+    expect(result.outcome).toBe('complete');
+    expect(result.retryCount).toBe(1);
+
+    const verificationEvents = logStub.runJsonEntries
+      .filter(e => typeof e.event === 'string' && (e.event as string).startsWith('implementer-verification'))
+      .map(e => e.event);
+    expect(verificationEvents).toEqual([
+      'implementer-verification-failed',
+      'implementer-verification-passed',
+    ]);
+
+    expect(logStub.runJsonEntries).toContainEqual(
+      expect.objectContaining({
+        event: 'bead-reopened',
+        beadId: 'pv-gate.2',
+        reason: 'verification-gate-retry',
+      }),
+    );
+  });
+
+  it('escalates when gate fails on both attempts', async () => {
+    const { runLeafExecution } = await import('../../lib/execute.js');
+
+    const gateCtx: RunContext = { ...makeCtx(logStub), beadId: 'pv-gate.3' };
+
+    const spawnFn = vi.fn().mockImplementation(() => createMockChild('done', '', 0));
+
+    // Status always dirty, everything else cooperates
+    const scriptSpawnFn = vi.fn().mockImplementation((cmd: string, args: string[]) => {
+      if (cmd === 'git' && args[0] === 'status') return fakeSpawnResult(' M a.ts\n', '', 0);
+      if (cmd === 'git' && args[0] === 'rev-list') return fakeSpawnResult('1\n', '', 0);
+      if (cmd === 'git' && args[0] === 'diff') return fakeSpawnResult('a.ts\n', '', 0);
+      if (cmd === 'bd') return fakeSpawnResult('', '', 0);
+      return fakeSpawnResult('', '', 0);
+    });
+
+    const result = await runLeafExecution('pv-gate.3', gateCtx, {
+      spawnFn,
+      scriptSpawnFn,
+    });
+
+    expect(result.outcome).toBe('halt');
+
+    const reopenEvents = logStub.runJsonEntries.filter(e => e.event === 'bead-reopened');
+    expect(reopenEvents).toHaveLength(2);
+    expect(reopenEvents.map(e => e.reason)).toEqual([
+      'verification-gate-retry',
+      'verification-gate-escalate',
+    ]);
+  });
+
+  it('escalates when tree is clean but branch has zero commits (the observed failure)', async () => {
+    const { runLeafExecution } = await import('../../lib/execute.js');
+
+    const gateCtx: RunContext = { ...makeCtx(logStub), beadId: 'pv-psum.2' };
+
+    const spawnFn = vi.fn().mockImplementation(() => createMockChild('done', '', 0));
+
+    const scriptSpawnFn = vi.fn().mockImplementation((cmd: string, args: string[]) => {
+      if (cmd === 'git' && args[0] === 'status') return fakeSpawnResult('', '', 0);
+      if (cmd === 'git' && args[0] === 'rev-list') return fakeSpawnResult('0\n', '', 0);
+      if (cmd === 'git' && args[0] === 'diff') return fakeSpawnResult('', '', 0);
+      if (cmd === 'bd') return fakeSpawnResult('', '', 0);
+      return fakeSpawnResult('', '', 0);
+    });
+
+    const result = await runLeafExecution('pv-psum.2', gateCtx, {
+      spawnFn,
+      scriptSpawnFn,
+    });
+
+    expect(result.outcome).toBe('halt');
+
+    const failReasons = logStub.runJsonEntries
+      .filter(e => e.event === 'implementer-verification-failed')
+      .map(e => e.reason);
+    expect(failReasons).toEqual([
+      'no commits on branch ahead of main',
+      'no commits on branch ahead of main',
+    ]);
+  });
 });
 
 // =============================================================================
