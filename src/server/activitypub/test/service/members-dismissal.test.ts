@@ -238,6 +238,62 @@ describe('unshareEvent - RepostDismissalEntity upsert', () => {
       findOrCreateStub.restore();
     }
   });
+
+  it('does not fire addToOutbox or eventUnreposted emit when the transaction rolls back', async () => {
+    // Seed the AP URL → local event UUID lookup
+    await EventObjectEntity.create({
+      event_id: localEventId,
+      ap_id: eventApUrl,
+      attributed_to: 'https://remote.example.com/calendars/some-calendar',
+    });
+
+    // Seed a SharedEventEntity that unshareEvent would try to destroy
+    await SharedEventEntity.create({
+      id: 'share-activity-uuid-rollback-side-effects',
+      event_id: localEventId,
+      calendar_id: calendarId,
+      auto_posted: false,
+    });
+
+    // Capture the sandbox-stubbed addToOutbox and spy eventBus.emit so we can
+    // assert neither side effect escapes the aborted transaction.
+    const addToOutboxStub = service.addToOutbox as sinon.SinonStub;
+    const emitSpy = sandbox.spy(eventBus, 'emit');
+
+    // Force the dismissal write to throw, rolling back the entire transaction.
+    // Use sinon.stub directly (not sandbox) so we can restore it in finally
+    // even if the assertions blow up.
+    const findOrCreateStub = sinon.stub(RepostDismissalEntity, 'findOrCreate')
+      .rejects(new Error('forced rollback'));
+
+    const calendar = Calendar.fromObject({ id: calendarId, urlName: 'test-calendar' });
+    const account = Account.fromObject({ id: 'test-account-id' });
+
+    try {
+      await expect(
+        service.unshareEvent(account, calendar, eventApUrl),
+      ).rejects.toThrow('forced rollback');
+
+      // addToOutbox must NOT have fired — the post-commit side effect should
+      // never run when the transaction rolls back.
+      expect(addToOutboxStub.called).toBe(false);
+
+      // eventBus.emit must NOT have fired for 'eventUnreposted'. Filter by
+      // channel name so unrelated emits on the shared bus cannot flake this.
+      const unrepostEmits = emitSpy.getCalls().filter((c) => c.args[0] === 'eventUnreposted');
+      expect(unrepostEmits).toHaveLength(0);
+
+      // Sanity-check: the SharedEventEntity row still exists, confirming the
+      // rollback actually engaged (mirrors the Wave 2 rollback test).
+      const remainingShares = await SharedEventEntity.findAll({
+        where: { event_id: localEventId, calendar_id: calendarId },
+      });
+      expect(remainingShares).toHaveLength(1);
+    }
+    finally {
+      findOrCreateStub.restore();
+    }
+  });
 });
 
 describe('shareEvent - RepostDismissalEntity deletion', () => {
