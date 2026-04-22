@@ -47,3 +47,31 @@
     }
   }
 }
+
+/* Inline text link used for "Forgot password?" / "Back to login" / "Resend"
+   affordances across login, password-forgot, password-reset, register,
+   register-apply, and accept-invite pages. Brand-primary colored with a
+   hover darken and a visible focus outline. */
+a.forgot,
+button.forgot {
+  display: inline-block;
+  margin-top: 1.25rem; /* 20px */
+  font-size: 1rem; /* 16px */
+  color: var(--pav-color-brand-primary);
+  text-decoration: none;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  transition: color 0.2s ease-in-out;
+
+  &:hover {
+    color: var(--pav-color-orange-600);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--pav-color-brand-primary);
+    outline-offset: 2px;
+    text-decoration: underline;
+  }
+}

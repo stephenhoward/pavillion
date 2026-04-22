@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { inject, computed } from 'vue';
+import { ref, inject, computed } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useTranslation } from 'i18next-vue';
 import i18next from 'i18next';
@@ -17,6 +17,14 @@ const settings = computed(() => site_config.settings());
 const initialEmail = computed(() =>
   typeof route.query.email === 'string' ? route.query.email : undefined,
 );
+
+// Local reactive email, seeded from the initial query-param value. Kept in
+// sync with LoginForm's <input> via the @update:email emit so the secondary
+// router-links (register / apply / forgot-password) can propagate the live
+// typed value through their ?email= query params.
+const email = ref<string>(initialEmail.value ?? '');
+
+const registrationMode = computed(() => settings.value.registrationMode);
 
 const infoDescription = computed(() => {
   const desc = settings.value.instanceDescription as Record<string, string> | undefined;
@@ -46,7 +54,28 @@ function onLoginSuccess() {
 
 <template>
   <div class="welcome-card">
-    <LoginForm :initial-email="initialEmail" @success="onLoginSuccess" />
+    <LoginForm :initial-email="initialEmail"
+               @update:email="(v) => email = v"
+               @success="onLoginSuccess" />
+
+    <div v-if="registrationMode === 'open' || registrationMode === 'apply'"
+         class="secondary-actions">
+      <router-link v-if="registrationMode === 'open'"
+                   class="btn btn--pill btn--secondary"
+                   :to="{ name: 'register', query: { email: email }}">
+        {{ t("register_button") }}
+      </router-link>
+      <router-link v-if="registrationMode === 'apply'"
+                   class="btn btn--pill btn--secondary"
+                   :to="{ name: 'register-apply', query: { email: email }}">
+        {{ t("apply_button") }}
+      </router-link>
+    </div>
+
+    <router-link class="forgot"
+                 :to="{ name: 'forgot_password', query: { email: email }}">
+      {{ t("forgot_password") }}
+    </router-link>
 
     <aside class="welcome-card-info"
            :aria-label="t('info_panel.welcome') + ' ' + siteTitle">
@@ -73,3 +102,9 @@ function onLoginSuccess() {
     </aside>
   </div>
 </template>
+
+<style scoped lang="scss">
+.secondary-actions {
+  margin-top: 1.5rem; /* 24px */
+}
+</style>

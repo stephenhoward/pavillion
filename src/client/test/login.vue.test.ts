@@ -43,6 +43,16 @@ const mountLoginView = async (settings: Record<string, any> = {}, queryEmail?: s
   return { wrapper, router, authn };
 };
 
+// Helpers for link-presence assertions by href. The template has no #register
+// or #apply IDs; selecting by ID would always yield a missing element and make
+// negative assertions tautological.
+const findRegisterLink = (wrapper: Awaited<ReturnType<typeof mountLoginView>>['wrapper']) =>
+  wrapper.findAll('a').find(a => a.attributes('href')?.includes('/register'));
+const findApplyLink = (wrapper: Awaited<ReturnType<typeof mountLoginView>>['wrapper']) =>
+  wrapper.findAll('a').find(a => a.attributes('href')?.includes('/apply'));
+const findForgotLink = (wrapper: Awaited<ReturnType<typeof mountLoginView>>['wrapper']) =>
+  wrapper.findAll('a').find(a => a.attributes('href')?.includes('/forgot'));
+
 describe('Login Route View', () => {
   const sandbox = sinon.createSandbox();
   afterEach(() => sandbox.restore());
@@ -81,6 +91,92 @@ describe('Login Route View', () => {
     await wrapper.vm.$nextTick();
 
     expect(pushStub.calledWith('/calendar')).toBe(true);
+  });
+});
+
+describe('Login Registration Mode Affordances', () => {
+
+  describe('Closed Registration', () => {
+    it('no registration link', async () => {
+      const { wrapper } = await mountLoginView({ registrationMode: 'closed' });
+      expect(findRegisterLink(wrapper)).toBeUndefined();
+    });
+
+    it('no apply link', async () => {
+      const { wrapper } = await mountLoginView({ registrationMode: 'closed' });
+      expect(findApplyLink(wrapper)).toBeUndefined();
+    });
+  });
+
+  describe('Open Registration', () => {
+    it('has registration link', async () => {
+      const { wrapper } = await mountLoginView({ registrationMode: 'open' });
+      expect(findRegisterLink(wrapper)).toBeDefined();
+    });
+
+    it('no apply link', async () => {
+      const { wrapper } = await mountLoginView({ registrationMode: 'open' });
+      expect(findApplyLink(wrapper)).toBeUndefined();
+    });
+  });
+
+  describe('Open Applies', () => {
+    it('no registration link', async () => {
+      const { wrapper } = await mountLoginView({ registrationMode: 'apply' });
+      expect(findRegisterLink(wrapper)).toBeUndefined();
+    });
+
+    it('has apply link', async () => {
+      const { wrapper } = await mountLoginView({ registrationMode: 'apply' });
+      expect(findApplyLink(wrapper)).toBeDefined();
+    });
+  });
+
+  describe('Invitation Mode', () => {
+    it('no registration link', async () => {
+      const { wrapper } = await mountLoginView({ registrationMode: 'invitation' });
+      expect(findRegisterLink(wrapper)).toBeUndefined();
+    });
+
+    it('no apply link', async () => {
+      const { wrapper } = await mountLoginView({ registrationMode: 'invitation' });
+      expect(findApplyLink(wrapper)).toBeUndefined();
+    });
+  });
+});
+
+describe('Login Live Email Propagation', () => {
+
+  it('updates register/forgot-password link ?email= query params as the user types', async () => {
+    const { wrapper } = await mountLoginView({ registrationMode: 'open' });
+
+    const emailInput = wrapper.find('input[type="email"]');
+    await emailInput.setValue('typed@example.com');
+    await wrapper.vm.$nextTick();
+
+    const registerLink = findRegisterLink(wrapper);
+    const forgotLink = findForgotLink(wrapper);
+
+    expect(registerLink).toBeDefined();
+    expect(forgotLink).toBeDefined();
+    expect(registerLink!.attributes('href')).toContain('email=typed@example.com');
+    expect(forgotLink!.attributes('href')).toContain('email=typed@example.com');
+  });
+
+  it('updates apply/forgot-password link ?email= query params as the user types (apply mode)', async () => {
+    const { wrapper } = await mountLoginView({ registrationMode: 'apply' });
+
+    const emailInput = wrapper.find('input[type="email"]');
+    await emailInput.setValue('applicant@example.com');
+    await wrapper.vm.$nextTick();
+
+    const applyLink = findApplyLink(wrapper);
+    const forgotLink = findForgotLink(wrapper);
+
+    expect(applyLink).toBeDefined();
+    expect(forgotLink).toBeDefined();
+    expect(applyLink!.attributes('href')).toContain('email=applicant@example.com');
+    expect(forgotLink!.attributes('href')).toContain('email=applicant@example.com');
   });
 });
 
