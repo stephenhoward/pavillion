@@ -793,6 +793,97 @@ export async function dispatchImplementer(
 }
 
 // =============================================================================
+// Exported: verifyImplementerCompletion
+// =============================================================================
+
+/**
+ * Verification result returned by `verifyImplementerCompletion`.
+ *
+ * On success, `changedFiles` is the authoritative list derived from
+ * `git diff --name-only <base>...HEAD` — callers must use this in place
+ * of any stale `deps.changedFiles`.
+ */
+export type VerificationResult =
+  | { passed: true; changedFiles: string[] }
+  | { passed: false; reason: string };
+
+/**
+ * Verify that the implementer subagent actually committed its work.
+ *
+ * Runs after a successful `dispatchImplementer`, before `runAudit`. Catches
+ * the failure mode where an implementer declares success (and may even have
+ * called `bd close`) but never committed — producing an empty branch that
+ * silently passes through audit and fails at `gh pr create`.
+ *
+ * Checks, in order:
+ *   1. Working tree is clean (`git status --porcelain` returns empty).
+ *   2. Branch has commits ahead of base (`git rev-list --count base..HEAD > 0`).
+ *   3. Computes authoritative `changedFiles` via `git diff --name-only base...HEAD`.
+ *
+ * Base branch defaults to `main`; override via `GIT_SAFE_MAIN_BRANCH` env var
+ * (consistent with preflight checks in `helpers.ts`).
+ */
+export function verifyImplementerCompletion(
+  ctx: PhaseCtx,
+  deps: ExecuteDeps,
+): VerificationResult {
+  const spawnFn = deps.scriptSpawnFn ?? nodeSpawnSync;
+  const baseBranch = process.env.GIT_SAFE_MAIN_BRANCH ?? 'main';
+
+  const statusResult = spawnFn('git', ['status', '--porcelain'], {
+    encoding: 'buffer' as never,
+    shell: false,
+    timeout: 10_000,
+  });
+  const statusOutput = (statusResult.stdout?.toString('utf-8') ?? '').trim();
+  if (statusOutput !== '') {
+    const firstLine = statusOutput.split('\n')[0].trim();
+    const reason = `uncommitted or untracked changes present: ${firstLine}`;
+    ctx.logger.appendRunJson({
+      event: 'implementer-verification-failed',
+      phase: PhaseName.Leaf,
+      beadId: ctx.beadId,
+      reason,
+    });
+    return { passed: false, reason };
+  }
+
+  const revResult = spawnFn('git', ['rev-list', '--count', `${baseBranch}..HEAD`], {
+    encoding: 'buffer' as never,
+    shell: false,
+    timeout: 10_000,
+  });
+  const revCount = (revResult.stdout?.toString('utf-8') ?? '').trim();
+  if (revCount === '0') {
+    const reason = `no commits on branch ahead of ${baseBranch}`;
+    ctx.logger.appendRunJson({
+      event: 'implementer-verification-failed',
+      phase: PhaseName.Leaf,
+      beadId: ctx.beadId,
+      reason,
+    });
+    return { passed: false, reason };
+  }
+
+  const diffResult = spawnFn('git', ['diff', '--name-only', `${baseBranch}...HEAD`], {
+    encoding: 'buffer' as never,
+    shell: false,
+    timeout: 10_000,
+  });
+  const diffOutput = (diffResult.stdout?.toString('utf-8') ?? '').trim();
+  const changedFiles = diffOutput === '' ? [] : diffOutput.split('\n');
+
+  ctx.logger.appendRunJson({
+    event: 'implementer-verification-passed',
+    phase: PhaseName.Leaf,
+    beadId: ctx.beadId,
+    changedFilesCount: changedFiles.length,
+  });
+
+  return { passed: true, changedFiles };
+}
+
+// =============================================================================
 // Exported: runAudit
 // =============================================================================
 
