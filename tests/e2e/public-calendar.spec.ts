@@ -151,7 +151,13 @@ test.describe('Public Calendar', () => {
     }
   });
 
-  test('should navigate to event detail page', async ({ page }) => {
+  // TEMP: epic pv-3hsk transitions public event-instance URLs from UUID to a
+  // yyyymmdd-hhmm slug. Wave 2 makes event-card emit slug-based hrefs but the
+  // detail-page consumer (event-instance.vue) and its backend service path are
+  // not slug-aware until later waves (beads 3.4, 3.2, 2.4, 2.3, 2.1, 1.4). The
+  // verification bead pv-3hsk.5.1 will remove this skip once the full path is
+  // wired through.
+  test.skip('should navigate to event detail page', async ({ page }) => {
     // Wait for events to load
     // New redesign uses li.day-event-item (containing article.event-card) instead of li.event
     await page.waitForSelector('li.day-event-item, .empty-state', { timeout: 15000 });

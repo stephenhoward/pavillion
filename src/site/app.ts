@@ -27,7 +27,7 @@ Config.init().then( async (config) => {
   const routes: RouteRecordRaw[] = [
     { path: '/view/:calendar', component: CalendarView, name: 'calendar' },
     { path: '/view/:calendar/events/:event', component: EventView, name: 'event' },
-    { path: '/view/:calendar/events/:event/:instance', component: EventInstanceView, name: 'instance' },
+    { path: '/view/:calendar/events/:event/:startTime(\\d{8}-\\d{4})', component: EventInstanceView, name: 'instance' },
     { path: '/view/:calendar/series/:series', component: SeriesView, name: 'series' },
   ];
 
@@ -42,7 +42,7 @@ Config.init().then( async (config) => {
     routes.push(
       { path: `/:locale(${pattern})/view/:calendar`, component: CalendarView },
       { path: `/:locale(${pattern})/view/:calendar/events/:event`, component: EventView },
-      { path: `/:locale(${pattern})/view/:calendar/events/:event/:instance`, component: EventInstanceView },
+      { path: `/:locale(${pattern})/view/:calendar/events/:event/:startTime(\\d{8}-\\d{4})`, component: EventInstanceView },
       { path: `/:locale(${pattern})/view/:calendar/series/:series`, component: SeriesView },
     );
   }

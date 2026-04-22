@@ -577,10 +577,12 @@ describe('calendar.vue - Locale-aware event card links', () => {
     const eventContent = new CalendarEventContent('en');
     eventContent.name = 'Test Event';
     event.addContent(eventContent);
+    // Use a UTC ISO so the slug formatInstanceSlug derives is deterministic
+    // regardless of host timezone: 2026-03-15T10:00:00Z → 20260315-1000.
     return new CalendarEventInstance(
       instanceId,
       event,
-      DateTime.fromISO('2026-03-15T10:00:00'),
+      DateTime.fromISO('2026-03-15T10:00:00.000Z'),
       null,
     );
   }
@@ -606,7 +608,7 @@ describe('calendar.vue - Locale-aware event card links', () => {
       history: createMemoryHistory(),
       routes: [
         { path: '/view/:calendar', name: 'calendar', component: calendar },
-        { path: '/view/:calendar/events/:event/:instance', name: 'instance', component: { template: '<div/>' } },
+        { path: '/view/:calendar/events/:event/:startTime(\\d{8}-\\d{4})', name: 'instance', component: { template: '<div/>' } },
       ],
     });
 
@@ -639,8 +641,8 @@ describe('calendar.vue - Locale-aware event card links', () => {
     expect(link.exists()).toBe(true);
 
     const href = link.attributes('href');
-    // Default locale — no /en/ prefix
-    expect(href).toBe('/view/test-calendar/events/event-abc/instance-xyz');
+    // Default locale — no /en/ prefix; final segment is the UTC slug.
+    expect(href).toBe('/view/test-calendar/events/event-abc/20260315-1000');
   });
 
   it('event card links include locale prefix for non-default locale (es)', async () => {
@@ -649,8 +651,8 @@ describe('calendar.vue - Locale-aware event card links', () => {
       routes: [
         { path: '/view/:calendar', name: 'calendar', component: calendar },
         { path: '/es/view/:calendar', component: calendar },
-        { path: '/view/:calendar/events/:event/:instance', name: 'instance', component: { template: '<div/>' } },
-        { path: '/es/view/:calendar/events/:event/:instance', component: { template: '<div/>' } },
+        { path: '/view/:calendar/events/:event/:startTime(\\d{8}-\\d{4})', name: 'instance', component: { template: '<div/>' } },
+        { path: '/es/view/:calendar/events/:event/:startTime(\\d{8}-\\d{4})', component: { template: '<div/>' } },
       ],
     });
 
@@ -684,8 +686,8 @@ describe('calendar.vue - Locale-aware event card links', () => {
     expect(link.exists()).toBe(true);
 
     const href = link.attributes('href');
-    // Non-default locale — must include /es/ prefix
-    expect(href).toBe('/es/view/test-calendar/events/event-abc/instance-xyz');
+    // Non-default locale — must include /es/ prefix; final segment is the UTC slug.
+    expect(href).toBe('/es/view/test-calendar/events/event-abc/20260315-1000');
   });
 });
 

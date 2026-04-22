@@ -35,7 +35,7 @@ const createMockRouter = () => {
     history: createMemoryHistory(),
     routes: [
       { path: '/widget/:urlName', name: 'widget-calendar', component: { template: '<div></div>' } },
-      { path: '/widget/:urlName/events/:eventId', name: 'widget-event-detail', component: { template: '<div></div>' } },
+      { path: '/widget/:urlName/events/:eventId/:startTime(\\d{8}-\\d{4})?', name: 'widget-event-detail', component: { template: '<div></div>' } },
     ],
   });
 };

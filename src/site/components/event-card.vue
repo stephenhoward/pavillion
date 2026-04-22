@@ -6,6 +6,7 @@ import { Calendar, CalendarX, MapPin, Repeat } from 'lucide-vue-next';
 import EventImage from './event-image.vue';
 import { useLocalizedContent } from '@/site/composables/useLocalizedContent';
 import { useLocale } from '@/site/composables/useLocale';
+import { formatInstanceSlug } from '@/common/utils/instance-slug';
 import type CalendarEventInstance from '@/common/model/event_instance';
 import type { Media } from '@/common/model/media';
 
@@ -117,12 +118,14 @@ const isRemoteSourceCalendar = computed(() => {
 
 /**
  * Returns the router-link href for the event detail page.
+ * The final path segment is a minute-precision UTC timestamp slug
+ * (`yyyymmdd-hhmm`) derived from the instance's start time.
  */
 const detailPath = computed(() => {
   const eventId = props.instance.event.id;
-  const instanceId = props.instance.id;
+  const slug = formatInstanceSlug(props.instance.start);
   return localizedPath(
-    `/view/${props.calendarUrlName}/events/${eventId}/${instanceId}`,
+    `/view/${props.calendarUrlName}/events/${eventId}/${slug}`,
   );
 });
 </script>

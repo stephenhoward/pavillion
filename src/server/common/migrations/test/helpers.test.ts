@@ -3,6 +3,7 @@ import { Sequelize, DataTypes } from 'sequelize';
 import {
   addIndexIfNotExists,
   columnExists,
+  removeIndexIfExists,
   tableExists,
 } from '../helpers';
 
@@ -142,6 +143,29 @@ describe('Migration Helpers', () => {
         (ix) => ix.name === 'uniq_widget_owner_name',
       ).length;
       expect(count).toBe(1);
+    });
+  });
+
+  describe('removeIndexIfExists', () => {
+    it('removes the index when it exists', async () => {
+      const qi = sequelize.getQueryInterface();
+
+      await addIndexIfNotExists(qi, 'widget', ['owner_id'], {
+        name: 'idx_widget_owner_id',
+      });
+
+      await removeIndexIfExists(qi, 'widget', 'idx_widget_owner_id');
+
+      const indexes = await qi.showIndex('widget') as { name: string }[];
+      expect(indexes.some((ix) => ix.name === 'idx_widget_owner_id')).toBe(false);
+    });
+
+    it('is a no-op when the index does not exist', async () => {
+      const qi = sequelize.getQueryInterface();
+
+      await expect(
+        removeIndexIfExists(qi, 'widget', 'idx_widget_missing'),
+      ).resolves.toBeUndefined();
     });
   });
 });

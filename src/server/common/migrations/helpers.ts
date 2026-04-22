@@ -116,3 +116,24 @@ export async function addIndexIfNotExists(
   }
   await queryInterface.addIndex(tableName, fields, options);
 }
+
+/**
+ * Remove an index by name only if it exists. Symmetric with
+ * addIndexIfNotExists so migration `down` paths can roll back safely even
+ * when the index was never applied (e.g. partial migration failure).
+ */
+export async function removeIndexIfExists(
+  queryInterface: QueryInterface,
+  tableName: string,
+  indexName: string,
+): Promise<void> {
+  const indexes = await queryInterface.showIndex(tableName) as { name: string }[];
+  if (!indexes.some((ix) => ix.name === indexName)) {
+    logger.info(
+      { table: tableName, index: indexName },
+      'Index does not exist, skipping removal',
+    );
+    return;
+  }
+  await queryInterface.removeIndex(tableName, indexName);
+}

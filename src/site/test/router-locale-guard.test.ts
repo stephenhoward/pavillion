@@ -36,14 +36,16 @@ function installLocaleGuard(router: ReturnType<typeof createRouter>) {
 const StubComponent = { template: '<div />' };
 
 const routes: RouteRecordRaw[] = [
-  { path: '/@:calendar', component: StubComponent, name: 'calendar' },
-  { path: '/@:calendar/events/:event', component: StubComponent, name: 'event' },
-  { path: '/@:calendar/events/:event/:instance', component: StubComponent, name: 'instance' },
+  { path: '/view/:calendar', component: StubComponent, name: 'calendar' },
+  { path: '/view/:calendar/events/:event', component: StubComponent, name: 'event' },
+  { path: '/view/:calendar/events/:event/:startTime(\\d{8}-\\d{4})', component: StubComponent, name: 'instance' },
   // Locale-prefixed variants — unnamed intentionally (mirrors app.ts).
   // Use dynamic :locale param so the guard can read to.params.locale.
-  { path: '/:locale(es)/@:calendar', component: StubComponent },
-  { path: '/:locale(es)/@:calendar/events/:event', component: StubComponent },
-  { path: '/:locale(es)/@:calendar/events/:event/:instance', component: StubComponent },
+  { path: '/:locale(es)/view/:calendar', component: StubComponent },
+  { path: '/:locale(es)/view/:calendar/events/:event', component: StubComponent },
+  { path: '/:locale(es)/view/:calendar/events/:event/:startTime(\\d{8}-\\d{4})', component: StubComponent },
+  // Catch-all for 404 fall-through tests.
+  { path: '/:pathMatch(.*)*', component: StubComponent, name: 'not-found' },
 ];
 
 // ---------------------------------------------------------------------------
@@ -82,26 +84,37 @@ describe('Vue Router locale-aware navigation guard', () => {
   // -------------------------------------------------------------------------
 
   describe('unprefixed routes (default language)', () => {
-    it('should match /@:calendar without a locale prefix', async () => {
-      await router.push('/@mycalendar');
+    it('should match /view/:calendar without a locale prefix', async () => {
+      await router.push('/view/mycalendar');
       expect(router.currentRoute.value.name).toBe('calendar');
       expect(router.currentRoute.value.params.calendar).toBe('mycalendar');
     });
 
-    it('should match /@:calendar/events/:event without a locale prefix', async () => {
-      await router.push('/@mycalendar/events/event-123');
+    it('should match /view/:calendar/events/:event without a locale prefix', async () => {
+      await router.push('/view/mycalendar/events/event-123');
       expect(router.currentRoute.value.name).toBe('event');
       expect(router.currentRoute.value.params.calendar).toBe('mycalendar');
       expect(router.currentRoute.value.params.event).toBe('event-123');
     });
 
-    it('should match /@:calendar/events/:event/:instance', async () => {
-      await router.push('/@mycalendar/events/event-123/instance-456');
+    it('should match /view/:calendar/events/:event/:startTime with a valid slug', async () => {
+      await router.push('/view/mycalendar/events/event-123/20260508-1800');
       expect(router.currentRoute.value.name).toBe('instance');
+      expect(router.currentRoute.value.params.startTime).toBe('20260508-1800');
+    });
+
+    it('should fall through to 404 for a non-slug :startTime segment', async () => {
+      await router.push('/view/mycalendar/events/event-123/not-a-slug');
+      expect(router.currentRoute.value.name).toBe('not-found');
+    });
+
+    it('should fall through to 404 for a UUID-shaped :startTime segment', async () => {
+      await router.push('/view/mycalendar/events/event-123/550e8400-e29b-41d4-a716-446655440000');
+      expect(router.currentRoute.value.name).toBe('not-found');
     });
 
     it('should not call changeLanguage for unprefixed routes', async () => {
-      await router.push('/@mycalendar');
+      await router.push('/view/mycalendar');
       expect(changeLanguageSpy.called).toBe(false);
     });
   });
@@ -111,40 +124,46 @@ describe('Vue Router locale-aware navigation guard', () => {
   // -------------------------------------------------------------------------
 
   describe('locale-prefixed routes (non-default language)', () => {
-    it('should detect locale from /es/@calendar and call changeLanguage', async () => {
-      await router.push('/es/@mycalendar');
+    it('should detect locale from /es/view/calendar and call changeLanguage', async () => {
+      await router.push('/es/view/mycalendar');
       expect(changeLanguageSpy.calledWith('es')).toBe(true);
     });
 
-    it('should match /es/@calendar natively and keep locale prefix in URL', async () => {
-      await router.push('/es/@mycalendar');
-      expect(router.currentRoute.value.path).toBe('/es/@mycalendar');
+    it('should match /es/view/calendar natively and keep locale prefix in URL', async () => {
+      await router.push('/es/view/mycalendar');
+      expect(router.currentRoute.value.path).toBe('/es/view/mycalendar');
       expect(router.currentRoute.value.params.calendar).toBe('mycalendar');
       expect(router.currentRoute.value.params.locale).toBe('es');
     });
 
-    it('should match /es/@calendar/events/:event natively', async () => {
-      await router.push('/es/@mycalendar/events/event-123');
-      expect(router.currentRoute.value.path).toBe('/es/@mycalendar/events/event-123');
+    it('should match /es/view/calendar/events/:event natively', async () => {
+      await router.push('/es/view/mycalendar/events/event-123');
+      expect(router.currentRoute.value.path).toBe('/es/view/mycalendar/events/event-123');
       expect(router.currentRoute.value.params.calendar).toBe('mycalendar');
       expect(router.currentRoute.value.params.event).toBe('event-123');
     });
 
-    it('should match /es/@calendar/events/:event/:instance natively', async () => {
-      await router.push('/es/@mycalendar/events/event-123/instance-456');
-      expect(router.currentRoute.value.path).toBe('/es/@mycalendar/events/event-123/instance-456');
+    it('should match /es/view/calendar/events/:event/:startTime with a valid slug', async () => {
+      await router.push('/es/view/mycalendar/events/event-123/20260508-1800');
+      expect(router.currentRoute.value.path).toBe('/es/view/mycalendar/events/event-123/20260508-1800');
       expect(router.currentRoute.value.params.calendar).toBe('mycalendar');
+      expect(router.currentRoute.value.params.startTime).toBe('20260508-1800');
+    });
+
+    it('should fall through to 404 for a non-slug :startTime on a locale-prefixed route', async () => {
+      await router.push('/es/view/mycalendar/events/event-123/not-a-slug');
+      expect(router.currentRoute.value.name).toBe('not-found');
     });
 
     it('should preserve query parameters on locale-prefixed routes', async () => {
-      await router.push('/es/@mycalendar?filter=music&page=2');
-      expect(router.currentRoute.value.path).toBe('/es/@mycalendar');
+      await router.push('/es/view/mycalendar?filter=music&page=2');
+      expect(router.currentRoute.value.path).toBe('/es/view/mycalendar');
       expect(router.currentRoute.value.query).toEqual({ filter: 'music', page: '2' });
     });
 
     it('should preserve hash on locale-prefixed routes', async () => {
-      await router.push({ path: '/es/@mycalendar', hash: '#section' });
-      expect(router.currentRoute.value.path).toBe('/es/@mycalendar');
+      await router.push({ path: '/es/view/mycalendar', hash: '#section' });
+      expect(router.currentRoute.value.path).toBe('/es/view/mycalendar');
       expect(router.currentRoute.value.hash).toBe('#section');
     });
   });
@@ -157,19 +176,19 @@ describe('Vue Router locale-aware navigation guard', () => {
     it('should call changeLanguage when the URL locale differs from current language', async () => {
       // Simulate current language is 'en', URL has 'es' prefix
       Object.defineProperty(i18next, 'language', { value: 'en', configurable: true });
-      await router.push('/es/@mycalendar');
+      await router.push('/es/view/mycalendar');
       expect(changeLanguageSpy.calledWith('es')).toBe(true);
     });
 
     it('should not call changeLanguage when i18next is already set to the URL locale', async () => {
       // Simulate language is already 'es'
       Object.defineProperty(i18next, 'language', { value: 'es', configurable: true });
-      await router.push('/es/@mycalendar');
+      await router.push('/es/view/mycalendar');
       expect(changeLanguageSpy.called).toBe(false);
     });
 
     it('should not call changeLanguage for routes without a locale prefix', async () => {
-      await router.push('/@mycalendar');
+      await router.push('/view/mycalendar');
       expect(changeLanguageSpy.called).toBe(false);
     });
   });
@@ -179,10 +198,10 @@ describe('Vue Router locale-aware navigation guard', () => {
   // -------------------------------------------------------------------------
 
   describe('non-locale path segments', () => {
-    it('should not trigger locale switch for /xx/@calendar when xx is not a valid locale', async () => {
-      // '/xx/@mycalendar' does not match any route (no route defined for /xx prefix),
+    it('should not trigger locale switch for /xx/view/calendar when xx is not a valid locale', async () => {
+      // '/xx/view/mycalendar' does not match any locale-prefixed route (no route defined for /xx prefix),
       // so the guard never fires with a locale param
-      await router.push('/xx/@mycalendar');
+      await router.push('/xx/view/mycalendar');
       expect(changeLanguageSpy.called).toBe(false);
     });
   });
@@ -194,13 +213,13 @@ describe('Vue Router locale-aware navigation guard', () => {
   describe('browser history behaviour', () => {
     it('should keep locale prefix in URL with no extra history redirect', async () => {
       // Navigate to a non-locale route first
-      await router.push('/@mycalendar');
+      await router.push('/view/mycalendar');
 
       // Then navigate to a locale-prefixed URL — no redirect occurs
-      await router.push('/es/@anothercalendar');
+      await router.push('/es/view/anothercalendar');
 
       // The current route should stay at the locale-prefixed path
-      expect(router.currentRoute.value.path).toBe('/es/@anothercalendar');
+      expect(router.currentRoute.value.path).toBe('/es/view/anothercalendar');
     });
   });
 });

@@ -128,7 +128,7 @@ import EventDetailOverlay from '@/widget/components/event-detail-overlay.vue';
 
 const routes: RouteRecordRaw[] = [
   {
-    path: '/widget/:urlName/events/:eventId',
+    path: '/widget/:urlName/events/:eventId/:startTime(\\d{8}-\\d{4})?',
     component: EventDetailOverlay,
     name: 'widget-event',
   },

@@ -16,8 +16,41 @@ describe('Widget App Infrastructure', () => {
       history: createMemoryHistory(),
       routes: [
         { path: '/widget/:urlName', name: 'widget', component: { template: '<div>Widget</div>' } },
-        { path: '/widget/:urlName/events/:eventId', name: 'event', component: { template: '<div>Event</div>' } },
+        { path: '/widget/:urlName/events/:eventId/:startTime(\\d{8}-\\d{4})?', name: 'event', component: { template: '<div>Event</div>' } },
       ],
+    });
+  });
+
+  describe('Event Detail Route Matching', () => {
+    it('should match event-detail URL without startTime slug (legacy embed)', async () => {
+      await router.push('/widget/my-cal/events/abc123');
+      await router.isReady();
+
+      const current = router.currentRoute.value;
+      expect(current.name).toBe('event');
+      expect(current.params.urlName).toBe('my-cal');
+      expect(current.params.eventId).toBe('abc123');
+      expect(current.params.startTime).toBe('');
+    });
+
+    it('should match event-detail URL with startTime slug (occurrence deep link)', async () => {
+      await router.push('/widget/my-cal/events/abc123/20260422-1830');
+      await router.isReady();
+
+      const current = router.currentRoute.value;
+      expect(current.name).toBe('event');
+      expect(current.params.urlName).toBe('my-cal');
+      expect(current.params.eventId).toBe('abc123');
+      expect(current.params.startTime).toBe('20260422-1830');
+    });
+
+    it('should reject malformed startTime slug (wrong length)', async () => {
+      // '12345' doesn't match yyyymmdd-hhmm; router should not match the event route.
+      await router.push('/widget/my-cal/events/abc123/12345');
+      await router.isReady();
+
+      const current = router.currentRoute.value;
+      expect(current.name).not.toBe('event');
     });
   });
 
