@@ -439,23 +439,6 @@ describe('useEventEditor', () => {
       sinon.assert.calledWith(getModelStub, '/api/v1/events/event-123');
     });
 
-    it('should handle 401 unauthorized error', async () => {
-      const error = {
-        response: {
-          status: 401,
-        },
-      };
-
-      sandbox.stub(CalendarService.prototype, 'loadCalendars').resolves([new Calendar('cal-1', 'test')]);
-      sandbox.stub(ModelService, 'getModel').rejects(error);
-
-      const { initializeEvent } = useEventEditor();
-
-      await initializeEvent('event-123');
-
-      expect(mockRouter.push).toHaveBeenCalledWith({ name: 'login' });
-    });
-
     it('should handle 403 forbidden error', async () => {
       const error = {
         response: {

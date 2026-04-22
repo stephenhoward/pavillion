@@ -200,18 +200,12 @@ export function useEventEditor(defaultLanguage: string = 'en') {
     catch (error: any) {
       console.error('Error loading event:', error);
 
-      // Check for axios error with response status
-      if (error.response) {
-        if (error.response.status === 401) {
-          // Not authenticated
-          router.push({ name: 'login' });
-          return null;
-        }
-        if (error.response.status === 403) {
-          // No permission
-          router.push({ name: 'calendars' });
-          return null;
-        }
+      // 401 handling is delegated to the global axios interceptor in
+      // AuthenticationService, which queues the request and opens the
+      // session-expired modal. We only handle 403 (no permission) locally.
+      if (error.response?.status === 403) {
+        router.push({ name: 'calendars' });
+        return null;
       }
 
       state.err = 'Failed to load event';

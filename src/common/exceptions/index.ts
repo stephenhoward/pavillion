@@ -1,3 +1,4 @@
+export * from './authentication';
 export * from './calendar';
 export * from './category';
 export * from './base';

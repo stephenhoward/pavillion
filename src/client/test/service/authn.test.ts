@@ -3,6 +3,7 @@ import sinon from 'sinon';
 import axios from 'axios';
 
 import AuthenticationService from '@/client/service/authn';
+import { SessionExpiredError } from '@/common/exceptions/authentication';
 
 class LocalStore implements Storage {
 
@@ -41,14 +42,31 @@ class LocalStore implements Storage {
 const sandbox = sinon.createSandbox();
 let fake_jwt = '1234.'+btoa('{ "exp": "1000"}');
 
+// Track AuthenticationService instances created per test so we can eject
+// their axios interceptors in afterEach. Without this, every test leaves
+// request + response interceptors registered on the global axios, causing
+// subtle cross-test interference as stacks accumulate.
+const createdServices: AuthenticationService[] = [];
+
+function makeAuth(): AuthenticationService {
+  const svc = new AuthenticationService( new LocalStore() );
+  createdServices.push(svc);
+  return svc;
+}
+
 // Global setup for each test
 afterEach(() => {
   sandbox.restore();
+  for (const s of createdServices) {
+    axios.interceptors.request.eject(s._requestInterceptorId);
+    axios.interceptors.response.eject(s._responseInterceptorId);
+  }
+  createdServices.length = 0;
 });
 
 // async function test_basic_axios_roundtrip(stubbed_axios_method: sinon.SinonStub,auth_method: string,params: string[]) {
 
-//     let authentication = new AuthenticationService( new LocalStore() );
+//     let authentication = makeAuth();
 //     let sandbox = sinon.createSandbox();
 //     stubbed_axios_method.returns(Promise.resolve({status: 200, statusText: "Ok"}));
 
@@ -60,7 +78,7 @@ afterEach(() => {
 describe('Login', () => {
   it( 'login fail', async () => {
 
-    let authentication = new AuthenticationService( new LocalStore() );
+    let authentication = makeAuth();
     let stub1 = sandbox.stub(authentication,"_unset_token");
     let stub2 = sandbox.stub(authentication,"_set_token");
     const axios_post = sandbox.stub(axios, "post");
@@ -78,7 +96,7 @@ describe('Login', () => {
 
   it( 'login succeed', async () => {
 
-    let authentication = new AuthenticationService( new LocalStore() );
+    let authentication = makeAuth();
 
     let stub1 = sandbox.stub(authentication,"_unset_token");
     let stub2 = sandbox.stub(authentication,"_set_token");
@@ -94,7 +112,7 @@ describe('Login', () => {
 describe('Logout', () => {
   it( 'logout', () => {
 
-    let authentication = new AuthenticationService( new LocalStore() );
+    let authentication = makeAuth();
     let stub1 = sinon.stub(authentication,"_unset_token");
 
     authentication.logout();
@@ -102,8 +120,7 @@ describe('Logout', () => {
     expect(stub1.called).toBe(true);
   });
   it ('is_logged_in', () => {
-    let store = new LocalStore();
-    let authentication = new AuthenticationService( store );
+    let authentication = makeAuth();
 
     expect( authentication.isLoggedIn() ).toBe(false);
     let stub1 = sinon.stub(authentication,"_refresh_login");
@@ -123,7 +140,7 @@ describe('Logout', () => {
 
 // test( 'reset_password', async () => {
 
-//     let authentication = new AuthenticationService( new LocalStore() );
+//     let authentication = makeAuth();
 
 
 //     await test_basic_axios_roundtrip(axios_post,'reset_password',['email']);
@@ -142,7 +159,7 @@ describe('Logout', () => {
 describe('Token Setting', () => {
   it( '_set_token', () => {
 
-    let authentication = new AuthenticationService( new LocalStore() );
+    let authentication = makeAuth();
     let stub1 = sinon.stub(authentication,"_refresh_login");
 
     authentication._set_token(fake_jwt);
@@ -155,7 +172,7 @@ describe('Token Setting', () => {
 
   it( '_unset_token', () => {
 
-    let authentication = new AuthenticationService( new LocalStore() );
+    let authentication = makeAuth();
     sandbox.stub(authentication,"_refresh_login");
 
     authentication._set_token(fake_jwt);
@@ -172,11 +189,20 @@ describe('Token Setting', () => {
     expect( authentication._refresh_timer ).toBeFalsy();
 
   });
+
+  it('_unset_token clears lastKnownEmail', () => {
+    let authentication = makeAuth();
+    authentication.lastKnownEmail = 'user@example.com';
+
+    authentication._unset_token();
+
+    expect(authentication.lastKnownEmail).toBeNull();
+  });
 });
 
 describe('Invitation Management', () => {
   it('revoke_invitation calls DELETE on the invitation endpoint', async () => {
-    let authentication = new AuthenticationService( new LocalStore() );
+    let authentication = makeAuth();
     const axios_delete = sandbox.stub(axios, 'delete');
     axios_delete.resolves({ status: 200, data: { success: true } });
 
@@ -188,7 +214,7 @@ describe('Invitation Management', () => {
   });
 
   it('revoke_invitation throws response status on error', async () => {
-    let authentication = new AuthenticationService( new LocalStore() );
+    let authentication = makeAuth();
     const axios_delete = sandbox.stub(axios, 'delete');
     const error = new axios.AxiosError('Not found', '404', undefined, undefined, {
       status: 404,
@@ -206,7 +232,7 @@ describe('Invitation Management', () => {
 describe('Token Refresh', () => {
   it ( '_refresh_login 0 timer', () => {
 
-    let authentication = new AuthenticationService( new LocalStore() );
+    let authentication = makeAuth();
 
     let stub1 = sandbox.stub(authentication,"_unset_token");
 
@@ -217,7 +243,7 @@ describe('Token Refresh', () => {
 
   it ( '_refresh_login valid', async () => {
 
-    let authentication = new AuthenticationService( new LocalStore() );
+    let authentication = makeAuth();
     sandbox.useFakeTimers();
 
     let stub1 = sandbox.stub(authentication,"_set_token");
@@ -234,4 +260,199 @@ describe('Token Refresh', () => {
     return promise;
   });
 
+  it('_refresh_login failure flips sessionExpired', async () => {
+    let authentication = makeAuth();
+    sandbox.useFakeTimers();
+    // Ensure _refresh_login's jwt() check returns something so it attempts the call
+    authentication.localStore.setItem('jwt', fake_jwt);
+
+    sandbox.stub(axios, 'get').rejects(new Error('network down'));
+
+    let promise = authentication._refresh_login( Date.now() + 500 )
+      .then(
+        () => { throw new Error('should have rejected'); },
+        () => {
+          expect(authentication.sessionExpired.value).toBe(true);
+        },
+      );
+    sandbox.clock.runAll();
+    return promise;
+  });
+
+});
+
+describe('Session-Expired Interceptor', () => {
+  // Capture the rejection handler each AuthenticationService registers, so we
+  // can invoke it directly without relying on real axios network flow.
+  function captureResponseErrorHandler(): {
+    authentication: AuthenticationService;
+    onError: (error: any) => any;
+  } {
+    const useSpy = sandbox.spy(axios.interceptors.response, 'use');
+    const authentication = makeAuth();
+    // The response interceptor is the one registered during this constructor.
+    // The constructor only registers one response interceptor.
+    const lastCall = useSpy.lastCall;
+    const onError = lastCall.args[1] as (error: any) => any;
+    return { authentication, onError };
+  }
+
+  it('401 on an authenticated endpoint queues the request and flips the flag', async () => {
+    const { authentication, onError } = captureResponseErrorHandler();
+    expect(authentication.sessionExpired.value).toBe(false);
+
+    const error = {
+      response: { status: 401 },
+      config: { url: '/api/v1/events', method: 'get' },
+    };
+
+    // The returned promise is intentionally left pending until drain/abort.
+    const pending = onError(error);
+    expect(pending).toBeInstanceOf(Promise);
+    expect(authentication._pendingRequests.length).toBe(1);
+    expect(authentication.sessionExpired.value).toBe(true);
+
+    // Settle the pending promise so vitest doesn't warn about unhandled state.
+    authentication.abortPendingRequests();
+    await expect(pending).rejects.toBeInstanceOf(SessionExpiredError);
+  });
+
+  it('401 on /api/auth/* passes through without touching the flag', async () => {
+    const { authentication, onError } = captureResponseErrorHandler();
+
+    const error = {
+      response: { status: 401 },
+      config: { url: '/api/auth/v1/login', method: 'post' },
+    };
+
+    await expect(onError(error)).rejects.toBe(error);
+    expect(authentication._pendingRequests.length).toBe(0);
+    expect(authentication.sessionExpired.value).toBe(false);
+  });
+
+  it('403 passes through without touching the flag', async () => {
+    const { authentication, onError } = captureResponseErrorHandler();
+
+    const error = {
+      response: { status: 403 },
+      config: { url: '/api/v1/events', method: 'get' },
+    };
+
+    await expect(onError(error)).rejects.toBe(error);
+    expect(authentication._pendingRequests.length).toBe(0);
+    expect(authentication.sessionExpired.value).toBe(false);
+  });
+
+  it('parallel 401s flip the flag once and enqueue many entries', () => {
+    const { authentication, onError } = captureResponseErrorHandler();
+
+    const pendings: Promise<any>[] = [];
+    for (let i = 0; i < 5; i++) {
+      pendings.push(
+        onError({
+          response: { status: 401 },
+          config: { url: `/api/v1/resource/${i}`, method: 'get' },
+        }),
+      );
+    }
+
+    expect(authentication._pendingRequests.length).toBe(5);
+    expect(authentication.sessionExpired.value).toBe(true);
+
+    authentication.abortPendingRequests();
+    return Promise.all(pendings.map((p) => p.catch((e) => e))).then((results) => {
+      results.forEach((r) => expect(r).toBeInstanceOf(SessionExpiredError));
+    });
+  });
+
+  it('drainPendingRequests replays queued requests and resolves originals', async () => {
+    const { authentication, onError } = captureResponseErrorHandler();
+
+    const request_stub = sandbox.stub(axios, 'request');
+    request_stub.onFirstCall().resolves({ status: 200, data: 'first' });
+    request_stub.onSecondCall().resolves({ status: 200, data: 'second' });
+
+    const p1 = onError({
+      response: { status: 401 },
+      config: { url: '/api/v1/first', method: 'get' },
+    });
+    const p2 = onError({
+      response: { status: 401 },
+      config: { url: '/api/v1/second', method: 'post', data: { x: 1 } },
+    });
+
+    expect(authentication.sessionExpired.value).toBe(true);
+
+    await authentication.drainPendingRequests();
+
+    await expect(p1).resolves.toMatchObject({ status: 200, data: 'first' });
+    await expect(p2).resolves.toMatchObject({ status: 200, data: 'second' });
+    expect(request_stub.callCount).toBe(2);
+    expect(request_stub.firstCall.args[0]).toMatchObject({ url: '/api/v1/first' });
+    expect(request_stub.secondCall.args[0]).toMatchObject({ url: '/api/v1/second' });
+    expect(authentication.sessionExpired.value).toBe(false);
+    expect(authentication._pendingRequests.length).toBe(0);
+  });
+
+  it('drainPendingRequests rejects originals when a replay fails', async () => {
+    const { authentication, onError } = captureResponseErrorHandler();
+
+    const request_stub = sandbox.stub(axios, 'request');
+    const retryError = { response: { status: 500 }, message: 'server exploded' };
+    request_stub.rejects(retryError);
+
+    const p1 = onError({
+      response: { status: 401 },
+      config: { url: '/api/v1/drain-fail', method: 'get' },
+    });
+
+    expect(authentication.sessionExpired.value).toBe(true);
+
+    await authentication.drainPendingRequests();
+
+    await expect(p1).rejects.toBe(retryError);
+    expect(authentication.sessionExpired.value).toBe(false);
+    expect(authentication._pendingRequests.length).toBe(0);
+  });
+
+  it('abortPendingRequests rejects queued requests with SessionExpiredError', async () => {
+    const { authentication, onError } = captureResponseErrorHandler();
+
+    const p1 = onError({
+      response: { status: 401 },
+      config: { url: '/api/v1/a', method: 'get' },
+    });
+    const p2 = onError({
+      response: { status: 401 },
+      config: { url: '/api/v1/b', method: 'get' },
+    });
+
+    authentication.abortPendingRequests();
+
+    await expect(p1).rejects.toBeInstanceOf(SessionExpiredError);
+    await expect(p2).rejects.toBeInstanceOf(SessionExpiredError);
+    expect(authentication.sessionExpired.value).toBe(false);
+    expect(authentication._pendingRequests.length).toBe(0);
+  });
+});
+
+describe('lastKnownEmail', () => {
+  it('is populated by a successful login', async () => {
+    let authentication = makeAuth();
+    sandbox.stub(authentication, '_set_token');
+    sandbox.stub(axios, 'post').resolves({ status: 200, data: {} });
+
+    expect(authentication.lastKnownEmail).toBeNull();
+    await authentication.login('person@example.com', 'pw');
+    expect(authentication.lastKnownEmail).toBe('person@example.com');
+  });
+
+  it('is not populated by a failed login', async () => {
+    let authentication = makeAuth();
+    sandbox.stub(authentication, '_unset_token');
+    sandbox.stub(axios, 'post').rejects({ status: 400, data: {} });
+
+    await authentication.login('person@example.com', 'pw');
+    expect(authentication.lastKnownEmail).toBeNull();
+  });
 });

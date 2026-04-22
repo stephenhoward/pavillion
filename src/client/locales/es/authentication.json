@@ -63,5 +63,9 @@
     "password_needs_variety": "La contraseña debe incluir al menos dos de: letras, números, caracteres especiales",
     "PasswordResetError": "No se pudo restablecer la contraseña. El código puede ser inválido o haber expirado.",
     "TokenRefreshError": "La sesión expiró. Por favor inicia sesión nuevamente."
+  },
+  "session_expired": {
+    "title": "Sesión expirada",
+    "description": "Tu sesión ha expirado. Inicia sesión nuevamente para continuar donde lo dejaste."
   }
 }

@@ -63,5 +63,9 @@
     "password_needs_variety": "Le mot de passe doit inclure au moins deux types parmi : lettres, chiffres, caractères spéciaux",
     "PasswordResetError": "Impossible de réinitialiser le mot de passe. Le code peut être invalide ou expiré.",
     "TokenRefreshError": "Session expirée. Veuillez vous reconnecter."
+  },
+  "session_expired": {
+    "title": "Session expirée",
+    "description": "Votre session a expiré. Reconnectez-vous pour reprendre là où vous en étiez."
   }
 }
