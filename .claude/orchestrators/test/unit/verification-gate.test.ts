@@ -141,4 +141,44 @@ describe('verifyImplementerCompletion', () => {
       expect(result.reason).toBe('no commits on branch ahead of main');
     }
   });
+
+  it('returns passed=false with porcelain reason when tree is dirty', () => {
+    const logStub = stubLogger();
+    const ctx = makeCtx(logStub);
+
+    const scriptSpawnFn = vi.fn()
+      .mockReturnValueOnce(fakeSpawnResult(' M src/a.ts\n'));
+
+    const result = verifyImplementerCompletion(ctx, { scriptSpawnFn });
+
+    expect(result).toEqual({
+      passed: false,
+      reason: 'uncommitted or untracked changes present: M src/a.ts',
+    });
+
+    expect(scriptSpawnFn).toHaveBeenCalledTimes(1);
+
+    expect(logStub.runJsonEntries).toContainEqual(
+      expect.objectContaining({
+        event: 'implementer-verification-failed',
+        beadId: 'pv-test.1',
+        reason: 'uncommitted or untracked changes present: M src/a.ts',
+      }),
+    );
+  });
+
+  it('returns passed=false for untracked files only', () => {
+    const logStub = stubLogger();
+    const ctx = makeCtx(logStub);
+
+    const scriptSpawnFn = vi.fn()
+      .mockReturnValueOnce(fakeSpawnResult('?? src/newfile.ts\n'));
+
+    const result = verifyImplementerCompletion(ctx, { scriptSpawnFn });
+
+    expect(result.passed).toBe(false);
+    if (!result.passed) {
+      expect(result.reason).toContain('?? src/newfile.ts');
+    }
+  });
 });
