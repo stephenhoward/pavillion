@@ -835,6 +835,19 @@ export function verifyImplementerCompletion(
     shell: false,
     timeout: 10_000,
   });
+  if (statusResult.status !== 0 || statusResult.error) {
+    const stderrSnippet = (statusResult.stderr?.toString('utf-8') ?? '').trim()
+      || statusResult.error?.message
+      || `exit ${statusResult.status}`;
+    const reason = `git status --porcelain failed: ${stderrSnippet}`;
+    ctx.logger.appendRunJson({
+      event: 'implementer-verification-failed',
+      phase: PhaseName.Leaf,
+      beadId: ctx.beadId,
+      reason,
+    });
+    return { passed: false, reason };
+  }
   const statusOutput = (statusResult.stdout?.toString('utf-8') ?? '').trim();
   if (statusOutput !== '') {
     const firstLine = statusOutput.split('\n')[0].trim();
@@ -853,8 +866,22 @@ export function verifyImplementerCompletion(
     shell: false,
     timeout: 10_000,
   });
+  if (revResult.status !== 0 || revResult.error) {
+    const stderrSnippet = (revResult.stderr?.toString('utf-8') ?? '').trim()
+      || revResult.error?.message
+      || `exit ${revResult.status}`;
+    const reason = `git rev-list --count failed: ${stderrSnippet}`;
+    ctx.logger.appendRunJson({
+      event: 'implementer-verification-failed',
+      phase: PhaseName.Leaf,
+      beadId: ctx.beadId,
+      reason,
+    });
+    return { passed: false, reason };
+  }
   const revCount = (revResult.stdout?.toString('utf-8') ?? '').trim();
-  if (revCount === '0') {
+  const revCountNum = Number(revCount);
+  if (!Number.isFinite(revCountNum) || revCountNum <= 0) {
     const reason = `no commits on branch ahead of ${baseBranch}`;
     ctx.logger.appendRunJson({
       event: 'implementer-verification-failed',
@@ -870,6 +897,19 @@ export function verifyImplementerCompletion(
     shell: false,
     timeout: 10_000,
   });
+  if (diffResult.status !== 0 || diffResult.error) {
+    const stderrSnippet = (diffResult.stderr?.toString('utf-8') ?? '').trim()
+      || diffResult.error?.message
+      || `exit ${diffResult.status}`;
+    const reason = `git diff --name-only failed: ${stderrSnippet}`;
+    ctx.logger.appendRunJson({
+      event: 'implementer-verification-failed',
+      phase: PhaseName.Leaf,
+      beadId: ctx.beadId,
+      reason,
+    });
+    return { passed: false, reason };
+  }
   const diffOutput = (diffResult.stdout?.toString('utf-8') ?? '').trim();
   const changedFiles = diffOutput === '' ? [] : diffOutput.split('\n');
 

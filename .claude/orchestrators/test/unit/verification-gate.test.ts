@@ -63,4 +63,82 @@ describe('verifyImplementerCompletion', () => {
       }),
     );
   });
+
+  it('fails closed when git status exits non-zero', () => {
+    const logStub = stubLogger();
+    const ctx = makeCtx(logStub);
+
+    const scriptSpawnFn = vi.fn()
+      .mockReturnValueOnce({
+        ...fakeSpawnResult(''),
+        status: 128,
+        stderr: Buffer.from('fatal: not a git repository\n', 'utf-8'),
+      });
+
+    const result = verifyImplementerCompletion(ctx, { scriptSpawnFn });
+
+    expect(result.passed).toBe(false);
+    if (!result.passed) {
+      expect(result.reason).toMatch(/^git status --porcelain failed:/);
+      expect(result.reason).toContain('fatal: not a git repository');
+    }
+    expect(scriptSpawnFn).toHaveBeenCalledTimes(1);
+  });
+
+  it('fails closed when git rev-list exits non-zero', () => {
+    const logStub = stubLogger();
+    const ctx = makeCtx(logStub);
+
+    const scriptSpawnFn = vi.fn()
+      .mockReturnValueOnce(fakeSpawnResult(''))
+      .mockReturnValueOnce({
+        ...fakeSpawnResult(''),
+        status: 128,
+        stderr: Buffer.from('fatal: bad revision \'main..HEAD\'\n', 'utf-8'),
+      });
+
+    const result = verifyImplementerCompletion(ctx, { scriptSpawnFn });
+
+    expect(result.passed).toBe(false);
+    if (!result.passed) {
+      expect(result.reason).toMatch(/^git rev-list --count failed:/);
+    }
+  });
+
+  it('fails closed when git diff exits non-zero', () => {
+    const logStub = stubLogger();
+    const ctx = makeCtx(logStub);
+
+    const scriptSpawnFn = vi.fn()
+      .mockReturnValueOnce(fakeSpawnResult(''))
+      .mockReturnValueOnce(fakeSpawnResult('2\n'))
+      .mockReturnValueOnce({
+        ...fakeSpawnResult(''),
+        status: 1,
+        stderr: Buffer.from('something broke\n', 'utf-8'),
+      });
+
+    const result = verifyImplementerCompletion(ctx, { scriptSpawnFn });
+
+    expect(result.passed).toBe(false);
+    if (!result.passed) {
+      expect(result.reason).toMatch(/^git diff --name-only failed:/);
+    }
+  });
+
+  it('fails closed when rev-list returns non-numeric garbage', () => {
+    const logStub = stubLogger();
+    const ctx = makeCtx(logStub);
+
+    const scriptSpawnFn = vi.fn()
+      .mockReturnValueOnce(fakeSpawnResult(''))
+      .mockReturnValueOnce(fakeSpawnResult('abc\n'));
+
+    const result = verifyImplementerCompletion(ctx, { scriptSpawnFn });
+
+    expect(result.passed).toBe(false);
+    if (!result.passed) {
+      expect(result.reason).toBe('no commits on branch ahead of main');
+    }
+  });
 });
