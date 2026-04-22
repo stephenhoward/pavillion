@@ -145,6 +145,23 @@ export const publicWidgetByIp: RequestHandler = isRateLimitEnabled()
   : noOpMiddleware;
 
 /**
+ * Public event-instance detail endpoint rate limiter by IP.
+ * Limits: 120 requests per IP per 15 minutes (default config).
+ *
+ * Rationale: the endpoint can lazily materialize instance rows on cache
+ * miss. The limit bounds anonymous-write throughput while remaining
+ * permissive enough for legitimate share-link traffic from social crawlers
+ * and search engines.
+ */
+export const publicEventInstanceByIp: RequestHandler = isRateLimitEnabled()
+  ? createIpRateLimiter(
+    config.get<number>('rateLimit.publicEventInstance.byIp.max'),
+    config.get<number>('rateLimit.publicEventInstance.byIp.windowMs'),
+    'public-event-instance',
+  )
+  : noOpMiddleware;
+
+/**
  * Widget configuration rate limiter for authenticated users.
  * Limits: 100 requests per account per 15 minutes (default config).
  * Prevents abuse of widget configuration endpoints.
