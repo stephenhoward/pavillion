@@ -1051,6 +1051,12 @@ export async function runLeafExecution(
   deps: ExecuteDeps = {},
 ): Promise<LeafExecutionResult> {
   const warnings: string[] = [];
+  // The verification-gate helpers expect PhaseCtx; runLeafExecution is always
+  // called from leafPhase with a PhaseCtx at runtime, or from tests with a
+  // RunContext whose extra PhaseCtx fields the helpers do not touch. Cast is
+  // safe because verifyImplementerCompletion / reopenBead use only beadId and
+  // logger, both of which live on RunContext.
+  const phaseCtx = ctx as PhaseCtx;
 
   // --- Attempt 1: Implementer ---
   const implResult = await dispatchImplementer(beadId, ctx, deps);
@@ -1062,8 +1068,19 @@ export async function runLeafExecution(
     return escalateLeaf(beadId, ctx, deps, `implementer failure: ${implResult.reason}`, 1);
   }
 
-  // --- Attempt 1: Auditors ---
-  const auditResult = await runAudit(beadId, ctx, deps);
+  // --- Attempt 1: Verification gate ---
+  const gate1 = verifyImplementerCompletion(phaseCtx, deps);
+  if (!gate1.passed) {
+    reopenBead(beadId, phaseCtx, deps, 'verification-gate-retry');
+    const retryResult = await retryAfterVerificationFailure(beadId, ctx, deps, gate1.reason);
+    if (retryResult) return retryResult;
+    reopenBead(beadId, phaseCtx, deps, 'verification-gate-escalate');
+    return escalateLeaf(beadId, ctx, deps, `verification gate exhausted: ${gate1.reason}`, 1);
+  }
+
+  // --- Attempt 1: Auditors (with gate-authoritative changedFiles) ---
+  const auditDeps: ExecuteDeps = { ...deps, changedFiles: gate1.changedFiles };
+  const auditResult = await runAudit(beadId, ctx, auditDeps);
   warnings.push(...auditResult.warnings);
 
   if (auditResult.passed) {
@@ -1080,8 +1097,16 @@ export async function runLeafExecution(
     return escalateLeaf(beadId, ctx, deps, `retry implementer failure: ${retryImplResult.reason}`, 1);
   }
 
-  // --- Retry: re-run auditors ---
-  const retryAuditResult = await runAudit(beadId, ctx, deps);
+  // --- Retry: Verification gate (second pass) ---
+  const gate2 = verifyImplementerCompletion(phaseCtx, deps);
+  if (!gate2.passed) {
+    reopenBead(beadId, phaseCtx, deps, 'verification-gate-escalate');
+    return escalateLeaf(beadId, ctx, deps, `verification gate exhausted after retry: ${gate2.reason}`, 1);
+  }
+
+  // --- Retry: re-run auditors (with fresh changedFiles) ---
+  const retryAuditDeps: ExecuteDeps = { ...deps, changedFiles: gate2.changedFiles };
+  const retryAuditResult = await runAudit(beadId, ctx, retryAuditDeps);
   warnings.push(...retryAuditResult.warnings);
 
   if (retryAuditResult.passed) {
@@ -1114,6 +1139,44 @@ async function retryAfterFailure(
   }
 
   const auditResult = await runAudit(beadId, ctx, deps);
+  if (auditResult.passed) {
+    return { outcome: 'complete', retryCount: 1, warnings: auditResult.warnings };
+  }
+
+  return null;
+}
+
+/**
+ * Attempt a retry after a verification-gate failure.
+ *
+ * Mirrors `retryAfterFailure` but scoped to the gate-trip case:
+ * the implementer declared success but git state refuted it.
+ * Feeds a specific correction into `retryContext.concerns`.
+ */
+async function retryAfterVerificationFailure(
+  beadId: string,
+  ctx: RunContext,
+  deps: ExecuteDeps,
+  reason: string,
+): Promise<LeafExecutionResult | null> {
+  const concern = `Verification failed: ${reason}. You must commit ALL changes (including new/untracked files) to the current branch before declaring completion. Do not call 'bd close' until the commit exists on the branch.`;
+
+  const retryImplResult = await dispatchImplementer(beadId, ctx, {
+    ...deps,
+    retryContext: { concerns: [concern], attempt: 2 },
+  });
+
+  if (!retryImplResult.ok) {
+    return null;
+  }
+
+  const gateRetry = verifyImplementerCompletion(ctx as PhaseCtx, deps);
+  if (!gateRetry.passed) {
+    return null;
+  }
+
+  const auditDeps: ExecuteDeps = { ...deps, changedFiles: gateRetry.changedFiles };
+  const auditResult = await runAudit(beadId, ctx, auditDeps);
   if (auditResult.passed) {
     return { outcome: 'complete', retryCount: 1, warnings: auditResult.warnings };
   }

@@ -374,8 +374,15 @@ describe('runLeafExecution', () => {
       return createMockChild(JSON.stringify(auditVerdict), '', 0);
     });
 
+    // Gate probes: clean tree, 1 commit ahead of base, 1 changed file
+    const scriptSpawnFn = vi.fn()
+      .mockReturnValueOnce(fakeSpawnResult('', '', 0))
+      .mockReturnValueOnce(fakeSpawnResult('1\n', '', 0))
+      .mockReturnValueOnce(fakeSpawnResult('src/server/calendar/service/calendar.ts\n', '', 0));
+
     const result = await runLeafExecution('pv-test-1', ctx, {
       spawnFn: mockSpawnFn,
+      scriptSpawnFn,
       changedFiles: ['src/server/calendar/service/calendar.ts'],
       selectAuditorsFn: async () => matchResult,
     });
@@ -423,8 +430,20 @@ describe('runLeafExecution', () => {
       }
     });
 
+    // Gate probes fire once per implementer success: 3 probes per call, 2 calls total
+    const scriptSpawnFn = vi.fn()
+      // Attempt 1 gate
+      .mockReturnValueOnce(fakeSpawnResult('', '', 0))
+      .mockReturnValueOnce(fakeSpawnResult('1\n', '', 0))
+      .mockReturnValueOnce(fakeSpawnResult('src/server/calendar/service/calendar.ts\n', '', 0))
+      // Retry gate
+      .mockReturnValueOnce(fakeSpawnResult('', '', 0))
+      .mockReturnValueOnce(fakeSpawnResult('1\n', '', 0))
+      .mockReturnValueOnce(fakeSpawnResult('src/server/calendar/service/calendar.ts\n', '', 0));
+
     const result = await runLeafExecution('pv-test-1', ctx, {
       spawnFn: mockSpawnFn,
+      scriptSpawnFn,
       changedFiles: ['src/server/calendar/service/calendar.ts'],
       selectAuditorsFn: async () => matchResult,
     });
@@ -462,14 +481,73 @@ describe('runLeafExecution', () => {
       return createMockChild(JSON.stringify(failVerdict), '', 0);
     });
 
+    // Gate probes fire once per implementer success: 3 probes per call, 2 calls total
+    const scriptSpawnFn = vi.fn()
+      .mockReturnValueOnce(fakeSpawnResult('', '', 0))
+      .mockReturnValueOnce(fakeSpawnResult('1\n', '', 0))
+      .mockReturnValueOnce(fakeSpawnResult('src/server/calendar/service/calendar.ts\n', '', 0))
+      .mockReturnValueOnce(fakeSpawnResult('', '', 0))
+      .mockReturnValueOnce(fakeSpawnResult('1\n', '', 0))
+      .mockReturnValueOnce(fakeSpawnResult('src/server/calendar/service/calendar.ts\n', '', 0));
+
     const result = await runLeafExecution('pv-test-1', ctx, {
       spawnFn: mockSpawnFn,
+      scriptSpawnFn,
       changedFiles: ['src/server/calendar/service/calendar.ts'],
       selectAuditorsFn: async () => matchResult,
     });
 
     expect(result.outcome).toBe('halt');
     expect(result.reason).toContain('retry exhausted');
+  });
+
+  it('calls verification gate after implementer success and uses its changedFiles for audit', async () => {
+    const { runLeafExecution } = await import('../../lib/execute.js');
+
+    // Implementer succeeds once
+    const spawnFn = vi.fn().mockImplementation(() => createMockChild('done', '', 0));
+
+    // Gate probes: clean tree, 1 commit, 1 changed file.
+    // Probes may fire more than once if a retry occurs; keep returning passing
+    // results so the test never exhausts the mock sequence — we only assert
+    // that the FIRST gate pass drove the authoritative changedFiles.
+    const scriptSpawnFn = vi.fn().mockImplementation((_cmd: string, args: string[]) => {
+      if (args.includes('--porcelain')) return fakeSpawnResult('', '', 0);
+      if (args.includes('--count')) return fakeSpawnResult('1\n', '', 0);
+      if (args.includes('--name-only')) return fakeSpawnResult('src/gate.ts\n', '', 0);
+      return fakeSpawnResult('', '', 0);
+    });
+
+    const passingSelector = vi.fn().mockResolvedValue([]); // empty selection -> audit fails
+    // We don't actually care about audit outcome for this test; we only assert the gate fired and
+    // changedFiles was overridden.
+
+    await runLeafExecution('pv-gate.1', ctx, {
+      spawnFn,
+      scriptSpawnFn,
+      selectAuditorsFn: passingSelector,
+      changedFiles: ['STALE.ts'], // intentionally stale; gate must override
+    });
+
+    // Gate fired and passed
+    expect(logStub.runJsonEntries).toContainEqual(
+      expect.objectContaining({
+        event: 'implementer-verification-passed',
+        changedFilesCount: 1,
+      }),
+    );
+
+    // audit-skip did NOT fire (gate produced a non-empty changedFiles)
+    expect(logStub.runJsonEntries).not.toContainEqual(
+      expect.objectContaining({ event: 'audit-skip' }),
+    );
+
+    // Auditor selector was called with the gate's changedFiles, not the stale dep
+    expect(passingSelector).toHaveBeenCalledWith(
+      ['src/gate.ts'],
+      expect.any(Object),
+      expect.any(Object),
+    );
   });
 });
 
@@ -718,10 +796,17 @@ describe('leafPhase', () => {
       createMockChild(JSON.stringify(implementerResult), '', 0),
     );
 
+    // Gate probes: clean tree, 1 commit, 0 changed files -> audit-skip passes
+    const scriptSpawnFn = vi.fn()
+      .mockReturnValueOnce(fakeSpawnResult('', '', 0))
+      .mockReturnValueOnce(fakeSpawnResult('1\n', '', 0))
+      .mockReturnValueOnce(fakeSpawnResult('', '', 0));
+
     const ctx = makePhaseCtx(logStub);
 
     const result = await leafPhase(ctx, {
       spawnFn: mockSpawnFn,
+      scriptSpawnFn,
       changedFiles: [],
     });
 
