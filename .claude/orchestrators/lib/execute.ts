@@ -923,6 +923,38 @@ export function verifyImplementerCompletion(
   return { passed: true, changedFiles };
 }
 
+/**
+ * Reset a bead's status to `in_progress`.
+ *
+ * Used when the implementer subagent closed its own bead prematurely
+ * (e.g., before committing), so that retry or escalation finds an
+ * accurate bead state rather than a falsely-closed one.
+ *
+ * Idempotent — safe to call regardless of current bead status. Failures
+ * of the `bd` command itself are logged but never throw: we don't want
+ * to block an escalation path because a beads CLI call hiccupped.
+ */
+export function reopenBead(
+  beadId: string,
+  ctx: PhaseCtx,
+  deps: ExecuteDeps,
+  reasonTag: string,
+): void {
+  const spawnFn = deps.scriptSpawnFn ?? nodeSpawnSync;
+  const result = spawnFn('bd', ['update', beadId, '--status=in_progress'], {
+    encoding: 'buffer' as never,
+    shell: false,
+    timeout: 10_000,
+  });
+  const success = result.status === 0;
+  ctx.logger.appendRunJson({
+    event: 'bead-reopened',
+    beadId,
+    reason: reasonTag,
+    success,
+  });
+}
+
 // =============================================================================
 // Exported: runAudit
 // =============================================================================

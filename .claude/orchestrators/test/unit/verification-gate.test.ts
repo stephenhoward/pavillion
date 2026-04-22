@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import type { SpawnSyncReturns } from 'node:child_process';
 import { PhaseName, type RunLogger } from '../../lib/types.js';
 import type { PhaseCtx } from '../../lib/execute.js';
-import { verifyImplementerCompletion } from '../../lib/execute.js';
+import { verifyImplementerCompletion, reopenBead } from '../../lib/execute.js';
 
 function stubLogger(): {
   logger: RunLogger;
@@ -236,5 +236,52 @@ describe('verifyImplementerCompletion', () => {
       if (prev === undefined) delete process.env.GIT_SAFE_MAIN_BRANCH;
       else process.env.GIT_SAFE_MAIN_BRANCH = prev;
     }
+  });
+});
+
+describe('reopenBead', () => {
+  it('runs bd update --status=in_progress and logs a bead-reopened event', () => {
+    const logStub = stubLogger();
+    const ctx = makeCtx(logStub, 'pv-psum.2');
+
+    const scriptSpawnFn = vi.fn()
+      .mockReturnValueOnce(fakeSpawnResult('', 0));
+
+    reopenBead('pv-psum.2', ctx, { scriptSpawnFn }, 'verification-gate-retry');
+
+    expect(scriptSpawnFn).toHaveBeenCalledWith(
+      'bd',
+      ['update', 'pv-psum.2', '--status=in_progress'],
+      expect.any(Object),
+    );
+
+    expect(logStub.runJsonEntries).toContainEqual(
+      expect.objectContaining({
+        event: 'bead-reopened',
+        beadId: 'pv-psum.2',
+        reason: 'verification-gate-retry',
+        success: true,
+      }),
+    );
+  });
+
+  it('logs success=false when bd update exits non-zero but does not throw', () => {
+    const logStub = stubLogger();
+    const ctx = makeCtx(logStub, 'pv-psum.2');
+
+    const scriptSpawnFn = vi.fn()
+      .mockReturnValueOnce(fakeSpawnResult('', 1));
+
+    expect(() =>
+      reopenBead('pv-psum.2', ctx, { scriptSpawnFn }, 'verification-gate-escalate'),
+    ).not.toThrow();
+
+    expect(logStub.runJsonEntries).toContainEqual(
+      expect.objectContaining({
+        event: 'bead-reopened',
+        beadId: 'pv-psum.2',
+        success: false,
+      }),
+    );
   });
 });
