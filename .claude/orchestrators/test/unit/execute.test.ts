@@ -374,8 +374,15 @@ describe('runLeafExecution', () => {
       return createMockChild(JSON.stringify(auditVerdict), '', 0);
     });
 
+    // Gate probes: clean tree, 1 commit ahead of base, 1 changed file
+    const scriptSpawnFn = vi.fn()
+      .mockReturnValueOnce(fakeSpawnResult('', '', 0))
+      .mockReturnValueOnce(fakeSpawnResult('1\n', '', 0))
+      .mockReturnValueOnce(fakeSpawnResult('src/server/calendar/service/calendar.ts\n', '', 0));
+
     const result = await runLeafExecution('pv-test-1', ctx, {
       spawnFn: mockSpawnFn,
+      scriptSpawnFn,
       changedFiles: ['src/server/calendar/service/calendar.ts'],
       selectAuditorsFn: async () => matchResult,
     });
@@ -423,8 +430,20 @@ describe('runLeafExecution', () => {
       }
     });
 
+    // Gate probes fire once per implementer success: 3 probes per call, 2 calls total
+    const scriptSpawnFn = vi.fn()
+      // Attempt 1 gate
+      .mockReturnValueOnce(fakeSpawnResult('', '', 0))
+      .mockReturnValueOnce(fakeSpawnResult('1\n', '', 0))
+      .mockReturnValueOnce(fakeSpawnResult('src/server/calendar/service/calendar.ts\n', '', 0))
+      // Retry gate
+      .mockReturnValueOnce(fakeSpawnResult('', '', 0))
+      .mockReturnValueOnce(fakeSpawnResult('1\n', '', 0))
+      .mockReturnValueOnce(fakeSpawnResult('src/server/calendar/service/calendar.ts\n', '', 0));
+
     const result = await runLeafExecution('pv-test-1', ctx, {
       spawnFn: mockSpawnFn,
+      scriptSpawnFn,
       changedFiles: ['src/server/calendar/service/calendar.ts'],
       selectAuditorsFn: async () => matchResult,
     });
@@ -462,14 +481,267 @@ describe('runLeafExecution', () => {
       return createMockChild(JSON.stringify(failVerdict), '', 0);
     });
 
+    // Gate probes fire once per implementer success: 3 probes per call, 2 calls total
+    const scriptSpawnFn = vi.fn()
+      .mockReturnValueOnce(fakeSpawnResult('', '', 0))
+      .mockReturnValueOnce(fakeSpawnResult('1\n', '', 0))
+      .mockReturnValueOnce(fakeSpawnResult('src/server/calendar/service/calendar.ts\n', '', 0))
+      .mockReturnValueOnce(fakeSpawnResult('', '', 0))
+      .mockReturnValueOnce(fakeSpawnResult('1\n', '', 0))
+      .mockReturnValueOnce(fakeSpawnResult('src/server/calendar/service/calendar.ts\n', '', 0));
+
     const result = await runLeafExecution('pv-test-1', ctx, {
       spawnFn: mockSpawnFn,
+      scriptSpawnFn,
       changedFiles: ['src/server/calendar/service/calendar.ts'],
       selectAuditorsFn: async () => matchResult,
     });
 
     expect(result.outcome).toBe('halt');
     expect(result.reason).toContain('retry exhausted');
+  });
+
+  it('calls verification gate after implementer success and uses its changedFiles for audit', async () => {
+    const { runLeafExecution } = await import('../../lib/execute.js');
+
+    // Implementer succeeds once
+    const spawnFn = vi.fn().mockImplementation(() => createMockChild('done', '', 0));
+
+    // Gate probes: clean tree, 1 commit, 1 changed file.
+    // Probes may fire more than once if a retry occurs; keep returning passing
+    // results so the test never exhausts the mock sequence — we only assert
+    // that the FIRST gate pass drove the authoritative changedFiles.
+    const scriptSpawnFn = vi.fn().mockImplementation((_cmd: string, args: string[]) => {
+      if (args.includes('--porcelain')) return fakeSpawnResult('', '', 0);
+      if (args.includes('--count')) return fakeSpawnResult('1\n', '', 0);
+      if (args.includes('--name-only')) return fakeSpawnResult('src/gate.ts\n', '', 0);
+      return fakeSpawnResult('', '', 0);
+    });
+
+    const passingSelector = vi.fn().mockResolvedValue([]); // empty selection -> audit fails
+    // We don't actually care about audit outcome for this test; we only assert the gate fired and
+    // changedFiles was overridden.
+
+    await runLeafExecution('pv-gate.1', ctx, {
+      spawnFn,
+      scriptSpawnFn,
+      selectAuditorsFn: passingSelector,
+      changedFiles: ['STALE.ts'], // intentionally stale; gate must override
+    });
+
+    // Gate fired and passed
+    expect(logStub.runJsonEntries).toContainEqual(
+      expect.objectContaining({
+        event: 'implementer-verification-passed',
+        changedFilesCount: 1,
+      }),
+    );
+
+    // audit-skip did NOT fire (gate produced a non-empty changedFiles)
+    expect(logStub.runJsonEntries).not.toContainEqual(
+      expect.objectContaining({ event: 'audit-skip' }),
+    );
+
+    // Auditor selector was called with the gate's changedFiles, not the stale dep
+    expect(passingSelector).toHaveBeenCalledWith(
+      ['src/gate.ts'],
+      expect.any(Object),
+      expect.any(Object),
+    );
+  });
+
+  it('retries implementer when gate fails on first attempt, succeeds on retry', async () => {
+    const { runLeafExecution } = await import('../../lib/execute.js');
+
+    const gateCtx: RunContext = { ...makeCtx(logStub), beadId: 'pv-gate.2' };
+
+    // Implementer succeeds both attempts
+    const spawnFn = vi.fn().mockImplementation(() => createMockChild('done', '', 0));
+
+    // scriptSpawnFn: route by argv. First status call is dirty; subsequent clean.
+    const scriptSpawnFn = vi.fn().mockImplementation((cmd: string, args: string[]) => {
+      if (cmd === 'git' && args[0] === 'status') {
+        const call = scriptSpawnFn.mock.calls
+          .filter(c => c[0] === 'git' && (c[1] as string[])[0] === 'status').length;
+        return call === 1
+          ? fakeSpawnResult(' M a.ts\n', '', 0)
+          : fakeSpawnResult('', '', 0);
+      }
+      if (cmd === 'git' && args[0] === 'rev-list') return fakeSpawnResult('1\n', '', 0);
+      // Empty diff -> audit-skip pass-through (we're exercising the gate, not audit).
+      if (cmd === 'git' && args[0] === 'diff') return fakeSpawnResult('', '', 0);
+      if (cmd === 'bd') return fakeSpawnResult('', '', 0);
+      return fakeSpawnResult('', '', 0);
+    });
+
+    const selectAuditorsFn = vi.fn().mockResolvedValue([]);
+
+    const result = await runLeafExecution('pv-gate.2', gateCtx, {
+      spawnFn,
+      scriptSpawnFn,
+      selectAuditorsFn,
+    });
+
+    expect(result.outcome).toBe('complete');
+    expect(result.retryCount).toBe(1);
+
+    const verificationEvents = logStub.runJsonEntries
+      .filter(e => typeof e.event === 'string' && (e.event as string).startsWith('implementer-verification'))
+      .map(e => e.event);
+    expect(verificationEvents).toEqual([
+      'implementer-verification-failed',
+      'implementer-verification-passed',
+    ]);
+
+    expect(logStub.runJsonEntries).toContainEqual(
+      expect.objectContaining({
+        event: 'bead-reopened',
+        beadId: 'pv-gate.2',
+        reason: 'verification-gate-retry',
+      }),
+    );
+  });
+
+  it('escalates when gate fails on both attempts', async () => {
+    const { runLeafExecution } = await import('../../lib/execute.js');
+
+    const gateCtx: RunContext = { ...makeCtx(logStub), beadId: 'pv-gate.3' };
+
+    const spawnFn = vi.fn().mockImplementation(() => createMockChild('done', '', 0));
+
+    // Status always dirty, everything else cooperates
+    const scriptSpawnFn = vi.fn().mockImplementation((cmd: string, args: string[]) => {
+      if (cmd === 'git' && args[0] === 'status') return fakeSpawnResult(' M a.ts\n', '', 0);
+      if (cmd === 'git' && args[0] === 'rev-list') return fakeSpawnResult('1\n', '', 0);
+      if (cmd === 'git' && args[0] === 'diff') return fakeSpawnResult('a.ts\n', '', 0);
+      if (cmd === 'bd') return fakeSpawnResult('', '', 0);
+      return fakeSpawnResult('', '', 0);
+    });
+
+    const result = await runLeafExecution('pv-gate.3', gateCtx, {
+      spawnFn,
+      scriptSpawnFn,
+    });
+
+    expect(result.outcome).toBe('halt');
+
+    const reopenEvents = logStub.runJsonEntries.filter(e => e.event === 'bead-reopened');
+    expect(reopenEvents).toHaveLength(2);
+    expect(reopenEvents.map(e => e.reason)).toEqual([
+      'verification-gate-retry',
+      'verification-gate-escalate',
+    ]);
+  });
+
+  it('escalates when tree is clean but branch has zero commits (the observed failure)', async () => {
+    const { runLeafExecution } = await import('../../lib/execute.js');
+
+    const gateCtx: RunContext = { ...makeCtx(logStub), beadId: 'pv-psum.2' };
+
+    const spawnFn = vi.fn().mockImplementation(() => createMockChild('done', '', 0));
+
+    const scriptSpawnFn = vi.fn().mockImplementation((cmd: string, args: string[]) => {
+      if (cmd === 'git' && args[0] === 'status') return fakeSpawnResult('', '', 0);
+      if (cmd === 'git' && args[0] === 'rev-list') return fakeSpawnResult('0\n', '', 0);
+      if (cmd === 'git' && args[0] === 'diff') return fakeSpawnResult('', '', 0);
+      if (cmd === 'bd') return fakeSpawnResult('', '', 0);
+      return fakeSpawnResult('', '', 0);
+    });
+
+    const result = await runLeafExecution('pv-psum.2', gateCtx, {
+      spawnFn,
+      scriptSpawnFn,
+    });
+
+    expect(result.outcome).toBe('halt');
+
+    const failReasons = logStub.runJsonEntries
+      .filter(e => e.event === 'implementer-verification-failed')
+      .map(e => e.reason);
+    expect(failReasons).toEqual([
+      'no commits on branch ahead of main',
+      'no commits on branch ahead of main',
+    ]);
+  });
+});
+
+// =============================================================================
+// runEpicExecution
+// =============================================================================
+
+describe('runEpicExecution', () => {
+  let logStub: ReturnType<typeof stubLogger>;
+
+  beforeEach(async () => {
+    logStub = stubLogger();
+    vi.clearAllMocks();
+    const helpers = await import('../../lib/helpers.js');
+    vi.mocked(helpers.discoverAgents).mockReturnValue([]);
+    vi.mocked(helpers.bdEscalate).mockReturnValue(undefined);
+    // Treat beads in this suite as enriched so they enter the implementer wave.
+    vi.mocked(helpers.bdEnrichmentCheck).mockReturnValue(true);
+  });
+
+  it('runs verification gate per bead in an epic wave and escalates on gate failure', async () => {
+    const { runEpicExecution } = await import('../../lib/execute.js');
+
+    const ctx: RunContext = {
+      runId: 'test-run',
+      beadId: 'epic-parent',
+      logger: logStub.logger,
+      phaseHistory: [],
+    };
+
+    const initialBeads = ['pv-child.1'];
+
+    // Implementer + downstream verifier agents all return success.
+    // Build-guardian needs valid JSON for a pass verdict; return that uniformly
+    // so the wave-end chain passes cleanly and the per-bead gate-failure path
+    // is what drives the outcome.
+    const spawnFn = vi.fn().mockImplementation(() =>
+      createMockChild(JSON.stringify({ verdict: 'pass' }), '', 0),
+    );
+
+    // Gate fails with zero commits; bd/git calls otherwise cooperate.
+    const scriptSpawnFn = vi.fn().mockImplementation((cmd: string, args: string[]) => {
+      if (cmd === 'git' && args[0] === 'status')   return fakeSpawnResult('', '', 0);
+      if (cmd === 'git' && args[0] === 'rev-list') return fakeSpawnResult('0\n', '', 0);
+      if (cmd === 'git' && args[0] === 'diff')     return fakeSpawnResult('', '', 0);
+      // bd ready (cascade) returns no new beads so the while-loop exits.
+      if (cmd === 'bd' && args[0] === 'ready')     return fakeSpawnResult('[]', '', 0);
+      if (cmd === 'bd')                            return fakeSpawnResult('', '', 0);
+      return fakeSpawnResult('', '', 0);
+    });
+
+    const result = await runEpicExecution('epic-parent', initialBeads, ctx, {
+      spawnFn,
+      scriptSpawnFn,
+    });
+
+    // Gate fired and reported the zero-commit failure for the child bead.
+    expect(logStub.runJsonEntries).toContainEqual(
+      expect.objectContaining({
+        event: 'implementer-verification-failed',
+        beadId: 'pv-child.1',
+        reason: 'no commits on branch ahead of main',
+      }),
+    );
+
+    // Bead was reopened with the epic-specific escalate tag.
+    expect(logStub.runJsonEntries).toContainEqual(
+      expect.objectContaining({
+        event: 'bead-reopened',
+        beadId: 'pv-child.1',
+        reason: 'verification-gate-epic-escalate',
+      }),
+    );
+
+    // The bead ended up flagged as failed/escalated in the epic result.
+    const failedLike = [
+      ...(result.beadsFailed ?? []),
+      ...(result.escalatedBeads ?? []),
+    ];
+    expect(failedLike).toContain('pv-child.1');
   });
 });
 
@@ -594,7 +866,12 @@ describe('runPR', () => {
 
   function makeDeps(results: SpawnSyncReturns<Buffer>[]): ExecuteDeps {
     let callIndex = 0;
-    const spawnFn = vi.fn().mockImplementation(() => {
+    const spawnFn = vi.fn().mockImplementation((cmd: string, args: string[]) => {
+      // Intercept the rev-list backstop probe so the existing sequential
+      // fixtures don't have to know about it. Default: branch has commits.
+      if (cmd === 'git' && args[0] === 'rev-list') {
+        return fakeSpawnResult('1\n', '', 0);
+      }
       const result = results[callIndex] ?? results[results.length - 1];
       callIndex++;
       return result;
@@ -692,6 +969,53 @@ describe('runPR', () => {
   });
 });
 
+describe('runPR backstop', () => {
+  it('halts before push if branch has zero commits ahead of main', async () => {
+    const logStub = stubLogger();
+    const ctx: PhaseCtx = {
+      runId: 'test-run',
+      beadId: 'pv-empty.1',
+      logger: logStub.logger,
+      phaseHistory: [],
+      dryRun: false,
+    };
+
+    const scriptSpawnFn = vi.fn().mockImplementation((cmd: string, args: string[]) => {
+      if (cmd === 'git' && args[0] === 'branch' && args[1] === '--show-current') {
+        return fakeSpawnResult('chore/pv-empty-1\n', '', 0);
+      }
+      if (cmd === 'git' && args[0] === 'rev-list') {
+        return fakeSpawnResult('0\n', '', 0);
+      }
+      // Anything else (bd show, git push, gh pr create) must NOT be called.
+      // If it is, return failure so assertions catch the leak.
+      return fakeSpawnResult('', 'unexpected spawn', 1);
+    });
+
+    const { runPR } = await import('../../lib/execute.js');
+    const result = await runPR(ctx, { scriptSpawnFn });
+
+    expect(result.next).toBe('halt');
+    expect(ctx.prUrl).toBeUndefined();
+
+    expect(logStub.runJsonEntries).toContainEqual(
+      expect.objectContaining({
+        event: 'pr_finalize_aborted',
+        reason: 'no commits on branch',
+      }),
+    );
+
+    // Assert the sequence: only branch detect + rev-list were called.
+    const cmds = scriptSpawnFn.mock.calls.map((c: [string, string[]]) =>
+      `${c[0]} ${c[1]?.[0] ?? ''}`);
+    expect(cmds).toContain('git branch');
+    expect(cmds).toContain('git rev-list');
+    expect(cmds).not.toContain('git push');
+    expect(cmds).not.toContain('gh pr');
+    expect(cmds).not.toContain('bd show');
+  });
+});
+
 // =============================================================================
 // leafPhase / epicPhase — basic routing
 // =============================================================================
@@ -718,10 +1042,17 @@ describe('leafPhase', () => {
       createMockChild(JSON.stringify(implementerResult), '', 0),
     );
 
+    // Gate probes: clean tree, 1 commit, 0 changed files -> audit-skip passes
+    const scriptSpawnFn = vi.fn()
+      .mockReturnValueOnce(fakeSpawnResult('', '', 0))
+      .mockReturnValueOnce(fakeSpawnResult('1\n', '', 0))
+      .mockReturnValueOnce(fakeSpawnResult('', '', 0));
+
     const ctx = makePhaseCtx(logStub);
 
     const result = await leafPhase(ctx, {
       spawnFn: mockSpawnFn,
+      scriptSpawnFn,
       changedFiles: [],
     });
 

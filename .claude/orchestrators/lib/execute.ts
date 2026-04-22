@@ -793,6 +793,169 @@ export async function dispatchImplementer(
 }
 
 // =============================================================================
+// Exported: verifyImplementerCompletion
+// =============================================================================
+
+/**
+ * Verification result returned by `verifyImplementerCompletion`.
+ *
+ * On success, `changedFiles` is the authoritative list derived from
+ * `git diff --name-only <base>...HEAD` — callers must use this in place
+ * of any stale `deps.changedFiles`.
+ */
+export type VerificationResult =
+  | { passed: true; changedFiles: string[] }
+  | { passed: false; reason: string };
+
+/**
+ * Verify that the implementer subagent actually committed its work.
+ *
+ * Runs after a successful `dispatchImplementer`, before `runAudit`. Catches
+ * the failure mode where an implementer declares success (and may even have
+ * called `bd close`) but never committed — producing an empty branch that
+ * silently passes through audit and fails at `gh pr create`.
+ *
+ * Checks, in order:
+ *   1. Working tree is clean (`git status --porcelain` returns empty).
+ *   2. Branch has commits ahead of base (`git rev-list --count base..HEAD > 0`).
+ *   3. Computes authoritative `changedFiles` via `git diff --name-only base...HEAD`.
+ *
+ * Base branch defaults to `main`; override via `GIT_SAFE_MAIN_BRANCH` env var
+ * (consistent with preflight checks in `helpers.ts`).
+ */
+export function verifyImplementerCompletion(
+  ctx: RunContext,
+  deps: ExecuteDeps,
+): VerificationResult {
+  const spawnFn = deps.scriptSpawnFn ?? nodeSpawnSync;
+  const baseBranch = process.env.GIT_SAFE_MAIN_BRANCH ?? 'main';
+
+  const statusResult = spawnFn('git', ['status', '--porcelain'], {
+    encoding: 'buffer' as never,
+    shell: false,
+    timeout: 10_000,
+  });
+  if (statusResult.status !== 0 || statusResult.error) {
+    const stderrSnippet = (statusResult.stderr?.toString('utf-8') ?? '').trim()
+      || statusResult.error?.message
+      || `exit ${statusResult.status}`;
+    const reason = `git status --porcelain failed: ${stderrSnippet}`;
+    ctx.logger.appendRunJson({
+      event: 'implementer-verification-failed',
+      phase: PhaseName.Leaf,
+      beadId: ctx.beadId,
+      reason,
+    });
+    return { passed: false, reason };
+  }
+  const statusOutput = (statusResult.stdout?.toString('utf-8') ?? '').trim();
+  if (statusOutput !== '') {
+    const firstLine = statusOutput.split('\n')[0].trim();
+    const reason = `uncommitted or untracked changes present: ${firstLine}`;
+    ctx.logger.appendRunJson({
+      event: 'implementer-verification-failed',
+      phase: PhaseName.Leaf,
+      beadId: ctx.beadId,
+      reason,
+    });
+    return { passed: false, reason };
+  }
+
+  const revResult = spawnFn('git', ['rev-list', '--count', `${baseBranch}..HEAD`], {
+    encoding: 'buffer' as never,
+    shell: false,
+    timeout: 10_000,
+  });
+  if (revResult.status !== 0 || revResult.error) {
+    const stderrSnippet = (revResult.stderr?.toString('utf-8') ?? '').trim()
+      || revResult.error?.message
+      || `exit ${revResult.status}`;
+    const reason = `git rev-list --count failed: ${stderrSnippet}`;
+    ctx.logger.appendRunJson({
+      event: 'implementer-verification-failed',
+      phase: PhaseName.Leaf,
+      beadId: ctx.beadId,
+      reason,
+    });
+    return { passed: false, reason };
+  }
+  const revCount = (revResult.stdout?.toString('utf-8') ?? '').trim();
+  const revCountNum = Number(revCount);
+  if (!Number.isFinite(revCountNum) || revCountNum <= 0) {
+    const reason = `no commits on branch ahead of ${baseBranch}`;
+    ctx.logger.appendRunJson({
+      event: 'implementer-verification-failed',
+      phase: PhaseName.Leaf,
+      beadId: ctx.beadId,
+      reason,
+    });
+    return { passed: false, reason };
+  }
+
+  const diffResult = spawnFn('git', ['diff', '--name-only', `${baseBranch}...HEAD`], {
+    encoding: 'buffer' as never,
+    shell: false,
+    timeout: 10_000,
+  });
+  if (diffResult.status !== 0 || diffResult.error) {
+    const stderrSnippet = (diffResult.stderr?.toString('utf-8') ?? '').trim()
+      || diffResult.error?.message
+      || `exit ${diffResult.status}`;
+    const reason = `git diff --name-only failed: ${stderrSnippet}`;
+    ctx.logger.appendRunJson({
+      event: 'implementer-verification-failed',
+      phase: PhaseName.Leaf,
+      beadId: ctx.beadId,
+      reason,
+    });
+    return { passed: false, reason };
+  }
+  const diffOutput = (diffResult.stdout?.toString('utf-8') ?? '').trim();
+  const changedFiles = diffOutput === '' ? [] : diffOutput.split('\n');
+
+  ctx.logger.appendRunJson({
+    event: 'implementer-verification-passed',
+    phase: PhaseName.Leaf,
+    beadId: ctx.beadId,
+    changedFilesCount: changedFiles.length,
+  });
+
+  return { passed: true, changedFiles };
+}
+
+/**
+ * Reset a bead's status to `in_progress`.
+ *
+ * Used when the implementer subagent closed its own bead prematurely
+ * (e.g., before committing), so that retry or escalation finds an
+ * accurate bead state rather than a falsely-closed one.
+ *
+ * Idempotent — safe to call regardless of current bead status. Failures
+ * of the `bd` command itself are logged but never throw: we don't want
+ * to block an escalation path because a beads CLI call hiccupped.
+ */
+export function reopenBead(
+  beadId: string,
+  ctx: RunContext,
+  deps: ExecuteDeps,
+  reasonTag: string,
+): void {
+  const spawnFn = deps.scriptSpawnFn ?? nodeSpawnSync;
+  const result = spawnFn('bd', ['update', beadId, '--status=in_progress'], {
+    encoding: 'buffer' as never,
+    shell: false,
+    timeout: 10_000,
+  });
+  const success = result.status === 0;
+  ctx.logger.appendRunJson({
+    event: 'bead-reopened',
+    beadId,
+    reason: reasonTag,
+    success,
+  });
+}
+
+// =============================================================================
 // Exported: runAudit
 // =============================================================================
 
@@ -899,8 +1062,19 @@ export async function runLeafExecution(
     return escalateLeaf(beadId, ctx, deps, `implementer failure: ${implResult.reason}`, 1);
   }
 
-  // --- Attempt 1: Auditors ---
-  const auditResult = await runAudit(beadId, ctx, deps);
+  // --- Attempt 1: Verification gate ---
+  const gate1 = verifyImplementerCompletion(ctx, deps);
+  if (!gate1.passed) {
+    reopenBead(beadId, ctx, deps, 'verification-gate-retry');
+    const retryResult = await retryAfterVerificationFailure(beadId, ctx, deps, gate1.reason);
+    if (retryResult) return retryResult;
+    reopenBead(beadId, ctx, deps, 'verification-gate-escalate');
+    return escalateLeaf(beadId, ctx, deps, `verification gate exhausted: ${gate1.reason}`, 1);
+  }
+
+  // --- Attempt 1: Auditors (with gate-authoritative changedFiles) ---
+  const auditDeps: ExecuteDeps = { ...deps, changedFiles: gate1.changedFiles };
+  const auditResult = await runAudit(beadId, ctx, auditDeps);
   warnings.push(...auditResult.warnings);
 
   if (auditResult.passed) {
@@ -917,8 +1091,16 @@ export async function runLeafExecution(
     return escalateLeaf(beadId, ctx, deps, `retry implementer failure: ${retryImplResult.reason}`, 1);
   }
 
-  // --- Retry: re-run auditors ---
-  const retryAuditResult = await runAudit(beadId, ctx, deps);
+  // --- Retry: Verification gate (second pass) ---
+  const gate2 = verifyImplementerCompletion(ctx, deps);
+  if (!gate2.passed) {
+    reopenBead(beadId, ctx, deps, 'verification-gate-escalate');
+    return escalateLeaf(beadId, ctx, deps, `verification gate exhausted after retry: ${gate2.reason}`, 1);
+  }
+
+  // --- Retry: re-run auditors (with fresh changedFiles) ---
+  const retryAuditDeps: ExecuteDeps = { ...deps, changedFiles: gate2.changedFiles };
+  const retryAuditResult = await runAudit(beadId, ctx, retryAuditDeps);
   warnings.push(...retryAuditResult.warnings);
 
   if (retryAuditResult.passed) {
@@ -951,6 +1133,44 @@ async function retryAfterFailure(
   }
 
   const auditResult = await runAudit(beadId, ctx, deps);
+  if (auditResult.passed) {
+    return { outcome: 'complete', retryCount: 1, warnings: auditResult.warnings };
+  }
+
+  return null;
+}
+
+/**
+ * Attempt a retry after a verification-gate failure.
+ *
+ * Mirrors `retryAfterFailure` but scoped to the gate-trip case:
+ * the implementer declared success but git state refuted it.
+ * Feeds a specific correction into `retryContext.concerns`.
+ */
+async function retryAfterVerificationFailure(
+  beadId: string,
+  ctx: RunContext,
+  deps: ExecuteDeps,
+  reason: string,
+): Promise<LeafExecutionResult | null> {
+  const concern = `Verification failed: ${reason}. You must commit ALL changes (including new/untracked files) to the current branch before declaring completion. Do not call 'bd close' until the commit exists on the branch.`;
+
+  const retryImplResult = await dispatchImplementer(beadId, ctx, {
+    ...deps,
+    retryContext: { concerns: [concern], attempt: 2 },
+  });
+
+  if (!retryImplResult.ok) {
+    return null;
+  }
+
+  const gateRetry = verifyImplementerCompletion(ctx, deps);
+  if (!gateRetry.passed) {
+    return null;
+  }
+
+  const auditDeps: ExecuteDeps = { ...deps, changedFiles: gateRetry.changedFiles };
+  const auditResult = await runAudit(beadId, ctx, auditDeps);
   if (auditResult.passed) {
     return { outcome: 'complete', retryCount: 1, warnings: auditResult.warnings };
   }
@@ -1069,8 +1289,22 @@ export async function runEpicExecution(
         continue;
       }
 
-      const changedFiles = deps.changedFilesForBead?.(beadId) ?? [];
-      const auditResult = await runAudit(beadId, ctx, { ...deps, changedFiles });
+      // Verification gate — mirror leaf-path enforcement. Scope ctx.beadId to
+      // the child bead so gate/reopen log events identify the bead, not the epic.
+      // Epic wave loop handles retries at the wave level via MAX_WAVE_RETRIES;
+      // here we just mark this bead as failed for this wave and move on.
+      const beadCtx: RunContext = { ...ctx, beadId };
+      const gate = verifyImplementerCompletion(beadCtx, deps);
+      if (!gate.passed) {
+        reopenBead(beadId, beadCtx, deps, 'verification-gate-epic-escalate');
+        waveState.beadsFailed.push(beadId);
+        continue;
+      }
+
+      const auditResult = await runAudit(beadId, ctx, {
+        ...deps,
+        changedFiles: gate.changedFiles,
+      });
       allWarnings.push(...auditResult.warnings);
 
       if (auditResult.passed) {
@@ -1083,7 +1317,10 @@ export async function runEpicExecution(
         });
 
         if (retryResult.ok) {
-          const retryAudit = await runAudit(beadId, ctx, { ...deps, changedFiles });
+          const retryAudit = await runAudit(beadId, ctx, {
+            ...deps,
+            changedFiles: gate.changedFiles,
+          });
           allWarnings.push(...retryAudit.warnings);
 
           if (retryAudit.passed) {
@@ -1226,6 +1463,27 @@ export async function runPR(
   }
 
   const branchName = branchCmd.stdout;
+
+  // Step 0.5: Backstop — refuse to PR an empty branch. The leaf/epic
+  // verification gates should have caught this, but if any code path
+  // slips past them we still won't push empty branches or call gh.
+  const baseBranch = process.env.GIT_SAFE_MAIN_BRANCH ?? 'main';
+  const revCountCmd = spawnCmd(
+    'git', ['rev-list', '--count', `${baseBranch}..HEAD`],
+    logger, PhaseName.PR, spawnFn,
+  );
+
+  if (revCountCmd.exitCode !== 0 || revCountCmd.stdout.trim() === '0') {
+    logger.appendRunJson({
+      event: 'pr_finalize_aborted',
+      reason: 'no commits on branch',
+    });
+    logger.writePhaseLog(
+      PhaseName.PR, 'err',
+      `Branch ${branchName} has no commits ahead of ${baseBranch} — refusing to create empty PR\n`,
+    );
+    return { next: 'halt', ctx };
+  }
 
   // Step 1: Verify bead(s) are CLOSED
   const bdResult = spawnCmd(
