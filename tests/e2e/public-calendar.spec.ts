@@ -151,13 +151,7 @@ test.describe('Public Calendar', () => {
     }
   });
 
-  // TEMP: epic pv-3hsk transitions public event-instance URLs from UUID to a
-  // yyyymmdd-hhmm slug. Wave 2 makes event-card emit slug-based hrefs but the
-  // detail-page consumer (event-instance.vue) and its backend service path are
-  // not slug-aware until later waves (beads 3.4, 3.2, 2.4, 2.3, 2.1, 1.4). The
-  // verification bead pv-3hsk.5.1 will remove this skip once the full path is
-  // wired through.
-  test.skip('should navigate to event detail page', async ({ page }) => {
+  test('should navigate to event detail page', async ({ page }) => {
     // Wait for events to load
     // New redesign uses li.day-event-item (containing article.event-card) instead of li.event
     await page.waitForSelector('li.day-event-item, .empty-state', { timeout: 15000 });
@@ -186,8 +180,10 @@ test.describe('Public Calendar', () => {
     // Client-side routing does not fire a browser 'load' event (the default for waitForURL), so
     // we only wait for the URL to commit (change) rather than for a full page reload lifecycle.
     const escapedBase = env.baseURL.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    // Verify the URL ends with a yyyymmdd-hhmm slug — proves the new
+    // stable-slug routing is active (legacy UUID hrefs would not match).
     await page.waitForURL(
-      new RegExp(`${escapedBase}(\\/[a-z]{2,8})?\\/view\\/test_calendar\\/events\\/`),
+      new RegExp(`${escapedBase}(\\/[a-z]{2,8})?\\/view\\/test_calendar\\/events\\/[^/]+\\/\\d{8}-\\d{4}$`),
       { timeout: 10000, waitUntil: 'commit' },
     );
 

@@ -116,6 +116,18 @@ onBeforeMount(async () => {
   try {
     state.isLoading = true;
 
+    // Slug-first short-circuit: if the route carries a startTime slug,
+    // validate it before any network call. This mirrors the site
+    // event-instance.vue order so both surfaces share identical flow.
+    let parsedStartTime = null;
+    if (startTimeSlug) {
+      parsedStartTime = parseInstanceSlug(startTimeSlug);
+      if (!parsedStartTime) {
+        state.notFound = true;
+        return;
+      }
+    }
+
     state.calendar = await calendarService.getCalendarByUrlName(calendarId as string);
 
     if (!state.calendar) {
@@ -123,21 +135,13 @@ onBeforeMount(async () => {
       return;
     }
 
-    if (startTimeSlug) {
-      // Preferred path: the route carries an occurrence timestamp slug.
-      // Reject semantically-invalid slugs (the router regex only checks
-      // structural shape) before making any network call.
-      const startTime = parseInstanceSlug(startTimeSlug);
-      if (!startTime) {
-        state.notFound = true;
-        return;
-      }
+    if (parsedStartTime) {
       // Fetch the occurrence directly by (eventId, startTime) via the site
       // service — a single request that returns the full detail shape the
       // template expects and updates the event-instance store.
       const instance = await calendarService.loadEventInstance(
         eventId as string,
-        startTime,
+        parsedStartTime,
       );
       if (!instance) {
         state.notFound = true;
