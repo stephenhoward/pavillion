@@ -105,6 +105,9 @@ function onLoginSuccess() {
 
 <style scoped lang="scss">
 .secondary-actions {
-  margin-top: 1.5rem; /* 24px */
+  display: flex;
+  flex-direction: column;
+  gap: var(--pav-space-4);
+  margin-block-start: var(--pav-space-6);
 }
 </style>
