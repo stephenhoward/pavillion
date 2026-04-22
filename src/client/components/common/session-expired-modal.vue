@@ -32,7 +32,6 @@ function handleClose() {
     <p class="session-expired-description">{{ t('description') }}</p>
     <LoginForm
       :initial-email="authn.lastKnownEmail ?? ''"
-      heading-level="h3"
       @success="handleSuccess"
     />
   </Modal>

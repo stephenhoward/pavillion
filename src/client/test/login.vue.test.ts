@@ -64,6 +64,16 @@ describe('Login Route View', () => {
     expect(wrapper.findComponent(LoginForm).exists()).toBe(true);
   });
 
+  it('renders the page title as an h2 outside of LoginForm', async () => {
+    const { wrapper } = await mountLoginView();
+    const h2 = wrapper.find('h2');
+    expect(h2.exists()).toBe(true);
+    expect(h2.text().length).toBeGreaterThan(0);
+    // Title lives on the page, not inside the reusable LoginForm
+    const loginForm = wrapper.findComponent(LoginForm);
+    expect(loginForm.find('h2').exists()).toBe(false);
+  });
+
   it('forwards ?email= query param to LoginForm as initialEmail', async () => {
     const { wrapper } = await mountLoginView({}, 'someone@example.com');
     const form = wrapper.findComponent(LoginForm);

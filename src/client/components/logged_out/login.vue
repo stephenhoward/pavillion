@@ -54,28 +54,32 @@ function onLoginSuccess() {
 
 <template>
   <div class="welcome-card">
-    <LoginForm :initial-email="initialEmail"
-               @update:email="(v) => email = v"
-               @success="onLoginSuccess" />
+    <div class="welcome-card-main">
+      <h2>{{ t('title') }}</h2>
 
-    <div v-if="registrationMode === 'open' || registrationMode === 'apply'"
-         class="secondary-actions">
-      <router-link v-if="registrationMode === 'open'"
-                   class="btn btn--pill btn--secondary"
-                   :to="{ name: 'register', query: { email: email }}">
-        {{ t("register_button") }}
-      </router-link>
-      <router-link v-if="registrationMode === 'apply'"
-                   class="btn btn--pill btn--secondary"
-                   :to="{ name: 'register-apply', query: { email: email }}">
-        {{ t("apply_button") }}
+      <LoginForm :initial-email="initialEmail"
+                 @update:email="(v) => email = v"
+                 @success="onLoginSuccess" />
+
+      <div v-if="registrationMode === 'open' || registrationMode === 'apply'"
+           class="secondary-actions">
+        <router-link v-if="registrationMode === 'open'"
+                     class="btn btn--pill btn--secondary"
+                     :to="{ name: 'register', query: { email: email }}">
+          {{ t("register_button") }}
+        </router-link>
+        <router-link v-if="registrationMode === 'apply'"
+                     class="btn btn--pill btn--secondary"
+                     :to="{ name: 'register-apply', query: { email: email }}">
+          {{ t("apply_button") }}
+        </router-link>
+      </div>
+
+      <router-link class="forgot"
+                   :to="{ name: 'forgot_password', query: { email: email }}">
+        {{ t("forgot_password") }}
       </router-link>
     </div>
-
-    <router-link class="forgot"
-                 :to="{ name: 'forgot_password', query: { email: email }}">
-      {{ t("forgot_password") }}
-    </router-link>
 
     <aside class="welcome-card-info"
            :aria-label="t('info_panel.welcome') + ' ' + siteTitle">

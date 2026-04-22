@@ -67,16 +67,11 @@ describe('LoginForm Props', () => {
     expect((emailInput.element as HTMLInputElement).value).toBe('');
   });
 
-  it('renders the title as an h2 by default', () => {
+  it('does not render its own heading — the containing page owns the title', () => {
     const { wrapper } = mountedLoginForm();
-    expect(wrapper.find('h2').exists()).toBe(true);
-    expect(wrapper.find('h3').exists()).toBe(false);
-  });
-
-  it('renders the title as an h3 when headingLevel="h3" prop is passed', () => {
-    const { wrapper } = mountedLoginForm({ props: { headingLevel: 'h3' } });
-    expect(wrapper.find('h3').exists()).toBe(true);
+    expect(wrapper.find('h1').exists()).toBe(false);
     expect(wrapper.find('h2').exists()).toBe(false);
+    expect(wrapper.find('h3').exists()).toBe(false);
   });
 });
 

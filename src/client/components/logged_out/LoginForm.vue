@@ -6,12 +6,10 @@ import ErrorAlert from './error-alert.vue';
 
 interface Props {
   initialEmail?: string;
-  headingLevel?: 'h2' | 'h3';
 }
 
 const props = withDefaults(defineProps<Props>(), {
   initialEmail: '',
-  headingLevel: 'h2',
 });
 
 const emit = defineEmits<{
@@ -85,8 +83,6 @@ async function doLogin() {
   <form class="welcome-card-form"
         @submit.prevent="doLogin"
         novalidate>
-    <component :is="props.headingLevel">{{ t('title') }}</component>
-
     <ErrorAlert id="login-error" :error="state.err" />
 
     <div class="form-stack">

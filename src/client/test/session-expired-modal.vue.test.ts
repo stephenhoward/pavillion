@@ -77,12 +77,6 @@ describe('SessionExpiredModal Rendering', () => {
     expect(loginForm.props('initialEmail')).toBe('');
   });
 
-  it('passes headingLevel="h3" to LoginForm to avoid duplicate h2 in the modal', () => {
-    const { wrapper } = mountedSessionExpiredModal();
-    const loginForm = wrapper.findComponent(LoginForm);
-    expect(loginForm.props('headingLevel')).toBe('h3');
-  });
-
   // Regression: pv-rh4z / PR #234 — the session-expired modal re-authenticates
   // the existing user in place. It must not surface register, apply-for-account,
   // or forgot-password affordances (those belong on the standalone /auth/login
