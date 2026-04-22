@@ -1289,8 +1289,22 @@ export async function runEpicExecution(
         continue;
       }
 
-      const changedFiles = deps.changedFilesForBead?.(beadId) ?? [];
-      const auditResult = await runAudit(beadId, ctx, { ...deps, changedFiles });
+      // Verification gate — mirror leaf-path enforcement. Scope ctx.beadId to
+      // the child bead so gate/reopen log events identify the bead, not the epic.
+      // Epic wave loop handles retries at the wave level via MAX_WAVE_RETRIES;
+      // here we just mark this bead as failed for this wave and move on.
+      const beadCtx: RunContext = { ...ctx, beadId };
+      const gate = verifyImplementerCompletion(beadCtx, deps);
+      if (!gate.passed) {
+        reopenBead(beadId, beadCtx, deps, 'verification-gate-epic-escalate');
+        waveState.beadsFailed.push(beadId);
+        continue;
+      }
+
+      const auditResult = await runAudit(beadId, ctx, {
+        ...deps,
+        changedFiles: gate.changedFiles,
+      });
       allWarnings.push(...auditResult.warnings);
 
       if (auditResult.passed) {
@@ -1303,7 +1317,10 @@ export async function runEpicExecution(
         });
 
         if (retryResult.ok) {
-          const retryAudit = await runAudit(beadId, ctx, { ...deps, changedFiles });
+          const retryAudit = await runAudit(beadId, ctx, {
+            ...deps,
+            changedFiles: gate.changedFiles,
+          });
           allWarnings.push(...retryAudit.warnings);
 
           if (retryAudit.passed) {

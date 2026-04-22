@@ -666,6 +666,86 @@ describe('runLeafExecution', () => {
 });
 
 // =============================================================================
+// runEpicExecution
+// =============================================================================
+
+describe('runEpicExecution', () => {
+  let logStub: ReturnType<typeof stubLogger>;
+
+  beforeEach(async () => {
+    logStub = stubLogger();
+    vi.clearAllMocks();
+    const helpers = await import('../../lib/helpers.js');
+    vi.mocked(helpers.discoverAgents).mockReturnValue([]);
+    vi.mocked(helpers.bdEscalate).mockReturnValue(undefined);
+    // Treat beads in this suite as enriched so they enter the implementer wave.
+    vi.mocked(helpers.bdEnrichmentCheck).mockReturnValue(true);
+  });
+
+  it('runs verification gate per bead in an epic wave and escalates on gate failure', async () => {
+    const { runEpicExecution } = await import('../../lib/execute.js');
+
+    const ctx: RunContext = {
+      runId: 'test-run',
+      beadId: 'epic-parent',
+      logger: logStub.logger,
+      phaseHistory: [],
+    };
+
+    const initialBeads = ['pv-child.1'];
+
+    // Implementer + downstream verifier agents all return success.
+    // Build-guardian needs valid JSON for a pass verdict; return that uniformly
+    // so the wave-end chain passes cleanly and the per-bead gate-failure path
+    // is what drives the outcome.
+    const spawnFn = vi.fn().mockImplementation(() =>
+      createMockChild(JSON.stringify({ verdict: 'pass' }), '', 0),
+    );
+
+    // Gate fails with zero commits; bd/git calls otherwise cooperate.
+    const scriptSpawnFn = vi.fn().mockImplementation((cmd: string, args: string[]) => {
+      if (cmd === 'git' && args[0] === 'status')   return fakeSpawnResult('', '', 0);
+      if (cmd === 'git' && args[0] === 'rev-list') return fakeSpawnResult('0\n', '', 0);
+      if (cmd === 'git' && args[0] === 'diff')     return fakeSpawnResult('', '', 0);
+      // bd ready (cascade) returns no new beads so the while-loop exits.
+      if (cmd === 'bd' && args[0] === 'ready')     return fakeSpawnResult('[]', '', 0);
+      if (cmd === 'bd')                            return fakeSpawnResult('', '', 0);
+      return fakeSpawnResult('', '', 0);
+    });
+
+    const result = await runEpicExecution('epic-parent', initialBeads, ctx, {
+      spawnFn,
+      scriptSpawnFn,
+    });
+
+    // Gate fired and reported the zero-commit failure for the child bead.
+    expect(logStub.runJsonEntries).toContainEqual(
+      expect.objectContaining({
+        event: 'implementer-verification-failed',
+        beadId: 'pv-child.1',
+        reason: 'no commits on branch ahead of main',
+      }),
+    );
+
+    // Bead was reopened with the epic-specific escalate tag.
+    expect(logStub.runJsonEntries).toContainEqual(
+      expect.objectContaining({
+        event: 'bead-reopened',
+        beadId: 'pv-child.1',
+        reason: 'verification-gate-epic-escalate',
+      }),
+    );
+
+    // The bead ended up flagged as failed/escalated in the epic result.
+    const failedLike = [
+      ...(result.beadsFailed ?? []),
+      ...(result.escalatedBeads ?? []),
+    ];
+    expect(failedLike).toContain('pv-child.1');
+  });
+});
+
+// =============================================================================
 // runWithConcurrencyCap
 // =============================================================================
 
