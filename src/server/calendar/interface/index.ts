@@ -363,6 +363,23 @@ export default class CalendarInterface {
   }
 
   /**
+   * Look up an event instance by (eventId, startTime), materializing it on
+   * demand from the event's RRuleSet if it hasn't been persisted yet. Used by
+   * the public (event + timestamp) URL route so bookmarks survive the
+   * materialization horizon and race safely with scheduled materialization.
+   *
+   * @param eventId - The owning event ID
+   * @param startTime - Occurrence start datetime (minute precision)
+   * @returns Hydrated CalendarEventInstance or null if not found / invalid
+   */
+  async findOrMaterializeInstanceWithDetails(
+    eventId: string,
+    startTime: DateTime,
+  ): Promise<CalendarEventInstance | null> {
+    return this.eventInstanceService.findOrMaterializeInstanceWithDetails(eventId, startTime);
+  }
+
+  /**
    * List upcoming occurrences of a recurring event, tagging each with its
    * state (active / cancelled-shown / hidden). Transient DTOs — not persisted.
    *
