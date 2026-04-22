@@ -35,6 +35,14 @@ jwt:
 session:
   secret: 'development-only-session-secret-do-not-use-in-production'
 
+# Calendar domain configuration
+calendar:
+  # Upper bound on how many event_instance rows a single event may persist.
+  # Protects the lazy-materialization path (findOrMaterializeInstanceWithDetails)
+  # from anonymous-write amplification via repeated miss probes across an
+  # unbounded recurring schedule's occurrences.
+  materializationCap: 1000
+
 # Funding domain configuration
 # In production, ENCRYPTION_KEY must be set via environment variable
 # Generate with: openssl rand -hex 32

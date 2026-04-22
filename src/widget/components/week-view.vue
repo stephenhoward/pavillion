@@ -4,6 +4,7 @@ import { useTranslation } from 'i18next-vue';
 import { DateTime } from 'luxon';
 import { useRouter } from 'vue-router';
 import { usePublicCalendarStore } from '@/site/stores/publicCalendarStore';
+import { formatInstanceSlug } from '@/common/utils/instance-slug';
 import { useWidgetStore } from '../stores/widgetStore';
 import { useSwipeGesture } from '../composables/useSwipeGesture';
 import EventImage from '@/site/components/event-image.vue';
@@ -84,6 +85,7 @@ const openEvent = (instance: any) => {
     params: {
       urlName: widgetStore.calendarUrlName!,
       eventId: instance.event.id,
+      startTime: formatInstanceSlug(instance.start),
     },
   });
 };

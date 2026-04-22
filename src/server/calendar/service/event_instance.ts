@@ -1,4 +1,5 @@
 import { EventEmitter } from "events";
+import config from 'config';
 import { v4 as uuidv4 } from 'uuid';
 import { Account } from "@/common/model/account";
 import { CalendarEvent, EventFrequency } from "@/common/model/events";
@@ -10,7 +11,7 @@ import { EventInstanceEntity } from "@/server/calendar/entity/event_instance";
 import { CalendarEntity } from "@/server/calendar/entity/calendar";
 import { MediaEntity } from "@/server/media/entity/media";
 import { Calendar } from "@/common/model/calendar";
-import { DateTime, Duration } from 'luxon';
+import { DateTime } from 'luxon';
 import rrule from 'rrule';
 import { LocationEntity, LocationContentEntity } from "@/server/calendar/entity/location";
 import { EventSeriesEntity, EventSeriesContentEntity } from '@/server/calendar/entity/event_series';
@@ -459,16 +460,29 @@ export default class EventInstanceService {
       return null;
     }
 
+    return this.hydrateInstanceEntity(eventInstance);
+  }
+
+  /**
+   * Shared hydration: given a fully-eager-loaded EventInstanceEntity, produce
+   * a CalendarEventInstance with schedules populated, shown-cancellations
+   * marked, location model hydrated, categories populated, and source
+   * calendar resolved. Both getEventInstanceWithDetails and
+   * findOrMaterializeInstanceWithDetails delegate to this helper so the
+   * detail shape is identical on both paths.
+   *
+   * Schedules are stripped at the public API boundary (see toPublicEventObject)
+   * so they never reach the wire — populating them here is safe for both
+   * internal consumers and the public detail page.
+   */
+  private async hydrateInstanceEntity(
+    eventInstance: EventInstanceEntity,
+  ): Promise<CalendarEventInstance> {
     const instance = eventInstance.toModel();
     const event = eventInstance.event;
 
-    // Populate schedules on the model so the public API layer can compute
-    // the recurrence summary and mark shown cancellations without requiring a
-    // second DB query. Schedules are stripped at the public API boundary
-    // (see toPublicEventObject) so they never reach the wire.
     const scheduleEntities = (event.getDataValue('schedules') ?? []) as EventScheduleEntity[];
-    const scheduleModels = scheduleEntities.map((s: EventScheduleEntity) => s.toModel());
-    instance.event.schedules = scheduleModels;
+    instance.event.schedules = scheduleEntities.map((s: EventScheduleEntity) => s.toModel());
 
     // Mark as cancelled in-memory if a shown-cancellation schedule targets this instance.
     this.markShownCancellations([instance]);
@@ -480,7 +494,10 @@ export default class EventInstanceService {
 
     // Populate categories via the category service, filtered to the display calendar
     // so reposted events only show the display calendar's categories
-    instance.event.categories = await this.categoryService.getEventCategories(instance.event.id, eventInstance.calendar_id);
+    instance.event.categories = await this.categoryService.getEventCategories(
+      instance.event.id,
+      eventInstance.calendar_id,
+    );
 
     // Resolve source calendar information for reposted events
     const repostContext: RepostContext = {
@@ -491,7 +508,285 @@ export default class EventInstanceService {
     };
     const remoteEventIds = repostContext.eventCalendarId === null ? [instance.event.id] : [];
     const remoteActorUriMap = await this.fetchRemoteActorUriMap(remoteEventIds);
+    await resolveSourceCalendars([repostContext], remoteActorUriMap);
 
+    return instance;
+  }
+
+  /**
+   * Derive an occurrence's end time by applying the duration of the event's
+   * first non-exclusion schedule with a configured eventEndTime. Returns
+   * null if no such schedule exists. Shared by generateInstances and
+   * findOrMaterializeInstanceWithDetails so the two paths agree on the
+   * computed end time.
+   */
+  private computeOccurrenceEndTime(
+    event: CalendarEvent,
+    startTime: DateTime,
+  ): DateTime | null {
+    const baseSchedule = (event.schedules ?? []).find(
+      s => !s.isExclusion && s.startDate && s.eventEndTime,
+    );
+    if (!baseSchedule || !baseSchedule.startDate || !baseSchedule.eventEndTime) {
+      return null;
+    }
+    const durationMs = baseSchedule.eventEndTime.toMillis() - baseSchedule.startDate.toMillis();
+    if (durationMs <= 0) return null;
+    return startTime.plus({ milliseconds: durationMs });
+  }
+
+  /**
+   * Default bound on total persisted instances per event. Used when
+   * `calendar.materializationCap` is not present in application config.
+   * Protects the lazy-materialization path from anonymous-write amplification
+   * through the materialize-on-miss path.
+   */
+  private static readonly DEFAULT_MATERIALIZATION_CAP = 1000;
+
+  /**
+   * Additional pre-flight horizon: an unbounded recurring schedule (no
+   * UNTIL / COUNT) cannot be probed beyond GENERATION_HORIZON_MONTHS + 12
+   * months from "now" without calling into rrule. Bounds the RRuleSet walk
+   * so a far-future timestamp against an unbounded schedule is rejected
+   * before any expensive expansion runs.
+   */
+  private static readonly UNBOUNDED_PREFLIGHT_MONTHS = GENERATION_HORIZON_MONTHS + 12;
+
+  /**
+   * Resolve the per-event materialization cap. Reads from application config
+   * at `calendar.materializationCap`, falling back to
+   * {@link DEFAULT_MATERIALIZATION_CAP} when unset.
+   */
+  private getMaterializationCap(): number {
+    try {
+      if (config.has('calendar.materializationCap')) {
+        const value = config.get<number>('calendar.materializationCap');
+        if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
+          return value;
+        }
+      }
+    }
+    catch {
+      // Fall through to default on any config lookup error.
+    }
+    return EventInstanceService.DEFAULT_MATERIALIZATION_CAP;
+  }
+
+  /**
+   * Look up an event instance by `(eventId, startTime)` with the same eager
+   * loading as {@link getEventInstanceWithDetails}. On cache miss, validate
+   * that `startTime` coincides with an occurrence produced by the event's
+   * RRuleSet; if valid and not cancelled-hidden, materialize and persist a
+   * new `EventInstanceEntity` row. Cancelled-shown occurrences return an
+   * in-memory `CalendarEventInstance` with `isCancelled=true` and are not
+   * persisted.
+   *
+   * Defensive bounds:
+   *  - Pre-flight horizon check for unbounded recurring schedules (returns
+   *    null before invoking rrule)
+   *  - Per-event materialization cap (returns null at the cap)
+   *
+   * Concurrency: protected by the unique index on `(event_id, start_time)`.
+   * On unique-violation during the race, the loser re-fetches the row the
+   * winner inserted via the same hydration helper used for cache hits.
+   *
+   * @param eventId - The owning event ID
+   * @param startTime - Occurrence start datetime (minute precision)
+   * @returns Hydrated CalendarEventInstance or null if not found / invalid
+   */
+  async findOrMaterializeInstanceWithDetails(
+    eventId: string,
+    startTime: DateTime,
+  ): Promise<CalendarEventInstance | null> {
+    const startMs = startTime.toUTC().toMillis();
+    const startDate = new Date(startMs);
+
+    // 1. Cache hit via a single eager-load of the existing row.
+    const cached = await EventInstanceEntity.findOne({
+      where: { event_id: eventId, start_time: startDate },
+      include: [{
+        model: EventEntity,
+        as: 'event',
+        include: [
+          EventContentEntity,
+          { model: LocationEntity, include: [LocationContentEntity] },
+          EventScheduleEntity,
+          MediaEntity,
+          CalendarEntity,
+        ],
+      }],
+    });
+    if (cached) {
+      // Short-circuit: do not re-validate against the RRuleSet. Materialized
+      // rows are authoritative; a subsequent schedule edit that would now
+      // reject this date does not invalidate a pre-existing bookmark.
+      return this.hydrateInstanceEntity(cached);
+    }
+
+    // 2. Load the event with BOTH schedules and the detail-page associations
+    //    in a single query. This eliminates the need for a second fetch on
+    //    the cancelled-shown path — every branch from here on works from the
+    //    same entity.
+    const eventEntity = await EventEntity.findByPk(eventId, {
+      include: [
+        EventContentEntity,
+        { model: LocationEntity, include: [LocationContentEntity] },
+        EventScheduleEntity,
+        MediaEntity,
+        CalendarEntity,
+      ],
+    });
+    if (!eventEntity) {
+      return null;
+    }
+    const event = eventEntity.toModel();
+    const scheduleEntities = (eventEntity.getDataValue('schedules') ?? []) as EventScheduleEntity[];
+    event.schedules = scheduleEntities.map(s => s.toModel());
+
+    // 3. Pre-flight guard: reject far-future probes on unbounded schedules.
+    if (this.exceedsUnboundedHorizon(event, startTime)) {
+      return null;
+    }
+
+    // 4. Validate occurrence membership via the RRuleSet.
+    try {
+      this.assertDateMatchesOccurrence(event, startTime);
+    }
+    catch (err) {
+      if (err instanceof InvalidOccurrenceDateError) {
+        return null;
+      }
+      throw err;
+    }
+
+    // 5. Exclusion rows.
+    const exclusion = (event.schedules ?? []).find(s =>
+      s.isExclusion
+      && s.startDate
+      && s.startDate.toUTC().toMillis() === startMs,
+    );
+    if (exclusion) {
+      if (exclusion.hideFromPublic) {
+        return null;
+      }
+      // Shown cancellation: build a transient in-memory instance directly
+      // from the already-loaded eventEntity. No second fetch, no persistence.
+      return this.buildTransientCancelledInstance(eventEntity, startTime);
+    }
+
+    // 6. Materialization cap.
+    const cap = this.getMaterializationCap();
+    const persistedCount = await EventInstanceEntity.count({
+      where: { event_id: eventId },
+    });
+    if (persistedCount >= cap) {
+      logger.warn(
+        { eventId, persistedCount, cap },
+        'materialization cap reached; refusing to persist new instance',
+      );
+      return null;
+    }
+
+    // 7. Materialize + persist with unique-constraint catch.
+    const endTime = this.computeOccurrenceEndTime(event, startTime);
+    const row = EventInstanceEntity.build({
+      id: uuidv4(),
+      event_id: eventId,
+      calendar_id: eventEntity.calendar_id,
+      start_time: startDate,
+      end_time: endTime ? endTime.toJSDate() : null,
+    });
+    try {
+      await row.save();
+    }
+    catch (err: any) {
+      if (err?.name !== 'SequelizeUniqueConstraintError') {
+        throw err;
+      }
+      // Fall through: winner already inserted. Re-fetch the row via the
+      // same eager-load below so both racers see the identical hydrated
+      // detail shape. The unique index on (event_id, start_time) is what
+      // makes this branch reachable and reliable.
+    }
+
+    const persisted = await EventInstanceEntity.findOne({
+      where: { event_id: eventId, start_time: startDate },
+      include: [{
+        model: EventEntity,
+        as: 'event',
+        include: [
+          EventContentEntity,
+          { model: LocationEntity, include: [LocationContentEntity] },
+          EventScheduleEntity,
+          MediaEntity,
+          CalendarEntity,
+        ],
+      }],
+    });
+    if (!persisted) return null;
+    return this.hydrateInstanceEntity(persisted);
+  }
+
+  /**
+   * Pre-flight check that bounds how far into the future an unbounded
+   * recurring schedule (no UNTIL, no COUNT) can be probed before rrule is
+   * called. For bounded schedules, rrule's own bounds already limit work;
+   * for unbounded schedules, an attacker probing year-distant timestamps
+   * would drive O(occurrences-since-dtstart) work per request.
+   */
+  private exceedsUnboundedHorizon(event: CalendarEvent, startTime: DateTime): boolean {
+    const now = DateTime.utc();
+    const horizon = now.plus({ months: EventInstanceService.UNBOUNDED_PREFLIGHT_MONTHS });
+    if (startTime <= horizon) return false;
+
+    // Only guard when at least one schedule is recurring-unbounded
+    // (no COUNT, no endDate=UNTIL).
+    const hasUnbounded = (event.schedules ?? []).some(s =>
+      !s.isExclusion
+      && s.frequency
+      && !s.count
+      && !s.endDate,
+    );
+    return hasUnbounded;
+  }
+
+  /**
+   * Synthesize a cancelled in-memory instance from an already-loaded event
+   * entity — no extra DB round-trip. Used for the cancelled-shown branch of
+   * {@link findOrMaterializeInstanceWithDetails}.
+   */
+  private async buildTransientCancelledInstance(
+    eventEntity: EventEntity,
+    startTime: DateTime,
+  ): Promise<CalendarEventInstance> {
+    const eventModel = eventEntity.toModel();
+    const scheduleEntities = (eventEntity.getDataValue('schedules') ?? []) as EventScheduleEntity[];
+    eventModel.schedules = scheduleEntities.map(s => s.toModel());
+    if (eventEntity.location) {
+      eventModel.location = eventEntity.location.toModel();
+    }
+    eventModel.categories = await this.categoryService.getEventCategories(
+      eventModel.id,
+      eventEntity.calendar_id,
+    );
+
+    const endTime = this.computeOccurrenceEndTime(eventModel, startTime);
+    const instance = new CalendarEventInstance(
+      `transient-${startTime.toUTC().toMillis()}`,
+      eventModel,
+      startTime.toUTC(),
+      endTime,
+    );
+    instance.isCancelled = true;
+
+    const repostContext: RepostContext = {
+      event: instance.event,
+      displayCalendarId: eventEntity.calendar_id,
+      eventCalendarId: eventEntity.calendar_id ?? null,
+      sourceCalendarUrlName: eventEntity.calendar?.url_name,
+    };
+    const remoteEventIds = repostContext.eventCalendarId === null ? [instance.event.id] : [];
+    const remoteActorUriMap = await this.fetchRemoteActorUriMap(remoteEventIds);
     await resolveSourceCalendars([repostContext], remoteActorUriMap);
 
     return instance;
@@ -1102,17 +1397,6 @@ export default class EventInstanceService {
   private generateInstances(event: CalendarEvent, now: Date = new Date()): CalendarEventInstance[] {
     const rruleSet = this.rrules(event);
 
-    // Compute duration from the first non-exclusion schedule that has both
-    // startDate and eventEndTime. This duration is applied to every generated
-    // instance so recurring occurrences inherit the correct event length.
-    let duration: Duration | null = null;
-    for (const schedule of event.schedules) {
-      if (!schedule.isExclusion && schedule.startDate && schedule.eventEndTime) {
-        duration = schedule.eventEndTime.diff(schedule.startDate);
-        break;
-      }
-    }
-
     const windowEnd = DateTime.fromJSDate(now)
       .plus({ months: GENERATION_HORIZON_MONTHS })
       .toJSDate();
@@ -1142,8 +1426,18 @@ export default class EventInstanceService {
       .sort((a, b) => a.getTime() - b.getTime());
 
     return allDates.map((date: Date) => {
-      const startDate = DateTime.fromJSDate(date);
-      const endDate = duration ? startDate.plus(duration) : null;
+      // Minute-truncation invariant: event_instance.start_time is stored at
+      // minute precision because the public instance slug (yyyymmdd-hhmm) and
+      // the findOrMaterializeInstanceWithDetails cache-hit lookup both do
+      // exact equality against a minute-precise DateTime. RRule inherits
+      // sub-minute precision from dtstart if present, so truncate here —
+      // this is the single materialization point for every stored row.
+      // Enforced by migration 0025's unique index on (event_id, start_time)
+      // and spec @docs/superpowers/specs/2026-04-22-instance-timestamp-slug-design.md.
+      const startDate = DateTime.fromJSDate(date).startOf('minute');
+      // Duration is applied per-occurrence via the shared helper so that
+      // findOrMaterializeInstanceWithDetails computes end times identically.
+      const endDate = this.computeOccurrenceEndTime(event, startDate);
 
       return CalendarEventInstance.fromObject({
         id: uuidv4(),
