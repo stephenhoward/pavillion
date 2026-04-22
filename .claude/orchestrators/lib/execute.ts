@@ -824,7 +824,7 @@ export type VerificationResult =
  * (consistent with preflight checks in `helpers.ts`).
  */
 export function verifyImplementerCompletion(
-  ctx: PhaseCtx,
+  ctx: RunContext,
   deps: ExecuteDeps,
 ): VerificationResult {
   const spawnFn = deps.scriptSpawnFn ?? nodeSpawnSync;
@@ -936,7 +936,7 @@ export function verifyImplementerCompletion(
  */
 export function reopenBead(
   beadId: string,
-  ctx: PhaseCtx,
+  ctx: RunContext,
   deps: ExecuteDeps,
   reasonTag: string,
 ): void {
@@ -1051,12 +1051,6 @@ export async function runLeafExecution(
   deps: ExecuteDeps = {},
 ): Promise<LeafExecutionResult> {
   const warnings: string[] = [];
-  // The verification-gate helpers expect PhaseCtx; runLeafExecution is always
-  // called from leafPhase with a PhaseCtx at runtime, or from tests with a
-  // RunContext whose extra PhaseCtx fields the helpers do not touch. Cast is
-  // safe because verifyImplementerCompletion / reopenBead use only beadId and
-  // logger, both of which live on RunContext.
-  const phaseCtx = ctx as PhaseCtx;
 
   // --- Attempt 1: Implementer ---
   const implResult = await dispatchImplementer(beadId, ctx, deps);
@@ -1069,12 +1063,12 @@ export async function runLeafExecution(
   }
 
   // --- Attempt 1: Verification gate ---
-  const gate1 = verifyImplementerCompletion(phaseCtx, deps);
+  const gate1 = verifyImplementerCompletion(ctx, deps);
   if (!gate1.passed) {
-    reopenBead(beadId, phaseCtx, deps, 'verification-gate-retry');
+    reopenBead(beadId, ctx, deps, 'verification-gate-retry');
     const retryResult = await retryAfterVerificationFailure(beadId, ctx, deps, gate1.reason);
     if (retryResult) return retryResult;
-    reopenBead(beadId, phaseCtx, deps, 'verification-gate-escalate');
+    reopenBead(beadId, ctx, deps, 'verification-gate-escalate');
     return escalateLeaf(beadId, ctx, deps, `verification gate exhausted: ${gate1.reason}`, 1);
   }
 
@@ -1098,9 +1092,9 @@ export async function runLeafExecution(
   }
 
   // --- Retry: Verification gate (second pass) ---
-  const gate2 = verifyImplementerCompletion(phaseCtx, deps);
+  const gate2 = verifyImplementerCompletion(ctx, deps);
   if (!gate2.passed) {
-    reopenBead(beadId, phaseCtx, deps, 'verification-gate-escalate');
+    reopenBead(beadId, ctx, deps, 'verification-gate-escalate');
     return escalateLeaf(beadId, ctx, deps, `verification gate exhausted after retry: ${gate2.reason}`, 1);
   }
 
@@ -1170,7 +1164,7 @@ async function retryAfterVerificationFailure(
     return null;
   }
 
-  const gateRetry = verifyImplementerCompletion(ctx as PhaseCtx, deps);
+  const gateRetry = verifyImplementerCompletion(ctx, deps);
   if (!gateRetry.passed) {
     return null;
   }
