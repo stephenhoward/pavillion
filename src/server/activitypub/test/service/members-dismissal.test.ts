@@ -34,6 +34,7 @@ import {
 describe('unshareEvent - RepostDismissalEntity upsert', () => {
   let service: ActivityPubService;
   let sandbox: sinon.SinonSandbox;
+  let eventBus: EventEmitter;
 
   const calendarId = 'c00a0000-0000-4000-8000-000000000001';
   const otherCalendarId = 'c00a0000-0000-4000-8000-000000000002';
@@ -48,7 +49,7 @@ describe('unshareEvent - RepostDismissalEntity upsert', () => {
     // the full EventEntity FK graph (LocationEntity, EventSeriesEntity, etc.).
     await db.query('PRAGMA foreign_keys = OFF');
 
-    const eventBus = new EventEmitter();
+    eventBus = new EventEmitter();
     service = new ActivityPubService(eventBus, new CalendarInterface(eventBus));
 
     // Allow permission checks
@@ -85,6 +86,9 @@ describe('unshareEvent - RepostDismissalEntity upsert', () => {
     const calendar = Calendar.fromObject({ id: calendarId, urlName: 'test-calendar' });
     const account = Account.fromObject({ id: 'test-account-id' });
 
+    // Spy on eventBus.emit to verify exact post-commit payload
+    const emitSpy = sandbox.spy(eventBus, 'emit');
+
     await service.unshareEvent(account, calendar, eventApUrl);
 
     // SharedEventEntity row should be gone
@@ -100,6 +104,18 @@ describe('unshareEvent - RepostDismissalEntity upsert', () => {
     expect(dismissals).toHaveLength(1);
     expect(dismissals[0].event_id).toBe(localEventId);
     expect(dismissals[0].calendar_id).toBe(calendarId);
+
+    // addToOutbox must fire exactly once per destroyed share, post-commit
+    const addToOutboxStub = service.addToOutbox as sinon.SinonStub;
+    expect(addToOutboxStub.callCount).toBe(1);
+
+    // eventBus.emit must fire exactly once for eventUnreposted with the exact
+    // payload — captured share.event_id must survive entity destroy.
+    const unrepostEmits = emitSpy.getCalls().filter((c) => c.args[0] === 'eventUnreposted');
+    expect(unrepostEmits).toHaveLength(1);
+    expect(
+      emitSpy.calledWith('eventUnreposted', { eventId: localEventId, calendarId }),
+    ).toBe(true);
   });
 
   it('is idempotent: calling unshareEvent twice does not create duplicate dismissal rows', async () => {

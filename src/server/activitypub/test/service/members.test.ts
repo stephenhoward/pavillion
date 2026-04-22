@@ -1149,7 +1149,7 @@ describe("unshareEvent - eventUnreposted emission", () => {
     expect(emittedPayloads[0].calendarId).toBe(calendar.id);
   });
 
-  it('should emit eventUnreposted before calling share.destroy()', async () => {
+  it('should emit eventUnreposted after the transaction commits (after share.destroy)', async () => {
     const account = Account.fromObject({ id: 'test-account-id' });
     const calendar = Calendar.fromObject({ id: 'test-calendar-id', urlName: 'test-calendar' });
     const eventApUrl = 'https://remote.example.com/events/event-789';
@@ -1185,8 +1185,8 @@ describe("unshareEvent - eventUnreposted emission", () => {
 
     await service.unshareEvent(account, calendar, eventApUrl);
 
-    // Verify emit happens before destroy
-    expect(operationOrder).toEqual(['emit', 'destroy']);
+    // Verify emit happens after destroy (transaction commits before side effects).
+    expect(operationOrder).toEqual(['destroy', 'emit']);
   });
 
   it('should emit eventUnreposted for each share when multiple shares exist', async () => {
