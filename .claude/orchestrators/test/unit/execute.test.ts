@@ -866,7 +866,12 @@ describe('runPR', () => {
 
   function makeDeps(results: SpawnSyncReturns<Buffer>[]): ExecuteDeps {
     let callIndex = 0;
-    const spawnFn = vi.fn().mockImplementation(() => {
+    const spawnFn = vi.fn().mockImplementation((cmd: string, args: string[]) => {
+      // Intercept the rev-list backstop probe so the existing sequential
+      // fixtures don't have to know about it. Default: branch has commits.
+      if (cmd === 'git' && args[0] === 'rev-list') {
+        return fakeSpawnResult('1\n', '', 0);
+      }
       const result = results[callIndex] ?? results[results.length - 1];
       callIndex++;
       return result;
@@ -961,6 +966,53 @@ describe('runPR', () => {
 
     const result = await runPR(ctx, deps);
     expect(result.next).toBe('halt');
+  });
+});
+
+describe('runPR backstop', () => {
+  it('halts before push if branch has zero commits ahead of main', async () => {
+    const logStub = stubLogger();
+    const ctx: PhaseCtx = {
+      runId: 'test-run',
+      beadId: 'pv-empty.1',
+      logger: logStub.logger,
+      phaseHistory: [],
+      dryRun: false,
+    };
+
+    const scriptSpawnFn = vi.fn().mockImplementation((cmd: string, args: string[]) => {
+      if (cmd === 'git' && args[0] === 'branch' && args[1] === '--show-current') {
+        return fakeSpawnResult('chore/pv-empty-1\n', '', 0);
+      }
+      if (cmd === 'git' && args[0] === 'rev-list') {
+        return fakeSpawnResult('0\n', '', 0);
+      }
+      // Anything else (bd show, git push, gh pr create) must NOT be called.
+      // If it is, return failure so assertions catch the leak.
+      return fakeSpawnResult('', 'unexpected spawn', 1);
+    });
+
+    const { runPR } = await import('../../lib/execute.js');
+    const result = await runPR(ctx, { scriptSpawnFn });
+
+    expect(result.next).toBe('halt');
+    expect(ctx.prUrl).toBeUndefined();
+
+    expect(logStub.runJsonEntries).toContainEqual(
+      expect.objectContaining({
+        event: 'pr_finalize_aborted',
+        reason: 'no commits on branch',
+      }),
+    );
+
+    // Assert the sequence: only branch detect + rev-list were called.
+    const cmds = scriptSpawnFn.mock.calls.map((c: [string, string[]]) =>
+      `${c[0]} ${c[1]?.[0] ?? ''}`);
+    expect(cmds).toContain('git branch');
+    expect(cmds).toContain('git rev-list');
+    expect(cmds).not.toContain('git push');
+    expect(cmds).not.toContain('gh pr');
+    expect(cmds).not.toContain('bd show');
   });
 });
 

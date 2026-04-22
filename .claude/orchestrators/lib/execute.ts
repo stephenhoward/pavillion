@@ -1464,6 +1464,27 @@ export async function runPR(
 
   const branchName = branchCmd.stdout;
 
+  // Step 0.5: Backstop — refuse to PR an empty branch. The leaf/epic
+  // verification gates should have caught this, but if any code path
+  // slips past them we still won't push empty branches or call gh.
+  const baseBranch = process.env.GIT_SAFE_MAIN_BRANCH ?? 'main';
+  const revCountCmd = spawnCmd(
+    'git', ['rev-list', '--count', `${baseBranch}..HEAD`],
+    logger, PhaseName.PR, spawnFn,
+  );
+
+  if (revCountCmd.exitCode !== 0 || revCountCmd.stdout.trim() === '0') {
+    logger.appendRunJson({
+      event: 'pr_finalize_aborted',
+      reason: 'no commits on branch',
+    });
+    logger.writePhaseLog(
+      PhaseName.PR, 'err',
+      `Branch ${branchName} has no commits ahead of ${baseBranch} — refusing to create empty PR\n`,
+    );
+    return { next: 'halt', ctx };
+  }
+
   // Step 1: Verify bead(s) are CLOSED
   const bdResult = spawnCmd(
     'bd', ['show', '--json', ctx.beadId], logger, PhaseName.PR, spawnFn,
