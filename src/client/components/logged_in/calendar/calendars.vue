@@ -74,7 +74,7 @@ async function loadCalendars() {
   }
   catch (error) {
     console.error('Error loading calendars:', error);
-    state.err = 'Failed to load calendars';
+    state.err = t('error_loading_calendars');
   }
   finally {
     state.isLoading = false;
