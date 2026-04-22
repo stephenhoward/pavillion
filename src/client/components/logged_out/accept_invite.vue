@@ -59,6 +59,7 @@
       <input
         type="password"
         id="invite-password"
+        class="auth-field"
         :placeholder="t('password_placeholder')"
         v-model="state.password"
         @blur="validatePasswordField"
@@ -72,6 +73,7 @@
       <input
         type="password"
         id="invite-password2"
+        class="auth-field"
         :placeholder="t('password2_placeholder')"
         v-model="state.password2"
         :aria-invalid="(state.passwordError || state.form_error) ? 'true' : 'false'"
@@ -82,7 +84,7 @@
       />
 
       <button
-        class="btn btn--primary"
+        class="btn btn--pill btn--primary"
         type="submit"
         :aria-describedby="(state.passwordError || state.form_error) ? 'accept-invite-error' : undefined"
       >
