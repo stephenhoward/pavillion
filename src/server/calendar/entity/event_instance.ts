@@ -20,6 +20,13 @@ export class EventInstanceEntity extends Model {
   @Column({ type: DataType.UUID })
   declare calendar_id: string;
 
+  // The unique index on (event_id, start_time) is defined in migration 0025
+  // (see docs/superpowers/specs/2026-04-22-instance-timestamp-slug-design.md).
+  // We do NOT mirror it here as a `@Index` decorator because db.sync envs
+  // (e2e seed) currently materialize per-calendar rows for shared events,
+  // which collides with the unique constraint. The shared-event materialization
+  // semantics are tracked as a follow-up; production migrations enforce the
+  // constraint as the spec intends.
   @Column({ type: DataType.DATE })
   declare start_time: Date;
 
