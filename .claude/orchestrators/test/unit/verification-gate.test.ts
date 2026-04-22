@@ -181,4 +181,60 @@ describe('verifyImplementerCompletion', () => {
       expect(result.reason).toContain('?? src/newfile.ts');
     }
   });
+
+  it('returns passed=false when branch has zero commits ahead of main', () => {
+    const logStub = stubLogger();
+    const ctx = makeCtx(logStub);
+
+    const scriptSpawnFn = vi.fn()
+      .mockReturnValueOnce(fakeSpawnResult(''))
+      .mockReturnValueOnce(fakeSpawnResult('0\n'));
+
+    const result = verifyImplementerCompletion(ctx, { scriptSpawnFn });
+
+    expect(result).toEqual({
+      passed: false,
+      reason: 'no commits on branch ahead of main',
+    });
+
+    expect(scriptSpawnFn).toHaveBeenCalledTimes(2);
+
+    expect(logStub.runJsonEntries).toContainEqual(
+      expect.objectContaining({
+        event: 'implementer-verification-failed',
+        reason: 'no commits on branch ahead of main',
+      }),
+    );
+  });
+
+  it('honors GIT_SAFE_MAIN_BRANCH override in the reason string', () => {
+    const prev = process.env.GIT_SAFE_MAIN_BRANCH;
+    process.env.GIT_SAFE_MAIN_BRANCH = 'develop';
+    try {
+      const logStub = stubLogger();
+      const ctx = makeCtx(logStub);
+
+      const scriptSpawnFn = vi.fn()
+        .mockReturnValueOnce(fakeSpawnResult(''))
+        .mockReturnValueOnce(fakeSpawnResult('0\n'));
+
+      const result = verifyImplementerCompletion(ctx, { scriptSpawnFn });
+
+      expect(result).toEqual({
+        passed: false,
+        reason: 'no commits on branch ahead of develop',
+      });
+
+      expect(scriptSpawnFn).toHaveBeenNthCalledWith(
+        2,
+        'git',
+        ['rev-list', '--count', 'develop..HEAD'],
+        expect.any(Object),
+      );
+    }
+    finally {
+      if (prev === undefined) delete process.env.GIT_SAFE_MAIN_BRANCH;
+      else process.env.GIT_SAFE_MAIN_BRANCH = prev;
+    }
+  });
 });
