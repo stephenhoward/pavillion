@@ -495,9 +495,15 @@ export function spawnCmd(
   spawnFn: typeof spawnSync = spawnSync,
   env?: Record<string, string>,
 ): CmdResult {
+  // NOTE: shell must be false. With shell: true, Node flattens cmd+args into a
+  // single string and hands it to /bin/sh -c without quoting, so argv values
+  // containing shell metacharacters (parens, $, backticks, ;, |, &, *, ?, [, ],
+  // <, >) cause shell parse errors. PR titles/bodies and bead titles routinely
+  // contain these. With shell: false, argv is passed straight to execve and
+  // metacharacters pass through literally. See bead pv-2kup.
   const result: SpawnSyncReturns<Buffer> = spawnFn(cmd, args, {
     encoding: 'buffer' as never,
-    shell: true,
+    shell: false,
     timeout: 120_000,
     env: env ? { ...process.env, ...env } : undefined,
   });

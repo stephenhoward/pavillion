@@ -536,6 +536,39 @@ describe('spawnCmd', () => {
     const spawnOpts = mockSpawnFn.mock.calls[0][2] as Record<string, unknown>;
     expect(spawnOpts.env).toBeUndefined();
   });
+
+  // Regression: bead pv-2kup. With shell: true, Node flattens argv into a
+  // single shell command and bash parse-errors on metacharacters like '(' ')'
+  // in argv values (PR titles, commit messages, bead titles). spawnCmd must
+  // pass shell: false so argv goes directly to execve.
+  it('should pass shell: false to spawnSync (regression: pv-2kup)', () => {
+    mockSpawnFn.mockReturnValue(fakeSpawnResult('', '', 0));
+
+    spawnCmd('gh', ['pr', 'create', '--title', 'fix: thing (pv-2kup)'],
+      logStub.logger, PhaseName.PR, mockSpawnFn);
+
+    const spawnOpts = mockSpawnFn.mock.calls[0][2] as Record<string, unknown>;
+    expect(spawnOpts.shell).toBe(false);
+  });
+
+  it('should handle argv values containing shell metacharacters without shell errors (regression: pv-2kup)', () => {
+    // Use the real spawnSync (default) with a harmless command whose argv
+    // contains the exact metacharacters that broke `gh pr create` in run
+    // 20260422T003112-3159: parentheses, dollar, backticks, semicolons, pipes.
+    // With shell: true this bash-parse-errored. With shell: false the argv is
+    // delivered verbatim to the process.
+    const trickyArg = 'fix: thing (pv-2kup) $USER `whoami`; |& > <';
+    const result = spawnCmd(
+      'node',
+      ['-e', `process.stdout.write(process.argv[1])`, trickyArg],
+      logStub.logger,
+      PhaseName.PR,
+    );
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toBe(trickyArg);
+    expect(result.stderr).toBe('');
+  });
 });
 
 // =============================================================================
