@@ -716,6 +716,49 @@ describe('analyze', () => {
 
     expect(result.next).toBe(PhaseName.AnalyzeAdvisors);
   });
+
+  it('should discover children via bd show --json when childIds is omitted', async () => {
+    // bdListChildren calls `bd show <parent> --json` and parses parent-child dependents.
+    const parentJson = JSON.stringify([{
+      id: 'pv-test-1',
+      dependents: [
+        { id: 'c1', dependency_type: 'parent-child', issue_type: 'task' },
+        { id: 'c2', dependency_type: 'parent-child', issue_type: 'task' },
+        { id: 'rel', dependency_type: 'related', issue_type: 'task' },
+      ],
+    }]);
+    const report = { beadId: 'pv-test-1', mode: 'hierarchy', leavesEnriched: ['c1', 'c2'], summary: 'done' };
+    const spawn = seqSpawn(
+      fakeSpawn(parentJson, '', 0),          // bdListChildren
+      fakeSpawn(beadTextShaped(), '', 0),    // c1 unenriched
+      fakeSpawn(beadTextShaped(), '', 0),    // c2 unenriched
+      fakeSpawn(beadTextAnalyzed(), '', 0),  // c1 enriched after dispatch
+      fakeSpawn(beadTextAnalyzed(), '', 0),  // c2 enriched after dispatch
+    );
+
+    const result = await analyze(makeCtx(), {
+      spawnFn: spawn,
+      dispatchFn: async () => report as never,
+    });
+
+    expect(result.next).toBe(PhaseName.AnalyzeAdvisors);
+  });
+
+  it('should treat bead as leaf when bd show reports no parent-child dependents', async () => {
+    const parentJson = JSON.stringify([{
+      id: 'pv-test-1',
+      dependents: [
+        { id: 'rel', dependency_type: 'related', issue_type: 'task' },
+      ],
+    }]);
+    const spawn = seqSpawn(
+      fakeSpawn(parentJson, '', 0),  // bdListChildren returns []
+    );
+
+    const result = await analyze(makeCtx(), { spawnFn: spawn });
+
+    expect(result.next).toBe(PhaseName.Branch);
+  });
 });
 
 // =============================================================================
