@@ -492,9 +492,9 @@ class ActivityPubService {
     });
     let actorUrl = await this.actorUrl(calendar);
     for (let share of shares) {
-      this.addToOutbox(calendar, new UndoActivity(actorUrl, share.id));
-      // Emit eventUnreposted before destroy so share.event_id is still accessible
-      this.eventBus.emit('eventUnreposted', { eventId: share.event_id, calendarId: calendar.id });
+      // Capture event_id before destroy so it survives for the post-commit emit.
+      const eventId = share.event_id;
+      const shareActivityId = share.id;
 
       // Destroy the SharedEventEntity and upsert a RepostDismissalEntity row
       // for (event_id, calendar_id) in the same transaction so partial failure
@@ -506,12 +506,16 @@ class ActivityPubService {
         await share.destroy({ transaction: t });
         await RepostDismissalEntity.findOrCreate({
           where: {
-            event_id: share.event_id,
+            event_id: eventId,
             calendar_id: calendar.id,
           },
           transaction: t,
         });
       });
+
+      // Side effects fire only after the transaction commits — mirrors shareEvent.
+      this.addToOutbox(calendar, new UndoActivity(actorUrl, shareActivityId));
+      this.eventBus.emit('eventUnreposted', { eventId, calendarId: calendar.id });
     }
   }
 
