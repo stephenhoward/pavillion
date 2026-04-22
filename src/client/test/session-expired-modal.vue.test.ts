@@ -82,6 +82,31 @@ describe('SessionExpiredModal Rendering', () => {
     const loginForm = wrapper.findComponent(LoginForm);
     expect(loginForm.props('headingLevel')).toBe('h3');
   });
+
+  // Regression: pv-rh4z / PR #234 — the session-expired modal re-authenticates
+  // the existing user in place. It must not surface register, apply-for-account,
+  // or forgot-password affordances (those belong on the standalone /auth/login
+  // page, not in the modal).
+  it('does not render register, apply, or forgot-password affordances', () => {
+    const { wrapper } = mountedSessionExpiredModal();
+    const html = wrapper.html();
+
+    // No links/buttons pointing at the auxiliary auth routes
+    expect(wrapper.find('a[href*="/auth/register"]').exists()).toBe(false);
+    expect(wrapper.find('a[href*="/auth/apply"]').exists()).toBe(false);
+    expect(wrapper.find('a[href*="/auth/forgot"]').exists()).toBe(false);
+    expect(wrapper.find('a[href*="/auth/reset"]').exists()).toBe(false);
+
+    // No router-link navigation to those named routes either
+    expect(wrapper.find('[to*="register"]').exists()).toBe(false);
+    expect(wrapper.find('[to*="forgot"]').exists()).toBe(false);
+    expect(wrapper.find('[to*="apply"]').exists()).toBe(false);
+
+    // Rendered markup contains no copy hinting at those flows
+    expect(html).not.toMatch(/register/i);
+    expect(html).not.toMatch(/apply/i);
+    expect(html).not.toMatch(/forgot/i);
+  });
 });
 
 describe('SessionExpiredModal Behavior', () => {
