@@ -1,7 +1,6 @@
 {
     "list": {
         "my_calendars_header": "My Calendars",
-        "no_calendars_message": "No calendar found",
         "create_first_calendar_header": "Create your first calendar",
         "create_calendar_button": "Create Your Calendar",
         "creating_calendar": "Creating calendar...",
@@ -13,7 +12,6 @@
         "calendar_name_help": "Calendar names must be 3-24 characters long, start with a letter or number, and can contain letters, numbers, underscores, and hyphens (hyphens not allowed at the beginning or end)",
         "aria_calendar_management": "Calendar Management",
         "aria_my_calendars_navigation": "My Calendars Navigation",
-        "aria_view_calendar": "View calendar: {{calendarName}}",
         "create_new_calendar_header": "Create New Calendar",
         "create_new_calendar_button": "New Calendar",
         "aria_create_new_calendar": "Create New Calendar",
