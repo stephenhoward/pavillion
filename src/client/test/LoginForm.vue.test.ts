@@ -10,15 +10,11 @@ import ErrorAlert from '@/client/components/logged_out/error-alert.vue';
 const routes: RouteRecordRaw[] = [
   { path: '/login',  component: {}, name: 'login', props: true },
   { path: '/logout', component: {}, name: 'logout' },
-  { path: '/register', component: {}, name: 'register', props: true },
-  { path: '/forgot', component: {}, name: 'forgot_password', props: true },
-  { path: '/apply',  component: {}, name: 'register-apply', props: true },
   { path: '/reset',  component: {}, name: 'reset_password', props: true },
 ];
 
 interface MountedLoginFormOptions {
   props?: Record<string, any>;
-  settings?: Record<string, any>;
 }
 
 const mountedLoginForm = (options: MountedLoginFormOptions = {}) => {
@@ -34,9 +30,6 @@ const mountedLoginForm = (options: MountedLoginFormOptions = {}) => {
 
   const wrapper = mountComponent(LoginForm, router, {
     provide: {
-      site_config: {
-        settings: () => options.settings ?? {},
-      },
       authn,
     },
     props: options.props ?? {},
@@ -49,14 +42,6 @@ const mountedLoginForm = (options: MountedLoginFormOptions = {}) => {
   };
 };
 
-// Helpers for link-presence assertions by href (the template has no #register or
-// #apply IDs; selecting by ID would always yield a missing element and make
-// negative assertions tautological).
-const findRegisterLink = (wrapper: ReturnType<typeof mountedLoginForm>['wrapper']) =>
-  wrapper.findAll('a').find(a => a.attributes('href')?.includes('/register'));
-const findApplyLink = (wrapper: ReturnType<typeof mountedLoginForm>['wrapper']) =>
-  wrapper.findAll('a').find(a => a.attributes('href')?.includes('/apply'));
-
 describe('LoginForm Rendering', () => {
 
   it('should show basic login components', () => {
@@ -65,57 +50,6 @@ describe('LoginForm Rendering', () => {
     expect(wrapper.find('input[type="email"]').exists()).toBe(true);
     expect(wrapper.find('input[type="password"]').exists()).toBe(true);
     expect(wrapper.find('button[type="submit"]').exists()).toBe(true);
-
-    expect(findRegisterLink(wrapper)).toBeUndefined();
-    expect(findApplyLink(wrapper)).toBeUndefined();
-  });
-
-  describe('Closed Registration', () => {
-    it('no registration link', () => {
-      const { wrapper } = mountedLoginForm({ settings: { registrationMode: 'closed' } });
-      expect(findRegisterLink(wrapper)).toBeUndefined();
-    });
-
-    it('no apply link', () => {
-      const { wrapper } = mountedLoginForm({ settings: { registrationMode: 'closed' } });
-      expect(findApplyLink(wrapper)).toBeUndefined();
-    });
-  });
-
-  describe('Open Registration', () => {
-    it('has registration link', () => {
-      const { wrapper } = mountedLoginForm({ settings: { registrationMode: 'open' } });
-      expect(findRegisterLink(wrapper)).toBeDefined();
-    });
-
-    it('no apply link', () => {
-      const { wrapper } = mountedLoginForm({ settings: { registrationMode: 'open' } });
-      expect(findApplyLink(wrapper)).toBeUndefined();
-    });
-  });
-
-  describe('Open Applies', () => {
-    it('no registration link', () => {
-      const { wrapper } = mountedLoginForm({ settings: { registrationMode: 'apply' } });
-      expect(findRegisterLink(wrapper)).toBeUndefined();
-    });
-
-    it('has apply link', () => {
-      const { wrapper } = mountedLoginForm({ settings: { registrationMode: 'apply' } });
-      expect(findApplyLink(wrapper)).toBeDefined();
-    });
-  });
-
-  describe('Invitation Mode', () => {
-    it('no registration link', () => {
-      const { wrapper } = mountedLoginForm({ settings: { registrationMode: 'invitation' } });
-      expect(findRegisterLink(wrapper)).toBeUndefined();
-    });
-
-    it('no apply link', () => {
-      const { wrapper } = mountedLoginForm({ settings: { registrationMode: 'invitation' } });
-      expect(findApplyLink(wrapper)).toBeUndefined();
-    });
   });
 });
 
@@ -143,6 +77,32 @@ describe('LoginForm Props', () => {
     const { wrapper } = mountedLoginForm({ props: { headingLevel: 'h3' } });
     expect(wrapper.find('h3').exists()).toBe(true);
     expect(wrapper.find('h2').exists()).toBe(false);
+  });
+});
+
+describe('LoginForm Emits', () => {
+
+  it('emits update:email with the typed value when the user types into the email input', async () => {
+    const { wrapper } = mountedLoginForm();
+
+    await wrapper.find('input[type="email"]').setValue('typed@example.com');
+    await wrapper.vm.$nextTick();
+
+    const emitted = wrapper.emitted('update:email');
+    expect(emitted).toBeDefined();
+    expect(emitted!.length).toBe(1);
+    expect(emitted![0]).toEqual(['typed@example.com']);
+  });
+
+  it('emits update:email with the empty string when the user clears the email input', async () => {
+    const { wrapper } = mountedLoginForm({ props: { initialEmail: 'start@example.com' } });
+
+    await wrapper.find('input[type="email"]').setValue('');
+    await wrapper.vm.$nextTick();
+
+    const emitted = wrapper.emitted('update:email');
+    expect(emitted).toBeDefined();
+    expect(emitted![emitted!.length - 1]).toEqual(['']);
   });
 });
 
@@ -316,3 +276,4 @@ describe('LoginForm Behavior', () => {
     expect(loginStub.called).toBe(true);
   });
 });
+

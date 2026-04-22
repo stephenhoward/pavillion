@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, inject, computed } from 'vue';
+import { reactive, inject, watch } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import { isValidEmail } from '@/common/validation/email';
 import ErrorAlert from './error-alert.vue';
@@ -16,10 +16,10 @@ const props = withDefaults(defineProps<Props>(), {
 
 const emit = defineEmits<{
   (e: 'success'): void;
+  (e: 'update:email', value: string): void;
 }>();
 
 const authn = inject('authn') as any;
-const site_config = inject('site_config') as any;
 const { t } = useTranslation('authentication', {
   keyPrefix: 'login',
 });
@@ -30,7 +30,12 @@ const state = reactive({
   password : '',
 });
 
-const registrationMode = computed(() => site_config.settings().registrationMode);
+// Propagate typed email to parent so sibling affordances (register/apply/forgot
+// links in login.vue) can bind their ?email= query params to the live value.
+// Consumer wiring lands in pv-rh4z.2.2 (login.vue update).
+watch(() => state.email, (value) => {
+  emit('update:email', value);
+});
 
 async function doLogin() {
   if ( state.email == '' || state.password == '' ) {
@@ -89,6 +94,7 @@ async function doLogin() {
       <input type="email"
              id="login-email"
              autofocus
+             class="auth-field"
              :class="{ 'form-control--error': state.err }"
              :placeholder="t('email')"
              v-model="state.email"
@@ -100,6 +106,7 @@ async function doLogin() {
       <label for="login-password" class="sr-only">{{ t('password') }}</label>
       <input type="password"
              id="login-password"
+             class="auth-field"
              :class="{ 'form-control--error': state.err }"
              :placeholder="t('password')"
              v-model="state.password"
@@ -109,29 +116,12 @@ async function doLogin() {
              @keyup.enter="doLogin"
              required/>
 
-      <button class="btn btn--primary"
+      <button class="btn btn--pill btn--primary"
               type="submit"
               :aria-describedby="state.err ? 'login-error' : undefined">
         {{ t("login_button") }}
       </button>
     </div>
-
-    <div v-if="registrationMode == 'open' || registrationMode == 'apply'"
-         class="secondary-actions">
-      <router-link v-if="registrationMode == 'open'"
-                   :to="{ name: 'register', query: { email: state.email}}">
-        {{ t("register_button") }}
-      </router-link>
-      <router-link v-if="registrationMode == 'apply'"
-                   :to="{ name: 'register-apply', query: { email: state.email}}">
-        {{ t("apply_button") }}
-      </router-link>
-    </div>
-
-    <router-link class="forgot"
-                 :to="{ name: 'forgot_password', query: { email: state.email }}">
-      {{ t("forgot_password") }}
-    </router-link>
   </form>
 </template>
 
@@ -140,9 +130,5 @@ async function doLogin() {
   display: flex;
   flex-direction: column;
   gap: 1.5rem; /* 24px */
-}
-
-.secondary-actions {
-  margin-top: 1.5rem; /* 24px */
 }
 </style>

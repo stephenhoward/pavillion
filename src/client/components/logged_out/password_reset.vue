@@ -16,6 +16,7 @@
       <input
         type="text"
         id="reset-code"
+        class="auth-field"
         :placeholder="t('reset_code')"
         v-model="state.reset_code"
         :aria-invalid="state.form_error ? 'true' : 'false'"
@@ -25,7 +26,7 @@
       />
 
       <button
-        class="btn btn--primary"
+        class="btn btn--pill btn--primary"
         type="submit"
         :aria-describedby="state.form_error ? 'reset-code-error' : undefined"
       >
@@ -58,6 +59,7 @@
       <input
         type="password"
         id="new-password"
+        class="auth-field"
         :placeholder="t('password_placeholder')"
         v-model="state.password"
         :aria-invalid="(state.passwordError || state.form_error) ? 'true' : 'false'"
@@ -71,6 +73,7 @@
       <input
         type="password"
         id="confirm-password"
+        class="auth-field"
         :placeholder="t('password2_placeholder')"
         v-model="state.password2"
         :aria-invalid="(state.passwordError || state.form_error) ? 'true' : 'false'"
@@ -81,7 +84,7 @@
       />
 
       <button
-        class="btn btn--primary"
+        class="btn btn--pill btn--primary"
         type="submit"
         :aria-describedby="(state.passwordError || state.form_error) ? 'reset-password-error' : undefined"
       >
