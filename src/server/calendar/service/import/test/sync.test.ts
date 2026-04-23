@@ -534,9 +534,59 @@ describe('SyncService', () => {
 
       expect(result.outcome).toBe('parse_error');
       expect(result.eventsCreated).toBe(0);
-      expect(result.errorMessage).toBe('write failure on fifth');
+      // Non-typed Error should not leak its message to the caller. Instead the
+      // opaque IMPORT_INTERNAL_ERROR sentinel is surfaced and the raw error is
+      // logged at error level for operator diagnostics.
+      expect(result.errorMessage).toBe('IMPORT_INTERNAL_ERROR');
       // ImportRun was still recorded (separate transaction from the rolled-back one).
       expect((ImportRunEntity.create as sinon.SinonStub).calledOnce).toBe(true);
+    });
+
+    it('does not leak raw error message (e.g. DB connection string) to ImportRun.error_message', async () => {
+      // Fake "leaky" internal error: a Sequelize-style message that might
+      // embed a DB connection string, a stack fragment, or other internal
+      // detail. Any such text MUST be scrubbed before it lands in the DB or
+      // in the API response.
+      const leakyDbUrl = 'postgresql://admin:s3cret@db.internal:5432/pavillion_prod';
+      const leakyMessage = `connection failed: could not connect to ${leakyDbUrl}`;
+
+      const vevent = makeVEvent({ uid: 'leaky@example.test' });
+
+      const src = makeSourceEntity();
+      sandbox.stub(ImportSourceEntity, 'findByPk').resolves(src);
+      fetcher.fetch.resolves({
+        outcome: 'ok',
+        httpStatus: 200,
+        body: Buffer.from('BEGIN:VCALENDAR...'),
+        contentHash: 'HASH-CHANGED',
+        etag: undefined,
+        bytesReceived: 1,
+      });
+      sandbox.stub(EventEntity, 'findAll').resolves([] as unknown as EventEntity[]);
+
+      service = new SyncService({
+        eventService: eventService as unknown as EventService,
+        fetcher: fetcher as unknown as Fetcher,
+        rateLimiter,
+        parseICS: () => ({ 'v-0': vevent } as never),
+      });
+
+      eventService.createEvent.rejects(new Error(leakyMessage));
+
+      const result = await service.syncSource({ account, importSourceId: 'src-1' });
+
+      // Result returned to caller is sanitized.
+      expect(result.errorMessage).toBe('IMPORT_INTERNAL_ERROR');
+      expect(result.errorMessage).not.toContain(leakyDbUrl);
+      expect(result.errorMessage).not.toContain('s3cret');
+
+      // ImportRun row persisted to the DB is sanitized.
+      const createStub = ImportRunEntity.create as sinon.SinonStub;
+      expect(createStub.calledOnce).toBe(true);
+      const persistedArgs = createStub.firstCall.args[0] as { error_message: string | null };
+      expect(persistedArgs.error_message).toBe('IMPORT_INTERNAL_ERROR');
+      expect(persistedArgs.error_message).not.toContain(leakyDbUrl);
+      expect(persistedArgs.error_message).not.toContain('s3cret');
     });
   });
 

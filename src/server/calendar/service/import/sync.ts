@@ -410,6 +410,15 @@ class SyncService {
     catch (err) {
       // Transaction rolled back. Record a separate-transaction ImportRun
       // so the run history survives.
+      //
+      // Log the raw error at error level so operators retain the stack + any
+      // unsanitized message text for diagnostics. Only the sanitized sentinel
+      // code is persisted on ImportRun and returned to the calendar owner via
+      // SyncResult.errorMessage — see `sanitizedErrorMessage`.
+      logger.error(
+        { err, importSourceId },
+        'ics.sync.transaction_failed',
+      );
       const message = firstErrorMessage ?? this.sanitizedErrorMessage(err);
       await this.updateSourceOnFetchFailure(sourceEntity, 'parse_error');
       return this.recordRun({
@@ -474,13 +483,18 @@ class SyncService {
    * Translate raw error objects into the stable sanitized message codes used
    * by the API + audit log. Mirrors the import exception module's contract
    * so run rows never embed raw stack traces or URLs.
+   *
+   * For unknown / non-typed errors we return the opaque
+   * `IMPORT_INTERNAL_ERROR` sentinel rather than leaking `err.message`. The
+   * caller logs the raw error at error level so operators retain diagnostic
+   * context without persisting message text on ImportRun or returning it to
+   * the calendar owner via the API.
    */
   private sanitizedErrorMessage(err: unknown): string {
     if (err instanceof ImportSourceSsrfBlockedError) return 'IMPORT_SSRF_BLOCKED';
     if (err instanceof ImportSourceFetchError) return 'IMPORT_FETCH_ERROR';
     if (err instanceof ImportSourceParseError) return 'IMPORT_PARSE_ERROR';
-    if (err instanceof Error) return err.message;
-    return String(err);
+    return 'IMPORT_INTERNAL_ERROR';
   }
 
   /**
