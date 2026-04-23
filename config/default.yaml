@@ -42,17 +42,9 @@ calendar:
   # from anonymous-write amplification via repeated miss probes across an
   # unbounded recurring schedule's occurrences.
   materializationCap: 1000
-
-# Funding domain configuration
-# In production, ENCRYPTION_KEY must be set via environment variable
-# Generate with: openssl rand -hex 32
-funding:
-  encryptionKey: '0a301f6ce8380d582acb2d5eb29109beeb722423261ae8bdad142210d89fe095'
-
-# Calendar import configuration
-# In production, CALENDAR_IMPORT_HMAC_SECRET must be set via environment variable
-# Used to derive per-source DNS verification tokens.
-calendar:
+  # Calendar import configuration
+  # In production, CALENDAR_IMPORT_HMAC_SECRET must be set via environment variable
+  # Used to derive per-source DNS verification tokens.
   import:
     # HMAC secret for deriving DNS verification tokens.
     # Empty in default.yaml; development/test provide non-empty dev-only values.
@@ -64,6 +56,12 @@ calendar:
       - 'https://8.8.8.8/dns-query'
     # Maximum number of import sources per calendar.
     maxSourcesPerCalendar: 10
+
+# Funding domain configuration
+# In production, ENCRYPTION_KEY must be set via environment variable
+# Generate with: openssl rand -hex 32
+funding:
+  encryptionKey: '0a301f6ce8380d582acb2d5eb29109beeb722423261ae8bdad142210d89fe095'
 
 # Moderation configuration
 moderation:
