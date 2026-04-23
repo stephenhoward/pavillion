@@ -449,4 +449,3 @@ Migration onboarding should be frictionless. Once a user has moved their calenda
 **Negative:**
 - No direct funding signal at migration time (acceptable — funding plans exist independently on the calendar and can be subscribed to once the user has settled in)
 - Future advanced-sync funding gates must be clearly communicated so users understand what they're subscribing for, not retroactively locking behavior users relied on in v1
-- Manual re-share of a dismissed event requires clearing the dismissal row (handled transparently by `shareEvent` inside the same transaction)
