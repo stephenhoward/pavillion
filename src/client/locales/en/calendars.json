@@ -275,9 +275,12 @@
         "last_sync_never": "Never synced",
         "last_sync_at": "Last synced {{time}}",
         "sync_now": "Sync now",
+        "sync_aria": "Sync import source {{url}}",
         "sync_disabled_reason": "Verify this source before you can sync it.",
+        "sync_disabled_description": "Verify this source before you can sync it.",
         "remove": "Remove",
         "remove_source_aria": "Remove import source {{url}}",
+        "verification_badge_aria": "Verification status: {{state}}",
         "dns_challenge": {
             "modal_title": "Verify DNS ownership",
             "instructions": "Add a DNS TXT record with name \"{{name}}\" and value \"{{value}}\" to your domain, then click Verify.",

@@ -3,8 +3,15 @@
     <div class="import-source-row__main">
       <div class="import-source-row__header">
         <span class="import-source-row__url" :title="source.url">{{ source.url }}</span>
+        <!--
+          Verification state is static on render (not a live-updating status
+          message), so role='status' would over-promise to assistive tech.
+          A plain span with aria-label conveys the same information without
+          triggering live-region announcements. Matches project
+          accessibility.md guidance on ARIA use only when semantic HTML is
+          insufficient.
+        -->
         <span
-          role="status"
           :class="['import-source-row__badge', `import-source-row__badge--${source.verificationState}`]"
           :aria-label="t('verification_state_label') + ': ' + verificationStateLabel"
         >
@@ -44,12 +51,26 @@
         <ShieldCheck :size="16" :stroke-width="2" aria-hidden="true" />
         {{ t('dns_challenge.verify_button') }}
       </button>
+      <!--
+        sr-only description that explains *why* the Sync Now button is
+        disabled. The `title` attribute alone is not exposed by many
+        screen readers; an aria-describedby reference on the button is
+        the recommended pattern (WCAG SC 4.1.2 Name, Role, Value).
+      -->
+      <span
+        v-if="!canSync"
+        :id="syncDisabledDescId"
+        class="sr-only"
+      >
+        {{ t('sync_disabled_description') }}
+      </span>
       <button
         type="button"
         class="btn-ghost"
         :disabled="!canSync || isSyncing"
-        :title="!canSync ? t('sync_disabled_reason') : undefined"
-        :aria-describedby="apSourceDetected ? warningId : undefined"
+        :aria-disabled="!canSync || isSyncing"
+        :aria-label="t('sync_aria', { url: source.url })"
+        :aria-describedby="syncAriaDescribedBy"
         @click="onSync"
       >
         <RefreshCw :size="16" :stroke-width="2" aria-hidden="true" />
@@ -92,6 +113,7 @@ const { t } = useTranslation('calendars', { keyPrefix: 'import' });
 
 const uid = Math.random().toString(36).slice(2, 10);
 const warningId = `import-source-warning-${uid}`;
+const syncDisabledDescId = `import-source-sync-disabled-${uid}`;
 
 /**
  * Server-side detection of an ActivityPub-federated source (e.g. Mobilizon or
@@ -121,6 +143,24 @@ const lastSyncLabel = computed(() => {
 const canSync = computed(() => props.source.verificationState === 'verified');
 
 /**
+ * Space-separated list of element IDs used by the Sync Now button's
+ * `aria-describedby`. Combines the AP-source warning (when present) with
+ * the disabled-reason description (when the button is disabled) so screen
+ * readers announce both contexts. Returns undefined when no descriptions
+ * apply so Vue omits the attribute entirely.
+ */
+const syncAriaDescribedBy = computed<string | undefined>(() => {
+  const ids: string[] = [];
+  if (apSourceDetected.value) {
+    ids.push(warningId);
+  }
+  if (!canSync.value) {
+    ids.push(syncDisabledDescId);
+  }
+  return ids.length > 0 ? ids.join(' ') : undefined;
+});
+
+/**
  * Show the Verify button whenever the source is not currently verified.
  * The DNS challenge UX (pv-1qcp.3.4) renders the one-click entry point
  * into the modal that walks the owner through publishing the TXT record.
@@ -148,6 +188,22 @@ const onVerify = () => {
 
 <style scoped lang="scss">
 @use '../../../../assets/style/components/calendar-admin' as *;
+
+// Visually hide descriptive text while keeping it accessible to screen
+// readers. Used for the Sync Now disabled-reason description so the
+// reason is announced via aria-describedby even though only the label
+// "Sync now" is visible on screen (WCAG SC 4.1.2).
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
 
 .import-source-row {
   display: flex;

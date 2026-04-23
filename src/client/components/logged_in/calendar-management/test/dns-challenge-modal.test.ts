@@ -221,4 +221,71 @@ describe('DnsChallengeModal', () => {
       expect(wrapper.emitted('close')).toBeTruthy();
     });
   });
+
+  describe('accessibility', () => {
+    it('renders a polite live region for the copied state', async () => {
+      const { wrapper } = mountModal();
+      await flushPromises();
+
+      const liveRegion = wrapper.find('[role="status"][aria-live="polite"]');
+      expect(liveRegion.exists()).toBe(true);
+      expect(liveRegion.attributes('aria-atomic')).toBe('true');
+      // Visually hidden via sr-only utility class
+      expect(liveRegion.classes()).toContain('sr-only');
+    });
+
+    it('announces Copied in the live region after clicking a copy button', async () => {
+      const { wrapper } = mountModal();
+      await flushPromises();
+
+      // Before any click, live region is empty
+      const regionBefore = wrapper.find('[role="status"][aria-live="polite"]');
+      expect(regionBefore.text()).toBe('');
+
+      const copyBtns = wrapper.findAll('.dns-challenge__copy-btn');
+      await copyBtns[0].trigger('click');
+      await flushPromises();
+
+      const regionAfter = wrapper.find('[role="status"][aria-live="polite"]');
+      expect(regionAfter.text()).toContain('Copied');
+    });
+
+    it('adds aria-live="polite" to the error alert', async () => {
+      verifyMock.mockRejectedValue(new ImportSourceDnsVerificationError(IMPORT_DNS_NOT_FOUND));
+
+      const { wrapper } = mountModal();
+      await flushPromises();
+
+      await wrapper.find('.pill-button--primary').trigger('click');
+      await flushPromises();
+
+      const alert = wrapper.find('.alert--error');
+      expect(alert.exists()).toBe(true);
+      expect(alert.attributes('aria-live')).toBe('polite');
+      expect(alert.attributes('role')).toBe('alert');
+    });
+
+    it('returns focus to the triggering element when the modal unmounts', async () => {
+      // Create a trigger button in the DOM that is the activeElement when
+      // the modal mounts — simulates the Verify button in ImportSourceRow.
+      const trigger = document.createElement('button');
+      trigger.textContent = 'Verify';
+      document.body.appendChild(trigger);
+      trigger.focus();
+      expect(document.activeElement).toBe(trigger);
+
+      const { wrapper } = mountModal();
+      await flushPromises();
+
+      // Unmounting the modal (v-if=false from parent) should restore focus
+      // to the original trigger via the onBeforeUnmount hook.
+      wrapper.unmount();
+      // Allow the nextTick scheduled inside onBeforeUnmount to resolve
+      await flushPromises();
+
+      expect(document.activeElement).toBe(trigger);
+
+      trigger.remove();
+    });
+  });
 });

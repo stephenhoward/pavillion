@@ -412,6 +412,97 @@ describe('ImportSourcesSection', () => {
     });
   });
 
+  describe('accessibility', () => {
+    it('adds aria-disabled on the Sync Now button when unverified', async () => {
+      const s1 = buildSource('id-1', 'https://example.com/a.ics');
+      s1.verificationState = 'unverified';
+      listSourcesMock.mockResolvedValue([s1]);
+
+      const { wrapper } = mountSection();
+      await flushPromises();
+
+      const syncBtn = wrapper.find(
+        '.import-source-row .btn-ghost:not(.btn-ghost--danger):not(.import-source-row__verify-btn)',
+      );
+      expect(syncBtn.attributes('aria-disabled')).toBe('true');
+    });
+
+    it('keeps aria-disabled=false on the Sync Now button when verified and idle', async () => {
+      const s1 = buildSource('id-1', 'https://example.com/a.ics');
+      s1.verificationState = 'verified';
+      listSourcesMock.mockResolvedValue([s1]);
+
+      const { wrapper } = mountSection();
+      await flushPromises();
+
+      const syncBtn = wrapper.find(
+        '.import-source-row .btn-ghost:not(.btn-ghost--danger):not(.import-source-row__verify-btn)',
+      );
+      expect(syncBtn.attributes('aria-disabled')).toBe('false');
+    });
+
+    it('adds a URL-scoped aria-label to the Sync Now button', async () => {
+      const s1 = buildSource('id-1', 'https://example.com/a.ics');
+      s1.verificationState = 'verified';
+      listSourcesMock.mockResolvedValue([s1]);
+
+      const { wrapper } = mountSection();
+      await flushPromises();
+
+      const syncBtn = wrapper.find(
+        '.import-source-row .btn-ghost:not(.btn-ghost--danger):not(.import-source-row__verify-btn)',
+      );
+      const label = syncBtn.attributes('aria-label');
+      expect(label).toBeTruthy();
+      // attribute is HTML-encoded in the serialized form (slashes become
+      // &#x2F;); decode via a textarea to compare the decoded value.
+      const decoder = document.createElement('textarea');
+      decoder.innerHTML = label ?? '';
+      const decoded = decoder.value;
+      expect(decoded).toContain('Sync import source');
+      expect(decoded).toContain('https://example.com/a.ics');
+    });
+
+    it('provides an sr-only disabled-reason referenced by aria-describedby', async () => {
+      const s1 = buildSource('id-1', 'https://example.com/a.ics');
+      s1.verificationState = 'unverified';
+      listSourcesMock.mockResolvedValue([s1]);
+
+      const { wrapper } = mountSection();
+      await flushPromises();
+
+      const syncBtn = wrapper.find(
+        '.import-source-row .btn-ghost:not(.btn-ghost--danger):not(.import-source-row__verify-btn)',
+      );
+      const describedBy = syncBtn.attributes('aria-describedby');
+      expect(describedBy).toBeTruthy();
+
+      // At least one referenced element must exist in the row and be sr-only.
+      const ids = (describedBy ?? '').split(/\s+/).filter(Boolean);
+      const rowHtml = wrapper.find('.import-source-row').html();
+      const foundSrOnly = ids.some((id) => {
+        const escaped = id.replace(/"/g, '\\"');
+        return rowHtml.includes(`id="${escaped}"`) && rowHtml.includes('sr-only');
+      });
+      expect(foundSrOnly).toBe(true);
+    });
+
+    it('does not mark the verification badge with role="status"', async () => {
+      const s1 = buildSource('id-1', 'https://example.com/a.ics');
+      s1.verificationState = 'verified';
+      listSourcesMock.mockResolvedValue([s1]);
+
+      const { wrapper } = mountSection();
+      await flushPromises();
+
+      const badge = wrapper.find('.import-source-row__badge');
+      expect(badge.exists()).toBe(true);
+      expect(badge.attributes('role')).toBeUndefined();
+      // But still has an accessible name via aria-label
+      expect(badge.attributes('aria-label')).toBeTruthy();
+    });
+  });
+
   describe('AP-source warning', () => {
     it('renders warning when detectedApSource flag is set', async () => {
       const s1 = buildSource('id-1', 'https://mobilizon.example/cal.ics');

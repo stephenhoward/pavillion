@@ -58,7 +58,26 @@
         </div>
       </div>
 
-      <div v-if="errorMessage" class="alert alert--error dns-challenge__error" role="alert">
+      <!--
+        Live region that announces "Copied" to screen readers when either copy
+        button is clicked. Visually hidden; only accessible-tech consumers see
+        it. WCAG SC 4.1.3 Status Messages.
+      -->
+      <span
+        class="sr-only"
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+      >
+        {{ copied ? t('dns_challenge.copied') : '' }}
+      </span>
+
+      <div
+        v-if="errorMessage"
+        class="alert alert--error dns-challenge__error"
+        role="alert"
+        aria-live="polite"
+      >
         {{ errorMessage }}
       </div>
 
@@ -84,7 +103,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import { Copy } from 'lucide-vue-next';
 
@@ -143,6 +162,14 @@ const isVerifying = ref(false);
 const errorMessage = ref<string | null>(null);
 const copied = ref<'name' | 'value' | null>(null);
 let copyTimeout: ReturnType<typeof setTimeout> | null = null;
+
+/**
+ * Element that triggered the modal (typically the Verify button in the row).
+ * Captured on mount so focus can be returned when the modal closes, per
+ * WCAG 2.4.3 Focus Order. The parent renders the modal conditionally with
+ * v-if, so onMounted fires each time the modal is opened.
+ */
+let triggerElement: HTMLElement | null = null;
 
 // Unique field ids so multiple instances (if opened concurrently in
 // different sections) do not collide.
@@ -265,9 +292,56 @@ const onClose = (): void => {
   }
   emit('close');
 };
+
+onMounted(() => {
+  // Capture the element that opened the modal so focus can be restored when
+  // it closes. Guarded for environments without `document` (SSR/tests).
+  if (typeof document !== 'undefined') {
+    const active = document.activeElement;
+    if (active instanceof HTMLElement) {
+      triggerElement = active;
+    }
+  }
+});
+
+onBeforeUnmount(() => {
+  // Restore focus to the trigger on the next tick so the element is still
+  // visible in the DOM when focus is applied. Using nextTick ensures the
+  // modal's teardown has released focus before we reassign it.
+  const toFocus = triggerElement;
+  triggerElement = null;
+  if (toFocus && typeof document !== 'undefined') {
+    // Only restore focus if the element is still connected to the DOM
+    // (otherwise .focus() is a no-op anyway).
+    nextTick(() => {
+      if (toFocus.isConnected) {
+        toFocus.focus();
+      }
+    });
+  }
+  if (copyTimeout) {
+    clearTimeout(copyTimeout);
+    copyTimeout = null;
+  }
+});
 </script>
 
 <style scoped lang="scss">
+// Visually hide content while keeping it accessible to screen readers.
+// Used for the "Copied" live region; pattern mirrors the shared sr-only
+// pattern in admin/root.vue (WCAG SC 4.1.3 Status Messages).
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
 .dns-challenge {
   display: flex;
   flex-direction: column;
