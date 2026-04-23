@@ -7,6 +7,7 @@ import { LocationEntity } from '@/server/calendar/entity/location';
 import { MediaEntity } from '@/server/media/entity/media';
 import { CalendarEntity } from '@/server/calendar/entity/calendar';
 import { EventSeriesEntity } from '@/server/calendar/entity/event_series';
+import { ImportSourceEntity } from '@/server/calendar/entity/import_source';
 
 @Table({ tableName: 'event' })
 class EventEntity extends Model {
@@ -68,6 +69,51 @@ class EventEntity extends Model {
   @Column({ type: DataType.STRING(32), allowNull: true })
   declare url_prompt: string | null;
 
+  /**
+   * ICS-import origin columns.
+   *
+   * Populated when this event was created by importing a subscribed ICS
+   * feed. `import_source_id` links back to the parent ImportSourceEntity;
+   * the remaining fields capture the metadata needed for deduplication and
+   * incremental sync on subsequent import runs.
+   *
+   * Divergence note (pv-1qcp epic DESIGN): ActivityPub-origin events track
+   * their remote origin in a sibling EventObjectEntity (see lines 31-35
+   * above re: calendar_id being null for remote AP events). ICS-origin
+   * events are owned by a local calendar (calendar_id is non-null) and
+   * carry their upstream provenance inline here. The two origins are
+   * independent: an event cannot be both AP-origin and ICS-origin, and
+   * neither set of columns is serialized into the public/federation-facing
+   * CalendarEvent.toObject() projection (privacy: origin provenance must
+   * not leak into the public API or AP output).
+   *
+   * @see migration 0027_add_event_import_origin_columns.ts
+   */
+  @ForeignKey(() => ImportSourceEntity)
+  @Column({ type: DataType.UUID, allowNull: true })
+  declare import_source_id: string | null;
+
+  @Column({ type: DataType.STRING(512), allowNull: true })
+  declare external_uid: string | null;
+
+  @Column({ type: DataType.STRING, allowNull: true })
+  declare external_recurrence_id: string | null;
+
+  @Column({ type: DataType.DATE, allowNull: true })
+  declare source_last_modified: Date | null;
+
+  @Column({ type: DataType.DATE, allowNull: true })
+  declare source_last_seen_at: Date | null;
+
+  @Column({ type: DataType.BOOLEAN, allowNull: false, defaultValue: false })
+  declare locally_edited: boolean;
+
+  @Column({ type: DataType.JSON, allowNull: true })
+  declare x_props: Record<string, unknown> | null;
+
+  @BelongsTo(() => ImportSourceEntity, 'import_source_id')
+  declare importSource: ImportSourceEntity | null;
+
   @BelongsTo(() => EventEntity)
   declare parentEvent: EventEntity;
 
@@ -100,6 +146,17 @@ class EventEntity extends Model {
     model.mediaZoom = this.media_zoom;
     model.externalUrl = this.external_url;
     model.urlPrompt = this.url_prompt as UrlPrompt | null;
+    // ICS-origin metadata (server-side read-only; NOT serialized publicly).
+    // Populated for events that were created by importing an ICS feed so
+    // the service layer can make origin-aware decisions (skip on
+    // locally_edited, re-run dedup, etc.). See CalendarEvent docstring.
+    model.importSourceId = this.import_source_id ?? null;
+    model.externalUid = this.external_uid ?? null;
+    model.externalRecurrenceId = this.external_recurrence_id ?? null;
+    model.sourceLastModified = this.source_last_modified ?? null;
+    model.sourceLastSeenAt = this.source_last_seen_at ?? null;
+    model.locallyEdited = this.locally_edited ?? false;
+    model.xProps = this.x_props ?? null;
     if (this.location) {
       model.location = this.location.toModel();
     }
@@ -132,6 +189,16 @@ class EventEntity extends Model {
       series_id: event.series?.id ?? null,
       external_url: event.externalUrl,
       url_prompt: event.urlPrompt,
+      // ICS-origin columns. These are on the domain model but not on the
+      // public toObject() projection; they round-trip through the server
+      // boundary only.
+      import_source_id: event.importSourceId,
+      external_uid: event.externalUid,
+      external_recurrence_id: event.externalRecurrenceId,
+      source_last_modified: event.sourceLastModified,
+      source_last_seen_at: event.sourceLastSeenAt,
+      locally_edited: event.locallyEdited,
+      x_props: event.xProps,
     });
   }
 };
