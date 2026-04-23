@@ -21,7 +21,7 @@ import EventInstanceService, { UpcomingOccurrencesResult } from '../service/even
 import { DateTime } from 'luxon';
 import SeriesService from '../service/series';
 import ImportSourceService from '../service/import/import_source_service';
-import SyncService, { type SyncResult } from '../service/import/sync';
+import SyncService, { type SyncDependencies, type SyncResult } from '../service/import/sync';
 import { ImportSource } from '@/common/model/import_source';
 import CalendarEventInstance from '@/common/model/event_instance';
 import AccountsInterface from '@/server/accounts/interface';
@@ -74,8 +74,38 @@ export default class CalendarInterface {
     // Wire the SyncService factory lazily: SyncService needs EventService,
     // and we want a single shared instance so the per-source in-memory
     // rate limiter has a stable state across invocations.
-    const sharedSyncService = new SyncService({ eventService: this.eventService });
+    const sharedSyncService = new SyncService({
+      eventService: this.eventService,
+      calendarService: this.calendarService,
+    });
     this.importSourceService.setSyncServiceFactory(() => sharedSyncService);
+  }
+
+  /**
+   * Construct a {@link SyncService} wired with the domain's internal
+   * EventService and CalendarService. Intended for CLI / operational entry
+   * points that need to drive the sync pipeline outside the HTTP path — the
+   * HTTP path goes through {@link ImportSourceService} via
+   * {@link syncImportSource}.
+   *
+   * Callers may pass additional overrides (fetcher, rateLimiter, parseICS,
+   * now) for tests or alternative transport wiring. Providing
+   * `eventService` or `calendarService` here overrides the interface's
+   * internally-wired services.
+   *
+   * Exposing this factory keeps the interface's internal services private
+   * while still giving the CLI a supported way to materialize a sync
+   * pipeline.
+   *
+   * @param overrides - Optional subset of SyncDependencies to override
+   * @returns A new SyncService instance using interface-internal services
+   */
+  createSyncService(overrides: Partial<SyncDependencies> = {}): SyncService {
+    return new SyncService({
+      eventService: this.eventService,
+      calendarService: this.calendarService,
+      ...overrides,
+    });
   }
 
   /**

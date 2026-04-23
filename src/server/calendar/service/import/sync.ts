@@ -56,9 +56,11 @@ import {
   ImportSourceSsrfBlockedError,
   ImportSourceVerifyRateLimitError,
 } from '@/common/exceptions/import';
+import { CalendarEntity } from '@/server/calendar/entity/calendar';
 import { EventEntity } from '@/server/calendar/entity/event';
 import { ImportSourceEntity } from '@/server/calendar/entity/import_source';
 import { ImportRunEntity, type ImportRunOutcome } from '@/server/calendar/entity/import_run';
+import type CalendarService from '@/server/calendar/service/calendar';
 import EventService from '@/server/calendar/service/events';
 import { Fetcher, type FetcherResult } from '@/server/calendar/service/import/fetcher';
 import {
@@ -178,6 +180,16 @@ export type IcsParseFn = (body: string) => CalendarResponse;
 
 export interface SyncDependencies {
   eventService: EventService;
+  /**
+   * Optional CalendarService used to resolve a calendar's primary language
+   * when mapping VEVENTs. When omitted, the orchestrator falls back to a
+   * direct CalendarEntity lookup via `findByPk(calendarId, { attributes:
+   * ['languages'] })`. Providing this explicitly is the preferred production
+   * wiring (see CalendarInterface.createSyncService); the fallback exists
+   * purely to keep the service testable without stubbing a CalendarService
+   * instance.
+   */
+  calendarService?: CalendarService;
   fetcher?: Fetcher;
   rateLimiter?: SyncRateLimiter;
   parseICS?: IcsParseFn;
@@ -187,6 +199,7 @@ export interface SyncDependencies {
 
 class SyncService {
   private readonly eventService: EventService;
+  private readonly calendarService: CalendarService | undefined;
   private readonly fetcher: Fetcher;
   private readonly rateLimiter: SyncRateLimiter;
   private readonly parseICS: IcsParseFn;
@@ -194,6 +207,7 @@ class SyncService {
 
   constructor(deps: SyncDependencies) {
     this.eventService = deps.eventService;
+    this.calendarService = deps.calendarService;
     this.fetcher = deps.fetcher ?? new Fetcher();
     this.rateLimiter = deps.rateLimiter ?? new SyncRateLimiter();
     // Defer node-ical import until the first parse call. The module pulls in
@@ -498,21 +512,36 @@ class SyncService {
   }
 
   /**
-   * Resolve the calendar's primary content language for mapper use. The
-   * calendar table stores a comma-separated `languages` column; we split
-   * and take the first non-empty entry, defaulting to 'en'.
+   * Resolve the calendar's primary content language for mapper use.
+   *
+   * Preferred path: use the injected {@link CalendarService} which returns a
+   * fully-hydrated Calendar domain model with `languages: string[]`.
+   *
+   * Fallback path: when no CalendarService is injected (older test wiring),
+   * read the `languages` column directly from CalendarEntity and split on
+   * comma. The entity column is a comma-separated string per the Sequelize
+   * schema. Defaults to 'en' when unavailable for any reason.
    */
   private async resolveCalendarPrimaryLanguage(calendarId: string): Promise<string> {
     try {
-      const calendar = await (this.eventService as unknown as {
-        calendarService: { getCalendar: (id: string) => Promise<{ languages: string[] } | null> };
-      }).calendarService.getCalendar(calendarId);
-      if (calendar && calendar.languages && calendar.languages.length > 0) {
-        return calendar.languages[0] ?? 'en';
+      if (this.calendarService) {
+        const calendar = await this.calendarService.getCalendar(calendarId);
+        if (calendar && calendar.languages && calendar.languages.length > 0) {
+          return calendar.languages[0] ?? 'en';
+        }
+        return 'en';
+      }
+
+      const entity = await CalendarEntity.findByPk(calendarId, {
+        attributes: ['languages'],
+      });
+      if (entity && typeof entity.languages === 'string' && entity.languages.length > 0) {
+        const first = entity.languages.split(',').map(s => s.trim()).find(s => s.length > 0);
+        if (first) return first;
       }
     }
     catch {
-      // Fall through
+      // Fall through to default.
     }
     return 'en';
   }

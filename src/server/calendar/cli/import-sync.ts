@@ -223,13 +223,11 @@ export async function buildImportSyncDeps(
     { default: AccountsInterface },
     { default: ConfigurationInterface },
     { default: SetupInterface },
-    { default: SyncServiceCtor },
   ] = await Promise.all([
     import('@/server/calendar/interface'),
     import('@/server/accounts/interface'),
     import('@/server/configuration/interface'),
     import('@/server/setup/interface'),
-    import('@/server/calendar/service/import/sync'),
   ]);
 
   const calendarInterface = new CalendarInterface(eventBus);
@@ -237,14 +235,11 @@ export async function buildImportSyncDeps(
   const setupInterface = new SetupInterface();
   const accountsInterface = new AccountsInterface(eventBus, configurationInterface, setupInterface);
 
-  // Pull the already-wired EventService out of the calendar interface so
+  // Use the interface's public factory so the sync pipeline is wired with
+  // the same EventService and CalendarService the HTTP path uses. This keeps
   // event-bus emissions (media reconciliation, instance refresh, federation)
-  // fire through the same pipeline used by the HTTP API path.
-  const eventService = (calendarInterface as unknown as {
-    eventService: import('@/server/calendar/service/events').default;
-  }).eventService;
-
-  const syncService = new SyncServiceCtor({ eventService });
+  // consistent and avoids piercing the interface's private fields.
+  const syncService = calendarInterface.createSyncService();
 
   const calendarOwnerResolver: CalendarOwnerResolver = {
     getCalendarOwnerAccountId: (calendarId: string) => calendarInterface.getCalendarOwnerAccountId(calendarId),

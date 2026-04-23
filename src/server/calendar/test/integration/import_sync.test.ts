@@ -77,13 +77,10 @@ describe('SyncService integration', () => {
     rateLimiter = new SyncRateLimiter();
     parseICSFake = () => ({});
 
-    // Access the same EventService instance the interface wires up so that
-    // event-bus emissions wire through the same machinery production uses.
-    const eventService = (calendarInterface as unknown as { eventService: import('@/server/calendar/service/events').default })
-      .eventService;
-
-    syncService = new SyncService({
-      eventService,
+    // Use the interface's public createSyncService factory so the sync
+    // pipeline is wired with the same EventService and CalendarService
+    // instances the HTTP path uses — no piercing into private fields.
+    syncService = calendarInterface.createSyncService({
       fetcher: fetcherStub as unknown as Fetcher,
       rateLimiter,
       parseICS: (body: string) => parseICSFake(body) as never,

@@ -12,6 +12,7 @@ import {
 import { EventEntity } from '@/server/calendar/entity/event';
 import { ImportRunEntity } from '@/server/calendar/entity/import_run';
 import { ImportSourceEntity } from '@/server/calendar/entity/import_source';
+import CalendarService from '@/server/calendar/service/calendar';
 import EventService from '@/server/calendar/service/events';
 import { Fetcher } from '@/server/calendar/service/import/fetcher';
 import SyncService, {
@@ -96,6 +97,7 @@ describe('SyncService', () => {
   let sandbox: sinon.SinonSandbox;
   let fetcher: sinon.SinonStubbedInstance<Fetcher>;
   let eventService: sinon.SinonStubbedInstance<EventService>;
+  let calendarService: sinon.SinonStubbedInstance<CalendarService>;
   let service: SyncService;
   let rateLimiter: SyncRateLimiter;
   let account: Account;
@@ -106,16 +108,18 @@ describe('SyncService', () => {
     fetcher = sandbox.createStubInstance(Fetcher);
     eventService = sandbox.createStubInstance(EventService);
 
-    // The orchestrator reads the calendar's primary language via
-    // eventService.calendarService.getCalendar. Stub that reach-through.
-    (eventService as unknown as { calendarService: { getCalendar: sinon.SinonStub } }).calendarService = {
-      getCalendar: sinon.stub().resolves({ languages: ['en'] }),
-    };
+    // The orchestrator resolves the calendar's primary language through
+    // the injected CalendarService. A stubbed instance is passed via
+    // SyncDependencies.calendarService — no reach-through into private
+    // fields required.
+    calendarService = sandbox.createStubInstance(CalendarService);
+    calendarService.getCalendar.resolves({ languages: ['en'] } as never);
 
     rateLimiter = new SyncRateLimiter();
 
     service = new SyncService({
       eventService: eventService as unknown as EventService,
+      calendarService: calendarService as unknown as CalendarService,
       fetcher: fetcher as unknown as Fetcher,
       rateLimiter,
       parseICS: () => ({}) as never,
@@ -201,6 +205,7 @@ describe('SyncService', () => {
 
       service = new SyncService({
         eventService: eventService as unknown as EventService,
+        calendarService: calendarService as unknown as CalendarService,
         fetcher: fetcher as unknown as Fetcher,
         rateLimiter,
         parseICS: () => ({}) as never,
@@ -338,6 +343,7 @@ describe('SyncService', () => {
 
       service = new SyncService({
         eventService: eventService as unknown as EventService,
+        calendarService: calendarService as unknown as CalendarService,
         fetcher: fetcher as unknown as Fetcher,
         rateLimiter,
         parseICS: () => { throw new Error('malformed calendar'); },
@@ -370,6 +376,7 @@ describe('SyncService', () => {
 
       service = new SyncService({
         eventService: eventService as unknown as EventService,
+        calendarService: calendarService as unknown as CalendarService,
         fetcher: fetcher as unknown as Fetcher,
         rateLimiter,
         parseICS: () => {
@@ -514,6 +521,7 @@ describe('SyncService', () => {
 
       service = new SyncService({
         eventService: eventService as unknown as EventService,
+        calendarService: calendarService as unknown as CalendarService,
         fetcher: fetcher as unknown as Fetcher,
         rateLimiter,
         parseICS: () => {
@@ -566,6 +574,7 @@ describe('SyncService', () => {
 
       service = new SyncService({
         eventService: eventService as unknown as EventService,
+        calendarService: calendarService as unknown as CalendarService,
         fetcher: fetcher as unknown as Fetcher,
         rateLimiter,
         parseICS: () => ({ 'v-0': vevent } as never),
@@ -611,6 +620,82 @@ describe('SyncService', () => {
       const result = await service.syncSource({ account, importSourceId: 'src-1' });
       expect(result.outcome).toBe('no_changes');
       expect(eventService.createEvent.called).toBe(false);
+    });
+  });
+
+  // --------------------------------------------------------------------------
+  // Calendar-language resolution DI surface (pv-1qcp.7)
+  // --------------------------------------------------------------------------
+
+  describe('calendar-language resolution DI', () => {
+    function setupParseableFeed(): ImportSourceEntity {
+      const src = makeSourceEntity();
+      sandbox.stub(ImportSourceEntity, 'findByPk').resolves(src);
+      fetcher.fetch.resolves({
+        outcome: 'ok',
+        httpStatus: 200,
+        body: Buffer.from('BEGIN:VCALENDAR...'),
+        contentHash: 'HASH-LANG-1',
+        etag: undefined,
+        bytesReceived: 1,
+      });
+      sandbox.stub(EventEntity, 'findAll').resolves([] as unknown as EventEntity[]);
+      return src;
+    }
+
+    it('uses the injected CalendarService to resolve the primary language', async () => {
+      setupParseableFeed();
+      calendarService.getCalendar.resolves({ languages: ['fr', 'en'] } as never);
+
+      const vevent = makeVEvent({ uid: 'lang-a@example.test' });
+      service = new SyncService({
+        eventService: eventService as unknown as EventService,
+        calendarService: calendarService as unknown as CalendarService,
+        fetcher: fetcher as unknown as Fetcher,
+        rateLimiter,
+        parseICS: () => ({ 'v-0': vevent } as never),
+      });
+
+      eventService.createEvent.callsFake(async (_acct, params: Record<string, unknown>) => {
+        // The mapper stamps the primary language onto the content map key.
+        const content = params.content as Record<string, unknown>;
+        expect(Object.keys(content)).toContain('fr');
+        return { id: 'evt-lang-a' } as never;
+      });
+
+      const result = await service.syncSource({ account, importSourceId: 'src-1' });
+      expect(result.outcome).toBe('success');
+      expect(calendarService.getCalendar.calledOnce).toBe(true);
+    });
+
+    it('falls back to CalendarEntity.findByPk when no CalendarService is injected', async () => {
+      setupParseableFeed();
+      const findByPkStub = sandbox.stub()
+        .withArgs('cccccccc-cccc-cccc-cccc-cccccccccccc')
+        .resolves({ languages: 'de,en' } as never);
+      // Stub CalendarEntity.findByPk via the dynamic import used inside sync.ts.
+      const { CalendarEntity } = await import('@/server/calendar/entity/calendar');
+      sandbox.stub(CalendarEntity, 'findByPk').callsFake(findByPkStub);
+
+      const vevent = makeVEvent({ uid: 'lang-b@example.test' });
+      service = new SyncService({
+        // NOTE: no calendarService — fallback path exercised.
+        eventService: eventService as unknown as EventService,
+        fetcher: fetcher as unknown as Fetcher,
+        rateLimiter,
+        parseICS: () => ({ 'v-0': vevent } as never),
+      });
+
+      eventService.createEvent.callsFake(async (_acct, params: Record<string, unknown>) => {
+        const content = params.content as Record<string, unknown>;
+        // First non-empty entry from the comma-separated string is picked.
+        expect(Object.keys(content)).toContain('de');
+        return { id: 'evt-lang-b' } as never;
+      });
+
+      const result = await service.syncSource({ account, importSourceId: 'src-1' });
+      expect(result.outcome).toBe('success');
+      expect(findByPkStub.calledOnce).toBe(true);
     });
   });
 });
