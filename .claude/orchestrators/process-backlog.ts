@@ -150,6 +150,45 @@ export async function runStateMachine(
 // ---------------------------------------------------------------------------
 
 /**
+ * Classify how a run ended so /loop consumers and humans can tell recoverable
+ * halts from blockers.
+ *
+ *   `completed`       — a PR was opened; next /process-backlog run should
+ *                       pick a different bead.
+ *   `transient_halt`  — the run halted on a condition that typically clears
+ *                       between invocations (subagent timeout, wrong_branch
+ *                       preflight before orphan recovery lands). The same
+ *                       bead is still eligible; retry after a delay.
+ *   `needs_human`     — the run halted on a condition requiring human input
+ *                       (advisor REQUEST CHANGES, verification exhausted,
+ *                       dirty tree, stale main, empty backlog).
+ *
+ * Exported for testing.
+ */
+export type RunVerdict = 'completed' | 'transient_halt' | 'needs_human';
+
+const TRANSIENT_ERROR_PATTERNS = [
+  /timed out/i,
+  /timeout/i,
+  /wrong_branch/i,
+  /stale_main/i,
+];
+
+export function classifyVerdict(ctx: OrchestratorCtx): RunVerdict {
+  if (ctx.prUrl) return 'completed';
+
+  const failed = ctx.phaseHistory.filter((p) => !p.ok);
+  for (const p of failed) {
+    const text = p.error ?? '';
+    if (TRANSIENT_ERROR_PATTERNS.some((rx) => rx.test(text))) {
+      return 'transient_halt';
+    }
+  }
+
+  return 'needs_human';
+}
+
+/**
  * Build the structured markdown summary from the run context.
  *
  * Exported for testing.
@@ -160,6 +199,7 @@ export function buildSummary(ctx: OrchestratorCtx): string {
   const prUrl = ctx.prUrl ?? '(none)';
   const beadsClosed = ctx.beadsClosed ?? [ctx.beadId].filter(Boolean);
   const failed = ctx.phaseHistory.filter((p) => !p.ok);
+  const verdict = classifyVerdict(ctx);
 
   const lines: string[] = [
     '',
@@ -170,6 +210,7 @@ export function buildSummary(ctx: OrchestratorCtx): string {
     `Beads Touched: ${beadsClosed.join(', ') || '(none)'}`,
     `PR: ${prUrl}`,
     `Total Duration: ${totalMs}ms`,
+    `Verdict: ${verdict}`,
     `Status: ${failed.length > 0 ? 'completed with errors' : 'completed'}`,
   ];
 
@@ -206,6 +247,7 @@ function printSummary(ctx: OrchestratorCtx): void {
     beadsClosed: ctx.beadsClosed ?? [ctx.beadId].filter(Boolean),
     phasesExecuted: ctx.phaseHistory.map((p) => p.phase),
     totalDurationMs: ctx.phaseHistory.reduce((sum, p) => sum + p.durationMs, 0),
+    verdict: classifyVerdict(ctx),
     errors: ctx.phaseHistory
       .filter((p) => !p.ok)
       .map((p) => ({ phase: p.phase, error: p.error })),

@@ -355,6 +355,240 @@ describe('select', () => {
     expect(result.ctx.beadId).toBe('pv-explicit-99');
     expect(spawn).not.toHaveBeenCalled();
   });
+
+  // -------------------------------------------------------------------------
+  // Epic promotion
+  // -------------------------------------------------------------------------
+  //
+  // When /process-backlog auto-selects a leaf whose parent is an analyzed
+  // epic with >= 2 ready children, we want it to pivot to the epic id so
+  // the epic phase can run as a wave. These tests cover the decision matrix.
+
+  /** Text for bdState() that looks like an enriched (analyzed) epic. */
+  function beadTextAnalyzedEpic(): string {
+    return [
+      'OPEN pv-epic',
+      'DESCRIPTION',
+      'A nontrivial epic that spans multiple beads.',
+      'DESIGN',
+      'Break the work into independent leaves.',
+      'ACCEPTANCE CRITERIA',
+      '- All child beads close',
+      'CHILDREN',
+      '  ↳ pv-child-1',
+      '  ↳ pv-child-2',
+      'NOTES',
+      'Implementation Context: children enriched with scope and test plan.',
+    ].join('\n');
+  }
+
+  /** Text for bdState() that looks like an epic before analyze. */
+  function beadTextShapedOnlyEpic(): string {
+    return [
+      'OPEN pv-epic',
+      'DESCRIPTION',
+      'Shaped epic without children yet.',
+      'DESIGN',
+      'TBD',
+      'ACCEPTANCE CRITERIA',
+      '- Define child beads',
+      'NOTES',
+      'not yet analyzed',
+    ].join('\n');
+  }
+
+  it('should promote leaf to its analyzed epic parent with 2+ ready children', async () => {
+    const leaf = { id: 'pv-child-1', issue_type: 'task', priority: 1 };
+    const leafFull = { id: 'pv-child-1', issue_type: 'task', parent: 'pv-epic' };
+    const epicFull = {
+      id: 'pv-epic',
+      issue_type: 'epic',
+      title: 'Orchestrator resilience',
+      dependents: [
+        { id: 'pv-child-1', dependency_type: 'parent-child' },
+        { id: 'pv-child-2', dependency_type: 'parent-child' },
+      ],
+    };
+
+    const spawn = seqSpawn(
+      // bdTopReady
+      fakeSpawn(JSON.stringify([leaf]), '', 0),  // bd ready --limit=5 --json
+      fakeSpawn('- other', '', 0),                // bd label list pv-child-1
+
+      // checkEpicPromotion
+      fakeSpawn(JSON.stringify([leafFull]), '', 0),     // bd show pv-child-1 --json
+      fakeSpawn(JSON.stringify([epicFull]), '', 0),     // bd show pv-epic --json
+      fakeSpawn(beadTextAnalyzedEpic(), '', 0),         // bd show pv-epic (bdState)
+      fakeSpawn(JSON.stringify([                        // bd ready --limit=200 --json
+        { id: 'pv-child-1' }, { id: 'pv-child-2' },
+      ]), '', 0),
+      fakeSpawn(JSON.stringify([epicFull]), '', 0),     // bd show pv-epic --json (bdListChildren)
+      fakeSpawn('- other', '', 0),                      // bd label list pv-child-1
+      fakeSpawn('- other', '', 0),                      // bd label list pv-child-2
+    );
+
+    const ctx = makeCtx({ beadId: '' });
+    const result = await select(ctx, { spawnFn: spawn });
+
+    expect(result.next).toBe(PhaseName.State);
+    expect(result.ctx.beadId).toBe('pv-epic');
+  });
+
+  it('should not promote when leaf has no parent', async () => {
+    const leaf = { id: 'pv-solo', issue_type: 'task', priority: 1 };
+    const leafFull = { id: 'pv-solo', issue_type: 'task' };  // no parent
+
+    const spawn = seqSpawn(
+      fakeSpawn(JSON.stringify([leaf]), '', 0),
+      fakeSpawn('- other', '', 0),
+      fakeSpawn(JSON.stringify([leafFull]), '', 0),  // no parent -> early return
+    );
+
+    const ctx = makeCtx({ beadId: '' });
+    const result = await select(ctx, { spawnFn: spawn });
+
+    expect(result.next).toBe(PhaseName.State);
+    expect(result.ctx.beadId).toBe('pv-solo');
+  });
+
+  it('should not promote when parent is not an epic', async () => {
+    const leaf = { id: 'pv-sub', issue_type: 'task', priority: 1 };
+    const leafFull = { id: 'pv-sub', issue_type: 'task', parent: 'pv-task-parent' };
+    const parentFull = { id: 'pv-task-parent', issue_type: 'task' };  // not an epic
+
+    const spawn = seqSpawn(
+      fakeSpawn(JSON.stringify([leaf]), '', 0),
+      fakeSpawn('- other', '', 0),
+      fakeSpawn(JSON.stringify([leafFull]), '', 0),
+      fakeSpawn(JSON.stringify([parentFull]), '', 0),  // issue_type != epic -> return null
+    );
+
+    const ctx = makeCtx({ beadId: '' });
+    const result = await select(ctx, { spawnFn: spawn });
+
+    expect(result.next).toBe(PhaseName.State);
+    expect(result.ctx.beadId).toBe('pv-sub');
+  });
+
+  it('should not promote when epic parent is not yet analyzed', async () => {
+    const leaf = { id: 'pv-child-1', issue_type: 'task', priority: 1 };
+    const leafFull = { id: 'pv-child-1', issue_type: 'task', parent: 'pv-epic' };
+    const epicFull = { id: 'pv-epic', issue_type: 'epic' };
+
+    const spawn = seqSpawn(
+      fakeSpawn(JSON.stringify([leaf]), '', 0),
+      fakeSpawn('- other', '', 0),
+      fakeSpawn(JSON.stringify([leafFull]), '', 0),
+      fakeSpawn(JSON.stringify([epicFull]), '', 0),
+      fakeSpawn(beadTextShapedOnlyEpic(), '', 0),  // bdState: missing_phases includes 'analyzed'
+    );
+
+    const ctx = makeCtx({ beadId: '' });
+    const result = await select(ctx, { spawnFn: spawn });
+
+    expect(result.next).toBe(PhaseName.State);
+    expect(result.ctx.beadId).toBe('pv-child-1');
+  });
+
+  it('should not promote when epic has only 1 ready child', async () => {
+    const leaf = { id: 'pv-child-1', issue_type: 'task', priority: 1 };
+    const leafFull = { id: 'pv-child-1', issue_type: 'task', parent: 'pv-epic' };
+    const epicFull = {
+      id: 'pv-epic',
+      issue_type: 'epic',
+      dependents: [
+        { id: 'pv-child-1', dependency_type: 'parent-child' },
+        { id: 'pv-child-2', dependency_type: 'parent-child' },  // exists but not ready
+      ],
+    };
+
+    const spawn = seqSpawn(
+      fakeSpawn(JSON.stringify([leaf]), '', 0),
+      fakeSpawn('- other', '', 0),
+      fakeSpawn(JSON.stringify([leafFull]), '', 0),
+      fakeSpawn(JSON.stringify([epicFull]), '', 0),
+      fakeSpawn(beadTextAnalyzedEpic(), '', 0),
+      fakeSpawn(JSON.stringify([{ id: 'pv-child-1' }]), '', 0),  // only child-1 in bd ready
+      fakeSpawn(JSON.stringify([epicFull]), '', 0),
+      fakeSpawn('- other', '', 0),
+    );
+
+    const ctx = makeCtx({ beadId: '' });
+    const result = await select(ctx, { spawnFn: spawn });
+
+    expect(result.next).toBe(PhaseName.State);
+    expect(result.ctx.beadId).toBe('pv-child-1');
+  });
+
+  it('should promote even when bd reports the epic parent as blocked-by-children', async () => {
+    // Guard: an analyzed epic's bd status may be "blocked" because bd views
+    // its unclosed children as blockers. That's normal for epics and must NOT
+    // prevent promotion — the wave executor iterates exactly those children.
+    const leaf = { id: 'pv-child-1', issue_type: 'task', priority: 1 };
+    const leafFull = { id: 'pv-child-1', issue_type: 'task', parent: 'pv-epic' };
+    const epicFull = {
+      id: 'pv-epic',
+      issue_type: 'epic',
+      status: 'blocked',   // bd reports blocked — must not disqualify promotion
+      dependents: [
+        { id: 'pv-child-1', dependency_type: 'parent-child' },
+        { id: 'pv-child-2', dependency_type: 'parent-child' },
+        { id: 'pv-child-3', dependency_type: 'parent-child' },
+      ],
+    };
+
+    const spawn = seqSpawn(
+      fakeSpawn(JSON.stringify([leaf]), '', 0),
+      fakeSpawn('- other', '', 0),
+      fakeSpawn(JSON.stringify([leafFull]), '', 0),
+      fakeSpawn(JSON.stringify([epicFull]), '', 0),
+      fakeSpawn(beadTextAnalyzedEpic(), '', 0),
+      fakeSpawn(JSON.stringify([
+        { id: 'pv-child-1' }, { id: 'pv-child-2' }, { id: 'pv-child-3' },
+      ]), '', 0),
+      fakeSpawn(JSON.stringify([epicFull]), '', 0),
+      fakeSpawn('- other', '', 0),
+      fakeSpawn('- other', '', 0),
+      fakeSpawn('- other', '', 0),
+    );
+
+    const ctx = makeCtx({ beadId: '' });
+    const result = await select(ctx, { spawnFn: spawn });
+
+    expect(result.ctx.beadId).toBe('pv-epic');
+  });
+
+  it('should not promote when 2 children exist but one is needs-human labelled', async () => {
+    const leaf = { id: 'pv-child-1', issue_type: 'task', priority: 1 };
+    const leafFull = { id: 'pv-child-1', issue_type: 'task', parent: 'pv-epic' };
+    const epicFull = {
+      id: 'pv-epic',
+      issue_type: 'epic',
+      dependents: [
+        { id: 'pv-child-1', dependency_type: 'parent-child' },
+        { id: 'pv-child-2', dependency_type: 'parent-child' },
+      ],
+    };
+
+    const spawn = seqSpawn(
+      fakeSpawn(JSON.stringify([leaf]), '', 0),
+      fakeSpawn('- other', '', 0),
+      fakeSpawn(JSON.stringify([leafFull]), '', 0),
+      fakeSpawn(JSON.stringify([epicFull]), '', 0),
+      fakeSpawn(beadTextAnalyzedEpic(), '', 0),
+      fakeSpawn(JSON.stringify([
+        { id: 'pv-child-1' }, { id: 'pv-child-2' },
+      ]), '', 0),
+      fakeSpawn(JSON.stringify([epicFull]), '', 0),
+      fakeSpawn('- other', '', 0),         // child-1 label list
+      fakeSpawn('- needs-human', '', 0),    // child-2 labelled -> excluded
+    );
+
+    const ctx = makeCtx({ beadId: '' });
+    const result = await select(ctx, { spawnFn: spawn });
+
+    expect(result.ctx.beadId).toBe('pv-child-1');
+  });
 });
 
 // =============================================================================
@@ -444,20 +678,43 @@ describe('shape', () => {
     expect(result.next).toBe('halt');
   });
 
-  it('should escalate and halt on dispatch timeout', async () => {
-    // escalate() calls bdEscalate: bd label add, bd show --json, bd update
+  it('should halt without escalating to needs-human on dispatch timeout', async () => {
+    // Timeout is classified as transient_halt: the run halts but the bead
+    // stays open and eligible for the next /process-backlog invocation.
+    // bdEscalate is NOT called, so no bd spawn calls should happen here.
+    const spawn = seqSpawn();
+
+    const log = stubLogger();
+    const ctx = makeCtx({ logger: log.logger });
+    const result = await shape(ctx, {
+      dispatchFn: async () => { throw new DispatchTimeoutError('shape-bead', 300000); },
+      spawnFn: spawn,
+    });
+
+    expect(result.next).toBe('halt');
+    expect(spawn).not.toHaveBeenCalled();
+    // Verify the timeout event was logged (distinct from *_escalated)
+    expect(log.jsonEntries.some(e => e.event === 'shape_bead_timed_out')).toBe(true);
+    expect(log.jsonEntries.some(e => e.event === 'shape_bead_escalated')).toBe(false);
+  });
+
+  it('should escalate to needs-human on malformed dispatch output', async () => {
+    // Malformed output IS an escalation: bdEscalate runs its bd commands.
     const spawn = seqSpawn(
       fakeSpawn('', '', 0),                                 // bd label add
       fakeSpawn(JSON.stringify([{ notes: '' }]), '', 0),    // bd show --json
       fakeSpawn('', '', 0),                                 // bd update --append-notes
     );
 
-    const result = await shape(makeCtx(), {
-      dispatchFn: async () => { throw new DispatchTimeoutError('shape-bead', 180000); },
+    const log = stubLogger();
+    const { DispatchMalformedError } = await import('../../lib/dispatch.js');
+    const result = await shape(makeCtx({ logger: log.logger }), {
+      dispatchFn: async () => { throw new DispatchMalformedError('shape-bead', 'not json'); },
       spawnFn: spawn,
     });
 
     expect(result.next).toBe('halt');
+    expect(log.jsonEntries.some(e => e.event === 'shape_bead_escalated')).toBe(true);
   });
 
   // Regression: shape() used to build its prompt from beadId only,
