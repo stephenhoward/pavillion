@@ -4,6 +4,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 // performing any real DNS lookups.
 vi.mock('@/server/common/helper/ip-validation', () => ({
   validateUrlNotPrivate: vi.fn().mockResolvedValue(true),
+  isPrivateIP: vi.fn().mockReturnValue(false),
 }));
 import { validateUrlNotPrivate } from '@/server/common/helper/ip-validation';
 
