@@ -133,6 +133,7 @@ describe('Fetcher', () => {
       const result = await buildFetcher().fetch({ url: 'https://example.org/cal.ics' });
 
       expect(result.outcome).toBe('ok');
+      expect((dnsLookup as sinon.SinonStub).callCount).toBe(1);
       expect((createAgent as sinon.SinonStub).callCount).toBe(1);
       expect((createAgent as sinon.SinonStub).firstCall.args[0]).toBe('198.51.100.77');
 
@@ -269,6 +270,9 @@ describe('Fetcher', () => {
 
       await buildFetcher().fetch({ url: 'https://first.example/cal.ics' });
 
+      // SSRF isolation invariant (see 5-hop test for full rationale).
+      expect((createAgent as sinon.SinonStub).callCount).toBe(2);
+
       // Both hops must have no Authorization or Cookie header present.
       for (const call of (request as sinon.SinonStub).getCalls()) {
         const headers = call.args[1].headers as Record<string, string>;
@@ -316,8 +320,10 @@ describe('Fetcher', () => {
       }
       catch (err) {
         expect(err).toBeInstanceOf(ImportSourceFetchError);
-        const details = (err as ImportSourceFetchError).details as { reason?: string };
+        const details = (err as ImportSourceFetchError).details as { reason?: string; observed?: number };
         expect(details?.reason).toBe('body_too_large');
+        // Prove the stream was cut short — we did not buffer the full 12 MiB.
+        expect(details.observed).toBeLessThan(11 * 1024 * 1024);
       }
     });
 
@@ -407,6 +413,7 @@ describe('Fetcher', () => {
         expect.fail('Expected ImportSourceFetchError');
       }
       catch (err) {
+        // Classified as FetchError (not ParseError) because the fetcher owns signature validation; ParseError is reserved for downstream ICS parsing failures.
         expect(err).toBeInstanceOf(ImportSourceFetchError);
         const details = (err as ImportSourceFetchError).details as { reason?: string };
         expect(details?.reason).toBe('missing_vcalendar_signature');

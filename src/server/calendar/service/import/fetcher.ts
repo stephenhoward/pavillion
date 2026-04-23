@@ -32,6 +32,7 @@
 
 import { createHash } from 'node:crypto';
 import dns from 'node:dns';
+import { createRequire } from 'node:module';
 import { promisify } from 'node:util';
 import { Agent, request as undiciRequest } from 'undici';
 
@@ -76,8 +77,13 @@ const REJECTED_CONTENT_TYPES: ReadonlySet<string> = new Set([
   'application/xhtml+xml',
 ]);
 
-/** User-Agent string per privacy-advisor — no instance hostname. */
-export const USER_AGENT = 'Pavillion/0.0.0 ICS-Fetcher (+https://pavillion.app)';
+/**
+ * User-Agent string per privacy-advisor — no instance hostname.
+ * Version is read from package.json at module init so the UA stays in sync
+ * with releases without a hardcoded literal.
+ */
+const pkg = createRequire(import.meta.url)('../../../../../package.json') as { version: string };
+export const USER_AGENT = `Pavillion/${pkg.version} ICS-Fetcher (+https://pavillion.app)`;
 
 /** Per-phase timeouts (ms). */
 export const CONNECT_TIMEOUT_MS = 10_000;
@@ -328,9 +334,9 @@ export class Fetcher {
           // Drain any redirect body to free the socket.
           await drainBody(response.body);
 
-          if (hop >= MAX_REDIRECTS) {
-            throw new ImportSourceFetchError({ reason: 'too_many_redirects' });
-          }
+          // The `for` loop condition `hop < MAX_REDIRECTS` is the sole redirect
+          // ceiling. A redirect received on the last permitted hop falls out of
+          // the loop and is caught by the defensive post-loop throw below.
 
           const nextUrl = new URL(location, currentUrl);
           previousUrl = parsedUrl;
