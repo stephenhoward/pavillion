@@ -133,6 +133,31 @@ export function scrubExternalUrlForLog(externalUrl: string | null | undefined): 
 }
 
 /**
+ * Originator context for EventService mutations.
+ *
+ * Distinguishes user-driven mutations (HTTP handlers, UI actions) from
+ * import-driven mutations (ICS sync orchestrator). The service layer — not
+ * entity hooks — owns the rule because hooks cannot distinguish caller
+ * intent. See pv-1qcp epic DESIGN and architecture-playbook (no entity
+ * hooks for caller-intent rules).
+ *
+ * - `'user'` (default): user-initiated mutation. If the event has an
+ *   `importSourceId`, the service flips `locallyEdited=true` so future sync
+ *   runs know not to overwrite this event's content.
+ * - `'import'`: ICS sync orchestrator. The service leaves `locallyEdited`
+ *   unchanged and, on create, initializes `sourceLastSeenAt=now()` and
+ *   `locallyEdited=false`.
+ *
+ * Event-bus emissions fire on BOTH paths (critical — imported events must
+ * still federate via AP through the existing emission machinery).
+ */
+export type EventOriginatorContext = {
+  source: 'user' | 'import';
+};
+
+const DEFAULT_ORIGINATOR_CONTEXT: EventOriginatorContext = { source: 'user' };
+
+/**
  * Service class for managing events
  *
  * @remarks
@@ -638,7 +663,11 @@ class EventService {
      * @param eventParams - the parameters for the new event
      * @returns a promise that resolves to the created Event
      */
-  async createEvent(account: Account, eventParams:Record<string,any>): Promise<CalendarEvent> {
+  async createEvent(
+    account: Account,
+    eventParams: Record<string, any>,
+    context: EventOriginatorContext = DEFAULT_ORIGINATOR_CONTEXT,
+  ): Promise<CalendarEvent> {
 
     const calendar = await this.calendarService.getCalendar(eventParams.calendarId);
     const calendars = await this.calendarService.editableCalendarsForUser(account);
@@ -694,6 +723,18 @@ class EventService {
     }
 
     const eventEntity = EventEntity.fromModel(event);
+
+    // Import-origin bookkeeping: when the sync orchestrator creates an event
+    // from an ICS feed, stamp source_last_seen_at=now() and force
+    // locally_edited=false. User-path creates never set these fields here;
+    // they default to null/false respectively at the column level.
+    //
+    // Note: entity hooks are deliberately NOT used for this rule — hooks
+    // cannot distinguish caller intent. Service layer owns it.
+    if (context.source === 'import') {
+      eventEntity.source_last_seen_at = new Date();
+      eventEntity.locally_edited = false;
+    }
 
     // Handle locationId (reference to existing location)
     if (eventParams.locationId) {
@@ -816,7 +857,12 @@ class EventService {
    * @param eventParams - the parameters and values to update for the event
    * @returns a promise that resolves to the Event
    */
-  async updateEvent(account: Account, eventId: string, eventParams:Record<string,any>): Promise<CalendarEvent> {
+  async updateEvent(
+    account: Account,
+    eventId: string,
+    eventParams: Record<string, any>,
+    context: EventOriginatorContext = DEFAULT_ORIGINATOR_CONTEXT,
+  ): Promise<CalendarEvent> {
     // Validate eventId parameter
     if (!eventId || (typeof eventId === 'string' && eventId.trim() === '')) {
       throw new ValidationError('Event ID is required');
@@ -1003,6 +1049,20 @@ class EventService {
     }
     if (eventParams.mediaZoom !== undefined) {
       eventEntity.media_zoom = eventParams.mediaZoom;
+    }
+
+    // Originator-aware locally_edited flip: a user-driven update to an
+    // imported event (non-null import_source_id) flips locally_edited=true
+    // so subsequent sync runs know this event's content has diverged from
+    // the upstream feed and should not be overwritten. Import-driven
+    // updates leave locally_edited unchanged — the sync orchestrator
+    // explicitly passes context.source='import' for this case.
+    //
+    // Note: entity hooks are deliberately NOT used for this rule — hooks
+    // cannot distinguish caller intent. See pv-1qcp epic DESIGN and
+    // architecture-playbook.
+    if (context.source === 'user' && eventEntity.import_source_id) {
+      eventEntity.locally_edited = true;
     }
 
     await eventEntity.save();
