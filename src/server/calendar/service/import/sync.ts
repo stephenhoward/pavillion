@@ -365,7 +365,7 @@ class SyncService {
           const existingEntity = existingByKey.get(key);
           try {
             if (!existingEntity) {
-              await this.createEvent(actingAccount, sourceEntity, mapped);
+              await this.createEvent(actingAccount, sourceEntity, mapped, tx);
               counts.created++;
             }
             else if (existingEntity.locally_edited) {
@@ -373,7 +373,7 @@ class SyncService {
               counts.skippedLocallyEdited++;
             }
             else if (this.sourceIsNewer(mapped.source_last_modified, existingEntity.source_last_modified)) {
-              await this.updateEvent(actingAccount, existingEntity.id, sourceEntity, mapped);
+              await this.updateEvent(actingAccount, existingEntity.id, sourceEntity, mapped, tx);
               counts.updated++;
             }
             else {
@@ -507,6 +507,7 @@ class SyncService {
     account: Account,
     source: ImportSourceEntity,
     mapped: MapperOutput,
+    tx?: unknown,
   ): Promise<CalendarEvent> {
     const params = buildEventParamsForCreate(source, mapped);
     const event = await this.eventService.createEvent(account, params, { source: 'import' });
@@ -516,7 +517,13 @@ class SyncService {
     // (CalendarEvent.fromObject intentionally strips origin provenance so it
     // never flows into toObject / public APIs). The orchestrator owns those
     // columns and writes them directly to the entity after the service call.
-    await this.stampOriginColumns(event.id, source, mapped);
+    //
+    // The tx handle is threaded through so the origin-column write participates
+    // in the caller's transaction: if the surrounding db.transaction rolls back
+    // (e.g. a later event fails, source bookkeeping save fails), the origin
+    // columns roll back with it — no orphaned provenance pointing at rolled-
+    // back rows.
+    await this.stampOriginColumns(event.id, source, mapped, tx);
     return event;
   }
 
@@ -525,13 +532,14 @@ class SyncService {
     eventId: string,
     source: ImportSourceEntity,
     mapped: MapperOutput,
+    tx?: unknown,
   ): Promise<CalendarEvent> {
     const params = buildEventParamsForUpdate(source, mapped);
     const event = await this.eventService.updateEvent(account, eventId, params, { source: 'import' });
     // Refresh origin columns on update too. source_last_modified and x_props
     // may have changed on the feed side; import_source_id / external_uid /
     // external_recurrence_id are stable but re-stamping them is a no-op.
-    await this.stampOriginColumns(event.id, source, mapped);
+    await this.stampOriginColumns(event.id, source, mapped, tx);
     return event;
   }
 
@@ -541,11 +549,18 @@ class SyncService {
    * model does not surface origin columns via toObject/fromObject (privacy —
    * they must not leak to federation / public API), so they cannot round-trip
    * through the service layer. The orchestrator is the sole writer.
+   *
+   * Accepts an optional transaction handle so the update participates in the
+   * caller's transaction. Callers inside `db.transaction` MUST pass `tx` —
+   * otherwise the origin-column write commits independently and survives any
+   * rollback of the surrounding event writes, leaving provenance pointing at
+   * rolled-back rows.
    */
   private async stampOriginColumns(
     eventId: string,
     source: ImportSourceEntity,
     mapped: MapperOutput,
+    tx?: unknown,
   ): Promise<void> {
     await EventEntity.update(
       {
@@ -558,7 +573,7 @@ class SyncService {
         source_last_seen_at: this.nowFn(),
         x_props: mapped.x_props,
       },
-      { where: { id: eventId } },
+      { where: { id: eventId }, transaction: tx as never },
     );
   }
 

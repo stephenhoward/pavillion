@@ -266,6 +266,78 @@ describe('SyncService integration', () => {
   });
 
   // --------------------------------------------------------------------------
+  // Transaction rollback: origin columns participate in the sync transaction
+  // --------------------------------------------------------------------------
+
+  describe('transaction rollback of origin columns (pv-1qcp.5)', () => {
+    it('leaves no rows with import_source_id set when a mid-run createEvent fails', async () => {
+      // Source is fresh — no pre-existing events on it, so every findAll for
+      // { import_source_id: source.id } must return empty when the test ends
+      // if-and-only-if the origin-column writes (stampOriginColumns) properly
+      // rolled back with the transaction.
+      const source = await createVerifiedSource();
+
+      fetcherStub.fetch.resolves({
+        outcome: 'ok',
+        httpStatus: 200,
+        body: Buffer.from('BEGIN:VCALENDAR'),
+        contentHash: 'HASH-ROLLBACK-1',
+        etag: undefined,
+        bytesReceived: 1,
+      });
+
+      parseICSFake = () => ({
+        a: makeVEvent({ uid: 'rollback-a@example.test', summary: 'A' }),
+        b: makeVEvent({ uid: 'rollback-b@example.test', summary: 'B' }),
+        c: makeVEvent({ uid: 'rollback-c@example.test', summary: 'C' }),
+        d: makeVEvent({ uid: 'rollback-d@example.test', summary: 'D' }),
+        e: makeVEvent({ uid: 'rollback-e@example.test', summary: 'E' }),
+      });
+
+      // Stub EventService.createEvent to reject on the third call. The first
+      // two calls must invoke the real implementation so their stampOriginColumns
+      // writes are actually issued (and expected to roll back).
+      const eventService = (calendarInterface as unknown as {
+        eventService: import('@/server/calendar/service/events').default;
+      }).eventService;
+
+      const realCreateEvent = eventService.createEvent.bind(eventService);
+      const stub = sinon.stub(eventService, 'createEvent');
+      stub.onCall(0).callsFake((...args: unknown[]) => realCreateEvent(...(args as Parameters<typeof realCreateEvent>)));
+      stub.onCall(1).callsFake((...args: unknown[]) => realCreateEvent(...(args as Parameters<typeof realCreateEvent>)));
+      stub.onCall(2).rejects(new Error('simulated mid-run write failure'));
+      // Calls 3 and 4 never fire because the transaction callback throws on
+      // call 2's rejection, but guard them anyway.
+      stub.onCall(3).rejects(new Error('should not reach 4th'));
+      stub.onCall(4).rejects(new Error('should not reach 5th'));
+
+      try {
+        const result = await syncService.syncSource({
+          account: testAccount,
+          importSourceId: source.id,
+        });
+
+        // The run was recorded as a parse_error (generic write-failure bucket)
+        // in a separate transaction, and no events are reported as created.
+        expect(result.outcome).toBe('parse_error');
+        expect(result.eventsCreated).toBe(0);
+
+        // Key assertion: no event rows carry this source's import_source_id.
+        // Without the tx threading fix, stampOriginColumns would have committed
+        // the origin columns on events a and b before the transaction rolled
+        // back, and those rows would still show import_source_id = source.id.
+        const leakedOriginRows = await EventEntity.findAll({
+          where: { import_source_id: source.id },
+        });
+        expect(leakedOriginRows).toHaveLength(0);
+      }
+      finally {
+        stub.restore();
+      }
+    });
+  });
+
+  // --------------------------------------------------------------------------
   // ImportRun retention cap
   // --------------------------------------------------------------------------
 
