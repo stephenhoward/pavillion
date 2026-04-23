@@ -87,7 +87,7 @@ class EventEntity extends Model {
    * CalendarEvent.toObject() projection (privacy: origin provenance must
    * not leak into the public API or AP output).
    *
-   * @see migration 0027_add_event_import_origin_columns.ts
+   * @see migration 0028_add_event_import_origin_columns.ts
    */
   @ForeignKey(() => ImportSourceEntity)
   @Column({ type: DataType.UUID, allowNull: true })

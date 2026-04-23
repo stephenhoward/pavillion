@@ -14,7 +14,7 @@ import { CalendarEvent } from '@/common/model/events';
  *    (privacy: provenance must not leak into public API or AP output).
  *
  * @see bead pv-1qcp.1.2
- * @see migration 0027_add_event_import_origin_columns.ts
+ * @see migration 0028_add_event_import_origin_columns.ts
  */
 describe('EventEntity - ICS import origin columns', () => {
   const calendarId = '123e4567-e89b-12d3-a456-426614174000';

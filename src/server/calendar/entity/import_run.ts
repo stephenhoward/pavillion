@@ -39,7 +39,7 @@ export type ImportRunOutcome =
  * clients via a dedicated API shape, not a round-trippable domain model.
  *
  * @see bead pv-1qcp.1.2
- * @see migration 0026_create_import_run.ts
+ * @see migration 0027_create_import_run.ts
  */
 @Table({
   tableName: 'import_run',

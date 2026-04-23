@@ -32,7 +32,7 @@ import db from '@/server/common/entity/db';
  * is a pure data mapper (entity ↔ common-model conversion only).
  *
  * @see bead pv-1qcp.1.2
- * @see migration 0025_create_import_source.ts
+ * @see migration 0026_create_import_source.ts
  */
 @Table({
   tableName: 'import_source',

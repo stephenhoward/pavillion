@@ -10,9 +10,9 @@ import { runMigrations } from '@/server/common/migrations/runner';
  * Integration tests for bead pv-1qcp.1.1 (ICS import foundation schema).
  *
  * Validates the three foundation migrations end-to-end on fresh SQLite:
- * - 0025_create_import_source.ts
- * - 0026_create_import_run.ts
- * - 0027_add_event_import_origin_columns.ts
+ * - 0026_create_import_source.ts
+ * - 0027_create_import_run.ts
+ * - 0028_add_event_import_origin_columns.ts
  *
  * Specifically covers the acceptance criteria:
  * - Migration up/down works
@@ -279,13 +279,13 @@ describe('ICS import foundation migrations', () => {
   describe('Reversibility', () => {
     it('rolls back cleanly: down removes tables and columns', async () => {
       // Run each down migration in reverse order.
-      const m0027 = (await import(path.join(migrationsDir, '0027_add_event_import_origin_columns.ts'))).default;
-      const m0026 = (await import(path.join(migrationsDir, '0026_create_import_run.ts'))).default;
-      const m0025 = (await import(path.join(migrationsDir, '0025_create_import_source.ts'))).default;
+      const m0028 = (await import(path.join(migrationsDir, '0028_add_event_import_origin_columns.ts'))).default;
+      const m0027 = (await import(path.join(migrationsDir, '0027_create_import_run.ts'))).default;
+      const m0026 = (await import(path.join(migrationsDir, '0026_create_import_source.ts'))).default;
 
+      await m0028.down({ context: sequelize });
       await m0027.down({ context: sequelize });
       await m0026.down({ context: sequelize });
-      await m0025.down({ context: sequelize });
 
       const qi = sequelize.getQueryInterface();
       const tables = (await qi.showAllTables()) as string[];
