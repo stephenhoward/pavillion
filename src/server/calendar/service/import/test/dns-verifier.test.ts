@@ -57,6 +57,21 @@ describe('DnsVerifier', () => {
   let fetchStub: sinon.SinonStub;
   let verifier: DnsVerifier;
 
+  /**
+   * Replaces the list returned by `config.get('calendar.import.dohResolvers')`
+   * for the duration of a test. Other config keys fall through to the real
+   * config so unrelated lookups still succeed.
+   */
+  function stubResolvers(resolvers: string[]): void {
+    const original = config.get.bind(config);
+    sandbox.replace(config, 'get', ((key: string) => {
+      if (key === 'calendar.import.dohResolvers') {
+        return resolvers;
+      }
+      return original(key);
+    }) as typeof config.get);
+  }
+
   beforeEach(() => {
     fetchStub = sandbox.stub();
     verifier = new DnsVerifier(fetchStub);
@@ -117,20 +132,15 @@ describe('DnsVerifier', () => {
       fetchStub.onCall(0).resolves(mockFetchResponse(good.status, good.body));
       fetchStub.onCall(1).resolves(mockFetchResponse(bad.status, bad.body));
 
-      try {
-        await verifier.verify({
-          sourceId: SOURCE_ID,
-          calendarId: CALENDAR_ID,
-          sourceUrl: SOURCE_URL,
-        });
-        throw new Error('Expected to throw');
-      }
-      catch (err) {
-        expect(err).toBeInstanceOf(ImportSourceDnsVerificationError);
-        const e = err as ImportSourceDnsVerificationError;
-        expect(e.reason).toBe(IMPORT_DNS_RESOLVER_DISAGREEMENT);
-        expect(e.message).toBe(IMPORT_DNS_RESOLVER_DISAGREEMENT);
-      }
+      const promise = verifier.verify({
+        sourceId: SOURCE_ID,
+        calendarId: CALENDAR_ID,
+        sourceUrl: SOURCE_URL,
+      });
+
+      await expect(promise).rejects.toBeInstanceOf(ImportSourceDnsVerificationError);
+      await expect(promise).rejects.toHaveProperty('reason', IMPORT_DNS_RESOLVER_DISAGREEMENT);
+      await expect(promise).rejects.toHaveProperty('message', IMPORT_DNS_RESOLVER_DISAGREEMENT);
     });
   });
 
@@ -139,20 +149,30 @@ describe('DnsVerifier', () => {
       const resp = buildDohResponse([]);
       fetchStub.resolves(mockFetchResponse(resp.status, resp.body));
 
-      try {
-        await verifier.verify({
-          sourceId: SOURCE_ID,
-          calendarId: CALENDAR_ID,
-          sourceUrl: SOURCE_URL,
-        });
-        throw new Error('Expected to throw');
-      }
-      catch (err) {
-        expect(err).toBeInstanceOf(ImportSourceDnsVerificationError);
-        const e = err as ImportSourceDnsVerificationError;
-        expect(e.reason).toBe(IMPORT_DNS_NOT_FOUND);
-        expect(e.message).toBe(IMPORT_DNS_NOT_FOUND);
-      }
+      const promise = verifier.verify({
+        sourceId: SOURCE_ID,
+        calendarId: CALENDAR_ID,
+        sourceUrl: SOURCE_URL,
+      });
+
+      await expect(promise).rejects.toBeInstanceOf(ImportSourceDnsVerificationError);
+      await expect(promise).rejects.toHaveProperty('reason', IMPORT_DNS_NOT_FOUND);
+      await expect(promise).rejects.toHaveProperty('message', IMPORT_DNS_NOT_FOUND);
+    });
+
+    it('throws IMPORT_DNS_NOT_FOUND when DoH returns NXDOMAIN (Status=3)', async () => {
+      // NXDOMAIN with no Answer array — the typical "name does not exist" shape.
+      const resp = buildDohResponse([], 3);
+      fetchStub.resolves(mockFetchResponse(resp.status, resp.body));
+
+      const promise = verifier.verify({
+        sourceId: SOURCE_ID,
+        calendarId: CALENDAR_ID,
+        sourceUrl: SOURCE_URL,
+      });
+
+      await expect(promise).rejects.toBeInstanceOf(ImportSourceDnsVerificationError);
+      await expect(promise).rejects.toHaveProperty('reason', IMPORT_DNS_NOT_FOUND);
     });
 
     it('throws IMPORT_DNS_MISMATCH when records exist but none match', async () => {
@@ -162,19 +182,14 @@ describe('DnsVerifier', () => {
       ]);
       fetchStub.resolves(mockFetchResponse(resp.status, resp.body));
 
-      try {
-        await verifier.verify({
-          sourceId: SOURCE_ID,
-          calendarId: CALENDAR_ID,
-          sourceUrl: SOURCE_URL,
-        });
-        throw new Error('Expected to throw');
-      }
-      catch (err) {
-        expect(err).toBeInstanceOf(ImportSourceDnsVerificationError);
-        const e = err as ImportSourceDnsVerificationError;
-        expect(e.reason).toBe(IMPORT_DNS_MISMATCH);
-      }
+      const promise = verifier.verify({
+        sourceId: SOURCE_ID,
+        calendarId: CALENDAR_ID,
+        sourceUrl: SOURCE_URL,
+      });
+
+      await expect(promise).rejects.toBeInstanceOf(ImportSourceDnsVerificationError);
+      await expect(promise).rejects.toHaveProperty('reason', IMPORT_DNS_MISMATCH);
     });
   });
 
@@ -182,56 +197,59 @@ describe('DnsVerifier', () => {
     it('throws IMPORT_DNS_RESOLVER_UNAVAILABLE on network error from any resolver', async () => {
       fetchStub.rejects(new Error('ECONNREFUSED'));
 
-      try {
-        await verifier.verify({
-          sourceId: SOURCE_ID,
-          calendarId: CALENDAR_ID,
-          sourceUrl: SOURCE_URL,
-        });
-        throw new Error('Expected to throw');
-      }
-      catch (err) {
-        expect(err).toBeInstanceOf(ImportSourceDnsVerificationError);
-        const e = err as ImportSourceDnsVerificationError;
-        expect(e.reason).toBe(IMPORT_DNS_RESOLVER_UNAVAILABLE);
-        expect(e.message).not.toContain('ECONNREFUSED');
-      }
+      const promise = verifier.verify({
+        sourceId: SOURCE_ID,
+        calendarId: CALENDAR_ID,
+        sourceUrl: SOURCE_URL,
+      });
+
+      await expect(promise).rejects.toBeInstanceOf(ImportSourceDnsVerificationError);
+      await expect(promise).rejects.toHaveProperty('reason', IMPORT_DNS_RESOLVER_UNAVAILABLE);
+      // Sanitized surface: internal error text must not leak through
+      await expect(promise).rejects.toSatisfy(
+        (e: unknown) => !(e as Error).message.includes('ECONNREFUSED'),
+      );
     });
 
     it('throws IMPORT_DNS_RESOLVER_UNAVAILABLE on non-200 response', async () => {
       fetchStub.resolves(mockFetchResponse(500, 'Internal Server Error'));
 
-      try {
-        await verifier.verify({
-          sourceId: SOURCE_ID,
-          calendarId: CALENDAR_ID,
-          sourceUrl: SOURCE_URL,
-        });
-        throw new Error('Expected to throw');
-      }
-      catch (err) {
-        expect(err).toBeInstanceOf(ImportSourceDnsVerificationError);
-        const e = err as ImportSourceDnsVerificationError;
-        expect(e.reason).toBe(IMPORT_DNS_RESOLVER_UNAVAILABLE);
-      }
+      const promise = verifier.verify({
+        sourceId: SOURCE_ID,
+        calendarId: CALENDAR_ID,
+        sourceUrl: SOURCE_URL,
+      });
+
+      await expect(promise).rejects.toBeInstanceOf(ImportSourceDnsVerificationError);
+      await expect(promise).rejects.toHaveProperty('reason', IMPORT_DNS_RESOLVER_UNAVAILABLE);
     });
 
     it('throws IMPORT_DNS_RESOLVER_UNAVAILABLE on malformed JSON', async () => {
       fetchStub.resolves(mockFetchResponse(200, 'not-json{{{'));
 
-      try {
-        await verifier.verify({
-          sourceId: SOURCE_ID,
-          calendarId: CALENDAR_ID,
-          sourceUrl: SOURCE_URL,
-        });
-        throw new Error('Expected to throw');
-      }
-      catch (err) {
-        expect(err).toBeInstanceOf(ImportSourceDnsVerificationError);
-        const e = err as ImportSourceDnsVerificationError;
-        expect(e.reason).toBe(IMPORT_DNS_RESOLVER_UNAVAILABLE);
-      }
+      const promise = verifier.verify({
+        sourceId: SOURCE_ID,
+        calendarId: CALENDAR_ID,
+        sourceUrl: SOURCE_URL,
+      });
+
+      await expect(promise).rejects.toBeInstanceOf(ImportSourceDnsVerificationError);
+      await expect(promise).rejects.toHaveProperty('reason', IMPORT_DNS_RESOLVER_UNAVAILABLE);
+    });
+
+    it('throws IMPORT_DNS_RESOLVER_UNAVAILABLE on DoH SERVFAIL (Status=2)', async () => {
+      // SERVFAIL is an "the resolver could not answer" signal — treat as unavailable.
+      const resp = buildDohResponse([], 2);
+      fetchStub.resolves(mockFetchResponse(resp.status, resp.body));
+
+      const promise = verifier.verify({
+        sourceId: SOURCE_ID,
+        calendarId: CALENDAR_ID,
+        sourceUrl: SOURCE_URL,
+      });
+
+      await expect(promise).rejects.toBeInstanceOf(ImportSourceDnsVerificationError);
+      await expect(promise).rejects.toHaveProperty('reason', IMPORT_DNS_RESOLVER_UNAVAILABLE);
     });
 
     it('fails closed when only one resolver errors (other succeeds)', async () => {
@@ -241,19 +259,84 @@ describe('DnsVerifier', () => {
       fetchStub.onCall(0).resolves(mockFetchResponse(good.status, good.body));
       fetchStub.onCall(1).rejects(new Error('timeout'));
 
-      try {
-        await verifier.verify({
-          sourceId: SOURCE_ID,
-          calendarId: CALENDAR_ID,
-          sourceUrl: SOURCE_URL,
-        });
-        throw new Error('Expected to throw');
-      }
-      catch (err) {
-        expect(err).toBeInstanceOf(ImportSourceDnsVerificationError);
-        const e = err as ImportSourceDnsVerificationError;
-        expect(e.reason).toBe(IMPORT_DNS_RESOLVER_UNAVAILABLE);
-      }
+      const promise = verifier.verify({
+        sourceId: SOURCE_ID,
+        calendarId: CALENDAR_ID,
+        sourceUrl: SOURCE_URL,
+      });
+
+      await expect(promise).rejects.toBeInstanceOf(ImportSourceDnsVerificationError);
+      await expect(promise).rejects.toHaveProperty('reason', IMPORT_DNS_RESOLVER_UNAVAILABLE);
+    });
+  });
+
+  describe('resolver URL validation (SSRF defense)', () => {
+    it('rejects an http:// resolver URL without attempting to fetch', async () => {
+      stubResolvers(['http://1.1.1.1/dns-query', 'https://8.8.8.8/dns-query']);
+
+      const freshVerifier = new DnsVerifier(fetchStub);
+      const promise = freshVerifier.verify({
+        sourceId: SOURCE_ID,
+        calendarId: CALENDAR_ID,
+        sourceUrl: SOURCE_URL,
+      });
+
+      await expect(promise).rejects.toBeInstanceOf(ImportSourceDnsVerificationError);
+      await expect(promise).rejects.toHaveProperty('reason', IMPORT_DNS_RESOLVER_UNAVAILABLE);
+      expect(fetchStub.called).toBe(false);
+    });
+
+    it('rejects a resolver URL whose hostname is a private IP (169.254.169.254 cloud metadata)', async () => {
+      stubResolvers(['https://169.254.169.254/dns-query', 'https://8.8.8.8/dns-query']);
+
+      const freshVerifier = new DnsVerifier(fetchStub);
+      const promise = freshVerifier.verify({
+        sourceId: SOURCE_ID,
+        calendarId: CALENDAR_ID,
+        sourceUrl: SOURCE_URL,
+      });
+
+      await expect(promise).rejects.toBeInstanceOf(ImportSourceDnsVerificationError);
+      await expect(promise).rejects.toHaveProperty('reason', IMPORT_DNS_RESOLVER_UNAVAILABLE);
+      expect(fetchStub.called).toBe(false);
+    });
+
+    it('rejects a resolver URL whose hostname is a loopback address', async () => {
+      stubResolvers(['https://127.0.0.1/dns-query', 'https://8.8.8.8/dns-query']);
+
+      const freshVerifier = new DnsVerifier(fetchStub);
+      const promise = freshVerifier.verify({
+        sourceId: SOURCE_ID,
+        calendarId: CALENDAR_ID,
+        sourceUrl: SOURCE_URL,
+      });
+
+      await expect(promise).rejects.toBeInstanceOf(ImportSourceDnsVerificationError);
+      await expect(promise).rejects.toHaveProperty('reason', IMPORT_DNS_RESOLVER_UNAVAILABLE);
+      expect(fetchStub.called).toBe(false);
+    });
+
+    it('accepts the default Cloudflare (1.1.1.1) and Google (8.8.8.8) DoH resolvers', async () => {
+      // No config stub — use the real defaults from config/default.yaml.
+      const resolvers = config.get<string[]>('calendar.import.dohResolvers');
+      expect(resolvers).toEqual([
+        'https://1.1.1.1/dns-query',
+        'https://8.8.8.8/dns-query',
+      ]);
+
+      const record = formatVerificationRecord(SOURCE_ID, CALENDAR_ID);
+      const resp = buildDohResponse([record]);
+      fetchStub.resolves(mockFetchResponse(resp.status, resp.body));
+
+      const result = await verifier.verify({
+        sourceId: SOURCE_ID,
+        calendarId: CALENDAR_ID,
+        sourceUrl: SOURCE_URL,
+      });
+
+      expect(result.verified).toBe(true);
+      // Validation did not block the fetch path — both defaults were accepted.
+      expect(fetchStub.callCount).toBeGreaterThanOrEqual(2);
     });
   });
 
@@ -271,20 +354,14 @@ describe('DnsVerifier', () => {
       it(`${shouldPassPsl ? 'accepts' : 'rejects'} hostname from ${url}`, async () => {
         if (!shouldPassPsl) {
           // Should throw PSL violation WITHOUT calling fetch
-          try {
-            await verifier.verify({
-              sourceId: SOURCE_ID,
-              calendarId: CALENDAR_ID,
-              sourceUrl: url,
-            });
-            throw new Error('Expected PSL violation');
-          }
-          catch (err) {
-            expect(err).toBeInstanceOf(ImportSourceDnsVerificationError);
-            const e = err as ImportSourceDnsVerificationError;
-            expect(e.reason).toBe(IMPORT_DNS_PSL_VIOLATION);
-            expect(fetchStub.called).toBe(false);
-          }
+          const promise = verifier.verify({
+            sourceId: SOURCE_ID,
+            calendarId: CALENDAR_ID,
+            sourceUrl: url,
+          });
+          await expect(promise).rejects.toBeInstanceOf(ImportSourceDnsVerificationError);
+          await expect(promise).rejects.toHaveProperty('reason', IMPORT_DNS_PSL_VIOLATION);
+          expect(fetchStub.called).toBe(false);
         }
         else {
           // For accept cases, stub a successful response to confirm it passes PSL
@@ -309,28 +386,24 @@ describe('DnsVerifier', () => {
       const secretLeak = 'SECRET_RAW_RESOLVER_DATA_xyz123';
       fetchStub.rejects(new Error(secretLeak));
 
-      try {
-        await verifier.verify({
-          sourceId: SOURCE_ID,
-          calendarId: CALENDAR_ID,
-          sourceUrl: SOURCE_URL,
-        });
-        throw new Error('Expected to throw');
-      }
-      catch (err) {
-        expect(err).toBeInstanceOf(ImportSourceDnsVerificationError);
-        const e = err as ImportSourceDnsVerificationError;
-        // Message is exactly the sanitized code, nothing more
-        const sanitized = new Set([
-          IMPORT_DNS_NOT_FOUND,
-          IMPORT_DNS_MISMATCH,
-          IMPORT_DNS_RESOLVER_DISAGREEMENT,
-          IMPORT_DNS_RESOLVER_UNAVAILABLE,
-          IMPORT_DNS_PSL_VIOLATION,
-        ]);
-        expect(sanitized.has(e.message)).toBe(true);
-        expect(e.message).not.toContain(secretLeak);
-      }
+      const promise = verifier.verify({
+        sourceId: SOURCE_ID,
+        calendarId: CALENDAR_ID,
+        sourceUrl: SOURCE_URL,
+      });
+
+      await expect(promise).rejects.toBeInstanceOf(ImportSourceDnsVerificationError);
+      const sanitized = new Set([
+        IMPORT_DNS_NOT_FOUND,
+        IMPORT_DNS_MISMATCH,
+        IMPORT_DNS_RESOLVER_DISAGREEMENT,
+        IMPORT_DNS_RESOLVER_UNAVAILABLE,
+        IMPORT_DNS_PSL_VIOLATION,
+      ]);
+      await expect(promise).rejects.toSatisfy((e: unknown) => {
+        const msg = (e as Error).message;
+        return sanitized.has(msg) && !msg.includes(secretLeak);
+      });
     });
 
     it('queries the expected DoH endpoints configured in calendar.import.dohResolvers', async () => {

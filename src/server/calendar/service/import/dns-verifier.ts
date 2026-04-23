@@ -12,6 +12,7 @@ import {
 } from '@/common/exceptions/import';
 import { formatVerificationRecord } from '@/server/calendar/service/import/hmac';
 import { createLogger } from '@/server/common/helper/logger';
+import { validateUrlNotPrivate } from '@/server/common/helper/ip-validation';
 
 /**
  * DNS TXT ownership verification for ICS import sources.
@@ -149,6 +150,7 @@ function passesPslCheck(hostname: string): boolean {
  */
 export class DnsVerifier {
   private readonly fetchImpl: DohFetch;
+  private validatedResolvers: Promise<string[]> | null = null;
 
   constructor(fetchImpl?: DohFetch) {
     this.fetchImpl = fetchImpl ?? (undiciFetch as unknown as DohFetch);
@@ -180,7 +182,7 @@ export class DnsVerifier {
 
     const recordName = `_pavillion-challenge.${hostname}`;
     const expectedValue = formatVerificationRecord(sourceId, calendarId);
-    const resolvers = this.getResolvers();
+    const resolvers = await this.getResolvers();
 
     // Query each resolver; each resolver is a pass/fail independently.
     // Fail CLOSED: any resolver unavailability → IMPORT_DNS_RESOLVER_UNAVAILABLE.
@@ -240,7 +242,33 @@ export class DnsVerifier {
     throw new ImportSourceDnsVerificationError(IMPORT_DNS_NOT_FOUND);
   }
 
-  private getResolvers(): string[] {
+  private async getResolvers(): Promise<string[]> {
+    if (!this.validatedResolvers) {
+      this.validatedResolvers = this.loadAndValidateResolvers();
+    }
+    try {
+      return await this.validatedResolvers;
+    }
+    catch (err) {
+      // Reset memo so the next verify() retries validation rather than being
+      // permanently poisoned by a transient issue (e.g. DNS blip during the
+      // resolver-hostname lookup). The error itself is already sanitized.
+      this.validatedResolvers = null;
+      throw err;
+    }
+  }
+
+  /**
+   * Loads the configured DoH resolver URLs and validates each against SSRF
+   * protections: https scheme only, and hostnames must not resolve to private,
+   * loopback, link-local, or otherwise-unroutable ranges (defense against a
+   * compromised or misconfigured config pointing at e.g. 169.254.169.254
+   * cloud metadata or internal services).
+   *
+   * Fails CLOSED: any invalid resolver surfaces as IMPORT_DNS_RESOLVER_UNAVAILABLE,
+   * honoring the sanitized error surface (no URLs or hostnames leak to callers).
+   */
+  private async loadAndValidateResolvers(): Promise<string[]> {
     const resolvers = config.get<string[]>('calendar.import.dohResolvers');
     if (!Array.isArray(resolvers) || resolvers.length < 2) {
       // Configuration bug: dual-resolver is a hard requirement. Surface as
@@ -252,6 +280,20 @@ export class DnsVerifier {
       );
       throw new ImportSourceDnsVerificationError(IMPORT_DNS_RESOLVER_UNAVAILABLE);
     }
+
+    for (const resolverUrl of resolvers) {
+      try {
+        await validateUrlNotPrivate(resolverUrl);
+      }
+      catch (err) {
+        logger.warn(
+          { resolverUrl, err: (err as Error).message },
+          'calendar.import.dohResolvers contains an unsafe URL; rejecting (SSRF defense)',
+        );
+        throw new ImportSourceDnsVerificationError(IMPORT_DNS_RESOLVER_UNAVAILABLE);
+      }
+    }
+
     return resolvers;
   }
 
