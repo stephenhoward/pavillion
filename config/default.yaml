@@ -62,6 +62,8 @@ calendar:
     dohResolvers:
       - 'https://1.1.1.1/dns-query'
       - 'https://8.8.8.8/dns-query'
+    # Maximum number of import sources per calendar.
+    maxSourcesPerCalendar: 10
 
 # Moderation configuration
 moderation:

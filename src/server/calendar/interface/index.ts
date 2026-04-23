@@ -20,6 +20,8 @@ import { EventEmitter } from 'events';
 import EventInstanceService, { UpcomingOccurrencesResult } from '../service/event_instance';
 import { DateTime } from 'luxon';
 import SeriesService from '../service/series';
+import ImportSourceService from '../service/import/import_source_service';
+import { ImportSource } from '@/common/model/import_source';
 import CalendarEventInstance from '@/common/model/event_instance';
 import AccountsInterface from '@/server/accounts/interface';
 import EmailInterface from '@/server/email/interface';
@@ -50,6 +52,7 @@ export default class CalendarInterface {
   private widgetConfigService: WidgetConfigService;
   private categoryMappingService: CategoryMappingService;
   private seriesService: SeriesService;
+  private importSourceService: ImportSourceService;
 
   constructor(
     eventBus: EventEmitter,
@@ -66,6 +69,7 @@ export default class CalendarInterface {
     this.widgetConfigService = new WidgetConfigService(this.calendarService);
     this.categoryMappingService = new CategoryMappingService();
     this.seriesService = new SeriesService(this.calendarService, eventBus);
+    this.importSourceService = new ImportSourceService(this.calendarService);
   }
 
   /**
@@ -883,6 +887,55 @@ export default class CalendarInterface {
    */
   async removeRemoteEditorAccess(accountId: string, calendarActorId: string): Promise<boolean> {
     return this.calendarService.removeRemoteCalendarMembership(accountId, calendarActorId);
+  }
+
+  // Import source operations
+
+  /**
+   * List all import sources for a calendar.
+   *
+   * @param account - The requesting account (must own or edit the calendar)
+   * @param calendarId - The calendar UUID
+   * @returns Array of ImportSource models (verification token NOT included)
+   */
+  async listImportSources(account: Account, calendarId: string): Promise<ImportSource[]> {
+    return this.importSourceService.listSources(account, calendarId);
+  }
+
+  /**
+   * Create a new import source for a calendar.
+   *
+   * @param account - The requesting account (must own or edit the calendar)
+   * @param calendarId - The calendar UUID
+   * @param url - The ICS feed URL (HTTPS, non-private, SSRF-checked)
+   * @returns The persisted ImportSource in `verification_state='pending'`
+   */
+  async createImportSource(account: Account, calendarId: string, url: string): Promise<ImportSource> {
+    return this.importSourceService.createSource(account, calendarId, url);
+  }
+
+  /**
+   * Get a single import source by id, scoped to the calendar.
+   *
+   * @param account - The requesting account (must own or edit the calendar)
+   * @param calendarId - The calendar UUID
+   * @param id - The import source UUID
+   * @returns The matching ImportSource model
+   */
+  async getImportSource(account: Account, calendarId: string, id: string): Promise<ImportSource> {
+    return this.importSourceService.getSource(account, calendarId, id);
+  }
+
+  /**
+   * Delete an import source. DB cascade handles import_run rows; event
+   * references are nulled out via ON DELETE SET NULL.
+   *
+   * @param account - The requesting account (must own or edit the calendar)
+   * @param calendarId - The calendar UUID
+   * @param id - The import source UUID
+   */
+  async deleteImportSource(account: Account, calendarId: string, id: string): Promise<void> {
+    return this.importSourceService.deleteSource(account, calendarId, id);
   }
 
 }
