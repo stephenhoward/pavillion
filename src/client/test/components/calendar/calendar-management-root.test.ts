@@ -31,6 +31,7 @@ const mountRootComponent = async (calendarUrlName: string = 'my-calendar', query
       WidgetTab: true,
       ReportsDashboard: true,
       ReportDetail: true,
+      ImportSourcesSection: true,
     },
   });
 
@@ -186,7 +187,7 @@ describe('CalendarManagementRoot', () => {
       expect(wrapper.find('#series-panel').exists()).toBe(false);
     });
 
-    it('shows Editors, Reports, Settings, Widget tabs for owners', async () => {
+    it('shows Editors, Reports, Settings, Import, Widget tabs for owners', async () => {
       const info = makeCalendarInfo('my-calendar', 'owner');
       vi.spyOn(CalendarService.prototype, 'loadCalendarsWithRelationship').mockResolvedValue([info]);
 
@@ -196,8 +197,9 @@ describe('CalendarManagementRoot', () => {
       await flushPromises();
 
       const tabs = wrapper.findAll('[role="tab"]');
-      expect(tabs.length).toBe(4);
+      expect(tabs.length).toBe(5);
       expect(wrapper.find('#editors-tab').exists()).toBe(true);
+      expect(wrapper.find('#import-tab').exists()).toBe(true);
       expect(wrapper.find('#reports-tab').exists()).toBe(true);
       expect(wrapper.find('#settings-tab').exists()).toBe(true);
       expect(wrapper.find('#widget-tab').exists()).toBe(true);

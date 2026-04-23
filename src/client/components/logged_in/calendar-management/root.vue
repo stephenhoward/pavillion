@@ -6,6 +6,7 @@ import { useTabNavigation } from '@/client/composables/useTabNavigation';
 import EditorsTab from './editors.vue';
 import SettingsTab from './settings.vue';
 import WidgetTab from './widget-tab.vue';
+import ImportSourcesSection from './import-sources/ImportSourcesSection.vue';
 import ReportsDashboard from '@/client/components/moderation/reports-dashboard.vue';
 import ReportDetail from '@/client/components/moderation/report-detail.vue';
 import CalendarService from '../../../service/calendar';
@@ -65,7 +66,7 @@ onBeforeMount(async () => {
 const visibleTabs = computed(() => {
   const tabs = ['editors'];
   if (isOwner.value) {
-    tabs.push('reports', 'settings');
+    tabs.push('reports', 'settings', 'import');
   }
   tabs.push('widget');
   return tabs;
@@ -73,7 +74,7 @@ const visibleTabs = computed(() => {
 
 const activateTab = (tab: string) => {
   // Prevent non-owners from activating owner-only tabs
-  if ((tab === 'settings' || tab === 'reports') && !isOwner.value) {
+  if ((tab === 'settings' || tab === 'reports' || tab === 'import') && !isOwner.value) {
     return;
   }
 
@@ -174,6 +175,19 @@ const backToReports = () => {
               {{ t('settings_tab') }}
             </button>
             <button
+              v-if="isOwner"
+              id="import-tab"
+              type="button"
+              role="tab"
+              :aria-selected="state.activeTab === 'import'"
+              aria-controls="import-panel"
+              :tabindex="state.activeTab === 'import' ? 0 : -1"
+              class="calendar-management-root__tab"
+              @click="activateTab('import')"
+            >
+              {{ t('import_tab') }}
+            </button>
+            <button
               id="widget-tab"
               type="button"
               role="tab"
@@ -237,6 +251,17 @@ const backToReports = () => {
           class="calendar-management-root__panel"
         >
           <SettingsTab v-if="isOwner" :calendar-id="calendar.id" />
+        </div>
+
+        <div
+          id="import-panel"
+          role="tabpanel"
+          aria-labelledby="import-tab"
+          :aria-hidden="state.activeTab !== 'import' || !isOwner ? 'true' : 'false'"
+          :hidden="state.activeTab !== 'import' || !isOwner"
+          class="calendar-management-root__panel"
+        >
+          <ImportSourcesSection v-if="isOwner" :calendar-id="calendar.id" />
         </div>
 
         <div
