@@ -23,7 +23,7 @@ const routes: RouteRecordRaw[] = [
     },
   },
   {
-    path: '/widget/:urlName/events/:eventId',
+    path: '/widget/:urlName/events/:eventId/:startTime(\\d{8}-\\d{4})?',
     name: 'widget-event-detail',
     component: EventDetailOverlay,
     beforeEnter: (to) => {

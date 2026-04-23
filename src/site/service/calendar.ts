@@ -1,3 +1,4 @@
+import { DateTime } from 'luxon';
 import { Calendar } from '@/common/model/calendar';
 import ModelService from '@/client/service/models';
 import { useCalendarStore } from '@/client/stores/calendarStore';
@@ -5,6 +6,7 @@ import { useEventInstanceStore } from '@/site/stores/eventInstanceStore';
 import CalendarEventInstance from '@/common/model/event_instance';
 import { CalendarEvent } from '@/common/model/events';
 import { EventSeries } from '@/common/model/event_series';
+import { formatInstanceSlug } from '@/common/utils/instance-slug';
 
 export type SeriesDetail = {
   series: EventSeries;
@@ -83,9 +85,27 @@ export default class CalendarService {
     return eventsByDay;
   }
 
-  async loadEventInstance(instanceId: string): Promise<CalendarEventInstance|null> {
+  /**
+   * Load a single event instance by its parent event id and UTC start time.
+   *
+   * The start time is serialized as a minute-precision slug (`yyyymmdd-hhmm`)
+   * and appended to the nested public route
+   * `/api/public/v1/events/:eventId/instances/:startTime`. The DateTime is
+   * converted to UTC before formatting, so callers may pass a zoned value.
+   *
+   * @param eventId - The parent event id (UUID)
+   * @param startTime - The instance's start time; converted to UTC for the slug
+   * @returns The loaded instance, or `null` if the backend returned 404
+   */
+  async loadEventInstance(
+    eventId: string,
+    startTime: DateTime,
+  ): Promise<CalendarEventInstance | null> {
     try {
-      const instance = await ModelService.getModel(`/api/public/v1/instances/${instanceId}`);
+      const slug = formatInstanceSlug(startTime);
+      const instance = await ModelService.getModel(
+        `/api/public/v1/events/${eventId}/instances/${slug}`,
+      );
       if (instance) {
         const calendarEvent = CalendarEventInstance.fromObject(instance);
         this.eventStore.addEvent(calendarEvent);

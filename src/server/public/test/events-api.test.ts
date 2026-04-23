@@ -421,16 +421,19 @@ describe('Public API - toPublicEventObject shape contract', () => {
   });
 
   describe('getEventInstance', () => {
+    const EVENT_UUID = '11111111-1111-4111-8111-111111111111';
+    const VALID_SLUG = '20260508-1800';
+
     it('strips schedules[], projects media, and computes recurrenceSummary', async () => {
       const event = makeRecurringEventWithMedia();
       const instance = new CalendarEventInstance('inst-1', event, DateTime.now(), null);
-      apiSandbox.stub(publicInterface, 'getEventInstanceById').resolves(instance);
+      apiSandbox.stub(publicInterface, 'findOrMaterializeInstanceWithDetails').resolves(instance);
 
-      router.get('/handler/:id', (req, res) => {
+      router.get('/handler/:eventId/:startTime', (req, res) => {
         routes.getEventInstance(req, res);
       });
 
-      const response = await request(testApp(router)).get('/handler/inst-1');
+      const response = await request(testApp(router)).get(`/handler/${EVENT_UUID}/${VALID_SLUG}`);
 
       expect(response.status).toBe(200);
       assertPublicEventShape(response.body.event);
@@ -440,6 +443,100 @@ describe('Public API - toPublicEventObject shape contract', () => {
         params: { n: 2, days: ['TU'] },
       });
       assertMediaProjection(response.body.event.media);
+    });
+
+    it('returns 404 for a non-UUID eventId (path traversal attempt)', async () => {
+      // Should not call the service at all.
+      const stub = apiSandbox.stub(publicInterface, 'findOrMaterializeInstanceWithDetails');
+
+      router.get('/handler/:eventId/:startTime', (req, res) => {
+        routes.getEventInstance(req, res);
+      });
+
+      const response = await request(testApp(router))
+        .get(`/handler/not-a-uuid/${VALID_SLUG}`);
+
+      expect(response.status).toBe(404);
+      expect(response.body.error).toBe('instance not found');
+      expect(response.body.errorName).toBe('NotFoundError');
+      expect(stub.called).toBe(false);
+    });
+
+    it('returns 404 for an unparseable slug', async () => {
+      const stub = apiSandbox.stub(publicInterface, 'findOrMaterializeInstanceWithDetails');
+
+      router.get('/handler/:eventId/:startTime', (req, res) => {
+        routes.getEventInstance(req, res);
+      });
+
+      const response = await request(testApp(router))
+        .get(`/handler/${EVENT_UUID}/not-a-slug`);
+
+      expect(response.status).toBe(404);
+      expect(response.body.errorName).toBe('NotFoundError');
+      expect(stub.called).toBe(false);
+    });
+
+    it('returns 404 for a legacy UUID-shaped slug (DEC-006 migration guard)', async () => {
+      const stub = apiSandbox.stub(publicInterface, 'findOrMaterializeInstanceWithDetails');
+
+      router.get('/handler/:eventId/:startTime', (req, res) => {
+        routes.getEventInstance(req, res);
+      });
+
+      const response = await request(testApp(router))
+        .get(`/handler/${EVENT_UUID}/00000000-0000-0000-0000-000000000000`);
+
+      expect(response.status).toBe(404);
+      expect(response.body.errorName).toBe('NotFoundError');
+      expect(stub.called).toBe(false);
+    });
+
+    it('response body contains exactly the allow-listed fields (no internal leakage)', async () => {
+      const event = makeRecurringEventWithMedia();
+      const start = DateTime.utc(2026, 5, 8, 18, 0);
+      const end = start.plus({ hours: 1 });
+      const instance = new CalendarEventInstance('inst-1', event, start, end);
+      instance.isCancelled = false;
+      apiSandbox.stub(publicInterface, 'findOrMaterializeInstanceWithDetails').resolves(instance);
+
+      router.get('/handler/:eventId/:startTime', (req, res) => {
+        routes.getEventInstance(req, res);
+      });
+
+      const response = await request(testApp(router)).get(`/handler/${EVENT_UUID}/${VALID_SLUG}`);
+
+      expect(response.status).toBe(200);
+      // Top-level keys must be a subset of the allow-list. Regression guard
+      // against future additions to CalendarEventInstance.toObject().
+      const allowed = new Set(['id', 'start', 'end', 'isCancelled', 'event']);
+      for (const key of Object.keys(response.body)) {
+        expect(allowed.has(key)).toBe(true);
+      }
+      // calendarId must not leak at the top level.
+      expect(response.body.calendarId).toBeUndefined();
+      // And event is public-shaped (no schedules leak)
+      expect(response.body.event.schedules).toBeUndefined();
+    });
+
+    it('passes the parsed startTime (UTC) through to the service', async () => {
+      const event = new CalendarEvent('event-1', 'cal-id');
+      event.schedules = [];
+      const instance = new CalendarEventInstance('inst-1', event, DateTime.utc(2026, 5, 8, 18, 0), null);
+      const stub = apiSandbox.stub(publicInterface, 'findOrMaterializeInstanceWithDetails').resolves(instance);
+
+      router.get('/handler/:eventId/:startTime', (req, res) => {
+        routes.getEventInstance(req, res);
+      });
+
+      const response = await request(testApp(router)).get(`/handler/${EVENT_UUID}/${VALID_SLUG}`);
+
+      expect(response.status).toBe(200);
+      expect(stub.calledOnce).toBe(true);
+      const [eventIdArg, startArg] = stub.firstCall.args;
+      expect(eventIdArg).toBe(EVENT_UUID);
+      // Slug 20260508-1800 = UTC 2026-05-08T18:00Z
+      expect(startArg.toUTC().toISO()).toBe('2026-05-08T18:00:00.000Z');
     });
   });
 

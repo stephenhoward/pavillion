@@ -180,8 +180,10 @@ test.describe('Public Calendar', () => {
     // Client-side routing does not fire a browser 'load' event (the default for waitForURL), so
     // we only wait for the URL to commit (change) rather than for a full page reload lifecycle.
     const escapedBase = env.baseURL.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    // Verify the URL ends with a yyyymmdd-hhmm slug — proves the new
+    // stable-slug routing is active (legacy UUID hrefs would not match).
     await page.waitForURL(
-      new RegExp(`${escapedBase}(\\/[a-z]{2,8})?\\/view\\/test_calendar\\/events\\/`),
+      new RegExp(`${escapedBase}(\\/[a-z]{2,8})?\\/view\\/test_calendar\\/events\\/[^/]+\\/\\d{8}-\\d{4}$`),
       { timeout: 10000, waitUntil: 'commit' },
     );
 

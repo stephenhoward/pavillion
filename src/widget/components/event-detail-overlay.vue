@@ -14,6 +14,7 @@ import EventImage from '@/site/components/event-image.vue';
 import AddToCalendar from '@/site/components/add-to-calendar.vue';
 import { useRecurrenceText } from '@/site/composables/useRecurrenceText';
 import { URL_PROMPT_VALUES, type UrlPrompt } from '@/common/model/events';
+import { parseInstanceSlug } from '@/common/utils/instance-slug';
 
 const { t } = useTranslation('system');
 const route = useRoute();
@@ -23,6 +24,7 @@ const { localizedContent } = useLocalizedContent();
 
 const calendarId = route.params.urlName;
 const eventId = route.params.eventId;
+const startTimeSlug = route.params.startTime as string | undefined;
 
 const state = reactive({
   err: '',
@@ -114,6 +116,18 @@ onBeforeMount(async () => {
   try {
     state.isLoading = true;
 
+    // Slug-first short-circuit: if the route carries a startTime slug,
+    // validate it before any network call. This mirrors the site
+    // event-instance.vue order so both surfaces share identical flow.
+    let parsedStartTime = null;
+    if (startTimeSlug) {
+      parsedStartTime = parseInstanceSlug(startTimeSlug);
+      if (!parsedStartTime) {
+        state.notFound = true;
+        return;
+      }
+    }
+
     state.calendar = await calendarService.getCalendarByUrlName(calendarId as string);
 
     if (!state.calendar) {
@@ -121,21 +135,34 @@ onBeforeMount(async () => {
       return;
     }
 
-    // Widget routes carry only eventId (not instanceId), so list the
-    // calendar's instances and pick the first one whose event matches.
-    // Listing events omit some detail fields (full location content, etc.)
-    // so we refetch that single instance to get the full detail shape
-    // used by the detail template.
-    const events = await calendarService.loadCalendarEvents(calendarId as string);
-    const match = events.find((e: any) => e.event.id === eventId);
-
-    if (!match) {
-      state.notFound = true;
-      return;
+    if (parsedStartTime) {
+      // Fetch the occurrence directly by (eventId, startTime) via the site
+      // service — a single request that returns the full detail shape the
+      // template expects and updates the event-instance store.
+      const instance = await calendarService.loadEventInstance(
+        eventId as string,
+        parsedStartTime,
+      );
+      if (!instance) {
+        state.notFound = true;
+        return;
+      }
+      state.instance = instance;
     }
+    else {
+      // Fallback path (legacy embeds without a slug): list calendar events
+      // and pick the first one whose event id matches. The list response
+      // already carries the fields the overlay needs, so no second detail
+      // fetch is required here.
+      const events = await calendarService.loadCalendarEvents(calendarId as string);
+      const match = events.find((e: any) => e.event.id === eventId);
 
-    const fullInstance = await calendarService.loadEventInstance(match.id);
-    state.instance = fullInstance ?? match;
+      if (!match) {
+        state.notFound = true;
+        return;
+      }
+      state.instance = match;
+    }
   }
   catch (error) {
     console.error('Error loading event data:', error);

@@ -12,6 +12,7 @@ import {
   reportSubmissionByEmail,
   reportVerificationByIp,
   reportSubmissionByAccount,
+  publicEventInstanceByIp,
 } from '../rate-limiters';
 
 describe('rate-limiters', () => {
@@ -80,6 +81,14 @@ describe('rate-limiters', () => {
       expect(windowMs).toBe(3600000); // 1 hour
     });
 
+    it('should use correct config values for public event instance by IP', () => {
+      const maxRequests = config.get<number>('rateLimit.publicEventInstance.byIp.max');
+      const windowMs = config.get<number>('rateLimit.publicEventInstance.byIp.windowMs');
+
+      expect(maxRequests).toBe(120);
+      expect(windowMs).toBe(900000); // 15 minutes
+    });
+
     it('should check if rate limiting is enabled in config', () => {
       const enabled = config.get<boolean>('rateLimit.enabled');
       // In test environment, rate limiting is disabled
@@ -126,6 +135,11 @@ describe('rate-limiters', () => {
     it('should export reportSubmissionByAccount limiter', () => {
       expect(reportSubmissionByAccount).toBeDefined();
       expect(typeof reportSubmissionByAccount).toBe('function');
+    });
+
+    it('should export publicEventInstanceByIp limiter', () => {
+      expect(publicEventInstanceByIp).toBeDefined();
+      expect(typeof publicEventInstanceByIp).toBe('function');
     });
   });
 
@@ -447,6 +461,23 @@ describe('rate-limiters', () => {
         .post('/report')
         .send({ email: 'test@example.com' });
 
+      expect(response.status).toBe(200);
+
+      if (config.get<boolean>('rateLimit.enabled')) {
+        expect(response.headers['ratelimit-limit']).toBeDefined();
+        expect(response.headers['ratelimit-remaining']).toBeDefined();
+      }
+      else {
+        expect(response.headers['ratelimit-limit']).toBeUndefined();
+      }
+    });
+
+    it('should apply publicEventInstanceByIp limiter to endpoint', async () => {
+      app.get('/instance', publicEventInstanceByIp, (req, res) => {
+        res.json({ success: true });
+      });
+
+      const response = await request(app).get('/instance');
       expect(response.status).toBe(200);
 
       if (config.get<boolean>('rateLimit.enabled')) {

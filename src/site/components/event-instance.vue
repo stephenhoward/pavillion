@@ -15,13 +15,14 @@ import { useLocale } from '@/site/composables/useLocale';
 import { useRecurrenceText } from '@/site/composables/useRecurrenceText';
 import AddToCalendar from './add-to-calendar.vue';
 import { URL_PROMPT_VALUES, type UrlPrompt } from '@/common/model/events';
+import { parseInstanceSlug } from '@/common/utils/instance-slug';
 
 const { t } = useTranslation('system');
 const route = useRoute();
 const { localizedPath } = useLocale();
 const calendarId = route.params.calendar;
-const eventId = route.params.event;
-const instanceId = route.params.instance;
+const eventId = route.params.event as string;
+const startTimeSlug = route.params.startTime as string;
 const showReportModal = ref(false);
 const { localizedContent } = useLocalizedContent();
 const state = reactive({
@@ -166,6 +167,17 @@ const safePrompt = computed<UrlPrompt | null>(() => {
 onBeforeMount(async () => {
   try {
     state.isLoading = true;
+
+    // Validate the start-time slug before making any network calls.
+    // A semantically-invalid slug (malformed, out-of-bounds, or impossible
+    // date) short-circuits to the not-found state so we don't hit the API
+    // with garbage input.
+    const parsedStartTime = parseInstanceSlug(startTimeSlug);
+    if (!parsedStartTime) {
+      state.notFound = true;
+      return;
+    }
+
     // Load calendar by URL name
     state.calendar = await calendarService.getCalendarByUrlName(calendarId);
 
@@ -174,7 +186,7 @@ onBeforeMount(async () => {
       return;
     }
 
-    state.instance = await calendarService.loadEventInstance(instanceId);
+    state.instance = await calendarService.loadEventInstance(eventId, parsedStartTime);
     if (!state.instance) {
       state.notFound = true;
       return;

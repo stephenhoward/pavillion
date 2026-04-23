@@ -128,7 +128,7 @@ async function mountEventCard(
     history: createMemoryHistory(),
     routes: [
       { path: '/view/:calendar', component: { template: '<div />' }, name: 'calendar' },
-      { path: '/view/:calendar/events/:event/:instance', component: { template: '<div />' }, name: 'instance' },
+      { path: '/view/:calendar/events/:event/:startTime(\\d{8}-\\d{4})', component: { template: '<div />' }, name: 'instance' },
     ],
   });
   await router.push('/view/test-calendar');
@@ -206,17 +206,18 @@ describe('EventCard', () => {
       wrapper.unmount();
     });
 
-    it('should wrap title in a link pointing to the event detail page', async () => {
+    it('should wrap title in a link pointing to the event detail page using a timestamp slug', async () => {
       const event = makeEvent({ name: 'My Event' });
       (event as any).id = 'evt-abc';
-      const instance = makeInstance(event, '2026-07-15T19:00:00');
+      // Use a UTC ISO so the slug is deterministic regardless of host timezone.
+      const instance = makeInstance(event, '2026-05-08T18:00:00.000Z');
       (instance as any).id = 'inst-xyz';
       const wrapper = await mountEventCard(instance, 'my-calendar');
 
       const link = wrapper.find('.event-title-link');
       expect(link.exists()).toBe(true);
       const href = link.attributes('href') ?? '';
-      expect(href).toContain('/view/my-calendar/events/evt-abc/inst-xyz');
+      expect(href).toContain('/view/my-calendar/events/evt-abc/20260508-1800');
       wrapper.unmount();
     });
   });

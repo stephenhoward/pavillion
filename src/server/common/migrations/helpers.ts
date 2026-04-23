@@ -93,3 +93,47 @@ export async function createTableIfNotExists(
   }
   await queryInterface.createTable(tableName, attributes, options);
 }
+
+/**
+ * Add an index only if an index with the given name does not already exist on
+ * the table. Mirrors the pattern of createTableIfNotExists and
+ * addColumnIfNotExists so migrations remain safe to re-run against both SQLite
+ * (dev/test) and PostgreSQL (prod).
+ */
+export async function addIndexIfNotExists(
+  queryInterface: QueryInterface,
+  tableName: string,
+  fields: string[],
+  options: Parameters<QueryInterface['addIndex']>[2] & { name: string },
+): Promise<void> {
+  const indexes = await queryInterface.showIndex(tableName) as { name: string }[];
+  if (indexes.some((ix) => ix.name === options.name)) {
+    logger.info(
+      { table: tableName, index: options.name },
+      'Index already exists, skipping creation',
+    );
+    return;
+  }
+  await queryInterface.addIndex(tableName, fields, options);
+}
+
+/**
+ * Remove an index by name only if it exists. Symmetric with
+ * addIndexIfNotExists so migration `down` paths can roll back safely even
+ * when the index was never applied (e.g. partial migration failure).
+ */
+export async function removeIndexIfExists(
+  queryInterface: QueryInterface,
+  tableName: string,
+  indexName: string,
+): Promise<void> {
+  const indexes = await queryInterface.showIndex(tableName) as { name: string }[];
+  if (!indexes.some((ix) => ix.name === indexName)) {
+    logger.info(
+      { table: tableName, index: indexName },
+      'Index does not exist, skipping removal',
+    );
+    return;
+  }
+  await queryInterface.removeIndex(tableName, indexName);
+}

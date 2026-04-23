@@ -35,6 +35,14 @@ jwt:
 session:
   secret: 'development-only-session-secret-do-not-use-in-production'
 
+# Calendar domain configuration
+calendar:
+  # Upper bound on how many event_instance rows a single event may persist.
+  # Protects the lazy-materialization path (findOrMaterializeInstanceWithDetails)
+  # from anonymous-write amplification via repeated miss probes across an
+  # unbounded recurring schedule's occurrences.
+  materializationCap: 1000
+
 # Funding domain configuration
 # In production, ENCRYPTION_KEY must be set via environment variable
 # Generate with: openssl rand -hex 32
@@ -93,6 +101,10 @@ rateLimit:
     byIp:
       windowMs: 900000  # 15 minutes in milliseconds
       max: 300  # 300 requests per IP per 15 minutes (higher for embedded widgets)
+  publicEventInstance:
+    byIp:
+      windowMs: 900000  # 15 minutes in milliseconds
+      max: 120  # 120 requests per IP per 15 minutes (protects lazy instance materialization)
   widgetConfig:
     byAccount:
       windowMs: 900000  # 15 minutes in milliseconds

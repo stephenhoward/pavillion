@@ -71,12 +71,12 @@ describe('MetaTags Helper', () => {
       });
     });
 
-    it('should extract params from /view/calendar/events/eventId/instanceId', () => {
-      const result = parseEventPageParams('/view/my-calendar/events/event-123/instance-456');
+    it('parses a path with a timestamp slug as instanceStartTime', () => {
+      const result = parseEventPageParams('/view/my-calendar/events/event-123/20260508-1800');
       expect(result).toEqual({
         calendarUrlName: 'my-calendar',
         eventId: 'event-123',
-        instanceId: 'instance-456',
+        instanceStartTime: '20260508-1800',
       });
     });
 
@@ -88,13 +88,29 @@ describe('MetaTags Helper', () => {
       });
     });
 
-    it('should extract params from /es/view/calendar/events/eventId/instanceId (locale-prefixed instance)', () => {
-      const result = parseEventPageParams('/es/view/my-calendar/events/event-123/instance-456');
+    it('parses a locale-prefixed path with a timestamp slug', () => {
+      const result = parseEventPageParams('/fr/view/my-calendar/events/event-123/20260508-1800');
       expect(result).toEqual({
         calendarUrlName: 'my-calendar',
         eventId: 'event-123',
-        instanceId: 'instance-456',
+        instanceStartTime: '20260508-1800',
       });
+    });
+
+    it('returns null for paths whose instance segment is not a valid slug', () => {
+      expect(parseEventPageParams('/view/my-calendar/events/event-123/not-a-slug')).toBeNull();
+      // Per DEC-006, UUID instance slugs are no longer valid.
+      expect(parseEventPageParams('/view/my-calendar/events/event-123/00000000-0000-0000-0000-000000000000')).toBeNull();
+    });
+
+    it('rejects over-long calendarUrlName segments', () => {
+      const huge = 'a'.repeat(200);
+      expect(parseEventPageParams(`/view/${huge}/events/event-123`)).toBeNull();
+    });
+
+    it('rejects over-long eventId segments', () => {
+      const huge = 'a'.repeat(100);
+      expect(parseEventPageParams(`/view/my-calendar/events/${huge}`)).toBeNull();
     });
 
     it('should return null for /view/calendar (calendar page)', () => {
@@ -123,6 +139,7 @@ describe('MetaTags Helper', () => {
           getCalendarByName: sandbox.stub(),
           getEventById: sandbox.stub(),
           getEventInstanceById: sandbox.stub(),
+          findOrMaterializeInstanceWithDetails: sandbox.stub(),
         },
       } as unknown as PublicInterfaceHolder;
     }
@@ -147,26 +164,87 @@ describe('MetaTags Helper', () => {
       expect(result!.siteName).toBe('My Calendar');
     });
 
-    it('should return correct MetaTagData for an event instance (uses instance endpoint)', async () => {
+    it('constructs the instance canonical URL from the timestamp slug', async () => {
       const iface = createMockInterface();
       const calendar = createMockCalendar();
       const event = createMockEvent({ mediaId: 'media-uuid-2' });
       const instance = new CalendarEventInstance(
         'instance-uuid-1',
         event,
-        DateTime.fromISO('2026-04-01T10:00:00'),
-        DateTime.fromISO('2026-04-01T12:00:00'),
+        DateTime.fromISO('2026-05-08T18:00:00', { zone: 'utc' }),
+        DateTime.fromISO('2026-05-08T20:00:00', { zone: 'utc' }),
       );
 
       (iface.current!.getCalendarByName as sinon.SinonStub).resolves(calendar);
-      (iface.current!.getEventInstanceById as sinon.SinonStub).resolves(instance);
+      (iface.current!.findOrMaterializeInstanceWithDetails as sinon.SinonStub).resolves(instance);
 
-      const params = { calendarUrlName: 'my-calendar', eventId: 'event-uuid-1', instanceId: 'instance-uuid-1' };
+      const params = {
+        calendarUrlName: 'my-calendar',
+        eventId: 'event-uuid-1',
+        instanceStartTime: '20260508-1800',
+      };
       const result = await buildEventMetaTags(iface, params, 'en', baseUrl);
 
       expect(result).not.toBeNull();
       expect(result!.title).toBe('Test Event');
-      expect(result!.url).toBe('https://example.com/view/my-calendar/events/event-uuid-1/instance-uuid-1');
+      expect(result!.url).toBe('https://example.com/view/my-calendar/events/event-uuid-1/20260508-1800');
+
+      // Verify the interface lookup was performed via findOrMaterializeInstanceWithDetails
+      // with a DateTime derived from the slug.
+      const call = (iface.current!.findOrMaterializeInstanceWithDetails as sinon.SinonStub).getCall(0);
+      expect(call.args[0]).toBe('event-uuid-1');
+      const passedDt = call.args[1] as DateTime;
+      expect(passedDt.toUTC().toISO()).toBe('2026-05-08T18:00:00.000Z');
+    });
+
+    it('constructs the non-instance canonical URL when no slug is present', async () => {
+      const iface = createMockInterface();
+      const calendar = createMockCalendar();
+      const event = createMockEvent();
+
+      (iface.current!.getCalendarByName as sinon.SinonStub).resolves(calendar);
+      (iface.current!.getEventById as sinon.SinonStub).resolves(event);
+
+      const params = { calendarUrlName: 'my-calendar', eventId: 'event-uuid-1' };
+      const result = await buildEventMetaTags(iface, params, 'en', baseUrl);
+
+      expect(result).not.toBeNull();
+      expect(result!.url).toBe('https://example.com/view/my-calendar/events/event-uuid-1');
+    });
+
+    it('returns null when instanceStartTime slug fails to parse', async () => {
+      const iface = createMockInterface();
+      const calendar = createMockCalendar();
+
+      (iface.current!.getCalendarByName as sinon.SinonStub).resolves(calendar);
+
+      // Slug that structurally matches the regex but is semantically invalid
+      // (e.g. month 99). parseInstanceSlug returns null in this case.
+      const params = {
+        calendarUrlName: 'my-calendar',
+        eventId: 'event-uuid-1',
+        instanceStartTime: '20269913-9999',
+      };
+      const result = await buildEventMetaTags(iface, params, 'en', baseUrl);
+
+      expect(result).toBeNull();
+    });
+
+    it('returns null when the materialized instance is not found', async () => {
+      const iface = createMockInterface();
+      const calendar = createMockCalendar();
+
+      (iface.current!.getCalendarByName as sinon.SinonStub).resolves(calendar);
+      (iface.current!.findOrMaterializeInstanceWithDetails as sinon.SinonStub).resolves(null);
+
+      const params = {
+        calendarUrlName: 'my-calendar',
+        eventId: 'event-uuid-1',
+        instanceStartTime: '20260508-1800',
+      };
+      const result = await buildEventMetaTags(iface, params, 'en', baseUrl);
+
+      expect(result).toBeNull();
     });
 
     it('should decode HTML entities before stripping tags', async () => {

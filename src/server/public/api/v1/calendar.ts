@@ -3,7 +3,11 @@ import PublicCalendarInterface from '../../interface';
 import { SeriesNotFoundError } from '@/common/exceptions/series';
 import { logError } from '@/server/common/helper/error-logger';
 import { CalendarEventSchedule } from '@/common/model/events';
+import CalendarEventInstance from '@/common/model/event_instance';
 import { getRecurrenceSummary } from '@/common/utils/recurrence-text';
+import { parseInstanceSlug } from '@/common/utils/instance-slug';
+import { publicEventInstanceByIp } from '@/server/common/middleware/rate-limiters';
+import ExpressHelper from '@/server/common/helper/express';
 
 /**
  * Strips sensitive fields from a defaultEventImage object for public responses.
@@ -71,8 +75,28 @@ function toPublicEventObject(eventObj: Record<string, any>): Record<string, any>
   return publicObj;
 }
 
+/**
+ * Shapes an instance object for public consumption via an explicit
+ * allow-list. Prevents future additions to CalendarEventInstance.toObject()
+ * from silently leaking internal fields (e.g., row UUID, calendarId,
+ * internal flags) through the public surface.
+ *
+ * Allow-listed fields: id, start, end, isCancelled, event (shaped via
+ * toPublicEventObject).
+ */
+function toPublicInstanceObject(instance: CalendarEventInstance): Record<string, any> {
+  const obj = instance.toObject();
+  return {
+    id: obj.id,
+    start: obj.start,
+    end: obj.end,
+    isCancelled: obj.isCancelled,
+    event: toPublicEventObject(obj.event),
+  };
+}
+
 export default class CalendarRoutes {
-  service: PublicCalendarInterface;
+  private service: PublicCalendarInterface;
 
   constructor(internalAPI: PublicCalendarInterface) {
     this.service = internalAPI;
@@ -86,7 +110,11 @@ export default class CalendarRoutes {
     router.get('/calendar/:urlName/series/:seriesUrlName', this.getSeries.bind(this));
     router.get('/calendar/:calendar/events', this.listInstances.bind(this));
     router.get('/events/:id', this.getEvent.bind(this));
-    router.get('/instances/:id', this.getEventInstance.bind(this));
+    router.get(
+      '/events/:eventId/instances/:startTime',
+      publicEventInstanceByIp,
+      this.getEventInstance.bind(this),
+    );
     app.use(routePrefix, router);
   }
 
@@ -353,19 +381,46 @@ export default class CalendarRoutes {
   }
 
   async getEventInstance(req: Request, res: Response) {
-    const instanceId = req.params.id;
-    const instance = await this.service.getEventInstanceById(instanceId);
-    if ( instance ) {
-      const obj = instance.toObject();
-      res.json({
-        ...obj,
-        event: toPublicEventObject(obj.event),
-      });
-    }
-    else {
+    const { eventId, startTime: slug } = req.params;
+
+    // UUID validation on :eventId — reject malformed/path-traversal attempts
+    // before any service call. Responds 404 (not 400) to avoid leaking whether
+    // a particular id format is recognized versus valid-but-unknown.
+    if (!ExpressHelper.isValidUUID(eventId)) {
       res.status(404).json({
         "error": "instance not found",
         errorName: 'NotFoundError',
+      });
+      return;
+    }
+
+    // Slug validation — reject unparseable timestamp slugs, including legacy
+    // UUID-shaped params from the pre-DEC-006 route. parseInstanceSlug returns
+    // null for any non-yyyyMMdd-HHmm structure or out-of-bounds year.
+    const startTime = parseInstanceSlug(slug);
+    if (!startTime) {
+      res.status(404).json({
+        "error": "instance not found",
+        errorName: 'NotFoundError',
+      });
+      return;
+    }
+
+    try {
+      const instance = await this.service.findOrMaterializeInstanceWithDetails(eventId, startTime);
+      if (!instance) {
+        res.status(404).json({
+          "error": "instance not found",
+          errorName: 'NotFoundError',
+        });
+        return;
+      }
+      res.json(toPublicInstanceObject(instance));
+    }
+    catch (error) {
+      logError(error, 'Error in getEventInstance');
+      res.status(500).json({
+        "error": "Failed to retrieve event instance",
       });
     }
   }

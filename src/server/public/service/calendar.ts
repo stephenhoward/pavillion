@@ -130,6 +130,22 @@ export default class PublicCalendarService {
   }
 
   /**
+   * Find an existing event instance by (eventId, startTime), or materialize
+   * it on demand from the event's RRuleSet. Delegates to the calendar
+   * interface; the public domain does not import calendar services directly.
+   *
+   * @param eventId - The owning event ID
+   * @param startTime - Occurrence start datetime (minute precision)
+   * @returns Hydrated CalendarEventInstance or null if not found / invalid
+   */
+  async findOrMaterializeInstanceWithDetails(
+    eventId: string,
+    startTime: DateTime,
+  ): Promise<CalendarEventInstance | null> {
+    return this.calendarInterface.findOrMaterializeInstanceWithDetails(eventId, startTime);
+  }
+
+  /**
    * Validate ISO date format (YYYY-MM-DD)
    */
   private isValidISODate(dateString: string): boolean {

@@ -3,6 +3,7 @@ import { CalendarEvent } from '@/common/model/events';
 import { EventCategory } from '@/common/model/event_category';
 import { EventSeries } from '@/common/model/event_series';
 import { EventEmitter } from 'events';
+import { DateTime } from 'luxon';
 import CalendarEventInstance from '@/common/model/event_instance';
 import CalendarInterface from '@/server/calendar/interface';
 import PublicCalendarService from '@/server/public/service/calendar';
@@ -44,6 +45,18 @@ export default class PublicCalendarInterface {
    */
   async getEventInstanceById(instanceId: string): Promise<CalendarEventInstance|null> {
     return this.publicCalendarService.getEventInstanceById(instanceId);
+  }
+
+  /**
+   * Find or materialize an event instance by (eventId, startTime) for the
+   * public detail page. Delegates to the calendar domain via its interface;
+   * Public domain does not import calendar services directly.
+   */
+  async findOrMaterializeInstanceWithDetails(
+    eventId: string,
+    startTime: DateTime,
+  ): Promise<CalendarEventInstance | null> {
+    return this.publicCalendarService.findOrMaterializeInstanceWithDetails(eventId, startTime);
   }
 
   async listCategoriesForCalendar(calendar: Calendar): Promise<Array<{category: EventCategory, eventCount: number}>> {

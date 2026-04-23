@@ -12,6 +12,7 @@
 
 import PublicCalendarInterface from '@/server/public/interface/index';
 import { DEFAULT_LANGUAGE_CODE, getDefaultEnabledLanguageCodes } from '@/common/i18n/languages';
+import { parseInstanceSlug } from '@/common/utils/instance-slug';
 import { createLogger } from '@/server/common/helper/logger';
 
 const logger = createLogger('meta-tags');
@@ -37,24 +38,35 @@ export interface MetaTagData {
 /**
  * Parsed parameters from a public event page URL.
  */
-interface EventPageParams {
+export interface EventPageParams {
   calendarUrlName: string;
   eventId: string;
-  instanceId?: string;
+  /**
+   * The UTC yyyymmdd-hhmm instance slug when the path addresses a specific
+   * occurrence. See @/common/utils/instance-slug for format details.
+   */
+  instanceStartTime?: string;
 }
 
-/** Regex for public event page paths, with optional locale prefix. */
-const EVENT_PAGE_RE = /^(?:\/[a-z]{2,8})?\/view\/([^/]+)\/events\/([^/]+)(?:\/([^/]+))?$/i;
+/**
+ * Regex for public event page paths, with optional locale prefix.
+ *
+ * Segment length caps defend against pathological URLs reaching the lookup
+ * layer: calendarUrlName capped at 64 chars (matches calendar.url_name column
+ * limit), eventId capped at 36 chars (UUID length). The instance segment,
+ * when present, must match the `yyyymmdd-hhmm` slug shape exactly.
+ */
+const EVENT_PAGE_RE = /^(?:\/[a-z]{2,8})?\/view\/([^/]{1,64})\/events\/([^/]{1,36})(?:\/(\d{8}-\d{4}))?$/i;
 
 /**
  * Parses a public event page URL path into its component parts.
  *
  * Supports paths with or without a locale prefix and with or without
- * an instance ID segment:
+ * a timestamp-slug instance segment:
  *   /view/:calendar/events/:eventId
- *   /view/:calendar/events/:eventId/:instanceId
+ *   /view/:calendar/events/:eventId/:yyyymmdd-hhmm
  *   /fr/view/:calendar/events/:eventId
- *   /fr/view/:calendar/events/:eventId/:instanceId
+ *   /fr/view/:calendar/events/:eventId/:yyyymmdd-hhmm
  *
  * @param path - The URL path to parse (e.g. from req.path)
  * @returns Parsed parameters or null if the path does not match
@@ -71,7 +83,7 @@ export function parseEventPageParams(path: string): EventPageParams | null {
   };
 
   if (match[3]) {
-    result.instanceId = match[3];
+    result.instanceStartTime = match[3];
   }
 
   return result;
@@ -220,8 +232,15 @@ async function buildMetaTagsInternal(
 
   // Fetch event or instance
   let event;
-  if (params.instanceId) {
-    const instance = await iface.getEventInstanceById(params.instanceId);
+  if (params.instanceStartTime) {
+    const startTime = parseInstanceSlug(params.instanceStartTime);
+    if (!startTime) {
+      return null;
+    }
+    const instance = await iface.findOrMaterializeInstanceWithDetails(
+      params.eventId,
+      startTime,
+    );
     if (!instance) {
       return null;
     }
@@ -274,9 +293,9 @@ async function buildMetaTagsInternal(
     image = `${baseUrl}/api/v1/media/${calendar.defaultEventImage.id}`;
   }
 
-  // Build canonical URL
-  const canonicalPath = params.instanceId
-    ? `/view/${params.calendarUrlName}/events/${params.eventId}/${params.instanceId}`
+  // Build canonical URL. DEC-006 reserves /view/ as the public site namespace.
+  const canonicalPath = params.instanceStartTime
+    ? `/view/${params.calendarUrlName}/events/${params.eventId}/${params.instanceStartTime}`
     : `/view/${params.calendarUrlName}/events/${params.eventId}`;
   const url = `${baseUrl}${canonicalPath}`;
 

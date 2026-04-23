@@ -45,17 +45,21 @@ describe('Public API - Schedule + Location data', () => {
     apiSandbox.restore();
   });
 
-  describe('GET /instances/:id - detail endpoint', () => {
+  describe('GET /events/:eventId/instances/:startTime - detail endpoint', () => {
+    // Valid UUID v4 used across detail-route tests.
+    const EVENT_UUID = '11111111-1111-4111-8111-111111111111';
+    const VALID_SLUG = '20260508-1800';
+
     it('should return 404 for non-existent instance', async () => {
-      const instanceStub = apiSandbox.stub(publicInterface, 'getEventInstanceById');
+      const instanceStub = apiSandbox.stub(publicInterface, 'findOrMaterializeInstanceWithDetails');
       instanceStub.resolves(null);
 
-      router.get('/handler/:id', (req, res) => {
+      router.get('/handler/:eventId/:startTime', (req, res) => {
         routes.getEventInstance(req, res);
       });
 
       const response = await request(testApp(router))
-        .get('/handler/nonexistent-id');
+        .get(`/handler/${EVENT_UUID}/${VALID_SLUG}`);
 
       expect(response.status).toBe(404);
       expect(response.body.error).toBe('instance not found');
@@ -71,15 +75,15 @@ describe('Public API - Schedule + Location data', () => {
       event.schedules = [schedule];
 
       const instance = new CalendarEventInstance('inst-1', event, DateTime.now(), null);
-      const instanceStub = apiSandbox.stub(publicInterface, 'getEventInstanceById');
+      const instanceStub = apiSandbox.stub(publicInterface, 'findOrMaterializeInstanceWithDetails');
       instanceStub.resolves(instance);
 
-      router.get('/handler/:id', (req, res) => {
+      router.get('/handler/:eventId/:startTime', (req, res) => {
         routes.getEventInstance(req, res);
       });
 
       const response = await request(testApp(router))
-        .get('/handler/inst-1');
+        .get(`/handler/${EVENT_UUID}/${VALID_SLUG}`);
 
       expect(response.status).toBe(200);
       expect(response.body.id).toBe('inst-1');
@@ -103,15 +107,15 @@ describe('Public API - Schedule + Location data', () => {
       event.locationId = 'loc-1';
 
       const instance = new CalendarEventInstance('inst-1', event, DateTime.now(), null);
-      const instanceStub = apiSandbox.stub(publicInterface, 'getEventInstanceById');
+      const instanceStub = apiSandbox.stub(publicInterface, 'findOrMaterializeInstanceWithDetails');
       instanceStub.resolves(instance);
 
-      router.get('/handler/:id', (req, res) => {
+      router.get('/handler/:eventId/:startTime', (req, res) => {
         routes.getEventInstance(req, res);
       });
 
       const response = await request(testApp(router))
-        .get('/handler/inst-1');
+        .get(`/handler/${EVENT_UUID}/${VALID_SLUG}`);
 
       expect(response.status).toBe(200);
       expect(response.body.event.location).toBeDefined();
@@ -127,15 +131,15 @@ describe('Public API - Schedule + Location data', () => {
       event.schedules = [];
 
       const instance = new CalendarEventInstance('inst-1', event, DateTime.now(), null);
-      const instanceStub = apiSandbox.stub(publicInterface, 'getEventInstanceById');
+      const instanceStub = apiSandbox.stub(publicInterface, 'findOrMaterializeInstanceWithDetails');
       instanceStub.resolves(instance);
 
-      router.get('/handler/:id', (req, res) => {
+      router.get('/handler/:eventId/:startTime', (req, res) => {
         routes.getEventInstance(req, res);
       });
 
       const response = await request(testApp(router))
-        .get('/handler/inst-1');
+        .get(`/handler/${EVENT_UUID}/${VALID_SLUG}`);
 
       expect(response.status).toBe(200);
       // schedules[] and recurrenceText must not appear on the public shape

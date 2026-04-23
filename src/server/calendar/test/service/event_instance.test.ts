@@ -174,6 +174,57 @@ describe('EventInstanceService.generateInstances', () => {
     expect(instanceStarts).not.toContain(excludedISO);
   });
 
+  describe('minute-truncation invariant', () => {
+    // The public instance slug (yyyymmdd-hhmm) and the cache-hit lookup in
+    // findOrMaterializeInstanceWithDetails both rely on every stored
+    // event_instance.start_time being minute-precise. Generation is the
+    // single point where instance start timestamps are first materialized,
+    // so this is the guard site. See migration 0025 and spec
+    // @docs/superpowers/specs/2026-04-22-instance-timestamp-slug-design.md.
+
+    it('truncates generated non-recurring instance start_time to minute precision', () => {
+      const start = DateTime.fromISO('2026-04-10T10:00:42.123', { zone: 'utc' });
+      const endTime = DateTime.fromISO('2026-04-10T12:00:00', { zone: 'utc' });
+
+      const event = createEvent([
+        createSchedule({ startDate: start, eventEndTime: endTime }),
+      ]);
+
+      const instances = (service as any).generateInstances(event, new Date('2026-04-01T00:00:00Z'));
+
+      expect(instances).toHaveLength(1);
+      expect(instances[0].start.second).toBe(0);
+      expect(instances[0].start.millisecond).toBe(0);
+    });
+
+    it('truncates every generated recurring instance start_time to minute precision', () => {
+      // Sub-minute precision on dtstart would normally be inherited by every
+      // rrule expansion. Truncation at generation time ensures stored rows
+      // always satisfy the (event_id, start_time) equality lookup.
+      const start = DateTime.fromISO('2026-04-10T09:00:17.500', { zone: 'utc' });
+      const endTime = DateTime.fromISO('2026-04-10T10:00:17.500', { zone: 'utc' });
+      const recurrenceEnd = DateTime.fromISO('2026-05-10T09:00:00', { zone: 'utc' });
+
+      const event = createEvent([
+        createSchedule({
+          startDate: start,
+          endDate: recurrenceEnd,
+          eventEndTime: endTime,
+          frequency: EventFrequency.WEEKLY,
+          interval: 1,
+        }),
+      ]);
+
+      const instances = (service as any).generateInstances(event, new Date('2026-04-01T00:00:00Z'));
+
+      expect(instances.length).toBeGreaterThanOrEqual(2);
+      for (const instance of instances) {
+        expect(instance.start.second).toBe(0);
+        expect(instance.start.millisecond).toBe(0);
+      }
+    });
+  });
+
   describe('byDay parsing', () => {
     // Monthly "first Monday of the month" — the canonical bug case.
     // Sept 2025 first Monday is the 1st; Oct is the 6th; Nov is the 3rd.
@@ -1178,5 +1229,407 @@ describe('EventInstanceService.cancelOccurrenceByDate / restoreOccurrenceByDate'
         service.restoreOccurrenceByDate(makeAccount(), EVENT_ID, MATCHING_START),
       ).rejects.toMatchObject({ name: 'EventNotFoundError' });
     });
+  });
+});
+
+/**
+ * Tests for EventInstanceService.findOrMaterializeInstanceWithDetails.
+ *
+ * The method composes: a cache-hit fast path on EventInstanceEntity, a slow
+ * path that loads the event, validates against the RRuleSet, enforces a
+ * pre-flight horizon guard and a per-event materialization cap, handles
+ * shown/hidden exclusions, and protects against concurrent-miss races via a
+ * unique-constraint catch.
+ *
+ * These tests stub the Sequelize static calls and the private hydration
+ * helper so the branching logic is exercised without a live database. The
+ * end-to-end race-loser path is covered by the public-API integration suite
+ * (Task 5 in the plan) — a unit stub can only test the mock.
+ */
+describe('EventInstanceService.findOrMaterializeInstanceWithDetails', () => {
+  let service: EventInstanceService;
+  let sandbox: sinon.SinonSandbox;
+
+  const EVENT_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+  const CALENDAR_ID = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+  const INSTANCE_ID = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+
+  // Weekly Monday schedule anchored at a Monday.
+  const SCHEDULE_START = DateTime.fromISO('2026-05-04T10:00:00Z', { zone: 'utc' });
+  // Second Monday — matches the rrule.
+  const MATCHING_START = DateTime.fromISO('2026-05-11T10:00:00Z', { zone: 'utc' });
+  // Thursday same week — NOT on a Monday, will not match.
+  const NON_MATCHING_START = DateTime.fromISO('2026-05-14T10:00:00Z', { zone: 'utc' });
+
+  /**
+   * Build an EventEntity with a weekly-Monday schedule eager-loaded.
+   * Mirrors stubEventWithWeeklyMondaySchedule above but lives in this describe
+   * block so the find-or-materialize suite is self-contained.
+   */
+  function buildEventWithWeeklyMondaySchedule(): EventEntity {
+    const eventEntity = EventEntity.build({
+      id: EVENT_ID,
+      calendar_id: CALENDAR_ID,
+    });
+    const scheduleEntity = EventScheduleEntity.build({
+      id: uuidv4(),
+      event_id: EVENT_ID,
+      timezone: 'UTC',
+      start_date: SCHEDULE_START.toJSDate(),
+      end_date: null,
+      event_end_time: null,
+      frequency: EventFrequency.WEEKLY,
+      interval: 1,
+      count: 0,
+      by_day: 'MO',
+      is_exclusion: false,
+      hide_from_public: false,
+    });
+    eventEntity.setDataValue('schedules', [scheduleEntity] as any);
+    return eventEntity;
+  }
+
+  /**
+   * Build an EventEntity with a weekly-Monday recurring schedule PLUS a
+   * matching shown/hidden exclusion schedule for MATCHING_START.
+   */
+  function buildEventWithExclusion(hideFromPublic: boolean): EventEntity {
+    const eventEntity = EventEntity.build({
+      id: EVENT_ID,
+      calendar_id: CALENDAR_ID,
+    });
+    const baseSchedule = EventScheduleEntity.build({
+      id: uuidv4(),
+      event_id: EVENT_ID,
+      timezone: 'UTC',
+      start_date: SCHEDULE_START.toJSDate(),
+      end_date: null,
+      event_end_time: null,
+      frequency: EventFrequency.WEEKLY,
+      interval: 1,
+      count: 0,
+      by_day: 'MO',
+      is_exclusion: false,
+      hide_from_public: false,
+    });
+    const exclusion = EventScheduleEntity.build({
+      id: uuidv4(),
+      event_id: EVENT_ID,
+      timezone: 'UTC',
+      start_date: MATCHING_START.toJSDate(),
+      end_date: null,
+      event_end_time: null,
+      frequency: null,
+      interval: 0,
+      count: 0,
+      by_day: null,
+      is_exclusion: true,
+      hide_from_public: hideFromPublic,
+    });
+    eventEntity.setDataValue('schedules', [baseSchedule, exclusion] as any);
+    return eventEntity;
+  }
+
+  /**
+   * Build an EventEntity with an unbounded DAILY recurring schedule anchored
+   * well in the past. Used by the pre-flight-horizon test to model a schedule
+   * that would otherwise produce occurrences decades out.
+   */
+  function buildUnboundedDailyEvent(dtstart: DateTime): EventEntity {
+    const eventEntity = EventEntity.build({
+      id: EVENT_ID,
+      calendar_id: CALENDAR_ID,
+    });
+    const schedule = EventScheduleEntity.build({
+      id: uuidv4(),
+      event_id: EVENT_ID,
+      timezone: 'UTC',
+      start_date: dtstart.toJSDate(),
+      end_date: null,
+      event_end_time: null,
+      frequency: EventFrequency.DAILY,
+      interval: 1,
+      count: 0,
+      by_day: null,
+      is_exclusion: false,
+      hide_from_public: false,
+    });
+    eventEntity.setDataValue('schedules', [schedule] as any);
+    return eventEntity;
+  }
+
+  /**
+   * Build a pre-existing instance entity eager-loaded with the event for use
+   * on the cache-hit path.
+   */
+  function buildCachedInstanceEntity(eventEntity: EventEntity, start: DateTime): EventInstanceEntity {
+    const instance = EventInstanceEntity.build({
+      id: INSTANCE_ID,
+      event_id: EVENT_ID,
+      calendar_id: CALENDAR_ID,
+      start_time: start.toJSDate(),
+      end_time: null,
+    });
+    (instance as any).event = eventEntity;
+    return instance;
+  }
+
+  beforeEach(() => {
+    sandbox = sinon.createSandbox();
+    service = new EventInstanceService(new EventEmitter());
+
+    // Neutralize cross-domain side-effects. These paths are covered by the
+    // getEventInstanceWithDetails tests elsewhere; here we want to exercise
+    // only the find-or-materialize branching logic.
+    sandbox.stub(service['categoryService'], 'getEventCategories').resolves([]);
+    sandbox.stub(service as any, 'fetchRemoteActorUriMap').resolves(new Map());
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+  });
+
+  it('returns the hydrated existing row when one already matches (event_id, start_time)', async () => {
+    const eventEntity = buildEventWithWeeklyMondaySchedule();
+    const cached = buildCachedInstanceEntity(eventEntity, MATCHING_START);
+    sandbox.stub(EventInstanceEntity, 'findOne').resolves(cached);
+
+    const result = await service.findOrMaterializeInstanceWithDetails(EVENT_ID, MATCHING_START);
+
+    expect(result).not.toBeNull();
+    expect(result!.id).toBe(INSTANCE_ID);
+    expect(result!.start.toMillis()).toBe(MATCHING_START.toMillis());
+  });
+
+  it('short-circuits RRule validation on cache hit', async () => {
+    // Even if the current schedule would reject the date, a pre-existing row
+    // is authoritative: the RRule-check must not be invoked on the cache-hit
+    // path.
+    const eventEntity = buildEventWithWeeklyMondaySchedule();
+    const cached = buildCachedInstanceEntity(eventEntity, MATCHING_START);
+    sandbox.stub(EventInstanceEntity, 'findOne').resolves(cached);
+    const assertStub = sandbox.stub(service as any, 'assertDateMatchesOccurrence')
+      .throws(new Error('RRule should not be called on cache hit'));
+
+    const result = await service.findOrMaterializeInstanceWithDetails(EVENT_ID, MATCHING_START);
+
+    expect(result).not.toBeNull();
+    expect(result!.id).toBe(INSTANCE_ID);
+    expect(assertStub.called).toBe(false);
+  });
+
+  it('materializes and persists a new row on cache miss when the date matches the RRuleSet', async () => {
+    const eventEntity = buildEventWithWeeklyMondaySchedule();
+    const findOneStub = sandbox.stub(EventInstanceEntity, 'findOne');
+    // First call: cache miss. Second call: post-save re-fetch.
+    findOneStub.onFirstCall().resolves(null);
+    sandbox.stub(EventEntity, 'findByPk').resolves(eventEntity);
+    sandbox.stub(EventInstanceEntity, 'count').resolves(0);
+    const saveStub = sandbox.stub(EventInstanceEntity.prototype, 'save').resolves();
+    const postSaveRow = buildCachedInstanceEntity(eventEntity, MATCHING_START);
+    findOneStub.onSecondCall().resolves(postSaveRow);
+
+    const result = await service.findOrMaterializeInstanceWithDetails(EVENT_ID, MATCHING_START);
+
+    expect(saveStub.calledOnce).toBe(true);
+    expect(result).not.toBeNull();
+    expect(result!.start.toMillis()).toBe(MATCHING_START.toMillis());
+  });
+
+  it('returns null when the start time does not match any occurrence', async () => {
+    const eventEntity = buildEventWithWeeklyMondaySchedule();
+    sandbox.stub(EventInstanceEntity, 'findOne').resolves(null);
+    sandbox.stub(EventEntity, 'findByPk').resolves(eventEntity);
+    const countStub = sandbox.stub(EventInstanceEntity, 'count').resolves(0);
+    const saveStub = sandbox.stub(EventInstanceEntity.prototype, 'save').resolves();
+
+    const result = await service.findOrMaterializeInstanceWithDetails(
+      EVENT_ID,
+      NON_MATCHING_START,
+    );
+
+    expect(result).toBeNull();
+    // Nothing should have been persisted for a non-matching date.
+    expect(countStub.called).toBe(false);
+    expect(saveStub.called).toBe(false);
+  });
+
+  it('returns null when the event does not exist', async () => {
+    sandbox.stub(EventInstanceEntity, 'findOne').resolves(null);
+    sandbox.stub(EventEntity, 'findByPk').resolves(null);
+
+    const result = await service.findOrMaterializeInstanceWithDetails(EVENT_ID, MATCHING_START);
+    expect(result).toBeNull();
+  });
+
+  it('returns null for a hidden-cancelled occurrence (exclusion with hide_from_public=true)', async () => {
+    const eventEntity = buildEventWithExclusion(true);
+    sandbox.stub(EventInstanceEntity, 'findOne').resolves(null);
+    sandbox.stub(EventEntity, 'findByPk').resolves(eventEntity);
+    const countStub = sandbox.stub(EventInstanceEntity, 'count').resolves(0);
+    const saveStub = sandbox.stub(EventInstanceEntity.prototype, 'save').resolves();
+
+    const result = await service.findOrMaterializeInstanceWithDetails(EVENT_ID, MATCHING_START);
+
+    expect(result).toBeNull();
+    // Hidden exclusion must NOT materialize — count/save must not be called.
+    expect(countStub.called).toBe(false);
+    expect(saveStub.called).toBe(false);
+  });
+
+  it('returns a cancelled in-memory instance for a shown-cancelled occurrence without persisting', async () => {
+    const eventEntity = buildEventWithExclusion(false);
+    sandbox.stub(EventInstanceEntity, 'findOne').resolves(null);
+    sandbox.stub(EventEntity, 'findByPk').resolves(eventEntity);
+    const countStub = sandbox.stub(EventInstanceEntity, 'count').resolves(0);
+    const saveStub = sandbox.stub(EventInstanceEntity.prototype, 'save').resolves();
+
+    const result = await service.findOrMaterializeInstanceWithDetails(EVENT_ID, MATCHING_START);
+
+    expect(result).not.toBeNull();
+    expect(result!.isCancelled).toBe(true);
+    expect(result!.start.toMillis()).toBe(MATCHING_START.toMillis());
+    // Shown cancellation must NOT materialize — count/save must not be called.
+    expect(countStub.called).toBe(false);
+    expect(saveStub.called).toBe(false);
+  });
+
+  it('rejects an unbounded-recurring schedule probed far beyond the horizon (pre-flight guard)', async () => {
+    // DAILY schedule with no UNTIL/COUNT starting far in the past. Probing
+    // many years in the future is within DateTime representable bounds but
+    // beyond the unbounded-preflight horizon, so the guard must fire BEFORE
+    // assertDateMatchesOccurrence runs.
+    const eventEntity = buildUnboundedDailyEvent(
+      DateTime.fromISO('2020-01-01T00:00:00Z', { zone: 'utc' }),
+    );
+    sandbox.stub(EventInstanceEntity, 'findOne').resolves(null);
+    sandbox.stub(EventEntity, 'findByPk').resolves(eventEntity);
+    const assertStub = sandbox.stub(service as any, 'assertDateMatchesOccurrence')
+      .throws(new Error('RRule should not be called when pre-flight guard triggers'));
+    const saveStub = sandbox.stub(EventInstanceEntity.prototype, 'save').resolves();
+
+    const farFuture = DateTime.utc().plus({ years: 20 });
+    const result = await service.findOrMaterializeInstanceWithDetails(EVENT_ID, farFuture);
+
+    expect(result).toBeNull();
+    expect(assertStub.called).toBe(false);
+    expect(saveStub.called).toBe(false);
+  });
+
+  it('lets a probe just outside the unbounded horizon hit the guard, not RRule', async () => {
+    // Boundary case: UNBOUNDED_PREFLIGHT_MONTHS = GENERATION_HORIZON_MONTHS + 12.
+    // A probe a few months past the horizon must short-circuit at the guard.
+    const eventEntity = buildUnboundedDailyEvent(
+      DateTime.fromISO('2020-01-01T00:00:00Z', { zone: 'utc' }),
+    );
+    sandbox.stub(EventInstanceEntity, 'findOne').resolves(null);
+    sandbox.stub(EventEntity, 'findByPk').resolves(eventEntity);
+    const assertStub = sandbox.stub(service as any, 'assertDateMatchesOccurrence')
+      .throws(new Error('RRule should not be called past horizon'));
+
+    const justOutside = DateTime.utc().plus({ months: 30 }); // > 18 months
+    const result = await service.findOrMaterializeInstanceWithDetails(EVENT_ID, justOutside);
+
+    expect(result).toBeNull();
+    expect(assertStub.called).toBe(false);
+  });
+
+  it('lets a probe just inside the unbounded horizon reach RRule validation', async () => {
+    // Boundary case: a probe inside the 18-month window must NOT be filtered
+    // by the pre-flight guard. The RRule-membership step then decides.
+    const eventEntity = buildUnboundedDailyEvent(
+      DateTime.fromISO('2020-01-01T00:00:00Z', { zone: 'utc' }),
+    );
+    sandbox.stub(EventEntity, 'findByPk').resolves(eventEntity);
+    // Stub assertDateMatchesOccurrence so we can prove it WAS reached.
+    const assertStub = sandbox.stub(service as any, 'assertDateMatchesOccurrence')
+      .resolves(undefined);
+    sandbox.stub(EventInstanceEntity, 'count').resolves(0);
+    const saveStub = sandbox.stub(EventInstanceEntity.prototype, 'save').resolves();
+    sandbox.stub(EventInstanceEntity, 'findOne')
+      .onFirstCall().resolves(null)
+      .onSecondCall().resolves(buildCachedInstanceEntity(eventEntity, MATCHING_START));
+
+    const justInside = DateTime.utc().plus({ months: 6 });
+    await service.findOrMaterializeInstanceWithDetails(EVENT_ID, justInside);
+
+    // Guard did NOT fire — the RRule check was reached.
+    expect(assertStub.called).toBe(true);
+    expect(saveStub.called).toBe(true);
+  });
+
+  it('refuses to materialize when the event already has MATERIALIZATION_CAP rows', async () => {
+    const eventEntity = buildEventWithWeeklyMondaySchedule();
+    sandbox.stub(EventInstanceEntity, 'findOne').resolves(null);
+    sandbox.stub(EventEntity, 'findByPk').resolves(eventEntity);
+    // Stub count to exactly the documented default cap (1000). Hardcoded
+    // rather than read from getMaterializationCap() so a regression in the
+    // default value would surface here.
+    sandbox.stub(EventInstanceEntity, 'count').resolves(1000);
+    const saveStub = sandbox.stub(EventInstanceEntity.prototype, 'save').resolves();
+
+    const result = await service.findOrMaterializeInstanceWithDetails(EVENT_ID, MATCHING_START);
+
+    expect(result).toBeNull();
+    expect(saveStub.called).toBe(false);
+  });
+
+  it('returns an instance with end=null when the schedule has no configured event_end_time', async () => {
+    // buildEventWithWeeklyMondaySchedule has event_end_time=null — the happy
+    // path produces an instance whose end is null.
+    const eventEntity = buildEventWithWeeklyMondaySchedule();
+    const findOneStub = sandbox.stub(EventInstanceEntity, 'findOne');
+    findOneStub.onFirstCall().resolves(null);
+    sandbox.stub(EventEntity, 'findByPk').resolves(eventEntity);
+    sandbox.stub(EventInstanceEntity, 'count').resolves(0);
+    sandbox.stub(EventInstanceEntity.prototype, 'save').resolves();
+    const postSave = buildCachedInstanceEntity(eventEntity, MATCHING_START);
+    findOneStub.onSecondCall().resolves(postSave);
+
+    const result = await service.findOrMaterializeInstanceWithDetails(EVENT_ID, MATCHING_START);
+
+    expect(result).not.toBeNull();
+    expect(result!.end).toBeNull();
+  });
+
+  it('recovers from SequelizeUniqueConstraintError on concurrent-miss race by re-fetching the winner', async () => {
+    // Simulate the racer-loser path: cache miss, event loads, RRule matches,
+    // we attempt to save, but the database raises a unique-violation because
+    // the concurrent winner inserted the same (event_id, start_time) row
+    // first. The catch must swallow the error and re-fetch the row.
+    const eventEntity = buildEventWithWeeklyMondaySchedule();
+    const findOneStub = sandbox.stub(EventInstanceEntity, 'findOne');
+    findOneStub.onFirstCall().resolves(null);
+    sandbox.stub(EventEntity, 'findByPk').resolves(eventEntity);
+    sandbox.stub(EventInstanceEntity, 'count').resolves(0);
+
+    const uniqueErr = new Error('duplicate key value violates unique constraint');
+    (uniqueErr as any).name = 'SequelizeUniqueConstraintError';
+    sandbox.stub(EventInstanceEntity.prototype, 'save').rejects(uniqueErr);
+
+    const winnerRow = buildCachedInstanceEntity(eventEntity, MATCHING_START);
+    findOneStub.onSecondCall().resolves(winnerRow);
+
+    const result = await service.findOrMaterializeInstanceWithDetails(EVENT_ID, MATCHING_START);
+
+    expect(result).not.toBeNull();
+    expect(result!.id).toBe(INSTANCE_ID);
+  });
+
+  it('re-throws non-unique-violation save errors rather than swallowing them', async () => {
+    // Any error from .save() that is NOT a SequelizeUniqueConstraintError
+    // must propagate to the caller — we only want to absorb the known race.
+    const eventEntity = buildEventWithWeeklyMondaySchedule();
+    sandbox.stub(EventInstanceEntity, 'findOne').resolves(null);
+    sandbox.stub(EventEntity, 'findByPk').resolves(eventEntity);
+    sandbox.stub(EventInstanceEntity, 'count').resolves(0);
+
+    const dbErr = new Error('connection refused');
+    (dbErr as any).name = 'SequelizeConnectionError';
+    sandbox.stub(EventInstanceEntity.prototype, 'save').rejects(dbErr);
+
+    await expect(
+      service.findOrMaterializeInstanceWithDetails(EVENT_ID, MATCHING_START),
+    ).rejects.toMatchObject({ name: 'SequelizeConnectionError' });
   });
 });

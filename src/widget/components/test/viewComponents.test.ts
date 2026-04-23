@@ -9,6 +9,7 @@ import WeekView from '../week-view.vue';
 import MonthView from '../month-view.vue';
 import ListView from '../list-view.vue';
 import { usePublicCalendarStore } from '@/site/stores/publicCalendarStore';
+import { useWidgetStore } from '../../stores/widgetStore';
 
 // Initialize i18next for tests
 i18next.init({
@@ -35,7 +36,7 @@ const createMockRouter = () => {
     history: createMemoryHistory(),
     routes: [
       { path: '/widget/:urlName', name: 'widget-calendar', component: { template: '<div></div>' } },
-      { path: '/widget/:urlName/events/:eventId', name: 'widget-event-detail', component: { template: '<div></div>' } },
+      { path: '/widget/:urlName/events/:eventId/:startTime(\\d{8}-\\d{4})?', name: 'widget-event-detail', component: { template: '<div></div>' } },
     ],
   });
 };
@@ -205,6 +206,92 @@ describe('Widget View Components', () => {
       // Should have events list with horizontal scroll
       const eventsList = wrapper.find('.events');
       expect(eventsList.exists()).toBe(true);
+    });
+  });
+
+  describe('openEvent slug navigation', () => {
+    const today = DateTime.now().toISODate()!;
+    // A known instant so we can assert the exact slug. 2026-05-08 18:00 UTC.
+    const fixedStart = DateTime.fromISO('2026-05-08T18:00:00.000Z', { zone: 'utc' });
+    const fixedSlug = '20260508-1800';
+
+    const buildInstance = (start: DateTime) => ({
+      id: 'inst-1',
+      start: {
+        // toLocal used by component grouping for dayKey
+        toLocal: () => ({
+          toISODate: () => today,
+          toLocaleString: () => '10:00 AM',
+        }),
+        // toUTC used by formatInstanceSlug
+        toUTC: () => start.toUTC(),
+        // Luxon passthrough fields needed by formatInstanceSlug
+        toFormat: (fmt: string) => start.toUTC().toFormat(fmt),
+      },
+      event: {
+        id: 'evt-1',
+        content: () => ({ name: 'Test Event' }),
+        media: null,
+        categories: [],
+      },
+    });
+
+    it('WeekView openEvent pushes route params including startTime slug', async () => {
+      const publicStore = usePublicCalendarStore();
+      const widgetStore = useWidgetStore();
+      widgetStore.setCalendarUrlName('mycal');
+
+      publicStore.allEvents = [buildInstance(fixedStart)] as any;
+
+      const pushSpy = vi.spyOn(router, 'push');
+
+      const wrapper = mount(WeekView, {
+        global: {
+          plugins: [[I18NextVue, { i18next }], router],
+        },
+      });
+
+      const eventEl = wrapper.find('.event-item');
+      expect(eventEl.exists()).toBe(true);
+      await eventEl.trigger('click');
+
+      expect(pushSpy).toHaveBeenCalledWith({
+        name: 'widget-event-detail',
+        params: {
+          urlName: 'mycal',
+          eventId: 'evt-1',
+          startTime: fixedSlug,
+        },
+      });
+    });
+
+    it('MonthView openEvent pushes route params including startTime slug', async () => {
+      const publicStore = usePublicCalendarStore();
+      const widgetStore = useWidgetStore();
+      widgetStore.setCalendarUrlName('mycal');
+
+      publicStore.allEvents = [buildInstance(fixedStart)] as any;
+
+      const pushSpy = vi.spyOn(router, 'push');
+
+      const wrapper = mount(MonthView, {
+        global: {
+          plugins: [[I18NextVue, { i18next }], router],
+        },
+      });
+
+      const eventEl = wrapper.find('.event-preview');
+      expect(eventEl.exists()).toBe(true);
+      await eventEl.trigger('click');
+
+      expect(pushSpy).toHaveBeenCalledWith({
+        name: 'widget-event-detail',
+        params: {
+          urlName: 'mycal',
+          eventId: 'evt-1',
+          startTime: fixedSlug,
+        },
+      });
     });
   });
 
