@@ -178,6 +178,39 @@ describe('ImportSourceService', () => {
     });
   });
 
+  describe('issueChallenge', () => {
+    it('POSTs to the verify-issue endpoint and returns the token', async () => {
+      const postStub = sandbox.stub(axios, 'post').resolves({
+        data: { challengeToken: 'test-token-xyz' },
+      });
+
+      const result = await service.issueChallenge(CALENDAR_ID, SOURCE_ID);
+
+      expect(postStub.calledOnce).toBe(true);
+      expect(postStub.firstCall.args[0]).toBe(
+        `/api/v1/calendars/${CALENDAR_ID}/import-sources/${SOURCE_ID}/verify-issue`,
+      );
+      expect(result).toBe('test-token-xyz');
+    });
+
+    it('returns empty string when the server response omits the token', async () => {
+      sandbox.stub(axios, 'post').resolves({ data: {} });
+
+      const result = await service.issueChallenge(CALENDAR_ID, SOURCE_ID);
+      expect(result).toBe('');
+    });
+
+    it('throws ImportSourceNotFoundError when the source is missing', async () => {
+      sandbox.stub(axios, 'post').rejects({
+        response: { data: { errorName: 'ImportSourceNotFoundError' } },
+      });
+
+      await expect(service.issueChallenge(CALENDAR_ID, SOURCE_ID)).rejects.toThrow(
+        ImportSourceNotFoundError,
+      );
+    });
+  });
+
   describe('verifySource', () => {
     it('POSTs to the verify endpoint and deserializes the updated source', async () => {
       const payload = sourcePayload({

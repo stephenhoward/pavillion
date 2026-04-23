@@ -311,18 +311,27 @@ const errorMessageForSync = (err: unknown): string => {
 };
 
 /**
- * Open the DNS challenge modal for a source. The challenge token is a
- * server-side secret not present on the ImportSource model; we pass an
- * empty string until the server surfaces it via a dedicated endpoint.
- * See bead pv-1qcp.3.4 — the modal is intentionally token-tolerant.
- *
- * TODO(pv-1qcp): once the backend exposes a verify-issue endpoint that
- * returns the challenge token, fetch it here and populate
- * `state.challengeToken` before opening the modal.
+ * Open the DNS challenge modal for a source. The challenge token is
+ * owner-only data surfaced by the verify-issue endpoint; we render the
+ * modal immediately with an empty token and replace it in-place once the
+ * server responds so the modal stays responsive while the request is in
+ * flight.
  */
-const openChallengeModal = (source: ImportSource) => {
+const openChallengeModal = async (source: ImportSource) => {
   state.challengeSource = source;
   state.challengeToken = '';
+  try {
+    const token = await service.issueChallenge(props.calendarId, source.id);
+    // Guard against the modal being closed mid-flight.
+    if (state.challengeSource?.id === source.id) {
+      state.challengeToken = token;
+    }
+  }
+  catch (err) {
+    console.error('Failed to load DNS challenge token', err);
+    // Leave token empty; the modal still renders the record name so the
+    // user has something to copy, and the action buttons remain active.
+  }
 };
 
 const closeChallengeModal = () => {

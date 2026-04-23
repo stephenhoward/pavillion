@@ -3,6 +3,7 @@ import type { RequestHandler } from 'express';
 import { createIpRateLimiter } from './rate-limit-by-ip';
 import { createCredentialRateLimiter } from './rate-limit-by-credential';
 import { createAccountRateLimiter } from './rate-limit-by-account';
+import { createParamRateLimiter } from './rate-limit-by-param';
 
 /**
  * Pre-configured rate limiters for specific endpoints.
@@ -197,5 +198,40 @@ export const checkoutSessionByAccount: RequestHandler = isRateLimitEnabled()
     config.get<number>('rateLimit.checkoutSession.byAccount.max'),
     config.get<number>('rateLimit.checkoutSession.byAccount.windowMs'),
     'checkout-session',
+  )
+  : noOpMiddleware;
+
+/**
+ * Import source DNS verification rate limiter, keyed by the source's route
+ * param (`id`). Each import source maps to a single hostname, so capping
+ * per-source throttles DNS-verification load against the source's hostname
+ * while remaining simple and reliable (no DB lookup required mid-request).
+ *
+ * Limits: 3 verify attempts per source per hour (default config).
+ */
+export const importSourceVerifyBySource: RequestHandler = isRateLimitEnabled()
+  ? createParamRateLimiter(
+    config.get<number>('rateLimit.importSource.verifyByHostname.max'),
+    config.get<number>('rateLimit.importSource.verifyByHostname.windowMs'),
+    'import-source-verify',
+    'id',
+  )
+  : noOpMiddleware;
+
+/**
+ * Import source manual-sync rate limiter, keyed by the source id in the URL.
+ * Provides an HTTP-layer cap in addition to the per-source sliding window
+ * enforced inside SyncService (defense in depth: the middleware stops abusive
+ * callers before the DB is touched, while the service-level limiter still
+ * holds when sync runs are invoked from the CLI or event bus).
+ *
+ * Limits: 4 sync attempts per source per hour (default config).
+ */
+export const importSourceSyncBySource: RequestHandler = isRateLimitEnabled()
+  ? createParamRateLimiter(
+    config.get<number>('rateLimit.importSource.syncBySource.max'),
+    config.get<number>('rateLimit.importSource.syncBySource.windowMs'),
+    'import-source-sync',
+    'id',
   )
   : noOpMiddleware;

@@ -169,6 +169,32 @@ export default class ImportSourceService {
   }
 
   /**
+   * Fetch the DNS verification challenge token for an import source. The
+   * token is owner-only data used to render the `pavillion-verify=v1:...`
+   * TXT record the owner must publish. Repeated calls return the same
+   * deterministic token.
+   *
+   * @param calendarId - UUID of the owning calendar
+   * @param id - UUID of the import source to issue a challenge for
+   * @returns The per-source HMAC challenge token
+   */
+  async issueChallenge(calendarId: string, id: string): Promise<string> {
+    const encodedCalendarId = validateAndEncodeId(calendarId, 'Calendar ID');
+    const encodedId = validateAndEncodeId(id, 'Import Source ID');
+
+    try {
+      const response = await axios.post(
+        `/api/v1/calendars/${encodedCalendarId}/import-sources/${encodedId}/verify-issue`,
+      );
+      const data = response.data as { challengeToken?: string };
+      return data.challengeToken ?? '';
+    }
+    catch (error: unknown) {
+      handleApiError(error, errorMap);
+    }
+  }
+
+  /**
    * Trigger a DNS verification attempt for an import source. Returns the
    * updated source reflecting the new verification state.
    *

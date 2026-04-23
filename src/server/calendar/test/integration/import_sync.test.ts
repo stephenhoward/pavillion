@@ -338,6 +338,42 @@ describe('SyncService integration', () => {
   });
 
   // --------------------------------------------------------------------------
+  // Interface-level wiring (verify/sync exposed via CalendarInterface)
+  // --------------------------------------------------------------------------
+
+  describe('CalendarInterface wiring (pv-uffj)', () => {
+    it('issueImportSourceChallenge returns a deterministic HMAC token', async () => {
+      const source = await createVerifiedSource({ url: 'https://wire-issue.example.test/a.ics' });
+
+      const token1 = await calendarInterface.issueImportSourceChallenge(
+        testAccount,
+        testCalendar.id,
+        source.id,
+      );
+      const token2 = await calendarInterface.issueImportSourceChallenge(
+        testAccount,
+        testCalendar.id,
+        source.id,
+      );
+
+      expect(typeof token1).toBe('string');
+      expect(token1.length).toBeGreaterThan(0);
+      expect(token1).toBe(token2);
+
+      // Token is persisted on the entity.
+      const refreshed = await ImportSourceEntity.findByPk(source.id);
+      expect(refreshed?.verification_token).toBe(token1);
+    });
+
+    it('syncImportSource throws ImportSourceNotFoundError when the source is missing', async () => {
+      const missingId = '00000000-0000-4000-8000-000000000000';
+      await expect(
+        calendarInterface.syncImportSource(testAccount, testCalendar.id, missingId),
+      ).rejects.toThrow();
+    });
+  });
+
+  // --------------------------------------------------------------------------
   // ImportRun retention cap
   // --------------------------------------------------------------------------
 

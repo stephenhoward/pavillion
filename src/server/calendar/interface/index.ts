@@ -21,6 +21,7 @@ import EventInstanceService, { UpcomingOccurrencesResult } from '../service/even
 import { DateTime } from 'luxon';
 import SeriesService from '../service/series';
 import ImportSourceService from '../service/import/import_source_service';
+import SyncService, { type SyncResult } from '../service/import/sync';
 import { ImportSource } from '@/common/model/import_source';
 import CalendarEventInstance from '@/common/model/event_instance';
 import AccountsInterface from '@/server/accounts/interface';
@@ -70,6 +71,11 @@ export default class CalendarInterface {
     this.categoryMappingService = new CategoryMappingService();
     this.seriesService = new SeriesService(this.calendarService, eventBus);
     this.importSourceService = new ImportSourceService(this.calendarService);
+    // Wire the SyncService factory lazily: SyncService needs EventService,
+    // and we want a single shared instance so the per-source in-memory
+    // rate limiter has a stable state across invocations.
+    const sharedSyncService = new SyncService({ eventService: this.eventService });
+    this.importSourceService.setSyncServiceFactory(() => sharedSyncService);
   }
 
   /**
@@ -936,6 +942,56 @@ export default class CalendarInterface {
    */
   async deleteImportSource(account: Account, calendarId: string, id: string): Promise<void> {
     return this.importSourceService.deleteSource(account, calendarId, id);
+  }
+
+  /**
+   * Issue the DNS verification challenge token for an import source. The
+   * token is the owner-only secret that must appear in the
+   * `pavillion-verify=v1:{host}:{token}` TXT record.
+   *
+   * @param account - The requesting account (must own or edit the calendar)
+   * @param calendarId - The calendar UUID
+   * @param id - The import source UUID
+   * @returns The opaque verification token
+   */
+  async issueImportSourceChallenge(
+    account: Account,
+    calendarId: string,
+    id: string,
+  ): Promise<string> {
+    return this.importSourceService.issueVerificationChallenge(account, calendarId, id);
+  }
+
+  /**
+   * Run DNS TXT verification for an import source and persist the outcome.
+   *
+   * @param account - The requesting account (must own or edit the calendar)
+   * @param calendarId - The calendar UUID
+   * @param id - The import source UUID
+   * @returns The updated ImportSource model
+   */
+  async verifyImportSource(
+    account: Account,
+    calendarId: string,
+    id: string,
+  ): Promise<ImportSource> {
+    return this.importSourceService.verifySource(account, calendarId, id);
+  }
+
+  /**
+   * Trigger a manual sync run for an import source.
+   *
+   * @param account - The requesting account (must own or edit the calendar)
+   * @param calendarId - The calendar UUID
+   * @param id - The import source UUID
+   * @returns Summary of the sync run
+   */
+  async syncImportSource(
+    account: Account,
+    calendarId: string,
+    id: string,
+  ): Promise<SyncResult> {
+    return this.importSourceService.syncSource(account, calendarId, id);
   }
 
 }

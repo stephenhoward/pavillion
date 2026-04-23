@@ -133,6 +133,13 @@ rateLimit:
     byAccount:
       windowMs: 900000  # 15 minutes in milliseconds
       max: 10  # 10 requests per account per 15 minutes
+  importSource:
+    verifyByHostname:
+      windowMs: 3600000  # 1 hour in milliseconds
+      max: 3  # 3 verify attempts per source hostname per hour
+    syncBySource:
+      windowMs: 3600000  # 1 hour in milliseconds
+      max: 4  # 4 sync attempts per source per hour
 
 # Housekeeping configuration for automated server maintenance
 housekeeping:

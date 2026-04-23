@@ -40,6 +40,7 @@ describe('ImportSourcesSection', () => {
   let deleteSourceMock: ReturnType<typeof vi.fn>;
   let syncSourceMock: ReturnType<typeof vi.fn>;
   let getSourceMock: ReturnType<typeof vi.fn>;
+  let issueChallengeMock: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     listSourcesMock = vi.fn();
@@ -47,12 +48,14 @@ describe('ImportSourcesSection', () => {
     deleteSourceMock = vi.fn();
     syncSourceMock = vi.fn();
     getSourceMock = vi.fn();
+    issueChallengeMock = vi.fn().mockResolvedValue('test-challenge-token');
 
     vi.spyOn(ImportSourceService.prototype, 'listSources').mockImplementation(listSourcesMock);
     vi.spyOn(ImportSourceService.prototype, 'createSource').mockImplementation(createSourceMock);
     vi.spyOn(ImportSourceService.prototype, 'deleteSource').mockImplementation(deleteSourceMock);
     vi.spyOn(ImportSourceService.prototype, 'syncSource').mockImplementation(syncSourceMock);
     vi.spyOn(ImportSourceService.prototype, 'getSource').mockImplementation(getSourceMock);
+    vi.spyOn(ImportSourceService.prototype, 'issueChallenge').mockImplementation(issueChallengeMock);
   });
 
   afterEach(() => {
@@ -370,6 +373,22 @@ describe('ImportSourcesSection', () => {
       await flushPromises();
 
       expect(wrapper.find('.import-source-row__verify-btn').exists()).toBe(false);
+    });
+
+    it('fetches the challenge token via issueChallenge when Verify is clicked', async () => {
+      const s1 = buildSource('id-1', 'https://example.com/a.ics');
+      s1.verificationState = 'pending';
+      listSourcesMock.mockResolvedValue([s1]);
+
+      const { wrapper } = mountSection();
+      await flushPromises();
+
+      const verifyBtn = wrapper.find('.import-source-row__verify-btn');
+      await verifyBtn.trigger('click');
+      await flushPromises();
+
+      expect(issueChallengeMock).toHaveBeenCalledWith(CALENDAR_ID, 'id-1');
+      expect((wrapper.vm as any).state.challengeToken).toBe('test-challenge-token');
     });
 
     it('opens DNS challenge modal automatically after creating a new source', async () => {

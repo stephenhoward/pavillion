@@ -12,6 +12,9 @@ import { validateUrlNotPrivate } from '@/server/common/helper/ip-validation';
 import { createLogger } from '@/server/common/helper/logger';
 import CalendarService from '@/server/calendar/service/calendar';
 import { generateVerificationToken } from '@/server/calendar/service/import/hmac';
+import { DnsVerifier } from '@/server/calendar/service/import/dns-verifier';
+import type SyncService from '@/server/calendar/service/import/sync';
+import type { SyncResult } from '@/server/calendar/service/import/sync';
 
 const logger = createLogger('calendar.import.source');
 
@@ -46,11 +49,30 @@ const DEFAULT_MAX_SOURCES_PER_CALENDAR = 10;
  * @see bead pv-1qcp.1.4
  */
 class ImportSourceService {
+  private dnsVerifier: DnsVerifier;
+  private syncServiceFactory: (() => SyncService) | null = null;
 
-  constructor(private calendarService?: CalendarService) {
+  constructor(private calendarService?: CalendarService, dnsVerifier?: DnsVerifier) {
     // calendarService is optional so callers in a future wiring pass can
     // inject the shared instance; when absent we fall back to loading the
     // calendar entity directly (mirrors WidgetConfigService).
+    this.dnsVerifier = dnsVerifier ?? new DnsVerifier();
+  }
+
+  /**
+   * Inject the SyncService factory so this service can delegate manual
+   * sync runs without creating a circular import at module load time.
+   * Called by the CalendarInterface wiring pass.
+   */
+  setSyncServiceFactory(factory: () => SyncService): void {
+    this.syncServiceFactory = factory;
+  }
+
+  /**
+   * Allow tests to inject a fake DnsVerifier after construction.
+   */
+  setDnsVerifier(verifier: DnsVerifier): void {
+    this.dnsVerifier = verifier;
   }
 
   /**
@@ -166,6 +188,141 @@ class ImportSourceService {
     await entity.destroy();
 
     logger.info({ calendarId, importSourceId: id }, 'Deleted import source');
+  }
+
+  /**
+   * Issue (or re-issue) the DNS verification challenge for a source.
+   *
+   * Returns the opaque HMAC token that the source-owning administrator
+   * must publish in a `_pavillion-challenge.{hostname}` TXT record. The
+   * token is deterministic per (sourceId, calendarId), so repeated calls
+   * return the same value — which is safe because the token alone is
+   * useless without also controlling the source's hostname DNS.
+   *
+   * @param account - The requesting account (must own or edit the calendar)
+   * @param calendarId - The calendar UUID
+   * @param id - The import source UUID
+   * @returns The verification token (owner-facing, not persisted on the
+   *          returned model and not leaked via list/read responses)
+   * @throws CalendarNotFoundError, CalendarEditorPermissionError,
+   *         ImportSourceNotFoundError
+   */
+  async issueVerificationChallenge(
+    account: Account,
+    calendarId: string,
+    id: string,
+  ): Promise<string> {
+    await this.assertEditorAccess(account, calendarId);
+
+    const entity = await ImportSourceEntity.findOne({
+      where: { id, calendar_id: calendarId },
+    });
+    if (!entity) {
+      throw new ImportSourceNotFoundError();
+    }
+
+    // Derive token deterministically. Always re-derive (rather than relying
+    // on a stored value) so callers receive the current HMAC output if the
+    // instance secret is ever rotated — stored column is authoritative only
+    // for the DNS verifier, which recomputes via formatVerificationRecord.
+    const token = generateVerificationToken(id, calendarId);
+
+    // Persist on the entity so a later verification + token inspection path
+    // can compare. Also bump state to 'pending' if it's still 'unverified'
+    // so the admin UI reflects that a challenge has been issued.
+    entity.verification_token = token;
+    if (entity.verification_state === 'unverified') {
+      entity.verification_state = 'pending';
+    }
+    await entity.save();
+
+    return token;
+  }
+
+  /**
+   * Run DNS TXT verification for an import source and persist the outcome.
+   *
+   * On success the entity's verification_state transitions to 'verified',
+   * verified_at is set to now, and verification_expires_at is stamped to
+   * now + 90 days. On any failure the entity is left untouched so the
+   * caller can retry after fixing DNS.
+   *
+   * @param account - The requesting account (must own or edit the calendar)
+   * @param calendarId - The calendar UUID
+   * @param id - The import source UUID
+   * @returns The updated ImportSource model
+   * @throws CalendarNotFoundError, CalendarEditorPermissionError,
+   *         ImportSourceNotFoundError, ImportSourceDnsVerificationError
+   */
+  async verifySource(
+    account: Account,
+    calendarId: string,
+    id: string,
+  ): Promise<ImportSource> {
+    await this.assertEditorAccess(account, calendarId);
+
+    const entity = await ImportSourceEntity.findOne({
+      where: { id, calendar_id: calendarId },
+    });
+    if (!entity) {
+      throw new ImportSourceNotFoundError();
+    }
+
+    // DnsVerifier.verify throws ImportSourceDnsVerificationError on any
+    // non-success; let it propagate to the API layer which translates it
+    // to the sanitized HTTP response.
+    const result = await this.dnsVerifier.verify({
+      sourceId: id,
+      calendarId,
+      sourceUrl: entity.url,
+    });
+
+    entity.verification_state = 'verified';
+    entity.verified_at = result.verifiedAt;
+    entity.verification_expires_at = result.expiresAt;
+    await entity.save();
+
+    logger.info(
+      { calendarId, importSourceId: id },
+      'Import source DNS verification succeeded',
+    );
+
+    return entity.toModel();
+  }
+
+  /**
+   * Trigger a manual sync run for an import source. The service enforces
+   * editor access and then delegates the full pipeline (fetch → parse →
+   * persist → record ImportRun) to the SyncService orchestrator.
+   *
+   * @param account - The requesting account (must own or edit the calendar)
+   * @param calendarId - The calendar UUID
+   * @param id - The import source UUID
+   * @returns Summary of the sync run
+   * @throws CalendarNotFoundError, CalendarEditorPermissionError,
+   *         ImportSourceNotFoundError, ImportSourceVerifyRateLimitError,
+   *         and any sanitized ImportSource*Error from the pipeline.
+   */
+  async syncSource(
+    account: Account,
+    calendarId: string,
+    id: string,
+  ): Promise<SyncResult> {
+    await this.assertEditorAccess(account, calendarId);
+
+    const entity = await ImportSourceEntity.findOne({
+      where: { id, calendar_id: calendarId },
+    });
+    if (!entity) {
+      throw new ImportSourceNotFoundError();
+    }
+
+    if (!this.syncServiceFactory) {
+      throw new Error('ImportSourceService.syncSource called before SyncService factory wiring');
+    }
+    const syncService = this.syncServiceFactory();
+
+    return syncService.syncSource({ account, importSourceId: id });
   }
 
   // ---------------------------------------------------------------------

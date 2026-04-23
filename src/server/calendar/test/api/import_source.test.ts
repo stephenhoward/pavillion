@@ -9,7 +9,15 @@ import { ImportSource } from '@/common/model/import_source';
 import { ValidationError } from '@/common/exceptions/base';
 import { CalendarNotFoundError } from '@/common/exceptions/calendar';
 import { CalendarEditorPermissionError } from '@/common/exceptions/editor';
-import { ImportSourceNotFoundError } from '@/common/exceptions/import';
+import {
+  ImportSourceNotFoundError,
+  ImportSourceDnsVerificationError,
+  ImportSourceVerifyRateLimitError,
+  ImportSourceFetchError,
+  ImportSourceSsrfBlockedError,
+  ImportSourceParseError,
+  IMPORT_DNS_NOT_FOUND,
+} from '@/common/exceptions/import';
 import { testApp } from '@/server/common/test/lib/express';
 import ImportSourceRoutes from '@/server/calendar/api/v1/import_source';
 import CalendarInterface from '@/server/calendar/interface';
@@ -37,6 +45,9 @@ describe('ImportSourceRoutes', () => {
       createImportSource: sandbox.stub(),
       getImportSource: sandbox.stub(),
       deleteImportSource: sandbox.stub(),
+      issueImportSourceChallenge: sandbox.stub(),
+      verifyImportSource: sandbox.stub(),
+      syncImportSource: sandbox.stub(),
     } as any;
 
     routes = new ImportSourceRoutes(mockInterface);
@@ -294,8 +305,64 @@ describe('ImportSourceRoutes', () => {
     });
   });
 
-  describe('verify/sync placeholders (TODO: pv-1qcp.1.9 / 2.4)', () => {
-    it('POST .../verify returns 501 with a TODO marker', async () => {
+  describe('POST /calendars/:calendarId/import-sources/:id/verify-issue', () => {
+    it('returns the challenge token on success', async () => {
+      const stub = mockInterface.issueImportSourceChallenge as sinon.SinonStub;
+      stub.resolves('test-token-abc');
+
+      router.post('/handler', (req, res) => {
+        attachAccount(req);
+        req.params.calendarId = CALENDAR_ID;
+        req.params.id = SOURCE_ID;
+        routes.issueChallenge(req, res);
+      });
+
+      const response = await request(testApp(router)).post('/handler');
+
+      expect(response.status).toBe(200);
+      expect(response.body.challengeToken).toBe('test-token-abc');
+    });
+
+    it('returns 404 when the source is missing', async () => {
+      const stub = mockInterface.issueImportSourceChallenge as sinon.SinonStub;
+      stub.rejects(new ImportSourceNotFoundError());
+
+      router.post('/handler', (req, res) => {
+        attachAccount(req);
+        req.params.calendarId = CALENDAR_ID;
+        req.params.id = SOURCE_ID;
+        routes.issueChallenge(req, res);
+      });
+
+      const response = await request(testApp(router)).post('/handler');
+
+      expect(response.status).toBe(404);
+      expect(response.body.errorName).toBe('ImportSourceNotFoundError');
+    });
+
+    it('returns 400 when the source id is invalid', async () => {
+      router.post('/handler', (req, res) => {
+        attachAccount(req);
+        req.params.calendarId = CALENDAR_ID;
+        req.params.id = INVALID_ID;
+        routes.issueChallenge(req, res);
+      });
+
+      const response = await request(testApp(router)).post('/handler');
+
+      expect(response.status).toBe(400);
+      expect(response.body.errorName).toBe('ValidationError');
+    });
+  });
+
+  describe('POST /calendars/:calendarId/import-sources/:id/verify', () => {
+    it('returns the updated source on success', async () => {
+      const verified = makeSource();
+      verified.verificationState = 'verified';
+      verified.verifiedAt = new Date();
+      const stub = mockInterface.verifyImportSource as sinon.SinonStub;
+      stub.resolves(verified);
+
       router.post('/handler', (req, res) => {
         attachAccount(req);
         req.params.calendarId = CALENDAR_ID;
@@ -305,12 +372,77 @@ describe('ImportSourceRoutes', () => {
 
       const response = await request(testApp(router)).post('/handler');
 
-      expect(response.status).toBe(501);
-      expect(response.body.errorName).toBe('NotImplementedError');
-      expect(response.body.todo).toBe('pv-1qcp.1.9');
+      expect(response.status).toBe(200);
+      expect(response.body.verificationState).toBe('verified');
+      expect(response.body.verifiedAt).not.toBeNull();
     });
 
-    it('POST .../sync returns 501 with a TODO marker', async () => {
+    it('maps DNS verification failure to errorName + reason', async () => {
+      const stub = mockInterface.verifyImportSource as sinon.SinonStub;
+      stub.rejects(new ImportSourceDnsVerificationError(IMPORT_DNS_NOT_FOUND));
+
+      router.post('/handler', (req, res) => {
+        attachAccount(req);
+        req.params.calendarId = CALENDAR_ID;
+        req.params.id = SOURCE_ID;
+        routes.verifySource(req, res);
+      });
+
+      const response = await request(testApp(router)).post('/handler');
+
+      expect(response.status).toBe(400);
+      expect(response.body.errorName).toBe('ImportSourceDnsVerificationError');
+      expect(response.body.reason).toBe(IMPORT_DNS_NOT_FOUND);
+    });
+
+    it('maps verify rate limit to 429', async () => {
+      const stub = mockInterface.verifyImportSource as sinon.SinonStub;
+      stub.rejects(new ImportSourceVerifyRateLimitError());
+
+      router.post('/handler', (req, res) => {
+        attachAccount(req);
+        req.params.calendarId = CALENDAR_ID;
+        req.params.id = SOURCE_ID;
+        routes.verifySource(req, res);
+      });
+
+      const response = await request(testApp(router)).post('/handler');
+
+      expect(response.status).toBe(429);
+      expect(response.body.errorName).toBe('ImportSourceVerifyRateLimitError');
+    });
+
+    it('maps ImportSourceNotFound to 404', async () => {
+      const stub = mockInterface.verifyImportSource as sinon.SinonStub;
+      stub.rejects(new ImportSourceNotFoundError());
+
+      router.post('/handler', (req, res) => {
+        attachAccount(req);
+        req.params.calendarId = CALENDAR_ID;
+        req.params.id = SOURCE_ID;
+        routes.verifySource(req, res);
+      });
+
+      const response = await request(testApp(router)).post('/handler');
+
+      expect(response.status).toBe(404);
+      expect(response.body.errorName).toBe('ImportSourceNotFoundError');
+    });
+  });
+
+  describe('POST /calendars/:calendarId/import-sources/:id/sync', () => {
+    it('returns the ImportRunSummary on success', async () => {
+      const stub = mockInterface.syncImportSource as sinon.SinonStub;
+      stub.resolves({
+        runId: 'run-id-123',
+        outcome: 'success',
+        eventsCreated: 2,
+        eventsUpdated: 1,
+        eventsSkippedLocallyEdited: 0,
+        eventsDisappeared: 0,
+        errorMessage: null,
+      });
+
       router.post('/handler', (req, res) => {
         attachAccount(req);
         req.params.calendarId = CALENDAR_ID;
@@ -320,9 +452,101 @@ describe('ImportSourceRoutes', () => {
 
       const response = await request(testApp(router)).post('/handler');
 
-      expect(response.status).toBe(501);
-      expect(response.body.errorName).toBe('NotImplementedError');
-      expect(response.body.todo).toBe('pv-1qcp.2.4');
+      expect(response.status).toBe(200);
+      expect(response.body.id).toBe('run-id-123');
+      expect(response.body.importSourceId).toBe(SOURCE_ID);
+      expect(response.body.outcome).toBe('success');
+      expect(response.body.eventsCreated).toBe(2);
+      expect(response.body.eventsUpdated).toBe(1);
+      expect(typeof response.body.startedAt).toBe('string');
+      expect(typeof response.body.finishedAt).toBe('string');
+    });
+
+    it('maps SSRF block to 400 with errorName', async () => {
+      const stub = mockInterface.syncImportSource as sinon.SinonStub;
+      stub.rejects(new ImportSourceSsrfBlockedError());
+
+      router.post('/handler', (req, res) => {
+        attachAccount(req);
+        req.params.calendarId = CALENDAR_ID;
+        req.params.id = SOURCE_ID;
+        routes.syncSource(req, res);
+      });
+
+      const response = await request(testApp(router)).post('/handler');
+
+      expect(response.status).toBe(400);
+      expect(response.body.errorName).toBe('ImportSourceSsrfBlockedError');
+    });
+
+    it('maps fetch error to 502 with errorName', async () => {
+      const stub = mockInterface.syncImportSource as sinon.SinonStub;
+      stub.rejects(new ImportSourceFetchError());
+
+      router.post('/handler', (req, res) => {
+        attachAccount(req);
+        req.params.calendarId = CALENDAR_ID;
+        req.params.id = SOURCE_ID;
+        routes.syncSource(req, res);
+      });
+
+      const response = await request(testApp(router)).post('/handler');
+
+      expect(response.status).toBe(502);
+      expect(response.body.errorName).toBe('ImportSourceFetchError');
+    });
+
+    it('maps parse error to 422 with errorName', async () => {
+      const stub = mockInterface.syncImportSource as sinon.SinonStub;
+      stub.rejects(new ImportSourceParseError());
+
+      router.post('/handler', (req, res) => {
+        attachAccount(req);
+        req.params.calendarId = CALENDAR_ID;
+        req.params.id = SOURCE_ID;
+        routes.syncSource(req, res);
+      });
+
+      const response = await request(testApp(router)).post('/handler');
+
+      expect(response.status).toBe(422);
+      expect(response.body.errorName).toBe('ImportSourceParseError');
+    });
+
+    it('maps sync rate limit to 429', async () => {
+      const stub = mockInterface.syncImportSource as sinon.SinonStub;
+      stub.rejects(new ImportSourceVerifyRateLimitError());
+
+      router.post('/handler', (req, res) => {
+        attachAccount(req);
+        req.params.calendarId = CALENDAR_ID;
+        req.params.id = SOURCE_ID;
+        routes.syncSource(req, res);
+      });
+
+      const response = await request(testApp(router)).post('/handler');
+
+      expect(response.status).toBe(429);
+      expect(response.body.errorName).toBe('ImportSourceVerifyRateLimitError');
+    });
+
+    it('maps not-verified state error to 409', async () => {
+      const notVerified = new Error('IMPORT_SOURCE_NOT_VERIFIED');
+      notVerified.name = 'ImportSourceNotVerifiedError';
+      const stub = mockInterface.syncImportSource as sinon.SinonStub;
+      stub.rejects(notVerified);
+
+      router.post('/handler', (req, res) => {
+        attachAccount(req);
+        req.params.calendarId = CALENDAR_ID;
+        req.params.id = SOURCE_ID;
+        routes.syncSource(req, res);
+      });
+
+      const response = await request(testApp(router)).post('/handler');
+
+      expect(response.status).toBe(409);
+      expect(response.body.errorName).toBe('ImportSourceNotVerifiedError');
     });
   });
 });
