@@ -335,6 +335,64 @@ describe('SyncService integration', () => {
         stub.restore();
       }
     });
+
+    // DOCUMENTED GAP: EventService.createEvent auto-commits EventEntity /
+    // EventContent / EventSchedule writes outside the sync orchestrator's
+    // db.transaction callback. That means when a mid-run createEvent rejects
+    // here, the previously-created event rows on testCalendar survive the
+    // rollback — the origin columns were never stamped (pv-1qcp.5 fix), but
+    // the bare event rows are orphaned on the calendar with no provenance.
+    //
+    // Fixing this requires making EventService transaction-aware (accept a
+    // tx handle and thread it through to EventEntity/EventContent/EventSchedule
+    // writes), which is OUT OF SCOPE for pv-1qcp.5. A follow-up bead
+    // (pv-1qcp.5.1) will flip this to `.only` once EventService accepts tx.
+    it.skip('leaves no orphaned EventEntity rows on the calendar when a mid-run createEvent fails (requires EventService tx plumbing — pv-1qcp.5.1)', async () => {
+      const source = await createVerifiedSource({ url: 'https://feeds.example.test/rollback-orphan.ics' });
+
+      fetcherStub.fetch.resolves({
+        outcome: 'ok',
+        httpStatus: 200,
+        body: Buffer.from('BEGIN:VCALENDAR'),
+        contentHash: 'HASH-ROLLBACK-ORPHAN',
+        etag: undefined,
+        bytesReceived: 1,
+      });
+
+      parseICSFake = () => ({
+        a: makeVEvent({ uid: 'orphan-a@example.test', summary: 'A' }),
+        b: makeVEvent({ uid: 'orphan-b@example.test', summary: 'B' }),
+        c: makeVEvent({ uid: 'orphan-c@example.test', summary: 'C' }),
+      });
+
+      const eventService = (calendarInterface as unknown as {
+        eventService: import('@/server/calendar/service/events').default;
+      }).eventService;
+
+      const realCreateEvent = eventService.createEvent.bind(eventService);
+      const stub = sinon.stub(eventService, 'createEvent');
+      stub.onCall(0).callsFake((...args: unknown[]) => realCreateEvent(...(args as Parameters<typeof realCreateEvent>)));
+      stub.onCall(1).callsFake((...args: unknown[]) => realCreateEvent(...(args as Parameters<typeof realCreateEvent>)));
+      stub.onCall(2).rejects(new Error('simulated mid-run write failure'));
+
+      try {
+        await syncService.syncSource({
+          account: testAccount,
+          importSourceId: source.id,
+        });
+
+        // DOCUMENTED GAP: EventService.createEvent auto-commits; see
+        // pv-1qcp.5.1 follow-up. This assertion will FAIL against the
+        // current implementation.
+        const orphanedEventRows = await EventEntity.findAll({
+          where: { calendar_id: testCalendar.id },
+        });
+        expect(orphanedEventRows).toHaveLength(0);
+      }
+      finally {
+        stub.restore();
+      }
+    });
   });
 
   // --------------------------------------------------------------------------

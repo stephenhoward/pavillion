@@ -43,7 +43,7 @@
 import type { CalendarResponse, VEvent } from 'node-ical';
 import { createRequire } from 'node:module';
 import { DateTime } from 'luxon';
-import { Op } from 'sequelize';
+import { Op, type Transaction } from 'sequelize';
 
 const nodeRequire = createRequire(import.meta.url);
 
@@ -507,7 +507,7 @@ class SyncService {
     account: Account,
     source: ImportSourceEntity,
     mapped: MapperOutput,
-    tx?: unknown,
+    tx?: Transaction,
   ): Promise<CalendarEvent> {
     const params = buildEventParamsForCreate(source, mapped);
     const event = await this.eventService.createEvent(account, params, { source: 'import' });
@@ -532,7 +532,7 @@ class SyncService {
     eventId: string,
     source: ImportSourceEntity,
     mapped: MapperOutput,
-    tx?: unknown,
+    tx?: Transaction,
   ): Promise<CalendarEvent> {
     const params = buildEventParamsForUpdate(source, mapped);
     const event = await this.eventService.updateEvent(account, eventId, params, { source: 'import' });
@@ -560,7 +560,7 @@ class SyncService {
     eventId: string,
     source: ImportSourceEntity,
     mapped: MapperOutput,
-    tx?: unknown,
+    tx?: Transaction,
   ): Promise<void> {
     await EventEntity.update(
       {
@@ -573,16 +573,13 @@ class SyncService {
         source_last_seen_at: this.nowFn(),
         x_props: mapped.x_props,
       },
-      { where: { id: eventId }, transaction: tx as never },
+      { where: { id: eventId }, transaction: tx },
     );
   }
 
-  private async touchSourceLastSeen(entity: EventEntity, tx: unknown): Promise<void> {
+  private async touchSourceLastSeen(entity: EventEntity, tx?: Transaction): Promise<void> {
     entity.source_last_seen_at = this.nowFn();
-    // `save` on a Sequelize entity accepts transaction option via an object
-    // cast; we keep the type narrow to avoid leaking Sequelize types into
-    // this file's signatures.
-    await entity.save({ transaction: tx as never });
+    await entity.save({ transaction: tx });
   }
 
   /**
