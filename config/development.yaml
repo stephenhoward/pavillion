@@ -45,3 +45,8 @@ media:
 # when Playwright runs many parallel login requests
 rateLimit:
   enabled: false
+
+# Calendar import (dev-only HMAC secret; production must set via env var)
+calendar:
+  import:
+    hmacSecret: 'development-only-hmac-secret-do-not-use-in-production'

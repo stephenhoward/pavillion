@@ -14,6 +14,9 @@ export function validateProductionSecrets(): void {
   const emailHashSecret = config.get<string>('moderation.emailHashSecret');
   const encryptionKey = config.get<string>('funding.encryptionKey');
   const dbPassword = config.has('database.password') ? config.get<string>('database.password') : '';
+  const importHmacSecret = config.has('calendar.import.hmacSecret')
+    ? config.get<string>('calendar.import.hmacSecret')
+    : '';
 
   if (!dbPassword) {
     throw new Error(
@@ -47,6 +50,13 @@ export function validateProductionSecrets(): void {
     throw new Error(
       'ENCRYPTION_KEY must be set in production. Run bin/deploy.sh to generate secure secrets, ' +
       'or set the ENCRYPTION_KEY environment variable to a cryptographically secure value.',
+    );
+  }
+
+  if (!importHmacSecret || importHmacSecret.includes('development-only')) {
+    throw new Error(
+      'CALENDAR_IMPORT_HMAC_SECRET must be set in production. Generate using: openssl rand -base64 32, ' +
+      'or set the CALENDAR_IMPORT_HMAC_SECRET environment variable to a cryptographically secure value.',
     );
   }
 }

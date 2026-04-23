@@ -49,6 +49,20 @@ calendar:
 funding:
   encryptionKey: '0a301f6ce8380d582acb2d5eb29109beeb722423261ae8bdad142210d89fe095'
 
+# Calendar import configuration
+# In production, CALENDAR_IMPORT_HMAC_SECRET must be set via environment variable
+# Used to derive per-source DNS verification tokens.
+calendar:
+  import:
+    # HMAC secret for deriving DNS verification tokens.
+    # Empty in default.yaml; development/test provide non-empty dev-only values.
+    # Production startup refuses to boot with an empty or development-only value.
+    hmacSecret: ''
+    # DoH resolvers used for DNS ownership verification. Both must agree.
+    dohResolvers:
+      - 'https://1.1.1.1/dns-query'
+      - 'https://8.8.8.8/dns-query'
+
 # Moderation configuration
 moderation:
   # HMAC secret for hashing reporter email addresses

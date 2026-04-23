@@ -104,6 +104,8 @@ describe('JWT Externalization and Production Validation', () => {
     configGetStub.withArgs('session.secret').returns('custom-session-secret');
     configGetStub.withArgs('moderation.emailHashSecret').returns('custom-email-hash-secret');
     configGetStub.withArgs('funding.encryptionKey').returns('custom-encryption-key');
+    configHasStub.withArgs('calendar.import.hmacSecret').returns(true);
+    configGetStub.withArgs('calendar.import.hmacSecret').returns('custom-import-hmac-secret');
 
     expect(() => {
       validateProductionSecrets();
@@ -120,6 +122,8 @@ describe('JWT Externalization and Production Validation', () => {
     configGetStub2.withArgs('session.secret').returns('development-only-session-secret-do-not-use-in-production');
     configGetStub2.withArgs('moderation.emailHashSecret').returns('custom-email-hash-secret');
     configGetStub2.withArgs('funding.encryptionKey').returns('custom-encryption-key');
+    configHasStub2.withArgs('calendar.import.hmacSecret').returns(true);
+    configGetStub2.withArgs('calendar.import.hmacSecret').returns('custom-import-hmac-secret');
 
     expect(() => {
       validateProductionSecrets();
@@ -136,6 +140,8 @@ describe('JWT Externalization and Production Validation', () => {
     configGetStub3.withArgs('session.secret').returns('custom-session-secret');
     configGetStub3.withArgs('moderation.emailHashSecret').returns('development-only-email-hash-secret-do-not-use-in-production');
     configGetStub3.withArgs('funding.encryptionKey').returns('custom-encryption-key');
+    configHasStub3.withArgs('calendar.import.hmacSecret').returns(true);
+    configGetStub3.withArgs('calendar.import.hmacSecret').returns('custom-import-hmac-secret');
 
     expect(() => {
       validateProductionSecrets();
@@ -152,6 +158,8 @@ describe('JWT Externalization and Production Validation', () => {
     configGetStub4.withArgs('session.secret').returns('custom-session-secret');
     configGetStub4.withArgs('moderation.emailHashSecret').returns('custom-email-hash-secret');
     configGetStub4.withArgs('funding.encryptionKey').returns('development-only-do-not-use-prod');
+    configHasStub4.withArgs('calendar.import.hmacSecret').returns(true);
+    configGetStub4.withArgs('calendar.import.hmacSecret').returns('custom-import-hmac-secret');
 
     expect(() => {
       validateProductionSecrets();
@@ -168,6 +176,8 @@ describe('JWT Externalization and Production Validation', () => {
     configGetStub.withArgs('session.secret').returns('custom-session-secret-xyzabc123');
     configGetStub.withArgs('moderation.emailHashSecret').returns('custom-email-hash-secret-xyzabc123');
     configGetStub.withArgs('funding.encryptionKey').returns('custom-encryption-key-xyzabc123');
+    configHasStub.withArgs('calendar.import.hmacSecret').returns(true);
+    configGetStub.withArgs('calendar.import.hmacSecret').returns('custom-import-hmac-secret-xyzabc123');
 
     // Should not throw
     expect(() => {
