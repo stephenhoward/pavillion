@@ -50,6 +50,7 @@ import {
 // without performing real DNS lookups. Defaults to resolving safely (no throw).
 vi.mock('@/server/common/helper/ip-validation', () => ({
   validateUrlNotPrivate: vi.fn().mockResolvedValue(true),
+  isPrivateIP: vi.fn().mockReturnValue(false),
 }));
 
 import { validateUrlNotPrivate } from '@/server/common/helper/ip-validation';
