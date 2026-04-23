@@ -15,7 +15,10 @@ import SyncService, {
   SYNC_PER_SOURCE_HOURLY_LIMIT,
   SyncRateLimiter,
 } from '@/server/calendar/service/import/sync';
-import { ImportSourceVerifyRateLimitError } from '@/common/exceptions/import';
+import {
+  ImportSourceNotFoundError,
+  ImportSourceVerifyRateLimitError,
+} from '@/common/exceptions/import';
 import AccountService from '@/server/accounts/service/account';
 import ConfigurationInterface from '@/server/configuration/interface';
 import SetupInterface from '@/server/setup/interface';
@@ -427,7 +430,7 @@ describe('SyncService integration', () => {
       const missingId = '00000000-0000-4000-8000-000000000000';
       await expect(
         calendarInterface.syncImportSource(testAccount, testCalendar.id, missingId),
-      ).rejects.toThrow();
+      ).rejects.toBeInstanceOf(ImportSourceNotFoundError);
     });
   });
 

@@ -428,6 +428,40 @@ describe('ImportSourceRoutes', () => {
       expect(response.status).toBe(404);
       expect(response.body.errorName).toBe('ImportSourceNotFoundError');
     });
+
+    it('maps SSRF block to 400 with errorName', async () => {
+      const stub = mockInterface.verifyImportSource as sinon.SinonStub;
+      stub.rejects(new ImportSourceSsrfBlockedError());
+
+      router.post('/handler', (req, res) => {
+        attachAccount(req);
+        req.params.calendarId = CALENDAR_ID;
+        req.params.id = SOURCE_ID;
+        routes.verifySource(req, res);
+      });
+
+      const response = await request(testApp(router)).post('/handler');
+
+      expect(response.status).toBe(400);
+      expect(response.body.errorName).toBe('ImportSourceSsrfBlockedError');
+    });
+
+    it('maps fetch error to 502 with errorName', async () => {
+      const stub = mockInterface.verifyImportSource as sinon.SinonStub;
+      stub.rejects(new ImportSourceFetchError());
+
+      router.post('/handler', (req, res) => {
+        attachAccount(req);
+        req.params.calendarId = CALENDAR_ID;
+        req.params.id = SOURCE_ID;
+        routes.verifySource(req, res);
+      });
+
+      const response = await request(testApp(router)).post('/handler');
+
+      expect(response.status).toBe(502);
+      expect(response.body.errorName).toBe('ImportSourceFetchError');
+    });
   });
 
   describe('POST /calendars/:calendarId/import-sources/:id/sync', () => {

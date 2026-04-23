@@ -15,11 +15,18 @@ import { ImportSource } from '@/common/model/import_source';
 import { ValidationError } from '@/common/exceptions/base';
 import { CalendarNotFoundError } from '@/common/exceptions/calendar';
 import { CalendarEditorPermissionError } from '@/common/exceptions/editor';
-import { ImportSourceNotFoundError } from '@/common/exceptions/import';
+import {
+  ImportSourceNotFoundError,
+  ImportSourceDnsVerificationError,
+  IMPORT_DNS_NOT_FOUND,
+} from '@/common/exceptions/import';
 import { ImportSourceEntity } from '@/server/calendar/entity/import_source';
 import ImportSourceService from '@/server/calendar/service/import/import_source_service';
 import CalendarService from '@/server/calendar/service/calendar';
 import { generateVerificationToken } from '@/server/calendar/service/import/hmac';
+import type { DnsVerifier } from '@/server/calendar/service/import/dns-verifier';
+import type SyncService from '@/server/calendar/service/import/sync';
+import type { SyncResult } from '@/server/calendar/service/import/sync';
 
 /**
  * Unit tests for ImportSourceService (pv-1qcp.1.4).
@@ -297,6 +304,239 @@ describe('ImportSourceService', () => {
 
       await expect(
         service.deleteSource(account, CAL_ID, SOURCE_ID),
+      ).rejects.toBeInstanceOf(CalendarEditorPermissionError);
+    });
+  });
+
+  // --------------------------------------------------------------------
+  // issueVerificationChallenge
+  // --------------------------------------------------------------------
+
+  describe('issueVerificationChallenge', () => {
+    /**
+     * Build a fake ImportSourceEntity shim with a working `save()` spy and
+     * the fields the service mutates. Mirrors the pattern used by createSource
+     * tests so we never touch a real DB.
+     */
+    function fakeSourceEntity(overrides: Partial<ImportSourceEntity> = {}): ImportSourceEntity {
+      return {
+        id: SOURCE_ID,
+        calendar_id: CAL_ID,
+        url: VALID_URL,
+        verification_state: 'unverified',
+        verification_token: null,
+        save: sandbox.stub().resolves(),
+        ...overrides,
+      } as unknown as ImportSourceEntity;
+    }
+
+    it('transitions unverified → pending and returns the deterministic HMAC token', async () => {
+      const entity = fakeSourceEntity({ verification_state: 'unverified' });
+      sandbox.stub(ImportSourceEntity, 'findOne').resolves(entity);
+
+      const token = await service.issueVerificationChallenge(account, CAL_ID, SOURCE_ID);
+
+      const expected = generateVerificationToken(SOURCE_ID, CAL_ID);
+      expect(token).toBe(expected);
+      // State transition: unverified → pending, and token persisted on entity.
+      expect(entity.verification_state).toBe('pending');
+      expect(entity.verification_token).toBe(expected);
+      expect((entity.save as sinon.SinonStub).calledOnce).toBe(true);
+    });
+
+    it('leaves already-pending / verified state untouched but still re-derives the token', async () => {
+      const entity = fakeSourceEntity({ verification_state: 'verified' });
+      sandbox.stub(ImportSourceEntity, 'findOne').resolves(entity);
+
+      const token = await service.issueVerificationChallenge(account, CAL_ID, SOURCE_ID);
+
+      expect(token).toBe(generateVerificationToken(SOURCE_ID, CAL_ID));
+      // State must NOT be downgraded to 'pending' from 'verified'.
+      expect(entity.verification_state).toBe('verified');
+      expect(entity.verification_token).toBe(token);
+      expect((entity.save as sinon.SinonStub).calledOnce).toBe(true);
+    });
+
+    it('returns the same token on repeated calls (determinism contract)', async () => {
+      const entity1 = fakeSourceEntity();
+      const entity2 = fakeSourceEntity();
+      const findOneStub = sandbox.stub(ImportSourceEntity, 'findOne');
+      findOneStub.onFirstCall().resolves(entity1);
+      findOneStub.onSecondCall().resolves(entity2);
+
+      const token1 = await service.issueVerificationChallenge(account, CAL_ID, SOURCE_ID);
+      const token2 = await service.issueVerificationChallenge(account, CAL_ID, SOURCE_ID);
+
+      expect(token1).toBe(token2);
+    });
+
+    it('throws ImportSourceNotFoundError when the source does not exist', async () => {
+      sandbox.stub(ImportSourceEntity, 'findOne').resolves(null);
+
+      await expect(
+        service.issueVerificationChallenge(account, CAL_ID, SOURCE_ID),
+      ).rejects.toBeInstanceOf(ImportSourceNotFoundError);
+    });
+
+    it('rejects when the account lacks edit access (CalendarEditorPermissionError)', async () => {
+      calendarService.userCanModifyCalendar.resolves(false);
+
+      await expect(
+        service.issueVerificationChallenge(account, CAL_ID, SOURCE_ID),
+      ).rejects.toBeInstanceOf(CalendarEditorPermissionError);
+    });
+  });
+
+  // --------------------------------------------------------------------
+  // verifySource
+  // --------------------------------------------------------------------
+
+  describe('verifySource', () => {
+    function fakeSourceEntity(overrides: Partial<ImportSourceEntity> = {}): ImportSourceEntity {
+      return {
+        id: SOURCE_ID,
+        calendar_id: CAL_ID,
+        url: VALID_URL,
+        verification_state: 'pending',
+        verified_at: null,
+        verification_expires_at: null,
+        save: sandbox.stub().resolves(),
+        toModel: () => {
+          const model = new ImportSource(SOURCE_ID, CAL_ID, VALID_URL);
+          model.verificationState = 'verified';
+          return model;
+        },
+        ...overrides,
+      } as unknown as ImportSourceEntity;
+    }
+
+    it('transitions state to verified and stamps verified_at / verification_expires_at on success', async () => {
+      const verifiedAt = new Date('2026-04-23T12:00:00Z');
+      const expiresAt = new Date('2026-07-22T12:00:00Z');
+      const entity = fakeSourceEntity();
+      sandbox.stub(ImportSourceEntity, 'findOne').resolves(entity);
+
+      // Inject a fake DnsVerifier so no DNS lookup or HTTP fetch occurs.
+      const fakeVerifier = {
+        verify: sandbox.stub().resolves({ verified: true, verifiedAt, expiresAt }),
+      } as unknown as DnsVerifier;
+      service.setDnsVerifier(fakeVerifier);
+
+      const result = await service.verifySource(account, CAL_ID, SOURCE_ID);
+
+      expect(entity.verification_state).toBe('verified');
+      expect(entity.verified_at).toBe(verifiedAt);
+      expect(entity.verification_expires_at).toBe(expiresAt);
+      expect((entity.save as sinon.SinonStub).calledOnce).toBe(true);
+      expect(result.verificationState).toBe('verified');
+    });
+
+    it('propagates ImportSourceDnsVerificationError from the verifier (no state change)', async () => {
+      const entity = fakeSourceEntity({ verification_state: 'pending' });
+      sandbox.stub(ImportSourceEntity, 'findOne').resolves(entity);
+
+      const fakeVerifier = {
+        verify: sandbox.stub().rejects(new ImportSourceDnsVerificationError(IMPORT_DNS_NOT_FOUND)),
+      } as unknown as DnsVerifier;
+      service.setDnsVerifier(fakeVerifier);
+
+      await expect(
+        service.verifySource(account, CAL_ID, SOURCE_ID),
+      ).rejects.toBeInstanceOf(ImportSourceDnsVerificationError);
+
+      // State untouched so the caller may retry after fixing DNS.
+      expect(entity.verification_state).toBe('pending');
+      expect((entity.save as sinon.SinonStub).called).toBe(false);
+    });
+
+    it('throws ImportSourceNotFoundError when the source does not exist', async () => {
+      sandbox.stub(ImportSourceEntity, 'findOne').resolves(null);
+
+      await expect(
+        service.verifySource(account, CAL_ID, SOURCE_ID),
+      ).rejects.toBeInstanceOf(ImportSourceNotFoundError);
+    });
+
+    it('rejects when the account lacks edit access (CalendarEditorPermissionError)', async () => {
+      calendarService.userCanModifyCalendar.resolves(false);
+
+      await expect(
+        service.verifySource(account, CAL_ID, SOURCE_ID),
+      ).rejects.toBeInstanceOf(CalendarEditorPermissionError);
+    });
+  });
+
+  // --------------------------------------------------------------------
+  // syncSource
+  // --------------------------------------------------------------------
+
+  describe('syncSource', () => {
+    const FAKE_RESULT: SyncResult = {
+      runId: 'run-xyz',
+      outcome: 'success',
+      eventsCreated: 3,
+      eventsUpdated: 0,
+      eventsSkippedLocallyEdited: 0,
+      eventsDisappeared: 0,
+      errorMessage: null,
+    };
+
+    function fakeSourceEntity(overrides: Partial<ImportSourceEntity> = {}): ImportSourceEntity {
+      return {
+        id: SOURCE_ID,
+        calendar_id: CAL_ID,
+        url: VALID_URL,
+        verification_state: 'verified',
+        save: sandbox.stub().resolves(),
+        ...overrides,
+      } as unknown as ImportSourceEntity;
+    }
+
+    it('delegates to the SyncService returned by the injected factory', async () => {
+      const entity = fakeSourceEntity();
+      sandbox.stub(ImportSourceEntity, 'findOne').resolves(entity);
+
+      const syncStub = sandbox.stub().resolves(FAKE_RESULT);
+      const fakeSyncService = { syncSource: syncStub } as unknown as SyncService;
+      service.setSyncServiceFactory(() => fakeSyncService);
+
+      const result = await service.syncSource(account, CAL_ID, SOURCE_ID);
+
+      expect(result).toBe(FAKE_RESULT);
+      expect(syncStub.calledOnce).toBe(true);
+      // The orchestrator is called with { account, importSourceId }, never
+      // calendarId — the source has already been scoped to the calendar by
+      // the service's permission + lookup checks.
+      const callArg = syncStub.firstCall.args[0];
+      expect(callArg.importSourceId).toBe(SOURCE_ID);
+      expect(callArg.account).toBe(account);
+    });
+
+    it('throws a guard error when the SyncService factory is not wired', async () => {
+      const entity = fakeSourceEntity();
+      sandbox.stub(ImportSourceEntity, 'findOne').resolves(entity);
+
+      // Factory intentionally NOT wired — production startup must call
+      // setSyncServiceFactory during interface bootstrap. If that wiring is
+      // ever skipped we want a loud guard, not a silent null-deref.
+      await expect(
+        service.syncSource(account, CAL_ID, SOURCE_ID),
+      ).rejects.toThrow(/factory wiring/);
+    });
+
+    it('throws ImportSourceNotFoundError when the source does not exist', async () => {
+      sandbox.stub(ImportSourceEntity, 'findOne').resolves(null);
+
+      await expect(
+        service.syncSource(account, CAL_ID, SOURCE_ID),
+      ).rejects.toBeInstanceOf(ImportSourceNotFoundError);
+    });
+
+    it('rejects when the account lacks edit access (CalendarEditorPermissionError)', async () => {
+      calendarService.userCanModifyCalendar.resolves(false);
+
+      await expect(
+        service.syncSource(account, CAL_ID, SOURCE_ID),
       ).rejects.toBeInstanceOf(CalendarEditorPermissionError);
     });
   });
