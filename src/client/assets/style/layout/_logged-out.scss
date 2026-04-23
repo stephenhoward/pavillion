@@ -83,143 +83,19 @@
         display: grid;
         grid-template-columns: 3fr 2fr;
 
-        .welcome-card-form {
+        .welcome-card-main {
           padding-inline-end: var(--pav-space-10);
         }
       }
     }
 
+    h2,
     h3 {
       font-size: 2.25rem; /* 36px */
       font-weight: var(--pav-font-weight-light);
       color: var(--pav-text-primary);
       text-align: center;
       margin-block-end: var(--pav-space-10);
-    }
-
-    /* Pill-shaped inputs for auth forms */
-    input[type="text"],
-    input[type="email"],
-    input[type="password"] {
-      width: 100%;
-      border-radius: 9999px; /* Full pill shape */
-      border: var(--pav-border-width-1) solid var(--pav-border-primary);
-      padding: 1.125rem 1.5rem; /* 18px 24px */
-      font-size: 1.125rem; /* 18px */
-      background-color: var(--pav-surface-primary);
-      color: var(--pav-text-primary);
-      transition: all 0.2s ease-in-out;
-
-      &::placeholder {
-        color: var(--pav-text-muted);
-      }
-
-      &:focus {
-        outline: none;
-        border-color: var(--pav-color-orange-400);
-        /* color-mix on brand orange keeps focus ring tied to the orange token. */
-        box-shadow: 0 0 0 3px color-mix(in srgb, var(--pav-color-orange-500) 40%, transparent);
-      }
-    }
-
-    /* Error state for inputs */
-    input.form-control--error {
-      /* Using literal red tokens rather than --pav-color-border-error because
-         the semantic error token resolves to purple, not red. */
-      border-color: var(--pav-color-red-500);
-
-      @media (prefers-color-scheme: dark) {
-        border-color: var(--pav-color-red-700);
-      }
-    }
-
-    /* Primary buttons — pill-shaped auth card aesthetic */
-    .btn--primary {
-      width: 100%;
-      border-radius: 9999px;
-      padding: 1.125rem 1.5rem; /* 18px 24px */
-      font-size: 1.125rem; /* 18px */
-      font-weight: var(--pav-font-weight-medium);
-      background-color: var(--pav-color-orange-500);
-      /* Brand orange is constant across modes; white literal matches _buttons.scss. */
-      color: white;
-      border: none;
-
-      &:hover:not(:disabled) {
-        opacity: 0.9;
-      }
-
-      &:focus-visible {
-        outline: none;
-        box-shadow: 0 0 0 2px var(--pav-color-orange-500), 0 0 0 4px color-mix(in srgb, var(--pav-color-orange-500) 40%, transparent);
-      }
-
-      &:active:not(:disabled) {
-        transform: scale(0.98);
-      }
-    }
-
-    /* Secondary buttons — pill-shaped outlined */
-    a[role="button"],
-    .btn--secondary {
-      display: block;
-      width: 100%;
-      border-radius: 9999px;
-      padding: 1.125rem 1.5rem; /* 18px 24px */
-      font-size: 1.125rem; /* 18px */
-      font-weight: var(--pav-font-weight-medium);
-      background-color: var(--pav-surface-primary);
-      color: var(--pav-text-secondary);
-      border: var(--pav-border-width-1) solid var(--pav-border-primary);
-      text-decoration: none;
-      text-align: center;
-
-      &:hover:not(:disabled) {
-        background-color: var(--pav-interactive-hover);
-      }
-
-      &:focus-visible {
-        outline: none;
-        box-shadow: 0 0 0 2px var(--pav-color-stone-400), 0 0 0 4px color-mix(in srgb, var(--pav-color-stone-400) 30%, transparent);
-      }
-
-      &:active:not(:disabled) {
-        transform: scale(0.98);
-      }
-    }
-
-    /* Text links (like "Forgot Password?") */
-    a.forgot,
-    button.forgot {
-      display: inline-block;
-      margin-top: 1.25rem; /* 20px */
-      font-size: 1rem; /* 16px */
-      color: var(--pav-color-orange-500);
-      text-decoration: none;
-      background: none;
-      border: none;
-      cursor: pointer;
-      padding: 0;
-      transition: color 0.2s ease-in-out;
-
-      &:hover {
-        color: var(--pav-color-orange-600);
-      }
-
-      &:focus {
-        outline: none;
-        text-decoration: underline;
-      }
-
-      /* Brand orange variants are not auto-flipped by the theme layer, so this
-         manual dark-mode override is retained to preserve contrast. */
-      @media (prefers-color-scheme: dark) {
-        color: var(--pav-color-orange-400);
-
-        &:hover {
-          color: var(--pav-color-orange-300);
-        }
-      }
     }
   }
 

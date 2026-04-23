@@ -1,4 +1,7 @@
-import axios, { AxiosError } from 'axios';
+import axios, { AxiosError, AxiosRequestConfig, AxiosResponse } from 'axios';
+import { ref, Ref } from 'vue';
+
+import { SessionExpiredError } from '@/common/exceptions/authentication';
 
 interface JWTClaims {
   exp: number;
@@ -6,13 +9,26 @@ interface JWTClaims {
   email: string;
 }
 
+interface PendingRequest {
+  config: AxiosRequestConfig;
+  resolve: (value: AxiosResponse) => void;
+  reject: (reason: unknown) => void;
+}
+
 export default class AuthenticationService {
   localStore: Storage;
   _refresh_timer: NodeJS.Timeout | null;
+  sessionExpired: Ref<boolean>;
+  lastKnownEmail: string | null;
+  _pendingRequests: PendingRequest[];
+  _requestInterceptorId: number;
+  _responseInterceptorId: number;
 
   /**
    * Constructor.
-   * Sets up axios interceptors to include JWT token in all requests.
+   * Sets up axios interceptors to include JWT token in all requests
+   * and to capture 401 responses into a pending-request queue so the
+   * session-expired modal can drain or abort them once resolved.
    *
    * @param {Storage} localStore - Storage interface for persisting authentication data
    * @throws Will throw an error if localStore is not provided
@@ -32,14 +48,82 @@ export default class AuthenticationService {
     }
 
     this._refresh_timer = null;
+    this.sessionExpired = ref(false);
+    this.lastKnownEmail = null;
+    this._pendingRequests = [];
 
-    axios.interceptors.request.use( (config) => {
+    this._requestInterceptorId = axios.interceptors.request.use( (config) => {
       let jwt = this.jwt();
       if ( jwt ) {
         config.headers['Authorization'] = 'Bearer ' + jwt;
       }
       return config;
     });
+
+    // Response interceptor: on 401 from a non-auth endpoint, queue the original
+    // request and flip the sessionExpired flag so the modal opens. On 401 from
+    // /api/auth/* endpoints (login/refresh/forgot-password), pass the error
+    // through so form-level errors still surface. Retrying queued requests is
+    // safe for all HTTP methods because the server rejects pre-handler on 401,
+    // so the original mutation never ran.
+    //
+    // Replayed requests (marked with _retry) short-circuit this interceptor so
+    // that a still-401 replay never re-enters the queue and reopens the modal,
+    // which would trap the user in a loop.
+    this._responseInterceptorId = axios.interceptors.response.use(
+      (response) => response,
+      (error) => {
+        if ((error?.config as any)?._retry) {
+          return Promise.reject(error);
+        }
+        const status = error?.response?.status;
+        const url = error?.config?.url ?? '';
+        const isAuthEndpoint = url.startsWith('/api/auth/');
+        if (status !== 401 || isAuthEndpoint) {
+          return Promise.reject(error);
+        }
+        return new Promise<AxiosResponse>((resolve, reject) => {
+          this._pendingRequests.push({ config: error.config, resolve, reject });
+          this.sessionExpired.value = true;
+        });
+      },
+    );
+  }
+
+  /**
+   * Replays every queued 401'd request in order. The existing request
+   * interceptor re-injects the fresh Bearer token on each retried call.
+   * Resolves the original promise with the retry's response (or rejects
+   * it with the retry's error). Finally clears the sessionExpired flag,
+   * which un-mounts the modal.
+   */
+  async drainPendingRequests(): Promise<void> {
+    const queue = this._pendingRequests.splice(0);
+    for (const { config, resolve, reject } of queue) {
+      try {
+        // Mark replay so the response interceptor short-circuits instead of
+        // re-queuing if the replay itself gets a 401 (avoids modal-reopen loop).
+        const retryConfig = { ...config, _retry: true } as AxiosRequestConfig;
+        resolve(await axios.request(retryConfig));
+      }
+      catch (err) {
+        reject(err);
+      }
+    }
+    this.sessionExpired.value = false;
+  }
+
+  /**
+   * Rejects every queued request with a `SessionExpiredError` and clears
+   * the sessionExpired flag. Called when the user dismisses the modal
+   * without logging back in.
+   */
+  abortPendingRequests(): void {
+    const queue = this._pendingRequests.splice(0);
+    for (const { reject } of queue) {
+      reject(new SessionExpiredError());
+    }
+    this.sessionExpired.value = false;
   }
 
   /**
@@ -59,6 +143,7 @@ export default class AuthenticationService {
         password : password,
       });
       this._set_token(response.data);
+      this.lastKnownEmail = email;
       return response.data;
     }
     catch(error) {
@@ -489,6 +574,9 @@ export default class AuthenticationService {
       }
       catch (error) {
         this._unset_token();
+        // Surface the session-expired modal on the user's next visible
+        // interaction for backgrounded tabs whose silent refresh failed.
+        this.sessionExpired.value = true;
         throw( error );
       }
     }
@@ -523,6 +611,7 @@ export default class AuthenticationService {
   _unset_token() {
     this.localStore.removeItem('jwt');
     this.localStore.removeItem('jw_token');
+    this.lastKnownEmail = null;
     if ( this._refresh_timer ) {
       clearTimeout(this._refresh_timer);
       this._refresh_timer = null;

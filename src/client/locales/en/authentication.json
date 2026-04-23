@@ -63,5 +63,9 @@
     "password_needs_variety": "Password must include at least two of: letters, numbers, special characters",
     "PasswordResetError": "Unable to reset password. The code may be invalid or expired.",
     "TokenRefreshError": "Session expired. Please log in again."
+  },
+  "session_expired": {
+    "title": "Session expired",
+    "description": "Your session has expired. Sign in again to continue where you left off."
   }
 }

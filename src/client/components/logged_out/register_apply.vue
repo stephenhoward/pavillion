@@ -26,7 +26,7 @@
         <input
           type="email"
           id="apply-email"
-          :class="{ 'form-control--error': state.err }"
+          :class="['auth-field', { 'form-control--error': state.err }]"
           :placeholder="t('email')"
           v-model="state.email"
           :aria-invalid="state.err ? 'true' : 'false'"
@@ -52,7 +52,7 @@
         </div>
 
         <button
-          class="btn btn--primary"
+          class="btn btn--pill btn--primary"
           type="submit"
           :aria-describedby="state.err ? 'apply-error' : undefined"
         >

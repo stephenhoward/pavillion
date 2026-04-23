@@ -33,6 +33,7 @@
         type="email"
         id="reset-email"
         name="email"
+        class="auth-field"
         :placeholder="t('email')"
         v-model="state.email"
         :aria-invalid="state.error ? 'true' : 'false'"
@@ -42,7 +43,7 @@
       />
 
       <button
-        class="btn btn--primary"
+        class="btn btn--pill btn--primary"
         type="submit"
         :aria-describedby="state.error ? 'forgot-error' : undefined"
       >
