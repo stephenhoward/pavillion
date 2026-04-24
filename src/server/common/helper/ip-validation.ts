@@ -32,7 +32,6 @@ import dns from 'dns';
 import { promisify } from 'util';
 import ipaddr from 'ipaddr.js';
 import { createLogger } from '@/server/common/helper/logger';
-import { isLocalhostIcsImportAllowed } from '@/server/common/helper/test-ssrf-gate';
 
 const logger = createLogger('ip-validation');
 
@@ -191,6 +190,20 @@ export async function resolvesToPrivateIP(hostname: string): Promise<boolean> {
  * Validates that a URL does not point to a private or internal IP address.
  * This prevents SSRF attacks by blocking requests to internal infrastructure.
  *
+ * This helper is STRICT in every environment and has no env-var escape
+ * hatch for http:// or private-IP literals. The ICS-import pipeline, which
+ * needs to accept http:// + localhost fixtures in e2e, relaxes URL
+ * validation at its own call sites (Fetcher, DnsVerifier,
+ * ImportSourceService) via `createIcsUrlValidator()` in
+ * `test-ssrf-gate.ts`. ActivityPub federation paths share this helper and
+ * therefore cannot be relaxed — a deliberate narrowing per pv-gdqp.
+ *
+ * The only exception carved out here is `ALLOW_PRIVATE_FEDERATION`, which
+ * is scoped strictly to DNS-resolved private IPs (e.g. Docker bridge
+ * subnets resolving alpha.federation.local → 172.18.0.4). Literal
+ * private-IP URLs and http:// URLs remain rejected regardless of that
+ * flag.
+ *
  * @param url - The URL to validate
  * @returns Promise resolving to true if the URL is safe to fetch
  * @throws Error if the URL points to a private IP address or uses a rejected
@@ -200,19 +213,10 @@ export async function validateUrlNotPrivate(url: string): Promise<boolean> {
   try {
     const parsedUrl = new URL(url);
 
-    // Env-gated test hook: when NODE_ENV=test|e2e AND
-    // ALLOW_LOCALHOST_ICS_IMPORT=true, allow http:// + private-IP literals
-    // so Playwright e2e can run a mock DoH + ICS fixture server on
-    // localhost. Gate is closed in production regardless of env var.
-    // See src/server/common/helper/test-ssrf-gate.ts.
-    const icsTestGateOpen = isLocalhostIcsImportAllowed();
-
-    // Reject non-HTTPS URLs — ActivityPub federation must use HTTPS
+    // Reject non-HTTPS URLs — ActivityPub federation must use HTTPS and
+    // every other caller of this helper shares the same expectation.
     if (parsedUrl.protocol !== 'https:') {
-      if (!(icsTestGateOpen && parsedUrl.protocol === 'http:')) {
-        throw new Error(`URL must use HTTPS, got: ${parsedUrl.protocol}`);
-      }
-      logger.warn('SECURITY WARNING: ALLOW_LOCALHOST_ICS_IMPORT is set - allowing http:// URL. Never use in production.');
+      throw new Error(`URL must use HTTPS, got: ${parsedUrl.protocol}`);
     }
 
     let hostname = parsedUrl.hostname;
@@ -230,10 +234,6 @@ export async function validateUrlNotPrivate(url: string): Promise<boolean> {
 
     if (isLikelyIpLiteral && ipaddr.isValid(hostname)) {
       if (isPrivateIP(hostname)) {
-        if (icsTestGateOpen) {
-          logger.warn({ hostname }, 'SECURITY WARNING: ALLOW_LOCALHOST_ICS_IMPORT is set - allowing private IP literal. Never use in production.');
-          return true;
-        }
         throw new Error(`Access to private IP address ${hostname} is not allowed`);
       }
       return true;
@@ -262,10 +262,6 @@ export async function validateUrlNotPrivate(url: string): Promise<boolean> {
     // Resolve hostname to IP and check
     const resolvesPrivate = await resolvesToPrivateIP(hostname);
     if (resolvesPrivate) {
-      if (icsTestGateOpen) {
-        logger.warn({ hostname }, 'SECURITY WARNING: ALLOW_LOCALHOST_ICS_IMPORT is set - allowing private-IP-resolving hostname. Never use in production.');
-        return true;
-      }
       throw new Error(`Hostname ${hostname} resolves to a private IP address`);
     }
 

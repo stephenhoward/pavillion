@@ -13,6 +13,7 @@ import {
 import { formatVerificationRecord } from '@/server/calendar/service/import/hmac';
 import { createLogger } from '@/server/common/helper/logger';
 import { validateUrlNotPrivate } from '@/server/common/helper/ip-validation';
+import { createIcsUrlValidator } from '@/server/common/helper/test-ssrf-gate';
 
 /**
  * DNS TXT ownership verification for ICS import sources.
@@ -67,6 +68,20 @@ export type DohFetch = (
   url: string,
   init?: { method?: string; headers?: Record<string, string> },
 ) => Promise<{ ok: boolean; status: number; text(): Promise<string> }>;
+
+/** URL SSRF validator (scheme + IP-literal private check). */
+export type UrlValidatorFn = (url: string) => Promise<boolean>;
+
+export interface DnsVerifierDependencies {
+  fetchImpl?: DohFetch;
+  /**
+   * URL validator used against configured DoH resolver URLs. Default is a
+   * gate-aware wrapper: strict `validateUrlNotPrivate` in production, a
+   * localhost-friendly relaxed validator when ALLOW_LOCALHOST_ICS_IMPORT
+   * is open in test/e2e.
+   */
+  validateUrl?: UrlValidatorFn;
+}
 
 interface DohAnswer {
   name: string;
@@ -150,10 +165,24 @@ function passesPslCheck(hostname: string): boolean {
  */
 export class DnsVerifier {
   private readonly fetchImpl: DohFetch;
+  private readonly validateUrl: UrlValidatorFn;
   private validatedResolvers: Promise<string[]> | null = null;
 
-  constructor(fetchImpl?: DohFetch) {
-    this.fetchImpl = fetchImpl ?? (undiciFetch as unknown as DohFetch);
+  /**
+   * Accepts either the legacy positional `DohFetch` or a full dependencies
+   * object. The dual signature keeps existing call sites (tests that do
+   * `new DnsVerifier(fetchStub)`) working without churn while the new
+   * `validateUrl` DI seam is added for pv-gdqp.
+   */
+  constructor(fetchImplOrDeps?: DohFetch | DnsVerifierDependencies) {
+    const deps: DnsVerifierDependencies =
+      typeof fetchImplOrDeps === 'function' || fetchImplOrDeps === undefined
+        ? { fetchImpl: fetchImplOrDeps as DohFetch | undefined }
+        : fetchImplOrDeps;
+    this.fetchImpl = deps.fetchImpl ?? (undiciFetch as unknown as DohFetch);
+    // Gate-aware default: strict in production, relaxed when
+    // ALLOW_LOCALHOST_ICS_IMPORT is open (test/e2e only).
+    this.validateUrl = deps.validateUrl ?? createIcsUrlValidator(validateUrlNotPrivate);
   }
 
   /**
@@ -283,7 +312,7 @@ export class DnsVerifier {
 
     for (const resolverUrl of resolvers) {
       try {
-        await validateUrlNotPrivate(resolverUrl);
+        await this.validateUrl(resolverUrl);
       }
       catch (err) {
         logger.warn(

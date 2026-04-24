@@ -45,7 +45,10 @@ import {
   validateUrlNotPrivate,
 } from '@/server/common/helper/ip-validation';
 import { createLogger } from '@/server/common/helper/logger';
-import { isLocalhostIcsImportAllowed } from '@/server/common/helper/test-ssrf-gate';
+import {
+  createIcsUrlValidator,
+  isLocalhostIcsImportAllowed,
+} from '@/server/common/helper/test-ssrf-gate';
 
 const logger = createLogger('calendar.import.fetcher');
 
@@ -252,7 +255,12 @@ export class Fetcher {
 
   constructor(deps: FetcherDependencies = {}) {
     this.dnsLookup = deps.dnsLookup ?? defaultDnsLookup;
-    this.validateUrl = deps.validateUrl ?? validateUrlNotPrivate;
+    // When the ALLOW_LOCALHOST_ICS_IMPORT gate is open (test/e2e only), a
+    // relaxed validator is substituted so http:// + localhost fixtures are
+    // accepted here. The shared `validateUrlNotPrivate` helper is always
+    // strict — the gate is consulted at THIS call site, not inside the
+    // helper (pv-gdqp).
+    this.validateUrl = deps.validateUrl ?? createIcsUrlValidator(validateUrlNotPrivate);
     this.isPrivateIp = deps.isPrivateIp ?? isPrivateIP;
     this.createAgent = deps.createAgent ?? defaultCreateAgent;
     this.request = deps.request ?? defaultRequest;

@@ -179,6 +179,71 @@ describe('ImportSourceService', () => {
       ).rejects.toBeInstanceOf(ValidationError);
     });
 
+    // pv-gdqp: assertUrlIsPublic routes through a gate-aware validator.
+    // When an explicit validator is injected via the constructor, the
+    // default gate-aware wrapper is bypassed — this is the seam used by
+    // production wiring to honor ALLOW_LOCALHOST_ICS_IMPORT without
+    // relaxing the shared `validateUrlNotPrivate` helper.
+    describe('validateUrl DI seam for ALLOW_LOCALHOST_ICS_IMPORT gate (pv-gdqp)', () => {
+      it('uses the injected validator instead of validateUrlNotPrivate', async () => {
+        sandbox.stub(ImportSourceEntity, 'count').resolves(0);
+        sandbox.stub(ImportSourceEntity, 'findOne').resolves(null);
+        sandbox.stub(ImportSourceEntity, 'build').callsFake((values) => ({
+          id: (values as any).id,
+          calendar_id: (values as any).calendar_id,
+          url: (values as any).url,
+          verification_state: 'pending',
+          verification_token: (values as any).verification_token,
+          verified_at: null,
+          verification_expires_at: null,
+          etag: null,
+          content_hash: null,
+          last_fetched_at: null,
+          last_status: null,
+          created_at: new Date(),
+          updated_at: new Date(),
+          save: sandbox.stub().resolves(),
+          toModel: function() { return ImportSourceEntity.prototype.toModel.call(this); },
+        } as unknown as ImportSourceEntity));
+
+        let injectedCalls = 0;
+        const injectedValidator = async (_url: string): Promise<boolean> => {
+          injectedCalls += 1;
+          return true;
+        };
+        const wiredService = new ImportSourceService(
+          calendarService as unknown as CalendarService,
+          undefined,
+          undefined,
+          injectedValidator,
+        );
+
+        // Use an http://127.0.0.1 URL that the strict default would reject.
+        await wiredService.createSource(account, CAL_ID, 'http://127.0.0.1:3000/cal.ics');
+
+        expect(injectedCalls).toBe(1);
+        // Crucially, the real validateUrlNotPrivate was NOT called because
+        // the injected validator replaced the default gate-aware wrapper.
+        expect(vi.mocked(validateUrlNotPrivate)).not.toHaveBeenCalled();
+      });
+
+      it('propagates injected validator rejection as ValidationError', async () => {
+        const injectedValidator = async (_url: string): Promise<boolean> => {
+          throw new Error('injected validator rejected');
+        };
+        const wiredService = new ImportSourceService(
+          calendarService as unknown as CalendarService,
+          undefined,
+          undefined,
+          injectedValidator,
+        );
+
+        await expect(
+          wiredService.createSource(account, CAL_ID, VALID_URL),
+        ).rejects.toBeInstanceOf(ValidationError);
+      });
+    });
+
     it('enforces the 10-source-per-calendar cap (11th create throws)', async () => {
       sandbox.stub(ImportSourceEntity, 'count').resolves(10);
 

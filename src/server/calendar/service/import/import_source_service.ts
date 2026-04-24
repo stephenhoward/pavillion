@@ -9,6 +9,7 @@ import { CalendarEditorPermissionError } from '@/common/exceptions/editor';
 import { ImportSourceNotFoundError } from '@/common/exceptions/import';
 import { ImportSourceEntity } from '@/server/calendar/entity/import_source';
 import { validateUrlNotPrivate } from '@/server/common/helper/ip-validation';
+import { createIcsUrlValidator } from '@/server/common/helper/test-ssrf-gate';
 import { createLogger } from '@/server/common/helper/logger';
 import CalendarService from '@/server/calendar/service/calendar';
 import { generateVerificationToken } from '@/server/calendar/service/import/hmac';
@@ -50,11 +51,13 @@ const DEFAULT_MAX_SOURCES_PER_CALENDAR = 10;
  */
 class ImportSourceService {
   private dnsVerifier: DnsVerifier;
+  private readonly urlSafetyValidator: (url: string) => Promise<boolean>;
 
   constructor(
     private calendarService?: CalendarService,
     private syncService?: SyncService,
     dnsVerifier?: DnsVerifier,
+    urlSafetyValidator?: (url: string) => Promise<boolean>,
   ) {
     // calendarService is optional so callers in a future wiring pass can
     // inject the shared instance; when absent we fall back to loading the
@@ -64,6 +67,13 @@ class ImportSourceService {
     // wiring a real sync pipeline; production wiring in CalendarInterface
     // injects the shared SyncService instance directly.
     this.dnsVerifier = dnsVerifier ?? new DnsVerifier();
+    // Gate-aware default (pv-gdqp): strict `validateUrlNotPrivate` in
+    // production, relaxed localhost-friendly validator when
+    // ALLOW_LOCALHOST_ICS_IMPORT is open (test/e2e only). The gate is NOT
+    // consulted inside `validateUrlNotPrivate` itself — this is the
+    // ICS-owned opt-in site. Named distinctly from the service's private
+    // `validateUrl()` method, which handles scheme/credentials checks.
+    this.urlSafetyValidator = urlSafetyValidator ?? createIcsUrlValidator(validateUrlNotPrivate);
   }
 
   /**
@@ -371,7 +381,7 @@ class ImportSourceService {
    */
   private async assertUrlIsPublic(url: string): Promise<void> {
     try {
-      await validateUrlNotPrivate(url);
+      await this.urlSafetyValidator(url);
     }
     catch (err) {
       logger.warn(
