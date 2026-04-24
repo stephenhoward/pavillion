@@ -27,7 +27,7 @@ The concern is not this one secret. The concern is that every new required secre
 
 **Secret classification lives in a manifest file**, not in code. Every new required secret lands with a manifest entry, and CI enforces that the manifest stays in sync with the plumbing.
 
-**Classification rubric:** secrets are `stable` (must be preserved once generated; regeneration has real user-visible impact) or `regenerable` (loss only resets the feature that uses them; no cross-system impact). First install generates everything; upgrade only prompts when a `stable` secret goes missing.
+**Classification rubric:** secrets are `stable` (must be preserved once generated; regeneration has real user-visible impact) or `regenerable` (loss only resets the feature that uses them; no cross-system impact). First install generates everything. On upgrade, the script distinguishes a *newly-introduced* secret (admin couldn't possibly have it; auto-generate regardless of stability) from a *previously-provisioned* secret that's gone missing (admin had it before; for `stable`, prompt before regenerating). The distinction is tracked in a `.deploy-state` file — see "Per-instance state" below.
 
 ## Design
 
@@ -41,16 +41,18 @@ The single command an admin runs for install, upgrade, or redeploy. Idempotent �
 2. **Safety checks** — working tree clean (for `git pull`); not running as root unless explicitly allowed; expected files present.
 3. **Git pull** — `upgrade` mode only. Skipped if `--skip-git-pull` is passed. Aborts if the pull would create a merge conflict (admin must resolve manually).
 4. **Read manifest** — `bin/deploy-manifest.yaml` (see below).
-5. **Diff against `.env`** — compute the set of secrets the manifest requires but `.env` does not provide.
-6. **Resolve missing secrets** — per-entry behavior keyed on `stability`:
-   - `regenerable` missing → generate via the entry's `generator`, append to `.env`, write to `secrets/<name>.txt` with mode 600.
-   - `stable` missing and interactive → prompt: paste value, type `GENERATE` to accept the documented impact, or abort.
-   - `stable` missing and non-interactive → exit non-zero with a structured error (secret name, one-line description, manifest URL).
-7. **First-install only** — prompt for domain (or require `--domain=<value>` in non-interactive mode), copy `config/local.yaml.example` to `config/local.yaml`, substitute domain.
-8. **`docker compose pull`** — get the new images.
-9. **`docker compose up -d`** — start (or restart) containers.
-10. **Poll `/health`** — wait up to `DEPLOY_HEALTH_TIMEOUT` (default 120s) for `curl http://localhost:${APP_PORT:-3000}/health` to return 200. Tail `docker compose logs app` on timeout.
-11. **Report** — print a clear success or failure summary.
+5. **Load `.deploy-state`** — plain-text list of secrets previously provisioned on this instance. If absent, seed it from the current contents of `.env` (one-time migration for pre-existing installs).
+6. **Diff against `.env`** — compute the set of secrets the manifest requires but `.env` does not provide.
+7. **Resolve missing secrets** — per-entry behavior keyed on `stability` AND whether the name appears in `.deploy-state`:
+   - Name NOT in `.deploy-state` (newly introduced by this release) → silently generate regardless of stability. Append the name to `.deploy-state`.
+   - Name IN `.deploy-state`, `regenerable` → silently generate.
+   - Name IN `.deploy-state`, `stable`, interactive → prompt: paste existing value, type `GENERATE` to accept the documented impact, or abort.
+   - Name IN `.deploy-state`, `stable`, non-interactive → exit non-zero with a structured error (secret name, one-line description, manifest URL).
+8. **First-install only** — prompt for domain (or require `--domain=<value>` in non-interactive mode), copy `config/local.yaml.example` to `config/local.yaml`, substitute domain.
+9. **`docker compose pull`** — get the new images.
+10. **`docker compose up -d`** — start (or restart) containers.
+11. **Poll `/health`** — wait up to `DEPLOY_HEALTH_TIMEOUT` (default 120s) for `curl http://localhost:${APP_PORT:-3000}/health` to return 200. Tail `docker compose logs app` on timeout.
+12. **Report** — print a clear success or failure summary.
 
 **Flags:**
 
@@ -124,6 +126,30 @@ secrets:
 ```
 
 The ICS branch adds `CALENDAR_IMPORT_HMAC_SECRET` with `stability: regenerable` alongside its existing production-validation change. That is the first `regenerable` entry and the first end-to-end exercise of the manifest-driven upgrade flow.
+
+### `.deploy-state` — per-instance provisioning ledger
+
+`bin/deploy.sh` maintains `/<repo-root>/.deploy-state` — a plain-text file listing every secret name that has been provisioned on this instance. Gitignored (per-instance, not per-code).
+
+**Format** (one name per line, `#` comments allowed):
+
+```
+# Pavillion deploy state — managed by bin/deploy.sh
+# Do not edit by hand.
+JWT_SECRET
+SESSION_SECRET
+DB_PASSWORD
+EMAIL_HASH_SECRET
+ENCRYPTION_KEY
+```
+
+**Lifecycle:**
+
+- **First install:** after each secret is written to `.env`, append its name to `.deploy-state`.
+- **Upgrade, `.deploy-state` present:** consult it to distinguish newly-introduced secrets from previously-provisioned-but-lost secrets.
+- **Upgrade, `.deploy-state` absent (one-time migration):** before processing, seed `.deploy-state` from the current contents of `.env`. Every secret name currently defined in `.env` is backfilled. This ensures pre-`bin/deploy.sh` installs don't get spurious "new secret" auto-gen on their first run under the new tool.
+
+**Why a separate file instead of deriving from `.env`:** admins edit `.env`, scripts edit `.deploy-state`. Clean separation of responsibilities. Also lets the ledger record names that are intentionally missing from `.env` (a blank-value line, for instance) without ambiguity.
 
 ### CI lint
 
@@ -200,11 +226,12 @@ The `flock`-based concurrency guard from the current staging script stays (moved
 - **CI enforcement:** included in v1.
 - **Script name:** `bin/deploy.sh` (neutral for install, upgrade, redeploy).
 - **Field name for classification:** `stability: stable | regenerable` (enum leaves room for a third tier).
+- **Distinguishing "new secret" from "lost secret" on upgrade:** a `.deploy-state` ledger tracks which secrets have been provisioned on this instance. Missing-and-never-seen = auto-gen; missing-but-previously-seen = stability-keyed behavior. Without this, every new stable secret would trigger a spurious prompt for every admin.
 
 ## Success criteria
 
 1. An admin can run `git clone && cd pavillion && bin/deploy.sh` and get a working instance from a clean machine.
 2. An admin can run `bin/deploy.sh` on an existing install after pulling the ICS branch, and the new `CALENDAR_IMPORT_HMAC_SECRET` is generated silently — no crash loop, no manual editing.
-3. The staging webhook calls `bin/deploy.sh --non-interactive` and works for every upgrade that does not add a `stable` secret.
+3. The staging webhook calls `bin/deploy.sh --non-interactive` and works for every upgrade — including upgrades that introduce a new `stable` secret. The non-interactive path only fails when a previously-provisioned `stable` secret has gone missing from `.env`, which is a rare manual-recovery scenario.
 4. A PR that adds a new required secret without updating all four plumbing locations is rejected by CI with a clear message.
 5. The old `docker compose pull && docker compose up -d` path continues to work for releases that don't add a new secret, and hard-fails with an actionable error for releases that do. The admin's escape hatch is always `bin/deploy.sh`.
