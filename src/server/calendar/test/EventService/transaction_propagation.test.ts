@@ -6,6 +6,7 @@ import type { Transaction } from 'sequelize';
 import { Account } from '@/common/model/account';
 import { Calendar } from '@/common/model/calendar';
 import { EventContentEntity, EventEntity, EventScheduleEntity } from '@/server/calendar/entity/event';
+import { EventImportOriginEntity } from '@/server/calendar/entity/event_import_origin';
 import EventService from '@/server/calendar/service/events';
 
 /**
@@ -44,6 +45,10 @@ describe('EventService transaction propagation', () => {
     editableCalendarsStub = sandbox.stub(service['calendarService'], 'editableCalendarsForUser');
     getCalendarStub.resolves(calendar);
     editableCalendarsStub.resolves([calendar]);
+    // Default: no origin row exists. Individual tests that care about the
+    // sibling-table flip path override this stub (via sandbox) with a real
+    // origin row.
+    sandbox.stub(EventImportOriginEntity, 'findOne').resolves(null);
   });
 
   afterEach(() => {
@@ -216,6 +221,43 @@ describe('EventService transaction propagation', () => {
       await service.updateEvent(account, EVENT_ID, {});
 
       expect(eventSaveStub.firstCall.args[0]).toEqual({ transaction: undefined });
+    });
+
+    it('threads transaction into the origin-row save when flipping locally_edited', async () => {
+      // pv-picz invariant: the locally_edited flip lives on the sibling
+      // EventImportOriginEntity row. When a tx is supplied, the origin
+      // save() must carry it so the flip participates in the same
+      // transaction as the EventEntity save — otherwise a rollback would
+      // leave a dangling true on the origin row.
+      const findStub = sandbox.stub(EventEntity, 'findByPk');
+      sandbox.stub(EventEntity.prototype, 'save').resolves();
+      const entity = EventEntity.build({
+        id: EVENT_ID,
+        calendar_id: CALENDAR_ID,
+        import_source_id: null,
+        locally_edited: false,
+      });
+      findStub.resolves(entity);
+
+      // Override the default null-origin stub with a real origin row so the
+      // flip path is exercised.
+      (EventImportOriginEntity.findOne as sinon.SinonStub).restore();
+      const originSave = sinon.stub().resolves();
+      const origin = {
+        event_id: EVENT_ID,
+        import_source_id: '22222222-2222-4222-8222-222222222222',
+        locally_edited: false,
+        save: originSave,
+      } as unknown as EventImportOriginEntity;
+      const originFindStub = sandbox.stub(EventImportOriginEntity, 'findOne').resolves(origin);
+
+      await service.updateEvent(account, EVENT_ID, {}, { source: 'user' }, fakeTx);
+
+      // Lookup participates in the caller's transaction.
+      expect(originFindStub.firstCall.args[0]).toMatchObject({ transaction: fakeTx });
+      // Save participates in the caller's transaction.
+      expect(originSave.calledOnce).toBe(true);
+      expect(originSave.firstCall.args[0]).toEqual({ transaction: fakeTx });
     });
   });
 });

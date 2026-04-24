@@ -11,6 +11,7 @@ import {
   ImportSourceVerifyRateLimitError,
 } from '@/common/exceptions/import';
 import { EventEntity } from '@/server/calendar/entity/event';
+import { EventImportOriginEntity } from '@/server/calendar/entity/event_import_origin';
 import { ImportRunEntity } from '@/server/calendar/entity/import_run';
 import { ImportSourceEntity } from '@/server/calendar/entity/import_source';
 import CalendarService from '@/server/calendar/service/calendar';
@@ -19,6 +20,8 @@ import { Fetcher } from '@/server/calendar/service/import/fetcher';
 import SyncService, {
   SYNC_PER_SOURCE_HOURLY_LIMIT,
   SyncRateLimiter,
+  buildEventParamsForCreate,
+  buildEventParamsForUpdate,
   dedupKey,
 } from '@/server/calendar/service/import/sync';
 import db from '@/server/common/entity/db';
@@ -30,6 +33,11 @@ import db from '@/server/common/entity/db';
  * is exercised deterministically without touching a real database. The core
  * integration-tier behavior (real-DB transaction rollback, retention cap)
  * has a dedicated integration spec at ../../../test/integration/.
+ *
+ * Post-pv-picz: origin provenance lives on the sibling EventImportOriginEntity
+ * table — the orchestrator's dedup bulk-load is now
+ * `EventImportOriginEntity.findAll({ include: [{ model: EventEntity }] })`
+ * and stampImportOrigin / touchSourceLastSeen write to the sibling row.
  */
 
 function makeDtz(iso: string, tz?: string): DateWithTimeZone {
@@ -77,11 +85,21 @@ function makeSourceEntity(overrides: Partial<ImportSourceEntity> = {}): ImportSo
   } as unknown as ImportSourceEntity;
 }
 
-function makeEventEntity(overrides: Partial<EventEntity> = {}): EventEntity {
+/**
+ * Builds a minimal fake EventImportOriginEntity mirroring the sibling table
+ * shape. The orchestrator's dedup bulk-load returns rows of this shape (with
+ * `event` eager-joined). Event-side fields live on EventEntity; this factory
+ * models the origin row only, since the orchestrator reads external_uid and
+ * external_recurrence_id straight off the origin row — not from the joined
+ * event — on the dedup path.
+ */
+function makeOriginEntity(overrides: Partial<EventImportOriginEntity> = {}): EventImportOriginEntity {
   const save = sinon.stub().resolves();
+  const defaultEventId = (overrides as Record<string, unknown>).event_id as string | undefined
+    ?? 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee';
   return {
-    id: 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee',
-    calendar_id: 'cccccccc-cccc-cccc-cccc-cccccccccccc',
+    id: 'oooooooo-oooo-oooo-oooo-oooooooooooo',
+    event_id: defaultEventId,
     import_source_id: 'ssssssss-ssss-ssss-ssss-ssssssssssss',
     external_uid: 'event-uid-1@example.test',
     external_recurrence_id: null,
@@ -91,7 +109,7 @@ function makeEventEntity(overrides: Partial<EventEntity> = {}): EventEntity {
     x_props: null,
     save,
     ...overrides,
-  } as unknown as EventEntity;
+  } as unknown as EventImportOriginEntity;
 }
 
 describe('SyncService', () => {
@@ -102,6 +120,7 @@ describe('SyncService', () => {
   let service: SyncService;
   let rateLimiter: SyncRateLimiter;
   let account: Account;
+  let originUpsertStub: sinon.SinonStub;
 
   beforeEach(() => {
     sandbox = sinon.createSandbox();
@@ -135,7 +154,12 @@ describe('SyncService', () => {
     });
     sandbox.stub(ImportRunEntity, 'findAll').resolves([] as unknown as ImportRunEntity[]);
     sandbox.stub(ImportRunEntity, 'destroy').resolves(0);
-    sandbox.stub(EventEntity, 'update').resolves([0]);
+
+    // Origin-row upsert default: resolve. Individual tests may over-assert
+    // the args via firstCall.
+    originUpsertStub = sandbox.stub(EventImportOriginEntity, 'upsert').resolves(
+      [null as unknown as EventImportOriginEntity, true] as [EventImportOriginEntity, boolean | null],
+    );
 
     // Default transaction passthrough — runs the callback directly with a
     // sentinel and propagates thrown errors.
@@ -160,6 +184,52 @@ describe('SyncService', () => {
       expect(dedupKey('uid-1', null)).toBe('uid-1::');
       expect(dedupKey('uid-1', undefined)).toBe('uid-1::');
       expect(dedupKey('uid-1', '2026-04-22T10:00:00Z')).toBe('uid-1::2026-04-22T10:00:00Z');
+    });
+  });
+
+  describe('buildEventParamsForCreate / buildEventParamsForUpdate', () => {
+    // Post-pv-picz: origin provenance (importSourceId, externalUid, etc.)
+    // MUST NOT leak into the params passed to EventService. It lives on the
+    // sibling EventImportOriginEntity row and is written separately by the
+    // orchestrator's stampImportOrigin helper.
+    function buildFakeMapperOutput(): Parameters<typeof buildEventParamsForCreate>[1] {
+      return {
+        external_uid: 'uid-x@example.test',
+        external_recurrence_id: '20260501T100000Z',
+        source_last_modified: undefined,
+        external_url: 'https://example.test/page',
+        x_props: { 'X-FOO': 'bar' },
+        content: {
+          language: 'en',
+          toObject: () => ({ language: 'en', name: 'n', description: 'd' }),
+        },
+        schedule: {
+          toObject: () => ({ start: '2026-05-01T10:00:00Z', end: '2026-05-01T11:00:00Z' }),
+        },
+        exclusions: [],
+      } as unknown as Parameters<typeof buildEventParamsForCreate>[1];
+    }
+
+    it('buildEventParamsForCreate omits origin-provenance fields', () => {
+      const src = makeSourceEntity();
+      const params = buildEventParamsForCreate(src, buildFakeMapperOutput()) as Record<string, unknown>;
+
+      expect(params).not.toHaveProperty('importSourceId');
+      expect(params).not.toHaveProperty('externalUid');
+      expect(params).not.toHaveProperty('externalRecurrenceId');
+      expect(params).not.toHaveProperty('sourceLastModified');
+      expect(params).not.toHaveProperty('xProps');
+    });
+
+    it('buildEventParamsForUpdate omits origin-provenance fields', () => {
+      const src = makeSourceEntity();
+      const params = buildEventParamsForUpdate(src, buildFakeMapperOutput()) as Record<string, unknown>;
+
+      expect(params).not.toHaveProperty('importSourceId');
+      expect(params).not.toHaveProperty('externalUid');
+      expect(params).not.toHaveProperty('externalRecurrenceId');
+      expect(params).not.toHaveProperty('sourceLastModified');
+      expect(params).not.toHaveProperty('xProps');
     });
   });
 
@@ -296,18 +366,7 @@ describe('SyncService', () => {
       const finishTs = new Date('2026-04-22T10:00:05.000Z');
       let firstCall = true;
       const now = (): Date => {
-        // Anything that happens BEFORE syncSource() captures startedAt
-        // (e.g. the verification-expiry check) reads `startTs`. The very
-        // next read — which the orchestrator performs immediately after,
-        // assigning to the local `startedAt` — also reads `startTs`. From
-        // then on, time has advanced to `finishTs` (the run is finished).
         if (firstCall) {
-          // This branch is intentionally narrow so we do not have to count
-          // pre-startedAt calls; the implementation reads the clock for
-          // verification then for startedAt before doing any I/O.
-          // Keep returning startTs until we observe a call that means the
-          // run has progressed past start; here we approximate by switching
-          // after the first I/O await (i.e. on the call from recordRun).
           return startTs;
         }
         return finishTs;
@@ -316,8 +375,6 @@ describe('SyncService', () => {
       const src = makeSourceEntity({ etag: 'W/"abc"' });
       sandbox.stub(ImportSourceEntity, 'findByPk').resolves(src);
       fetcher.fetch.callsFake(async () => {
-        // Time advances to finishTs after the fetch completes — this is
-        // the only nowFn() reads after this point will see.
         firstCall = false;
         return { outcome: 'not_modified', httpStatus: 304, etag: 'W/"abc"' };
       });
@@ -416,7 +473,7 @@ describe('SyncService', () => {
   // --------------------------------------------------------------------------
 
   describe('four-case event dispatch', () => {
-    function setupWith(vevents: VEvent[], existingEvents: EventEntity[] = []) {
+    function setupWith(vevents: VEvent[], existingOrigins: EventImportOriginEntity[] = []) {
       const src = makeSourceEntity();
       sandbox.stub(ImportSourceEntity, 'findByPk').resolves(src);
       fetcher.fetch.resolves({
@@ -428,7 +485,13 @@ describe('SyncService', () => {
         bytesReceived: 1,
       });
 
-      sandbox.stub(EventEntity, 'findAll').resolves(existingEvents as unknown as EventEntity[]);
+      // Dedup bulk-load queries the sibling origin table with EventEntity
+      // eager-joined. Tests supply origin rows (not event rows); the
+      // orchestrator reads external_uid / external_recurrence_id straight
+      // off the origin row.
+      sandbox.stub(EventImportOriginEntity, 'findAll').resolves(
+        existingOrigins as unknown as EventImportOriginEntity[],
+      );
 
       service = new SyncService({
         eventService: eventService as unknown as EventService,
@@ -445,13 +508,35 @@ describe('SyncService', () => {
       return src;
     }
 
+    it('dedup bulk-load queries EventImportOriginEntity with EventEntity eager-joined', async () => {
+      // Use a fresh findAll spy so we can inspect the call args directly.
+      const vevent = makeVEvent({ uid: 'new-a@example.test' });
+      const src = setupWith([vevent], []);
+      void src;
+
+      eventService.createEvent.callsFake(async () => ({ id: 'evt-new-a' } as never));
+
+      // The orchestrator's findAll uses the `importSourceId` input it was
+      // given; we pass 'src-input-id' and assert the query carried it.
+      await service.syncSource({ account, importSourceId: 'src-input-id' });
+
+      const findAllStub = EventImportOriginEntity.findAll as sinon.SinonStub;
+      expect(findAllStub.calledOnce).toBe(true);
+      const args = findAllStub.firstCall.args[0] as Record<string, unknown>;
+      expect(args.where).toMatchObject({ import_source_id: 'src-input-id' });
+      expect(args.include).toBeDefined();
+      const include = args.include as Array<Record<string, unknown>>;
+      expect(include[0]).toMatchObject({ model: EventEntity });
+    });
+
     it('creates NEW events via EventService.createEvent with source=import context', async () => {
       const veventA = makeVEvent({ uid: 'new-a@example.test' });
       const veventB = makeVEvent({ uid: 'new-b@example.test' });
       setupWith([veventA, veventB]);
 
       eventService.createEvent.callsFake(async (_acct, params: Record<string, unknown>) => {
-        return { id: 'evt-' + (params.externalUid as string) } as never;
+        void params;
+        return { id: 'evt-create' } as never;
       });
 
       const result = await service.syncSource({ account, importSourceId: 'src-1' });
@@ -464,10 +549,43 @@ describe('SyncService', () => {
       }
     });
 
-    it('skips events with locally_edited=true — updates source_last_seen_at only', async () => {
+    it('stampImportOrigin omits locally_edited from the upsert values', async () => {
+      const vevent = makeVEvent({ uid: 'new-a@example.test' });
+      setupWith([vevent]);
+      eventService.createEvent.callsFake(async () => ({ id: 'evt-new-a' } as never));
+
+      await service.syncSource({ account, importSourceId: 'src-1' });
+
+      expect(originUpsertStub.called).toBe(true);
+      const values = originUpsertStub.firstCall.args[0] as Record<string, unknown>;
+      expect(values).not.toHaveProperty('locally_edited');
+      // Sanity: the shape is otherwise as expected.
+      expect(values).toHaveProperty('event_id');
+      expect(values).toHaveProperty('import_source_id');
+      expect(values).toHaveProperty('external_uid');
+    });
+
+    it('stampImportOrigin receives the transaction handle from the caller', async () => {
+      const vevent = makeVEvent({ uid: 'new-a@example.test' });
+      setupWith([vevent]);
+      eventService.createEvent.callsFake(async () => ({ id: 'evt-new-a' } as never));
+
+      await service.syncSource({ account, importSourceId: 'src-1' });
+
+      expect(originUpsertStub.called).toBe(true);
+      const options = originUpsertStub.firstCall.args[1] as Record<string, unknown>;
+      // Inside the transaction callback, the orchestrator threads the
+      // sentinel tx object through to upsert. Assert the transaction key is
+      // present and non-undefined (fake tx sentinel from the db.transaction
+      // stub is `{ LEVEL: 'test' }`).
+      expect(options.transaction).toBeDefined();
+      expect(options.transaction).toMatchObject({ LEVEL: 'test' });
+    });
+
+    it('skips events with locally_edited=true — updates source_last_seen_at on the origin row only', async () => {
       const vevent = makeVEvent({ uid: 'held@example.test' });
-      const existing = makeEventEntity({
-        id: 'evt-held',
+      const existing = makeOriginEntity({
+        event_id: 'evt-held',
         external_uid: 'held@example.test',
         locally_edited: true,
         source_last_seen_at: new Date('2026-04-01T00:00:00Z'),
@@ -480,7 +598,7 @@ describe('SyncService', () => {
       expect(result.eventsUpdated).toBe(0);
       expect(eventService.updateEvent.called).toBe(false);
       expect(eventService.createEvent.called).toBe(false);
-      // source_last_seen_at stamped on entity
+      // source_last_seen_at refreshed on the origin row, not on EventEntity
       expect(existing.source_last_seen_at).not.toEqual(new Date('2026-04-01T00:00:00Z'));
       expect((existing.save as sinon.SinonStub).called).toBe(true);
     });
@@ -490,8 +608,8 @@ describe('SyncService', () => {
         uid: 'changing@example.test',
         lastmodified: new Date('2026-04-22T12:00:00Z'),
       });
-      const existing = makeEventEntity({
-        id: 'evt-changing',
+      const existing = makeOriginEntity({
+        event_id: 'evt-changing',
         external_uid: 'changing@example.test',
         source_last_modified: new Date('2026-04-22T10:00:00Z'),
       });
@@ -509,13 +627,13 @@ describe('SyncService', () => {
       expect(eventService.updateEvent.firstCall.args[3]).toEqual({ source: 'import' });
     });
 
-    it('leaves unchanged events untouched — only source_last_seen_at is refreshed', async () => {
+    it('leaves unchanged events untouched — only source_last_seen_at is refreshed on the origin row', async () => {
       const vevent = makeVEvent({
         uid: 'stable@example.test',
         lastmodified: new Date('2026-04-22T10:00:00Z'),
       });
-      const existing = makeEventEntity({
-        id: 'evt-stable',
+      const existing = makeOriginEntity({
+        event_id: 'evt-stable',
         external_uid: 'stable@example.test',
         source_last_modified: new Date('2026-04-22T10:00:00Z'),
       });
@@ -527,18 +645,45 @@ describe('SyncService', () => {
       expect(result.eventsUpdated).toBe(0);
       expect(eventService.createEvent.called).toBe(false);
       expect(eventService.updateEvent.called).toBe(false);
+      // The origin row's save() is invoked to stamp a fresh source_last_seen_at.
       expect((existing.save as sinon.SinonStub).called).toBe(true);
+    });
+
+    it('touchSourceLastSeen writes source_last_seen_at to the origin row, not the event', async () => {
+      const vevent = makeVEvent({
+        uid: 'seen@example.test',
+        lastmodified: new Date('2026-04-22T10:00:00Z'),
+      });
+      const existing = makeOriginEntity({
+        event_id: 'evt-seen',
+        external_uid: 'seen@example.test',
+        source_last_modified: new Date('2026-04-22T10:00:00Z'),
+        source_last_seen_at: new Date('2026-04-01T00:00:00Z'),
+      });
+      setupWith([vevent], [existing]);
+
+      await service.syncSource({ account, importSourceId: 'src-1' });
+
+      // source_last_seen_at advanced on the origin row itself.
+      expect(existing.source_last_seen_at).toBeInstanceOf(Date);
+      expect((existing.source_last_seen_at as Date).getTime()).toBeGreaterThan(
+        new Date('2026-04-01T00:00:00Z').getTime(),
+      );
+      expect((existing.save as sinon.SinonStub).called).toBe(true);
+      // The save on the origin row must receive the transaction.
+      const saveArgs = (existing.save as sinon.SinonStub).firstCall.args[0];
+      expect(saveArgs).toMatchObject({ transaction: { LEVEL: 'test' } });
     });
 
     it('counts disappeared events without writing to them', async () => {
       const vevent = makeVEvent({ uid: 'present@example.test' });
-      const present = makeEventEntity({
-        id: 'evt-present',
+      const present = makeOriginEntity({
+        event_id: 'evt-present',
         external_uid: 'present@example.test',
         source_last_modified: null,
       });
-      const gone = makeEventEntity({
-        id: 'evt-gone',
+      const gone = makeOriginEntity({
+        event_id: 'evt-gone',
         external_uid: 'gone@example.test',
         source_last_seen_at: new Date('2026-04-01T00:00:00Z'),
       });
@@ -547,41 +692,31 @@ describe('SyncService', () => {
       const result = await service.syncSource({ account, importSourceId: 'src-1' });
 
       expect(result.eventsDisappeared).toBe(1);
-      // The disappeared event is NOT saved.
+      // The disappeared origin row is NOT saved.
       expect((gone.save as sinon.SinonStub).called).toBe(false);
     });
 
     it('records partial parse failure when one VEVENT in a batch throws during mapping', async () => {
       // Three VEVENTs — the middle one is missing DTSTART, which causes the
-      // real mapper to throw (`'VEVENT is missing DTSTART; cannot map.'`).
-      // The other two should still be created in the same run, and the
-      // orchestrator should record an overall 'parse_error' outcome with
-      // parseErrorCount > 0 while eventsCreated counts only the successes.
+      // real mapper to throw. The other two should still be created in the
+      // same run, and the orchestrator should record an overall 'parse_error'
+      // outcome with parseErrorCount > 0 while eventsCreated counts only the
+      // successes.
       const veventA = makeVEvent({ uid: 'uid-a@example.test' });
       const veventB = makeVEvent({ uid: 'uid-b@example.test' });
-      // Force mapper to throw on this one by dropping DTSTART (mapper.ts:341).
       delete (veventB as Partial<VEvent>).start;
       const veventC = makeVEvent({ uid: 'uid-c@example.test' });
 
       const src = setupWith([veventA, veventB, veventC]);
 
-      eventService.createEvent.callsFake(async (_acct, params: Record<string, unknown>) => {
-        return { id: 'evt-' + (params.externalUid as string) } as never;
-      });
+      eventService.createEvent.callsFake(async () => ({ id: 'evt-any' } as never));
 
       const result = await service.syncSource({ account, importSourceId: 'src-1' });
 
-      // Transaction completes (per-event mapper errors are caught + continue)
-      // so outcome reflects parseErrorCount > 0.
       expect(result.outcome).toBe('parse_error');
       expect(result.eventsCreated).toBe(2);
-      // Two successful creates, one mapper failure.
       expect(eventService.createEvent.callCount).toBe(2);
-      // Source bookkeeping stamped inside the successful transaction.
       expect(src.last_status).toBe('parse_error');
-      // Non-typed Error from the real mapper is sanitized to the internal
-      // sentinel (ImportSourceParseError is never thrown by mapVEvent — the
-      // wrapper in sync.ts maps plain Error to IMPORT_INTERNAL_ERROR).
       expect(result.errorMessage).toBe('IMPORT_INTERNAL_ERROR');
     });
   });
@@ -607,7 +742,7 @@ describe('SyncService', () => {
         etag: undefined,
         bytesReceived: 1,
       });
-      sandbox.stub(EventEntity, 'findAll').resolves([] as unknown as EventEntity[]);
+      sandbox.stub(EventImportOriginEntity, 'findAll').resolves([] as unknown as EventImportOriginEntity[]);
 
       service = new SyncService({
         eventService: eventService as unknown as EventService,
@@ -632,19 +767,11 @@ describe('SyncService', () => {
 
       expect(result.outcome).toBe('parse_error');
       expect(result.eventsCreated).toBe(0);
-      // Non-typed Error should not leak its message to the caller. Instead the
-      // opaque IMPORT_INTERNAL_ERROR sentinel is surfaced and the raw error is
-      // logged at error level for operator diagnostics.
       expect(result.errorMessage).toBe('IMPORT_INTERNAL_ERROR');
-      // ImportRun was still recorded (separate transaction from the rolled-back one).
       expect((ImportRunEntity.create as sinon.SinonStub).calledOnce).toBe(true);
     });
 
     it('does not leak raw error message (e.g. DB connection string) to ImportRun.error_message', async () => {
-      // Fake "leaky" internal error: a Sequelize-style message that might
-      // embed a DB connection string, a stack fragment, or other internal
-      // detail. Any such text MUST be scrubbed before it lands in the DB or
-      // in the API response.
       const leakyDbUrl = 'postgresql://admin:s3cret@db.internal:5432/pavillion_prod';
       const leakyMessage = `connection failed: could not connect to ${leakyDbUrl}`;
 
@@ -660,7 +787,7 @@ describe('SyncService', () => {
         etag: undefined,
         bytesReceived: 1,
       });
-      sandbox.stub(EventEntity, 'findAll').resolves([] as unknown as EventEntity[]);
+      sandbox.stub(EventImportOriginEntity, 'findAll').resolves([] as unknown as EventImportOriginEntity[]);
 
       service = new SyncService({
         eventService: eventService as unknown as EventService,
@@ -674,12 +801,10 @@ describe('SyncService', () => {
 
       const result = await service.syncSource({ account, importSourceId: 'src-1' });
 
-      // Result returned to caller is sanitized.
       expect(result.errorMessage).toBe('IMPORT_INTERNAL_ERROR');
       expect(result.errorMessage).not.toContain(leakyDbUrl);
       expect(result.errorMessage).not.toContain('s3cret');
 
-      // ImportRun row persisted to the DB is sanitized.
       const createStub = ImportRunEntity.create as sinon.SinonStub;
       expect(createStub.calledOnce).toBe(true);
       const persistedArgs = createStub.firstCall.args[0] as { error_message: string | null };
@@ -695,7 +820,6 @@ describe('SyncService', () => {
 
   describe('idempotency', () => {
     it('second run with the same content hash is a no-op', async () => {
-      // First run: fresh fetch, content hash recorded.
       const src = makeSourceEntity({ content_hash: 'HASH-1' });
       sandbox.stub(ImportSourceEntity, 'findByPk').resolves(src);
       fetcher.fetch.resolves({
@@ -729,7 +853,7 @@ describe('SyncService', () => {
         etag: undefined,
         bytesReceived: 1,
       });
-      sandbox.stub(EventEntity, 'findAll').resolves([] as unknown as EventEntity[]);
+      sandbox.stub(EventImportOriginEntity, 'findAll').resolves([] as unknown as EventImportOriginEntity[]);
       return src;
     }
 
