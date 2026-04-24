@@ -61,7 +61,7 @@ class EventImportOriginEntity extends Model {
   declare event_id: string;
 
   @ForeignKey(() => ImportSourceEntity)
-  @Index('idx_event_import_origin_source')
+  @Index({ name: 'idx_event_import_origin_source' })
   @Column({ type: DataType.UUID, allowNull: false })
   declare import_source_id: string;
 
