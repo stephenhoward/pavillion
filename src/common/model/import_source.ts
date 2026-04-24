@@ -21,6 +21,25 @@ export const IMPORT_SOURCE_VERIFICATION_STATES: readonly ImportSourceVerificatio
   ['unverified', 'pending', 'verified', 'expired'];
 
 /**
+ * Allowed values for the `verification_type` column on import_source.
+ *
+ * This column is a **discriminator** (not a state): it answers "which trust
+ * mechanism was used" for this source and remains stable for the life of
+ * the row. It is orthogonal to `verification_state`, which answers
+ * "is the current trust still valid" and continues to be the single
+ * readiness gate used by the sync pipeline.
+ *
+ * Only `'dns-txt'` is defined today. Future verifier beads extend this
+ * union (and the matching DB enum) in the same change that introduces the
+ * verifier implementation.
+ */
+export type ImportSourceVerificationType = 'dns-txt';
+
+export const IMPORT_SOURCE_VERIFICATION_TYPES: readonly ImportSourceVerificationType[] = [
+  'dns-txt',
+];
+
+/**
  * Allowed values for the `last_status` column on import_source. Captures the
  * outcome of the most recent fetch attempt so the admin UI can render a
  * status indicator and operators can filter the run history.
@@ -58,6 +77,7 @@ export class ImportSource extends PrimaryModel {
   calendarId: string;
   url: string;
   enabled: boolean;
+  verificationType: ImportSourceVerificationType;
   verificationState: ImportSourceVerificationState;
   verifiedAt: Date | null;
   verificationExpiresAt: Date | null;
@@ -80,6 +100,7 @@ export class ImportSource extends PrimaryModel {
     this.calendarId = calendarId;
     this.url = url;
     this.enabled = true;
+    this.verificationType = 'dns-txt';
     this.verificationState = 'unverified';
     this.verifiedAt = null;
     this.verificationExpiresAt = null;
@@ -105,6 +126,7 @@ export class ImportSource extends PrimaryModel {
       calendarId: this.calendarId,
       url: this.url,
       enabled: this.enabled,
+      verificationType: this.verificationType,
       verificationState: this.verificationState,
       verifiedAt: this.verifiedAt ? this.verifiedAt.toISOString() : null,
       verificationExpiresAt: this.verificationExpiresAt
@@ -131,6 +153,8 @@ export class ImportSource extends PrimaryModel {
   static fromObject(obj: Record<string, any>): ImportSource {
     const model = new ImportSource(obj.id ?? '', obj.calendarId ?? '', obj.url ?? '');
     model.enabled = obj.enabled ?? true;
+    model.verificationType =
+      (obj.verificationType as ImportSourceVerificationType) ?? 'dns-txt';
     model.verificationState =
       (obj.verificationState as ImportSourceVerificationState) ?? 'unverified';
     model.verifiedAt = parseDate(obj.verifiedAt);

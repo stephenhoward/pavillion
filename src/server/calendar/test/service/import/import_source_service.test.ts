@@ -85,6 +85,7 @@ describe('ImportSourceService', () => {
           calendar_id: (values as any).calendar_id,
           url: (values as any).url,
           enabled: (values as any).enabled,
+          verification_type: (values as any).verification_type,
           verification_state: (values as any).verification_state,
           verification_token: (values as any).verification_token,
           verified_at: null,
@@ -111,6 +112,11 @@ describe('ImportSourceService', () => {
       expect(buildArgs.calendar_id).toBe(CAL_ID);
       expect(buildArgs.url).toBe(VALID_URL);
       expect(buildArgs.verification_state).toBe('pending');
+      // The service stamps the discriminator explicitly even though the DB
+      // default would cover it, so future call paths that create sources
+      // with a different type (OAuth onboarding) have a clear precedent.
+      // See bead pv-44qj.
+      expect(buildArgs.verification_type).toBe('dns-txt');
       expect(buildArgs.verification_token).toBeTruthy();
 
       // Token was derived by the HMAC helper for this (sourceId, calendarId).
@@ -125,6 +131,7 @@ describe('ImportSourceService', () => {
       expect(result.calendarId).toBe(CAL_ID);
       expect(result.url).toBe(VALID_URL);
       expect(result.verificationState).toBe('pending');
+      expect(result.verificationType).toBe('dns-txt');
       // Token must never leak onto the returned model.
       expect((result as any).verificationToken).toBeUndefined();
     });
@@ -407,6 +414,9 @@ describe('ImportSourceService', () => {
       // State transition: unverified → pending, and token persisted on entity.
       expect(entity.verification_state).toBe('pending');
       expect(entity.verification_token).toBe(expected);
+      // Belt-and-braces discriminator stamp, even on pre-existing rows that
+      // would otherwise carry the DB default. See bead pv-44qj.
+      expect(entity.verification_type).toBe('dns-txt');
       expect((entity.save as sinon.SinonStub).calledOnce).toBe(true);
     });
 
@@ -420,6 +430,7 @@ describe('ImportSourceService', () => {
       // State must NOT be downgraded to 'pending' from 'verified'.
       expect(entity.verification_state).toBe('verified');
       expect(entity.verification_token).toBe(token);
+      expect(entity.verification_type).toBe('dns-txt');
       expect((entity.save as sinon.SinonStub).calledOnce).toBe(true);
     });
 

@@ -113,6 +113,10 @@ class ImportSourceService {
       calendar_id: calendarId,
       url: normalizedUrl,
       enabled: true,
+      // Future call paths for rel-me / oauth sources must pass a different
+      // verification_type here; keeping the stamp visible now establishes
+      // the pattern before it has callers.
+      verification_type: 'dns-txt',
       verification_state: 'pending',
       verification_token: token,
     });
@@ -242,6 +246,10 @@ class ImportSourceService {
     // can compare. Also bump state to 'pending' if it's still 'unverified'
     // so the admin UI reflects that a challenge has been issued.
     entity.verification_token = token;
+    // Future call paths for rel-me / oauth sources must pass a different
+    // verification_type here; keeping the stamp visible now establishes
+    // the pattern before it has callers.
+    entity.verification_type = 'dns-txt';
     if (entity.verification_state === 'unverified') {
       entity.verification_state = 'pending';
     }

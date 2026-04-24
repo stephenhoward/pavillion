@@ -16,6 +16,7 @@ import {
   ImportSource,
   ImportSourceLastStatus,
   ImportSourceVerificationState,
+  ImportSourceVerificationType,
 } from '@/common/model/import_source';
 import { CalendarEntity } from '@/server/calendar/entity/calendar';
 import db from '@/server/common/entity/db';
@@ -24,7 +25,7 @@ import db from '@/server/common/entity/db';
  * ImportSourceEntity
  *
  * Sequelize entity mirroring the `import_source` table defined in
- * migration 0025. Stores calendar-level ICS import subscriptions with
+ * migration 0026. Stores calendar-level ICS import subscriptions with
  * their verification lifecycle and fetch bookkeeping.
  *
  * No business logic lives here — verification, fetch scheduling, and
@@ -55,6 +56,13 @@ class ImportSourceEntity extends Model {
   @Default(true)
   @Column({ type: DataType.BOOLEAN, allowNull: false })
   declare enabled: boolean;
+
+  @Default('dns-txt')
+  @Column({
+    type: DataType.ENUM('dns-txt'),
+    allowNull: false,
+  })
+  declare verification_type: ImportSourceVerificationType;
 
   @Default('unverified')
   @Column({
@@ -114,6 +122,7 @@ class ImportSourceEntity extends Model {
   toModel(): ImportSource {
     const model = new ImportSource(this.id, this.calendar_id, this.url);
     model.enabled = this.enabled;
+    model.verificationType = this.verification_type;
     model.verificationState = this.verification_state;
     model.verifiedAt = this.verified_at;
     model.verificationExpiresAt = this.verification_expires_at;
@@ -140,6 +149,7 @@ class ImportSourceEntity extends Model {
       calendar_id: model.calendarId,
       url: model.url,
       enabled: model.enabled,
+      verification_type: model.verificationType,
       verification_state: model.verificationState,
       verified_at: model.verifiedAt,
       verification_expires_at: model.verificationExpiresAt,

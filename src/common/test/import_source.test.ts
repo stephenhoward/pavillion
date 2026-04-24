@@ -3,6 +3,7 @@ import { describe, it, expect } from 'vitest';
 import {
   ImportSource,
   IMPORT_SOURCE_VERIFICATION_STATES,
+  IMPORT_SOURCE_VERIFICATION_TYPES,
   IMPORT_SOURCE_LAST_STATUSES,
 } from '@/common/model/import_source';
 
@@ -15,6 +16,7 @@ describe('ImportSource', () => {
       expect(model.calendarId).toBe('');
       expect(model.url).toBe('');
       expect(model.enabled).toBe(true);
+      expect(model.verificationType).toBe('dns-txt');
       expect(model.verificationState).toBe('unverified');
       expect(model.verifiedAt).toBeNull();
       expect(model.verificationExpiresAt).toBeNull();
@@ -43,6 +45,13 @@ describe('ImportSource', () => {
         'verified',
         'expired',
       ]);
+    });
+
+    it('exposes verification types (discriminator)', () => {
+      // Only `dns-txt` is defined today. Future verifier beads extend the
+      // union in the same change that introduces the verifier. See bead
+      // pv-44qj.
+      expect(IMPORT_SOURCE_VERIFICATION_TYPES).toEqual(['dns-txt']);
     });
 
     it('exposes last-status values', () => {
@@ -78,6 +87,7 @@ describe('ImportSource', () => {
         calendarId: 'cal-1',
         url: 'https://example.com/cal.ics',
         enabled: false,
+        verificationType: 'dns-txt',
         verificationState: 'verified',
         verifiedAt: '2026-04-22T10:00:00.000Z',
         verificationExpiresAt: '2026-10-22T10:00:00.000Z',
@@ -121,6 +131,7 @@ describe('ImportSource', () => {
         calendarId: 'cal-1',
         url: 'https://example.com/cal.ics',
         enabled: false,
+        verificationType: 'dns-txt',
         verificationState: 'pending',
         verifiedAt: '2026-04-22T10:00:00.000Z',
         verificationExpiresAt: null,
@@ -138,6 +149,7 @@ describe('ImportSource', () => {
       expect(model.calendarId).toBe('cal-1');
       expect(model.url).toBe('https://example.com/cal.ics');
       expect(model.enabled).toBe(false);
+      expect(model.verificationType).toBe('dns-txt');
       expect(model.verificationState).toBe('pending');
       expect(model.verifiedAt).toEqual(new Date('2026-04-22T10:00:00.000Z'));
       expect(model.verificationExpiresAt).toBeNull();
@@ -151,6 +163,7 @@ describe('ImportSource', () => {
       const model = ImportSource.fromObject({});
 
       expect(model.enabled).toBe(true);
+      expect(model.verificationType).toBe('dns-txt');
       expect(model.verificationState).toBe('unverified');
       expect(model.verifiedAt).toBeNull();
       expect(model.lastStatus).toBeNull();

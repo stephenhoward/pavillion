@@ -12,6 +12,7 @@ describe('ImportSourceEntity', () => {
       const calendarId = uuidv4();
       const model = new ImportSource(id, calendarId, 'https://example.com/cal.ics');
       model.enabled = false;
+      model.verificationType = 'dns-txt';
       model.verificationState = 'verified';
       model.verifiedAt = new Date('2026-04-22T10:00:00Z');
       model.verificationExpiresAt = new Date('2026-10-22T10:00:00Z');
@@ -26,6 +27,7 @@ describe('ImportSourceEntity', () => {
       expect(entity.calendar_id).toBe(calendarId);
       expect(entity.url).toBe('https://example.com/cal.ics');
       expect(entity.enabled).toBe(false);
+      expect(entity.verification_type).toBe('dns-txt');
       expect(entity.verification_state).toBe('verified');
       expect(entity.verified_at).toEqual(new Date('2026-04-22T10:00:00Z'));
       expect(entity.verification_expires_at).toEqual(new Date('2026-10-22T10:00:00Z'));
@@ -58,6 +60,7 @@ describe('ImportSourceEntity', () => {
         calendar_id: calendarId,
         url: 'https://example.com/cal.ics',
         enabled: true,
+        verification_type: 'dns-txt',
         verification_state: 'pending',
         verification_token: 'secret-token',
         verified_at: null,
@@ -75,6 +78,7 @@ describe('ImportSourceEntity', () => {
       expect(model.calendarId).toBe(calendarId);
       expect(model.url).toBe('https://example.com/cal.ics');
       expect(model.enabled).toBe(true);
+      expect(model.verificationType).toBe('dns-txt');
       expect(model.verificationState).toBe('pending');
       expect(model.verifiedAt).toBeNull();
       expect(model.lastStatus).toBeNull();
@@ -104,6 +108,7 @@ describe('ImportSourceEntity', () => {
       const calendarId = uuidv4();
       const original = new ImportSource(id, calendarId, 'https://example.com/cal.ics');
       original.enabled = false;
+      original.verificationType = 'dns-txt';
       original.verificationState = 'verified';
       original.verifiedAt = new Date('2026-04-22T10:00:00Z');
       original.etag = 'W/"abc"';
@@ -117,11 +122,48 @@ describe('ImportSourceEntity', () => {
       expect(roundTrip.calendarId).toBe(original.calendarId);
       expect(roundTrip.url).toBe(original.url);
       expect(roundTrip.enabled).toBe(original.enabled);
+      expect(roundTrip.verificationType).toBe(original.verificationType);
       expect(roundTrip.verificationState).toBe(original.verificationState);
       expect(roundTrip.verifiedAt).toEqual(original.verifiedAt);
       expect(roundTrip.etag).toBe(original.etag);
       expect(roundTrip.contentHash).toBe(original.contentHash);
       expect(roundTrip.lastStatus).toBe(original.lastStatus);
+    });
+  });
+
+  describe('verification_type column defaults', () => {
+    it('defaults verification_type to dns-txt when not specified on build', () => {
+      // The column has a Sequelize @Default('dns-txt') decorator so an
+      // entity built without an explicit verification_type still carries
+      // the discriminator. This is the safety net behind the service-layer
+      // explicit stamp (see bead pv-44qj).
+      const id = uuidv4();
+      const calendarId = uuidv4();
+      const entity = ImportSourceEntity.build({
+        id,
+        calendar_id: calendarId,
+        url: 'https://example.com/cal.ics',
+        verification_state: 'pending',
+      });
+
+      expect(entity.verification_type).toBe('dns-txt');
+    });
+
+    it('round-trips an explicit verificationType through fromModel -> toModel', () => {
+      // With only one enum value today this can't discriminate a hypothetical
+      // "always returns default" bug from correct behavior — it simply
+      // verifies the field is carried through fromModel/toModel. Future
+      // verifier beads that add new enum values can strengthen this check.
+      const id = uuidv4();
+      const calendarId = uuidv4();
+      const model = new ImportSource(id, calendarId, 'https://example.com/cal.ics');
+      model.verificationType = 'dns-txt';
+
+      const entity = ImportSourceEntity.fromModel(model);
+      expect(entity.verification_type).toBe('dns-txt');
+
+      const roundTrip = entity.toModel();
+      expect(roundTrip.verificationType).toBe('dns-txt');
     });
   });
 });
