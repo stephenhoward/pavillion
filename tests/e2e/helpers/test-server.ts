@@ -28,6 +28,14 @@ export interface TestServerOptions {
   portRangeEnd?: number;
   /** Timeout for server startup in ms (default: 30000) */
   startupTimeout?: number;
+  /**
+   * Extra environment variables to merge into the child process' env.
+   * Used by specs that need to toggle env-gated behavior (e.g. the
+   * ICS-import e2e spec sets ALLOW_LOCALHOST_ICS_IMPORT=true and
+   * provides a NODE_CONFIG override pointing DoH at a local mock server).
+   * Values here take precedence over the caller's process.env.
+   */
+  extraEnv?: Record<string, string>;
 }
 
 /**
@@ -124,6 +132,7 @@ export async function startTestServer(
     portRangeStart = 3100,
     portRangeEnd = 3200,
     startupTimeout = 30000,
+    extraEnv = {},
   } = options;
 
   // Find an available port
@@ -133,13 +142,28 @@ export async function startTestServer(
   console.log(`[Test Server] Starting server on port ${port}...`);
 
   // Spawn server process with tsx (TypeScript executor)
-  // Set NODE_ENV=e2e for proper seeding and built frontend asset serving
+  // Set NODE_ENV=e2e for proper seeding and built frontend asset serving.
+  //
+  // NODE_OPTIONS: `--unhandled-rejections=warn` keeps the child alive when
+  // a promise rejects without a handler. The e2e backend exercises many
+  // async background workers (ActivityPub outbox processor, etc.) whose
+  // rejected promises are only logged — not re-thrown — in production
+  // under Pino. Newer Node defaults to `throw`, which would crash the
+  // test server mid-test and surface as a flaky ERR_CONNECTION_REFUSED
+  // with no useful diagnostic. Warning-only matches production operators'
+  // experience and lets the tests assert what they came to assert.
+  const nodeOptions = [process.env.NODE_OPTIONS, '--unhandled-rejections=warn']
+    .filter(Boolean)
+    .join(' ');
+
   const serverProcess = spawn('npx', ['tsx', 'src/server/app.ts'], {
     env: {
       ...process.env,
       NODE_ENV: 'e2e',
       HOST_PORT: port.toString(),
       DB_RESET: 'true', // Ensure database reset on startup
+      NODE_OPTIONS: nodeOptions,
+      ...extraEnv,
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
@@ -147,11 +171,19 @@ export async function startTestServer(
   // Buffer server output for debugging
   let serverOutput = '';
   serverProcess.stdout?.on('data', (data) => {
-    serverOutput += data.toString();
+    const s = data.toString();
+    serverOutput += s;
+    if (process.env.TEST_SERVER_VERBOSE === '1') {
+      process.stdout.write(`[server:${port}] ${s}`);
+    }
   });
 
   serverProcess.stderr?.on('data', (data) => {
-    serverOutput += data.toString();
+    const s = data.toString();
+    serverOutput += s;
+    if (process.env.TEST_SERVER_VERBOSE === '1') {
+      process.stderr.write(`[server:${port} err] ${s}`);
+    }
   });
 
   // Handle process errors
