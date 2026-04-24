@@ -344,7 +344,7 @@ describe('ImportSourceService', () => {
   // --------------------------------------------------------------------
 
   describe('deleteSource', () => {
-    it('destroys the entity (DB cascade handles import_run + event.import_source_id)', async () => {
+    it('destroys the entity (DB cascade handles import_run + event_import_origin rows)', async () => {
       const destroyStub = sandbox.stub().resolves();
       sandbox.stub(ImportSourceEntity, 'findOne').resolves({
         id: SOURCE_ID,

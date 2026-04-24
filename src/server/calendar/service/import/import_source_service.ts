@@ -34,9 +34,10 @@ const DEFAULT_MAX_SOURCES_PER_CALENDAR = 10;
  *  - `listSources`      — all sources for a calendar (editor-permission-gated)
  *  - `getSource`        — single source by id, scoped to the calendar
  *  - `deleteSource`     — hard delete; DB `ON DELETE CASCADE` removes
- *                         dependent import_run rows, and
- *                         `event.import_source_id` is nulled out by the
- *                         migration's `ON DELETE SET NULL` FK
+ *                         dependent import_run rows and
+ *                         event_import_origin sibling rows; associated
+ *                         event rows are preserved and become
+ *                         locally-owned (pv-picz sibling-table design)
  *
  * URL immutability: there is no `updateSource` / URL-mutation method by
  * design. Any change to the source URL requires delete + recreate, which
@@ -173,7 +174,9 @@ class ImportSourceService {
   /**
    * Delete an import source. The DB migration handles cascade semantics:
    *  - `import_run.import_source_id` is `ON DELETE CASCADE`
-   *  - `event.import_source_id` is `ON DELETE SET NULL`
+   *  - `event_import_origin.import_source_id` is `ON DELETE CASCADE`
+   *    (pv-picz sibling table — event rows are preserved and become
+   *    locally-owned; orphan origin rows would carry no actionable data)
    *
    * @param account - The requesting account (must own or edit the calendar)
    * @param calendarId - The calendar UUID

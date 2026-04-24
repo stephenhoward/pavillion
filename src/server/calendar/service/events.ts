@@ -142,12 +142,15 @@ export function scrubExternalUrlForLog(externalUrl: string | null | undefined): 
  * intent. See pv-1qcp epic DESIGN and architecture-playbook (no entity
  * hooks for caller-intent rules).
  *
- * - `'user'` (default): user-initiated mutation. If the event has an
- *   `importSourceId`, the service flips `locallyEdited=true` so future sync
- *   runs know not to overwrite this event's content.
- * - `'import'`: ICS sync orchestrator. The service leaves `locallyEdited`
- *   unchanged and, on create, initializes `sourceLastSeenAt=now()` and
- *   `locallyEdited=false`.
+ * - `'user'` (default): user-initiated mutation. On updateEvent, the
+ *   service looks up the `EventImportOriginEntity` sibling row (if any)
+ *   and flips `locally_edited=true` so future sync runs know not to
+ *   overwrite this event's content. On createEvent, no-op.
+ * - `'import'`: ICS sync orchestrator. On createEvent and updateEvent,
+ *   no-op at the EventService layer — origin bookkeeping lives on the
+ *   sibling table and is owned by sync.ts's stampImportOrigin, which
+ *   runs in the same transaction. The context argument is retained for
+ *   symmetry, audit traceability, and future originator-aware behavior.
  *
  * Event-bus emissions fire on BOTH paths (critical — imported events must
  * still federate via AP through the existing emission machinery).
