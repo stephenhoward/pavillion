@@ -50,22 +50,20 @@ const DEFAULT_MAX_SOURCES_PER_CALENDAR = 10;
  */
 class ImportSourceService {
   private dnsVerifier: DnsVerifier;
-  private syncServiceFactory: (() => SyncService) | null = null;
 
-  constructor(private calendarService?: CalendarService, dnsVerifier?: DnsVerifier) {
+  constructor(
+    private calendarService?: CalendarService,
+    private syncService?: SyncService,
+    dnsVerifier?: DnsVerifier,
+  ) {
     // calendarService is optional so callers in a future wiring pass can
     // inject the shared instance; when absent we fall back to loading the
     // calendar entity directly (mirrors WidgetConfigService).
+    //
+    // syncService is optional so tests can construct the service without
+    // wiring a real sync pipeline; production wiring in CalendarInterface
+    // injects the shared SyncService instance directly.
     this.dnsVerifier = dnsVerifier ?? new DnsVerifier();
-  }
-
-  /**
-   * Inject the SyncService factory so this service can delegate manual
-   * sync runs without creating a circular import at module load time.
-   * Called by the CalendarInterface wiring pass.
-   */
-  setSyncServiceFactory(factory: () => SyncService): void {
-    this.syncServiceFactory = factory;
   }
 
   /**
@@ -317,12 +315,11 @@ class ImportSourceService {
       throw new ImportSourceNotFoundError();
     }
 
-    if (!this.syncServiceFactory) {
-      throw new Error('ImportSourceService.syncSource called before SyncService factory wiring');
+    if (!this.syncService) {
+      throw new Error('ImportSourceService.syncSource called without SyncService wiring');
     }
-    const syncService = this.syncServiceFactory();
 
-    return syncService.syncSource({ account, importSourceId: id });
+    return this.syncService.syncSource({ account, importSourceId: id });
   }
 
   // ---------------------------------------------------------------------

@@ -70,15 +70,14 @@ export default class CalendarInterface {
     this.widgetConfigService = new WidgetConfigService(this.calendarService);
     this.categoryMappingService = new CategoryMappingService();
     this.seriesService = new SeriesService(this.calendarService, eventBus);
-    this.importSourceService = new ImportSourceService(this.calendarService);
-    // Wire the SyncService factory lazily: SyncService needs EventService,
-    // and we want a single shared instance so the per-source in-memory
-    // rate limiter has a stable state across invocations.
+    // A single shared SyncService instance is constructed here so the
+    // per-source in-memory rate limiter has stable state across invocations,
+    // and injected directly into ImportSourceService via its constructor.
     const sharedSyncService = new SyncService({
       eventService: this.eventService,
       calendarService: this.calendarService,
     });
-    this.importSourceService.setSyncServiceFactory(() => sharedSyncService);
+    this.importSourceService = new ImportSourceService(this.calendarService, sharedSyncService);
   }
 
   /**

@@ -53,6 +53,7 @@ import {
   ImportSourceFetchError,
   ImportSourceParseError,
   ImportSourceNotFoundError,
+  ImportSourceNotVerifiedError,
   ImportSourceSsrfBlockedError,
   ImportSourceVerifyRateLimitError,
 } from '@/common/exceptions/import';
@@ -97,6 +98,8 @@ export const IMPORT_RUN_RETENTION = 50;
 export interface SyncResult {
   /** The ImportRun UUID (also persisted). */
   runId: string;
+  /** Wall-clock time at which the run began (matches the ImportRun row's `started_at`). */
+  startedAt: Date;
   /** Terminal outcome for the run. */
   outcome: ImportRunOutcome;
   /** New events created via EventService.createEvent. */
@@ -230,7 +233,7 @@ class SyncService {
    * Throws:
    *  - {@link ImportSourceNotFoundError} — source does not exist
    *  - {@link ImportSourceVerifyRateLimitError} — per-source hourly cap hit
-   *  - Error("IMPORT_SOURCE_NOT_VERIFIED") — source state blocks sync
+   *  - {@link ImportSourceNotVerifiedError} — source state blocks sync
    */
   async syncSource(input: SyncInput): Promise<SyncResult> {
     const { importSourceId } = input;
@@ -469,9 +472,7 @@ class SyncService {
         const expiresAt = source.verification_expires_at;
         const now = this.nowFn();
         if (!isVerificationCurrentlyValid(expiresAt, now) && !isWithinGracePeriod(expiresAt, now)) {
-          const e = new Error('IMPORT_SOURCE_NOT_VERIFIED');
-          e.name = 'ImportSourceNotVerifiedError';
-          throw e;
+          throw new ImportSourceNotVerifiedError();
         }
       }
       return;
@@ -482,9 +483,7 @@ class SyncService {
         return;
       }
     }
-    const e = new Error('IMPORT_SOURCE_NOT_VERIFIED');
-    e.name = 'ImportSourceNotVerifiedError';
-    throw e;
+    throw new ImportSourceNotVerifiedError();
   }
 
   /**
@@ -716,6 +715,7 @@ class SyncService {
 
     return {
       runId: row.id,
+      startedAt: input.startedAt,
       outcome: input.outcome,
       eventsCreated: input.counts.created,
       eventsUpdated: input.counts.updated,

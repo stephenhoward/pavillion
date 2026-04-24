@@ -328,20 +328,13 @@ onBeforeUnmount(() => {
 
 <style scoped lang="scss">
 @use '../../../../assets/style/components/calendar-admin' as *;
+@use '../../../../assets/style/mixins/visibility' as *;
 
 // Visually hide content while keeping it accessible to screen readers.
 // Used for the "Copied" live region; pattern mirrors the shared sr-only
 // pattern in admin/root.vue (WCAG SC 4.1.3 Status Messages).
 .sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border-width: 0;
+  @include sr-only;
 }
 
 .dns-challenge {

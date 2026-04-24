@@ -474,6 +474,7 @@ describe('ImportSourceService', () => {
   describe('syncSource', () => {
     const FAKE_RESULT: SyncResult = {
       runId: 'run-xyz',
+      startedAt: new Date('2026-04-22T10:00:00Z'),
       outcome: 'success',
       eventsCreated: 3,
       eventsUpdated: 0,
@@ -493,15 +494,18 @@ describe('ImportSourceService', () => {
       } as unknown as ImportSourceEntity;
     }
 
-    it('delegates to the SyncService returned by the injected factory', async () => {
+    it('delegates to the injected SyncService', async () => {
       const entity = fakeSourceEntity();
       sandbox.stub(ImportSourceEntity, 'findOne').resolves(entity);
 
       const syncStub = sandbox.stub().resolves(FAKE_RESULT);
       const fakeSyncService = { syncSource: syncStub } as unknown as SyncService;
-      service.setSyncServiceFactory(() => fakeSyncService);
+      const wiredService = new ImportSourceService(
+        calendarService as unknown as CalendarService,
+        fakeSyncService,
+      );
 
-      const result = await service.syncSource(account, CAL_ID, SOURCE_ID);
+      const result = await wiredService.syncSource(account, CAL_ID, SOURCE_ID);
 
       expect(result).toBe(FAKE_RESULT);
       expect(syncStub.calledOnce).toBe(true);
@@ -513,16 +517,16 @@ describe('ImportSourceService', () => {
       expect(callArg.account).toBe(account);
     });
 
-    it('throws a guard error when the SyncService factory is not wired', async () => {
+    it('throws a guard error when the SyncService is not wired', async () => {
       const entity = fakeSourceEntity();
       sandbox.stub(ImportSourceEntity, 'findOne').resolves(entity);
 
-      // Factory intentionally NOT wired — production startup must call
-      // setSyncServiceFactory during interface bootstrap. If that wiring is
-      // ever skipped we want a loud guard, not a silent null-deref.
+      // SyncService intentionally NOT wired — production startup must inject
+      // one during interface bootstrap. If that wiring is ever skipped we
+      // want a loud guard, not a silent null-deref.
       await expect(
         service.syncSource(account, CAL_ID, SOURCE_ID),
-      ).rejects.toThrow(/factory wiring/);
+      ).rejects.toThrow(/SyncService wiring/);
     });
 
     it('throws ImportSourceNotFoundError when the source does not exist', async () => {

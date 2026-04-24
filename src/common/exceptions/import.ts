@@ -25,6 +25,7 @@ export const IMPORT_FETCH_ERROR = 'IMPORT_FETCH_ERROR';
 export const IMPORT_SSRF_BLOCKED = 'IMPORT_SSRF_BLOCKED';
 export const IMPORT_PARSE_ERROR = 'IMPORT_PARSE_ERROR';
 export const IMPORT_VERIFY_RATE_LIMITED = 'IMPORT_VERIFY_RATE_LIMITED';
+export const IMPORT_SOURCE_NOT_VERIFIED = 'IMPORT_SOURCE_NOT_VERIFIED';
 
 // DNS verification reason codes — exactly one of these is used as the
 // user-visible message for ImportSourceDnsVerificationError.
@@ -136,5 +137,21 @@ export class ImportSourceVerifyRateLimitError extends Error {
     this.name = 'ImportSourceVerifyRateLimitError';
     this.details = details;
     Object.setPrototypeOf(this, ImportSourceVerifyRateLimitError.prototype);
+  }
+}
+
+/**
+ * Thrown when a sync is attempted against an import source whose verification
+ * state blocks it (unverified, or expired beyond the grace window). Maps to
+ * HTTP 409 Conflict in the API handler.
+ */
+export class ImportSourceNotVerifiedError extends Error {
+  public readonly details?: Record<string, unknown>;
+
+  constructor(details?: Record<string, unknown>) {
+    super(IMPORT_SOURCE_NOT_VERIFIED);
+    this.name = 'ImportSourceNotVerifiedError';
+    this.details = details;
+    Object.setPrototypeOf(this, ImportSourceNotVerifiedError.prototype);
   }
 }

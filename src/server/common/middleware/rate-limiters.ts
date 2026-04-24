@@ -211,10 +211,11 @@ export const checkoutSessionByAccount: RequestHandler = isRateLimitEnabled()
  */
 export const importSourceVerifyBySource: RequestHandler = isRateLimitEnabled()
   ? createParamRateLimiter(
-    config.get<number>('rateLimit.importSource.verifyByHostname.max'),
-    config.get<number>('rateLimit.importSource.verifyByHostname.windowMs'),
+    config.get<number>('rateLimit.importSource.verifyBySource.max'),
+    config.get<number>('rateLimit.importSource.verifyBySource.windowMs'),
     'import-source-verify',
     'id',
+    'ImportSourceVerifyRateLimitError',
   )
   : noOpMiddleware;
 
@@ -233,5 +234,6 @@ export const importSourceSyncBySource: RequestHandler = isRateLimitEnabled()
     config.get<number>('rateLimit.importSource.syncBySource.windowMs'),
     'import-source-sync',
     'id',
+    'ImportSourceSyncRateLimitError',
   )
   : noOpMiddleware;

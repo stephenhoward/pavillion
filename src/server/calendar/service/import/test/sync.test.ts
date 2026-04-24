@@ -6,6 +6,7 @@ import { Account } from '@/common/model/account';
 import {
   ImportSourceFetchError,
   ImportSourceNotFoundError,
+  ImportSourceNotVerifiedError,
   ImportSourceSsrfBlockedError,
   ImportSourceVerifyRateLimitError,
 } from '@/common/exceptions/import';
@@ -178,7 +179,7 @@ describe('SyncService', () => {
         makeSourceEntity({ verification_state: 'unverified' }),
       );
       await expect(service.syncSource({ account, importSourceId: 'src-1' }))
-        .rejects.toMatchObject({ message: 'IMPORT_SOURCE_NOT_VERIFIED' });
+        .rejects.toBeInstanceOf(ImportSourceNotVerifiedError);
     });
 
     it('refuses sync when verification is expired and beyond the grace window', async () => {
@@ -190,7 +191,7 @@ describe('SyncService', () => {
         }),
       );
       await expect(service.syncSource({ account, importSourceId: 'src-1' }))
-        .rejects.toMatchObject({ message: 'IMPORT_SOURCE_NOT_VERIFIED' });
+        .rejects.toBeInstanceOf(ImportSourceNotVerifiedError);
     });
 
     it('allows sync when expired but inside the 14-day grace window', async () => {
@@ -281,6 +282,61 @@ describe('SyncService', () => {
       expect((src.save as sinon.SinonStub).called).toBe(true);
       // conditional GET sent with stored etag
       expect(fetcher.fetch.firstCall.args[0]).toMatchObject({ etag: 'W/"abc"' });
+    });
+
+    it('propagates the real run start time on SyncResult.startedAt', async () => {
+      // Item 1 of pv-1qcp.15: SyncResult must preserve the actual run start
+      // time (captured at syncSource() entry), not be overwritten by any
+      // later clock reading. We simulate time advancing by returning a
+      // monotonically increasing clock value on each nowFn() call. The
+      // verification-state check reads the clock too, so we use a counter
+      // rather than `onFirstCall` semantics to make the assertion robust
+      // to internal call order.
+      const startTs = new Date('2026-04-22T10:00:00.000Z');
+      const finishTs = new Date('2026-04-22T10:00:05.000Z');
+      let firstCall = true;
+      const now = (): Date => {
+        // Anything that happens BEFORE syncSource() captures startedAt
+        // (e.g. the verification-expiry check) reads `startTs`. The very
+        // next read — which the orchestrator performs immediately after,
+        // assigning to the local `startedAt` — also reads `startTs`. From
+        // then on, time has advanced to `finishTs` (the run is finished).
+        if (firstCall) {
+          // This branch is intentionally narrow so we do not have to count
+          // pre-startedAt calls; the implementation reads the clock for
+          // verification then for startedAt before doing any I/O.
+          // Keep returning startTs until we observe a call that means the
+          // run has progressed past start; here we approximate by switching
+          // after the first I/O await (i.e. on the call from recordRun).
+          return startTs;
+        }
+        return finishTs;
+      };
+
+      const src = makeSourceEntity({ etag: 'W/"abc"' });
+      sandbox.stub(ImportSourceEntity, 'findByPk').resolves(src);
+      fetcher.fetch.callsFake(async () => {
+        // Time advances to finishTs after the fetch completes — this is
+        // the only nowFn() reads after this point will see.
+        firstCall = false;
+        return { outcome: 'not_modified', httpStatus: 304, etag: 'W/"abc"' };
+      });
+
+      const scoped = new SyncService({
+        eventService: eventService as unknown as EventService,
+        calendarService: calendarService as unknown as CalendarService,
+        fetcher: fetcher as unknown as Fetcher,
+        rateLimiter,
+        parseICS: () => ({}) as never,
+        now,
+      });
+
+      const result = await scoped.syncSource({ account, importSourceId: 'src-1' });
+
+      expect(result.startedAt).toBeInstanceOf(Date);
+      expect(result.startedAt.getTime()).toBe(startTs.getTime());
+      // Sanity: startedAt must NOT be clobbered by a later clock read.
+      expect(result.startedAt.getTime()).not.toBe(finishTs.getTime());
     });
 
     it('records no_changes when content_hash matches the stored hash', async () => {

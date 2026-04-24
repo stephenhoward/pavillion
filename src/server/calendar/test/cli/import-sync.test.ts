@@ -62,6 +62,7 @@ describe('runImportSync (CLI adapter)', () => {
   function makeResult(overrides: Partial<SyncResult> = {}): SyncResult {
     return {
       runId: 'run-1',
+      startedAt: new Date('2026-04-22T10:00:00Z'),
       outcome: 'success',
       eventsCreated: 0,
       eventsUpdated: 0,

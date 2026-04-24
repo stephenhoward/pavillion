@@ -13,7 +13,7 @@
         -->
         <span
           :class="['import-source-row__badge', `import-source-row__badge--${source.verificationState}`]"
-          :aria-label="t('verification_state_label') + ': ' + verificationStateLabel"
+          :aria-label="t('verification_badge_aria', { state: verificationStateLabel })"
         >
           {{ verificationStateLabel }}
         </span>
@@ -188,21 +188,14 @@ const onVerify = () => {
 
 <style scoped lang="scss">
 @use '../../../../assets/style/components/calendar-admin' as *;
+@use '../../../../assets/style/mixins/visibility' as *;
 
 // Visually hide descriptive text while keeping it accessible to screen
 // readers. Used for the Sync Now disabled-reason description so the
 // reason is announced via aria-describedby even though only the label
 // "Sync now" is visible on screen (WCAG SC 4.1.2).
 .sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border-width: 0;
+  @include sr-only;
 }
 
 .import-source-row {

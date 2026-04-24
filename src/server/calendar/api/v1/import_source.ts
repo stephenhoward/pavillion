@@ -6,6 +6,7 @@ import { CalendarNotFoundError } from '@/common/exceptions/calendar';
 import { CalendarEditorPermissionError } from '@/common/exceptions/editor';
 import {
   ImportSourceNotFoundError,
+  ImportSourceNotVerifiedError,
   ImportSourceDnsVerificationError,
   ImportSourceVerifyRateLimitError,
   ImportSourceFetchError,
@@ -411,12 +412,12 @@ class ImportSourceRoutes {
       });
       return;
     }
-    // Sync service throws a bare Error with name='ImportSourceNotVerifiedError'
-    // for "not verified" state gating — translate to 409 Conflict.
-    if (error instanceof Error && error.name === 'ImportSourceNotVerifiedError') {
+    // Sync service throws ImportSourceNotVerifiedError when the source's
+    // verification state blocks the run — translate to 409 Conflict.
+    if (error instanceof ImportSourceNotVerifiedError) {
       res.status(409).json({
-        error: 'IMPORT_SOURCE_NOT_VERIFIED',
-        errorName: 'ImportSourceNotVerifiedError',
+        error: error.message,
+        errorName: error.name,
       });
       return;
     }
@@ -430,21 +431,20 @@ class ImportSourceRoutes {
 
 /**
  * Translate SyncService's internal SyncResult shape into the API wire
- * shape consumed by the frontend (`ImportRunSummary`). Frontend uses
- * `id` + `importSourceId` + `startedAt` / `finishedAt` timestamps; the
- * service returns `runId` with counts only, so we flesh out timestamps
- * with the current wall clock (run is already finished at this point).
+ * shape consumed by the frontend (`ImportRunSummary`). The run's real
+ * `startedAt` is preserved from the service result; `finishedAt` is
+ * captured at API-handler return time (the run is definitively finished
+ * by the time this function runs).
  */
 function toImportRunSummary(
   result: SyncResult,
   importSourceId: string,
 ): Record<string, unknown> {
-  const finishedAt = new Date().toISOString();
   return {
     id: result.runId,
     importSourceId,
-    startedAt: finishedAt,
-    finishedAt,
+    startedAt: result.startedAt.toISOString(),
+    finishedAt: new Date().toISOString(),
     outcome: result.outcome,
     eventsCreated: result.eventsCreated,
     eventsUpdated: result.eventsUpdated,

@@ -276,7 +276,6 @@
         "last_sync_at": "Last synced {{time}}",
         "sync_now": "Sync now",
         "sync_aria": "Sync import source {{url}}",
-        "sync_disabled_reason": "Verify this source before you can sync it.",
         "sync_disabled_description": "Verify this source before you can sync it.",
         "remove": "Remove",
         "remove_source_aria": "Remove import source {{url}}",

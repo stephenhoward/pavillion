@@ -11,6 +11,7 @@ import { CalendarNotFoundError } from '@/common/exceptions/calendar';
 import { CalendarEditorPermissionError } from '@/common/exceptions/editor';
 import {
   ImportSourceNotFoundError,
+  ImportSourceNotVerifiedError,
   ImportSourceDnsVerificationError,
   ImportSourceVerifyRateLimitError,
   ImportSourceFetchError,
@@ -479,8 +480,10 @@ describe('ImportSourceRoutes', () => {
   describe('POST /calendars/:calendarId/import-sources/:id/sync', () => {
     it('returns the ImportRunSummary on success', async () => {
       const stub = mockInterface.syncImportSource as sinon.SinonStub;
+      const syncStartedAt = new Date('2026-04-22T10:00:00Z');
       stub.resolves({
         runId: 'run-id-123',
+        startedAt: syncStartedAt,
         outcome: 'success',
         eventsCreated: 2,
         eventsUpdated: 1,
@@ -504,8 +507,13 @@ describe('ImportSourceRoutes', () => {
       expect(response.body.outcome).toBe('success');
       expect(response.body.eventsCreated).toBe(2);
       expect(response.body.eventsUpdated).toBe(1);
-      expect(typeof response.body.startedAt).toBe('string');
+      // The API must preserve the real run start time from the service —
+      // NOT overwrite it with the current wall clock. See Item 1 of pv-1qcp.15.
+      expect(response.body.startedAt).toBe(syncStartedAt.toISOString());
       expect(typeof response.body.finishedAt).toBe('string');
+      // finishedAt is stamped at API-handler time, so it must be ≥ startedAt.
+      expect(new Date(response.body.finishedAt).getTime())
+        .toBeGreaterThanOrEqual(syncStartedAt.getTime());
     });
 
     it('maps SSRF block to 400 with errorName', async () => {
@@ -577,10 +585,8 @@ describe('ImportSourceRoutes', () => {
     });
 
     it('maps not-verified state error to 409', async () => {
-      const notVerified = new Error('IMPORT_SOURCE_NOT_VERIFIED');
-      notVerified.name = 'ImportSourceNotVerifiedError';
       const stub = mockInterface.syncImportSource as sinon.SinonStub;
-      stub.rejects(notVerified);
+      stub.rejects(new ImportSourceNotVerifiedError());
 
       router.post('/handler', (req, res) => {
         attachAccount(req);

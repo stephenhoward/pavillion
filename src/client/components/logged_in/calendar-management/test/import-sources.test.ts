@@ -591,6 +591,25 @@ describe('ImportSourcesSection', () => {
       // But still has an accessible name via aria-label
       expect(badge.attributes('aria-label')).toBeTruthy();
     });
+
+    it('badge aria-label uses verification_badge_aria interpolation (state placeholder)', async () => {
+      // Item 6 of pv-1qcp.15: switch from string concatenation to the
+      // dedicated i18n key with a {state} placeholder. The label must
+      // contain the verification state's localized label.
+      const s1 = buildSource('id-1', 'https://example.com/a.ics');
+      s1.verificationState = 'verified';
+      listSourcesMock.mockResolvedValue([s1]);
+
+      const { wrapper } = mountSection();
+      await flushPromises();
+
+      const badge = wrapper.find('.import-source-row__badge');
+      const ariaLabel = badge.attributes('aria-label') ?? '';
+      // The key resolves to "Verification status: {{state}}"; we assert the
+      // interpolated state appears (the verified label) without locking the
+      // exact translation string.
+      expect(ariaLabel.toLowerCase()).toContain('verified');
+    });
   });
 
   describe('AP-source warning', () => {
