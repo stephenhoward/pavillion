@@ -593,10 +593,16 @@ class SyncService {
    * orchestrator is the sole writer.
    *
    * Contract: `locally_edited` is intentionally omitted from the upsert
-   * values. On INSERT Sequelize applies the column default (false). On
-   * subsequent UPSERTs the existing value is preserved because the column is
-   * not present in the values object — this is how user edits survive
-   * intervening sync runs.
+   * values. On INSERT Sequelize applies the model-level `defaultValue: false`
+   * from the @Column decorator (the DB default is a redundant safety net —
+   * both must stay consistent). On subsequent UPSERTs the existing value is
+   * preserved because the column is not present in the values object, so
+   * Sequelize does not list it in `ON CONFLICT (event_id) DO UPDATE SET ...`
+   * — this is how user edits survive intervening sync runs.
+   *
+   * `conflictFields: ['event_id']` makes the ON CONFLICT target explicit
+   * rather than relying on Sequelize's implicit scan of unique column
+   * decorators; stable across future entity/values-object refactors.
    *
    * Accepts an optional transaction handle so the upsert participates in the
    * caller's transaction. Callers inside `db.transaction` MUST pass `tx` —
@@ -622,7 +628,7 @@ class SyncService {
         source_last_seen_at: this.nowFn(),
         x_props: mapped.x_props,
       },
-      { transaction: tx },
+      { transaction: tx, conflictFields: ['event_id'] },
     );
   }
 
