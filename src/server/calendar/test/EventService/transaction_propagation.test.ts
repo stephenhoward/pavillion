@@ -112,8 +112,6 @@ describe('EventService transaction propagation', () => {
       const entity = EventEntity.build({
         id: EVENT_ID,
         calendar_id: CALENDAR_ID,
-        import_source_id: null,
-        locally_edited: false,
       });
       findStub.resolves(entity);
 
@@ -135,8 +133,6 @@ describe('EventService transaction propagation', () => {
       const entity = EventEntity.build({
         id: EVENT_ID,
         calendar_id: CALENDAR_ID,
-        import_source_id: null,
-        locally_edited: false,
       });
       findStub.resolves(entity);
 
@@ -168,8 +164,6 @@ describe('EventService transaction propagation', () => {
       const entity = EventEntity.build({
         id: EVENT_ID,
         calendar_id: CALENDAR_ID,
-        import_source_id: null,
-        locally_edited: false,
       });
       findStub.resolves(entity);
 
@@ -213,8 +207,6 @@ describe('EventService transaction propagation', () => {
       const entity = EventEntity.build({
         id: EVENT_ID,
         calendar_id: CALENDAR_ID,
-        import_source_id: null,
-        locally_edited: false,
       });
       findStub.resolves(entity);
 
@@ -234,8 +226,6 @@ describe('EventService transaction propagation', () => {
       const entity = EventEntity.build({
         id: EVENT_ID,
         calendar_id: CALENDAR_ID,
-        import_source_id: null,
-        locally_edited: false,
       });
       findStub.resolves(entity);
 
@@ -246,7 +236,6 @@ describe('EventService transaction propagation', () => {
       const origin = {
         event_id: EVENT_ID,
         import_source_id: '22222222-2222-4222-8222-222222222222',
-        locally_edited: false,
         save: originSave,
       } as unknown as EventImportOriginEntity;
       const originFindStub = sandbox.stub(EventImportOriginEntity, 'findOne').resolves(origin);

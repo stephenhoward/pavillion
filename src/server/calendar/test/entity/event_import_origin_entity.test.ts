@@ -93,22 +93,24 @@ describe('EventImportOriginEntity', () => {
   });
 
   describe('associations', () => {
-    it('declares a @BelongsTo association to EventEntity on event_id', () => {
+    it('declares a @BelongsTo association to EventEntity on event_id with ON DELETE CASCADE', () => {
       const associations = (EventImportOriginEntity as unknown as { associations: Record<string, any> }).associations;
       const eventAssoc = associations.event;
       expect(eventAssoc).toBeDefined();
       expect(eventAssoc.associationType).toBe('BelongsTo');
       expect(eventAssoc.target).toBe(EventEntity);
       expect(eventAssoc.foreignKey).toBe('event_id');
+      expect(eventAssoc.options.onDelete).toBe('CASCADE');
     });
 
-    it('declares a @BelongsTo association to ImportSourceEntity on import_source_id', () => {
+    it('declares a @BelongsTo association to ImportSourceEntity on import_source_id with ON DELETE CASCADE', () => {
       const associations = (EventImportOriginEntity as unknown as { associations: Record<string, any> }).associations;
       const sourceAssoc = associations.importSource;
       expect(sourceAssoc).toBeDefined();
       expect(sourceAssoc.associationType).toBe('BelongsTo');
       expect(sourceAssoc.target).toBe(ImportSourceEntity);
       expect(sourceAssoc.foreignKey).toBe('import_source_id');
+      expect(sourceAssoc.options.onDelete).toBe('CASCADE');
     });
   });
 
