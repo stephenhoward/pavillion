@@ -6,6 +6,7 @@ import type { VEvent, DateWithTimeZone } from 'node-ical';
 import { Account } from '@/common/model/account';
 import { Calendar } from '@/common/model/calendar';
 import { EventEntity } from '@/server/calendar/entity/event';
+import { EventImportOriginEntity } from '@/server/calendar/entity/event_import_origin';
 import { ImportRunEntity } from '@/server/calendar/entity/import_run';
 import { ImportSourceEntity } from '@/server/calendar/entity/import_source';
 import CalendarInterface from '@/server/calendar/interface';
@@ -133,7 +134,10 @@ describe('SyncService integration', () => {
   }
 
   async function countEventsForSource(sourceId: string): Promise<number> {
-    return EventEntity.count({ where: { import_source_id: sourceId } });
+    // After pv-picz, origin-provenance lives on the EventImportOriginEntity
+    // sibling table rather than as columns on EventEntity. Count rows there
+    // to measure events attributable to the given source.
+    return EventImportOriginEntity.count({ where: { import_source_id: sourceId } });
   }
 
   // --------------------------------------------------------------------------
@@ -266,15 +270,16 @@ describe('SyncService integration', () => {
   });
 
   // --------------------------------------------------------------------------
-  // Transaction rollback: origin columns participate in the sync transaction
+  // Transaction rollback: sibling-table origin rows participate in the sync
+  // transaction (pv-picz — provenance now lives on EventImportOriginEntity)
   // --------------------------------------------------------------------------
 
-  describe('transaction rollback of origin columns (pv-1qcp.5)', () => {
-    it('leaves no rows with import_source_id set when a mid-run createEvent fails', async () => {
-      // Source is fresh — no pre-existing events on it, so every findAll for
-      // { import_source_id: source.id } must return empty when the test ends
-      // if-and-only-if the origin-column writes (stampOriginColumns) properly
-      // rolled back with the transaction.
+  describe('atomicity: transaction rollback covers sibling origin rows (pv-picz)', () => {
+    it('leaves no EventImportOriginEntity rows for the source when a mid-run createEvent fails', async () => {
+      // Source is fresh — no pre-existing events or origin rows on it, so
+      // every findAll for { import_source_id: source.id } must return empty
+      // when the test ends if-and-only-if the sibling-row writes
+      // (stampImportOrigin) properly roll back with the transaction.
       const source = await createVerifiedSource();
 
       fetcherStub.fetch.resolves({
@@ -295,7 +300,7 @@ describe('SyncService integration', () => {
       });
 
       // Stub EventService.createEvent to reject on the third call. The first
-      // two calls must invoke the real implementation so their stampOriginColumns
+      // two calls must invoke the real implementation so their stampImportOrigin
       // writes are actually issued (and expected to roll back).
       const eventService = (calendarInterface as unknown as {
         eventService: import('@/server/calendar/service/events').default;
@@ -322,11 +327,11 @@ describe('SyncService integration', () => {
         expect(result.outcome).toBe('parse_error');
         expect(result.eventsCreated).toBe(0);
 
-        // Key assertion: no event rows carry this source's import_source_id.
-        // Without the tx threading fix, stampOriginColumns would have committed
-        // the origin columns on events a and b before the transaction rolled
+        // Key assertion: no origin rows exist for this source after rollback.
+        // Without the tx threading fix, stampImportOrigin would have committed
+        // the sibling rows for events a and b before the transaction rolled
         // back, and those rows would still show import_source_id = source.id.
-        const leakedOriginRows = await EventEntity.findAll({
+        const leakedOriginRows = await EventImportOriginEntity.findAll({
           where: { import_source_id: source.id },
         });
         expect(leakedOriginRows).toHaveLength(0);
@@ -385,6 +390,94 @@ describe('SyncService integration', () => {
       }
       finally {
         stub.restore();
+      }
+    });
+  });
+
+  // --------------------------------------------------------------------------
+  // FK cascade: EventImportOriginEntity row lifecycle tied to both parents
+  // (pv-picz — origin sibling table has ON DELETE CASCADE on event_id and
+  // import_source_id). The cascade on import_source_id is a user-observable
+  // semantic change from the previous 0028 schema, which used ON DELETE
+  // SET NULL on the inline event.import_source_id column.
+  // --------------------------------------------------------------------------
+
+  describe('FK cascade on event_import_origin', () => {
+    it('cascades delete of EventEntity → its EventImportOriginEntity row is removed', async () => {
+      const source = await createVerifiedSource({ url: 'https://feeds.example.test/cascade-event.ics' });
+
+      fetcherStub.fetch.resolves({
+        outcome: 'ok',
+        httpStatus: 200,
+        body: Buffer.from('BEGIN:VCALENDAR'),
+        contentHash: 'HASH-CASCADE-EVENT',
+        etag: undefined,
+        bytesReceived: 1,
+      });
+      parseICSFake = () => ({
+        a: makeVEvent({ uid: 'cascade-event-a@example.test', summary: 'Cascade A' }),
+      });
+
+      await syncService.syncSource({ account: testAccount, importSourceId: source.id });
+
+      const originBefore = await EventImportOriginEntity.findOne({
+        where: { import_source_id: source.id },
+      });
+      expect(originBefore).not.toBeNull();
+      const eventId = originBefore!.event_id;
+
+      const event = await EventEntity.findByPk(eventId);
+      expect(event).not.toBeNull();
+      await event!.destroy();
+
+      const originAfter = await EventImportOriginEntity.findOne({
+        where: { event_id: eventId },
+      });
+      expect(originAfter).toBeNull();
+    });
+
+    it('cascades delete of ImportSourceEntity → origin rows are removed but events are preserved', async () => {
+      // User-observable semantic change vs. the previous 0028 SET NULL design:
+      // the sibling-table approach drops provenance when the source is deleted
+      // rather than preserving events with nulled-out origin columns. The
+      // event rows remain, now represented as locally-owned events with no
+      // origin row.
+      const source = await createVerifiedSource({ url: 'https://feeds.example.test/cascade-source.ics' });
+
+      fetcherStub.fetch.resolves({
+        outcome: 'ok',
+        httpStatus: 200,
+        body: Buffer.from('BEGIN:VCALENDAR'),
+        contentHash: 'HASH-CASCADE-SOURCE',
+        etag: undefined,
+        bytesReceived: 1,
+      });
+      parseICSFake = () => ({
+        a: makeVEvent({ uid: 'cascade-source-a@example.test', summary: 'Source Cascade A' }),
+        b: makeVEvent({ uid: 'cascade-source-b@example.test', summary: 'Source Cascade B' }),
+      });
+
+      await syncService.syncSource({ account: testAccount, importSourceId: source.id });
+
+      const originRowsBefore = await EventImportOriginEntity.findAll({
+        where: { import_source_id: source.id },
+      });
+      expect(originRowsBefore).toHaveLength(2);
+      const eventIds = originRowsBefore.map((r) => r.event_id);
+
+      await source.destroy();
+
+      // Origin rows are gone (CASCADE on import_source_id).
+      const originRowsAfter = await EventImportOriginEntity.findAll({
+        where: { import_source_id: source.id },
+      });
+      expect(originRowsAfter).toHaveLength(0);
+
+      // But the EventEntity rows are preserved — no cascade from source to
+      // event via the sibling table, so events become locally-owned.
+      for (const eventId of eventIds) {
+        const event = await EventEntity.findByPk(eventId);
+        expect(event).not.toBeNull();
       }
     });
   });

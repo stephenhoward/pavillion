@@ -7,20 +7,26 @@ import { randomUUID } from 'crypto';
 import { runMigrations } from '@/server/common/migrations/runner';
 
 /**
- * Integration tests for bead pv-1qcp.1.1 (ICS import foundation schema).
+ * Integration tests for bead pv-1qcp.1.1 (ICS import foundation schema),
+ * updated by pv-picz.6 to reflect the sibling-table refactor.
  *
  * Validates the three foundation migrations end-to-end on fresh SQLite:
  * - 0026_create_import_source.ts
  * - 0027_create_import_run.ts
- * - 0028_add_event_import_origin_columns.ts
+ * - 0028_create_event_import_origin.ts (sibling table, replaces the earlier
+ *   inline-columns design that added origin columns directly to event)
  *
  * Specifically covers the acceptance criteria:
  * - Migration up/down works
+ * - event table has NONE of the seven origin columns (they moved out to
+ *   the sibling table)
+ * - event_import_origin table exists with expected columns, the two FKs
+ *   (both CASCADE), secondary index on import_source_id, and a dialect-
+ *   appropriate dedup UNIQUE index
  * - UNIQUE dedup index is created and enforced for non-null recurrence ids
- * - Cascade semantics: delete import_source → import_runs are deleted,
- *   events are preserved with NULL import_source_id
- * - Existing events (created before the import column backfill) remain
- *   functional with default values on the new columns
+ * - Cascade semantics: delete import_source → import_run rows are deleted
+ *   AND event_import_origin rows are deleted, but event rows are preserved
+ *   intact (user-observable semantic change from the prior SET NULL design)
  */
 describe('ICS import foundation migrations', () => {
   let sequelize: Sequelize;
@@ -78,15 +84,32 @@ describe('ICS import foundation migrations', () => {
     return id;
   }
 
-  async function seedEvent(calendarId: string, importSourceId: string | null, externalUid: string | null, recurrenceId: string | null): Promise<string> {
+  async function seedEvent(calendarId: string): Promise<string> {
     const id = randomUUID();
     await sequelize.query(
       `INSERT INTO event
-         (id, calendar_id, import_source_id, external_uid, external_recurrence_id,
-          media_focal_point_x, media_focal_point_y, media_zoom, locally_edited,
+         (id, calendar_id,
+          media_focal_point_x, media_focal_point_y, media_zoom,
           createdAt, updatedAt)
-       VALUES (?, ?, ?, ?, ?, 0.5, 0.5, 1.0, 0, datetime('now'), datetime('now'))`,
-      { replacements: [id, calendarId, importSourceId, externalUid, recurrenceId] },
+       VALUES (?, ?, 0.5, 0.5, 1.0, datetime('now'), datetime('now'))`,
+      { replacements: [id, calendarId] },
+    );
+    return id;
+  }
+
+  async function seedEventImportOrigin(
+    eventId: string,
+    importSourceId: string,
+    externalUid: string,
+    recurrenceId: string | null,
+  ): Promise<string> {
+    const id = randomUUID();
+    await sequelize.query(
+      `INSERT INTO event_import_origin
+         (id, event_id, import_source_id, external_uid, external_recurrence_id,
+          locally_edited, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, 0, datetime('now'), datetime('now'))`,
+      { replacements: [id, eventId, importSourceId, externalUid, recurrenceId] },
     );
     return id;
   }
@@ -126,10 +149,27 @@ describe('ICS import foundation migrations', () => {
       expect(desc).toHaveProperty('error_message');
     });
 
-    it('adds origin columns to event table', async () => {
+    it('does NOT add origin columns to the event table (sibling-table design)', async () => {
+      // Post pv-picz: origin provenance lives on event_import_origin, not
+      // directly on event. The event row shape stays clean.
       const qi = sequelize.getQueryInterface();
       const desc = await qi.describeTable('event') as Record<string, unknown>;
 
+      expect(desc).not.toHaveProperty('import_source_id');
+      expect(desc).not.toHaveProperty('external_uid');
+      expect(desc).not.toHaveProperty('external_recurrence_id');
+      expect(desc).not.toHaveProperty('source_last_modified');
+      expect(desc).not.toHaveProperty('source_last_seen_at');
+      expect(desc).not.toHaveProperty('locally_edited');
+      expect(desc).not.toHaveProperty('x_props');
+    });
+
+    it('creates the event_import_origin sibling table with required columns', async () => {
+      const qi = sequelize.getQueryInterface();
+      const desc = await qi.describeTable('event_import_origin') as Record<string, unknown>;
+
+      expect(desc).toHaveProperty('id');
+      expect(desc).toHaveProperty('event_id');
       expect(desc).toHaveProperty('import_source_id');
       expect(desc).toHaveProperty('external_uid');
       expect(desc).toHaveProperty('external_recurrence_id');
@@ -137,45 +177,57 @@ describe('ICS import foundation migrations', () => {
       expect(desc).toHaveProperty('source_last_seen_at');
       expect(desc).toHaveProperty('locally_edited');
       expect(desc).toHaveProperty('x_props');
+      expect(desc).toHaveProperty('created_at');
+      expect(desc).toHaveProperty('updated_at');
     });
 
-    it('creates the UNIQUE dedup index on event', async () => {
+    it('creates the UNIQUE dedup index on event_import_origin', async () => {
+      // Index moved from the event table to the sibling table. On SQLite
+      // this is a plain UNIQUE index on the raw columns (the functional
+      // COALESCE-based variant is Postgres-only — see migration 0028).
       const indexes = await sequelize.query<{ name: string }>(
-        `SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'event'`,
+        `SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'event_import_origin'`,
         { type: QueryTypes.SELECT },
       );
 
       const names = indexes.map((i) => i.name);
       expect(names).toContain('idx_event_import_dedup');
+      // Also the secondary index on import_source_id for per-source sync
+      // bulk-load queries.
+      expect(names).toContain('idx_event_import_origin_source');
     });
   });
 
   describe('UNIQUE dedup index enforcement', () => {
-    it('rejects duplicate (import_source_id, external_uid, external_recurrence_id) tuples', async () => {
+    it('rejects duplicate (import_source_id, external_uid, external_recurrence_id) tuples on event_import_origin', async () => {
       const calendarId = await seedCalendar();
       const sourceId = await seedImportSource(calendarId);
+      const eventId1 = await seedEvent(calendarId);
+      const eventId2 = await seedEvent(calendarId);
 
-      await seedEvent(calendarId, sourceId, 'event-uid-1@example.test', 'rec-1');
+      await seedEventImportOrigin(eventId1, sourceId, 'event-uid-1@example.test', 'rec-1');
 
       // Sequelize wraps SQLite's UNIQUE constraint violation as a
       // SequelizeUniqueConstraintError ("Validation error"). Matching the
       // error class keeps the test independent of Sequelize's message
       // formatting.
       await expect(
-        seedEvent(calendarId, sourceId, 'event-uid-1@example.test', 'rec-1'),
+        seedEventImportOrigin(eventId2, sourceId, 'event-uid-1@example.test', 'rec-1'),
       ).rejects.toThrow(/validation|UNIQUE/i);
     });
 
     it('allows distinct external_uid values for the same source', async () => {
       const calendarId = await seedCalendar();
       const sourceId = await seedImportSource(calendarId);
+      const eventId1 = await seedEvent(calendarId);
+      const eventId2 = await seedEvent(calendarId);
 
-      await seedEvent(calendarId, sourceId, 'event-uid-1@example.test', null);
+      await seedEventImportOrigin(eventId1, sourceId, 'event-uid-1@example.test', null);
       // Different uid → allowed
-      await seedEvent(calendarId, sourceId, 'event-uid-2@example.test', null);
+      await seedEventImportOrigin(eventId2, sourceId, 'event-uid-2@example.test', null);
 
       const [row] = await sequelize.query<{ count: number }>(
-        `SELECT COUNT(*) AS count FROM event WHERE import_source_id = ?`,
+        `SELECT COUNT(*) AS count FROM event_import_origin WHERE import_source_id = ?`,
         { replacements: [sourceId], type: QueryTypes.SELECT },
       );
       expect(row.count).toBe(2);
@@ -185,12 +237,14 @@ describe('ICS import foundation migrations', () => {
       const calendarId = await seedCalendar();
       const sourceA = await seedImportSource(calendarId, 'https://a.example.test/feed.ics');
       const sourceB = await seedImportSource(calendarId, 'https://b.example.test/feed.ics');
+      const eventIdA = await seedEvent(calendarId);
+      const eventIdB = await seedEvent(calendarId);
 
-      await seedEvent(calendarId, sourceA, 'shared-uid@example.test', null);
-      await seedEvent(calendarId, sourceB, 'shared-uid@example.test', null);
+      await seedEventImportOrigin(eventIdA, sourceA, 'shared-uid@example.test', null);
+      await seedEventImportOrigin(eventIdB, sourceB, 'shared-uid@example.test', null);
 
       const [row] = await sequelize.query<{ count: number }>(
-        `SELECT COUNT(*) AS count FROM event WHERE external_uid = 'shared-uid@example.test'`,
+        `SELECT COUNT(*) AS count FROM event_import_origin WHERE external_uid = 'shared-uid@example.test'`,
         { type: QueryTypes.SELECT },
       );
       expect(row.count).toBe(2);
@@ -198,10 +252,17 @@ describe('ICS import foundation migrations', () => {
   });
 
   describe('Cascade semantics', () => {
-    it('cascades delete of import_source → import_runs are deleted; events are preserved with NULL import_source_id', async () => {
+    it('cascades delete of import_source → import_run AND event_import_origin rows are deleted; event rows are preserved intact', async () => {
+      // User-observable semantic change from the pre-picz 0028 design:
+      // previously event.import_source_id had ON DELETE SET NULL, so the
+      // event survived with the provenance column nulled out. Under the
+      // sibling-table design the event_import_origin row is CASCADE-deleted
+      // instead, dropping provenance entirely while keeping the event row
+      // as a locally-owned event.
       const calendarId = await seedCalendar();
       const sourceId = await seedImportSource(calendarId);
-      const eventId = await seedEvent(calendarId, sourceId, 'event-uid-1@example.test', null);
+      const eventId = await seedEvent(calendarId);
+      const originId = await seedEventImportOrigin(eventId, sourceId, 'event-uid-1@example.test', null);
 
       // Seed an import_run referencing the source.
       await sequelize.query(
@@ -216,21 +277,46 @@ describe('ICS import foundation migrations', () => {
       // Delete the source.
       await sequelize.query('DELETE FROM import_source WHERE id = ?', { replacements: [sourceId] });
 
-      // import_run rows should be gone (CASCADE).
+      // import_run rows should be gone (CASCADE on import_source_id).
       const [runRow] = await sequelize.query<{ count: number }>(
         `SELECT COUNT(*) AS count FROM import_run WHERE import_source_id = ?`,
         { replacements: [sourceId], type: QueryTypes.SELECT },
       );
       expect(runRow.count).toBe(0);
 
-      // event row should remain with import_source_id nulled out (SET NULL).
-      const [eventRow] = await sequelize.query<{ id: string; import_source_id: string | null }>(
-        `SELECT id, import_source_id FROM event WHERE id = ?`,
+      // event_import_origin rows should also be gone (CASCADE on
+      // import_source_id — see migration 0028).
+      const [originRow] = await sequelize.query<{ count: number }>(
+        `SELECT COUNT(*) AS count FROM event_import_origin WHERE id = ?`,
+        { replacements: [originId], type: QueryTypes.SELECT },
+      );
+      expect(originRow.count).toBe(0);
+
+      // event row is preserved intact — no parent touch. The event
+      // table no longer has any origin columns to null out.
+      const [eventRow] = await sequelize.query<{ id: string }>(
+        `SELECT id FROM event WHERE id = ?`,
         { replacements: [eventId], type: QueryTypes.SELECT },
       );
       expect(eventRow).toBeDefined();
       expect(eventRow.id).toBe(eventId);
-      expect(eventRow.import_source_id).toBeNull();
+    });
+
+    it('cascades delete of event → event_import_origin row is removed', async () => {
+      // Second FK on the sibling table: event_id with ON DELETE CASCADE.
+      // Deleting an event row takes its origin row with it.
+      const calendarId = await seedCalendar();
+      const sourceId = await seedImportSource(calendarId);
+      const eventId = await seedEvent(calendarId);
+      const originId = await seedEventImportOrigin(eventId, sourceId, 'event-uid-cascade@example.test', null);
+
+      await sequelize.query('DELETE FROM event WHERE id = ?', { replacements: [eventId] });
+
+      const [row] = await sequelize.query<{ count: number }>(
+        `SELECT COUNT(*) AS count FROM event_import_origin WHERE id = ?`,
+        { replacements: [originId], type: QueryTypes.SELECT },
+      );
+      expect(row.count).toBe(0);
     });
 
     it('cascades delete of calendar → import_source rows are deleted', async () => {
@@ -248,38 +334,36 @@ describe('ICS import foundation migrations', () => {
   });
 
   describe('Existing events unaffected', () => {
-    it('allows events with no import metadata to continue functioning', async () => {
+    it('allows events with no import metadata to continue functioning (no origin row required)', async () => {
+      // Post-picz: a locally-authored event simply has no corresponding row
+      // in event_import_origin. There is no longer any "origin default
+      // values on the event row" to assert — the event row has no origin
+      // columns at all.
       const calendarId = await seedCalendar();
 
-      // Event with no import linkage at all — representing a pre-existing
-      // locally-authored event.
-      const eventId = await seedEvent(calendarId, null, null, null);
+      const eventId = await seedEvent(calendarId);
 
-      const [row] = await sequelize.query<{
-        id: string;
-        import_source_id: string | null;
-        external_uid: string | null;
-        external_recurrence_id: string | null;
-        locally_edited: number;
-      }>(
-        `SELECT id, import_source_id, external_uid, external_recurrence_id, locally_edited
-         FROM event WHERE id = ?`,
+      const [row] = await sequelize.query<{ id: string }>(
+        `SELECT id FROM event WHERE id = ?`,
         { replacements: [eventId], type: QueryTypes.SELECT },
       );
-
       expect(row.id).toBe(eventId);
-      expect(row.import_source_id).toBeNull();
-      expect(row.external_uid).toBeNull();
-      expect(row.external_recurrence_id).toBeNull();
-      // locally_edited defaults to FALSE.
-      expect(Boolean(row.locally_edited)).toBe(false);
+
+      // No row exists on the sibling table for a locally-authored event.
+      const [originRow] = await sequelize.query<{ count: number }>(
+        `SELECT COUNT(*) AS count FROM event_import_origin WHERE event_id = ?`,
+        { replacements: [eventId], type: QueryTypes.SELECT },
+      );
+      expect(originRow.count).toBe(0);
     });
   });
 
   describe('Reversibility', () => {
-    it('rolls back cleanly: down removes tables and columns', async () => {
-      // Run each down migration in reverse order.
-      const m0028 = (await import(path.join(migrationsDir, '0028_add_event_import_origin_columns.ts'))).default;
+    it('rolls back cleanly: down removes the sibling table and the two import tables', async () => {
+      // Run each down migration in reverse order. Post-picz, 0028 drops the
+      // event_import_origin sibling table rather than removing columns from
+      // the event table.
+      const m0028 = (await import(path.join(migrationsDir, '0028_create_event_import_origin.ts'))).default;
       const m0027 = (await import(path.join(migrationsDir, '0027_create_import_run.ts'))).default;
       const m0026 = (await import(path.join(migrationsDir, '0026_create_import_source.ts'))).default;
 
@@ -291,7 +375,10 @@ describe('ICS import foundation migrations', () => {
       const tables = (await qi.showAllTables()) as string[];
       expect(tables).not.toContain('import_source');
       expect(tables).not.toContain('import_run');
+      expect(tables).not.toContain('event_import_origin');
 
+      // Belt-and-braces: after the teardown the event table still has no
+      // origin columns (it never had them under the sibling-table design).
       const eventDesc = await qi.describeTable('event') as Record<string, unknown>;
       expect(eventDesc).not.toHaveProperty('import_source_id');
       expect(eventDesc).not.toHaveProperty('external_uid');
