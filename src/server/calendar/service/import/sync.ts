@@ -59,6 +59,7 @@ import {
 } from '@/common/exceptions/import';
 import { CalendarEntity } from '@/server/calendar/entity/calendar';
 import { EventEntity } from '@/server/calendar/entity/event';
+import { EventImportOriginEntity } from '@/server/calendar/entity/event_import_origin';
 import { ImportSourceEntity } from '@/server/calendar/entity/import_source';
 import { ImportRunEntity, type ImportRunOutcome } from '@/server/calendar/entity/import_run';
 import type CalendarService from '@/server/calendar/service/calendar';
@@ -341,14 +342,18 @@ class SyncService {
 
     try {
       await db.transaction(async (tx) => {
-        // Collect existing events keyed on the dedup tuple.
-        const existing = await EventEntity.findAll({
+        // Collect existing origin rows (with eager-joined event) keyed on the
+        // dedup tuple. The join is resolved via EventImportOriginEntity's
+        // @BelongsTo on the child side; EventEntity deliberately has no
+        // reciprocal @HasOne (parent stays unaware — see epic DESIGN).
+        const existing = await EventImportOriginEntity.findAll({
           where: { import_source_id: importSourceId },
+          include: [{ model: EventEntity, required: false }],
           transaction: tx,
         });
-        const existingByKey = new Map<string, EventEntity>();
-        for (const e of existing) {
-          existingByKey.set(dedupKey(e.external_uid, e.external_recurrence_id), e);
+        const existingByKey = new Map<string, EventImportOriginEntity>();
+        for (const origin of existing) {
+          existingByKey.set(dedupKey(origin.external_uid, origin.external_recurrence_id), origin);
         }
 
         const seenKeys = new Set<string>();
@@ -378,22 +383,22 @@ class SyncService {
           const key = dedupKey(mapped.external_uid, mapped.external_recurrence_id ?? null);
           seenKeys.add(key);
 
-          const existingEntity = existingByKey.get(key);
+          const existingOrigin = existingByKey.get(key);
           try {
-            if (!existingEntity) {
+            if (!existingOrigin) {
               await this.createEvent(actingAccount, sourceEntity, mapped, tx);
               counts.created++;
             }
-            else if (existingEntity.locally_edited) {
-              await this.touchSourceLastSeen(existingEntity, tx);
+            else if (existingOrigin.locally_edited) {
+              await this.touchSourceLastSeen(existingOrigin, tx);
               counts.skippedLocallyEdited++;
             }
-            else if (this.sourceIsNewer(mapped.source_last_modified, existingEntity.source_last_modified)) {
-              await this.updateEvent(actingAccount, existingEntity.id, sourceEntity, mapped, tx);
+            else if (this.sourceIsNewer(mapped.source_last_modified, existingOrigin.source_last_modified)) {
+              await this.updateEvent(actingAccount, existingOrigin.event_id, sourceEntity, mapped, tx);
               counts.updated++;
             }
             else {
-              await this.touchSourceLastSeen(existingEntity, tx);
+              await this.touchSourceLastSeen(existingOrigin, tx);
             }
           }
           catch (err) {
@@ -405,11 +410,12 @@ class SyncService {
           }
         }
 
-        // Disappeared events: left untouched (keep-on-disappearance).
-        for (const [key, entity] of existingByKey) {
+        // Disappeared origin rows: left untouched (keep-on-disappearance).
+        // A disappeared origin row indicates a disappeared event.
+        for (const [key, origin] of existingByKey) {
           if (!seenKeys.has(key)) {
             counts.disappeared++;
-            void entity; // explicit: no write
+            void origin; // explicit: no write
           }
         }
 
@@ -547,19 +553,17 @@ class SyncService {
   ): Promise<CalendarEvent> {
     const params = buildEventParamsForCreate(source, mapped);
     const event = await this.eventService.createEvent(account, params, { source: 'import' }, tx);
-    // Stamp the origin columns on the persisted entity. EventService.createEvent
-    // sets source_last_seen_at and locally_edited per the originator context,
-    // but does not read the ICS-origin columns off the CalendarEvent model
-    // (CalendarEvent.fromObject intentionally strips origin provenance so it
-    // never flows into toObject / public APIs). The orchestrator owns those
-    // columns and writes them directly to the entity after the service call.
+    // Stamp the origin-provenance row on the sibling table. EventService does
+    // not know about EventImportOriginEntity (origin metadata lives outside
+    // the shared CalendarEvent model for privacy reasons — it must not leak
+    // into federation / public APIs). The orchestrator is the sole writer.
     //
-    // The tx handle is threaded through so the origin-column write participates
-    // in the caller's transaction: if the surrounding db.transaction rolls back
-    // (e.g. a later event fails, source bookkeeping save fails), the origin
-    // columns roll back with it — no orphaned provenance pointing at rolled-
-    // back rows.
-    await this.stampOriginColumns(event.id, source, mapped, tx);
+    // The tx handle is threaded through so the origin-row write participates
+    // in the caller's transaction: if the surrounding db.transaction rolls
+    // back (e.g. a later event fails, source bookkeeping save fails), the
+    // origin row rolls back with it — no orphaned provenance pointing at
+    // rolled-back rows.
+    await this.stampImportOrigin(event.id, source, mapped, tx);
     return event;
   }
 
@@ -572,34 +576,43 @@ class SyncService {
   ): Promise<CalendarEvent> {
     const params = buildEventParamsForUpdate(source, mapped);
     const event = await this.eventService.updateEvent(account, eventId, params, { source: 'import' }, tx);
-    // Refresh origin columns on update too. source_last_modified and x_props
-    // may have changed on the feed side; import_source_id / external_uid /
-    // external_recurrence_id are stable but re-stamping them is a no-op.
-    await this.stampOriginColumns(event.id, source, mapped, tx);
+    // Refresh origin row on update too. source_last_modified, source_last_seen_at
+    // and x_props may have changed on the feed side; import_source_id /
+    // external_uid / external_recurrence_id are stable but re-stamping them is
+    // a no-op. locally_edited is intentionally NOT written — see stampImportOrigin.
+    await this.stampImportOrigin(event.id, source, mapped, tx);
     return event;
   }
 
   /**
-   * Write the origin-provenance columns on the event entity. Separate from
-   * EventService.createEvent/updateEvent by design: the shared CalendarEvent
-   * model does not surface origin columns via toObject/fromObject (privacy —
-   * they must not leak to federation / public API), so they cannot round-trip
-   * through the service layer. The orchestrator is the sole writer.
+   * Write the origin-provenance row on the EventImportOriginEntity sibling
+   * table. Separate from EventService.createEvent/updateEvent by design: the
+   * shared CalendarEvent model does not surface origin metadata via
+   * toObject/fromObject (privacy — it must not leak to federation / public
+   * API), so origin cannot round-trip through the service layer. The
+   * orchestrator is the sole writer.
    *
-   * Accepts an optional transaction handle so the update participates in the
+   * Contract: `locally_edited` is intentionally omitted from the upsert
+   * values. On INSERT Sequelize applies the column default (false). On
+   * subsequent UPSERTs the existing value is preserved because the column is
+   * not present in the values object — this is how user edits survive
+   * intervening sync runs.
+   *
+   * Accepts an optional transaction handle so the upsert participates in the
    * caller's transaction. Callers inside `db.transaction` MUST pass `tx` —
-   * otherwise the origin-column write commits independently and survives any
+   * otherwise the origin-row write commits independently and survives any
    * rollback of the surrounding event writes, leaving provenance pointing at
    * rolled-back rows.
    */
-  private async stampOriginColumns(
+  private async stampImportOrigin(
     eventId: string,
     source: ImportSourceEntity,
     mapped: MapperOutput,
     tx?: Transaction,
   ): Promise<void> {
-    await EventEntity.update(
+    await EventImportOriginEntity.upsert(
       {
+        event_id: eventId,
         import_source_id: source.id,
         external_uid: mapped.external_uid,
         external_recurrence_id: mapped.external_recurrence_id ?? null,
@@ -609,13 +622,13 @@ class SyncService {
         source_last_seen_at: this.nowFn(),
         x_props: mapped.x_props,
       },
-      { where: { id: eventId }, transaction: tx },
+      { transaction: tx },
     );
   }
 
-  private async touchSourceLastSeen(entity: EventEntity, tx?: Transaction): Promise<void> {
-    entity.source_last_seen_at = this.nowFn();
-    await entity.save({ transaction: tx });
+  private async touchSourceLastSeen(origin: EventImportOriginEntity, tx?: Transaction): Promise<void> {
+    origin.source_last_seen_at = this.nowFn();
+    await origin.save({ transaction: tx });
   }
 
   /**
