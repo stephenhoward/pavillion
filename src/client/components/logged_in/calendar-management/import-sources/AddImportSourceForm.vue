@@ -231,26 +231,6 @@ defineExpose({
 }
 
 .btn-ghost {
-  padding: var(--pav-space-2) var(--pav-space-4);
-  background: none;
-  border: none;
-  color: var(--pav-color-stone-600);
-  font-weight: 500;
-  cursor: pointer;
-  transition: color 0.2s;
-  border-radius: 0.375rem;
-
-  &:hover {
-    color: var(--pav-color-stone-900);
-
-    @media (prefers-color-scheme: dark) {
-      color: var(--pav-color-stone-100);
-    }
-  }
-
-  &:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
+  @include admin-ghost-button;
 }
 </style>

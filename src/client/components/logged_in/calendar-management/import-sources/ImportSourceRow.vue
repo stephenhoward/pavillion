@@ -318,46 +318,7 @@ const onVerify = () => {
   }
 }
 
-// Scoped layout for the row's icon+label ghost buttons. The confirmation-modal
-// btn-ghost styling comes from admin-dialog-layout via the ImportSourcesSection;
-// here the buttons are standalone action icons and need their own layout rules.
 .btn-ghost {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--pav-space-1);
-  padding: var(--pav-space-2) var(--pav-space-3);
-  background: none;
-  border: none;
-  color: var(--pav-color-stone-600);
-  font-weight: 500;
-  font-size: 0.875rem;
-  cursor: pointer;
-  transition: color 0.2s;
-  border-radius: 0.375rem;
-
-  &:hover:not(:disabled) {
-    color: var(--pav-color-stone-900);
-
-    @media (prefers-color-scheme: dark) {
-      color: var(--pav-color-stone-100);
-    }
-  }
-
-  &:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  &--danger {
-    color: var(--pav-color-red-600);
-
-    &:hover:not(:disabled) {
-      color: var(--pav-color-red-700);
-
-      @media (prefers-color-scheme: dark) {
-        color: var(--pav-color-red-400);
-      }
-    }
-  }
+  @include admin-ghost-button;
 }
 </style>

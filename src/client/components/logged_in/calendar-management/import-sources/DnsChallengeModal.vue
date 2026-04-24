@@ -327,6 +327,8 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped lang="scss">
+@use '../../../../assets/style/components/calendar-admin' as *;
+
 // Visually hide content while keeping it accessible to screen readers.
 // Used for the "Copied" live region; pattern mirrors the shared sr-only
 // pattern in admin/root.vue (WCAG SC 4.1.3 Status Messages).
@@ -415,27 +417,6 @@ onBeforeUnmount(() => {
 }
 
 .btn-ghost {
-  padding: var(--pav-space-2) var(--pav-space-3);
-  background: none;
-  border: none;
-  color: var(--pav-color-stone-600);
-  font-weight: 500;
-  font-size: 0.875rem;
-  cursor: pointer;
-  transition: color 0.2s;
-  border-radius: 0.375rem;
-
-  &:hover:not(:disabled) {
-    color: var(--pav-color-stone-900);
-
-    @media (prefers-color-scheme: dark) {
-      color: var(--pav-color-stone-100);
-    }
-  }
-
-  &:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
+  @include admin-ghost-button;
 }
 </style>
