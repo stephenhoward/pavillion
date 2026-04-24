@@ -9,6 +9,7 @@ import { CalendarEvent, CalendarEventContent, CalendarEventSchedule, UrlPrompt, 
 import { EventCategory } from "@/common/model/event_category";
 import { EventLocation, validateLocationHierarchy } from "@/common/model/location";
 import { EventContentEntity, EventEntity, EventScheduleEntity } from "@/server/calendar/entity/event";
+import { EventImportOriginEntity } from "@/server/calendar/entity/event_import_origin";
 import CalendarService from "@/server/calendar/service/calendar";
 import { LocationEntity, LocationContentEntity } from "@/server/calendar/entity/location";
 // TODO: MediaEntity is still needed here for Sequelize eager-load association includes
@@ -658,7 +659,17 @@ class EventService {
   }
 
   /**
-     * Creates a new event for the provided account
+     * Creates a new event for the provided account.
+     *
+     * The `_context` originator-context parameter is retained on the
+     * signature for symmetry with updateEvent and because callers (notably
+     * the ICS-import sync orchestrator) pass `{ source: 'import' }`
+     * positionally. createEvent currently has no originator-branching
+     * behavior — origin-provenance bookkeeping lives on the sibling
+     * EventImportOriginEntity written by the orchestrator in the same
+     * transaction. Preserving the argument keeps the API stable for any
+     * future originator-aware create behavior.
+     *
      * @param account - account the event belongs to
      * @param eventParams - the parameters for the new event
      * @returns a promise that resolves to the created Event
@@ -666,7 +677,8 @@ class EventService {
   async createEvent(
     account: Account,
     eventParams: Record<string, any>,
-    context: EventOriginatorContext = DEFAULT_ORIGINATOR_CONTEXT,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    _context: EventOriginatorContext = DEFAULT_ORIGINATOR_CONTEXT,
     tx?: Transaction,
   ): Promise<CalendarEvent> {
 
@@ -724,18 +736,6 @@ class EventService {
     }
 
     const eventEntity = EventEntity.fromModel(event);
-
-    // Import-origin bookkeeping: when the sync orchestrator creates an event
-    // from an ICS feed, stamp source_last_seen_at=now() and force
-    // locally_edited=false. User-path creates never set these fields here;
-    // they default to null/false respectively at the column level.
-    //
-    // Note: entity hooks are deliberately NOT used for this rule — hooks
-    // cannot distinguish caller intent. Service layer owns it.
-    if (context.source === 'import') {
-      eventEntity.source_last_seen_at = new Date();
-      eventEntity.locally_edited = false;
-    }
 
     // Handle locationId (reference to existing location)
     if (eventParams.locationId) {
@@ -1054,17 +1054,30 @@ class EventService {
     }
 
     // Originator-aware locally_edited flip: a user-driven update to an
-    // imported event (non-null import_source_id) flips locally_edited=true
-    // so subsequent sync runs know this event's content has diverged from
-    // the upstream feed and should not be overwritten. Import-driven
-    // updates leave locally_edited unchanged — the sync orchestrator
-    // explicitly passes context.source='import' for this case.
+    // imported event flips locally_edited=true on the sibling
+    // EventImportOriginEntity row so subsequent sync runs know this event's
+    // content has diverged from the upstream feed and should not be
+    // overwritten. Import-driven updates leave locally_edited unchanged —
+    // the sync orchestrator explicitly passes context.source='import' for
+    // this case. Non-imported events have no origin row; the SELECT
+    // returns null and the flip is a no-op.
     //
     // Note: entity hooks are deliberately NOT used for this rule — hooks
-    // cannot distinguish caller intent. See pv-1qcp epic DESIGN and
-    // architecture-playbook.
-    if (context.source === 'user' && eventEntity.import_source_id) {
-      eventEntity.locally_edited = true;
+    // cannot distinguish caller intent. Service layer owns it. See pv-1qcp
+    // epic DESIGN and architecture-playbook.
+    //
+    // Cost: one extra SELECT + UPDATE per user-initiated edit of an imported
+    // event. Accepted per epic DESIGN for structural purity — origin
+    // provenance lives on the sibling table, not on EventEntity.
+    if (context.source === 'user') {
+      const origin = await EventImportOriginEntity.findOne({
+        where: { event_id: eventEntity.id },
+        transaction: tx,
+      });
+      if (origin) {
+        origin.locally_edited = true;
+        await origin.save({ transaction: tx });
+      }
     }
 
     await eventEntity.save({ transaction: tx });

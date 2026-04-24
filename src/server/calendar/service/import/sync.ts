@@ -785,8 +785,11 @@ export function dedupKey(externalUid: string | null | undefined, recurrenceId: s
  *
  * The shape mirrors what EventService.createEvent expects when called from
  * user-path code: a `content` map keyed by language, a `schedules` array
- * already in `toObject` form, and the origin columns expressed on the
- * top-level params.
+ * already in `toObject` form. Origin-provenance fields (import_source_id,
+ * external_uid, external_recurrence_id, source_last_modified, x_props) are
+ * NOT passed through createEvent — they live on the sibling
+ * EventImportOriginEntity and are written by stampImportOrigin in the same
+ * transaction immediately after createEvent returns.
  */
 export function buildEventParamsForCreate(
   source: ImportSourceEntity,
@@ -800,13 +803,6 @@ export function buildEventParamsForCreate(
       [lang]: mapped.content.toObject(),
     },
     schedules,
-    importSourceId: source.id,
-    externalUid: mapped.external_uid,
-    externalRecurrenceId: mapped.external_recurrence_id ?? null,
-    sourceLastModified: mapped.source_last_modified
-      ? mapped.source_last_modified.toJSDate()
-      : null,
-    xProps: mapped.x_props,
     externalUrl: mapped.external_url,
   };
 }
@@ -814,6 +810,9 @@ export function buildEventParamsForCreate(
 /**
  * Build the `updateEvent` params from a mapper output. Omits the identity
  * fields (id, calendarId) — those come from the existing event record.
+ * Origin-provenance fields are NOT passed through updateEvent — they live on
+ * the sibling EventImportOriginEntity and are refreshed by stampImportOrigin
+ * in the same transaction immediately after updateEvent returns.
  */
 export function buildEventParamsForUpdate(
   source: ImportSourceEntity,
@@ -827,10 +826,6 @@ export function buildEventParamsForUpdate(
       [lang]: mapped.content.toObject(),
     },
     schedules,
-    sourceLastModified: mapped.source_last_modified
-      ? mapped.source_last_modified.toJSDate()
-      : null,
-    xProps: mapped.x_props,
     externalUrl: mapped.external_url,
   };
 }
