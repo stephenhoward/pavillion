@@ -80,6 +80,19 @@ class EventImportOriginEntity extends Model {
   @Column({ type: DataType.BOOLEAN, allowNull: false, defaultValue: false })
   declare locally_edited: boolean;
 
+  /**
+   * Allowlisted preserved properties from the source VEVENT.
+   *
+   * This column intentionally stores only a narrow allowlist of structured
+   * properties tied to concrete future readers (category import, location
+   * enrichment, virtual/hybrid location). It is NOT a passthrough store for
+   * arbitrary ICS data: PII-bearing fields (ORGANIZER/ATTENDEE) and
+   * unsanitized HTML (X-ALT-DESC) are deliberately dropped during mapping
+   * per DEC-004 (privacy-first) and the absence of a rich-HTML sanitizer.
+   *
+   * The mapper (`src/server/calendar/service/import/mapper.ts`,
+   * `collectXProps`) is the source of truth for which keys are allowed.
+   */
   @Column({ type: DataType.JSON, allowNull: true })
   declare x_props: Record<string, unknown> | null;
 

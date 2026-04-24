@@ -190,33 +190,155 @@ describe('ICS mapper: mapVEvent', () => {
     });
   });
 
-  describe('X-* properties', () => {
-    it('preserves an X-* property in x_props with X- prefix restored', () => {
-      const vevent = makeVEvent({});
-      // node-ical strips the `X-` prefix on parse; we simulate that here.
-      (vevent as unknown as Record<string, unknown>).FOO = 'barvalue';
-      const out = mapVEvent({ vevent, calendarPrimaryLanguage: 'en' });
-      expect(out.x_props['X-FOO']).toBe('barvalue');
-    });
+  describe('x_props allowlist', () => {
+    // ---- Allowlist: each entry must be retained under a stable output key. ----
 
-    it('preserves multiple X-* properties independently', () => {
-      const vevent = makeVEvent({});
-      (vevent as unknown as Record<string, unknown>).FOO = 'one';
-      (vevent as unknown as Record<string, unknown>).BAR = 'two';
-      const out = mapVEvent({ vevent, calendarPrimaryLanguage: 'en' });
-      expect(out.x_props['X-FOO']).toBe('one');
-      expect(out.x_props['X-BAR']).toBe('two');
-    });
-
-    it('preserves v1-ignored standard fields (categories, organizer, geo) under their original keys', () => {
+    it('retains CATEGORIES under "categories" as a string array', () => {
       const vevent = makeVEvent({});
       (vevent as unknown as Record<string, unknown>).categories = ['music', 'art'];
-      (vevent as unknown as Record<string, unknown>).organizer = { val: 'mailto:x@y', params: { CN: 'X' } };
-      (vevent as unknown as Record<string, unknown>).geo = { lat: 45, lon: -122 };
       const out = mapVEvent({ vevent, calendarPrimaryLanguage: 'en' });
       expect(out.x_props.categories).toEqual(['music', 'art']);
-      expect(out.x_props.organizer).toEqual({ val: 'mailto:x@y', params: { CN: 'X' } });
+    });
+
+    it('retains GEO under "geo" as { lat, lon }', () => {
+      const vevent = makeVEvent({});
+      (vevent as unknown as Record<string, unknown>).geo = { lat: 45, lon: -122 };
+      const out = mapVEvent({ vevent, calendarPrimaryLanguage: 'en' });
       expect(out.x_props.geo).toEqual({ lat: 45, lon: -122 });
+    });
+
+    it('retains X-APPLE-STRUCTURED-LOCATION under the re-prefixed key', () => {
+      const vevent = makeVEvent({});
+      // CRITICAL — empirical key shape for X-* properties.
+      //
+      // node-ical strips the leading `X-` from X-* property names but does NOT
+      // lowercase the remainder. The relevant parser path lives at
+      // `node_modules/node-ical/ical.js:1064-1067`:
+      //
+      //     if (/X-(?:-|[0-9A-Za-z_])+/v.test(name) && stack.length > 0) {
+      //       name = name.slice(2);  // strips 'X-'; no .toLowerCase() call
+      //       return storeParameter(name)(value, parameters, ctx, stack, line);
+      //     }
+      //
+      // So `X-APPLE-STRUCTURED-LOCATION` lands in the parsed VEVENT under the
+      // uppercase key `APPLE-STRUCTURED-LOCATION`. If we injected the value
+      // under a lowercased key here, the mapper's allowlist lookup would miss
+      // and this test would pass against a shape the real parser never emits.
+      //
+      // Exercising the real parser from this test file is blocked by a
+      // temporal-polyfill ESM/CJS interop issue in the vitest vmThreads pool
+      // (see sync.ts:217-223 for the same constraint in production). Until
+      // that has a dedicated integration fixture, this comment is the primary
+      // guard: keep it in sync with any future node-ical upgrade.
+      const value = {
+        val: 'geo:37.7749,-122.4194',
+        params: {
+          'X-ADDRESS': '1 Market St',
+          'X-TITLE': 'HQ',
+        },
+      };
+      (vevent as unknown as Record<string, unknown>)['APPLE-STRUCTURED-LOCATION'] = value;
+      const out = mapVEvent({ vevent, calendarPrimaryLanguage: 'en' });
+      expect(out.x_props['X-APPLE-STRUCTURED-LOCATION']).toEqual(value);
+      // The source key must NOT also be present under the un-prefixed name.
+      expect(out.x_props['APPLE-STRUCTURED-LOCATION']).toBeUndefined();
+      // Nor under a hypothetical lowercased variant.
+      expect(out.x_props['apple-structured-location']).toBeUndefined();
+    });
+
+    it('retains CONFERENCE under "conference" with URI and display name', () => {
+      const vevent = makeVEvent({});
+      const value = {
+        val: 'https://meet.example.com/abc',
+        params: { FEATURE: 'AUDIO,VIDEO', LABEL: 'Team Standup' },
+      };
+      (vevent as unknown as Record<string, unknown>).conference = value;
+      const out = mapVEvent({ vevent, calendarPrimaryLanguage: 'en' });
+      expect(out.x_props.conference).toEqual(value);
+    });
+
+    // ---- Drop list: PII, unsafe HTML, and non-allowlisted X-* must be absent. ----
+
+    it('drops ORGANIZER (PII: mailto address)', () => {
+      const vevent = makeVEvent({});
+      (vevent as unknown as Record<string, unknown>).organizer = {
+        val: 'mailto:host@example.com',
+        params: { CN: 'Host' },
+      };
+      const out = mapVEvent({ vevent, calendarPrimaryLanguage: 'en' });
+      expect(out.x_props.organizer).toBeUndefined();
+      expect(Object.values(out.x_props)).not.toContainEqual({
+        val: 'mailto:host@example.com',
+        params: { CN: 'Host' },
+      });
+    });
+
+    it('drops ATTENDEE (PII: mailto addresses)', () => {
+      const vevent = makeVEvent({});
+      (vevent as unknown as Record<string, unknown>).attendee = [
+        { val: 'mailto:a@example.com', params: { CN: 'A' } },
+        { val: 'mailto:b@example.com', params: { CN: 'B' } },
+      ];
+      const out = mapVEvent({ vevent, calendarPrimaryLanguage: 'en' });
+      expect(out.x_props.attendee).toBeUndefined();
+      // Belt-and-braces: a catch-all regression must not leak the value under
+      // an X- prefixed variant either.
+      expect(out.x_props['X-ATTENDEE']).toBeUndefined();
+    });
+
+    it('drops ATTACH (security-sensitive: arbitrary URL/binary)', () => {
+      const vevent = makeVEvent({});
+      (vevent as unknown as Record<string, unknown>).attach = {
+        val: 'https://example.com/file.pdf',
+        params: { FMTTYPE: 'application/pdf' },
+      };
+      const out = mapVEvent({ vevent, calendarPrimaryLanguage: 'en' });
+      expect(out.x_props.attach).toBeUndefined();
+      // Belt-and-braces: a catch-all regression must not leak the value under
+      // an X- prefixed variant either.
+      expect(out.x_props['X-ATTACH']).toBeUndefined();
+    });
+
+    it('drops CONTACT (free-form, no target field)', () => {
+      const vevent = makeVEvent({});
+      (vevent as unknown as Record<string, unknown>).contact = 'Jim Dolittle, ABC Industries, +1-919-555-1234';
+      const out = mapVEvent({ vevent, calendarPrimaryLanguage: 'en' });
+      expect(out.x_props.contact).toBeUndefined();
+      // Belt-and-braces: a catch-all regression must not leak the value under
+      // an X- prefixed variant either.
+      expect(out.x_props['X-CONTACT']).toBeUndefined();
+    });
+
+    it('drops X-ALT-DESC (HTML body; needs sanitizer we don\'t have)', () => {
+      const vevent = makeVEvent({});
+      // node-ical strips the X- prefix but preserves case on the remainder,
+      // so the runtime key is 'ALT-DESC' (uppercase) — not 'alt-desc'. See
+      // node_modules/node-ical/ical.js:1064-1067.
+      (vevent as unknown as Record<string, unknown>)['ALT-DESC'] = {
+        val: '<html><body><b>fancy</b></body></html>',
+        params: { FMTTYPE: 'text/html' },
+      };
+      const out = mapVEvent({ vevent, calendarPrimaryLanguage: 'en' });
+      expect(out.x_props['ALT-DESC']).toBeUndefined();
+      expect(out.x_props['X-ALT-DESC']).toBeUndefined();
+      // Also assert the lowercased shape is absent, guarding against future
+      // catch-all regressions that over-match on case variations.
+      expect(out.x_props['alt-desc']).toBeUndefined();
+    });
+
+    it('drops arbitrary X-* properties not on the allowlist', () => {
+      const vevent = makeVEvent({});
+      // Two flavors: one that node-ical emits uppercase after X- stripping
+      // (X-FOO → FOO, see node_modules/node-ical/ical.js:1064-1067) and one
+      // lowercased random extension as a sanity check.
+      (vevent as unknown as Record<string, unknown>).FOO = 'should-not-appear';
+      (vevent as unknown as Record<string, unknown>)['x-bar'] = 'also-not';
+      const out = mapVEvent({ vevent, calendarPrimaryLanguage: 'en' });
+      expect(out.x_props.FOO).toBeUndefined();
+      expect(out.x_props.foo).toBeUndefined();
+      expect(out.x_props['X-FOO']).toBeUndefined();
+      expect(out.x_props['x-bar']).toBeUndefined();
+      expect(out.x_props['X-BAR']).toBeUndefined();
     });
 
     it('does not emit mapped standard fields into x_props', () => {
@@ -238,6 +360,12 @@ describe('ICS mapper: mapVEvent', () => {
       expect(keys).not.toContain('type');
       expect(keys).not.toContain('datetype');
       expect(keys).not.toContain('dtstamp');
+    });
+
+    it('returns an empty x_props when no allowlisted properties are present', () => {
+      const vevent = makeVEvent({});
+      const out = mapVEvent({ vevent, calendarPrimaryLanguage: 'en' });
+      expect(out.x_props).toEqual({});
     });
   });
 
@@ -539,7 +667,8 @@ describe('ICS mapper: mapVEvent', () => {
       const vevent = makeVEvent({
         summary: 'S', description: 'D', location: 'L',
       });
-      (vevent as unknown as Record<string, unknown>).FOO = 'X';
+      // Use an allowlisted property so x_props equality is non-trivial.
+      (vevent as unknown as Record<string, unknown>).categories = ['music', 'art'];
       const a = mapVEvent({ vevent, calendarPrimaryLanguage: 'en' });
       const b = mapVEvent({ vevent, calendarPrimaryLanguage: 'en' });
       expect(a.content.name).toBe(b.content.name);

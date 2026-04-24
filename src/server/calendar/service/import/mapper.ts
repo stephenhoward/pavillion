@@ -87,12 +87,17 @@ export type MapperOutput = {
   /** LAST-MODIFIED value, when present. Used by sync for idempotency. */
   source_last_modified?: DateTime;
   /**
-   * All X-prefixed properties from the VEVENT, plus a handful of v1-ignored
-   * fields (CATEGORIES, ORGANIZER, GEO, ATTACH) preserved as opaque JSON so
-   * a later release can interpret them without a re-import.
+   * Narrow allowlist of structured properties preserved for forward-looking
+   * readers that aren't wired yet. Each entry is tied to a concrete future
+   * feature (category import, location enrichment, virtual/hybrid location)
+   * and is shaped to match what that reader will eventually consume.
    *
-   * Node-ical strips the `X-` prefix from X-* fields; we re-add it here so
-   * the stored shape is stable regardless of parser internals.
+   * The allowlist is intentionally small: blanket X-* passthrough was dropped
+   * because (a) almost nothing real-world emits useful X-* extensions, and
+   * (b) some standard fields (ORGANIZER/ATTENDEE/ATTACH/X-ALT-DESC) carry PII
+   * or HTML that we don't want to warehouse without a reader and a sanitizer.
+   * See DEC-004 (privacy-first) and the mapper's `collectXProps` for the
+   * canonical list.
    */
   x_props: Record<string, unknown>;
   /**
@@ -239,36 +244,51 @@ function parseFreq(freq: string | undefined): EventFrequency | null {
 }
 
 /**
- * Collects X-prefixed and v1-ignored structured fields into `x_props`.
+ * Collects an explicit allowlist of forward-looking structured properties.
  *
- * node-ical strips the `X-` prefix, so we detect X-* properties by inspecting
- * the raw VEVENT payload and re-prefixing on output. Known standard fields
- * that we already mapped are skipped.
+ * The allowlist replaced an earlier "passthrough unless mapped" contract
+ * that warehoused arbitrary X-* properties plus several standard fields with
+ * no readers. The narrow set kept here is each tied to a concrete future
+ * feature:
+ *
+ *   - `categories`              → future category-import reader
+ *   - `geo`                     → future location enrichment (lat/lon)
+ *   - `X-APPLE-STRUCTURED-LOCATION` → future location enrichment (richer)
+ *   - `conference` (RFC 7986)   → future virtual/hybrid location feature
+ *
+ * Everything else is dropped on purpose. ORGANIZER/ATTENDEE carry attendee
+ * email PII (DEC-004); ATTACH carries arbitrary URLs/binaries with no target
+ * field; X-ALT-DESC is HTML and would need a sanitizer Pavillion doesn't yet
+ * have. Keeping these out of `x_props` keeps the stored shape safe to expose
+ * to a future reader without a privacy/safety audit.
+ *
+ * Node-ical strips the `X-` prefix from X-* property names but does NOT
+ * lowercase the remainder (see node_modules/node-ical/ical.js:1064-1067 —
+ * `name = name.slice(2)` with no `.toLowerCase()` call). So the runtime
+ * key for `X-APPLE-STRUCTURED-LOCATION` in the parsed VEVENT is the
+ * uppercase `APPLE-STRUCTURED-LOCATION`. We re-prefix on output to keep
+ * the stored key matching the source ICS property name exactly.
  */
 function collectXProps(vevent: VEvent): Record<string, unknown> {
-  // Fields that are part of the standard mapping — must not land in x_props.
-  const mapped = new Set([
-    'type', 'uid', 'start', 'end', 'datetype', 'summary', 'description',
-    'location', 'rrule', 'exdate', 'lastmodified', 'url', 'recurrenceid',
-    'recurrences', 'status', 'dtstamp', 'sequence', 'created', 'method',
-    'transparency', 'completion', 'class',
-  ]);
-
-  // Fields we choose to ignore in v1 but preserve in x_props for future use.
-  const preserve = new Set(['categories', 'organizer', 'attendee', 'geo', 'attach']);
-
   const out: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(vevent)) {
-    if (mapped.has(key)) continue;
-    if (preserve.has(key)) {
-      // Lower-cased to avoid case collisions with X-CATEGORIES etc.
-      out[key] = value;
-      continue;
-    }
-    // Everything else is assumed to be an X-property whose prefix node-ical stripped.
-    // Re-prefix so the stored shape is stable.
-    out[`X-${key}`] = value;
+  const source = vevent as unknown as Record<string, unknown>;
+
+  if ('categories' in source && source.categories !== undefined) {
+    out.categories = source.categories;
   }
+  if ('geo' in source && source.geo !== undefined) {
+    out.geo = source.geo;
+  }
+  if ('conference' in source && source.conference !== undefined) {
+    out.conference = source.conference;
+  }
+  // node-ical exposes X-APPLE-STRUCTURED-LOCATION with the X- prefix stripped
+  // but the remainder preserved in its original (uppercase) case. Re-prefix
+  // on output so the stored key matches the source ICS property name exactly.
+  if ('APPLE-STRUCTURED-LOCATION' in source && source['APPLE-STRUCTURED-LOCATION'] !== undefined) {
+    out['X-APPLE-STRUCTURED-LOCATION'] = source['APPLE-STRUCTURED-LOCATION'];
+  }
+
   return out;
 }
 
