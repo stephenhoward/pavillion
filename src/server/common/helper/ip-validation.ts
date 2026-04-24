@@ -32,6 +32,7 @@ import dns from 'dns';
 import { promisify } from 'util';
 import ipaddr from 'ipaddr.js';
 import { createLogger } from '@/server/common/helper/logger';
+import { isLocalhostIcsImportAllowed } from '@/server/common/helper/test-ssrf-gate';
 
 const logger = createLogger('ip-validation');
 
@@ -199,9 +200,19 @@ export async function validateUrlNotPrivate(url: string): Promise<boolean> {
   try {
     const parsedUrl = new URL(url);
 
+    // Env-gated test hook: when NODE_ENV=test|e2e AND
+    // ALLOW_LOCALHOST_ICS_IMPORT=true, allow http:// + private-IP literals
+    // so Playwright e2e can run a mock DoH + ICS fixture server on
+    // localhost. Gate is closed in production regardless of env var.
+    // See src/server/common/helper/test-ssrf-gate.ts.
+    const icsTestGateOpen = isLocalhostIcsImportAllowed();
+
     // Reject non-HTTPS URLs — ActivityPub federation must use HTTPS
     if (parsedUrl.protocol !== 'https:') {
-      throw new Error(`URL must use HTTPS, got: ${parsedUrl.protocol}`);
+      if (!(icsTestGateOpen && parsedUrl.protocol === 'http:')) {
+        throw new Error(`URL must use HTTPS, got: ${parsedUrl.protocol}`);
+      }
+      logger.warn('SECURITY WARNING: ALLOW_LOCALHOST_ICS_IMPORT is set - allowing http:// URL. Never use in production.');
     }
 
     let hostname = parsedUrl.hostname;
@@ -219,6 +230,10 @@ export async function validateUrlNotPrivate(url: string): Promise<boolean> {
 
     if (isLikelyIpLiteral && ipaddr.isValid(hostname)) {
       if (isPrivateIP(hostname)) {
+        if (icsTestGateOpen) {
+          logger.warn({ hostname }, 'SECURITY WARNING: ALLOW_LOCALHOST_ICS_IMPORT is set - allowing private IP literal. Never use in production.');
+          return true;
+        }
         throw new Error(`Access to private IP address ${hostname} is not allowed`);
       }
       return true;
@@ -247,6 +262,10 @@ export async function validateUrlNotPrivate(url: string): Promise<boolean> {
     // Resolve hostname to IP and check
     const resolvesPrivate = await resolvesToPrivateIP(hostname);
     if (resolvesPrivate) {
+      if (icsTestGateOpen) {
+        logger.warn({ hostname }, 'SECURITY WARNING: ALLOW_LOCALHOST_ICS_IMPORT is set - allowing private-IP-resolving hostname. Never use in production.');
+        return true;
+      }
       throw new Error(`Hostname ${hostname} resolves to a private IP address`);
     }
 

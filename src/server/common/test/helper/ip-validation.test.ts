@@ -263,5 +263,101 @@ describe('IP Validation', () => {
     // Note: Testing DNS resolution requires mocking promisified dns.lookup which is complex.
     // The core IP validation logic is thoroughly tested above with isPrivateIP tests.
     // Integration tests with http_signature.test.ts cover the end-to-end behavior.
+
+    describe('ALLOW_LOCALHOST_ICS_IMPORT gate (pv-1qcp.13)', () => {
+      // NODE_ENV=test is already set by the test runner, so we MUST manipulate
+      // NODE_ENV and ALLOW_LOCALHOST_ICS_IMPORT together to isolate the three
+      // gate states: closed-default, production-safe (closed), open.
+      const originalEnv = process.env.NODE_ENV;
+      const originalFlag = process.env.ALLOW_LOCALHOST_ICS_IMPORT;
+
+      afterEach(() => {
+        process.env.NODE_ENV = originalEnv;
+        if (originalFlag === undefined) {
+          delete process.env.ALLOW_LOCALHOST_ICS_IMPORT;
+        }
+        else {
+          process.env.ALLOW_LOCALHOST_ICS_IMPORT = originalFlag;
+        }
+      });
+
+      it('keeps http:// rejected when gate is closed (env var unset)', async () => {
+        delete process.env.ALLOW_LOCALHOST_ICS_IMPORT;
+        process.env.NODE_ENV = 'test';
+        await expect(ipValidation.validateUrlNotPrivate('http://127.0.0.1:3000')).rejects.toThrow(
+          'URL must use HTTPS',
+        );
+      });
+
+      it('keeps private-IP literals rejected when gate is closed (env var unset)', async () => {
+        delete process.env.ALLOW_LOCALHOST_ICS_IMPORT;
+        process.env.NODE_ENV = 'test';
+        await expect(ipValidation.validateUrlNotPrivate('https://127.0.0.1/cal.ics')).rejects.toThrow(
+          'Access to private IP address 127.0.0.1 is not allowed',
+        );
+      });
+
+      it('keeps gate closed when NODE_ENV=production even with ALLOW_LOCALHOST_ICS_IMPORT=true (production safety)', async () => {
+        process.env.NODE_ENV = 'production';
+        process.env.ALLOW_LOCALHOST_ICS_IMPORT = 'true';
+
+        // http:// still rejected
+        await expect(ipValidation.validateUrlNotPrivate('http://127.0.0.1/cal.ics')).rejects.toThrow(
+          'URL must use HTTPS',
+        );
+        // private-IP literal still rejected
+        await expect(ipValidation.validateUrlNotPrivate('https://127.0.0.1/cal.ics')).rejects.toThrow(
+          'Access to private IP address 127.0.0.1 is not allowed',
+        );
+      });
+
+      it('keeps gate closed in development/staging even with flag set', async () => {
+        process.env.NODE_ENV = 'development';
+        process.env.ALLOW_LOCALHOST_ICS_IMPORT = 'true';
+        await expect(ipValidation.validateUrlNotPrivate('http://127.0.0.1/cal.ics')).rejects.toThrow(
+          'URL must use HTTPS',
+        );
+      });
+
+      it('allows http:// when gate is open (NODE_ENV=test + flag=true)', async () => {
+        process.env.NODE_ENV = 'test';
+        process.env.ALLOW_LOCALHOST_ICS_IMPORT = 'true';
+
+        const result = await ipValidation.validateUrlNotPrivate('http://127.0.0.1:3000/cal.ics');
+        expect(result).toBe(true);
+      });
+
+      it('allows private-IP literals when gate is open (NODE_ENV=test + flag=true)', async () => {
+        process.env.NODE_ENV = 'test';
+        process.env.ALLOW_LOCALHOST_ICS_IMPORT = 'true';
+
+        const result = await ipValidation.validateUrlNotPrivate('https://127.0.0.1/cal.ics');
+        expect(result).toBe(true);
+      });
+
+      it('allows IPv6 loopback literal when gate is open', async () => {
+        process.env.NODE_ENV = 'test';
+        process.env.ALLOW_LOCALHOST_ICS_IMPORT = 'true';
+
+        const result = await ipValidation.validateUrlNotPrivate('http://[::1]:3000/cal.ics');
+        expect(result).toBe(true);
+      });
+
+      it('allows hostname resolving to loopback when gate is open', async () => {
+        process.env.NODE_ENV = 'test';
+        process.env.ALLOW_LOCALHOST_ICS_IMPORT = 'true';
+
+        const result = await ipValidation.validateUrlNotPrivate('http://localhost:3000/cal.ics');
+        expect(result).toBe(true);
+      });
+
+      it('allows http:// when gate is open with NODE_ENV=e2e', async () => {
+        process.env.NODE_ENV = 'e2e';
+        process.env.ALLOW_LOCALHOST_ICS_IMPORT = 'true';
+
+        const result = await ipValidation.validateUrlNotPrivate('http://127.0.0.1:3000/cal.ics');
+        expect(result).toBe(true);
+      });
+    });
   });
 });

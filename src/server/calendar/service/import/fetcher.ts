@@ -45,6 +45,7 @@ import {
   validateUrlNotPrivate,
 } from '@/server/common/helper/ip-validation';
 import { createLogger } from '@/server/common/helper/logger';
+import { isLocalhostIcsImportAllowed } from '@/server/common/helper/test-ssrf-gate';
 
 const logger = createLogger('calendar.import.fetcher');
 
@@ -262,8 +263,22 @@ export class Fetcher {
         if (addresses.length === 0) {
           throw new ImportSourceFetchError({ reason: 'dns_no_answer' });
         }
+        // Env-gated test hook: allow private-IP resolutions (e.g. 127.0.0.1)
+        // through when NODE_ENV=test|e2e AND ALLOW_LOCALHOST_ICS_IMPORT=true.
+        // The `defaultCreateAgent` already pins the socket to the resolved
+        // IP via `connect.lookup`, so allowing a localhost address here still
+        // flows through the same hardened pinning path.
+        // See src/server/common/helper/test-ssrf-gate.ts.
+        const icsTestGateOpen = isLocalhostIcsImportAllowed();
         for (const ip of addresses) {
           if (this.isPrivateIp(ip)) {
+            if (icsTestGateOpen) {
+              logger.warn(
+                { importSourceId, ip },
+                'ics.fetch.localhost_allowed: ALLOW_LOCALHOST_ICS_IMPORT gate is open — never enable in production',
+              );
+              continue;
+            }
             throw new ImportSourceSsrfBlockedError({ reason: 'private_ip_resolved' });
           }
         }

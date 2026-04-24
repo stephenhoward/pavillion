@@ -338,6 +338,98 @@ describe('DnsVerifier', () => {
       // Validation did not block the fetch path — both defaults were accepted.
       expect(fetchStub.callCount).toBeGreaterThanOrEqual(2);
     });
+
+    describe('ALLOW_LOCALHOST_ICS_IMPORT gate (pv-1qcp.13)', () => {
+      // The test runner already sets NODE_ENV=test; save/restore both vars
+      // to isolate closed-default / production-safe / open states.
+      const originalEnv = process.env.NODE_ENV;
+      const originalFlag = process.env.ALLOW_LOCALHOST_ICS_IMPORT;
+
+      afterEach(() => {
+        process.env.NODE_ENV = originalEnv;
+        if (originalFlag === undefined) {
+          delete process.env.ALLOW_LOCALHOST_ICS_IMPORT;
+        }
+        else {
+          process.env.ALLOW_LOCALHOST_ICS_IMPORT = originalFlag;
+        }
+      });
+
+      it('rejects http://127.0.0.1 resolvers when gate is closed (env var unset)', async () => {
+        delete process.env.ALLOW_LOCALHOST_ICS_IMPORT;
+        process.env.NODE_ENV = 'test';
+        stubResolvers(['http://127.0.0.1:3002/dns-query', 'http://127.0.0.1:3003/dns-query']);
+
+        const freshVerifier = new DnsVerifier(fetchStub);
+        const promise = freshVerifier.verify({
+          sourceId: SOURCE_ID,
+          calendarId: CALENDAR_ID,
+          sourceUrl: SOURCE_URL,
+        });
+
+        await expect(promise).rejects.toBeInstanceOf(ImportSourceDnsVerificationError);
+        await expect(promise).rejects.toHaveProperty('reason', IMPORT_DNS_RESOLVER_UNAVAILABLE);
+        expect(fetchStub.called).toBe(false);
+      });
+
+      it('keeps gate closed when NODE_ENV=production even with ALLOW_LOCALHOST_ICS_IMPORT=true', async () => {
+        process.env.NODE_ENV = 'production';
+        process.env.ALLOW_LOCALHOST_ICS_IMPORT = 'true';
+        stubResolvers(['http://127.0.0.1:3002/dns-query', 'http://127.0.0.1:3003/dns-query']);
+
+        const freshVerifier = new DnsVerifier(fetchStub);
+        const promise = freshVerifier.verify({
+          sourceId: SOURCE_ID,
+          calendarId: CALENDAR_ID,
+          sourceUrl: SOURCE_URL,
+        });
+
+        await expect(promise).rejects.toBeInstanceOf(ImportSourceDnsVerificationError);
+        await expect(promise).rejects.toHaveProperty('reason', IMPORT_DNS_RESOLVER_UNAVAILABLE);
+        expect(fetchStub.called).toBe(false);
+      });
+
+      it('accepts http://127.0.0.1 DoH resolvers when gate is open (NODE_ENV=test + flag=true)', async () => {
+        process.env.NODE_ENV = 'test';
+        process.env.ALLOW_LOCALHOST_ICS_IMPORT = 'true';
+        stubResolvers(['http://127.0.0.1:3002/dns-query', 'http://127.0.0.1:3003/dns-query']);
+
+        const record = formatVerificationRecord(SOURCE_ID, CALENDAR_ID);
+        const resp = buildDohResponse([record]);
+        fetchStub.resolves(mockFetchResponse(resp.status, resp.body));
+
+        const freshVerifier = new DnsVerifier(fetchStub);
+        const result = await freshVerifier.verify({
+          sourceId: SOURCE_ID,
+          calendarId: CALENDAR_ID,
+          sourceUrl: SOURCE_URL,
+        });
+
+        expect(result.verified).toBe(true);
+        // The validator did not block the fetch — both http://127.0.0.1
+        // resolvers passed through and the fetch stub was called per-resolver.
+        expect(fetchStub.callCount).toBeGreaterThanOrEqual(2);
+      });
+
+      it('accepts http://127.0.0.1 DoH resolvers when NODE_ENV=e2e + flag=true', async () => {
+        process.env.NODE_ENV = 'e2e';
+        process.env.ALLOW_LOCALHOST_ICS_IMPORT = 'true';
+        stubResolvers(['http://127.0.0.1:3002/dns-query', 'http://127.0.0.1:3003/dns-query']);
+
+        const record = formatVerificationRecord(SOURCE_ID, CALENDAR_ID);
+        const resp = buildDohResponse([record]);
+        fetchStub.resolves(mockFetchResponse(resp.status, resp.body));
+
+        const freshVerifier = new DnsVerifier(fetchStub);
+        const result = await freshVerifier.verify({
+          sourceId: SOURCE_ID,
+          calendarId: CALENDAR_ID,
+          sourceUrl: SOURCE_URL,
+        });
+
+        expect(result.verified).toBe(true);
+      });
+    });
   });
 
   describe('PSL violation', () => {

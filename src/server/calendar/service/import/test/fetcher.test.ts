@@ -521,4 +521,87 @@ describe('Fetcher', () => {
       }
     });
   });
+
+  // -------------------------------------------------------------------------
+  // ALLOW_LOCALHOST_ICS_IMPORT gate (pv-1qcp.13)
+  // -------------------------------------------------------------------------
+
+  describe('ALLOW_LOCALHOST_ICS_IMPORT gate', () => {
+    // NODE_ENV=test is already set by the test runner. Save/restore both
+    // vars to isolate closed-default / production-safe / open states.
+    const originalEnv = process.env.NODE_ENV;
+    const originalFlag = process.env.ALLOW_LOCALHOST_ICS_IMPORT;
+
+    afterEach(() => {
+      process.env.NODE_ENV = originalEnv;
+      if (originalFlag === undefined) {
+        delete process.env.ALLOW_LOCALHOST_ICS_IMPORT;
+      }
+      else {
+        process.env.ALLOW_LOCALHOST_ICS_IMPORT = originalFlag;
+      }
+    });
+
+    it('rejects a DNS-resolved private IP when gate is closed (env var unset)', async () => {
+      delete process.env.ALLOW_LOCALHOST_ICS_IMPORT;
+      process.env.NODE_ENV = 'test';
+
+      (dnsLookup as sinon.SinonStub).resolves(['127.0.0.1']);
+      (isPrivateIp as sinon.SinonStub).callsFake((ip: string) => ip === '127.0.0.1');
+
+      await expect(
+        buildFetcher().fetch({ url: 'https://localhost.test/cal.ics' }),
+      ).rejects.toBeInstanceOf(ImportSourceSsrfBlockedError);
+
+      expect((createAgent as sinon.SinonStub).called).toBe(false);
+      expect((request as sinon.SinonStub).called).toBe(false);
+    });
+
+    it('keeps gate closed when NODE_ENV=production even with ALLOW_LOCALHOST_ICS_IMPORT=true', async () => {
+      process.env.NODE_ENV = 'production';
+      process.env.ALLOW_LOCALHOST_ICS_IMPORT = 'true';
+
+      (dnsLookup as sinon.SinonStub).resolves(['127.0.0.1']);
+      (isPrivateIp as sinon.SinonStub).callsFake((ip: string) => ip === '127.0.0.1');
+
+      await expect(
+        buildFetcher().fetch({ url: 'https://localhost.test/cal.ics' }),
+      ).rejects.toBeInstanceOf(ImportSourceSsrfBlockedError);
+
+      expect((createAgent as sinon.SinonStub).called).toBe(false);
+    });
+
+    it('allows a DNS-resolved 127.0.0.1 through when gate is open (NODE_ENV=test + flag=true)', async () => {
+      process.env.NODE_ENV = 'test';
+      process.env.ALLOW_LOCALHOST_ICS_IMPORT = 'true';
+
+      (dnsLookup as sinon.SinonStub).resolves(['127.0.0.1']);
+      (isPrivateIp as sinon.SinonStub).callsFake((ip: string) => ip === '127.0.0.1');
+      (request as sinon.SinonStub).resolves(
+        makeResponse(200, { 'content-type': 'text/calendar' }, [VCAL_OK]),
+      );
+
+      const result = await buildFetcher().fetch({ url: 'https://localhost.test/cal.ics' });
+      expect(result.outcome).toBe('ok');
+
+      // Pinned-IP Agent was still built for the localhost address — the
+      // hardened pinning contract is preserved.
+      expect((createAgent as sinon.SinonStub).callCount).toBe(1);
+      expect((createAgent as sinon.SinonStub).firstCall.args[0]).toBe('127.0.0.1');
+    });
+
+    it('allows DNS-resolved 127.0.0.1 when NODE_ENV=e2e + flag=true', async () => {
+      process.env.NODE_ENV = 'e2e';
+      process.env.ALLOW_LOCALHOST_ICS_IMPORT = 'true';
+
+      (dnsLookup as sinon.SinonStub).resolves(['127.0.0.1']);
+      (isPrivateIp as sinon.SinonStub).callsFake((ip: string) => ip === '127.0.0.1');
+      (request as sinon.SinonStub).resolves(
+        makeResponse(200, { 'content-type': 'text/calendar' }, [VCAL_OK]),
+      );
+
+      const result = await buildFetcher().fetch({ url: 'https://localhost.test/cal.ics' });
+      expect(result.outcome).toBe('ok');
+    });
+  });
 });
