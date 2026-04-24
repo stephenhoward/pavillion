@@ -130,30 +130,6 @@ class CalendarEvent extends TranslatedModel<CalendarEventContent> {
   recurrenceSummary: { key: string; params: Record<string, any> } | null = null;
 
   /**
-   * ICS-import origin metadata (read-only, server-side only).
-   *
-   * Populated by the server when converting an EventEntity that was
-   * created via ICS import. These fields are DELIBERATELY OMITTED from
-   * `toObject()` — origin provenance must not leak into public API
-   * responses or ActivityPub output (see pv-1qcp epic DESIGN / privacy
-   * playbook). Authenticated service-layer callers that need to read
-   * origin metadata should read these fields directly on the model.
-   *
-   * Divergence from ActivityPub origin tracking: AP-origin events carry
-   * their provenance in a sibling EventObjectEntity on the server side
-   * rather than on this model. ICS origin is inline here because ICS
-   * imports land in a locally-owned calendar (calendarId non-null) and
-   * have no separate "remote actor" concept.
-   */
-  importSourceId: string | null = null;
-  externalUid: string | null = null;
-  externalRecurrenceId: string | null = null;
-  sourceLastModified: Date | null = null;
-  sourceLastSeenAt: Date | null = null;
-  locallyEdited: boolean = false;
-  xProps: Record<string, unknown> | null = null;
-
-  /**
    * Constructor for CalendarEvent.
    *
    * @param {string} [id] - Unique identifier for the event
