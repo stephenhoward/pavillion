@@ -335,7 +335,6 @@ class SyncService {
     let counts = { created: 0, updated: 0, skippedLocallyEdited: 0, disappeared: 0 };
     let parseErrorCount = 0;
     let firstErrorMessage: string | null = null;
-    let catastrophic = false;
 
     try {
       await db.transaction(async (tx) => {
@@ -399,7 +398,6 @@ class SyncService {
             // roll the whole run back (the transaction callback below will
             // rethrow). Record the first sanitized message and propagate.
             firstErrorMessage = firstErrorMessage ?? this.sanitizedErrorMessage(err);
-            catastrophic = true;
             throw err;
           }
         }
@@ -444,11 +442,7 @@ class SyncService {
       });
     }
 
-    void catastrophic;
-
-    const finalOutcome: ImportRunOutcome = parseErrorCount > 0
-      ? 'parse_error'
-      : (counts.created === 0 && counts.updated === 0 ? 'success' : 'success');
+    const finalOutcome: ImportRunOutcome = parseErrorCount > 0 ? 'parse_error' : 'success';
 
     const result = await this.recordRun({
       sourceId: importSourceId,
