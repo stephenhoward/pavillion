@@ -5,7 +5,9 @@ import { flushPromises } from '@vue/test-utils';
 import { ImportSource } from '@/common/model/import_source';
 import { mountComponent } from '@/client/test/lib/vue';
 import ImportSourcesSection from '../import-sources/ImportSourcesSection.vue';
+import DnsChallengeModal from '../import-sources/DnsChallengeModal.vue';
 import ImportSourceService from '@/client/service/import_source';
+import { useToast, resetToastState } from '@/client/composables/useToast';
 
 const routes: RouteRecordRaw[] = [
   { path: '/test', component: {}, name: 'test' },
@@ -56,6 +58,10 @@ describe('ImportSourcesSection', () => {
     vi.spyOn(ImportSourceService.prototype, 'syncSource').mockImplementation(syncSourceMock);
     vi.spyOn(ImportSourceService.prototype, 'getSource').mockImplementation(getSourceMock);
     vi.spyOn(ImportSourceService.prototype, 'issueChallenge').mockImplementation(issueChallengeMock);
+
+    // Toast state is module-scoped shared reactive state — reset per test so
+    // assertions don't pick up toasts accumulated by earlier tests.
+    resetToastState();
   });
 
   afterEach(() => {
@@ -323,6 +329,49 @@ describe('ImportSourcesSection', () => {
       expect(getSourceMock).toHaveBeenCalledWith(CALENDAR_ID, 'id-1');
       // The row was replaced with the refreshed version
       expect((wrapper.vm as any).state.sources[0].lastFetchedAt).toEqual(refreshed.lastFetchedAt);
+      // User-visible success toast — message should reflect created/updated
+      // counts per the sync_success i18n template.
+      const { toasts } = useToast();
+      const successToasts = toasts.value.filter(t => t.type === 'success');
+      expect(successToasts.length).toBeGreaterThan(0);
+      // The rendered message mentions the numeric counts from the summary.
+      expect(successToasts.some(t => t.message.includes('2') && t.message.includes('1'))).toBe(true);
+    });
+
+    it('shows a distinct success toast when sync run reports no_changes', async () => {
+      const s1 = buildSource('id-1', 'https://example.com/a.ics');
+      s1.verificationState = 'verified';
+      listSourcesMock.mockResolvedValue([s1]);
+
+      syncSourceMock.mockResolvedValue({
+        id: 'run-2',
+        importSourceId: 'id-1',
+        startedAt: new Date().toISOString(),
+        finishedAt: new Date().toISOString(),
+        outcome: 'no_changes',
+        eventsCreated: 0,
+        eventsUpdated: 0,
+        eventsSkippedLocallyEdited: 0,
+        eventsDisappeared: 0,
+        errorMessage: null,
+      });
+      getSourceMock.mockResolvedValue(s1);
+
+      const { wrapper } = mountSection();
+      await flushPromises();
+
+      const syncBtn = wrapper.find('.import-source-row .btn-ghost:not(.btn-ghost--danger):not(.import-source-row__verify-btn)');
+      await syncBtn.trigger('click');
+      await flushPromises();
+
+      const { toasts } = useToast();
+      const successToasts = toasts.value.filter(t => t.type === 'success');
+      expect(successToasts.length).toBeGreaterThan(0);
+      // sync_success_no_changes => 'Sync complete: no changes.' — distinct
+      // from the counts-based message in the previous test.
+      expect(successToasts.some(t => /no changes/i.test(t.message))).toBe(true);
+      // And the message does NOT contain a numeric count marker.
+      expect(successToasts.every(t => !/\b[1-9]\d*\b/.test(t.message))).toBe(true);
     });
 
     it('surfaces error without crashing when syncSource fails', async () => {
@@ -344,6 +393,14 @@ describe('ImportSourcesSection', () => {
       expect(syncSourceMock).toHaveBeenCalled();
       // syncingId is reset
       expect((wrapper.vm as any).state.syncingId).toBeNull();
+      // User-visible error toast surfaces — errorMessageForSync resolves an
+      // i18n string from the raw error's .name field (ImportSourceFetchError
+      // => errors.fetch_error). Type-level assertion is locale-robust; the
+      // message field itself must be non-empty.
+      const { toasts } = useToast();
+      const errorToasts = toasts.value.filter(t => t.type === 'error');
+      expect(errorToasts.length).toBeGreaterThan(0);
+      expect(errorToasts.every(t => t.message.length > 0)).toBe(true);
     });
   });
 
@@ -389,6 +446,39 @@ describe('ImportSourcesSection', () => {
 
       expect(issueChallengeMock).toHaveBeenCalledWith(CALENDAR_ID, 'id-1');
       expect((wrapper.vm as any).state.challengeToken).toBe('test-challenge-token');
+    });
+
+    it('onVerified updates the row and closes the challenge modal', async () => {
+      const s1 = buildSource('id-1', 'https://example.com/a.ics');
+      s1.verificationState = 'pending';
+      listSourcesMock.mockResolvedValue([s1]);
+
+      const { wrapper } = mountSection();
+      await flushPromises();
+
+      // Open the modal via Verify click.
+      await wrapper.find('.import-source-row__verify-btn').trigger('click');
+      await flushPromises();
+
+      expect((wrapper.vm as any).state.challengeSource?.id).toBe('id-1');
+
+      // DnsChallengeModal is rendered via v-if once challengeSource is set.
+      const modal = wrapper.findComponent(DnsChallengeModal);
+      expect(modal.exists()).toBe(true);
+
+      // Emit the 'verified' event with an updated source payload. The
+      // handler replaces the stale row and calls closeChallengeModal.
+      const updatedSource = buildSource('id-1', 'https://example.com/a.ics', {
+        verificationState: 'verified',
+      });
+      modal.vm.$emit('verified', updatedSource);
+      await flushPromises();
+
+      // Row replaced in state.
+      expect((wrapper.vm as any).state.sources[0].verificationState).toBe('verified');
+      // Modal closed — both challengeSource and challengeToken cleared.
+      expect((wrapper.vm as any).state.challengeSource).toBeNull();
+      expect((wrapper.vm as any).state.challengeToken).toBe('');
     });
 
     it('opens DNS challenge modal automatically after creating a new source', async () => {

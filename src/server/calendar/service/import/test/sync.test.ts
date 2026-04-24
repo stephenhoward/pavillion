@@ -494,6 +494,40 @@ describe('SyncService', () => {
       // The disappeared event is NOT saved.
       expect((gone.save as sinon.SinonStub).called).toBe(false);
     });
+
+    it('records partial parse failure when one VEVENT in a batch throws during mapping', async () => {
+      // Three VEVENTs — the middle one is missing DTSTART, which causes the
+      // real mapper to throw (`'VEVENT is missing DTSTART; cannot map.'`).
+      // The other two should still be created in the same run, and the
+      // orchestrator should record an overall 'parse_error' outcome with
+      // parseErrorCount > 0 while eventsCreated counts only the successes.
+      const veventA = makeVEvent({ uid: 'uid-a@example.test' });
+      const veventB = makeVEvent({ uid: 'uid-b@example.test' });
+      // Force mapper to throw on this one by dropping DTSTART (mapper.ts:341).
+      delete (veventB as Partial<VEvent>).start;
+      const veventC = makeVEvent({ uid: 'uid-c@example.test' });
+
+      const src = setupWith([veventA, veventB, veventC]);
+
+      eventService.createEvent.callsFake(async (_acct, params: Record<string, unknown>) => {
+        return { id: 'evt-' + (params.externalUid as string) } as never;
+      });
+
+      const result = await service.syncSource({ account, importSourceId: 'src-1' });
+
+      // Transaction completes (per-event mapper errors are caught + continue)
+      // so outcome reflects parseErrorCount > 0.
+      expect(result.outcome).toBe('parse_error');
+      expect(result.eventsCreated).toBe(2);
+      // Two successful creates, one mapper failure.
+      expect(eventService.createEvent.callCount).toBe(2);
+      // Source bookkeeping stamped inside the successful transaction.
+      expect(src.last_status).toBe('parse_error');
+      // Non-typed Error from the real mapper is sanitized to the internal
+      // sentinel (ImportSourceParseError is never thrown by mapVEvent — the
+      // wrapper in sync.ts maps plain Error to IMPORT_INTERNAL_ERROR).
+      expect(result.errorMessage).toBe('IMPORT_INTERNAL_ERROR');
+    });
   });
 
   // --------------------------------------------------------------------------

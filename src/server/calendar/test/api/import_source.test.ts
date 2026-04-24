@@ -169,6 +169,12 @@ describe('ImportSourceRoutes', () => {
       expect(stub.calledOnce).toBe(true);
       expect(stub.firstCall.args[1]).toBe(CALENDAR_ID);
       expect(stub.firstCall.args[2]).toBe('https://example.com/events.ics');
+      // Verification token must never leak through create responses.
+      // Three-layer defense: entity.toModel + model.toObject + this test.
+      expect(response.body).not.toHaveProperty('verificationToken');
+      expect(
+        Object.keys(response.body).some(k => k.toLowerCase().includes('token')),
+      ).toBe(false);
     });
 
     it('forwards a ValidationError with field-level details', async () => {
@@ -231,6 +237,12 @@ describe('ImportSourceRoutes', () => {
 
       expect(response.status).toBe(200);
       expect(response.body.id).toBe(SOURCE_ID);
+      // Verification token must never leak through single-get responses.
+      // Three-layer defense: entity.toModel + model.toObject + this test.
+      expect(response.body).not.toHaveProperty('verificationToken');
+      expect(
+        Object.keys(response.body).some(k => k.toLowerCase().includes('token')),
+      ).toBe(false);
     });
 
     it('returns 404 when the source is missing', async () => {
