@@ -291,9 +291,7 @@
             "copied": "Copied",
             "verify_button": "Verify",
             "verifying": "Verifying...",
-            "cancel_button": "Close",
-            "close_button": "Close",
-            "verify_another_source": "Verify"
+            "close_button": "Close"
         },
         "errors": {
             "dns_not_found": "DNS TXT record not found. Please confirm the record is published and try again.",
@@ -310,7 +308,6 @@
         },
         "sync_success": "Sync complete: {{created}} added, {{updated}} updated.",
         "sync_success_no_changes": "Sync complete: no changes.",
-        "error_syncing": "Failed to sync import source.",
         "verify_aria": "Verify ownership for import source {{url}}",
         "warnings": {
             "ap_source_double_federation": "This source looks like a federated calendar (Mobilizon or Gancio). Following via ActivityPub may work better than ICS import."
