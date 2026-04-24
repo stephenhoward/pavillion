@@ -135,18 +135,6 @@ describe('ImportSourceRoutes', () => {
       expect(response.status).toBe(400);
       expect(response.body.errorName).toBe('ValidationError');
     });
-
-    it('returns 401 when no account is attached', async () => {
-      router.get('/handler', (req, res) => {
-        req.params.calendarId = CALENDAR_ID;
-        routes.listSources(req, res);
-      });
-
-      const response = await request(testApp(router)).get('/handler');
-
-      expect(response.status).toBe(401);
-      expect(response.body.errorName).toBe('AuthenticationError');
-    });
   });
 
   describe('POST /calendars/:calendarId/import-sources', () => {

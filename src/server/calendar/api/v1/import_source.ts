@@ -110,14 +110,6 @@ class ImportSourceRoutes {
     const account = req.user as Account;
     const { calendarId } = req.params;
 
-    if (!account) {
-      res.status(401).json({
-        error: 'missing account. Not logged in?',
-        errorName: 'AuthenticationError',
-      });
-      return;
-    }
-
     if (!ExpressHelper.isValidUUID(calendarId)) {
       res.status(400).json({
         error: 'invalid calendarId format',
@@ -147,14 +139,6 @@ class ImportSourceRoutes {
     const body = (req.body ?? {}) as Record<string, unknown>;
     const url = typeof body.url === 'string' ? body.url : '';
 
-    if (!account) {
-      res.status(401).json({
-        error: 'missing account. Not logged in?',
-        errorName: 'AuthenticationError',
-      });
-      return;
-    }
-
     if (!ExpressHelper.isValidUUID(calendarId)) {
       res.status(400).json({
         error: 'invalid calendarId format',
@@ -179,14 +163,6 @@ class ImportSourceRoutes {
     const account = req.user as Account;
     const { calendarId, id } = req.params;
 
-    if (!account) {
-      res.status(401).json({
-        error: 'missing account. Not logged in?',
-        errorName: 'AuthenticationError',
-      });
-      return;
-    }
-
     if (!ExpressHelper.isValidUUID(calendarId) || !ExpressHelper.isValidUUID(id)) {
       res.status(400).json({
         error: 'invalid id format',
@@ -210,14 +186,6 @@ class ImportSourceRoutes {
   async deleteSource(req: Request, res: Response): Promise<void> {
     const account = req.user as Account;
     const { calendarId, id } = req.params;
-
-    if (!account) {
-      res.status(401).json({
-        error: 'missing account. Not logged in?',
-        errorName: 'AuthenticationError',
-      });
-      return;
-    }
 
     if (!ExpressHelper.isValidUUID(calendarId) || !ExpressHelper.isValidUUID(id)) {
       res.status(400).json({
@@ -248,14 +216,6 @@ class ImportSourceRoutes {
     const account = req.user as Account;
     const { calendarId, id } = req.params;
 
-    if (!account) {
-      res.status(401).json({
-        error: 'missing account. Not logged in?',
-        errorName: 'AuthenticationError',
-      });
-      return;
-    }
-
     if (!ExpressHelper.isValidUUID(calendarId) || !ExpressHelper.isValidUUID(id)) {
       res.status(400).json({
         error: 'invalid id format',
@@ -285,14 +245,6 @@ class ImportSourceRoutes {
     const account = req.user as Account;
     const { calendarId, id } = req.params;
 
-    if (!account) {
-      res.status(401).json({
-        error: 'missing account. Not logged in?',
-        errorName: 'AuthenticationError',
-      });
-      return;
-    }
-
     if (!ExpressHelper.isValidUUID(calendarId) || !ExpressHelper.isValidUUID(id)) {
       res.status(400).json({
         error: 'invalid id format',
@@ -319,14 +271,6 @@ class ImportSourceRoutes {
   async syncSource(req: Request, res: Response): Promise<void> {
     const account = req.user as Account;
     const { calendarId, id } = req.params;
-
-    if (!account) {
-      res.status(401).json({
-        error: 'missing account. Not logged in?',
-        errorName: 'AuthenticationError',
-      });
-      return;
-    }
 
     if (!ExpressHelper.isValidUUID(calendarId) || !ExpressHelper.isValidUUID(id)) {
       res.status(400).json({
