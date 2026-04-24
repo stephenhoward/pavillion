@@ -667,6 +667,7 @@ class EventService {
     account: Account,
     eventParams: Record<string, any>,
     context: EventOriginatorContext = DEFAULT_ORIGINATOR_CONTEXT,
+    tx?: Transaction,
   ): Promise<CalendarEvent> {
 
     const calendar = await this.calendarService.getCalendar(eventParams.calendarId);
@@ -774,7 +775,7 @@ class EventService {
       event.media = media;
     }
 
-    await eventEntity.save();
+    await eventEntity.save({ transaction: tx });
 
     // Notify media domain that media has been attached to an event
     if (eventEntity.media_id) {
@@ -786,14 +787,14 @@ class EventService {
 
     if ( eventParams.content ) {
       for( let [language,content] of Object.entries(eventParams.content) ) {
-        event.addContent(await this.createEventContent(event.id, language, content as Record<string,any>));
+        event.addContent(await this.createEventContent(event.id, language, content as Record<string,any>, tx));
       }
     }
 
     if ( eventParams.schedules ) {
       event.schedules = []; // "fromObject" auto-creates schedules, but we need to create them in the db
       for( let schedule of eventParams.schedules ) {
-        event.addSchedule(await this.createEventSchedule(event.id, schedule as Record<string,any>));
+        event.addSchedule(await this.createEventSchedule(event.id, schedule as Record<string,any>, tx));
       }
     }
 
@@ -801,7 +802,7 @@ class EventService {
     return event;
   }
 
-  async createEventSchedule(eventId: string, scheduleParams: Record<string,any>): Promise<CalendarEventSchedule> {
+  async createEventSchedule(eventId: string, scheduleParams: Record<string,any>, tx?: Transaction): Promise<CalendarEventSchedule> {
     const schedule = CalendarEventSchedule.fromObject(scheduleParams);
 
     // For non-recurring events, sync endDate to eventEndTime so the database
@@ -814,19 +815,19 @@ class EventService {
     schedule.id = uuidv4();
     const scheduleEntity = EventScheduleEntity.fromModel(schedule);
     scheduleEntity.event_id = eventId;
-    await scheduleEntity.save();
+    await scheduleEntity.save({ transaction: tx });
 
     return schedule;
   }
 
-  async createEventContent(eventId: string, language: string, contentParams: Record<string,any>): Promise<CalendarEventContent> {
+  async createEventContent(eventId: string, language: string, contentParams: Record<string,any>, tx?: Transaction): Promise<CalendarEventContent> {
     contentParams.language = language;
     const content = CalendarEventContent.fromObject(contentParams);
 
     const contentEntity = EventContentEntity.fromModel(content);
     contentEntity.id = uuidv4();
     contentEntity.event_id = eventId;
-    await contentEntity.save();
+    await contentEntity.save({ transaction: tx });
 
     return content;
   }
@@ -862,6 +863,7 @@ class EventService {
     eventId: string,
     eventParams: Record<string, any>,
     context: EventOriginatorContext = DEFAULT_ORIGINATOR_CONTEXT,
+    tx?: Transaction,
   ): Promise<CalendarEvent> {
     // Validate eventId parameter
     if (!eventId || (typeof eventId === 'string' && eventId.trim() === '')) {
@@ -942,7 +944,7 @@ class EventService {
         if ( contentEntity ) {
 
           if ( ! content ) {
-            await contentEntity.destroy();
+            await contentEntity.destroy({ transaction: tx });
             continue;
           }
 
@@ -950,7 +952,7 @@ class EventService {
           delete c.language;
 
           if ( Object.keys(c).length === 0 ) {
-            await contentEntity.destroy();
+            await contentEntity.destroy({ transaction: tx });
             continue;
           }
 
@@ -960,7 +962,7 @@ class EventService {
             name: name,
             description: c.description,
             accessibility_info: c.accessibilityInfo ?? '',
-          });
+          }, { transaction: tx });
           event.addContent(contentEntity.toModel());
         }
         else {
@@ -972,7 +974,7 @@ class EventService {
           delete c.language;
 
           if ( Object.keys(c).length > 0 ) {
-            event.addContent(await this.createEventContent(eventId, language, c));
+            event.addContent(await this.createEventContent(eventId, language, c, tx));
           }
         }
       }
@@ -1017,7 +1019,7 @@ class EventService {
     }
 
     if ( eventParams.schedules ) {
-      await this.reconcileSchedules(eventId, eventParams.schedules, event);
+      await this.reconcileSchedules(eventId, eventParams.schedules, event, tx);
     }
 
     // Handle media updates
@@ -1065,7 +1067,7 @@ class EventService {
       eventEntity.locally_edited = true;
     }
 
-    await eventEntity.save();
+    await eventEntity.save({ transaction: tx });
 
     // Notify media domain that media has been attached to an event
     if (newMediaAttached && eventEntity.media_id) {
@@ -1109,6 +1111,7 @@ class EventService {
     eventId: string,
     incomingPositiveSchedules: any[],
     event: CalendarEvent,
+    tx?: Transaction,
   ): Promise<void> {
     // Reject payloads that try to create or modify exclusion rows directly.
     // Exclusions are only created via the cancel-instance flow; allowing them
@@ -1126,6 +1129,7 @@ class EventService {
     // to this event and can't leak into other events' cancellations.
     const existingSchedules = await EventScheduleEntity.findAll({
       where: { event_id: eventId },
+      transaction: tx,
     });
 
     // Separate existing rows by class so exclusions are kept completely
@@ -1176,11 +1180,11 @@ class EventService {
           interval: 'interval' in schedule ? (parsed.interval ?? 0) : scheduleEntity.interval,
           count: 'count' in schedule ? (parsed.count ?? 0) : scheduleEntity.count,
           by_day: byDayValue,
-        });
+        }, { transaction: tx });
         event.addSchedule(scheduleEntity.toModel());
       }
       else {
-        event.addSchedule(await this.createEventSchedule(eventId, schedule));
+        event.addSchedule(await this.createEventSchedule(eventId, schedule, tx));
       }
     }
 
@@ -1195,6 +1199,7 @@ class EventService {
           event_id: eventId,
           is_exclusion: false,
         },
+        transaction: tx,
       });
     }
 

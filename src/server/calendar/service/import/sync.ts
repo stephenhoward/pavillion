@@ -546,7 +546,7 @@ class SyncService {
     tx?: Transaction,
   ): Promise<CalendarEvent> {
     const params = buildEventParamsForCreate(source, mapped);
-    const event = await this.eventService.createEvent(account, params, { source: 'import' });
+    const event = await this.eventService.createEvent(account, params, { source: 'import' }, tx);
     // Stamp the origin columns on the persisted entity. EventService.createEvent
     // sets source_last_seen_at and locally_edited per the originator context,
     // but does not read the ICS-origin columns off the CalendarEvent model
@@ -571,7 +571,7 @@ class SyncService {
     tx?: Transaction,
   ): Promise<CalendarEvent> {
     const params = buildEventParamsForUpdate(source, mapped);
-    const event = await this.eventService.updateEvent(account, eventId, params, { source: 'import' });
+    const event = await this.eventService.updateEvent(account, eventId, params, { source: 'import' }, tx);
     // Refresh origin columns on update too. source_last_modified and x_props
     // may have changed on the feed side; import_source_id / external_uid /
     // external_recurrence_id are stable but re-stamping them is a no-op.

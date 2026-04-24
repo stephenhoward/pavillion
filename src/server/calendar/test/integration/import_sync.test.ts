@@ -336,18 +336,7 @@ describe('SyncService integration', () => {
       }
     });
 
-    // DOCUMENTED GAP: EventService.createEvent auto-commits EventEntity /
-    // EventContent / EventSchedule writes outside the sync orchestrator's
-    // db.transaction callback. That means when a mid-run createEvent rejects
-    // here, the previously-created event rows on testCalendar survive the
-    // rollback — the origin columns were never stamped (pv-1qcp.5 fix), but
-    // the bare event rows are orphaned on the calendar with no provenance.
-    //
-    // Fixing this requires making EventService transaction-aware (accept a
-    // tx handle and thread it through to EventEntity/EventContent/EventSchedule
-    // writes), which is OUT OF SCOPE for pv-1qcp.5. A follow-up bead
-    // (pv-1qcp.5.1) will flip this to `.only` once EventService accepts tx.
-    it.skip('leaves no orphaned EventEntity rows on the calendar when a mid-run createEvent fails (requires EventService tx plumbing — pv-1qcp.5.1)', async () => {
+    it('leaves no orphaned EventEntity rows on the calendar when a mid-run createEvent fails', async () => {
       const source = await createVerifiedSource({ url: 'https://feeds.example.test/rollback-orphan.ics' });
 
       fetcherStub.fetch.resolves({
@@ -369,6 +358,12 @@ describe('SyncService integration', () => {
         eventService: import('@/server/calendar/service/events').default;
       }).eventService;
 
+      // Snapshot the event count before the sync run so the assertion is
+      // resilient to whatever events earlier tests in this describe block
+      // left on testCalendar. The key invariant is: a failed sync run must
+      // not add any rows.
+      const rowsBefore = await EventEntity.count({ where: { calendar_id: testCalendar.id } });
+
       const realCreateEvent = eventService.createEvent.bind(eventService);
       const stub = sinon.stub(eventService, 'createEvent');
       stub.onCall(0).callsFake((...args: unknown[]) => realCreateEvent(...(args as Parameters<typeof realCreateEvent>)));
@@ -381,13 +376,12 @@ describe('SyncService integration', () => {
           importSourceId: source.id,
         });
 
-        // DOCUMENTED GAP: EventService.createEvent auto-commits; see
-        // pv-1qcp.5.1 follow-up. This assertion will FAIL against the
-        // current implementation.
-        const orphanedEventRows = await EventEntity.findAll({
-          where: { calendar_id: testCalendar.id },
-        });
-        expect(orphanedEventRows).toHaveLength(0);
+        // With EventService tx plumbing (pv-1qcp.14), all entity writes
+        // performed by the 2 successful createEvent calls participate in the
+        // sync orchestrator's db.transaction and roll back when the 3rd call
+        // rejects. No new EventEntity rows should survive on the test calendar.
+        const rowsAfter = await EventEntity.count({ where: { calendar_id: testCalendar.id } });
+        expect(rowsAfter).toBe(rowsBefore);
       }
       finally {
         stub.restore();
