@@ -20,6 +20,8 @@ jobs:
     with:
       platform: linux/amd64
       runner: ubuntu-latest
+  manifest_lint:
+    uses: ./.github/workflows/manifest_lint.yaml
   arm_e2e:
     needs: arm_tests
     uses: ./.github/workflows/run_e2e_tests.yaml

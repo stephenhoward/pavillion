@@ -1,0 +1,13 @@
+name: Manifest Lint
+on:
+  workflow_call:
+
+jobs:
+  manifest_lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run bash tests
+        run: bash bin/test/run.sh
+      - name: Check manifest wiring
+        run: bash bin/check-manifest.sh
