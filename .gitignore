@@ -43,3 +43,9 @@ AGENTS.md
 # Per-instance Caddy snippets dropped into the extras.d extension point.
 # README.md is tracked; *.caddyfile snippets are operator-supplied per-instance.
 caddy-extras.d/*.caddyfile
+
+# Per-instance staging webhook listener artifacts (adnanh/webhook).
+# hooks.json contains DEPLOY_WEBHOOK_SECRET; see docker/staging/hooks.json.example
+# for the tracked template. deploy.log is rotating output from the deploy hook.
+/hooks.json
+/deploy.log

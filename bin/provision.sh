@@ -409,8 +409,8 @@ configure_staging() {
   fi
 
   # Copy and configure hooks.json with generated webhook secret
-  if [ -f "${APP_DIR}/docker/staging/hooks.json" ]; then
-    cp "${APP_DIR}/docker/staging/hooks.json" "${APP_DIR}/hooks.json"
+  if [ -f "${APP_DIR}/docker/staging/hooks.json.example" ]; then
+    cp "${APP_DIR}/docker/staging/hooks.json.example" "${APP_DIR}/hooks.json"
     # Use | as sed delimiter for portability
     sed -i.bak "s|REPLACE_WITH_WEBHOOK_SECRET|${webhook_secret}|" "${APP_DIR}/hooks.json"
     rm -f "${APP_DIR}/hooks.json.bak"
@@ -418,7 +418,7 @@ configure_staging() {
     chown "${DEPLOY_USER}:${DEPLOY_USER}" "${APP_DIR}/hooks.json"
     print_success "Configured hooks.json with webhook secret"
   else
-    print_error "docker/staging/hooks.json not found, skipping webhook config."
+    print_error "docker/staging/hooks.json.example not found, skipping webhook config."
   fi
 
   # Copy staging Caddyfile
