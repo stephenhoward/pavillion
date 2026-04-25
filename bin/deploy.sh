@@ -96,7 +96,9 @@ parse_args() {
   done
 
   # Non-TTY implies non-interactive even if flag not passed.
-  if [[ ! -t 0 ]]; then
+  # DEPLOY_FORCE_INTERACTIVE=1 disables the auto-flip so that tests can pipe
+  # answers to the prompts; never set this in real deployments.
+  if [[ ! -t 0 && "${DEPLOY_FORCE_INTERACTIVE:-0}" != "1" ]]; then
     NON_INTERACTIVE=1
   fi
 }
@@ -241,7 +243,11 @@ resolve_missing() {
   deploy_state_init
 
   local failures=0
-  while IFS='|' read -r name stability; do
+  # Read missing_secrets via fd 3 so that the interactive `read` below stays
+  # bound to stdin (fd 0) — otherwise the prompt would silently consume from
+  # the process substitution and the interactive recovery branch would never
+  # reach the operator.
+  while IFS='|' read -r name stability <&3; do
     [[ -z "$name" ]] && continue
     local generator
     generator=$(manifest_field "$MANIFEST" "$name" "generator")
@@ -304,7 +310,7 @@ resolve_missing() {
         failures=$((failures+1))
         ;;
     esac
-  done < <(missing_secrets)
+  done 3< <(missing_secrets)
 
   if [[ $failures -gt 0 ]]; then
     return 2

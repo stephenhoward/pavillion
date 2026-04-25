@@ -65,10 +65,21 @@ report_results() {
   exit "$_FAILS"
 }
 
+_MKTEMP_DIRS=()
+_mktemp_dir_cleanup() {
+  local d
+  for d in "${_MKTEMP_DIRS[@]}"; do
+    rm -rf "$d"
+  done
+}
+
 mktemp_dir() {
-  # Create temp dir and register cleanup.
+  # Create temp dir and register cleanup. Accumulates across calls so that
+  # every directory created via mktemp_dir is removed on EXIT, not just the
+  # last one (a bare `trap "..." EXIT` would replace any prior trap).
   local dir
   dir=$(mktemp -d)
-  trap "rm -rf '${dir}'" EXIT
+  _MKTEMP_DIRS+=("$dir")
+  trap '_mktemp_dir_cleanup' EXIT
   echo "$dir"
 }

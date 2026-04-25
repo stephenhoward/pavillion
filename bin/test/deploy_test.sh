@@ -38,7 +38,7 @@ setup_workspace() {
 }
 
 echo "test: --diff-only reports missing secret names"
-tmp=$(mktemp -d); trap "rm -rf '${tmp}'" EXIT
+tmp=$(mktemp_dir)
 setup_workspace "$tmp" "${FIXTURES}/env_missing_one"
 cat > "${tmp}/bin/deploy-manifest.yaml" <<'EOF'
 secrets:
@@ -191,6 +191,102 @@ assert_eq "2" "$exit_code" "exit 2 when previously-provisioned stable secret is 
 assert_contains "$output" "JWT_SECRET" "error names the missing stable secret"
 assert_contains "$output" "previously provisioned" "error explains the secret was previously provisioned"
 
+# ---- interactive stable-secret recovery tests ----
+#
+# These tests cover the highest-risk path in deploy.sh: when a 'stable' secret
+# is missing from .env but recorded in .deploy-state, an interactive operator
+# is prompted to either paste the original value or type GENERATE. A bug here
+# silently destroys encrypted credentials in production, so the path needs
+# explicit coverage.
+#
+# bin/deploy.sh auto-flips to NON_INTERACTIVE when stdin is not a TTY (for
+# safety in CI). To exercise the interactive branch from a test we set
+# DEPLOY_FORCE_INTERACTIVE=1, which is the test-only escape hatch documented
+# alongside that auto-flip in deploy.sh.
+
+setup_recovery_workspace() {
+  # Build a workspace where JWT_SECRET is recorded as previously-provisioned
+  # but missing from .env, forcing the resolve_missing 'stable' interactive
+  # prompt. Echoes the workspace dir on stdout.
+  local ws
+  ws=$(mktemp_dir)
+  setup_workspace "$ws" ""
+  : > "${ws}/.env"
+  cat > "${ws}/.deploy-state" <<DSEOF
+# managed by bin/deploy.sh
+JWT_SECRET
+DSEOF
+  cat > "${ws}/bin/deploy-manifest.yaml" <<MFEOF
+secrets:
+  - name: JWT_SECRET
+    generator: openssl_rand_base64_32
+    stability: stable
+    description: Test JWT secret.
+MFEOF
+  echo "$ws"
+}
+
+echo "test: resolve_missing interactive: typing GENERATE creates a fresh secret"
+tmp_recover_gen=$(setup_recovery_workspace)
+output=$(cd "$tmp_recover_gen" && \
+  printf 'GENERATE\n' | DEPLOY_FORCE_INTERACTIVE=1 bash bin/deploy.sh --resolve-only 2>&1; \
+  echo "EXIT:$?") || true
+exit_code="${output##*EXIT:}"
+assert_eq "0" "$exit_code" "GENERATE keyword causes resolve_missing to exit 0"
+assert_contains "$output" "Generated new JWT_SECRET" "log records that a new value was generated"
+if grep -q "^JWT_SECRET=" "${tmp_recover_gen}/.env"; then
+  echo "  PASS: .env now contains JWT_SECRET"
+  _TESTS=$((_TESTS+1))
+else
+  fail ".env should contain JWT_SECRET after GENERATE"
+fi
+# Recovered value must be non-empty and not the literal sentinel.
+recovered_gen=$(grep '^JWT_SECRET=' "${tmp_recover_gen}/.env" | head -n1 | cut -d= -f2-)
+if [[ -n "$recovered_gen" && "$recovered_gen" != "GENERATE" ]]; then
+  echo "  PASS: generated JWT_SECRET is a real value (not the GENERATE keyword)"
+  _TESTS=$((_TESTS+1))
+else
+  fail "generated JWT_SECRET should be a real value, got: ${recovered_gen}"
+fi
+
+echo "test: resolve_missing interactive: pasted value is stored verbatim"
+tmp_recover_paste=$(setup_recovery_workspace)
+PASTED='pasted-secret-12345'
+output=$(cd "$tmp_recover_paste" && \
+  printf '%s\n' "$PASTED" | DEPLOY_FORCE_INTERACTIVE=1 bash bin/deploy.sh --resolve-only 2>&1; \
+  echo "EXIT:$?") || true
+exit_code="${output##*EXIT:}"
+assert_eq "0" "$exit_code" "pasted value causes resolve_missing to exit 0"
+recovered_paste=$(grep '^JWT_SECRET=' "${tmp_recover_paste}/.env" | head -n1 | cut -d= -f2-)
+assert_eq "$PASTED" "$recovered_paste" "pasted value lands verbatim in .env"
+# The paste path must NOT log "Generated new" — that would mean we silently
+# regenerated when the operator was trying to restore.
+if [[ "$output" != *"Generated new JWT_SECRET"* ]]; then
+  echo "  PASS: paste path did not regenerate the secret"
+  _TESTS=$((_TESTS+1))
+else
+  fail "paste path should not have generated a new secret"
+fi
+
+echo "test: resolve_missing interactive: empty input aborts with non-zero exit"
+tmp_recover_empty=$(setup_recovery_workspace)
+output=$(cd "$tmp_recover_empty" && \
+  printf '\n' | DEPLOY_FORCE_INTERACTIVE=1 bash bin/deploy.sh --resolve-only 2>&1; \
+  echo "EXIT:$?") || true
+exit_code="${output##*EXIT:}"
+# resolve_missing returns 2 on stable-secret failure (any non-zero is a
+# correct fail-safe; we assert the documented code).
+assert_eq "2" "$exit_code" "empty input aborts with exit 2"
+assert_contains "$output" "Empty response" "error message identifies the empty input"
+# .env must NOT contain JWT_SECRET — the script has to fail closed rather
+# than write garbage.
+if ! grep -q "^JWT_SECRET=" "${tmp_recover_empty}/.env"; then
+  echo "  PASS: .env unchanged after empty-input abort"
+  _TESTS=$((_TESTS+1))
+else
+  fail ".env should NOT contain JWT_SECRET after empty-input abort"
+fi
+
 echo "test: deploy_state_init seeds from .env when .deploy-state is absent (one-time migration)"
 rm -rf "${tmp}/secrets" "${tmp}/.deploy-state"
 mkdir -p "${tmp}/secrets"
@@ -234,7 +330,7 @@ fi
 # ---- install-mode tests ----
 
 echo "test: install mode non-interactive requires --domain"
-tmp2=$(mktemp -d)
+tmp2=$(mktemp_dir)
 setup_workspace "$tmp2" ""
 cp "${SCRIPT_DIR}/../deploy-manifest.yaml" "${tmp2}/bin/"
 # Provide a local.yaml.example with the substitution target.
@@ -259,7 +355,7 @@ else
 fi
 
 echo "test: install mode leaves existing config/local.yaml untouched"
-tmp2b=$(mktemp -d)
+tmp2b=$(mktemp_dir)
 setup_workspace "$tmp2b" ""
 cp "${SCRIPT_DIR}/../deploy-manifest.yaml" "${tmp2b}/bin/"
 mkdir -p "${tmp2b}/config"
@@ -277,7 +373,7 @@ else
 fi
 
 echo "test: install mode errors when local.yaml.example is missing"
-tmp2c=$(mktemp -d)
+tmp2c=$(mktemp_dir)
 setup_workspace "$tmp2c" ""
 cp "${SCRIPT_DIR}/../deploy-manifest.yaml" "${tmp2c}/bin/"
 # Intentionally do NOT create config/local.yaml.example
@@ -289,7 +385,7 @@ assert_contains "$output" "local.yaml.example" "error mentions local.yaml.exampl
 # ---- upgrade-mode git pull tests ----
 
 echo "test: upgrade mode fails on dirty working tree"
-tmp3=$(mktemp -d)
+tmp3=$(mktemp_dir)
 setup_workspace "$tmp3" "${FIXTURES}/env_complete"
 cp "${SCRIPT_DIR}/../deploy-manifest.yaml" "${tmp3}/bin/"
 # Init a git repo with an uncommitted change.
@@ -312,49 +408,57 @@ assert_eq "0" "$exit_code" "--skip-git-pull bypasses the pull and the dirty-tree
 # ---- docker / health-check tests (using shims) ----
 
 echo "test: docker ops call the expected commands (shim)"
-tmp4=$(mktemp -d)
+tmp4=$(mktemp_dir)
 setup_workspace "$tmp4" "${FIXTURES}/env_complete"
 cp "${SCRIPT_DIR}/../deploy-manifest.yaml" "${tmp4}/bin/"
-# Create a docker shim that records its arguments.
+# Per-test workspace paths for shim state. Keeping these inside ${tmp4} (as
+# opposed to a fixed /tmp path) avoids cross-talk between parallel CI runs and
+# leaves no residue between local invocations.
+DOCKER_LOG="${tmp4}/deploy_test_docker.log"
+CURL_LOG="${tmp4}/deploy_test_curl.log"
+CURL_STATE="${tmp4}/deploy_test_curl_state"
+# Create a docker shim that records its arguments. The heredoc is unquoted so
+# that DOCKER_LOG is interpolated into the shim script itself.
 mkdir -p "${tmp4}/shim"
-cat > "${tmp4}/shim/docker" <<'EOF'
+cat > "${tmp4}/shim/docker" <<EOF
 #!/usr/bin/env bash
-echo "docker $*" >> /tmp/deploy_test_docker.log
+echo "docker \$*" >> "${DOCKER_LOG}"
 exit 0
 EOF
 chmod +x "${tmp4}/shim/docker"
 # Create a curl shim that immediately succeeds (simulating /health OK).
-cat > "${tmp4}/shim/curl" <<'EOF'
+cat > "${tmp4}/shim/curl" <<EOF
 #!/usr/bin/env bash
-echo "curl $*" >> /tmp/deploy_test_curl.log
+echo "curl \$*" >> "${CURL_LOG}"
 # Simulate 200 OK.
 exit 0
 EOF
 chmod +x "${tmp4}/shim/curl"
 
-rm -f /tmp/deploy_test_docker.log /tmp/deploy_test_curl.log
+rm -f "${DOCKER_LOG}" "${CURL_LOG}"
 
 output=$(cd "$tmp4" && PATH="${tmp4}/shim:${PATH}" bash bin/deploy.sh --non-interactive --docker-only --health-timeout=5 2>&1; echo "EXIT:$?")
 exit_code="${output##*EXIT:}"
 assert_eq "0" "$exit_code" "docker-only path exits 0 with successful shims"
-assert_contains "$(cat /tmp/deploy_test_docker.log)" "compose pull" "docker compose pull was invoked"
-assert_contains "$(cat /tmp/deploy_test_docker.log)" "compose up -d" "docker compose up -d was invoked"
+assert_contains "$(cat "${DOCKER_LOG}")" "compose pull" "docker compose pull was invoked"
+assert_contains "$(cat "${DOCKER_LOG}")" "compose up -d" "docker compose up -d was invoked"
 
 echo "test: health check polls until success"
-# Simulate curl failing twice then succeeding.
-cat > "${tmp4}/shim/curl" <<'EOF'
+# Simulate curl failing twice then succeeding. CURL_STATE is interpolated
+# into the heredoc so each test gets its own counter file.
+cat > "${tmp4}/shim/curl" <<EOF
 #!/usr/bin/env bash
-STATE_FILE=/tmp/deploy_test_curl_state
-count=$(cat "$STATE_FILE" 2>/dev/null || echo 0)
-count=$((count+1))
-echo "$count" > "$STATE_FILE"
+STATE_FILE="${CURL_STATE}"
+count=\$(cat "\$STATE_FILE" 2>/dev/null || echo 0)
+count=\$((count+1))
+echo "\$count" > "\$STATE_FILE"
 if (( count < 3 )); then
   exit 7   # connection refused
 fi
 exit 0
 EOF
 chmod +x "${tmp4}/shim/curl"
-rm -f /tmp/deploy_test_curl_state /tmp/deploy_test_docker.log
+rm -f "${CURL_STATE}" "${DOCKER_LOG}"
 output=$(cd "$tmp4" && PATH="${tmp4}/shim:${PATH}" bash bin/deploy.sh --non-interactive --docker-only --health-timeout=10 2>&1; echo "EXIT:$?")
 exit_code="${output##*EXIT:}"
 assert_eq "0" "$exit_code" "health check succeeds after initial failures"
@@ -369,7 +473,6 @@ output=$(cd "$tmp4" && PATH="${tmp4}/shim:${PATH}" bash bin/deploy.sh --non-inte
 exit_code="${output##*EXIT:}"
 assert_eq "4" "$exit_code" "health-check timeout exits with code 4"
 
-# Clean up shim state files.
-rm -f /tmp/deploy_test_docker.log /tmp/deploy_test_curl.log /tmp/deploy_test_curl_state
+# tmp4 (and its shim state files) is cleaned up by mktemp_dir's EXIT trap.
 
 report_results
