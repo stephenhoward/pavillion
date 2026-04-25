@@ -186,6 +186,8 @@ services:
       - "443:443"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # Operator-supplied per-instance snippets (gitignored). See caddy-extras.d/README.md.
+      - ./caddy-extras.d:/etc/caddy/extras.d:ro
       - caddy-data:/data
       - caddy-config:/config
     environment:

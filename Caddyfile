@@ -1,4 +1,15 @@
 {$DOMAIN} {
-    encode gzip zstd
-    reverse_proxy app:3000
+	encode gzip zstd
+
+	# Operator extension point. Drop *.caddyfile snippets into ./caddy-extras.d/
+	# to add per-instance handlers (e.g., a webhook listener on a staging
+	# server). The directory is gitignored, so production deploys ship with no
+	# snippets and the import resolves to nothing. Snippets are imported
+	# before the catch-all handle below, so any matchers they declare take
+	# precedence over the default app proxy.
+	import /etc/caddy/extras.d/*.caddyfile
+
+	handle {
+		reverse_proxy app:3000
+	}
 }

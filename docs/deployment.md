@@ -187,6 +187,23 @@ docker compose ps
 
 You should see four containers: `pavillion-app`, `pavillion-worker`, `pavillion-db`, and `pavillion-caddy`.
 
+#### Per-Instance Caddy Snippets (`caddy-extras.d/`)
+
+The standalone Caddyfile imports `*.caddyfile` snippets from `caddy-extras.d/` before the default app proxy. The directory is gitignored (only `caddy-extras.d/README.md` is tracked), so production deploys ship with no snippets and the import is a no-op. Use this extension point when a single instance needs a Caddy handler that does not belong in the upstream config — for example, a staging server that exposes an auto-deploy webhook listener on the host:
+
+```caddy
+# caddy-extras.d/hooks.caddyfile (gitignored, per-instance only)
+handle /hooks/* {
+    reverse_proxy host.docker.internal:9000
+}
+```
+
+Snippets must contain only directives valid inside a site block (`handle`, `route`, `redir`, `respond`, etc.). After editing, validate with:
+
+```bash
+docker compose --profile standalone exec caddy caddy validate --config /etc/caddy/Caddyfile
+```
+
 ## Secrets Management
 
 ### How Secrets Work
