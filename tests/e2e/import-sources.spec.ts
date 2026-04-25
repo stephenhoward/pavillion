@@ -84,7 +84,12 @@ async function startMockServer(): Promise<{ server: Server; port: number; baseUr
     res.end('not found');
   });
 
-  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  // Bind dual-stack ('::') so the server accepts both IPv4 (127.0.0.1)
+  // and IPv6 (::1) connections. On GitHub Actions Linux runners,
+  // `dns.lookup('localtest.me', { verbatim: true })` can return ::1
+  // ahead of 127.0.0.1; pinning the fetcher's agent to ::1 against an
+  // IPv4-only bind would surface as a generic `fetch_error` outcome.
+  await new Promise<void>((resolve) => server.listen(0, '::', resolve));
   const { port } = server.address() as AddressInfo;
   return { server, port, baseUrl: `http://127.0.0.1:${port}` };
 }
@@ -364,7 +369,12 @@ test.describe('ICS Import Sources (e2e)', () => {
     ]);
     expect(syncResponse.status()).toBe(200);
     const syncBody = await syncResponse.json();
-    expect(syncBody.outcome).toBe('success');
+    // Include errorMessage in the assertion so non-success outcomes
+    // (e.g. fetch_error from IPv4/IPv6 bind mismatches) self-diagnose.
+    expect(
+      syncBody.outcome,
+      `sync did not succeed: outcome=${syncBody.outcome}, errorMessage=${syncBody.errorMessage ?? '(none)'}`,
+    ).toBe('success');
     expect(syncBody.eventsCreated).toBe(3);
 
     // Verify the events are visible in the calendar event list.
