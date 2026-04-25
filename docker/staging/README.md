@@ -8,7 +8,22 @@ Automated deployment from GitHub Actions to a Hetzner staging VPS using a webhoo
 2. After CI succeeds, the `Deploy to Staging` workflow fires
 3. The workflow sends an HMAC-signed POST to the staging server
 4. The webhook listener validates the signature and runs `deploy.sh`
-5. `deploy.sh` pulls new images, restarts containers, and prunes old images
+5. `deploy.sh` invokes `bin/deploy.sh --non-interactive`, which handles secret management, migrations, container lifecycle, and health checks
+
+## What this script does
+
+The staging deploy webhook fires `docker/staging/deploy.sh`, which is a thin
+wrapper around `bin/deploy.sh --non-interactive`. The wrapper adds:
+
+1. **flock-based concurrency** — prevents overlapping deploys on the same
+   machine.
+2. **Log file** — writes all output to `/opt/pavillion/deploy.log` for
+   post-hoc inspection.
+3. **Image prune** — removes dangling images after a successful deploy.
+
+All secret management, migrations, container lifecycle, and health checks
+live in `bin/deploy.sh`. See `docs/upgrading.md` for the admin-facing
+story.
 
 ## Why Webhook Instead of SSH
 
