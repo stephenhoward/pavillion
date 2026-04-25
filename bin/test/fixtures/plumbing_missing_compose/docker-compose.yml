@@ -1,0 +1,11 @@
+services:
+  app:
+    environment:
+      - SESSION_SECRET=${SESSION_SECRET:-}
+      - SESSION_SECRET_FILE=${SESSION_SECRET_FILE:-}
+  worker:
+    environment:
+      - JWT_SECRET=${JWT_SECRET:-}
+      - SESSION_SECRET=${SESSION_SECRET:-}
+      - JWT_SECRET_FILE=${JWT_SECRET_FILE:-}
+      - SESSION_SECRET_FILE=${SESSION_SECRET_FILE:-}

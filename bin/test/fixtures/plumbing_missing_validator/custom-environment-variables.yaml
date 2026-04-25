@@ -1,0 +1,4 @@
+jwt:
+  secret: JWT_SECRET
+session:
+  secret: SESSION_SECRET

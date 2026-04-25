@@ -13,6 +13,14 @@ export function validateProductionSecrets(): void {
   const sessionSecret = config.get<string>('session.secret');
   const emailHashSecret = config.get<string>('moderation.emailHashSecret');
   const encryptionKey = config.get<string>('funding.encryptionKey');
+  const dbPassword = config.has('database.password') ? config.get<string>('database.password') : '';
+
+  if (!dbPassword) {
+    throw new Error(
+      'DB_PASSWORD must be set in production. Run bin/setup.sh to generate secure secrets, ' +
+      'or set the DB_PASSWORD environment variable to a cryptographically secure value.',
+    );
+  }
 
   if (jwtSecret.includes('development-only')) {
     throw new Error(
