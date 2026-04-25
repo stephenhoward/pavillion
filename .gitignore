@@ -39,3 +39,7 @@ AGENTS.md
 # Per-instance deploy state managed by bin/deploy.sh
 # Lists secrets ever provisioned on this instance. Not for version control.
 .deploy-state
+
+# Per-instance Caddy snippets dropped into the extras.d extension point.
+# README.md is tracked; *.caddyfile snippets are operator-supplied per-instance.
+caddy-extras.d/*.caddyfile
