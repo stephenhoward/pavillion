@@ -2,276 +2,168 @@
 
 This guide covers upgrading your Pavillion instance to new versions.
 
-## Standard Upgrade Process
-
-Upgrading Pavillion is designed to be simple and automatic:
+## The Only Upgrade Command
 
 ```bash
-# Pull the latest image
-docker compose pull
-
-# Restart with the new version
-docker compose up -d
+bin/deploy.sh
 ```
 
-That's it! The container will automatically:
+Run this from your Pavillion checkout. The script is idempotent: it is safe
+to run at any time, whether you have changes to apply or not.
 
-1. Wait for the database to be ready
-2. Run any pending database migrations
-3. Start the new version of the application
+`bin/deploy.sh` handles every step of upgrade:
+
+1. Checks that your working tree is clean.
+2. Runs `git pull` to fetch the latest code and configuration changes.
+3. Reads `bin/deploy-manifest.yaml` to learn what secrets the new version
+   requires.
+4. Compares against your `.env`. Silently generates any missing
+   **regenerable** secrets. Prompts you to paste (or regenerate) any
+   missing **stable** secrets.
+5. Runs `docker compose pull` to fetch the new image.
+6. Runs `docker compose up -d` to start (or restart) containers.
+7. Polls `http://localhost:3000/health` until the app responds or the
+   timeout expires.
+8. Reports success or failure.
 
 ## Pre-Upgrade Checklist
 
-Before upgrading, especially for major version changes:
+Before running `bin/deploy.sh` for a major upgrade:
 
-### 1. Check Release Notes
+### 1. Review release notes
 
-Review the [release notes](https://github.com/pavillion/pavillion/releases) for:
-- Breaking changes that may require configuration updates
-- New required environment variables
-- Deprecated features being removed
+Read the [release notes](https://github.com/stephenhoward/pavillion/releases)
+for breaking changes, new configuration options, or deprecations.
 
-### 2. Backup Your Data
+### 2. Back up your database
 
-Always backup before upgrading:
+Backups are not automated. Run a `pg_dump` before any major upgrade:
 
 ```bash
-# Stop the application (database stays running)
-docker compose stop app
+docker compose exec db pg_dump -U pavillion pavillion > \
+  backup-pre-upgrade-$(date +%Y%m%d-%H%M%S).sql
+```
 
-# Backup the database
-docker compose exec db pg_dump -U pavillion pavillion > backup-$(date +%Y%m%d-%H%M%S).sql
+If you use local media storage (not S3), back up the media volume too:
 
-# Backup media files (if using local storage)
-docker compose cp app:/app/storage/media ./media-backup-$(date +%Y%m%d)
-
-# Or for volumes:
-docker run --rm -v pavillion-media:/data -v $(pwd):/backup alpine \
+```bash
+docker run --rm -v pavillion-media:/data -v "$(pwd):/backup" alpine \
   tar czf /backup/media-backup-$(date +%Y%m%d).tar.gz -C /data .
 ```
 
-### 3. Check System Resources
+## Flags
 
-Ensure you have sufficient disk space and memory:
-
-```bash
-# Check disk space
-df -h
-
-# Check available memory
-free -h
+```
+bin/deploy.sh --help
 ```
 
-## Step-by-Step Upgrade
+| Flag | Purpose |
+|---|---|
+| `--non-interactive` | Do not prompt. Fail fast if a `stable` secret is missing. |
+| `--skip-git-pull` | Skip the `git pull` step (for local development). |
+| `--domain=<value>` | Supply domain for non-interactive first install. Ignored on upgrade. |
+| `--health-timeout=<seconds>` | Override the `/health` poll timeout (default 120s). |
 
-### Step 1: Create Backups
+## What happens when a new version adds a required secret
 
-```bash
-# Database backup
-docker compose exec db pg_dump -U pavillion pavillion > backup-pre-upgrade.sql
+Every required secret is declared in `bin/deploy-manifest.yaml`, tagged
+as either `regenerable` or `stable`. The script also tracks every secret
+ever provisioned on this instance in `.deploy-state` (per-instance, not
+in version control). On upgrade:
 
-# Optional: media backup (if using local storage)
-docker run --rm -v pavillion-media:/data -v $(pwd):/backup alpine \
-  tar czf /backup/media-backup.tar.gz -C /data .
-```
+- **A new secret is introduced this version** (its name is in the
+  manifest but not in `.deploy-state`): the script silently generates
+  it, regardless of stability. You couldn't have it; the script gives
+  you one. This is the normal path for upgrades that add a new required
+  secret.
 
-### Step 2: Pull New Version
+- **A `regenerable` secret is missing** (was previously provisioned but
+  is no longer in `.env`): silently regenerated. The associated feature
+  reissues whatever tokens it had — pending DNS verifications get new
+  challenges, for example. No cross-system impact.
 
-```bash
-# Pull the latest version
-docker compose pull
+- **A `stable` secret is missing AND was previously provisioned** (it's
+  in `.deploy-state` but not in `.env` — admin lost it): the script
+  prompts you (interactive) or exits with a clear error
+  (non-interactive). Regenerating a stable secret has real impact
+  (invalidated sessions, broken decryption, re-anonymized moderation
+  reports); the script requires you to acknowledge the impact or paste
+  the existing value from your password manager.
 
-# Or pull a specific version
-docker compose pull pavillion/pavillion:v1.2.0
-```
+The staging webhook calls `bin/deploy.sh --non-interactive`. Because new
+secrets auto-generate on upgrade, the only situation that requires
+interactive intervention is recovering a previously-provisioned `stable`
+secret that's gone missing — which is a rare manual-recovery scenario,
+not a normal upgrade.
 
-### Step 3: Review Changes
+### One-time migration for installs that predate `bin/deploy.sh`
 
-Check what will change:
+If `.deploy-state` is absent on first run of `bin/deploy.sh`, the script
+seeds it from the contents of your `.env`. Every secret name currently
+defined in `.env` is recorded as previously-provisioned, so subsequent
+upgrades that touch existing secrets get the right behavior.
 
-```bash
-# See current running version
-docker compose ps
+## Rollback
 
-# See what images will be updated
-docker compose images
-```
+`bin/deploy.sh` does not automate rollback. If an upgrade fails:
 
-### Step 4: Perform the Upgrade
+1. Stop the containers:
 
-```bash
-# Restart with new version
-docker compose up -d
-```
+   ```bash
+   docker compose down
+   ```
 
-### Step 5: Monitor the Upgrade
+2. Restore your database backup (see step 2 of the pre-upgrade checklist).
 
-Watch the logs for successful migration and startup:
+3. Pin the previous image version in `docker-compose.yml`:
 
-```bash
-docker compose logs -f app
-```
+   ```yaml
+   services:
+     app:
+       image: ghcr.io/stephenhoward/pavillion:v1.1.0  # previous version
+   ```
 
-Look for:
-- "PostgreSQL is ready!" - Database connection established
-- "Successfully executed migrations:" or "No pending migrations to run." - Migrations complete
-- "Starting Pavillion application..." - Application starting
+4. Start with the previous version:
 
-### Step 6: Verify the Upgrade
+   ```bash
+   docker compose up -d
+   ```
 
-```bash
-# Check containers are running
-docker compose ps
+5. Verify: `curl http://localhost:3000/health`.
 
-# Test health endpoint
-curl http://localhost:3000/health
+## Troubleshooting
 
-# Check the application in your browser
-```
+### "Working tree is not clean"
 
-## Migration Failure Troubleshooting
+The script requires a clean working tree to run `git pull`. Options:
 
-If migrations fail, the container will exit with an error code. This is by design to prevent data corruption.
+- Commit or stash your local changes, then re-run.
+- Pass `--skip-git-pull` to skip the pull and proceed with what's on disk.
 
-### Viewing Migration Errors
+### "Secret X is missing (stable, non-interactive mode)"
 
-```bash
-# Check application logs
-docker compose logs app
+A new version added a required `stable` secret that is not in your
+`.env`. Options:
 
-# Look for migration-specific messages
-docker compose logs app | grep -i migration
-```
+- Re-run interactively: `bin/deploy.sh` (without `--non-interactive`).
+  The script will prompt you to paste the value or generate a new one.
+- Or manually: generate with `openssl rand -base64 32`, append
+  `X=<value>` to `.env`, and re-run.
 
-### Common Migration Issues
+### Health check timed out
 
-**1. Database connection issues:**
-```bash
-# Verify database is running and healthy
-docker compose ps db
-docker compose exec db pg_isready -U pavillion
-```
-
-**2. Schema conflicts:**
-If you've manually modified the database schema, migrations may fail. Options:
-- Restore from backup and try again
-- Manually fix the schema to match expected state
-- Contact support with the specific error message
-
-**3. Disk space issues:**
-```bash
-# Check disk space
-df -h
-# Clean up old images
-docker system prune
-```
-
-### Retrying Migrations
-
-After fixing the underlying issue:
-
-```bash
-# Restart the application container
-docker compose restart app
-
-# Watch the logs
-docker compose logs -f app
-```
-
-## Rollback Procedure
-
-If an upgrade fails or causes issues, you can rollback to the previous version:
-
-### Step 1: Stop the Current Version
-
-```bash
-docker compose down
-```
-
-### Step 2: Restore Database Backup
-
-```bash
-# Start only the database
-docker compose up -d db
-
-# Wait for it to be ready
-docker compose exec db pg_isready -U pavillion
-
-# Drop and recreate the database
-docker compose exec db psql -U pavillion -c "DROP DATABASE pavillion;"
-docker compose exec db psql -U pavillion -c "CREATE DATABASE pavillion;"
-
-# Restore from backup
-cat backup-pre-upgrade.sql | docker compose exec -T db psql -U pavillion pavillion
-```
-
-### Step 3: Run Previous Version
-
-Edit `docker-compose.yml` to specify the previous version:
-
-```yaml
-services:
-  app:
-    image: pavillion/pavillion:v1.1.0  # Previous version
-```
-
-Then start the application:
-
-```bash
-docker compose up -d
-```
-
-### Step 4: Verify Rollback
-
-```bash
-docker compose ps
-curl http://localhost:3000/health
-```
-
-## Breaking Change Guidelines
-
-When upgrading across major versions, pay attention to:
-
-### Configuration Changes
-
-Breaking changes may require updating `config/local.yaml`. Common changes:
-- Configuration keys renamed or restructured
-- New required configuration options
-- Deprecated options removed
-
-Review your configuration against the latest `config/local.yaml.example`.
-
-### Environment Variable Changes
-
-Check `.env.example` for:
-- New required environment variables
-- Changed variable names
-- Removed variables
-
-### Database Schema Changes
-
-Major versions may include significant schema changes. These are handled automatically by migrations, but:
-- Large databases may take longer to migrate
-- Some migrations cannot be automatically reversed
-- Always backup before major version upgrades
-
-## Upgrade Best Practices
-
-1. **Always backup first** - Database backups are quick and can save hours of recovery time
-2. **Read release notes** - Know what's changing before you upgrade
-3. **Upgrade regularly** - Small, frequent upgrades are safer than large jumps
-4. **Test in staging** - If possible, test upgrades on a staging instance first
-5. **Upgrade during low-traffic periods** - Minimize impact on users
-6. **Monitor after upgrade** - Watch logs and metrics for unexpected behavior
+The containers started but `/health` did not respond within the timeout.
+Check `docker compose logs app` for errors. Common causes: migration
+failure, database connection issue, missing configuration in
+`config/local.yaml`.
 
 ## Getting Help
 
 If you encounter issues:
 
-1. Check the [troubleshooting section](#migration-failure-troubleshooting)
-2. Search [existing issues](https://github.com/pavillion/pavillion/issues)
+1. Check the [troubleshooting section](#troubleshooting).
+2. Search [existing issues](https://github.com/stephenhoward/pavillion/issues).
 3. Open a new issue with:
    - Current version and target version
-   - Full error messages from logs
-   - Steps to reproduce
-   - Your configuration (without secrets)
+   - Full output from `bin/deploy.sh` (with secrets redacted)
+   - Your `config/local.yaml` (secrets redacted)
