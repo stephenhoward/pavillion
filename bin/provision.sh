@@ -337,7 +337,7 @@ Wants=docker.service
 Type=simple
 User=pavillion
 Group=pavillion
-ExecStart=/usr/bin/webhook -hooks /opt/pavillion/hooks.json -ip 0.0.0.0 -port 9000 -verbose
+ExecStart=/usr/bin/webhook -hooks /opt/pavillion/docker/staging/hooks.json -ip 0.0.0.0 -port 9000 -verbose
 Restart=on-failure
 RestartSec=5
 StandardOutput=journal
@@ -398,36 +398,44 @@ configure_staging() {
   local webhook_secret
   webhook_secret=$(openssl rand -hex 32)
 
-  # Copy deploy script
+  # Make tracked staging deploy script executable for the webhook user.
+  # hooks.json.example points the webhook execute-command directly at
+  # docker/staging/deploy.sh, so no copy to ${APP_DIR}/deploy.sh is needed.
   if [ -f "${APP_DIR}/docker/staging/deploy.sh" ]; then
-    cp "${APP_DIR}/docker/staging/deploy.sh" "${APP_DIR}/deploy.sh"
-    chmod 750 "${APP_DIR}/deploy.sh"
-    chown "${DEPLOY_USER}:${DEPLOY_USER}" "${APP_DIR}/deploy.sh"
-    print_success "Copied deploy.sh"
+    chmod 750 "${APP_DIR}/docker/staging/deploy.sh"
+    chown "${DEPLOY_USER}:${DEPLOY_USER}" "${APP_DIR}/docker/staging/deploy.sh"
+    print_success "Marked docker/staging/deploy.sh executable"
   else
     print_error "docker/staging/deploy.sh not found, skipping deploy script."
   fi
 
-  # Copy and configure hooks.json with generated webhook secret
-  if [ -f "${APP_DIR}/docker/staging/hooks.json" ]; then
-    cp "${APP_DIR}/docker/staging/hooks.json" "${APP_DIR}/hooks.json"
+  # Copy hooks.json.example next to itself as hooks.json, then substitute the
+  # generated webhook secret in place. The real hooks.json is gitignored.
+  if [ -f "${APP_DIR}/docker/staging/hooks.json.example" ]; then
+    cp "${APP_DIR}/docker/staging/hooks.json.example" "${APP_DIR}/docker/staging/hooks.json"
     # Use | as sed delimiter for portability
-    sed -i.bak "s|REPLACE_WITH_WEBHOOK_SECRET|${webhook_secret}|" "${APP_DIR}/hooks.json"
-    rm -f "${APP_DIR}/hooks.json.bak"
-    chmod 600 "${APP_DIR}/hooks.json"
-    chown "${DEPLOY_USER}:${DEPLOY_USER}" "${APP_DIR}/hooks.json"
-    print_success "Configured hooks.json with webhook secret"
+    sed -i.bak "s|REPLACE_WITH_WEBHOOK_SECRET|${webhook_secret}|" "${APP_DIR}/docker/staging/hooks.json"
+    rm -f "${APP_DIR}/docker/staging/hooks.json.bak"
+    chmod 600 "${APP_DIR}/docker/staging/hooks.json"
+    chown "${DEPLOY_USER}:${DEPLOY_USER}" "${APP_DIR}/docker/staging/hooks.json"
+    print_success "Configured docker/staging/hooks.json with webhook secret"
   else
-    print_error "docker/staging/hooks.json not found, skipping webhook config."
+    print_error "docker/staging/hooks.json.example not found, skipping webhook config."
   fi
 
-  # Copy staging Caddyfile
-  if [ -f "${APP_DIR}/docker/staging/Caddyfile.staging" ]; then
-    cp "${APP_DIR}/docker/staging/Caddyfile.staging" "${APP_DIR}/Caddyfile"
-    chown "${DEPLOY_USER}:${DEPLOY_USER}" "${APP_DIR}/Caddyfile"
-    print_success "Copied staging Caddyfile"
+  # Drop a Caddy snippet into the extras.d extension point so the standalone
+  # Caddyfile proxies /hooks/* to the webhook listener on the host. The
+  # tracked Caddyfile is left untouched, keeping the working tree clean.
+  if [ -d "${APP_DIR}/caddy-extras.d" ]; then
+    cat > "${APP_DIR}/caddy-extras.d/hooks.caddyfile" <<'EOF'
+handle /hooks/* {
+	reverse_proxy host.docker.internal:9000
+}
+EOF
+    chown "${DEPLOY_USER}:${DEPLOY_USER}" "${APP_DIR}/caddy-extras.d/hooks.caddyfile"
+    print_success "Wrote caddy-extras.d/hooks.caddyfile"
   else
-    print_error "docker/staging/Caddyfile.staging not found, skipping Caddyfile."
+    print_error "caddy-extras.d/ not found, skipping Caddy snippet."
   fi
 
   # Start webhook service

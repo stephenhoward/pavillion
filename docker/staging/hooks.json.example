@@ -1,7 +1,7 @@
 [
   {
     "id": "deploy-staging",
-    "execute-command": "/opt/pavillion/deploy.sh",
+    "execute-command": "/opt/pavillion/docker/staging/deploy.sh",
     "command-working-directory": "/opt/pavillion",
     "trigger-rule": {
       "match": {
