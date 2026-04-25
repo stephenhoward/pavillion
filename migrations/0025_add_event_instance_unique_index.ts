@@ -38,21 +38,21 @@ export default {
     // Collapse pre-existing race-condition duplicates. Keep the lowest id
     // per (event_id, start_time) group; either is fine since the duplicate
     // rows are functionally identical (same event, same start_time, same
-    // end_time written by concurrent materialization). The wrapped subquery
-    // forces SQLite/Postgres to materialize the keeper set so the DELETE
-    // can safely reference the same table.
+    // end_time written by concurrent materialization). ROW_NUMBER() is used
+    // instead of MIN(id) because PostgreSQL has no `min(uuid)` aggregate,
+    // but UUID comparison operators (used by ORDER BY) are defined.
     await sequelize.query(
       `DELETE FROM event_instance
-       WHERE event_id IS NOT NULL
-         AND start_time IS NOT NULL
-         AND id NOT IN (
-           SELECT min_id FROM (
-             SELECT MIN(id) AS min_id
-             FROM event_instance
-             WHERE event_id IS NOT NULL AND start_time IS NOT NULL
-             GROUP BY event_id, start_time
-           ) AS keepers
-         )`,
+       WHERE id IN (
+         SELECT id FROM (
+           SELECT id, ROW_NUMBER() OVER (
+             PARTITION BY event_id, start_time ORDER BY id
+           ) AS rn
+           FROM event_instance
+           WHERE event_id IS NOT NULL AND start_time IS NOT NULL
+         ) AS ranked
+         WHERE rn > 1
+       )`,
       { type: QueryTypes.DELETE },
     );
 
