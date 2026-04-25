@@ -272,6 +272,7 @@ chmod 600 secrets/*.txt
 | `S3_ENDPOINT` | No | - | Custom S3 endpoint (for DigitalOcean Spaces, MinIO) |
 | `DOMAIN` | No | `localhost` | Public domain name (required for standalone mode) |
 | `COMPOSE_PROFILES` | No | - | Set to `standalone` to enable built-in Caddy proxy |
+| `PAVILLION_IMAGE_TAG` | No | `latest` | Tag of the `ghcr.io/stephenhoward/pavillion` image to deploy. Set to `main` on staging to track unreleased builds, or pin to a specific version (e.g., `v1.2.3`) for reproducible production deploys. |
 | `SMTP_HOST` | No | - | SMTP server hostname |
 | `SMTP_PORT` | No | `587` | SMTP server port |
 | `SMTP_USER` | No | - | SMTP authentication username |

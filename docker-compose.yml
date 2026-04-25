@@ -31,7 +31,7 @@
 services:
   # Pavillion application server (web mode)
   app:
-    image: ghcr.io/stephenhoward/pavillion:latest
+    image: ghcr.io/stephenhoward/pavillion:${PAVILLION_IMAGE_TAG:-latest}
     container_name: pavillion-app
     depends_on:
       db:
@@ -98,7 +98,7 @@ services:
   # Pavillion worker container (worker mode)
   # Processes background jobs including database backups and monitoring
   worker:
-    image: ghcr.io/stephenhoward/pavillion:latest
+    image: ghcr.io/stephenhoward/pavillion:${PAVILLION_IMAGE_TAG:-latest}
     container_name: pavillion-worker
     # Pass --worker flag to unified entrypoint
     command: ["--worker"]
