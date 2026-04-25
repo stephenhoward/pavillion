@@ -143,6 +143,8 @@ describe('validateProductionSecrets — calendar.import.hmacSecret guard', () =>
   it('throws when calendar.import.hmacSecret is missing', () => {
     const getStub = sandbox.stub(config, 'get');
     const hasStub = sandbox.stub(config, 'has');
+    hasStub.withArgs('database.password').returns(true);
+    getStub.withArgs('database.password').returns('test-db-password');
     getStub.withArgs('jwt.secret').returns('custom-jwt-secret-xyzabc123');
     getStub.withArgs('session.secret').returns('custom-session-secret-xyzabc123');
     getStub.withArgs('moderation.emailHashSecret').returns('custom-email-hash-secret-xyzabc123');
@@ -156,6 +158,8 @@ describe('validateProductionSecrets — calendar.import.hmacSecret guard', () =>
   it('throws when calendar.import.hmacSecret is a development-only value', () => {
     const getStub = sandbox.stub(config, 'get');
     const hasStub = sandbox.stub(config, 'has');
+    hasStub.withArgs('database.password').returns(true);
+    getStub.withArgs('database.password').returns('test-db-password');
     getStub.withArgs('jwt.secret').returns('custom-jwt-secret-xyzabc123');
     getStub.withArgs('session.secret').returns('custom-session-secret-xyzabc123');
     getStub.withArgs('moderation.emailHashSecret').returns('custom-email-hash-secret-xyzabc123');
@@ -171,6 +175,8 @@ describe('validateProductionSecrets — calendar.import.hmacSecret guard', () =>
   it('passes when all secrets are configured with non-dev values', () => {
     const getStub = sandbox.stub(config, 'get');
     const hasStub = sandbox.stub(config, 'has');
+    hasStub.withArgs('database.password').returns(true);
+    getStub.withArgs('database.password').returns('test-db-password');
     getStub.withArgs('jwt.secret').returns('custom-jwt-secret-xyzabc123');
     getStub.withArgs('session.secret').returns('custom-session-secret-xyzabc123');
     getStub.withArgs('moderation.emailHashSecret').returns('custom-email-hash-secret-xyzabc123');
