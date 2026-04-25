@@ -398,12 +398,13 @@ configure_staging() {
   local webhook_secret
   webhook_secret=$(openssl rand -hex 32)
 
-  # Copy deploy script
+  # Make tracked staging deploy script executable for the webhook user.
+  # hooks.json.example points the webhook execute-command directly at
+  # docker/staging/deploy.sh, so no copy to ${APP_DIR}/deploy.sh is needed.
   if [ -f "${APP_DIR}/docker/staging/deploy.sh" ]; then
-    cp "${APP_DIR}/docker/staging/deploy.sh" "${APP_DIR}/deploy.sh"
-    chmod 750 "${APP_DIR}/deploy.sh"
-    chown "${DEPLOY_USER}:${DEPLOY_USER}" "${APP_DIR}/deploy.sh"
-    print_success "Copied deploy.sh"
+    chmod 750 "${APP_DIR}/docker/staging/deploy.sh"
+    chown "${DEPLOY_USER}:${DEPLOY_USER}" "${APP_DIR}/docker/staging/deploy.sh"
+    print_success "Marked docker/staging/deploy.sh executable"
   else
     print_error "docker/staging/deploy.sh not found, skipping deploy script."
   fi
@@ -421,13 +422,19 @@ configure_staging() {
     print_error "docker/staging/hooks.json.example not found, skipping webhook config."
   fi
 
-  # Copy staging Caddyfile
-  if [ -f "${APP_DIR}/docker/staging/Caddyfile.staging" ]; then
-    cp "${APP_DIR}/docker/staging/Caddyfile.staging" "${APP_DIR}/Caddyfile"
-    chown "${DEPLOY_USER}:${DEPLOY_USER}" "${APP_DIR}/Caddyfile"
-    print_success "Copied staging Caddyfile"
+  # Drop a Caddy snippet into the extras.d extension point so the standalone
+  # Caddyfile proxies /hooks/* to the webhook listener on the host. The
+  # tracked Caddyfile is left untouched, keeping the working tree clean.
+  if [ -d "${APP_DIR}/caddy-extras.d" ]; then
+    cat > "${APP_DIR}/caddy-extras.d/hooks.caddyfile" <<'EOF'
+handle /hooks/* {
+	reverse_proxy host.docker.internal:9000
+}
+EOF
+    chown "${DEPLOY_USER}:${DEPLOY_USER}" "${APP_DIR}/caddy-extras.d/hooks.caddyfile"
+    print_success "Wrote caddy-extras.d/hooks.caddyfile"
   else
-    print_error "docker/staging/Caddyfile.staging not found, skipping Caddyfile."
+    print_error "caddy-extras.d/ not found, skipping Caddy snippet."
   fi
 
   # Start webhook service

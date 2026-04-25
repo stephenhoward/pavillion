@@ -6,9 +6,9 @@ Automated deployment from GitHub Actions to a Hetzner staging VPS using a webhoo
 
 1. A push to `main` triggers the CI pipeline
 2. After CI succeeds, the `Deploy to Staging` workflow fires
-3. The workflow sends an HMAC-signed POST to the staging server
-4. The webhook listener validates the signature and runs `deploy.sh`
-5. `deploy.sh` invokes `bin/deploy.sh --non-interactive`, which handles secret management, migrations, container lifecycle, and health checks
+3. The workflow sends an HMAC-signed POST to the staging server, which Caddy forwards to the webhook listener via a `caddy-extras.d/hooks.caddyfile` snippet (see [`caddy-extras.d/README.md`](../../caddy-extras.d/README.md))
+4. The webhook listener validates the signature and executes `docker/staging/deploy.sh` directly
+5. `docker/staging/deploy.sh` invokes `bin/deploy.sh --non-interactive`, which handles secret management, migrations, container lifecycle, and health checks
 
 ## What this script does
 
@@ -85,9 +85,10 @@ tail -f /opt/pavillion/deploy.log
 
 | File | Permissions | Owner | Notes |
 |------|-------------|-------|-------|
-| `hooks.json` | `600` | `pavillion` | Contains the webhook secret |
-| `deploy.sh` | `750` | `pavillion` | Executable by owner and group |
-| `deploy.log` | `640` | `pavillion` | Created automatically by deploy.sh |
+| `/opt/pavillion/hooks.json` | `600` | `pavillion` | Contains the webhook secret. Generated from `docker/staging/hooks.json.example` during provisioning. Gitignored. |
+| `/opt/pavillion/docker/staging/deploy.sh` | `750` | `pavillion` | Tracked. The webhook fires this directly (no root-level copy). |
+| `/opt/pavillion/caddy-extras.d/hooks.caddyfile` | `644` | `pavillion` | Caddy snippet that proxies `/hooks/*` to the webhook listener. Written during provisioning into the gitignored `caddy-extras.d/` extension point. |
+| `/opt/pavillion/deploy.log` | `640` | `pavillion` | Created automatically by `docker/staging/deploy.sh`. Gitignored. |
 
 ### Log Rotation
 
@@ -121,12 +122,13 @@ To rotate the webhook secret:
 
 - Check that the webhook service is running: `sudo systemctl status webhook`
 - Verify hooks.json is at `/opt/pavillion/hooks.json`
-- Check Caddy is proxying `/hooks/*` to `localhost:9000`
+- Verify the Caddy snippet is in place: `cat /opt/pavillion/caddy-extras.d/hooks.caddyfile`
+- Reload Caddy if you just added the snippet: `docker compose --profile standalone restart caddy`
 
 ### Webhook returns 200 but nothing happens
 
 - Check deploy.log for errors: `tail -20 /opt/pavillion/deploy.log`
-- Verify deploy.sh is executable: `ls -la /opt/pavillion/deploy.sh`
+- Verify the staging deploy script is executable: `ls -la /opt/pavillion/docker/staging/deploy.sh`
 - Check if a lockfile is stale: `ls -la /tmp/pavillion-deploy.lock`
 
 ### HMAC signature mismatch
