@@ -1,0 +1,10 @@
+secrets:
+  - name: ALPHA
+    generator: openssl_rand_base64_32
+    stability: stable
+    description: Alpha secret.
+
+  - name: BETA
+    generator: openssl_rand_hex_32
+    stability: regenerable
+    description: Beta secret.
