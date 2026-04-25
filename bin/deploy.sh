@@ -49,6 +49,7 @@ DEBUG_DIFF=0
 DEBUG_GENERATE=""
 DEBUG_RESOLVE=0
 DEBUG_INSTALL=0
+DEBUG_GIT_PULL=0
 
 # ANSI colors (only when stdout is a TTY)
 if [[ -t 1 ]]; then
@@ -82,6 +83,7 @@ parse_args() {
       --generate=*)      DEBUG_GENERATE="${arg#*=}" ;;
       --resolve-only)    DEBUG_RESOLVE=1 ;;
       --install-only)    DEBUG_INSTALL=1 ;;
+      --git-pull-only)   DEBUG_GIT_PULL=1 ;;
       -h|--help)         print_help; exit 0 ;;
       *)
         log_error "unknown argument: ${arg}"
@@ -374,6 +376,45 @@ run_install() {
   return 0
 }
 
+# ---- Upgrade-mode helpers ----
+
+# check_working_tree_clean: exit 0 if the repo is a git checkout with no
+# uncommitted changes; non-zero otherwise.
+check_working_tree_clean() {
+  if ! git -C "$REPO_ROOT" rev-parse --git-dir >/dev/null 2>&1; then
+    log_error "${REPO_ROOT} is not a git repository."
+    return 1
+  fi
+  if [[ -n "$(git -C "$REPO_ROOT" status --porcelain)" ]]; then
+    log_error "working tree is not clean. Commit or stash changes before upgrading:"
+    git -C "$REPO_ROOT" status --short >&2
+    return 1
+  fi
+  return 0
+}
+
+# run_git_pull: honor --skip-git-pull, otherwise verify a clean tree and
+# fast-forward pull. Returns:
+#   0 on success or skip
+#   1 on git pull failure (e.g., not fast-forward)
+#   3 on safety check failure (dirty tree, not a git repo)
+run_git_pull() {
+  if [[ $SKIP_GIT_PULL -eq 1 ]]; then
+    log_info "Skipping git pull (--skip-git-pull)."
+    return 0
+  fi
+  if ! check_working_tree_clean; then
+    return 3
+  fi
+  log_info "Running git pull..."
+  if ! git -C "$REPO_ROOT" pull --ff-only; then
+    log_error "git pull failed. Resolve the conflict manually and re-run."
+    return 1
+  fi
+  log_success "git pull complete."
+  return 0
+}
+
 main() {
   parse_args "$@"
 
@@ -391,6 +432,10 @@ main() {
   fi
   if [[ $DEBUG_INSTALL -eq 1 ]]; then
     run_install
+    exit $?
+  fi
+  if [[ $DEBUG_GIT_PULL -eq 1 ]]; then
+    run_git_pull
     exit $?
   fi
 

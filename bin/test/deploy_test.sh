@@ -282,4 +282,27 @@ exit_code="${output##*EXIT:}"
 assert_eq "1" "$exit_code" "install fails when local.yaml.example is missing"
 assert_contains "$output" "local.yaml.example" "error mentions local.yaml.example"
 
+# ---- upgrade-mode git pull tests ----
+
+echo "test: upgrade mode fails on dirty working tree"
+tmp3=$(mktemp -d)
+setup_workspace "$tmp3" "${FIXTURES}/env_complete"
+cp "${SCRIPT_DIR}/../deploy-manifest.yaml" "${tmp3}/bin/"
+# Init a git repo with an uncommitted change.
+(cd "$tmp3" && git init -q && git config user.email "t@e.co" && git config user.name "t" && \
+   echo "initial" > file.txt && git add . && git commit -qm "initial" && \
+   echo "change" >> file.txt)
+
+output=$(cd "$tmp3" && bash bin/deploy.sh --non-interactive --git-pull-only 2>&1; echo "EXIT:$?") || true
+exit_code="${output##*EXIT:}"
+assert_eq "3" "$exit_code" "dirty tree fails with exit 3"
+assert_contains "$output" "working tree" "error mentions the dirty tree"
+
+echo "test: upgrade mode honors --skip-git-pull"
+# Reset the dirty tree fixture to a clean one first for this test.
+(cd "$tmp3" && git checkout -q -- file.txt)
+output=$(cd "$tmp3" && bash bin/deploy.sh --non-interactive --skip-git-pull --git-pull-only 2>&1; echo "EXIT:$?") || true
+exit_code="${output##*EXIT:}"
+assert_eq "0" "$exit_code" "--skip-git-pull bypasses the pull and the dirty-tree check (exit 0)"
+
 report_results
