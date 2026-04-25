@@ -50,6 +50,7 @@ DEBUG_GENERATE=""
 DEBUG_RESOLVE=0
 DEBUG_INSTALL=0
 DEBUG_GIT_PULL=0
+DEBUG_DOCKER=0
 
 # ANSI colors (only when stdout is a TTY)
 if [[ -t 1 ]]; then
@@ -84,6 +85,7 @@ parse_args() {
       --resolve-only)    DEBUG_RESOLVE=1 ;;
       --install-only)    DEBUG_INSTALL=1 ;;
       --git-pull-only)   DEBUG_GIT_PULL=1 ;;
+      --docker-only)     DEBUG_DOCKER=1 ;;
       -h|--help)         print_help; exit 0 ;;
       *)
         log_error "unknown argument: ${arg}"
@@ -415,9 +417,67 @@ run_git_pull() {
   return 0
 }
 
+# ---- Docker-mode helpers ----
+
+# run_docker_pull: fetch updated images.
+run_docker_pull() {
+  log_info "Pulling images..."
+  if ! (cd "$REPO_ROOT" && docker compose pull); then
+    log_error "docker compose pull failed."
+    return 1
+  fi
+  log_success "Images pulled."
+  return 0
+}
+
+# run_docker_up: bring containers up in detached mode.
+run_docker_up() {
+  log_info "Starting containers..."
+  if ! (cd "$REPO_ROOT" && docker compose up -d --remove-orphans); then
+    log_error "docker compose up failed."
+    return 1
+  fi
+  log_success "Containers started."
+  return 0
+}
+
+# poll_health <timeout_seconds>: poll http://localhost:${APP_PORT:-3000}/health
+# until curl returns success or the timeout expires. Returns 0 on success,
+# 4 on timeout.
+poll_health() {
+  local timeout="$1"
+  local port="${APP_PORT:-3000}"
+  local url="http://localhost:${port}/health"
+  log_info "Polling ${url} for up to ${timeout}s..."
+
+  local elapsed=0
+  local interval=2
+  while (( elapsed < timeout )); do
+    if curl -sS -f -o /dev/null "${url}"; then
+      log_success "Health check passed."
+      return 0
+    fi
+    sleep "$interval"
+    elapsed=$((elapsed + interval))
+  done
+  log_error "Health check timed out after ${timeout}s."
+  log_error "Tail of 'docker compose logs app':"
+  (cd "$REPO_ROOT" && docker compose logs --tail=50 app) || true
+  return 4
+}
+
+# run_docker: pull, up, and poll /health.
+run_docker() {
+  run_docker_pull || return 1
+  run_docker_up || return 1
+  poll_health "$HEALTH_TIMEOUT" || return $?
+  return 0
+}
+
 main() {
   parse_args "$@"
 
+  # Debug dispatches (kept for testability).
   if [[ $DEBUG_DIFF -eq 1 ]]; then
     missing_secrets
     exit 0
@@ -438,13 +498,25 @@ main() {
     run_git_pull
     exit $?
   fi
+  if [[ $DEBUG_DOCKER -eq 1 ]]; then
+    run_docker
+    exit $?
+  fi
 
   local mode
   mode=$(detect_mode)
   log_info "Detected mode: ${mode}"
 
-  # Subsequent tasks fill in install/upgrade flow.
-  log_info "Scaffold-only: nothing to do yet."
+  if [[ "$mode" == "install" ]]; then
+    run_install || exit $?
+  else
+    run_git_pull || exit $?
+    resolve_missing || exit $?
+  fi
+
+  run_docker || exit $?
+
+  log_success "Deploy complete."
 }
 
 main "$@"

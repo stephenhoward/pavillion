@@ -305,4 +305,67 @@ output=$(cd "$tmp3" && bash bin/deploy.sh --non-interactive --skip-git-pull --gi
 exit_code="${output##*EXIT:}"
 assert_eq "0" "$exit_code" "--skip-git-pull bypasses the pull and the dirty-tree check (exit 0)"
 
+# ---- docker / health-check tests (using shims) ----
+
+echo "test: docker ops call the expected commands (shim)"
+tmp4=$(mktemp -d)
+setup_workspace "$tmp4" "${FIXTURES}/env_complete"
+cp "${SCRIPT_DIR}/../deploy-manifest.yaml" "${tmp4}/bin/"
+# Create a docker shim that records its arguments.
+mkdir -p "${tmp4}/shim"
+cat > "${tmp4}/shim/docker" <<'EOF'
+#!/usr/bin/env bash
+echo "docker $*" >> /tmp/deploy_test_docker.log
+exit 0
+EOF
+chmod +x "${tmp4}/shim/docker"
+# Create a curl shim that immediately succeeds (simulating /health OK).
+cat > "${tmp4}/shim/curl" <<'EOF'
+#!/usr/bin/env bash
+echo "curl $*" >> /tmp/deploy_test_curl.log
+# Simulate 200 OK.
+exit 0
+EOF
+chmod +x "${tmp4}/shim/curl"
+
+rm -f /tmp/deploy_test_docker.log /tmp/deploy_test_curl.log
+
+output=$(cd "$tmp4" && PATH="${tmp4}/shim:${PATH}" bash bin/deploy.sh --non-interactive --docker-only --health-timeout=5 2>&1; echo "EXIT:$?")
+exit_code="${output##*EXIT:}"
+assert_eq "0" "$exit_code" "docker-only path exits 0 with successful shims"
+assert_contains "$(cat /tmp/deploy_test_docker.log)" "compose pull" "docker compose pull was invoked"
+assert_contains "$(cat /tmp/deploy_test_docker.log)" "compose up -d" "docker compose up -d was invoked"
+
+echo "test: health check polls until success"
+# Simulate curl failing twice then succeeding.
+cat > "${tmp4}/shim/curl" <<'EOF'
+#!/usr/bin/env bash
+STATE_FILE=/tmp/deploy_test_curl_state
+count=$(cat "$STATE_FILE" 2>/dev/null || echo 0)
+count=$((count+1))
+echo "$count" > "$STATE_FILE"
+if (( count < 3 )); then
+  exit 7   # connection refused
+fi
+exit 0
+EOF
+chmod +x "${tmp4}/shim/curl"
+rm -f /tmp/deploy_test_curl_state /tmp/deploy_test_docker.log
+output=$(cd "$tmp4" && PATH="${tmp4}/shim:${PATH}" bash bin/deploy.sh --non-interactive --docker-only --health-timeout=10 2>&1; echo "EXIT:$?")
+exit_code="${output##*EXIT:}"
+assert_eq "0" "$exit_code" "health check succeeds after initial failures"
+
+echo "test: health check times out with exit 4"
+cat > "${tmp4}/shim/curl" <<'EOF'
+#!/usr/bin/env bash
+exit 7
+EOF
+chmod +x "${tmp4}/shim/curl"
+output=$(cd "$tmp4" && PATH="${tmp4}/shim:${PATH}" bash bin/deploy.sh --non-interactive --docker-only --health-timeout=3 2>&1; echo "EXIT:$?") || true
+exit_code="${output##*EXIT:}"
+assert_eq "4" "$exit_code" "health-check timeout exits with code 4"
+
+# Clean up shim state files.
+rm -f /tmp/deploy_test_docker.log /tmp/deploy_test_curl.log /tmp/deploy_test_curl_state
+
 report_results
