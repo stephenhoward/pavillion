@@ -15,8 +15,8 @@ Pavillion uses the [node-config](https://github.com/node-config/node-config) lib
 
 For most deployments, you only need to configure:
 
-1. **`./bin/setup.sh`** - Run once to generate secure secrets
-2. **`config/local.yaml`** - Your domain and email settings
+1. **`bin/deploy.sh`** - Run once to generate secrets, prompt for your domain, and start the application
+2. **`config/local.yaml`** - Your email settings and any other instance-specific overrides (the deploy script creates this from the example template)
 
 ## Secrets Management
 
@@ -32,10 +32,10 @@ Pavillion requires three secrets for secure operation:
 
 ### Generating Secrets
 
-**Recommended**: Run the setup script to generate all secrets automatically:
+**Recommended**: Run the deploy script to generate all secrets automatically:
 
 ```bash
-./bin/setup.sh
+bin/deploy.sh
 ```
 
 This creates:
@@ -327,7 +327,7 @@ federation:
 Complete `.env` file example:
 
 ```env
-# Required secrets (generate with ./bin/setup.sh)
+# Required secrets (generate with bin/deploy.sh)
 JWT_SECRET=your_jwt_secret_here
 SESSION_SECRET=your_session_secret_here
 DB_PASSWORD=your_secure_database_password
@@ -406,7 +406,7 @@ For local development with PostgreSQL (instead of SQLite):
 
 1. **Never commit secrets** - Use environment variables for passwords and API keys
 2. **Use strong passwords** - Generate random passwords with `openssl rand -base64 32`
-3. **Use the setup script** - Run `./bin/setup.sh` to generate secure secrets automatically
+3. **Use the deploy script** - Run `bin/deploy.sh` to generate secure secrets automatically
 4. **Restrict database access** - Don't expose PostgreSQL port in production
 5. **Use HTTPS** - Always use a reverse proxy with SSL in production
 6. **Limit file uploads** - Configure appropriate `maxFileSize` limits

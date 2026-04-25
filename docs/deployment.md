@@ -19,17 +19,10 @@ For experienced users who want to get running quickly:
 git clone https://github.com/stephenhoward/pavillion.git
 cd pavillion
 
-# 2. Run the setup script to generate secure secrets
-./bin/setup.sh
+# 2. Run the deploy script (generates secrets, prompts for domain, starts containers)
+bin/deploy.sh
 
-# 3. Configure your instance
-cp config/local.yaml.example config/local.yaml
-# Edit config/local.yaml with your domain and email settings
-
-# 4. Start the application
-docker compose up -d
-
-# 5. Check that containers are running
+# 3. Check that containers are running
 docker compose ps
 ```
 
@@ -46,34 +39,34 @@ git clone https://github.com/stephenhoward/pavillion.git
 cd pavillion
 ```
 
-### Step 2: Generate Secrets with Setup Script
-
-Run the setup script to automatically generate secure secrets:
+### Step 2: Run bin/deploy.sh
 
 ```bash
-./bin/setup.sh
+bin/deploy.sh
 ```
 
-The setup script will:
-1. Generate cryptographically secure secrets (JWT, session, database password)
-2. Create a `.env` file with secure permissions
-3. Create `secrets/` directory with individual secret files for Docker secrets
-4. Display the generated secrets for backup
+The deploy script will:
 
-**IMPORTANT**: Save the displayed secrets to a password manager immediately. If you lose these secrets, you will lose access to your data.
+1. Detect that `.env` is absent → install mode.
+2. Generate all required secrets.
+3. Prompt for your domain name.
+4. Create `config/local.yaml` from the example.
+5. Pull the latest container images.
+6. Start the containers.
+7. Poll `/health` until the app is ready.
+
+Save the generated secrets to your password manager. They are written
+to `.env` with mode 600 (owner-only), and also to individual files
+under `secrets/` for Docker secrets integration.
 
 ### Step 3: Configure Your Instance
 
-Copy the example configuration file:
-
-```bash
-cp config/local.yaml.example config/local.yaml
-```
-
-Edit `config/local.yaml` and configure your instance:
+`bin/deploy.sh` creates `config/local.yaml` from the example template and
+fills in your domain. Edit it to configure email and any other instance
+settings:
 
 ```yaml
-# Your instance domain (required)
+# Your instance domain (required, set by deploy.sh)
 domain: "calendar.example.org"
 
 # Email configuration for password resets and invitations
@@ -86,15 +79,7 @@ mail:
     secure: false
 ```
 
-### Step 4: Start the Application
-
-Start all containers in the background:
-
-```bash
-docker compose up -d
-```
-
-Monitor the startup process:
+To monitor the startup process at any time:
 
 ```bash
 docker compose logs -f app
@@ -106,7 +91,7 @@ You should see output showing:
 3. Migrations running (on first start)
 4. Application starting and listening on port 3000
 
-### Step 5: Verify the Deployment
+### Step 4: Verify the Deployment
 
 Check that containers are running:
 
@@ -126,7 +111,7 @@ Test the health endpoint:
 curl http://localhost:3000/health
 ```
 
-### Step 6: Configure Reverse Proxy
+### Step 5: Configure Reverse Proxy
 
 Pavillion should be served behind a reverse proxy that handles SSL termination. Example configurations:
 
@@ -208,7 +193,7 @@ You should see four containers: `pavillion-app`, `pavillion-worker`, `pavillion-
 
 Pavillion uses a layered approach to secrets management:
 
-1. **Setup script generates secrets**: The `./bin/setup.sh` script creates unique, cryptographically secure secrets for each deployment.
+1. **Deploy script generates secrets**: The `bin/deploy.sh` script creates unique, cryptographically secure secrets for each deployment.
 
 2. **Dual storage for flexibility**:
    - `.env` file: Contains secrets as environment variables (simple approach)
@@ -234,7 +219,7 @@ If you lose these secrets:
 
 1. **Use full-disk encryption**: For production servers, enable full-disk encryption (LUKS on Linux, FileVault on macOS). This protects secrets at rest if the server is physically compromised.
 
-2. **Restrict file permissions**: The setup script creates files with `chmod 600` (owner read/write only). Verify permissions:
+2. **Restrict file permissions**: The deploy script creates files with `chmod 600` (owner read/write only). Verify permissions:
    ```bash
    ls -la .env secrets/
    ```
@@ -245,7 +230,7 @@ If you lose these secrets:
 
 ### Manual Secret Generation
 
-If you prefer to generate secrets manually instead of using `bin/setup.sh`:
+If you prefer to generate secrets manually instead of using `bin/deploy.sh`:
 
 ```bash
 # Generate a secure secret
@@ -402,7 +387,7 @@ docker compose logs app
 ```
 
 Common issues:
-- **Secrets not generated**: Run `./bin/setup.sh` to generate secrets
+- **Secrets not generated**: Run `bin/deploy.sh` to generate secrets
 - **Database password not set**: Ensure `DB_PASSWORD` is set in `.env`
 - **Port already in use**: Change `APP_PORT` in `.env` or stop the conflicting service
 - **Insufficient memory**: Ensure at least 1GB RAM is available
@@ -412,8 +397,8 @@ Common issues:
 This error occurs when running in production mode without proper secrets configured:
 
 ```bash
-# Generate secrets with the setup script
-./bin/setup.sh
+# Generate secrets with the deploy script
+bin/deploy.sh
 
 # Or manually set secrets in .env
 ```
@@ -453,8 +438,7 @@ To completely reset the deployment (WARNING: this deletes all data):
 
 ```bash
 docker compose down -v
-./bin/setup.sh  # Generate new secrets
-docker compose up -d
+bin/deploy.sh  # Generate new secrets and restart
 ```
 
 ## Next Steps
