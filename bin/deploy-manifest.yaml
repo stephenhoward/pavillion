@@ -1,0 +1,49 @@
+# Pavillion Deploy Manifest
+#
+# Each entry declares a secret the operator must have set for this checkout
+# to boot. New secrets are added in the same PR that introduces the
+# production validation requiring them.
+#
+# Fields:
+#   name         — environment variable name
+#   generator    — symbolic name for the secret generator. Currently
+#                  supported: openssl_rand_base64_32, openssl_rand_hex_32.
+#                  Mapped to concrete shell commands inside bin/deploy.sh.
+#   stability    — "stable" or "regenerable" (see rubric below)
+#   description  — one-line summary of what this secret protects and what
+#                  happens if it is lost or rotated
+#
+# Stability rubric:
+#   stable       — value must be preserved once generated. Regeneration has
+#                  user-visible or data-visible impact (e.g., invalidated
+#                  sessions, broken decryption, re-anonymized reports).
+#                  First install generates it; upgrade prompts if missing.
+#   regenerable  — value can be regenerated safely at any time. Loss only
+#                  resets the feature that uses it (e.g., invalidates
+#                  pending verification tokens). Upgrade silently generates.
+
+secrets:
+  - name: JWT_SECRET
+    generator: openssl_rand_base64_32
+    stability: stable
+    description: Signs API authentication tokens. Rotation logs out all users.
+
+  - name: SESSION_SECRET
+    generator: openssl_rand_base64_32
+    stability: stable
+    description: Signs browser session cookies. Rotation invalidates all sessions.
+
+  - name: DB_PASSWORD
+    generator: openssl_rand_base64_32
+    stability: stable
+    description: PostgreSQL password. Must match the existing database volume.
+
+  - name: EMAIL_HASH_SECRET
+    generator: openssl_rand_base64_32
+    stability: stable
+    description: Hashes reporter emails for moderation. Rotation de-anonymizes prior reports.
+
+  - name: ENCRYPTION_KEY
+    generator: openssl_rand_hex_32
+    stability: stable
+    description: Encrypts funding provider API keys at rest. Rotation breaks decryption of stored keys.
