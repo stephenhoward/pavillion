@@ -1,4 +1,4 @@
-import { Sequelize } from 'sequelize';
+import { Sequelize, QueryTypes } from 'sequelize';
 import { addIndexIfNotExists, removeIndexIfExists } from '../src/server/common/migrations/helpers.js';
 
 /**
@@ -14,6 +14,14 @@ import { addIndexIfNotExists, removeIndexIfExists } from '../src/server/common/m
  * The existing non-unique indexes on event_id and start_time remain in
  * place; they are still useful for range scans and single-column lookups.
  *
+ * Pre-existing duplicates: any deployment that ran before this migration
+ * could already hold race-condition duplicates from the same path the index
+ * is meant to prevent. Collapse them to a single row per (event_id,
+ * start_time) before adding the unique index, otherwise the index creation
+ * fails on existing data. Rows whose event_id or start_time is NULL are not
+ * touched — they cannot collide with anything (NULL ≠ NULL in SQL) and the
+ * index does not constrain them.
+ *
  * Invariant: both columns are `allowNull: true` in the schema but the
  * materialization path always populates them. The uniqueness guarantee
  * therefore relies on the application-level rule that a materialized
@@ -26,6 +34,28 @@ import { addIndexIfNotExists, removeIndexIfExists } from '../src/server/common/m
 export default {
   async up({ context: sequelize }: { context: Sequelize }) {
     const queryInterface = sequelize.getQueryInterface();
+
+    // Collapse pre-existing race-condition duplicates. Keep the lowest id
+    // per (event_id, start_time) group; either is fine since the duplicate
+    // rows are functionally identical (same event, same start_time, same
+    // end_time written by concurrent materialization). ROW_NUMBER() is used
+    // instead of MIN(id) because PostgreSQL has no `min(uuid)` aggregate,
+    // but UUID comparison operators (used by ORDER BY) are defined.
+    await sequelize.query(
+      `DELETE FROM event_instance
+       WHERE id IN (
+         SELECT id FROM (
+           SELECT id, ROW_NUMBER() OVER (
+             PARTITION BY event_id, start_time ORDER BY id
+           ) AS rn
+           FROM event_instance
+           WHERE event_id IS NOT NULL AND start_time IS NOT NULL
+         ) AS ranked
+         WHERE rn > 1
+       )`,
+      { type: QueryTypes.DELETE },
+    );
+
     await addIndexIfNotExists(
       queryInterface,
       'event_instance',
