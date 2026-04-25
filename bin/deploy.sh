@@ -48,6 +48,7 @@ DEPLOY_STATE_FILE="${REPO_ROOT}/.deploy-state"
 DEBUG_DIFF=0
 DEBUG_GENERATE=""
 DEBUG_RESOLVE=0
+DEBUG_INSTALL=0
 
 # ANSI colors (only when stdout is a TTY)
 if [[ -t 1 ]]; then
@@ -80,6 +81,7 @@ parse_args() {
       --diff-only)       DEBUG_DIFF=1 ;;
       --generate=*)      DEBUG_GENERATE="${arg#*=}" ;;
       --resolve-only)    DEBUG_RESOLVE=1 ;;
+      --install-only)    DEBUG_INSTALL=1 ;;
       -h|--help)         print_help; exit 0 ;;
       *)
         log_error "unknown argument: ${arg}"
@@ -306,6 +308,72 @@ resolve_missing() {
   return 0
 }
 
+# ---- Install-mode helpers ----
+
+# prompt_domain: emit the desired domain on stdout. If DOMAIN is set
+# (via --domain=), use it. Otherwise prompt interactively, or fail in
+# non-interactive mode.
+prompt_domain() {
+  if [[ -n "$DOMAIN" ]]; then
+    echo "$DOMAIN"
+    return 0
+  fi
+  if [[ $NON_INTERACTIVE -eq 1 ]]; then
+    log_error "Install mode requires --domain=<value> in non-interactive mode."
+    return 1
+  fi
+  local response
+  read -r -p "Enter your domain name (e.g., events.example.org): " response
+  if [[ -z "$response" ]]; then
+    log_error "Domain name is required."
+    return 1
+  fi
+  echo "$response"
+}
+
+# write_local_yaml <domain>: copy config/local.yaml.example to
+# config/local.yaml with the placeholder domain substituted. Leaves any
+# existing config/local.yaml untouched (warns), and errors if the example
+# file is missing.
+write_local_yaml() {
+  local domain="$1"
+  local example="${REPO_ROOT}/config/local.yaml.example"
+  local target="${REPO_ROOT}/config/local.yaml"
+
+  if [[ -f "$target" ]]; then
+    log_warn "config/local.yaml already exists. Leaving it untouched."
+    return 0
+  fi
+
+  if [[ ! -f "$example" ]]; then
+    log_error "config/local.yaml.example not found at ${example}"
+    return 1
+  fi
+
+  # Substitute the placeholder domain. Use | as the sed delimiter to avoid
+  # conflict with domains containing slashes.
+  sed "s|pavillion.example.org|${domain}|g" "$example" > "$target"
+  log_success "Created config/local.yaml with domain '${domain}'"
+}
+
+# run_install: first-install flow. Resolves all (missing) secrets, then
+# prompts for the domain and writes config/local.yaml.
+run_install() {
+  log_info "First-install mode. Generating secrets, configuring local.yaml."
+
+  # Resolve all secrets (on first install, all will be missing and generated).
+  resolve_missing || return $?
+
+  local domain
+  if ! domain=$(prompt_domain); then
+    return 1
+  fi
+  write_local_yaml "$domain" || return $?
+
+  log_success "Install phase complete."
+  return 0
+}
+
 main() {
   parse_args "$@"
 
@@ -319,6 +387,10 @@ main() {
   fi
   if [[ $DEBUG_RESOLVE -eq 1 ]]; then
     resolve_missing
+    exit $?
+  fi
+  if [[ $DEBUG_INSTALL -eq 1 ]]; then
+    run_install
     exit $?
   fi
 

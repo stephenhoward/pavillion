@@ -227,4 +227,59 @@ else
   fail "SESSION_SECRET should be in seeded .deploy-state"
 fi
 
+# ---- install-mode tests ----
+
+echo "test: install mode non-interactive requires --domain"
+tmp2=$(mktemp -d)
+setup_workspace "$tmp2" ""
+cp "${SCRIPT_DIR}/../deploy-manifest.yaml" "${tmp2}/bin/"
+# Provide a local.yaml.example with the substitution target.
+mkdir -p "${tmp2}/config"
+echo 'domain: "pavillion.example.org"' > "${tmp2}/config/local.yaml.example"
+
+output=$(cd "$tmp2" && bash bin/deploy.sh --non-interactive --install-only 2>&1; echo "EXIT:$?") || true
+exit_code="${output##*EXIT:}"
+assert_eq "1" "$exit_code" "install mode without --domain fails in non-interactive mode"
+assert_contains "$output" "--domain" "error message mentions --domain"
+
+echo "test: install mode non-interactive with --domain succeeds"
+output=$(cd "$tmp2" && bash bin/deploy.sh --non-interactive --domain=test.example.org --install-only 2>&1; echo "EXIT:$?") || true
+exit_code="${output##*EXIT:}"
+assert_eq "0" "$exit_code" "install with --domain succeeds (exit 0)"
+# Verify local.yaml was created with the domain substituted.
+if grep -q "test.example.org" "${tmp2}/config/local.yaml"; then
+  echo "  PASS: local.yaml contains substituted domain"
+  _TESTS=$((_TESTS+1))
+else
+  fail "local.yaml should contain test.example.org"
+fi
+
+echo "test: install mode leaves existing config/local.yaml untouched"
+tmp2b=$(mktemp -d)
+setup_workspace "$tmp2b" ""
+cp "${SCRIPT_DIR}/../deploy-manifest.yaml" "${tmp2b}/bin/"
+mkdir -p "${tmp2b}/config"
+echo 'domain: "pavillion.example.org"' > "${tmp2b}/config/local.yaml.example"
+echo 'domain: "preexisting.example.org"' > "${tmp2b}/config/local.yaml"
+output=$(cd "$tmp2b" && bash bin/deploy.sh --non-interactive --domain=test.example.org --install-only 2>&1; echo "EXIT:$?") || true
+exit_code="${output##*EXIT:}"
+assert_eq "0" "$exit_code" "install with existing local.yaml succeeds (exit 0)"
+assert_contains "$output" "already exists" "warns that local.yaml already exists"
+if grep -q "preexisting.example.org" "${tmp2b}/config/local.yaml"; then
+  echo "  PASS: existing local.yaml left untouched"
+  _TESTS=$((_TESTS+1))
+else
+  fail "existing local.yaml should not have been overwritten"
+fi
+
+echo "test: install mode errors when local.yaml.example is missing"
+tmp2c=$(mktemp -d)
+setup_workspace "$tmp2c" ""
+cp "${SCRIPT_DIR}/../deploy-manifest.yaml" "${tmp2c}/bin/"
+# Intentionally do NOT create config/local.yaml.example
+output=$(cd "$tmp2c" && bash bin/deploy.sh --non-interactive --domain=test.example.org --install-only 2>&1; echo "EXIT:$?") || true
+exit_code="${output##*EXIT:}"
+assert_eq "1" "$exit_code" "install fails when local.yaml.example is missing"
+assert_contains "$output" "local.yaml.example" "error mentions local.yaml.example"
+
 report_results
