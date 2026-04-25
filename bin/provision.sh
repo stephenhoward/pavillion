@@ -26,7 +26,7 @@
 #   5. Installs Docker CE from official repository
 #   6. Adds deploy user to docker group
 #   7. Creates application directory at /opt/pavillion
-#   8. Clones the repo and runs setup.sh
+#   8. Clones the repo and runs bin/deploy.sh
 #   9. Creates runtime directories (backups, media storage)
 #  10. (Staging) Configures webhook auto-deploy
 #
@@ -380,12 +380,12 @@ clone_and_setup() {
     fi
   fi
 
-  # Run setup.sh as deploy user
-  if [ -f "${APP_DIR}/bin/setup.sh" ]; then
-    su - "${DEPLOY_USER}" -c "cd ${APP_DIR} && ./bin/setup.sh --domain=${DOMAIN}"
-    print_success "Setup script completed"
+  # Run deploy.sh as deploy user
+  if [ -f "${APP_DIR}/bin/deploy.sh" ]; then
+    su - "${DEPLOY_USER}" -c "cd ${APP_DIR} && ./bin/deploy.sh --non-interactive --domain=${DOMAIN}"
+    print_success "Deploy script completed"
   else
-    print_error "bin/setup.sh not found in ${APP_DIR}. Run setup manually after cloning."
+    print_error "bin/deploy.sh not found in ${APP_DIR}. Run deploy manually after cloning."
     return 1
   fi
 }

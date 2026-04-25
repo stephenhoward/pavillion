@@ -2,6 +2,20 @@
 
 This guide documents procedures for rotating each secret type in Pavillion. Regular secret rotation is a security best practice and should be performed periodically or immediately if a secret is suspected to be compromised.
 
+## Missing secret after an upgrade
+
+If a new Pavillion version adds a required secret that your `.env` does
+not have, `bin/deploy.sh` handles it automatically:
+
+- **`regenerable`** secrets — silently generated.
+- **`stable`** secrets — prompted (interactive) or hard-failed
+  (non-interactive) with an actionable error.
+
+See `docs/upgrading.md` for the full flow.
+
+This document covers a different case: **intentional rotation of an
+existing secret**. That remains a manual procedure, described below.
+
 ## Overview
 
 Pavillion uses five types of secrets:

@@ -3,13 +3,12 @@
 # This file defines the production deployment for Pavillion using Docker Compose.
 #
 # Usage:
-#   1. Run ./bin/setup.sh to generate secrets automatically, OR
-#   2. Copy .env.example to .env and configure your secrets manually
-#   3. Copy config/local.yaml.example to config/local.yaml and customize
-#   4. Run: docker compose up -d
+#   Run ./bin/deploy.sh — the single entry point for install, upgrade, and
+#   redeploy. It generates secrets, writes config/local.yaml, pulls the latest
+#   images, runs migrations, and restarts the stack.
 #
 # For upgrades:
-#   docker compose pull && docker compose up -d
+#   ./bin/deploy.sh
 #
 # The app container will automatically:
 #   - Process Docker secrets from _FILE environment variables
@@ -248,7 +247,7 @@ volumes:
 
 # Docker secrets configuration
 # These secrets are mounted as tmpfs at /run/secrets/ inside containers
-# Secret files should be created by running ./bin/setup.sh
+# Secret files are created by running ./bin/deploy.sh
 secrets:
   db_password:
     file: ./secrets/db_password.txt

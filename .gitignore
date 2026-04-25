@@ -35,3 +35,7 @@ docker/federation/ssl/*.key
 .env
 config/local.yaml
 AGENTS.md
+
+# Per-instance deploy state managed by bin/deploy.sh
+# Lists secrets ever provisioned on this instance. Not for version control.
+.deploy-state

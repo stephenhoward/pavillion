@@ -97,6 +97,9 @@ describe('JWT Externalization and Production Validation', () => {
   it('should throw error when development-default secrets are used', () => {
     // Test JWT secret validation
     const configGetStub = sandbox.stub(config, 'get');
+    const configHasStub = sandbox.stub(config, 'has');
+    configHasStub.withArgs('database.password').returns(true);
+    configGetStub.withArgs('database.password').returns('test-db-password');
     configGetStub.withArgs('jwt.secret').returns('development-only-jwt-secret-do-not-use-in-production');
     configGetStub.withArgs('session.secret').returns('custom-session-secret');
     configGetStub.withArgs('moderation.emailHashSecret').returns('custom-email-hash-secret');
@@ -110,6 +113,9 @@ describe('JWT Externalization and Production Validation', () => {
 
     // Test session secret validation
     const configGetStub2 = sandbox.stub(config, 'get');
+    const configHasStub2 = sandbox.stub(config, 'has');
+    configHasStub2.withArgs('database.password').returns(true);
+    configGetStub2.withArgs('database.password').returns('test-db-password');
     configGetStub2.withArgs('jwt.secret').returns('custom-jwt-secret');
     configGetStub2.withArgs('session.secret').returns('development-only-session-secret-do-not-use-in-production');
     configGetStub2.withArgs('moderation.emailHashSecret').returns('custom-email-hash-secret');
@@ -123,6 +129,9 @@ describe('JWT Externalization and Production Validation', () => {
 
     // Test email hash secret validation
     const configGetStub3 = sandbox.stub(config, 'get');
+    const configHasStub3 = sandbox.stub(config, 'has');
+    configHasStub3.withArgs('database.password').returns(true);
+    configGetStub3.withArgs('database.password').returns('test-db-password');
     configGetStub3.withArgs('jwt.secret').returns('custom-jwt-secret');
     configGetStub3.withArgs('session.secret').returns('custom-session-secret');
     configGetStub3.withArgs('moderation.emailHashSecret').returns('development-only-email-hash-secret-do-not-use-in-production');
@@ -136,6 +145,9 @@ describe('JWT Externalization and Production Validation', () => {
 
     // Test encryption key validation
     const configGetStub4 = sandbox.stub(config, 'get');
+    const configHasStub4 = sandbox.stub(config, 'has');
+    configHasStub4.withArgs('database.password').returns(true);
+    configGetStub4.withArgs('database.password').returns('test-db-password');
     configGetStub4.withArgs('jwt.secret').returns('custom-jwt-secret');
     configGetStub4.withArgs('session.secret').returns('custom-session-secret');
     configGetStub4.withArgs('moderation.emailHashSecret').returns('custom-email-hash-secret');
@@ -149,6 +161,9 @@ describe('JWT Externalization and Production Validation', () => {
   // Test 5: Production validation passes with custom secrets
   it('should pass validation when custom secrets are configured', () => {
     const configGetStub = sandbox.stub(config, 'get');
+    const configHasStub = sandbox.stub(config, 'has');
+    configHasStub.withArgs('database.password').returns(true);
+    configGetStub.withArgs('database.password').returns('test-db-password');
     configGetStub.withArgs('jwt.secret').returns('custom-jwt-secret-xyzabc123');
     configGetStub.withArgs('session.secret').returns('custom-session-secret-xyzabc123');
     configGetStub.withArgs('moderation.emailHashSecret').returns('custom-email-hash-secret-xyzabc123');

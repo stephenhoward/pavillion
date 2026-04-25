@@ -2,10 +2,8 @@
 #
 # Pavillion Staging Deploy Script
 #
-# Executed by the webhook listener when a valid deploy request is received.
-# Pulls updated images, restarts containers, and prunes old images.
-#
-# This script uses a lockfile to prevent concurrent execution.
+# Webhook-triggered wrapper around bin/deploy.sh. Calls the unified deploy
+# tool in non-interactive mode. flock guards against concurrent deploys.
 #
 
 set -euo pipefail
@@ -24,19 +22,18 @@ log() {
     exit 1
   fi
 
-  log "Deploy started"
+  log "Staging deploy started"
 
   cd "$APP_DIR"
 
-  log "Pulling images..."
-  docker compose pull >> "$LOG_FILE" 2>&1
-
-  log "Restarting containers..."
-  docker compose up -d --remove-orphans >> "$LOG_FILE" 2>&1
+  if ! bash bin/deploy.sh --non-interactive >> "$LOG_FILE" 2>&1; then
+    log "ERROR: bin/deploy.sh failed (exit $?)"
+    exit 1
+  fi
 
   log "Pruning old images..."
-  docker image prune -f >> "$LOG_FILE" 2>&1
+  docker image prune -f >> "$LOG_FILE" 2>&1 || true
 
-  log "Deploy complete"
+  log "Staging deploy complete"
 
 ) 200>"$LOCK_FILE"
