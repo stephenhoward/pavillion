@@ -45,7 +45,8 @@ AGENTS.md
 caddy-extras.d/*.caddyfile
 
 # Per-instance staging webhook listener artifacts (adnanh/webhook).
-# hooks.json contains DEPLOY_WEBHOOK_SECRET; see docker/staging/hooks.json.example
-# for the tracked template. deploy.log is rotating output from the deploy hook.
-/hooks.json
+# hooks.json contains DEPLOY_WEBHOOK_SECRET; the tracked template lives
+# next to it as docker/staging/hooks.json.example. deploy.log is rotating
+# output from the deploy hook (written to /opt/pavillion/deploy.log).
+docker/staging/hooks.json
 /deploy.log

@@ -337,7 +337,7 @@ Wants=docker.service
 Type=simple
 User=pavillion
 Group=pavillion
-ExecStart=/usr/bin/webhook -hooks /opt/pavillion/hooks.json -ip 0.0.0.0 -port 9000 -verbose
+ExecStart=/usr/bin/webhook -hooks /opt/pavillion/docker/staging/hooks.json -ip 0.0.0.0 -port 9000 -verbose
 Restart=on-failure
 RestartSec=5
 StandardOutput=journal
@@ -409,15 +409,16 @@ configure_staging() {
     print_error "docker/staging/deploy.sh not found, skipping deploy script."
   fi
 
-  # Copy and configure hooks.json with generated webhook secret
+  # Copy hooks.json.example next to itself as hooks.json, then substitute the
+  # generated webhook secret in place. The real hooks.json is gitignored.
   if [ -f "${APP_DIR}/docker/staging/hooks.json.example" ]; then
-    cp "${APP_DIR}/docker/staging/hooks.json.example" "${APP_DIR}/hooks.json"
+    cp "${APP_DIR}/docker/staging/hooks.json.example" "${APP_DIR}/docker/staging/hooks.json"
     # Use | as sed delimiter for portability
-    sed -i.bak "s|REPLACE_WITH_WEBHOOK_SECRET|${webhook_secret}|" "${APP_DIR}/hooks.json"
-    rm -f "${APP_DIR}/hooks.json.bak"
-    chmod 600 "${APP_DIR}/hooks.json"
-    chown "${DEPLOY_USER}:${DEPLOY_USER}" "${APP_DIR}/hooks.json"
-    print_success "Configured hooks.json with webhook secret"
+    sed -i.bak "s|REPLACE_WITH_WEBHOOK_SECRET|${webhook_secret}|" "${APP_DIR}/docker/staging/hooks.json"
+    rm -f "${APP_DIR}/docker/staging/hooks.json.bak"
+    chmod 600 "${APP_DIR}/docker/staging/hooks.json"
+    chown "${DEPLOY_USER}:${DEPLOY_USER}" "${APP_DIR}/docker/staging/hooks.json"
+    print_success "Configured docker/staging/hooks.json with webhook secret"
   else
     print_error "docker/staging/hooks.json.example not found, skipping webhook config."
   fi

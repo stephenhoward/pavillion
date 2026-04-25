@@ -85,7 +85,7 @@ tail -f /opt/pavillion/deploy.log
 
 | File | Permissions | Owner | Notes |
 |------|-------------|-------|-------|
-| `/opt/pavillion/hooks.json` | `600` | `pavillion` | Contains the webhook secret. Generated from `docker/staging/hooks.json.example` during provisioning. Gitignored. |
+| `/opt/pavillion/docker/staging/hooks.json` | `600` | `pavillion` | Contains the webhook secret. Generated from the sibling `hooks.json.example` during provisioning. Gitignored. |
 | `/opt/pavillion/docker/staging/deploy.sh` | `750` | `pavillion` | Tracked. The webhook fires this directly (no root-level copy). |
 | `/opt/pavillion/caddy-extras.d/hooks.caddyfile` | `644` | `pavillion` | Caddy snippet that proxies `/hooks/*` to the webhook listener. Written during provisioning into the gitignored `caddy-extras.d/` extension point. |
 | `/opt/pavillion/deploy.log` | `640` | `pavillion` | Created automatically by `docker/staging/deploy.sh`. Gitignored. |
@@ -121,7 +121,7 @@ To rotate the webhook secret:
 ### Webhook returns 404
 
 - Check that the webhook service is running: `sudo systemctl status webhook`
-- Verify hooks.json is at `/opt/pavillion/hooks.json`
+- Verify hooks.json is at `/opt/pavillion/docker/staging/hooks.json`
 - Verify the Caddy snippet is in place: `cat /opt/pavillion/caddy-extras.d/hooks.caddyfile`
 - Reload Caddy if you just added the snippet: `docker compose --profile standalone restart caddy`
 
