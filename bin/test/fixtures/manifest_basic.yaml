@@ -1,5 +1,0 @@
-secrets:
-  - name: ONE_SECRET
-    generator: openssl_rand_base64_32
-    stability: stable
-    description: First secret.

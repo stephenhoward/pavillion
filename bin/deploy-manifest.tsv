@@ -21,29 +21,12 @@
 #   regenerable  — value can be regenerated safely at any time. Loss only
 #                  resets the feature that uses it (e.g., invalidates
 #                  pending verification tokens). Upgrade silently generates.
-
-secrets:
-  - name: JWT_SECRET
-    generator: openssl_rand_base64_32
-    stability: stable
-    description: Signs API authentication tokens. Rotation logs out all users.
-
-  - name: SESSION_SECRET
-    generator: openssl_rand_base64_32
-    stability: stable
-    description: Signs browser session cookies. Rotation invalidates all sessions.
-
-  - name: DB_PASSWORD
-    generator: openssl_rand_base64_32
-    stability: stable
-    description: PostgreSQL password. Must match the existing database volume.
-
-  - name: EMAIL_HASH_SECRET
-    generator: openssl_rand_base64_32
-    stability: stable
-    description: Hashes reporter emails for moderation. Rotation de-anonymizes prior reports.
-
-  - name: ENCRYPTION_KEY
-    generator: openssl_rand_hex_32
-    stability: stable
-    description: Encrypts funding provider API keys at rest. Rotation breaks decryption of stored keys.
+#
+# Format: tab-separated values, one record per line.
+# Columns: name<TAB>generator<TAB>stability<TAB>description
+#
+JWT_SECRET	openssl_rand_base64_32	stable	Signs API authentication tokens. Rotation logs out all users.
+SESSION_SECRET	openssl_rand_base64_32	stable	Signs browser session cookies. Rotation invalidates all sessions.
+DB_PASSWORD	openssl_rand_base64_32	stable	PostgreSQL password. Must match the existing database volume.
+EMAIL_HASH_SECRET	openssl_rand_base64_32	stable	Hashes reporter emails for moderation. Rotation de-anonymizes prior reports.
+ENCRYPTION_KEY	openssl_rand_hex_32	stable	Encrypts funding provider API keys at rest. Rotation breaks decryption of stored keys.

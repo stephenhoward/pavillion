@@ -1,0 +1,7 @@
+# header comment
+
+GAMMA	openssl_rand_base64_32	stable	Gamma secret.
+
+# inline comment
+DELTA	openssl_rand_hex_32	regenerable	Delta secret.
+

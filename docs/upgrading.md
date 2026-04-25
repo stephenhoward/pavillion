@@ -15,7 +15,7 @@ to run at any time, whether you have changes to apply or not.
 
 1. Checks that your working tree is clean.
 2. Runs `git pull` to fetch the latest code and configuration changes.
-3. Reads `bin/deploy-manifest.yaml` to learn what secrets the new version
+3. Reads `bin/deploy-manifest.tsv` to learn what secrets the new version
    requires.
 4. Compares against your `.env`. Silently generates any missing
    **regenerable** secrets. Prompts you to paste (or regenerate) any
@@ -66,7 +66,7 @@ bin/deploy.sh --help
 
 ## What happens when a new version adds a required secret
 
-Every required secret is declared in `bin/deploy-manifest.yaml`, tagged
+Every required secret is declared in `bin/deploy-manifest.tsv`, tagged
 as either `regenerable` or `stable`. The script also tracks every secret
 ever provisioned on this instance in `.deploy-state` (per-instance, not
 in version control). On upgrade:

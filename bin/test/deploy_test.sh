@@ -40,29 +40,14 @@ setup_workspace() {
 echo "test: --diff-only reports missing secret names"
 tmp=$(mktemp_dir)
 setup_workspace "$tmp" "${FIXTURES}/env_missing_one"
-cat > "${tmp}/bin/deploy-manifest.yaml" <<'EOF'
-secrets:
-  - name: JWT_SECRET
-    generator: openssl_rand_base64_32
-    stability: stable
-    description: A.
-  - name: SESSION_SECRET
-    generator: openssl_rand_base64_32
-    stability: stable
-    description: B.
-  - name: DB_PASSWORD
-    generator: openssl_rand_base64_32
-    stability: stable
-    description: C.
-  - name: EMAIL_HASH_SECRET
-    generator: openssl_rand_base64_32
-    stability: stable
-    description: D.
-  - name: ENCRYPTION_KEY
-    generator: openssl_rand_hex_32
-    stability: stable
-    description: E.
-EOF
+# Note: use `printf` not `echo` — `\t` interpretation in echo varies by shell/platform.
+{
+  printf 'JWT_SECRET\topenssl_rand_base64_32\tstable\tA.\n'
+  printf 'SESSION_SECRET\topenssl_rand_base64_32\tstable\tB.\n'
+  printf 'DB_PASSWORD\topenssl_rand_base64_32\tstable\tC.\n'
+  printf 'EMAIL_HASH_SECRET\topenssl_rand_base64_32\tstable\tD.\n'
+  printf 'ENCRYPTION_KEY\topenssl_rand_hex_32\tstable\tE.\n'
+} > "${tmp}/bin/deploy-manifest.tsv"
 output=$(cd "$tmp" && bash bin/deploy.sh --diff-only 2>&1 || true)
 assert_contains "$output" "ENCRYPTION_KEY" "diff reports the missing secret"
 
@@ -90,17 +75,10 @@ fi
 
 echo "test: resolve_missing auto-generates 'regenerable' silently"
 # Use a fixture manifest with one regenerable secret missing from .env.
-cat > "${tmp}/bin/deploy-manifest.yaml" <<'EOF'
-secrets:
-  - name: JWT_SECRET
-    generator: openssl_rand_base64_32
-    stability: stable
-    description: A.
-  - name: IMPORT_HMAC
-    generator: openssl_rand_base64_32
-    stability: regenerable
-    description: B.
-EOF
+{
+  printf 'JWT_SECRET\topenssl_rand_base64_32\tstable\tA.\n'
+  printf 'IMPORT_HMAC\topenssl_rand_base64_32\tregenerable\tB.\n'
+} > "${tmp}/bin/deploy-manifest.tsv"
 cat > "${tmp}/.env" <<'EOF'
 JWT_SECRET=existing
 EOF
@@ -141,17 +119,10 @@ cat > "${tmp}/.deploy-state" <<'EOF'
 # managed by bin/deploy.sh
 JWT_SECRET
 EOF
-cat > "${tmp}/bin/deploy-manifest.yaml" <<'EOF'
-secrets:
-  - name: JWT_SECRET
-    generator: openssl_rand_base64_32
-    stability: stable
-    description: A.
-  - name: NEW_STABLE_SECRET
-    generator: openssl_rand_base64_32
-    stability: stable
-    description: Newly introduced this release.
-EOF
+{
+  printf 'JWT_SECRET\topenssl_rand_base64_32\tstable\tA.\n'
+  printf 'NEW_STABLE_SECRET\topenssl_rand_base64_32\tstable\tNewly introduced this release.\n'
+} > "${tmp}/bin/deploy-manifest.tsv"
 output=$(cd "$tmp" && bash bin/deploy.sh --non-interactive --resolve-only 2>&1; echo "EXIT:$?") || true
 exit_code="${output##*EXIT:}"
 assert_eq "0" "$exit_code" "exit 0 when missing stable secret is newly-introduced (not in .deploy-state)"
@@ -178,13 +149,9 @@ cat > "${tmp}/.deploy-state" <<'EOF'
 # managed by bin/deploy.sh
 JWT_SECRET
 EOF
-cat > "${tmp}/bin/deploy-manifest.yaml" <<'EOF'
-secrets:
-  - name: JWT_SECRET
-    generator: openssl_rand_base64_32
-    stability: stable
-    description: A.
-EOF
+{
+  printf 'JWT_SECRET\topenssl_rand_base64_32\tstable\tA.\n'
+} > "${tmp}/bin/deploy-manifest.tsv"
 output=$(cd "$tmp" && bash bin/deploy.sh --non-interactive --resolve-only 2>&1; echo "EXIT:$?") || true
 exit_code="${output##*EXIT:}"
 assert_eq "2" "$exit_code" "exit 2 when previously-provisioned stable secret is missing in non-interactive mode"
@@ -216,13 +183,8 @@ setup_recovery_workspace() {
 # managed by bin/deploy.sh
 JWT_SECRET
 DSEOF
-  cat > "${ws}/bin/deploy-manifest.yaml" <<MFEOF
-secrets:
-  - name: JWT_SECRET
-    generator: openssl_rand_base64_32
-    stability: stable
-    description: Test JWT secret.
-MFEOF
+  printf 'JWT_SECRET\topenssl_rand_base64_32\tstable\tTest JWT secret.\n' \
+    > "${ws}/bin/deploy-manifest.tsv"
   echo "$ws"
 }
 
@@ -294,17 +256,10 @@ cat > "${tmp}/.env" <<'EOF'
 JWT_SECRET=existing
 SESSION_SECRET=existing
 EOF
-cat > "${tmp}/bin/deploy-manifest.yaml" <<'EOF'
-secrets:
-  - name: JWT_SECRET
-    generator: openssl_rand_base64_32
-    stability: stable
-    description: A.
-  - name: SESSION_SECRET
-    generator: openssl_rand_base64_32
-    stability: stable
-    description: B.
-EOF
+{
+  printf 'JWT_SECRET\topenssl_rand_base64_32\tstable\tA.\n'
+  printf 'SESSION_SECRET\topenssl_rand_base64_32\tstable\tB.\n'
+} > "${tmp}/bin/deploy-manifest.tsv"
 output=$(cd "$tmp" && bash bin/deploy.sh --non-interactive --resolve-only 2>&1; echo "EXIT:$?") || true
 exit_code="${output##*EXIT:}"
 assert_eq "0" "$exit_code" "exit 0: nothing missing, deploy-state seeded silently"
@@ -332,7 +287,7 @@ fi
 echo "test: install mode non-interactive requires --domain"
 tmp2=$(mktemp_dir)
 setup_workspace "$tmp2" ""
-cp "${SCRIPT_DIR}/../deploy-manifest.yaml" "${tmp2}/bin/"
+cp "${SCRIPT_DIR}/../deploy-manifest.tsv" "${tmp2}/bin/"
 # Provide a local.yaml.example with the substitution target.
 mkdir -p "${tmp2}/config"
 echo 'domain: "pavillion.example.org"' > "${tmp2}/config/local.yaml.example"
@@ -357,7 +312,7 @@ fi
 echo "test: install mode leaves existing config/local.yaml untouched"
 tmp2b=$(mktemp_dir)
 setup_workspace "$tmp2b" ""
-cp "${SCRIPT_DIR}/../deploy-manifest.yaml" "${tmp2b}/bin/"
+cp "${SCRIPT_DIR}/../deploy-manifest.tsv" "${tmp2b}/bin/"
 mkdir -p "${tmp2b}/config"
 echo 'domain: "pavillion.example.org"' > "${tmp2b}/config/local.yaml.example"
 echo 'domain: "preexisting.example.org"' > "${tmp2b}/config/local.yaml"
@@ -375,7 +330,7 @@ fi
 echo "test: install mode errors when local.yaml.example is missing"
 tmp2c=$(mktemp_dir)
 setup_workspace "$tmp2c" ""
-cp "${SCRIPT_DIR}/../deploy-manifest.yaml" "${tmp2c}/bin/"
+cp "${SCRIPT_DIR}/../deploy-manifest.tsv" "${tmp2c}/bin/"
 # Intentionally do NOT create config/local.yaml.example
 output=$(cd "$tmp2c" && bash bin/deploy.sh --non-interactive --domain=test.example.org --install-only 2>&1; echo "EXIT:$?") || true
 exit_code="${output##*EXIT:}"
@@ -387,7 +342,7 @@ assert_contains "$output" "local.yaml.example" "error mentions local.yaml.exampl
 echo "test: upgrade mode fails on dirty working tree"
 tmp3=$(mktemp_dir)
 setup_workspace "$tmp3" "${FIXTURES}/env_complete"
-cp "${SCRIPT_DIR}/../deploy-manifest.yaml" "${tmp3}/bin/"
+cp "${SCRIPT_DIR}/../deploy-manifest.tsv" "${tmp3}/bin/"
 # Init a git repo with an uncommitted change.
 (cd "$tmp3" && git init -q && git config user.email "t@e.co" && git config user.name "t" && \
    echo "initial" > file.txt && git add . && git commit -qm "initial" && \
@@ -410,7 +365,7 @@ assert_eq "0" "$exit_code" "--skip-git-pull bypasses the pull and the dirty-tree
 echo "test: docker ops call the expected commands (shim)"
 tmp4=$(mktemp_dir)
 setup_workspace "$tmp4" "${FIXTURES}/env_complete"
-cp "${SCRIPT_DIR}/../deploy-manifest.yaml" "${tmp4}/bin/"
+cp "${SCRIPT_DIR}/../deploy-manifest.tsv" "${tmp4}/bin/"
 # Per-test workspace paths for shim state. Keeping these inside ${tmp4} (as
 # opposed to a fixed /tmp path) avoids cross-talk between parallel CI runs and
 # leaves no residue between local invocations.

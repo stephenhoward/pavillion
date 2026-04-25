@@ -16,7 +16,7 @@ echo "check_manifest_test.sh"
 run_check() {
   local fixture_dir="$1"
   "${CHECKER}" \
-    --manifest="${fixture_dir}/manifest.yaml" \
+    --manifest="${fixture_dir}/manifest.tsv" \
     --envvars="${fixture_dir}/custom-environment-variables.yaml" \
     --compose="${fixture_dir}/docker-compose.yml" \
     --entrypoint="${fixture_dir}/entrypoint.sh" \

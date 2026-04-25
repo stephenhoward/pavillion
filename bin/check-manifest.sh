@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# check-manifest.sh — CI lint for bin/deploy-manifest.yaml.
+# check-manifest.sh — CI lint for bin/deploy-manifest.tsv.
 #
 # Verifies that every secret declared in the manifest is wired into the
 # four plumbing files:
@@ -26,7 +26,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 source "${SCRIPT_DIR}/lib/manifest.sh"
 
-MANIFEST="${REPO_ROOT}/bin/deploy-manifest.yaml"
+MANIFEST="${REPO_ROOT}/bin/deploy-manifest.tsv"
 ENVVARS="${REPO_ROOT}/config/custom-environment-variables.yaml"
 COMPOSE="${REPO_ROOT}/docker-compose.yml"
 ENTRYPOINT="${REPO_ROOT}/bin/entrypoint.sh"

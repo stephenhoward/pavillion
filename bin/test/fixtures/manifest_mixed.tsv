@@ -1,0 +1,2 @@
+ALPHA	openssl_rand_base64_32	stable	Alpha secret.
+BETA	openssl_rand_hex_32	regenerable	Beta secret.
