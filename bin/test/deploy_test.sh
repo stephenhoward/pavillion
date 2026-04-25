@@ -119,7 +119,11 @@ else
 fi
 # Verify secrets/import_hmac.txt exists with mode 600.
 if [[ -f "${tmp}/secrets/import_hmac.txt" ]]; then
-  perms=$(stat -f "%Lp" "${tmp}/secrets/import_hmac.txt" 2>/dev/null || stat -c "%a" "${tmp}/secrets/import_hmac.txt")
+  if [[ "$(uname)" == "Darwin" ]]; then
+    perms=$(stat -f "%Lp" "${tmp}/secrets/import_hmac.txt")
+  else
+    perms=$(stat -c "%a" "${tmp}/secrets/import_hmac.txt")
+  fi
   assert_eq "600" "$perms" "secrets/import_hmac.txt is mode 600"
 else
   fail "secrets/import_hmac.txt should exist"
