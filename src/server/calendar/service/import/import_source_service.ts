@@ -1,19 +1,34 @@
+import crypto from 'crypto';
+import dns from 'dns';
+import { promisify } from 'util';
 import { v4 as uuidv4 } from 'uuid';
 import config from 'config';
+import * as cheerio from 'cheerio';
+import { getPublicSuffix, parse as parseTld } from 'tldts';
+import { Agent, request as undiciRequest } from 'undici';
 
 import { Account } from '@/common/model/account';
 import { ImportSource } from '@/common/model/import_source';
 import { ValidationError } from '@/common/exceptions/base';
 import { CalendarNotFoundError } from '@/common/exceptions/calendar';
 import { CalendarEditorPermissionError } from '@/common/exceptions/editor';
-import { ImportSourceNotFoundError } from '@/common/exceptions/import';
+import {
+  ImportSourceNotFoundError,
+  ImportSourceRelMeVerificationError,
+  ImportSourceSsrfBlockedError,
+  IMPORT_RELME_HOSTNAME_MISMATCH,
+  IMPORT_RELME_LINK_NOT_FOUND,
+  IMPORT_RELME_PAGE_FETCH_ERROR,
+  IMPORT_RELME_PARSE_ERROR,
+  IMPORT_RELME_PSL_VIOLATION,
+} from '@/common/exceptions/import';
 import { ImportSourceEntity } from '@/server/calendar/entity/import_source';
-import { validateUrlNotPrivate } from '@/server/common/helper/ip-validation';
+import { isPrivateIP, validateUrlNotPrivate } from '@/server/common/helper/ip-validation';
 import { createIcsUrlValidator } from '@/server/common/helper/test-ssrf-gate';
 import { createLogger } from '@/server/common/helper/logger';
 import CalendarService from '@/server/calendar/service/calendar';
 import { generateVerificationToken } from '@/server/calendar/service/import/hmac';
-import { DnsVerifier } from '@/server/calendar/service/import/dns-verifier';
+import { DnsVerifier, VERIFICATION_VALIDITY_DAYS } from '@/server/calendar/service/import/dns-verifier';
 import type SyncService from '@/server/calendar/service/import/sync';
 import type { SyncResult } from '@/server/calendar/service/import/sync';
 
@@ -21,6 +36,54 @@ const logger = createLogger('calendar.import.source');
 
 /** Default cap when config value is absent. */
 const DEFAULT_MAX_SOURCES_PER_CALENDAR = 10;
+
+/** Maximum length of a user-supplied verification page URL. */
+const RELME_PAGE_URL_MAX_LENGTH = 2048;
+
+/** Maximum redirect hops for the rel-me page fetch. */
+const RELME_MAX_REDIRECTS = 3;
+
+/** Hard body cap for the rel-me page fetch (512 KB pre-decompression). */
+const RELME_MAX_BODY_BYTES = 512 * 1024;
+
+/** Per-phase timeouts for the rel-me page fetch (ms). */
+const RELME_CONNECT_TIMEOUT_MS = 10_000;
+const RELME_HEADERS_TIMEOUT_MS = 15_000;
+const RELME_BODY_TIMEOUT_MS = 30_000;
+
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+/**
+ * Promisified `dns.lookup` returning every resolved address. Used by the
+ * rel-me HTML fetcher for SSRF resolution checks.
+ */
+const dnsLookupAll = promisify(dns.lookup) as unknown as (
+  hostname: string,
+  opts: { all: true; verbatim: true },
+) => Promise<Array<{ address: string; family: number }>>;
+
+/**
+ * Minimal response shape returned by {@link HtmlFetcher.fetch}. Body is the
+ * page contents up to the size cap; status is the final HTTP status code
+ * after any redirect chain.
+ */
+export interface HtmlFetchResult {
+  status: number;
+  body: Buffer;
+  finalUrl: string;
+}
+
+/**
+ * Fetches an HTML page with SSRF defenses suitable for the rel-me verifier:
+ * scheme + private-IP literal check, DNS resolution + per-IP private-range
+ * check, redirect-chain revalidation, response-size cap, max-redirects cap.
+ *
+ * Defined as an interface so the {@link ImportSourceService} can accept a
+ * fake fetcher in unit tests without exercising the real `undici` stack.
+ */
+export interface HtmlFetcher {
+  fetch(url: string): Promise<HtmlFetchResult>;
+}
 
 /**
  * Service for managing per-calendar ICS import sources.
@@ -52,6 +115,7 @@ const DEFAULT_MAX_SOURCES_PER_CALENDAR = 10;
  */
 class ImportSourceService {
   private dnsVerifier: DnsVerifier;
+  private htmlFetcher: HtmlFetcher;
   private readonly urlSafetyValidator: (url: string) => Promise<boolean>;
 
   constructor(
@@ -59,6 +123,7 @@ class ImportSourceService {
     private syncService?: SyncService,
     dnsVerifier?: DnsVerifier,
     urlSafetyValidator?: (url: string) => Promise<boolean>,
+    htmlFetcher?: HtmlFetcher,
   ) {
     // calendarService is optional so callers in a future wiring pass can
     // inject the shared instance; when absent we fall back to loading the
@@ -75,6 +140,10 @@ class ImportSourceService {
     // ICS-owned opt-in site. Named distinctly from the service's private
     // `validateUrl()` method, which handles scheme/credentials checks.
     this.urlSafetyValidator = urlSafetyValidator ?? createIcsUrlValidator(validateUrlNotPrivate);
+    // Default rel-me HTML fetcher: SSRF-hardened (DNS + per-IP private-range
+    // check), redirect-chain revalidated, 512 KB cap, max 3 redirects. Tests
+    // inject a fake to avoid real network I/O.
+    this.htmlFetcher = htmlFetcher ?? new DefaultHtmlFetcher(this.urlSafetyValidator);
   }
 
   /**
@@ -82,6 +151,13 @@ class ImportSourceService {
    */
   setDnsVerifier(verifier: DnsVerifier): void {
     this.dnsVerifier = verifier;
+  }
+
+  /**
+   * Allow tests to inject a fake HtmlFetcher after construction.
+   */
+  setHtmlFetcher(fetcher: HtmlFetcher): void {
+    this.htmlFetcher = fetcher;
   }
 
   /**
@@ -259,24 +335,38 @@ class ImportSourceService {
   }
 
   /**
-   * Run DNS TXT verification for an import source and persist the outcome.
+   * Run ownership verification for an import source and persist the outcome.
    *
-   * On success the entity's verification_state transitions to 'verified',
-   * verified_at is set to now, and verification_expires_at is stamped to
-   * now + 90 days. On any failure the entity is left untouched so the
-   * caller can retry after fixing DNS.
+   * Dispatches on the source's `verification_type` discriminator:
+   *  - `'dns-txt'` → {@link verifyDnsTxtSource} (DoH-based TXT lookup)
+   *  - `'rel-me'`  → {@link verifyRelMeSource} (HTML page rel="me" backlink)
+   *
+   * On success the entity's `verification_state` transitions to `'verified'`,
+   * `verified_at` is set to now, and `verification_expires_at` is stamped to
+   * now + 90 days. On any failure the entity is left untouched so the caller
+   * can retry after fixing the underlying issue.
+   *
+   * NOTE: This dispatcher uses a switch for two verification types. Adding a
+   * THIRD verification type (e.g. OAuth) is the trigger to refactor into a
+   * strategy registry — the per-type method bodies are already encapsulated
+   * to make that refactor mechanical when it is needed.
    *
    * @param account - The requesting account (must own or edit the calendar)
    * @param calendarId - The calendar UUID
    * @param id - The import source UUID
+   * @param verificationPageUrl - For `'rel-me'` sources only: the URL of the
+   *   page hosting the `<a rel="me">` / `<link rel="me">` backlink. Required
+   *   for `'rel-me'`; ignored otherwise.
    * @returns The updated ImportSource model
    * @throws CalendarNotFoundError, CalendarEditorPermissionError,
-   *         ImportSourceNotFoundError, ImportSourceDnsVerificationError
+   *         ImportSourceNotFoundError, ImportSourceDnsVerificationError,
+   *         ImportSourceRelMeVerificationError, ImportSourceSsrfBlockedError
    */
   async verifySource(
     account: Account,
     calendarId: string,
     id: string,
+    verificationPageUrl?: string,
   ): Promise<ImportSource> {
     await this.assertEditorAccess(account, calendarId);
 
@@ -287,12 +377,37 @@ class ImportSourceService {
       throw new ImportSourceNotFoundError();
     }
 
-    // DnsVerifier.verify throws ImportSourceDnsVerificationError on any
-    // non-success; let it propagate to the API layer which translates it
-    // to the sanitized HTTP response.
+    // Dispatch on the verification-type discriminator. Each branch may throw
+    // a sanitized domain exception that the API layer translates to the
+    // canonical HTTP response.
+    //
+    // Adding a THIRD verification type is the trigger to refactor this switch
+    // into a strategy registry; for two types the branching is mechanical and
+    // the local cohesion is worth more than the indirection.
+    switch (entity.verification_type) {
+      case 'dns-txt':
+        return this.verifyDnsTxtSource(entity);
+      case 'rel-me':
+        return this.verifyRelMeSource(entity, verificationPageUrl);
+      default: {
+        // Exhaustiveness guard. If a future migration adds a new enum value
+        // without a matching dispatcher branch, fail loudly rather than
+        // silently treating it as a verification success.
+        const _exhaustive: never = entity.verification_type;
+        throw new Error(`Unsupported verification type: ${String(_exhaustive)}`);
+      }
+    }
+  }
+
+  /**
+   * DNS TXT verification branch of {@link verifySource}. Delegates to the
+   * injected {@link DnsVerifier} which throws
+   * {@link ImportSourceDnsVerificationError} on any non-success.
+   */
+  private async verifyDnsTxtSource(entity: ImportSourceEntity): Promise<ImportSource> {
     const result = await this.dnsVerifier.verify({
-      sourceId: id,
-      calendarId,
+      sourceId: entity.id,
+      calendarId: entity.calendar_id,
       sourceUrl: entity.url,
     });
 
@@ -302,11 +417,211 @@ class ImportSourceService {
     await entity.save();
 
     logger.info(
-      { calendarId, importSourceId: id },
+      { calendarId: entity.calendar_id, importSourceId: entity.id },
       'Import source DNS verification succeeded',
     );
 
     return entity.toModel();
+  }
+
+  /**
+   * `rel="me"` verification branch of {@link verifySource}. Validates the
+   * caller-supplied verification page URL, fetches it under SSRF protections,
+   * parses the HTML with cheerio, and looks for an `<a rel="me">` or
+   * `<link rel="me">` element whose `href` matches the source's expected
+   * verification URL via timing-safe comparison.
+   *
+   * Security mitigations baked in (per security-advisor on epic pv-jutm):
+   *  - Verification page URL must parse as a URL, use `https:` only, have
+   *    hostname EXACTLY equal to the source URL hostname (NOT eTLD+1), and
+   *    be at most {@link RELME_PAGE_URL_MAX_LENGTH} characters.
+   *  - PSL guard: the verification page hostname must sit strictly below the
+   *    public suffix on the PSL (rejects `co.uk`, `github.io`, etc.). This
+   *    is checked BEFORE any fetch is issued.
+   *  - SSRF: every URL in the redirect chain is revalidated by the HTML
+   *    fetcher; private-IP resolutions throw {@link ImportSourceSsrfBlockedError}.
+   *  - Body size: 512 KB cap; over-cap aborts with `IMPORT_RELME_PAGE_FETCH_ERROR`.
+   *  - Redirects: max {@link RELME_MAX_REDIRECTS} hops.
+   *  - HTML parsed by cheerio (no regex). Multi-value `rel` attributes
+   *    (e.g. `rel="me noopener"`) and reversed attribute orders are
+   *    supported because cheerio normalizes them.
+   *  - Token URL comparison uses {@link crypto.timingSafeEqual} on Buffer
+   *    representations to avoid leaking equality progress through timing.
+   *
+   * Logging discipline: structured log fields contain only `sourceId` and a
+   * `reason` code — the user-supplied verification page URL never appears in
+   * structured fields (privacy-playbook).
+   */
+  private async verifyRelMeSource(
+    entity: ImportSourceEntity,
+    verificationPageUrl: string | undefined,
+  ): Promise<ImportSource> {
+    const sourceHostname = hostnameFromUrl(entity.url);
+    if (!sourceHostname) {
+      // Defensive: entity.url passed createSource validation, so this should
+      // be unreachable in practice. Fail closed if it ever occurs.
+      logger.warn(
+        { importSourceId: entity.id, reason: IMPORT_RELME_HOSTNAME_MISMATCH },
+        'rel-me verification rejected: source URL has no hostname',
+      );
+      throw new ImportSourceRelMeVerificationError(IMPORT_RELME_HOSTNAME_MISMATCH);
+    }
+
+    // 1. Validate the user-supplied verification page URL.
+    const pageHostname = this.validateRelMePageUrl(
+      verificationPageUrl,
+      sourceHostname,
+      entity.id,
+    );
+
+    // 2. PSL guard: hostname must sit strictly below its public suffix. This
+    //    runs BEFORE any fetch so a hostname at/above the PSL never causes
+    //    outbound traffic to a shared-tenancy host.
+    if (!passesPslCheck(pageHostname)) {
+      logger.warn(
+        { importSourceId: entity.id, reason: IMPORT_RELME_PSL_VIOLATION },
+        'rel-me verification rejected: verification page hostname is at/above the public suffix',
+      );
+      throw new ImportSourceRelMeVerificationError(IMPORT_RELME_PSL_VIOLATION);
+    }
+
+    // 3. Compute the expected rel="me" target URL from the source token.
+    //    The token is derived deterministically; we never store the URL.
+    const token = generateVerificationToken(entity.id, entity.calendar_id);
+    const instanceHost = config.get<string>('domain');
+    const expectedRelMeUrl = `https://${instanceHost}/.well-known/pavillion-verify/${token}`;
+
+    // 4. Fetch the page under SSRF protections. The fetcher revalidates each
+    //    redirect hop and throws ImportSourceSsrfBlockedError if any URL in
+    //    the chain (including the original) resolves to a private address.
+    let pageBody: string;
+    try {
+      const fetchResult = await this.htmlFetcher.fetch(verificationPageUrl as string);
+      pageBody = fetchResult.body.toString('utf8');
+    }
+    catch (err) {
+      if (err instanceof ImportSourceSsrfBlockedError) {
+        // SSRF blocks reuse the existing exception type so the API serializer
+        // and i18n key handling stay uniform across all outbound import
+        // fetches. No new SSRF reason on the rel-me exception by design.
+        logger.warn(
+          { importSourceId: entity.id, reason: 'ssrf_blocked' },
+          'rel-me verification page fetch blocked by SSRF policy',
+        );
+        throw err;
+      }
+      logger.info(
+        { importSourceId: entity.id, reason: IMPORT_RELME_PAGE_FETCH_ERROR },
+        'rel-me verification page fetch failed',
+      );
+      throw new ImportSourceRelMeVerificationError(IMPORT_RELME_PAGE_FETCH_ERROR);
+    }
+
+    // 5. Parse the page with cheerio and walk every <a rel="me"> / <link
+    //    rel="me"> element. cheerio normalizes attribute order and tokenizes
+    //    the rel attribute, so we accept rel="me", rel="me noopener", etc.
+    let $: cheerio.CheerioAPI;
+    try {
+      $ = cheerio.load(pageBody);
+    }
+    catch {
+      logger.info(
+        { importSourceId: entity.id, reason: IMPORT_RELME_PARSE_ERROR },
+        'rel-me verification page parse failed',
+      );
+      throw new ImportSourceRelMeVerificationError(IMPORT_RELME_PARSE_ERROR);
+    }
+
+    if (!hasMatchingRelMeLink($, expectedRelMeUrl)) {
+      logger.info(
+        { importSourceId: entity.id, reason: IMPORT_RELME_LINK_NOT_FOUND },
+        'rel-me verification: no matching <a|link rel="me"> backlink found',
+      );
+      throw new ImportSourceRelMeVerificationError(IMPORT_RELME_LINK_NOT_FOUND);
+    }
+
+    // 6. Persist the verification stamp. Same 90-day window as DNS so both
+    //    branches share the renewal cadence.
+    const verifiedAt = new Date();
+    const expiresAt = new Date(verifiedAt.getTime() + VERIFICATION_VALIDITY_DAYS * MS_PER_DAY);
+    entity.verification_state = 'verified';
+    entity.verified_at = verifiedAt;
+    entity.verification_expires_at = expiresAt;
+    await entity.save();
+
+    logger.info(
+      { calendarId: entity.calendar_id, importSourceId: entity.id },
+      'Import source rel-me verification succeeded',
+    );
+
+    return entity.toModel();
+  }
+
+  /**
+   * Validate the user-supplied `verificationPageUrl`. Throws
+   * {@link ImportSourceRelMeVerificationError} on any structural failure;
+   * returns the verified hostname on success so the caller can run the PSL
+   * guard without re-parsing.
+   *
+   * Validation rules (security-advisor):
+   *  - Required, string-typed, non-empty
+   *  - Length <= {@link RELME_PAGE_URL_MAX_LENGTH}
+   *  - Parses as a URL
+   *  - Scheme is `https:` only (no http, no ftp, no file, no data)
+   *  - Hostname equals the source URL hostname EXACTLY (case-insensitive,
+   *    no eTLD+1 fallback). Shared-tenancy hosts (alice.github.io vs
+   *    bob.github.io) MUST NOT be confusable here.
+   */
+  private validateRelMePageUrl(
+    rawUrl: string | undefined,
+    sourceHostname: string,
+    sourceId: string,
+  ): string {
+    if (
+      rawUrl === undefined
+      || rawUrl === null
+      || typeof rawUrl !== 'string'
+      || rawUrl.trim().length === 0
+    ) {
+      throw new ValidationError('Verification page URL is required', {
+        verification_page_url: ['Verification page URL is required'],
+      });
+    }
+
+    if (rawUrl.length > RELME_PAGE_URL_MAX_LENGTH) {
+      throw new ValidationError('Verification page URL is too long', {
+        verification_page_url: ['Verification page URL is too long'],
+      });
+    }
+
+    let parsed: URL;
+    try {
+      parsed = new URL(rawUrl);
+    }
+    catch {
+      throw new ValidationError('Invalid verification page URL', {
+        verification_page_url: ['Invalid URL format'],
+      });
+    }
+
+    if (parsed.protocol !== 'https:') {
+      throw new ValidationError('Invalid verification page URL', {
+        verification_page_url: ['Verification page URL must use https'],
+      });
+    }
+
+    const pageHostname = parsed.hostname.toLowerCase();
+    if (pageHostname !== sourceHostname.toLowerCase()) {
+      // Full-hostname equality (NOT eTLD+1). Bypass via a sibling subdomain
+      // on a shared host is the explicit attack model here.
+      logger.warn(
+        { importSourceId: sourceId, reason: IMPORT_RELME_HOSTNAME_MISMATCH },
+        'rel-me verification rejected: page hostname does not match source hostname',
+      );
+      throw new ImportSourceRelMeVerificationError(IMPORT_RELME_HOSTNAME_MISMATCH);
+    }
+
+    return pageHostname;
   }
 
   /**
@@ -499,3 +814,336 @@ class ImportSourceService {
 }
 
 export default ImportSourceService;
+
+// ---------------------------------------------------------------------------
+// Module-private helpers (rel-me verifier)
+// ---------------------------------------------------------------------------
+
+/**
+ * Extracts the lowercased hostname from a URL string. Returns null if the
+ * URL is unparseable or has no hostname.
+ */
+function hostnameFromUrl(rawUrl: string): string | null {
+  try {
+    const u = new URL(rawUrl);
+    return u.hostname.toLowerCase() || null;
+  }
+  catch {
+    return null;
+  }
+}
+
+/**
+ * PSL guard: a hostname must sit strictly below its public suffix on the
+ * Public Suffix List. Returns true when the hostname is safe (a registrable
+ * domain or a label below one), false when the hostname equals or sits at
+ * the public suffix (e.g. `co.uk`, `github.io`, bare `com`).
+ *
+ * Mirrors the same check used by {@link DnsVerifier} so both verifier
+ * branches reject shared-tenancy hosts identically.
+ */
+function passesPslCheck(hostname: string): boolean {
+  const parsed = parseTld(hostname);
+  if (!parsed || !parsed.hostname) {
+    return false;
+  }
+  if (!parsed.domain) {
+    return false;
+  }
+  const suffix = getPublicSuffix(hostname);
+  if (suffix && suffix === hostname) {
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Returns true if any `<a rel="me" href=...>` or `<link rel="me" href=...>`
+ * element on the page resolves to the expected URL. Multi-value `rel`
+ * attributes (e.g. `rel="me noopener"`) are tokenized and checked.
+ *
+ * Comparison uses {@link crypto.timingSafeEqual} on Buffer representations
+ * of the canonicalized URLs to avoid leaking equality progress through
+ * timing. We canonicalize (re-parse) both sides so trivial syntactic
+ * differences (default port, trailing slash) do not produce false negatives.
+ */
+function hasMatchingRelMeLink($: cheerio.CheerioAPI, expectedUrl: string): boolean {
+  const expectedCanonical = canonicalizeUrl(expectedUrl);
+  if (expectedCanonical === null) {
+    // Defensive: should be unreachable since the caller computes
+    // expectedUrl from a config-known host plus an HMAC-derived token.
+    return false;
+  }
+  const expectedBuf = Buffer.from(expectedCanonical, 'utf8');
+
+  let matched = false;
+  $('a[rel], link[rel]').each((_idx, el) => {
+    if (matched) return;
+    const relAttr = $(el).attr('rel');
+    if (!relAttr) return;
+    const tokens = relAttr.split(/\s+/).map(t => t.toLowerCase());
+    if (!tokens.includes('me')) return;
+
+    const href = $(el).attr('href');
+    if (!href) return;
+    const hrefCanonical = canonicalizeUrl(href);
+    if (hrefCanonical === null) return;
+
+    const hrefBuf = Buffer.from(hrefCanonical, 'utf8');
+    if (hrefBuf.length !== expectedBuf.length) return;
+    if (crypto.timingSafeEqual(hrefBuf, expectedBuf)) {
+      matched = true;
+    }
+  });
+  return matched;
+}
+
+/**
+ * Canonicalize a URL for byte-equality comparison. Returns the parsed URL's
+ * `.toString()` (which normalizes default ports, percent-encoding, etc.) or
+ * null when the input is not a parseable URL. Relative URLs are not
+ * accepted — the rel-me expected URL is always absolute, and any relative
+ * `href` on the page would not match an absolute expected URL anyway.
+ */
+function canonicalizeUrl(rawUrl: string): string | null {
+  try {
+    return new URL(rawUrl).toString();
+  }
+  catch {
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Default rel-me HTML fetcher (SSRF-hardened)
+// ---------------------------------------------------------------------------
+
+/**
+ * Production HTML fetcher used by the rel-me verifier. Mirrors the SSRF
+ * protections of {@link Fetcher} (the ICS fetcher) but targeted at HTML:
+ *
+ *  - Validates URL scheme + literal IP at every redirect hop
+ *  - DNS-resolves the hostname and rejects any private/loopback/link-local
+ *    address by throwing {@link ImportSourceSsrfBlockedError}
+ *  - Pins the socket to the validated IP via a per-request `undici.Agent`
+ *    so a second DNS resolution at connect time cannot rebind to a
+ *    different address (DNS-rebinding defense)
+ *  - Caps the response body at {@link RELME_MAX_BODY_BYTES} (512 KB)
+ *  - Caps the redirect chain at {@link RELME_MAX_REDIRECTS} (3)
+ *
+ * Construction takes the gate-aware URL safety validator so test/e2e
+ * environments with `ALLOW_LOCALHOST_ICS_IMPORT=true` can fetch from
+ * localhost fixtures without disabling production-strict validation.
+ */
+class DefaultHtmlFetcher implements HtmlFetcher {
+  constructor(
+    private readonly urlSafetyValidator: (url: string) => Promise<boolean>,
+  ) {}
+
+  async fetch(initialUrl: string): Promise<HtmlFetchResult> {
+    let currentUrl = initialUrl;
+    const agents: Agent[] = [];
+
+    try {
+      // RELME_MAX_REDIRECTS is a HOP ceiling: indices 0..MAX-1 are valid;
+      // an attempted hop at index MAX is rejected as "too many redirects".
+      for (let hop = 0; hop < RELME_MAX_REDIRECTS + 1; hop++) {
+        if (hop === RELME_MAX_REDIRECTS + 1) {
+          // Defensive — loop condition prevents this.
+          break;
+        }
+
+        // 1. Validate URL (scheme + IP-literal private check). Reuses the
+        //    same gate-aware validator the ICS fetcher uses so the
+        //    ALLOW_LOCALHOST_ICS_IMPORT gate behaves identically here.
+        try {
+          await this.urlSafetyValidator(currentUrl);
+        }
+        catch {
+          throw new ImportSourceSsrfBlockedError({ reason: 'url_failed_validation' });
+        }
+
+        const parsedUrl = new URL(currentUrl);
+        const hostname = parsedUrl.hostname.replace(/^\[|\]$/g, '');
+
+        // 2. Resolve hostname → IPs and reject any private address. Mirrors
+        //    the per-IP check in the ICS Fetcher so a hostname like
+        //    `localtest.me` (which resolves to 127.0.0.1) is blocked even
+        //    though its name parses cleanly.
+        let addresses: Array<{ address: string; family: number }>;
+        try {
+          addresses = await dnsLookupAll(hostname, { all: true, verbatim: true });
+        }
+        catch {
+          throw new ImportSourceRelMeVerificationError(IMPORT_RELME_PAGE_FETCH_ERROR);
+        }
+        if (addresses.length === 0) {
+          throw new ImportSourceRelMeVerificationError(IMPORT_RELME_PAGE_FETCH_ERROR);
+        }
+        for (const { address } of addresses) {
+          if (isPrivateIP(address)) {
+            throw new ImportSourceSsrfBlockedError({ reason: 'private_ip_resolved' });
+          }
+        }
+
+        // 3. Pick the first validated IP and build a pinned Agent.
+        const pinnedIp = addresses[0].address;
+        const agent = createPinnedAgent(pinnedIp);
+        agents.push(agent);
+
+        // 4. Issue the request. Manual redirect handling — `maxRedirections: 0`
+        //    forces undici to surface 3xx responses to us so we can revalidate
+        //    the next hop before any further connection is made.
+        let response;
+        try {
+          response = await undiciRequest(currentUrl, {
+            method: 'GET',
+            headers: {
+              'user-agent': 'Pavillion/rel-me-verifier (+https://pavillion.app)',
+              'accept': 'text/html, application/xhtml+xml;q=0.9, */*;q=0.1',
+            },
+            dispatcher: agent,
+            maxRedirections: 0,
+            headersTimeout: RELME_HEADERS_TIMEOUT_MS,
+            bodyTimeout: RELME_BODY_TIMEOUT_MS,
+          });
+        }
+        catch {
+          throw new ImportSourceRelMeVerificationError(IMPORT_RELME_PAGE_FETCH_ERROR);
+        }
+
+        const status = response.statusCode;
+        const headers = response.headers as Record<string, string | string[] | undefined>;
+        const body = response.body as unknown as AsyncIterable<Uint8Array>;
+
+        // Redirect handling: drain body, revalidate the next URL on next
+        // iteration. The fetched-URL validation at the top of the loop is
+        // the redirect-chain SSRF defense.
+        if (status >= 300 && status < 400) {
+          const location = extractHeader(headers, 'location');
+          if (!location) {
+            throw new ImportSourceRelMeVerificationError(IMPORT_RELME_PAGE_FETCH_ERROR);
+          }
+          await drainBody(body);
+          if (hop + 1 >= RELME_MAX_REDIRECTS + 1) {
+            throw new ImportSourceRelMeVerificationError(IMPORT_RELME_PAGE_FETCH_ERROR);
+          }
+          let nextUrl: URL;
+          try {
+            nextUrl = new URL(location, currentUrl);
+          }
+          catch {
+            throw new ImportSourceRelMeVerificationError(IMPORT_RELME_PAGE_FETCH_ERROR);
+          }
+          currentUrl = nextUrl.toString();
+          continue;
+        }
+
+        if (status < 200 || status >= 300) {
+          await drainBody(body);
+          throw new ImportSourceRelMeVerificationError(IMPORT_RELME_PAGE_FETCH_ERROR);
+        }
+
+        // 5. Stream body with hard cap. We do NOT trust Content-Length.
+        const bodyBuf = await readBodyCapped(body, RELME_MAX_BODY_BYTES);
+
+        return {
+          status,
+          body: bodyBuf,
+          finalUrl: currentUrl,
+        };
+      }
+
+      // Unreachable — loop only exits via return or throw.
+      throw new ImportSourceRelMeVerificationError(IMPORT_RELME_PAGE_FETCH_ERROR);
+    }
+    finally {
+      for (const agent of agents) {
+        void agent.close().catch(() => { /* swallow */ });
+      }
+    }
+  }
+}
+
+/**
+ * Build an undici Agent whose `connect.lookup` always resolves to the given
+ * IP. This pins the socket to a previously-validated address, defeating
+ * DNS-rebinding attacks at the socket layer (a second DNS resolution at
+ * connect time cannot redirect the connection).
+ */
+function createPinnedAgent(pinnedIp: string): Agent {
+  return new Agent({
+    connect: {
+      lookup: (
+        _hostname: string,
+        options: unknown,
+        callback: (
+          err: NodeJS.ErrnoException | null,
+          addressOrAddresses: string | Array<{ address: string; family: number }>,
+          family?: number,
+        ) => void,
+      ) => {
+        const family = pinnedIp.includes(':') ? 6 : 4;
+        const wantsAll = typeof options === 'object'
+          && options !== null
+          && (options as { all?: unknown }).all === true;
+        if (wantsAll) {
+          callback(null, [{ address: pinnedIp, family }]);
+        }
+        else {
+          callback(null, pinnedIp, family);
+        }
+      },
+      timeout: RELME_CONNECT_TIMEOUT_MS,
+    },
+  });
+}
+
+function extractHeader(
+  headers: Record<string, string | string[] | undefined>,
+  name: string,
+): string | undefined {
+  const v = headers[name] ?? headers[name.toLowerCase()];
+  if (v === undefined) return undefined;
+  return Array.isArray(v) ? v[0] : v;
+}
+
+async function drainBody(body: AsyncIterable<Uint8Array>): Promise<void> {
+  try {
+    for await (const _chunk of body) {
+      // discard
+    }
+  }
+  catch {
+    // swallow
+  }
+}
+
+/**
+ * Read an async-iterable body into a Buffer, aborting as soon as the
+ * accumulated size exceeds `limit`. Over-cap and mid-stream errors both
+ * surface as IMPORT_RELME_PAGE_FETCH_ERROR so the caller does not have to
+ * distinguish between transport failure and over-cap.
+ */
+async function readBodyCapped(
+  body: AsyncIterable<Uint8Array>,
+  limit: number,
+): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+  let total = 0;
+  try {
+    for await (const chunk of body) {
+      const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      total += buf.length;
+      if (total > limit) {
+        throw new ImportSourceRelMeVerificationError(IMPORT_RELME_PAGE_FETCH_ERROR);
+      }
+      chunks.push(buf);
+    }
+  }
+  catch (err) {
+    if (err instanceof ImportSourceRelMeVerificationError) throw err;
+    throw new ImportSourceRelMeVerificationError(IMPORT_RELME_PAGE_FETCH_ERROR);
+  }
+  return Buffer.concat(chunks, total);
+}

@@ -517,6 +517,7 @@ describe('ImportSourceService', () => {
         id: SOURCE_ID,
         calendar_id: CAL_ID,
         url: VALID_URL,
+        verification_type: 'dns-txt',
         verification_state: 'pending',
         verified_at: null,
         verification_expires_at: null,
