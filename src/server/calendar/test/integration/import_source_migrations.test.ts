@@ -380,6 +380,30 @@ describe('ICS import foundation migrations', () => {
 
       expect(row.verification_type).toBe('dns-txt');
     });
+
+    it('persists verification_type=rel-me after migration 0029 extends the enum', async () => {
+      // Migration 0029 adds 'rel-me' as a valid discriminator value alongside
+      // the existing 'dns-txt'. On SQLite the ENUM is not enforced at the DB
+      // layer (Sequelize emits no CHECK constraint), so this assertion
+      // primarily covers persistence semantics on dev/test. On Postgres the
+      // value would be rejected without the ALTER TYPE in 0029.
+      const calendarId = await seedCalendar();
+      const sourceId = randomUUID();
+      await sequelize.query(
+        `INSERT INTO import_source
+           (id, calendar_id, url, enabled, verification_type, verification_state,
+            created_at, updated_at)
+         VALUES (?, ?, ?, 1, 'rel-me', 'unverified', datetime('now'), datetime('now'))`,
+        { replacements: [sourceId, calendarId, 'https://example.test/rel-me-feed.ics'] },
+      );
+
+      const [row] = await sequelize.query<{ verification_type: string }>(
+        `SELECT verification_type FROM import_source WHERE id = ?`,
+        { replacements: [sourceId], type: QueryTypes.SELECT },
+      );
+
+      expect(row.verification_type).toBe('rel-me');
+    });
   });
 
   describe('Reversibility', () => {
