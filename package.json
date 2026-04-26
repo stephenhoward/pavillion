@@ -49,6 +49,7 @@
     "@types/passport": "^1.0.17",
     "activitypub-express": "^4.4.2",
     "chalk": "^5.6.2",
+    "cheerio": "^1.2.0",
     "cli-table3": "^0.6.5",
     "cls-hooked": "^4.2.2",
     "commander": "^14.0.2",

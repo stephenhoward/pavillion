@@ -59,7 +59,7 @@ class ImportSourceEntity extends Model {
 
   @Default('dns-txt')
   @Column({
-    type: DataType.ENUM('dns-txt'),
+    type: DataType.ENUM('dns-txt', 'rel-me'),
     allowNull: false,
   })
   declare verification_type: ImportSourceVerificationType;

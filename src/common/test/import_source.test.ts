@@ -48,10 +48,7 @@ describe('ImportSource', () => {
     });
 
     it('exposes verification types (discriminator)', () => {
-      // Only `dns-txt` is defined today. Future verifier beads extend the
-      // union in the same change that introduces the verifier. See bead
-      // pv-44qj.
-      expect(IMPORT_SOURCE_VERIFICATION_TYPES).toEqual(['dns-txt']);
+      expect(IMPORT_SOURCE_VERIFICATION_TYPES).toEqual(['dns-txt', 'rel-me']);
     });
 
     it('exposes last-status values', () => {

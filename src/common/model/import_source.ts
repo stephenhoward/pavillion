@@ -29,14 +29,18 @@ export const IMPORT_SOURCE_VERIFICATION_STATES: readonly ImportSourceVerificatio
  * "is the current trust still valid" and continues to be the single
  * readiness gate used by the sync pipeline.
  *
- * Only `'dns-txt'` is defined today. Future verifier beads extend this
- * union (and the matching DB enum) in the same change that introduces the
- * verifier implementation.
+ * - `'dns-txt'` — verified via a DNS TXT record on the source hostname.
+ * - `'rel-me'`  — verified via a `rel="me"` backlink on a page hosted on
+ *                 the source hostname.
+ *
+ * Future verifier beads extend this union (and the matching DB enum) in the
+ * same change that introduces the verifier implementation.
  */
-export type ImportSourceVerificationType = 'dns-txt';
+export type ImportSourceVerificationType = 'dns-txt' | 'rel-me';
 
 export const IMPORT_SOURCE_VERIFICATION_TYPES: readonly ImportSourceVerificationType[] = [
   'dns-txt',
+  'rel-me',
 ];
 
 /**

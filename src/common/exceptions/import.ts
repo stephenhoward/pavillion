@@ -42,6 +42,23 @@ export type ImportDnsVerificationReason =
   | typeof IMPORT_DNS_RESOLVER_UNAVAILABLE
   | typeof IMPORT_DNS_PSL_VIOLATION;
 
+// rel="me" verification reason codes — exactly one of these is used as the
+// user-visible message for ImportSourceRelMeVerificationError. SSRF blocks
+// during page fetch reuse ImportSourceSsrfBlockedError and are NOT
+// represented here.
+export const IMPORT_RELME_PAGE_FETCH_ERROR = 'IMPORT_RELME_PAGE_FETCH_ERROR';
+export const IMPORT_RELME_PARSE_ERROR = 'IMPORT_RELME_PARSE_ERROR';
+export const IMPORT_RELME_LINK_NOT_FOUND = 'IMPORT_RELME_LINK_NOT_FOUND';
+export const IMPORT_RELME_HOSTNAME_MISMATCH = 'IMPORT_RELME_HOSTNAME_MISMATCH';
+export const IMPORT_RELME_PSL_VIOLATION = 'IMPORT_RELME_PSL_VIOLATION';
+
+export type ImportRelMeVerificationReason =
+  | typeof IMPORT_RELME_PAGE_FETCH_ERROR
+  | typeof IMPORT_RELME_PARSE_ERROR
+  | typeof IMPORT_RELME_LINK_NOT_FOUND
+  | typeof IMPORT_RELME_HOSTNAME_MISMATCH
+  | typeof IMPORT_RELME_PSL_VIOLATION;
+
 // ---------------------------------------------------------------------------
 // Exception classes
 // ---------------------------------------------------------------------------
@@ -122,6 +139,28 @@ export class ImportSourceDnsVerificationError extends Error {
     this.reason = reason;
     this.details = details;
     Object.setPrototypeOf(this, ImportSourceDnsVerificationError.prototype);
+  }
+}
+
+/**
+ * Thrown when `rel="me"` ownership verification fails. The constructor
+ * requires one of the fixed reason codes; fetched URLs, hostnames, and
+ * raw HTML must only be placed on `details`.
+ *
+ * SSRF policy blocks during the verification page fetch are NOT signaled
+ * here — they reuse the existing `ImportSourceSsrfBlockedError` so that
+ * SSRF handling stays uniform across all outbound import fetches.
+ */
+export class ImportSourceRelMeVerificationError extends Error {
+  public readonly reason: ImportRelMeVerificationReason;
+  public readonly details?: Record<string, unknown>;
+
+  constructor(reason: ImportRelMeVerificationReason, details?: Record<string, unknown>) {
+    super(reason);
+    this.name = 'ImportSourceRelMeVerificationError';
+    this.reason = reason;
+    this.details = details;
+    Object.setPrototypeOf(this, ImportSourceRelMeVerificationError.prototype);
   }
 }
 
