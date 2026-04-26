@@ -373,8 +373,7 @@ defineExpose({ state, loadSources });
   }
 
   &__header {
-    display: flex;
-    justify-content: space-between;
+    @include admin-section-header;
     align-items: flex-start;
     gap: var(--pav-space-4);
     flex-wrap: wrap;
@@ -388,14 +387,8 @@ defineExpose({ state, loadSources });
   }
 
   &__title {
-    font-size: 1.125rem;
-    font-weight: 600;
-    color: var(--pav-color-stone-900);
+    @include admin-section-title;
     margin: 0;
-
-    @media (prefers-color-scheme: dark) {
-      color: var(--pav-color-stone-100);
-    }
   }
 
   &__description {
