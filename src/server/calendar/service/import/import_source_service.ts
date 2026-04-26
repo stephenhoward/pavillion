@@ -28,7 +28,7 @@ import {
 } from '@/common/exceptions/import';
 import { ImportSourceEntity } from '@/server/calendar/entity/import_source';
 import { isPrivateIP, validateUrlNotPrivate } from '@/server/common/helper/ip-validation';
-import { createIcsUrlValidator } from '@/server/common/helper/test-ssrf-gate';
+import { createIcsUrlValidator, isLocalhostIcsImportAllowed } from '@/server/common/helper/test-ssrf-gate';
 import { createLogger } from '@/server/common/helper/logger';
 import CalendarService from '@/server/calendar/service/calendar';
 import { generateVerificationToken } from '@/server/calendar/service/import/hmac';
@@ -1025,8 +1025,23 @@ class DefaultHtmlFetcher implements HtmlFetcher {
         if (addresses.length === 0) {
           throw new ImportSourceRelMeVerificationError(IMPORT_RELME_PAGE_FETCH_ERROR);
         }
+        // Env-gated test hook: allow private-IP resolutions (e.g. 127.0.0.1)
+        // through when NODE_ENV=test|e2e AND ALLOW_LOCALHOST_ICS_IMPORT=true.
+        // Mirrors the gate in the ICS Fetcher so the rel-me path is reachable
+        // by Playwright e2e fixtures running an in-process mock HTTPS server.
+        // The pinned Agent below still constrains the socket to the resolved
+        // IP, so allowing a localhost address here flows through the same
+        // hardened pinning path. See src/server/common/helper/test-ssrf-gate.ts.
+        const relMeTestGateOpen = isLocalhostIcsImportAllowed();
         for (const { address } of addresses) {
           if (isPrivateIP(address)) {
+            if (relMeTestGateOpen) {
+              logger.warn(
+                { importSourceId: 'rel-me', address },
+                'rel-me.fetch.localhost_allowed: ALLOW_LOCALHOST_ICS_IMPORT gate is open — never enable in production',
+              );
+              continue;
+            }
             throw new ImportSourceSsrfBlockedError({ reason: 'private_ip_resolved' });
           }
         }

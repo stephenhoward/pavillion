@@ -1,5 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import { createServer, type Server, type IncomingMessage, type ServerResponse } from 'node:http';
+import { createServer as createHttpsServer, type Server as HttpsServer } from 'node:https';
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -37,10 +38,48 @@ import { startTestServer, TestEnvironment } from './helpers/test-server';
  *  3. Parse error: malformed VEVENT → sync reports parse_error outcome.
  *  4. DNS verification failure: DoH mock returns non-matching TXT →
  *     Verify surfaces IMPORT_DNS_MISMATCH (sanitized).
+ *  5. rel-me happy path: pick rel-me method → enter verification page URL
+ *     → mock HTTPS server returns HTML with valid rel='me' backlink →
+ *     verify succeeds → row shows verified state.
+ *  6. rel-me link not found: HTML lacks the expected backlink → verify
+ *     surfaces IMPORT_RELME_LINK_NOT_FOUND (sanitized). The full rel-me
+ *     error matrix is covered at unit/integration tier — this case proves
+ *     the negative-path UX surfaces the sanitized error.
+ *
+ * The rel-me flow uses a SECOND mock server bound to HTTPS (using the
+ * existing federation-test self-signed cert) because the rel-me verifier
+ * structurally requires `https://` page URLs. The Pavillion server child
+ * process accepts the cert via `NODE_TLS_REJECT_UNAUTHORIZED=0`.
  */
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const FIXTURES_DIR = join(__dirname, 'fixtures', 'ics');
+
+/**
+ * Path to the self-signed TLS cert/key used to back the HTTPS mock server
+ * for rel-me verification. We reuse the existing federation-test cert
+ * (CN=alpha.federation.local) rather than introducing a new artifact —
+ * the rel-me child process disables TLS verification via
+ * `NODE_TLS_REJECT_UNAUTHORIZED=0`, so neither CN nor CA matter.
+ */
+const TLS_CERT_PATH = join(
+  __dirname,
+  '..',
+  '..',
+  'docker',
+  'federation',
+  'ssl',
+  'alpha.federation.local.crt',
+);
+const TLS_KEY_PATH = join(
+  __dirname,
+  '..',
+  '..',
+  'docker',
+  'federation',
+  'ssl',
+  'alpha.federation.local.key',
+);
 
 /**
  * Per-source TXT record configuration accepted by the mock DoH server.
@@ -66,23 +105,46 @@ const dohRecordsByName = new Map<string, DohRecordConfig>();
 const icsBodyByPath = new Map<string, string>();
 
 /**
+ * Per-HTML-path body override served on both the HTTP and HTTPS mock
+ * servers. Used by the rel-me verification flow to publish a page whose
+ * `<a rel="me">` link points at the Pavillion `/.well-known/pavillion-verify`
+ * URL the verifier expects. Mirrors the `icsBodyByPath` per-path-override
+ * pattern (per the bead's complexity-advisor finding: do NOT introduce a
+ * new infrastructure layer — extend the existing one).
+ */
+const htmlBodyByPath = new Map<string, string>();
+
+/**
+ * Shared request dispatcher used by both the HTTP and HTTPS mock servers.
+ * Routes `/dns-query` (DoH), `/ics/...` (calendar fixtures), and `/html/...`
+ * (rel-me verification pages) and falls through to 404. Kept as a free
+ * function so the same dispatch logic backs both the HTTP and HTTPS
+ * variants without duplicating route tables.
+ */
+function dispatchMockRequest(req: IncomingMessage, res: ServerResponse): void {
+  const url = new URL(req.url ?? '/', 'http://127.0.0.1');
+  if (url.pathname === '/dns-query') {
+    handleDohQuery(url, res);
+    return;
+  }
+  if (url.pathname.startsWith('/ics/')) {
+    handleIcsRequest(url.pathname, res);
+    return;
+  }
+  if (url.pathname.startsWith('/html/')) {
+    handleHtmlRequest(url.pathname, res);
+    return;
+  }
+  res.writeHead(404, { 'content-type': 'text/plain' });
+  res.end('not found');
+}
+
+/**
  * Starts the combined DoH + ICS mock HTTP server on an ephemeral port
  * bound to 127.0.0.1.
  */
 async function startMockServer(): Promise<{ server: Server; port: number; baseUrl: string }> {
-  const server = createServer((req: IncomingMessage, res: ServerResponse) => {
-    const url = new URL(req.url ?? '/', 'http://127.0.0.1');
-    if (url.pathname === '/dns-query') {
-      handleDohQuery(url, res);
-      return;
-    }
-    if (url.pathname.startsWith('/ics/')) {
-      handleIcsRequest(url.pathname, res);
-      return;
-    }
-    res.writeHead(404, { 'content-type': 'text/plain' });
-    res.end('not found');
-  });
+  const server = createServer(dispatchMockRequest);
 
   // Bind dual-stack ('::') so the server accepts both IPv4 (127.0.0.1)
   // and IPv6 (::1) connections. On GitHub Actions Linux runners,
@@ -92,6 +154,26 @@ async function startMockServer(): Promise<{ server: Server; port: number; baseUr
   await new Promise<void>((resolve) => server.listen(0, '::', resolve));
   const { port } = server.address() as AddressInfo;
   return { server, port, baseUrl: `http://127.0.0.1:${port}` };
+}
+
+/**
+ * Starts an HTTPS variant of the mock server using the existing federation
+ * test self-signed cert. Required for rel-me verification because the
+ * server-side `validateRelMePageUrl` rejects any non-`https:` page URL up
+ * front — we cannot exercise the rel-me verifier with the http server.
+ *
+ * The Pavillion child process accepts the cert via
+ * `NODE_TLS_REJECT_UNAUTHORIZED=0` (set in `extraEnv` below), so cert
+ * subject mismatch (CN=alpha.federation.local vs request to `localtest.me`)
+ * is irrelevant.
+ */
+async function startMockHttpsServer(): Promise<{ server: HttpsServer; port: number; baseUrl: string }> {
+  const cert = readFileSync(TLS_CERT_PATH);
+  const key = readFileSync(TLS_KEY_PATH);
+  const server = createHttpsServer({ cert, key }, dispatchMockRequest);
+  await new Promise<void>((resolve) => server.listen(0, '::', resolve));
+  const { port } = server.address() as AddressInfo;
+  return { server, port, baseUrl: `https://127.0.0.1:${port}` };
 }
 
 function handleDohQuery(url: URL, res: ServerResponse): void {
@@ -132,6 +214,31 @@ function respondDoh(res: ServerResponse, body: unknown): void {
     'content-length': Buffer.byteLength(payload).toString(),
   });
   res.end(payload);
+}
+
+/**
+ * Serve a per-test HTML page for the rel-me verifier. Bodies are configured
+ * by tests via `htmlBodyByPath`. There is no fixture-directory fallback
+ * (unlike `/ics/...`) because rel-me pages are always test-specific:
+ * each test publishes a body containing the exact `<a rel="me">` href the
+ * Pavillion verifier expects for that test's source token.
+ */
+function handleHtmlRequest(pathname: string, res: ServerResponse): void {
+  if (process.env.MOCK_VERBOSE === '1') {
+
+    console.log(`[MockHTML] serving ${pathname}`);
+  }
+  const body = htmlBodyByPath.get(pathname);
+  if (body === undefined) {
+    res.writeHead(404, { 'content-type': 'text/plain' });
+    res.end('not found');
+    return;
+  }
+  res.writeHead(200, {
+    'content-type': 'text/html; charset=utf-8',
+    'content-length': Buffer.byteLength(body).toString(),
+  });
+  res.end(body);
 }
 
 function handleIcsRequest(pathname: string, res: ServerResponse): void {
@@ -190,12 +297,14 @@ const SERVER_DOMAIN = 'localhost:3000';
 
 let env: TestEnvironment;
 let mock: { server: Server; port: number; baseUrl: string };
+let mockHttps: { server: HttpsServer; port: number; baseUrl: string };
 
 test.describe.configure({ mode: 'serial' });
 
 test.describe('ICS Import Sources (e2e)', () => {
   test.beforeAll(async () => {
     mock = await startMockServer();
+    mockHttps = await startMockHttpsServer();
 
     // Point the backend DoH resolvers at our mock. Both entries are the
     // same URL; the verifier requires at least two resolvers and cross-
@@ -223,6 +332,11 @@ test.describe('ICS Import Sources (e2e)', () => {
       extraEnv: {
         ALLOW_LOCALHOST_ICS_IMPORT: 'true',
         NODE_CONFIG: nodeConfig,
+        // Accept the self-signed federation cert used by the rel-me HTTPS
+        // mock server. The cert's CN does not match `localtest.me`, and the
+        // CA is not trusted by Node by default. This relaxation is scoped
+        // to the e2e child process — it does not affect production paths.
+        NODE_TLS_REJECT_UNAUTHORIZED: '0',
       },
     });
   });
@@ -232,11 +346,17 @@ test.describe('ICS Import Sources (e2e)', () => {
     await new Promise<void>((resolve, reject) => {
       mock.server.close((err) => (err ? reject(err) : resolve()));
     });
+    if (mockHttps) {
+      await new Promise<void>((resolve, reject) => {
+        mockHttps.server.close((err) => (err ? reject(err) : resolve()));
+      });
+    }
   });
 
   test.beforeEach(() => {
     dohRecordsByName.clear();
     icsBodyByPath.clear();
+    htmlBodyByPath.clear();
   });
 
   /**
@@ -276,6 +396,27 @@ test.describe('ICS Import Sources (e2e)', () => {
     const res = await page.request.post(
       `${env.baseURL}/api/v1/calendars/${ADMIN_CALENDAR_ID}/import-sources/${sourceId}/verify-issue`,
       { headers },
+    );
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+    return body.challengeToken as string;
+  }
+
+  /**
+   * Issue a challenge while also setting (or switching) the source's
+   * verification_type discriminator. Used by the rel-me e2e cases to seed
+   * a source straight to 'rel-me' without driving the picker UI, or to
+   * reset back to 'dns-txt' as part of staging the picker entry path.
+   */
+  async function apiIssueChallengeWithType(
+    page: Page,
+    sourceId: string,
+    type: 'dns-txt' | 'rel-me',
+  ): Promise<string> {
+    const headers = await authHeader(page);
+    const res = await page.request.post(
+      `${env.baseURL}/api/v1/calendars/${ADMIN_CALENDAR_ID}/import-sources/${sourceId}/verify-issue`,
+      { headers, data: { verification_type: type } },
     );
     expect(res.status()).toBe(200);
     const body = await res.json();
@@ -538,7 +679,7 @@ test.describe('ICS Import Sources (e2e)', () => {
     await expect(row).toBeVisible();
     await row.getByRole('button', { name: /Verify ownership/i }).click();
 
-    const dialog = page.getByRole('dialog', { name: /Verify DNS ownership/i });
+    const dialog = page.getByRole('dialog', { name: /Verify ownership/i });
     await expect(dialog).toBeVisible();
 
     const [verifyResponse] = await Promise.all([
@@ -570,5 +711,190 @@ test.describe('ICS Import Sources (e2e)', () => {
     expect(alertText.length).toBeGreaterThan(0);
     expect(alertText).not.toContain(`localtest.me`);
     expect(alertText).not.toContain(`${SERVER_DOMAIN}`);
+  });
+
+  // ------------------------------------------------------------------
+  // Scenario 5: rel-me happy path
+  // ------------------------------------------------------------------
+  //
+  // Drives the picker UI: a freshly-created source defaults to
+  // verification_type='dns-txt' so the wizard opens on the DNS step. The
+  // test bounces through "Change verification method" to force the picker
+  // to render, then picks rel-me to advance to the rel-me step. This
+  // exercises the wizard's full step graph (dns-txt → pick → rel-me) in a
+  // single flow, which is the path a calendar owner takes when they decide
+  // to switch verification mechanisms after creating a source.
+  //
+  // The mock HTTPS server publishes an HTML page whose <a rel="me"> link
+  // points at the Pavillion well-known verify URL the verifier will compute
+  // from the source's challenge token, satisfying the rel-me match check.
+  test('rel-me happy path: pick rel-me method → verify with backlink → row shows verified', async ({ page }) => {
+    await loginAsAdmin(page, env.baseURL);
+
+    // Source URL stays on HTTP — only the rel-me PAGE URL must be HTTPS.
+    // Hostname equality is on the bare host (`localtest.me`), unaffected by
+    // port differences between the http and https mock servers.
+    const sourceUrl = `http://localtest.me:${mock.port}/ics/relme-happy.ics`;
+    icsBodyByPath.set(
+      '/ics/relme-happy.ics',
+      readFileSync(join(FIXTURES_DIR, 'basic.ics'), 'utf8'),
+    );
+
+    const sourceId = await apiCreateSource(page, sourceUrl);
+
+    // Compute the page URL the user will type into the rel-me input. The
+    // backend's verifier requires `https://` and same-hostname-as-source,
+    // so this hits the HTTPS mock at the same hostname (`localtest.me`).
+    const verificationPageUrl = `https://localtest.me:${mockHttps.port}/html/relme-happy`;
+
+    // Pre-publish the HTML body that contains the expected <a rel="me">.
+    // The expected link target is computed by the backend from the source's
+    // challenge token. We capture that token via the challenge-issue API
+    // (driven by the wizard for any user in production, but the URL the
+    // verifier compares against is deterministic from sourceId+calendarId,
+    // so issuing the challenge ourselves up front is operationally
+    // equivalent for fixture-staging purposes).
+    const token = await apiIssueChallengeWithType(page, sourceId, 'rel-me');
+    const expectedHref = `https://${SERVER_DOMAIN}/.well-known/pavillion-verify/${token}`;
+    htmlBodyByPath.set(
+      '/html/relme-happy',
+      `<!doctype html><html><head><title>rel-me happy</title></head>`
+      + `<body><a rel="me" href="${expectedHref}">Pavillion calendar</a></body></html>`,
+    );
+
+    // Reset the source's verification_type back to 'dns-txt' (createSource
+    // already set this, but the issueChallenge above flipped it to
+    // 'rel-me') so the wizard opens on the DNS step and we can drive the
+    // picker UI via "Change verification method". This validates the full
+    // step graph rather than landing on rel-me directly.
+    await apiIssueChallengeWithType(page, sourceId, 'dns-txt');
+
+    await openCalendarImportTab(page);
+
+    const row = page.locator('.import-source-row', { hasText: sourceUrl });
+    await expect(row).toBeVisible();
+    await row.getByRole('button', { name: /Verify ownership/i }).click();
+
+    const dialog = page.getByRole('dialog', { name: /Verify ownership/i });
+    await expect(dialog).toBeVisible();
+
+    // Wizard opens on the DNS step (verification_type='dns-txt'). Click
+    // "Change verification method" to surface the picker.
+    await dialog.locator('[data-test="verify-wizard-change-method"]').click();
+    await expect(dialog.locator('[data-test="verify-wizard-picker"]')).toBeVisible();
+
+    // Pick rel-me. The wizard re-issues the challenge under the rel-me
+    // discriminator on entry to the step, which switches the source's
+    // verification_type to 'rel-me' on the server. Our pre-staged HTML
+    // body remains valid because the token is deterministic per
+    // (sourceId, calendarId) — it does not change across re-issuances.
+    await dialog.locator('[data-test="verify-wizard-pick-relme"]').click();
+    await expect(dialog.locator('[data-test="rel-me-challenge-step"]')).toBeVisible();
+
+    // Type the verification page URL and click Verify. The Verify button
+    // calls issueChallenge('rel-me') then verifySource(pageUrl) — wait on
+    // the verify response so we can assert the outcome precisely.
+    await dialog.locator('[data-test="rel-me-page-url-input"]').fill(verificationPageUrl);
+    const [verifyResponse] = await Promise.all([
+      page.waitForResponse(
+        (r) => r.url().endsWith(`/import-sources/${sourceId}/verify`) && r.request().method() === 'POST',
+        { timeout: 15000 },
+      ),
+      dialog.locator('[data-test="rel-me-verify-button"]').click(),
+    ]);
+    expect(
+      verifyResponse.status(),
+      `verify did not succeed: status=${verifyResponse.status()}, body=${await verifyResponse.text()}`,
+    ).toBe(200);
+
+    // Wizard closes and the row shows the Verified badge.
+    await expect(dialog).toBeHidden();
+    await expect(row.locator('.import-source-row__badge--verified')).toBeVisible();
+
+    // Server-side state confirmation: GET the source and verify it carries
+    // both verification_type='rel-me' and verification_state='verified'.
+    const refreshed = await apiGetSource(page, sourceId);
+    expect(refreshed.status).toBe(200);
+    expect(refreshed.body.verificationType).toBe('rel-me');
+    expect(refreshed.body.verificationState).toBe('verified');
+  });
+
+  // ------------------------------------------------------------------
+  // Scenario 6: rel-me link not found
+  // ------------------------------------------------------------------
+  //
+  // Negative-path: the HTML body lacks the expected rel='me' backlink.
+  // The verifier surfaces IMPORT_RELME_LINK_NOT_FOUND. The full rel-me
+  // error matrix (PARSE_ERROR, HOSTNAME_MISMATCH, PSL_VIOLATION,
+  // PAGE_FETCH_ERROR) is covered at the unit/integration tier; this
+  // case proves the negative-path UX surfaces a sanitized error in the
+  // wizard's alert region.
+  test('rel-me link not found: HTML lacks backlink → wizard surfaces sanitized error', async ({ page }) => {
+    await loginAsAdmin(page, env.baseURL);
+
+    const sourceUrl = `http://localtest.me:${mock.port}/ics/relme-missing.ics`;
+    icsBodyByPath.set(
+      '/ics/relme-missing.ics',
+      readFileSync(join(FIXTURES_DIR, 'basic.ics'), 'utf8'),
+    );
+    const sourceId = await apiCreateSource(page, sourceUrl);
+
+    // Seed the source straight to verification_type='rel-me' so the wizard
+    // lands on the rel-me step and we can focus the test on the verifier
+    // outcome rather than re-exercising the picker (covered in scenario 5).
+    await apiIssueChallengeWithType(page, sourceId, 'rel-me');
+
+    // HTML body present but contains NO <a rel="me"> with the expected
+    // href. A different rel="me" link is included to confirm the verifier
+    // requires URL match, not just any rel="me" presence.
+    htmlBodyByPath.set(
+      '/html/relme-missing',
+      `<!doctype html><html><head><title>missing</title></head><body>`
+      + `<a rel="me" href="https://${SERVER_DOMAIN}/.well-known/pavillion-verify/`
+      + `0000000000000000000000000000000000000000000000000000000000000000">decoy</a>`
+      + `</body></html>`,
+    );
+    const verificationPageUrl = `https://localtest.me:${mockHttps.port}/html/relme-missing`;
+
+    await openCalendarImportTab(page);
+
+    const row = page.locator('.import-source-row', { hasText: sourceUrl });
+    await expect(row).toBeVisible();
+    await row.getByRole('button', { name: /Verify ownership/i }).click();
+
+    const dialog = page.getByRole('dialog', { name: /Verify ownership/i });
+    await expect(dialog).toBeVisible();
+    // Source's verification_type is 'rel-me' so the wizard skips the picker
+    // and lands directly on the rel-me step.
+    await expect(dialog.locator('[data-test="rel-me-challenge-step"]')).toBeVisible();
+
+    await dialog.locator('[data-test="rel-me-page-url-input"]').fill(verificationPageUrl);
+    const [verifyResponse] = await Promise.all([
+      page.waitForResponse(
+        (r) => r.url().endsWith(`/import-sources/${sourceId}/verify`) && r.request().method() === 'POST',
+        { timeout: 15000 },
+      ),
+      dialog.locator('[data-test="rel-me-verify-button"]').click(),
+    ]);
+    expect(verifyResponse.status()).toBe(400);
+    const body = await verifyResponse.json();
+    expect(body.errorName).toBe('ImportSourceRelMeVerificationError');
+    expect(body.reason).toBe('IMPORT_RELME_LINK_NOT_FOUND');
+
+    // Wizard stays open and the rel-me step renders a sanitized error.
+    // Following the dns-txt pattern in scenario 4, we assert the alert
+    // appears with non-empty text and contains no host/secret leakage.
+    await expect(dialog).toBeVisible();
+    const alert = dialog.locator('[data-test="rel-me-error"]');
+    await expect(alert).toBeVisible();
+    const alertText = (await alert.textContent())?.trim() ?? '';
+    expect(alertText.length).toBeGreaterThan(0);
+    expect(alertText).not.toContain('localtest.me');
+    expect(alertText).not.toContain(SERVER_DOMAIN);
+
+    // Server-side state confirmation: source remains unverified.
+    const refreshed = await apiGetSource(page, sourceId);
+    expect(refreshed.status).toBe(200);
+    expect(refreshed.body.verificationState).not.toBe('verified');
   });
 });
