@@ -5,7 +5,7 @@ import { ref } from 'vue';
 import sinon from 'sinon';
 import i18next from 'i18next';
 import I18NextVue from 'i18next-vue';
-import FollowedEventsView from '../events.vue';
+import FollowedEventsView from '@/client/components/logged_in/feed/events.vue';
 import { useFeedStore } from '@/client/stores/feedStore';
 import { useCalendarStore } from '@/client/stores/calendarStore';
 import { Calendar } from '@/common/model/calendar';

@@ -4,10 +4,10 @@ import sinon from 'sinon';
 import i18next from 'i18next';
 import I18NextVue from 'i18next-vue';
 import axios from 'axios';
-import WidgetDomains from '../widget-domains.vue';
-import WidgetConfig from '../widget-config.vue';
-import WidgetEmbed from '../widget-embed.vue';
-import WidgetTab from '../widget-tab.vue';
+import WidgetDomains from '@/client/components/logged_in/calendar-management/widget-domains.vue';
+import WidgetConfig from '@/client/components/logged_in/calendar-management/widget-config.vue';
+import WidgetEmbed from '@/client/components/logged_in/calendar-management/widget-embed.vue';
+import WidgetTab from '@/client/components/logged_in/calendar-management/widget-tab.vue';
 
 describe('Widget Admin UI Components', () => {
   let sandbox: sinon.SinonSandbox;

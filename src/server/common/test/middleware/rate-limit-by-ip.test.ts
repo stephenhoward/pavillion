@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import express, { Express } from 'express';
 import request from 'supertest';
-import { createIpRateLimiter } from '../rate-limit-by-ip';
+import { createIpRateLimiter } from '@/server/common/middleware/rate-limit-by-ip';
 
 describe('createIpRateLimiter', () => {
   let app: Express;

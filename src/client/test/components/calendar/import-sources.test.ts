@@ -4,9 +4,9 @@ import { flushPromises } from '@vue/test-utils';
 
 import { ImportSource } from '@/common/model/import_source';
 import { mountComponent } from '@/client/test/lib/vue';
-import ImportSourcesSection from '../import-sources/ImportSourcesSection.vue';
-import ImportSourceList from '../import-sources/ImportSourceList.vue';
-import VerifyOwnershipWizard from '../import-sources/VerifyOwnershipWizard.vue';
+import ImportSourcesSection from '@/client/components/logged_in/calendar-management/import-sources/ImportSourcesSection.vue';
+import ImportSourceList from '@/client/components/logged_in/calendar-management/import-sources/ImportSourceList.vue';
+import VerifyOwnershipWizard from '@/client/components/logged_in/calendar-management/import-sources/VerifyOwnershipWizard.vue';
 import ImportSourceService from '@/client/service/import_source';
 import { useToast, resetToastState } from '@/client/composables/useToast';
 

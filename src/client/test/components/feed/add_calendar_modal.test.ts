@@ -4,7 +4,7 @@ import { createPinia, setActivePinia } from 'pinia';
 import sinon from 'sinon';
 import i18next from 'i18next';
 import I18NextVue from 'i18next-vue';
-import AddCalendarModal from '../add_calendar_modal.vue';
+import AddCalendarModal from '@/client/components/logged_in/feed/add_calendar_modal.vue';
 import { useCalendarStore } from '@/client/stores/calendarStore';
 import { Calendar } from '@/common/model/calendar';
 import FeedService from '@/client/service/feed';

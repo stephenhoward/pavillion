@@ -4,7 +4,7 @@ import { flushPromises } from '@vue/test-utils';
 
 import { ImportSource } from '@/common/model/import_source';
 import { mountComponent } from '@/client/test/lib/vue';
-import DnsChallengeStep from '../DnsChallengeStep.vue';
+import DnsChallengeStep from '@/client/components/logged_in/calendar-management/import-sources/DnsChallengeStep.vue';
 import ImportSourceService from '@/client/service/import_source';
 import {
   ImportSourceDnsVerificationError,

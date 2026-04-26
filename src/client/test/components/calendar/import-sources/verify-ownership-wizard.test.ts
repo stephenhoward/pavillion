@@ -5,9 +5,9 @@ import { flushPromises } from '@vue/test-utils';
 import { ImportSource, ImportSourceVerificationType } from '@/common/model/import_source';
 import { mountComponent } from '@/client/test/lib/vue';
 import ImportSourceService from '@/client/service/import_source';
-import VerifyOwnershipWizard from '../VerifyOwnershipWizard.vue';
-import DnsChallengeStep from '../DnsChallengeStep.vue';
-import RelMeChallengeStep from '../RelMeChallengeStep.vue';
+import VerifyOwnershipWizard from '@/client/components/logged_in/calendar-management/import-sources/VerifyOwnershipWizard.vue';
+import DnsChallengeStep from '@/client/components/logged_in/calendar-management/import-sources/DnsChallengeStep.vue';
+import RelMeChallengeStep from '@/client/components/logged_in/calendar-management/import-sources/RelMeChallengeStep.vue';
 
 const routes: RouteRecordRaw[] = [
   { path: '/test', component: {}, name: 'test' },

@@ -3,7 +3,7 @@ import { Sequelize } from 'sequelize-typescript';
 import path from 'path';
 import fs from 'fs';
 import db from '@/server/common/entity/db';
-import { runMigrations, createMigrationRunner } from '../../runner';
+import { runMigrations, createMigrationRunner } from '@/server/common/migrations/runner';
 import { compareSchemas, getTableNames } from './schema-comparator';
 import { importAllEntities } from './entity-registry';
 

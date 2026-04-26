@@ -3,7 +3,7 @@ import sinon from 'sinon';
 import request from 'supertest';
 import express from 'express';
 import { testApp, addRequestUser } from '@/server/common/test/lib/express';
-import { createAccountRateLimiter } from '../rate-limit-by-account';
+import { createAccountRateLimiter } from '@/server/common/middleware/rate-limit-by-account';
 import { Account } from '@/common/model/account';
 
 describe('createAccountRateLimiter', () => {

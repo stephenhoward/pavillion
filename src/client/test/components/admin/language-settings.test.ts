@@ -3,7 +3,7 @@ import { mount, VueWrapper, flushPromises } from '@vue/test-utils';
 import { nextTick } from 'vue';
 import i18next from 'i18next';
 import I18NextVue from 'i18next-vue';
-import LanguageSettings from '../language-settings.vue';
+import LanguageSettings from '@/client/components/admin/language-settings.vue';
 import Config from '@/client/service/config';
 
 // Initialize i18next for tests

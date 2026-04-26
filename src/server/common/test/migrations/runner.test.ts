@@ -6,7 +6,7 @@ import {
   runMigrations,
   getPendingMigrations,
   getExecutedMigrations,
-} from '../runner';
+} from '@/server/common/migrations/runner';
 
 /**
  * Tests for the migration runner functionality.

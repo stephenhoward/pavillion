@@ -5,7 +5,7 @@ import {
   columnExists,
   removeIndexIfExists,
   tableExists,
-} from '../helpers';
+} from '@/server/common/migrations/helpers';
 
 /**
  * Tests for migration helpers.

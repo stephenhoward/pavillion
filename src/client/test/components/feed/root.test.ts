@@ -3,7 +3,7 @@ import { createPinia, setActivePinia } from 'pinia';
 import { createMemoryHistory, createRouter } from 'vue-router';
 import { nextTick } from 'vue';
 import { mountComponent } from '@/client/test/lib/vue';
-import Root from '../root.vue';
+import Root from '@/client/components/logged_in/feed/root.vue';
 import { useCalendarStore } from '@/client/stores/calendarStore';
 import { Calendar } from '@/common/model/calendar';
 

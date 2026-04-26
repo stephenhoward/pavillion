@@ -8,7 +8,7 @@ import {
   createCalendarRateLimiter,
   resetCalendarRateLimitStore,
   getCalendarRateLimitStore,
-} from '../rate-limit';
+} from '@/server/activitypub/middleware/rate-limit';
 
 describe('createActorRateLimiter', () => {
   beforeEach(() => {

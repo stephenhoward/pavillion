@@ -13,7 +13,7 @@ import {
   reportVerificationByIp,
   reportSubmissionByAccount,
   publicEventInstanceByIp,
-} from '../rate-limiters';
+} from '@/server/common/middleware/rate-limiters';
 
 describe('rate-limiters', () => {
   describe('configuration values', () => {

@@ -19,7 +19,7 @@ vi.mock('@/server/common/helper/logger', () => ({
   }),
 }));
 
-import { createParamRateLimiter } from '../rate-limit-by-param';
+import { createParamRateLimiter } from '@/server/common/middleware/rate-limit-by-param';
 
 /**
  * Unit tests for createParamRateLimiter — mirrors rate-limit-by-ip.test.ts

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { redactEmail } from '../redact-email';
+import { redactEmail } from '@/server/common/helpers/redact-email';
 
 describe('redactEmail', () => {
   describe('valid email addresses', () => {

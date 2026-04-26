@@ -5,7 +5,7 @@ import { ref } from 'vue';
 import sinon from 'sinon';
 import i18next from 'i18next';
 import I18NextVue from 'i18next-vue';
-import Followers from '../followers.vue';
+import Followers from '@/client/components/logged_in/feed/followers.vue';
 import { useFeedStore } from '@/client/stores/feedStore';
 import type { FollowerRelationship } from '@/client/service/feed';
 

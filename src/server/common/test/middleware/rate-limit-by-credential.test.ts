@@ -3,7 +3,7 @@ import sinon from 'sinon';
 import request from 'supertest';
 import express from 'express';
 import { testApp } from '@/server/common/test/lib/express';
-import { createCredentialRateLimiter } from '../rate-limit-by-credential';
+import { createCredentialRateLimiter } from '@/server/common/middleware/rate-limit-by-credential';
 
 describe('createCredentialRateLimiter', () => {
   let router: express.Router;

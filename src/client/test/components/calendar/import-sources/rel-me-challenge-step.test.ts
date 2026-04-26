@@ -4,7 +4,7 @@ import { flushPromises } from '@vue/test-utils';
 
 import { ImportSource } from '@/common/model/import_source';
 import { mountComponent } from '@/client/test/lib/vue';
-import RelMeChallengeStep from '../RelMeChallengeStep.vue';
+import RelMeChallengeStep from '@/client/components/logged_in/calendar-management/import-sources/RelMeChallengeStep.vue';
 import ImportSourceService from '@/client/service/import_source';
 import {
   ImportSourceRelMeVerificationError,
