@@ -164,6 +164,49 @@ describe('ImportSourceService', () => {
       ).rejects.toBeInstanceOf(ValidationError);
     });
 
+    it('accepts a scheme-less URL by defaulting to https://', async () => {
+      sandbox.stub(ImportSourceEntity, 'count').resolves(0);
+      sandbox.stub(ImportSourceEntity, 'findOne').resolves(null);
+
+      const savedEntities: ImportSourceEntity[] = [];
+      const buildSpy = sandbox.stub(ImportSourceEntity, 'build').callsFake((values) => {
+        const fake = {
+          id: (values as any).id,
+          calendar_id: (values as any).calendar_id,
+          url: (values as any).url,
+          enabled: (values as any).enabled,
+          verification_type: (values as any).verification_type,
+          verification_state: (values as any).verification_state,
+          verification_token: (values as any).verification_token,
+          verified_at: null,
+          verification_expires_at: null,
+          etag: null,
+          content_hash: null,
+          last_fetched_at: null,
+          last_status: null,
+          created_at: new Date(),
+          updated_at: new Date(),
+          save: sandbox.stub().resolves(),
+          toModel: function() {
+            return ImportSourceEntity.prototype.toModel.call(this);
+          },
+        } as unknown as ImportSourceEntity;
+        savedEntities.push(fake);
+        return fake;
+      });
+
+      const result = await service.createSource(
+        account,
+        CAL_ID,
+        'events.example.com/calendar.ics',
+      );
+
+      expect(buildSpy.calledOnce).toBe(true);
+      const buildArgs = buildSpy.firstCall.args[0] as any;
+      expect(buildArgs.url).toBe('https://events.example.com/calendar.ics');
+      expect(result.url).toBe('https://events.example.com/calendar.ics');
+    });
+
     it('throws ValidationError when URL scheme is not http/https', async () => {
       await expect(
         service.createSource(account, CAL_ID, 'ftp://example.com/cal.ics'),

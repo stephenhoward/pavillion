@@ -350,6 +350,8 @@ class ImportSourceService {
   /**
    * Parse and normalize the URL, rejecting malformed input, non-HTTP(S)
    * schemes, and embedded userinfo. Returns the canonical string form.
+   * Inputs without an explicit scheme default to `https://` so calendar
+   * owners can paste a bare hostname (e.g. `example.com/cal.ics`).
    * Final SSRF checks (scheme enforcement + private-IP resolution) are
    * performed by {@link assertUrlIsPublic}.
    */
@@ -360,9 +362,14 @@ class ImportSourceService {
       });
     }
 
+    const trimmed = rawUrl.trim();
+    // RFC 3986 scheme syntax: ALPHA *( ALPHA / DIGIT / "+" / "-" / "." ) ":"
+    const hasScheme = /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(trimmed);
+    const candidate = hasScheme ? trimmed : `https://${trimmed}`;
+
     let parsed: URL;
     try {
-      parsed = new URL(rawUrl);
+      parsed = new URL(candidate);
     }
     catch {
       throw new ValidationError('Invalid import source URL', {
