@@ -437,7 +437,11 @@ describe('ImportSourcesSection', () => {
 
     it('does not pre-fetch the challenge token when Verify is clicked (wizard handles issuance)', async () => {
       const s1 = buildSource('id-1', 'https://example.com/a.ics');
+      // A 'pending' source has already committed to a verification method,
+      // so the wizard skips the picker and lands directly on the matching
+      // step — that's where the single issueChallenge call comes from.
       s1.verificationState = 'pending';
+      s1.verificationType = 'dns-txt';
       listSourcesMock.mockResolvedValue([s1]);
 
       const { wrapper } = mountSection();

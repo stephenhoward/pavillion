@@ -20,10 +20,9 @@ const INSTANCE_HOST = 'pavillion.test';
 const CHALLENGE_TOKEN = 'abc123tokenXYZ';
 
 /**
- * Build an ImportSource for tests. Allows overriding `verificationType` with
- * `null` (cast through unknown) to express the "owner has not yet picked a
- * verification method" entry-state — the wizard shell treats any non-known
- * `verificationType` as an instruction to show the picker step.
+ * Build an ImportSource for tests. `verificationType` is now nullable on the
+ * model itself — `null` expresses the "owner has not yet picked a
+ * verification method" entry-state and tells the wizard to show the picker.
  */
 const buildSource = (overrides: Partial<ImportSource> & { verificationType?: ImportSourceVerificationType | null } = {}): ImportSource => {
   const source = new ImportSource(SOURCE_ID, CALENDAR_ID, SOURCE_URL);

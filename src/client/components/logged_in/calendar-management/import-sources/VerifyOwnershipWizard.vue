@@ -27,26 +27,11 @@
           natively keyboard-focusable and announced as "button" by AT.
           The icon + heading + description live inside the button as
           presentational content.
-        -->
-        <button
-          type="button"
-          class="verify-wizard__method"
-          data-test="verify-wizard-pick-dns"
-          @click="selectMethod('dns-txt')"
-        >
-          <span class="verify-wizard__method-icon" aria-hidden="true">
-            <Globe :size="24" :stroke-width="2" />
-          </span>
-          <span class="verify-wizard__method-body">
-            <span class="verify-wizard__method-title">
-              {{ t('method_dns_title') }}
-            </span>
-            <span class="verify-wizard__method-description">
-              {{ t('method_dns_description') }}
-            </span>
-          </span>
-        </button>
 
+          rel="me" is listed first because it's accessible to any calendar
+          owner who can edit a page on their own site, while DNS TXT
+          requires registrar / DNS panel access that not every owner has.
+        -->
         <button
           type="button"
           class="verify-wizard__method"
@@ -62,6 +47,25 @@
             </span>
             <span class="verify-wizard__method-description">
               {{ t('method_relme_description') }}
+            </span>
+          </span>
+        </button>
+
+        <button
+          type="button"
+          class="verify-wizard__method"
+          data-test="verify-wizard-pick-dns"
+          @click="selectMethod('dns-txt')"
+        >
+          <span class="verify-wizard__method-icon" aria-hidden="true">
+            <Globe :size="24" :stroke-width="2" />
+          </span>
+          <span class="verify-wizard__method-body">
+            <span class="verify-wizard__method-title">
+              {{ t('method_dns_title') }}
+            </span>
+            <span class="verify-wizard__method-description">
+              {{ t('method_dns_description') }}
             </span>
           </span>
         </button>
@@ -168,14 +172,12 @@ type WizardStep = 'pick' | 'dns-txt' | 'rel-me';
  * Set of known verification-method discriminants. Used by the entry-rule
  * computation to decide whether `source.verificationType` represents a
  * concrete method (skip picker) or an unset/unknown value (show picker).
- *
- * Cast through `unknown` because callers may pass `null` to express the
- * "no method chosen yet" state even though the model's TypeScript shape
- * declares `verificationType` as non-nullable.
  */
 const KNOWN_METHODS = new Set<string>(['dns-txt', 'rel-me']);
 
-const isKnownMethod = (value: unknown): value is ImportSourceVerificationType => {
+const isKnownMethod = (
+  value: ImportSourceVerificationType | null | undefined,
+): value is ImportSourceVerificationType => {
   return typeof value === 'string' && KNOWN_METHODS.has(value);
 };
 
@@ -305,19 +307,15 @@ onMounted(() => {
   }
 
   /*
-   * Method picker layout. Stacked on narrow viewports so each card stays
-   * tap-friendly; switches to a two-column grid at the 480px container
-   * threshold called for in the bead. Uses logical block/inline grid
-   * properties so RTL locales flip cleanly.
+   * Method picker layout. Cards stack vertically at every viewport size so
+   * each method has room to breathe and there's headroom to add more
+   * verification mechanisms (OAuth provider connections, etc.) without
+   * cramping the picker.
    */
   &__methods {
     display: grid;
     grid-template-columns: 1fr;
     gap: var(--pav-space-3);
-
-    @media (min-width: 480px) {
-      grid-template-columns: 1fr 1fr;
-    }
   }
 
   &__method {
@@ -333,6 +331,16 @@ onMounted(() => {
     text-align: start;
     cursor: pointer;
     transition: background 0.15s ease, border-color 0.15s ease;
+    // Grid items default to min-width: auto, which lets the cell grow past
+    // the track width when content can't shrink — the descriptions then
+    // spill out of the modal. Setting min-width: 0 lets the cell respect
+    // its 1fr track sizing and forces the inner content to wrap.
+    min-width: 0;
+    // <button> elements default to white-space: nowrap in UA stylesheets,
+    // which prevents the description from wrapping and produces the
+    // overflow seen in the picker. Reset to normal so text wraps inside
+    // the card the same way it does outside one.
+    white-space: normal;
 
     &:hover:not(:disabled),
     &:focus-visible {
