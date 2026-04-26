@@ -57,12 +57,11 @@ class ImportSourceEntity extends Model {
   @Column({ type: DataType.BOOLEAN, allowNull: false })
   declare enabled: boolean;
 
-  @Default('dns-txt')
   @Column({
     type: DataType.ENUM('dns-txt', 'rel-me'),
-    allowNull: false,
+    allowNull: true,
   })
-  declare verification_type: ImportSourceVerificationType;
+  declare verification_type: ImportSourceVerificationType | null;
 
   @Default('unverified')
   @Column({

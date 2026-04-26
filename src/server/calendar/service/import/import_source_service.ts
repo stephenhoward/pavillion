@@ -167,10 +167,16 @@ class ImportSourceService {
   /**
    * Create a new import source for a calendar.
    *
+   * The new source starts in `verification_state='unverified'` with
+   * `verification_type=null` (no method chosen) and no token. The owner
+   * commits to a verification mechanism by issuing a challenge through
+   * {@link issueVerificationChallenge}, which stamps both the chosen
+   * discriminator and the deterministic HMAC token onto the row.
+   *
    * @param account - The requesting account (must own or edit the calendar)
    * @param calendarId - The calendar UUID
    * @param url - The ICS feed URL (HTTPS, non-private, SSRF-checked)
-   * @returns The persisted ImportSource in `verification_state='pending'`
+   * @returns The persisted ImportSource in `verification_state='unverified'`
    * @throws CalendarNotFoundError if the calendar does not exist
    * @throws CalendarEditorPermissionError if the account lacks edit access
    * @throws ValidationError if the URL is empty, malformed, or fails SSRF checks,
@@ -186,25 +192,20 @@ class ImportSourceService {
     await this.assertUrlNotDuplicate(calendarId, normalizedUrl);
 
     const id = uuidv4();
-    const token = generateVerificationToken(id, calendarId);
 
     const entity = ImportSourceEntity.build({
       id,
       calendar_id: calendarId,
       url: normalizedUrl,
       enabled: true,
-      // Future call paths for rel-me / oauth sources must pass a different
-      // verification_type here; keeping the stamp visible now establishes
-      // the pattern before it has callers.
-      verification_type: 'dns-txt',
-      verification_state: 'pending',
-      verification_token: token,
+      verification_type: null,
+      verification_state: 'unverified',
     });
     await entity.save();
 
     logger.info(
       { calendarId, importSourceId: id },
-      'Created import source (verification pending)',
+      'Created import source (verification unverified, no method chosen)',
     );
 
     return entity.toModel();
@@ -355,8 +356,16 @@ class ImportSourceService {
     // Resolve the next verification type. When the caller omits
     // `verificationType`, preserve whatever the entity already carries —
     // this keeps the ungated /verify-issue path backwards compatible with
-    // pre-rel-me callers and pre-existing rows.
+    // pre-rel-me callers and pre-existing rows. When neither the caller
+    // nor the entity carries a method, the source is brand-new and the
+    // caller must commit to one before a challenge can be issued.
     const nextType = verificationType ?? entity.verification_type;
+    if (nextType === null) {
+      throw new ValidationError(
+        'A verification method must be chosen before issuing a challenge',
+        { verification_type: ['Verification method must be chosen'] },
+      );
+    }
     if (nextType !== entity.verification_type) {
       // Switching mechanism invalidates the previous proof: the new
       // mechanism has not been satisfied yet. Clear `verified_at` so the
@@ -420,6 +429,16 @@ class ImportSourceService {
     });
     if (!entity) {
       throw new ImportSourceNotFoundError();
+    }
+
+    // A source with no chosen method cannot be verified. The wizard always
+    // calls issueVerificationChallenge before verify, so this only happens
+    // if a caller invokes /verify before /verify-issue on a brand-new row.
+    if (entity.verification_type === null) {
+      throw new ValidationError(
+        'A verification method must be chosen before verification can run',
+        { verification_type: ['Verification method must be chosen'] },
+      );
     }
 
     // Dispatch on the verification-type discriminator. Each branch may throw

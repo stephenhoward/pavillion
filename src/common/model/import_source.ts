@@ -81,7 +81,14 @@ export class ImportSource extends PrimaryModel {
   calendarId: string;
   url: string;
   enabled: boolean;
-  verificationType: ImportSourceVerificationType;
+  /**
+   * The verification mechanism the owner has committed to for this source,
+   * or `null` if no method has been chosen yet. New rows arrive with `null`
+   * so the verify-ownership wizard can present the method picker; the value
+   * is stamped to a concrete discriminator the first time a verification
+   * challenge is issued.
+   */
+  verificationType: ImportSourceVerificationType | null;
   verificationState: ImportSourceVerificationState;
   verifiedAt: Date | null;
   verificationExpiresAt: Date | null;
@@ -104,7 +111,7 @@ export class ImportSource extends PrimaryModel {
     this.calendarId = calendarId;
     this.url = url;
     this.enabled = true;
-    this.verificationType = 'dns-txt';
+    this.verificationType = null;
     this.verificationState = 'unverified';
     this.verifiedAt = null;
     this.verificationExpiresAt = null;
@@ -158,7 +165,7 @@ export class ImportSource extends PrimaryModel {
     const model = new ImportSource(obj.id ?? '', obj.calendarId ?? '', obj.url ?? '');
     model.enabled = obj.enabled ?? true;
     model.verificationType =
-      (obj.verificationType as ImportSourceVerificationType) ?? 'dns-txt';
+      (obj.verificationType as ImportSourceVerificationType) ?? null;
     model.verificationState =
       (obj.verificationState as ImportSourceVerificationState) ?? 'unverified';
     model.verifiedAt = parseDate(obj.verifiedAt);

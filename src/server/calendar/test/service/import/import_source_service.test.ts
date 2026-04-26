@@ -102,7 +102,7 @@ describe('ImportSourceService', () => {
   // --------------------------------------------------------------------
 
   describe('createSource', () => {
-    it('creates a source in verification_state=pending with an HMAC token', async () => {
+    it('creates a source in verification_state=unverified with no method or token', async () => {
       sandbox.stub(ImportSourceEntity, 'count').resolves(0);
       sandbox.stub(ImportSourceEntity, 'findOne').resolves(null);
 
@@ -115,7 +115,7 @@ describe('ImportSourceService', () => {
           enabled: (values as any).enabled,
           verification_type: (values as any).verification_type,
           verification_state: (values as any).verification_state,
-          verification_token: (values as any).verification_token,
+          verification_token: (values as any).verification_token ?? null,
           verified_at: null,
           verification_expires_at: null,
           etag: null,
@@ -139,27 +139,20 @@ describe('ImportSourceService', () => {
       const buildArgs = buildSpy.firstCall.args[0] as any;
       expect(buildArgs.calendar_id).toBe(CAL_ID);
       expect(buildArgs.url).toBe(VALID_URL);
-      expect(buildArgs.verification_state).toBe('pending');
-      // The service stamps the discriminator explicitly even though the DB
-      // default would cover it, so future call paths that create sources
-      // with a different type (OAuth onboarding) have a clear precedent.
-      // See bead pv-44qj.
-      expect(buildArgs.verification_type).toBe('dns-txt');
-      expect(buildArgs.verification_token).toBeTruthy();
-
-      // Token was derived by the HMAC helper for this (sourceId, calendarId).
-      // We assert against the helper's deterministic output rather than
-      // re-testing the HMAC derivation itself.
-      const expectedToken = generateVerificationToken(buildArgs.id, CAL_ID);
-      expect(buildArgs.verification_token).toBe(expectedToken);
+      // New sources arrive uncommitted: no method chosen, no challenge issued.
+      // The verify-ownership wizard relies on this to show the method picker
+      // on first entry instead of jumping straight to the DNS step.
+      expect(buildArgs.verification_state).toBe('unverified');
+      expect(buildArgs.verification_type).toBeNull();
+      expect(buildArgs.verification_token).toBeFalsy();
 
       expect(savedEntities[0].save).toBeDefined();
       expect((savedEntities[0].save as any).calledOnce).toBe(true);
 
       expect(result.calendarId).toBe(CAL_ID);
       expect(result.url).toBe(VALID_URL);
-      expect(result.verificationState).toBe('pending');
-      expect(result.verificationType).toBe('dns-txt');
+      expect(result.verificationState).toBe('unverified');
+      expect(result.verificationType).toBeNull();
       // Token must never leak onto the returned model.
       expect((result as any).verificationToken).toBeUndefined();
     });
@@ -467,10 +460,10 @@ describe('ImportSourceService', () => {
         id: SOURCE_ID,
         calendar_id: CAL_ID,
         url: VALID_URL,
-        // Default the discriminator to 'dns-txt' so fixtures mirror what
-        // the DB default produces for pre-existing rows. The
-        // issueVerificationChallenge contract preserves the persisted type
-        // when the caller does not request a change.
+        // Most issueVerificationChallenge fixtures simulate a re-issue on a
+        // source that has already committed to DNS, so they default the
+        // discriminator to 'dns-txt'. The brand-new "no method chosen yet"
+        // case is covered by an explicit test that overrides this to null.
         verification_type: 'dns-txt',
         verification_state: 'unverified',
         verification_token: null,
@@ -595,6 +588,22 @@ describe('ImportSourceService', () => {
           SOURCE_ID,
           'bogus' as unknown as 'dns-txt',
         ),
+      ).rejects.toBeInstanceOf(ValidationError);
+    });
+
+    it('rejects with ValidationError when the source has no method and the caller did not pick one', async () => {
+      // Brand-new source (verification_type=null) and caller passes nothing —
+      // there is no method to challenge against. The wizard always passes the
+      // user's chosen method, so this only happens if a misbehaving client
+      // calls /verify-issue without a body before the picker has surfaced one.
+      const entity = fakeSourceEntity({
+        verification_state: 'unverified',
+        verification_type: null as unknown as 'dns-txt',
+      });
+      sandbox.stub(ImportSourceEntity, 'findOne').resolves(entity);
+
+      await expect(
+        service.issueVerificationChallenge(account, CAL_ID, SOURCE_ID),
       ).rejects.toBeInstanceOf(ValidationError);
     });
   });

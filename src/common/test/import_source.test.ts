@@ -16,7 +16,9 @@ describe('ImportSource', () => {
       expect(model.calendarId).toBe('');
       expect(model.url).toBe('');
       expect(model.enabled).toBe(true);
-      expect(model.verificationType).toBe('dns-txt');
+      // verificationType is null until the owner picks a verification method
+      // through the verify-ownership wizard.
+      expect(model.verificationType).toBeNull();
       expect(model.verificationState).toBe('unverified');
       expect(model.verifiedAt).toBeNull();
       expect(model.verificationExpiresAt).toBeNull();
@@ -84,7 +86,7 @@ describe('ImportSource', () => {
         calendarId: 'cal-1',
         url: 'https://example.com/cal.ics',
         enabled: false,
-        verificationType: 'dns-txt',
+        verificationType: null,
         verificationState: 'verified',
         verifiedAt: '2026-04-22T10:00:00.000Z',
         verificationExpiresAt: '2026-10-22T10:00:00.000Z',
@@ -160,7 +162,9 @@ describe('ImportSource', () => {
       const model = ImportSource.fromObject({});
 
       expect(model.enabled).toBe(true);
-      expect(model.verificationType).toBe('dns-txt');
+      // null is the "no method chosen yet" sentinel; fromObject preserves
+      // that rather than falling back to a concrete method.
+      expect(model.verificationType).toBeNull();
       expect(model.verificationState).toBe('unverified');
       expect(model.verifiedAt).toBeNull();
       expect(model.lastStatus).toBeNull();

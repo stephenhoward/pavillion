@@ -132,21 +132,21 @@ describe('ImportSourceEntity', () => {
   });
 
   describe('verification_type column defaults', () => {
-    it('defaults verification_type to dns-txt when not specified on build', () => {
-      // The column has a Sequelize @Default('dns-txt') decorator so an
-      // entity built without an explicit verification_type still carries
-      // the discriminator. This is the safety net behind the service-layer
-      // explicit stamp (see bead pv-44qj).
+    it('does not stamp a verification_type when not specified on build', () => {
+      // The column is nullable with no DB default. An entity built without
+      // an explicit verification_type carries the "no method chosen yet"
+      // signal — falsy on read — so the verify-ownership wizard knows to
+      // show the method picker on first entry.
       const id = uuidv4();
       const calendarId = uuidv4();
       const entity = ImportSourceEntity.build({
         id,
         calendar_id: calendarId,
         url: 'https://example.com/cal.ics',
-        verification_state: 'pending',
+        verification_state: 'unverified',
       });
 
-      expect(entity.verification_type).toBe('dns-txt');
+      expect(entity.verification_type).toBeFalsy();
     });
 
     it('round-trips an explicit verificationType through fromModel -> toModel', () => {
