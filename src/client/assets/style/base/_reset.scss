@@ -66,8 +66,10 @@ input, button, textarea, select {
 /* Typography overflow handling */
 p, h1, h2, h3, h4, h5, h6 {
   overflow-wrap: break-word;
+}
 
-  /* Prevent long words from breaking layout */
+/* Hyphenation for paragraph copy only; headings should not auto-hyphenate. */
+p {
   hyphens: auto;
 }
 
