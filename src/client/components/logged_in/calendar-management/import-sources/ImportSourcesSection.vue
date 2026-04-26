@@ -1,27 +1,27 @@
 <template>
   <div class="import-sources-section">
-    <header class="import-sources-section__header">
-      <div class="import-sources-section__heading">
-        <h2 class="import-sources-section__title">{{ t('section_title') }}</h2>
-        <p class="import-sources-section__description">{{ t('section_description') }}</p>
-      </div>
-      <PillButton
-        v-if="!state.showAddForm && state.sources.length > 0"
-        variant="primary"
-        @click="openAddForm"
-      >
-        <Plus :size="20" :stroke-width="2" aria-hidden="true" />
-        {{ t('add_button') }}
-      </PillButton>
-    </header>
-
     <div v-if="state.error" class="alert alert--error" role="alert">
       {{ state.error }}
     </div>
 
     <LoadingMessage v-if="state.isLoading" :description="t('loading')" />
 
-    <template v-else>
+    <template v-else-if="state.sources.length > 0 || state.showAddForm">
+      <header class="import-sources-section__header">
+        <div class="import-sources-section__heading">
+          <h2 class="import-sources-section__title">{{ t('section_title') }}</h2>
+          <p class="import-sources-section__description">{{ t('section_description') }}</p>
+        </div>
+        <PillButton
+          v-if="!state.showAddForm && state.sources.length > 0"
+          variant="primary"
+          @click="openAddForm"
+        >
+          <Plus :size="20" :stroke-width="2" aria-hidden="true" />
+          {{ t('add_button') }}
+        </PillButton>
+      </header>
+
       <!-- Add form (inline, not modal, per bead spec — quick add) -->
       <div v-if="state.showAddForm" class="import-sources-section__add-form-container">
         <AddImportSourceForm
@@ -44,19 +44,19 @@
         @sync="onSync"
         @verify="onVerify"
       />
-
-      <!-- Empty state -->
-      <EmptyLayout
-        v-else-if="!state.showAddForm"
-        :title="t('empty_title')"
-        :description="t('empty_description')"
-      >
-        <PillButton variant="primary" @click="openAddForm">
-          <Plus :size="20" :stroke-width="2" aria-hidden="true" />
-          {{ t('add_button') }}
-        </PillButton>
-      </EmptyLayout>
     </template>
+
+    <!-- Empty state — only the centered notice and add button, no section header -->
+    <EmptyLayout
+      v-else
+      :title="t('empty_title')"
+      :description="t('empty_description')"
+    >
+      <PillButton variant="primary" @click="openAddForm">
+        <Plus :size="20" :stroke-width="2" aria-hidden="true" />
+        {{ t('add_button') }}
+      </PillButton>
+    </EmptyLayout>
 
     <!-- DNS challenge modal -->
     <DnsChallengeModal
