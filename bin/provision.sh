@@ -26,9 +26,10 @@
 #   5. Installs Docker CE from official repository
 #   6. Adds deploy user to docker group
 #   7. Creates application directory at /opt/pavillion
-#   8. Clones the repo and runs bin/deploy.sh
-#   9. Creates runtime directories (backups, media storage)
-#  10. (Staging) Configures webhook auto-deploy
+#   8. Clones the repo
+#   9. Creates runtime directories (backups, media storage) with container-user ownership
+#  10. Runs bin/deploy.sh to bring up the stack
+#  11. (Staging) Configures webhook auto-deploy
 #
 # Requirements:
 #   - Fresh Debian 12 (Bookworm) or later
@@ -135,11 +136,45 @@ preflight() {
 create_deploy_user() {
   print_step "Step 1: Creating deploy user '${DEPLOY_USER}'"
 
+  # Pin host pavillion to uid/gid 1001 to match the container's pavillion user
+  # (hardcoded in the Dockerfile). With matching uids, bind-mounted runtime
+  # files (e.g. /opt/pavillion/backups) appear owned by 'pavillion' on the host
+  # rather than by a bare numeric uid, so the host operator can read backups
+  # without sudo.
   if id "${DEPLOY_USER}" &>/dev/null; then
-    print_warning "User '${DEPLOY_USER}' already exists, skipping creation."
+    local existing_uid
+    existing_uid=$(id -u "${DEPLOY_USER}")
+    if [ "${existing_uid}" != "1001" ]; then
+      print_warning "User '${DEPLOY_USER}' already exists with uid ${existing_uid} (expected 1001 to match container)."
+      print_warning "Bind-mounted runtime files will appear owned by uid 1001, not '${DEPLOY_USER}'."
+      print_warning "To remediate manually:"
+      print_warning "  usermod -u 1001 ${DEPLOY_USER} && groupmod -g 1001 ${DEPLOY_USER}"
+      print_warning "  find /home/${DEPLOY_USER} /opt/pavillion -uid ${existing_uid} -exec chown -h 1001 {} +"
+    else
+      print_warning "User '${DEPLOY_USER}' already exists with uid 1001, skipping creation."
+    fi
   else
-    useradd --create-home --shell /bin/bash "${DEPLOY_USER}"
-    print_success "Created user '${DEPLOY_USER}'"
+    # Refuse to proceed if uid 1001 is taken by a different user, since the
+    # container side is hardcoded to that uid and we cannot share it safely.
+    if getent passwd 1001 &>/dev/null; then
+      local conflict_user
+      conflict_user=$(getent passwd 1001 | cut -d: -f1)
+      print_error "uid 1001 is already in use by user '${conflict_user}'."
+      print_error "The container's pavillion user is hardcoded to uid 1001."
+      print_error "Resolve the conflict (e.g. 'userdel ${conflict_user}') and re-run this script."
+      exit 1
+    fi
+    if getent group 1001 &>/dev/null; then
+      local conflict_group
+      conflict_group=$(getent group 1001 | cut -d: -f1)
+      print_error "gid 1001 is already in use by group '${conflict_group}'."
+      print_error "The container's pavillion group is hardcoded to gid 1001."
+      print_error "Resolve the conflict (e.g. 'groupdel ${conflict_group}') and re-run this script."
+      exit 1
+    fi
+    groupadd --gid 1001 "${DEPLOY_USER}"
+    useradd --uid 1001 --gid 1001 --create-home --shell /bin/bash "${DEPLOY_USER}"
+    print_success "Created user '${DEPLOY_USER}' (uid/gid 1001, matching container)"
   fi
 
   # Copy root's authorized_keys to deploy user
@@ -295,26 +330,35 @@ create_app_directory() {
   print_success "Created ${APP_DIR} (owned by ${DEPLOY_USER})"
 }
 
-# --- Create runtime directories (after clone) --------------------------------
+# --- Create runtime directories (between clone and docker compose up) --------
+#
+# These must be created BEFORE bin/deploy.sh runs `docker compose up`, because
+# docker-compose.yml bind-mounts /opt/pavillion/backups into the container. If
+# the path doesn't exist, Docker auto-creates it as root:root and the worker
+# (uid 1001) can't write backup files until something fixes the ownership.
 
 create_runtime_directories() {
   print_step "Creating runtime directories"
 
-  # Create backup directory owned by the container user (uid/gid 1001).
-  # The container's pavillion user is hardcoded to uid 1001 in the Dockerfile.
-  # This directory is bind-mounted into the container at /backups via docker-compose.yml.
+  # The container's pavillion user is hardcoded to uid/gid 1001 in the
+  # Dockerfile, so runtime directories that the container writes to must be
+  # chowned to 1001:1001 on the host.
+
+  # Backups: bind-mounted into the container at /backups via docker-compose.yml.
   mkdir -p "${APP_DIR}/backups"
   chown 1001:1001 "${APP_DIR}/backups"
   chmod 750 "${APP_DIR}/backups"
   print_success "Created ${APP_DIR}/backups (owned by container user uid 1001)"
 
-  # Create media storage directory owned by the container user (uid/gid 1001).
-  # The container's pavillion user is hardcoded to uid 1001 in the Dockerfile.
-  # This directory is bind-accessible from within the named Docker volume
-  # and also used directly in bare-metal deployments.
+  # Media storage: used directly by bare-metal deployments. Docker installs use
+  # the named 'pavillion-media' volume managed by Docker, but we still create
+  # the path so a future bind-mount or bare-metal switch finds it ready, and so
+  # operators don't see a half-created tree. Chown both the parent and leaf:
+  # mkdir -p creates 'storage/' and 'storage/media/' in one call, but a bare
+  # `chown <leaf>` would leave the intermediate directory owned by root.
   mkdir -p "${APP_DIR}/storage/media"
-  chown 1001:1001 "${APP_DIR}/storage/media"
-  chmod 750 "${APP_DIR}/storage/media"
+  chown 1001:1001 "${APP_DIR}/storage" "${APP_DIR}/storage/media"
+  chmod 750 "${APP_DIR}/storage" "${APP_DIR}/storage/media"
   print_success "Created ${APP_DIR}/storage/media (owned by container user uid 1001)"
 }
 
@@ -352,12 +396,15 @@ EOF
   print_success "Created and enabled webhook.service (not started — start after hooks.json is in place)"
 }
 
-# --- Clone repo and run setup ------------------------------------------------
+# --- Clone repository --------------------------------------------------------
 
-clone_and_setup() {
-  print_step "Cloning repository and running setup"
+clone_repo() {
+  print_step "Cloning repository"
 
-  # Prompt for domain interactively if not provided
+  # Prompt for domain interactively if not provided. Done here (not later)
+  # because clone_repo's empty-directory check must run before any other step
+  # populates ${APP_DIR}; gathering the domain at the same time keeps all the
+  # interactive prompting in one place.
   if [ -z "$DOMAIN" ]; then
     echo ""
     echo -n "Enter your domain name (e.g., events.example.org): "
@@ -368,19 +415,26 @@ clone_and_setup() {
     fi
   fi
 
-  # Clone the repository as deploy user
+  # The empty-directory check must run before create_runtime_directories,
+  # otherwise the runtime subdirs (backups/, storage/) make ${APP_DIR}
+  # non-empty and the clone is silently skipped.
   if [ "$(ls -A "${APP_DIR}" 2>/dev/null)" ]; then
     print_warning "${APP_DIR} is not empty, skipping clone."
-  else
-    if su - "${DEPLOY_USER}" -c "git clone ${REPO_URL} ${APP_DIR}" 2>&1; then
-      print_success "Cloned repository to ${APP_DIR}"
-    else
-      print_error "Failed to clone repository. You will need to clone manually."
-      return 1
-    fi
+    return 0
   fi
+  if su - "${DEPLOY_USER}" -c "git clone ${REPO_URL} ${APP_DIR}" 2>&1; then
+    print_success "Cloned repository to ${APP_DIR}"
+  else
+    print_error "Failed to clone repository. You will need to clone manually."
+    return 1
+  fi
+}
 
-  # Run deploy.sh as deploy user
+# --- Run bin/deploy.sh -------------------------------------------------------
+
+run_deploy() {
+  print_step "Running bin/deploy.sh"
+
   if [ -f "${APP_DIR}/bin/deploy.sh" ]; then
     su - "${DEPLOY_USER}" -c "cd ${APP_DIR} && ./bin/deploy.sh --non-interactive --domain=${DOMAIN}"
     print_success "Deploy script completed"
@@ -520,8 +574,12 @@ main() {
     install_webhook
   fi
 
-  clone_and_setup || print_warning "Clone/setup had errors — see above. Complete manually if needed."
+  # Clone, then create runtime dirs, then deploy. Runtime dirs MUST exist
+  # before `docker compose up` runs so Docker doesn't auto-create the
+  # /opt/pavillion/backups bind-mount target as root.
+  clone_repo || print_warning "Clone had errors — see above. Complete manually if needed."
   create_runtime_directories
+  run_deploy || print_warning "Deploy had errors — see above. Complete manually if needed."
 
   if [ "$STAGING_MODE" = true ]; then
     configure_staging || print_warning "Staging configuration had errors — see above."
