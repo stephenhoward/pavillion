@@ -6,12 +6,12 @@
 
     <LoadingMessage v-if="state.isLoading" :description="t('loading')" />
 
-    <template v-else-if="state.sources.length > 0 || state.showAddForm">
+    <template v-else-if="state.sources.length > 0">
       <AdminSectionHeader
         :title="t('section_title')"
         :description="t('section_description')"
       >
-        <template v-if="!state.showAddForm && state.sources.length > 0" #actions>
+        <template #actions>
           <PillButton variant="primary" @click="openAddForm">
             <Plus :size="20" :stroke-width="2" aria-hidden="true" />
             {{ t('add_button') }}
@@ -19,21 +19,8 @@
         </template>
       </AdminSectionHeader>
 
-      <!-- Add form (inline, not modal, per bead spec — quick add) -->
-      <div v-if="state.showAddForm" class="import-sources-section__add-form-container">
-        <AddImportSourceForm
-          ref="addFormRef"
-          :is-submitting="state.isAdding"
-          :error-message="state.addError"
-          :autofocus="true"
-          @submit="onAddSubmit"
-          @cancel="closeAddForm"
-        />
-      </div>
-
       <!-- List of sources -->
       <ImportSourceList
-        v-if="state.sources.length > 0"
         :sources="state.sources"
         :removing-id="state.removingId"
         :syncing-id="state.syncingId"
@@ -54,6 +41,22 @@
         {{ t('add_button') }}
       </PillButton>
     </EmptyLayout>
+
+    <!-- Add import source modal -->
+    <ModalLayout
+      v-if="state.showAddForm"
+      :title="t('add_fieldset_legend')"
+      size="lg"
+      @close="closeAddForm"
+    >
+      <AddImportSourceForm
+        :is-submitting="state.isAdding"
+        :error-message="state.addError"
+        :autofocus="true"
+        @submit="onAddSubmit"
+        @cancel="closeAddForm"
+      />
+    </ModalLayout>
 
     <!-- DNS challenge modal -->
     <DnsChallengeModal
@@ -98,7 +101,7 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref, onMounted } from 'vue';
+import { reactive, onMounted } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import { Plus } from 'lucide-vue-next';
 
@@ -154,8 +157,6 @@ const state = reactive({
   challengeToken: '',
 });
 
-const addFormRef = ref<InstanceType<typeof AddImportSourceForm> | null>(null);
-
 /**
  * Load the full list of import sources for this calendar.
  */
@@ -177,7 +178,6 @@ const loadSources = async () => {
 const openAddForm = () => {
   state.showAddForm = true;
   state.addError = null;
-  addFormRef.value?.reset();
 };
 
 const closeAddForm = () => {
@@ -368,22 +368,6 @@ defineExpose({ state, loadSources });
 
   @media (min-width: 640px) {
     padding: var(--pav-space-6) 0;
-  }
-
-  &__add-form-container {
-    background: var(--pav-surface-primary);
-    border: 1px solid var(--pav-border-primary);
-    border-radius: 0.75rem;
-    padding: var(--pav-space-4);
-
-    @media (min-width: 640px) {
-      padding: var(--pav-space-6);
-    }
-
-    @media (prefers-color-scheme: dark) {
-      background: var(--pav-color-stone-900);
-      border-color: var(--pav-color-stone-800);
-    }
   }
 }
 

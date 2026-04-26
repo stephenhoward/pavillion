@@ -5,7 +5,11 @@
     @submit.prevent="onSubmit"
   >
     <fieldset :disabled="isSubmitting" class="add-import-source-form__fieldset">
-      <legend class="add-import-source-form__legend">
+      <!--
+        The visible heading is provided by the parent ModalLayout's title,
+        so the legend is visually hidden but kept for fieldset semantics.
+      -->
+      <legend class="sr-only">
         {{ t('add_fieldset_legend') }}
       </legend>
 
@@ -123,20 +127,15 @@ onMounted(async () => {
     urlInputRef.value?.focus();
   }
 });
-
-defineExpose({
-  reset() {
-    url.value = '';
-    validationError.value = null;
-  },
-  focus() {
-    urlInputRef.value?.focus();
-  },
-});
 </script>
 
 <style scoped lang="scss">
 @use '../../../../assets/style/components/calendar-admin' as *;
+@use '../../../../assets/style/mixins/visibility' as *;
+
+.sr-only {
+  @include sr-only;
+}
 
 .add-import-source-form {
   &__fieldset {
@@ -146,18 +145,6 @@ defineExpose({
     display: flex;
     flex-direction: column;
     gap: var(--pav-space-4);
-  }
-
-  &__legend {
-    font-size: 1rem;
-    font-weight: 500;
-    color: var(--pav-color-stone-900);
-    padding: 0;
-    margin-bottom: var(--pav-space-2);
-
-    @media (prefers-color-scheme: dark) {
-      color: var(--pav-color-stone-100);
-    }
   }
 
   &__actions {
