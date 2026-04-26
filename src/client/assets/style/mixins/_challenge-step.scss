@@ -151,6 +151,14 @@
   font-family: var(--pav-font-family-mono);
   font-size: var(--pav-font-size-small);
   line-height: var(--pav-line-height-normal);
+
+  // Readonly inputs are still focusable for keyboard select/copy, so the
+  // focus ring must be visible even though the field is non-editable.
+  // WCAG SC 2.4.7 Focus Visible.
+  &:focus-visible {
+    outline: var(--pav-border-width-2) solid var(--pav-text-primary);
+    outline-offset: var(--pav-space-1);
+  }
 }
 
 /* ===== FOOTER / ACTIONS ===== */
