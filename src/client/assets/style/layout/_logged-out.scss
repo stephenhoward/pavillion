@@ -6,7 +6,7 @@
   justify-content: center;
   min-height: 100vh;
   padding: var(--pav-space-4) var(--pav-space-4);
-  background-color: var(--pav-surface-secondary);
+  background-color: var(--pav-surface-primary);
 
   /* Header with site title */
   header {
@@ -71,9 +71,7 @@
     background-color: var(--pav-surface-card);
     border-radius: 1rem; /* 16px - rounded-2xl */
     padding: var(--pav-space-10);
-    /* No semantic "shadow-ring" token exists; use color-mix on the stone-200 token
-       so the ring tracks the token layer even though it does not flip for dark mode. */
-    box-shadow: var(--pav-shadow-lg), 0 0 0 1px color-mix(in srgb, var(--pav-color-stone-200) 50%, transparent);
+    box-shadow: var(--pav-shadow-lg), var(--pav-shadow-ring);
 
     /* Two-column layout for login card with info panel */
     &:has(.welcome-card-info) {

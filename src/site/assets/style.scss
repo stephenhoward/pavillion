@@ -101,6 +101,9 @@ button.primary {
 
       a {
         color: inherit;
+        display: inline-flex;
+        align-items: center;
+        gap: $public-space-sm;
 
         &:hover {
           color: $public-accent-hover-light;

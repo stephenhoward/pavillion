@@ -33,4 +33,8 @@
   --pav-nav-active-icon: var(--pav-color-interactive-active);
   --pav-nav-inactive-text: var(--pav-color-stone-500);
   --pav-nav-inactive-icon: var(--pav-color-stone-400);
+
+  /* Hairline ring layered into box-shadow for cards/surfaces. Resolves through
+     --pav-border-subtle so it adapts automatically to the active theme. */
+  --pav-shadow-ring: 0 0 0 1px color-mix(in srgb, var(--pav-border-subtle) 50%, transparent);
 }
