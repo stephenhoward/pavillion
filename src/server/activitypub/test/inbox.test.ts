@@ -15,7 +15,7 @@ import { CalendarEvent } from '@/common/model/events';
 import { CalendarEntity } from '@/server/calendar/entity/calendar';
 import { EventEmitter } from 'events';
 import CalendarInterface from '@/server/calendar/interface';
-import { setupActivityPubSchema, teardownActivityPubSchema } from '@/server/test/helpers/database';
+import { setupActivityPubSchema, teardownActivityPubSchema } from '@/server/common/test/helpers/database';
 
 describe('ProcessInboxService - Follow Activity Processing', () => {
   let sandbox: sinon.SinonSandbox;

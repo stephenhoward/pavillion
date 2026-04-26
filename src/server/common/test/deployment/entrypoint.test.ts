@@ -17,7 +17,7 @@ import net from 'net';
  * Some tests require Docker with PostgreSQL.
  */
 
-const PROJECT_ROOT = path.resolve(__dirname, '../../..');
+const PROJECT_ROOT = path.resolve(__dirname, '../../../../..');
 const ENTRYPOINT_PATH = path.join(PROJECT_ROOT, 'bin', 'entrypoint.sh');
 
 /**

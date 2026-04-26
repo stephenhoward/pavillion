@@ -17,7 +17,7 @@ import fs from 'fs';
  * Integration tests that start containers are skipped if Docker is unavailable.
  */
 
-const PROJECT_ROOT = path.resolve(__dirname, '../../..');
+const PROJECT_ROOT = path.resolve(__dirname, '../../../../..');
 const COMPOSE_PROJECT_NAME = 'pavillion-test';
 
 /**

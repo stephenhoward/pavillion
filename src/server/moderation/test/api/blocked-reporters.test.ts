@@ -4,7 +4,7 @@ import request from 'supertest';
 import express from 'express';
 import { v4 as uuidv4 } from 'uuid';
 
-import { TestEnvironment } from '@/server/test/lib/test_environment';
+import { TestEnvironment } from '@/server/common/test/lib/test_environment';
 import { Account } from '@/common/model/account';
 import { AccountEntity } from '@/server/common/entity/account';
 import { BlockedReporterEntity } from '@/server/moderation/entity/blocked_reporter';

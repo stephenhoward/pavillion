@@ -33,7 +33,6 @@ export default defineConfig({
       '**/docker-build.test.ts', // Docker build tests - require Docker environment
       '**/docker-compose.test.ts', // Docker compose tests - require Docker environment
       // Exclude server integration tests - run separately with test:integration
-      '**/server/test/integration/**',
       '**/server/**/test/integration/**',
       // Exclude git worktrees used by subagents — stale tests from old worktrees
       // should never be collected in the main project's test run.

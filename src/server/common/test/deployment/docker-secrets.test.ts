@@ -15,7 +15,7 @@ import os from 'os';
  * - Backward compatibility when _FILE var is not set
  */
 
-const PROJECT_ROOT = path.resolve(__dirname, '../../..');
+const PROJECT_ROOT = path.resolve(__dirname, '../../../../..');
 const ENTRYPOINT_PATH = path.join(PROJECT_ROOT, 'bin', 'entrypoint.sh');
 
 describe('Docker Secrets - file_env function', () => {

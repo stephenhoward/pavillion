@@ -4,7 +4,7 @@ import request from 'supertest';
 
 import { Account } from '@/common/model/account';
 import { Calendar } from '@/common/model/calendar';
-import { TestEnvironment } from '@/server/test/lib/test_environment';
+import { TestEnvironment } from '@/server/common/test/lib/test_environment';
 import AccountService from '@/server/accounts/service/account';
 import CalendarService from '@/server/calendar/service/calendar';
 import ConfigurationInterface from '@/server/configuration/interface';

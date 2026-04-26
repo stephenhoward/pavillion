@@ -26,7 +26,7 @@ import AccountsInterface from '@/server/accounts/interface';
 import ConfigurationInterface from '@/server/configuration/interface';
 import SetupInterface from '@/server/setup/interface';
 import EmailInterface from '@/server/email/interface';
-import { TestEnvironment } from '@/server/test/lib/test_environment';
+import { TestEnvironment } from '@/server/common/test/lib/test_environment';
 import { SharedEventEntity, ActivityPubOutboxMessageEntity } from '@/server/activitypub/entity/activitypub';
 import { EventObjectEntity } from '@/server/activitypub/entity/event_object';
 import { UserActorEntity } from '@/server/activitypub/entity/user_actor';
@@ -34,7 +34,7 @@ import ProcessInboxService from '@/server/activitypub/service/inbox';
 import CreateActivity from '@/server/activitypub/model/action/create';
 import AnnounceActivity from '@/server/activitypub/model/action/announce';
 import { ActivityPubActor } from '@/server/activitypub/model/base';
-import { createFollowingRelationship, createSharedEvent, getOrCreateRemoteCalendarActor } from '@/server/test/helpers/database';
+import { createFollowingRelationship, createSharedEvent, getOrCreateRemoteCalendarActor } from '@/server/common/test/helpers/database';
 
 describe('Auto-Repost Integration Tests', () => {
   let env: TestEnvironment;

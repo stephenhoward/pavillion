@@ -8,7 +8,7 @@ import { EventReporterEntity } from '../../entity/event_reporter';
 import { Account } from '@/common/model/account';
 import { AccountEntity } from '@/server/common/entity/account';
 import { ReportCategory } from '@/common/model/report';
-import { TestEnvironment } from '@/server/test/lib/test_environment';
+import { TestEnvironment } from '@/server/common/test/lib/test_environment';
 import { v4 as uuidv4 } from 'uuid';
 
 describe('EmailBlockingService Integration', () => {

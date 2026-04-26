@@ -19,7 +19,7 @@ import yaml from 'yaml';
  * structure directly to verify environment variable mappings.
  */
 
-const PROJECT_ROOT = path.resolve(__dirname, '../../..');
+const PROJECT_ROOT = path.resolve(__dirname, '../../../../..');
 const CONFIG_DIR = path.join(PROJECT_ROOT, 'config');
 
 describe('Secrets Configuration', () => {

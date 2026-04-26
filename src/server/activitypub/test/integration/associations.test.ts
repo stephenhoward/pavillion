@@ -12,7 +12,7 @@ import CalendarInterface from '@/server/calendar/interface';
 import AccountService from '@/server/accounts/service/account';
 import ConfigurationInterface from '@/server/configuration/interface';
 import SetupInterface from '@/server/setup/interface';
-import { TestEnvironment } from '@/server/test/lib/test_environment';
+import { TestEnvironment } from '@/server/common/test/lib/test_environment';
 
 describe('FollowingCalendarEntity associations', () => {
   let env: TestEnvironment;

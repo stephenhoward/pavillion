@@ -11,7 +11,7 @@ import { EventObjectEntity } from '@/server/activitypub/entity/event_object';
 import { ActivityPubActor } from '@/server/activitypub/model/base';
 import { Calendar } from '@/common/model/calendar';
 import { CalendarEvent } from '@/common/model/events';
-import { setupActivityPubSchema, teardownActivityPubSchema } from '@/server/test/helpers/database';
+import { setupActivityPubSchema, teardownActivityPubSchema } from '@/server/common/test/helpers/database';
 
 describe('inbox event listener', () => {
   let service: ActivityPubInterface;

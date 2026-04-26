@@ -3,7 +3,7 @@ import request from 'supertest';
 import { EventEmitter } from 'events';
 import { v4 as uuidv4 } from 'uuid';
 
-import { TestEnvironment } from '../lib/test_environment';
+import { TestEnvironment } from '@/server/common/test/lib/test_environment';
 import { Account } from '@/common/model/account';
 import { Calendar } from '@/common/model/calendar';
 import { CalendarEvent } from '@/common/model/events';

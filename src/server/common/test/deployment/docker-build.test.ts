@@ -16,7 +16,7 @@ import fs from 'fs';
  * They are meant to be run as part of the deployment verification process.
  */
 
-const PROJECT_ROOT = path.resolve(__dirname, '../../..');
+const PROJECT_ROOT = path.resolve(__dirname, '../../../../..');
 const IMAGE_NAME = 'pavillion-test-build';
 const CONTAINER_NAME = 'pavillion-test-container';
 

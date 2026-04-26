@@ -4,7 +4,7 @@ import { ReportCategory, ReportStatus } from '@/common/model/report';
 import { ReportEntity } from '@/server/moderation/entity/report';
 import { EventReporterEntity } from '@/server/moderation/entity/event_reporter';
 import { PatternDetectionService } from '@/server/moderation/service/pattern-detection';
-import { TestEnvironment } from '@/server/test/lib/test_environment';
+import { TestEnvironment } from '@/server/common/test/lib/test_environment';
 import { v4 as uuidv4 } from 'uuid';
 
 describe('Pattern Detection Integration - Database Persistence', () => {

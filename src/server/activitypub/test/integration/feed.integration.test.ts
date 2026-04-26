@@ -27,7 +27,7 @@ import ConfigurationInterface from '@/server/configuration/interface';
 import SetupInterface from '@/server/setup/interface';
 import AccountService from '@/server/accounts/service/account';
 import ActivityPubInterface from '@/server/activitypub/interface';
-import { TestEnvironment } from '@/server/test/lib/test_environment';
+import { TestEnvironment } from '@/server/common/test/lib/test_environment';
 import { CalendarActorEntity } from '@/server/activitypub/entity/calendar_actor';
 import { FollowingCalendarEntity } from '@/server/activitypub/entity/activitypub';
 import { EventEntity, EventContentEntity } from '@/server/calendar/entity/event';

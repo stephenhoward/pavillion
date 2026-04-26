@@ -17,7 +17,7 @@ import yaml from 'yaml';
  * is correct.
  */
 
-const PROJECT_ROOT = path.resolve(__dirname, '../../..');
+const PROJECT_ROOT = path.resolve(__dirname, '../../../../..');
 const CONFIG_DIR = path.join(PROJECT_ROOT, 'config');
 const PRODUCTION_CONFIG_PATH = path.join(CONFIG_DIR, 'production.yaml');
 
