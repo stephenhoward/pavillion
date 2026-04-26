@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { Sequelize } from 'sequelize-typescript';
 import { QueryTypes } from 'sequelize';
-import fs from 'fs';
 import path from 'path';
 import { randomUUID } from 'crypto';
 
@@ -360,10 +359,11 @@ describe('ICS import foundation migrations', () => {
     });
   });
 
-  describe('verification_type discriminator (migration 0029)', () => {
-    it('creates the verification_type column with dns-txt default', async () => {
-      // The column is added by migration 0029. Assert both existence and
-      // that new INSERTs without an explicit value receive the DB default.
+  describe('verification_type discriminator', () => {
+    it('applies the dns-txt default to inserts that omit the column', async () => {
+      // The column is created with `defaultValue: 'dns-txt'` in migration
+      // 0026. Assert that new INSERTs without an explicit value receive
+      // the DB default.
       const calendarId = await seedCalendar();
       const sourceId = randomUUID();
       await sequelize.query(
@@ -379,92 +379,6 @@ describe('ICS import foundation migrations', () => {
       );
 
       expect(row.verification_type).toBe('dns-txt');
-    });
-
-    it('backfills pre-existing rows to dns-txt via default-on-add when applied to a table with existing data', async () => {
-      // The bead calls for a focused backfill check: insert a row against
-      // the post-0026 schema (before 0029 ran), then run 0029, and assert
-      // the default-on-add backfill filled the new column with `dns-txt`.
-      //
-      // Because the top-level beforeEach has already run all migrations on
-      // the shared `sequelize` instance, we need a fresh in-memory DB for
-      // this one test. Build it here, migrate 0026-0028 manually, seed a
-      // row, then apply 0029.
-      const freshDb = new Sequelize({
-        dialect: 'sqlite',
-        storage: ':memory:',
-        logging: false,
-      });
-      try {
-        await freshDb.query('PRAGMA foreign_keys = ON');
-
-        // Auto-discover every migration before 0029 so this test stays
-        // correct as earlier migrations are added/renamed. Sort lexically
-        // (matching Umzug's glob ordering) and stop before 0029.
-        const predecessors = fs.readdirSync(migrationsDir)
-          .filter((f) => /^\d{4}_.+\.ts$/.test(f))
-          .sort()
-          .filter((f) => !f.startsWith('0029_'));
-
-        for (const filename of predecessors) {
-          const mod = (await import(path.join(migrationsDir, filename))).default;
-          await mod.up({ context: freshDb });
-        }
-
-        // Seed a calendar and an import_source row BEFORE applying 0029.
-        const accountId = randomUUID();
-        const calendarId = randomUUID();
-        await freshDb.query(
-          `INSERT INTO account (id, username, email, createdAt, updatedAt)
-           VALUES (?, ?, ?, datetime('now'), datetime('now'))`,
-          { replacements: [accountId, `user-${accountId.slice(0, 8)}`, `${accountId.slice(0, 8)}@example.test`] },
-        );
-        await freshDb.query(
-          `INSERT INTO calendar (id, url_name, languages, createdAt, updatedAt)
-           VALUES (?, ?, ?, datetime('now'), datetime('now'))`,
-          { replacements: [calendarId, `cal-${calendarId.slice(0, 8)}`, 'en'] },
-        );
-
-        const sourceId = randomUUID();
-        await freshDb.query(
-          `INSERT INTO import_source
-             (id, calendar_id, url, enabled, verification_state, created_at, updated_at)
-           VALUES (?, ?, ?, 1, 'unverified', datetime('now'), datetime('now'))`,
-          { replacements: [sourceId, calendarId, 'https://pre-existing.example.test/feed.ics'] },
-        );
-
-        // Now apply 0029. The migration adds the column with
-        // `ADD COLUMN NOT NULL DEFAULT 'dns-txt'`, which SQLite (and
-        // Postgres 11+) apply to pre-existing rows as part of the
-        // default-on-add backfill — no separate UPDATE is required.
-        const m0029 = (await import(path.join(migrationsDir, '0029_add_verification_type_to_import_source.ts'))).default;
-        await m0029.up({ context: freshDb });
-
-        const [row] = await freshDb.query<{ verification_type: string }>(
-          `SELECT verification_type FROM import_source WHERE id = ?`,
-          { replacements: [sourceId], type: QueryTypes.SELECT },
-        );
-        expect(row.verification_type).toBe('dns-txt');
-      }
-      finally {
-        await freshDb.close();
-      }
-    });
-
-    it('rolls back 0029 cleanly (down removes the verification_type column)', async () => {
-      // Applying down on 0029 should remove the column without touching
-      // any other schema element. Use the top-level sequelize instance
-      // (already fully migrated) and verify the pre- and post-state.
-      const qi = sequelize.getQueryInterface();
-
-      let desc = await qi.describeTable('import_source') as Record<string, unknown>;
-      expect(desc).toHaveProperty('verification_type');
-
-      const m0029 = (await import(path.join(migrationsDir, '0029_add_verification_type_to_import_source.ts'))).default;
-      await m0029.down({ context: sequelize });
-
-      desc = await qi.describeTable('import_source') as Record<string, unknown>;
-      expect(desc).not.toHaveProperty('verification_type');
     });
   });
 

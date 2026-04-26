@@ -20,9 +20,15 @@ import {
  *   parent calendar.
  * - `url` is immutable after creation per security-advisor (any URL change
  *   requires creating a new source and re-verifying).
- * - ENUM columns for verification_state and last_status use DataType.ENUM
- *   for dialect-appropriate storage (Postgres enum type, SQLite check
- *   constraint).
+ * - ENUM columns for verification_type, verification_state, and last_status
+ *   use DataType.ENUM for dialect-appropriate storage (Postgres enum type,
+ *   SQLite check constraint).
+ * - `verification_type` is a single-value discriminator ENUM ("which trust
+ *   mechanism was used"), layered orthogonally to `verification_state`
+ *   ("is the current trust still valid"). Only `'dns-txt'` is defined
+ *   today; future verifier mechanisms (e.g. rel-me, OAuth provider-
+ *   connection delegation) extend the enum atomically alongside the code
+ *   that stamps the new value.
  *
  * Reference: bead pv-1qcp.1.1 (ICS import foundation).
  */
@@ -55,6 +61,11 @@ export default {
         type: DataTypes.BOOLEAN,
         allowNull: false,
         defaultValue: true,
+      },
+      verification_type: {
+        type: DataTypes.ENUM('dns-txt'),
+        allowNull: false,
+        defaultValue: 'dns-txt',
       },
       verification_state: {
         type: DataTypes.ENUM('unverified', 'pending', 'verified', 'expired'),
