@@ -122,11 +122,11 @@ import { ImportSourceDnsVerificationError } from '@/common/exceptions/import';
  * the challenge record name and value, exposes copy-to-clipboard on each,
  * and calls `ImportSourceService.verifySource` on confirm.
  *
- * Unlike the legacy {@link DnsChallengeModal} this component does NOT wrap
- * itself in a ModalLayout — the wizard owns the modal chrome (title, focus
- * trap, escape handling, backdrop). The step emits `change-method` so the
- * wizard can return to the picker, and `verified` when verification
- * succeeds. Wizard-level dismissal stays with the wizard.
+ * This component does NOT wrap itself in a ModalLayout — the wizard owns
+ * the modal chrome (title, focus trap, escape handling, backdrop). The
+ * step emits `change-method` so the wizard can return to the picker, and
+ * `verified` when verification succeeds. Wizard-level dismissal stays
+ * with the wizard.
  *
  * @see bead pv-jutm.6
  */

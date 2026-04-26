@@ -341,8 +341,10 @@ test.describe('ICS Import Sources (e2e)', () => {
     await expect(row).toBeVisible();
     await row.getByRole('button', { name: /Verify ownership/i }).click();
 
-    // DNS Challenge modal opens. Click Verify inside the modal.
-    const dialog = page.getByRole('dialog', { name: /Verify DNS ownership/i });
+    // Verify-ownership wizard opens (pv-jutm). The source already has
+    // verification_type='dns-txt' from createSource, so the wizard skips
+    // the method picker and lands directly on the DNS step.
+    const dialog = page.getByRole('dialog', { name: /Verify ownership/i });
     await expect(dialog).toBeVisible();
     const [verifyResponse] = await Promise.all([
       page.waitForResponse(

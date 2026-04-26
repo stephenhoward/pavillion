@@ -58,12 +58,11 @@
       />
     </ModalLayout>
 
-    <!-- DNS challenge modal -->
-    <DnsChallengeModal
+    <!-- Verify ownership wizard -->
+    <VerifyOwnershipWizard
       v-if="state.challengeSource"
       :source="state.challengeSource"
       :instance-host="props.instanceHost"
-      :challenge-token="state.challengeToken"
       @verified="onVerified"
       @close="closeChallengeModal"
     />
@@ -101,7 +100,7 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, onMounted } from 'vue';
+import { reactive, onMounted, nextTick } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import { Plus } from 'lucide-vue-next';
 
@@ -116,7 +115,7 @@ import { useToast } from '@/client/composables/useToast';
 
 import ImportSourceList from './ImportSourceList.vue';
 import AddImportSourceForm from './AddImportSourceForm.vue';
-import DnsChallengeModal from './DnsChallengeModal.vue';
+import VerifyOwnershipWizard from './VerifyOwnershipWizard.vue';
 
 const props = withDefaults(defineProps<{
   calendarId: string;
@@ -154,8 +153,16 @@ const state = reactive({
   removingId: null as string | null,
   syncingId: null as string | null,
   challengeSource: null as ImportSource | null,
-  challengeToken: '',
 });
+
+/**
+ * Element that triggered the verify-ownership wizard (typically the Verify
+ * button in the row, or the Add button via the create-flow). Captured at
+ * open time so focus can be restored when the wizard closes, per WCAG 2.4.3
+ * Focus Order. The wizard owns its modal chrome but not the trigger
+ * relationship — that lives with the section that opens it.
+ */
+let challengeTrigger: HTMLElement | null = null;
 
 /**
  * Load the full list of import sources for this calendar.
@@ -309,43 +316,56 @@ const errorMessageForSync = (err: unknown): string => {
 };
 
 /**
- * Open the DNS challenge modal for a source. The challenge token is
- * owner-only data surfaced by the verify-issue endpoint; we render the
- * modal immediately with an empty token and replace it in-place once the
- * server responds so the modal stays responsive while the request is in
- * flight.
+ * Open the verify-ownership wizard for a source. The wizard owns its own
+ * challenge-token issuance lifecycle, so the section only needs to record
+ * which source is being verified and which element triggered the open so
+ * focus can be returned on close.
+ *
+ * @param source - The source to verify
+ * @param trigger - The element that triggered the open (typically the
+ *   Verify button row); captured for focus return per WCAG 2.4.3.
  */
-const openChallengeModal = async (source: ImportSource) => {
+const openChallengeModal = (source: ImportSource, trigger: HTMLElement | null = null): void => {
+  challengeTrigger = trigger ?? (
+    typeof document !== 'undefined' && document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null
+  );
   state.challengeSource = source;
-  state.challengeToken = '';
-  try {
-    const token = await service.issueChallenge(props.calendarId, source.id);
-    // Guard against the modal being closed mid-flight.
-    if (state.challengeSource?.id === source.id) {
-      state.challengeToken = token;
-    }
-  }
-  catch (err) {
-    console.error('Failed to load DNS challenge token', err);
-    // Leave token empty; the modal still renders the record name so the
-    // user has something to copy, and the action buttons remain active.
-  }
 };
 
-const closeChallengeModal = () => {
+/**
+ * Close the verify-ownership wizard and return focus to the element that
+ * opened it. Focus is restored on the next tick so the wizard's teardown
+ * has fully released the focus trap before we reassign focus.
+ */
+const closeChallengeModal = (): void => {
   state.challengeSource = null;
-  state.challengeToken = '';
+  const trigger = challengeTrigger;
+  challengeTrigger = null;
+  if (trigger) {
+    nextTick(() => {
+      if (trigger.isConnected) {
+        trigger.focus();
+      }
+    });
+  }
 };
 
-const onVerify = (source: ImportSource) => {
+const onVerify = (source: ImportSource): void => {
+  // The Verify button is the activeElement at this point because clicks set
+  // it as the focused element synchronously. openChallengeModal() captures
+  // it via the document.activeElement fallback so we can return focus on
+  // close per WCAG 2.4.3.
   openChallengeModal(source);
 };
 
 /**
  * Update the row when verification succeeds so the verification badge
- * and action-button visibility immediately reflect the new state.
+ * and action-button visibility immediately reflect the new state. Closing
+ * the wizard returns focus to the element that opened it.
  */
-const onVerified = (updated: ImportSource) => {
+const onVerified = (updated: ImportSource): void => {
   state.sources = state.sources.map(s =>
     (s.id === updated.id ? updated : s),
   );

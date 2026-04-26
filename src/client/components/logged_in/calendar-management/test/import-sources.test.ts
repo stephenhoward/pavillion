@@ -5,7 +5,8 @@ import { flushPromises } from '@vue/test-utils';
 import { ImportSource } from '@/common/model/import_source';
 import { mountComponent } from '@/client/test/lib/vue';
 import ImportSourcesSection from '../import-sources/ImportSourcesSection.vue';
-import DnsChallengeModal from '../import-sources/DnsChallengeModal.vue';
+import ImportSourceList from '../import-sources/ImportSourceList.vue';
+import VerifyOwnershipWizard from '../import-sources/VerifyOwnershipWizard.vue';
 import ImportSourceService from '@/client/service/import_source';
 import { useToast, resetToastState } from '@/client/composables/useToast';
 
@@ -405,7 +406,7 @@ describe('ImportSourcesSection', () => {
   });
 
   describe('verify wiring', () => {
-    it('opens DNS challenge modal when Verify is clicked on a pending source', async () => {
+    it('opens the verify-ownership wizard when Verify is clicked on a pending source', async () => {
       const s1 = buildSource('id-1', 'https://example.com/a.ics');
       s1.verificationState = 'pending';
       listSourcesMock.mockResolvedValue([s1]);
@@ -419,6 +420,8 @@ describe('ImportSourcesSection', () => {
       await flushPromises();
 
       expect((wrapper.vm as any).state.challengeSource?.id).toBe('id-1');
+      // The wizard is rendered via v-if once challengeSource is set.
+      expect(wrapper.findComponent(VerifyOwnershipWizard).exists()).toBe(true);
     });
 
     it('does not render Verify button when source is already verified', async () => {
@@ -432,23 +435,33 @@ describe('ImportSourcesSection', () => {
       expect(wrapper.find('.import-source-row__verify-btn').exists()).toBe(false);
     });
 
-    it('fetches the challenge token via issueChallenge when Verify is clicked', async () => {
+    it('does not pre-fetch the challenge token when Verify is clicked (wizard handles issuance)', async () => {
       const s1 = buildSource('id-1', 'https://example.com/a.ics');
       s1.verificationState = 'pending';
       listSourcesMock.mockResolvedValue([s1]);
 
       const { wrapper } = mountSection();
       await flushPromises();
+
+      // Reset the mock so we can isolate calls made AFTER the click. The
+      // wizard's onMounted/watcher will issue once when the wizard mounts;
+      // the section itself must not also pre-fetch as it did pre-pv-jutm.8.
+      issueChallengeMock.mockClear();
 
       const verifyBtn = wrapper.find('.import-source-row__verify-btn');
       await verifyBtn.trigger('click');
       await flushPromises();
 
-      expect(issueChallengeMock).toHaveBeenCalledWith(CALENDAR_ID, 'id-1');
-      expect((wrapper.vm as any).state.challengeToken).toBe('test-challenge-token');
+      // Exactly one issueChallenge call should be observed — the wizard's,
+      // with the verification-type discriminator set. The section must not
+      // make its own pre-fetch (which would have used the 2-arg signature).
+      expect(issueChallengeMock).toHaveBeenCalledTimes(1);
+      expect(issueChallengeMock).toHaveBeenCalledWith(CALENDAR_ID, 'id-1', 'dns-txt');
+      // No more state.challengeToken — the wizard owns it now.
+      expect((wrapper.vm as any).state.challengeToken).toBeUndefined();
     });
 
-    it('onVerified updates the row and closes the challenge modal', async () => {
+    it('onVerified updates the row and closes the wizard', async () => {
       const s1 = buildSource('id-1', 'https://example.com/a.ics');
       s1.verificationState = 'pending';
       listSourcesMock.mockResolvedValue([s1]);
@@ -456,32 +469,31 @@ describe('ImportSourcesSection', () => {
       const { wrapper } = mountSection();
       await flushPromises();
 
-      // Open the modal via Verify click.
+      // Open the wizard via Verify click.
       await wrapper.find('.import-source-row__verify-btn').trigger('click');
       await flushPromises();
 
       expect((wrapper.vm as any).state.challengeSource?.id).toBe('id-1');
 
-      // DnsChallengeModal is rendered via v-if once challengeSource is set.
-      const modal = wrapper.findComponent(DnsChallengeModal);
-      expect(modal.exists()).toBe(true);
+      // VerifyOwnershipWizard is rendered via v-if once challengeSource is set.
+      const wizard = wrapper.findComponent(VerifyOwnershipWizard);
+      expect(wizard.exists()).toBe(true);
 
       // Emit the 'verified' event with an updated source payload. The
       // handler replaces the stale row and calls closeChallengeModal.
       const updatedSource = buildSource('id-1', 'https://example.com/a.ics', {
         verificationState: 'verified',
       });
-      modal.vm.$emit('verified', updatedSource);
+      wizard.vm.$emit('verified', updatedSource);
       await flushPromises();
 
       // Row replaced in state.
       expect((wrapper.vm as any).state.sources[0].verificationState).toBe('verified');
-      // Modal closed — both challengeSource and challengeToken cleared.
+      // Wizard closed.
       expect((wrapper.vm as any).state.challengeSource).toBeNull();
-      expect((wrapper.vm as any).state.challengeToken).toBe('');
     });
 
-    it('opens DNS challenge modal automatically after creating a new source', async () => {
+    it('opens the verify-ownership wizard automatically after creating a new source', async () => {
       listSourcesMock.mockResolvedValue([]);
       const created = buildSource('new-id', 'https://new.example.com/cal.ics');
       created.verificationState = 'pending';
@@ -499,6 +511,56 @@ describe('ImportSourcesSection', () => {
       await flushPromises();
 
       expect((wrapper.vm as any).state.challengeSource?.id).toBe('new-id');
+      expect(wrapper.findComponent(VerifyOwnershipWizard).exists()).toBe(true);
+    });
+
+    it('returns focus to the trigger element when the wizard closes', async () => {
+      const s1 = buildSource('id-1', 'https://example.com/a.ics');
+      s1.verificationState = 'pending';
+      listSourcesMock.mockResolvedValue([s1]);
+
+      // Focus a stand-in trigger button so that document.activeElement
+      // points at it when the section opens the wizard. The section's
+      // openChallengeModal captures the active element at open time, then
+      // restores focus to it on close — the WCAG 2.4.3 contract this test
+      // is verifying.
+      const trigger = document.createElement('button');
+      document.body.appendChild(trigger);
+      trigger.focus();
+      expect(document.activeElement).toBe(trigger);
+
+      const { wrapper } = mountSection();
+      await flushPromises();
+
+      // Re-focus after the mount cycle in case happy-dom moved focus
+      // during component mount.
+      trigger.focus();
+      expect(document.activeElement).toBe(trigger);
+
+      // Open the wizard by emitting @verify on the import-source list
+      // child — this is the same handler path the row's Verify button
+      // hits. We grab the list via the row that the section already
+      // rendered.
+      const listWrapper = wrapper.findComponent(ImportSourceList);
+      expect(listWrapper.exists()).toBe(true);
+      listWrapper.vm.$emit('verify', s1);
+      await flushPromises();
+
+      expect((wrapper.vm as any).state.challengeSource?.id).toBe('id-1');
+
+      // Close the wizard via verified emit — this should restore focus to
+      // our trigger button on the next tick.
+      const updated = buildSource('id-1', 'https://example.com/a.ics', {
+        verificationState: 'verified',
+      });
+      wrapper.findComponent(VerifyOwnershipWizard).vm.$emit('verified', updated);
+      await flushPromises();
+      // Focus restoration is scheduled via nextTick.
+      await flushPromises();
+
+      expect(document.activeElement).toBe(trigger);
+      trigger.remove();
+      wrapper.unmount();
     });
   });
 

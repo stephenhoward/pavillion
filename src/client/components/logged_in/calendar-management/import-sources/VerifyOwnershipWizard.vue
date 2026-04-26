@@ -79,82 +79,42 @@
       </div>
     </section>
 
-    <!-- ===== DNS TXT STEP (placeholder until pv-jutm.6 ships) ===== -->
-    <section
+    <!-- ===== DNS TXT STEP ===== -->
+    <DnsChallengeStep
       v-else-if="currentStep === 'dns-txt'"
-      class="verify-wizard verify-wizard--step"
-      data-test="verify-wizard-dns-step"
-      :aria-labelledby="dnsHeadingId"
-    >
-      <!--
-        Placeholder body for the DNS challenge step. The real
-        DnsChallengeStep component is implemented in pv-jutm.6 and will
-        replace this v-if branch wholesale. Rendering a minimal informational
-        body here keeps the wizard navigable in the meantime so the picker
-        and change-method affordance are exercisable end-to-end.
-      -->
-      <h3 :id="dnsHeadingId" class="verify-wizard__sr-only">
-        {{ t('method_dns_title') }}
-      </h3>
-      <p class="verify-wizard__placeholder">
-        {{ t('method_dns_title') }}
-      </p>
+      :source="props.source"
+      :instance-host="props.instanceHost"
+      :challenge-token="challengeToken"
+      @change-method="returnToPicker"
+      @verified="onVerified"
+    />
 
-      <div class="verify-wizard__actions">
-        <button
-          type="button"
-          class="btn-ghost"
-          data-test="verify-wizard-change-method"
-          @click="returnToPicker"
-        >
-          {{ t('change_method_button') }}
-        </button>
-      </div>
-    </section>
-
-    <!-- ===== REL=ME STEP (placeholder until pv-jutm.7 ships) ===== -->
-    <section
+    <!-- ===== REL=ME STEP ===== -->
+    <RelMeChallengeStep
       v-else-if="currentStep === 'rel-me'"
-      class="verify-wizard verify-wizard--step"
-      data-test="verify-wizard-relme-step"
-      :aria-labelledby="relmeHeadingId"
-    >
-      <!--
-        Placeholder body for the rel="me" challenge step. The real
-        RelMeChallengeStep component lands in pv-jutm.7 and will replace
-        this v-if branch wholesale.
-      -->
-      <h3 :id="relmeHeadingId" class="verify-wizard__sr-only">
-        {{ t('method_relme_title') }}
-      </h3>
-      <p class="verify-wizard__placeholder">
-        {{ t('method_relme_title') }}
-      </p>
-
-      <div class="verify-wizard__actions">
-        <button
-          type="button"
-          class="btn-ghost"
-          data-test="verify-wizard-change-method"
-          @click="returnToPicker"
-        >
-          {{ t('change_method_button') }}
-        </button>
-      </div>
-    </section>
+      :source="props.source"
+      :instance-host="props.instanceHost"
+      :challenge-token="challengeToken"
+      @change-method="returnToPicker"
+      @verified="onVerified"
+    />
   </ModalLayout>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { onMounted, ref, watch } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import { Globe, Link2 } from 'lucide-vue-next';
 
 import ModalLayout from '@/client/components/common/modal.vue';
+import ImportSourceService from '@/client/service/import_source';
 import type {
   ImportSource,
   ImportSourceVerificationType,
 } from '@/common/model/import_source';
+
+import DnsChallengeStep from './DnsChallengeStep.vue';
+import RelMeChallengeStep from './RelMeChallengeStep.vue';
 
 /**
  * Multi-step wizard that hosts the import-source ownership-verification
@@ -164,11 +124,12 @@ import type {
  * splitting it would add a one-prop, one-event component without saving
  * meaningful complexity.
  *
- * Step components for the actual challenges (`DnsChallengeStep`,
- * `RelMeChallengeStep`) ship in pv-jutm.6 and pv-jutm.7 respectively. Until
- * they arrive, the dns-txt and rel-me v-if branches render minimal
- * placeholder content so the wizard's picker → step → change-method
- * navigation is exercisable end-to-end and the entry rule can be tested.
+ * The actual challenge bodies are rendered by the dedicated step components
+ * (`DnsChallengeStep`, `RelMeChallengeStep`) which own the verification
+ * request lifecycle and copy-to-clipboard interactions. Each step emits
+ * `change-method` to bounce back to the picker and `verified` when
+ * verification succeeds; the wizard relays `verified` to its own consumer
+ * (the import-sources section) and owns wizard-level dismissal via `close`.
  *
  * Step state uses a string discriminant ('pick' | 'dns-txt' | 'rel-me')
  * rather than a numeric `currentStep` because the topology branches: from
@@ -181,23 +142,17 @@ import type {
  * picker so the owner can choose. The picker can always be returned to via
  * the "Change verification method" button on each step.
  *
- * @see bead pv-jutm.5
+ * @see bead pv-jutm.5, pv-jutm.8
  */
 
 const props = defineProps<{
   source: ImportSource;
   /**
    * The instance host component of the DNS challenge value. Forwarded to
-   * the DNS step when it ships; held by the wizard so the parent only has
-   * to pass it once at the wizard level.
+   * each step component so the rendered challenge string matches what the
+   * server-side verifier will read.
    */
   instanceHost: string;
-  /**
-   * The per-source HMAC verification token. Forwarded to the DNS step when
-   * it ships. May be empty while the parent is still loading the challenge
-   * metadata.
-   */
-  challengeToken: string;
 }>();
 
 const emit = defineEmits<{
@@ -239,8 +194,46 @@ const currentStep = ref<WizardStep>(initialStep());
 
 const uid = Math.random().toString(36).slice(2, 10);
 const pickerHeadingId = `verify-wizard-picker-heading-${uid}`;
-const dnsHeadingId = `verify-wizard-dns-heading-${uid}`;
-const relmeHeadingId = `verify-wizard-relme-heading-${uid}`;
+
+const service = new ImportSourceService();
+
+/**
+ * Per-source HMAC verification token issued by the server. Empty until the
+ * wizard has issued the challenge for the active step. The wizard owns
+ * issuance lifecycle so the parent does not have to pre-fetch — this is
+ * the change called for in pv-jutm.8 (move issuance from
+ * ImportSourcesSection into the wizard).
+ *
+ * Issuance is per-step rather than per-mount because the server records the
+ * verification-method discriminator at issue time. Re-issuing on each
+ * non-picker step entry keeps that discriminator aligned with whatever
+ * method the user is currently looking at, even if they bounce back and
+ * forth via change-method.
+ */
+const challengeToken = ref<string>('');
+
+const ensureChallengeFor = async (method: 'dns-txt' | 'rel-me'): Promise<void> => {
+  try {
+    const token = await service.issueChallenge(
+      props.source.calendarId,
+      props.source.id,
+      method,
+    );
+    // Guard against a step change mid-flight: only adopt the token if the
+    // user is still on a non-picker step. The displayed challenge value
+    // is permitted to be stale-but-consistent rather than swapped to a
+    // token for a method the user just navigated away from.
+    if (currentStep.value === method) {
+      challengeToken.value = token;
+    }
+  }
+  catch {
+    // Issuance failures are deliberately swallowed here: the step still
+    // renders a recognisable (but visibly incomplete) challenge value, and
+    // the verify request itself surfaces a typed error to the user. Adding
+    // a wizard-level error surface would duplicate the per-step alert.
+  }
+};
 
 const selectMethod = (method: ImportSourceVerificationType): void => {
   currentStep.value = method;
@@ -256,9 +249,38 @@ const returnToPicker = (): void => {
   currentStep.value = 'pick';
 };
 
+/**
+ * Relay `verified` from the active step to the wizard's consumer. The
+ * wizard owns dismissal — the parent typically responds to `verified` by
+ * unmounting the wizard, which triggers the focus-return logic on the
+ * triggering button.
+ */
+const onVerified = (updated: ImportSource): void => {
+  emit('verified', updated);
+};
+
 const onClose = (): void => {
   emit('close');
 };
+
+/**
+ * Issue the challenge whenever the wizard transitions onto a non-picker
+ * step. Fires on mount when the entry rule lands directly on a step, and
+ * on subsequent picker → step transitions. Returning to the picker
+ * intentionally does not re-fetch — the picker has nothing to render with
+ * a token.
+ */
+watch(currentStep, (step) => {
+  if (step === 'dns-txt' || step === 'rel-me') {
+    void ensureChallengeFor(step);
+  }
+});
+
+onMounted(() => {
+  if (currentStep.value === 'dns-txt' || currentStep.value === 'rel-me') {
+    void ensureChallengeFor(currentStep.value);
+  }
+});
 </script>
 
 <style scoped lang="scss">
@@ -280,25 +302,6 @@ const onClose = (): void => {
 
   &__description {
     @include challenge-step-instructions;
-  }
-
-  /*
-   * Visually hidden heading used to give the placeholder step sections
-   * accessible names while their real components (with visible headings)
-   * are pending in pv-jutm.6 and pv-jutm.7. Standard sr-only pattern;
-   * not promoted to a global utility because the rest of the codebase
-   * uses ad-hoc sr-only helpers rather than a shared one.
-   */
-  &__sr-only {
-    position: absolute;
-    inline-size: 1px;
-    block-size: 1px;
-    margin: -1px;
-    padding: 0;
-    overflow: hidden;
-    clip: rect(0, 0, 0, 0);
-    white-space: nowrap;
-    border: 0;
   }
 
   /*
@@ -363,13 +366,6 @@ const onClose = (): void => {
   &__method-description {
     color: var(--pav-text-secondary);
     font-size: var(--pav-font-size-small);
-    line-height: var(--pav-line-height-normal);
-  }
-
-  &__placeholder {
-    margin: 0;
-    color: var(--pav-text-secondary);
-    font-size: var(--pav-font-size-body);
     line-height: var(--pav-line-height-normal);
   }
 
