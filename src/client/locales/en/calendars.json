@@ -258,7 +258,7 @@
         "url_required": "A calendar URL is required.",
         "loading": "Loading import sources...",
         "empty_title": "No import sources",
-        "empty_description": "Add an import source to mirror events from an external ICS feed.",
+        "empty_description": "Add an import source to mirror events from an external calendar (ICS) feed.",
         "error_loading": "Failed to load import sources.",
         "error_creating": "Failed to add import source.",
         "error_removing": "Failed to remove import source.",
