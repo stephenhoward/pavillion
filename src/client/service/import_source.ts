@@ -1,12 +1,13 @@
 import axios from 'axios';
 
-import { ImportSource } from '@/common/model/import_source';
+import { ImportSource, ImportSourceVerificationType } from '@/common/model/import_source';
 import {
   ImportSourceNotFoundError,
   ImportSourceFetchError,
   ImportSourceSsrfBlockedError,
   ImportSourceParseError,
   ImportSourceDnsVerificationError,
+  ImportSourceRelMeVerificationError,
   ImportSourceVerifyRateLimitError,
 } from '@/common/exceptions/import';
 import { CalendarNotFoundError } from '@/common/exceptions/calendar';
@@ -60,6 +61,7 @@ const errorMap = {
   ImportSourceSsrfBlockedError,
   ImportSourceParseError,
   ImportSourceDnsVerificationError,
+  ImportSourceRelMeVerificationError,
   ImportSourceVerifyRateLimitError,
   UnauthenticatedError,
   ValidationError,
@@ -169,22 +171,35 @@ export default class ImportSourceService {
   }
 
   /**
-   * Fetch the DNS verification challenge token for an import source. The
+   * Fetch the verification challenge token for an import source. The
    * token is owner-only data used to render the `pavillion-verify=v1:...`
-   * TXT record the owner must publish. Repeated calls return the same
+   * artifact the owner must publish (a TXT record for `dns-txt`, an
+   * `<a rel="me">` backlink for `rel-me`). Repeated calls return the same
    * deterministic token.
    *
    * @param calendarId - UUID of the owning calendar
    * @param id - UUID of the import source to issue a challenge for
+   * @param verificationType - Optional verifier discriminator; defaults to
+   *   the source's existing `verificationType` on the server when omitted.
    * @returns The per-source HMAC challenge token
    */
-  async issueChallenge(calendarId: string, id: string): Promise<string> {
+  async issueChallenge(
+    calendarId: string,
+    id: string,
+    verificationType?: ImportSourceVerificationType,
+  ): Promise<string> {
     const encodedCalendarId = validateAndEncodeId(calendarId, 'Calendar ID');
     const encodedId = validateAndEncodeId(id, 'Import Source ID');
+
+    const body: Record<string, unknown> = {};
+    if (verificationType !== undefined) {
+      body.verification_type = verificationType;
+    }
 
     try {
       const response = await axios.post(
         `/api/v1/calendars/${encodedCalendarId}/import-sources/${encodedId}/verify-issue`,
+        body,
       );
       const data = response.data as { challengeToken?: string };
       return data.challengeToken ?? '';
@@ -195,20 +210,33 @@ export default class ImportSourceService {
   }
 
   /**
-   * Trigger a DNS verification attempt for an import source. Returns the
+   * Trigger a verification attempt for an import source. Returns the
    * updated source reflecting the new verification state.
    *
    * @param calendarId - UUID of the owning calendar
    * @param id - UUID of the import source to verify
+   * @param verificationPageUrl - Optional URL of the page hosting the
+   *   `rel="me"` backlink. Required by the server only for `rel-me`
+   *   verification; ignored by the `dns-txt` flow.
    * @returns The updated import source
    */
-  async verifySource(calendarId: string, id: string): Promise<ImportSource> {
+  async verifySource(
+    calendarId: string,
+    id: string,
+    verificationPageUrl?: string,
+  ): Promise<ImportSource> {
     const encodedCalendarId = validateAndEncodeId(calendarId, 'Calendar ID');
     const encodedId = validateAndEncodeId(id, 'Import Source ID');
+
+    const body: Record<string, unknown> = {};
+    if (verificationPageUrl !== undefined) {
+      body.verification_page_url = verificationPageUrl;
+    }
 
     try {
       const response = await axios.post(
         `/api/v1/calendars/${encodedCalendarId}/import-sources/${encodedId}/verify`,
+        body,
       );
       return ImportSource.fromObject(response.data);
     }

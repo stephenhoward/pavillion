@@ -190,7 +190,33 @@ describe('ImportSourceService', () => {
       expect(postStub.firstCall.args[0]).toBe(
         `/api/v1/calendars/${CALENDAR_ID}/import-sources/${SOURCE_ID}/verify-issue`,
       );
+      // Backwards-compatible call (no verificationType): empty body, no
+      // discriminator key sent so the server falls back to the source's
+      // existing verification_type.
+      expect(postStub.firstCall.args[1]).toEqual({});
       expect(result).toBe('test-token-xyz');
+    });
+
+    it('sends verification_type in body when verificationType is provided', async () => {
+      const postStub = sandbox.stub(axios, 'post').resolves({
+        data: { challengeToken: 'rel-me-token' },
+      });
+
+      const result = await service.issueChallenge(CALENDAR_ID, SOURCE_ID, 'rel-me');
+
+      expect(postStub.calledOnce).toBe(true);
+      expect(postStub.firstCall.args[1]).toEqual({ verification_type: 'rel-me' });
+      expect(result).toBe('rel-me-token');
+    });
+
+    it('sends verification_type=dns-txt when explicitly requested', async () => {
+      const postStub = sandbox.stub(axios, 'post').resolves({
+        data: { challengeToken: 'dns-token' },
+      });
+
+      await service.issueChallenge(CALENDAR_ID, SOURCE_ID, 'dns-txt');
+
+      expect(postStub.firstCall.args[1]).toEqual({ verification_type: 'dns-txt' });
     });
 
     it('returns empty string when the server response omits the token', async () => {
@@ -225,9 +251,31 @@ describe('ImportSourceService', () => {
       expect(postStub.firstCall.args[0]).toBe(
         `/api/v1/calendars/${CALENDAR_ID}/import-sources/${SOURCE_ID}/verify`,
       );
+      // Backwards-compatible call (no verificationPageUrl): empty body so
+      // the dns-txt flow keeps working without sending a rel-me-only key.
+      expect(postStub.firstCall.args[1]).toEqual({});
       expect(result).toBeInstanceOf(ImportSource);
       expect(result.verificationState).toBe('verified');
       expect(result.verifiedAt).toBeInstanceOf(Date);
+    });
+
+    it('sends verification_page_url in body when verificationPageUrl is provided', async () => {
+      const payload = sourcePayload({
+        verificationState: 'verified',
+        verifiedAt: '2026-04-22T00:00:00.000Z',
+      });
+      const postStub = sandbox.stub(axios, 'post').resolves({ data: payload });
+
+      await service.verifySource(
+        CALENDAR_ID,
+        SOURCE_ID,
+        'https://example.com/about',
+      );
+
+      expect(postStub.calledOnce).toBe(true);
+      expect(postStub.firstCall.args[1]).toEqual({
+        verification_page_url: 'https://example.com/about',
+      });
     });
 
     it('throws ImportSourceDnsVerificationError when server returns that errorName', async () => {
