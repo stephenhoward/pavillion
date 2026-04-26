@@ -90,15 +90,15 @@ describe('RelMeChallengeStep', () => {
   });
 
   describe('rendering', () => {
-    it('renders the expected verification URL in a copy-link block', async () => {
+    it('does not render a separate copy-link block for the verification URL', async () => {
       const { wrapper } = mountStep();
       await flushPromises();
 
-      const linkInput = wrapper.find('[data-test="rel-me-link-target"]');
-      expect(linkInput.exists()).toBe(true);
-      expect((linkInput.element as HTMLInputElement).value).toBe(
-        `https://${INSTANCE_HOST}/.well-known/pavillion-verify/${CHALLENGE_TOKEN}`,
-      );
+      // The link-target row was removed in favor of the single HTML snippet
+      // copy affordance — anyone capable of building a custom snippet from
+      // the raw URL can edit the one we provide.
+      expect(wrapper.find('[data-test="rel-me-link-target"]').exists()).toBe(false);
+      expect(wrapper.find('[data-test="rel-me-copy-link"]').exists()).toBe(false);
     });
 
     it('renders the HTML snippet as text inside a <pre><code> block (no v-html)', async () => {
@@ -119,13 +119,18 @@ describe('RelMeChallengeStep', () => {
       );
     });
 
-    it('renders the page URL input field', async () => {
+    it('renders the page URL input field as a text input (so schemeless input is not blocked by the browser)', async () => {
       const { wrapper } = mountStep();
       await flushPromises();
 
       const input = wrapper.find('[data-test="rel-me-page-url-input"]');
       expect(input.exists()).toBe(true);
-      expect(input.attributes('type')).toBe('url');
+      // Native type="url" rejects schemeless input via HTML5 validation,
+      // which is the UX trap we are explicitly avoiding. Use type="text"
+      // with inputmode="url" to keep the mobile URL keyboard hint while
+      // letting our validator handle scheme normalization.
+      expect(input.attributes('type')).toBe('text');
+      expect(input.attributes('inputmode')).toBe('url');
     });
 
     it('renders the verify button', async () => {
@@ -318,6 +323,58 @@ describe('RelMeChallengeStep', () => {
       expect(verifySourceMock).not.toHaveBeenCalled();
     });
 
+    it('accepts schemeless input and forwards a normalized https:// URL to verifySource', async () => {
+      const { wrapper } = mountStep();
+      await flushPromises();
+
+      // The user types just the host + path. Requiring them to also type
+      // `https://` is the UX trap this normalization fixes.
+      await wrapper.find('[data-test="rel-me-page-url-input"]').setValue('feeds.example.org/about');
+      await wrapper.find('[data-test="rel-me-verify-button"]').trigger('click');
+      await flushPromises();
+
+      expect(issueChallengeMock).toHaveBeenCalledTimes(1);
+      expect(verifySourceMock).toHaveBeenCalledWith(
+        CALENDAR_ID,
+        SOURCE_ID,
+        'https://feeds.example.org/about',
+      );
+    });
+
+    it('accepts schemeless input on a bare hostname (no path)', async () => {
+      const { wrapper } = mountStep();
+      await flushPromises();
+
+      await wrapper.find('[data-test="rel-me-page-url-input"]').setValue('feeds.example.org');
+      await wrapper.find('[data-test="rel-me-verify-button"]').trigger('click');
+      await flushPromises();
+
+      expect(verifySourceMock).toHaveBeenCalledTimes(1);
+      // URL normalization adds the trailing slash that the URL parser
+      // produces from a bare-host input — verifying we send the parser's
+      // canonical form rather than the user's literal text would lock us
+      // in too tightly. We only assert the scheme + hostname are present.
+      const sentUrl = verifySourceMock.mock.calls[0][2] as string;
+      expect(sentUrl.startsWith('https://feeds.example.org')).toBe(true);
+    });
+
+    it('does NOT auto-prepend https:// when the user provided a non-https scheme (rejects with scheme error)', async () => {
+      const { wrapper } = mountStep();
+      await flushPromises();
+
+      // Inputs that already declare a scheme are passed through so the
+      // scheme check can produce a precise rejection. Without this the
+      // user could paste `http://...` and the normalizer would silently
+      // mask the scheme mismatch.
+      await wrapper.find('[data-test="rel-me-page-url-input"]').setValue('ftp://feeds.example.org/about');
+      await wrapper.find('[data-test="rel-me-verify-button"]').trigger('click');
+      await flushPromises();
+
+      expect(issueChallengeMock).not.toHaveBeenCalled();
+      expect(verifySourceMock).not.toHaveBeenCalled();
+      expect(wrapper.find('[data-test="rel-me-error"]').exists()).toBe(true);
+    });
+
     it('shows a validation error when hostname does not match the source hostname', async () => {
       const { wrapper } = mountStep();
       await flushPromises();
@@ -363,20 +420,6 @@ describe('RelMeChallengeStep', () => {
   });
 
   describe('copy-to-clipboard', () => {
-    it('copies the link target when the copy-link button is clicked', async () => {
-      const { wrapper } = mountStep();
-      await flushPromises();
-
-      const copyBtn = wrapper.find('[data-test="rel-me-copy-link"]');
-      expect(copyBtn.exists()).toBe(true);
-      await copyBtn.trigger('click');
-      await flushPromises();
-
-      expect(writeTextMock).toHaveBeenCalledWith(
-        `https://${INSTANCE_HOST}/.well-known/pavillion-verify/${CHALLENGE_TOKEN}`,
-      );
-    });
-
     it('copies the HTML snippet when the copy-html button is clicked', async () => {
       const { wrapper } = mountStep();
       await flushPromises();

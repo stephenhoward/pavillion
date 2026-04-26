@@ -13,36 +13,6 @@
       </p>
     </header>
 
-    <!-- Link target (the href the user must use in their rel="me" link) -->
-    <div class="rel-me-challenge__field">
-      <label :for="linkTargetInputId" class="rel-me-challenge__label">
-        {{ t('rel_me_challenge.link_target_label') }}
-      </label>
-      <p class="rel-me-challenge__help">
-        {{ t('rel_me_challenge.link_target_help') }}
-      </p>
-      <div class="rel-me-challenge__row">
-        <input
-          :id="linkTargetInputId"
-          type="text"
-          class="rel-me-challenge__code-input"
-          data-test="rel-me-link-target"
-          readonly
-          :value="expectedLinkTarget"
-        />
-        <button
-          type="button"
-          class="btn-ghost rel-me-challenge__copy-btn"
-          data-test="rel-me-copy-link"
-          :aria-label="t('rel_me_challenge.copy_link_aria')"
-          @click="copy('link')"
-        >
-          <Copy :size="16" :stroke-width="2" aria-hidden="true" />
-          {{ copied === 'link' ? t('rel_me_challenge.copied') : t('rel_me_challenge.copy_link') }}
-        </button>
-      </div>
-    </div>
-
     <!--
       HTML snippet for the user to copy. CRITICAL SECURITY CONSTRAINT: this
       block MUST NOT use v-html. The snippet is built as a plain string and
@@ -70,10 +40,10 @@
         class="btn-ghost rel-me-challenge__copy-btn rel-me-challenge__copy-btn--block"
         data-test="rel-me-copy-html"
         :aria-label="t('rel_me_challenge.copy_html_aria')"
-        @click="copy('snippet')"
+        @click="copySnippet"
       >
         <Copy :size="16" :stroke-width="2" aria-hidden="true" />
-        {{ copied === 'snippet' ? t('rel_me_challenge.copied') : t('rel_me_challenge.copy_html') }}
+        {{ copied ? t('rel_me_challenge.copied') : t('rel_me_challenge.copy_html') }}
       </button>
     </div>
 
@@ -88,7 +58,11 @@
       <input
         :id="pageUrlInputId"
         v-model="pageUrl"
-        type="url"
+        type="text"
+        inputmode="url"
+        autocapitalize="off"
+        autocomplete="url"
+        spellcheck="false"
         required
         class="rel-me-challenge__input"
         data-test="rel-me-page-url-input"
@@ -164,11 +138,14 @@ import {
 /**
  * Step component inside the verify-ownership wizard that walks a calendar
  * editor through the `rel="me"` ownership-verification flow for an ICS
- * import source. Displays the link target (the URL the owner must use as
- * the href of their rel="me" link) and a copyable HTML snippet, accepts
- * the URL of the page hosting the link, and on Verify calls
+ * import source. Displays a copyable HTML snippet (the complete `<a
+ * rel="me">` tag for the user to drop onto their verification page),
+ * accepts the URL of the page hosting that link, and on Verify calls
  * `issueChallenge('rel-me')` followed by `verifySource(pageUrl)` in that
- * order.
+ * order. The page URL input accepts schemeless input — the validator
+ * auto-prepends `https://` rather than rejecting input without a scheme,
+ * so users are not punished for typing a hostname rather than pasting a
+ * full URL.
  *
  * Issuing the challenge before verifying ensures the server has materialized
  * the challenge token under the rel-me discriminator before the verifier
@@ -231,12 +208,11 @@ const MAX_URL_LENGTH = 2048;
 const pageUrl = ref<string>('');
 const isVerifying = ref<boolean>(false);
 const errorMessage = ref<string | null>(null);
-const copied = ref<'link' | 'snippet' | null>(null);
+const copied = ref<boolean>(false);
 let copyTimeout: ReturnType<typeof setTimeout> | null = null;
 
 const uid = Math.random().toString(36).slice(2, 10);
 const headingId = `rel-me-challenge-heading-${uid}`;
-const linkTargetInputId = `rel-me-link-target-${uid}`;
 const snippetCodeId = `rel-me-snippet-${uid}`;
 const snippetLabelId = `rel-me-snippet-label-${uid}`;
 const pageUrlInputId = `rel-me-page-url-${uid}`;
@@ -281,41 +257,62 @@ const htmlSnippet = computed<string>(() => {
 });
 
 /**
+ * Normalize raw user input by prepending `https://` when the user omits
+ * the scheme. Requiring the scheme is a UX trap — pasting a URL from a
+ * browser address bar usually includes it, but typing a hostname does
+ * not. We auto-prepend rather than reject so the user is not punished
+ * for either habit. Inputs that already declare a scheme (including
+ * non-https schemes such as `http://`) are passed through unchanged so
+ * the downstream scheme check can reject them with a precise error.
+ */
+const SCHEME_PREFIX_PATTERN = /^[a-zA-Z][a-zA-Z0-9+\-.]*:\/\//;
+const normalizeUrl = (raw: string): string => {
+  const trimmed = raw.trim();
+  if (trimmed.length === 0 || SCHEME_PREFIX_PATTERN.test(trimmed)) {
+    return trimmed;
+  }
+  return `https://${trimmed}`;
+};
+
+/**
  * Validate the user-supplied page URL against the same rules as the
- * server-side `validateRelMePageUrl()`. Returns null on success, or the
- * i18n key for the matching field-level error on failure.
+ * server-side `validateRelMePageUrl()`. Returns either a validation
+ * failure (i18n key) or the normalized URL ready to send to the verifier.
  *
  * Rules (mirroring server):
  *  1. Required, non-empty after trim
- *  2. Length <= MAX_URL_LENGTH
+ *  2. Length <= MAX_URL_LENGTH (after normalization)
  *  3. Parses as a URL
  *  4. Scheme is `https:`
  *  5. Hostname equals source hostname (case-insensitive)
  */
-const validatePageUrl = (raw: string): string | null => {
+type ValidationResult = { ok: true; url: string } | { ok: false; key: string };
+const validatePageUrl = (raw: string): ValidationResult => {
   const trimmed = raw.trim();
   if (trimmed.length === 0) {
-    return 'rel_me_challenge.page_url_required';
+    return { ok: false, key: 'rel_me_challenge.page_url_required' };
   }
-  if (trimmed.length > MAX_URL_LENGTH) {
-    return 'rel_me_challenge.page_url_too_long';
+
+  const normalized = normalizeUrl(trimmed);
+  if (normalized.length > MAX_URL_LENGTH) {
+    return { ok: false, key: 'rel_me_challenge.page_url_too_long' };
   }
 
   let parsed: URL;
   try {
-    parsed = new URL(trimmed);
+    parsed = new URL(normalized);
   }
   catch {
-    return 'rel_me_challenge.page_url_invalid';
+    return { ok: false, key: 'rel_me_challenge.page_url_invalid' };
   }
 
   if (parsed.protocol !== 'https:') {
-    return 'rel_me_challenge.page_url_invalid_scheme';
+    return { ok: false, key: 'rel_me_challenge.page_url_invalid_scheme' };
   }
   if (parsed.hostname.toLowerCase() !== sourceHostname.value) {
-    return 'rel_me_challenge.page_url_hostname_mismatch';
+    return { ok: false, key: 'rel_me_challenge.page_url_hostname_mismatch' };
   }
-  return null;
+  return { ok: true, url: normalized };
 };
 
 /**
@@ -365,29 +362,28 @@ const onInput = (): void => {
 };
 
 /**
- * Copy the link target or HTML snippet to the clipboard. Uses the async
+ * Copy the HTML snippet to the clipboard. Uses the async
  * navigator.clipboard API; when unavailable the operation is a no-op but
  * still updates the `copied` indicator so the user gets feedback that
- * the action ran (the input field is selectable for manual copy).
+ * the action ran (the snippet block remains text-selectable for manual
+ * copy).
  */
-const copy = async (target: 'link' | 'snippet'): Promise<void> => {
-  const text = target === 'link' ? expectedLinkTarget.value : htmlSnippet.value;
-
+const copySnippet = async (): Promise<void> => {
   try {
     if (typeof navigator !== 'undefined' && navigator.clipboard) {
-      await navigator.clipboard.writeText(text);
+      await navigator.clipboard.writeText(htmlSnippet.value);
     }
   }
   catch {
     // Clipboard access may be denied by the browser; treat as soft failure.
   }
 
-  copied.value = target;
+  copied.value = true;
   if (copyTimeout) {
     clearTimeout(copyTimeout);
   }
   copyTimeout = setTimeout(() => {
-    copied.value = null;
+    copied.value = false;
     copyTimeout = null;
   }, 1500);
 };
@@ -405,9 +401,12 @@ const onVerify = async (): Promise<void> => {
 
   // Client-side validation gate. Mirrors the server's validation rules so
   // the user sees field-level feedback locally before round-tripping.
-  const validationKey = validatePageUrl(pageUrl.value);
-  if (validationKey !== null) {
-    errorMessage.value = t(validationKey);
+  // The validator also normalizes the URL (auto-prepending `https://`
+  // when the scheme is missing), so we forward the normalized form to
+  // the verifier rather than the raw input.
+  const validation = validatePageUrl(pageUrl.value);
+  if (!validation.ok) {
+    errorMessage.value = t(validation.key);
     return;
   }
 
@@ -424,7 +423,7 @@ const onVerify = async (): Promise<void> => {
     const updated = await service.verifySource(
       props.source.calendarId,
       props.source.id,
-      pageUrl.value.trim(),
+      validation.url,
     );
     emit('verified', updated);
   }
@@ -496,14 +495,6 @@ onBeforeUnmount(() => {
     color: var(--pav-text-secondary);
     font-size: var(--pav-font-size-small);
     line-height: var(--pav-line-height-normal);
-  }
-
-  &__row {
-    @include challenge-step-row;
-  }
-
-  &__code-input {
-    @include challenge-step-code-input;
   }
 
   &__code-block {
