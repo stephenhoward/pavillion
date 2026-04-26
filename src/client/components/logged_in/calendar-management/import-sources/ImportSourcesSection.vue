@@ -7,20 +7,17 @@
     <LoadingMessage v-if="state.isLoading" :description="t('loading')" />
 
     <template v-else-if="state.sources.length > 0 || state.showAddForm">
-      <header class="import-sources-section__header">
-        <div class="import-sources-section__heading">
-          <h2 class="import-sources-section__title">{{ t('section_title') }}</h2>
-          <p class="import-sources-section__description">{{ t('section_description') }}</p>
-        </div>
-        <PillButton
-          v-if="!state.showAddForm && state.sources.length > 0"
-          variant="primary"
-          @click="openAddForm"
-        >
-          <Plus :size="20" :stroke-width="2" aria-hidden="true" />
-          {{ t('add_button') }}
-        </PillButton>
-      </header>
+      <AdminSectionHeader
+        :title="t('section_title')"
+        :description="t('section_description')"
+      >
+        <template v-if="!state.showAddForm && state.sources.length > 0" #actions>
+          <PillButton variant="primary" @click="openAddForm">
+            <Plus :size="20" :stroke-width="2" aria-hidden="true" />
+            {{ t('add_button') }}
+          </PillButton>
+        </template>
+      </AdminSectionHeader>
 
       <!-- Add form (inline, not modal, per bead spec — quick add) -->
       <div v-if="state.showAddForm" class="import-sources-section__add-form-container">
@@ -111,6 +108,7 @@ import PillButton from '@/client/components/common/pill-button.vue';
 import ModalLayout from '@/client/components/common/modal.vue';
 import EmptyLayout from '@/client/components/common/empty_state.vue';
 import LoadingMessage from '@/client/components/common/loading_message.vue';
+import AdminSectionHeader from '@/client/components/common/admin-section-header.vue';
 import { useToast } from '@/client/composables/useToast';
 
 import ImportSourceList from './ImportSourceList.vue';
@@ -370,36 +368,6 @@ defineExpose({ state, loadSources });
 
   @media (min-width: 640px) {
     padding: var(--pav-space-6) 0;
-  }
-
-  &__header {
-    @include admin-section-header;
-    align-items: flex-start;
-    gap: var(--pav-space-4);
-    flex-wrap: wrap;
-  }
-
-  &__heading {
-    display: flex;
-    flex-direction: column;
-    gap: var(--pav-space-1);
-    min-width: 0;
-  }
-
-  &__title {
-    @include admin-section-title;
-    margin: 0;
-  }
-
-  &__description {
-    margin: 0;
-    color: var(--pav-color-stone-600);
-    font-size: 0.875rem;
-    max-width: 36rem;
-
-    @media (prefers-color-scheme: dark) {
-      color: var(--pav-color-stone-400);
-    }
   }
 
   &__add-form-container {

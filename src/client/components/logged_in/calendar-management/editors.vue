@@ -17,13 +17,14 @@
     <!-- Editors and Invitations List -->
     <div v-else-if="state.editors.length > 0 || state.pendingInvitations.length > 0" class="editors-content">
       <!-- Section Header -->
-      <div class="editors-header">
-        <h2 class="editors-title">{{ t('title') }}</h2>
-        <PillButton v-if="props.isOwner" variant="primary" @click="openAddForm">
-          <Plus :size="20" :stroke-width="2" />
-          {{ t('add_editor_button') }}
-        </PillButton>
-      </div>
+      <AdminSectionHeader :title="t('title')">
+        <template v-if="props.isOwner" #actions>
+          <PillButton variant="primary" @click="openAddForm">
+            <Plus :size="20" :stroke-width="2" />
+            {{ t('add_editor_button') }}
+          </PillButton>
+        </template>
+      </AdminSectionHeader>
 
       <!-- Active Editors Section -->
       <div v-if="state.editors.length > 0" class="editors-section">
@@ -228,6 +229,7 @@ import { CalendarEditorPermissionError, EditorAlreadyExistsError, EditorNotFound
 import { EmptyValueError, AccountInviteAlreadyExistsError } from '@/common/exceptions';
 import EmptyLayout from '@/client/components/common/empty_state.vue';
 import LoadingMessage from '@/client/components/common/loading_message.vue';
+import AdminSectionHeader from '@/client/components/common/admin-section-header.vue';
 
 // Props
 const props = defineProps({
@@ -604,14 +606,6 @@ onMounted(loadEditors);
   display: flex;
   flex-direction: column;
   gap: var(--pav-space-8);
-}
-
-.editors-header {
-  @include admin-section-header;
-}
-
-.editors-title {
-  @include admin-section-title;
 }
 
 .editors-section {

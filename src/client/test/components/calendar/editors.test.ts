@@ -262,7 +262,7 @@ describe('Editors Component', () => {
 
       await flushPromises();
 
-      const headerAddButton = wrapper.find('.editors-header .pill-button--primary');
+      const headerAddButton = wrapper.find('.admin-section-header .pill-button--primary');
       expect(headerAddButton.exists()).toBe(true);
     });
 
@@ -277,7 +277,7 @@ describe('Editors Component', () => {
 
       await flushPromises();
 
-      const headerAddButton = wrapper.find('.editors-header .pill-button--primary');
+      const headerAddButton = wrapper.find('.admin-section-header .pill-button--primary');
       expect(headerAddButton.exists()).toBe(false);
     });
 
