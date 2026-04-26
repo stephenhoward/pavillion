@@ -22,7 +22,7 @@ import { DateTime } from 'luxon';
 import SeriesService from '../service/series';
 import ImportSourceService from '../service/import/import_source_service';
 import SyncService, { type SyncDependencies, type SyncResult } from '../service/import/sync';
-import { ImportSource } from '@/common/model/import_source';
+import { ImportSource, ImportSourceVerificationType } from '@/common/model/import_source';
 import CalendarEventInstance from '@/common/model/event_instance';
 import AccountsInterface from '@/server/accounts/interface';
 import EmailInterface from '@/server/email/interface';
@@ -974,37 +974,64 @@ export default class CalendarInterface {
   }
 
   /**
-   * Issue the DNS verification challenge token for an import source. The
+   * Issue the verification challenge token for an import source. The
    * token is the owner-only secret that must appear in the
-   * `pavillion-verify=v1:{host}:{token}` TXT record.
+   * `pavillion-verify=v1:{host}:{token}` TXT record (DNS) or in the
+   * well-known URL referenced by a `<a rel="me">` backlink (rel-me).
+   *
+   * When `verificationType` is supplied and differs from the persisted
+   * value, the source's verification mechanism is updated and any prior
+   * `verified_at` proof is cleared so the source must re-enter the verify
+   * gate under the new mechanism.
    *
    * @param account - The requesting account (must own or edit the calendar)
    * @param calendarId - The calendar UUID
    * @param id - The import source UUID
+   * @param verificationType - Optional verification mechanism to set on the
+   *   source. When omitted, the persisted type is preserved.
    * @returns The opaque verification token
    */
   async issueImportSourceChallenge(
     account: Account,
     calendarId: string,
     id: string,
+    verificationType?: ImportSourceVerificationType,
   ): Promise<string> {
-    return this.importSourceService.issueVerificationChallenge(account, calendarId, id);
+    return this.importSourceService.issueVerificationChallenge(
+      account,
+      calendarId,
+      id,
+      verificationType,
+    );
   }
 
   /**
-   * Run DNS TXT verification for an import source and persist the outcome.
+   * Run ownership verification for an import source and persist the outcome.
+   *
+   * Dispatches in the service layer based on the source's
+   * `verificationType` discriminator: DNS TXT lookup for `'dns-txt'`
+   * sources, rel="me" backlink check for `'rel-me'` sources.
    *
    * @param account - The requesting account (must own or edit the calendar)
    * @param calendarId - The calendar UUID
    * @param id - The import source UUID
+   * @param verificationPageUrl - For `'rel-me'` sources only: the URL of
+   *   the page hosting the `<a rel="me">` backlink. Required for rel-me;
+   *   ignored otherwise. Validated in the service layer.
    * @returns The updated ImportSource model
    */
   async verifyImportSource(
     account: Account,
     calendarId: string,
     id: string,
+    verificationPageUrl?: string,
   ): Promise<ImportSource> {
-    return this.importSourceService.verifySource(account, calendarId, id);
+    return this.importSourceService.verifySource(
+      account,
+      calendarId,
+      id,
+      verificationPageUrl,
+    );
   }
 
   /**

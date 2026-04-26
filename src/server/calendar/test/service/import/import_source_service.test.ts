@@ -467,8 +467,14 @@ describe('ImportSourceService', () => {
         id: SOURCE_ID,
         calendar_id: CAL_ID,
         url: VALID_URL,
+        // Default the discriminator to 'dns-txt' so fixtures mirror what
+        // the DB default produces for pre-existing rows. The
+        // issueVerificationChallenge contract preserves the persisted type
+        // when the caller does not request a change.
+        verification_type: 'dns-txt',
         verification_state: 'unverified',
         verification_token: null,
+        verified_at: null,
         save: sandbox.stub().resolves(),
         ...overrides,
       } as unknown as ImportSourceEntity;
@@ -485,8 +491,9 @@ describe('ImportSourceService', () => {
       // State transition: unverified → pending, and token persisted on entity.
       expect(entity.verification_state).toBe('pending');
       expect(entity.verification_token).toBe(expected);
-      // Belt-and-braces discriminator stamp, even on pre-existing rows that
-      // would otherwise carry the DB default. See bead pv-44qj.
+      // Discriminator preserved when caller does not request a change.
+      // See bead pv-jutm.3.1: only an explicit verification_type triggers a
+      // type swap (and `verified_at` clear).
       expect(entity.verification_type).toBe('dns-txt');
       expect((entity.save as sinon.SinonStub).calledOnce).toBe(true);
     });
@@ -532,6 +539,63 @@ describe('ImportSourceService', () => {
       await expect(
         service.issueVerificationChallenge(account, CAL_ID, SOURCE_ID),
       ).rejects.toBeInstanceOf(CalendarEditorPermissionError);
+    });
+
+    it('persists the requested verification_type when caller passes "rel-me"', async () => {
+      const entity = fakeSourceEntity({
+        verification_state: 'pending',
+        verification_type: 'dns-txt',
+        verified_at: new Date('2026-01-01T00:00:00Z'),
+      });
+      sandbox.stub(ImportSourceEntity, 'findOne').resolves(entity);
+
+      await service.issueVerificationChallenge(account, CAL_ID, SOURCE_ID, 'rel-me');
+
+      expect(entity.verification_type).toBe('rel-me');
+      // Switching the verification_type invalidates the previous proof —
+      // verifiedAt must be cleared so the source re-enters the verify gate.
+      expect(entity.verified_at).toBeNull();
+    });
+
+    it('clears verifiedAt only when verification_type actually changes', async () => {
+      const verifiedAt = new Date('2026-01-01T00:00:00Z');
+      const entity = fakeSourceEntity({
+        verification_state: 'verified',
+        verification_type: 'dns-txt',
+        verified_at: verifiedAt,
+      });
+      sandbox.stub(ImportSourceEntity, 'findOne').resolves(entity);
+
+      await service.issueVerificationChallenge(account, CAL_ID, SOURCE_ID, 'dns-txt');
+
+      // Type unchanged — verifiedAt must be preserved.
+      expect(entity.verification_type).toBe('dns-txt');
+      expect(entity.verified_at).toBe(verifiedAt);
+    });
+
+    it('defaults to dns-txt when no verification_type is passed', async () => {
+      const entity = fakeSourceEntity({
+        verification_state: 'unverified',
+        verification_type: 'dns-txt',
+      });
+      sandbox.stub(ImportSourceEntity, 'findOne').resolves(entity);
+
+      await service.issueVerificationChallenge(account, CAL_ID, SOURCE_ID);
+
+      expect(entity.verification_type).toBe('dns-txt');
+    });
+
+    it('rejects unknown verification_type values with ValidationError', async () => {
+      sandbox.stub(ImportSourceEntity, 'findOne').resolves(fakeSourceEntity());
+
+      await expect(
+        service.issueVerificationChallenge(
+          account,
+          CAL_ID,
+          SOURCE_ID,
+          'bogus' as unknown as 'dns-txt',
+        ),
+      ).rejects.toBeInstanceOf(ValidationError);
     });
   });
 

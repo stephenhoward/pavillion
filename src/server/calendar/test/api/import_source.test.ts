@@ -13,11 +13,13 @@ import {
   ImportSourceNotFoundError,
   ImportSourceNotVerifiedError,
   ImportSourceDnsVerificationError,
+  ImportSourceRelMeVerificationError,
   ImportSourceVerifyRateLimitError,
   ImportSourceFetchError,
   ImportSourceSsrfBlockedError,
   ImportSourceParseError,
   IMPORT_DNS_NOT_FOUND,
+  IMPORT_RELME_LINK_NOT_FOUND,
 } from '@/common/exceptions/import';
 import { testApp } from '@/server/common/test/lib/express';
 import ImportSourceRoutes from '@/server/calendar/api/v1/import_source';
@@ -354,6 +356,73 @@ describe('ImportSourceRoutes', () => {
       expect(response.status).toBe(400);
       expect(response.body.errorName).toBe('ValidationError');
     });
+
+    it('forwards verification_type body to the interface', async () => {
+      const stub = mockInterface.issueImportSourceChallenge as sinon.SinonStub;
+      stub.resolves('test-token-abc');
+
+      router.post('/handler', (req, res) => {
+        attachAccount(req);
+        req.params.calendarId = CALENDAR_ID;
+        req.params.id = SOURCE_ID;
+        routes.issueChallenge(req, res);
+      });
+
+      const response = await request(testApp(router))
+        .post('/handler')
+        .send({ verification_type: 'rel-me' });
+
+      expect(response.status).toBe(200);
+      expect(response.body.challengeToken).toBe('test-token-abc');
+      expect(stub.calledOnce).toBe(true);
+      // Interface signature is (account, calendarId, id, verificationType?)
+      expect(stub.firstCall.args[1]).toBe(CALENDAR_ID);
+      expect(stub.firstCall.args[2]).toBe(SOURCE_ID);
+      expect(stub.firstCall.args[3]).toBe('rel-me');
+    });
+
+    it('omits verification_type when body is empty', async () => {
+      const stub = mockInterface.issueImportSourceChallenge as sinon.SinonStub;
+      stub.resolves('test-token-abc');
+
+      router.post('/handler', (req, res) => {
+        attachAccount(req);
+        req.params.calendarId = CALENDAR_ID;
+        req.params.id = SOURCE_ID;
+        routes.issueChallenge(req, res);
+      });
+
+      const response = await request(testApp(router)).post('/handler');
+
+      expect(response.status).toBe(200);
+      expect(stub.firstCall.args[3]).toBeUndefined();
+    });
+
+    it('forwards an invalid verification_type value to the service for validation', async () => {
+      // Handler stays thin — invalid type values are validated in the service
+      // and surface as ValidationError.
+      const stub = mockInterface.issueImportSourceChallenge as sinon.SinonStub;
+      stub.rejects(
+        new ValidationError('Invalid verification type', {
+          verification_type: ['Invalid verification type'],
+        }),
+      );
+
+      router.post('/handler', (req, res) => {
+        attachAccount(req);
+        req.params.calendarId = CALENDAR_ID;
+        req.params.id = SOURCE_ID;
+        routes.issueChallenge(req, res);
+      });
+
+      const response = await request(testApp(router))
+        .post('/handler')
+        .send({ verification_type: 'bogus' });
+
+      expect(response.status).toBe(400);
+      expect(response.body.errorName).toBe('ValidationError');
+      expect(response.body.fields?.verification_type).toEqual(['Invalid verification type']);
+    });
   });
 
   describe('POST /calendars/:calendarId/import-sources/:id/verify', () => {
@@ -462,6 +531,99 @@ describe('ImportSourceRoutes', () => {
 
       expect(response.status).toBe(502);
       expect(response.body.errorName).toBe('ImportSourceFetchError');
+    });
+
+    it('forwards verification_page_url body to the interface', async () => {
+      const verified = makeSource();
+      verified.verificationState = 'verified';
+      verified.verifiedAt = new Date();
+      const stub = mockInterface.verifyImportSource as sinon.SinonStub;
+      stub.resolves(verified);
+
+      router.post('/handler', (req, res) => {
+        attachAccount(req);
+        req.params.calendarId = CALENDAR_ID;
+        req.params.id = SOURCE_ID;
+        routes.verifySource(req, res);
+      });
+
+      const response = await request(testApp(router))
+        .post('/handler')
+        .send({ verification_page_url: 'https://example.com/profile' });
+
+      expect(response.status).toBe(200);
+      expect(stub.calledOnce).toBe(true);
+      // Interface signature is (account, calendarId, id, verificationPageUrl?)
+      expect(stub.firstCall.args[1]).toBe(CALENDAR_ID);
+      expect(stub.firstCall.args[2]).toBe(SOURCE_ID);
+      expect(stub.firstCall.args[3]).toBe('https://example.com/profile');
+    });
+
+    it('omits verification_page_url when body is empty', async () => {
+      const verified = makeSource();
+      verified.verificationState = 'verified';
+      verified.verifiedAt = new Date();
+      const stub = mockInterface.verifyImportSource as sinon.SinonStub;
+      stub.resolves(verified);
+
+      router.post('/handler', (req, res) => {
+        attachAccount(req);
+        req.params.calendarId = CALENDAR_ID;
+        req.params.id = SOURCE_ID;
+        routes.verifySource(req, res);
+      });
+
+      const response = await request(testApp(router)).post('/handler');
+
+      expect(response.status).toBe(200);
+      expect(stub.firstCall.args[3]).toBeUndefined();
+    });
+
+    it('maps rel-me verification failure to errorName + reason', async () => {
+      const stub = mockInterface.verifyImportSource as sinon.SinonStub;
+      stub.rejects(new ImportSourceRelMeVerificationError(IMPORT_RELME_LINK_NOT_FOUND));
+
+      router.post('/handler', (req, res) => {
+        attachAccount(req);
+        req.params.calendarId = CALENDAR_ID;
+        req.params.id = SOURCE_ID;
+        routes.verifySource(req, res);
+      });
+
+      const response = await request(testApp(router))
+        .post('/handler')
+        .send({ verification_page_url: 'https://example.com/profile' });
+
+      expect(response.status).toBe(400);
+      expect(response.body.errorName).toBe('ImportSourceRelMeVerificationError');
+      expect(response.body.reason).toBe(IMPORT_RELME_LINK_NOT_FOUND);
+    });
+
+    it('forwards a service ValidationError for missing verification_page_url', async () => {
+      // Handler stays thin — when source.verificationType is 'rel-me' and
+      // verification_page_url is missing or invalid, the service throws
+      // ValidationError with field-level details.
+      const stub = mockInterface.verifyImportSource as sinon.SinonStub;
+      stub.rejects(
+        new ValidationError('Verification page URL is required', {
+          verification_page_url: ['Verification page URL is required'],
+        }),
+      );
+
+      router.post('/handler', (req, res) => {
+        attachAccount(req);
+        req.params.calendarId = CALENDAR_ID;
+        req.params.id = SOURCE_ID;
+        routes.verifySource(req, res);
+      });
+
+      const response = await request(testApp(router)).post('/handler');
+
+      expect(response.status).toBe(400);
+      expect(response.body.errorName).toBe('ValidationError');
+      expect(response.body.fields?.verification_page_url).toEqual([
+        'Verification page URL is required',
+      ]);
     });
   });
 

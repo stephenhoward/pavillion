@@ -1,6 +1,7 @@
 import express, { Request, Response, Application } from 'express';
 
 import { Account } from '@/common/model/account';
+import { ImportSourceVerificationType } from '@/common/model/import_source';
 import { ValidationError } from '@/common/exceptions/base';
 import { CalendarNotFoundError } from '@/common/exceptions/calendar';
 import { CalendarEditorPermissionError } from '@/common/exceptions/editor';
@@ -8,6 +9,7 @@ import {
   ImportSourceNotFoundError,
   ImportSourceNotVerifiedError,
   ImportSourceDnsVerificationError,
+  ImportSourceRelMeVerificationError,
   ImportSourceVerifyRateLimitError,
   ImportSourceFetchError,
   ImportSourceSsrfBlockedError,
@@ -209,12 +211,26 @@ class ImportSourceRoutes {
    *
    * Return the per-source HMAC verification token. Owner-only (editor
    * permission required); the token allows a calendar owner to render
-   * the exact TXT record value they must publish. Token is deterministic
+   * the exact TXT record value they must publish, or to embed the
+   * well-known URL in a `<a rel="me">` backlink. Token is deterministic
    * per (sourceId, calendarId), so calling this repeatedly is safe.
+   *
+   * Optional body: `{ verification_type?: 'dns-txt' | 'rel-me' }`. When
+   * present, the service updates the source's verification mechanism
+   * (clearing `verifiedAt` if the mechanism actually changes). The handler
+   * stays thin: the value is forwarded as-is to the service, which
+   * validates and surfaces errors via ValidationError.
    */
   async issueChallenge(req: Request, res: Response): Promise<void> {
     const account = req.user as Account;
     const { calendarId, id } = req.params;
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const verificationType
+      = body.verification_type === undefined
+        ? undefined
+        // Cast is safe here because service-layer validation rejects any
+        // string that is not in IMPORT_SOURCE_VERIFICATION_TYPES.
+        : (body.verification_type as ImportSourceVerificationType);
 
     if (!ExpressHelper.isValidUUID(calendarId) || !ExpressHelper.isValidUUID(id)) {
       res.status(400).json({
@@ -225,7 +241,12 @@ class ImportSourceRoutes {
     }
 
     try {
-      const token = await this.service.issueImportSourceChallenge(account, calendarId, id);
+      const token = await this.service.issueImportSourceChallenge(
+        account,
+        calendarId,
+        id,
+        verificationType,
+      );
       res.json({ challengeToken: token });
     }
     catch (error) {
@@ -236,14 +257,27 @@ class ImportSourceRoutes {
   /**
    * POST /api/v1/calendars/:calendarId/import-sources/:id/verify
    *
-   * Perform DNS TXT ownership verification via the DnsVerifier, persist
-   * the outcome to the entity, and return the updated source on success.
-   * Sanitized failure modes map to typed exceptions the frontend uses to
-   * display actionable error messages.
+   * Perform ownership verification (DNS TXT or rel="me" backlink, per the
+   * source's `verificationType` discriminator), persist the outcome to the
+   * entity, and return the updated source on success. Sanitized failure
+   * modes map to typed exceptions the frontend uses to display actionable
+   * error messages.
+   *
+   * Optional body: `{ verification_page_url?: string }`. Required when the
+   * source's `verificationType === 'rel-me'`; ignored for DNS sources.
+   * The handler stays thin: the value is forwarded as-is to the service,
+   * which validates structure (https-only, hostname equality, length cap)
+   * and surfaces failures via ValidationError or
+   * ImportSourceRelMeVerificationError.
    */
   async verifySource(req: Request, res: Response): Promise<void> {
     const account = req.user as Account;
     const { calendarId, id } = req.params;
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const verificationPageUrl
+      = typeof body.verification_page_url === 'string'
+        ? body.verification_page_url
+        : undefined;
 
     if (!ExpressHelper.isValidUUID(calendarId) || !ExpressHelper.isValidUUID(id)) {
       res.status(400).json({
@@ -254,7 +288,12 @@ class ImportSourceRoutes {
     }
 
     try {
-      const updated = await this.service.verifyImportSource(account, calendarId, id);
+      const updated = await this.service.verifyImportSource(
+        account,
+        calendarId,
+        id,
+        verificationPageUrl,
+      );
       res.json(updated.toObject());
     }
     catch (error) {
@@ -321,6 +360,17 @@ class ImportSourceRoutes {
       return;
     }
     if (error instanceof ImportSourceDnsVerificationError) {
+      res.status(400).json({
+        error: error.message,
+        errorName: error.name,
+        reason: error.reason,
+      });
+      return;
+    }
+    if (error instanceof ImportSourceRelMeVerificationError) {
+      // Mirrors the DNS branch: 400 with `errorName` + `reason`. Reason is
+      // one of the IMPORT_RELME_* sanitized codes (no URLs, no hostnames,
+      // no raw HTML — those live on `details` for structured logs only).
       res.status(400).json({
         error: error.message,
         errorName: error.name,

@@ -8,7 +8,11 @@ import { getPublicSuffix, parse as parseTld } from 'tldts';
 import { Agent, request as undiciRequest } from 'undici';
 
 import { Account } from '@/common/model/account';
-import { ImportSource } from '@/common/model/import_source';
+import {
+  ImportSource,
+  ImportSourceVerificationType,
+  IMPORT_SOURCE_VERIFICATION_TYPES,
+} from '@/common/model/import_source';
 import { ValidationError } from '@/common/exceptions/base';
 import { CalendarNotFoundError } from '@/common/exceptions/calendar';
 import { CalendarEditorPermissionError } from '@/common/exceptions/editor';
@@ -282,28 +286,53 @@ class ImportSourceService {
   }
 
   /**
-   * Issue (or re-issue) the DNS verification challenge for a source.
+   * Issue (or re-issue) the verification challenge for a source.
    *
    * Returns the opaque HMAC token that the source-owning administrator
-   * must publish in a `_pavillion-challenge.{hostname}` TXT record. The
-   * token is deterministic per (sourceId, calendarId), so repeated calls
-   * return the same value — which is safe because the token alone is
-   * useless without also controlling the source's hostname DNS.
+   * must publish — either in a DNS TXT record (for `'dns-txt'` sources) or
+   * embedded in the well-known URL referenced by a `<a rel="me">` backlink
+   * (for `'rel-me'` sources). The token is deterministic per
+   * (sourceId, calendarId), so repeated calls return the same value —
+   * which is safe because the token alone is useless without also
+   * controlling the source's hostname DNS or hosting a backlink page on
+   * the source hostname.
+   *
+   * Verification type semantics: when `verificationType` is supplied and
+   * differs from the persisted value, the entity is updated and any prior
+   * `verified_at` proof is cleared so the source must re-enter the verify
+   * gate under the new mechanism. When the supplied type matches the
+   * persisted value (or no type is supplied), the existing proof is left
+   * intact.
    *
    * @param account - The requesting account (must own or edit the calendar)
    * @param calendarId - The calendar UUID
    * @param id - The import source UUID
+   * @param verificationType - Optional verification mechanism to set on the
+   *   source. Must be one of {@link IMPORT_SOURCE_VERIFICATION_TYPES}.
+   *   When omitted, the persisted type is preserved.
    * @returns The verification token (owner-facing, not persisted on the
    *          returned model and not leaked via list/read responses)
    * @throws CalendarNotFoundError, CalendarEditorPermissionError,
    *         ImportSourceNotFoundError
+   * @throws ValidationError when `verificationType` is supplied but is not
+   *   one of the allowed values.
    */
   async issueVerificationChallenge(
     account: Account,
     calendarId: string,
     id: string,
+    verificationType?: ImportSourceVerificationType,
   ): Promise<string> {
     await this.assertEditorAccess(account, calendarId);
+
+    if (
+      verificationType !== undefined
+      && !IMPORT_SOURCE_VERIFICATION_TYPES.includes(verificationType)
+    ) {
+      throw new ValidationError('Invalid verification type', {
+        verification_type: ['Invalid verification type'],
+      });
+    }
 
     const entity = await ImportSourceEntity.findOne({
       where: { id, calendar_id: calendarId },
@@ -322,10 +351,26 @@ class ImportSourceService {
     // can compare. Also bump state to 'pending' if it's still 'unverified'
     // so the admin UI reflects that a challenge has been issued.
     entity.verification_token = token;
-    // Future call paths for rel-me / oauth sources must pass a different
-    // verification_type here; keeping the stamp visible now establishes
-    // the pattern before it has callers.
-    entity.verification_type = 'dns-txt';
+
+    // Resolve the next verification type. When the caller omits
+    // `verificationType`, preserve whatever the entity already carries —
+    // this keeps the ungated /verify-issue path backwards compatible with
+    // pre-rel-me callers and pre-existing rows.
+    const nextType = verificationType ?? entity.verification_type;
+    if (nextType !== entity.verification_type) {
+      // Switching mechanism invalidates the previous proof: the new
+      // mechanism has not been satisfied yet. Clear `verified_at` so the
+      // source re-enters the verify gate under the new mechanism.
+      entity.verification_type = nextType;
+      entity.verified_at = null;
+    }
+    else {
+      // Belt-and-braces stamp — guarantees pre-existing rows that may have
+      // been seeded without the column populated still carry an explicit
+      // discriminator. No-op when already set.
+      entity.verification_type = nextType;
+    }
+
     if (entity.verification_state === 'unverified') {
       entity.verification_state = 'pending';
     }
