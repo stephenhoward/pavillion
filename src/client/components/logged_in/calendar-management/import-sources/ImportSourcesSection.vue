@@ -106,6 +106,7 @@ import { Plus } from 'lucide-vue-next';
 
 import type { ImportSource } from '@/common/model/import_source';
 import ImportSourceService from '@/client/service/import_source';
+import { importSourceErrorKey } from '@/client/service/import_source_errors';
 import PillButton from '@/client/components/common/pill-button.vue';
 import ModalLayout from '@/client/components/common/modal.vue';
 import EmptyLayout from '@/client/components/common/empty_state.vue';
@@ -292,26 +293,10 @@ const onSync = async (source: ImportSource) => {
   }
   catch (err) {
     console.error('Failed to sync import source', err);
-    toast.error(errorMessageForSync(err));
+    toast.error(t(importSourceErrorKey(err, 'sync')));
   }
   finally {
     state.syncingId = null;
-  }
-};
-
-/**
- * Map a sync error to a sanitized i18n-backed message. Falls back to a
- * generic message so the user never sees raw error objects or backend
- * resolver detail.
- */
-const errorMessageForSync = (err: unknown): string => {
-  const name = (err as { name?: string })?.name;
-  switch (name) {
-    case 'ImportSourceFetchError': return t('errors.fetch_error');
-    case 'ImportSourceSsrfBlockedError': return t('errors.ssrf_blocked');
-    case 'ImportSourceParseError': return t('errors.parse_error');
-    case 'ImportSourceVerifyRateLimitError': return t('errors.rate_limited');
-    default: return t('errors.unknown_sync');
   }
 };
 

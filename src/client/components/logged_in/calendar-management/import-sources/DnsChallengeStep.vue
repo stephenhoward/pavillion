@@ -112,8 +112,8 @@ import { Copy } from 'lucide-vue-next';
 
 import PillButton from '@/client/components/common/pill-button.vue';
 import ImportSourceService from '@/client/service/import_source';
+import { importSourceErrorKey } from '@/client/service/import_source_errors';
 import type { ImportSource } from '@/common/model/import_source';
-import { ImportSourceDnsVerificationError } from '@/common/exceptions/import';
 
 /**
  * Step component that walks a calendar editor through the DNS TXT verification
@@ -227,38 +227,6 @@ const copy = async (field: 'name' | 'value'): Promise<void> => {
   }, 1500);
 };
 
-/**
- * Map an error returned by verifySource to an i18n key under
- * `calendars.import.errors.*`. Falls back to a generic unknown_verify
- * message so the UI never displays an empty error surface.
- */
-const errorKeyFor = (err: unknown): string => {
-  if (err instanceof ImportSourceDnsVerificationError) {
-    switch (err.reason) {
-      case 'IMPORT_DNS_NOT_FOUND': return 'errors.dns_not_found';
-      case 'IMPORT_DNS_MISMATCH': return 'errors.dns_mismatch';
-      case 'IMPORT_DNS_RESOLVER_DISAGREEMENT': return 'errors.dns_resolver_disagreement';
-      case 'IMPORT_DNS_RESOLVER_UNAVAILABLE': return 'errors.dns_resolver_unavailable';
-      case 'IMPORT_DNS_PSL_VIOLATION': return 'errors.dns_psl_violation';
-      default: return 'errors.unknown_verify';
-    }
-  }
-  const name = (err as { name?: string })?.name;
-  if (name === 'ImportSourceVerifyRateLimitError') {
-    return 'errors.rate_limited';
-  }
-  if (name === 'ImportSourceFetchError') {
-    return 'errors.fetch_error';
-  }
-  if (name === 'ImportSourceSsrfBlockedError') {
-    return 'errors.ssrf_blocked';
-  }
-  if (name === 'ImportSourceParseError') {
-    return 'errors.parse_error';
-  }
-  return 'errors.unknown_verify';
-};
-
 const onVerify = async (): Promise<void> => {
   if (isVerifying.value) {
     return;
@@ -273,7 +241,7 @@ const onVerify = async (): Promise<void> => {
     emit('verified', updated);
   }
   catch (err) {
-    errorMessage.value = t(errorKeyFor(err));
+    errorMessage.value = t(importSourceErrorKey(err, 'verify-dns'));
   }
   finally {
     isVerifying.value = false;

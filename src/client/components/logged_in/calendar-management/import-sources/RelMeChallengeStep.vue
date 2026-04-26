@@ -67,7 +67,7 @@
         class="rel-me-challenge__input"
         data-test="rel-me-page-url-input"
         :placeholder="t('rel_me_challenge.page_url_placeholder')"
-        :maxlength="MAX_URL_LENGTH"
+        :maxlength="RELME_PAGE_URL_MAX_LENGTH"
         :aria-invalid="errorMessage !== null"
         :aria-describedby="errorMessage ? errorRegionId : undefined"
         @input="onInput"
@@ -128,12 +128,12 @@ import { Copy } from 'lucide-vue-next';
 
 import PillButton from '@/client/components/common/pill-button.vue';
 import ImportSourceService from '@/client/service/import_source';
-import type { ImportSource } from '@/common/model/import_source';
+import { importSourceErrorKey } from '@/client/service/import_source_errors';
 import {
-  ImportSourceRelMeVerificationError,
-  ImportSourceSsrfBlockedError,
-  ImportSourceVerifyRateLimitError,
-} from '@/common/exceptions/import';
+  RELME_PAGE_URL_MAX_LENGTH,
+  validateRelMePageUrl,
+} from '@/client/service/rel_me_url_validation';
+import type { ImportSource } from '@/common/model/import_source';
 
 /**
  * Step component inside the verify-ownership wizard that walks a calendar
@@ -196,15 +196,6 @@ const { t } = useTranslation('calendars', { keyPrefix: 'import' });
 
 const service = new ImportSourceService();
 
-/**
- * Maximum allowed length for the verification page URL. Mirrors the
- * server-side `RELME_PAGE_URL_MAX_LENGTH` constant so client-side
- * validation rejects the same inputs the server would; keeping this in
- * sync prevents the user from getting a server-side rejection for a
- * problem they could have caught locally.
- */
-const MAX_URL_LENGTH = 2048;
-
 const pageUrl = ref<string>('');
 const isVerifying = ref<boolean>(false);
 const errorMessage = ref<string | null>(null);
@@ -255,101 +246,6 @@ const expectedLinkTarget = computed<string>(() => {
 const htmlSnippet = computed<string>(() => {
   return `<a href="${expectedLinkTarget.value}" rel="me">${sourceHostname.value}</a>`;
 });
-
-/**
- * Normalize raw user input by prepending `https://` when the user omits
- * the scheme. Requiring the scheme is a UX trap — pasting a URL from a
- * browser address bar usually includes it, but typing a hostname does
- * not. We auto-prepend rather than reject so the user is not punished
- * for either habit. Inputs that already declare a scheme (including
- * non-https schemes such as `http://`) are passed through unchanged so
- * the downstream scheme check can reject them with a precise error.
- */
-const SCHEME_PREFIX_PATTERN = /^[a-zA-Z][a-zA-Z0-9+\-.]*:\/\//;
-const normalizeUrl = (raw: string): string => {
-  const trimmed = raw.trim();
-  if (trimmed.length === 0 || SCHEME_PREFIX_PATTERN.test(trimmed)) {
-    return trimmed;
-  }
-  return `https://${trimmed}`;
-};
-
-/**
- * Validate the user-supplied page URL against the same rules as the
- * server-side `validateRelMePageUrl()`. Returns either a validation
- * failure (i18n key) or the normalized URL ready to send to the verifier.
- *
- * Rules (mirroring server):
- *  1. Required, non-empty after trim
- *  2. Length <= MAX_URL_LENGTH (after normalization)
- *  3. Parses as a URL
- *  4. Scheme is `https:`
- *  5. Hostname equals source hostname (case-insensitive)
- */
-type ValidationResult = { ok: true; url: string } | { ok: false; key: string };
-const validatePageUrl = (raw: string): ValidationResult => {
-  const trimmed = raw.trim();
-  if (trimmed.length === 0) {
-    return { ok: false, key: 'rel_me_challenge.page_url_required' };
-  }
-
-  const normalized = normalizeUrl(trimmed);
-  if (normalized.length > MAX_URL_LENGTH) {
-    return { ok: false, key: 'rel_me_challenge.page_url_too_long' };
-  }
-
-  let parsed: URL;
-  try {
-    parsed = new URL(normalized);
-  }
-  catch {
-    return { ok: false, key: 'rel_me_challenge.page_url_invalid' };
-  }
-
-  if (parsed.protocol !== 'https:') {
-    return { ok: false, key: 'rel_me_challenge.page_url_invalid_scheme' };
-  }
-  if (parsed.hostname.toLowerCase() !== sourceHostname.value) {
-    return { ok: false, key: 'rel_me_challenge.page_url_hostname_mismatch' };
-  }
-  return { ok: true, url: normalized };
-};
-
-/**
- * Map a server-returned error to its i18n key under
- * `calendars.import.errors.*`. Mirrors the dns-challenge mapping pattern
- * so error surfaces stay consistent across both verification flows. Falls
- * back to a generic unknown_verify message so the UI never shows a blank
- * error state.
- */
-const errorKeyFor = (err: unknown): string => {
-  if (err instanceof ImportSourceRelMeVerificationError) {
-    switch (err.reason) {
-      case 'IMPORT_RELME_PAGE_FETCH_ERROR': return 'errors.relme_page_fetch_error';
-      case 'IMPORT_RELME_PARSE_ERROR': return 'errors.relme_parse_error';
-      case 'IMPORT_RELME_LINK_NOT_FOUND': return 'errors.relme_link_not_found';
-      case 'IMPORT_RELME_HOSTNAME_MISMATCH': return 'errors.relme_hostname_mismatch';
-      case 'IMPORT_RELME_PSL_VIOLATION': return 'errors.relme_psl_violation';
-      default: return 'errors.unknown_verify';
-    }
-  }
-  if (err instanceof ImportSourceSsrfBlockedError) {
-    return 'errors.ssrf_blocked';
-  }
-  if (err instanceof ImportSourceVerifyRateLimitError) {
-    return 'errors.rate_limited';
-  }
-  // Defensive: fall back to errorName-based mapping for cross-HTTP
-  // reconstructed errors that may not pass instanceof checks.
-  const name = (err as { name?: string })?.name;
-  if (name === 'ImportSourceSsrfBlockedError') {
-    return 'errors.ssrf_blocked';
-  }
-  if (name === 'ImportSourceVerifyRateLimitError') {
-    return 'errors.rate_limited';
-  }
-  return 'errors.unknown_verify';
-};
 
 /**
  * Clear the error message when the user starts editing again so the
@@ -404,7 +300,7 @@ const onVerify = async (): Promise<void> => {
   // The validator also normalizes the URL (auto-prepending `https://`
   // when the scheme is missing), so we forward the normalized form to
   // the verifier rather than the raw input.
-  const validation = validatePageUrl(pageUrl.value);
+  const validation = validateRelMePageUrl(pageUrl.value, sourceHostname.value);
   if (!validation.ok) {
     errorMessage.value = t(validation.key);
     return;
@@ -428,7 +324,7 @@ const onVerify = async (): Promise<void> => {
     emit('verified', updated);
   }
   catch (err) {
-    errorMessage.value = t(errorKeyFor(err));
+    errorMessage.value = t(importSourceErrorKey(err, 'verify-rel-me'));
   }
   finally {
     isVerifying.value = false;
