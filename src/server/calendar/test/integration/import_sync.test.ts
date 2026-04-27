@@ -122,6 +122,10 @@ describe('SyncService integration', () => {
       calendar_id: testCalendar.id,
       url: opts.url ?? 'https://feeds.example.test/events.ics',
       enabled: true,
+      // A verified source always has a verification method on it in
+      // production — issueVerificationChallenge requires the discriminator
+      // to be set before issuing a challenge (pv-44qj).
+      verification_type: 'dns-txt',
       verification_state: 'verified',
       verified_at: now,
       verification_expires_at: opts.verificationExpiresAt

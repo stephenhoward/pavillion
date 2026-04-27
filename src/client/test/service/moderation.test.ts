@@ -8,7 +8,7 @@ import type {
   ModerationSettings,
 } from '@/client/service/moderation';
 import { Report, ReportCategory, ReportStatus } from '@/common/model/report';
-import { UnknownError } from '@/common/exceptions/base';
+import { UnknownError, ValidationError } from '@/common/exceptions/base';
 
 describe('ModerationService', () => {
   let sandbox: sinon.SinonSandbox;
@@ -382,7 +382,7 @@ describe('ModerationService', () => {
         priority: 'low',
       };
 
-      await expect(service.createAdminReport(data)).rejects.toThrow('Invalid input');
+      await expect(service.createAdminReport(data)).rejects.toThrow(ValidationError);
     });
 
     it('should throw mapped error for event not found', async () => {
@@ -501,7 +501,7 @@ describe('ModerationService', () => {
       });
 
       await expect(service.updateModerationSettings({ autoEscalationHours: -1 }))
-        .rejects.toThrow('Invalid input');
+        .rejects.toThrow(ValidationError);
     });
 
     it('should throw UnknownError on network failure', async () => {

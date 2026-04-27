@@ -102,7 +102,7 @@ describe('DnsChallengeStep', () => {
       // Step renders its own heading inside the wizard chrome (not a modal title).
       const heading = wrapper.find('h3');
       expect(heading.exists()).toBe(true);
-      expect(heading.text()).toContain('Verify');
+      expect(heading.text()).toContain('DNS record');
 
       // Verify action button (inside the PillButton element)
       const verifyBtn = wrapper.find('.pill-button--primary');
