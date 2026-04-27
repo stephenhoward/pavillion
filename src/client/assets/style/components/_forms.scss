@@ -197,3 +197,48 @@
   line-height: 1.5;
 
 }
+
+// Read-only block surface for literal text the user must copy verbatim
+// (DNS TXT records, HTML snippets, embed codes, API tokens). Apply to a
+// <pre><code> wrapper so the surrounding container reads as a code block
+// to assistive technology. Uses semantic tokens so dark mode is handled
+// transparently by the [data-theme] tokens.
+@mixin code-display {
+  display: block;
+  margin: 0;
+  padding-block: var(--pav-space-2);
+  padding-inline: var(--pav-space-3);
+  background: var(--pav-surface-card);
+  color: var(--pav-text-primary);
+  border: var(--pav-border-width-1) solid var(--pav-border-subtle);
+  border-radius: var(--pav-border-radius-md);
+  font-family: var(--pav-font-family-mono);
+  font-size: var(--pav-font-size-small);
+  line-height: var(--pav-line-height-normal);
+  overflow-x: auto;
+  white-space: pre;
+  word-break: normal;
+}
+
+// Inline read-only input variant of code-display. Same visual treatment
+// as the block form but flex-sized so it can sit next to an inline copy
+// button via a flex row. Includes a focus ring because read-only inputs
+// are still focusable for keyboard select/copy (WCAG SC 2.4.7).
+@mixin code-input {
+  flex: 1;
+  min-width: 0;
+  padding-block: var(--pav-space-2);
+  padding-inline: var(--pav-space-3);
+  background: var(--pav-surface-card);
+  color: var(--pav-text-primary);
+  border: var(--pav-border-width-1) solid var(--pav-border-subtle);
+  border-radius: var(--pav-border-radius-md);
+  font-family: var(--pav-font-family-mono);
+  font-size: var(--pav-font-size-small);
+  line-height: var(--pav-line-height-normal);
+
+  &:focus-visible {
+    outline: var(--pav-border-width-2) solid var(--pav-text-primary);
+    outline-offset: var(--pav-space-1);
+  }
+}

@@ -1,14 +1,14 @@
 <template>
   <section
-    class="rel-me-challenge"
+    class="vstack stack--md"
     data-test="rel-me-challenge-step"
     :aria-labelledby="headingId"
   >
-    <header class="rel-me-challenge__header">
-      <h3 :id="headingId" class="rel-me-challenge__heading">
+    <header class="step-header vstack stack--xs">
+      <h3 :id="headingId" class="step-title">
         {{ t('verify_wizard.method_relme_title') }}
       </h3>
-      <p class="rel-me-challenge__instructions">
+      <p class="step-instructions">
         {{ t('rel_me_challenge.instructions') }}
       </p>
     </header>
@@ -22,17 +22,17 @@
       verification URL, which would (1) make the snippet impossible to
       "copy as code" and (2) defeat the read-only display intent.
     -->
-    <div class="rel-me-challenge__field">
-      <p :id="snippetLabelId" class="rel-me-challenge__label">
+    <div class="field vstack stack--sm">
+      <p :id="snippetLabelId" class="field-label">
         {{ t('rel_me_challenge.html_snippet_label') }}
       </p>
-      <p class="rel-me-challenge__help">
+      <p class="field-help">
         {{ t('rel_me_challenge.html_snippet_help') }}
       </p>
       <pre
         :id="snippetCodeId"
         :aria-labelledby="snippetLabelId"
-        class="rel-me-challenge__code-block"
+        class="code-display"
         data-test="rel-me-html-snippet"
       ><code>{{ htmlSnippet }}</code></pre>
       <CopyButton
@@ -40,17 +40,17 @@
         :label="t('rel_me_challenge.copy_html')"
         :copied-label="t('rel_me_challenge.copied')"
         :aria-label="t('rel_me_challenge.copy_html_aria')"
-        class="rel-me-challenge__copy-btn rel-me-challenge__copy-btn--block"
+        class="copy-html"
         data-test="rel-me-copy-html"
       />
     </div>
 
     <!-- Page URL input where the owner enters the URL of their verification page -->
-    <div class="rel-me-challenge__field">
-      <label :for="pageUrlInputId" class="rel-me-challenge__label">
+    <div class="field vstack stack--sm">
+      <label :for="pageUrlInputId" class="field-label">
         {{ t('rel_me_challenge.page_url_label') }}
       </label>
-      <p class="rel-me-challenge__help">
+      <p class="field-help">
         {{ t('rel_me_challenge.page_url_help') }}
       </p>
       <input
@@ -62,7 +62,7 @@
         autocomplete="url"
         spellcheck="false"
         required
-        class="rel-me-challenge__input"
+        class="code-input"
         data-test="rel-me-page-url-input"
         :placeholder="t('rel_me_challenge.page_url_placeholder')"
         :maxlength="RELME_PAGE_URL_MAX_LENGTH"
@@ -80,7 +80,7 @@
     <div
       v-if="errorMessage"
       :id="errorRegionId"
-      class="alert alert--error rel-me-challenge__error"
+      class="alert alert--error"
       data-test="rel-me-error"
       role="alert"
       aria-live="polite"
@@ -88,7 +88,7 @@
       {{ errorMessage }}
     </div>
 
-    <div class="rel-me-challenge__actions">
+    <div class="actions">
       <button
         type="button"
         class="btn-ghost"
@@ -306,88 +306,71 @@ const onChangeMethod = (): void => {
 
 <style scoped lang="scss">
 @use '../../../../assets/style/components/calendar-admin' as *;
-@use '../../../../assets/style/mixins/challenge-step' as *;
+@use '../../../../assets/style/components/forms' as *;
 
-.rel-me-challenge {
-  @include challenge-step;
+.step-header {
+  margin-block-end: var(--pav-space-1);
+}
 
-  &__header {
-    @include challenge-step-header;
+.step-title {
+  margin: 0;
+  color: var(--pav-text-primary);
+  font-size: var(--pav-font-size-h6);
+  font-weight: var(--pav-font-weight-semibold);
+  line-height: var(--pav-line-height-snug);
+}
+
+.step-instructions {
+  margin: 0;
+  color: var(--pav-text-primary);
+  font-size: var(--pav-font-size-body);
+  line-height: var(--pav-line-height-normal);
+}
+
+.field-label {
+  color: var(--pav-text-secondary);
+  font-size: var(--pav-font-size-small);
+  font-weight: var(--pav-font-weight-medium);
+}
+
+.field-help {
+  margin: 0;
+  color: var(--pav-text-secondary);
+  font-size: var(--pav-font-size-small);
+  line-height: var(--pav-line-height-normal);
+}
+
+.code-display {
+  @include code-display;
+}
+
+// The snippet copy button is a block-level affordance under the <pre>
+// snippet — pin it to the inline-start so it doesn't stretch across the
+// full column width that the parent vstack would otherwise apply.
+.copy-html {
+  align-self: start;
+}
+
+.code-input {
+  @include code-input;
+  inline-size: 100%;
+
+  &[aria-invalid='true'] {
+    border-color: var(--pav-color-error);
   }
+}
 
-  &__heading {
-    @include challenge-step-title;
-  }
+.alert {
+  margin: 0;
 
-  &__instructions {
-    @include challenge-step-instructions;
-  }
+  @include admin-alert;
+}
 
-  &__field {
-    @include challenge-step-field;
-  }
-
-  &__label {
-    @include challenge-step-label;
-  }
-
-  &__help {
-    margin: 0;
-    color: var(--pav-text-secondary);
-    font-size: var(--pav-font-size-small);
-    line-height: var(--pav-line-height-normal);
-  }
-
-  &__code-block {
-    @include challenge-step-code-block;
-  }
-
-  &__input {
-    inline-size: 100%;
-    padding-block: var(--pav-space-2);
-    padding-inline: var(--pav-space-3);
-    background: var(--pav-surface-card);
-    color: var(--pav-text-primary);
-    border: var(--pav-border-width-1) solid var(--pav-border-subtle);
-    border-radius: var(--pav-border-radius-md);
-    font-family: var(--pav-font-family-mono);
-    font-size: var(--pav-font-size-small);
-
-    &:focus-visible {
-      outline: var(--pav-border-width-2) solid var(--pav-text-primary);
-      outline-offset: var(--pav-space-1);
-    }
-
-    &[aria-invalid='true'] {
-      border-color: var(--pav-color-error);
-    }
-  }
-
-  &__copy-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--pav-space-1);
-    flex-shrink: 0;
-
-    &--block {
-      align-self: start;
-    }
-  }
-
-  &__error {
-    margin: 0;
-  }
-
-  &__actions {
-    @include challenge-step-actions;
-  }
+.actions {
+  @include modal-actions;
 }
 
 .btn-ghost {
   @include admin-ghost-button;
-}
-
-.alert {
-  @include admin-alert;
 }
 </style>

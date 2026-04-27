@@ -173,6 +173,20 @@
   }
 }
 
+// Modal/wizard action footer pattern.
+// End-justified buttons separated from the body by a top border, with
+// flex-wrap so the buttons stack rather than overflow on narrow modals.
+// Uses logical properties so the layout flips cleanly under RTL.
+@mixin modal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: end;
+  gap: var(--pav-space-3);
+  margin-block-start: var(--pav-space-2);
+  padding-block-start: var(--pav-space-3);
+  border-block-start: var(--pav-border-width-1) solid var(--pav-border-primary);
+}
+
 // Confirmation dialog layout pattern (delete, merge, etc.)
 @mixin admin-dialog-layout {
   display: flex;

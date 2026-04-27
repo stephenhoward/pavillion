@@ -1,27 +1,27 @@
 <template>
   <section
-    class="dns-challenge-step"
+    class="vstack stack--md"
     data-test="verify-wizard-dns-step"
     :aria-labelledby="headingId"
   >
-    <header class="dns-challenge-step__header">
-      <h3 :id="headingId" class="dns-challenge-step__heading">
+    <header class="step-header vstack stack--xs">
+      <h3 :id="headingId" class="step-title">
         {{ t('dns_challenge.modal_title') }}
       </h3>
-      <p class="dns-challenge-step__instructions">
+      <p class="step-instructions">
         {{ t('dns_challenge.instructions', { name: recordName, value: recordValue }) }}
       </p>
     </header>
 
-    <div class="dns-challenge-step__field">
-      <label :for="nameInputId" class="dns-challenge-step__label">
+    <div class="field vstack stack--sm">
+      <label :for="nameInputId" class="field-label">
         {{ t('dns_challenge.record_name_label') }}
       </label>
-      <div class="dns-challenge-step__row">
+      <div class="field-row hstack stack--sm stack--wrap">
         <input
           :id="nameInputId"
           type="text"
-          class="dns-challenge-step__input"
+          class="code-input code-input--borderless"
           readonly
           :value="recordName"
         />
@@ -30,20 +30,20 @@
           :label="t('dns_challenge.copy_record')"
           :copied-label="t('dns_challenge.copied')"
           :aria-label="t('dns_challenge.copy_record_name')"
-          class="dns-challenge-step__copy-btn"
+          data-test="dns-copy-record-name"
         />
       </div>
     </div>
 
-    <div class="dns-challenge-step__field">
-      <label :for="valueInputId" class="dns-challenge-step__label">
+    <div class="field vstack stack--sm">
+      <label :for="valueInputId" class="field-label">
         {{ t('dns_challenge.record_value_label') }}
       </label>
-      <div class="dns-challenge-step__row">
+      <div class="field-row hstack stack--sm stack--wrap">
         <input
           :id="valueInputId"
           type="text"
-          class="dns-challenge-step__input"
+          class="code-input code-input--borderless"
           readonly
           :value="recordValue"
         />
@@ -52,21 +52,21 @@
           :label="t('dns_challenge.copy_record')"
           :copied-label="t('dns_challenge.copied')"
           :aria-label="t('dns_challenge.copy_record_value')"
-          class="dns-challenge-step__copy-btn"
+          data-test="dns-copy-record-value"
         />
       </div>
     </div>
 
     <div
       v-if="errorMessage"
-      class="alert alert--error dns-challenge-step__error"
+      class="alert alert--error"
       role="alert"
       aria-live="polite"
     >
       {{ errorMessage }}
     </div>
 
-    <div class="dns-challenge-step__actions">
+    <div class="actions">
       <button
         type="button"
         class="btn-ghost"
@@ -209,55 +209,47 @@ const onChangeMethod = (): void => {
 
 <style scoped lang="scss">
 @use '../../../../assets/style/components/calendar-admin' as *;
-@use '../../../../assets/style/mixins/challenge-step' as *;
+@use '../../../../assets/style/components/forms' as *;
 
-.dns-challenge-step {
-  @include challenge-step;
+.step-header {
+  margin-block-end: var(--pav-space-1);
+}
 
-  &__header {
-    @include challenge-step-header;
-  }
+.step-title {
+  margin: 0;
+  color: var(--pav-text-primary);
+  font-size: var(--pav-font-size-h6);
+  font-weight: var(--pav-font-weight-semibold);
+  line-height: var(--pav-line-height-snug);
+}
 
-  &__heading {
-    @include challenge-step-title;
-  }
+.step-instructions {
+  margin: 0;
+  color: var(--pav-text-primary);
+  font-size: var(--pav-font-size-body);
+  line-height: var(--pav-line-height-normal);
+}
 
-  &__instructions {
-    @include challenge-step-instructions;
-  }
+.field-label {
+  color: var(--pav-text-secondary);
+  font-size: var(--pav-font-size-small);
+  font-weight: var(--pav-font-weight-medium);
+}
 
-  &__field {
-    @include challenge-step-field;
-  }
+.code-input {
+  @include code-input;
+}
 
-  &__label {
-    @include challenge-step-label;
-  }
+.code-input--borderless {
+  border: none;
+}
 
-  &__row {
-    @include challenge-step-row;
-  }
+.alert {
+  margin: 0;
+}
 
-  &__input {
-    @include challenge-step-code-input;
-    border-width: 0;
-    background: var(--pav-surface-card);
-  }
-
-  &__copy-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--pav-space-1);
-    flex-shrink: 0;
-  }
-
-  &__error {
-    margin: 0;
-  }
-
-  &__actions {
-    @include challenge-step-actions;
-  }
+.actions {
+  @include modal-actions;
 }
 
 .btn-ghost {

@@ -193,10 +193,10 @@ describe('DnsChallengeStep', () => {
       const { wrapper } = mountStep();
       await flushPromises();
 
-      const copyBtns = wrapper.findAll('.dns-challenge-step__copy-btn');
-      expect(copyBtns.length).toBeGreaterThanOrEqual(2);
+      const nameCopy = wrapper.find('[data-test="dns-copy-record-name"]');
+      expect(nameCopy.exists()).toBe(true);
 
-      await copyBtns[0].trigger('click');
+      await nameCopy.trigger('click');
       await flushPromises();
 
       expect(writeTextMock).toHaveBeenCalledWith(
@@ -208,8 +208,7 @@ describe('DnsChallengeStep', () => {
       const { wrapper } = mountStep();
       await flushPromises();
 
-      const copyBtns = wrapper.findAll('.dns-challenge-step__copy-btn');
-      await copyBtns[1].trigger('click');
+      await wrapper.find('[data-test="dns-copy-record-value"]').trigger('click');
       await flushPromises();
 
       expect(writeTextMock).toHaveBeenCalledWith(
@@ -250,8 +249,7 @@ describe('DnsChallengeStep', () => {
       const regionBefore = wrapper.find('[role="status"][aria-live="polite"]');
       expect(regionBefore.text()).toBe('');
 
-      const copyBtns = wrapper.findAll('.dns-challenge-step__copy-btn');
-      await copyBtns[0].trigger('click');
+      await wrapper.find('[data-test="dns-copy-record-name"]').trigger('click');
       await flushPromises();
 
       const regionAfter = wrapper.find('[role="status"][aria-live="polite"]');

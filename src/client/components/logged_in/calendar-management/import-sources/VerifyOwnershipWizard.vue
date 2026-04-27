@@ -8,20 +8,20 @@
     <!-- ===== PICKER STEP ===== -->
     <section
       v-if="currentStep === 'pick'"
-      class="verify-wizard verify-wizard--picker"
+      class="vstack stack--md"
       data-test="verify-wizard-picker"
       :aria-labelledby="pickerHeadingId"
     >
-      <header class="verify-wizard__header">
-        <h3 :id="pickerHeadingId" class="verify-wizard__heading">
+      <header class="step-header vstack stack--xs">
+        <h3 :id="pickerHeadingId" class="step-title">
           {{ t('picker_heading') }}
         </h3>
-        <p class="verify-wizard__description">
+        <p class="step-instructions">
           {{ t('picker_description') }}
         </p>
       </header>
 
-      <div class="verify-wizard__methods">
+      <div class="methods">
         <!--
           Card-as-button pattern: each method is a real <button> so it is
           natively keyboard-focusable and announced as "button" by AT.
@@ -34,18 +34,18 @@
         -->
         <button
           type="button"
-          class="verify-wizard__method"
+          class="method"
           data-test="verify-wizard-pick-relme"
           @click="selectMethod('rel-me')"
         >
-          <span class="verify-wizard__method-icon" aria-hidden="true">
+          <span class="method-icon" aria-hidden="true">
             <Link2 :size="24" :stroke-width="2" />
           </span>
-          <span class="verify-wizard__method-body">
-            <span class="verify-wizard__method-title">
+          <span class="method-body">
+            <span class="method-title">
               {{ t('method_relme_title') }}
             </span>
-            <span class="verify-wizard__method-description">
+            <span class="method-description">
               {{ t('method_relme_description') }}
             </span>
           </span>
@@ -53,25 +53,25 @@
 
         <button
           type="button"
-          class="verify-wizard__method"
+          class="method"
           data-test="verify-wizard-pick-dns"
           @click="selectMethod('dns-txt')"
         >
-          <span class="verify-wizard__method-icon" aria-hidden="true">
+          <span class="method-icon" aria-hidden="true">
             <Globe :size="24" :stroke-width="2" />
           </span>
-          <span class="verify-wizard__method-body">
-            <span class="verify-wizard__method-title">
+          <span class="method-body">
+            <span class="method-title">
               {{ t('method_dns_title') }}
             </span>
-            <span class="verify-wizard__method-description">
+            <span class="method-description">
               {{ t('method_dns_description') }}
             </span>
           </span>
         </button>
       </div>
 
-      <div class="verify-wizard__actions">
+      <div class="actions">
         <button
           type="button"
           class="btn-ghost"
@@ -287,99 +287,99 @@ onMounted(() => {
 
 <style scoped lang="scss">
 @use '../../../../assets/style/components/calendar-admin' as *;
-@use '../../../../assets/style/mixins/challenge-step' as *;
 
-.verify-wizard {
+.step-header {
+  margin-block-end: var(--pav-space-1);
+}
+
+.step-title {
+  margin: 0;
+  color: var(--pav-text-primary);
+  font-size: var(--pav-font-size-h6);
+  font-weight: var(--pav-font-weight-semibold);
+  line-height: var(--pav-line-height-snug);
+}
+
+.step-instructions {
+  margin: 0;
+  color: var(--pav-text-primary);
+  font-size: var(--pav-font-size-body);
+  line-height: var(--pav-line-height-normal);
+}
+
+/*
+ * Method picker layout. Cards stack vertically at every viewport size so
+ * each method has room to breathe and there's headroom to add more
+ * verification mechanisms (OAuth provider connections, etc.) without
+ * cramping the picker.
+ */
+.methods {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--pav-space-3);
+}
+
+.method {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--pav-space-3);
+  padding-block: var(--pav-space-4);
+  padding-inline: var(--pav-space-4);
+  background: var(--pav-surface-card);
+  color: var(--pav-text-primary);
+  border: var(--pav-border-width-1) solid var(--pav-border-primary);
+  border-radius: var(--pav-border-radius-md);
+  text-align: start;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+  // Grid items default to min-width: auto, which lets the cell grow past
+  // the track width when content can't shrink — the descriptions then
+  // spill out of the modal. Setting min-width: 0 lets the cell respect
+  // its 1fr track sizing and forces the inner content to wrap.
+  min-width: 0;
+  // <button> elements default to white-space: nowrap in UA stylesheets,
+  // which prevents the description from wrapping and produces the
+  // overflow seen in the picker. Reset to normal so text wraps inside
+  // the card the same way it does outside one.
+  white-space: normal;
+
+  &:hover:not(:disabled),
+  &:focus-visible {
+    background: var(--pav-interactive-hover);
+    border-color: var(--pav-text-primary);
+  }
+}
+
+.method-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--pav-text-primary);
+}
+
+.method-body {
   display: flex;
   flex-direction: column;
-  gap: var(--pav-space-4);
+  gap: var(--pav-space-1);
+  min-width: 0;
+}
 
-  &__header {
-    @include challenge-step-header;
-  }
+.method-title {
+  color: var(--pav-text-primary);
+  font-size: var(--pav-font-size-body);
+  font-weight: var(--pav-font-weight-semibold);
+  line-height: var(--pav-line-height-snug);
+}
 
-  &__heading {
-    @include challenge-step-title;
-  }
+.method-description {
+  color: var(--pav-text-secondary);
+  font-size: var(--pav-font-size-small);
+  line-height: var(--pav-line-height-normal);
+}
 
-  &__description {
-    @include challenge-step-instructions;
-  }
-
-  /*
-   * Method picker layout. Cards stack vertically at every viewport size so
-   * each method has room to breathe and there's headroom to add more
-   * verification mechanisms (OAuth provider connections, etc.) without
-   * cramping the picker.
-   */
-  &__methods {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: var(--pav-space-3);
-  }
-
-  &__method {
-    display: flex;
-    align-items: flex-start;
-    gap: var(--pav-space-3);
-    padding-block: var(--pav-space-4);
-    padding-inline: var(--pav-space-4);
-    background: var(--pav-surface-card);
-    color: var(--pav-text-primary);
-    border: var(--pav-border-width-1) solid var(--pav-border-primary);
-    border-radius: var(--pav-border-radius-md);
-    text-align: start;
-    cursor: pointer;
-    transition: background 0.15s ease, border-color 0.15s ease;
-    // Grid items default to min-width: auto, which lets the cell grow past
-    // the track width when content can't shrink — the descriptions then
-    // spill out of the modal. Setting min-width: 0 lets the cell respect
-    // its 1fr track sizing and forces the inner content to wrap.
-    min-width: 0;
-    // <button> elements default to white-space: nowrap in UA stylesheets,
-    // which prevents the description from wrapping and produces the
-    // overflow seen in the picker. Reset to normal so text wraps inside
-    // the card the same way it does outside one.
-    white-space: normal;
-
-    &:hover:not(:disabled),
-    &:focus-visible {
-      background: var(--pav-interactive-hover);
-      border-color: var(--pav-text-primary);
-    }
-  }
-
-  &__method-icon {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    color: var(--pav-text-primary);
-  }
-
-  &__method-body {
-    display: flex;
-    flex-direction: column;
-    gap: var(--pav-space-1);
-    min-width: 0;
-  }
-
-  &__method-title {
-    color: var(--pav-text-primary);
-    font-size: var(--pav-font-size-body);
-    font-weight: var(--pav-font-weight-semibold);
-    line-height: var(--pav-line-height-snug);
-  }
-
-  &__method-description {
-    color: var(--pav-text-secondary);
-    font-size: var(--pav-font-size-small);
-    line-height: var(--pav-line-height-normal);
-  }
-
-  &__actions {
-    @include challenge-step-actions;
-  }
+.actions {
+  @include modal-actions;
 }
 
 .btn-ghost {
