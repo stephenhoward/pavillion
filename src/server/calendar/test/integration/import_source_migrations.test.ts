@@ -360,10 +360,10 @@ describe('ICS import foundation migrations', () => {
   });
 
   describe('verification_type discriminator', () => {
-    it('applies the dns-txt default to inserts that omit the column', async () => {
-      // The column is created with `defaultValue: 'dns-txt'` in migration
-      // 0026. Assert that new INSERTs without an explicit value receive
-      // the DB default.
+    it('leaves verification_type NULL when an insert omits the column', async () => {
+      // Migration 0026 defines verification_type as nullable with no DB
+      // default so a freshly created source sits in a "no method chosen yet"
+      // state until the verify-ownership wizard records the owner's choice.
       const calendarId = await seedCalendar();
       const sourceId = randomUUID();
       await sequelize.query(
@@ -373,20 +373,20 @@ describe('ICS import foundation migrations', () => {
         { replacements: [sourceId, calendarId, 'https://example.test/default-feed.ics'] },
       );
 
-      const [row] = await sequelize.query<{ verification_type: string }>(
+      const [row] = await sequelize.query<{ verification_type: string | null }>(
         `SELECT verification_type FROM import_source WHERE id = ?`,
         { replacements: [sourceId], type: QueryTypes.SELECT },
       );
 
-      expect(row.verification_type).toBe('dns-txt');
+      expect(row.verification_type).toBeNull();
     });
 
-    it('persists verification_type=rel-me after migration 0029 extends the enum', async () => {
-      // Migration 0029 adds 'rel-me' as a valid discriminator value alongside
-      // the existing 'dns-txt'. On SQLite the ENUM is not enforced at the DB
+    it('persists verification_type=rel-me as a valid enum value', async () => {
+      // Migration 0026 includes 'rel-me' alongside 'dns-txt' in the
+      // discriminator enum. On SQLite the ENUM is not enforced at the DB
       // layer (Sequelize emits no CHECK constraint), so this assertion
-      // primarily covers persistence semantics on dev/test. On Postgres the
-      // value would be rejected without the ALTER TYPE in 0029.
+      // primarily covers persistence semantics on dev/test. On Postgres
+      // the column type rejects any value not in the enum.
       const calendarId = await seedCalendar();
       const sourceId = randomUUID();
       await sequelize.query(

@@ -23,12 +23,14 @@ import {
  * - ENUM columns for verification_type, verification_state, and last_status
  *   use DataType.ENUM for dialect-appropriate storage (Postgres enum type,
  *   SQLite check constraint).
- * - `verification_type` is a single-value discriminator ENUM ("which trust
- *   mechanism was used"), layered orthogonally to `verification_state`
- *   ("is the current trust still valid"). Only `'dns-txt'` is defined
- *   today; future verifier mechanisms (e.g. rel-me, OAuth provider-
- *   connection delegation) extend the enum atomically alongside the code
- *   that stamps the new value.
+ * - `verification_type` is a discriminator ENUM ("which trust mechanism was
+ *   used"), layered orthogonally to `verification_state` ("is the current
+ *   trust still valid"). It is nullable with no DB default so a freshly
+ *   created source can sit in a "no method chosen yet" state until the
+ *   verify-ownership wizard records the owner's choice; concrete values
+ *   today are `'dns-txt'` and `'rel-me'`. Future verifier mechanisms
+ *   (e.g. OAuth provider-connection delegation) extend the enum atomically
+ *   alongside the code that stamps the new value.
  *
  * Reference: bead pv-1qcp.1.1 (ICS import foundation).
  */
@@ -63,9 +65,9 @@ export default {
         defaultValue: true,
       },
       verification_type: {
-        type: DataTypes.ENUM('dns-txt'),
-        allowNull: false,
-        defaultValue: 'dns-txt',
+        type: DataTypes.ENUM('dns-txt', 'rel-me'),
+        allowNull: true,
+        defaultValue: null,
       },
       verification_state: {
         type: DataTypes.ENUM('unverified', 'pending', 'verified', 'expired'),
