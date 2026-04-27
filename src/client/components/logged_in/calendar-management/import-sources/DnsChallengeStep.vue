@@ -27,7 +27,7 @@
         />
         <CopyButton
           :text="recordName"
-          :label="t('dns_challenge.copy_record')"
+          :label="t('dns_challenge.copy_record_name')"
           :copied-label="t('dns_challenge.copied')"
           :aria-label="t('dns_challenge.copy_record_name')"
           data-test="dns-copy-record-name"
@@ -49,7 +49,7 @@
         />
         <CopyButton
           :text="recordValue"
-          :label="t('dns_challenge.copy_record')"
+          :label="t('dns_challenge.copy_record_value')"
           :copied-label="t('dns_challenge.copied')"
           :aria-label="t('dns_challenge.copy_record_value')"
           data-test="dns-copy-record-value"

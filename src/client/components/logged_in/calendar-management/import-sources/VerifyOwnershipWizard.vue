@@ -10,12 +10,9 @@
       v-if="currentStep === 'pick'"
       class="vstack stack--md"
       data-test="verify-wizard-picker"
-      :aria-labelledby="pickerHeadingId"
+      :aria-label="t('picker_aria')"
     >
       <header class="step-header vstack stack--xs">
-        <h3 :id="pickerHeadingId" class="step-title">
-          {{ t('picker_heading') }}
-        </h3>
         <p class="step-instructions">
           {{ t('picker_description') }}
         </p>
@@ -194,9 +191,6 @@ const initialStep = (): WizardStep => {
 
 const currentStep = ref<WizardStep>(initialStep());
 
-const uid = Math.random().toString(36).slice(2, 10);
-const pickerHeadingId = `verify-wizard-picker-heading-${uid}`;
-
 const service = new ImportSourceService();
 
 /**
@@ -290,14 +284,6 @@ onMounted(() => {
 
 .step-header {
   margin-block-end: var(--pav-space-1);
-}
-
-.step-title {
-  margin: 0;
-  color: var(--pav-text-primary);
-  font-size: var(--pav-font-size-h6);
-  font-weight: var(--pav-font-weight-semibold);
-  line-height: var(--pav-line-height-snug);
 }
 
 .step-instructions {

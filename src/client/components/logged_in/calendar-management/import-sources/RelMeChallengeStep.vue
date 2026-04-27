@@ -23,15 +23,12 @@
       "copy as code" and (2) defeat the read-only display intent.
     -->
     <div class="field vstack stack--sm">
-      <p :id="snippetLabelId" class="field-label">
-        {{ t('rel_me_challenge.html_snippet_label') }}
-      </p>
       <p class="field-help">
         {{ t('rel_me_challenge.html_snippet_help') }}
       </p>
       <pre
         :id="snippetCodeId"
-        :aria-labelledby="snippetLabelId"
+        :aria-label="t('rel_me_challenge.html_snippet_aria')"
         class="code-display"
         data-test="rel-me-html-snippet"
       ><code>{{ htmlSnippet }}</code></pre>
@@ -47,9 +44,6 @@
 
     <!-- Page URL input where the owner enters the URL of their verification page -->
     <div class="field vstack stack--sm">
-      <label :for="pageUrlInputId" class="field-label">
-        {{ t('rel_me_challenge.page_url_label') }}
-      </label>
       <p class="field-help">
         {{ t('rel_me_challenge.page_url_help') }}
       </p>
@@ -66,6 +60,7 @@
         data-test="rel-me-page-url-input"
         :placeholder="t('rel_me_challenge.page_url_placeholder')"
         :maxlength="RELME_PAGE_URL_MAX_LENGTH"
+        :aria-label="t('rel_me_challenge.page_url_aria')"
         :aria-invalid="errorMessage !== null"
         :aria-describedby="errorMessage ? errorRegionId : undefined"
         @input="onInput"
@@ -192,7 +187,6 @@ const errorMessage = ref<string | null>(null);
 const uid = Math.random().toString(36).slice(2, 10);
 const headingId = `rel-me-challenge-heading-${uid}`;
 const snippetCodeId = `rel-me-snippet-${uid}`;
-const snippetLabelId = `rel-me-snippet-label-${uid}`;
 const pageUrlInputId = `rel-me-page-url-${uid}`;
 const errorRegionId = `rel-me-error-${uid}`;
 
@@ -325,12 +319,6 @@ const onChangeMethod = (): void => {
   color: var(--pav-text-primary);
   font-size: var(--pav-font-size-body);
   line-height: var(--pav-line-height-normal);
-}
-
-.field-label {
-  color: var(--pav-text-secondary);
-  font-size: var(--pav-font-size-small);
-  font-weight: var(--pav-font-weight-medium);
 }
 
 .field-help {
