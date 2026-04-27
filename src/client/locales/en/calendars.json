@@ -246,7 +246,7 @@
     },
     "import": {
         "section_title": "Import Sources",
-        "section_description": "Import events from external calendar feeds (ICS). Each source must be verified via DNS TXT before syncing.",
+        "section_description": "Import events from external calendar feeds (ICS).",
         "add_button": "Add Import Source",
         "add_fieldset_legend": "New import source",
         "add_submit_button": "Add source",
