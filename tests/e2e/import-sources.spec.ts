@@ -393,9 +393,13 @@ test.describe('ICS Import Sources (e2e)', () => {
 
   async function apiIssueChallenge(page: Page, sourceId: string): Promise<string> {
     const headers = await authHeader(page);
+    // Brand-new sources have `verification_type=null` (per pv-o686): the
+    // service rejects /verify-issue without a type, and the wizard would
+    // otherwise show the picker step before reaching DNS. DNS-flavoured
+    // scenarios use this helper, so seed `dns-txt` explicitly here.
     const res = await page.request.post(
       `${env.baseURL}/api/v1/calendars/${ADMIN_CALENDAR_ID}/import-sources/${sourceId}/verify-issue`,
-      { headers },
+      { headers, data: { verification_type: 'dns-txt' } },
     );
     expect(res.status()).toBe(200);
     const body = await res.json();
