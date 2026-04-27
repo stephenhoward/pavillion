@@ -49,26 +49,12 @@ export const MAX_LOCATION_LENGTH = 1024;
 // ---------------------------------------------------------------------------
 
 /**
- * Structured signal returned to the sync orchestrator when a VEVENT carries
- * a RECURRENCE-ID that modifies (rather than merely cancels) a single
- * occurrence of a recurring parent.
- *
- * Per DESIGN: the orchestrator interprets this by (a) cancelling the parent
- * occurrence on the given date, and (b) creating a standalone event from
- * `standaloneEvent`. The mapper never writes — it only reports the intent.
- */
-export type RecurrenceOverrideSignal = {
-  /** True when a parent-occurrence cancellation must be recorded. */
-  cancelOriginal: boolean;
-  /**
-   * When present, the caller must also persist a standalone event derived
-   * from this mapping output. Omitted for pure STATUS:CANCELLED overrides.
-   */
-  standaloneEvent?: MapperOutput;
-};
-
-/**
  * Pure mapper output for a single VEVENT.
+ *
+ * RECURRENCE-ID VEVENTs are mapped as ordinary events keyed by
+ * `(external_uid, external_recurrence_id)`. v1 does not interpret the
+ * cancel-parent-and-create-standalone semantics that RFC 5545 ascribes to
+ * overrides; that's deferred to a follow-up bead.
  */
 export type MapperOutput = {
   /** Single-language content record, language === calendarPrimaryLanguage. */
@@ -105,13 +91,6 @@ export type MapperOutput = {
    * when absent.
    */
   external_url: string | null;
-  /**
-   * Set only on the RECURRENCE-ID branch. The orchestrator uses this as
-   * the authoritative signal for cancel+standalone handling; callers must
-   * NOT attempt to infer this from `external_recurrence_id` alone (a pure
-   * STATUS:CANCELLED override has recurrence_id but no standalone event).
-   */
-  recurrenceOverride?: RecurrenceOverrideSignal;
 };
 
 /**
@@ -444,9 +423,14 @@ export function mapVEvent(input: MapperInput): MapperOutput {
 
   const xProps = collectXProps(vevent);
 
-  // --- Base output ---------------------------------------------------------
+  // --- Output --------------------------------------------------------------
+  //
+  // RECURRENCE-ID VEVENTs are returned as ordinary mapped events; the sync
+  // orchestrator dedupes them via `(external_uid, external_recurrence_id)`.
+  // RFC 5545 cancel-parent + create-standalone semantics are not interpreted
+  // here in v1.
 
-  const base: MapperOutput = {
+  return {
     content,
     schedule,
     exclusions,
@@ -456,40 +440,4 @@ export function mapVEvent(input: MapperInput): MapperOutput {
     x_props: xProps,
     external_url: externalUrl,
   };
-
-  // --- RECURRENCE-ID branch -----------------------------------------------
-  //
-  // Two distinct override flavors per DESIGN:
-  //
-  //   1. STATUS:CANCELLED  → caller records a cancellation-shown marker on the
-  //      parent occurrence. No standalone event is written.
-  //
-  //   2. Modified content  → caller records BOTH a cancellation of the parent
-  //      occurrence AND creates a standalone event. We return the full
-  //      MapperOutput (minus its own recurrenceOverride) as `standaloneEvent`.
-  //
-  // This split is the contract that pv-1qcp.2.4 consumes. Encoding it here,
-  // and only here, means the sync orchestrator never has to inspect
-  // `recurrenceid` / `status` directly.
-
-  if (externalRecurrenceId) {
-    const isCancelled = (vevent.status ?? '').toUpperCase() === 'CANCELLED';
-    if (isCancelled) {
-      base.recurrenceOverride = {
-        cancelOriginal: true,
-      };
-    }
-    else {
-      // Build the standalone mapping by reusing `base` (sans override).
-      const standalone: MapperOutput = { ...base };
-      // Avoid an infinite structural loop if a consumer serializes.
-      delete (standalone as { recurrenceOverride?: unknown }).recurrenceOverride;
-      base.recurrenceOverride = {
-        cancelOriginal: true,
-        standaloneEvent: standalone,
-      };
-    }
-  }
-
-  return base;
 }

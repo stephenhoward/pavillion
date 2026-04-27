@@ -510,55 +510,20 @@ describe('ICS mapper: mapVEvent', () => {
   });
 
   describe('RECURRENCE-ID', () => {
-    it('emits cancel-only signal for STATUS:CANCELLED override', () => {
+    it('serializes RECURRENCE-ID into external_recurrence_id (ISO-8601)', () => {
       const vevent = makeVEvent({
         uid: 'parent@example.com',
         recurrenceid: makeDtz('2026-01-03T10:00:00Z'),
-        status: 'CANCELLED',
-        summary: 'Cancelled occurrence',
+        summary: 'Override',
       });
       const out = mapVEvent({ vevent, calendarPrimaryLanguage: 'en' });
       expect(out.external_recurrence_id).toBe('2026-01-03T10:00:00.000Z');
-      expect(out.recurrenceOverride).toBeDefined();
-      expect(out.recurrenceOverride!.cancelOriginal).toBe(true);
-      expect(out.recurrenceOverride!.standaloneEvent).toBeUndefined();
     });
 
-    it('emits cancel+standalone signal for modified (non-cancelled) override', () => {
-      const vevent = makeVEvent({
-        uid: 'parent@example.com',
-        recurrenceid: makeDtz('2026-01-03T10:00:00Z'),
-        summary: 'Moved',
-        start: makeDtz('2026-01-03T13:00:00Z', 'Etc/UTC'),
-        end: makeDtz('2026-01-03T14:00:00Z', 'Etc/UTC'),
-      });
-      const out = mapVEvent({ vevent, calendarPrimaryLanguage: 'en' });
-      expect(out.external_recurrence_id).toBe('2026-01-03T10:00:00.000Z');
-      expect(out.recurrenceOverride).toBeDefined();
-      expect(out.recurrenceOverride!.cancelOriginal).toBe(true);
-      expect(out.recurrenceOverride!.standaloneEvent).toBeDefined();
-      // Standalone carries the override VEVENT's own title.
-      expect(out.recurrenceOverride!.standaloneEvent!.content.name).toBe('Moved');
-      // Standalone is not itself tagged as an override (prevents recursion).
-      expect(out.recurrenceOverride!.standaloneEvent!.recurrenceOverride).toBeUndefined();
-    });
-
-    it('treats CONFIRMED status as modified, not cancelled', () => {
-      const vevent = makeVEvent({
-        uid: 'parent@example.com',
-        recurrenceid: makeDtz('2026-01-03T10:00:00Z'),
-        status: 'CONFIRMED',
-        summary: 'Still happening, moved time',
-      });
-      const out = mapVEvent({ vevent, calendarPrimaryLanguage: 'en' });
-      expect(out.recurrenceOverride!.standaloneEvent).toBeDefined();
-    });
-
-    it('leaves external_recurrence_id and recurrenceOverride undefined when RECURRENCE-ID absent', () => {
+    it('leaves external_recurrence_id undefined when RECURRENCE-ID absent', () => {
       const vevent = makeVEvent({});
       const out = mapVEvent({ vevent, calendarPrimaryLanguage: 'en' });
       expect(out.external_recurrence_id).toBeUndefined();
-      expect(out.recurrenceOverride).toBeUndefined();
     });
   });
 
