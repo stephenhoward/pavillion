@@ -1,6 +1,5 @@
 import config from 'config';
 import { fetch as undiciFetch } from 'undici';
-import { getPublicSuffix, parse as parseTld } from 'tldts';
 
 import {
   ImportSourceDnsVerificationError,
@@ -11,6 +10,7 @@ import {
   IMPORT_DNS_PSL_VIOLATION,
 } from '@/common/exceptions/import';
 import { formatVerificationRecord } from '@/server/calendar/service/import/hmac';
+import { hostnameFromUrl, passesPslCheck } from '@/server/calendar/service/import/hostname';
 import { createLogger } from '@/server/common/helper/logger';
 import { validateUrlNotPrivate } from '@/server/common/helper/ip-validation';
 import { createIcsUrlValidator } from '@/server/common/helper/test-ssrf-gate';
@@ -118,46 +118,6 @@ export function isWithinGracePeriod(
   const graceEnd = expiresAt.getTime() + VERIFICATION_GRACE_DAYS * MS_PER_DAY;
   const n = now.getTime();
   return n >= expiresAt.getTime() && n < graceEnd;
-}
-
-/**
- * Extracts the effective hostname from a source URL. Returns null if the
- * URL is unparseable or has no hostname.
- */
-function hostnameFromUrl(sourceUrl: string): string | null {
-  try {
-    const u = new URL(sourceUrl);
-    return u.hostname.toLowerCase() || null;
-  }
-  catch {
-    return null;
-  }
-}
-
-/**
- * PSL check: reject hostnames that are at or above the public suffix.
- * For example, `co.uk` (a public suffix itself) must be rejected, while
- * `example.co.uk` and `events.example.com` are accepted.
- */
-function passesPslCheck(hostname: string): boolean {
-  // getPublicSuffix returns the public suffix portion, or null if the host
-  // is itself not under any known suffix (e.g. bare `com`).
-  const parsed = parseTld(hostname);
-  if (!parsed || !parsed.hostname) {
-    return false;
-  }
-  // A valid registrable domain must exist (i.e. there is something below
-  // the public suffix). `domain` is null when the hostname equals or sits
-  // above the suffix.
-  if (!parsed.domain) {
-    return false;
-  }
-  // Belt-and-suspenders: ensure hostname != public suffix itself.
-  const suffix = getPublicSuffix(hostname);
-  if (suffix && suffix === hostname) {
-    return false;
-  }
-  return true;
 }
 
 /**

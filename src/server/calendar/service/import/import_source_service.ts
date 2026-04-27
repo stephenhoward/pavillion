@@ -4,7 +4,6 @@ import { promisify } from 'util';
 import { v4 as uuidv4 } from 'uuid';
 import config from 'config';
 import * as cheerio from 'cheerio';
-import { getPublicSuffix, parse as parseTld } from 'tldts';
 import { Agent, request as undiciRequest } from 'undici';
 
 import { Account } from '@/common/model/account';
@@ -32,6 +31,7 @@ import { createIcsUrlValidator, isLocalhostIcsImportAllowed } from '@/server/com
 import { createLogger } from '@/server/common/helper/logger';
 import CalendarService from '@/server/calendar/service/calendar';
 import { generateVerificationToken } from '@/server/calendar/service/import/hmac';
+import { hostnameFromUrl, passesPslCheck } from '@/server/calendar/service/import/hostname';
 import { DnsVerifier, VERIFICATION_VALIDITY_DAYS } from '@/server/calendar/service/import/dns-verifier';
 import type SyncService from '@/server/calendar/service/import/sync';
 import type { SyncResult } from '@/server/calendar/service/import/sync';
@@ -882,44 +882,6 @@ export default ImportSourceService;
 // ---------------------------------------------------------------------------
 // Module-private helpers (rel-me verifier)
 // ---------------------------------------------------------------------------
-
-/**
- * Extracts the lowercased hostname from a URL string. Returns null if the
- * URL is unparseable or has no hostname.
- */
-function hostnameFromUrl(rawUrl: string): string | null {
-  try {
-    const u = new URL(rawUrl);
-    return u.hostname.toLowerCase() || null;
-  }
-  catch {
-    return null;
-  }
-}
-
-/**
- * PSL guard: a hostname must sit strictly below its public suffix on the
- * Public Suffix List. Returns true when the hostname is safe (a registrable
- * domain or a label below one), false when the hostname equals or sits at
- * the public suffix (e.g. `co.uk`, `github.io`, bare `com`).
- *
- * Mirrors the same check used by {@link DnsVerifier} so both verifier
- * branches reject shared-tenancy hosts identically.
- */
-function passesPslCheck(hostname: string): boolean {
-  const parsed = parseTld(hostname);
-  if (!parsed || !parsed.hostname) {
-    return false;
-  }
-  if (!parsed.domain) {
-    return false;
-  }
-  const suffix = getPublicSuffix(hostname);
-  if (suffix && suffix === hostname) {
-    return false;
-  }
-  return true;
-}
 
 /**
  * Returns true if any `<a rel="me" href=...>` or `<link rel="me" href=...>`
