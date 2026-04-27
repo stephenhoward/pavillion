@@ -108,6 +108,16 @@ describe('createI18nConfig', () => {
       const config = createI18nConfig({ fallbackLng: 'fr' } as any);
       expect(config.fallbackLng).toEqual(buildFallbackLng());
     });
+
+    it('should disable interpolation escaping (Vue/Handlebars escape downstream)', () => {
+      const config = createI18nConfig();
+      expect(config.interpolation).toEqual({ escapeValue: false });
+    });
+
+    it('should not allow callers to override interpolation', () => {
+      const config = createI18nConfig({ interpolation: { escapeValue: true } } as any);
+      expect(config.interpolation).toEqual({ escapeValue: false });
+    });
   });
 
   describe('debug setting', () => {
