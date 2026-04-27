@@ -128,17 +128,7 @@ export class DnsVerifier {
   private readonly validateUrl: UrlValidatorFn;
   private validatedResolvers: Promise<string[]> | null = null;
 
-  /**
-   * Accepts either the legacy positional `DohFetch` or a full dependencies
-   * object. The dual signature keeps existing call sites (tests that do
-   * `new DnsVerifier(fetchStub)`) working without churn while the new
-   * `validateUrl` DI seam is added for pv-gdqp.
-   */
-  constructor(fetchImplOrDeps?: DohFetch | DnsVerifierDependencies) {
-    const deps: DnsVerifierDependencies =
-      typeof fetchImplOrDeps === 'function' || fetchImplOrDeps === undefined
-        ? { fetchImpl: fetchImplOrDeps as DohFetch | undefined }
-        : fetchImplOrDeps;
+  constructor(deps: DnsVerifierDependencies = {}) {
     this.fetchImpl = deps.fetchImpl ?? (undiciFetch as unknown as DohFetch);
     // Gate-aware default: strict in production, relaxed when
     // ALLOW_LOCALHOST_ICS_IMPORT is open (test/e2e only).

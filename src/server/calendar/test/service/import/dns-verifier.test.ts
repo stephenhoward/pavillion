@@ -74,7 +74,7 @@ describe('DnsVerifier', () => {
 
   beforeEach(() => {
     fetchStub = sandbox.stub();
-    verifier = new DnsVerifier(fetchStub);
+    verifier = new DnsVerifier({ fetchImpl: fetchStub });
   });
 
   afterEach(() => {
@@ -274,7 +274,7 @@ describe('DnsVerifier', () => {
     it('rejects an http:// resolver URL without attempting to fetch', async () => {
       stubResolvers(['http://1.1.1.1/dns-query', 'https://8.8.8.8/dns-query']);
 
-      const freshVerifier = new DnsVerifier(fetchStub);
+      const freshVerifier = new DnsVerifier({ fetchImpl: fetchStub });
       const promise = freshVerifier.verify({
         sourceId: SOURCE_ID,
         calendarId: CALENDAR_ID,
@@ -289,7 +289,7 @@ describe('DnsVerifier', () => {
     it('rejects a resolver URL whose hostname is a private IP (169.254.169.254 cloud metadata)', async () => {
       stubResolvers(['https://169.254.169.254/dns-query', 'https://8.8.8.8/dns-query']);
 
-      const freshVerifier = new DnsVerifier(fetchStub);
+      const freshVerifier = new DnsVerifier({ fetchImpl: fetchStub });
       const promise = freshVerifier.verify({
         sourceId: SOURCE_ID,
         calendarId: CALENDAR_ID,
@@ -304,7 +304,7 @@ describe('DnsVerifier', () => {
     it('rejects a resolver URL whose hostname is a loopback address', async () => {
       stubResolvers(['https://127.0.0.1/dns-query', 'https://8.8.8.8/dns-query']);
 
-      const freshVerifier = new DnsVerifier(fetchStub);
+      const freshVerifier = new DnsVerifier({ fetchImpl: fetchStub });
       const promise = freshVerifier.verify({
         sourceId: SOURCE_ID,
         calendarId: CALENDAR_ID,
@@ -360,7 +360,7 @@ describe('DnsVerifier', () => {
         process.env.NODE_ENV = 'test';
         stubResolvers(['http://127.0.0.1:3002/dns-query', 'http://127.0.0.1:3003/dns-query']);
 
-        const freshVerifier = new DnsVerifier(fetchStub);
+        const freshVerifier = new DnsVerifier({ fetchImpl: fetchStub });
         const promise = freshVerifier.verify({
           sourceId: SOURCE_ID,
           calendarId: CALENDAR_ID,
@@ -377,7 +377,7 @@ describe('DnsVerifier', () => {
         process.env.ALLOW_LOCALHOST_ICS_IMPORT = 'true';
         stubResolvers(['http://127.0.0.1:3002/dns-query', 'http://127.0.0.1:3003/dns-query']);
 
-        const freshVerifier = new DnsVerifier(fetchStub);
+        const freshVerifier = new DnsVerifier({ fetchImpl: fetchStub });
         const promise = freshVerifier.verify({
           sourceId: SOURCE_ID,
           calendarId: CALENDAR_ID,
@@ -398,7 +398,7 @@ describe('DnsVerifier', () => {
         const resp = buildDohResponse([record]);
         fetchStub.resolves(mockFetchResponse(resp.status, resp.body));
 
-        const freshVerifier = new DnsVerifier(fetchStub);
+        const freshVerifier = new DnsVerifier({ fetchImpl: fetchStub });
         const result = await freshVerifier.verify({
           sourceId: SOURCE_ID,
           calendarId: CALENDAR_ID,
@@ -420,7 +420,7 @@ describe('DnsVerifier', () => {
         const resp = buildDohResponse([record]);
         fetchStub.resolves(mockFetchResponse(resp.status, resp.body));
 
-        const freshVerifier = new DnsVerifier(fetchStub);
+        const freshVerifier = new DnsVerifier({ fetchImpl: fetchStub });
         const result = await freshVerifier.verify({
           sourceId: SOURCE_ID,
           calendarId: CALENDAR_ID,
