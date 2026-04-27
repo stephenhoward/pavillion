@@ -334,6 +334,13 @@ class SyncService {
     // the mapper only uses it to stamp a language code on content.
     const primaryLanguage = await this.resolveCalendarPrimaryLanguage(sourceEntity.calendar_id);
 
+    // --- Extract VCALENDAR-level X-WR-TIMEZONE fallback ------------------
+    // node-ical surfaces it on `parsed.vcalendar['WR-TIMEZONE']`. The mapper
+    // uses this only as the middle step of its TZID → X-WR-TIMEZONE → UTC
+    // fallback chain — it has no effect on events whose TZID is already a
+    // recognized IANA zone.
+    const calendarFallbackTimezone = parsed.vcalendar?.['WR-TIMEZONE'];
+
     // --- Transactional body --------------------------------------------------
     // All persistence inside this transaction rolls back together on failure.
     let counts = { created: 0, updated: 0, skippedLocallyEdited: 0, disappeared: 0 };
@@ -370,6 +377,7 @@ class SyncService {
             mapped = mapVEvent({
               vevent,
               calendarPrimaryLanguage: primaryLanguage,
+              calendarFallbackTimezone,
             });
           }
           catch (err) {

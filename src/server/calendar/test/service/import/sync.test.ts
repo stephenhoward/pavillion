@@ -722,6 +722,82 @@ describe('SyncService', () => {
   });
 
   // --------------------------------------------------------------------------
+  // VCALENDAR-level X-WR-TIMEZONE wiring
+  // --------------------------------------------------------------------------
+
+  describe('X-WR-TIMEZONE fallback wiring', () => {
+    // The mapper's three-tier timezone resolution (TZID → X-WR-TIMEZONE → UTC)
+    // is unit-tested in mapper.test.ts. These tests prove the orchestrator
+    // actually extracts X-WR-TIMEZONE from `parsed.vcalendar` and threads it
+    // into mapVEvent — without this the middle tier is permanently undefined
+    // and an unrecognized TZID always falls through to UTC.
+
+    function setupWithVcalendar(vevent: VEvent, vcalendar: Record<string, unknown> | null) {
+      sandbox.stub(ImportSourceEntity, 'findByPk').resolves(makeSourceEntity());
+      fetcher.fetch.resolves({
+        outcome: 'ok',
+        httpStatus: 200,
+        body: Buffer.from('BEGIN:VCALENDAR...'),
+        contentHash: 'HASH-CHANGED',
+        etag: undefined,
+        bytesReceived: 1,
+      });
+      sandbox.stub(EventImportOriginEntity, 'findAll').resolves([] as unknown as EventImportOriginEntity[]);
+
+      service = new SyncService({
+        eventService: eventService as unknown as EventService,
+        calendarService: calendarService as unknown as CalendarService,
+        fetcher: fetcher as unknown as Fetcher,
+        rateLimiter,
+        parseICS: () => {
+          const parsed: Record<string, unknown> = { 'v-0': vevent };
+          if (vcalendar) parsed.vcalendar = { type: 'VCALENDAR', ...vcalendar };
+          return parsed as never;
+        },
+      });
+    }
+
+    it('threads parsed.vcalendar["WR-TIMEZONE"] into the mapper so unrecognized TZIDs resolve to the calendar fallback', async () => {
+      // VEVENT carries a TZID node-ical does not recognize; the mapper would
+      // otherwise drop straight to UTC.
+      const vevent = makeVEvent({
+        uid: 'fallback-needed@example.test',
+        start: makeDtz('2026-04-22T10:00:00Z', 'Bogus/UnknownZone'),
+        end: makeDtz('2026-04-22T11:00:00Z', 'Bogus/UnknownZone'),
+      });
+      setupWithVcalendar(vevent, { 'WR-TIMEZONE': 'America/Los_Angeles' });
+
+      eventService.createEvent.callsFake(async () => ({ id: 'evt-x' } as never));
+
+      await service.syncSource({ account, importSourceId: 'src-1' });
+
+      expect(eventService.createEvent.calledOnce).toBe(true);
+      const params = eventService.createEvent.firstCall.args[1] as Record<string, unknown>;
+      const schedule = (params.schedules as Array<Record<string, unknown>>)[0];
+      // 2026-04-22 is PDT — same UTC instant rendered in LA carries -07:00.
+      expect(schedule.start).toMatch(/-07:00$|-08:00$/);
+    });
+
+    it('falls all the way to UTC when no WR-TIMEZONE is present and TZID is unrecognized', async () => {
+      const vevent = makeVEvent({
+        uid: 'no-fallback@example.test',
+        start: makeDtz('2026-04-22T10:00:00Z', 'Bogus/UnknownZone'),
+        end: makeDtz('2026-04-22T11:00:00Z', 'Bogus/UnknownZone'),
+      });
+      setupWithVcalendar(vevent, null);
+
+      eventService.createEvent.callsFake(async () => ({ id: 'evt-x' } as never));
+
+      await service.syncSource({ account, importSourceId: 'src-1' });
+
+      expect(eventService.createEvent.calledOnce).toBe(true);
+      const params = eventService.createEvent.firstCall.args[1] as Record<string, unknown>;
+      const schedule = (params.schedules as Array<Record<string, unknown>>)[0];
+      expect(schedule.start).toMatch(/Z$|\+00:00$/);
+    });
+  });
+
+  // --------------------------------------------------------------------------
   // Transaction rollback
   // --------------------------------------------------------------------------
 
