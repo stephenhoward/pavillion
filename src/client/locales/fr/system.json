@@ -22,5 +22,9 @@
     "skip_to_content": "Aller au contenu principal",
     "main_label": "Navigation principale",
     "mobile_label": "Navigation mobile"
+  },
+  "copy_button": {
+    "copy": "Copier",
+    "copied": "Copié"
   }
 }

@@ -1,14 +1,16 @@
 <template>
   <div class="widget-embed">
     <div class="embed-header">
-      <button
-        class="copy-btn"
-        :disabled="state.copying"
-        :aria-disabled="state.copying"
-        @click="copyToClipboard"
-      >
-        {{ state.copied ? t('copied') : t('copy_button') }}
-      </button>
+      <CopyButton
+        :text="embedCode"
+        :label="t('copy_button')"
+        :copied-label="t('copied')"
+        :feedback-ms="3000"
+        :with-icon="false"
+        variant="primary"
+        @copied="onCopied"
+        @error="onCopyError"
+      />
     </div>
 
     <pre class="embed-code"><code>{{ embedCode }}</code></pre>
@@ -37,6 +39,8 @@
 import { reactive, computed } from 'vue';
 import { useTranslation } from 'i18next-vue';
 
+import CopyButton from '@/client/components/common/CopyButton.vue';
+
 // Props
 const props = defineProps({
   calendarUrlName: {
@@ -52,7 +56,6 @@ const { t } = useTranslation('calendars', {
 
 // Component state
 const state = reactive({
-  copying: false,
   copied: false,
   error: '',
 });
@@ -71,29 +74,18 @@ const embedCode = computed(() => {
 <\/script>`;
 });
 
-/**
- * Copy embed code to clipboard
- */
-const copyToClipboard = async () => {
-  try {
-    state.copying = true;
-    state.error = '';
+const onCopied = () => {
+  state.error = '';
+  state.copied = true;
+  setTimeout(() => {
     state.copied = false;
+  }, 3000);
+};
 
-    await navigator.clipboard.writeText(embedCode.value);
-    state.copied = true;
-
-    setTimeout(() => {
-      state.copied = false;
-    }, 3000);
-  }
-  catch (error) {
-    console.error('Error copying to clipboard:', error);
-    state.error = t('copy_error');
-  }
-  finally {
-    state.copying = false;
-  }
+const onCopyError = (err) => {
+  console.error('Error copying to clipboard:', err);
+  state.error = t('copy_error');
+  state.copied = false;
 };
 </script>
 
@@ -106,37 +98,6 @@ const copyToClipboard = async () => {
     display: flex;
     justify-content: flex-end;
     margin-bottom: var(--pav-space-3);
-  }
-
-  .copy-btn {
-    padding: var(--pav-space-2) var(--pav-space-4);
-    background: var(--pav-color-orange-500);
-    color: white;
-    border: none;
-    border-radius: 0.5rem;
-    font-size: 0.875rem;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    min-height: 36px;
-
-    @media (prefers-color-scheme: dark) {
-      background: var(--pav-color-orange-600);
-      color: white;
-    }
-
-    &:hover:not(:disabled) {
-      background: var(--pav-color-orange-600);
-
-      @media (prefers-color-scheme: dark) {
-        background: var(--pav-color-orange-500);
-      }
-    }
-
-    &:disabled {
-      opacity: 0.6;
-      cursor: not-allowed;
-    }
   }
 
   .embed-code {

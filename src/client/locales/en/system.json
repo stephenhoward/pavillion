@@ -29,6 +29,10 @@
   "modal": {
     "close": "Close dialog"
   },
+  "copy_button": {
+    "copy": "Copy",
+    "copied": "Copied"
+  },
   "report": {
     "form_title": "Report Event",
     "close_dialog": "Close report dialog",

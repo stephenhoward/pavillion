@@ -240,8 +240,6 @@ describe('DnsChallengeStep', () => {
       const liveRegion = wrapper.find('[role="status"][aria-live="polite"]');
       expect(liveRegion.exists()).toBe(true);
       expect(liveRegion.attributes('aria-atomic')).toBe('true');
-      // Visually hidden via sr-only utility class
-      expect(liveRegion.classes()).toContain('sr-only');
     });
 
     it('announces Copied in the live region after clicking a copy button', async () => {

@@ -35,16 +35,14 @@
         class="rel-me-challenge__code-block"
         data-test="rel-me-html-snippet"
       ><code>{{ htmlSnippet }}</code></pre>
-      <button
-        type="button"
-        class="btn-ghost rel-me-challenge__copy-btn rel-me-challenge__copy-btn--block"
-        data-test="rel-me-copy-html"
+      <CopyButton
+        :text="htmlSnippet"
+        :label="t('rel_me_challenge.copy_html')"
+        :copied-label="t('rel_me_challenge.copied')"
         :aria-label="t('rel_me_challenge.copy_html_aria')"
-        @click="copySnippet"
-      >
-        <Copy :size="16" :stroke-width="2" aria-hidden="true" />
-        {{ copied ? t('rel_me_challenge.copied') : t('rel_me_challenge.copy_html') }}
-      </button>
+        class="rel-me-challenge__copy-btn rel-me-challenge__copy-btn--block"
+        data-test="rel-me-copy-html"
+      />
     </div>
 
     <!-- Page URL input where the owner enters the URL of their verification page -->
@@ -90,15 +88,6 @@
       {{ errorMessage }}
     </div>
 
-    <span
-      class="sr-only"
-      role="status"
-      aria-live="polite"
-      aria-atomic="true"
-    >
-      {{ copied ? t('rel_me_challenge.copied') : '' }}
-    </span>
-
     <div class="rel-me-challenge__actions">
       <button
         type="button"
@@ -122,10 +111,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref } from 'vue';
+import { computed, ref } from 'vue';
 import { useTranslation } from 'i18next-vue';
-import { Copy } from 'lucide-vue-next';
 
+import CopyButton from '@/client/components/common/CopyButton.vue';
 import PillButton from '@/client/components/common/pill-button.vue';
 import ImportSourceService from '@/client/service/import_source';
 import { importSourceErrorKey } from '@/client/service/import_source_errors';
@@ -199,8 +188,6 @@ const service = new ImportSourceService();
 const pageUrl = ref<string>('');
 const isVerifying = ref<boolean>(false);
 const errorMessage = ref<string | null>(null);
-const copied = ref<boolean>(false);
-let copyTimeout: ReturnType<typeof setTimeout> | null = null;
 
 const uid = Math.random().toString(36).slice(2, 10);
 const headingId = `rel-me-challenge-heading-${uid}`;
@@ -255,33 +242,6 @@ const onInput = (): void => {
   if (errorMessage.value !== null) {
     errorMessage.value = null;
   }
-};
-
-/**
- * Copy the HTML snippet to the clipboard. Uses the async
- * navigator.clipboard API; when unavailable the operation is a no-op but
- * still updates the `copied` indicator so the user gets feedback that
- * the action ran (the snippet block remains text-selectable for manual
- * copy).
- */
-const copySnippet = async (): Promise<void> => {
-  try {
-    if (typeof navigator !== 'undefined' && navigator.clipboard) {
-      await navigator.clipboard.writeText(htmlSnippet.value);
-    }
-  }
-  catch {
-    // Clipboard access may be denied by the browser; treat as soft failure.
-  }
-
-  copied.value = true;
-  if (copyTimeout) {
-    clearTimeout(copyTimeout);
-  }
-  copyTimeout = setTimeout(() => {
-    copied.value = false;
-    copyTimeout = null;
-  }, 1500);
 };
 
 /**
@@ -342,26 +302,11 @@ const onChangeMethod = (): void => {
   }
   emit('change-method');
 };
-
-onBeforeUnmount(() => {
-  if (copyTimeout) {
-    clearTimeout(copyTimeout);
-    copyTimeout = null;
-  }
-});
 </script>
 
 <style scoped lang="scss">
 @use '../../../../assets/style/components/calendar-admin' as *;
 @use '../../../../assets/style/mixins/challenge-step' as *;
-@use '../../../../assets/style/mixins/visibility' as *;
-
-// Visually hide content while keeping it accessible to screen readers.
-// Pattern mirrors the shared sr-only pattern used elsewhere in the
-// admin UI (WCAG SC 4.1.3 Status Messages).
-.sr-only {
-  @include sr-only;
-}
 
 .rel-me-challenge {
   @include challenge-step;

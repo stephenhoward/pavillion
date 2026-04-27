@@ -25,15 +25,13 @@
           readonly
           :value="recordName"
         />
-        <button
-          type="button"
-          class="btn-ghost dns-challenge-step__copy-btn"
+        <CopyButton
+          :text="recordName"
+          :label="t('dns_challenge.copy_record')"
+          :copied-label="t('dns_challenge.copied')"
           :aria-label="t('dns_challenge.copy_record_name')"
-          @click="copy('name')"
-        >
-          <Copy :size="16" :stroke-width="2" aria-hidden="true" />
-          {{ copied === 'name' ? t('dns_challenge.copied') : t('dns_challenge.copy_record') }}
-        </button>
+          class="dns-challenge-step__copy-btn"
+        />
       </div>
     </div>
 
@@ -49,31 +47,15 @@
           readonly
           :value="recordValue"
         />
-        <button
-          type="button"
-          class="btn-ghost dns-challenge-step__copy-btn"
+        <CopyButton
+          :text="recordValue"
+          :label="t('dns_challenge.copy_record')"
+          :copied-label="t('dns_challenge.copied')"
           :aria-label="t('dns_challenge.copy_record_value')"
-          @click="copy('value')"
-        >
-          <Copy :size="16" :stroke-width="2" aria-hidden="true" />
-          {{ copied === 'value' ? t('dns_challenge.copied') : t('dns_challenge.copy_record') }}
-        </button>
+          class="dns-challenge-step__copy-btn"
+        />
       </div>
     </div>
-
-    <!--
-      Live region that announces "Copied" to screen readers when either copy
-      button is clicked. Visually hidden; only accessible-tech consumers see
-      it. WCAG SC 4.1.3 Status Messages.
-    -->
-    <span
-      class="sr-only"
-      role="status"
-      aria-live="polite"
-      aria-atomic="true"
-    >
-      {{ copied ? t('dns_challenge.copied') : '' }}
-    </span>
 
     <div
       v-if="errorMessage"
@@ -106,10 +88,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, onBeforeUnmount } from 'vue';
+import { computed, ref } from 'vue';
 import { useTranslation } from 'i18next-vue';
-import { Copy } from 'lucide-vue-next';
 
+import CopyButton from '@/client/components/common/CopyButton.vue';
 import PillButton from '@/client/components/common/pill-button.vue';
 import ImportSourceService from '@/client/service/import_source';
 import { importSourceErrorKey } from '@/client/service/import_source_errors';
@@ -162,8 +144,6 @@ const service = new ImportSourceService();
 
 const isVerifying = ref(false);
 const errorMessage = ref<string | null>(null);
-const copied = ref<'name' | 'value' | null>(null);
-let copyTimeout: ReturnType<typeof setTimeout> | null = null;
 
 // Unique field ids so multiple instances (if mounted concurrently in
 // different sections) do not collide.
@@ -198,35 +178,6 @@ const recordValue = computed<string>(() => {
   return `pavillion-verify=v1:${props.instanceHost}:${props.challengeToken}`;
 });
 
-/**
- * Copy the record name or value to the clipboard. Uses the async
- * navigator.clipboard API; when unavailable (older environments / tests
- * without a clipboard mock) the operation is a no-op but still updates the
- * `copied` indicator so users get feedback that the action ran.
- */
-const copy = async (field: 'name' | 'value'): Promise<void> => {
-  const text = field === 'name' ? recordName.value : recordValue.value;
-
-  try {
-    if (typeof navigator !== 'undefined' && navigator.clipboard) {
-      await navigator.clipboard.writeText(text);
-    }
-  }
-  catch {
-    // Clipboard access may be denied by the browser; treat as soft failure
-    // — the input field is selectable for manual copy.
-  }
-
-  copied.value = field;
-  if (copyTimeout) {
-    clearTimeout(copyTimeout);
-  }
-  copyTimeout = setTimeout(() => {
-    copied.value = null;
-    copyTimeout = null;
-  }, 1500);
-};
-
 const onVerify = async (): Promise<void> => {
   if (isVerifying.value) {
     return;
@@ -254,26 +205,11 @@ const onChangeMethod = (): void => {
   }
   emit('change-method');
 };
-
-onBeforeUnmount(() => {
-  if (copyTimeout) {
-    clearTimeout(copyTimeout);
-    copyTimeout = null;
-  }
-});
 </script>
 
 <style scoped lang="scss">
 @use '../../../../assets/style/components/calendar-admin' as *;
-@use '../../../../assets/style/mixins/visibility' as *;
 @use '../../../../assets/style/mixins/challenge-step' as *;
-
-// Visually hide content while keeping it accessible to screen readers.
-// Used for the "Copied" live region; pattern mirrors the shared sr-only
-// pattern in admin/root.vue (WCAG SC 4.1.3 Status Messages).
-.sr-only {
-  @include sr-only;
-}
 
 .dns-challenge-step {
   @include challenge-step;

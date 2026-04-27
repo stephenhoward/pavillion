@@ -443,7 +443,7 @@ describe('Widget Admin UI Components', () => {
         },
       });
 
-      const copyButton = wrapper.find('button.copy-btn');
+      const copyButton = wrapper.find('button.copy-button');
       await copyButton.trigger('click');
 
       expect(mockWriteText).toHaveBeenCalled();
