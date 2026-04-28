@@ -41,6 +41,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { Account } from '@/common/model/account';
 import { Calendar } from '@/common/model/calendar';
 import CalendarInterface from '@/server/calendar/interface';
+import CalendarEventHandlers from '@/server/calendar/events';
 import AccountService from '@/server/accounts/service/account';
 import ConfigurationInterface from '@/server/configuration/interface';
 import SetupInterface from '@/server/setup/interface';
@@ -52,6 +53,7 @@ import { SharedEventEntity } from '@/server/activitypub/entity/activitypub';
 describe('Listing union for reposted events (pv-hr72.4)', () => {
   let env: TestEnvironment;
   let calendarInterface: CalendarInterface;
+  let eventBus: EventEmitter;
 
   let accountA: Account;
   let accountB: Account;
@@ -62,7 +64,7 @@ describe('Listing union for reposted events (pv-hr72.4)', () => {
     env = new TestEnvironment();
     await env.init();
 
-    const eventBus = new EventEmitter();
+    eventBus = new EventEmitter();
     calendarInterface = new CalendarInterface(eventBus);
 
     // Minimal AP interface stub. listEventInstancesForCalendar fans into:
@@ -288,5 +290,112 @@ describe('Listing union for reposted events (pv-hr72.4)', () => {
     expect(matchingOnB).toHaveLength(1);
     expect(matchingOnB[0].event.isRepost).toBe(true);
     expect(matchingOnB[0].event.sourceCalendar!.urlName).toBe(calendarA.urlName);
+  });
+
+  /**
+   * Regression lock for pv-13xg: a remote-origin event received via
+   * EventService.addRemoteEvent must materialize its canonical event_instance
+   * row at receive time, so list views on follower calendars surface the
+   * event without waiting for an inbound Update or a per-occurrence detail
+   * URL hit to lazily materialize.
+   *
+   * Under the single-producer model (pv-hr72), only the originating calendar
+   * materializes a row per (event_id, start_time). For remote-origin events,
+   * the originating calendar lives on another server, so the local server is
+   * the de-facto producer of the canonical row from the AP payload — driven
+   * by addRemoteEvent emitting `eventCreated` with calendar:null, which the
+   * existing CalendarEventHandlers eventCreated handler routes through
+   * buildEventInstances.
+   */
+  it('materializes event_instance rows for inbound federated events without manual fixture writes', async () => {
+    // Register the calendar-domain event handlers against the shared eventBus
+    // so addRemoteEvent's eventCreated emit drives buildEventInstances. We do
+    // this only for this scenario because earlier scenarios in this file
+    // intentionally drive EventInstanceEntity rows via direct create() calls
+    // alongside calendarInterface.createEvent(); installing the handler in
+    // beforeAll would race those manual rows against the unique
+    // (event_id, start_time) index.
+    const handlers = new CalendarEventHandlers(calendarInterface);
+    handlers.install(eventBus);
+
+    const remoteEventId = uuidv4();
+    // Schedule must fall within the rolling GENERATION_HORIZON_MONTHS (6 months)
+    // window from "now" so generateInstances includes it. Use a near-future date
+    // anchored from the current wall clock; building from now keeps the test
+    // stable as the fixed test date drifts forward over time.
+    const startDateTime = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // ~30 days out
+    const endDateTime = new Date(startDateTime.getTime() + 2 * 60 * 60 * 1000); // +2h
+    const startIso = startDateTime.toISOString();
+    const endIso = endDateTime.toISOString();
+
+    // Capture any unhandled rejection from the async eventCreated listener so
+    // a silent buildEventInstances failure surfaces as a test assertion rather
+    // than a hard-to-diagnose timeout.
+    const listenerErrors: Error[] = [];
+    const onRejection = (err: any) => listenerErrors.push(err);
+    process.on('unhandledRejection', onRejection);
+
+    // Drive addRemoteEvent directly with a parsed-AP-like payload. This
+    // mirrors what ProcessInboxService does when handling a Create(Event)
+    // from a federated source. The empty calendarId field causes
+    // addRemoteEvent to set calendar_id = null on the EventEntity (single-
+    // producer canonical row for a remote-origin event).
+    await calendarInterface.addRemoteEvent(calendarA, {
+      id: remoteEventId,
+      content: { en: { name: 'Remote Federated Event', description: 'from remote A' } },
+      schedules: [
+        {
+          start: startIso,
+          end: endIso,
+        },
+      ],
+    });
+
+    // Calendar B receives a federated share of this remote event (auto-repost
+    // path). We insert the ap_shared_event row directly to keep the test
+    // focused on the materialization trigger; the listing union path is
+    // already exercised by the earlier scenarios.
+    await SharedEventEntity.create({
+      id: uuidv4(),
+      event_id: remoteEventId,
+      calendar_id: calendarB.id,
+      auto_posted: true,
+    });
+
+    // Wait for the addRemoteEvent emit to complete the buildEventInstances
+    // listener (events.emit is synchronous on the dispatch site, but the
+    // handler is async — it does a removeEventInstances + generateInstances
+    // + per-instance save chain). Poll until the canonical row appears or a
+    // generous deadline elapses, so the test does not flake on slow CI.
+    const deadline = Date.now() + 2000;
+    while (Date.now() < deadline) {
+      const row = await EventInstanceEntity.findOne({ where: { event_id: remoteEventId } });
+      if (row) break;
+      await new Promise(resolve => setTimeout(resolve, 25));
+    }
+
+    process.off('unhandledRejection', onRejection);
+    if (listenerErrors.length > 0) {
+      throw new Error('eventCreated listener errored: ' + listenerErrors.map(e => e?.message ?? String(e)).join('; '));
+    }
+
+    // Critical assertion: a canonical event_instance row exists for this
+    // remote event WITHOUT any test-fixture EventInstanceEntity.create()
+    // call. Under the bug being fixed (pv-13xg), no row would exist until
+    // an inbound Update arrived.
+    const canonicalRow = await EventInstanceEntity.findOne({
+      where: { event_id: remoteEventId },
+    });
+    expect(canonicalRow, 'addRemoteEvent must materialize the canonical event_instance row').not.toBeNull();
+    expect(canonicalRow!.calendar_id).toBeNull();
+
+    // Listing for the share-receiving calendar (B) surfaces the event via
+    // the ap_shared_event link. This proves the end-to-end happy path:
+    // remote Create -> addRemoteEvent -> eventCreated emit ->
+    // buildEventInstances -> canonical row -> listing union picks it up.
+    const instances = await calendarInterface.listEventInstancesForCalendar(calendarB);
+    const matching = instances.filter(i => i.event.id === remoteEventId);
+    expect(matching).toHaveLength(1);
+    expect(matching[0].event.isRepost).toBe(true);
   });
 });

@@ -108,6 +108,14 @@ export default class CalendarEventHandlers implements DomainEventHandlers {
   }
 
   install(eventBus: EventEmitter): void {
+    // Single-producer model (pv-hr72): only the originating calendar
+    // materializes instance rows. When `calendar` is present, the create
+    // originated locally — rebuild on the owning calendar. When `calendar`
+    // is absent (emitted by EventService.addRemoteEvent), the create
+    // originated from a remote instance (incoming AP Create); we still call
+    // buildEventInstances so the canonical row(s) for the remote event are
+    // materialized at receive time. Without this, list views on follower
+    // calendars would miss freshly-federated remote events (pv-13xg).
     eventBus.on('eventCreated', async (e) => this.service.buildEventInstances(e.event));
 
     eventBus.on('eventUpdated', async (e: EventUpdatedPayload) => {
