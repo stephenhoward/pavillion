@@ -10,6 +10,7 @@ import ImportSourcesSection from './import-sources/ImportSourcesSection.vue';
 import ReportsDashboard from '@/client/components/moderation/reports-dashboard.vue';
 import ReportDetail from '@/client/components/moderation/report-detail.vue';
 import CalendarService from '../../../service/calendar';
+import Config from '@/client/service/config';
 import { CalendarInfo } from '@/common/model/calendar_info';
 
 const route = useRoute();
@@ -35,6 +36,7 @@ const selectedReportId = ref<string | null>(null);
 
 const calendar = computed(() => state.calendarInfo?.calendar ?? null);
 const isOwner = computed(() => state.calendarInfo?.isOwner ?? false);
+const instanceHost = computed(() => new Config().settings().domain);
 
 onBeforeMount(async () => {
   state.loading = true;
@@ -261,7 +263,11 @@ const backToReports = () => {
           :hidden="state.activeTab !== 'import' || !isOwner"
           class="calendar-management-root__panel"
         >
-          <ImportSourcesSection v-if="isOwner" :calendar-id="calendar.id" />
+          <ImportSourcesSection
+            v-if="isOwner"
+            :calendar-id="calendar.id"
+            :instance-host="instanceHost"
+          />
         </div>
 
         <div
