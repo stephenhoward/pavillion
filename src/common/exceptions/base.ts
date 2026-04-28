@@ -69,7 +69,7 @@ export class ValidationError extends Error {
   public errors: string[];
   public fields?: Record<string, string[]>;
 
-  constructor(errors: string | string[], fields?: Record<string, string[]>) {
+  constructor(errors: string | string[] = 'Validation failed', fields?: Record<string, string[]>) {
     const errorArray = typeof errors === 'string' ? [errors] : errors;
     super(errorArray.join('; '));
     this.name = 'ValidationError';

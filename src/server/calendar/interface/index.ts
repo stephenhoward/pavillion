@@ -20,6 +20,9 @@ import { EventEmitter } from 'events';
 import EventInstanceService, { UpcomingOccurrencesResult } from '../service/event_instance';
 import { DateTime } from 'luxon';
 import SeriesService from '../service/series';
+import ImportSourceService from '../service/import/import_source_service';
+import SyncService, { type SyncDependencies, type SyncResult } from '../service/import/sync';
+import { ImportSource, ImportSourceVerificationType } from '@/common/model/import_source';
 import CalendarEventInstance from '@/common/model/event_instance';
 import AccountsInterface from '@/server/accounts/interface';
 import EmailInterface from '@/server/email/interface';
@@ -50,6 +53,7 @@ export default class CalendarInterface {
   private widgetConfigService: WidgetConfigService;
   private categoryMappingService: CategoryMappingService;
   private seriesService: SeriesService;
+  private importSourceService: ImportSourceService;
 
   constructor(
     eventBus: EventEmitter,
@@ -66,6 +70,41 @@ export default class CalendarInterface {
     this.widgetConfigService = new WidgetConfigService(this.calendarService);
     this.categoryMappingService = new CategoryMappingService();
     this.seriesService = new SeriesService(this.calendarService, eventBus);
+    // A single shared SyncService instance is constructed here so the
+    // per-source in-memory rate limiter has stable state across invocations,
+    // and injected directly into ImportSourceService via its constructor.
+    const sharedSyncService = new SyncService({
+      eventService: this.eventService,
+      calendarService: this.calendarService,
+    });
+    this.importSourceService = new ImportSourceService(this.calendarService, sharedSyncService);
+  }
+
+  /**
+   * Construct a {@link SyncService} wired with the domain's internal
+   * EventService and CalendarService. Intended for CLI / operational entry
+   * points that need to drive the sync pipeline outside the HTTP path — the
+   * HTTP path goes through {@link ImportSourceService} via
+   * {@link syncImportSource}.
+   *
+   * Callers may pass additional overrides (fetcher, rateLimiter, parseICS,
+   * now) for tests or alternative transport wiring. Providing
+   * `eventService` or `calendarService` here overrides the interface's
+   * internally-wired services.
+   *
+   * Exposing this factory keeps the interface's internal services private
+   * while still giving the CLI a supported way to materialize a sync
+   * pipeline.
+   *
+   * @param overrides - Optional subset of SyncDependencies to override
+   * @returns A new SyncService instance using interface-internal services
+   */
+  createSyncService(overrides: Partial<SyncDependencies> = {}): SyncService {
+    return new SyncService({
+      eventService: this.eventService,
+      calendarService: this.calendarService,
+      ...overrides,
+    });
   }
 
   /**
@@ -883,6 +922,132 @@ export default class CalendarInterface {
    */
   async removeRemoteEditorAccess(accountId: string, calendarActorId: string): Promise<boolean> {
     return this.calendarService.removeRemoteCalendarMembership(accountId, calendarActorId);
+  }
+
+  // Import source operations
+
+  /**
+   * List all import sources for a calendar.
+   *
+   * @param account - The requesting account (must own or edit the calendar)
+   * @param calendarId - The calendar UUID
+   * @returns Array of ImportSource models (verification token NOT included)
+   */
+  async listImportSources(account: Account, calendarId: string): Promise<ImportSource[]> {
+    return this.importSourceService.listSources(account, calendarId);
+  }
+
+  /**
+   * Create a new import source for a calendar.
+   *
+   * @param account - The requesting account (must own or edit the calendar)
+   * @param calendarId - The calendar UUID
+   * @param url - The ICS feed URL (HTTPS, non-private, SSRF-checked)
+   * @returns The persisted ImportSource in `verification_state='pending'`
+   */
+  async createImportSource(account: Account, calendarId: string, url: string): Promise<ImportSource> {
+    return this.importSourceService.createSource(account, calendarId, url);
+  }
+
+  /**
+   * Get a single import source by id, scoped to the calendar.
+   *
+   * @param account - The requesting account (must own or edit the calendar)
+   * @param calendarId - The calendar UUID
+   * @param id - The import source UUID
+   * @returns The matching ImportSource model
+   */
+  async getImportSource(account: Account, calendarId: string, id: string): Promise<ImportSource> {
+    return this.importSourceService.getSource(account, calendarId, id);
+  }
+
+  /**
+   * Delete an import source. DB cascade handles import_run rows; event
+   * references are nulled out via ON DELETE SET NULL.
+   *
+   * @param account - The requesting account (must own or edit the calendar)
+   * @param calendarId - The calendar UUID
+   * @param id - The import source UUID
+   */
+  async deleteImportSource(account: Account, calendarId: string, id: string): Promise<void> {
+    return this.importSourceService.deleteSource(account, calendarId, id);
+  }
+
+  /**
+   * Issue the verification challenge token for an import source. The
+   * token is the owner-only secret that must appear in the
+   * `pavillion-verify=v1:{host}:{token}` TXT record (DNS) or in the
+   * well-known URL referenced by a `<a rel="me">` backlink (rel-me).
+   *
+   * When `verificationType` is supplied and differs from the persisted
+   * value, the source's verification mechanism is updated and any prior
+   * `verified_at` proof is cleared so the source must re-enter the verify
+   * gate under the new mechanism.
+   *
+   * @param account - The requesting account (must own or edit the calendar)
+   * @param calendarId - The calendar UUID
+   * @param id - The import source UUID
+   * @param verificationType - Optional verification mechanism to set on the
+   *   source. When omitted, the persisted type is preserved.
+   * @returns The opaque verification token
+   */
+  async issueImportSourceChallenge(
+    account: Account,
+    calendarId: string,
+    id: string,
+    verificationType?: ImportSourceVerificationType,
+  ): Promise<string> {
+    return this.importSourceService.issueVerificationChallenge(
+      account,
+      calendarId,
+      id,
+      verificationType,
+    );
+  }
+
+  /**
+   * Run ownership verification for an import source and persist the outcome.
+   *
+   * Dispatches in the service layer based on the source's
+   * `verificationType` discriminator: DNS TXT lookup for `'dns-txt'`
+   * sources, rel="me" backlink check for `'rel-me'` sources.
+   *
+   * @param account - The requesting account (must own or edit the calendar)
+   * @param calendarId - The calendar UUID
+   * @param id - The import source UUID
+   * @param verificationPageUrl - For `'rel-me'` sources only: the URL of
+   *   the page hosting the `<a rel="me">` backlink. Required for rel-me;
+   *   ignored otherwise. Validated in the service layer.
+   * @returns The updated ImportSource model
+   */
+  async verifyImportSource(
+    account: Account,
+    calendarId: string,
+    id: string,
+    verificationPageUrl?: string,
+  ): Promise<ImportSource> {
+    return this.importSourceService.verifySource(
+      account,
+      calendarId,
+      id,
+      verificationPageUrl,
+    );
+  }
+
+  /**
+   * Trigger a manual sync run for an import source.
+   *
+   * @param account - The requesting account (must own or edit the calendar)
+   * @param calendarId - The calendar UUID
+   * @param id - The import source UUID
+   * @returns Summary of the sync run
+   */
+  async syncImportSource(
+    account: Account,
+    calendarId: string,
+    id: string,
+  ): Promise<SyncResult> {
+    return this.importSourceService.syncSource(account, calendarId, id);
   }
 
 }

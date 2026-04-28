@@ -4,7 +4,7 @@ import { DateTime } from 'luxon';
 import { ReportEntity } from '@/server/moderation/entity/report';
 import IpCleanupService from '@/server/moderation/service/ip-cleanup';
 import { ReportStatus, ReportCategory } from '@/common/model/report';
-import { TestEnvironment } from '@/server/test/lib/test_environment';
+import { TestEnvironment } from '@/server/common/test/lib/test_environment';
 
 describe('IpCleanupService Integration', () => {
   let service: IpCleanupService;

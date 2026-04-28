@@ -10,7 +10,7 @@ import ConfigurationInterface from '@/server/configuration/interface';
 import SetupInterface from '@/server/setup/interface';
 import FundingInterface from '@/server/funding/interface';
 import AccountService from '@/server/accounts/service/account';
-import { TestEnvironment } from '@/server/test/lib/test_environment';
+import { TestEnvironment } from '@/server/common/test/lib/test_environment';
 import { FundingSettingsEntity } from '@/server/funding/entity/funding_settings';
 import { FundingPlanEntity } from '@/server/funding/entity/funding_plan';
 import { CalendarFundingPlanEntity } from '@/server/funding/entity/calendar_funding_plan';

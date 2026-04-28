@@ -59,6 +59,11 @@ export function buildFallbackLng(): FallbackLngObjList {
  * - `load: 'languageOnly'`       — loads base language files only (not region variants)
  * - `fallbackLng`                — per-language chains from AVAILABLE_LANGUAGES
  * - `debug`                      — enabled in development mode for missing-key warnings
+ * - `interpolation.escapeValue: false` — Vue mustache and Handlebars already escape
+ *   their output, so i18next's default escaping double-encodes characters like `/`
+ *   into `&#x2F;` that then render as literal entities. Disabling it is the standard
+ *   i18next-with-Vue/Handlebars configuration; the project never feeds t() output to
+ *   v-html or `{{{ }}}` raw blocks.
  *
  * App-specific settings (passed via `options` and merged in):
  * - `backend`   — backend plugin configuration (e.g. file path for server, HTTP for browser)
@@ -81,6 +86,7 @@ export function createI18nConfig(options?: I18nConfigOptions): InitOptions {
     nonExplicitSupportedLngs: true,
     load: 'languageOnly',
     fallbackLng: buildFallbackLng(),
+    interpolation: { escapeValue: false },
   };
 
   if (backend !== undefined) {

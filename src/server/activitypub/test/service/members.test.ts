@@ -13,7 +13,7 @@ import {
   AlreadyFollowingError,
 } from '@/common/exceptions/activitypub';
 import { InsufficientCalendarPermissionsError } from '@/common/exceptions/calendar';
-import { setupActivityPubSchema, teardownActivityPubSchema } from '@/server/test/helpers/database';
+import { setupActivityPubSchema, teardownActivityPubSchema } from '@/server/common/test/helpers/database';
 import CalendarInterface from '@/server/calendar/interface';
 import { SharedEventEntity, RepostDismissalEntity } from '@/server/activitypub/entity/activitypub';
 import db from '@/server/common/entity/db';

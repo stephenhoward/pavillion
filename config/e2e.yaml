@@ -16,3 +16,11 @@ mail:
 # Disable rate limiting for tests
 rateLimit:
   enabled: false
+
+# Calendar ICS import: stable HMAC secret for deterministic DNS verification
+# tokens in e2e tests. DoH resolvers are intentionally left as the default
+# public-internet values here; ICS-import e2e specs override them to a local
+# mock server via NODE_CONFIG (see tests/e2e/import-sources.spec.ts).
+calendar:
+  import:
+    hmacSecret: 'e2e-hmac-secret-stable-value'

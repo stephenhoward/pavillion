@@ -24,6 +24,11 @@ media:
 moderation:
   emailHashSecret: 'test-email-hash-secret-stable-value'
 
+# Calendar import (test-fixed secret for deterministic HMAC output in tests)
+calendar:
+  import:
+    hmacSecret: 'test-hmac-secret-stable-value'
+
 # Disable rate limiting in tests by default (unit tests expect this)
 # Integration tests that need rate limiting can enable it explicitly
 rateLimit:

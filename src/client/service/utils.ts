@@ -2,7 +2,7 @@
  * Utility functions for client services
  */
 
-import { UnknownError } from '@/common/exceptions/base';
+import { UnknownError, ValidationError } from '@/common/exceptions/base';
 
 /**
  * Validates, normalizes, and encodes an ID for safe use in URLs
@@ -27,6 +27,10 @@ export function validateAndEncodeId(id: string | any, idName: string = 'ID'): st
  * corresponding error class from the provided map. Always throws (returns `never`),
  * so callers do not need a fallback `throw new UnknownError()`.
  *
+ * `ValidationError` is reconstructed with the server's `error` message and
+ * optional `fields` map so callers can surface field-level validation detail;
+ * other exceptions are constructed via their default no-arg path.
+ *
  * @param error - The unknown error from an axios catch block
  * @param errorMap - A map of errorName strings to Error constructor functions
  */
@@ -40,6 +44,11 @@ export function handleApiError(
     const responseData = (error as { response: { data: Record<string, unknown> } }).response.data;
     const errorName = responseData.errorName as string;
     if (errorName && errorName in errorMap) {
+      if (errorName === 'ValidationError') {
+        const message = typeof responseData.error === 'string' ? responseData.error : undefined;
+        const fields = responseData.fields as Record<string, string[]> | undefined;
+        throw new ValidationError(message ?? 'Validation failed', fields);
+      }
       throw new errorMap[errorName]();
     }
   }

@@ -43,7 +43,7 @@ import { Calendar, CalendarContent } from '@/common/model/calendar';
 import { CalendarEvent } from '@/common/model/events';
 import { CalendarEntity } from '@/server/calendar/entity/calendar';
 import CalendarInterface from '@/server/calendar/interface';
-import { setupActivityPubSchema, teardownActivityPubSchema } from '@/server/test/helpers/database';
+import { setupActivityPubSchema, teardownActivityPubSchema } from '@/server/common/test/helpers/database';
 
 describe('ProcessInboxService.handleLocalAnnounceDispatch (integration)', () => {
   let sandbox: sinon.SinonSandbox;

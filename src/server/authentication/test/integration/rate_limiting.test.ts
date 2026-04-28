@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
 import config from 'config';
 
-import { TestEnvironment } from '@/server/test/lib/test_environment';
+import { TestEnvironment } from '@/server/common/test/lib/test_environment';
 import AccountService from '@/server/accounts/service/account';
 import ConfigurationInterface from '@/server/configuration/interface';
 import SetupInterface from '@/server/setup/interface';

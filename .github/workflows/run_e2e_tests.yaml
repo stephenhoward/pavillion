@@ -25,4 +25,8 @@ jobs:
       - name: Build frontend assets
         run: npm run build
       - run: npx playwright install --with-deps chromium
+      - name: Generate self-signed TLS certs for ICS rel-me HTTPS mock
+        run: |
+          chmod +x docker/federation/ssl/generate-certs.sh
+          docker/federation/ssl/generate-certs.sh
       - run: npm run test:e2e

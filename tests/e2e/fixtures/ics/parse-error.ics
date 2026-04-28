@@ -1,0 +1,11 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Pavillion E2E//ICS Import Test//EN
+CALSCALE:GREGORIAN
+BEGIN:VEVENT
+UID:e2e-parse-error@import-sources.test
+DTSTAMP:20260501T000000Z
+SUMMARY:Event Missing DTSTART Causes Parse Error
+DESCRIPTION:node-ical parses this, but the mapper throws because DTSTART is missing.
+END:VEVENT
+END:VCALENDAR

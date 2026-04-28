@@ -42,6 +42,22 @@ calendar:
   # from anonymous-write amplification via repeated miss probes across an
   # unbounded recurring schedule's occurrences.
   materializationCap: 1000
+  # Calendar import configuration
+  # In production, CALENDAR_IMPORT_HMAC_SECRET must be set via environment variable
+  # Used to derive per-source DNS verification tokens.
+  import:
+    # HMAC secret for deriving DNS verification tokens.
+    # Empty in default.yaml; development/test provide non-empty dev-only values.
+    # Production startup refuses to boot with an empty or development-only value.
+    hmacSecret: ''
+    # DoH resolvers used for DNS ownership verification. Both must agree.
+    # Cloudflare exposes its JSON API at /dns-query; Google's /dns-query is
+    # RFC 8484 wire-format only and rejects JSON queries, so use /resolve.
+    dohResolvers:
+      - 'https://1.1.1.1/dns-query'
+      - 'https://8.8.8.8/resolve'
+    # Maximum number of import sources per calendar.
+    maxSourcesPerCalendar: 10
 
 # Funding domain configuration
 # In production, ENCRYPTION_KEY must be set via environment variable
@@ -117,6 +133,13 @@ rateLimit:
     byAccount:
       windowMs: 900000  # 15 minutes in milliseconds
       max: 10  # 10 requests per account per 15 minutes
+  importSource:
+    verifyBySource:
+      windowMs: 3600000  # 1 hour in milliseconds
+      max: 3  # 3 verify attempts per source per hour
+    syncBySource:
+      windowMs: 3600000  # 1 hour in milliseconds
+      max: 4  # 4 sync attempts per source per hour
 
 # Housekeeping configuration for automated server maintenance
 housekeeping:

@@ -15,7 +15,7 @@ import db from '@/server/common/entity/db';
 import {
   setupActivityPubSchema,
   teardownActivityPubSchema,
-} from '@/server/test/helpers/database';
+} from '@/server/common/test/helpers/database';
 
 /**
  * Sticky-dismissal behavior for memberService.unshareEvent / shareEvent.

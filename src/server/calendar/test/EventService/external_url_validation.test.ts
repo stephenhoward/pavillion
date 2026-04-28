@@ -5,6 +5,7 @@ import { EventEmitter } from 'events';
 import { Account } from '@/common/model/account';
 import { Calendar } from '@/common/model/calendar';
 import { EventEntity, EventContentEntity } from '@/server/calendar/entity/event';
+import { EventImportOriginEntity } from '@/server/calendar/entity/event_import_origin';
 import EventService from '@/server/calendar/service/events';
 import { InvalidExternalUrlError } from '@/common/exceptions/calendar';
 import { ValidationError } from '@/common/exceptions/base';
@@ -27,6 +28,8 @@ describe('EventService externalUrl + urlPrompt validation (via createEvent)', ()
     sandbox.stub(service['calendarService'], 'getCalendar').resolves(cal);
     sandbox.stub(EventEntity.prototype, 'save');
     sandbox.stub(EventContentEntity.prototype, 'save');
+    // Keep the sibling origin lookup off the in-memory DB.
+    sandbox.stub(EventImportOriginEntity, 'findOne').resolves(null);
   });
 
   afterEach(() => {
@@ -287,6 +290,7 @@ describe('EventService externalUrl + urlPrompt validation (via updateEvent)', ()
       EventEntity.build({ calendar_id: cal.id, id: eventId }),
     );
     sandbox.stub(EventEntity.prototype, 'save');
+    sandbox.stub(EventImportOriginEntity, 'findOne').resolves(null);
   });
 
   afterEach(() => {

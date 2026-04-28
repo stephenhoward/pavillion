@@ -1,19 +1,36 @@
 /**
  * IP Address Validation Utilities
  *
- * Provides utilities for validating IP addresses to prevent SSRF (Server-Side Request Forgery)
- * attacks by blocking requests to private and internal IP address ranges.
+ * Provides utilities for validating IP addresses to prevent SSRF (Server-Side
+ * Request Forgery) attacks by blocking requests to private, internal, and
+ * otherwise-unroutable IP address ranges.
  *
- * This module blocks access to:
- * - Private IPv4 ranges (RFC 1918): 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16
- * - Loopback addresses: 127.0.0.0/8 (IPv4), ::1 (IPv6)
- * - Link-local addresses: 169.254.0.0/16 (IPv4), fe80::/10 (IPv6)
- * - Multicast addresses: 224.0.0.0/4 (IPv4), ff00::/8 (IPv6)
- * - Other reserved ranges
+ * Blocked IPv4 ranges:
+ * - Loopback: 127.0.0.0/8
+ * - Private (RFC 1918): 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16
+ * - Link-local: 169.254.0.0/16 (including 169.254.169.254 cloud metadata)
+ * - CGNAT: 100.64.0.0/10 (RFC 6598)
+ * - "This network": 0.0.0.0/8
+ * - IETF Protocol Assignments: 192.0.0.0/24
+ * - TEST-NET-1/2/3: 192.0.2.0/24, 198.51.100.0/24, 203.0.113.0/24
+ * - Multicast: 224.0.0.0/4
+ * - Reserved for future use: 240.0.0.0/4 (includes 255.255.255.255 broadcast)
+ *
+ * Blocked IPv6 ranges:
+ * - Loopback (::1), unspecified (::)
+ * - Link-local: fe80::/10
+ * - Unique local: fc00::/7
+ * - Multicast: ff00::/8
+ * - IPv4-mapped (::ffff:X.X.X.X) — unwrapped and the underlying IPv4 validated
+ *
+ * Alternate IPv4 literal encodings (octal 0177.0.0.1, decimal integer
+ * 2130706433, hex 0x7f000001, shorthand 127.1) are rejected outright rather
+ * than normalized — this avoids ambiguity and matches strict SSRF defenses.
  */
 
 import dns from 'dns';
 import { promisify } from 'util';
+import ipaddr from 'ipaddr.js';
 import { createLogger } from '@/server/common/helper/logger';
 
 const logger = createLogger('ip-validation');
@@ -21,173 +38,115 @@ const logger = createLogger('ip-validation');
 const dnsLookup = promisify(dns.lookup);
 
 /**
- * Checks if an IPv4 address falls within a CIDR range.
- *
- * @param ip - The IPv4 address to check (e.g., "192.168.1.1")
- * @param cidr - The CIDR range to check against (e.g., "192.168.0.0/16")
- * @returns True if the IP is within the CIDR range
+ * IPv4 ranges reported by ipaddr.js that are considered private / non-routable
+ * for SSRF purposes.
  */
-function isIpInCidrRange(ip: string, cidr: string): boolean {
-  const [rangeIp, prefixLengthStr] = cidr.split('/');
-  const prefixLength = parseInt(prefixLengthStr, 10);
+const BLOCKED_IPV4_RANGES: ReadonlySet<string> = new Set([
+  'unspecified',       // 0.0.0.0/8
+  'broadcast',         // 255.255.255.255/32
+  'multicast',         // 224.0.0.0/4
+  'linkLocal',         // 169.254.0.0/16 (covers 169.254.169.254 cloud metadata)
+  'loopback',          // 127.0.0.0/8
+  'carrierGradeNat',   // 100.64.0.0/10 (RFC 6598 CGNAT)
+  'private',           // 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16 (RFC 1918)
+  'reserved',          // 192.0.0.0/24, 240.0.0.0/4, etc.
+  'benchmarking',      // 198.18.0.0/15 (RFC 2544)
+  'amt',               // 192.52.193.0/24
+  'as112',             // 192.175.48.0/24
+]);
 
-  const ipParts = ip.split('.').map(Number);
-  const rangeParts = rangeIp.split('.').map(Number);
-
-  // Convert IP addresses to 32-bit integers
-  const ipInt = (ipParts[0] << 24) + (ipParts[1] << 16) + (ipParts[2] << 8) + ipParts[3];
-  const rangeInt = (rangeParts[0] << 24) + (rangeParts[1] << 16) + (rangeParts[2] << 8) + rangeParts[3];
-
-  // Create subnet mask
-  const mask = (-1 << (32 - prefixLength)) >>> 0;
-
-  // Check if IP is in range
-  return (ipInt & mask) === (rangeInt & mask);
-}
+/**
+ * IPv6 ranges reported by ipaddr.js that are considered private / non-routable
+ * for SSRF purposes. Note: `reserved` is intentionally NOT in this list so that
+ * the documentation prefix (2001:db8::/32) remains allowed for test URLs.
+ */
+const BLOCKED_IPV6_RANGES: ReadonlySet<string> = new Set([
+  'unspecified',   // ::
+  'linkLocal',     // fe80::/10
+  'multicast',     // ff00::/8
+  'loopback',      // ::1
+  'uniqueLocal',   // fc00::/7
+  // ipv4Mapped is handled explicitly via unwrap + recursive IPv4 validation
+]);
 
 /**
  * Checks if an IPv4 address is a private or internal address.
  *
+ * The input MUST be a valid four-part decimal IPv4 address
+ * (e.g., "192.168.1.1"). Alternate encodings are rejected upstream in
+ * `isPrivateIP`.
+ *
  * @param ip - The IPv4 address to check
- * @returns True if the IP is private or internal
+ * @returns True if the IP is private, internal, or reserved
  */
 function isPrivateIPv4(ip: string): boolean {
-  // Private ranges (RFC 1918)
-  const privateRanges = [
-    '10.0.0.0/8',       // 10.0.0.0 - 10.255.255.255
-    '172.16.0.0/12',    // 172.16.0.0 - 172.31.255.255
-    '192.168.0.0/16',   // 192.168.0.0 - 192.168.255.255
-  ];
-
-  // Check private ranges
-  for (const range of privateRanges) {
-    if (isIpInCidrRange(ip, range)) {
-      return true;
-    }
-  }
-
-  // Loopback (127.0.0.0/8)
-  if (isIpInCidrRange(ip, '127.0.0.0/8')) {
-    return true;
-  }
-
-  // Link-local (169.254.0.0/16)
-  if (isIpInCidrRange(ip, '169.254.0.0/16')) {
-    return true;
-  }
-
-  // Multicast (224.0.0.0/4)
-  if (isIpInCidrRange(ip, '224.0.0.0/4')) {
-    return true;
-  }
-
-  // Reserved and special-purpose addresses
-  // 0.0.0.0/8 - Current network (only valid as source address)
-  if (isIpInCidrRange(ip, '0.0.0.0/8')) {
-    return true;
-  }
-
-  // 100.64.0.0/10 - Shared Address Space (RFC 6598)
-  if (isIpInCidrRange(ip, '100.64.0.0/10')) {
-    return true;
-  }
-
-  // 192.0.0.0/24 - IETF Protocol Assignments
-  if (isIpInCidrRange(ip, '192.0.0.0/24')) {
-    return true;
-  }
-
-  // 192.0.2.0/24 - TEST-NET-1 (RFC 5737)
-  if (isIpInCidrRange(ip, '192.0.2.0/24')) {
-    return true;
-  }
-
-  // 198.51.100.0/24 - TEST-NET-2 (RFC 5737)
-  if (isIpInCidrRange(ip, '198.51.100.0/24')) {
-    return true;
-  }
-
-  // 203.0.113.0/24 - TEST-NET-3 (RFC 5737)
-  if (isIpInCidrRange(ip, '203.0.113.0/24')) {
-    return true;
-  }
-
-  // 240.0.0.0/4 - Reserved for future use
-  if (isIpInCidrRange(ip, '240.0.0.0/4')) {
-    return true;
-  }
-
-  // 255.255.255.255/32 - Broadcast address
-  if (ip === '255.255.255.255') {
-    return true;
-  }
-
-  return false;
+  const parsed = ipaddr.IPv4.parse(ip);
+  return BLOCKED_IPV4_RANGES.has(parsed.range());
 }
 
 /**
- * Checks if an IPv6 address is a private or internal address.
+ * Checks if an IPv6 address is a private or internal address. IPv4-mapped IPv6
+ * addresses (`::ffff:X.X.X.X`) are unwrapped and the underlying IPv4 is
+ * validated, preventing bypass via IPv6 encoding of an IPv4 private address.
  *
  * @param ip - The IPv6 address to check
- * @returns True if the IP is private or internal
+ * @returns True if the IP is private, internal, or an IPv4-mapped private IPv4
  */
 function isPrivateIPv6(ip: string): boolean {
-  // Normalize IPv6 address to lowercase
-  const normalizedIp = ip.toLowerCase();
+  const parsed = ipaddr.IPv6.parse(ip);
 
-  // Loopback address ::1
-  if (normalizedIp === '::1' || normalizedIp === '0:0:0:0:0:0:0:1') {
-    return true;
+  // Unwrap IPv4-mapped IPv6 (::ffff:X.X.X.X) and validate underlying IPv4.
+  // Without this, an attacker could use https://[::ffff:10.0.0.1]/ to bypass
+  // the IPv4 private-range check.
+  if (parsed.isIPv4MappedAddress()) {
+    return BLOCKED_IPV4_RANGES.has(parsed.toIPv4Address().range());
   }
 
-  // Link-local addresses fe80::/10
-  if (normalizedIp.startsWith('fe80:') || normalizedIp.startsWith('fe8') || normalizedIp.startsWith('fe9') ||
-      normalizedIp.startsWith('fea') || normalizedIp.startsWith('feb')) {
-    return true;
-  }
-
-  // Unique local addresses fc00::/7 (fd00::/8 is commonly used)
-  if (normalizedIp.startsWith('fc') || normalizedIp.startsWith('fd')) {
-    return true;
-  }
-
-  // Multicast addresses ff00::/8
-  if (normalizedIp.startsWith('ff')) {
-    return true;
-  }
-
-  // Unspecified address ::
-  if (normalizedIp === '::' || normalizedIp === '0:0:0:0:0:0:0:0') {
-    return true;
-  }
-
-  return false;
+  return BLOCKED_IPV6_RANGES.has(parsed.range());
 }
 
 /**
- * Checks if an IP address (IPv4 or IPv6) is a private or internal address.
+ * Checks if an IP address literal (IPv4 or IPv6) is a private or internal
+ * address.
  *
- * @param ip - The IP address to check
- * @returns True if the IP is private or internal
+ * Alternate IPv4 encodings (octal, decimal-integer, hex, shorthand) are
+ * rejected by returning `true` (treat as unsafe). This is the defensive choice:
+ * a URL using `https://0x7f000001/` is almost certainly an SSRF probe, and we
+ * have no legitimate reason to accept it.
+ *
+ * @param ip - The IP address to check (literal, not a hostname)
+ * @returns True if the IP is private, internal, reserved, or uses a rejected
+ *   alternate encoding
  */
 export function isPrivateIP(ip: string): boolean {
-  // Check if it's an IPv6 address
+  // IPv6 address (contains a colon)
   if (ip.includes(':')) {
+    if (!ipaddr.IPv6.isValid(ip)) {
+      // Malformed IPv6 — treat as unsafe
+      return true;
+    }
     return isPrivateIPv6(ip);
   }
 
-  // Otherwise treat as IPv4
+  // IPv4: reject anything that is not a strict four-part decimal literal.
+  // This blocks octal (0177.0.0.1), decimal-integer (2130706433),
+  // hex (0x7f000001), and shorthand (127.1) encodings.
+  if (!ipaddr.IPv4.isValidFourPartDecimal(ip)) {
+    return true;
+  }
+
   return isPrivateIPv4(ip);
 }
 
 /**
- * Resolves a hostname to its IP addresses and checks if any resolve to private IPs.
- * This prevents DNS rebinding attacks where a domain resolves to a private IP.
+ * Resolves a hostname to its IP addresses and checks if any resolve to private
+ * IPs. This prevents DNS rebinding attacks where a domain resolves to a
+ * private IP.
  *
  * @param hostname - The hostname to resolve and check
  * @returns Promise resolving to true if the hostname resolves to a private IP
  */
-export async function resolvesToPrivateIP(hostname: string): boolean {
+export async function resolvesToPrivateIP(hostname: string): Promise<boolean> {
   // Special case: localhost always resolves to loopback
   if (hostname === 'localhost') {
     return true;
@@ -231,15 +190,31 @@ export async function resolvesToPrivateIP(hostname: string): boolean {
  * Validates that a URL does not point to a private or internal IP address.
  * This prevents SSRF attacks by blocking requests to internal infrastructure.
  *
+ * This helper is STRICT in every environment and has no env-var escape
+ * hatch for http:// or private-IP literals. The ICS-import pipeline, which
+ * needs to accept http:// + localhost fixtures in e2e, relaxes URL
+ * validation at its own call sites (Fetcher, DnsVerifier,
+ * ImportSourceService) via `createIcsUrlValidator()` in
+ * `test-ssrf-gate.ts`. ActivityPub federation paths share this helper and
+ * therefore cannot be relaxed — a deliberate narrowing per pv-gdqp.
+ *
+ * The only exception carved out here is `ALLOW_PRIVATE_FEDERATION`, which
+ * is scoped strictly to DNS-resolved private IPs (e.g. Docker bridge
+ * subnets resolving alpha.federation.local → 172.18.0.4). Literal
+ * private-IP URLs and http:// URLs remain rejected regardless of that
+ * flag.
+ *
  * @param url - The URL to validate
  * @returns Promise resolving to true if the URL is safe to fetch
- * @throws Error if the URL points to a private IP address
+ * @throws Error if the URL points to a private IP address or uses a rejected
+ *   scheme or encoding
  */
 export async function validateUrlNotPrivate(url: string): Promise<boolean> {
   try {
     const parsedUrl = new URL(url);
 
-    // Reject non-HTTPS URLs — ActivityPub federation must use HTTPS
+    // Reject non-HTTPS URLs — ActivityPub federation must use HTTPS and
+    // every other caller of this helper shares the same expectation.
     if (parsedUrl.protocol !== 'https:') {
       throw new Error(`URL must use HTTPS, got: ${parsedUrl.protocol}`);
     }
@@ -251,20 +226,25 @@ export async function validateUrlNotPrivate(url: string): Promise<boolean> {
       hostname = hostname.slice(1, -1);
     }
 
-    // Check if hostname is directly an IPv4 address
-    if (hostname.match(/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/)) {
+    // Check if hostname looks like an IP literal (IPv4 or IPv6).
+    // ipaddr.isValid accepts both IPv4 and IPv6 literal forms — including
+    // alternate IPv4 encodings like 0x7f000001. We reject those explicitly
+    // via the four-part-decimal check in isPrivateIP.
+    const isLikelyIpLiteral = hostname.includes(':') || /^[0-9a-fA-Fx.]+$/.test(hostname);
+
+    if (isLikelyIpLiteral && ipaddr.isValid(hostname)) {
       if (isPrivateIP(hostname)) {
         throw new Error(`Access to private IP address ${hostname} is not allowed`);
       }
       return true;
     }
 
-    // Check if hostname is directly an IPv6 address (contains colons)
-    if (hostname.includes(':')) {
-      if (isPrivateIP(hostname)) {
-        throw new Error(`Access to private IP address ${hostname} is not allowed`);
-      }
-      return true;
+    // If the hostname looks numeric but is not valid as a literal, reject it
+    // rather than letting it fall through to DNS resolution. An "IP-shaped"
+    // string that ipaddr doesn't accept is malformed and should not be
+    // fetched.
+    if (/^\d{1,3}(\.\d{1,3}){0,3}$/.test(hostname) || /^0x[0-9a-fA-F]+$/.test(hostname)) {
+      throw new Error(`Access to private IP address ${hostname} is not allowed`);
     }
 
     // Allow private-IP hostnames in non-production federation test environments.

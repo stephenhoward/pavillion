@@ -9,6 +9,7 @@ import { CalendarEvent, CalendarEventContent, CalendarEventSchedule, UrlPrompt, 
 import { EventCategory } from "@/common/model/event_category";
 import { EventLocation, validateLocationHierarchy } from "@/common/model/location";
 import { EventContentEntity, EventEntity, EventScheduleEntity } from "@/server/calendar/entity/event";
+import { EventImportOriginEntity } from "@/server/calendar/entity/event_import_origin";
 import CalendarService from "@/server/calendar/service/calendar";
 import { LocationEntity, LocationContentEntity } from "@/server/calendar/entity/location";
 // TODO: MediaEntity is still needed here for Sequelize eager-load association includes
@@ -131,6 +132,34 @@ export function scrubExternalUrlForLog(externalUrl: string | null | undefined): 
     return null;
   }
 }
+
+/**
+ * Originator context for EventService mutations.
+ *
+ * Distinguishes user-driven mutations (HTTP handlers, UI actions) from
+ * import-driven mutations (ICS sync orchestrator). The service layer — not
+ * entity hooks — owns the rule because hooks cannot distinguish caller
+ * intent. See pv-1qcp epic DESIGN and architecture-playbook (no entity
+ * hooks for caller-intent rules).
+ *
+ * - `'user'` (default): user-initiated mutation. On updateEvent, the
+ *   service looks up the `EventImportOriginEntity` sibling row (if any)
+ *   and flips `locally_edited=true` so future sync runs know not to
+ *   overwrite this event's content. On createEvent, no-op.
+ * - `'import'`: ICS sync orchestrator. On createEvent and updateEvent,
+ *   no-op at the EventService layer — origin bookkeeping lives on the
+ *   sibling table and is owned by sync.ts's stampImportOrigin, which
+ *   runs in the same transaction. The context argument is retained for
+ *   symmetry, audit traceability, and future originator-aware behavior.
+ *
+ * Event-bus emissions fire on BOTH paths (critical — imported events must
+ * still federate via AP through the existing emission machinery).
+ */
+export type EventOriginatorContext = {
+  source: 'user' | 'import';
+};
+
+const DEFAULT_ORIGINATOR_CONTEXT: EventOriginatorContext = { source: 'user' };
 
 /**
  * Service class for managing events
@@ -633,12 +662,28 @@ class EventService {
   }
 
   /**
-     * Creates a new event for the provided account
+     * Creates a new event for the provided account.
+     *
+     * The `_context` originator-context parameter is retained on the
+     * signature for symmetry with updateEvent and because callers (notably
+     * the ICS-import sync orchestrator) pass `{ source: 'import' }`
+     * positionally. createEvent currently has no originator-branching
+     * behavior — origin-provenance bookkeeping lives on the sibling
+     * EventImportOriginEntity written by the orchestrator in the same
+     * transaction. Preserving the argument keeps the API stable for any
+     * future originator-aware create behavior.
+     *
      * @param account - account the event belongs to
      * @param eventParams - the parameters for the new event
      * @returns a promise that resolves to the created Event
      */
-  async createEvent(account: Account, eventParams:Record<string,any>): Promise<CalendarEvent> {
+  async createEvent(
+    account: Account,
+    eventParams: Record<string, any>,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    _context: EventOriginatorContext = DEFAULT_ORIGINATOR_CONTEXT,
+    tx?: Transaction,
+  ): Promise<CalendarEvent> {
 
     const calendar = await this.calendarService.getCalendar(eventParams.calendarId);
     const calendars = await this.calendarService.editableCalendarsForUser(account);
@@ -733,34 +778,53 @@ class EventService {
       event.media = media;
     }
 
-    await eventEntity.save();
+    await eventEntity.save({ transaction: tx });
 
-    // Notify media domain that media has been attached to an event
+    // Notify media domain that media has been attached to an event.
+    // When the caller supplies a transaction, defer the emit until after
+    // commit. The setImmediate hop is required to escape Sequelize's CLS
+    // context — without it the listener's async body inherits a CLS scope
+    // that still binds the just-committed transaction, and Sequelize's
+    // implicit transaction lookup picks it up, causing
+    // "commit has been called on this transaction" errors.
     if (eventEntity.media_id) {
-      this.eventBus.emit('mediaAttachedToEvent', {
-        mediaId: eventEntity.media_id,
+      const mediaId = eventEntity.media_id;
+      const emitMediaAttached = () => this.eventBus.emit('mediaAttachedToEvent', {
+        mediaId,
         eventId: event.id,
       });
+      if (tx) {
+        tx.afterCommit(() => setImmediate(emitMediaAttached));
+      }
+      else {
+        emitMediaAttached();
+      }
     }
 
     if ( eventParams.content ) {
       for( let [language,content] of Object.entries(eventParams.content) ) {
-        event.addContent(await this.createEventContent(event.id, language, content as Record<string,any>));
+        event.addContent(await this.createEventContent(event.id, language, content as Record<string,any>, tx));
       }
     }
 
     if ( eventParams.schedules ) {
       event.schedules = []; // "fromObject" auto-creates schedules, but we need to create them in the db
       for( let schedule of eventParams.schedules ) {
-        event.addSchedule(await this.createEventSchedule(event.id, schedule as Record<string,any>));
+        event.addSchedule(await this.createEventSchedule(event.id, schedule as Record<string,any>, tx));
       }
     }
 
-    this.eventBus.emit('eventCreated', { calendar, event });
+    const emitEventCreated = () => this.eventBus.emit('eventCreated', { calendar, event });
+    if (tx) {
+      tx.afterCommit(() => setImmediate(emitEventCreated));
+    }
+    else {
+      emitEventCreated();
+    }
     return event;
   }
 
-  async createEventSchedule(eventId: string, scheduleParams: Record<string,any>): Promise<CalendarEventSchedule> {
+  async createEventSchedule(eventId: string, scheduleParams: Record<string,any>, tx?: Transaction): Promise<CalendarEventSchedule> {
     const schedule = CalendarEventSchedule.fromObject(scheduleParams);
 
     // For non-recurring events, sync endDate to eventEndTime so the database
@@ -773,19 +837,19 @@ class EventService {
     schedule.id = uuidv4();
     const scheduleEntity = EventScheduleEntity.fromModel(schedule);
     scheduleEntity.event_id = eventId;
-    await scheduleEntity.save();
+    await scheduleEntity.save({ transaction: tx });
 
     return schedule;
   }
 
-  async createEventContent(eventId: string, language: string, contentParams: Record<string,any>): Promise<CalendarEventContent> {
+  async createEventContent(eventId: string, language: string, contentParams: Record<string,any>, tx?: Transaction): Promise<CalendarEventContent> {
     contentParams.language = language;
     const content = CalendarEventContent.fromObject(contentParams);
 
     const contentEntity = EventContentEntity.fromModel(content);
     contentEntity.id = uuidv4();
     contentEntity.event_id = eventId;
-    await contentEntity.save();
+    await contentEntity.save({ transaction: tx });
 
     return content;
   }
@@ -816,7 +880,13 @@ class EventService {
    * @param eventParams - the parameters and values to update for the event
    * @returns a promise that resolves to the Event
    */
-  async updateEvent(account: Account, eventId: string, eventParams:Record<string,any>): Promise<CalendarEvent> {
+  async updateEvent(
+    account: Account,
+    eventId: string,
+    eventParams: Record<string, any>,
+    context: EventOriginatorContext = DEFAULT_ORIGINATOR_CONTEXT,
+    tx?: Transaction,
+  ): Promise<CalendarEvent> {
     // Validate eventId parameter
     if (!eventId || (typeof eventId === 'string' && eventId.trim() === '')) {
       throw new ValidationError('Event ID is required');
@@ -896,7 +966,7 @@ class EventService {
         if ( contentEntity ) {
 
           if ( ! content ) {
-            await contentEntity.destroy();
+            await contentEntity.destroy({ transaction: tx });
             continue;
           }
 
@@ -904,7 +974,7 @@ class EventService {
           delete c.language;
 
           if ( Object.keys(c).length === 0 ) {
-            await contentEntity.destroy();
+            await contentEntity.destroy({ transaction: tx });
             continue;
           }
 
@@ -914,7 +984,7 @@ class EventService {
             name: name,
             description: c.description,
             accessibility_info: c.accessibilityInfo ?? '',
-          });
+          }, { transaction: tx });
           event.addContent(contentEntity.toModel());
         }
         else {
@@ -926,7 +996,7 @@ class EventService {
           delete c.language;
 
           if ( Object.keys(c).length > 0 ) {
-            event.addContent(await this.createEventContent(eventId, language, c));
+            event.addContent(await this.createEventContent(eventId, language, c, tx));
           }
         }
       }
@@ -971,7 +1041,7 @@ class EventService {
     }
 
     if ( eventParams.schedules ) {
-      await this.reconcileSchedules(eventId, eventParams.schedules, event);
+      await this.reconcileSchedules(eventId, eventParams.schedules, event, tx);
     }
 
     // Handle media updates
@@ -1005,17 +1075,63 @@ class EventService {
       eventEntity.media_zoom = eventParams.mediaZoom;
     }
 
-    await eventEntity.save();
-
-    // Notify media domain that media has been attached to an event
-    if (newMediaAttached && eventEntity.media_id) {
-      this.eventBus.emit('mediaAttachedToEvent', {
-        mediaId: eventEntity.media_id,
-        eventId: event.id,
+    // Originator-aware locally_edited flip: a user-driven update to an
+    // imported event flips locally_edited=true on the sibling
+    // EventImportOriginEntity row so subsequent sync runs know this event's
+    // content has diverged from the upstream feed and should not be
+    // overwritten. Import-driven updates leave locally_edited unchanged —
+    // the sync orchestrator explicitly passes context.source='import' for
+    // this case. Non-imported events have no origin row; the SELECT
+    // returns null and the flip is a no-op.
+    //
+    // Note: entity hooks are deliberately NOT used for this rule — hooks
+    // cannot distinguish caller intent. Service layer owns it. See pv-1qcp
+    // epic DESIGN and architecture-playbook.
+    //
+    // Cost: one extra SELECT + UPDATE per user-initiated edit of an imported
+    // event. Accepted per epic DESIGN for structural purity — origin
+    // provenance lives on the sibling table, not on EventEntity.
+    if (context.source === 'user') {
+      const origin = await EventImportOriginEntity.findOne({
+        where: { event_id: eventEntity.id },
+        transaction: tx,
       });
+      if (origin) {
+        origin.locally_edited = true;
+        await origin.save({ transaction: tx });
+      }
     }
 
-    this.eventBus.emit('eventUpdated', { calendar, event });
+    await eventEntity.save({ transaction: tx });
+
+    // Notify media domain that media has been attached to an event.
+    // When the caller supplies a transaction, defer the emit until after
+    // commit. The setImmediate hop is required to escape Sequelize's CLS
+    // context — without it the listener's async body inherits a CLS scope
+    // that still binds the just-committed transaction, and Sequelize's
+    // implicit transaction lookup picks it up, causing
+    // "commit has been called on this transaction" errors.
+    if (newMediaAttached && eventEntity.media_id) {
+      const mediaId = eventEntity.media_id;
+      const emitMediaAttached = () => this.eventBus.emit('mediaAttachedToEvent', {
+        mediaId,
+        eventId: event.id,
+      });
+      if (tx) {
+        tx.afterCommit(() => setImmediate(emitMediaAttached));
+      }
+      else {
+        emitMediaAttached();
+      }
+    }
+
+    const emitEventUpdated = () => this.eventBus.emit('eventUpdated', { calendar, event });
+    if (tx) {
+      tx.afterCommit(() => setImmediate(emitEventUpdated));
+    }
+    else {
+      emitEventUpdated();
+    }
     return event;
   }
 
@@ -1049,6 +1165,7 @@ class EventService {
     eventId: string,
     incomingPositiveSchedules: any[],
     event: CalendarEvent,
+    tx?: Transaction,
   ): Promise<void> {
     // Reject payloads that try to create or modify exclusion rows directly.
     // Exclusions are only created via the cancel-instance flow; allowing them
@@ -1066,6 +1183,7 @@ class EventService {
     // to this event and can't leak into other events' cancellations.
     const existingSchedules = await EventScheduleEntity.findAll({
       where: { event_id: eventId },
+      transaction: tx,
     });
 
     // Separate existing rows by class so exclusions are kept completely
@@ -1116,11 +1234,11 @@ class EventService {
           interval: 'interval' in schedule ? (parsed.interval ?? 0) : scheduleEntity.interval,
           count: 'count' in schedule ? (parsed.count ?? 0) : scheduleEntity.count,
           by_day: byDayValue,
-        });
+        }, { transaction: tx });
         event.addSchedule(scheduleEntity.toModel());
       }
       else {
-        event.addSchedule(await this.createEventSchedule(eventId, schedule));
+        event.addSchedule(await this.createEventSchedule(eventId, schedule, tx));
       }
     }
 
@@ -1135,6 +1253,7 @@ class EventService {
           event_id: eventId,
           is_exclusion: false,
         },
+        transaction: tx,
       });
     }
 

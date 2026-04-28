@@ -1,6 +1,7 @@
 # Production configuration overrides
-# Secrets (jwt.secret, session.secret, moderation.emailHashSecret) MUST be
-# provided via environment variables - see custom-environment-variables.yaml
+# Secrets (jwt.secret, session.secret, moderation.emailHashSecret,
+# funding.encryptionKey, calendar.import.hmacSecret) MUST be provided via
+# environment variables - see custom-environment-variables.yaml
 
 database:
   dialect: postgres

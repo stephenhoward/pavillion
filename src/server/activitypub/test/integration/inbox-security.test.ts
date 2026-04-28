@@ -26,14 +26,14 @@ import AccountsInterface from '@/server/accounts/interface';
 import ConfigurationInterface from '@/server/configuration/interface';
 import SetupInterface from '@/server/setup/interface';
 import AccountService from '@/server/accounts/service/account';
-import { TestEnvironment } from '@/server/test/lib/test_environment';
+import { TestEnvironment } from '@/server/common/test/lib/test_environment';
 import ProcessInboxService from '@/server/activitypub/service/inbox';
 import { EventObjectEntity } from '@/server/activitypub/entity/event_object';
 import { EventActivityEntity } from '@/server/activitypub/entity/activitypub';
 import AnnounceActivity from '@/server/activitypub/model/action/announce';
 import * as remoteFetch from '@/server/activitypub/helper/remote-fetch';
 import { CalendarEntity } from '@/server/calendar/entity/calendar';
-import { setupActivityPubSchema, teardownActivityPubSchema } from '@/server/test/helpers/database';
+import { setupActivityPubSchema, teardownActivityPubSchema } from '@/server/common/test/helpers/database';
 
 describe('ActivityPub Inbox Security Pipeline', () => {
   let env: TestEnvironment;

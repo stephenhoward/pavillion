@@ -1,9 +1,110 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import sinon from 'sinon';
-import dns from 'dns';
-import { promisify } from 'util';
 import * as ipValidation from '@/server/common/helper/ip-validation';
 import { isPrivateIP } from '@/server/common/helper/ip-validation';
+
+/**
+ * Parameterized SSRF fixture.
+ *
+ * Each entry: [input, blocked, reason]
+ *   input   — the literal or hostname-shaped value passed to isPrivateIP
+ *   blocked — expected return of isPrivateIP (true = treated as unsafe)
+ *   reason  — human-readable category used for assertion messaging
+ *
+ * Coverage per testing-advisor:
+ *   - literal loopback (IPv4 + IPv6)
+ *   - full RFC 1918 ranges (all three, including 172.16-31 boundary)
+ *   - link-local incl. cloud metadata (169.254.169.254)
+ *   - CGNAT (100.64.0.0/10)
+ *   - IPv4-mapped IPv6 (both private and public underlying)
+ *   - alternate IPv4 encodings (octal, decimal integer, hex, shorthand)
+ *   - valid public IPv4 and IPv6 (positive cases)
+ *   - full RFC 1918 / reserved boundary tests
+ */
+type SsrfFixture = readonly [input: string, blocked: boolean, reason: string];
+
+const SSRF_FIXTURES: readonly SsrfFixture[] = [
+  // --- Loopback (literal)
+  ['127.0.0.1', true, 'IPv4 loopback'],
+  ['127.255.255.255', true, 'IPv4 loopback (top of range)'],
+  ['::1', true, 'IPv6 loopback'],
+  ['0:0:0:0:0:0:0:1', true, 'IPv6 loopback (expanded)'],
+
+  // --- RFC 1918 private
+  ['10.0.0.0', true, 'RFC 1918 10/8 (bottom)'],
+  ['10.255.255.255', true, 'RFC 1918 10/8 (top)'],
+  ['172.16.0.0', true, 'RFC 1918 172.16/12 (bottom)'],
+  ['172.20.10.5', true, 'RFC 1918 172.16/12 (middle)'],
+  ['172.31.255.255', true, 'RFC 1918 172.16/12 (top)'],
+  ['192.168.0.0', true, 'RFC 1918 192.168/16 (bottom)'],
+  ['192.168.1.100', true, 'RFC 1918 192.168/16 (middle)'],
+  ['192.168.255.255', true, 'RFC 1918 192.168/16 (top)'],
+
+  // --- Link-local / cloud metadata
+  ['169.254.0.0', true, 'IPv4 link-local (bottom)'],
+  ['169.254.169.254', true, 'AWS/GCP/Azure instance metadata endpoint'],
+  ['169.254.255.255', true, 'IPv4 link-local (top)'],
+  ['fe80::1', true, 'IPv6 link-local'],
+  ['fe80::a00:27ff:fe4e:66a1', true, 'IPv6 link-local (MAC-derived)'],
+
+  // --- Unique local IPv6 (fc00::/7)
+  ['fc00::1', true, 'IPv6 unique local fc00::/8'],
+  ['fd00::1', true, 'IPv6 unique local fd00::/8'],
+  ['fd12:3456:789a:1::1', true, 'IPv6 unique local (realistic)'],
+
+  // --- CGNAT (RFC 6598)
+  ['100.64.0.0', true, 'CGNAT 100.64/10 (bottom)'],
+  ['100.64.0.1', true, 'CGNAT 100.64/10'],
+  ['100.127.255.255', true, 'CGNAT 100.64/10 (top)'],
+
+  // --- IPv4-mapped IPv6 (SSRF bypass attempt)
+  ['::ffff:127.0.0.1', true, 'IPv4-mapped loopback'],
+  ['::ffff:10.0.0.1', true, 'IPv4-mapped RFC 1918'],
+  ['::ffff:169.254.169.254', true, 'IPv4-mapped metadata endpoint'],
+
+  // --- Multicast + broadcast
+  ['224.0.0.1', true, 'IPv4 multicast'],
+  ['239.255.255.255', true, 'IPv4 multicast (top)'],
+  ['ff02::1', true, 'IPv6 multicast'],
+  ['255.255.255.255', true, 'IPv4 broadcast'],
+
+  // --- Reserved / unspecified
+  ['0.0.0.0', true, 'IPv4 unspecified (this network)'],
+  ['::', true, 'IPv6 unspecified'],
+  ['240.0.0.0', true, 'IPv4 reserved (240/4)'],
+  ['192.0.2.1', true, 'TEST-NET-1'],
+  ['198.51.100.1', true, 'TEST-NET-2'],
+  ['203.0.113.1', true, 'TEST-NET-3'],
+
+  // --- Alternate IPv4 encodings (MUST be rejected even in "literal" form)
+  ['0177.0.0.1', true, 'octal-encoded 127.0.0.1'],
+  ['2130706433', true, 'decimal-integer-encoded 127.0.0.1'],
+  ['0x7f000001', true, 'hex-encoded 127.0.0.1'],
+  ['127.1', true, 'shorthand-encoded 127.0.0.1'],
+  ['0x1', true, 'hex literal (malformed/alt encoding)'],
+
+  // --- Malformed / unparseable input
+  ['not-an-ip', true, 'non-IP string (fallthrough to IPv4 path, rejected)'],
+  ['999.999.999.999', true, 'malformed IPv4'],
+  ['fe80:::1', true, 'malformed IPv6'],
+
+  // --- Positive cases: valid public IPv4
+  ['8.8.8.8', false, 'Google DNS'],
+  ['1.1.1.1', false, 'Cloudflare DNS'],
+  ['93.184.216.34', false, 'example.com'],
+  ['151.101.1.69', false, 'reddit.com CDN'],
+  ['172.15.255.255', false, 'just outside RFC 1918 172.16/12 lower boundary'],
+  ['172.32.0.0', false, 'just outside RFC 1918 172.16/12 upper boundary'],
+  ['100.63.255.255', false, 'just outside CGNAT 100.64/10 lower boundary'],
+  ['100.128.0.0', false, 'just outside CGNAT 100.64/10 upper boundary'],
+
+  // --- Positive cases: valid public IPv6
+  ['2001:4860:4860::8888', false, 'Google public DNS IPv6'],
+  ['2606:4700:4700::1111', false, 'Cloudflare public DNS IPv6'],
+
+  // --- IPv4-mapped IPv6 with PUBLIC underlying (should pass)
+  ['::ffff:8.8.8.8', false, 'IPv4-mapped public IPv4'],
+];
 
 describe('IP Validation', () => {
   let sandbox: sinon.SinonSandbox;
@@ -17,154 +118,14 @@ describe('IP Validation', () => {
     vi.restoreAllMocks();
   });
 
-  describe('isPrivateIP', () => {
-    describe('IPv4 Private Ranges (RFC 1918)', () => {
-      it('should block 10.0.0.0/8 range', () => {
-        expect(isPrivateIP('10.0.0.0')).toBe(true);
-        expect(isPrivateIP('10.0.0.1')).toBe(true);
-        expect(isPrivateIP('10.255.255.255')).toBe(true);
-        expect(isPrivateIP('10.123.45.67')).toBe(true);
-      });
-
-      it('should block 172.16.0.0/12 range', () => {
-        expect(isPrivateIP('172.16.0.0')).toBe(true);
-        expect(isPrivateIP('172.16.0.1')).toBe(true);
-        expect(isPrivateIP('172.31.255.255')).toBe(true);
-        expect(isPrivateIP('172.20.10.5')).toBe(true);
-      });
-
-      it('should block 192.168.0.0/16 range', () => {
-        expect(isPrivateIP('192.168.0.0')).toBe(true);
-        expect(isPrivateIP('192.168.0.1')).toBe(true);
-        expect(isPrivateIP('192.168.255.255')).toBe(true);
-        expect(isPrivateIP('192.168.1.100')).toBe(true);
-      });
-    });
-
-    describe('IPv4 Loopback', () => {
-      it('should block 127.0.0.0/8 range', () => {
-        expect(isPrivateIP('127.0.0.0')).toBe(true);
-        expect(isPrivateIP('127.0.0.1')).toBe(true);
-        expect(isPrivateIP('127.255.255.255')).toBe(true);
-        expect(isPrivateIP('127.123.45.67')).toBe(true);
-      });
-    });
-
-    describe('IPv4 Link-Local', () => {
-      it('should block 169.254.0.0/16 range', () => {
-        expect(isPrivateIP('169.254.0.0')).toBe(true);
-        expect(isPrivateIP('169.254.0.1')).toBe(true);
-        expect(isPrivateIP('169.254.255.255')).toBe(true);
-        expect(isPrivateIP('169.254.169.254')).toBe(true); // AWS metadata service
-      });
-    });
-
-    describe('IPv4 Multicast', () => {
-      it('should block 224.0.0.0/4 range', () => {
-        expect(isPrivateIP('224.0.0.0')).toBe(true);
-        expect(isPrivateIP('224.0.0.1')).toBe(true);
-        expect(isPrivateIP('239.255.255.255')).toBe(true);
-        expect(isPrivateIP('230.123.45.67')).toBe(true);
-      });
-    });
-
-    describe('IPv4 Reserved Ranges', () => {
-      it('should block 0.0.0.0/8 range', () => {
-        expect(isPrivateIP('0.0.0.0')).toBe(true);
-        expect(isPrivateIP('0.0.0.1')).toBe(true);
-        expect(isPrivateIP('0.255.255.255')).toBe(true);
-      });
-
-      it('should block 100.64.0.0/10 range (Shared Address Space)', () => {
-        expect(isPrivateIP('100.64.0.0')).toBe(true);
-        expect(isPrivateIP('100.64.0.1')).toBe(true);
-        expect(isPrivateIP('100.127.255.255')).toBe(true);
-      });
-
-      it('should block 192.0.0.0/24 range (IETF Protocol Assignments)', () => {
-        expect(isPrivateIP('192.0.0.0')).toBe(true);
-        expect(isPrivateIP('192.0.0.1')).toBe(true);
-        expect(isPrivateIP('192.0.0.255')).toBe(true);
-      });
-
-      it('should block 192.0.2.0/24 range (TEST-NET-1)', () => {
-        expect(isPrivateIP('192.0.2.0')).toBe(true);
-        expect(isPrivateIP('192.0.2.1')).toBe(true);
-        expect(isPrivateIP('192.0.2.255')).toBe(true);
-      });
-
-      it('should block 198.51.100.0/24 range (TEST-NET-2)', () => {
-        expect(isPrivateIP('198.51.100.0')).toBe(true);
-        expect(isPrivateIP('198.51.100.1')).toBe(true);
-        expect(isPrivateIP('198.51.100.255')).toBe(true);
-      });
-
-      it('should block 203.0.113.0/24 range (TEST-NET-3)', () => {
-        expect(isPrivateIP('203.0.113.0')).toBe(true);
-        expect(isPrivateIP('203.0.113.1')).toBe(true);
-        expect(isPrivateIP('203.0.113.255')).toBe(true);
-      });
-
-      it('should block 240.0.0.0/4 range (Reserved)', () => {
-        expect(isPrivateIP('240.0.0.0')).toBe(true);
-        expect(isPrivateIP('240.0.0.1')).toBe(true);
-        expect(isPrivateIP('255.255.255.254')).toBe(true);
-      });
-
-      it('should block 255.255.255.255 (Broadcast)', () => {
-        expect(isPrivateIP('255.255.255.255')).toBe(true);
-      });
-    });
-
-    describe('IPv4 Public Addresses', () => {
-      it('should allow public IPv4 addresses', () => {
-        expect(isPrivateIP('8.8.8.8')).toBe(false); // Google DNS
-        expect(isPrivateIP('1.1.1.1')).toBe(false); // Cloudflare DNS
-        expect(isPrivateIP('93.184.216.34')).toBe(false); // example.com
-        expect(isPrivateIP('151.101.1.69')).toBe(false); // reddit.com
-        expect(isPrivateIP('172.15.255.255')).toBe(false); // Just outside 172.16.0.0/12
-        expect(isPrivateIP('172.32.0.0')).toBe(false); // Just outside 172.16.0.0/12
-      });
-    });
-
-    describe('IPv6 Addresses', () => {
-      it('should block ::1 loopback address', () => {
-        expect(isPrivateIP('::1')).toBe(true);
-        expect(isPrivateIP('0:0:0:0:0:0:0:1')).toBe(true);
-      });
-
-      it('should block :: unspecified address', () => {
-        expect(isPrivateIP('::')).toBe(true);
-        expect(isPrivateIP('0:0:0:0:0:0:0:0')).toBe(true);
-      });
-
-      it('should block fe80::/10 link-local addresses', () => {
-        expect(isPrivateIP('fe80::1')).toBe(true);
-        expect(isPrivateIP('fe80:0000:0000:0000:0000:0000:0000:0001')).toBe(true);
-        expect(isPrivateIP('fe80::a00:27ff:fe4e:66a1')).toBe(true);
-        expect(isPrivateIP('fe90::1')).toBe(true);
-        expect(isPrivateIP('fea0::1')).toBe(true);
-        expect(isPrivateIP('feb0::1')).toBe(true);
-      });
-
-      it('should block fc00::/7 unique local addresses', () => {
-        expect(isPrivateIP('fc00::1')).toBe(true);
-        expect(isPrivateIP('fd00::1')).toBe(true);
-        expect(isPrivateIP('fd12:3456:789a:1::1')).toBe(true);
-      });
-
-      it('should block ff00::/8 multicast addresses', () => {
-        expect(isPrivateIP('ff00::1')).toBe(true);
-        expect(isPrivateIP('ff02::1')).toBe(true);
-        expect(isPrivateIP('ffff::1')).toBe(true);
-      });
-
-      it('should allow public IPv6 addresses', () => {
-        expect(isPrivateIP('2001:4860:4860::8888')).toBe(false); // Google DNS
-        expect(isPrivateIP('2606:4700:4700::1111')).toBe(false); // Cloudflare DNS
-        expect(isPrivateIP('2001:db8::1')).toBe(false); // Documentation prefix (not reserved)
-      });
-    });
+  describe('isPrivateIP (SSRF fixture table)', () => {
+    it.each(SSRF_FIXTURES)(
+      '%s -> blocked=%s (%s)',
+      (input, blocked, reason) => {
+        const actual = isPrivateIP(input);
+        expect(actual, `expected ${input} to be ${blocked ? 'blocked' : 'allowed'}: ${reason}`).toBe(blocked);
+      },
+    );
   });
 
   describe('resolvesToPrivateIP', () => {
@@ -173,10 +134,10 @@ describe('IP Validation', () => {
       expect(result).toBe(true);
     });
 
-    // Note: The remaining tests in this section would require mocking promisified DNS lookup
-    // which is complex due to how promisify works. The real-world behavior is tested through
-    // integration tests and the validateUrlNotPrivate function tests below.
-    // The isPrivateIP function tests above cover the core IP validation logic.
+    // Additional DNS-based tests live in ip-validation-dns.test.ts because
+    // vi.mock('dns') must be hoisted before the module under test is loaded,
+    // and mocking dns globally in this file would break the real-DNS tests
+    // in validateUrlNotPrivate below.
   });
 
   describe('validateUrlNotPrivate', () => {
@@ -211,6 +172,31 @@ describe('IP Validation', () => {
       );
       await expect(ipValidation.validateUrlNotPrivate('https://[fc00::1]/api')).rejects.toThrow(
         'Access to private IP address fc00::1 is not allowed',
+      );
+    });
+
+    it('should reject IPv4-mapped IPv6 URLs pointing to private IPv4', async () => {
+      // URL class preserves ::ffff: notation in brackets. The underlying
+      // private IPv4 must be unwrapped and rejected.
+      await expect(ipValidation.validateUrlNotPrivate('https://[::ffff:10.0.0.1]/api')).rejects.toThrow(
+        /Access to private IP address/,
+      );
+    });
+
+    it('should reject URLs using alternate IPv4 literal encodings that normalize to private IPs', async () => {
+      // Node's URL class normalizes these alternate encodings to 127.0.0.1
+      // before we see them, so the loopback check rejects the normalized form.
+      await expect(ipValidation.validateUrlNotPrivate('https://0177.0.0.1/api')).rejects.toThrow(
+        /Access to private IP address/,
+      );
+      await expect(ipValidation.validateUrlNotPrivate('https://2130706433/api')).rejects.toThrow(
+        /Access to private IP address/,
+      );
+      await expect(ipValidation.validateUrlNotPrivate('https://0x7f000001/api')).rejects.toThrow(
+        /Access to private IP address/,
+      );
+      await expect(ipValidation.validateUrlNotPrivate('https://127.1/api')).rejects.toThrow(
+        /Access to private IP address/,
       );
     });
 
@@ -277,5 +263,47 @@ describe('IP Validation', () => {
     // Note: Testing DNS resolution requires mocking promisified dns.lookup which is complex.
     // The core IP validation logic is thoroughly tested above with isPrivateIP tests.
     // Integration tests with http_signature.test.ts cover the end-to-end behavior.
+
+    describe('AP paths are unaffected by ALLOW_LOCALHOST_ICS_IMPORT (pv-gdqp)', () => {
+      // Regression guard: `validateUrlNotPrivate` is the shared helper used
+      // by ActivityPub federation code. It MUST NOT consult the
+      // ALLOW_LOCALHOST_ICS_IMPORT gate. The ICS-import pipeline relaxes
+      // validation at its own call sites (Fetcher, DnsVerifier,
+      // ImportSourceService), never inside this helper.
+      const originalEnv = process.env.NODE_ENV;
+      const originalFlag = process.env.ALLOW_LOCALHOST_ICS_IMPORT;
+
+      afterEach(() => {
+        process.env.NODE_ENV = originalEnv;
+        if (originalFlag === undefined) {
+          delete process.env.ALLOW_LOCALHOST_ICS_IMPORT;
+        }
+        else {
+          process.env.ALLOW_LOCALHOST_ICS_IMPORT = originalFlag;
+        }
+      });
+
+      it('still rejects http:// and private IPs even with NODE_ENV=test + ALLOW_LOCALHOST_ICS_IMPORT=true', async () => {
+        process.env.NODE_ENV = 'test';
+        process.env.ALLOW_LOCALHOST_ICS_IMPORT = 'true';
+
+        // http:// remains rejected at the helper level (AP must use HTTPS)
+        await expect(ipValidation.validateUrlNotPrivate('http://127.0.0.1:3000/cal.ics')).rejects.toThrow(
+          'URL must use HTTPS',
+        );
+        // Private IPv4 literal remains rejected
+        await expect(ipValidation.validateUrlNotPrivate('https://127.0.0.1/cal.ics')).rejects.toThrow(
+          'Access to private IP address 127.0.0.1 is not allowed',
+        );
+        // Private IPv6 literal remains rejected
+        await expect(ipValidation.validateUrlNotPrivate('https://[::1]/api')).rejects.toThrow(
+          'Access to private IP address ::1 is not allowed',
+        );
+        // Hostname resolving to loopback remains rejected
+        await expect(ipValidation.validateUrlNotPrivate('https://localhost/api')).rejects.toThrow(
+          'Hostname localhost resolves to a private IP address',
+        );
+      });
+    });
   });
 });

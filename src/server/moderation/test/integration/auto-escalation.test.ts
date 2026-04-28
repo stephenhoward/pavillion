@@ -7,7 +7,7 @@ import { ReportEscalationEntity } from '@/server/moderation/entity/report_escala
 import ModerationService from '@/server/moderation/service/moderation';
 import ConfigurationInterface from '@/server/configuration/interface';
 import ServiceSettingEntity from '@/server/configuration/entity/settings';
-import { TestEnvironment } from '@/server/test/lib/test_environment';
+import { TestEnvironment } from '@/server/common/test/lib/test_environment';
 import { v4 as uuidv4 } from 'uuid';
 
 describe('ModerationService - Auto-Escalation Integration', () => {

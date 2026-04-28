@@ -4,7 +4,7 @@ import { DateTime } from 'luxon';
 import { ReportEntity } from '@/server/moderation/entity/report';
 import AnalyticsService from '@/server/moderation/service/analytics';
 import { ReportStatus, ReportCategory } from '@/common/model/report';
-import { TestEnvironment } from '@/server/test/lib/test_environment';
+import { TestEnvironment } from '@/server/common/test/lib/test_environment';
 
 describe('AnalyticsService Integration', () => {
   let service: AnalyticsService;

@@ -1,0 +1,374 @@
+<template>
+  <ModalLayout
+    :title="t('title')"
+    size="lg"
+    modal-class="verify-ownership-wizard"
+    @close="onClose"
+  >
+    <!-- ===== PICKER STEP ===== -->
+    <section
+      v-if="currentStep === 'pick'"
+      class="vstack stack--md"
+      data-test="verify-wizard-picker"
+      :aria-label="t('picker_aria')"
+    >
+      <header class="step-header vstack stack--xs">
+        <p class="step-instructions">
+          {{ t('picker_description') }}
+        </p>
+      </header>
+
+      <div class="methods">
+        <!--
+          Card-as-button pattern: each method is a real <button> so it is
+          natively keyboard-focusable and announced as "button" by AT.
+          The icon + heading + description live inside the button as
+          presentational content.
+
+          rel="me" is listed first because it's accessible to any calendar
+          owner who can edit a page on their own site, while DNS TXT
+          requires registrar / DNS panel access that not every owner has.
+        -->
+        <button
+          type="button"
+          class="method"
+          data-test="verify-wizard-pick-relme"
+          @click="selectMethod('rel-me')"
+        >
+          <span class="method-icon" aria-hidden="true">
+            <Link2 :size="24" :stroke-width="2" />
+          </span>
+          <span class="method-body">
+            <span class="method-title">
+              {{ t('method_relme_title') }}
+            </span>
+            <span class="method-description">
+              {{ t('method_relme_description') }}
+            </span>
+          </span>
+        </button>
+
+        <button
+          type="button"
+          class="method"
+          data-test="verify-wizard-pick-dns"
+          @click="selectMethod('dns-txt')"
+        >
+          <span class="method-icon" aria-hidden="true">
+            <Globe :size="24" :stroke-width="2" />
+          </span>
+          <span class="method-body">
+            <span class="method-title">
+              {{ t('method_dns_title') }}
+            </span>
+            <span class="method-description">
+              {{ t('method_dns_description') }}
+            </span>
+          </span>
+        </button>
+      </div>
+
+      <div class="actions">
+        <button
+          type="button"
+          class="btn-ghost"
+          data-test="verify-wizard-cancel"
+          @click="onClose"
+        >
+          {{ t('cancel_button') }}
+        </button>
+      </div>
+    </section>
+
+    <!-- ===== DNS TXT STEP ===== -->
+    <DnsChallengeStep
+      v-else-if="currentStep === 'dns-txt'"
+      :source="props.source"
+      :instance-host="props.instanceHost"
+      :challenge-token="challengeToken"
+      @change-method="returnToPicker"
+      @verified="onVerified"
+    />
+
+    <!-- ===== REL=ME STEP ===== -->
+    <RelMeChallengeStep
+      v-else-if="currentStep === 'rel-me'"
+      :source="props.source"
+      :instance-host="props.instanceHost"
+      :challenge-token="challengeToken"
+      @change-method="returnToPicker"
+      @verified="onVerified"
+    />
+  </ModalLayout>
+</template>
+
+<script setup lang="ts">
+import { onMounted, ref, watch } from 'vue';
+import { useTranslation } from 'i18next-vue';
+import { Globe, Link2 } from 'lucide-vue-next';
+
+import ModalLayout from '@/client/components/common/modal.vue';
+import ImportSourceService from '@/client/service/import_source';
+import type {
+  ImportSource,
+  ImportSourceVerificationType,
+} from '@/common/model/import_source';
+
+import DnsChallengeStep from './DnsChallengeStep.vue';
+import RelMeChallengeStep from './RelMeChallengeStep.vue';
+
+/**
+ * Multi-step wizard that hosts the import-source ownership-verification
+ * flow. Inlines the method-picker step (DNS TXT vs. rel="me") rather than
+ * extracting it to its own component, per the complexity-advisor finding
+ * during epic shaping (pv-jutm): the picker is two cards and a heading,
+ * splitting it would add a one-prop, one-event component without saving
+ * meaningful complexity.
+ *
+ * The actual challenge bodies are rendered by the dedicated step components
+ * (`DnsChallengeStep`, `RelMeChallengeStep`) which own the verification
+ * request lifecycle and copy-to-clipboard interactions. Each step emits
+ * `change-method` to bounce back to the picker and `verified` when
+ * verification succeeds; the wizard relays `verified` to its own consumer
+ * (the import-sources section) and owns wizard-level dismissal via `close`.
+ *
+ * Step state uses a string discriminant ('pick' | 'dns-txt' | 'rel-me')
+ * rather than a numeric `currentStep` because the topology branches: from
+ * the picker, the user lands on either the DNS step OR the rel-me step,
+ * never one-after-the-other. A numeric counter could not encode that.
+ *
+ * Entry rule: when `source.verificationType` is one of the known method
+ * discriminants, the wizard skips the picker and opens directly on that
+ * step. When it is null/undefined/unrecognised the wizard opens on the
+ * picker so the owner can choose. The picker can always be returned to via
+ * the "Change verification method" button on each step.
+ *
+ * @see bead pv-jutm.5, pv-jutm.8
+ */
+
+const props = defineProps<{
+  source: ImportSource;
+  /**
+   * The instance host component of the DNS challenge value. Forwarded to
+   * each step component so the rendered challenge string matches what the
+   * server-side verifier will read.
+   */
+  instanceHost: string;
+}>();
+
+const emit = defineEmits<{
+  (event: 'close'): void;
+  (event: 'verified', source: ImportSource): void;
+}>();
+
+const { t } = useTranslation('calendars', { keyPrefix: 'import.verify_wizard' });
+
+type WizardStep = 'pick' | 'dns-txt' | 'rel-me';
+
+/**
+ * Set of known verification-method discriminants. Used by the entry-rule
+ * computation to decide whether `source.verificationType` represents a
+ * concrete method (skip picker) or an unset/unknown value (show picker).
+ */
+const KNOWN_METHODS = new Set<string>(['dns-txt', 'rel-me']);
+
+const isKnownMethod = (
+  value: ImportSourceVerificationType | null | undefined,
+): value is ImportSourceVerificationType => {
+  return typeof value === 'string' && KNOWN_METHODS.has(value);
+};
+
+/**
+ * Determine the initial wizard step from the source's verification type.
+ * Encapsulates the entry rule so the change-method affordance can also
+ * decide where to land if the parent re-mounts the wizard.
+ */
+const initialStep = (): WizardStep => {
+  return isKnownMethod(props.source.verificationType)
+    ? props.source.verificationType
+    : 'pick';
+};
+
+const currentStep = ref<WizardStep>(initialStep());
+
+const service = new ImportSourceService();
+
+/**
+ * Per-source HMAC verification token issued by the server. Empty until the
+ * wizard has issued the challenge for the active step. The wizard owns
+ * issuance lifecycle so the parent does not have to pre-fetch — this is
+ * the change called for in pv-jutm.8 (move issuance from
+ * ImportSourcesSection into the wizard).
+ *
+ * Issuance is per-step rather than per-mount because the server records the
+ * verification-method discriminator at issue time. Re-issuing on each
+ * non-picker step entry keeps that discriminator aligned with whatever
+ * method the user is currently looking at, even if they bounce back and
+ * forth via change-method.
+ */
+const challengeToken = ref<string>('');
+
+const ensureChallengeFor = async (method: 'dns-txt' | 'rel-me'): Promise<void> => {
+  try {
+    const token = await service.issueChallenge(
+      props.source.calendarId,
+      props.source.id,
+      method,
+    );
+    // Guard against a step change mid-flight: only adopt the token if the
+    // user is still on a non-picker step. The displayed challenge value
+    // is permitted to be stale-but-consistent rather than swapped to a
+    // token for a method the user just navigated away from.
+    if (currentStep.value === method) {
+      challengeToken.value = token;
+    }
+  }
+  catch {
+    // Issuance failures are deliberately swallowed here: the step still
+    // renders a recognisable (but visibly incomplete) challenge value, and
+    // the verify request itself surfaces a typed error to the user. Adding
+    // a wizard-level error surface would duplicate the per-step alert.
+  }
+};
+
+const selectMethod = (method: ImportSourceVerificationType): void => {
+  currentStep.value = method;
+};
+
+/**
+ * Return to the picker step. Clears nothing here directly because the
+ * step components are unmounted by v-if when the step changes — any
+ * in-flight state they hold (typed-in verification-page URL, in-progress
+ * verify request) is owned by the step component and discarded with it.
+ */
+const returnToPicker = (): void => {
+  currentStep.value = 'pick';
+};
+
+/**
+ * Relay `verified` from the active step to the wizard's consumer. The
+ * wizard owns dismissal — the parent typically responds to `verified` by
+ * unmounting the wizard, which triggers the focus-return logic on the
+ * triggering button.
+ */
+const onVerified = (updated: ImportSource): void => {
+  emit('verified', updated);
+};
+
+const onClose = (): void => {
+  emit('close');
+};
+
+/**
+ * Issue the challenge whenever the wizard transitions onto a non-picker
+ * step. Fires on mount when the entry rule lands directly on a step, and
+ * on subsequent picker → step transitions. Returning to the picker
+ * intentionally does not re-fetch — the picker has nothing to render with
+ * a token.
+ */
+watch(currentStep, (step) => {
+  if (step === 'dns-txt' || step === 'rel-me') {
+    void ensureChallengeFor(step);
+  }
+});
+
+onMounted(() => {
+  if (currentStep.value === 'dns-txt' || currentStep.value === 'rel-me') {
+    void ensureChallengeFor(currentStep.value);
+  }
+});
+</script>
+
+<style scoped lang="scss">
+@use '../../../../assets/style/components/calendar-admin' as *;
+
+.step-header {
+  margin-block-end: var(--pav-space-1);
+}
+
+.step-instructions {
+  margin: 0;
+  color: var(--pav-text-primary);
+  font-size: var(--pav-font-size-body);
+  line-height: var(--pav-line-height-normal);
+}
+
+/*
+ * Method picker layout. Cards stack vertically at every viewport size so
+ * each method has room to breathe and there's headroom to add more
+ * verification mechanisms (OAuth provider connections, etc.) without
+ * cramping the picker.
+ */
+.methods {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--pav-space-3);
+}
+
+.method {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--pav-space-3);
+  padding-block: var(--pav-space-4);
+  padding-inline: var(--pav-space-4);
+  background: var(--pav-surface-card);
+  color: var(--pav-text-primary);
+  border: var(--pav-border-width-1) solid var(--pav-border-primary);
+  border-radius: var(--pav-border-radius-md);
+  text-align: start;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+  // Grid items default to min-width: auto, which lets the cell grow past
+  // the track width when content can't shrink — the descriptions then
+  // spill out of the modal. Setting min-width: 0 lets the cell respect
+  // its 1fr track sizing and forces the inner content to wrap.
+  min-width: 0;
+  // <button> elements default to white-space: nowrap in UA stylesheets,
+  // which prevents the description from wrapping and produces the
+  // overflow seen in the picker. Reset to normal so text wraps inside
+  // the card the same way it does outside one.
+  white-space: normal;
+
+  &:hover:not(:disabled),
+  &:focus-visible {
+    background: var(--pav-interactive-hover);
+    border-color: var(--pav-text-primary);
+  }
+}
+
+.method-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--pav-text-primary);
+}
+
+.method-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pav-space-1);
+  min-width: 0;
+}
+
+.method-title {
+  color: var(--pav-text-primary);
+  font-size: var(--pav-font-size-body);
+  font-weight: var(--pav-font-weight-semibold);
+  line-height: var(--pav-line-height-snug);
+}
+
+.method-description {
+  color: var(--pav-text-secondary);
+  font-size: var(--pav-font-size-small);
+  line-height: var(--pav-line-height-normal);
+}
+
+.actions {
+  @include modal-actions;
+}
+
+.btn-ghost {
+  @include admin-ghost-button;
+}
+</style>

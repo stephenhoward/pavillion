@@ -6,6 +6,7 @@ type Settings = {
   siteTitle?: string;
   defaultDateRange: DefaultDateRange;
   defaultLanguage: string;
+  domain: string;
   enabledLanguages?: string[];
   forceLanguage?: string | null;
   instanceDescription?: Record<string, string>;

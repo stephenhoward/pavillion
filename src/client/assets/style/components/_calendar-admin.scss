@@ -173,6 +173,20 @@
   }
 }
 
+// Modal/wizard action footer pattern.
+// End-justified buttons separated from the body by a top border, with
+// flex-wrap so the buttons stack rather than overflow on narrow modals.
+// Uses logical properties so the layout flips cleanly under RTL.
+@mixin modal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: end;
+  gap: var(--pav-space-3);
+  margin-block-start: var(--pav-space-2);
+  padding-block-start: var(--pav-space-3);
+  border-block-start: var(--pav-border-width-1) solid var(--pav-border-primary);
+}
+
 // Confirmation dialog layout pattern (delete, merge, etc.)
 @mixin admin-dialog-layout {
   display: flex;
@@ -218,6 +232,51 @@
     &:disabled {
       opacity: 0.5;
       cursor: not-allowed;
+    }
+  }
+}
+
+// Standalone ghost button pattern
+// Covers both shapes currently in use across admin screens:
+// - flat ghost (Close / Cancel buttons in modals and forms)
+// - inline-flex icon+label ghost (action buttons next to icons)
+// Use the `--danger` modifier for destructive actions (e.g., Remove).
+@mixin admin-ghost-button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--pav-space-1);
+  padding: var(--pav-space-2) var(--pav-space-3);
+  background: none;
+  border: none;
+  border-radius: 0.375rem;
+  color: var(--pav-color-stone-600);
+  font-weight: 500;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: color 0.2s;
+
+  &:hover:not(:disabled) {
+    color: var(--pav-color-stone-900);
+
+    @media (prefers-color-scheme: dark) {
+      color: var(--pav-color-stone-100);
+    }
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  &--danger {
+    color: var(--pav-color-red-600);
+
+    &:hover:not(:disabled) {
+      color: var(--pav-color-red-700);
+
+      @media (prefers-color-scheme: dark) {
+        color: var(--pav-color-red-400);
+      }
     }
   }
 }

@@ -8,6 +8,7 @@ import { Command } from 'commander';
 import { Sequelize } from 'sequelize-typescript';
 import config from 'config';
 import chalk from 'chalk';
+import { EventEmitter } from 'events';
 import { BackupEntity } from '../housekeeping/entity/backup.js';
 import JobQueueService from '../housekeeping/service/job-queue.js';
 import StorageService from '../housekeeping/service/storage.js';
@@ -341,6 +342,50 @@ async function handleHousekeepingStatus() {
 }
 
 /**
+ * Handles the ICS import:sync command.
+ *
+ * Thin shell around {@link runImportSync} — responsible only for wiring the
+ * runtime dependencies (calendar interface, accounts service, sync service)
+ * and forwarding the exit code back to the process. All logic / output lives
+ * in the adapter module so it can be unit-tested without spawning a process.
+ *
+ * @see bead pv-1qcp.2.5
+ */
+async function handleImportSync(options: { sourceId?: string; calendarId?: string }): Promise<void> {
+  try {
+    // Use the shared db singleton so every entity's addModels() self-registration
+    // is picked up. The local `sequelize` var tracked here is only used by the
+    // other CLI subcommands; the import:sync path never touches it.
+    const dbModule = await import('../common/entity/db.js');
+    await dbModule.default.authenticate();
+    // Touch the import_source / import_run / calendar / event modules so their
+    // static `db.addModels([...])` side effects run before the sync service
+    // queries them.
+    await Promise.all([
+      import('../calendar/entity/import_source.js'),
+      import('../calendar/entity/import_run.js'),
+      import('../calendar/entity/calendar.js'),
+      import('../calendar/entity/event.js'),
+    ]);
+
+    const { runImportSync, buildImportSyncDeps } = await import('../calendar/cli/import-sync.js');
+
+    const eventBus = new EventEmitter();
+    const deps = await buildImportSyncDeps(eventBus);
+
+    const result = await runImportSync(options, deps);
+
+    if (result.exitCode !== 0) {
+      process.exit(result.exitCode);
+    }
+  }
+  catch (error) {
+    console.error(chalk.red('[ImportSync] Failed:'), error instanceof Error ? error.message : String(error));
+    process.exit(1);
+  }
+}
+
+/**
  * Main CLI program.
  */
 async function main() {
@@ -391,6 +436,16 @@ async function main() {
     .description('View housekeeping system status')
     .action(async () => {
       await handleHousekeepingStatus();
+    });
+
+  // ICS import commands (pv-1qcp — dogfooding entry point for manual sync)
+  program
+    .command('import:sync')
+    .description('Manually sync an ICS import source (or all verified sources for a calendar)')
+    .option('--source-id <id>', 'Import source UUID to sync')
+    .option('--calendar-id <id>', 'Calendar UUID — sync all verified sources for this calendar')
+    .action(async (opts: { sourceId?: string; calendarId?: string }) => {
+      await handleImportSync(opts);
     });
 
   // Global error handler

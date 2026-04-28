@@ -8,6 +8,7 @@ import { Calendar } from '@/common/model/calendar';
 import { CalendarEventContent, CalendarEventSchedule, language, EventFrequency } from '@/common/model/events';
 import { EventLocation } from '@/common/model/location';
 import { EventEntity, EventContentEntity, EventScheduleEntity } from '@/server/calendar/entity/event';
+import { EventImportOriginEntity } from '@/server/calendar/entity/event_import_origin';
 import EventService from '@/server/calendar/service/events';
 
 describe('updateEvent with content', () => {
@@ -21,6 +22,10 @@ describe('updateEvent with content', () => {
     // Stub the internal service instances created by EventService
     getCalendarStub = sandbox.stub(service['calendarService'], 'getCalendar');
     editableCalendarsStub = sandbox.stub(service['calendarService'], 'editableCalendarsForUser');
+    // Stub the sibling origin lookup so user-context updateEvent's flip-check
+    // does not hit the in-memory DB (the event_import_origin table is not
+    // created in the shared test DB bootstrap).
+    sandbox.stub(EventImportOriginEntity, 'findOne').resolves(null);
   });
   afterEach(() => {
     sandbox.restore();
@@ -196,6 +201,7 @@ describe('updateEvent with location', () => {
     const cal = new Calendar('testCalendarId', 'testme');
     getCalendarStub.resolves(cal);
     editableCalendarsStub.resolves([cal]);
+    sandbox.stub(EventImportOriginEntity, 'findOne').resolves(null);
   });
 
   afterEach(() => {
@@ -259,6 +265,7 @@ describe('updateEvent with schedules', () => {
     const cal = new Calendar('testCalendarId', 'testme');
     getCalendarStub.resolves(cal);
     editableCalendarsStub.resolves([cal]);
+    sandbox.stub(EventImportOriginEntity, 'findOne').resolves(null);
   });
   afterEach(() => {
     sandbox.restore();
@@ -501,6 +508,7 @@ describe('updateEvent exclusion preservation (reconcileSchedules)', () => {
     editableCalendarsStub = sandbox.stub(service['calendarService'], 'editableCalendarsForUser');
     getCalendarStub.resolves(cal);
     editableCalendarsStub.resolves([cal]);
+    sandbox.stub(EventImportOriginEntity, 'findOne').resolves(null);
   });
 
   afterEach(() => {
@@ -666,6 +674,7 @@ describe('updateEvent with mediaId', () => {
     editableCalendarsStub = sandbox.stub(service['calendarService'], 'editableCalendarsForUser');
     getCalendarStub.resolves(cal);
     editableCalendarsStub.resolves([cal]);
+    sandbox.stub(EventImportOriginEntity, 'findOne').resolves(null);
 
     mockMediaInterface = { getMediaById: sandbox.stub() };
     service.setMediaInterface(mockMediaInterface as unknown as InstanceType<typeof MediaInterface>);

@@ -49,7 +49,7 @@ import SetupInterface from '@/server/setup/interface';
 import EmailInterface from '@/server/email/interface';
 import ActivityPubInterface from '@/server/activitypub/interface';
 import ActivityPubEventHandlers from '@/server/activitypub/events';
-import { TestEnvironment } from '@/server/test/lib/test_environment';
+import { TestEnvironment } from '@/server/common/test/lib/test_environment';
 import { CalendarActorEntity } from '@/server/activitypub/entity/calendar_actor';
 import CalendarActorService from '@/server/activitypub/service/calendar_actor';
 import { ActivityPubActor } from '@/server/activitypub/model/base';
@@ -59,7 +59,7 @@ import {
   SharedEventEntity,
   ActivityPubOutboxMessageEntity,
 } from '@/server/activitypub/entity/activitypub';
-import { waitFor, waitForStableCount } from '@/server/test/lib/drain-event-bus';
+import { waitFor, waitForStableCount } from '@/server/common/test/lib/drain-event-bus';
 
 describe('Outbox Local Dispatch (cross-hop remote follower regression)', () => {
   let env: TestEnvironment;

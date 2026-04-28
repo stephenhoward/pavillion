@@ -7,7 +7,7 @@ import CalendarInterface from '@/server/calendar/interface';
 import ConfigurationInterface from '@/server/configuration/interface';
 import SetupInterface from '@/server/setup/interface';
 import AccountService from '@/server/accounts/service/account';
-import { TestEnvironment } from '@/server/test/lib/test_environment';
+import { TestEnvironment } from '@/server/common/test/lib/test_environment';
 import { CalendarWidgetConfigEntity } from '@/server/calendar/entity/calendar_widget_config';
 import { WIDGET_CONFIG_DEFAULTS } from '@/common/model/widget_config';
 
