@@ -36,7 +36,7 @@ const selectedReportId = ref<string | null>(null);
 
 const calendar = computed(() => state.calendarInfo?.calendar ?? null);
 const isOwner = computed(() => state.calendarInfo?.isOwner ?? false);
-const instanceHost = computed(() => new Config().settings().domain);
+const instanceHost = computed(() => new Config().settings()?.domain);
 
 onBeforeMount(async () => {
   state.loading = true;
