@@ -36,6 +36,7 @@ import {
   followCalendar,
   getFeed,
   getCalendarEvents,
+  getPublicCalendarEvents,
   getFollows,
   updateFollowPolicy,
   shareEvent,
@@ -130,6 +131,23 @@ test.describe('Auto-Repost Policy Enforcement', () => {
     const calendarEvents = await calendarEventsResponse.json();
     const eventInCalendar = calendarEvents.find((e: any) => e.content?.en?.title === eventTitle);
     expect(eventInCalendar).toBeDefined();
+
+    // Regression for pv-13xg: the auto-reposted event must also surface in the
+    // public (event_instance-backed) list view immediately after the inbound
+    // Create(Event) activity is processed — without an Update(Event) follow-up
+    // and without hitting a per-occurrence detail URL. This exercises a
+    // different code path than the authenticated `getCalendarEvents` above:
+    // PublicCalendarService.listEventInstances -> listEventInstancesForCalendar,
+    // which reads `event_instance` rather than `events`. The response is each
+    // CalendarEventInstance.toObject() with its `event` field replaced by
+    // toPublicEventObject(...), so we read the title via i.event.content.en.
+    const publicEventsResponse = await getPublicCalendarEvents(INSTANCE_BETA, bobCalendar.urlName);
+    expect(publicEventsResponse.ok).toBe(true);
+    const publicInstances = await publicEventsResponse.json();
+    const instanceInPublicList = publicInstances.find(
+      (i: any) => i.event?.content?.en?.title === eventTitle,
+    );
+    expect(instanceInPublicList).toBeDefined();
   });
 
   test('Scenario 2: Auto-repost reposts when policy enabled', async () => {

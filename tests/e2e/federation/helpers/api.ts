@@ -542,6 +542,34 @@ export async function getCalendarEvents(
 }
 
 /**
+ * Get events for a specific calendar via the public (unauthenticated) endpoint.
+ *
+ * This endpoint is backed by the `event_instance` table via
+ * `PublicCalendarService.getCalendarEvents` -> `listEventInstancesForCalendar`,
+ * which is a different code path than the authenticated `getCalendarEvents`
+ * helper above (that one reads the `events` table). Use this when you need to
+ * verify that event_instance materialization happened — e.g. after an inbound
+ * federation Create activity is processed.
+ *
+ * @param instance - The instance to query
+ * @param calendarUrlName - URL name of the calendar to get events for
+ * @returns Response object (use .json() to get events array)
+ * @throws Error if the request fails
+ */
+export async function getPublicCalendarEvents(
+  instance: InstanceConfig,
+  calendarUrlName: string,
+): Promise<Response> {
+  return await fetch(
+    `${instance.baseUrl}/api/public/v1/calendar/${calendarUrlName}/events`,
+    {
+      // @ts-ignore - agent is not in the TypeScript types but works at runtime
+      agent: httpsAgent,
+    },
+  );
+}
+
+/**
  * Create a new account on the instance
  *
  * @param instance - The instance to create the account on
