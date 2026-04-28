@@ -318,13 +318,13 @@
             "method_dns_title": "DNS record",
             "method_dns_description": "Add a TXT record to your domain's DNS. Best if you have access to your DNS provider.",
             "method_relme_title": "HTML link",
-            "method_relme_description": "Add a link with rel=\"me\" on a page hosted on the same domain name as the calendar feed. Best if you can publish HTML but don't have DNS access.",
+            "method_relme_description": "Add a verification link on a page hosted on the same domain name as the calendar feed. Best if you can publish HTML but don't have DNS access.",
             "change_method_button": "Change verification method",
             "back_button": "Back",
             "cancel_button": "Cancel"
         },
         "rel_me_challenge": {
-            "instructions": "Publish a link to this calendar with rel=\"me\" on a page on the same site as the calendar feed, then enter that page's URL below and click Verify.",
+            "instructions": "Publish a verification link to this calendar on a page on the same site as the calendar feed, then enter that page's URL below and click Verify.",
             "html_snippet_aria": "HTML snippet",
             "page_url_aria": "Verification page URL",
             "page_url_placeholder": "example.com/about",
