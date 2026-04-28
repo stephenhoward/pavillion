@@ -343,10 +343,7 @@
         },
         "sync_success": "Sync complete: {{created}} added, {{updated}} updated.",
         "sync_success_no_changes": "Sync complete: no changes.",
-        "verify_aria": "Verify ownership for import source {{url}}",
-        "warnings": {
-            "ap_source_double_federation": "This source looks like a federated calendar (Mobilizon or Gancio). Following via ActivityPub may work better than ICS import."
-        }
+        "verify_aria": "Verify ownership for import source {{url}}"
     },
     "places": {
         "title": "Places",

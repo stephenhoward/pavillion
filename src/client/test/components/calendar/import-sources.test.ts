@@ -677,29 +677,4 @@ describe('ImportSourcesSection', () => {
       expect(ariaLabel.toLowerCase()).toContain('verified');
     });
   });
-
-  describe('AP-source warning', () => {
-    it('renders warning when detectedApSource flag is set', async () => {
-      const s1 = buildSource('id-1', 'https://mobilizon.example/cal.ics');
-      (s1 as any).detectedApSource = true;
-      listSourcesMock.mockResolvedValue([s1]);
-
-      const { wrapper } = mountSection();
-      await flushPromises();
-
-      const warning = wrapper.find('.import-source-row__warning');
-      expect(warning.exists()).toBe(true);
-      expect(warning.text().length).toBeGreaterThan(0);
-    });
-
-    it('does not render warning when flag is absent', async () => {
-      const s1 = buildSource('id-1', 'https://example.com/a.ics');
-      listSourcesMock.mockResolvedValue([s1]);
-
-      const { wrapper } = mountSection();
-      await flushPromises();
-
-      expect(wrapper.find('.import-source-row__warning').exists()).toBe(false);
-    });
-  });
 });

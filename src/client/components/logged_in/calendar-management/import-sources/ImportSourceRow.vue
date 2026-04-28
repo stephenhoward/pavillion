@@ -22,22 +22,6 @@
       <p class="import-source-row__last-sync">
         {{ lastSyncLabel }}
       </p>
-
-      <!--
-        AP-source double-federation warning.
-        TODO(pv-1qcp): the `detected_ap_source` field is not yet available on
-        the common ImportSource model; when the server-side detection + field
-        are added (see bead pv-1qcp.1.2 addendum), set `apSourceDetected` to
-        `source.detectedApSource` so this warning renders automatically.
-      -->
-      <p
-        v-if="apSourceDetected"
-        :id="warningId"
-        class="import-source-row__warning"
-        role="note"
-      >
-        {{ t('warnings.ap_source_double_federation') }}
-      </p>
     </div>
 
     <div class="import-source-row__actions">
@@ -112,20 +96,7 @@ const emit = defineEmits<{
 const { t } = useTranslation('calendars', { keyPrefix: 'import' });
 
 const uid = Math.random().toString(36).slice(2, 10);
-const warningId = `import-source-warning-${uid}`;
 const syncDisabledDescId = `import-source-sync-disabled-${uid}`;
-
-/**
- * Server-side detection of an ActivityPub-federated source (e.g. Mobilizon or
- * Gancio) is planned but the `detectedApSource` field is not yet on the
- * common `ImportSource` model. When that lands, switch this computed to
- * `source.detectedApSource` so the double-federation warning shows
- * automatically. See bead pv-1qcp.3.3 notes.
- */
-const apSourceDetected = computed<boolean>(() => {
-  const extended = props.source as unknown as { detectedApSource?: boolean };
-  return extended.detectedApSource === true;
-});
 
 const verificationStateLabel = computed(() =>
   t(`verification_state.${props.source.verificationState}`),
@@ -142,23 +113,9 @@ const lastSyncLabel = computed(() => {
 
 const canSync = computed(() => props.source.verificationState === 'verified');
 
-/**
- * Space-separated list of element IDs used by the Sync Now button's
- * `aria-describedby`. Combines the AP-source warning (when present) with
- * the disabled-reason description (when the button is disabled) so screen
- * readers announce both contexts. Returns undefined when no descriptions
- * apply so Vue omits the attribute entirely.
- */
-const syncAriaDescribedBy = computed<string | undefined>(() => {
-  const ids: string[] = [];
-  if (apSourceDetected.value) {
-    ids.push(warningId);
-  }
-  if (!canSync.value) {
-    ids.push(syncDisabledDescId);
-  }
-  return ids.length > 0 ? ids.join(' ') : undefined;
-});
+const syncAriaDescribedBy = computed<string | undefined>(() =>
+  canSync.value ? undefined : syncDisabledDescId,
+);
 
 /**
  * Show the Verify button whenever the source is not currently verified.
@@ -286,20 +243,6 @@ const onVerify = () => {
 
     @media (prefers-color-scheme: dark) {
       color: var(--pav-color-stone-400);
-    }
-  }
-
-  &__warning {
-    margin: 0;
-    padding: var(--pav-space-2) var(--pav-space-3);
-    background-color: rgba(234, 179, 8, 0.1);
-    border-left: 3px solid var(--pav-color-yellow-500, #eab308);
-    border-radius: 0.375rem;
-    color: var(--pav-color-stone-800);
-    font-size: 0.875rem;
-
-    @media (prefers-color-scheme: dark) {
-      color: var(--pav-color-stone-200);
     }
   }
 
