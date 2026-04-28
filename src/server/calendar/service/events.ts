@@ -780,12 +780,25 @@ class EventService {
 
     await eventEntity.save({ transaction: tx });
 
-    // Notify media domain that media has been attached to an event
+    // Notify media domain that media has been attached to an event.
+    // When the caller supplies a transaction, defer the emit until after
+    // commit. The setImmediate hop is required to escape Sequelize's CLS
+    // context — without it the listener's async body inherits a CLS scope
+    // that still binds the just-committed transaction, and Sequelize's
+    // implicit transaction lookup picks it up, causing
+    // "commit has been called on this transaction" errors.
     if (eventEntity.media_id) {
-      this.eventBus.emit('mediaAttachedToEvent', {
-        mediaId: eventEntity.media_id,
+      const mediaId = eventEntity.media_id;
+      const emitMediaAttached = () => this.eventBus.emit('mediaAttachedToEvent', {
+        mediaId,
         eventId: event.id,
       });
+      if (tx) {
+        tx.afterCommit(() => setImmediate(emitMediaAttached));
+      }
+      else {
+        emitMediaAttached();
+      }
     }
 
     if ( eventParams.content ) {
@@ -801,7 +814,13 @@ class EventService {
       }
     }
 
-    this.eventBus.emit('eventCreated', { calendar, event });
+    const emitEventCreated = () => this.eventBus.emit('eventCreated', { calendar, event });
+    if (tx) {
+      tx.afterCommit(() => setImmediate(emitEventCreated));
+    }
+    else {
+      emitEventCreated();
+    }
     return event;
   }
 
@@ -1085,15 +1104,34 @@ class EventService {
 
     await eventEntity.save({ transaction: tx });
 
-    // Notify media domain that media has been attached to an event
+    // Notify media domain that media has been attached to an event.
+    // When the caller supplies a transaction, defer the emit until after
+    // commit. The setImmediate hop is required to escape Sequelize's CLS
+    // context — without it the listener's async body inherits a CLS scope
+    // that still binds the just-committed transaction, and Sequelize's
+    // implicit transaction lookup picks it up, causing
+    // "commit has been called on this transaction" errors.
     if (newMediaAttached && eventEntity.media_id) {
-      this.eventBus.emit('mediaAttachedToEvent', {
-        mediaId: eventEntity.media_id,
+      const mediaId = eventEntity.media_id;
+      const emitMediaAttached = () => this.eventBus.emit('mediaAttachedToEvent', {
+        mediaId,
         eventId: event.id,
       });
+      if (tx) {
+        tx.afterCommit(() => setImmediate(emitMediaAttached));
+      }
+      else {
+        emitMediaAttached();
+      }
     }
 
-    this.eventBus.emit('eventUpdated', { calendar, event });
+    const emitEventUpdated = () => this.eventBus.emit('eventUpdated', { calendar, event });
+    if (tx) {
+      tx.afterCommit(() => setImmediate(emitEventUpdated));
+    }
+    else {
+      emitEventUpdated();
+    }
     return event;
   }
 
