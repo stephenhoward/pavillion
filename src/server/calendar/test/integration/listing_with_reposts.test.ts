@@ -41,7 +41,6 @@ import { v4 as uuidv4 } from 'uuid';
 import { Account } from '@/common/model/account';
 import { Calendar } from '@/common/model/calendar';
 import CalendarInterface from '@/server/calendar/interface';
-import CalendarEventHandlers from '@/server/calendar/events';
 import AccountService from '@/server/accounts/service/account';
 import ConfigurationInterface from '@/server/configuration/interface';
 import SetupInterface from '@/server/setup/interface';
@@ -308,15 +307,30 @@ describe('Listing union for reposted events (pv-hr72.4)', () => {
    * buildEventInstances.
    */
   it('materializes event_instance rows for inbound federated events without manual fixture writes', async () => {
-    // Register the calendar-domain event handlers against the shared eventBus
-    // so addRemoteEvent's eventCreated emit drives buildEventInstances. We do
-    // this only for this scenario because earlier scenarios in this file
-    // intentionally drive EventInstanceEntity rows via direct create() calls
-    // alongside calendarInterface.createEvent(); installing the handler in
-    // beforeAll would race those manual rows against the unique
-    // (event_id, start_time) index.
-    const handlers = new CalendarEventHandlers(calendarInterface);
-    handlers.install(eventBus);
+    // Deterministic wait: install a one-shot eventCreated listener that
+    // performs the same buildEventInstances call the production handler does
+    // and resolves a sentinel Promise on completion. Awaiting the sentinel
+    // (instead of polling EventInstanceEntity.findOne) eliminates the
+    // flakiness vector pv-hr72.5 removed from the race test elsewhere.
+    //
+    // We do NOT install the production CalendarEventHandlers here: doing
+    // both would race two concurrent buildEventInstances calls against the
+    // unique (event_id, start_time) index. The production wire-up
+    // (eventCreated -> buildEventInstances) is already exercised by the
+    // unit tests for that file; this integration test focuses on the
+    // emit-from-addRemoteEvent contract, which is what the once-listener
+    // simulates exactly.
+    const materialized = new Promise<void>((resolve, reject) => {
+      eventBus.once('eventCreated', async (e: { calendar: Calendar | null; event: any }) => {
+        try {
+          await calendarInterface.buildEventInstances(e.event);
+          resolve();
+        }
+        catch (err) {
+          reject(err instanceof Error ? err : new Error(String(err)));
+        }
+      });
+    });
 
     const remoteEventId = uuidv4();
     // Schedule must fall within the rolling GENERATION_HORIZON_MONTHS (6 months)
@@ -327,13 +341,6 @@ describe('Listing union for reposted events (pv-hr72.4)', () => {
     const endDateTime = new Date(startDateTime.getTime() + 2 * 60 * 60 * 1000); // +2h
     const startIso = startDateTime.toISOString();
     const endIso = endDateTime.toISOString();
-
-    // Capture any unhandled rejection from the async eventCreated listener so
-    // a silent buildEventInstances failure surfaces as a test assertion rather
-    // than a hard-to-diagnose timeout.
-    const listenerErrors: Error[] = [];
-    const onRejection = (err: any) => listenerErrors.push(err);
-    process.on('unhandledRejection', onRejection);
 
     // Drive addRemoteEvent directly with a parsed-AP-like payload. This
     // mirrors what ProcessInboxService does when handling a Create(Event)
@@ -362,40 +369,34 @@ describe('Listing union for reposted events (pv-hr72.4)', () => {
       auto_posted: true,
     });
 
-    // Wait for the addRemoteEvent emit to complete the buildEventInstances
-    // listener (events.emit is synchronous on the dispatch site, but the
-    // handler is async — it does a removeEventInstances + generateInstances
-    // + per-instance save chain). Poll until the canonical row appears or a
-    // generous deadline elapses, so the test does not flake on slow CI.
-    const deadline = Date.now() + 2000;
-    while (Date.now() < deadline) {
-      const row = await EventInstanceEntity.findOne({ where: { event_id: remoteEventId } });
-      if (row) break;
-      await new Promise(resolve => setTimeout(resolve, 25));
+    // Await the sentinel — guarantees buildEventInstances has finished
+    // before assertions run. No polling, no timeout race.
+    await materialized;
+
+    try {
+      // Critical assertion: a canonical event_instance row exists for this
+      // remote event WITHOUT any test-fixture EventInstanceEntity.create()
+      // call. Under the bug being fixed (pv-13xg), no row would exist until
+      // an inbound Update arrived.
+      const canonicalRow = await EventInstanceEntity.findOne({
+        where: { event_id: remoteEventId },
+      });
+      expect(canonicalRow, 'addRemoteEvent must materialize the canonical event_instance row').not.toBeNull();
+      expect(canonicalRow!.calendar_id).toBeNull();
+
+      // Listing for the share-receiving calendar (B) surfaces the event via
+      // the ap_shared_event link. This proves the end-to-end happy path:
+      // remote Create -> addRemoteEvent -> eventCreated emit ->
+      // buildEventInstances -> canonical row -> listing union picks it up.
+      const instances = await calendarInterface.listEventInstancesForCalendar(calendarB);
+      const matching = instances.filter(i => i.event.id === remoteEventId);
+      expect(matching).toHaveLength(1);
+      expect(matching[0].event.isRepost).toBe(true);
     }
-
-    process.off('unhandledRejection', onRejection);
-    if (listenerErrors.length > 0) {
-      throw new Error('eventCreated listener errored: ' + listenerErrors.map(e => e?.message ?? String(e)).join('; '));
+    finally {
+      // Tear down any residual eventCreated listeners so they don't leak
+      // into tests that may be added below this scenario.
+      eventBus.removeAllListeners('eventCreated');
     }
-
-    // Critical assertion: a canonical event_instance row exists for this
-    // remote event WITHOUT any test-fixture EventInstanceEntity.create()
-    // call. Under the bug being fixed (pv-13xg), no row would exist until
-    // an inbound Update arrived.
-    const canonicalRow = await EventInstanceEntity.findOne({
-      where: { event_id: remoteEventId },
-    });
-    expect(canonicalRow, 'addRemoteEvent must materialize the canonical event_instance row').not.toBeNull();
-    expect(canonicalRow!.calendar_id).toBeNull();
-
-    // Listing for the share-receiving calendar (B) surfaces the event via
-    // the ap_shared_event link. This proves the end-to-end happy path:
-    // remote Create -> addRemoteEvent -> eventCreated emit ->
-    // buildEventInstances -> canonical row -> listing union picks it up.
-    const instances = await calendarInterface.listEventInstancesForCalendar(calendarB);
-    const matching = instances.filter(i => i.event.id === remoteEventId);
-    expect(matching).toHaveLength(1);
-    expect(matching[0].event.isRepost).toBe(true);
   });
 });

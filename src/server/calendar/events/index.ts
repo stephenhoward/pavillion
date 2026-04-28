@@ -80,6 +80,20 @@ export interface EventInstanceRestoredPayload {
 }
 
 /**
+ * Payload for the eventCreated event bus emission.
+ *
+ * `calendar` may be null when the event originated from a remote instance
+ * (emitted by EventService.addRemoteEvent). The calendar-domain handler
+ * calls buildEventInstances on the event regardless, while the AP handler
+ * early-returns on null to avoid re-Announcing a remote-origin event back
+ * to federation. Mirrors EventUpdatedPayload's nullable shape.
+ */
+export interface EventCreatedPayload {
+  calendar: Calendar | null;
+  event: CalendarEvent;
+}
+
+/**
  * Payload for the eventUpdated event bus emission.
  *
  * `skipRebuild` is an internal flag set by the cancel / restore handlers
@@ -116,7 +130,7 @@ export default class CalendarEventHandlers implements DomainEventHandlers {
     // buildEventInstances so the canonical row(s) for the remote event are
     // materialized at receive time. Without this, list views on follower
     // calendars would miss freshly-federated remote events (pv-13xg).
-    eventBus.on('eventCreated', async (e) => this.service.buildEventInstances(e.event));
+    eventBus.on('eventCreated', async (e: EventCreatedPayload) => this.service.buildEventInstances(e.event));
 
     eventBus.on('eventUpdated', async (e: EventUpdatedPayload) => {
       // Cancel / restore handlers re-emit eventUpdated with skipRebuild:true

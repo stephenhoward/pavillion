@@ -308,18 +308,4 @@ describe('handleEventCreated', () => {
     expect(eventObject, 'no EventObjectEntity row for remote-origin event').toBeNull();
   });
 
-  it('returns early without dispatching Announce when payload.calendar is undefined', async () => {
-    // Same guard, undefined variant. Mirrors the equivalent handleEventUpdated
-    // test above — both null and undefined collapse to the early-return path
-    // because TypeScript permits Calendar | null | undefined at the seam.
-    const event = CalendarEvent.fromObject({ id: uuidv4() });
-
-    const actorUrlStub = sandbox.stub(service, 'actorUrl');
-    const addToOutboxStub = sandbox.stub(service, 'addToOutbox');
-
-    await (handlers as any)['handleEventCreated']({ calendar: undefined, event });
-
-    expect(actorUrlStub.called).toBe(false);
-    expect(addToOutboxStub.called).toBe(false);
-  });
 });

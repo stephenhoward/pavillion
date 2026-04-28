@@ -1374,22 +1374,10 @@ class EventService {
     }
 
     // Emit eventCreated with calendar:null so the calendar-domain
-    // eventCreated -> buildEventInstances handler materializes canonical
-    // event_instance rows for this remote-origin event. Under the
-    // single-producer model (pv-hr72), the local server is the de-facto
-    // producer of the canonical row from the AP payload — without this
-    // emit, list views on follower calendars would miss freshly-federated
-    // remote events until an inbound Update arrived or a per-occurrence
-    // detail URL triggered lazy materialization.
-    //
-    // The AP eventCreated handler early-returns on calendar:null to avoid
-    // re-Announcing the remote event back to federation, mirroring the
-    // existing handleEventUpdated guard.
-    //
-    // addRemoteEvent does not currently take a Sequelize transaction, so a
-    // synchronous emit is sufficient. If a `tx` parameter is added later,
-    // mirror the tx.afterCommit(() => setImmediate(...)) pattern from
-    // addEvent (line 877) to escape Sequelize's CLS context.
+    // buildEventInstances handler materializes the canonical event_instance
+    // rows for this remote-origin event. The null calendar is intentional:
+    // the AP eventCreated handler early-returns on it, preventing an
+    // outbound Announce loop back to federation.
     this.eventBus.emit('eventCreated', { calendar: null, event });
 
     return event;
