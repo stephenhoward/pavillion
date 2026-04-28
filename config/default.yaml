@@ -51,9 +51,11 @@ calendar:
     # Production startup refuses to boot with an empty or development-only value.
     hmacSecret: ''
     # DoH resolvers used for DNS ownership verification. Both must agree.
+    # Cloudflare exposes its JSON API at /dns-query; Google's /dns-query is
+    # RFC 8484 wire-format only and rejects JSON queries, so use /resolve.
     dohResolvers:
       - 'https://1.1.1.1/dns-query'
-      - 'https://8.8.8.8/dns-query'
+      - 'https://8.8.8.8/resolve'
     # Maximum number of import sources per calendar.
     maxSourcesPerCalendar: 10
 

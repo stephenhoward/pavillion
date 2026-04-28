@@ -193,6 +193,6 @@ describe('calendar.import.dohResolvers config', () => {
     const resolvers = config.get<string[]>('calendar.import.dohResolvers');
     expect(Array.isArray(resolvers)).toBe(true);
     expect(resolvers).toContain('https://1.1.1.1/dns-query');
-    expect(resolvers).toContain('https://8.8.8.8/dns-query');
+    expect(resolvers).toContain('https://8.8.8.8/resolve');
   });
 });

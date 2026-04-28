@@ -321,7 +321,7 @@ describe('DnsVerifier', () => {
       const resolvers = config.get<string[]>('calendar.import.dohResolvers');
       expect(resolvers).toEqual([
         'https://1.1.1.1/dns-query',
-        'https://8.8.8.8/dns-query',
+        'https://8.8.8.8/resolve',
       ]);
 
       const record = formatVerificationRecord(SOURCE_ID, CALENDAR_ID);
