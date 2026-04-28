@@ -11,10 +11,20 @@ import { DateTime } from 'luxon';
  * Handler-level tests under the single-producer model (pv-hr72).
  *
  * Architectural invariants exercised here:
- *   - eventCreated, eventUpdated, eventInstanceCancelled, eventInstanceRestored
- *     all call buildEventInstances on the originating event. There is no
- *     per-calendar fan-out for repost-display calendars — listing for those
- *     calendars derives visibility through EventService.listEventIdsForCalendar.
+ *   - eventCreated and eventUpdated call buildEventInstances on the originating
+ *     event. There is no per-calendar fan-out for repost-display calendars —
+ *     listing for those calendars derives visibility through
+ *     EventService.listEventIdsForCalendar.
+ *   - eventInstanceCancelled and eventInstanceRestored intentionally do NOT
+ *     call buildEventInstances. Cancellation state lives in EventScheduleEntity
+ *     exclusion rows, not in event_instance (no is_cancelled column there).
+ *     Calling buildEventInstances would only delete-then-reinsert identical
+ *     rows and risk racing the unique (event_id, start_time) index when rapid
+ *     cancel→restore sequences leave dangling promises in flight (regression
+ *     surfaced as SequelizeUniqueConstraintError after pv-hr72.3).
+ *   - The cancel/restore handlers re-emit eventUpdated with skipRebuild:true
+ *     so federation propagation runs but the calendar-domain eventUpdated
+ *     handler skips its rebuild for the same race-avoidance reason.
  *   - eventReposted / eventUnreposted are signal-preservation stubs only:
  *     creating or removing a repost link does NOT trigger any instance
  *     materialization, because the originating-calendar row already exists
@@ -129,6 +139,21 @@ describe('CalendarEventHandlers (single-producer model)', () => {
       expect(mockService.buildEventInstances.calledOnce).toBe(true);
       expect(mockService.buildEventInstances.firstCall.args[0]).toBe(event);
     });
+
+    it('should NOT call buildEventInstances when skipRebuild:true is on the payload', async () => {
+      // The cancel/restore handlers re-emit eventUpdated with skipRebuild:true
+      // purely to drive AP outbound propagation. The calendar-domain handler
+      // must skip its rebuild to avoid racing the unique
+      // (event_id, start_time) index across rapid cancel→restore sequences.
+      const event = createTestEvent('event-1', 'calendar-1');
+      const calendar = new Calendar('calendar-1', 'test-calendar');
+
+      eventBus.emit('eventUpdated', { event, calendar, skipRebuild: true });
+
+      await new Promise(resolve => setTimeout(resolve, 10));
+
+      expect(mockService.buildEventInstances.called).toBe(false);
+    });
   });
 
   describe('eventDeleted handler', () => {
@@ -198,7 +223,7 @@ describe('CalendarEventHandlers (single-producer model)', () => {
   });
 
   describe('eventInstanceCancelled handler', () => {
-    it('should rebuild instances on the originating calendar and re-emit eventUpdated', async () => {
+    it('should NOT call buildEventInstances and should re-emit eventUpdated with skipRebuild:true', async () => {
       const event = createTestEvent('event-1', 'calendar-1');
       const calendar = new Calendar('calendar-1', 'test-calendar');
 
@@ -213,21 +238,25 @@ describe('CalendarEventHandlers (single-producer model)', () => {
 
       await new Promise(resolve => setTimeout(resolve, 10));
 
-      // The cancel handler calls buildEventInstances directly; the re-emitted
-      // eventUpdated event triggers another buildEventInstances call from the
-      // eventUpdated handler. Hence 2 calls — a fixed bound under the
-      // single-producer model.
-      expect(mockService.buildEventInstances.callCount).toBe(2);
-      expect(mockService.buildEventInstances.firstCall.args[0]).toBe(event);
-      // eventUpdated is re-emitted so the ActivityPub handler dispatches the
-      // outbound Update(Event) activity to followers.
+      // Cancellation state lives in EventScheduleEntity exclusion rows
+      // (already written by cancelOccurrenceByDate). event_instance has no
+      // is_cancelled column, so a rebuild here would only delete-then-reinsert
+      // identical rows and risk racing the unique (event_id, start_time) index.
+      // Both the direct call and the downstream eventUpdated call are gone.
+      expect(mockService.buildEventInstances.called).toBe(false);
+      // eventUpdated is still re-emitted so the ActivityPub handler dispatches
+      // the outbound Update(Event) activity to followers, with skipRebuild:true
+      // suppressing the calendar-domain rebuild for the same race-avoidance.
       expect(eventUpdatedSpy.calledOnce).toBe(true);
       expect(eventUpdatedSpy.firstCall.args[0].calendar).toBe(calendar);
       expect(eventUpdatedSpy.firstCall.args[0].event).toBe(event);
+      expect(eventUpdatedSpy.firstCall.args[0].skipRebuild).toBe(true);
     });
 
     it('should skip when calendar is missing from payload', async () => {
       const event = createTestEvent('event-1', 'calendar-1');
+      const eventUpdatedSpy = sandbox.spy();
+      eventBus.on('eventUpdated', eventUpdatedSpy);
 
       eventBus.emit('eventInstanceCancelled', {
         event,
@@ -238,11 +267,13 @@ describe('CalendarEventHandlers (single-producer model)', () => {
       await new Promise(resolve => setTimeout(resolve, 10));
 
       expect(mockService.buildEventInstances.called).toBe(false);
+      // No outbound emission either when payload identity is malformed.
+      expect(eventUpdatedSpy.called).toBe(false);
     });
   });
 
   describe('eventInstanceRestored handler', () => {
-    it('should rebuild instances on the originating calendar and re-emit eventUpdated', async () => {
+    it('should NOT call buildEventInstances and should re-emit eventUpdated with skipRebuild:true', async () => {
       const event = createTestEvent('event-1', 'calendar-1');
       const calendar = new Calendar('calendar-1', 'test-calendar');
 
@@ -256,16 +287,21 @@ describe('CalendarEventHandlers (single-producer model)', () => {
 
       await new Promise(resolve => setTimeout(resolve, 10));
 
-      // Same fan-out as eventInstanceCancelled: direct buildEventInstances +
-      // downstream eventUpdated build. Fixed 2-call architectural bound.
-      expect(mockService.buildEventInstances.callCount).toBe(2);
+      // Same exclusion-row architecture as eventInstanceCancelled: restore
+      // deletes the exclusion row (already done by restoreOccurrenceByDate);
+      // event_instance rows are unaffected. No buildEventInstances calls,
+      // either direct or via the eventUpdated cascade (skipRebuild:true).
+      expect(mockService.buildEventInstances.called).toBe(false);
       expect(eventUpdatedSpy.calledOnce).toBe(true);
       expect(eventUpdatedSpy.firstCall.args[0].calendar).toBe(calendar);
       expect(eventUpdatedSpy.firstCall.args[0].event).toBe(event);
+      expect(eventUpdatedSpy.firstCall.args[0].skipRebuild).toBe(true);
     });
 
     it('should skip when event id is missing from payload', async () => {
       const calendar = new Calendar('calendar-1', 'test-calendar');
+      const eventUpdatedSpy = sandbox.spy();
+      eventBus.on('eventUpdated', eventUpdatedSpy);
 
       eventBus.emit('eventInstanceRestored', {
         event: { id: null },
@@ -275,6 +311,7 @@ describe('CalendarEventHandlers (single-producer model)', () => {
       await new Promise(resolve => setTimeout(resolve, 10));
 
       expect(mockService.buildEventInstances.called).toBe(false);
+      expect(eventUpdatedSpy.called).toBe(false);
     });
   });
 });
