@@ -293,6 +293,35 @@ describe('Widget View Components', () => {
         },
       });
     });
+
+    it('ListView openEvent pushes route params including startTime slug', async () => {
+      const publicStore = usePublicCalendarStore();
+      const widgetStore = useWidgetStore();
+      widgetStore.setCalendarUrlName('mycal');
+
+      publicStore.allEvents = [buildInstance(fixedStart)] as any;
+
+      const pushSpy = vi.spyOn(router, 'push');
+
+      const wrapper = mount(ListView, {
+        global: {
+          plugins: [[I18NextVue, { i18next }], router],
+        },
+      });
+
+      const eventEl = wrapper.find('.event');
+      expect(eventEl.exists()).toBe(true);
+      await eventEl.trigger('click');
+
+      expect(pushSpy).toHaveBeenCalledWith({
+        name: 'widget-event-detail',
+        params: {
+          urlName: 'mycal',
+          eventId: 'evt-1',
+          startTime: fixedSlug,
+        },
+      });
+    });
   });
 
   describe('Navigation and Gestures', () => {

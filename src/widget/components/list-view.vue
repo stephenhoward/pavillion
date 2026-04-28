@@ -6,6 +6,7 @@ import { DateTime } from 'luxon';
 import { usePublicCalendarStore } from '@/site/stores/publicCalendarStore';
 import { useWidgetStore } from '../stores/widgetStore';
 import EventImage from '@/site/components/event-image.vue';
+import { formatInstanceSlug } from '@/common/utils/instance-slug';
 
 const { t } = useTranslation('system');
 const router = useRouter();
@@ -36,6 +37,7 @@ const openEvent = (instance: any) => {
     params: {
       urlName: widgetStore.calendarUrlName!,
       eventId: instance.event.id,
+      startTime: formatInstanceSlug(instance.start),
     },
   });
 };
