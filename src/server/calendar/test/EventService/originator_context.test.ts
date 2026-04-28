@@ -142,7 +142,10 @@ describe('EventService originator context', () => {
     });
 
     it('threads tx into origin.save when a transaction is supplied by the caller', async () => {
-      const fakeTx = { __brand: 'fake-transaction' } as unknown as Transaction;
+      const fakeTx = {
+        __brand: 'fake-transaction',
+        afterCommit: () => {},
+      } as unknown as Transaction;
       const findStub = sandbox.stub(EventEntity, 'findByPk');
       sandbox.stub(EventEntity.prototype, 'save');
       const entity = EventEntity.build({

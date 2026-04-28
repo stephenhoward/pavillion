@@ -32,10 +32,13 @@ describe('EventService transaction propagation', () => {
   const account = new Account('testAccountId', 'testme', 'testme');
   const calendar = new Calendar(CALENDAR_ID, 'testme');
 
-  // A minimal stand-in for a Sequelize Transaction — the service should never
-  // introspect it, only pass it through as options.transaction. Using a
-  // branded sentinel object lets us assert the exact reference was propagated.
-  const fakeTx = { __brand: 'fake-transaction' } as unknown as Transaction;
+  // A minimal stand-in for a Sequelize Transaction — used to assert the exact
+  // reference was propagated as options.transaction. afterCommit is a no-op
+  // because these tests do not exercise the post-commit emit path.
+  const fakeTx = {
+    __brand: 'fake-transaction',
+    afterCommit: () => {},
+  } as unknown as Transaction;
 
   beforeEach(() => {
     sandbox = sinon.createSandbox();
