@@ -201,6 +201,57 @@ class EventService {
 
 
   /**
+   * Returns the deduped set of event ids visible on the given calendar.
+   *
+   * The set is the union of three sources:
+   *   - own events (`event.calendar_id = calendar.id`)
+   *   - events linked via `event_repost` (legacy direct-repost link)
+   *   - events linked via `ap_shared_event` (auto-repost / manual share)
+   *
+   * Non-UUID identifiers from `ap_shared_event` (legacy AP URL rows) are
+   * filtered out so callers can safely use the result with `Op.in` against
+   * `EventEntity.id`.
+   *
+   * Public so intra-domain consumers (e.g. `EventInstanceService`) can drive
+   * listing under the single-producer model without re-deriving the union.
+   *
+   * @param calendar - the calendar whose visible event ids to enumerate
+   * @returns deduped string[] of event ids visible on the calendar
+   */
+  async listEventIdsForCalendar(calendar: Calendar): Promise<string[]> {
+    // Filter to valid UUIDs for safety since old ap_shared_event rows may
+    // carry AP URLs rather than EventEntity ids.
+    const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+    const [ownedEvents, reposts, sharedStatusMap] = await Promise.all([
+      EventEntity.findAll({
+        where: { calendar_id: calendar.id },
+        attributes: ['id'],
+      }),
+      EventRepostEntity.findAll({
+        where: { calendar_id: calendar.id },
+        attributes: ['event_id'],
+      }),
+      this.activityPubInterface!.getSharedEventStatusMap(calendar.id),
+    ]);
+
+    const ids = new Set<string>();
+    for (const e of ownedEvents) {
+      ids.add(e.id);
+    }
+    for (const r of reposts) {
+      ids.add(r.event_id);
+    }
+    for (const sharedId of sharedStatusMap.keys()) {
+      if (UUID_REGEX.test(sharedId)) {
+        ids.add(sharedId);
+      }
+    }
+
+    return Array.from(ids);
+  }
+
+  /**
    * Retrieves events for the provided calendar.
    * Returns events that are either:
    * - Owned by the calendar (calendar_id matches)
@@ -248,15 +299,17 @@ class EventService {
       }
     }
 
-    const repostedEventIds = Array.from(repostStatusByEventId.keys());
+    // Query events owned by calendar OR reposted/shared by calendar.
+    // Source set is the union of own events, event_repost links, and
+    // ap_shared_event links — see listEventIdsForCalendar() for the canonical
+    // derivation. listEvents retains its own repostStatus map (above) because
+    // the helper returns ids only; the status map drives the repostStatus
+    // field on each returned model.
+    const visibleEventIds = await this.listEventIdsForCalendar(calendar);
 
-    // Query events owned by calendar OR reposted by calendar
     const queryOptions: any = {
       where: {
-        [Op.or]: [
-          { calendar_id: calendar.id },
-          ...(repostedEventIds.length > 0 ? [{ id: { [Op.in]: repostedEventIds } }] : []),
-        ],
+        id: { [Op.in]: visibleEventIds },
       },
       include: [
         LocationEntity,

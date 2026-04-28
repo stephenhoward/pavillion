@@ -87,20 +87,25 @@ describe('EventService - Calendar ID Storage', () => {
     // Stub SharedEventEntity.findAll to simulate no auto-reposted events
     sandbox.stub(SharedEventEntity, 'findAll').resolves([]);
 
-    // Stub EventEntity.findAll to capture where clause
-    const findAllStub = sandbox.stub(EventEntity, 'findAll').resolves([]);
+    // After the listEventIdsForCalendar extraction (pv-hr72.1) the visible
+    // event-id union is materialized in the helper and listEvents queries
+    // EventEntity with `WHERE id IN (...)`. The helper itself queries
+    // EventEntity for own-event ids before listEvents materializes the
+    // include-loaded rows, so findAll is invoked twice.
+    const ownedEvent = EventEntity.build({ id: 'owned-event-uuid', calendar_id: calendar.id });
+    const findAllStub = sandbox.stub(EventEntity, 'findAll');
+    findAllStub.onFirstCall().resolves([ownedEvent]);
+    findAllStub.onSecondCall().resolves([]);
 
     await eventService.listEvents(calendar);
 
-    expect(findAllStub.calledOnce).toBe(true);
-    const queryOptions = findAllStub.firstCall.args[0] as any;
+    expect(findAllStub.callCount).toBe(2);
+    const queryOptions = findAllStub.lastCall.args[0] as any;
 
-    // Verify the query uses Op.or with calendar_id
-    expect(queryOptions.where[Op.or]).toBeDefined();
-    const orConditions = queryOptions.where[Op.or];
-
-    // First condition should be owned events (calendar_id matches)
-    expect(orConditions[0].calendar_id).toBe(calendar.id);
+    // The second call is the materialization query, scoped to the union of
+    // visible event ids. With no reposts/shares the union contains only the
+    // calendar's own event ids.
+    expect(queryOptions.where.id[Op.in]).toContain('owned-event-uuid');
   });
 
   it('should include reposted events in listEvents', async () => {
@@ -113,26 +118,21 @@ describe('EventService - Calendar ID Storage', () => {
     // Stub SharedEventEntity.findAll to simulate no auto-reposted events
     sandbox.stub(SharedEventEntity, 'findAll').resolves([]);
 
-    // Stub EventEntity.findAll to capture where clause
-    const findAllStub = sandbox.stub(EventEntity, 'findAll').resolves([]);
+    // findAll is invoked twice: helper enumerates own-event ids first, then
+    // listEvents materializes the include-loaded rows scoped to the visible-id
+    // union (own ∪ reposts ∪ shares).
+    const findAllStub = sandbox.stub(EventEntity, 'findAll');
+    findAllStub.onFirstCall().resolves([]); // no owned events in this scenario
+    findAllStub.onSecondCall().resolves([]);
 
     await eventService.listEvents(calendar);
 
-    expect(findAllStub.calledOnce).toBe(true);
-    const queryOptions = findAllStub.firstCall.args[0] as any;
+    expect(findAllStub.callCount).toBe(2);
+    const queryOptions = findAllStub.lastCall.args[0] as any;
 
-    // Verify the query includes both owned and reposted events
-    expect(queryOptions.where[Op.or]).toBeDefined();
-    const orConditions = queryOptions.where[Op.or];
-
-    // Should have two conditions: owned events and reposted events
-    expect(orConditions.length).toBe(2);
-
-    // First condition: owned events
-    expect(orConditions[0].calendar_id).toBe(calendar.id);
-
-    // Second condition: reposted events
-    expect(orConditions[1].id[Op.in]).toContain(repostedEventId);
+    // The materialization query scopes to the union, which here is just the
+    // reposted-event id surfaced by EventRepostEntity.
+    expect(queryOptions.where.id[Op.in]).toContain(repostedEventId);
   });
 
   it('should retrieve event with UUID calendar_id via getEventById', async () => {
