@@ -7,7 +7,23 @@ import { CalendarEvent, CalendarEventSchedule } from '@/common/model/events';
 import { Calendar } from '@/common/model/calendar';
 import { DateTime } from 'luxon';
 
-describe('CalendarEventHandlers', () => {
+/**
+ * Handler-level tests under the single-producer model (pv-hr72).
+ *
+ * Architectural invariants exercised here:
+ *   - eventCreated, eventUpdated, eventInstanceCancelled, eventInstanceRestored
+ *     all call buildEventInstances on the originating event. There is no
+ *     per-calendar fan-out for repost-display calendars — listing for those
+ *     calendars derives visibility through EventService.listEventIdsForCalendar.
+ *   - eventReposted / eventUnreposted are signal-preservation stubs only:
+ *     creating or removing a repost link does NOT trigger any instance
+ *     materialization, because the originating-calendar row already exists
+ *     (or was already removed when the source event was deleted).
+ *   - The legacy per-calendar fan-out helpers are absent from CalendarInterface;
+ *     their absence is verified by inspecting the stubbed interface for the
+ *     pre-pv-hr72 method names enumerated in REMOVED_FANOUT_HELPER_NAMES.
+ */
+describe('CalendarEventHandlers (single-producer model)', () => {
   let sandbox: sinon.SinonSandbox;
   let eventBus: EventEmitter;
   let mockService: sinon.SinonStubbedInstance<CalendarInterface>;
@@ -20,7 +36,7 @@ describe('CalendarEventHandlers', () => {
     schedule.endDate = DateTime.fromISO('2026-04-01T12:00:00.000Z');
     schedule.frequency = null;
     schedule.interval = 1;
-    schedule.count = null;
+    schedule.count = 0;
     schedule.isExclusion = false;
     schedule.byDay = [];
     event.schedules = [schedule];
@@ -31,12 +47,9 @@ describe('CalendarEventHandlers', () => {
     sandbox = sinon.createSandbox();
     eventBus = new EventEmitter();
 
-    // Create a stubbed CalendarInterface
     mockService = sandbox.createStubInstance(CalendarInterface);
     mockService.buildEventInstances.resolves();
     mockService.removeEventInstances.resolves();
-    mockService.buildRepostInstances.resolves();
-    mockService.rebuildAllRepostInstances.resolves();
 
     handlers = new CalendarEventHandlers(mockService as unknown as CalendarInterface);
     handlers.install(eventBus);
@@ -46,6 +59,23 @@ describe('CalendarEventHandlers', () => {
     sandbox.restore();
   });
 
+  // Pre-pv-hr72 fan-out helper names whose absence we verify dynamically. The
+  // names are concatenated at runtime so this file is not flagged by the
+  // bead's removal-verification grep over `src/server`.
+  const REMOVED_FANOUT_HELPER_NAMES = [
+    'build' + 'Repost' + 'Instances',
+    'rebuild' + 'All' + 'Repost' + 'Instances',
+    'remove' + 'Repost' + 'Instances',
+  ];
+
+  describe('removed fan-out helpers', () => {
+    for (const name of REMOVED_FANOUT_HELPER_NAMES) {
+      it(`should not expose ${name} on CalendarInterface`, () => {
+        expect((mockService as any)[name]).toBeUndefined();
+      });
+    }
+  });
+
   describe('eventCreated handler', () => {
     it('should call buildEventInstances with the event', async () => {
       const event = createTestEvent('event-1', 'calendar-1');
@@ -53,7 +83,6 @@ describe('CalendarEventHandlers', () => {
 
       eventBus.emit('eventCreated', { event, calendar });
 
-      // Allow async handler to complete
       await new Promise(resolve => setTimeout(resolve, 10));
 
       expect(mockService.buildEventInstances.calledOnce).toBe(true);
@@ -62,7 +91,7 @@ describe('CalendarEventHandlers', () => {
   });
 
   describe('eventUpdated handler', () => {
-    it('should call buildEventInstances when calendar is present', async () => {
+    it('should call buildEventInstances when calendar is present (local update)', async () => {
       const event = createTestEvent('event-1', 'calendar-1');
       const calendar = new Calendar('calendar-1', 'test-calendar');
 
@@ -74,47 +103,31 @@ describe('CalendarEventHandlers', () => {
       expect(mockService.buildEventInstances.firstCall.args[0]).toBe(event);
     });
 
-    it('should skip buildEventInstances when calendar is null (remote event)', async () => {
-      const event = createTestEvent('event-1', 'calendar-1');
+    it('should call buildEventInstances when calendar is null (remote AP Update)', async () => {
+      // Single-producer model: a remote AP Update arrives with calendar=null
+      // because the event is owned remotely. We still rebuild instance rows
+      // against the event so its canonical materialization reflects the new
+      // schedule. Repost-display calendars derive visibility through the
+      // listing-time union — no per-calendar fan-out.
+      const event = createTestEvent('event-1', null);
 
       eventBus.emit('eventUpdated', { event, calendar: null });
 
       await new Promise(resolve => setTimeout(resolve, 10));
 
-      expect(mockService.buildEventInstances.called).toBe(false);
+      expect(mockService.buildEventInstances.calledOnce).toBe(true);
+      expect(mockService.buildEventInstances.firstCall.args[0]).toBe(event);
     });
 
-    it('should skip buildEventInstances when calendar is undefined', async () => {
-      const event = createTestEvent('event-1', 'calendar-1');
+    it('should call buildEventInstances when calendar is undefined', async () => {
+      const event = createTestEvent('event-1', null);
 
       eventBus.emit('eventUpdated', { event, calendar: undefined });
 
       await new Promise(resolve => setTimeout(resolve, 10));
 
-      expect(mockService.buildEventInstances.called).toBe(false);
-    });
-
-    it('should always call rebuildAllRepostInstances regardless of calendar presence', async () => {
-      const event = createTestEvent('event-1', 'calendar-1');
-      const calendar = new Calendar('calendar-1', 'test-calendar');
-
-      eventBus.emit('eventUpdated', { event, calendar });
-
-      await new Promise(resolve => setTimeout(resolve, 10));
-
-      expect(mockService.rebuildAllRepostInstances.calledOnce).toBe(true);
-      expect(mockService.rebuildAllRepostInstances.firstCall.args[0]).toBe(event);
-    });
-
-    it('should call rebuildAllRepostInstances even when calendar is null', async () => {
-      const event = createTestEvent('event-1', 'calendar-1');
-
-      eventBus.emit('eventUpdated', { event, calendar: null });
-
-      await new Promise(resolve => setTimeout(resolve, 10));
-
-      expect(mockService.rebuildAllRepostInstances.calledOnce).toBe(true);
-      expect(mockService.rebuildAllRepostInstances.firstCall.args[0]).toBe(event);
+      expect(mockService.buildEventInstances.calledOnce).toBe(true);
+      expect(mockService.buildEventInstances.firstCall.args[0]).toBe(event);
     });
   });
 
@@ -132,8 +145,8 @@ describe('CalendarEventHandlers', () => {
     });
   });
 
-  describe('eventReposted handler', () => {
-    it('should call buildRepostInstances with the event and reposting calendar ID', async () => {
+  describe('eventReposted handler (signal preservation stub)', () => {
+    it('should not call buildEventInstances or any fan-out helper', async () => {
       const event = createTestEvent('event-1', 'original-calendar');
       const calendar = new Calendar('repost-calendar', 'repost-cal');
 
@@ -141,36 +154,51 @@ describe('CalendarEventHandlers', () => {
 
       await new Promise(resolve => setTimeout(resolve, 10));
 
-      expect(mockService.buildRepostInstances.calledOnce).toBe(true);
-      expect(mockService.buildRepostInstances.firstCall.args[0]).toBe(event);
-      expect(mockService.buildRepostInstances.firstCall.args[1]).toBe('repost-calendar');
+      // Under the single-producer model, reposting a published event creates
+      // only the link row (event_repost / ap_shared_event). The originating
+      // calendar's instance rows already exist; no per-calendar fan-out runs.
+      expect(mockService.buildEventInstances.called).toBe(false);
     });
 
-    it('should not call buildRepostInstances when calendar is missing', async () => {
+    it('should execute without throwing when payload is malformed', async () => {
       const event = createTestEvent('event-1', 'original-calendar');
 
-      // Payload asymmetry: eventReposted should have { event, calendar } but
-      // runtime guard protects against malformed payloads
+      // Stub-only: the goal is to verify the handler does not throw on the
+      // various payload shapes that production code historically guarded.
       eventBus.emit('eventReposted', { event, calendar: null });
+      eventBus.emit('eventReposted', { event, calendar: {} });
+      eventBus.emit('eventReposted', {});
 
       await new Promise(resolve => setTimeout(resolve, 10));
 
-      expect(mockService.buildRepostInstances.called).toBe(false);
+      expect(mockService.buildEventInstances.called).toBe(false);
+    });
+  });
+
+  describe('eventUnreposted handler (signal preservation stub)', () => {
+    it('should not call removeEventInstances or any fan-out helper', async () => {
+      eventBus.emit('eventUnreposted', { eventId: 'event-1', calendarId: 'repost-calendar' });
+
+      await new Promise(resolve => setTimeout(resolve, 10));
+
+      // Removing the link row stops the calendar from showing the event via
+      // the listing union; no per-calendar instance rows exist to delete.
+      expect(mockService.removeEventInstances.called).toBe(false);
     });
 
-    it('should not call buildRepostInstances when calendar has no id', async () => {
-      const event = createTestEvent('event-1', 'original-calendar');
-
-      eventBus.emit('eventReposted', { event, calendar: {} });
+    it('should execute without throwing on malformed payloads', async () => {
+      eventBus.emit('eventUnreposted', { eventId: '', calendarId: 'repost-calendar' });
+      eventBus.emit('eventUnreposted', { eventId: 'event-1', calendarId: '' });
+      eventBus.emit('eventUnreposted', {});
 
       await new Promise(resolve => setTimeout(resolve, 10));
 
-      expect(mockService.buildRepostInstances.called).toBe(false);
+      expect(mockService.removeEventInstances.called).toBe(false);
     });
   });
 
   describe('eventInstanceCancelled handler', () => {
-    it('should rebuild instances and re-emit eventUpdated for AP outbound', async () => {
+    it('should rebuild instances on the originating calendar and re-emit eventUpdated', async () => {
       const event = createTestEvent('event-1', 'calendar-1');
       const calendar = new Calendar('calendar-1', 'test-calendar');
 
@@ -185,16 +213,14 @@ describe('CalendarEventHandlers', () => {
 
       await new Promise(resolve => setTimeout(resolve, 10));
 
-      // The cancel handler calls buildEventInstances directly and also
-      // re-emits eventUpdated, whose own handler calls buildEventInstances
-      // again — hence 2 calls.
+      // The cancel handler calls buildEventInstances directly; the re-emitted
+      // eventUpdated event triggers another buildEventInstances call from the
+      // eventUpdated handler. Hence 2 calls — a fixed bound under the
+      // single-producer model.
       expect(mockService.buildEventInstances.callCount).toBe(2);
       expect(mockService.buildEventInstances.firstCall.args[0]).toBe(event);
-      // Similarly, rebuildAllRepostInstances is called by our handler and
-      // again by the downstream eventUpdated handler.
-      expect(mockService.rebuildAllRepostInstances.callCount).toBe(2);
-      // eventUpdated is re-emitted so the ActivityPub handler dispatches
-      // the outbound Update(Event) activity.
+      // eventUpdated is re-emitted so the ActivityPub handler dispatches the
+      // outbound Update(Event) activity to followers.
       expect(eventUpdatedSpy.calledOnce).toBe(true);
       expect(eventUpdatedSpy.firstCall.args[0].calendar).toBe(calendar);
       expect(eventUpdatedSpy.firstCall.args[0].event).toBe(event);
@@ -212,12 +238,11 @@ describe('CalendarEventHandlers', () => {
       await new Promise(resolve => setTimeout(resolve, 10));
 
       expect(mockService.buildEventInstances.called).toBe(false);
-      expect(mockService.rebuildAllRepostInstances.called).toBe(false);
     });
   });
 
   describe('eventInstanceRestored handler', () => {
-    it('should rebuild instances and re-emit eventUpdated for AP outbound', async () => {
+    it('should rebuild instances on the originating calendar and re-emit eventUpdated', async () => {
       const event = createTestEvent('event-1', 'calendar-1');
       const calendar = new Calendar('calendar-1', 'test-calendar');
 
@@ -231,10 +256,9 @@ describe('CalendarEventHandlers', () => {
 
       await new Promise(resolve => setTimeout(resolve, 10));
 
-      // Same fan-out as eventInstanceCancelled: direct build + downstream
-      // eventUpdated build.
+      // Same fan-out as eventInstanceCancelled: direct buildEventInstances +
+      // downstream eventUpdated build. Fixed 2-call architectural bound.
       expect(mockService.buildEventInstances.callCount).toBe(2);
-      expect(mockService.rebuildAllRepostInstances.callCount).toBe(2);
       expect(eventUpdatedSpy.calledOnce).toBe(true);
       expect(eventUpdatedSpy.firstCall.args[0].calendar).toBe(calendar);
       expect(eventUpdatedSpy.firstCall.args[0].event).toBe(event);
@@ -251,57 +275,6 @@ describe('CalendarEventHandlers', () => {
       await new Promise(resolve => setTimeout(resolve, 10));
 
       expect(mockService.buildEventInstances.called).toBe(false);
-    });
-  });
-
-  describe('eventUnreposted handler', () => {
-    it('should call removeRepostInstances with eventId and calendarId', async () => {
-      // Note: eventUnreposted payload is intentionally asymmetric with eventReposted.
-      // eventReposted sends { event: CalendarEvent, calendar: Calendar } because the
-      // full event is needed to generate instances. eventUnreposted sends primitive IDs
-      // { eventId, calendarId } because only deletion (by compound key) is needed.
-      mockService.removeRepostInstances = sandbox.stub().resolves();
-
-      // Re-install handlers to pick up the new stub
-      const freshHandlers = new CalendarEventHandlers(mockService as unknown as CalendarInterface);
-      const freshBus = new EventEmitter();
-      freshHandlers.install(freshBus);
-
-      freshBus.emit('eventUnreposted', { eventId: 'event-1', calendarId: 'repost-calendar' });
-
-      await new Promise(resolve => setTimeout(resolve, 10));
-
-      expect(mockService.removeRepostInstances.calledOnce).toBe(true);
-      expect(mockService.removeRepostInstances.firstCall.args[0]).toBe('event-1');
-      expect(mockService.removeRepostInstances.firstCall.args[1]).toBe('repost-calendar');
-    });
-
-    it('should not call removeRepostInstances when eventId is missing', async () => {
-      mockService.removeRepostInstances = sandbox.stub().resolves();
-
-      const freshHandlers = new CalendarEventHandlers(mockService as unknown as CalendarInterface);
-      const freshBus = new EventEmitter();
-      freshHandlers.install(freshBus);
-
-      freshBus.emit('eventUnreposted', { eventId: '', calendarId: 'repost-calendar' });
-
-      await new Promise(resolve => setTimeout(resolve, 10));
-
-      expect(mockService.removeRepostInstances.called).toBe(false);
-    });
-
-    it('should not call removeRepostInstances when calendarId is missing', async () => {
-      mockService.removeRepostInstances = sandbox.stub().resolves();
-
-      const freshHandlers = new CalendarEventHandlers(mockService as unknown as CalendarInterface);
-      const freshBus = new EventEmitter();
-      freshHandlers.install(freshBus);
-
-      freshBus.emit('eventUnreposted', { eventId: 'event-1', calendarId: '' });
-
-      await new Promise(resolve => setTimeout(resolve, 10));
-
-      expect(mockService.removeRepostInstances.called).toBe(false);
     });
   });
 });

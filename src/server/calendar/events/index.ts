@@ -82,36 +82,36 @@ export default class CalendarEventHandlers implements DomainEventHandlers {
     eventBus.on('eventCreated', async (e) => this.service.buildEventInstances(e.event));
 
     eventBus.on('eventUpdated', async (e) => {
-      // Guard on e.calendar before building instances for the owner calendar.
-      // When calendar is null/undefined, the update originated from a remote
-      // instance (incoming AP Update) so we skip owner instance rebuilding.
-      if (e.calendar) {
-        await this.service.buildEventInstances(e.event);
-      }
-
-      // Always rebuild repost instances regardless of calendar presence,
-      // because remote event updates still need to propagate to local reposters.
-      await this.service.rebuildAllRepostInstances(e.event);
+      // Single-producer model (pv-hr72): only the originating calendar
+      // materializes instance rows. When `calendar` is present, the update
+      // originated locally — rebuild on the owning calendar. When `calendar`
+      // is absent, the update originated from a remote instance (incoming AP
+      // Update) and the event is owned remotely; we still call
+      // buildEventInstances against the event so its canonical row(s) reflect
+      // the new schedule. Repost-display calendars derive visibility through
+      // the listing-time union (EventService.listEventIdsForCalendar) and
+      // need no per-calendar fan-out.
+      await this.service.buildEventInstances(e.event);
     });
 
     eventBus.on('eventDeleted', async (e) => this.service.removeEventInstances(e.event));
 
-    eventBus.on('eventReposted', async (e: EventRepostedPayload) => {
-      // Runtime guard: protect against malformed payloads that could cause
-      // silent data corruption from missing calendar or event information
-      if (!e.calendar?.id) {
-        return;
-      }
-      await this.service.buildRepostInstances(e.event, e.calendar.id);
+    // Signal preservation only — under the single-producer model the
+    // originating-calendar instance rows already exist; reposting a published
+    // event never adds a new row. Listing for the reposting calendar picks
+    // the event up via the visible-id union driven by the repost link.
+    // Handler retained as a one-line stub so future hooks (analytics,
+    // notifications, etc.) have a documented integration point.
+    eventBus.on('eventReposted', async () => {
+      /* signal preservation: no instance fan-out under pv-hr72 single-producer */
     });
 
-    eventBus.on('eventUnreposted', async (e: EventUnrepostedPayload) => {
-      // Runtime guard: both eventId and calendarId are required for targeted
-      // deletion by compound key; skip if either is falsy
-      if (!e.eventId || !e.calendarId) {
-        return;
-      }
-      await this.service.removeRepostInstances(e.eventId, e.calendarId);
+    // Signal preservation only — un-reposting removes the link row, which is
+    // sufficient to stop the calendar from showing the event via the listing
+    // union. No per-calendar instance rows exist to delete under the
+    // single-producer model.
+    eventBus.on('eventUnreposted', async () => {
+      /* signal preservation: no instance fan-out under pv-hr72 single-producer */
     });
 
     eventBus.on('eventInstanceCancelled', async (e: EventInstanceCancelledPayload) => {
@@ -120,12 +120,10 @@ export default class CalendarEventHandlers implements DomainEventHandlers {
       if (!e.event?.id || !e.calendar?.id) {
         return;
       }
-      // Rebuild instances on the owning calendar so shown cancellations
-      // flip the materialized row's isCancelled flag at list/detail time
-      // and hidden cancellations drop the row entirely.
+      // Rebuild the canonical originating-calendar instance rows so shown
+      // cancellations flip the materialized row's isCancelled flag at list/
+      // detail time and hidden cancellations drop the row entirely.
       await this.service.buildEventInstances(e.event);
-      // Also refresh every local calendar that reposts this event.
-      await this.service.rebuildAllRepostInstances(e.event);
       // Re-emit eventUpdated so the existing AP handler dispatches an
       // outbound Update(Event) to federation followers. Payload shape
       // matches ActivityPubEventUpdatedPayload.
@@ -138,7 +136,6 @@ export default class CalendarEventHandlers implements DomainEventHandlers {
         return;
       }
       await this.service.buildEventInstances(e.event);
-      await this.service.rebuildAllRepostInstances(e.event);
       eventBus.emit('eventUpdated', { calendar: e.calendar, event: e.event });
     });
   }

@@ -4,6 +4,8 @@ import config from 'config';
 import { EventEmitter } from 'events';
 import EventInstanceService from '../../service/event_instance';
 import { EventInstanceEntity } from '../../entity/event_instance';
+import { EventEntity } from '../../entity/event';
+import { EventRepostEntity } from '../../entity/event_repost';
 import { CalendarEvent } from '@/common/model/events';
 import CalendarEventInstance from '@/common/model/event_instance';
 import { DateTime } from 'luxon';
@@ -64,12 +66,29 @@ function buildMockInstanceEntity(overrides: {
 }
 
 /**
- * Creates a mock ActivityPubInterface with getEventSourceActorUris stubbed.
+ * Creates a mock ActivityPubInterface with the methods needed by both
+ * EventInstanceService.listEventInstancesForCalendar and the helper it now
+ * delegates the visible-id union to (EventService.listEventIdsForCalendar).
  */
 function buildMockApInterface(sandbox: sinon.SinonSandbox, uriMap: Map<string, string>): any {
   return {
     getEventSourceActorUris: sandbox.stub().resolves(uriMap),
+    // EventService.listEventIdsForCalendar uses this to enumerate AP-shared ids.
+    getSharedEventStatusMap: sandbox.stub().resolves(new Map<string, 'auto' | 'manual'>()),
   };
+}
+
+/**
+ * Stubs the upstream queries used by EventService.listEventIdsForCalendar so
+ * the helper returns a known set of event ids without needing a real DB.
+ * The set of event ids drives the `event_id IN (...)` filter in the rewritten
+ * listEventInstancesForCalendar.
+ */
+function stubVisibleEventIds(sandbox: sinon.SinonSandbox, eventIds: string[]): void {
+  sandbox.stub(EventEntity, 'findAll').resolves(
+    eventIds.map(id => ({ id }) as any),
+  );
+  sandbox.stub(EventRepostEntity, 'findAll').resolves([]);
 }
 
 describe('EventInstanceService sourceCalendar resolution', () => {
@@ -94,6 +113,7 @@ describe('EventInstanceService sourceCalendar resolution', () => {
         eventCalendarId: 'cal-A',
       });
 
+      stubVisibleEventIds(sandbox, ['evt-1']);
       sandbox.stub(EventInstanceEntity, 'findAll').resolves([instanceEntity]);
       service.setActivityPubInterface(buildMockApInterface(sandbox, new Map()));
 
@@ -114,6 +134,7 @@ describe('EventInstanceService sourceCalendar resolution', () => {
         calendarUrlName: 'original-cal',
       });
 
+      stubVisibleEventIds(sandbox, ['evt-2']);
       sandbox.stub(EventInstanceEntity, 'findAll').resolves([instanceEntity]);
       service.setActivityPubInterface(buildMockApInterface(sandbox, new Map()));
 
@@ -136,6 +157,7 @@ describe('EventInstanceService sourceCalendar resolution', () => {
         eventCalendarId: null,
       });
 
+      stubVisibleEventIds(sandbox, ['evt-3']);
       sandbox.stub(EventInstanceEntity, 'findAll').resolves([instanceEntity]);
 
       const uriMap = new Map<string, string>([
@@ -162,6 +184,7 @@ describe('EventInstanceService sourceCalendar resolution', () => {
         eventCalendarId: null,
       });
 
+      stubVisibleEventIds(sandbox, ['evt-4']);
       sandbox.stub(EventInstanceEntity, 'findAll').resolves([instanceEntity]);
       service.setActivityPubInterface(buildMockApInterface(sandbox, new Map()));
 
@@ -194,6 +217,7 @@ describe('EventInstanceService sourceCalendar resolution', () => {
         eventCalendarId: null,
       });
 
+      stubVisibleEventIds(sandbox, ['evt-5', 'evt-6', 'evt-7']);
       sandbox.stub(EventInstanceEntity, 'findAll').resolves([nonRepost, localRepost, remoteRepost]);
 
       const uriMap = new Map<string, string>([

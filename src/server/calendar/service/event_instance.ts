@@ -17,8 +17,8 @@ import { LocationEntity, LocationContentEntity } from "@/server/calendar/entity/
 import { EventSeriesEntity, EventSeriesContentEntity } from '@/server/calendar/entity/event_series';
 import CalendarService from "./calendar";
 import CategoryService from "./categories";
+import EventService from "./events";
 import { Op, literal } from 'sequelize';
-import { EventRepostEntity } from "@/server/calendar/entity/event_repost";
 import { resolveSourceCalendars, type RepostContext } from '../helper/source_calendar';
 import type ActivityPubInterface from '@/server/activitypub/interface';
 import {
@@ -115,16 +115,28 @@ export default class EventInstanceService {
   private eventBus: EventEmitter;
   private categoryService: CategoryService;
   private calendarService: CalendarService;
+  private eventService: EventService;
   private activityPubInterface?: ActivityPubInterface;
 
-  constructor(eventBus: EventEmitter) {
+  constructor(eventBus: EventEmitter, eventService?: EventService) {
     this.eventBus = eventBus;
     this.categoryService = new CategoryService();
     this.calendarService = new CalendarService();
+    // Intra-domain dependency: EventService.listEventIdsForCalendar drives the
+    // listing union under the single-producer model. Constructed locally when
+    // not supplied so existing callers (and tests) keep working without wiring
+    // changes; CalendarInterface injects the shared instance.
+    this.eventService = eventService ?? new EventService(eventBus);
   }
 
   setActivityPubInterface(apInterface: ActivityPubInterface): void {
     this.activityPubInterface = apInterface;
+    // EventService.listEventIdsForCalendar requires the AP interface to be set
+    // (it queries getSharedEventStatusMap). When the EventInstanceService
+    // constructed its own EventService internally, propagate the AP interface
+    // here so the helper can run; when CalendarInterface injected an
+    // already-wired EventService, this re-setter is a harmless no-op.
+    this.eventService.setActivityPubInterface(apInterface);
   }
 
   /**
@@ -163,8 +175,17 @@ export default class EventInstanceService {
 
   async listEventInstancesForCalendar(calendar: Calendar): Promise<CalendarEventInstance[]> {
 
+    // Single-producer model (pv-hr72): instances are owned by the originating
+    // calendar (Option A). Listing for a calendar is the union of every
+    // visible event id (own + repost links + AP shared links), then the
+    // single canonical instance row per (event_id, start_time).
+    const visibleEventIds = await this.eventService.listEventIdsForCalendar(calendar);
+    if (visibleEventIds.length === 0) {
+      return [];
+    }
+
     const eventInstances = await EventInstanceEntity.findAll({
-      where: { calendar_id: calendar.id },
+      where: { event_id: { [Op.in]: visibleEventIds } },
       include: [{
         model: EventEntity,
         include: [EventContentEntity, LocationEntity, EventScheduleEntity, MediaEntity, CalendarEntity],
@@ -180,9 +201,12 @@ export default class EventInstanceService {
       return instance;
     });
     this.markShownCancellations(instances);
+    // displayCalendarId is the CALLER calendar — under Option A the row's
+    // calendar_id always refers to the originating calendar, not the display
+    // context, so we derive display context from the calendar parameter.
     const repostContexts: RepostContext[] = eventInstances.map((entity, i) => ({
       event: instances[i].event,
-      displayCalendarId: entity.calendar_id,
+      displayCalendarId: calendar.id,
       eventCalendarId: entity.event?.calendar_id ?? null,
       sourceCalendarUrlName: entity.event?.calendar?.url_name,
     }));
@@ -236,11 +260,19 @@ export default class EventInstanceService {
     startDate?: string;
     endDate?: string;
   } = {}): Promise<CalendarEventInstance[]> {
+    // Single-producer model (pv-hr72): instances are owned by the originating
+    // calendar. Visibility for a calendar is the union of own + repost-link +
+    // AP-share-link event ids, computed once via the EventService helper. We
+    // scope the instance query by event_id IN (visible) so a single canonical
+    // row per (event_id, start_time) participates regardless of display calendar.
+    const visibleEventIds = await this.eventService.listEventIdsForCalendar(calendar);
+    if (visibleEventIds.length === 0) {
+      return [];
+    }
+
     // Build the query for event instances
-    // Scope on instance.calendar_id (not event.calendar_id) so reposted events
-    // are included — repost instances have the reposter's calendar_id.
     const queryOptions: any = {
-      where: { calendar_id: calendar.id },
+      where: { event_id: { [Op.in]: visibleEventIds } },
       include: [
         {
           model: EventEntity,
@@ -408,11 +440,14 @@ export default class EventInstanceService {
     // Mark shown cancellations in-memory from the already-loaded schedules.
     this.markShownCancellations(mappedInstances);
 
-    // Resolve source calendar information for reposted events
+    // Resolve source calendar information for reposted events.
+    // displayCalendarId is the CALLER calendar — under Option A the instance
+    // row's calendar_id refers to the originating calendar, so the display
+    // context is derived from the calendar parameter.
     const validEntities = instanceEntities.filter(e => e.event != null);
     const repostContexts: RepostContext[] = validEntities.map((entity, i) => ({
       event: mappedInstances[i].event,
-      displayCalendarId: entity.calendar_id,
+      displayCalendarId: calendar.id,
       eventCalendarId: entity.event?.calendar_id ?? null,
       sourceCalendarUrlName: entity.event?.calendar?.url_name,
     }));
@@ -821,26 +856,6 @@ export default class EventInstanceService {
   }
 
   /**
-   * Removes all event instances for a specific (event, reposter calendar) pair.
-   * Uses Sequelize bulk-destroy for efficient targeted deletion by compound key.
-   *
-   * @param eventId - The event ID whose repost instances should be removed
-   * @param calendarId - The reposting calendar ID
-   */
-  async removeRepostInstances(eventId: string, calendarId: string): Promise<void> {
-    if (!eventId || !calendarId) {
-      return;
-    }
-
-    await EventInstanceEntity.destroy({
-      where: {
-        event_id: eventId,
-        calendar_id: calendarId,
-      },
-    });
-  }
-
-  /**
    * Loads the event and confirms the caller has editor permission on the
    * owning calendar. Returns the resolved { event, calendar } pair; throws
    * EventNotFoundError / InsufficientCalendarPermissionsError otherwise.
@@ -1038,58 +1053,6 @@ export default class EventInstanceService {
     }
   }
 
-  /**
-   * Builds event instances for a reposting calendar. Idempotent: removes any
-   * existing repost instances for this (event, calendar) pair, then recreates
-   * them from the event's schedules.
-   *
-   * @param event - The event to create instances for
-   * @param repostCalendarId - The calendar ID that is reposting the event
-   */
-  async buildRepostInstances(event: CalendarEvent, repostCalendarId: string, now: Date = new Date()): Promise<void> {
-    await this.removeRepostInstances(event.id, repostCalendarId);
-    await this.buildInstancesForCalendar(event, repostCalendarId, now);
-  }
-
-  /**
-   * Rebuilds event instances for all local calendars that repost the given event.
-   * Queries EventRepostEntity and the AP interface to find all reposters,
-   * deduplicates them, filters out the original calendar, and verifies each
-   * calendar still exists before rebuilding.
-   *
-   * @param event - The event whose repost instances should be rebuilt
-   */
-  async rebuildAllRepostInstances(event: CalendarEvent): Promise<void> {
-    const [reposts, shareCalendarIds] = await Promise.all([
-      EventRepostEntity.findAll({ where: { event_id: event.id } }),
-      this.activityPubInterface
-        ? this.activityPubInterface.getCalendarIdsForSharedEvent(event.id)
-        : Promise.resolve([] as string[]),
-    ]);
-
-    // Collect and deduplicate calendar IDs, filtering out the original calendar
-    const repostCalendarIds = new Set<string>();
-    for (const repost of reposts) {
-      if (repost.calendar_id !== event.calendarId) {
-        repostCalendarIds.add(repost.calendar_id);
-      }
-    }
-    for (const calId of shareCalendarIds) {
-      if (calId !== event.calendarId) {
-        repostCalendarIds.add(calId);
-      }
-    }
-
-    // Rebuild instances for each reposting calendar that still exists
-    for (const calendarId of repostCalendarIds) {
-      const calendar = await CalendarEntity.findByPk(calendarId);
-      if (!calendar) {
-        continue;
-      }
-      await this.buildRepostInstances(event, calendarId);
-    }
-  }
-
   // TODO: retrieving all events won't scale. Need a paging/incremental strategy
   async refreshAllEventInstances() {
     // Get all local calendars and build a map of calendar ID -> Calendar
@@ -1132,32 +1095,6 @@ export default class EventInstanceService {
           event: event.toModel(),
         });
       }
-    }
-  }
-
-  /**
-   * Creates event instances with the calendar_id overridden to the given calendar.
-   * Loads schedules from DB if not already populated on the event.
-   *
-   * @param event - The event to generate instances for
-   * @param calendarId - The calendar ID to assign to the generated instances
-   */
-  private async buildInstancesForCalendar(event: CalendarEvent, calendarId: string, now: Date = new Date()): Promise<void> {
-    if (!event.schedules || !event.schedules.length) {
-      const schedules = await EventScheduleEntity.findAll({
-        where: { event_id: event.id },
-        order: [['start_date', 'ASC']],
-      });
-      event.schedules = schedules.map(schedule => schedule.toModel());
-    }
-
-    const instances = this.generateInstances(event, now);
-    for (const instance of instances) {
-      const instanceEntity = EventInstanceEntity.fromModel(instance);
-      instanceEntity.event_id = event.id;
-      // Override calendar_id to the reposting calendar instead of the event's original calendar
-      instanceEntity.calendar_id = calendarId;
-      await instanceEntity.save();
     }
   }
 

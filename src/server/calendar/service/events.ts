@@ -162,6 +162,15 @@ export type EventOriginatorContext = {
 const DEFAULT_ORIGINATOR_CONTEXT: EventOriginatorContext = { source: 'user' };
 
 /**
+ * Loose UUID regex used to filter out legacy AP-URL identifiers from
+ * `ap_shared_event` rows before passing the resulting ids into `Op.in`
+ * queries against `EventEntity.id` (UUID column). Permissive enough to
+ * accept any UUID variant; strict enough to reject AP URLs and other
+ * non-UUID strings that would otherwise blow up Sequelize's UUID coercion.
+ */
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
  * Service class for managing events
  *
  * @remarks
@@ -220,9 +229,7 @@ class EventService {
    */
   async listEventIdsForCalendar(calendar: Calendar): Promise<string[]> {
     // Filter to valid UUIDs for safety since old ap_shared_event rows may
-    // carry AP URLs rather than EventEntity ids.
-    const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
+    // carry AP URLs rather than EventEntity ids — see module-level UUID_REGEX.
     const [ownedEvents, reposts, sharedStatusMap] = await Promise.all([
       EventEntity.findAll({
         where: { calendar_id: calendar.id },
@@ -280,8 +287,8 @@ class EventService {
       attributes: ['event_id'],
     });
     // Get shared event id -> status map via AP interface (derived from auto_posted).
-    // Filter to valid UUIDs for safety since old records may have AP URLs.
-    const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    // Filter to valid UUIDs for safety since old records may have AP URLs —
+    // see module-level UUID_REGEX.
     const sharedStatusMap = await this.activityPubInterface!.getSharedEventStatusMap(calendar.id);
 
     // Build a unified repostStatus map for O(1) lookup during mapping below.

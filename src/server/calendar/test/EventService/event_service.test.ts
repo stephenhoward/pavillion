@@ -190,13 +190,14 @@ describe('listEvents', () => {
       expect(events[0].isRepost).toBe(true);
     });
 
-    it('should resolve repost status via a bounded number of SharedEventEntity queries (no N+1)', async () => {
+    it('should resolve repost status via exactly two SharedEventEntity queries (no N+1)', async () => {
       // After the listEventIdsForCalendar extraction (pv-hr72.1) the helper
       // queries getSharedEventStatusMap once to derive the visible-id union,
       // and listEvents queries it once more to build the auto/manual status
-      // map. The invariant under test is that the call count is bounded (a
-      // small constant) regardless of how many events the calendar exposes —
-      // not strictly equal to 1.
+      // map. Under the post-pv-hr72.3 single-producer model this is now a
+      // FIXED architectural bound (helper + listEvents = 2 calls) rather
+      // than a loose <= 2: any future regression that re-introduces
+      // per-event lookups will fail this strict assertion.
       const id1 = '550e8400-e29b-41d4-a716-446655440010';
       const id2 = '550e8400-e29b-41d4-a716-446655440011';
       const id3 = '550e8400-e29b-41d4-a716-446655440012';
@@ -216,9 +217,9 @@ describe('listEvents', () => {
 
       const events = await service.listEvents(new Calendar('cal-id', 'testcal'));
 
-      // Bounded by the architecture (helper + listEvents each call once),
+      // Fixed 2-call bound: helper invokes once, listEvents invokes once,
       // independent of event count.
-      expect(apMock.getSharedEventStatusMap.callCount).toBeLessThanOrEqual(2);
+      expect(apMock.getSharedEventStatusMap.callCount).toBe(2);
       expect(events.map(e => e.repostStatus).sort()).toEqual(['auto', 'auto', 'manual']);
     });
   });
