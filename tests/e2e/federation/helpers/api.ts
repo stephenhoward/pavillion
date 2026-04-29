@@ -219,13 +219,31 @@ export async function createEvent(
   token: string,
   eventData: EventData,
 ): Promise<EventResponse> {
+  // The API only materializes event_schedule (and downstream event_instance)
+  // rows when the payload carries a `schedules` array — a top-level
+  // startTime/endTime pair is ignored by EventService.createEvent. Real
+  // Pavillion clients (web frontend) send `schedules` for this reason.
+  // Synthesize a single non-recurring schedule from the helper's
+  // startTime/endTime so federated copies on follower instances also
+  // receive the schedule and can materialize event_instance rows.
+  const { startTime, endTime, ...rest } = eventData;
+  const requestBody = {
+    ...rest,
+    schedules: [
+      {
+        start: startTime,
+        eventEndTime: endTime,
+      },
+    ],
+  };
+
   const response = await fetch(`${instance.baseUrl}/api/v1/events`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
     },
-    body: JSON.stringify(eventData),
+    body: JSON.stringify(requestBody),
   });
 
   if (!response.ok) {
