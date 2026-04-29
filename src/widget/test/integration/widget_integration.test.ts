@@ -1,4 +1,24 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } from 'vitest';
+
+/**
+ * Build a fake MediaQueryList whose `matches` value is fixed and whose
+ * addEventListener/removeEventListener are spy-able. Mirrors the pattern
+ * established in widgetStore.test.ts (pv-16wd.1.2).
+ */
+function mockMatchMedia(matches: boolean) {
+  const addSpy = vi.fn();
+  const removeSpy = vi.fn();
+  const fakeMQL: Partial<MediaQueryList> = {
+    matches,
+    media: '(prefers-color-scheme: dark)',
+    addEventListener: addSpy as unknown as MediaQueryList['addEventListener'],
+    removeEventListener: removeSpy as unknown as MediaQueryList['removeEventListener'],
+  };
+  const matchMediaSpy = vi.fn().mockReturnValue(fakeMQL);
+  vi.stubGlobal('matchMedia', matchMediaSpy);
+  return { addSpy, removeSpy, matchMediaSpy };
+}
+
 import { mount } from '@vue/test-utils';
 import sinon from 'sinon';
 import express, { Application } from 'express';
@@ -308,7 +328,7 @@ describe('Widget Integration Tests', () => {
   });
 
   describe('Accent color customization applies correctly', () => {
-    it('should inject accent color as CSS custom property', () => {
+    it('should inject accent color as --pav-accent-light and --pav-accent-dark', () => {
       const mockRoot = document.createElement('div');
       document.body.appendChild(mockRoot);
 
@@ -318,15 +338,20 @@ describe('Widget Integration Tests', () => {
 
       widgetStore.injectAccentColor(mockRoot);
 
-      const appliedColor = mockRoot.style.getPropertyValue('--widget-accent-color');
-      expect(appliedColor).toBe('#ff9131');
+      expect(mockRoot.style.getPropertyValue('--pav-accent-light')).toBe('#ff9131');
+      expect(mockRoot.style.getPropertyValue('--pav-accent-dark')).toBe('#ff9131');
 
       document.body.removeChild(mockRoot);
     });
   });
 
   describe('Color mode switching (auto/light/dark)', () => {
-    it('should apply light theme class when colorMode=light', () => {
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    it('should apply light theme class when colorMode=light (even on dark system)', () => {
+      mockMatchMedia(true); // dark system
       const mockRoot = document.createElement('div');
       document.body.appendChild(mockRoot);
 
@@ -342,7 +367,8 @@ describe('Widget Integration Tests', () => {
       document.body.removeChild(mockRoot);
     });
 
-    it('should apply dark theme class when colorMode=dark', () => {
+    it('should apply dark theme class when colorMode=dark (even on light system)', () => {
+      mockMatchMedia(false); // light system
       const mockRoot = document.createElement('div');
       document.body.appendChild(mockRoot);
 
@@ -358,7 +384,8 @@ describe('Widget Integration Tests', () => {
       document.body.removeChild(mockRoot);
     });
 
-    it('should not apply theme class when colorMode=auto (uses media query)', () => {
+    it('auto mode resolves to widget-theme-light on a light system', () => {
+      mockMatchMedia(false);
       const mockRoot = document.createElement('div');
       document.body.appendChild(mockRoot);
 
@@ -368,8 +395,25 @@ describe('Widget Integration Tests', () => {
 
       widgetStore.applyColorMode(mockRoot);
 
-      expect(mockRoot.classList.contains('widget-theme-light')).toBe(false);
+      expect(mockRoot.classList.contains('widget-theme-light')).toBe(true);
       expect(mockRoot.classList.contains('widget-theme-dark')).toBe(false);
+
+      document.body.removeChild(mockRoot);
+    });
+
+    it('auto mode resolves to widget-theme-dark on a dark system', () => {
+      mockMatchMedia(true);
+      const mockRoot = document.createElement('div');
+      document.body.appendChild(mockRoot);
+
+      const widgetStore = useWidgetStore();
+      const urlParams = new URLSearchParams('colorMode=auto');
+      widgetStore.parseConfig(urlParams);
+
+      widgetStore.applyColorMode(mockRoot);
+
+      expect(mockRoot.classList.contains('widget-theme-dark')).toBe(true);
+      expect(mockRoot.classList.contains('widget-theme-light')).toBe(false);
 
       document.body.removeChild(mockRoot);
     });

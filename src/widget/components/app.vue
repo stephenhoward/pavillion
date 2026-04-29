@@ -79,7 +79,11 @@ onMounted(() => {
 </template>
 
 <style scoped lang="scss">
+@use '@/site/assets/mixins' as *;
+
 .widget-root {
+  @include public-accent-tokens;
+
   width: 100%;
   min-height: 100vh;
   display: flex;
