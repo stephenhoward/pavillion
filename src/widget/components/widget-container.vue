@@ -187,12 +187,12 @@ onUnmounted(() => {
   }
 
   // Widget theme overrides (forced light/dark mode)
-  :global(.widget-theme-light) & {
+  .widget-theme-light & {
     background: $public-bg-primary-light;
     color: $public-text-primary-light;
   }
 
-  :global(.widget-theme-dark) & {
+  .widget-theme-dark & {
     background: $public-bg-primary-dark;
     color: $public-text-primary-dark;
   }

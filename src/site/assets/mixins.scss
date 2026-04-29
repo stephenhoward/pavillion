@@ -643,7 +643,7 @@ $public-transition-slow: all $public-duration-slow $public-ease-in-out;
   }
 
   // Apply dark mode when widget is explicitly set to dark mode
-  :global(.widget-theme-dark) & {
+  .widget-theme-dark & {
     @content;
   }
 }
@@ -657,9 +657,16 @@ $public-transition-slow: all $public-duration-slow $public-ease-in-out;
 // `public-dark-mode` activates via `@media (prefers-color-scheme: dark)`,
 // which would otherwise win over the widget's explicit light theme on a user
 // agent that prefers dark. By stating the light values inside a
-// `:global(.widget-theme-light) &` selector, this override beats the media
+// `.widget-theme-light &` selector, this override beats the media
 // query branch on specificity when the widget root carries the
 // `.widget-theme-light` class.
+//
+// NOTE: Do NOT use `:global(.widget-theme-light) &` — Vue's scoped-style
+// compiler drops the descendant selector when `:global()` is followed by `&`,
+// producing bare `.widget-theme-light{...}` rules with no descendant. The
+// plain `.widget-theme-light &` form correctly emits
+// `.widget-theme-light .my-component[data-v-xxx]` because the ancestor is
+// not the scoped target.
 //
 // Usage:
 //   .my-component {
@@ -674,7 +681,7 @@ $public-transition-slow: all $public-duration-slow $public-ease-in-out;
 //     }
 //   }
 @mixin public-light-mode-override {
-  :global(.widget-theme-light) & {
+  .widget-theme-light & {
     @content;
   }
 }
