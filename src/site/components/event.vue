@@ -188,7 +188,7 @@ function closeReportModal() {
       <div v-if="state.err" role="alert" class="error">{{ state.err }}</div>
 
       <!-- Hero image -->
-      <div class="hero-image-wrapper">
+      <div v-if="state.event.media" class="hero-image-wrapper">
         <EventImage
           :media="state.event.media"
           context="feature"
