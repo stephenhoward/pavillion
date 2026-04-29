@@ -232,6 +232,10 @@ onMounted(() => {
     border-bottom-color: $public-border-subtle-dark;
   }
 
+  @include public-light-mode-override {
+    border-bottom-color: $public-border-subtle-light;
+  }
+
   .week-title {
     flex: 1;
     text-align: center;
@@ -242,6 +246,10 @@ onMounted(() => {
 
     @include public-dark-mode {
       color: $public-text-primary-dark;
+    }
+
+    @include public-light-mode-override {
+      color: $public-text-primary-light;
     }
 
     @include public-mobile-only {
@@ -273,6 +281,16 @@ onMounted(() => {
         border-color: $public-border-strong-dark;
       }
     }
+
+    @include public-light-mode-override {
+      border-color: $public-border-medium-light;
+      color: $public-text-primary-light;
+
+      &:hover:not(:disabled) {
+        background: $public-hover-overlay-light;
+        border-color: $public-border-strong-light;
+      }
+    }
   }
 }
 
@@ -290,6 +308,10 @@ onMounted(() => {
 
   @include public-dark-mode {
     background: $public-border-subtle-dark;
+  }
+
+  @include public-light-mode-override {
+    background: $public-border-subtle-light;
   }
 
   // Tablet: horizontal scroll if needed
@@ -322,13 +344,21 @@ onMounted(() => {
     background: $public-bg-primary-dark;
   }
 
+  @include public-light-mode-override {
+    background: $public-bg-primary-light;
+  }
+
   &.is-today {
     .day-header {
-      background: $public-accent-light;
+      background: var(--pav-accent-light);
       color: white;
 
       @include public-dark-mode {
-        background: $public-accent-dark;
+        background: var(--pav-accent-dark);
+      }
+
+      @include public-light-mode-override {
+        background: var(--pav-accent-light);
       }
     }
   }
@@ -339,6 +369,10 @@ onMounted(() => {
 
     @include public-dark-mode {
       box-shadow: $public-shadow-sm-dark;
+    }
+
+    @include public-light-mode-override {
+      box-shadow: $public-shadow-sm-light;
     }
   }
 }
@@ -356,6 +390,11 @@ onMounted(() => {
     border-bottom-color: $public-border-subtle-dark;
   }
 
+  @include public-light-mode-override {
+    background: $public-bg-secondary-light;
+    border-bottom-color: $public-border-subtle-light;
+  }
+
   .day-name {
     font-size: $public-font-size-xs;
     font-weight: $public-font-weight-semibold;
@@ -365,6 +404,10 @@ onMounted(() => {
 
     @include public-dark-mode {
       color: $public-text-secondary-dark;
+    }
+
+    @include public-light-mode-override {
+      color: $public-text-secondary-light;
     }
   }
 
@@ -376,6 +419,10 @@ onMounted(() => {
 
     @include public-dark-mode {
       color: $public-text-primary-dark;
+    }
+
+    @include public-light-mode-override {
+      color: $public-text-primary-light;
     }
   }
 }
@@ -410,7 +457,7 @@ onMounted(() => {
 
   &:hover {
     background: $public-bg-tertiary-light;
-    border-color: $public-accent-light;
+    border-color: var(--pav-accent-light);
     transform: translateY(-1px);
     box-shadow: $public-shadow-sm-light;
   }
@@ -420,8 +467,18 @@ onMounted(() => {
 
     &:hover {
       background: $public-bg-tertiary-dark;
-      border-color: $public-accent-dark;
+      border-color: var(--pav-accent-dark);
       box-shadow: $public-shadow-sm-dark;
+    }
+  }
+
+  @include public-light-mode-override {
+    background: $public-bg-secondary-light;
+
+    &:hover {
+      background: $public-bg-tertiary-light;
+      border-color: var(--pav-accent-light);
+      box-shadow: $public-shadow-sm-light;
     }
   }
 
@@ -435,10 +492,14 @@ onMounted(() => {
   .event-time {
     font-size: $public-font-size-xs;
     font-weight: $public-font-weight-medium;
-    color: $public-accent-light;
+    color: var(--pav-accent-light);
 
     @include public-dark-mode {
-      color: $public-accent-dark;
+      color: var(--pav-accent-dark);
+    }
+
+    @include public-light-mode-override {
+      color: var(--pav-accent-light);
     }
   }
 
@@ -456,6 +517,10 @@ onMounted(() => {
 
     @include public-dark-mode {
       color: $public-text-primary-dark;
+    }
+
+    @include public-light-mode-override {
+      color: $public-text-primary-light;
     }
   }
 }
@@ -476,8 +541,8 @@ onMounted(() => {
   transition: $public-transition-fast;
 
   &:hover {
-    color: $public-accent-light;
-    background: rgba($public-accent-light, 0.1);
+    color: var(--pav-accent-light);
+    background: color-mix(in srgb, var(--pav-accent-light) 10%, transparent);
   }
 
   @include public-dark-mode {
@@ -485,8 +550,18 @@ onMounted(() => {
     background: $public-bg-tertiary-dark;
 
     &:hover {
-      color: $public-accent-dark;
-      background: rgba($public-accent-dark, 0.1);
+      color: var(--pav-accent-dark);
+      background: color-mix(in srgb, var(--pav-accent-dark) 10%, transparent);
+    }
+  }
+
+  @include public-light-mode-override {
+    color: $public-text-secondary-light;
+    background: $public-bg-tertiary-light;
+
+    &:hover {
+      color: var(--pav-accent-light);
+      background: color-mix(in srgb, var(--pav-accent-light) 10%, transparent);
     }
   }
 }

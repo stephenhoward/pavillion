@@ -359,6 +359,10 @@ onBeforeMount(async () => {
   @include public-dark-mode {
     background: $public-bg-primary-dark;
   }
+
+  @include public-light-mode-override {
+    background: $public-bg-primary-light;
+  }
 }
 
 .event-detail-content {
@@ -380,6 +384,10 @@ onBeforeMount(async () => {
     border-bottom-color: $public-border-subtle-dark;
   }
 
+  @include public-light-mode-override {
+    border-bottom-color: $public-border-subtle-light;
+  }
+
   .back-link {
     display: inline-flex;
     align-items: center;
@@ -395,7 +403,7 @@ onBeforeMount(async () => {
     transition: $public-transition-fast;
 
     &:hover {
-      color: $public-accent-light;
+      color: var(--pav-accent-light);
 
       .back-arrow {
         transform: translateX(-3px);
@@ -410,7 +418,15 @@ onBeforeMount(async () => {
       color: $public-text-secondary-dark;
 
       &:hover {
-        color: $public-accent-dark;
+        color: var(--pav-accent-dark);
+      }
+    }
+
+    @include public-light-mode-override {
+      color: $public-text-secondary-light;
+
+      &:hover {
+        color: var(--pav-accent-light);
       }
     }
   }
@@ -476,6 +492,11 @@ onBeforeMount(async () => {
     background-color: rgba(30, 30, 35, 0.85);
     color: $public-text-primary-dark;
   }
+
+  @include public-light-mode-override {
+    background-color: rgba(255, 255, 255, 0.9);
+    color: $public-text-primary-light;
+  }
 }
 
 // ================================================================
@@ -510,6 +531,10 @@ onBeforeMount(async () => {
   @include public-dark-mode {
     color: $public-text-primary-dark;
   }
+
+  @include public-light-mode-override {
+    color: $public-text-primary-light;
+  }
 }
 
 // ================================================================
@@ -535,16 +560,24 @@ onBeforeMount(async () => {
   @include public-dark-mode {
     color: $public-text-secondary-dark;
   }
+
+  @include public-light-mode-override {
+    color: $public-text-secondary-light;
+  }
 }
 
 .datetime-icon {
   flex-shrink: 0;
 
   &--date {
-    color: $public-accent-light;
+    color: var(--pav-accent-light);
 
     @include public-dark-mode {
-      color: $public-accent-dark;
+      color: var(--pav-accent-dark);
+    }
+
+    @include public-light-mode-override {
+      color: var(--pav-accent-light);
     }
   }
 
@@ -553,6 +586,10 @@ onBeforeMount(async () => {
 
     @include public-dark-mode {
       color: $public-text-secondary-dark;
+    }
+
+    @include public-light-mode-override {
+      color: $public-text-secondary-light;
     }
   }
 }
@@ -583,6 +620,10 @@ onBeforeMount(async () => {
   @include public-dark-mode {
     color: $public-text-secondary-dark;
   }
+
+  @include public-light-mode-override {
+    color: $public-text-secondary-light;
+  }
 }
 
 .event-description {
@@ -594,6 +635,10 @@ onBeforeMount(async () => {
 
   @include public-dark-mode {
     color: $public-text-primary-dark;
+  }
+
+  @include public-light-mode-override {
+    color: $public-text-primary-light;
   }
 }
 
@@ -611,6 +656,10 @@ onBeforeMount(async () => {
 
   @include public-dark-mode {
     color: $public-text-secondary-dark;
+  }
+
+  @include public-light-mode-override {
+    color: $public-text-secondary-light;
   }
 }
 
@@ -655,6 +704,10 @@ onBeforeMount(async () => {
   @include public-dark-mode {
     color: $public-text-secondary-dark;
   }
+
+  @include public-light-mode-override {
+    color: $public-text-secondary-light;
+  }
 }
 
 .card-heading {
@@ -668,6 +721,10 @@ onBeforeMount(async () => {
   @include public-dark-mode {
     color: $public-text-secondary-dark;
   }
+
+  @include public-light-mode-override {
+    color: $public-text-secondary-light;
+  }
 }
 
 // Location card
@@ -680,6 +737,10 @@ onBeforeMount(async () => {
   @include public-dark-mode {
     color: $public-text-primary-dark;
   }
+
+  @include public-light-mode-override {
+    color: $public-text-primary-light;
+  }
 }
 
 .location-address {
@@ -690,6 +751,10 @@ onBeforeMount(async () => {
 
   @include public-dark-mode {
     color: $public-text-secondary-dark;
+  }
+
+  @include public-light-mode-override {
+    color: $public-text-secondary-light;
   }
 }
 
@@ -704,6 +769,10 @@ onBeforeMount(async () => {
   @include public-dark-mode {
     color: $public-text-primary-dark;
   }
+
+  @include public-light-mode-override {
+    color: $public-text-primary-light;
+  }
 }
 
 // Recurrence card
@@ -714,6 +783,10 @@ onBeforeMount(async () => {
 
   @include public-dark-mode {
     color: $public-text-primary-dark;
+  }
+
+  @include public-light-mode-override {
+    color: $public-text-primary-light;
   }
 }
 
@@ -778,6 +851,16 @@ onBeforeMount(async () => {
       &:hover {
         background: $public-hover-overlay-dark;
         border-color: $public-border-strong-dark;
+      }
+    }
+
+    @include public-light-mode-override {
+      border-color: $public-border-medium-light;
+      color: $public-text-primary-light;
+
+      &:hover {
+        background: $public-hover-overlay-light;
+        border-color: $public-border-strong-light;
       }
     }
   }

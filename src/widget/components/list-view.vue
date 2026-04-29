@@ -123,6 +123,10 @@ section.day {
     @include public-dark-mode {
       color: $public-text-secondary-dark;
     }
+
+    @include public-light-mode-override {
+      color: $public-text-secondary-light;
+    }
   }
 
   ul.events {
@@ -162,8 +166,8 @@ section.day {
           height: 3px;
           background: linear-gradient(
             90deg,
-            $public-accent-light 0%,
-            rgba($public-accent-light, 0.4) 100%
+            var(--pav-accent-light) 0%,
+            color-mix(in srgb, var(--pav-accent-light) 40%, transparent) 100%
           );
           border-radius: 0 0 2px 2px;
           opacity: 0.7;
@@ -171,8 +175,16 @@ section.day {
           @include public-dark-mode {
             background: linear-gradient(
               90deg,
-              $public-accent-dark 0%,
-              rgba($public-accent-dark, 0.4) 100%
+              var(--pav-accent-dark) 0%,
+              color-mix(in srgb, var(--pav-accent-dark) 40%, transparent) 100%
+            );
+          }
+
+          @include public-light-mode-override {
+            background: linear-gradient(
+              90deg,
+              var(--pav-accent-light) 0%,
+              color-mix(in srgb, var(--pav-accent-light) 40%, transparent) 100%
             );
           }
         }
@@ -213,13 +225,21 @@ section.day {
         @include public-dark-mode {
           color: $public-text-primary-dark;
         }
+
+        @include public-light-mode-override {
+          color: $public-text-primary-light;
+        }
       }
 
       &:hover h3 {
-        color: $public-accent-light;
+        color: var(--pav-accent-light);
 
         @include public-dark-mode {
-          color: $public-accent-dark;
+          color: var(--pav-accent-dark);
+        }
+
+        @include public-light-mode-override {
+          color: var(--pav-accent-light);
         }
       }
 
@@ -232,6 +252,10 @@ section.day {
 
         @include public-dark-mode {
           color: $public-text-secondary-dark;
+        }
+
+        @include public-light-mode-override {
+          color: $public-text-secondary-light;
         }
       }
     }
