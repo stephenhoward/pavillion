@@ -236,7 +236,7 @@ onBeforeMount(async () => {
       <div v-if="state.err" role="alert" class="error">{{ state.err }}</div>
 
       <!-- Hero image -->
-      <div class="hero-image-wrapper">
+      <div v-if="state.instance.event.media" class="hero-image-wrapper">
         <EventImage
           :media="state.instance.event.media"
           context="feature"

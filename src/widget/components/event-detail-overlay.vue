@@ -209,7 +209,7 @@ onBeforeMount(async () => {
 
       <main class="instance-main">
         <!-- Hero image -->
-        <div class="hero-image-wrapper">
+        <div v-if="state.instance.event.media" class="hero-image-wrapper">
           <EventImage
             :media="state.instance.event.media"
             context="feature"
