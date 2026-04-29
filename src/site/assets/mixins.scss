@@ -23,6 +23,21 @@ $public-accent-dark: #C86002;
 $public-accent-hover-light: darken(#ff9131, 5%);
 $public-accent-hover-dark: lighten(#C86002, 5%);
 
+// Emit the four accent CSS custom properties on a root selector so
+// widgets and the public site can override them via inline styles
+// (e.g. widget admin custom accent color) without forking SCSS.
+//
+// Apply this mixin once at the root of the widget app and the public
+// site root. Components consume the variables via `var(--pav-accent-light)`,
+// `var(--pav-accent-light-hover)`, `var(--pav-accent-dark)`, and
+// `var(--pav-accent-dark-hover)`.
+@mixin public-accent-tokens {
+  --pav-accent-light: #{$public-accent-light};
+  --pav-accent-light-hover: #{$public-accent-hover-light};
+  --pav-accent-dark: #{$public-accent-dark};
+  --pav-accent-dark-hover: #{$public-accent-hover-dark};
+}
+
 // Background layers (lighter, airier than client)
 $public-bg-primary-light: #ffffff;
 $public-bg-primary-dark: #1a1a1e;
@@ -629,6 +644,37 @@ $public-transition-slow: all $public-duration-slow $public-ease-in-out;
 
   // Apply dark mode when widget is explicitly set to dark mode
   :global(.widget-theme-dark) & {
+    @content;
+  }
+}
+
+// Light mode override mixin — pairs with every `public-dark-mode` block
+// in widget components.
+//
+// Pairing contract: every `@include public-dark-mode { ... }` block in a
+// widget component MUST be paired with an `@include public-light-mode-override`
+// block that re-states the LIGHT values explicitly. This is required because
+// `public-dark-mode` activates via `@media (prefers-color-scheme: dark)`,
+// which would otherwise win over the widget's explicit light theme on a user
+// agent that prefers dark. By stating the light values inside a
+// `:global(.widget-theme-light) &` selector, this override beats the media
+// query branch on specificity when the widget root carries the
+// `.widget-theme-light` class.
+//
+// Usage:
+//   .my-component {
+//     color: $public-text-primary-light;
+//
+//     @include public-dark-mode {
+//       color: $public-text-primary-dark;
+//     }
+//
+//     @include public-light-mode-override {
+//       color: $public-text-primary-light;
+//     }
+//   }
+@mixin public-light-mode-override {
+  :global(.widget-theme-light) & {
     @content;
   }
 }
