@@ -27,6 +27,7 @@
 #   - ENCRYPTION_KEY_FILE     -> ENCRYPTION_KEY
 #   - S3_SECRET_KEY_FILE      -> S3_SECRET_KEY
 #   - SMTP_PASSWORD_FILE      -> SMTP_PASSWORD
+#   - CALENDAR_IMPORT_HMAC_SECRET_FILE -> CALENDAR_IMPORT_HMAC_SECRET
 #
 # Worker Mode:
 #   When the --worker flag is present in the command, the container runs in
@@ -284,6 +285,7 @@ main() {
     file_env 'SESSION_SECRET'
     file_env 'EMAIL_HASH_SECRET'
     file_env 'ENCRYPTION_KEY'
+    file_env 'CALENDAR_IMPORT_HMAC_SECRET'
     file_env 'S3_SECRET_KEY'
     file_env 'SMTP_PASSWORD'
   fi
