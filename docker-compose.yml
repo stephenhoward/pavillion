@@ -57,6 +57,7 @@ services:
       - SMTP_PASSWORD=${SMTP_PASSWORD:-}
       - EMAIL_HASH_SECRET=${EMAIL_HASH_SECRET:-}
       - ENCRYPTION_KEY=${ENCRYPTION_KEY:-}
+      - CALENDAR_IMPORT_HMAC_SECRET=${CALENDAR_IMPORT_HMAC_SECRET:-}
       # Docker secrets via _FILE pattern (recommended for production)
       # When set, the entrypoint reads secret from file and unsets _FILE variable
       - DB_PASSWORD_FILE=${DB_PASSWORD_FILE:-}
@@ -66,6 +67,7 @@ services:
       - SMTP_PASSWORD_FILE=${SMTP_PASSWORD_FILE:-}
       - EMAIL_HASH_SECRET_FILE=${EMAIL_HASH_SECRET_FILE:-}
       - ENCRYPTION_KEY_FILE=${ENCRYPTION_KEY_FILE:-}
+      - CALENDAR_IMPORT_HMAC_SECRET_FILE=${CALENDAR_IMPORT_HMAC_SECRET_FILE:-}
       # Optional S3 storage configuration
       - S3_BUCKET=${S3_BUCKET:-}
       - S3_REGION=${S3_REGION:-}
@@ -121,6 +123,7 @@ services:
       - SMTP_PASSWORD=${SMTP_PASSWORD:-}
       - EMAIL_HASH_SECRET=${EMAIL_HASH_SECRET:-}
       - ENCRYPTION_KEY=${ENCRYPTION_KEY:-}
+      - CALENDAR_IMPORT_HMAC_SECRET=${CALENDAR_IMPORT_HMAC_SECRET:-}
       # Docker secrets via _FILE pattern (recommended for production)
       - DB_PASSWORD_FILE=${DB_PASSWORD_FILE:-}
       - JWT_SECRET_FILE=${JWT_SECRET_FILE:-}
@@ -128,6 +131,7 @@ services:
       - SMTP_PASSWORD_FILE=${SMTP_PASSWORD_FILE:-}
       - EMAIL_HASH_SECRET_FILE=${EMAIL_HASH_SECRET_FILE:-}
       - ENCRYPTION_KEY_FILE=${ENCRYPTION_KEY_FILE:-}
+      - CALENDAR_IMPORT_HMAC_SECRET_FILE=${CALENDAR_IMPORT_HMAC_SECRET_FILE:-}
       # Optional SMTP configuration for email alerts
       - SMTP_HOST=${SMTP_HOST:-}
       - SMTP_PORT=${SMTP_PORT:-}

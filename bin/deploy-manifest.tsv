@@ -30,3 +30,4 @@ SESSION_SECRET	openssl_rand_base64_32	stable	Signs browser session cookies. Rota
 DB_PASSWORD	openssl_rand_base64_32	stable	PostgreSQL password. Must match the existing database volume.
 EMAIL_HASH_SECRET	openssl_rand_base64_32	stable	Hashes reporter emails for moderation. Rotation de-anonymizes prior reports.
 ENCRYPTION_KEY	openssl_rand_hex_32	stable	Encrypts funding provider API keys at rest. Rotation breaks decryption of stored keys.
+CALENDAR_IMPORT_HMAC_SECRET	openssl_rand_base64_32	regenerable	HMAC for ICS import DNS/rel-me verification snippets. Rotation only invalidates pending verification challenges.
