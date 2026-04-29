@@ -176,7 +176,7 @@ async function doApply() {
     &:focus {
       outline: none;
       border-color: var(--pav-color-orange-400);
-      box-shadow: 0 0 0 3px rgb(249 115 22 / 0.4);
+      box-shadow: var(--pav-shadow-focus-brand);
     }
 
     @media (prefers-color-scheme: dark) {
