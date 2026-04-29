@@ -345,14 +345,9 @@ onBeforeMount(async () => {
 @use '@/site/assets/mixins' as *;
 
 .event-detail-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
   background: $public-bg-primary-light;
-  z-index: 100;
-  overflow-y: auto;
+  flex: 1 1 auto;
+  min-height: 0;
   display: flex;
   flex-direction: column;
 
