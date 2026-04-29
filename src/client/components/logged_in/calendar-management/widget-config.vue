@@ -647,7 +647,7 @@ defineExpose({
 
       &:focus {
         outline: none;
-        box-shadow: 0 0 0 3px oklch(0.705 0.213 47.604 / 0.4);
+        box-shadow: var(--pav-shadow-focus-brand);
         border-color: var(--pav-color-orange-500);
       }
     }
