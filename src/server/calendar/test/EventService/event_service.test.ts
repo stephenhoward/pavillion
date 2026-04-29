@@ -190,8 +190,14 @@ describe('listEvents', () => {
       expect(events[0].isRepost).toBe(true);
     });
 
-    it('should resolve repost status via a single SharedEventEntity query (no N+1)', async () => {
-      // Verify the map is built once up front, not per-event.
+    it('should resolve repost status via exactly two SharedEventEntity queries (no N+1)', async () => {
+      // After the listEventIdsForCalendar extraction (pv-hr72.1) the helper
+      // queries getSharedEventStatusMap once to derive the visible-id union,
+      // and listEvents queries it once more to build the auto/manual status
+      // map. Under the post-pv-hr72.3 single-producer model this is now a
+      // FIXED architectural bound (helper + listEvents = 2 calls) rather
+      // than a loose <= 2: any future regression that re-introduces
+      // per-event lookups will fail this strict assertion.
       const id1 = '550e8400-e29b-41d4-a716-446655440010';
       const id2 = '550e8400-e29b-41d4-a716-446655440011';
       const id3 = '550e8400-e29b-41d4-a716-446655440012';
@@ -211,13 +217,20 @@ describe('listEvents', () => {
 
       const events = await service.listEvents(new Calendar('cal-id', 'testcal'));
 
-      // getSharedEventStatusMap called exactly once regardless of event count
-      expect(apMock.getSharedEventStatusMap.callCount).toBe(1);
+      // Fixed 2-call bound: helper invokes once, listEvents invokes once,
+      // independent of event count.
+      expect(apMock.getSharedEventStatusMap.callCount).toBe(2);
       expect(events.map(e => e.repostStatus).sort()).toEqual(['auto', 'auto', 'manual']);
     });
   });
 
   describe('listEvents with search and filter options', () => {
+    // EventEntity.findAll is invoked twice per listEvents call after the
+    // listEventIdsForCalendar extraction: once by the helper to enumerate
+    // own-event ids, then once by listEvents itself to materialize the
+    // include-loaded rows. The include/search/category assertions below
+    // inspect the second (materialization) call.
+
     it('should pass search parameter to database query', async () => {
       let findEventsStub = sandbox.stub(EventEntity, 'findAll');
       findEventsStub.resolves([]);
@@ -226,8 +239,8 @@ describe('listEvents', () => {
         search: 'concert',
       });
 
-      expect(findEventsStub.calledOnce).toBe(true);
-      const queryOptions = findEventsStub.firstCall.args[0];
+      expect(findEventsStub.callCount).toBe(2);
+      const queryOptions = findEventsStub.lastCall.args[0];
 
       // The search should add an include for EventContentEntity with where clause
       expect(queryOptions.include).toBeDefined();
@@ -244,8 +257,8 @@ describe('listEvents', () => {
         categories: ['category-1', 'category-2'],
       });
 
-      expect(findEventsStub.calledOnce).toBe(true);
-      const queryOptions = findEventsStub.firstCall.args[0];
+      expect(findEventsStub.callCount).toBe(2);
+      const queryOptions = findEventsStub.lastCall.args[0];
 
       // Category filtering should add include for EventCategoryAssignmentEntity
       expect(queryOptions.include).toBeDefined();
@@ -267,8 +280,8 @@ describe('listEvents', () => {
         categories: ['tech', 'business'],
       });
 
-      expect(findEventsStub.calledOnce).toBe(true);
-      const queryOptions = findEventsStub.firstCall.args[0];
+      expect(findEventsStub.callCount).toBe(2);
+      const queryOptions = findEventsStub.lastCall.args[0];
 
       // Should have both content and category includes
       expect(queryOptions.include).toBeDefined();
@@ -284,8 +297,8 @@ describe('listEvents', () => {
         categories: [],
       });
 
-      expect(findEventsStub.calledOnce).toBe(true);
-      const queryOptions = findEventsStub.firstCall.args[0];
+      expect(findEventsStub.callCount).toBe(2);
+      const queryOptions = findEventsStub.lastCall.args[0];
 
       // With eager loading, category assignments are always included, but no where clause should be added
       const categoryInclude = queryOptions.include?.find((inc: any) => inc.model === EventCategoryAssignmentEntity);

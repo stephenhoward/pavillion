@@ -282,4 +282,30 @@ describe('handleEventCreated', () => {
       'addToOutbox must still be called so the event reaches federation',
     ).toBe(true);
   });
+
+  it('returns early without dispatching Announce when payload.calendar is null (remote-origin event, pv-13xg)', async () => {
+    // EventService.addRemoteEvent emits eventCreated with calendar:null so the
+    // calendar-domain buildEventInstances handler materializes canonical rows
+    // for inbound federated events. The AP handler must early-return on the
+    // same payload — without this guard, the handler would call
+    // EventObject.eventUrl(null, ...) (crash) and addToOutbox(null, ...)
+    // (re-Announce a remote event back to federation, creating a loop).
+    const event = CalendarEvent.fromObject({ id: uuidv4() });
+
+    const actorUrlStub = sandbox.stub(service, 'actorUrl');
+    const addToOutboxStub = sandbox.stub(service, 'addToOutbox');
+
+    // Invoke the private handler directly so the guard's behavior is asserted
+    // deterministically without racing setImmediate hops.
+    await (handlers as any)['handleEventCreated']({ calendar: null, event });
+
+    expect(actorUrlStub.called, 'actorUrl must not be called for remote-origin events').toBe(false);
+    expect(addToOutboxStub.called, 'addToOutbox must not be called for remote-origin events').toBe(false);
+
+    // No EventObjectEntity row should be persisted either — the local server
+    // is not the AP origin for this event, so it has no actor to attribute.
+    const eventObject = await EventObjectEntity.findOne({ where: { event_id: event.id } });
+    expect(eventObject, 'no EventObjectEntity row for remote-origin event').toBeNull();
+  });
+
 });

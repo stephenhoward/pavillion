@@ -34,12 +34,19 @@ export interface EventUnrepostedPayload {
  * Emitted by EventInstanceService.cancelOccurrenceByDate when a calendar
  * editor cancels a single occurrence of a (possibly recurring) event.
  *
- * Downstream responsibilities:
- *   1. Rebuild the owner calendar's event_instance rows so the cancellation
- *      is reflected in list/detail queries (via buildEventInstances).
- *   2. Propagate the change to federation followers through the existing
- *      AP Update(Event) outbound path (via a re-emission of `eventUpdated`,
- *      which the ActivityPub domain handler listens on).
+ * Downstream responsibility:
+ *   - Propagate the change to federation followers through the existing
+ *     AP Update(Event) outbound path (via a re-emission of `eventUpdated`,
+ *     which the ActivityPub domain handler listens on).
+ *
+ * Note: cancellation state lives in EventScheduleEntity exclusion rows, not
+ * on event_instance rows (there is no is_cancelled column). The cancel /
+ * restore handlers therefore intentionally do NOT call buildEventInstances
+ * — read-time queries derive cancelled state from exclusions. Calling
+ * buildEventInstances here would only delete-then-reinsert identical rows,
+ * and racing dangling promises from rapid cancel→restore sequences could
+ * collide with the unique (event_id, start_time) index restored in
+ * pv-hr72.3, surfacing as SequelizeUniqueConstraintError.
  *
  * Note on naming: the bus event name `eventInstanceCancelled` intentionally
  * retains the legacy camelCase shape rather than the `{domain}:{resource}:{action}`
@@ -57,9 +64,10 @@ export interface EventInstanceCancelledPayload {
  * Emitted by EventInstanceService.restoreOccurrenceByDate when a calendar
  * editor reverses a previous occurrence cancellation.
  *
- * Downstream responsibilities match {@link EventInstanceCancelledPayload}:
- * rebuild the owner's instances, and re-emit `eventUpdated` so the AP
- * outbound Update(Event) is sent to followers.
+ * Downstream responsibility matches {@link EventInstanceCancelledPayload}:
+ * re-emit `eventUpdated` so the AP outbound Update(Event) is sent to
+ * followers. No instance row regeneration — cancellation state is
+ * exclusion-row-based.
  *
  * Note on naming: the bus event name `eventInstanceRestored` intentionally
  * retains the legacy camelCase shape rather than the `{domain}:{resource}:{action}`
@@ -71,6 +79,41 @@ export interface EventInstanceRestoredPayload {
   event: CalendarEvent;
 }
 
+/**
+ * Payload for the eventCreated event bus emission.
+ *
+ * `calendar` may be null when the event originated from a remote instance
+ * (emitted by EventService.addRemoteEvent). The calendar-domain handler
+ * calls buildEventInstances on the event regardless, while the AP handler
+ * early-returns on null to avoid re-Announcing a remote-origin event back
+ * to federation. Mirrors EventUpdatedPayload's nullable shape.
+ */
+export interface EventCreatedPayload {
+  calendar: Calendar | null;
+  event: CalendarEvent;
+}
+
+/**
+ * Payload for the eventUpdated event bus emission.
+ *
+ * `skipRebuild` is an internal flag set by the cancel / restore handlers
+ * when re-emitting eventUpdated solely to drive AP outbound propagation.
+ * It instructs the calendar-domain eventUpdated handler to skip the
+ * buildEventInstances call, which would otherwise delete-then-reinsert
+ * the canonical instance rows. Skipping the rebuild is correct because
+ * cancellation state lives in exclusion rows, not on event_instance, and
+ * dangling rebuild promises racing across cancel→restore can collide with
+ * the unique (event_id, start_time) index.
+ *
+ * The ActivityPub eventUpdated handler ignores the flag — outbound
+ * Update(Event) propagation must still run.
+ */
+export interface EventUpdatedPayload {
+  calendar: Calendar | null;
+  event: CalendarEvent;
+  skipRebuild?: boolean;
+}
+
 export default class CalendarEventHandlers implements DomainEventHandlers {
   private service: CalendarInterface;
 
@@ -79,57 +122,81 @@ export default class CalendarEventHandlers implements DomainEventHandlers {
   }
 
   install(eventBus: EventEmitter): void {
-    eventBus.on('eventCreated', async (e) => this.service.buildEventInstances(e.event));
+    // Single-producer model (pv-hr72): only the originating calendar
+    // materializes instance rows. When `calendar` is present, the create
+    // originated locally — rebuild on the owning calendar. When `calendar`
+    // is absent (emitted by EventService.addRemoteEvent), the create
+    // originated from a remote instance (incoming AP Create); we still call
+    // buildEventInstances so the canonical row(s) for the remote event are
+    // materialized at receive time. Without this, list views on follower
+    // calendars would miss freshly-federated remote events (pv-13xg).
+    eventBus.on('eventCreated', async (e: EventCreatedPayload) => this.service.buildEventInstances(e.event));
 
-    eventBus.on('eventUpdated', async (e) => {
-      // Guard on e.calendar before building instances for the owner calendar.
-      // When calendar is null/undefined, the update originated from a remote
-      // instance (incoming AP Update) so we skip owner instance rebuilding.
-      if (e.calendar) {
-        await this.service.buildEventInstances(e.event);
+    eventBus.on('eventUpdated', async (e: EventUpdatedPayload) => {
+      // Cancel / restore handlers re-emit eventUpdated with skipRebuild:true
+      // purely to drive AP outbound propagation. Rebuilding here would
+      // race with concurrent cancel↔restore writes against the unique
+      // (event_id, start_time) index — and is unnecessary work besides,
+      // since cancellation state lives in exclusion rows, not event_instance.
+      if (e?.skipRebuild) {
+        return;
       }
-
-      // Always rebuild repost instances regardless of calendar presence,
-      // because remote event updates still need to propagate to local reposters.
-      await this.service.rebuildAllRepostInstances(e.event);
+      // Single-producer model (pv-hr72): only the originating calendar
+      // materializes instance rows. When `calendar` is present, the update
+      // originated locally — rebuild on the owning calendar. When `calendar`
+      // is absent, the update originated from a remote instance (incoming AP
+      // Update) and the event is owned remotely; we still call
+      // buildEventInstances against the event so its canonical row(s) reflect
+      // the new schedule. Repost-display calendars derive visibility through
+      // the listing-time union (EventService.listEventIdsForCalendar) and
+      // need no per-calendar fan-out.
+      await this.service.buildEventInstances(e.event);
     });
 
     eventBus.on('eventDeleted', async (e) => this.service.removeEventInstances(e.event));
 
-    eventBus.on('eventReposted', async (e: EventRepostedPayload) => {
-      // Runtime guard: protect against malformed payloads that could cause
-      // silent data corruption from missing calendar or event information
-      if (!e.calendar?.id) {
-        return;
-      }
-      await this.service.buildRepostInstances(e.event, e.calendar.id);
+    // Signal preservation only — under the single-producer model the
+    // originating-calendar instance rows already exist; reposting a published
+    // event never adds a new row. Listing for the reposting calendar picks
+    // the event up via the visible-id union driven by the repost link.
+    // Handler retained as a one-line stub so future hooks (analytics,
+    // notifications, etc.) have a documented integration point.
+    eventBus.on('eventReposted', async () => {
+      /* signal preservation: no instance fan-out under pv-hr72 single-producer */
     });
 
-    eventBus.on('eventUnreposted', async (e: EventUnrepostedPayload) => {
-      // Runtime guard: both eventId and calendarId are required for targeted
-      // deletion by compound key; skip if either is falsy
-      if (!e.eventId || !e.calendarId) {
-        return;
-      }
-      await this.service.removeRepostInstances(e.eventId, e.calendarId);
+    // Signal preservation only — un-reposting removes the link row, which is
+    // sufficient to stop the calendar from showing the event via the listing
+    // union. No per-calendar instance rows exist to delete under the
+    // single-producer model.
+    eventBus.on('eventUnreposted', async () => {
+      /* signal preservation: no instance fan-out under pv-hr72 single-producer */
     });
 
     eventBus.on('eventInstanceCancelled', async (e: EventInstanceCancelledPayload) => {
       // Runtime guard: protect against malformed payloads missing the
-      // required event/calendar identity before rebuild + outbound emit.
+      // required event/calendar identity before outbound emit.
       if (!e.event?.id || !e.calendar?.id) {
         return;
       }
-      // Rebuild instances on the owning calendar so shown cancellations
-      // flip the materialized row's isCancelled flag at list/detail time
-      // and hidden cancellations drop the row entirely.
-      await this.service.buildEventInstances(e.event);
-      // Also refresh every local calendar that reposts this event.
-      await this.service.rebuildAllRepostInstances(e.event);
+      // No buildEventInstances call: cancellation state is represented by
+      // EventScheduleEntity exclusion rows (already written by
+      // cancelOccurrenceByDate). event_instance has no is_cancelled column,
+      // so a rebuild here would only delete-then-reinsert identical rows
+      // and risk racing the unique (event_id, start_time) index across
+      // rapid cancel→restore sequences.
+      //
       // Re-emit eventUpdated so the existing AP handler dispatches an
-      // outbound Update(Event) to federation followers. Payload shape
-      // matches ActivityPubEventUpdatedPayload.
-      eventBus.emit('eventUpdated', { calendar: e.calendar, event: e.event });
+      // outbound Update(Event) to federation followers. skipRebuild:true
+      // tells the calendar-domain eventUpdated handler to skip its
+      // buildEventInstances call for the same race-avoidance reason.
+      // Payload shape matches ActivityPubEventUpdatedPayload (extra
+      // skipRebuild field is ignored by the AP handler).
+      eventBus.emit('eventUpdated', {
+        calendar: e.calendar,
+        event: e.event,
+        skipRebuild: true,
+      });
     });
 
     eventBus.on('eventInstanceRestored', async (e: EventInstanceRestoredPayload) => {
@@ -137,9 +204,14 @@ export default class CalendarEventHandlers implements DomainEventHandlers {
       if (!e.event?.id || !e.calendar?.id) {
         return;
       }
-      await this.service.buildEventInstances(e.event);
-      await this.service.rebuildAllRepostInstances(e.event);
-      eventBus.emit('eventUpdated', { calendar: e.calendar, event: e.event });
+      // See eventInstanceCancelled: no rebuild on restore either, because
+      // exclusion-row deletion (already done by restoreOccurrenceByDate) is
+      // the sole state change and event_instance rows are unaffected.
+      eventBus.emit('eventUpdated', {
+        calendar: e.calendar,
+        event: e.event,
+        skipRebuild: true,
+      });
     });
   }
 }

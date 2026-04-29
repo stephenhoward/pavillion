@@ -64,7 +64,11 @@ export default class CalendarInterface {
     this.calendarService = new CalendarService(accountsInterface, emailInterface, eventBus, fundingInterface);
     this.eventService = new EventService(eventBus);
     this.locationService = new LocationService();
-    this.eventInstanceService = new EventInstanceService(eventBus);
+    // EventInstanceService listing depends on EventService.listEventIdsForCalendar
+    // (single-producer model under pv-hr72). Inject the shared instance so the
+    // AP-interface wiring and any future EventService configuration apply
+    // uniformly to both consumers.
+    this.eventInstanceService = new EventInstanceService(eventBus, this.eventService);
     this.categoryService = new CategoryService(this.calendarService);
     this.widgetDomainService = new WidgetDomainService();
     this.widgetConfigService = new WidgetConfigService(this.calendarService);
@@ -469,40 +473,6 @@ export default class CalendarInterface {
     start: DateTime,
   ): Promise<void> {
     return this.eventInstanceService.restoreOccurrenceByDate(account, eventId, start);
-  }
-
-  /**
-   * Builds event instances for a reposting calendar. Idempotent: removes any
-   * existing repost instances for this (event, calendar) pair, then recreates
-   * them from the event's schedules.
-   *
-   * @param event - The event to create instances for
-   * @param repostCalendarId - The calendar ID that is reposting the event
-   */
-  async buildRepostInstances(event: CalendarEvent, repostCalendarId: string): Promise<void> {
-    return this.eventInstanceService.buildRepostInstances(event, repostCalendarId);
-  }
-
-  /**
-   * Rebuilds event instances for all local calendars that repost the given event.
-   * Queries both manual reposts and federation shares, deduplicates, and rebuilds.
-   *
-   * @param event - The event whose repost instances should be rebuilt
-   */
-  async rebuildAllRepostInstances(event: CalendarEvent): Promise<void> {
-    return this.eventInstanceService.rebuildAllRepostInstances(event);
-  }
-
-  /**
-   * Removes all event instances for a specific (event, reposter calendar) pair.
-   * Note: This method is NOT exposed through CalendarInterface for cross-domain use.
-   * It is only used internally via event handlers. Exposed here for handler access.
-   *
-   * @param eventId - The event ID whose repost instances should be removed
-   * @param calendarId - The reposting calendar ID
-   */
-  async removeRepostInstances(eventId: string, calendarId: string): Promise<void> {
-    return this.eventInstanceService.removeRepostInstances(eventId, calendarId);
   }
 
   async grantEditAccessByEmail(grantingAccount: Account, calendarId: string, email: string, message?: string): Promise<{ type: 'editor' | 'invitation', data: CalendarEditor | any }> {

@@ -50,7 +50,19 @@ export default class ActivityPubEventHandlers implements DomainEventHandlers {
     eventBus.on('remoteEditorRevoked', this.handleRemoteEditorRevoked.bind(this));
   }
 
+  /**
+   * Dispatch an outbound Announce for a locally-created event.
+   * Returns early when payload.calendar is null/undefined, which indicates
+   * the event originated from a remote instance (incoming AP Create routed
+   * via EventService.addRemoteEvent). Without this guard, processing a
+   * remote create would trigger an outbound Announce back to federation,
+   * creating a loop. Mirrors the handleEventUpdated guard.
+   */
   private async handleEventCreated(payload: ActivityPubEventCreatedPayload): Promise<void> {
+    if (!payload.calendar) {
+      return;
+    }
+
     const actorUrl = await this.service.actorUrl(payload.calendar);
     const eventUrl = EventObject.eventUrl(payload.calendar, payload.event);
 

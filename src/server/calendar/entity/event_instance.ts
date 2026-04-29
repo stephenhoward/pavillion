@@ -1,4 +1,4 @@
-import { Model, Table, Column, BelongsTo, DataType, ForeignKey, PrimaryKey } from 'sequelize-typescript';
+import { Model, Table, Column, BelongsTo, DataType, ForeignKey, PrimaryKey, Index } from 'sequelize-typescript';
 import { DateTime } from 'luxon';
 import db from '@/server/common/entity/db';
 import CalendarEventInstance from '@/common/model/event_instance';
@@ -12,6 +12,7 @@ export class EventInstanceEntity extends Model {
   @Column({ type: DataType.UUID })
   declare id: string;
 
+  @Index({ name: 'idx_event_instance_event_id_start_time_unique', unique: true })
   @ForeignKey(() => EventEntity)
   @Column({ type: DataType.UUID })
   declare event_id: string;
@@ -20,13 +21,13 @@ export class EventInstanceEntity extends Model {
   @Column({ type: DataType.UUID })
   declare calendar_id: string;
 
-  // The unique index on (event_id, start_time) is defined in migration 0025
+  // Compound unique index on (event_id, start_time) — matches migration 0025
   // (see docs/superpowers/specs/2026-04-22-instance-timestamp-slug-design.md).
-  // We do NOT mirror it here as a `@Index` decorator because db.sync envs
-  // (e2e seed) currently materialize per-calendar rows for shared events,
-  // which collides with the unique constraint. The shared-event materialization
-  // semantics are tracked as a follow-up; production migrations enforce the
-  // constraint as the spec intends.
+  // Mirrors event_series.ts's compound-unique convention. Under the
+  // single-producer model (pv-hr72) only the originating calendar materializes
+  // a row per (event_id, start_time), so db.sync environments no longer collide
+  // with this constraint.
+  @Index({ name: 'idx_event_instance_event_id_start_time_unique', unique: true })
   @Column({ type: DataType.DATE })
   declare start_time: Date;
 
