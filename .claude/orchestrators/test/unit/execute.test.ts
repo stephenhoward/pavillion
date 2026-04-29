@@ -227,6 +227,95 @@ describe('dispatchImplementer', () => {
     expect(writtenPrompt).toContain('Missing null check');
     expect(writtenPrompt).toContain('Previous audit failed');
   });
+
+  it('refuses to dispatch with empty bead id and never spawns a child', async () => {
+    const { dispatchImplementer } = await import('../../lib/execute.js');
+
+    const mockSpawnFn = vi.fn();
+
+    const result = await dispatchImplementer('', ctx, { spawnFn: mockSpawnFn });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.reason).toMatch(/empty.*undefined.*bead id/i);
+    }
+    expect(mockSpawnFn).not.toHaveBeenCalled();
+    expect(logStub.runJsonEntries).toContainEqual(
+      expect.objectContaining({ event: 'implementer-dispatch-refused' }),
+    );
+  });
+
+  it('refuses to dispatch when bead id is the literal string "undefined"', async () => {
+    const { dispatchImplementer } = await import('../../lib/execute.js');
+
+    const mockSpawnFn = vi.fn();
+
+    const result = await dispatchImplementer('undefined', ctx, { spawnFn: mockSpawnFn });
+
+    expect(result.ok).toBe(false);
+    expect(mockSpawnFn).not.toHaveBeenCalled();
+  });
+
+  it('refuses to dispatch when bead id is undefined (JS value cast through any)', async () => {
+    const { dispatchImplementer } = await import('../../lib/execute.js');
+
+    const mockSpawnFn = vi.fn();
+
+    const result = await dispatchImplementer(undefined as unknown as string, ctx, { spawnFn: mockSpawnFn });
+
+    expect(result.ok).toBe(false);
+    expect(mockSpawnFn).not.toHaveBeenCalled();
+  });
+});
+
+// =============================================================================
+// extractFinalJsonBlock
+// =============================================================================
+
+describe('extractFinalJsonBlock', () => {
+  it('extracts the last fenced ```json``` block from a markdown response', async () => {
+    const { extractFinalJsonBlock } = await import('../../lib/execute.js');
+    const response = `# Build Verification
+
+Lint passed. Tests passed. Build passed.
+
+\`\`\`json
+{ "verdict": "pass", "concerns": [], "beadsFailed": [] }
+\`\`\`
+
+Done.`;
+    expect(extractFinalJsonBlock(response)).toEqual({
+      verdict: 'pass',
+      concerns: [],
+      beadsFailed: [],
+    });
+  });
+
+  it('falls back to bare {...} block when no fenced JSON is present', async () => {
+    const { extractFinalJsonBlock } = await import('../../lib/execute.js');
+    const response = `**Step 3 (Re-verify): Build** ✅ PASS
+
+Final verdict: { "verdict": "pass", "concerns": [], "beadsFailed": [] }`;
+    expect(extractFinalJsonBlock(response)).toEqual({
+      verdict: 'pass',
+      concerns: [],
+      beadsFailed: [],
+    });
+  });
+
+  it('returns null when no parseable JSON is present', async () => {
+    const { extractFinalJsonBlock } = await import('../../lib/execute.js');
+    const response = `**Step 3 (Re-verify): Build** ✅ PASS
+
+No structured envelope here.`;
+    expect(extractFinalJsonBlock(response)).toBeNull();
+  });
+
+  it('returns null when the json block is malformed', async () => {
+    const { extractFinalJsonBlock } = await import('../../lib/execute.js');
+    const response = '```json\n{ verdict: pass, broken\n```';
+    expect(extractFinalJsonBlock(response)).toBeNull();
+  });
 });
 
 // =============================================================================
@@ -1085,5 +1174,26 @@ describe('epicPhase', () => {
 
     const result = await epicPhase(ctx, { scriptSpawnFn: mockSpawnSync });
     expect(result.next).toBe('halt');
+  });
+
+  it('scopes the bd ready query to descendants of the current epic via --parent', async () => {
+    const { epicPhase } = await import('../../lib/execute.js');
+
+    const mockSpawnSync = vi.fn().mockReturnValue({
+      stdout: Buffer.from('[]'),
+      stderr: Buffer.from(''),
+      status: 0,
+    });
+
+    const ctx = makePhaseCtx(logStub);
+    ctx.beadId = 'pv-epic';
+
+    await epicPhase(ctx, { scriptSpawnFn: mockSpawnSync });
+
+    expect(mockSpawnSync).toHaveBeenCalledWith(
+      'bd',
+      ['ready', '--parent', 'pv-epic', '--json'],
+      expect.any(Object),
+    );
   });
 });
