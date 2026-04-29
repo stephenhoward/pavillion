@@ -1,4 +1,26 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } from 'vitest';
+import { mount } from '@vue/test-utils';
+import sinon from 'sinon';
+import express, { Application } from 'express';
+import supertest from 'supertest';
+import { createPinia, setActivePinia } from 'pinia';
+import { createRouter, createMemoryHistory } from 'vue-router';
+import i18next from 'i18next';
+import I18NextVue from 'i18next-vue';
+import { DateTime } from 'luxon';
+
+import { Calendar } from '@/common/model/calendar';
+import { WidgetConfig as WidgetConfigModel } from '@/common/model/widget_config';
+import CalendarInterface from '@/server/calendar/interface';
+import WidgetDomainService from '@/server/calendar/service/widget_domain';
+import WidgetRoutes from '@/server/calendar/api/v1/widget';
+import WidgetEmbed from '@/client/components/logged_in/calendar-management/widget-embed.vue';
+import WidgetConfig from '@/client/components/logged_in/calendar-management/widget-config.vue';
+import WeekView from '@/widget/components/week-view.vue';
+import MonthView from '@/widget/components/month-view.vue';
+import ListView from '@/widget/components/list-view.vue';
+import { useWidgetStore } from '@/widget/stores/widgetStore';
+import { usePublicCalendarStore } from '@/site/stores/publicCalendarStore';
 
 /**
  * Build a fake MediaQueryList whose `matches` value is fixed and whose
@@ -18,30 +40,6 @@ function mockMatchMedia(matches: boolean) {
   vi.stubGlobal('matchMedia', matchMediaSpy);
   return { addSpy, removeSpy, matchMediaSpy };
 }
-
-import { mount } from '@vue/test-utils';
-import sinon from 'sinon';
-import express, { Application } from 'express';
-import supertest from 'supertest';
-import { createPinia, setActivePinia } from 'pinia';
-import { createRouter, createMemoryHistory } from 'vue-router';
-import i18next from 'i18next';
-import I18NextVue from 'i18next-vue';
-import axios from 'axios';
-import { DateTime } from 'luxon';
-
-import { Calendar } from '@/common/model/calendar';
-import { WidgetConfig as WidgetConfigModel } from '@/common/model/widget_config';
-import CalendarInterface from '@/server/calendar/interface';
-import WidgetDomainService from '@/server/calendar/service/widget_domain';
-import WidgetRoutes from '@/server/calendar/api/v1/widget';
-import WidgetEmbed from '@/client/components/logged_in/calendar-management/widget-embed.vue';
-import WidgetConfig from '@/client/components/logged_in/calendar-management/widget-config.vue';
-import WeekView from '@/widget/components/week-view.vue';
-import MonthView from '@/widget/components/month-view.vue';
-import ListView from '@/widget/components/list-view.vue';
-import { useWidgetStore } from '@/widget/stores/widgetStore';
-import { usePublicCalendarStore } from '@/site/stores/publicCalendarStore';
 
 describe('Widget Integration Tests', () => {
   let app: Application;
