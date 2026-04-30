@@ -3,13 +3,14 @@ import { EventEmitter } from 'events';
 import { DateTime, Duration } from 'luxon';
 import { v4 as uuidv4 } from 'uuid';
 import sinon from 'sinon';
+import { Op, Utils } from 'sequelize';
 import { Account } from '@/common/model/account';
 import { Calendar } from '@/common/model/calendar';
 import { CalendarEvent, CalendarEventSchedule, EventFrequency } from '@/common/model/events';
 import CalendarEventInstance from '@/common/model/event_instance';
 import EventInstanceService from '@/server/calendar/service/event_instance';
 import EventService from '@/server/calendar/service/events';
-import { EventEntity, EventScheduleEntity } from '@/server/calendar/entity/event';
+import { EventEntity, EventContentEntity, EventScheduleEntity } from '@/server/calendar/entity/event';
 import { EventInstanceEntity } from '@/server/calendar/entity/event_instance';
 
 /**
@@ -1631,5 +1632,124 @@ describe('EventInstanceService.findOrMaterializeInstanceWithDetails', () => {
     await expect(
       service.findOrMaterializeInstanceWithDetails(EVENT_ID, MATCHING_START),
     ).rejects.toMatchObject({ name: 'SequelizeConnectionError' });
+  });
+});
+
+/**
+ * Tests for the search predicate built by listEventInstancesWithFilters.
+ *
+ * Guards against regressing the SQL-injection fix from pv-qynz: user input
+ * must flow through Sequelize's parameterized where(fn, op) helper, never
+ * via Sequelize.literal() with string interpolation. Also asserts the
+ * 200-char service-boundary cap that bounds query cost on hostile public
+ * input — see security-playbook/database-injection.md and
+ * security-playbook/public-api.md.
+ */
+describe('EventInstanceService.listEventInstancesWithFilters — search predicate safety', () => {
+  let service: EventInstanceService;
+  let sandbox: sinon.SinonSandbox;
+  let testCalendar: Calendar;
+
+  /**
+   * Walks the where clause produced for the search filter and returns the
+   * LIKE patterns bound to each branch. The branches are Sequelize Where
+   * instances created via where(fn(...), { [Op.like]: pattern }), so the
+   * bound value lives on `.logic[Op.like]`.
+   */
+  function extractLikePatterns(whereClause: any): string[] {
+    const patterns: string[] = [];
+    const orConditions = whereClause?.[Op.or];
+    if (!Array.isArray(orConditions)) return patterns;
+    for (const condition of orConditions) {
+      const pattern = condition?.logic?.[Op.like];
+      if (typeof pattern === 'string') {
+        patterns.push(pattern);
+      }
+    }
+    return patterns;
+  }
+
+  beforeEach(() => {
+    sandbox = sinon.createSandbox();
+    service = new EventInstanceService(new EventEmitter());
+    testCalendar = new Calendar('cal-id', 'testcal');
+
+    // Stub the visibility helper to return a non-empty list so the search
+    // branch in listEventInstancesWithFilters is exercised.
+    sandbox.stub((service as any).eventService, 'listEventIdsForCalendar')
+      .resolves(['event-1']);
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+  });
+
+  it('builds a parameterized Op.or predicate, not a Sequelize.literal, for the search filter', async () => {
+    const findAllStub = sandbox.stub(EventInstanceEntity, 'findAll').resolves([]);
+
+    // Hostile input: every metacharacter that previously had to be escaped
+    // by hand inside a literal() — single quote, semicolon, comment marker,
+    // backslash, and a PostgreSQL escape sequence (E'\\' style).
+    const hostile = "'; DROP TABLE event_content; --\\E'\\x27";
+    await service.listEventInstancesWithFilters(testCalendar, { search: hostile });
+
+    const queryOptions = findAllStub.lastCall.args[0];
+    const eventInclude = queryOptions.include[0];
+    const contentInclude = eventInclude.include.find(
+      (inc: any) => inc.model === EventContentEntity,
+    );
+
+    expect(contentInclude).toBeDefined();
+    expect(contentInclude.required).toBe(true);
+
+    // The where clause must be a plain object keyed by Op.or (parameterized),
+    // never a Sequelize.literal — literal() with user input is the documented
+    // injection vector the fix removed.
+    expect(contentInclude.where).toBeInstanceOf(Object);
+    expect(contentInclude.where).not.toBeInstanceOf(Utils.Literal);
+    expect(contentInclude.where[Op.or]).toBeDefined();
+    expect(Array.isArray(contentInclude.where[Op.or])).toBe(true);
+    expect(contentInclude.where[Op.or]).toHaveLength(2);
+
+    // The hostile input flows through unchanged into the bound LIKE pattern
+    // (Sequelize parameterizes it; query semantics are unaffected). Each
+    // branch is a Where instance, never a Literal.
+    for (const branch of contentInclude.where[Op.or]) {
+      expect(branch).toBeInstanceOf(Utils.Where);
+      expect(branch).not.toBeInstanceOf(Utils.Literal);
+    }
+    const patterns = extractLikePatterns(contentInclude.where);
+    expect(patterns).toHaveLength(2);
+    // Lowercased and sandwiched between % wildcards. Single quotes and other
+    // SQL metacharacters survive verbatim because they are bound, not
+    // interpolated — they cannot break out of the LIKE pattern.
+    expect(patterns[0]).toBe(`%${hostile.toLowerCase()}%`);
+    expect(patterns[1]).toBe(`%${hostile.toLowerCase()}%`);
+  });
+
+  it('caps the search term at 200 characters at the service boundary', async () => {
+    const findAllStub = sandbox.stub(EventInstanceEntity, 'findAll').resolves([]);
+
+    // 250-char payload: simulate a public attacker forcing an unbounded LIKE
+    // pattern. The cap protects against pathological input regardless of
+    // whether a handler-side cap is in place.
+    const longSearch = 'a'.repeat(250);
+    await service.listEventInstancesWithFilters(testCalendar, { search: longSearch });
+
+    const queryOptions = findAllStub.lastCall.args[0];
+    const eventInclude = queryOptions.include[0];
+    const contentInclude = eventInclude.include.find(
+      (inc: any) => inc.model === EventContentEntity,
+    );
+
+    const patterns = extractLikePatterns(contentInclude.where);
+    expect(patterns).toHaveLength(2);
+    // Pattern is `%${searchTerm}%` — 200 capped chars + 2 wildcard chars.
+    for (const pattern of patterns) {
+      expect(pattern).toHaveLength(202);
+      expect(pattern.startsWith('%')).toBe(true);
+      expect(pattern.endsWith('%')).toBe(true);
+      expect(pattern.slice(1, -1)).toBe('a'.repeat(200));
+    }
   });
 });
