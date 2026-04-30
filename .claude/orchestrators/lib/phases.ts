@@ -1338,7 +1338,7 @@ export async function branch(ctx: PhaseCtx, deps: PhaseDeps = {}): Promise<Phase
   }
 
   // Step 3: Derive branch name (pure function)
-  const derivedBranchName = branchName(ctx.beadId, title, issueType);
+  const derivedBranchName = branchName(title, issueType);
 
   // Step 4: Check if already on target branch
   const currentCmd = spawnCmd('git', ['branch', '--show-current'], logger, PhaseName.Branch, spawn);
