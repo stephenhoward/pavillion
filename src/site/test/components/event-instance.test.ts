@@ -526,7 +526,7 @@ describe('eventInstance category badge locale behaviour', () => {
 
       const badge = wrapper.find('.event-category-badge');
       expect(badge.exists()).toBe(true);
-      expect(badge.attributes('href')).toContain('category=uuid-arts-123');
+      expect(badge.attributes('href')).toContain('?categories=uuid-arts-123');
       wrapper.unmount();
     });
 
@@ -575,7 +575,7 @@ describe('eventInstance category badge locale behaviour', () => {
       expect(badge.exists()).toBe(true);
       const href = badge.attributes('href') ?? '';
       expect(href).toContain('/es/');
-      expect(href).toContain('category=cat-uuid-002');
+      expect(href).toContain('?categories=cat-uuid-002');
       wrapper.unmount();
     });
   });
@@ -658,8 +658,8 @@ describe('eventInstance category badge locale behaviour', () => {
       );
 
       const badges = wrapper.findAll('.event-category-badge');
-      expect(badges[0].attributes('href')).toContain('category=uuid-alpha');
-      expect(badges[1].attributes('href')).toContain('category=uuid-beta');
+      expect(badges[0].attributes('href')).toContain('?categories=uuid-alpha');
+      expect(badges[1].attributes('href')).toContain('?categories=uuid-beta');
       wrapper.unmount();
     });
   });

@@ -49,7 +49,7 @@ function closeReportModal() {
  * view filtered by category id. Locale-aware via `localizedPath`.
  */
 function categoryHrefBuilder(category: EventCategory): string {
-  return localizedPath('/view/' + state.calendar.urlName) + '?category=' + category.id;
+  return localizedPath('/view/' + state.calendar.urlName) + '?categories=' + category.id;
 }
 
 onBeforeMount(async () => {
