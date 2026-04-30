@@ -1039,6 +1039,12 @@ $public-link-color: $public-accent-light;
       box-shadow: $public-shadow-xl-dark;
     }
   }
+
+  @include public-light-mode-override {
+    &:hover {
+      box-shadow: $public-shadow-xl-light;
+    }
+  }
 }
 
 // ===== SIDEBAR CARD (white bg, bordered, rounded) =====
@@ -1085,6 +1091,14 @@ $public-link-color: $public-accent-light;
 
     &::before {
       background: $public-accent-dark;
+    }
+  }
+
+  @include public-light-mode-override {
+    background: $public-bg-primary-light;
+
+    &::before {
+      background: $public-link-color;
     }
   }
 }
