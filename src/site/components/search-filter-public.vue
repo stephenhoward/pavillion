@@ -207,6 +207,8 @@
         :categories="publicStore.availableCategories"
         :selected-categories="publicStore.selectedCategoryIds"
         :disabled="publicStore.isLoadingCategories"
+        :present-category-ids="publicStore.presentCategoryIds"
+        :absent-tooltip="tSystem('category_absent_tooltip')"
         @update:selected-categories="handleCategoryChange"
       />
     </div>
@@ -243,6 +245,10 @@ const props = defineProps<{
 const { t } = useTranslation('system', {
   keyPrefix: 'public_search_filter',
 });
+
+// Root-namespace translator for keys shared with the pill selector
+// (category_absent_tooltip lives at the root of the system namespace).
+const { t: tSystem } = useTranslation('system');
 
 const route = useRoute();
 const router = useRouter();

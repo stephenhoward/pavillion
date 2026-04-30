@@ -31,11 +31,18 @@ export interface PublicCalendarState {
 
   // UI state
   isLoadingCategories: boolean;
+  hasLoadedCategories: boolean;
   isLoadingEvents: boolean;
   hasLoadedEvents: boolean;
   isSearchPending: boolean;
   categoryError: string | null;
   eventError: string | null;
+}
+
+export interface CategoryFilterOptions {
+  search?: string;
+  startDate?: string | null;
+  endDate?: string | null;
 }
 
 export interface FilterOptions {
@@ -60,6 +67,7 @@ export const usePublicCalendarStore = defineStore('publicCalendar', {
     allEvents: [],
     filteredEvents: [],
     isLoadingCategories: false,
+    hasLoadedCategories: false,
     isLoadingEvents: false,
     hasLoadedEvents: false,
     isSearchPending: false,
@@ -146,6 +154,24 @@ export const usePublicCalendarStore = defineStore('publicCalendar', {
     filteredEventCount(): number {
       return this.getFilteredEvents.length;
     },
+
+    /**
+     * IDs of categories that have at least one event in the current
+     * date/search window.
+     *
+     * Returns `undefined` when categories are still loading OR before the
+     * first successful fetch — callers MUST treat `undefined` as "presence
+     * data not yet available" rather than "no categories present".
+     * Returning an empty array would falsely flag every pill as absent.
+     */
+    presentCategoryIds(): string[] | undefined {
+      if (this.isLoadingCategories || !this.hasLoadedCategories) {
+        return undefined;
+      }
+      return this.availableCategories
+        .filter(c => (c.eventCount ?? 0) > 0)
+        .map(c => c.id);
+    },
   },
 
   actions: {
@@ -204,9 +230,15 @@ export const usePublicCalendarStore = defineStore('publicCalendar', {
     },
 
     /**
-     * Load categories for the current calendar
+     * Load categories for the current calendar.
+     *
+     * Optional filters scope which events the server includes when computing
+     * each category's eventCount. The filters do NOT include
+     * selectedCategoryIds — category-presence must be independent of the
+     * user's current category selection (otherwise selecting a category
+     * would hide all the others).
      */
-    async loadCategories(calendarUrlName: string) {
+    async loadCategories(calendarUrlName: string, filters?: CategoryFilterOptions) {
       if (this.currentCalendarUrlName !== calendarUrlName) {
         this.setCurrentCalendar(calendarUrlName);
       }
@@ -215,13 +247,32 @@ export const usePublicCalendarStore = defineStore('publicCalendar', {
       this.categoryError = null;
 
       try {
-        const categoriesData = await ModelService.listModels(
-          `/api/public/v1/calendar/${calendarUrlName}/categories`,
-        );
+        let url = `/api/public/v1/calendar/${calendarUrlName}/categories`;
+        const params = new URLSearchParams();
+
+        // Add search parameter if provided (minimum 3 characters; matches loadEvents)
+        if (filters?.search && filters.search.trim().length >= 3) {
+          params.append('search', filters.search.trim());
+        }
+
+        if (filters?.startDate) {
+          params.append('startDate', filters.startDate);
+        }
+
+        if (filters?.endDate) {
+          params.append('endDate', filters.endDate);
+        }
+
+        if (params.toString()) {
+          url += `?${params.toString()}`;
+        }
+
+        const categoriesData = await ModelService.listModels(url);
 
         this.availableCategories = categoriesData.items.map(categoryData =>
           EventCategory.fromObject(categoryData),
         );
+        this.hasLoadedCategories = true;
       }
       catch (error) {
         console.error('Error loading categories:', error);
@@ -366,17 +417,36 @@ export const usePublicCalendarStore = defineStore('publicCalendar', {
       this.categoryError = null;
       this.eventError = null;
       this.isLoadingCategories = false;
+      this.hasLoadedCategories = false;
       this.isLoadingEvents = false;
       this.hasLoadedEvents = false;
       this.isSearchPending = false;
     },
 
     /**
-     * Reload events with current filter settings
+     * Reload events AND categories with current filter settings.
+     *
+     * Categories are reloaded with the SAME date/search context so that
+     * eventCount (and thus presentCategoryIds) reflects the current window.
+     * Categories are NOT reloaded with selectedCategoryIds — category
+     * presence must be independent of the user's category selection.
+     *
+     * When the user has not picked an explicit date filter, both branches
+     * fall back to the calendar's default date window. Without this, the
+     * categories endpoint would count events across all time on initial
+     * load and every pill would render as "active" even when the default
+     * window contains no events for some categories.
      */
     async reloadWithFilters() {
       if (this.currentCalendarUrlName) {
-        const filters: FilterOptions = {};
+        const defaultRange = getDefaultDateRange(this.calendarDefaultDateRange);
+        const effectiveStartDate = this.startDate ?? defaultRange.startDate;
+        const effectiveEndDate = this.endDate ?? defaultRange.endDate;
+
+        const filters: FilterOptions = {
+          startDate: effectiveStartDate,
+          endDate: effectiveEndDate,
+        };
 
         // Only include search filter if it has at least 3 characters
         if (this.searchQuery.trim().length >= 3) {
@@ -385,14 +455,19 @@ export const usePublicCalendarStore = defineStore('publicCalendar', {
         if (this.selectedCategoryIds.length > 0) {
           filters.categories = this.selectedCategoryIds;
         }
-        if (this.startDate) {
-          filters.startDate = this.startDate;
-        }
-        if (this.endDate) {
-          filters.endDate = this.endDate;
+
+        const categoryFilters: CategoryFilterOptions = {
+          startDate: effectiveStartDate,
+          endDate: effectiveEndDate,
+        };
+        if (this.searchQuery.trim().length >= 3) {
+          categoryFilters.search = this.searchQuery;
         }
 
-        await this.loadEvents(this.currentCalendarUrlName, filters);
+        await Promise.all([
+          this.loadEvents(this.currentCalendarUrlName, filters),
+          this.loadCategories(this.currentCalendarUrlName, categoryFilters),
+        ]);
       }
     },
   },

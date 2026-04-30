@@ -281,6 +281,26 @@ $public-transition-slow: all $public-duration-slow $public-ease-in-out;
     transform: scale(0.97);
   }
 
+  // Absent state: pill represents a filter value with no matching events.
+  // Declared before .selected so a selected-but-absent pill stays styled
+  // as selected via source-order specificity.
+  &.absent {
+    opacity: 0.4;
+    cursor: not-allowed;
+    color: $public-text-tertiary-light;
+
+    &:hover,
+    &:focus {
+      background-color: $public-bg-tertiary-light;
+      color: $public-text-tertiary-light;
+      box-shadow: $public-shadow-xs-light;
+    }
+
+    &:active {
+      transform: none;
+    }
+  }
+
   &.selected {
     background-color: $public-accent-light;
     color: white;
@@ -303,6 +323,23 @@ $public-transition-slow: all $public-duration-slow $public-ease-in-out;
       box-shadow: $public-shadow-sm-dark;
     }
 
+    &.absent {
+      opacity: 0.4;
+      cursor: not-allowed;
+      color: $public-text-tertiary-dark;
+
+      &:hover,
+      &:focus {
+        background-color: $public-bg-tertiary-dark;
+        color: $public-text-tertiary-dark;
+        box-shadow: $public-shadow-xs-dark;
+      }
+
+      &:active {
+        transform: none;
+      }
+    }
+
     &.selected {
       background-color: $public-accent-dark;
       box-shadow: $public-shadow-md-dark;
@@ -322,6 +359,23 @@ $public-transition-slow: all $public-duration-slow $public-ease-in-out;
       background-color: rgba(0, 0, 0, 0.08);
       color: rgba(0, 0, 0, 0.75);
       box-shadow: $public-shadow-sm-light;
+    }
+
+    &.absent {
+      opacity: 0.4;
+      cursor: not-allowed;
+      color: $public-text-tertiary-light;
+
+      &:hover,
+      &:focus {
+        background-color: $public-bg-tertiary-light;
+        color: $public-text-tertiary-light;
+        box-shadow: $public-shadow-xs-light;
+      }
+
+      &:active {
+        transform: none;
+      }
     }
 
     &.selected {

@@ -107,6 +107,8 @@ describe('CategoryPillSelector Component', () => {
             category_filter_aria_label: '{{name}} category filter, {{state}}',
             selected: 'selected',
             not_selected: 'not selected',
+            category_absent: 'unavailable',
+            category_absent_tooltip: 'No events in this date range',
           },
         },
         es: {
@@ -116,6 +118,8 @@ describe('CategoryPillSelector Component', () => {
             category_filter_aria_label: '{{name}} filtro de categoría, {{state}}',
             selected: 'seleccionado',
             not_selected: 'no seleccionado',
+            category_absent: 'unavailable',
+            category_absent_tooltip: 'No events in this date range',
           },
         },
         fr: { system: {} },
@@ -1216,6 +1220,208 @@ describe('CategoryPillSelector Component', () => {
 
       pill = wrapper.find('.category-pill');
       expect(pill.attributes('aria-label')).toBe('Artes filtro de categoría, no seleccionado');
+    });
+  });
+
+  describe('Absent category state (presentCategoryIds gating)', () => {
+    beforeEach(() => {
+      stubMatchMedia();
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it('renders absent class on a category not present in the result window', async () => {
+      const categories = [
+        createTestCategory('1', 'Arts'),
+        createTestCategory('2', 'Sports'),
+      ];
+
+      const { wrapper } = await mountCategoryPillSelector({
+        categories,
+        selectedCategories: [],
+        presentCategoryIds: ['1'],
+      });
+      currentWrapper = wrapper;
+
+      const pills = wrapper.findAll('.category-pill');
+      // Arts is present, Sports is absent
+      expect(pills[0].classes()).not.toContain('absent');
+      expect(pills[1].classes()).toContain('absent');
+    });
+
+    it('renders aria-disabled="true" on absent pills', async () => {
+      const categories = [
+        createTestCategory('1', 'Arts'),
+        createTestCategory('2', 'Sports'),
+      ];
+
+      const { wrapper } = await mountCategoryPillSelector({
+        categories,
+        selectedCategories: [],
+        presentCategoryIds: ['1'],
+      });
+      currentWrapper = wrapper;
+
+      const pills = wrapper.findAll('.category-pill');
+      expect(pills[0].attributes('aria-disabled')).toBeUndefined();
+      expect(pills[1].attributes('aria-disabled')).toBe('true');
+    });
+
+    it('does not emit on click when pill is absent', async () => {
+      const categories = [
+        createTestCategory('1', 'Arts'),
+        createTestCategory('2', 'Sports'),
+      ];
+
+      const { wrapper } = await mountCategoryPillSelector({
+        categories,
+        selectedCategories: [],
+        presentCategoryIds: ['1'],
+      });
+      currentWrapper = wrapper;
+
+      const pills = wrapper.findAll('.category-pill');
+      await pills[1].trigger('click');
+
+      expect(wrapper.emitted('update:selectedCategories')).toBeFalsy();
+    });
+
+    it('does not emit on Enter key when pill is absent', async () => {
+      const categories = [
+        createTestCategory('1', 'Arts'),
+        createTestCategory('2', 'Sports'),
+      ];
+
+      const { wrapper } = await mountCategoryPillSelector({
+        categories,
+        selectedCategories: [],
+        presentCategoryIds: ['1'],
+      });
+      currentWrapper = wrapper;
+
+      const pills = wrapper.findAll('.category-pill');
+      await pills[1].trigger('keydown', { key: 'Enter' });
+
+      expect(wrapper.emitted('update:selectedCategories')).toBeFalsy();
+    });
+
+    it('does not emit on Space key when pill is absent', async () => {
+      const categories = [
+        createTestCategory('1', 'Arts'),
+        createTestCategory('2', 'Sports'),
+      ];
+
+      const { wrapper } = await mountCategoryPillSelector({
+        categories,
+        selectedCategories: [],
+        presentCategoryIds: ['1'],
+      });
+      currentWrapper = wrapper;
+
+      const pills = wrapper.findAll('.category-pill');
+      await pills[1].trigger('keydown', { key: ' ' });
+
+      expect(wrapper.emitted('update:selectedCategories')).toBeFalsy();
+    });
+
+    it('renders selected (not absent) when a pill is selected but not present in the window', async () => {
+      const categories = [
+        createTestCategory('1', 'Arts'),
+        createTestCategory('2', 'Sports'),
+      ];
+
+      // Sports is selected but not in presentCategoryIds — selected wins
+      const { wrapper } = await mountCategoryPillSelector({
+        categories,
+        selectedCategories: ['2'],
+        presentCategoryIds: ['1'],
+      });
+      currentWrapper = wrapper;
+
+      const pills = wrapper.findAll('.category-pill');
+      expect(pills[1].classes()).toContain('selected');
+      expect(pills[1].classes()).not.toContain('absent');
+      expect(pills[1].attributes('aria-disabled')).toBeUndefined();
+    });
+
+    it('marks no pill absent when presentCategoryIds is undefined', async () => {
+      const categories = [
+        createTestCategory('1', 'Arts'),
+        createTestCategory('2', 'Sports'),
+      ];
+
+      const { wrapper } = await mountCategoryPillSelector({
+        categories,
+        selectedCategories: [],
+        // presentCategoryIds intentionally omitted
+      });
+      currentWrapper = wrapper;
+
+      const pills = wrapper.findAll('.category-pill');
+      pills.forEach((pill) => {
+        expect(pill.classes()).not.toContain('absent');
+        expect(pill.attributes('aria-disabled')).toBeUndefined();
+      });
+    });
+
+    it('binds title attribute to absentTooltip when pill is absent', async () => {
+      const categories = [
+        createTestCategory('1', 'Arts'),
+        createTestCategory('2', 'Sports'),
+      ];
+
+      const { wrapper } = await mountCategoryPillSelector({
+        categories,
+        selectedCategories: [],
+        presentCategoryIds: ['1'],
+        absentTooltip: 'No events in this date range',
+      });
+      currentWrapper = wrapper;
+
+      const pills = wrapper.findAll('.category-pill');
+      // Present pill: no title
+      expect(pills[0].attributes('title')).toBeUndefined();
+      // Absent pill: title equals absentTooltip
+      expect(pills[1].attributes('title')).toBe('No events in this date range');
+    });
+
+    it('omits title when pill is absent but absentTooltip is undefined', async () => {
+      const categories = [
+        createTestCategory('1', 'Arts'),
+        createTestCategory('2', 'Sports'),
+      ];
+
+      const { wrapper } = await mountCategoryPillSelector({
+        categories,
+        selectedCategories: [],
+        presentCategoryIds: ['1'],
+        // absentTooltip intentionally omitted
+      });
+      currentWrapper = wrapper;
+
+      const pills = wrapper.findAll('.category-pill');
+      expect(pills[1].attributes('title')).toBeUndefined();
+    });
+
+    it('aria-label uses category_absent token in the state slot when pill is absent', async () => {
+      const categories = [
+        createTestCategory('1', 'Arts'),
+        createTestCategory('2', 'Sports'),
+      ];
+
+      const { wrapper } = await mountCategoryPillSelector({
+        categories,
+        selectedCategories: [],
+        presentCategoryIds: ['1'],
+      });
+      currentWrapper = wrapper;
+
+      const pills = wrapper.findAll('.category-pill');
+      expect(pills[1].attributes('aria-label')).toBe('Sports category filter, unavailable');
+      // Present pill should still use not_selected token
+      expect(pills[0].attributes('aria-label')).toBe('Arts category filter, not selected');
     });
   });
 });

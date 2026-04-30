@@ -32,6 +32,8 @@
     "category_filter_aria_label": "{{name}} category filter, {{state}}",
     "selected": "selected",
     "not_selected": "not selected",
+    "category_absent": "unavailable",
+    "category_absent_tooltip": "No events in this date range",
     "back_to_calendar": "Back to {{name}}",
     "series_events": "Events in this series",
     "series_no_events": "No events in this series",

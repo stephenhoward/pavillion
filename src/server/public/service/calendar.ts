@@ -16,16 +16,77 @@ export default class PublicCalendarService {
     private calendarInterface: CalendarInterface,
   ) {}
 
-  async listCategoriesForCalendar(calendar: Calendar): Promise<Array<{category: EventCategory, eventCount: number}>> {
+  /**
+   * List categories for a calendar, each annotated with the number of
+   * matching events. Without options, eventCount reflects every event
+   * assigned to the category. When date/search options are supplied,
+   * eventCount reflects only those events whose instances match the same
+   * predicates the public events query uses (mirrors
+   * listEventInstancesWithFilters), so the categories sidebar stays in
+   * sync with the visible event list.
+   *
+   * @param calendar - The calendar whose categories to list
+   * @param options - Optional date/search filters
+   * @returns EventCategory domain models annotated with eventCount
+   */
+  async listCategoriesForCalendar(
+    calendar: Calendar,
+    options?: { startDate?: string; endDate?: string; search?: string },
+  ): Promise<Array<{category: EventCategory, eventCount: number}>> {
     const categories = await this.calendarInterface.getCategories(calendar.id);
 
-    // Get event count for each category
+    const hasFilters = !!(options && (options.startDate || options.endDate || options.search));
+
+    if (!hasFilters) {
+      // Backward-compatible path: count every event assigned to each category.
+      const categoriesWithCounts = await Promise.all(
+        categories.map(async (category) => {
+          const eventIds = await this.calendarInterface.getCategoryEvents(category.id);
+          return {
+            category,
+            eventCount: eventIds.length,
+          };
+        }),
+      );
+
+      return categoriesWithCounts;
+    }
+
+    const { startDate, endDate, search } = options!;
+
+    // Validate date formats if provided (mirrors listEventInstancesWithFilters).
+    if (startDate && !this.isValidISODate(startDate)) {
+      throw new Error('Invalid date format');
+    }
+    if (endDate && !this.isValidISODate(endDate)) {
+      throw new Error('Invalid date format');
+    }
+
+    // Cap search length at the service boundary to protect against
+    // pathological-pattern DoS once the API handler is wired up.
+    const cappedSearch = search ? search.substring(0, 200) : search;
+
+    // Reuse the canonical filtered events query so category counts match the
+    // visible event list exactly. We then bucket each category's assigned
+    // events against the filtered set rather than hand-rolling new SQL.
+    const filteredInstances = await this.calendarInterface.listEventInstancesWithFilters(calendar, {
+      startDate,
+      endDate,
+      search: cappedSearch,
+    });
+
+    const filteredEventIds = new Set<string>(filteredInstances.map(instance => instance.event.id));
+
     const categoriesWithCounts = await Promise.all(
       categories.map(async (category) => {
-        const eventIds = await this.calendarInterface.getCategoryEvents(category.id);
+        const assignedEventIds = await this.calendarInterface.getCategoryEvents(category.id);
+        const matchingCount = assignedEventIds.reduce(
+          (count, eventId) => count + (filteredEventIds.has(eventId) ? 1 : 0),
+          0,
+        );
         return {
           category,
-          eventCount: eventIds.length,
+          eventCount: matchingCount,
         };
       }),
     );

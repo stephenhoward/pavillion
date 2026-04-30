@@ -87,11 +87,10 @@ onBeforeMount(async () => {
     // Set current calendar in store
     publicCalendarStore.setCurrentCalendar(calendarUrlName);
 
-    // Load calendar settings (including defaultDateRange) before loading events
+    // Load calendar settings (including defaultDateRange) before loading events.
+    // SearchFilterPublic's mount/watcher then triggers reloadWithFilters(), which
+    // loads events AND categories together against the resolved default date window.
     await publicCalendarStore.loadCalendar(calendarUrlName);
-
-    // Load categories - SearchFilterPublic will handle URL params and event loading
-    await publicCalendarStore.loadCategories(calendarUrlName);
   }
   catch (error) {
     console.error('Error loading calendar data:', error);

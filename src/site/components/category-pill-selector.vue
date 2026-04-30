@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import { EventCategory } from '@/common/model/event_category';
 import { useLocalizedContent } from '../composables/useLocalizedContent';
@@ -9,6 +9,8 @@ export interface CategoryPillSelectorProps {
   selectedCategories: string[];
   disabled?: boolean;
   maxDisplayRows?: number;
+  presentCategoryIds?: string[];
+  absentTooltip?: string;
 }
 
 export interface CategoryPillSelectorEmits {
@@ -34,6 +36,15 @@ const { t } = useTranslation('system');
 const { localizedContent } = useLocalizedContent();
 
 /**
+ * Set of category IDs known to be present in the current result window.
+ * Resolves to null when presentCategoryIds is undefined (presence gating
+ * is opt-in: callers that don't pass this prop get no absent state).
+ */
+const presentSet = computed(() => {
+  return props.presentCategoryIds ? new Set(props.presentCategoryIds) : null;
+});
+
+/**
  * Check if a category is currently selected by ID (per DEC-005)
  */
 const isCategorySelected = (category: EventCategory): boolean => {
@@ -41,10 +52,23 @@ const isCategorySelected = (category: EventCategory): boolean => {
 };
 
 /**
+ * A category is absent when presence data is provided, the category is not
+ * in the present set, and it is not currently selected. Selected always
+ * wins so the user can still see what they have filtered to.
+ */
+const isCategoryAbsent = (category: EventCategory): boolean => {
+  const set = presentSet.value;
+  if (set === null) return false;
+  if (isCategorySelected(category)) return false;
+  return !set.has(category.id);
+};
+
+/**
  * Toggle category selection state using category ID
  */
 const toggleCategory = (category: EventCategory): void => {
   if (props.disabled) return;
+  if (isCategoryAbsent(category)) return;
 
   const currentSelection = [...props.selectedCategories];
   const index = currentSelection.indexOf(category.id);
@@ -64,6 +88,7 @@ const toggleCategory = (category: EventCategory): void => {
  */
 const handleKeydown = (event: KeyboardEvent, category: EventCategory): void => {
   if (props.disabled) return;
+  if (isCategoryAbsent(category)) return;
 
   if (event.key === ' ' || event.key === 'Enter') {
     event.preventDefault();
@@ -85,14 +110,24 @@ const getCategoryDisplayName = (category: EventCategory): string => {
 };
 
 /**
- * Generate ARIA label for accessibility, translated to the current locale
+ * Generate ARIA label for accessibility, translated to the current locale.
+ * State precedence: selected wins, then absent, otherwise not_selected.
  */
 const getCategoryAriaLabel = (category: EventCategory): string => {
   const name = getCategoryDisplayName(category);
-  const isSelected = isCategorySelected(category);
+  let stateKey: 'selected' | 'category_absent' | 'not_selected';
+  if (isCategorySelected(category)) {
+    stateKey = 'selected';
+  }
+  else if (isCategoryAbsent(category)) {
+    stateKey = 'category_absent';
+  }
+  else {
+    stateKey = 'not_selected';
+  }
   return t('category_filter_aria_label', {
     name,
-    state: isSelected ? t('selected') : t('not_selected'),
+    state: t(stateKey),
   });
 };
 
@@ -198,10 +233,15 @@ onUnmounted(() => {
         v-for="category in categories"
         :key="category.id"
         class="category-pill"
-        :class="{ selected: isCategorySelected(category) }"
+        :class="{
+          selected: isCategorySelected(category),
+          absent: isCategoryAbsent(category),
+        }"
         :disabled="disabled"
         :aria-pressed="isCategorySelected(category)"
+        :aria-disabled="isCategoryAbsent(category) || null"
         :aria-label="getCategoryAriaLabel(category)"
+        :title="isCategoryAbsent(category) ? absentTooltip : undefined"
         role="button"
         tabindex="0"
         @click="toggleCategory(category)"
