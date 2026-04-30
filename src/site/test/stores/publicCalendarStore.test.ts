@@ -371,6 +371,7 @@ describe('publicCalendarStore - Search and Date Filter Extensions', () => {
       store.setSelectedCategories(['Arts']);
 
       const loadEventsSpy = vi.spyOn(store, 'loadEvents');
+      vi.spyOn(store, 'loadCategories').mockResolvedValue();
 
       await store.reloadWithFilters();
 
@@ -387,6 +388,7 @@ describe('publicCalendarStore - Search and Date Filter Extensions', () => {
       store.setDateRange('2025-11-15', '2025-11-21');
 
       const loadEventsSpy = vi.spyOn(store, 'loadEvents');
+      vi.spyOn(store, 'loadCategories').mockResolvedValue();
 
       await store.reloadWithFilters();
 
@@ -400,10 +402,12 @@ describe('publicCalendarStore - Search and Date Filter Extensions', () => {
       store.currentCalendarUrlName = null;
 
       const loadEventsSpy = vi.spyOn(store, 'loadEvents');
+      const loadCategoriesSpy = vi.spyOn(store, 'loadCategories');
 
       await store.reloadWithFilters();
 
       expect(loadEventsSpy).not.toHaveBeenCalled();
+      expect(loadCategoriesSpy).not.toHaveBeenCalled();
     });
   });
 
@@ -513,6 +517,276 @@ describe('publicCalendarStore - Search and Date Filter Extensions', () => {
       const byDay = store.getFilteredEventsByDay;
 
       expect(Object.keys(byDay).length).toBe(0);
+    });
+  });
+
+  describe('loadCategories action', () => {
+    /**
+     * Build a minimal category wire payload with optional eventCount.
+     */
+    const makeCategoryPayload = (id: string, eventCount?: number) => ({
+      id,
+      calendarId: 'cal-1',
+      ...(eventCount !== undefined ? { eventCount } : {}),
+      content: {
+        en: { language: 'en', name: `Category ${id}` },
+      },
+    });
+
+    it('appends no query params when called without filters', async () => {
+      const ModelService = await import('@/client/service/models');
+      (ModelService.default.listModels as any).mockResolvedValue({ items: [] });
+
+      await store.loadCategories('test-calendar');
+
+      expect(ModelService.default.listModels).toHaveBeenCalledWith(
+        '/api/public/v1/calendar/test-calendar/categories',
+      );
+    });
+
+    it('appends startDate and endDate query params when provided', async () => {
+      const ModelService = await import('@/client/service/models');
+      (ModelService.default.listModels as any).mockResolvedValue({ items: [] });
+
+      await store.loadCategories('test-calendar', {
+        startDate: '2025-11-15',
+        endDate: '2025-11-21',
+      });
+
+      expect(ModelService.default.listModels).toHaveBeenCalledWith(
+        '/api/public/v1/calendar/test-calendar/categories?startDate=2025-11-15&endDate=2025-11-21',
+      );
+    });
+
+    it('appends search query param when provided (>= 3 chars)', async () => {
+      const ModelService = await import('@/client/service/models');
+      (ModelService.default.listModels as any).mockResolvedValue({ items: [] });
+
+      await store.loadCategories('test-calendar', { search: 'yoga' });
+
+      expect(ModelService.default.listModels).toHaveBeenCalledWith(
+        '/api/public/v1/calendar/test-calendar/categories?search=yoga',
+      );
+    });
+
+    it('does not append search when shorter than 3 chars', async () => {
+      const ModelService = await import('@/client/service/models');
+      (ModelService.default.listModels as any).mockResolvedValue({ items: [] });
+
+      await store.loadCategories('test-calendar', { search: 'yo' });
+
+      expect(ModelService.default.listModels).toHaveBeenCalledWith(
+        '/api/public/v1/calendar/test-calendar/categories',
+      );
+    });
+
+    it('appends all filters together when provided', async () => {
+      const ModelService = await import('@/client/service/models');
+      (ModelService.default.listModels as any).mockResolvedValue({ items: [] });
+
+      await store.loadCategories('test-calendar', {
+        search: 'yoga class',
+        startDate: '2025-11-15',
+        endDate: '2025-11-21',
+      });
+
+      const callArg = (ModelService.default.listModels as any).mock.calls[0][0] as string;
+      expect(callArg).toContain('/api/public/v1/calendar/test-calendar/categories?');
+      expect(callArg).toContain('search=yoga+class');
+      expect(callArg).toContain('startDate=2025-11-15');
+      expect(callArg).toContain('endDate=2025-11-21');
+    });
+
+    it('sets hasLoadedCategories to true after a successful fetch', async () => {
+      const ModelService = await import('@/client/service/models');
+      (ModelService.default.listModels as any).mockResolvedValue({ items: [] });
+
+      expect(store.hasLoadedCategories).toBe(false);
+      await store.loadCategories('test-calendar');
+      expect(store.hasLoadedCategories).toBe(true);
+    });
+
+    it('does NOT set hasLoadedCategories to true when fetch fails', async () => {
+      const ModelService = await import('@/client/service/models');
+      (ModelService.default.listModels as any).mockRejectedValue(new Error('boom'));
+
+      // Suppress noisy error log
+      const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      await store.loadCategories('test-calendar');
+
+      expect(store.hasLoadedCategories).toBe(false);
+      expect(store.categoryError).toBe('Failed to load categories');
+
+      errSpy.mockRestore();
+    });
+
+    it('parses eventCount from wire payload onto availableCategories', async () => {
+      const ModelService = await import('@/client/service/models');
+      (ModelService.default.listModels as any).mockResolvedValue({
+        items: [
+          makeCategoryPayload('cat-a', 5),
+          makeCategoryPayload('cat-b', 0),
+          makeCategoryPayload('cat-c'), // no eventCount field — defaults to 0
+        ],
+      });
+
+      await store.loadCategories('test-calendar');
+
+      expect(store.availableCategories).toHaveLength(3);
+      expect(store.availableCategories[0].eventCount).toBe(5);
+      expect(store.availableCategories[1].eventCount).toBe(0);
+      expect(store.availableCategories[2].eventCount).toBe(0);
+    });
+  });
+
+  describe('presentCategoryIds getter', () => {
+    it('returns undefined before any fetch has occurred (first-fetch invariant)', () => {
+      // Default state: hasLoadedCategories=false, isLoadingCategories=false
+      expect(store.hasLoadedCategories).toBe(false);
+      expect(store.isLoadingCategories).toBe(false);
+      expect(store.presentCategoryIds).toBeUndefined();
+    });
+
+    it('returns undefined while categories are loading', () => {
+      // Simulate mid-flight: isLoadingCategories=true (regardless of hasLoadedCategories)
+      store.isLoadingCategories = true;
+      store.hasLoadedCategories = true;
+      // Even if some stale categories are sitting in state, the getter must hide them
+      const cat = new EventCategory('cat-1', 'cal-1');
+      cat.eventCount = 3;
+      store.availableCategories = [cat];
+
+      expect(store.presentCategoryIds).toBeUndefined();
+    });
+
+    it('returns ids of categories with eventCount > 0 after a successful fetch', () => {
+      const present = new EventCategory('cat-present', 'cal-1');
+      present.eventCount = 4;
+      const absent = new EventCategory('cat-absent', 'cal-1');
+      absent.eventCount = 0;
+      const alsoPresent = new EventCategory('cat-also', 'cal-1');
+      alsoPresent.eventCount = 1;
+
+      store.hasLoadedCategories = true;
+      store.isLoadingCategories = false;
+      store.availableCategories = [present, absent, alsoPresent];
+
+      expect(store.presentCategoryIds).toEqual(['cat-present', 'cat-also']);
+    });
+
+    it('treats missing eventCount as zero (excludes from present list)', () => {
+      const cat = new EventCategory('cat-no-count', 'cal-1');
+      // eventCount defaults to 0 on the model — explicitly verify
+      expect(cat.eventCount).toBe(0);
+
+      store.hasLoadedCategories = true;
+      store.isLoadingCategories = false;
+      store.availableCategories = [cat];
+
+      expect(store.presentCategoryIds).toEqual([]);
+    });
+
+    it('returns empty array (not undefined) when fetch loaded zero categories', () => {
+      store.hasLoadedCategories = true;
+      store.isLoadingCategories = false;
+      store.availableCategories = [];
+
+      // Empty array is correct here: fetch completed and the answer is "no categories present"
+      expect(store.presentCategoryIds).toEqual([]);
+    });
+
+    it('integrates end-to-end: undefined → ids after loadCategories resolves', async () => {
+      const ModelService = await import('@/client/service/models');
+      (ModelService.default.listModels as any).mockResolvedValue({
+        items: [
+          {
+            id: 'cat-1',
+            calendarId: 'cal-1',
+            eventCount: 2,
+            content: { en: { language: 'en', name: 'Music' } },
+          },
+          {
+            id: 'cat-2',
+            calendarId: 'cal-1',
+            eventCount: 0,
+            content: { en: { language: 'en', name: 'Sports' } },
+          },
+        ],
+      });
+
+      expect(store.presentCategoryIds).toBeUndefined();
+
+      await store.loadCategories('test-calendar');
+
+      expect(store.presentCategoryIds).toEqual(['cat-1']);
+    });
+  });
+
+  describe('reloadWithFilters reloads categories', () => {
+    it('reloads categories with the same date/search context as events', async () => {
+      store.currentCalendarUrlName = 'test-calendar';
+      store.setSearchQuery('yoga');
+      store.setDateRange('2025-11-15', '2025-11-21');
+      store.setSelectedCategories(['cat-selected']);
+
+      const loadCategoriesSpy = vi.spyOn(store, 'loadCategories').mockResolvedValue();
+      const loadEventsSpy = vi.spyOn(store, 'loadEvents').mockResolvedValue();
+
+      await store.reloadWithFilters();
+
+      expect(loadEventsSpy).toHaveBeenCalledWith('test-calendar', {
+        search: 'yoga',
+        categories: ['cat-selected'],
+        startDate: '2025-11-15',
+        endDate: '2025-11-21',
+      });
+      expect(loadCategoriesSpy).toHaveBeenCalledWith('test-calendar', {
+        search: 'yoga',
+        startDate: '2025-11-15',
+        endDate: '2025-11-21',
+      });
+    });
+
+    it('does NOT pass selectedCategoryIds to the categories endpoint', async () => {
+      store.currentCalendarUrlName = 'test-calendar';
+      store.setSelectedCategories(['cat-selected-a', 'cat-selected-b']);
+
+      const loadCategoriesSpy = vi.spyOn(store, 'loadCategories').mockResolvedValue();
+      vi.spyOn(store, 'loadEvents').mockResolvedValue();
+
+      await store.reloadWithFilters();
+
+      expect(loadCategoriesSpy).toHaveBeenCalledWith('test-calendar', {});
+      const passedFilters = loadCategoriesSpy.mock.calls[0][1] as Record<string, unknown> | undefined;
+      expect(passedFilters).toBeDefined();
+      expect(passedFilters).not.toHaveProperty('categories');
+    });
+
+    it('omits search from category filters when shorter than 3 chars', async () => {
+      store.currentCalendarUrlName = 'test-calendar';
+      store.setSearchQuery('yo');
+      store.setDateRange('2025-11-15', '2025-11-21');
+
+      const loadCategoriesSpy = vi.spyOn(store, 'loadCategories').mockResolvedValue();
+      vi.spyOn(store, 'loadEvents').mockResolvedValue();
+
+      await store.reloadWithFilters();
+
+      expect(loadCategoriesSpy).toHaveBeenCalledWith('test-calendar', {
+        startDate: '2025-11-15',
+        endDate: '2025-11-21',
+      });
+    });
+
+    it('does not call loadCategories if no calendar is set', async () => {
+      store.currentCalendarUrlName = null;
+
+      const loadCategoriesSpy = vi.spyOn(store, 'loadCategories').mockResolvedValue();
+
+      await store.reloadWithFilters();
+
+      expect(loadCategoriesSpy).not.toHaveBeenCalled();
     });
   });
 });
