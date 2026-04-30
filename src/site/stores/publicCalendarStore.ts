@@ -430,10 +430,23 @@ export const usePublicCalendarStore = defineStore('publicCalendar', {
      * eventCount (and thus presentCategoryIds) reflects the current window.
      * Categories are NOT reloaded with selectedCategoryIds — category
      * presence must be independent of the user's category selection.
+     *
+     * When the user has not picked an explicit date filter, both branches
+     * fall back to the calendar's default date window. Without this, the
+     * categories endpoint would count events across all time on initial
+     * load and every pill would render as "active" even when the default
+     * window contains no events for some categories.
      */
     async reloadWithFilters() {
       if (this.currentCalendarUrlName) {
-        const filters: FilterOptions = {};
+        const defaultRange = getDefaultDateRange(this.calendarDefaultDateRange);
+        const effectiveStartDate = this.startDate ?? defaultRange.startDate;
+        const effectiveEndDate = this.endDate ?? defaultRange.endDate;
+
+        const filters: FilterOptions = {
+          startDate: effectiveStartDate,
+          endDate: effectiveEndDate,
+        };
 
         // Only include search filter if it has at least 3 characters
         if (this.searchQuery.trim().length >= 3) {
@@ -442,22 +455,13 @@ export const usePublicCalendarStore = defineStore('publicCalendar', {
         if (this.selectedCategoryIds.length > 0) {
           filters.categories = this.selectedCategoryIds;
         }
-        if (this.startDate) {
-          filters.startDate = this.startDate;
-        }
-        if (this.endDate) {
-          filters.endDate = this.endDate;
-        }
 
-        const categoryFilters: CategoryFilterOptions = {};
+        const categoryFilters: CategoryFilterOptions = {
+          startDate: effectiveStartDate,
+          endDate: effectiveEndDate,
+        };
         if (this.searchQuery.trim().length >= 3) {
           categoryFilters.search = this.searchQuery;
-        }
-        if (this.startDate) {
-          categoryFilters.startDate = this.startDate;
-        }
-        if (this.endDate) {
-          categoryFilters.endDate = this.endDate;
         }
 
         await Promise.all([

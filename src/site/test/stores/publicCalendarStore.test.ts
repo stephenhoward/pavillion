@@ -757,10 +757,30 @@ describe('publicCalendarStore - Search and Date Filter Extensions', () => {
 
       await store.reloadWithFilters();
 
-      expect(loadCategoriesSpy).toHaveBeenCalledWith('test-calendar', {});
       const passedFilters = loadCategoriesSpy.mock.calls[0][1] as Record<string, unknown> | undefined;
       expect(passedFilters).toBeDefined();
       expect(passedFilters).not.toHaveProperty('categories');
+    });
+
+    it('falls back to the calendar default date window when no dates are set', async () => {
+      // Regression: without this fallback the categories endpoint counted
+      // events across all time on initial load, so every pill rendered as
+      // active even when the default window had no events for some categories.
+      store.currentCalendarUrlName = 'test-calendar';
+      store.calendarDefaultDateRange = '2weeks';
+
+      const loadCategoriesSpy = vi.spyOn(store, 'loadCategories').mockResolvedValue();
+      const loadEventsSpy = vi.spyOn(store, 'loadEvents').mockResolvedValue();
+
+      await store.reloadWithFilters();
+
+      const eventsFilters = loadEventsSpy.mock.calls[0][1] as Record<string, unknown>;
+      const categoryFilters = loadCategoriesSpy.mock.calls[0][1] as Record<string, unknown>;
+
+      expect(eventsFilters.startDate).toBeDefined();
+      expect(eventsFilters.endDate).toBeDefined();
+      expect(categoryFilters.startDate).toBe(eventsFilters.startDate);
+      expect(categoryFilters.endDate).toBe(eventsFilters.endDate);
     });
 
     it('omits search from category filters when shorter than 3 chars', async () => {
