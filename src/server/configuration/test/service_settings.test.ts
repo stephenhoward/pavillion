@@ -580,6 +580,10 @@ describe('ServiceSettings', () => {
     });
 
     describe('instanceDescription', () => {
+      beforeEach(() => {
+        sandbox.stub(SettingsContentEntity, 'destroy').resolves();
+      });
+
       it('should accept a valid language-keyed object', async () => {
         sandbox.stub(ServiceSettingEntity, 'findAll').resolves([]);
         sandbox.stub(SettingsContentEntity, 'findAll').resolves([]);
@@ -701,12 +705,18 @@ describe('ServiceSettings', () => {
         expect(result).toEqual({});
       });
 
-      it('should delete removed languages when updating', async () => {
+      it('should nullify description for removed languages when updating', async () => {
         sandbox.stub(ServiceSettingEntity, 'findAll').resolves([]);
-        const destroyStub = sandbox.stub().resolves();
+        const frSaveStub = sandbox.stub().resolves();
+        const frRow = {
+          language: 'fr',
+          description: 'Bonjour',
+          policy: null,
+          save: frSaveStub,
+        } as unknown as SettingsContentEntity;
         sandbox.stub(SettingsContentEntity, 'findAll').resolves([
-          { language: 'en', description: 'Hello', destroy: destroyStub } as unknown as SettingsContentEntity,
-          { language: 'fr', description: 'Bonjour', destroy: destroyStub } as unknown as SettingsContentEntity,
+          { language: 'en', description: 'Hello', policy: null } as unknown as SettingsContentEntity,
+          frRow,
         ]);
         sandbox.stub(SettingsContentEntity, 'findOrCreate').resolves([
           { language: 'en', description: 'Updated', save: sandbox.stub().resolves() } as unknown as SettingsContentEntity,
@@ -717,8 +727,9 @@ describe('ServiceSettings', () => {
         const result = await settings.setInstanceDescription({ en: 'Updated' });
 
         expect(result).toBe(true);
-        // 'fr' should have been destroyed since it's not in the new set
-        expect(destroyStub.calledOnce).toBe(true);
+        // 'fr' is not in the new set → description set to null and saved (preserves the row in case it carries a policy)
+        expect(frRow.description).toBeNull();
+        expect(frSaveStub.calledOnce).toBe(true);
       });
 
       it('should update existing descriptions', async () => {

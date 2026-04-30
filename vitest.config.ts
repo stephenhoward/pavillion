@@ -29,10 +29,13 @@ export default defineConfig({
     // Two-project layout:
     //  - default: vmThreads pool for the bulk of unit tests (Sequelize
     //    isolation, low RPC overhead).
-    //  - render-markdown: forks pool for any test that imports
-    //    `isomorphic-dompurify`, which transitively loads `@exodus/bytes`
-    //    (an ESM-in-CJS package). The vmThreads pool cannot evaluate that
-    //    without a Vite SSR transform; the forks pool handles it natively.
+    //  - dompurify-isolated: forks pool + node environment for any test
+    //    that transitively imports `isomorphic-dompurify`. The vmThreads
+    //    pool cannot evaluate `@exodus/bytes` (an ESM-in-CJS package
+    //    pulled in by isomorphic-dompurify's transitive deps); the forks
+    //    pool handles it natively. Add a test file here when its module
+    //    graph reaches `renderPolicyMarkdown` or any other consumer of
+    //    isomorphic-dompurify.
     projects: [
       {
         plugins: [vue()],
@@ -54,6 +57,23 @@ export default defineConfig({
           exclude: [
             ...sharedExclude,
             'src/common/test/utils/render-markdown.test.ts',
+            'src/server/configuration/test/service_settings.test.ts',
+            // Tests that transitively import ServiceSettings (which depends on renderPolicyMarkdown)
+            'src/server/accounts/test/account_service.test.ts',
+            'src/server/accounts/test/admin_pagination.test.ts',
+            'src/server/accounts/test/api.test.ts',
+            'src/server/authentication/test/api.test.ts',
+            'src/server/authentication/test/auth_service.test.ts',
+            'src/server/configuration/test/api.test.ts',
+            'src/server/activitypub/test/api/calendar-actor.test.ts',
+            'src/server/moderation/test/api/admin-instance.test.ts',
+            'src/server/moderation/test/api/admin-report-forward.test.ts',
+            'src/server/moderation/test/api/admin-settings.test.ts',
+            'src/server/moderation/test/api/analytics.test.ts',
+            'src/server/moderation/test/api/blocked-reporters.test.ts',
+            'src/server/moderation/test/api/owner-report-forward.test.ts',
+            'src/server/moderation/test/service/auto-escalation.test.ts',
+            'src/server/moderation/test/service/moderation.test.ts',
           ],
           env: { NODE_ENV: 'test' },
         },
@@ -62,11 +82,30 @@ export default defineConfig({
         plugins: [vue()],
         resolve: { alias: sharedAliases },
         test: {
-          name: 'render-markdown',
+          name: 'dompurify-isolated',
           environment: 'node',
           globals: true,
           pool: 'forks',
-          include: ['src/common/test/utils/render-markdown.test.ts'],
+          include: [
+            'src/common/test/utils/render-markdown.test.ts',
+            'src/server/configuration/test/service_settings.test.ts',
+            // Tests that transitively import ServiceSettings (which depends on renderPolicyMarkdown)
+            'src/server/accounts/test/account_service.test.ts',
+            'src/server/accounts/test/admin_pagination.test.ts',
+            'src/server/accounts/test/api.test.ts',
+            'src/server/authentication/test/api.test.ts',
+            'src/server/authentication/test/auth_service.test.ts',
+            'src/server/configuration/test/api.test.ts',
+            'src/server/activitypub/test/api/calendar-actor.test.ts',
+            'src/server/moderation/test/api/admin-instance.test.ts',
+            'src/server/moderation/test/api/admin-report-forward.test.ts',
+            'src/server/moderation/test/api/admin-settings.test.ts',
+            'src/server/moderation/test/api/analytics.test.ts',
+            'src/server/moderation/test/api/blocked-reporters.test.ts',
+            'src/server/moderation/test/api/owner-report-forward.test.ts',
+            'src/server/moderation/test/service/auto-escalation.test.ts',
+            'src/server/moderation/test/service/moderation.test.ts',
+          ],
           env: { NODE_ENV: 'test' },
         },
       },
