@@ -149,6 +149,45 @@ describe('EventCategoryModel', () => {
     expect(category.hasContent('es')).toBe(true);
   });
 
+  test('roundtrips eventCount through toObject/fromObject when present', () => {
+    const obj = {
+      id: 'cat-123',
+      calendarId: 'cal-456',
+      eventCount: 5,
+      content: {
+        en: {
+          language: 'en',
+          name: 'Meeting',
+        },
+      },
+    };
+
+    const category = EventCategory.fromObject(obj);
+    expect(category.eventCount).toBe(5);
+
+    const serialized = category.toObject();
+    expect(serialized.eventCount).toBe(5);
+  });
+
+  test('defaults eventCount to 0 when missing from wire payload', () => {
+    const obj = {
+      id: 'cat-123',
+      calendarId: 'cal-456',
+      content: {
+        en: {
+          language: 'en',
+          name: 'Meeting',
+        },
+      },
+    };
+
+    const category = EventCategory.fromObject(obj);
+    expect(category.eventCount).toBe(0);
+
+    const serialized = category.toObject();
+    expect(serialized.eventCount).toBe(0);
+  });
+
   test('handles empty calendar ID validation', () => {
     const category = new EventCategory(
       'cat-123',

@@ -9,6 +9,15 @@ import { EventCategoryContent as EventCategoryContent } from './event_category_c
 export class EventCategory extends TranslatedModel<EventCategoryContent> {
   _content: Record<string, EventCategoryContent> = {};
 
+  /**
+   * Wire-only count of events currently assigned to this category within the
+   * scope of the API response that produced it (e.g. matching a date window
+   * or search filter). Not persisted on the category itself; populated by the
+   * server when the category is returned alongside category-stats endpoints.
+   * Defaults to 0 when the wire payload does not include it.
+   */
+  eventCount: number = 0;
+
   constructor(
     id: string,
     public calendarId: string,
@@ -45,6 +54,7 @@ export class EventCategory extends TranslatedModel<EventCategoryContent> {
     return {
       id: this.id,
       calendarId: this.calendarId,
+      eventCount: this.eventCount,
       content: Object.fromEntries(
         Object.entries(this._content)
           .map(([language, content]: [string, EventCategoryContent]) => [language, content.toObject()]),
@@ -60,6 +70,10 @@ export class EventCategory extends TranslatedModel<EventCategoryContent> {
       obj.id,
       obj.calendarId,
     );
+
+    if (typeof obj.eventCount === 'number') {
+      category.eventCount = obj.eventCount;
+    }
 
     if (obj.content) {
       for (const [language, contentObj] of Object.entries(obj.content)) {
