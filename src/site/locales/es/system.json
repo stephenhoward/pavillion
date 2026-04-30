@@ -32,6 +32,8 @@
     "category_filter_aria_label": "{{name}} filtro de categoría, {{state}}",
     "selected": "seleccionado",
     "not_selected": "no seleccionado",
+    "category_absent": "no disponible",
+    "category_absent_tooltip": "No hay eventos en este rango de fechas",
     "back_to_calendar": "Volver a {{name}}",
     "series_events": "Eventos en esta serie",
     "series_no_events": "No hay eventos en esta serie",
@@ -87,6 +89,12 @@
     "event_source_calendar_label": "Ver calendario fuente {{name}}",
     "event_details_sidebar": "Detalles del evento",
     "opens_in_new_tab": "se abre en una pestaña nueva",
+    "url_prompt": {
+        "tickets": "Entradas",
+        "rsvp": "Confirmar asistencia",
+        "more_info": "Más información",
+        "register": "Registrarse"
+    },
     "report": {
         "link_text": "Reportar evento",
         "form_title": "Reportar este evento",

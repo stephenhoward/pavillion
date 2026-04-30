@@ -27,6 +27,13 @@
     "next_week": "Semaine suivante",
     "previous_month": "Mois précédent",
     "next_month": "Mois suivant",
+    "scroll_categories_left": "Faire défiler les catégories vers la gauche",
+    "scroll_categories_right": "Faire défiler les catégories vers la droite",
+    "category_filter_aria_label": "Filtre de catégorie {{name}}, {{state}}",
+    "selected": "sélectionné",
+    "not_selected": "non sélectionné",
+    "category_absent": "non disponible",
+    "category_absent_tooltip": "Aucun événement dans cette plage de dates",
     "public_search_filter": {
         "search_events": "Rechercher des événements",
         "search_placeholder": "Rechercher des événements...",
@@ -82,6 +89,12 @@
     "event_source_calendar_label": "Voir le calendrier source {{name}}",
     "event_details_sidebar": "Détails de l'événement",
     "opens_in_new_tab": "s'ouvre dans un nouvel onglet",
+    "url_prompt": {
+        "tickets": "Billets",
+        "rsvp": "Confirmer ma présence",
+        "more_info": "Plus d'informations",
+        "register": "S'inscrire"
+    },
     "report": {
         "link_text": "Signaler l'événement",
         "form_title": "Signaler cet événement",
