@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mount, flushPromises } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import { createRouter, createMemoryHistory } from 'vue-router';
@@ -632,6 +632,56 @@ describe('SearchFilterPublic Component', () => {
       const buttonText = wrapper.find('.button-text').text();
       expect(buttonText).toBe('Feb 24');
       expect(buttonText).not.toContain('24-24');
+    });
+  });
+
+  describe('Default Date Range Display', () => {
+    // Fix "now" so getDefaultDateRange() resolves to a known string.
+    // 2026-04-29T12:00:00Z renders to Apr 29 in every reasonable test-runner zone.
+    beforeEach(() => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-04-29T12:00:00Z'));
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('should show the default date range in the button label when no filter is active', async () => {
+      const wrapper = mount(SearchFilterPublic, {
+        global: {
+          plugins: [pinia, router, [I18NextVue, { i18next }]],
+        },
+      });
+
+      await flushPromises();
+
+      // Store default is '2weeks' → today (Apr 29) + 14 days = May 13.
+      // formatDateRange picks the cross-month form "Apr 29 - May 13".
+      const buttonText = wrapper.find('.button-text').text();
+      expect(buttonText).toBe('Apr 29 - May 13');
+    });
+
+    it('should re-render the button label when calendarDefaultDateRange changes', async () => {
+      const store = usePublicCalendarStore();
+
+      const wrapper = mount(SearchFilterPublic, {
+        global: {
+          plugins: [pinia, router, [I18NextVue, { i18next }]],
+        },
+      });
+
+      await flushPromises();
+
+      // Initial: '2weeks' default → 14 days
+      expect(wrapper.find('.button-text').text()).toBe('Apr 29 - May 13');
+
+      // Simulate loadCalendar() resolving with a per-calendar override
+      store.calendarDefaultDateRange = '1week';
+      await flushPromises();
+
+      // After change: '1week' → 7 days → May 6
+      expect(wrapper.find('.button-text').text()).toBe('Apr 29 - May 6');
     });
   });
 
