@@ -59,8 +59,11 @@ export default class PublicCalendarInterface {
     return this.publicCalendarService.findOrMaterializeInstanceWithDetails(eventId, startTime);
   }
 
-  async listCategoriesForCalendar(calendar: Calendar): Promise<Array<{category: EventCategory, eventCount: number}>> {
-    return this.publicCalendarService.listCategoriesForCalendar(calendar);
+  async listCategoriesForCalendar(
+    calendar: Calendar,
+    options?: { startDate?: string; endDate?: string; search?: string },
+  ): Promise<Array<{category: EventCategory, eventCount: number}>> {
+    return this.publicCalendarService.listCategoriesForCalendar(calendar, options);
   }
 
   async listEventInstancesWithCategoryFilter(calendar: Calendar, categoryIds: string[]): Promise<CalendarEventInstance[]> {
