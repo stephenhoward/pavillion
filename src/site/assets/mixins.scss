@@ -1059,6 +1059,11 @@ $public-link-color: $public-accent-light;
     background: $public-bg-primary-dark;
     border-color: $public-border-subtle-dark;
   }
+
+  @include public-light-mode-override {
+    background: $public-bg-primary-light;
+    border-color: $public-border-subtle-light;
+  }
 }
 
 // ===== STICKY DATE HEADING =====
@@ -1155,6 +1160,14 @@ $public-link-color: $public-accent-light;
       135deg,
       $public-bg-secondary-dark 0%,
       $public-bg-tertiary-dark 100%
+    );
+  }
+
+  @include public-light-mode-override {
+    background: linear-gradient(
+      135deg,
+      $public-bg-secondary-light 0%,
+      $public-bg-tertiary-light 100%
     );
   }
 }
