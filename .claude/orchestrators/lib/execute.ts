@@ -177,6 +177,8 @@ interface BuildGuardianResult {
   verdict: 'pass' | 'fail';
   concerns: string[];
   beadsFailed: string[];
+  /** True when the build-guardian response could not be parsed (terminal — do not retry). */
+  parseFailed?: boolean;
 }
 
 interface InvestigatorResult {
@@ -218,11 +220,21 @@ Follow TDD. Stay scoped to the files listed.
    \`\`\`bash
    npx vitest run <file1> <file2> --maxThreads=2
    \`\`\`
-4. If lint and targeted tests pass: \`bd close ${beadId}\`
+4. **Commit your work.** Stage only the files this bead was scoped to modify
+   (the "Files to Modify" list in your notes), then commit with the bead id
+   in the subject:
+   \`\`\`bash
+   git add <files-from-Files-to-Modify>
+   git commit -m "<conventional-prefix>: <short summary> (${beadId})"
+   \`\`\`
+   Do NOT \`git add -A\` — parallel sibling implementers may have unstaged
+   changes on other files; staging them here would attribute their work to
+   your commit and break the per-bead verification gate.
+5. If lint, targeted tests, and the commit all succeed: \`bd close ${beadId}\`
 
 Do NOT run \`npm test\` or the full test suite — the build-guardian handles that
-once per wave after all beads complete. Do NOT close the bead if lint or
-targeted tests are failing. If blocked, report back.`;
+once per wave after all beads complete. Do NOT close the bead if lint, targeted
+tests, or the commit step are failing. If blocked, report back.`;
 
   if (!retryContext) {
     return base;
@@ -418,13 +430,16 @@ function filterEnrichedBeads(
 }
 
 function findNextWaveBeads(
-  _epicId: string,
+  epicId: string,
   ctx: RunContext,
   deps: ExecuteDeps,
 ): string[] {
   const spawnSync = deps.scriptSpawnFn ?? nodeSpawnSync;
 
-  const result = spawnSync('bd', ['ready', '--json'], {
+  // Scope ready-set to descendants of the current epic; without --parent, bd
+  // ready returns every globally-ready bead and unrelated work gets pulled
+  // into the wave.
+  const result = spawnSync('bd', ['ready', '--parent', epicId, '--json'], {
     encoding: 'buffer' as never,
     shell: true,
     timeout: 30_000,
@@ -544,6 +559,54 @@ async function dispatchVerifier(
   }
 }
 
+/**
+ * Extract the final fenced JSON block from a markdown response.
+ *
+ * The build-guardian agent emits a free-form markdown report and is asked to
+ * close with a fenced ```json``` block carrying the structured verdict. Some
+ * agents drift from the schema; this helper scans for the *last* fenced JSON
+ * block (or the last bare `{...}` block as a fallback) and tries to parse it.
+ *
+ * Returns `null` when no parseable block is found.
+ */
+export function extractFinalJsonBlock(text: string): unknown | null {
+  // Prefer the last ```json fenced block.
+  const fencedRegex = /```json\s*([\s\S]*?)```/gi;
+  let lastFenced: string | null = null;
+  let m: RegExpExecArray | null;
+  while ((m = fencedRegex.exec(text)) !== null) {
+    lastFenced = m[1];
+  }
+  if (lastFenced) {
+    try { return JSON.parse(lastFenced.trim()); }
+    catch { /* fall through to bare-object fallback */ }
+  }
+
+  // Fallback: last balanced top-level `{...}` block in the text.
+  let depth = 0;
+  let start = -1;
+  let lastObject: string | null = null;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (ch === '{') {
+      if (depth === 0) start = i;
+      depth++;
+    }
+    else if (ch === '}') {
+      depth--;
+      if (depth === 0 && start !== -1) {
+        lastObject = text.slice(start, i + 1);
+        start = -1;
+      }
+    }
+  }
+  if (lastObject) {
+    try { return JSON.parse(lastObject); }
+    catch { /* unparseable */ }
+  }
+  return null;
+}
+
 async function dispatchBuildGuardian(
   epicId: string,
   waveNumber: number,
@@ -563,10 +626,26 @@ npx vitest run --maxThreads=2
 npm run build
 \`\`\`
 
-Report results using the wave-verdict schema.`;
+After running the suite, write your prose report, then close your output with
+a fenced JSON block containing the structured verdict. The orchestrator parses
+this block — without it, the run cannot continue.
 
+\`\`\`json
+{
+  "verdict": "pass" | "fail",
+  "concerns": ["short error description", "..."],
+  "beadsFailed": ["pv-xxxx", "..."]
+}
+\`\`\`
+
+\`verdict\` is "pass" only when lint, tests, and build all succeed. \`concerns\`
+should list each failing check (one entry per failure) with file paths and
+test names where available. \`beadsFailed\` lists bead IDs whose changes
+introduced the failures (empty if you cannot attribute).`;
+
+  let raw: unknown;
   try {
-    const raw = await dispatch({
+    raw = await dispatch({
       agent: 'build-guardian',
       prompt,
       timeoutMs: TIMEOUT_BUILD_GUARDIAN,
@@ -574,15 +653,6 @@ Report results using the wave-verdict schema.`;
       logTag: PhaseName.Epic,
       spawnFn: deps.spawnFn as typeof nodeSpawn,
     });
-
-    // dispatch returns raw string when no schemaPath; parse it ourselves
-    const result = typeof raw === 'string' ? JSON.parse(raw) as WaveResult : raw as WaveResult;
-
-    return {
-      verdict: result.verdict === 'pass' ? 'pass' : 'fail',
-      concerns: result.concerns ?? [],
-      beadsFailed: result.beadsFailed ?? [],
-    };
   }
   catch (err) {
     ctx.logger.writePhaseLog(PhaseName.Epic, 'err',
@@ -591,8 +661,41 @@ Report results using the wave-verdict schema.`;
       verdict: 'fail',
       concerns: [`build-guardian dispatch error: ${err instanceof Error ? err.message : String(err)}`],
       beadsFailed: [],
+      parseFailed: true,
     };
   }
+
+  // dispatch() returns the parsed object directly when --json-schema was used.
+  // Build-guardian dispatches without a schema, so `raw` is the markdown
+  // string. Extract the structured verdict from the fenced JSON tail.
+  let result: WaveResult | null = null;
+  if (typeof raw !== 'string') {
+    result = raw as WaveResult;
+  }
+  else {
+    const extracted = extractFinalJsonBlock(raw);
+    if (extracted && typeof extracted === 'object') {
+      result = extracted as WaveResult;
+    }
+  }
+
+  if (!result) {
+    const tail = typeof raw === 'string' ? raw.slice(-300).replace(/\s+/g, ' ').trim() : '';
+    const reason = `build-guardian output missing parseable JSON envelope${tail ? ` (tail: ${tail})` : ''}`;
+    ctx.logger.writePhaseLog(PhaseName.Epic, 'err', `${reason}\n`);
+    return {
+      verdict: 'fail',
+      concerns: [reason],
+      beadsFailed: [],
+      parseFailed: true,
+    };
+  }
+
+  return {
+    verdict: result.verdict === 'pass' ? 'pass' : 'fail',
+    concerns: result.concerns ?? [],
+    beadsFailed: result.beadsFailed ?? [],
+  };
 }
 
 async function dispatchTestFailureInvestigator(
@@ -674,22 +777,50 @@ async function runWaveEndChain(
       return { outcome: 'pass', failedBeads: [], retries };
     }
 
+    // Build-guardian failed — log and decide whether retry is meaningful.
+    ctx.logger.appendRunJson({
+      event: 'build-guardian-fail',
+      phase: PhaseName.Epic,
+      epicId,
+      waveNumber,
+      attempt: attempt + 1,
+      concerns: buildResult.concerns,
+      parseFailed: buildResult.parseFailed ?? false,
+    });
+
+    // Parse failures are terminal: there is no signal about which bead is
+    // responsible, so retrying just spawns implementers with no bead id and
+    // loops the orchestrator. Escalate immediately.
+    if (buildResult.parseFailed) {
+      const failedBeads = buildResult.beadsFailed.length > 0
+        ? buildResult.beadsFailed
+        : completedBeads;
+      for (const beadId of failedBeads) {
+        escalateBead(beadId, 'Build-guardian output unparseable; manual investigation required', ctx, deps);
+      }
+      return { outcome: 'escalated', failedBeads, retries };
+    }
+
     // Build-guardian failed — investigate and retry
     if (attempt < MAX_WAVE_RETRIES) {
-      ctx.logger.appendRunJson({
-        event: 'build-guardian-fail',
-        phase: PhaseName.Epic,
-        epicId,
-        waveNumber,
-        attempt: attempt + 1,
-        concerns: buildResult.concerns,
-      });
-
       const investigatorResult = await dispatchTestFailureInvestigator(
         epicId, waveNumber, buildResult.concerns, ctx, deps,
       );
 
       const responsibleBead = investigatorResult.responsibleBead ?? completedBeads[0];
+
+      // Without a responsibleBead we cannot dispatch a meaningful retry;
+      // the dispatchImplementer guard would refuse, but we'd still loop
+      // through this branch. Escalate instead.
+      if (!responsibleBead) {
+        const failedBeads = buildResult.beadsFailed.length > 0
+          ? buildResult.beadsFailed
+          : completedBeads;
+        for (const beadId of failedBeads) {
+          escalateBead(beadId, 'Build-guardian failed and no responsible bead could be identified', ctx, deps);
+        }
+        return { outcome: 'escalated', failedBeads, retries };
+      }
 
       retries++;
       await dispatchImplementer(responsibleBead, ctx, {
@@ -763,12 +894,29 @@ function escalateLeaf(
 
 /**
  * Dispatch a single implementer subagent for the given bead.
+ *
+ * Refuses to dispatch when `beadId` is empty, undefined, or the literal
+ * string `"undefined"` (the JS-toString fingerprint of a variable that
+ * was never set). Without this guard, upstream attribution failures
+ * (e.g. test-failure-investigator returning no responsibleBead) would
+ * spawn an implementer with the prompt "Implement Bead: undefined" and
+ * the orchestrator would loop on it indefinitely.
  */
 export async function dispatchImplementer(
   beadId: string,
   ctx: RunContext,
   deps: ExecuteDeps = {},
 ): Promise<ImplementerResult> {
+  if (!beadId || beadId === 'undefined' || beadId === 'null') {
+    const reason = `refused to dispatch implementer with empty/undefined bead id (got ${JSON.stringify(beadId)})`;
+    ctx.logger.appendRunJson({
+      event: 'implementer-dispatch-refused',
+      phase: PhaseName.Leaf,
+      reason,
+    });
+    return { ok: false, reason };
+  }
+
   const prompt = buildImplementerPrompt(beadId, deps.retryContext);
   const timeoutMs = deps.timeoutMs ?? TIMEOUT_IMPLEMENTER;
 
@@ -808,6 +956,63 @@ export type VerificationResult =
   | { passed: false; reason: string };
 
 /**
+ * Extract the "Files to Modify" path list from a bead's notes.
+ *
+ * Used by the verification gate in wave mode to scope the dirty-tree check
+ * to files the bead was supposed to touch. In a parallel-implementer wave,
+ * an unscoped check sees every sibling's pending edit as foreign noise and
+ * fails every bead in the wave.
+ *
+ * Parses `bd show <id> --json` output for the `## Files to Modify` block
+ * and pulls backticked paths from each bullet. Returns `[]` for verification-
+ * only beads (notes contain `- None`) or when the bead has no notes / parse
+ * fails — the caller falls back to the unscoped whole-tree check.
+ */
+export function extractExpectedFiles(
+  beadId: string,
+  deps: ExecuteDeps,
+): string[] {
+  const spawnSync = deps.scriptSpawnFn ?? nodeSpawnSync;
+  const result = spawnSync('bd', ['show', beadId, '--json'], {
+    encoding: 'buffer' as never,
+    shell: false,
+    timeout: 10_000,
+  });
+  if (result.status !== 0) {
+    return [];
+  }
+
+  let notes: string;
+  try {
+    const parsed = JSON.parse(result.stdout?.toString('utf-8') ?? '[]') as Array<{ notes?: string }>;
+    notes = parsed[0]?.notes ?? '';
+  }
+  catch {
+    return [];
+  }
+
+  // Locate `## Files to Modify` heading and grab bullet block until next heading.
+  const match = notes.match(/##\s*Files to Modify\s*\n([\s\S]*?)(?:\n##\s|\n#\s|$)/);
+  if (!match) {
+    return [];
+  }
+
+  const block = match[1];
+  // "None" or "- None" sentinel for verification-only beads.
+  if (/^\s*-?\s*None\b/im.test(block.trim().split('\n')[0] ?? '')) {
+    return [];
+  }
+
+  const files: string[] = [];
+  for (const line of block.split('\n')) {
+    // Bullet starting with `-` followed by a backticked path; ignore "Reason:" sub-lines.
+    const m = line.match(/^\s*-\s*`([^`]+)`/);
+    if (m) files.push(m[1]);
+  }
+  return files;
+}
+
+/**
  * Verify that the implementer subagent actually committed its work.
  *
  * Runs after a successful `dispatchImplementer`, before `runAudit`. Catches
@@ -820,17 +1025,27 @@ export type VerificationResult =
  *   2. Branch has commits ahead of base (`git rev-list --count base..HEAD > 0`).
  *   3. Computes authoritative `changedFiles` via `git diff --name-only base...HEAD`.
  *
+ * When `expectedFiles` is provided (wave mode), the dirty-tree check is
+ * scoped to those paths via `git status --porcelain -- <files>`. This
+ * prevents one bead from failing because a parallel sibling left
+ * uncommitted edits on a file outside this bead's scope.
+ *
  * Base branch defaults to `main`; override via `GIT_SAFE_MAIN_BRANCH` env var
  * (consistent with preflight checks in `helpers.ts`).
  */
 export function verifyImplementerCompletion(
   ctx: RunContext,
   deps: ExecuteDeps,
+  expectedFiles?: string[],
 ): VerificationResult {
   const spawnFn = deps.scriptSpawnFn ?? nodeSpawnSync;
   const baseBranch = process.env.GIT_SAFE_MAIN_BRANCH ?? 'main';
 
-  const statusResult = spawnFn('git', ['status', '--porcelain'], {
+  const statusArgs = ['status', '--porcelain'];
+  if (expectedFiles && expectedFiles.length > 0) {
+    statusArgs.push('--', ...expectedFiles);
+  }
+  const statusResult = spawnFn('git', statusArgs, {
     encoding: 'buffer' as never,
     shell: false,
     timeout: 10_000,
@@ -1291,10 +1506,13 @@ export async function runEpicExecution(
 
       // Verification gate — mirror leaf-path enforcement. Scope ctx.beadId to
       // the child bead so gate/reopen log events identify the bead, not the epic.
+      // Pass the bead's expected file set so the dirty-tree check ignores
+      // pending edits from parallel siblings on unrelated files.
       // Epic wave loop handles retries at the wave level via MAX_WAVE_RETRIES;
       // here we just mark this bead as failed for this wave and move on.
       const beadCtx: RunContext = { ...ctx, beadId };
-      const gate = verifyImplementerCompletion(beadCtx, deps);
+      const expectedFiles = extractExpectedFiles(beadId, deps);
+      const gate = verifyImplementerCompletion(beadCtx, deps, expectedFiles);
       if (!gate.passed) {
         reopenBead(beadId, beadCtx, deps, 'verification-gate-epic-escalate');
         waveState.beadsFailed.push(beadId);
@@ -1625,8 +1843,10 @@ export const leafPhase: PhaseRunner = async (ctx, deps = {}) => {
 export const epicPhase: PhaseRunner = async (ctx, deps = {}) => {
   const spawnSync = deps.scriptSpawnFn ?? nodeSpawnSync;
 
-  // Discover initial ready beads for the epic via `bd ready --json`
-  const result = spawnSync('bd', ['ready', '--json'], {
+  // Discover initial ready beads for the epic via `bd ready --parent <epic> --json`.
+  // The --parent filter is essential: without it, bd ready returns the entire
+  // globally-ready set and unrelated beads from other epics get swept into wave 1.
+  const result = spawnSync('bd', ['ready', '--parent', ctx.beadId, '--json'], {
     encoding: 'buffer' as never,
     shell: true,
     timeout: 30_000,
