@@ -498,7 +498,7 @@ describe('event category badge behaviour', () => {
 
     const badge = wrapper.find('.event-category-badge');
     expect(badge.exists()).toBe(true);
-    expect(badge.attributes('href')).toContain('category=uuid-arts-123');
+    expect(badge.attributes('href')).toContain('?categories=uuid-arts-123');
     wrapper.unmount();
   });
 
@@ -606,7 +606,7 @@ describe('event category badge behaviour', () => {
     expect(badge.exists()).toBe(true);
     const href = badge.attributes('href') ?? '';
     expect(href).toContain('/es/');
-    expect(href).toContain('category=cat-uuid-002');
+    expect(href).toContain('?categories=cat-uuid-002');
     wrapper.unmount();
   });
 });
