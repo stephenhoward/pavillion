@@ -28,10 +28,7 @@
   &:focus-visible {
     outline: none;
     border-color: var(--pav-color-brand-primary);
-    /* Pre-existing focus-ring literal shared with `.welcome-card input:focus` and
-       `.btn--pill.btn--primary:focus-visible`. WCAG 2.1 SC 1.4.11 (3:1 contrast) is a
-       known gap pending a brand-primary-alpha token; resolve together when that token lands. */
-    box-shadow: 0 0 0 3px rgb(249 115 22 / 0.4);
+    box-shadow: var(--pav-shadow-focus-brand);
   }
 
   /* Error state */
@@ -43,7 +40,7 @@
     &:focus-visible {
       outline: none;
       border-color: var(--pav-color-border-error);
-      box-shadow: 0 0 0 3px rgb(249 115 22 / 0.4);
+      box-shadow: var(--pav-shadow-focus-brand);
     }
   }
 }
