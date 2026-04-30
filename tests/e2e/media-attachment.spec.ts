@@ -65,50 +65,31 @@ test.describe('Media Attachment', () => {
     const fileInput = page.locator('input.file-input');
     await fileInput.setInputFiles(TEST_IMAGE_PATH);
 
-    // Wait for upload to process — preview or progress should appear
-    // The upload zone should transition from empty to preview state
-    const previewOrProgress = page.locator('.preview-state, .upload-progress-overlay, .preview-image-wrapper');
-    await expect(previewOrProgress.first()).toBeVisible({ timeout: 15000 });
-
-    // Check for either success state or preview image
-    const successOverlay = page.locator('.success-overlay');
-    const previewImage = page.locator('.preview-image');
-    const previewWrapper = page.locator('.preview-image-wrapper');
-
-    // At least one of these should be visible after upload
-    const hasSuccess = await successOverlay.isVisible().catch(() => false);
-    const hasPreview = await previewImage.isVisible().catch(() => false);
-    const hasWrapper = await previewWrapper.isVisible().catch(() => false);
-
-    expect(hasSuccess || hasPreview || hasWrapper).toBeTruthy();
+    // After upload completes, the parent swaps ImageUpload for ImageWorkspace,
+    // which renders the uploaded image. Wait for that — selectors inside
+    // ImageUpload (.preview-image, .success-overlay) are racy because they
+    // unmount once eventImage becomes truthy.
+    const workspaceImage = page.locator('.image-workspace .workspace-image');
+    await expect(workspaceImage).toBeVisible({ timeout: 15000 });
   });
 
-  test('should show file info and action buttons after upload', async ({ page }) => {
+  test('should show image workspace and action buttons after upload', async ({ page }) => {
     // Upload image
     const fileInput = page.locator('input.file-input');
     await fileInput.setInputFiles(TEST_IMAGE_PATH);
 
-    // Wait for upload to complete
-    await page.waitForSelector('.preview-state, .preview-image-wrapper, .file-info-bar', { timeout: 15000 });
+    // After upload completes, edit_event.vue swaps ImageUpload for ImageWorkspace
+    // (v-if="eventImage" / v-else). Wait for the ImageWorkspace to appear — that's
+    // the stable post-upload UI users actually see. Querying the ImageUpload's
+    // transient .file-info-bar state is racy because that component unmounts.
+    const workspace = page.locator('.image-workspace');
+    await expect(workspace).toBeVisible({ timeout: 15000 });
 
-    // Check for file info bar (shows filename and size)
-    const fileInfoBar = page.locator('.file-info-bar');
-    const hasFileInfo = await fileInfoBar.isVisible().catch(() => false);
+    // The uploaded image should be rendered in the workspace
+    await expect(workspace.locator('.workspace-image')).toBeVisible();
 
-    if (hasFileInfo) {
-      // Verify file name is displayed
-      const fileName = page.locator('.file-name');
-      await expect(fileName).toBeVisible();
-
-      // Verify action buttons exist (change/remove)
-      const changeBtn = page.locator('.action-btn.change, button[aria-label*="replace"], button[aria-label*="Replace"]');
-      const removeBtn = page.locator('.action-btn.remove, button[aria-label*="remove"], button[aria-label*="Remove"]');
-
-      const hasChangeBtn = await changeBtn.first().isVisible().catch(() => false);
-      const hasRemoveBtn = await removeBtn.first().isVisible().catch(() => false);
-
-      // At least one action button should exist
-      expect(hasChangeBtn || hasRemoveBtn).toBeTruthy();
-    }
+    // Replace and remove action buttons should be present in the workspace
+    const actionButtons = workspace.locator('.action-buttons button');
+    await expect(actionButtons).toHaveCount(2);
   });
 });
