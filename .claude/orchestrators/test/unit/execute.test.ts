@@ -18,13 +18,13 @@ vi.mock('../../lib/helpers.js', async (importOriginal) => {
     bdEscalate: vi.fn(),
     bdEnrichmentCheck: vi.fn().mockReturnValue(false),
     commitMsg: vi.fn().mockImplementation(
-      (beadId: string, summary: string, issueType: string) => {
+      (summary: string, issueType: string) => {
         const typeMap: Record<string, string> = { bug: 'fix', feature: 'feat', epic: 'feat', task: 'chore' };
         const type = typeMap[issueType] ?? 'chore';
-        return `${type}: ${summary} (${beadId})`;
+        return `${type}: ${summary}`;
       },
     ),
-    prBody: vi.fn().mockReturnValue('## Summary\n\n- title\n'),
+    prBody: vi.fn().mockReturnValue('## Motivation\n\nWhy.\n\n## Approach\n\ntitle\n\n## Validation\n\n- [ ] checks\n'),
   };
 });
 
@@ -944,13 +944,13 @@ describe('runPR', () => {
     vi.mocked(helpers.bdEscalate).mockReturnValue(undefined);
     vi.mocked(helpers.bdEnrichmentCheck).mockReturnValue(false);
     vi.mocked(helpers.commitMsg).mockImplementation(
-      (beadId: string, summary: string, issueType: string) => {
+      (summary: string, issueType: string) => {
         const typeMap: Record<string, string> = { bug: 'fix', feature: 'feat', epic: 'feat', task: 'chore' };
         const type = typeMap[issueType] ?? 'chore';
-        return `${type}: ${summary} (${beadId})`;
+        return `${type}: ${summary}`;
       },
     );
-    vi.mocked(helpers.prBody).mockReturnValue('## Summary\n\n- title\n');
+    vi.mocked(helpers.prBody).mockReturnValue('## Motivation\n\nWhy.\n\n## Approach\n\ntitle\n\n## Validation\n\n- [ ] checks\n');
   });
 
   function makeDeps(results: SpawnSyncReturns<Buffer>[]): ExecuteDeps {
@@ -997,7 +997,7 @@ describe('runPR', () => {
   it('should create PR and route to Report for a closed leaf bead', async () => {
     const { runPR } = await import('../../lib/execute.js');
 
-    const branchName = 'chore/fix-widget-pv-test-1';
+    const branchName = 'chore/fix-widget';
     const prUrl = 'https://github.com/owner/repo/pull/42';
 
     // Sequence: git branch, bd show, git push, gh pr create

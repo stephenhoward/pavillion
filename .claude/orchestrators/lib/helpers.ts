@@ -191,12 +191,16 @@ export function gitSafeToStart(deps: SpawnDeps = {}): GitSafeResult {
 // =============================================================================
 
 /**
- * Orchestrator-generated branch pattern. Matches the format produced by
- * `branchName()`: `<type>/<kebab-title>-<beadId-with-dashes>`.
+ * Orchestrator-generated branch pattern. Matches legacy branches that still
+ * carry a `-pv-<beadId>` suffix from before pv-p85n stripped bead IDs out of
+ * git artifacts. New `branchName()` output (`<type>/<kebab-title>`) will not
+ * match — the orphan-recovery shortcut is intentionally legacy-only because
+ * a no-suffix pattern is too loose to safely distinguish abandoned
+ * orchestrator branches from real user work.
  *
- * Loose by design — a branch that matches this pattern still has to pass
- * every other recovery guard (clean tree, no commits ahead of main, no open
- * PR) before preflight will touch it.
+ * A branch that matches this pattern still has to pass every other recovery
+ * guard (clean tree, no commits ahead of main, no open PR) before preflight
+ * will touch it.
  */
 const ORCHESTRATOR_BRANCH_PATTERN = /^(chore|feat|fix)\/[a-z0-9][a-z0-9-]*-pv-[a-z0-9-]+$/;
 
@@ -926,18 +930,20 @@ const BRANCH_PREFIX_MAP: Record<string, string> = {
 /**
  * Derive a branch name from bead metadata. Pure function.
  *
- * Format: <prefix>/<kebab-title>-<id-slug>
+ * Format: <prefix>/<kebab-title>
  * Max length: 60 chars total.
- * Dots in beadId are replaced with hyphens.
+ *
+ * Bead IDs do not appear in branch names — see git-workflow skill's
+ * foundational principle: GitHub artifacts are self-contained for GitHub
+ * readers, so local tracker references stay out of branch names, commits,
+ * and PR bodies.
  */
 export function branchName(
-  beadId: string,
   title: string,
   issueType: string,
 ): string {
   const MAX_LEN = 60;
   const prefix = BRANCH_PREFIX_MAP[issueType] ?? 'chore';
-  const idSlug = beadId.replace(/\./g, '-');
 
   // Kebab-case the title
   const kebabFull = title
@@ -945,15 +951,15 @@ export function branchName(
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '');
 
-  // Reserve space: prefix + "/" + "-" + idSlug
-  const reserved = prefix.length + 1 + 1 + idSlug.length;
+  // Reserve space: prefix + "/"
+  const reserved = prefix.length + 1;
   const budget = Math.max(8, MAX_LEN - reserved);
 
-  let kebab = kebabFull.length > budget
+  const kebab = kebabFull.length > budget
     ? kebabFull.slice(0, budget).replace(/-+$/, '')
     : kebabFull;
 
-  return `${prefix}/${kebab}-${idSlug}`;
+  return `${prefix}/${kebab}`;
 }
 
 // =============================================================================
@@ -969,13 +975,15 @@ const COMMIT_TYPE_MAP: Record<string, string> = {
 };
 
 /**
- * Format a conventional commit message. Pure function.
+ * Format a conventional commit message header. Pure function.
  *
- * Format: <type>(<scope>): <summary> (<beadId>)
- *      or <type>: <summary> (<beadId>)
+ * Format: <type>(<scope>): <summary>
+ *      or <type>: <summary>
+ *
+ * Bead IDs do not appear in commit messages — see git-workflow skill's
+ * foundational principle.
  */
 export function commitMsg(
-  beadId: string,
   summary: string,
   issueType: string,
   scope?: string,
@@ -984,9 +992,9 @@ export function commitMsg(
   const cleanSummary = summary.replace(/\n/g, ' ').replace(/\s+/g, ' ').trim();
 
   if (scope) {
-    return `${type}(${scope}): ${cleanSummary} (${beadId})`;
+    return `${type}(${scope}): ${cleanSummary}`;
   }
-  return `${type}: ${cleanSummary} (${beadId})`;
+  return `${type}: ${cleanSummary}`;
 }
 
 // =============================================================================
@@ -996,34 +1004,29 @@ export function commitMsg(
 /**
  * Generate PR markdown body. Pure function.
  *
- * Sections: ## Summary, ## Beads closed, ## Test plan.
+ * Sections: ## Motivation, ## Approach, ## Validation. Matches the template
+ * in the git-workflow skill's pull-requests.md. No Summary, no Beads-closed
+ * list — bead IDs and other local tracker references must not appear in
+ * GitHub-visible artifacts.
  */
 export function prBody(
-  primaryTitle: string,
-  primaryDesc: string,
-  beads: BeadRef[],
+  title: string,
+  description: string,
 ): string {
-  // Extract first sentence from description
-  const summaryLine = (() => {
-    const flat = primaryDesc.replace(/\n/g, ' ').replace(/\s+/g, ' ').trim();
-    const dotIdx = flat.indexOf('. ');
-    if (dotIdx >= 0) {
-      return flat.slice(0, dotIdx + 1);
-    }
-    return flat.endsWith('.') ? flat : flat + '.';
-  })();
+  const motivation = description.trim().length > 0
+    ? description.trim()
+    : title;
 
   const lines: string[] = [
-    '## Summary',
+    '## Motivation',
     '',
-    `- ${primaryTitle}`,
-    ...(primaryDesc ? [`- ${summaryLine}`] : []),
+    motivation,
     '',
-    '## Beads closed',
+    '## Approach',
     '',
-    ...beads.map(b => `- ${b.id} - ${b.title}`),
+    title,
     '',
-    '## Test plan',
+    '## Validation',
     '',
     '- [ ] `npm run lint`',
     '- [ ] `npm run test:unit`',

@@ -55,12 +55,12 @@ function enrichedBeadText(): string {
 }
 
 // ---------------------------------------------------------------------------
-// Branch name that branchName() would derive for pv-test.1 / 'task' / title
+// Branch name that branchName() would derive for 'task' + title
 // ---------------------------------------------------------------------------
-// branchName('pv-test.1', 'Implement widget feature', 'task')
-// → prefix='chore', idSlug='pv-test-1', kebab='implement-widget-feature'
-// → 'chore/implement-widget-feature-pv-test-1'
-const EXPECTED_BRANCH = 'chore/implement-widget-feature-pv-test-1';
+// branchName('Implement widget feature', 'task')
+// → prefix='chore', kebab='implement-widget-feature'
+// → 'chore/implement-widget-feature'
+const EXPECTED_BRANCH = 'chore/implement-widget-feature';
 
 describe('Integration: leaf happy path', () => {
   let scripts: ScriptRouter;

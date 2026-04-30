@@ -34,7 +34,6 @@ import {
   commitMsg,
   prBody,
   type MatchedAgent as HelperMatchedAgent,
-  type BeadRef,
 } from './helpers.js';
 import { buildAgentSelectorPrompt, parseAgentSelectorVerdict } from './phases.js';
 
@@ -137,9 +136,9 @@ export const PR_MESSAGES = {
   bdShowFailed: (beadId: string, code: number, stderr: string) =>
     `bd show --json failed for "${beadId}" (exit ${code}): ${stderr.trim()}`,
   prBodyFailed: (code: number, stderr: string) =>
-    `pr-body.sh failed (exit ${code}): ${stderr.trim()}`,
+    `prBody helper failed (exit ${code}): ${stderr.trim()}`,
   commitMsgFailed: (code: number, stderr: string) =>
-    `commit-msg.sh failed (exit ${code}): ${stderr.trim()}`,
+    `commitMsg helper failed (exit ${code}): ${stderr.trim()}`,
   pushFailed: (branch: string, stderr: string) =>
     `git push failed for branch "${branch}": ${stderr.trim()}`,
   ghPrFailed: (code: number, stderr: string) =>
@@ -156,6 +155,7 @@ type MatchedAgent = HelperMatchedAgent;
 
 interface BeadJson {
   title?: string;
+  description?: string;
   status?: string;
   issue_type?: string;
   children?: Array<{ id?: string }>;
@@ -1763,11 +1763,7 @@ export async function runPR(
   }
 
   // Step 2: Generate PR body (pure function)
-  const beadRefs: BeadRef[] = beadsClosed.map(id => ({
-    id,
-    title: id === ctx.beadId ? (bead.title ?? id) : id,
-  }));
-  const generatedPrBody = prBody(bead.title ?? ctx.beadId, '', beadRefs);
+  const generatedPrBody = prBody(bead.title ?? ctx.beadId, bead.description ?? '');
 
   // Step 3: Derive PR title
   let prTitle: string;
@@ -1776,7 +1772,7 @@ export async function runPR(
     prTitle = derivePrTitleFromBead(bead.title ?? ctx.beadId, 'epic');
   }
   else {
-    prTitle = commitMsg(ctx.beadId, bead.title ?? ctx.beadId, bead.issue_type ?? 'task');
+    prTitle = commitMsg(bead.title ?? ctx.beadId, bead.issue_type ?? 'task');
   }
 
   // Step 4: Push branch

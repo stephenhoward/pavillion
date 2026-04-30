@@ -545,37 +545,47 @@ describe('bdEnrichmentCheck', () => {
 
 describe('branchName', () => {
   it('derives chore prefix for task type', () => {
-    const result = branchName('pv-abc1', 'Fix the broken widget', 'task');
-    expect(result).toMatch(/^chore\//);
-    expect(result).toContain('fix-the-broken-widget');
-    expect(result).toContain('pv-abc1');
+    const result = branchName('Fix the broken widget', 'task');
+    expect(result).toBe('chore/fix-the-broken-widget');
   });
 
   it('uses feat prefix for feature type', () => {
-    const result = branchName('pv-abc2', 'Add calendar discovery', 'feature');
+    const result = branchName('Add calendar discovery', 'feature');
+    expect(result).toMatch(/^feat\//);
+  });
+
+  it('uses feat prefix for epic type', () => {
+    const result = branchName('Build search', 'epic');
     expect(result).toMatch(/^feat\//);
   });
 
   it('uses fix prefix for bug type', () => {
-    const result = branchName('pv-abc3', 'Fix broken links', 'bug');
+    const result = branchName('Fix broken links', 'bug');
     expect(result).toMatch(/^fix\//);
   });
 
-  it('replaces dots in bead id with hyphens', () => {
-    const result = branchName('pv-abc1.3', 'Some task', 'task');
-    expect(result).toContain('pv-abc1-3');
-    expect(result).not.toContain('pv-abc1.3');
+  it('does not embed bead IDs in output', () => {
+    // Bead IDs must not appear in branch names — git-workflow principle.
+    const result = branchName('Some task', 'task');
+    expect(result).not.toMatch(/pv-/);
   });
 
   it('truncates long titles to stay within 60 chars', () => {
-    const longTitle = 'This is a very long title that would exceed the maximum length limit easily';
-    const result = branchName('pv-abc1', longTitle, 'task');
+    const longTitle = 'This is a very long title that would exceed the maximum length limit easily and should be truncated cleanly';
+    const result = branchName(longTitle, 'task');
     expect(result.length).toBeLessThanOrEqual(60);
+    expect(result).toMatch(/^chore\//);
+    expect(result.endsWith('-')).toBe(false);
   });
 
   it('defaults to chore for unknown issue type', () => {
-    const result = branchName('pv-abc1', 'Some work', 'unknown');
+    const result = branchName('Some work', 'unknown');
     expect(result).toMatch(/^chore\//);
+  });
+
+  it('strips leading and trailing non-alphanumerics from the title', () => {
+    const result = branchName('  --Add Search-- ', 'feature');
+    expect(result).toBe('feat/add-search');
   });
 });
 
@@ -585,24 +595,35 @@ describe('branchName', () => {
 
 describe('commitMsg', () => {
   it('formats correctly without scope', () => {
-    const result = commitMsg('pv-abc1', 'Add event search', 'feature');
-    expect(result).toBe('feat: Add event search (pv-abc1)');
+    const result = commitMsg('Add event search', 'feature');
+    expect(result).toBe('feat: Add event search');
   });
 
   it('includes scope when provided', () => {
-    const result = commitMsg('pv-abc1', 'Fix calendar API', 'bug', 'calendar');
-    expect(result).toBe('fix(calendar): Fix calendar API (pv-abc1)');
+    const result = commitMsg('Fix calendar API', 'bug', 'calendar');
+    expect(result).toBe('fix(calendar): Fix calendar API');
   });
 
   it('maps epic to feat', () => {
-    const result = commitMsg('pv-abc1', 'Implement federation', 'epic');
+    const result = commitMsg('Implement federation', 'epic');
     expect(result).toMatch(/^feat:/);
   });
 
+  it('does not embed bead IDs in output', () => {
+    // Bead IDs must not appear in commit messages — git-workflow principle.
+    const result = commitMsg('Add event search', 'feature');
+    expect(result).not.toMatch(/pv-/);
+  });
+
   it('collapses newlines in summary', () => {
-    const result = commitMsg('pv-abc1', 'Line one\nLine two', 'task');
+    const result = commitMsg('Line one\nLine two', 'task');
     expect(result).not.toContain('\n');
     expect(result).toContain('Line one Line two');
+  });
+
+  it('defaults to chore for unknown issue type', () => {
+    const result = commitMsg('Some work', 'unknown');
+    expect(result).toBe('chore: Some work');
   });
 });
 
@@ -611,47 +632,59 @@ describe('commitMsg', () => {
 // =============================================================================
 
 describe('prBody', () => {
-  it('includes all three sections', () => {
+  it('renders the three required template sections', () => {
+    // The git-workflow PR template requires Motivation, Approach, Validation.
+    // No Summary, no Beads-closed list, no Test plan section.
     const body = prBody(
       'Add event search',
-      'This feature allows users to search for events.',
-      [{ id: 'pv-abc1', title: 'Add event search' }],
+      'Users have asked for a way to search calendar events.',
     );
-    expect(body).toContain('## Summary');
-    expect(body).toContain('## Beads closed');
-    expect(body).toContain('## Test plan');
+    expect(body).toContain('## Motivation');
+    expect(body).toContain('## Approach');
+    expect(body).toContain('## Validation');
+    expect(body).not.toContain('## Summary');
+    expect(body).not.toContain('## Beads closed');
+    expect(body).not.toContain('## Test plan');
   });
 
-  it('lists all beads in Beads closed section', () => {
-    const body = prBody(
-      'Epic: Build search',
-      'Description text.',
-      [
-        { id: 'pv-abc1', title: 'Parent epic' },
-        { id: 'pv-abc1.1', title: 'Child one' },
-        { id: 'pv-abc1.2', title: 'Child two' },
-      ],
-    );
-    expect(body).toContain('pv-abc1');
-    expect(body).toContain('pv-abc1.1');
-    expect(body).toContain('pv-abc1.2');
+  it('does not include any bead IDs in the rendered body', () => {
+    // Bead IDs must not appear in PR bodies — git-workflow principle.
+    const body = prBody('Add feature', 'Why this work was needed.');
+    expect(body).not.toMatch(/pv-[a-z0-9]+/);
   });
 
-  it('uses first sentence of description in summary', () => {
-    const body = prBody(
-      'Add feature',
-      'First sentence text. Second sentence should be excluded.',
-      [{ id: 'pv-abc1', title: 'Add feature' }],
-    );
-    expect(body).toContain('First sentence text.');
-    expect(body).not.toContain('Second sentence');
+  it('uses the description for the Motivation section', () => {
+    const description = 'Users have asked for a way to search calendar events.';
+    const body = prBody('Add event search', description);
+    const motivationStart = body.indexOf('## Motivation');
+    const approachStart = body.indexOf('## Approach');
+    const motivationBody = body.slice(motivationStart, approachStart);
+    expect(motivationBody).toContain(description);
   });
 
-  it('omits description line when no description', () => {
-    const body = prBody('Add feature', '', [{ id: 'pv-abc1', title: 'Add feature' }]);
-    // Should still have summary with just the title
-    expect(body).toContain('## Summary');
-    expect(body).toContain('- Add feature');
+  it('uses the title for the Approach section', () => {
+    const body = prBody('Add event search', 'Why...');
+    const approachStart = body.indexOf('## Approach');
+    const validationStart = body.indexOf('## Validation');
+    const approachBody = body.slice(approachStart, validationStart);
+    expect(approachBody).toContain('Add event search');
+  });
+
+  it('falls back to title for Motivation when description is empty', () => {
+    const body = prBody('Add feature', '');
+    const motivationStart = body.indexOf('## Motivation');
+    const approachStart = body.indexOf('## Approach');
+    const motivationBody = body.slice(motivationStart, approachStart);
+    expect(motivationBody).toContain('Add feature');
+  });
+
+  it('includes the standard validation checklist', () => {
+    const body = prBody('Add feature', 'Why.');
+    expect(body).toContain('`npm run lint`');
+    expect(body).toContain('`npm run test:unit`');
+    expect(body).toContain('`npm run test:integration`');
+    expect(body).toContain('`npm run build`');
+    expect(body).toContain('build-guardian');
   });
 });
 

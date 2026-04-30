@@ -1119,8 +1119,8 @@ describe('branch', () => {
 
   it('should skip checkout if already on target branch', async () => {
     const bdShowJson = JSON.stringify([{ issue_type: 'task', title: 'A Task' }]);
-    // branchName('pv-test-1', 'A Task', 'task') = 'chore/a-task-pv-test-1'
-    const expectedBranch = 'chore/a-task-pv-test-1';
+    // branchName('A Task', 'task') = 'chore/a-task'
+    const expectedBranch = 'chore/a-task';
     const spawn = seqSpawn(
       // gitSafeToStart:
       fakeSpawn('true', '', 0),

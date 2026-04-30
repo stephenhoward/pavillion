@@ -1,114 +1,62 @@
 ---
 name: bead-branch-and-pr
-description: Git branch, commit, and PR conventions for bead-scoped work. Use when creating a branch for a bead, writing commit messages that reference a bead id, drafting a PR that closes one or more beads, or verifying the working tree is safe to start new bead work.
+description: Orchestrator-internal helper functions that turn a bead into a branch, commit message, and PR body. Use when an orchestrator (or test that simulates one) needs to call branchName, commitMsg, prBody, or gitSafeToStart programmatically. NOT a source of truth for git or PR conventions — see the git-workflow skill for those.
 ---
 
-# Bead Branch and PR Skill
+# Bead Branch and PR Helpers
 
-This skill captures the git and GitHub conventions used when turning a bead (or a chain of beads) into shippable work. It pairs prose guidance with four deterministic functions that do the actual formatting so every branch, commit, and PR body is generated the same way, whether a human or an orchestrator is running the workflow.
+This skill documents the deterministic helper functions that orchestrators call when they need to turn a bead into git artifacts. The conventions those artifacts must follow are defined elsewhere — this skill is purely about the helper API.
 
-The functions live in `.claude/orchestrators/lib/helpers.ts`:
+**Source of truth for git/PR conventions:** the `git-workflow` skill at `.claude/skills/git-workflow/`. That skill defines branch naming, commit format, PR template, and the foundational principle that GitHub artifacts must be self-contained for GitHub readers (no bead IDs in branches, commits, or PR bodies).
 
-- `branchName(beadId, typeOverride, deps)` — Generate kebab-case branch name with bead id
-- `commitMsg(beadId, summary, scope)` — Format conventional commit message with bead id
-- `prBody(primaryBeadId, additionalBeadIds, deps)` — Render markdown PR body with summary and test plan
-- `gitSafeToStart(deps)` — Check if working tree is clean and on main
+## When to use
 
-All functions accept an injectable `spawnFn` dependency for testability and fail loudly on invalid input.
+Invoke this skill when:
 
-## Branch naming
+- An orchestrator phase needs to derive a branch name, commit message, or PR body from bead metadata.
+- A test fixtures the helpers' output and needs to know the call signature.
+- You are evolving one of the four helpers and need to keep the implementation aligned with `git-workflow`.
 
-Branches follow the pattern:
+Do **not** use this skill to look up git or PR conventions. For those, read `git-workflow/branches.md`, `commits.md`, `pull-requests.md`, or `releases.md` directly.
 
-```
-<prefix>/<kebab-title>-<bead-id-with-dashes>
-```
+## The four helpers
 
-The prefix is derived from the bead's `issue_type` so that the branch name hints at the kind of change that's landing. It also lines up with the conventional-commit prefixes used in commit messages, keeping the vocabulary consistent from branch → commit → PR.
+The functions live in `.claude/orchestrators/lib/helpers.ts` and are pure (no I/O) except for `gitSafeToStart`, which shells out to `git`.
 
-| Bead type  | Branch prefix | Conventional commit type |
-|------------|---------------|--------------------------|
-| `bug`      | `fix/`        | `fix`                    |
-| `feature`  | `feat/`       | `feat`                   |
-| `epic`     | `feat/`       | `feat`                   |
-| `task`     | `chore/`      | `chore`                  |
-| (unknown)  | `chore/`      | `chore`                  |
+### `branchName(title, issueType)`
 
-If a task is really an enhancement or refactor rather than housekeeping, override the prefix explicitly:
+Returns `<type>/<kebab-title>`, capped at 60 characters total. The type prefix maps from the bead's `issue_type`:
 
-```bash
-./branch-name.sh pv-9cfj.3 --type-override=refactor
-# -> refactor/<kebab-title>-<id>
-```
+| `issue_type` | Branch prefix |
+|--------------|---------------|
+| `bug`        | `fix/`        |
+| `feature`    | `feat/`       |
+| `epic`       | `feat/`       |
+| `task`       | `chore/`      |
+| (anything else) | `chore/`   |
 
-**Rules enforced by `branch-name.sh`:**
+Bead IDs are not embedded in the output. The orchestrator's bookkeeping of which bead a branch belongs to is tracked in its run-context, not in the branch name.
 
-- Kebab-case the bead title: lowercase, any run of non-alphanumerics collapses to a single hyphen, leading/trailing hyphens stripped.
-- Replace dots in the bead id (`pv-9cfj.3` → `pv-9cfj-3`) so the branch name is safe for `git rev-parse --abbrev-ref` and wildcard globs.
-- Total branch name length is capped at 60 characters. When the title is too long, only the kebab-title segment is truncated; the prefix and id slug are always preserved, and a trailing hyphen left over from mid-word truncation is trimmed.
-- Output is deterministic: the same bead always produces the same branch name.
+### `commitMsg(summary, issueType, scope?)`
 
-## Commit message format
+Returns a conventional-commit header — `<type>(<scope>): <summary>` or `<type>: <summary>` when no scope is given. The same `issue_type → type` map as `branchName` applies. Newlines and runs of whitespace in `summary` are flattened so multi-line input still produces a one-line header.
 
-Commit messages follow the conventional-commit shape with a `(pv-xxxx)` id suffix that ties the commit to a bead. This matches the existing git history — see commit `a810e16`:
+Bead IDs are not embedded in the output. GitHub's squash-merge UI auto-appends the `(#PR)` form when the branch lands on `main`.
 
-```
-fix(events): persist and display event accessibility info (pv-xhzn)
-```
+### `prBody(title, description)`
 
-**`commit-msg.sh` emits exactly one line:**
-
-```
-<type>(<scope>): <summary> (<bead-id>)
-```
-
-The scope parenthetical is omitted when no scope is provided:
-
-```
-<type>: <summary> (<bead-id>)
-```
-
-The `<type>` is derived from the bead's `issue_type` using the same mapping as branch naming (`bug → fix`, `feature → feat`, `epic → feat`, `task → chore`). The `<summary>` is flattened to a single line (newlines and runs of whitespace collapse to single spaces) so multi-line summaries passed in from orchestrators don't break the commit header.
-
-### Two commit conventions, don't confuse them
-
-Two commit shapes appear in this repo's history, and they mean different things:
-
-1. **In-branch commits:** individual commits on a feature branch use the `(pv-xxxx)` suffix. This is what `commit-msg.sh` produces. Example:
-
-   ```
-   fix(calendar): preserve repost-target context in reassign-categories dialog (pv-xxxx)
-   ```
-
-2. **Merge commits on `main`:** GitHub's squash/merge UI appends `(#PR)` automatically. Example:
-
-   ```
-   fix(widget): bring event detail page to parity with public site (#199)
-   ```
-
-When writing commits directly, **always use `(pv-xxxx)`** — let GitHub add the `(#PR)` form when the branch merges.
-
-### Never add assistant trailers
-
-Commit messages must not contain `Co-authored-by: Claude`, `Claude-Code`, or any other assistant-generated trailer. The script never emits one, and human commit bodies must not add one either.
-
-## PR body template
-
-`pr-body.sh <primary-bead-id> [additional-bead-ids...]` renders a PR body in markdown with three sections:
+Returns a markdown body with the three sections defined by the `git-workflow` PR template:
 
 ```markdown
-## Summary
+## Motivation
 
-- <primary bead title>
-- <first sentence of the primary bead's description>
+<description, or title if description is empty>
 
-## Beads closed
+## Approach
 
-- <primary-id> - <primary title>
-- <additional-id> - <additional title>
-  ...
+<title>
 
-## Test plan
+## Validation
 
 - [ ] `npm run lint`
 - [ ] `npm run test:unit`
@@ -117,50 +65,32 @@ Commit messages must not contain `Co-authored-by: Claude`, `Claude-Code`, or any
 - [ ] Relevant e2e specs passing via build-guardian
 ```
 
-**Single-bead PR:** pass only the primary id. The "Beads closed" section is a one-line list.
+No Summary section, no Beads-closed list, no Test plan — those would either duplicate template content or leak local tracker references into a GitHub-visible artifact.
 
-**Epic-closing or multi-bead PR:** pass every closed bead id. The primary id (first argument) still drives the Summary section; the other ids are looked up via `bd show --json` and rendered as `- <id> - <title>` entries.
+### `gitSafeToStart(deps?)`
 
-The PR title is not rendered by this script. Use `commit-msg.sh` output as the PR title when there's exactly one bead, or hand-write one for multi-bead PRs (typically the epic's title without the `Epic:` prefix).
+Returns `{ ok: boolean, reason?: string }`. The orchestrator calls this at the branch-creation step as a narrow re-check (clean tree + on `main`). It is intentionally cheaper than the full `preflight()` that runs at the start of `/process-backlog`.
 
-## When to push: after build-guardian, never before
+The expected main-branch name defaults to `main` and can be overridden by the `GIT_SAFE_MAIN_BRANCH` env var for test rigs.
 
-A branch may not be pushed to `origin` until the wave's build-guardian agent has reported PASS. This rule exists because:
+## Push gate: build-guardian before `git push`
 
-- Build-guardian is the last line of defence before CI sees the code. Pushing before it runs risks flipping a red CI badge on a PR that could have been fixed locally.
-- Pushing triggers webhooks (deploy previews, bots) which assume the branch is at least locally-verified.
-- An autonomous orchestrator pushing broken code wastes real-world cycles on retries.
-
-**Concrete sequence for a wave:**
+A branch may not be pushed to `origin` until the wave's build-guardian agent has reported PASS. This is enforced by the orchestrator's pipeline, not by these helpers, but it is documented here because it is the rule that closes the loop on safe branch handling:
 
 1. Implementers land commits on the branch.
-2. Per-bead auditors run (via `agent-discovery`'s `match-agents.sh auditor`).
+2. Per-bead auditors run.
 3. Build-guardian runs once per wave across all committed changes.
-4. Only if build-guardian reports PASS does the orchestrator `git push -u origin <branch>` and open the PR.
+4. Only after build-guardian PASS does the orchestrator `git push -u origin <branch>` and open the PR.
 
 If build-guardian reports FAIL, do not push. Fix locally, re-run build-guardian, and push only once it passes.
 
-## `gitSafeToStart()`: phase-6 gate
-
-When the orchestrator reaches the branch-creation step, the working tree should still be clean and still on `main` — but the full preflight (`bead-backlog-selection/preflight()`) ran in Phase 0, which may have been many phases ago. `gitSafeToStart()` is the narrow re-check: clean tree + on main, nothing else. It is intentionally cheaper than a full preflight.
-
-Returns `{ok: boolean, reason?: string}`. The `ok` field is true if safe to branch, false otherwise. The `reason` field explains why if not safe (wrong branch or dirty tree).
-
-The expected main-branch name is `main` by default but can be overridden via the `GIT_SAFE_MAIN_BRANCH` env var, which is useful for test rigs and for repositories that use a non-`main` trunk.
-
 ## Testing
 
-Tests are co-located with the orchestrator codebase in `.claude/orchestrators/lib/__tests__/`. The test suite covers:
-
-- Branch naming for each bead type, including epic, weird titles with apostrophes and slashes, and titles long enough to exercise the 60-char truncation.
-- Commit message generation with and without scope, including multi-line summary flattening.
-- PR body rendering for both single-bead and multi-bead (epic-closing) cases, with the primary bead's title and description driving the Summary block.
-- `gitSafeToStart()` against real temporary git repos: clean+main, dirty+main, clean+wrong-branch, clean+custom-main, and non-repo directories.
-
-Functions accept an injectable `spawnFn` for testing; fixtures mock `bd show` output. All functions are deterministic — the same input always produces the same output — and throw clearly on invalid input.
+Tests live alongside the orchestrator codebase at `.claude/orchestrators/test/unit/helpers.test.ts`. The suite covers each helper's pure-function behavior and the spawn-mocking dance for `gitSafeToStart`. Helpers must not embed bead IDs in any rendered output — the tests assert this directly.
 
 ## Related skills
 
-- `bead-backlog-selection` — owns the full preflight that this skill's `git-safe-to-start.sh` re-checks narrowly.
-- `bead-wave-orchestration` — consumes these scripts when the orchestrator is about to set up a branch or open a PR.
-- `epic-bead-workflow` — source of truth for how beads relate to branches and PRs.
+- `git-workflow` — canonical source for branch, commit, PR, and release conventions. These helpers exist to produce output that conforms to it.
+- `bead-backlog-selection` — owns the full `preflight()` that this skill's `gitSafeToStart` re-checks narrowly.
+- `bead-wave-orchestration` — consumes these helpers when the orchestrator is about to set up a branch or open a PR.
+- `epic-bead-workflow` — source of truth for how beads relate to branches and PRs at the workflow level.
