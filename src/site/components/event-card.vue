@@ -14,6 +14,7 @@ const props = defineProps<{
   instance: CalendarEventInstance;
   calendarUrlName: string;
   defaultImage?: Media | null;
+  detailHref?: string;
 }>();
 
 const { t } = useTranslation('system');
@@ -117,11 +118,18 @@ const isRemoteSourceCalendar = computed(() => {
 });
 
 /**
- * Returns the router-link href for the event detail page.
- * The final path segment is a minute-precision UTC timestamp slug
- * (`yyyymmdd-hhmm`) derived from the instance's start time.
+ * Returns the href for the event detail link.
+ *
+ * When `detailHref` is provided (e.g. by the widget host), it is returned
+ * directly and the `localizedPath`-based site URL is NOT computed. When the
+ * prop is omitted, the site computes its standard `/view/...` path with a
+ * minute-precision UTC timestamp slug (`yyyymmdd-hhmm`) derived from the
+ * instance's start time.
  */
 const detailPath = computed(() => {
+  if (props.detailHref !== undefined) {
+    return props.detailHref;
+  }
   const eventId = props.instance.event.id;
   const slug = formatInstanceSlug(props.instance.start);
   return localizedPath(
@@ -275,6 +283,11 @@ const detailPath = computed(() => {
     background: $public-bg-primary-dark;
     box-shadow: $public-shadow-sm-dark;
   }
+
+  @include public-light-mode-override {
+    background: $public-bg-primary-light;
+    box-shadow: $public-shadow-sm-light;
+  }
 }
 
 // ================================================================
@@ -295,6 +308,10 @@ const detailPath = computed(() => {
   @include public-dark-mode {
     background: $public-bg-tertiary-dark;
   }
+
+  @include public-light-mode-override {
+    background: $public-bg-tertiary-light;
+  }
 }
 
 .no-image-fallback {
@@ -308,6 +325,10 @@ const detailPath = computed(() => {
   @include public-dark-mode {
     background: linear-gradient(135deg, $public-bg-secondary-dark 0%, $public-bg-tertiary-dark 100%);
   }
+
+  @include public-light-mode-override {
+    background: linear-gradient(135deg, $public-bg-secondary-light 0%, $public-bg-tertiary-light 100%);
+  }
 }
 
 .fallback-icon {
@@ -317,6 +338,10 @@ const detailPath = computed(() => {
 
   @include public-dark-mode {
     color: $public-text-tertiary-dark;
+  }
+
+  @include public-light-mode-override {
+    color: $public-text-tertiary-light;
   }
 }
 
@@ -344,6 +369,11 @@ const detailPath = computed(() => {
     background: rgba(30, 30, 35, 0.85);
     color: $public-text-primary-dark;
   }
+
+  @include public-light-mode-override {
+    background: rgba(255, 255, 255, 0.9);
+    color: $public-text-primary-light;
+  }
 }
 
 // ================================================================
@@ -370,6 +400,11 @@ const detailPath = computed(() => {
   @include public-dark-mode {
     background: $public-error-dark;
     color: $public-bg-primary-dark;
+  }
+
+  @include public-light-mode-override {
+    background: $public-error-light;
+    color: #fff;
   }
 }
 
@@ -420,6 +455,10 @@ const detailPath = computed(() => {
   @include public-dark-mode {
     color: $public-accent-dark;
   }
+
+  @include public-light-mode-override {
+    color: $public-accent-light;
+  }
 }
 
 h3 {
@@ -454,6 +493,14 @@ h3 {
       color: $public-accent-dark;
     }
   }
+
+  @include public-light-mode-override {
+    color: $public-text-primary-light;
+
+    &:hover {
+      color: $public-accent-light;
+    }
+  }
 }
 
 .event-location {
@@ -470,6 +517,10 @@ h3 {
   @include public-dark-mode {
     color: $public-text-secondary-dark;
   }
+
+  @include public-light-mode-override {
+    color: $public-text-secondary-light;
+  }
 }
 
 .event-description {
@@ -485,6 +536,10 @@ h3 {
 
   @include public-dark-mode {
     color: $public-text-secondary-dark;
+  }
+
+  @include public-light-mode-override {
+    color: $public-text-secondary-light;
   }
 }
 

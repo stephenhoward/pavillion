@@ -220,6 +220,34 @@ describe('EventCard', () => {
       expect(href).toContain('/view/my-calendar/events/evt-abc/20260508-1800');
       wrapper.unmount();
     });
+
+    it('should fall back to localizedPath when detailHref is omitted', async () => {
+      const event = makeEvent({ name: 'Default Path Event' });
+      (event as any).id = 'evt-default';
+      const instance = makeInstance(event, '2026-06-10T12:00:00.000Z');
+      const wrapper = await mountEventCard(instance, 'site-cal');
+
+      const link = wrapper.find('.event-title-link');
+      expect(link.exists()).toBe(true);
+      // Without detailHref, the href is the site-computed localizedPath value.
+      expect(link.attributes('href')).toBe('/view/site-cal/events/evt-default/20260610-1200');
+      wrapper.unmount();
+    });
+
+    it('should use detailHref directly when prop is provided', async () => {
+      const event = makeEvent({ name: 'Widget Hosted Event' });
+      (event as any).id = 'evt-widget';
+      const instance = makeInstance(event, '2026-06-10T12:00:00.000Z');
+      const wrapper = await mountEventCard(instance, 'site-cal', {
+        detailHref: '/widget/some/path?event=evt-widget',
+      });
+
+      const link = wrapper.find('.event-title-link');
+      expect(link.exists()).toBe(true);
+      // detailHref short-circuits the localizedPath computation.
+      expect(link.attributes('href')).toBe('/widget/some/path?event=evt-widget');
+      wrapper.unmount();
+    });
   });
 
   describe('time range display', () => {
