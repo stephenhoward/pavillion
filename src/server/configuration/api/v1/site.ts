@@ -34,6 +34,7 @@ export default class SiteRouteHandlers {
       enabledLanguages: await this.service.getEnabledLanguages(),
       forceLanguage: await this.service.getForceLanguage(),
       instanceDescription: await this.service.getInstanceDescription(),
+      instancePolicy: await this.service.getInstancePolicy(),
     });
   }
 
@@ -44,6 +45,15 @@ export default class SiteRouteHandlers {
         const success = await this.service.setInstanceDescription(req.body.instanceDescription);
         if (!success) {
           res.status(400).json({ error: 'Invalid value for setting: "instanceDescription"' });
+          return;
+        }
+      }
+
+      // Handle instancePolicy separately via its dedicated content table
+      if (req.body.instancePolicy !== undefined) {
+        const success = await this.service.setInstancePolicy(req.body.instancePolicy);
+        if (!success) {
+          res.status(400).json({ error: 'Invalid value for setting: "instancePolicy"' });
           return;
         }
       }
