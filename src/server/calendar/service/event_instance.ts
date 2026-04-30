@@ -18,7 +18,7 @@ import { EventSeriesEntity, EventSeriesContentEntity } from '@/server/calendar/e
 import CalendarService from "./calendar";
 import CategoryService from "./categories";
 import EventService from "./events";
-import { Op, literal } from 'sequelize';
+import { Op, literal, where, fn, col } from 'sequelize';
 import { resolveSourceCalendars, type RepostContext } from '../helper/source_calendar';
 import type ActivityPubInterface from '@/server/activitypub/interface';
 import {
@@ -308,16 +308,31 @@ export default class EventInstanceService {
       ],
     };
 
-    // Handle search parameter - search in event title/description
+    // Handle search parameter - search in event title/description.
+    // Cap at 200 chars at the service boundary to bound query cost on
+    // pathological public input. Uses parameterized Op.like via Sequelize's
+    // where(fn('LOWER', col(...))) pattern so user input is bound rather than
+    // interpolated into SQL — see security-playbook/database-injection.md.
+    // LOWER(col) LIKE lower_pattern is dialect-neutral (Op.iLike is
+    // PostgreSQL-only; the test suite uses SQLite).
     if (options.search && options.search.trim()) {
-      const searchTerm = options.search.trim().toLowerCase().replace(/'/g, "''");
+      const searchTerm = options.search.trim().substring(0, 200).toLowerCase();
 
       // Add content to the event include with search filter
       const eventInclude = queryOptions.include[0];
       eventInclude.include.push({
         model: EventContentEntity,
         as: 'content',
-        where: literal(`(LOWER("event->content"."name") LIKE '%${searchTerm}%' OR LOWER("event->content"."description") LIKE '%${searchTerm}%')`),
+        where: {
+          [Op.or]: [
+            where(fn('LOWER', col('event->content.name')), {
+              [Op.like]: `%${searchTerm}%`,
+            }),
+            where(fn('LOWER', col('event->content.description')), {
+              [Op.like]: `%${searchTerm}%`,
+            }),
+          ],
+        },
         required: true, // INNER JOIN to only include events with matching content
       });
     }
