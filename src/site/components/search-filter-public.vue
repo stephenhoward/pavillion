@@ -231,7 +231,7 @@ import i18next from 'i18next';
 import { useRoute, useRouter } from 'vue-router';
 import { usePublicCalendarStore } from '../stores/publicCalendarStore';
 import CategoryPillSelector from './category-pill-selector.vue';
-import { getThisWeek, getNextWeek } from '@/common/utils/datePresets';
+import { getThisWeek, getNextWeek, getDefaultDateRange } from '@/common/utils/datePresets';
 import type { ViewMode } from '@/widget/stores/widgetStore';
 import { Search, CalendarDays } from 'lucide-vue-next';
 
@@ -271,6 +271,14 @@ const state = reactive({
   dateFilterMode: null as 'thisWeek' | 'nextWeek' | 'custom' | null,
 });
 
+// Default date range mirrors what publicCalendarStore.loadEvents() sends to the
+// API when no explicit filter is set, so the displayed range matches the
+// fetched range. Reactive on calendarDefaultDateRange so it refreshes once
+// loadCalendar() resolves the per-calendar override.
+const defaultRange = computed(() =>
+  getDefaultDateRange(publicStore.calendarDefaultDateRange),
+);
+
 // Computed property for button text
 const dateFilterButtonText = computed(() => {
   if (state.dateFilterMode === 'thisWeek') {
@@ -287,7 +295,9 @@ const dateFilterButtonText = computed(() => {
     if (state.startDate) return `From ${formatDate(state.startDate)}`;
     if (state.endDate) return `Until ${formatDate(state.endDate)}`;
   }
-  return t('custom'); // "Select Dates"
+  // No filter active: surface the implicit default window so the visitor
+  // can see what date range the events list represents.
+  return formatDateRange(defaultRange.value.startDate, defaultRange.value.endDate);
 });
 
 // Computed label for the clear button — adapts based on active filter types
