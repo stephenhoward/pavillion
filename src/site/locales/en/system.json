@@ -85,6 +85,8 @@
     "event_add_to_calendar": "Add to Calendar",
     "event_source_calendar": "Source Calendar",
     "event_source_calendar_label": "View source calendar {{name}}",
+    "event_details_sidebar": "Event details",
+    "opens_in_new_tab": "opens in new tab",
     "url_prompt": {
         "tickets": "Tickets",
         "rsvp": "RSVP",

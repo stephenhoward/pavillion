@@ -80,6 +80,8 @@
     "event_add_to_calendar": "Ajouter au calendrier",
     "event_source_calendar": "Calendrier source",
     "event_source_calendar_label": "Voir le calendrier source {{name}}",
+    "event_details_sidebar": "Détails de l'événement",
+    "opens_in_new_tab": "s'ouvre dans un nouvel onglet",
     "report": {
         "link_text": "Signaler l'événement",
         "form_title": "Signaler cet événement",

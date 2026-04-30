@@ -85,6 +85,8 @@
     "event_add_to_calendar": "Agregar al calendario",
     "event_source_calendar": "Calendario fuente",
     "event_source_calendar_label": "Ver calendario fuente {{name}}",
+    "event_details_sidebar": "Detalles del evento",
+    "opens_in_new_tab": "se abre en una pestaña nueva",
     "report": {
         "link_text": "Reportar evento",
         "form_title": "Reportar este evento",
