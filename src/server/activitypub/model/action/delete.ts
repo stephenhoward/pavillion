@@ -48,6 +48,9 @@ class DeleteActivity extends ActivityPubActivity {
     if ( object.cc ) {
       activity.cc = object.cc;
     }
+    if ( object.published ) {
+      activity.published = new Date(object.published);
+    }
 
     return activity;
   }

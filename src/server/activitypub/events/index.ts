@@ -97,7 +97,7 @@ export default class ActivityPubEventHandlers implements DomainEventHandlers {
     // Local followers are routed in-process via ProcessInboxService.
     await this.service.addToOutbox(
       payload.calendar,
-      new AnnounceActivity(actorUrl, eventUrl),
+      new AnnounceActivity(actorUrl, eventUrl).addressPublic(`${actorUrl}/followers`),
     );
   }
 
@@ -119,7 +119,7 @@ export default class ActivityPubEventHandlers implements DomainEventHandlers {
       new UpdateActivity(
         actorUrl,
         new EventObject(payload.calendar, payload.event),
-      ),
+      ).addressPublic(`${actorUrl}/followers`),
     );
   }
 
@@ -130,7 +130,7 @@ export default class ActivityPubEventHandlers implements DomainEventHandlers {
       new DeleteActivity(
         actorUrl,
         EventObject.eventUrl(payload.calendar, payload.event),
-      ),
+      ).addressPublic(`${actorUrl}/followers`),
     );
   }
 

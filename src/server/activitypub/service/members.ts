@@ -403,7 +403,8 @@ class ActivityPubService {
     }
 
     let actor = await this.actorUrl(calendar);
-    let shareActivity = new AnnounceActivity(actor, canonicalEventUrl);
+    let shareActivity = new AnnounceActivity(actor, canonicalEventUrl)
+      .addressPublic(`${actor}/followers`);
 
     // A manual (or auto) share is an explicit opt-in that supersedes any prior
     // dismissal. Delete any existing RepostDismissalEntity for this

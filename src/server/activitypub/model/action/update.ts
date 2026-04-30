@@ -36,6 +36,9 @@ class UpdateActivity extends ActivityPubActivity {
     if (json.cc) {
       activity.cc = json.cc;
     }
+    if (json.published) {
+      activity.published = new Date(json.published);
+    }
 
     return activity;
   }
