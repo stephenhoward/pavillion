@@ -21,7 +21,8 @@
   "navigation": {
     "skip_to_content": "Saltar al contenido principal",
     "main_label": "Navegación principal",
-    "mobile_label": "Navegación móvil"
+    "mobile_label": "Navegación móvil",
+    "view_policy": "View policy"
   },
   "copy_button": {
     "copy": "Copiar",

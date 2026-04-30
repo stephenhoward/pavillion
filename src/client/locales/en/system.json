@@ -24,7 +24,8 @@
   "navigation": {
     "skip_to_content": "Skip to main content",
     "main_label": "Main navigation",
-    "mobile_label": "Mobile navigation"
+    "mobile_label": "Mobile navigation",
+    "view_policy": "View policy"
   },
   "modal": {
     "close": "Close dialog"

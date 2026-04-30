@@ -20,6 +20,7 @@ import enCategories from '@/client/locales/en/categories.json';
 import enSeries from '@/client/locales/en/series.json';
 import enSetup from '@/client/locales/en/setup.json';
 import enFunding from '@/client/locales/en/funding.json';
+import enPolicy from '@/client/locales/en/policy.json';
 
 // Import Spanish translation resources
 import esSystem from '@/client/locales/es/system.json';
@@ -27,6 +28,7 @@ import esAuthentication from '@/client/locales/es/authentication.json';
 import esSetup from '@/client/locales/es/setup.json';
 import esFeed from '@/client/locales/es/feed.json';
 import esInbox from '@/client/locales/es/inbox.json';
+import esPolicy from '@/client/locales/es/policy.json';
 
 // Import French translation resources
 import frSystem from '@/client/locales/fr/system.json';
@@ -34,6 +36,7 @@ import frAuthentication from '@/client/locales/fr/authentication.json';
 import frSetup from '@/client/locales/fr/setup.json';
 import frFeed from '@/client/locales/fr/feed.json';
 import frInbox from '@/client/locales/fr/inbox.json';
+import frPolicy from '@/client/locales/fr/policy.json';
 
 /**
  * Detects the best language for the client from available signals.
@@ -106,6 +109,7 @@ export const initI18Next = (serverLanguage?: string) => {
         series: enSeries,
         setup: enSetup,
         funding: enFunding,
+        policy: enPolicy,
       },
       es: {
         system: esSystem,
@@ -113,6 +117,7 @@ export const initI18Next = (serverLanguage?: string) => {
         setup: esSetup,
         feed: esFeed,
         inbox: esInbox,
+        policy: esPolicy,
       },
       fr: {
         system: frSystem,
@@ -120,6 +125,7 @@ export const initI18Next = (serverLanguage?: string) => {
         setup: frSetup,
         feed: frFeed,
         inbox: frInbox,
+        policy: frPolicy,
       },
     },
   });

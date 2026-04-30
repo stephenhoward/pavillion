@@ -74,6 +74,9 @@
     "instance_settings": "Configuración de la Instancia",
     "instance_description": "Descripción de la Instancia",
     "instance_description_placeholder": "Describe tu instancia...",
-    "instance_description_help": "Una breve descripción de tu instancia que se muestra en las páginas públicas y en los metadatos de federación. Máximo 500 caracteres."
+    "instance_description_help": "Una breve descripción de tu instancia que se muestra en las páginas públicas y en los metadatos de federación. Máximo 500 caracteres.",
+    "instance_policy": "Instance Policy",
+    "instance_policy_placeholder": "e.g. Describe what content and conduct your instance allows...",
+    "instance_policy_help": "Markdown formatting is supported and will be converted to HTML on save. You can also edit the HTML directly."
   }
 }
