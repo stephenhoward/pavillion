@@ -235,6 +235,7 @@ describe('Widget Integration Tests', () => {
         history: createMemoryHistory(),
         routes: [
           { path: '/widget/:urlName', name: 'widget-calendar', component: { template: '<div></div>' } },
+          { path: '/widget/:urlName/events/:eventId/:startTime(\\d{8}-\\d{4})?', name: 'widget-event-detail', component: { template: '<div></div>' } },
         ],
       });
     };
@@ -272,13 +273,37 @@ describe('Widget Integration Tests', () => {
     it('should render list view with day groups', async () => {
       const router = createMockRouter();
       const publicStore = usePublicCalendarStore();
+      const widgetStore = useWidgetStore();
+      widgetStore.setCalendarUrlName('mycal');
 
-      // Mock an event - use allEvents property (not events)
+      const start = DateTime.fromISO('2026-01-06T18:00:00.000Z', { zone: 'utc' });
+      // Mock an event - use allEvents property (not events).
+      // ListView reuses the site EventCard, so the fixture must satisfy
+      // both day-grouping (toLocal().toISODate()) and EventCard's
+      // useLocalizedContent (hasContent / getLanguages) plus the
+      // formatInstanceSlug path (toUTC / toFormat).
       publicStore.allEvents = [
         {
           id: '1',
-          start: { toLocal: () => ({ toISODate: () => '2026-01-06', toLocaleString: () => '10:00 AM' }) },
-          event: { id: 'e1', content: () => ({ name: 'Test Event' }), media: null, categories: [] },
+          start: {
+            toLocal: () => ({ toISODate: () => '2026-01-06', toLocaleString: () => '10:00 AM' }),
+            toUTC: () => start.toUTC(),
+            toFormat: (fmt: string) => start.toUTC().toFormat(fmt),
+          },
+          end: null,
+          isCancelled: false,
+          event: {
+            id: 'e1',
+            content: () => ({ name: 'Test Event', description: '' }),
+            hasContent: () => true,
+            getLanguages: () => ['en'],
+            media: null,
+            categories: [],
+            location: null,
+            isRecurring: false,
+            isRepost: false,
+            sourceCalendar: null,
+          },
         },
       ] as any;
 
@@ -288,8 +313,8 @@ describe('Widget Integration Tests', () => {
         },
       });
 
-      // The events are in a ul.events element inside a conditional block
-      const eventsList = wrapper.find('ul.events');
+      // The events are now in a ul.day-events element inside the conditional block
+      const eventsList = wrapper.find('ul.day-events');
       expect(eventsList.exists()).toBe(true);
     });
   });
