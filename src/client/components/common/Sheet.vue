@@ -1,7 +1,6 @@
 <template>
   <dialog
     ref="dialogRef"
-    role="dialog"
     class="sheet-dialog"
     :aria-labelledby="titleId"
     :aria-modal="true"

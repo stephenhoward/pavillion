@@ -139,7 +139,7 @@ test.describe('Bulk Event Operations', () => {
     await page.locator('[data-testid="assign-categories-btn"]').click();
 
     // Verify category selection dialog opens
-    const dialog = page.locator('[role="dialog"][aria-modal="true"]');
+    const dialog = page.locator('dialog[aria-modal="true"]');
     await expect(dialog).toBeVisible({ timeout: 5000 });
 
     // Verify dialog has proper ARIA attributes (title labelled via aria-labelledby)

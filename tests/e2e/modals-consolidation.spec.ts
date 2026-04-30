@@ -7,7 +7,7 @@ import { startTestServer, TestEnvironment } from './helpers/test-server';
  *
  * Lightweight smoke test for the 9-site migration to <Modal> / <Sheet>.
  * Opens 2-3 representative migrated dialogs and asserts:
- * - [role="dialog"] + aria-modal="true" present (a11y intact)
+ * - native `<dialog>` element with aria-modal="true" present (a11y intact)
  * - Escape dismisses the dialog
  * - No JS console errors thrown while the dialog is open
  *
@@ -58,7 +58,7 @@ test.describe('Modal/Sheet Consolidation Smoke Tests', () => {
     if (hasUnblockButton) {
       await unblockButton.click();
 
-      const dialog = page.locator('[role="dialog"][aria-modal="true"]');
+      const dialog = page.locator('dialog[aria-modal="true"]');
       await expect(dialog).toBeVisible({ timeout: 5000 });
 
       // Escape dismisses
@@ -112,7 +112,7 @@ test.describe('Modal/Sheet Consolidation Smoke Tests', () => {
 
     await addLangButton.click();
 
-    const dialog = page.locator('[role="dialog"][aria-modal="true"]');
+    const dialog = page.locator('dialog[aria-modal="true"]');
     await expect(dialog).toBeVisible({ timeout: 5000 });
 
     // Language picker is labelled (has aria-labelledby pointing at title)
@@ -147,7 +147,7 @@ test.describe('Modal/Sheet Consolidation Smoke Tests', () => {
 
     await addLocationButton.click();
 
-    const dialog = page.locator('[role="dialog"][aria-modal="true"]');
+    const dialog = page.locator('dialog[aria-modal="true"]');
     await expect(dialog).toBeVisible({ timeout: 5000 });
 
     // aria-labelledby points at the Sheet's generated title id

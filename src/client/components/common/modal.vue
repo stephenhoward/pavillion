@@ -1,7 +1,6 @@
 <template>
   <dialog
     ref="dialogRef"
-    role="dialog"
     :class="['modal', 'modal-dialog', `modal-size-${size}`, props.modalClass]"
     :aria-labelledby="titleId"
     :aria-modal="true"

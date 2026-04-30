@@ -257,18 +257,6 @@ button:disabled,
   }
 }
 
-/* ===== FOCUS TRAP SUPPORT FOR DIALOGS ===== */
-
-[role="dialog"] {
-  /* Ensure dialog is in focus trap */
-  &[aria-modal="true"] {
-    /* Hide background content from screen readers when modal */
-    ~ * {
-      aria-hidden: true;
-    }
-  }
-}
-
 /* ===== ARIA LIVE REGIONS ===== */
 
 /* aria-live regions must remain in normal flow so their visible content
