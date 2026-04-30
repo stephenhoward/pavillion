@@ -146,7 +146,38 @@ export default class CalendarRoutes {
     }
 
     try {
-      const categoriesWithCounts = await this.service.listCategoriesForCalendar(calendar);
+      // Parse optional query parameters for filtering. Mirrors the parsing
+      // pattern in listInstances so eventCount can be windowed to match the
+      // visible event list when the sidebar is filtered.
+      const options: {
+        startDate?: string;
+        endDate?: string;
+        search?: string;
+      } = {};
+
+      if (req.query.startDate && typeof req.query.startDate === 'string') {
+        const startDate = req.query.startDate.trim();
+        if (startDate.length > 0) {
+          options.startDate = startDate;
+        }
+      }
+
+      if (req.query.endDate && typeof req.query.endDate === 'string') {
+        const endDate = req.query.endDate.trim();
+        if (endDate.length > 0) {
+          options.endDate = endDate;
+        }
+      }
+
+      if (req.query.search && typeof req.query.search === 'string') {
+        const searchTerm = req.query.search.trim();
+        if (searchTerm.length > 0) {
+          options.search = searchTerm;
+        }
+      }
+
+      const categoriesWithCounts = await this.service.listCategoriesForCalendar(calendar, options);
+
       res.json(
         categoriesWithCounts.map(({ category, eventCount }) => {
           return {
@@ -156,10 +187,20 @@ export default class CalendarRoutes {
         }),
       );
     }
-    catch {
-      res.status(500).json({
-        "error": "Failed to retrieve categories",
-      });
+    catch (error: any) {
+      logError(error, 'Error in listCategories');
+
+      if (error.message === 'Invalid date format') {
+        res.status(400).json({
+          "error": "Invalid date format. Please use YYYY-MM-DD format.",
+          errorName: 'ValidationError',
+        });
+      }
+      else {
+        res.status(500).json({
+          "error": "Failed to retrieve categories",
+        });
+      }
     }
   }
 

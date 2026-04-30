@@ -113,6 +113,80 @@ describe('Public Calendar API', () => {
       expect(calendarStub.called).toBe(true);
       expect(categoriesStub.called).toBe(true);
     });
+
+    it('should forward startDate and endDate options to the service', async () => {
+      let calendarStub = apiSandbox.stub(publicInterface, 'getCalendarByName');
+      let categoriesStub = apiSandbox.stub(publicInterface, 'listCategoriesForCalendar');
+
+      const calendar = new Calendar('cal-id', 'test-calendar');
+      const category1 = new EventCategory('cat-1', 'cal-id');
+      calendarStub.resolves(calendar);
+      categoriesStub.resolves([{ category: category1, eventCount: 2 }]);
+
+      router.get('/handler', (req, res) => {
+        req.params.urlName = 'test-calendar';
+        req.query.startDate = '2026-01-01';
+        req.query.endDate = '2026-12-31';
+        routes.listCategories(req, res);
+      });
+
+      const response = await request(testApp(router))
+        .get('/handler');
+
+      expect(response.status).toBe(200);
+      expect(response.body[0].eventCount).toBe(2);
+      expect(categoriesStub.calledWith(
+        calendar,
+        sinon.match({ startDate: '2026-01-01', endDate: '2026-12-31' }),
+      )).toBe(true);
+    });
+
+    it('should forward search option to the service', async () => {
+      let calendarStub = apiSandbox.stub(publicInterface, 'getCalendarByName');
+      let categoriesStub = apiSandbox.stub(publicInterface, 'listCategoriesForCalendar');
+
+      const calendar = new Calendar('cal-id', 'test-calendar');
+      const category1 = new EventCategory('cat-1', 'cal-id');
+      calendarStub.resolves(calendar);
+      categoriesStub.resolves([{ category: category1, eventCount: 1 }]);
+
+      router.get('/handler', (req, res) => {
+        req.params.urlName = 'test-calendar';
+        req.query.search = 'workshop';
+        routes.listCategories(req, res);
+      });
+
+      const response = await request(testApp(router))
+        .get('/handler');
+
+      expect(response.status).toBe(200);
+      expect(response.body[0].eventCount).toBe(1);
+      expect(categoriesStub.calledWith(
+        calendar,
+        sinon.match({ search: 'workshop' }),
+      )).toBe(true);
+    });
+
+    it('should return 400 for invalid date format', async () => {
+      let calendarStub = apiSandbox.stub(publicInterface, 'getCalendarByName');
+      let categoriesStub = apiSandbox.stub(publicInterface, 'listCategoriesForCalendar');
+
+      const calendar = new Calendar('cal-id', 'test-calendar');
+      calendarStub.resolves(calendar);
+      categoriesStub.throws(new Error('Invalid date format'));
+
+      router.get('/handler', (req, res) => {
+        req.params.urlName = 'test-calendar';
+        req.query.startDate = 'not-a-date';
+        routes.listCategories(req, res);
+      });
+
+      const response = await request(testApp(router))
+        .get('/handler');
+
+      expect(response.status).toBe(400);
+      expect(response.body.errorName).toBe('ValidationError');
+    });
   });
 
   describe('GET /calendar/:calendar/events with category filtering', () => {
