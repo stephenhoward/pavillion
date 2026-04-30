@@ -174,7 +174,8 @@ onUnmounted(() => {
 .widget-container {
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  flex: 1 1 auto;
+  min-height: 0;
   width: 100%;
   background: $public-bg-primary-light;
 

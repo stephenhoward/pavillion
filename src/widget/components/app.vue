@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { onMounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
+import { useTranslation } from 'i18next-vue';
 import { useWidgetStore } from '../stores/widgetStore';
 
+const { t } = useTranslation('system');
 const widgetStore = useWidgetStore();
 const route = useRoute();
 const rootRef = ref<HTMLElement | null>(null);
@@ -75,15 +77,72 @@ onMounted(() => {
     ref="rootRef"
     class="widget-root">
     <RouterView />
+    <footer class="widget-footer">
+      <a href="https://pavillion.social" target="_blank" rel="noopener noreferrer">
+        <span class="pavillion-logo" aria-hidden="true"/> {{ t('powered_by') }}
+      </a>
+    </footer>
   </div>
 </template>
 
 <style scoped lang="scss">
+@use '@/site/assets/mixins' as *;
+
 .widget-root {
   width: 100%;
   min-height: 100vh;
   display: flex;
   flex-direction: column;
+}
+
+.widget-footer {
+  flex: 0 0 auto;
+  padding: $public-space-sm $public-space-md;
+  border-top: 1px solid $public-border-subtle-light;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: $public-font-size-xs;
+  text-align: center;
+  color: $public-text-secondary-light;
+
+  @include public-dark-mode {
+    border-top-color: $public-border-subtle-dark;
+    color: $public-text-secondary-dark;
+  }
+
+  a {
+    color: inherit;
+    display: inline-flex;
+    align-items: center;
+    gap: $public-space-sm;
+    text-decoration: none;
+
+    &:hover {
+      color: $public-accent-hover-light;
+
+      @include public-dark-mode {
+        color: $public-accent-hover-dark;
+      }
+    }
+  }
+
+  .pavillion-logo {
+    display: inline-block;
+    background-color: $public-text-primary-light;
+    mask-size: contain;
+    mask-repeat: no-repeat;
+    mask-image: url('@/client/assets/pavillion-logo.svg');
+    -webkit-mask-size: contain;
+    -webkit-mask-repeat: no-repeat;
+    -webkit-mask-image: url('@/client/assets/pavillion-logo.svg');
+    width: 16px;
+    height: 16px;
+
+    @include public-dark-mode {
+      background-color: $public-text-primary-dark;
+    }
+  }
 }
 
 // Auto color mode (uses system preference)
