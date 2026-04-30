@@ -49,6 +49,8 @@ button.primary {
 // ===== APP LAYOUT =====
 
 #app {
+  @include public-accent-tokens;
+
   display: flex;
   flex-direction: column;
   justify-content: flex-start;

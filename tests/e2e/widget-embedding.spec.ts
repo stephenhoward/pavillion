@@ -191,10 +191,15 @@ test.describe('Widget Embedding', () => {
     const iframe = page.frameLocator('iframe[src*="/widget/"]');
     await expect(iframe.locator('body')).toBeVisible({ timeout: 20000 });
 
-    const accentColor = await iframe.locator('.widget-root').evaluate(
-      (el) => el.style.getPropertyValue('--widget-accent-color'),
+    const accentVars = await iframe.locator('.widget-root').evaluate(
+      (el) => ({
+        light: el.style.getPropertyValue('--pav-accent-light'),
+        dark: el.style.getPropertyValue('--pav-accent-dark'),
+      }),
     );
-    expect(accentColor).toBeTruthy();
+    // Both light/dark accent variables resolve to the default orange on the widget root.
+    expect(accentVars.light).toBeTruthy();
+    expect(accentVars.dark).toBeTruthy();
   });
 
   test('postMessage resize events reach the embedding page', async ({ page }) => {

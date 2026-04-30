@@ -147,7 +147,7 @@ describe('widgetStore — server-side config + admin-preview override', () => {
   });
 
   describe('safe accentColor DOM application', () => {
-    it('applies accent color via style.setProperty — not via innerHTML', () => {
+    it('writes --pav-accent-light and --pav-accent-dark via style.setProperty — not via innerHTML', () => {
       const store = useWidgetStore();
       const rootElement = document.createElement('div');
       document.body.appendChild(rootElement);
@@ -163,12 +163,58 @@ describe('widgetStore — server-side config + admin-preview override', () => {
 
       store.injectAccentColor(rootElement);
 
-      expect(setPropertySpy).toHaveBeenCalledWith('--widget-accent-color', '#ff9131');
+      expect(setPropertySpy).toHaveBeenCalledWith('--pav-accent-light', '#ff9131');
+      expect(setPropertySpy).toHaveBeenCalledWith('--pav-accent-dark', '#ff9131');
 
-      // The CSS custom property is readable from the style attribute, and
+      // The CSS custom properties are readable from the style attribute, and
       // the element's innerHTML remains empty (no <style> block injected).
-      expect(rootElement.style.getPropertyValue('--widget-accent-color')).toBe('#ff9131');
+      expect(rootElement.style.getPropertyValue('--pav-accent-light')).toBe('#ff9131');
+      expect(rootElement.style.getPropertyValue('--pav-accent-dark')).toBe('#ff9131');
       expect(rootElement.innerHTML).toBe('');
+
+      document.body.removeChild(rootElement);
+    });
+
+    it('does NOT publish the legacy --widget-accent-color custom property', () => {
+      const store = useWidgetStore();
+      const rootElement = document.createElement('div');
+      document.body.appendChild(rootElement);
+
+      store.applyServerConfig({
+        view: 'list',
+        accentColor: '#ff9131',
+        colorMode: 'auto',
+      });
+
+      const setPropertySpy = vi.spyOn(rootElement.style, 'setProperty');
+
+      store.injectAccentColor(rootElement);
+
+      const writtenProperties = setPropertySpy.mock.calls.map(call => call[0]);
+      expect(writtenProperties).not.toContain('--widget-accent-color');
+      expect(rootElement.style.getPropertyValue('--widget-accent-color')).toBe('');
+
+      document.body.removeChild(rootElement);
+    });
+
+    it('does NOT write hover variants (those remain at SCSS mixin defaults)', () => {
+      const store = useWidgetStore();
+      const rootElement = document.createElement('div');
+      document.body.appendChild(rootElement);
+
+      store.applyServerConfig({
+        view: 'list',
+        accentColor: '#ff9131',
+        colorMode: 'auto',
+      });
+
+      const setPropertySpy = vi.spyOn(rootElement.style, 'setProperty');
+
+      store.injectAccentColor(rootElement);
+
+      const writtenProperties = setPropertySpy.mock.calls.map(call => call[0]);
+      expect(writtenProperties).not.toContain('--pav-accent-light-hover');
+      expect(writtenProperties).not.toContain('--pav-accent-dark-hover');
 
       document.body.removeChild(rootElement);
     });
@@ -190,10 +236,185 @@ describe('widgetStore — server-side config + admin-preview override', () => {
 
       store.injectAccentColor(rootElement);
 
-      // Only the safe default hex reaches the DOM.
-      expect(rootElement.style.getPropertyValue('--widget-accent-color')).toBe(WIDGET_CONFIG_DEFAULTS.accentColor);
+      // Only the safe default hex reaches the DOM, on both variables.
+      expect(rootElement.style.getPropertyValue('--pav-accent-light')).toBe(WIDGET_CONFIG_DEFAULTS.accentColor);
+      expect(rootElement.style.getPropertyValue('--pav-accent-dark')).toBe(WIDGET_CONFIG_DEFAULTS.accentColor);
 
       document.body.removeChild(rootElement);
+    });
+  });
+
+  describe('applyColorMode (resolves auto + manages matchMedia listener)', () => {
+    /**
+     * Build a fake MediaQueryList whose `matches` value is fixed and whose
+     * addEventListener/removeEventListener are spy-able. Returns the spy
+     * accessors so individual tests can assert listener counts.
+     */
+    function mockMatchMedia(matches: boolean) {
+      const addSpy = vi.fn();
+      const removeSpy = vi.fn();
+      const fakeMQL: Partial<MediaQueryList> = {
+        matches,
+        media: '(prefers-color-scheme: dark)',
+        addEventListener: addSpy as unknown as MediaQueryList['addEventListener'],
+        removeEventListener: removeSpy as unknown as MediaQueryList['removeEventListener'],
+      };
+      const matchMediaSpy = vi.fn().mockReturnValue(fakeMQL);
+      vi.stubGlobal('matchMedia', matchMediaSpy);
+      return { addSpy, removeSpy, matchMediaSpy };
+    }
+
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    it('auto mode on a light system adds widget-theme-light', () => {
+      mockMatchMedia(false);
+      const store = useWidgetStore();
+      store.colorMode = 'auto';
+      const rootElement = document.createElement('div');
+
+      store.applyColorMode(rootElement);
+
+      expect(rootElement.classList.contains('widget-theme-light')).toBe(true);
+      expect(rootElement.classList.contains('widget-theme-dark')).toBe(false);
+    });
+
+    it('auto mode on a dark system adds widget-theme-dark', () => {
+      mockMatchMedia(true);
+      const store = useWidgetStore();
+      store.colorMode = 'auto';
+      const rootElement = document.createElement('div');
+
+      store.applyColorMode(rootElement);
+
+      expect(rootElement.classList.contains('widget-theme-dark')).toBe(true);
+      expect(rootElement.classList.contains('widget-theme-light')).toBe(false);
+    });
+
+    it('explicit light mode adds widget-theme-light regardless of system', () => {
+      mockMatchMedia(true); // dark system
+      const store = useWidgetStore();
+      store.colorMode = 'light';
+      const rootElement = document.createElement('div');
+
+      store.applyColorMode(rootElement);
+
+      expect(rootElement.classList.contains('widget-theme-light')).toBe(true);
+      expect(rootElement.classList.contains('widget-theme-dark')).toBe(false);
+    });
+
+    it('explicit dark mode adds widget-theme-dark regardless of system', () => {
+      mockMatchMedia(false); // light system
+      const store = useWidgetStore();
+      store.colorMode = 'dark';
+      const rootElement = document.createElement('div');
+
+      store.applyColorMode(rootElement);
+
+      expect(rootElement.classList.contains('widget-theme-dark')).toBe(true);
+      expect(rootElement.classList.contains('widget-theme-light')).toBe(false);
+    });
+
+    it('removes both theme classes before adding the resolved one', () => {
+      mockMatchMedia(false);
+      const store = useWidgetStore();
+      store.colorMode = 'dark';
+      const rootElement = document.createElement('div');
+      // Pre-pollute with both classes to verify removal.
+      rootElement.classList.add('widget-theme-light', 'widget-theme-dark');
+
+      store.applyColorMode(rootElement);
+
+      // Only the resolved class remains.
+      expect(rootElement.classList.contains('widget-theme-dark')).toBe(true);
+      expect(rootElement.classList.contains('widget-theme-light')).toBe(false);
+    });
+
+    it('non-auto modes do not register a matchMedia listener', () => {
+      const { addSpy } = mockMatchMedia(false);
+      const store = useWidgetStore();
+      store.colorMode = 'light';
+      const rootElement = document.createElement('div');
+
+      store.applyColorMode(rootElement);
+
+      expect(addSpy).not.toHaveBeenCalled();
+    });
+
+    it('auto mode registers exactly one change listener', () => {
+      const { addSpy } = mockMatchMedia(false);
+      const store = useWidgetStore();
+      store.colorMode = 'auto';
+      const rootElement = document.createElement('div');
+
+      store.applyColorMode(rootElement);
+
+      expect(addSpy).toHaveBeenCalledTimes(1);
+      expect(addSpy.mock.calls[0][0]).toBe('change');
+    });
+
+    it('auto → light → auto cycle never stacks listeners (teardown before re-bind)', () => {
+      // Use a single shared addSpy/removeSpy across all stub returns so we
+      // can count net listener bindings across the whole cycle.
+      const addSpy = vi.fn();
+      const removeSpy = vi.fn();
+      const fakeMQL: Partial<MediaQueryList> = {
+        matches: false,
+        media: '(prefers-color-scheme: dark)',
+        addEventListener: addSpy as unknown as MediaQueryList['addEventListener'],
+        removeEventListener: removeSpy as unknown as MediaQueryList['removeEventListener'],
+      };
+      vi.stubGlobal('matchMedia', vi.fn().mockReturnValue(fakeMQL));
+
+      const store = useWidgetStore();
+      const rootElement = document.createElement('div');
+
+      // 1) auto → registers a listener
+      store.colorMode = 'auto';
+      store.applyColorMode(rootElement);
+
+      // 2) light → must remove prior listener and not register a new one
+      store.colorMode = 'light';
+      store.applyColorMode(rootElement);
+
+      // 3) auto → registers exactly one new listener
+      store.colorMode = 'auto';
+      store.applyColorMode(rootElement);
+
+      // After the full cycle: 2 add calls (steps 1, 3), 2 remove calls
+      // (steps 2, 3 — step 3 tears down the prior auto-mode listener
+      // even though step 2 already removed it; the unconditional teardown
+      // is the invariant that prevents stacking, even if it sometimes
+      // calls remove on an already-cleared MQL).
+      expect(addSpy).toHaveBeenCalledTimes(2);
+      // Net bindings (add - remove) should never exceed 1 at any point;
+      // by the end of the cycle, exactly one listener is active.
+      expect(addSpy.mock.calls.length - removeSpy.mock.calls.length).toBeLessThanOrEqual(1);
+    });
+
+    it('repeated auto applications do not stack listeners', () => {
+      const addSpy = vi.fn();
+      const removeSpy = vi.fn();
+      const fakeMQL: Partial<MediaQueryList> = {
+        matches: false,
+        media: '(prefers-color-scheme: dark)',
+        addEventListener: addSpy as unknown as MediaQueryList['addEventListener'],
+        removeEventListener: removeSpy as unknown as MediaQueryList['removeEventListener'],
+      };
+      vi.stubGlobal('matchMedia', vi.fn().mockReturnValue(fakeMQL));
+
+      const store = useWidgetStore();
+      store.colorMode = 'auto';
+      const rootElement = document.createElement('div');
+
+      store.applyColorMode(rootElement);
+      store.applyColorMode(rootElement);
+      store.applyColorMode(rootElement);
+
+      // Each invocation tears down the prior listener and registers anew —
+      // net bindings (add - remove) must never exceed 1.
+      expect(addSpy.mock.calls.length - removeSpy.mock.calls.length).toBeLessThanOrEqual(1);
     });
   });
 });

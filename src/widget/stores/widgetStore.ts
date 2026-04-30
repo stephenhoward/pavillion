@@ -24,6 +24,13 @@ export interface WidgetState {
   currentMonthStart: string | null; // ISO date string
 }
 
+// Module-scope singletons for the auto-mode matchMedia listener.
+// Stored at module scope (not as Pinia state) so we never re-bind on top of
+// an existing listener; explicit teardown before each re-evaluation prevents
+// stacked listeners across `auto → light → auto` toggles.
+let mediaQueryList: MediaQueryList | null = null;
+let mediaQueryListener: ((e: MediaQueryListEvent) => void) | null = null;
+
 export const useWidgetStore = defineStore('widget', {
   state: (): WidgetState => ({
     viewMode: WIDGET_CONFIG_DEFAULTS.view,
@@ -145,42 +152,67 @@ export const useWidgetStore = defineStore('widget', {
     },
 
     /**
-     * Inject accent color as CSS custom property on root element.
+     * Inject accent color as CSS custom properties on root element.
+     *
+     * Writes `--pav-accent-light` and `--pav-accent-dark` from the user-chosen
+     * value. Hover variants (`--pav-accent-light-hover` / `--pav-accent-dark-hover`)
+     * are intentionally NOT written here — they remain at the SCSS-compiled
+     * defaults emitted by the `public-accent-tokens` mixin on the root.
      *
      * SECURITY: The accent color MUST reach the DOM only via
-     * `element.style.setProperty('--widget-accent-color', value)`. Never
-     * interpolate the value into a raw `<style>` block, `innerHTML`, or
-     * string-concatenated stylesheet — those paths enable CSS/HTML
-     * injection. Combined with the strict hex regex validation in
-     * `isValidWidgetAccentColor` and the re-validation in
-     * `applyServerConfig()`/`parseConfig()`, this closes the injection
-     * vector.
+     * `element.style.setProperty(...)`. Never interpolate the value into a
+     * raw `<style>` block, `innerHTML`, or string-concatenated stylesheet —
+     * those paths enable CSS/HTML injection. Combined with the strict hex
+     * regex validation in `isValidWidgetAccentColor` and the re-validation in
+     * `applyServerConfig()`/`parseConfig()`, this closes the injection vector.
      *
-     * @param rootElement - DOM element to inject CSS property on
+     * @param rootElement - DOM element to inject CSS properties on
      */
     injectAccentColor(rootElement: HTMLElement) {
       if (this.accentColor) {
-        rootElement.style.setProperty('--widget-accent-color', this.accentColor);
+        rootElement.style.setProperty('--pav-accent-light', this.accentColor);
+        rootElement.style.setProperty('--pav-accent-dark', this.accentColor);
       }
     },
 
     /**
-     * Apply color mode class to root element
+     * Apply color mode class to root element.
+     *
+     * Resolves `auto` to `light` or `dark` via
+     * `window.matchMedia('(prefers-color-scheme: dark)')` so widget content
+     * always carries exactly one explicit theme class. This lets the
+     * `public-light-mode-override` mixin win over the dark-mode media query
+     * branch via specificity when the user picks "Light" on a dark-OS system.
+     *
+     * For `auto` mode, registers a single `change` listener on the
+     * MediaQueryList. The listener is stored at module scope and torn down
+     * unconditionally on every invocation, preventing stacked listeners
+     * across `auto → light → auto` toggles.
      *
      * @param rootElement - DOM element to apply class to
      */
     applyColorMode(rootElement: HTMLElement) {
-      // Remove existing theme classes
+      // Always tear down any prior listener before re-evaluating.
+      if (mediaQueryList && mediaQueryListener) {
+        mediaQueryList.removeEventListener('change', mediaQueryListener);
+        mediaQueryList = null;
+        mediaQueryListener = null;
+      }
+
+      // Always remove both theme classes, then add exactly one.
       rootElement.classList.remove('widget-theme-light', 'widget-theme-dark');
 
-      // Apply theme class based on color mode (auto uses prefers-color-scheme)
-      if (this.colorMode === 'light') {
-        rootElement.classList.add('widget-theme-light');
+      const resolved = this.colorMode === 'auto'
+        ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+        : this.colorMode;
+      rootElement.classList.add(resolved === 'dark' ? 'widget-theme-dark' : 'widget-theme-light');
+
+      // For auto mode, listen for OS theme changes and re-apply.
+      if (this.colorMode === 'auto') {
+        mediaQueryList = window.matchMedia('(prefers-color-scheme: dark)');
+        mediaQueryListener = () => this.applyColorMode(rootElement);
+        mediaQueryList.addEventListener('change', mediaQueryListener);
       }
-      else if (this.colorMode === 'dark') {
-        rootElement.classList.add('widget-theme-dark');
-      }
-      // For 'auto', no class is added - CSS will use prefers-color-scheme
     },
 
     /**

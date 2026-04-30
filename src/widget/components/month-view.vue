@@ -314,6 +314,10 @@ onMounted(() => {
     border-bottom-color: $public-border-subtle-dark;
   }
 
+  @include public-light-mode-override {
+    border-bottom-color: $public-border-subtle-light;
+  }
+
   .month-title {
     flex: 1;
     text-align: center;
@@ -324,6 +328,10 @@ onMounted(() => {
 
     @include public-dark-mode {
       color: $public-text-primary-dark;
+    }
+
+    @include public-light-mode-override {
+      color: $public-text-primary-light;
     }
 
     @include public-mobile-only {
@@ -355,6 +363,16 @@ onMounted(() => {
         border-color: $public-border-strong-dark;
       }
     }
+
+    @include public-light-mode-override {
+      border-color: $public-border-medium-light;
+      color: $public-text-primary-light;
+
+      &:hover:not(:disabled) {
+        background: $public-hover-overlay-light;
+        border-color: $public-border-strong-light;
+      }
+    }
   }
 }
 
@@ -374,6 +392,10 @@ onMounted(() => {
   @include public-dark-mode {
     background: $public-border-subtle-dark;
   }
+
+  @include public-light-mode-override {
+    background: $public-border-subtle-light;
+  }
 }
 
 .weekday-header {
@@ -392,6 +414,11 @@ onMounted(() => {
     background: $public-bg-secondary-dark;
     color: $public-text-secondary-dark;
   }
+
+  @include public-light-mode-override {
+    background: $public-bg-secondary-light;
+    color: $public-text-secondary-light;
+  }
 }
 
 .month-day-cell {
@@ -405,6 +432,10 @@ onMounted(() => {
     background: $public-bg-primary-dark;
   }
 
+  @include public-light-mode-override {
+    background: $public-bg-primary-light;
+  }
+
   &.is-other-month {
     opacity: 0.3;
     pointer-events: none;
@@ -413,7 +444,7 @@ onMounted(() => {
   &.is-today {
     .cell-header {
       .day-number {
-        background: $public-accent-light;
+        background: var(--pav-accent-light);
         color: white;
         border-radius: 50%;
         width: 24px;
@@ -423,7 +454,11 @@ onMounted(() => {
         justify-content: center;
 
         @include public-dark-mode {
-          background: $public-accent-dark;
+          background: var(--pav-accent-dark);
+        }
+
+        @include public-light-mode-override {
+          background: var(--pav-accent-light);
         }
       }
     }
@@ -443,6 +478,10 @@ onMounted(() => {
       @include public-dark-mode {
         color: $public-text-primary-dark;
       }
+
+      @include public-light-mode-override {
+        color: $public-text-primary-light;
+      }
     }
   }
 
@@ -459,7 +498,7 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   padding: 2px 4px;
-  background: $public-accent-light;
+  background: var(--pav-accent-light);
   color: white;
   border-radius: 3px;
   font-size: 10px;
@@ -468,15 +507,23 @@ onMounted(() => {
   overflow: hidden;
 
   &:hover {
-    background: $public-accent-hover-light;
+    background: var(--pav-accent-light-hover);
     transform: translateY(-1px);
   }
 
   @include public-dark-mode {
-    background: $public-accent-dark;
+    background: var(--pav-accent-dark);
 
     &:hover {
-      background: $public-accent-hover-dark;
+      background: var(--pav-accent-dark-hover);
+    }
+  }
+
+  @include public-light-mode-override {
+    background: var(--pav-accent-light);
+
+    &:hover {
+      background: var(--pav-accent-light-hover);
     }
   }
 
@@ -506,6 +553,11 @@ onMounted(() => {
     color: $public-text-secondary-dark;
     background: $public-bg-tertiary-dark;
   }
+
+  @include public-light-mode-override {
+    color: $public-text-secondary-light;
+    background: $public-bg-tertiary-light;
+  }
 }
 
 // ================================================================
@@ -534,6 +586,11 @@ onMounted(() => {
     box-shadow: $public-shadow-sm-dark;
   }
 
+  @include public-light-mode-override {
+    background: $public-bg-secondary-light;
+    box-shadow: $public-shadow-sm-light;
+  }
+
   .day-header {
     display: flex;
     flex-direction: column;
@@ -541,12 +598,16 @@ onMounted(() => {
     justify-content: center;
     min-width: 60px;
     padding: $public-space-sm;
-    background: $public-accent-light;
+    background: var(--pav-accent-light);
     color: white;
     border-radius: $public-radius-sm;
 
     @include public-dark-mode {
-      background: $public-accent-dark;
+      background: var(--pav-accent-dark);
+    }
+
+    @include public-light-mode-override {
+      background: var(--pav-accent-light);
     }
 
     .day-name {
@@ -590,13 +651,25 @@ onMounted(() => {
       }
     }
 
+    @include public-light-mode-override {
+      background: $public-bg-primary-light;
+
+      &:hover {
+        background: $public-bg-tertiary-light;
+      }
+    }
+
     .event-time {
       font-size: $public-font-size-xs;
       font-weight: $public-font-weight-medium;
-      color: $public-accent-light;
+      color: var(--pav-accent-light);
 
       @include public-dark-mode {
-        color: $public-accent-dark;
+        color: var(--pav-accent-dark);
+      }
+
+      @include public-light-mode-override {
+        color: var(--pav-accent-light);
       }
     }
 
@@ -608,6 +681,10 @@ onMounted(() => {
 
       @include public-dark-mode {
         color: $public-text-primary-dark;
+      }
+
+      @include public-light-mode-override {
+        color: $public-text-primary-light;
       }
     }
   }

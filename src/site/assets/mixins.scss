@@ -23,6 +23,21 @@ $public-accent-dark: #C86002;
 $public-accent-hover-light: darken(#ff9131, 5%);
 $public-accent-hover-dark: lighten(#C86002, 5%);
 
+// Emit the four accent CSS custom properties on a root selector so
+// widgets and the public site can override them via inline styles
+// (e.g. widget admin custom accent color) without forking SCSS.
+//
+// Apply this mixin once at the root of the widget app and the public
+// site root. Components consume the variables via `var(--pav-accent-light)`,
+// `var(--pav-accent-light-hover)`, `var(--pav-accent-dark)`, and
+// `var(--pav-accent-dark-hover)`.
+@mixin public-accent-tokens {
+  --pav-accent-light: #{$public-accent-light};
+  --pav-accent-light-hover: #{$public-accent-hover-light};
+  --pav-accent-dark: #{$public-accent-dark};
+  --pav-accent-dark-hover: #{$public-accent-hover-dark};
+}
+
 // Background layers (lighter, airier than client)
 $public-bg-primary-light: #ffffff;
 $public-bg-primary-dark: #1a1a1e;
@@ -198,12 +213,21 @@ $public-transition-slow: all $public-duration-slow $public-ease-in-out;
     transform: translateY(0);
   }
 
-  @media (prefers-color-scheme: dark) {
+  @include public-dark-mode {
     background: $public-bg-primary-dark;
     box-shadow: $public-shadow-md-dark;
 
     &:hover {
       box-shadow: $public-shadow-lg-dark;
+    }
+  }
+
+  @include public-light-mode-override {
+    background: $public-bg-primary-light;
+    box-shadow: $public-shadow-md-light;
+
+    &:hover {
+      box-shadow: $public-shadow-lg-light;
     }
   }
 }
@@ -288,6 +312,28 @@ $public-transition-slow: all $public-duration-slow $public-ease-in-out;
       }
     }
   }
+
+  @include public-light-mode-override {
+    background-color: $public-bg-tertiary-light;
+    color: $public-text-secondary-light;
+    box-shadow: $public-shadow-xs-light;
+
+    &:hover {
+      background-color: rgba(0, 0, 0, 0.08);
+      color: rgba(0, 0, 0, 0.75);
+      box-shadow: $public-shadow-sm-light;
+    }
+
+    &.selected {
+      background-color: $public-accent-light;
+      color: white;
+      box-shadow: $public-shadow-md-light;
+
+      &:hover {
+        background-color: $public-accent-hover-light;
+      }
+    }
+  }
 }
 
 // ===== DROPDOWN COMPONENT =====
@@ -301,10 +347,16 @@ $public-transition-slow: all $public-duration-slow $public-ease-in-out;
   border-radius: $public-radius-md;
   box-shadow: $public-shadow-lg-light;
 
-  @media (prefers-color-scheme: dark) {
+  @include public-dark-mode {
     background: rgba(30, 30, 35, 0.98);
     box-shadow: $public-shadow-lg-dark;
     backdrop-filter: blur(20px);
+  }
+
+  @include public-light-mode-override {
+    background: $public-bg-primary-light;
+    box-shadow: $public-shadow-lg-light;
+    backdrop-filter: none;
   }
 }
 
@@ -362,7 +414,7 @@ $public-transition-slow: all $public-duration-slow $public-ease-in-out;
     background: $public-bg-primary-light;
   }
 
-  @media (prefers-color-scheme: dark) {
+  @include public-dark-mode {
     color: $public-text-primary-dark;
     background: $public-bg-secondary-dark;
     border-color: $public-border-subtle-dark;
@@ -379,6 +431,26 @@ $public-transition-slow: all $public-duration-slow $public-ease-in-out;
     &:focus {
       outline-color: $public-accent-dark;
       background: rgba(255, 255, 255, 0.1);
+    }
+  }
+
+  @include public-light-mode-override {
+    color: $public-text-primary-light;
+    background: $public-bg-primary-light;
+    border-color: $public-border-subtle-light;
+
+    &::placeholder {
+      color: $public-text-tertiary-light;
+    }
+
+    &:hover {
+      border-color: $public-border-medium-light;
+      background: $public-bg-secondary-light;
+    }
+
+    &:focus {
+      outline-color: $public-accent-light;
+      background: $public-bg-primary-light;
     }
   }
 }
@@ -404,11 +476,19 @@ $public-transition-slow: all $public-duration-slow $public-ease-in-out;
     color: $public-text-primary-light;
   }
 
-  @media (prefers-color-scheme: dark) {
+  @include public-dark-mode {
     color: $public-text-secondary-dark;
 
     &:hover {
       color: $public-text-primary-dark;
+    }
+  }
+
+  @include public-light-mode-override {
+    color: $public-text-secondary-light;
+
+    &:hover {
+      color: $public-text-primary-light;
     }
   }
 }
@@ -453,13 +533,23 @@ $public-transition-slow: all $public-duration-slow $public-ease-in-out;
     box-shadow: $public-shadow-md-light;
   }
 
-  @media (prefers-color-scheme: dark) {
+  @include public-dark-mode {
     background-color: $public-accent-dark;
     box-shadow: $public-shadow-sm-dark;
 
     &:hover:not(:disabled) {
       background-color: $public-accent-hover-dark;
       box-shadow: $public-shadow-md-dark;
+    }
+  }
+
+  @include public-light-mode-override {
+    background-color: $public-accent-light;
+    box-shadow: $public-shadow-sm-light;
+
+    &:hover:not(:disabled) {
+      background-color: $public-accent-hover-light;
+      box-shadow: $public-shadow-md-light;
     }
   }
 }
@@ -476,13 +566,23 @@ $public-transition-slow: all $public-duration-slow $public-ease-in-out;
     border-color: $public-border-strong-light;
   }
 
-  @media (prefers-color-scheme: dark) {
+  @include public-dark-mode {
     color: $public-text-primary-dark;
     border-color: $public-border-medium-dark;
 
     &:hover:not(:disabled) {
       background-color: $public-hover-overlay-dark;
       border-color: $public-border-strong-dark;
+    }
+  }
+
+  @include public-light-mode-override {
+    color: $public-text-primary-light;
+    border-color: $public-border-medium-light;
+
+    &:hover:not(:disabled) {
+      background-color: $public-hover-overlay-light;
+      border-color: $public-border-strong-light;
     }
   }
 }
@@ -498,8 +598,12 @@ $public-transition-slow: all $public-duration-slow $public-ease-in-out;
   font-size: $public-font-size-base;
   font-style: italic;
 
-  @media (prefers-color-scheme: dark) {
+  @include public-dark-mode {
     color: $public-text-secondary-dark;
+  }
+
+  @include public-light-mode-override {
+    color: $public-text-secondary-light;
   }
 }
 
@@ -511,10 +615,16 @@ $public-transition-slow: all $public-duration-slow $public-ease-in-out;
   color: $public-error-light;
   font-size: $public-font-size-base;
 
-  @media (prefers-color-scheme: dark) {
+  @include public-dark-mode {
     background: $public-error-bg-dark;
     border-color: rgba($public-error-dark, 0.3);
     color: $public-error-dark;
+  }
+
+  @include public-light-mode-override {
+    background: $public-error-bg-light;
+    border-color: rgba($public-error-light, 0.3);
+    color: $public-error-light;
   }
 }
 
@@ -532,8 +642,12 @@ $public-transition-slow: all $public-duration-slow $public-ease-in-out;
     font-size: $public-font-size-md;
   }
 
-  @media (prefers-color-scheme: dark) {
+  @include public-dark-mode {
     color: $public-text-secondary-dark;
+  }
+
+  @include public-light-mode-override {
+    color: $public-text-secondary-light;
   }
 }
 
@@ -628,7 +742,45 @@ $public-transition-slow: all $public-duration-slow $public-ease-in-out;
   }
 
   // Apply dark mode when widget is explicitly set to dark mode
-  :global(.widget-theme-dark) & {
+  .widget-theme-dark & {
+    @content;
+  }
+}
+
+// Light mode override mixin — pairs with every `public-dark-mode` block
+// in widget components.
+//
+// Pairing contract: every `@include public-dark-mode { ... }` block in a
+// widget component MUST be paired with an `@include public-light-mode-override`
+// block that re-states the LIGHT values explicitly. This is required because
+// `public-dark-mode` activates via `@media (prefers-color-scheme: dark)`,
+// which would otherwise win over the widget's explicit light theme on a user
+// agent that prefers dark. By stating the light values inside a
+// `.widget-theme-light &` selector, this override beats the media
+// query branch on specificity when the widget root carries the
+// `.widget-theme-light` class.
+//
+// NOTE: Do NOT use `:global(.widget-theme-light) &` — Vue's scoped-style
+// compiler drops the descendant selector when `:global()` is followed by `&`,
+// producing bare `.widget-theme-light{...}` rules with no descendant. The
+// plain `.widget-theme-light &` form correctly emits
+// `.widget-theme-light .my-component[data-v-xxx]` because the ancestor is
+// not the scoped target.
+//
+// Usage:
+//   .my-component {
+//     color: $public-text-primary-light;
+//
+//     @include public-dark-mode {
+//       color: $public-text-primary-dark;
+//     }
+//
+//     @include public-light-mode-override {
+//       color: $public-text-primary-light;
+//     }
+//   }
+@mixin public-light-mode-override {
+  .widget-theme-light & {
     @content;
   }
 }
@@ -645,9 +797,14 @@ $public-transition-slow: all $public-duration-slow $public-ease-in-out;
   background-color: #e0f2fe;
   color: #0369a1;
 
-  @media (prefers-color-scheme: dark) {
+  @include public-dark-mode {
     background-color: rgba(12, 74, 110, 0.3);
     color: #7dd3fc;
+  }
+
+  @include public-light-mode-override {
+    background-color: #e0f2fe;
+    color: #0369a1;
   }
 }
 
@@ -681,6 +838,15 @@ $public-transition-slow: all $public-duration-slow $public-ease-in-out;
 
     &:hover {
       background-color: $public-source-pill-hover-bg-dark;
+    }
+  }
+
+  @include public-light-mode-override {
+    background-color: $public-source-pill-bg-light;
+    color: $public-source-pill-color-light;
+
+    &:hover {
+      background-color: $public-source-pill-hover-bg-light;
     }
   }
 }
@@ -795,8 +961,12 @@ $font-medium: $public-font-weight-medium;
   outline: 2px solid $public-accent-light;
   outline-offset: 2px;
 
-  @media (prefers-color-scheme: dark) {
+  @include public-dark-mode {
     outline-color: $public-accent-dark;
+  }
+
+  @include public-light-mode-override {
+    outline-color: $public-accent-light;
   }
 }
 

@@ -1,8 +1,28 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mount } from '@vue/test-utils';
 import { createPinia } from 'pinia';
 import { createMemoryHistory, createRouter, type Router } from 'vue-router';
 import { useWidgetStore } from '../stores/widgetStore';
+
+/**
+ * Build a fake MediaQueryList whose `matches` value is fixed and whose
+ * addEventListener/removeEventListener are spy-able. Mirrors the pattern
+ * established in widgetStore.test.ts (pv-16wd.1.2) so all widget tests
+ * share a single matchMedia mocking approach.
+ */
+function mockMatchMedia(matches: boolean) {
+  const addSpy = vi.fn();
+  const removeSpy = vi.fn();
+  const fakeMQL: Partial<MediaQueryList> = {
+    matches,
+    media: '(prefers-color-scheme: dark)',
+    addEventListener: addSpy as unknown as MediaQueryList['addEventListener'],
+    removeEventListener: removeSpy as unknown as MediaQueryList['removeEventListener'],
+  };
+  const matchMediaSpy = vi.fn().mockReturnValue(fakeMQL);
+  vi.stubGlobal('matchMedia', matchMediaSpy);
+  return { addSpy, removeSpy, matchMediaSpy };
+}
 
 describe('Widget App Infrastructure', () => {
   let pinia: ReturnType<typeof createPinia>;
@@ -96,7 +116,7 @@ describe('Widget App Infrastructure', () => {
   });
 
   describe('Accent Color CSS Injection', () => {
-    it('should set CSS custom property when accent color is provided', () => {
+    it('should set --pav-accent-light and --pav-accent-dark when accent color is provided', () => {
       // Create a mock root element
       const mockRoot = document.createElement('div');
       mockRoot.id = 'widget-root';
@@ -109,13 +129,14 @@ describe('Widget App Infrastructure', () => {
       // Inject the color
       store.injectAccentColor(mockRoot);
 
-      expect(mockRoot.style.getPropertyValue('--widget-accent-color')).toBe('#ff9131');
+      expect(mockRoot.style.getPropertyValue('--pav-accent-light')).toBe('#ff9131');
+      expect(mockRoot.style.getPropertyValue('--pav-accent-dark')).toBe('#ff9131');
 
       // Cleanup
       document.body.removeChild(mockRoot);
     });
 
-    it('should not set CSS property when accent color is empty', () => {
+    it('should not set CSS properties when accent color is empty', () => {
       const mockRoot = document.createElement('div');
       mockRoot.id = 'widget-root';
       document.body.appendChild(mockRoot);
@@ -125,14 +146,21 @@ describe('Widget App Infrastructure', () => {
       store.accentColor = '';
       store.injectAccentColor(mockRoot);
 
-      expect(mockRoot.style.getPropertyValue('--widget-accent-color')).toBe('');
+      expect(mockRoot.style.getPropertyValue('--pav-accent-light')).toBe('');
+      expect(mockRoot.style.getPropertyValue('--pav-accent-dark')).toBe('');
 
       document.body.removeChild(mockRoot);
     });
   });
 
   describe('Color Mode Class Application', () => {
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
     it('should apply light theme class when colorMode is light', () => {
+      // Even on a dark system, explicit light must win.
+      mockMatchMedia(true);
       const mockRoot = document.createElement('div');
       mockRoot.id = 'widget-root';
       document.body.appendChild(mockRoot);
@@ -150,6 +178,8 @@ describe('Widget App Infrastructure', () => {
     });
 
     it('should apply dark theme class when colorMode is dark', () => {
+      // Even on a light system, explicit dark must win.
+      mockMatchMedia(false);
       const mockRoot = document.createElement('div');
       mockRoot.id = 'widget-root';
       document.body.appendChild(mockRoot);
@@ -166,7 +196,8 @@ describe('Widget App Infrastructure', () => {
       document.body.removeChild(mockRoot);
     });
 
-    it('should not apply theme class when colorMode is auto', () => {
+    it('auto mode resolves to widget-theme-light on a light system', () => {
+      mockMatchMedia(false);
       const mockRoot = document.createElement('div');
       mockRoot.id = 'widget-root';
       document.body.appendChild(mockRoot);
@@ -177,8 +208,26 @@ describe('Widget App Infrastructure', () => {
 
       store.applyColorMode(mockRoot);
 
-      expect(mockRoot.classList.contains('widget-theme-light')).toBe(false);
+      expect(mockRoot.classList.contains('widget-theme-light')).toBe(true);
       expect(mockRoot.classList.contains('widget-theme-dark')).toBe(false);
+
+      document.body.removeChild(mockRoot);
+    });
+
+    it('auto mode resolves to widget-theme-dark on a dark system', () => {
+      mockMatchMedia(true);
+      const mockRoot = document.createElement('div');
+      mockRoot.id = 'widget-root';
+      document.body.appendChild(mockRoot);
+
+      const store = useWidgetStore(pinia);
+      const urlParams = new URLSearchParams('colorMode=auto');
+      store.parseConfig(urlParams);
+
+      store.applyColorMode(mockRoot);
+
+      expect(mockRoot.classList.contains('widget-theme-dark')).toBe(true);
+      expect(mockRoot.classList.contains('widget-theme-light')).toBe(false);
 
       document.body.removeChild(mockRoot);
     });
