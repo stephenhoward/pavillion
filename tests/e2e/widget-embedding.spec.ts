@@ -87,13 +87,21 @@ test.describe('Widget Embedding', () => {
     await expect(iframe.locator('body')).toBeVisible({ timeout: 20000 });
 
     // Step 5: Verify events display inside the iframe
-    // The widget ListView renders events as li.event elements
+    // The widget ListView renders events as <li class="day-event-item"> wrappers
+    // around the shared site EventCard (an <article class="event-card">).
     // The seeded test_calendar has multiple events - wait for at least one to appear
-    await expect(iframe.locator('li.event').first()).toBeVisible({ timeout: 15000 });
+    await expect(iframe.locator('article.event-card').first()).toBeVisible({ timeout: 15000 });
 
     // Confirm multiple events exist in the seeded test data
-    const eventCount = await iframe.locator('li.event').count();
+    const eventCount = await iframe.locator('article.event-card').count();
     expect(eventCount).toBeGreaterThanOrEqual(1);
+
+    // Smoke-level parity check: widget list view now renders the full site
+    // EventCard, so seeded events should produce at least one location pill
+    // or category badge in the iframe DOM.
+    await expect(
+      iframe.locator('.event-location, .category-badge').first(),
+    ).toBeVisible({ timeout: 15000 });
 
     // Step 6: Verify no CSP or CORS errors occurred during the entire test
     // This provides a safety net to catch any security violations that slipped through
@@ -163,11 +171,12 @@ test.describe('Widget Embedding', () => {
     await page.waitForSelector('iframe[src*="/widget/"]', { timeout: 15000 });
     const iframe = page.frameLocator('iframe[src*="/widget/"]');
 
-    // Wait for events to render in list view
-    await expect(iframe.locator('li.event').first()).toBeVisible({ timeout: 15000 });
+    // Wait for events to render in list view (EventCard articles)
+    await expect(iframe.locator('article.event-card').first()).toBeVisible({ timeout: 15000 });
 
-    // Click the first event to open detail overlay
-    await iframe.locator('li.event').first().click();
+    // Click the first event title link to navigate to the detail overlay.
+    // EventCard navigates via the anchor href computed by the widget router.
+    await iframe.locator('article.event-card .event-title-link').first().click();
 
     // Verify event detail overlay appears with event name
     await expect(iframe.locator('.event-detail-overlay')).toBeVisible({ timeout: 10000 });
@@ -177,7 +186,7 @@ test.describe('Widget Embedding', () => {
     await iframe.locator('.back-link').first().click();
 
     // Verify list view is restored
-    await expect(iframe.locator('li.event').first()).toBeVisible({ timeout: 10000 });
+    await expect(iframe.locator('article.event-card').first()).toBeVisible({ timeout: 10000 });
   });
 
   test('default server config drives accent color CSS variable', async ({ page }) => {
@@ -209,7 +218,7 @@ test.describe('Widget Embedding', () => {
     const iframe = page.frameLocator('iframe[src*="/widget/"]');
 
     // Wait for widget to fully load with events
-    await expect(iframe.locator('li.event').first()).toBeVisible({ timeout: 15000 });
+    await expect(iframe.locator('article.event-card').first()).toBeVisible({ timeout: 15000 });
 
     // Wait for at least one pavillion:resize message to arrive on the embedding page.
     // The widget debounces resize notifications by 100ms, so poll until one appears.

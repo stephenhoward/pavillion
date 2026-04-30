@@ -229,7 +229,7 @@ function closeReportModal() {
               <a v-for="category in state.event.categories"
                  :key="category.id"
                  class="event-category-badge"
-                 :href="localizedPath('/view/' + state.calendar.urlName) + '?category=' + category.id"
+                 :href="localizedPath('/view/' + state.calendar.urlName) + '?categories=' + category.id"
               >
                 {{ localizedContent(category).name }}
               </a>

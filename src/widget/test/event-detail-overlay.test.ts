@@ -1,14 +1,24 @@
 /**
- * Tests for the widget's event detail overlay external-URL CTA button.
+ * Tests for the widget's event detail overlay shell.
  *
- * Validates defense-in-depth computed guards and rendering rules ported
- * from the public-site event-instance implementation (pv-itux.5.1):
- *   - javascript: URLs are blocked before reaching the DOM
- *   - unknown urlPrompt values are blocked before reaching the DOM
- *   - valid (http/https) URL + known prompt → CTA anchor rendered with
- *     target="_blank" rel="noopener noreferrer" and translated label
- *   - null externalUrl OR null urlPrompt → CTA is omitted
- *   - malformed URL strings → CTA is omitted
+ * The overlay is now a thin shell that owns:
+ *   - The back-button header
+ *   - The <main class="instance-main"> wrapper
+ *   - <EventDetailBody> composition inside <main>
+ *   - Loading / error / not-found states
+ *
+ * Per-region body coverage (hero image, badges, source pill, datetime row,
+ * description + categories, sidebar cards, external CTA security guards,
+ * AddToCalendar) lives in src/site/test/components/EventDetailBody.test.ts.
+ *
+ * Validates:
+ *   - Back button renders and navigates to the widget calendar route.
+ *   - <EventDetailBody> is composed inside <main> with the correct props
+ *     (categoryHrefBuilder is omitted, so categories render as <span>).
+ *   - Slug routing: parseInstanceSlug + service-call selection between
+ *     loadEventInstance (slug present) and loadCalendarEvents (slug absent).
+ *   - Not-found rendering when slug is unparseable or instance lookup
+ *     returns null.
  */
 import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest';
 import { mount, flushPromises, VueWrapper } from '@vue/test-utils';
@@ -20,10 +30,6 @@ import i18next from 'i18next';
 // ---------------------------------------------------------------------------
 // Mocks — declared before component import
 // ---------------------------------------------------------------------------
-
-// Mutable externalUrl / urlPrompt so tests can inject CTA data
-let mockExternalUrl: string | null = null;
-let mockUrlPrompt: string | null = null;
 
 // Spy hooks for assertions about which fetch path was taken. Hoisted so
 // they are defined before vi.mock factories (which vitest runs at module
@@ -61,8 +67,8 @@ function buildFallbackInstanceMock() {
       recurrenceSummary: null,
       location: null,
       sourceCalendar: null,
-      externalUrl: mockExternalUrl,
-      urlPrompt: mockUrlPrompt,
+      externalUrl: null,
+      urlPrompt: null,
     },
   };
 }
@@ -89,10 +95,11 @@ vi.mock('@/site/components/not-found.vue', () => ({
   default: { template: '<div class="not-found-stub"></div>' },
 }));
 
-vi.mock('@/site/components/event-image.vue', () => ({
+vi.mock('@/site/components/EventDetailBody.vue', () => ({
   default: {
-    template: '<div class="event-image-stub"></div>',
-    props: ['media', 'context', 'alt', 'focalPointX', 'focalPointY', 'zoom'],
+    name: 'EventDetailBody',
+    props: ['instance', 'calendar', 'categoryHrefBuilder'],
+    template: '<div data-test="event-detail-body" class="event-detail-body-stub"></div>',
   },
 }));
 
@@ -128,7 +135,7 @@ async function buildRouter(initialPath: string): Promise<Router> {
   return router;
 }
 
-async function mountOverlay(initialPath: string): Promise<VueWrapper> {
+async function mountOverlay(initialPath: string): Promise<{ wrapper: VueWrapper; router: Router }> {
   const router = await buildRouter(initialPath);
   const pinia = createPinia();
 
@@ -143,7 +150,7 @@ async function mountOverlay(initialPath: string): Promise<VueWrapper> {
   });
 
   await flushPromises();
-  return wrapper;
+  return { wrapper, router };
 }
 
 // ---------------------------------------------------------------------------
@@ -181,13 +188,8 @@ beforeAll(async () => {
 // Tests
 // ---------------------------------------------------------------------------
 
-describe('widget event-detail-overlay external URL CTA button', () => {
+describe('widget event-detail-overlay shell', () => {
   beforeEach(() => {
-    mockExternalUrl = null;
-    mockUrlPrompt = null;
-    // Reset and re-install default lazy implementations so the per-test
-    // mockExternalUrl / mockUrlPrompt mutations are picked up at call
-    // time, and so per-test mockResolvedValue overrides take effect.
     loadCalendarEventsMock.mockReset();
     loadEventInstanceMock.mockReset();
     loadCalendarEventsMock.mockImplementation(
@@ -202,111 +204,54 @@ describe('widget event-detail-overlay external URL CTA button', () => {
     vi.clearAllMocks();
   });
 
-  it('should render CTA anchor when externalUrl and urlPrompt are both valid', async () => {
-    mockExternalUrl = 'https://tickets.example.com/show/123';
-    mockUrlPrompt = 'tickets';
+  it('renders the back button when an instance is loaded', async () => {
+    const { wrapper } = await mountOverlay('/widget/test_calendar/events/evt-1');
 
-    const wrapper = await mountOverlay('/widget/test_calendar/events/evt-1');
-
-    const cta = wrapper.find('.external-link-button');
-    expect(cta.exists()).toBe(true);
-    expect(cta.attributes('href')).toBe('https://tickets.example.com/show/123');
+    const backButton = wrapper.find('.instance-back-header .back-link');
+    expect(backButton.exists()).toBe(true);
     wrapper.unmount();
   });
 
-  it('should use target="_blank" and rel="noopener noreferrer" on the CTA anchor', async () => {
-    mockExternalUrl = 'https://rsvp.example.com/party';
-    mockUrlPrompt = 'rsvp';
+  it('back-button click navigates to the widget-calendar route', async () => {
+    const { wrapper, router } = await mountOverlay('/widget/test_calendar/events/evt-1');
+    const pushSpy = vi.spyOn(router, 'push');
 
-    const wrapper = await mountOverlay('/widget/test_calendar/events/evt-1');
+    const backButton = wrapper.find('.instance-back-header .back-link');
+    expect(backButton.exists()).toBe(true);
+    await backButton.trigger('click');
 
-    const cta = wrapper.find('.external-link-button');
-    expect(cta.exists()).toBe(true);
-    expect(cta.attributes('target')).toBe('_blank');
-    expect(cta.attributes('rel')).toBe('noopener noreferrer');
+    expect(pushSpy).toHaveBeenCalledTimes(1);
+    const arg = pushSpy.mock.calls[0][0];
+    expect(arg).toMatchObject({ name: 'widget-calendar' });
     wrapper.unmount();
   });
 
-  it('should display the translated label from system:url_prompt.<prompt>', async () => {
-    mockExternalUrl = 'https://example.com/info';
-    mockUrlPrompt = 'more_info';
+  it('renders <EventDetailBody> inside <main> when instance and calendar are loaded', async () => {
+    const { wrapper } = await mountOverlay('/widget/test_calendar/events/evt-1');
 
-    const wrapper = await mountOverlay('/widget/test_calendar/events/evt-1');
-
-    const cta = wrapper.find('.external-link-button');
-    expect(cta.exists()).toBe(true);
-    expect(cta.text()).toBe('More Information');
+    const main = wrapper.find('main.instance-main');
+    expect(main.exists()).toBe(true);
+    const body = main.find('[data-test="event-detail-body"]');
+    expect(body.exists()).toBe(true);
     wrapper.unmount();
   });
 
-  it('should NOT render the CTA when externalUrl is null', async () => {
-    mockExternalUrl = null;
-    mockUrlPrompt = 'tickets';
+  it('passes the loaded instance and calendar to EventDetailBody, and omits categoryHrefBuilder', async () => {
+    const { wrapper } = await mountOverlay('/widget/test_calendar/events/evt-1');
 
-    const wrapper = await mountOverlay('/widget/test_calendar/events/evt-1');
-
-    expect(wrapper.find('.external-link-button').exists()).toBe(false);
-    wrapper.unmount();
-  });
-
-  it('should NOT render the CTA when urlPrompt is null', async () => {
-    mockExternalUrl = 'https://example.com';
-    mockUrlPrompt = null;
-
-    const wrapper = await mountOverlay('/widget/test_calendar/events/evt-1');
-
-    expect(wrapper.find('.external-link-button').exists()).toBe(false);
-    wrapper.unmount();
-  });
-
-  it('should NOT render the CTA for javascript: URLs (defense-in-depth)', async () => {
-    mockExternalUrl = 'javascript:alert(1)';
-    mockUrlPrompt = 'tickets';
-
-    const wrapper = await mountOverlay('/widget/test_calendar/events/evt-1');
-
-    expect(wrapper.find('.external-link-button').exists()).toBe(false);
-    wrapper.unmount();
-  });
-
-  it('should NOT render the CTA for unknown urlPrompt values', async () => {
-    mockExternalUrl = 'https://example.com';
-    mockUrlPrompt = 'hack';
-
-    const wrapper = await mountOverlay('/widget/test_calendar/events/evt-1');
-
-    expect(wrapper.find('.external-link-button').exists()).toBe(false);
-    wrapper.unmount();
-  });
-
-  it('should NOT render the CTA for malformed URLs', async () => {
-    mockExternalUrl = 'not a url at all';
-    mockUrlPrompt = 'tickets';
-
-    const wrapper = await mountOverlay('/widget/test_calendar/events/evt-1');
-
-    expect(wrapper.find('.external-link-button').exists()).toBe(false);
-    wrapper.unmount();
-  });
-
-  it('should NOT render the CTA for data: URLs (defense-in-depth)', async () => {
-    mockExternalUrl = 'data:text/html,<script>alert(1)</script>';
-    mockUrlPrompt = 'tickets';
-
-    const wrapper = await mountOverlay('/widget/test_calendar/events/evt-1');
-
-    expect(wrapper.find('.external-link-button').exists()).toBe(false);
+    const body = wrapper.findComponent({ name: 'EventDetailBody' });
+    expect(body.exists()).toBe(true);
+    expect(body.props('instance')).toBeTruthy();
+    expect((body.props('instance') as any).id).toBe('inst-1');
+    expect((body.props('calendar') as any).urlName).toBe('test_calendar');
+    // Widget shell omits categoryHrefBuilder so categories render as <span>.
+    expect(body.props('categoryHrefBuilder')).toBeUndefined();
     wrapper.unmount();
   });
 });
 
 describe('widget event-detail-overlay slug routing', () => {
   beforeEach(() => {
-    mockExternalUrl = null;
-    mockUrlPrompt = null;
-    // Reset and re-install default lazy implementations so the per-test
-    // mockExternalUrl / mockUrlPrompt mutations are picked up at call
-    // time, and so per-test mockResolvedValue overrides take effect.
     loadCalendarEventsMock.mockReset();
     loadEventInstanceMock.mockReset();
     loadCalendarEventsMock.mockImplementation(
@@ -353,7 +298,7 @@ describe('widget event-detail-overlay slug routing', () => {
       },
     });
 
-    const wrapper = await mountOverlay('/widget/test_calendar/events/evt-1/20260508-1800');
+    const { wrapper } = await mountOverlay('/widget/test_calendar/events/evt-1/20260508-1800');
 
     expect(loadEventInstanceMock).toHaveBeenCalledTimes(1);
     const [calledEventId, calledStartTime] = loadEventInstanceMock.mock.calls[0];
@@ -366,7 +311,7 @@ describe('widget event-detail-overlay slug routing', () => {
   });
 
   it('falls back to the event list scan when startTime is absent (no redundant detail fetch)', async () => {
-    const wrapper = await mountOverlay('/widget/test_calendar/events/evt-1');
+    const { wrapper } = await mountOverlay('/widget/test_calendar/events/evt-1');
 
     // Fallback path uses loadCalendarEvents once; no second detail fetch
     // (the list response already carries enough data for the overlay).
@@ -378,7 +323,7 @@ describe('widget event-detail-overlay slug routing', () => {
   it('renders not-found when startTime is semantically invalid (parseInstanceSlug returns null)', async () => {
     // The router regex only enforces \d{8}-\d{4}; parseInstanceSlug is the
     // semantic gate (month 13, day 32, bad year, etc.).
-    const wrapper = await mountOverlay('/widget/test_calendar/events/evt-1/20261301-2500');
+    const { wrapper } = await mountOverlay('/widget/test_calendar/events/evt-1/20261301-2500');
 
     expect(wrapper.find('.not-found-stub').exists()).toBe(true);
     // Neither the slug fetch nor the fallback list scan should run when the
@@ -391,7 +336,7 @@ describe('widget event-detail-overlay slug routing', () => {
   it('renders not-found when loadEventInstance returns null (instance not found)', async () => {
     loadEventInstanceMock.mockResolvedValue(null);
 
-    const wrapper = await mountOverlay('/widget/test_calendar/events/evt-1/20260508-1800');
+    const { wrapper } = await mountOverlay('/widget/test_calendar/events/evt-1/20260508-1800');
 
     expect(loadEventInstanceMock).toHaveBeenCalledTimes(1);
     expect(wrapper.find('.not-found-stub').exists()).toBe(true);

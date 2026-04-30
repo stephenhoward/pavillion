@@ -1,81 +1,80 @@
 <script setup lang="ts">
-import { computed, onBeforeMount } from 'vue';
+import { computed } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import { useRouter } from 'vue-router';
 import { DateTime } from 'luxon';
 import { usePublicCalendarStore } from '@/site/stores/publicCalendarStore';
 import { useWidgetStore } from '../stores/widgetStore';
-import EventImage from '@/site/components/event-image.vue';
+import EventCard from '@/site/components/event-card.vue';
 import { formatInstanceSlug } from '@/common/utils/instance-slug';
+import type CalendarEventInstance from '@/common/model/event_instance';
 
 const { t } = useTranslation('system');
 const router = useRouter();
 const publicStore = usePublicCalendarStore();
 const widgetStore = useWidgetStore();
 
-// Computed properties for store data
+// Events are loaded by WidgetContainer/SearchFilterPublic; this component
+// just displays them via the day-grouped EventCard list pattern shared
+// with the site (src/site/components/calendar.vue).
 const filteredEventsByDay = computed(() => publicStore.getFilteredEventsByDay);
+const defaultEventImage = computed(() => publicStore.defaultEventImage);
 
 /**
- * Resolves the effective image for an event instance.
- * Falls back to the calendar's default event image for locally-owned events.
- * Reposted events do NOT get the local calendar's default image.
+ * Builds the widget-router-resolved href for an event instance.
+ * EventCard receives this via its detailHref prop and renders it
+ * as an anchor href, so navigation flows through the widget router
+ * (no openEvent click handler needed on the list view).
  */
-const resolveEventImage = (instance: any) => {
-  if (instance.event.media) {
-    return instance.event.media;
-  }
-  if (instance.event.isRepost) {
-    return null;
-  }
-  return publicStore.defaultEventImage ?? null;
-};
-
-const openEvent = (instance: any) => {
-  router.push({
+const buildDetailHref = (instance: CalendarEventInstance): string => {
+  return router.resolve({
     name: 'widget-event-detail',
     params: {
       urlName: widgetStore.calendarUrlName!,
       eventId: instance.event.id,
       startTime: formatInstanceSlug(instance.start),
     },
-  });
+  }).href;
 };
-
-onBeforeMount(() => {
-  // Events are loaded by WidgetContainer/SearchFilterPublic
-  // This component just displays them
-});
 </script>
 
 <template>
   <div class="list-view">
     <!-- Events Display -->
-    <div v-if="Object.keys(filteredEventsByDay).length > 0">
-      <section class="day" v-for="day in Object.keys(filteredEventsByDay).sort()" :key="day">
-        <h2>{{ DateTime.fromISO(day).toLocaleString({ weekday: 'long', month: 'long', day: 'numeric' }) }}</h2>
-        <ul class="events">
-          <li class="event"
-              v-for="instance in filteredEventsByDay[day]"
-              :key="instance.id"
-              @click="openEvent(instance)">
-            <EventImage
-              :media="resolveEventImage(instance)"
-              :focal-point-x="instance.event.mediaFocalPointX"
-              :focal-point-y="instance.event.mediaFocalPointY"
-              :zoom="instance.event.mediaZoom"
-              context="card"
-              :lazy="true"
+    <div
+      v-if="Object.keys(filteredEventsByDay).length > 0"
+      class="events-container"
+    >
+      <section
+        v-for="day in Object.keys(filteredEventsByDay).sort()"
+        :key="day"
+        class="day"
+      >
+        <h2 class="day-heading">
+          {{ DateTime.fromISO(day).toLocaleString({ weekday: 'long', month: 'long', day: 'numeric' }) }}
+        </h2>
+        <ul class="day-events">
+          <li
+            v-for="instance in filteredEventsByDay[day]"
+            :key="instance.id"
+            class="day-event-item"
+          >
+            <EventCard
+              :instance="instance"
+              :calendar-url-name="widgetStore.calendarUrlName!"
+              :default-image="defaultEventImage"
+              :detail-href="buildDetailHref(instance)"
             />
-            <h3>{{ instance.event.content("en").name }}</h3>
-            <div class="event-time">{{ instance.start.toLocal().toLocaleString(DateTime.TIME_SIMPLE) }}</div>
           </li>
         </ul>
       </section>
     </div>
 
     <!-- Empty State: suppress when search is pending (1-2 chars typed) to avoid conflicting messages -->
-    <div v-else-if="!publicStore.isLoadingEvents && !publicStore.isSearchPending" class="empty-state">
+    <div
+      v-else-if="!publicStore.isLoadingEvents && !publicStore.isSearchPending"
+      class="empty-state"
+    >
       <p v-if="publicStore.hasActiveFilters">
         {{ t('no_events_with_filters') }}
       </p>
@@ -85,7 +84,12 @@ onBeforeMount(() => {
     </div>
 
     <!-- Loading State -->
-    <div v-if="publicStore.isLoadingEvents" class="loading">
+    <div
+      v-if="publicStore.isLoadingEvents"
+      class="loading"
+      role="status"
+      aria-live="polite"
+    >
       {{ t('loading_events') }}
     </div>
   </div>
@@ -101,165 +105,52 @@ onBeforeMount(() => {
 }
 
 // ================================================================
-// EVENTS DISPLAY (adapted from site calendar.vue)
+// EVENTS DISPLAY (mirrors site/components/calendar.vue)
 // ================================================================
-// A horizontally scrollable list of event cards.
-// Cards adapt gracefully whether they have images or not.
-// Optimized for iframe context.
+// Day-grouped vertical list of EventCards. The widget reuses the
+// site's EventCard component directly so it shares all card content
+// (image, title, time, location, description, categories,
+// source-calendar pill, recurrence/cancelled badges, no-image
+// fallback) and benefits from the same dark/light pairing audit.
 // ================================================================
 
-section.day {
-  margin: $public-space-lg 0;
+.events-container {
+  display: flex;
+  flex-direction: column;
+  gap: $public-space-2xl;
+}
 
-  h2 {
-    font-size: $public-font-size-sm;
-    margin: 0;
-    padding: 0;
-    font-weight: $public-font-weight-semibold;
-    text-transform: uppercase;
-    letter-spacing: $public-letter-spacing-wide;
+.day {
+  // No extra margin needed; events-container gap handles spacing
+}
+
+.day-heading {
+  @include public-sticky-date-heading;
+
+  padding: $public-space-sm 0;
+  margin: 0 0 $public-space-lg 0;
+  color: $public-text-secondary-light;
+
+  @include public-dark-mode {
+    color: $public-text-secondary-dark;
+  }
+
+  @include public-light-mode-override {
     color: $public-text-secondary-light;
-
-    @include public-dark-mode {
-      color: $public-text-secondary-dark;
-    }
-
-    @include public-light-mode-override {
-      color: $public-text-secondary-light;
-    }
   }
+}
 
-  ul.events {
-    @include public-horizontal-scroll;
+.day-events {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: $public-space-lg;
+}
 
-    display: flex;
-    flex-direction: row;
-    flex-wrap: nowrap;
-    align-items: stretch;
-    padding: $public-space-md 0 $public-space-xl 0;
-    gap: $public-space-md;
-
-    li.event {
-      @include public-event-card-compact;
-
-      list-style-type: none;
-      margin-right: 0;
-      position: relative;
-      cursor: pointer;
-
-      // ============================================================
-      // CONTENT-FIRST CARD DESIGN
-      // ============================================================
-      // When no image is present, the card becomes a refined
-      // text-focused card with a subtle accent treatment.
-      // ============================================================
-
-      // Check if card has no image (EventImage renders nothing)
-      &:not(:has(.event-image)) {
-        // Add a warm accent bar at top for visual weight
-        &::before {
-          content: '';
-          position: absolute;
-          top: 0;
-          left: $public-space-md;
-          right: $public-space-md;
-          height: 3px;
-          background: linear-gradient(
-            90deg,
-            var(--pav-accent-light) 0%,
-            color-mix(in srgb, var(--pav-accent-light) 40%, transparent) 100%
-          );
-          border-radius: 0 0 2px 2px;
-          opacity: 0.7;
-
-          @include public-dark-mode {
-            background: linear-gradient(
-              90deg,
-              var(--pav-accent-dark) 0%,
-              color-mix(in srgb, var(--pav-accent-dark) 40%, transparent) 100%
-            );
-          }
-
-          @include public-light-mode-override {
-            background: linear-gradient(
-              90deg,
-              var(--pav-accent-light) 0%,
-              color-mix(in srgb, var(--pav-accent-light) 40%, transparent) 100%
-            );
-          }
-        }
-
-        // Adjust padding to account for accent bar
-        padding-top: $public-space-lg;
-
-        // Title gets more visual prominence
-        h3 {
-          font-size: $public-font-size-lg;
-          font-weight: $public-font-weight-medium;
-          margin-top: 0;
-        }
-      }
-
-      // ============================================================
-      // CARD WITH IMAGE
-      // ============================================================
-      // Standard card with image thumbnail above text.
-      // ============================================================
-
-      &:has(.event-image) {
-        h3 {
-          margin-top: $public-space-sm;
-        }
-      }
-
-      h3 {
-        order: 1;
-        font-size: $public-font-size-md;
-        font-weight: $public-font-weight-regular;
-        line-height: $public-line-height-tight;
-        margin: 0;
-        color: $public-text-primary-light;
-        text-decoration: none;
-        transition: $public-transition-fast;
-
-        @include public-dark-mode {
-          color: $public-text-primary-dark;
-        }
-
-        @include public-light-mode-override {
-          color: $public-text-primary-light;
-        }
-      }
-
-      &:hover h3 {
-        color: var(--pav-accent-light);
-
-        @include public-dark-mode {
-          color: var(--pav-accent-dark);
-        }
-
-        @include public-light-mode-override {
-          color: var(--pav-accent-light);
-        }
-      }
-
-      .event-time {
-        order: 2;
-        font-size: $public-font-size-sm;
-        font-weight: $public-font-weight-medium;
-        color: $public-text-secondary-light;
-        margin-top: $public-space-xs;
-
-        @include public-dark-mode {
-          color: $public-text-secondary-dark;
-        }
-
-        @include public-light-mode-override {
-          color: $public-text-secondary-light;
-        }
-      }
-    }
-  }
+.day-event-item {
+  // No extra styles needed; EventCard handles its own layout
 }
 
 // Loading and error states
@@ -269,14 +160,5 @@ section.day {
 
 .empty-state {
   @include public-empty-state;
-}
-
-// Responsive design
-@include public-mobile-only {
-  section.day ul.events {
-    li.event {
-      width: 120px;
-    }
-  }
 }
 </style>
