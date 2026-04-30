@@ -116,6 +116,7 @@ vi.mock('@/site/service/calendar', () => {
         Promise.resolve({
           start: {
             toISO: () => '2026-03-01T10:00:00.000Z',
+            toISODate: () => '2026-03-01',
             toLocal: () => ({
               setLocale: (_locale: string) => ({
                 toLocaleString: () => 'March 1, 2026, 10:00 AM',
@@ -1397,7 +1398,10 @@ describe('event instance external URL CTA button', () => {
 
     const cta = wrapper.find('.external-link-button');
     expect(cta.exists()).toBe(true);
-    expect(cta.text()).toBe('More Information');
+    // Visible label is "More Information"; an sr-only span follows with
+    // localized "(opens in new tab)" affordance — use toContain to allow
+    // the sr-only suffix without making the assertion locale-fragile.
+    expect(cta.text()).toContain('More Information');
     wrapper.unmount();
   });
 
