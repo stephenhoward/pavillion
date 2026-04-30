@@ -4,6 +4,7 @@ import { useRouter, useRoute } from 'vue-router';
 import { useTranslation } from 'i18next-vue';
 import i18next from 'i18next';
 import LoginForm from './LoginForm.vue';
+import PolicyLink from '@/client/components/common/PolicyLink.vue';
 
 const router = useRouter();
 const route = useRoute();
@@ -103,6 +104,10 @@ function onLoginSuccess() {
          class="learn-more">
         {{ t('info_panel.learn_more') }}
       </a>
+
+      <p class="policy-link">
+        <PolicyLink />
+      </p>
     </aside>
   </div>
 </template>
@@ -113,5 +118,10 @@ function onLoginSuccess() {
   flex-direction: column;
   gap: var(--pav-space-4);
   margin-block-start: var(--pav-space-6);
+}
+
+.policy-link {
+  margin-block-start: var(--pav-space-4);
+  font-size: 0.875rem;
 }
 </style>

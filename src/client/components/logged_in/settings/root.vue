@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router';
 import { useTranslation } from 'i18next-vue';
 import EmailModal from '@/client/components/logged_in/settings/email_modal.vue';
 import PasswordModal from '@/client/components/logged_in/settings/password_modal.vue';
+import PolicyLink from '@/client/components/common/PolicyLink.vue';
 import FundingService from '@/client/service/funding';
 import AccountService from '@/client/service/account';
 import { AVAILABLE_LANGUAGES } from '@/common/i18n/languages';
@@ -290,6 +291,9 @@ onMounted(async () => {
 
         <!-- Logout Section -->
         <section class="logout-section">
+          <p class="policy-link">
+            <PolicyLink />
+          </p>
           <button
             type="button"
             class="logout-button"
