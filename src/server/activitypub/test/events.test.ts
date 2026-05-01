@@ -191,7 +191,14 @@ describe('handleEventUpdated guard', () => {
 
     const outboxCall = addToOutboxStub.getCall(0);
     expect(outboxCall.args[0]).toBe(calendar);
-    expect(outboxCall.args[1].type).toBe('Update');
+    const update = outboxCall.args[1];
+    expect(update.type).toBe('Update');
+    // Update activities must be addressed publicly so AP consumers (Mastodon
+    // included) treat them as visible profile timeline activity rather than
+    // private/addressless updates.
+    expect(update.to).toEqual(['https://www.w3.org/ns/activitystreams#Public']);
+    expect(update.cc).toEqual(['https://example.com/calendars/my_calendar/followers']);
+    expect(update.published).toBeInstanceOf(Date);
   });
 });
 
@@ -232,6 +239,15 @@ describe('handleEventCreated', () => {
     expect(eventObject, 'EventObjectEntity must exist for local event').not.toBeNull();
     expect(eventObject!.attributed_to).toBe(actorUrl);
     expect(addToOutboxStub.calledOnce).toBe(true);
+
+    // Announce envelope must be addressed publicly with followers in cc and a
+    // populated published timestamp — without these, Mastodon ignores the
+    // activity in profile timelines and HTTP delivery loses audience info.
+    const announce = addToOutboxStub.getCall(0).args[1];
+    expect(announce.type).toBe('Announce');
+    expect(announce.to).toEqual(['https://www.w3.org/ns/activitystreams#Public']);
+    expect(announce.cc).toEqual([`${actorUrl}/followers`]);
+    expect(announce.published).toBeInstanceOf(Date);
   });
 
   it('logs a warning but does not overwrite EventObjectEntity when a pre-existing row has mismatched attributed_to', async () => {

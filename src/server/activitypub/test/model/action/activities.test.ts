@@ -7,6 +7,8 @@ import FollowActivity from '@/server/activitypub/model/action/follow';
 import AcceptActivity from '@/server/activitypub/model/action/accept';
 import UndoActivity from '@/server/activitypub/model/action/undo';
 
+const PUBLIC_URI = 'https://www.w3.org/ns/activitystreams#Public';
+
 describe('Activity Model fromObject Null Checks', () => {
 
   describe('CreateActivity', () => {
@@ -152,6 +154,16 @@ describe('Activity Model fromObject Null Checks', () => {
       expect(result?.object).toEqual(tombstone);
       expect(result?.id).toBe('https://example.com/activities/delete/1');
     });
+
+    it('preserves published timestamp when present in source object', () => {
+      const result = DeleteActivity.fromObject({
+        actor: 'https://example.com/users/1',
+        object: 'https://example.com/event/123',
+        id: 'https://example.com/activities/delete/1',
+        published: '2026-04-30T12:34:56.000Z',
+      });
+      expect(result?.published).toEqual(new Date('2026-04-30T12:34:56.000Z'));
+    });
   });
 
   describe('UpdateActivity', () => {
@@ -206,6 +218,16 @@ describe('Activity Model fromObject Null Checks', () => {
       expect(result?.id).toBe('https://example.com/activities/update/1');
       expect(result?.to).toEqual(['https://www.w3.org/ns/activitystreams#Public']);
       expect(result?.cc).toEqual(['https://example.com/users/1/followers']);
+    });
+
+    it('preserves published timestamp when present in source object', () => {
+      const result = UpdateActivity.fromObject({
+        actor: 'https://example.com/users/1',
+        object: { id: 'https://example.com/event/123', type: 'Event' },
+        id: 'https://example.com/activities/update/1',
+        published: '2026-04-30T12:34:56.000Z',
+      });
+      expect(result?.published).toEqual(new Date('2026-04-30T12:34:56.000Z'));
     });
   });
 
@@ -266,6 +288,23 @@ describe('Activity Model fromObject Null Checks', () => {
       expect(result?.actor).toBe('https://example.com/users/1');
       expect(result?.object).toBe('https://example.com/event/123');
       expect(result?.id).toBe('https://example.com/activities/announce/1');
+    });
+
+    // Round-tripping must preserve the envelope addressing fields, otherwise
+    // an outbox-stored Announce loses its public addressing when reparsed for
+    // HTTP delivery and Mastodon refuses to render the activity.
+    it('preserves to/cc/published when present in source object', () => {
+      const result = AnnounceActivity.fromObject({
+        actor: 'https://example.com/users/1',
+        object: 'https://example.com/event/123',
+        id: 'https://example.com/activities/announce/1',
+        to: [PUBLIC_URI],
+        cc: ['https://example.com/users/1/followers'],
+        published: '2026-04-30T12:34:56.000Z',
+      });
+      expect(result?.to).toEqual([PUBLIC_URI]);
+      expect(result?.cc).toEqual(['https://example.com/users/1/followers']);
+      expect(result?.published).toEqual(new Date('2026-04-30T12:34:56.000Z'));
     });
   });
 
@@ -484,5 +523,34 @@ describe('Activity Model fromObject Null Checks', () => {
       // The base class initializes 'to' as an empty array
       expect(result?.to).toEqual([]);
     });
+  });
+});
+
+describe('ActivityPubActivity.addressPublic', () => {
+  it('addresses Announce activities to as:Public with followers in cc and stamps published', () => {
+    const before = Date.now();
+    const activity = new AnnounceActivity(
+      'https://example.com/calendars/cal',
+      'https://example.com/calendars/cal/events/abc',
+    ).addressPublic('https://example.com/calendars/cal/followers');
+    const after = Date.now();
+
+    expect(activity.to).toEqual([PUBLIC_URI]);
+    expect(activity.cc).toEqual(['https://example.com/calendars/cal/followers']);
+    expect(activity.published).toBeInstanceOf(Date);
+    expect(activity.published!.getTime()).toBeGreaterThanOrEqual(before);
+    expect(activity.published!.getTime()).toBeLessThanOrEqual(after);
+  });
+
+  it('emits to/cc/published in the serialized activity body', () => {
+    const activity = new AnnounceActivity(
+      'https://example.com/calendars/cal',
+      'https://example.com/calendars/cal/events/abc',
+    ).addressPublic('https://example.com/calendars/cal/followers');
+
+    const serialized = activity.toObject();
+    expect(serialized.to).toEqual([PUBLIC_URI]);
+    expect(serialized.cc).toEqual(['https://example.com/calendars/cal/followers']);
+    expect(serialized.published).toBeInstanceOf(Date);
   });
 });

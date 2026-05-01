@@ -1,6 +1,8 @@
 import config from 'config';
 import { Calendar } from '@/common/model/calendar';
 
+const AS_PUBLIC = 'https://www.w3.org/ns/activitystreams#Public';
+
 class ActivityPubActivity {
   context: string[] = ['https://www.w3.org/ns/activitystreams'];
   id: string = '';
@@ -13,6 +15,23 @@ class ActivityPubActivity {
 
   constructor(actorUrl: string) {
     this.actor = actorUrl;
+  }
+
+  /**
+   * Address this activity to the public timeline, with the actor's followers
+   * collection in cc. Sets published to the current time. Returns this so the
+   * call can be chained onto the constructor.
+   *
+   * Required for public outbound activities (Announce/Create/Update/Delete) so
+   * that AP consumers — including Mastodon — can render them on actor profiles
+   * and timelines. Per ActivityPub §5.6 / §6, an activity is only treated as
+   * public when it addresses as:Public in to or cc.
+   */
+  addressPublic(followersUrl: string): this {
+    this.to = [AS_PUBLIC];
+    this.cc = [followersUrl];
+    this.published = new Date();
+    return this;
   }
 
   toObject(): Record<string, any> {
@@ -76,4 +95,4 @@ class ActivityPubActor {
   }
 }
 
-export { ActivityPubActivity, ActivityPubActor, ActivityPubObject };
+export { ActivityPubActivity, ActivityPubActor, ActivityPubObject, AS_PUBLIC };

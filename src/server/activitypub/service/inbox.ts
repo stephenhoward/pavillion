@@ -919,7 +919,8 @@ class ProcessInboxService {
     logger.info('Creating SharedEventEntity and adding to outbox...');
 
     // Create SharedEventEntity with auto_posted: true
-    const announceActivity = new AnnounceActivity(localActorUrl, eventApId);
+    const announceActivity = new AnnounceActivity(localActorUrl, eventApId)
+      .addressPublic(`${localActorUrl}/followers`);
     await SharedEventEntity.create({
       id: announceActivity.id,
       event_id: eventObject.event_id,  // Use local event UUID, not AP URL

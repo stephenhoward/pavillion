@@ -27,6 +27,15 @@ class AnnounceActivity extends ActivityPubActivity {
     if ( object.id ) {
       activity.id = object.id;
     }
+    if ( Array.isArray(object.to) ) {
+      activity.to = object.to;
+    }
+    if ( Array.isArray(object.cc) ) {
+      activity.cc = object.cc;
+    }
+    if ( object.published ) {
+      activity.published = new Date(object.published);
+    }
 
     return activity;
   }
