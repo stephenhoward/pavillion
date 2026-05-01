@@ -20,6 +20,8 @@ function buildMockConfigInterface(): ConfigurationInterface {
     getDefaultLanguage: sinon.stub().resolves('en'),
     getEnabledLanguages: sinon.stub().resolves(['en', 'es']),
     getForceLanguage: sinon.stub().resolves(null),
+    getInstancePolicy: sinon.stub().resolves({}),
+    setInstancePolicy: sinon.stub().resolves(true),
   } as unknown as ConfigurationInterface;
 }
 
