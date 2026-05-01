@@ -237,3 +237,20 @@ export const importSourceSyncBySource: RequestHandler = isRateLimitEnabled()
     'ImportSourceSyncRateLimitError',
   )
   : noOpMiddleware;
+
+/**
+ * Public configuration site endpoint rate limiter by IP.
+ * Limits: 60 requests per IP per minute (default config).
+ *
+ * Caps anonymous traffic to GET /api/config/v1/site, which is read by every
+ * page load on the public site to retrieve registration mode, language
+ * settings, and instance metadata. The limit is permissive enough for
+ * legitimate page-render traffic while preventing scrape-style abuse.
+ */
+export const configSiteByIp: RequestHandler = isRateLimitEnabled()
+  ? createIpRateLimiter(
+    config.get<number>('rateLimit.configSite.byIp.max'),
+    config.get<number>('rateLimit.configSite.byIp.windowMs'),
+    'config-site',
+  )
+  : noOpMiddleware;

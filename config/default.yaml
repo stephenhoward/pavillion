@@ -140,6 +140,10 @@ rateLimit:
     syncBySource:
       windowMs: 3600000  # 1 hour in milliseconds
       max: 4  # 4 sync attempts per source per hour
+  configSite:
+    byIp:
+      windowMs: 60000  # 1 minute in milliseconds
+      max: 60  # 60 requests per IP per minute
 
 # Housekeeping configuration for automated server maintenance
 housekeeping:

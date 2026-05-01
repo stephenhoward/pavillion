@@ -3,6 +3,7 @@ import express, { Request, Response } from 'express';
 import ExpressHelper from '../../../common/helper/express';
 import ConfigurationInterface from '@/server/configuration/interface';
 import { createLogger } from '@/server/common/helper/logger';
+import { configSiteByIp } from '@/server/common/middleware/rate-limiters';
 
 const logger = createLogger('configuration');
 
@@ -19,7 +20,7 @@ export default class SiteRouteHandlers {
   }
   installHandlers(app: express.Application, routePrefix: string): void {
     const router = express.Router();
-    router.get('/site', this.getSettings.bind(this));
+    router.get('/site', configSiteByIp, this.getSettings.bind(this));
     router.post('/site', ExpressHelper.adminOnly, this.updateSettings.bind(this));
     app.use(routePrefix, router);
   }
