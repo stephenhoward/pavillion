@@ -4,8 +4,8 @@ import { Op, UniqueConstraintError, fn, col } from 'sequelize';
 import config from 'config';
 
 import { Account } from '@/common/model/account';
-import { Report, ReportCategory, ReportStatus } from '@/common/model/report';
-import type { ReporterType, EscalationType, ForwardStatus } from '@/common/model/report';
+import { Report, ReportCategory, ReportStatus, ForwardStatus } from '@/common/model/report';
+import type { ReporterType, EscalationType } from '@/common/model/report';
 import { BlockedInstance } from '@/common/model/blocked_instance';
 import { BlockedReporter } from '@/common/model/blocked_reporter';
 import { EventNotFoundError } from '@/common/exceptions/calendar';
@@ -1725,7 +1725,7 @@ class ModerationService {
     if (reportEntity) {
       await reportEntity.update({
         forwarded_report_id: flagActivity.id,
-        forward_status: 'pending',
+        forward_status: ForwardStatus.PENDING,
         forwarded_to_actor_uri: targetActorUri,
       });
     }
@@ -1780,7 +1780,7 @@ class ModerationService {
    * instance has acknowledged receipt of the forwarded Flag activity.
    *
    * @param reportId - Report UUID
-   * @returns Forward status ('pending' | 'acknowledged' | 'no_response') or null if not found or not forwarded
+   * @returns {ForwardStatus | null} Forward status enum value, or null if not found or not forwarded
    */
   async checkForwardStatus(reportId: string): Promise<ForwardStatus | null> {
     const entity = await ReportEntity.findByPk(reportId);
@@ -1791,7 +1791,7 @@ class ModerationService {
   }
 
   /**
-   * Acknowledges a forwarded report by updating its forward_status to 'acknowledged'.
+   * Acknowledges a forwarded report by updating its forward_status to ForwardStatus.ACKNOWLEDGED.
    * Used when a remote instance sends an Accept activity for a Flag we forwarded.
    * Validates that the sender's hostname matches the instance the report was forwarded to.
    *
@@ -1844,11 +1844,11 @@ class ModerationService {
       return false;
     }
     // Idempotency: if already acknowledged, return true without updating
-    if (entity.forward_status === 'acknowledged') {
+    if (entity.forward_status === ForwardStatus.ACKNOWLEDGED) {
       return true;
     }
 
-    await entity.update({ forward_status: 'acknowledged' });
+    await entity.update({ forward_status: ForwardStatus.ACKNOWLEDGED });
     return true;
   }
 

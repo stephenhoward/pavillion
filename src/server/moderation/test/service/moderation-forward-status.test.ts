@@ -4,7 +4,7 @@ import { EventEmitter } from 'events';
 
 import ModerationService from '@/server/moderation/service/moderation';
 import { ReportEntity } from '@/server/moderation/entity/report';
-import { Report, ReportStatus } from '@/common/model/report';
+import { Report, ReportStatus, ForwardStatus } from '@/common/model/report';
 
 describe('ModerationService.checkForwardStatus', () => {
   let sandbox: sinon.SinonSandbox;
@@ -42,34 +42,35 @@ describe('ModerationService.checkForwardStatus', () => {
 
   it('should return "pending" status', async () => {
     const mockEntity = {
-      forward_status: 'pending',
+      forward_status: ForwardStatus.PENDING,
     };
     sandbox.stub(ReportEntity, 'findByPk').resolves(mockEntity as any);
 
     const status = await service.checkForwardStatus('report-id');
 
     expect(status).toBe('pending');
+    expect(status).toBe(ForwardStatus.PENDING);
   });
 
   it('should return "acknowledged" status', async () => {
     const mockEntity = {
-      forward_status: 'acknowledged',
+      forward_status: ForwardStatus.ACKNOWLEDGED,
     };
     sandbox.stub(ReportEntity, 'findByPk').resolves(mockEntity as any);
 
     const status = await service.checkForwardStatus('report-id');
 
-    expect(status).toBe('acknowledged');
+    expect(status).toBe(ForwardStatus.ACKNOWLEDGED);
   });
 
   it('should return "no_response" status', async () => {
     const mockEntity = {
-      forward_status: 'no_response',
+      forward_status: ForwardStatus.NO_RESPONSE,
     };
     sandbox.stub(ReportEntity, 'findByPk').resolves(mockEntity as any);
 
     const status = await service.checkForwardStatus('report-id');
 
-    expect(status).toBe('no_response');
+    expect(status).toBe(ForwardStatus.NO_RESPONSE);
   });
 });
