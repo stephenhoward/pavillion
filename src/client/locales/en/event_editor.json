@@ -69,6 +69,21 @@
     "remove_button": "Remove location",
     "create_new_button": "Create New"
   },
+  "create_location": {
+    "title": "Create Location",
+    "basic_info_section": "Basic Information",
+    "accessibility_section": "Accessibility Information",
+    "name_placeholder": "Location name *",
+    "name_aria_label": "Location name (required)",
+    "address_placeholder": "Street address",
+    "city_placeholder": "City",
+    "state_placeholder": "State",
+    "postal_code_placeholder": "Postal code",
+    "accessibility_placeholder": "Accessibility information (optional)",
+    "accessibility_aria_label": "Accessibility information in {{language}}",
+    "back_button": "Back to search",
+    "submit_button": "Create Location"
+  },
   "external_link": {
     "section_title": "External Link",
     "url_label": "URL",

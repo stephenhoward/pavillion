@@ -1159,7 +1159,6 @@ button {
   <!-- Create Location Form Modal -->
   <CreateLocationForm
     v-if="showCreateLocationForm"
-    ref="createLocationFormRef"
     :languages="languages"
     @create-location="handleLocationCreated"
     @back-to-search="backToSearch"
@@ -1304,7 +1303,6 @@ const errorContainer = ref(null);
 
 // Modal refs
 const locationPickerRef = ref(null);
-const createLocationFormRef = ref(null);
 
 // The dropdown shows 'more_info' when the event has no prompt set; the
 // value is only persisted as urlPrompt when the user actually provides a
@@ -1544,14 +1542,6 @@ const handleSaveEvent = async () => {
     firstInvalid?.focus();
   }
 };
-
-// Watch for create location form visibility and show/hide the modal
-watch(() => showCreateLocationForm.value, async (newValue) => {
-  if (newValue) {
-    await nextTick();
-    createLocationFormRef.value?.dialogRef?.showModal();
-  }
-});
 
 // Watch for error changes and scroll into view
 watch(() => editorState.err, async (newError) => {

@@ -113,7 +113,7 @@ test.describe('Event Location Management End-to-End', () => {
     await page.waitForTimeout(1000);
 
     // Form should close and location should be set
-    const createLocationDialog = page.locator('dialog.create-location-form[open]');
+    const createLocationDialog = page.getByRole('dialog', { name: 'Create Location' });
     await expect(createLocationDialog).not.toBeVisible();
 
     // LocationDisplayCard should now show the location
@@ -139,7 +139,7 @@ test.describe('Event Location Management End-to-End', () => {
     await page.waitForTimeout(500);
 
     // Create location form should be visible
-    const createDialog = page.locator('dialog.create-location-form[open]');
+    const createDialog = page.getByRole('dialog', { name: 'Create Location' });
     await expect(createDialog).toBeVisible();
 
     // Fill the form
@@ -341,9 +341,9 @@ test.describe('Event Location Management End-to-End', () => {
     await page.waitForTimeout(500);
 
     // Check form dialog ARIA attributes
-    const createDialog = page.locator('dialog.create-location-form');
+    const createDialog = page.getByRole('dialog', { name: 'Create Location' });
     await expect(createDialog).toHaveAttribute('aria-modal', 'true');
-    await expect(createDialog).toHaveAttribute('aria-labelledby', 'create-location-title');
+    await expect(createDialog).toHaveAttribute('aria-labelledby', /.+/);
 
     // Check form inputs have proper labels
     const nameInput = page.locator('input[placeholder="Location name *"]');

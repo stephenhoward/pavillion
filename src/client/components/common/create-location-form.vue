@@ -1,33 +1,11 @@
 <script setup lang="ts">
 import { ref, computed, reactive } from 'vue';
+import { useTranslation } from 'i18next-vue';
+import Sheet from '@/client/components/common/Sheet.vue';
 import PillButton from '@/client/components/common/pill-button.vue';
 import LanguageTabSelector from '@/client/components/common/language-tab-selector.vue';
 
-/**
- * CreateLocationForm Component
- *
- * Form dialog for creating a new location with basic information and
- * multilingual accessibility details.
- *
- * Features:
- * - Basic location fields: name (required), address, city, state, postal code
- * - Language tabs for adding accessibility information in multiple languages
- * - Form validation requiring at least a location name
- * - Back button to return to location search
- * - Uses form-input-rounded styling for consistent design
- *
- * @component
- *
- * Props:
- * @prop {string[]} languages - Array of language codes for multilingual content (e.g., ['en', 'es'])
- *
- * Emits:
- * @emits create-location - Fired when user submits the form with valid data
- *   @param {object} data - Location data including name, address, city, state, postalCode, and content object with accessibility info per language
- * @emits back-to-search - Fired when user clicks "Back to Search" button
- * @emits add-language - Fired when user requests to add a new language tab
- * @emits close - Fired when user closes the modal dialog
- */
+const { t } = useTranslation('event_editor', { keyPrefix: 'create_location' });
 
 const props = defineProps<{
   languages: string[];
@@ -40,7 +18,6 @@ const emit = defineEmits<{
   (e: 'close'): void;
 }>();
 
-const dialogRef = ref<HTMLDialogElement | null>(null);
 const currentLanguage = ref(props.languages[0] || 'en');
 const accessibilityLangTabs = ref<InstanceType<typeof LanguageTabSelector> | null>(null);
 
@@ -60,10 +37,6 @@ const accessibilityInfo = reactive<Record<string, string>>({});
 const isValid = computed(() => {
   return formData.name.trim().length > 0;
 });
-
-const handleLanguageChange = (lang: string) => {
-  currentLanguage.value = lang;
-};
 
 const handleAddLanguage = () => {
   emit('add-language');
@@ -111,128 +84,96 @@ const handleSubmit = () => {
 
   emit('create-location', locationData);
 };
-
-const close = () => {
-  if (dialogRef.value) {
-    dialogRef.value.close();
-    emit('close');
-  }
-};
-
-// Expose methods to parent
-defineExpose({ close, dialogRef });
 </script>
 
 <template>
-  <dialog
-    ref="dialogRef"
-    class="create-location-form"
-    aria-labelledby="create-location-title"
-    aria-modal="true"
-    @click.self="close"
+  <Sheet
+    :title="t('title')"
+    @close="emit('close')"
   >
-    <div class="modal-content">
-      <!-- Header -->
-      <header class="modal-header">
-        <h2 id="create-location-title">Create Location</h2>
-        <button
-          type="button"
-          class="close-button"
-          @click="close"
-          aria-label="Close dialog"
-        >
-          &times;
-        </button>
-      </header>
+    <div class="create-location-body">
+      <section class="form-section">
+        <h3 class="section-title">{{ t('basic_info_section') }}</h3>
 
-      <!-- Form -->
-      <div class="form-body">
-        <!-- Basic Information Section -->
-        <section class="form-section">
-          <h3 class="section-title">Basic Information</h3>
-
-          <div class="form-field">
-            <input
-              v-model="formData.name"
-              type="text"
-              class="form-input"
-              placeholder="Location name *"
-              aria-label="Location name (required)"
-              required
-            />
-          </div>
-
-          <div class="form-field">
-            <input
-              v-model="formData.address"
-              type="text"
-              class="form-input"
-              placeholder="Street address"
-              aria-label="Street address"
-            />
-          </div>
-
-          <div class="form-row">
-            <input
-              v-model="formData.city"
-              type="text"
-              class="form-input"
-              placeholder="City"
-              aria-label="City"
-            />
-            <input
-              v-model="formData.state"
-              type="text"
-              class="form-input form-input--state"
-              placeholder="State"
-              aria-label="State"
-            />
-            <input
-              v-model="formData.postalCode"
-              type="text"
-              class="form-input form-input--zip"
-              placeholder="Postal code"
-              aria-label="Postal code"
-            />
-          </div>
-        </section>
-
-        <!-- Accessibility Information Section -->
-        <section class="form-section">
-          <h3 class="section-title">Accessibility Information</h3>
-
-          <LanguageTabSelector
-            ref="accessibilityLangTabs"
-            v-model="currentLanguage"
-            :languages="languages"
-            @add-language="handleAddLanguage"
+        <div class="form-field">
+          <input
+            v-model="formData.name"
+            type="text"
+            class="form-input"
+            :placeholder="t('name_placeholder')"
+            :aria-label="t('name_aria_label')"
+            required
           />
+        </div>
 
-          <div
-            :id="accessibilityLangTabs?.panelId(currentLanguage)"
-            role="tabpanel"
-            :aria-labelledby="accessibilityLangTabs?.tabId(currentLanguage)"
-            class="form-field"
-          >
-            <textarea
-              v-model="accessibilityInfo[currentLanguage]"
-              class="form-textarea"
-              placeholder="Accessibility information (optional)"
-              :aria-label="`Accessibility information in ${currentLanguage}`"
-              rows="4"
-            />
-          </div>
-        </section>
-      </div>
+        <div class="form-field">
+          <input
+            v-model="formData.address"
+            type="text"
+            class="form-input"
+            :placeholder="t('address_placeholder')"
+            :aria-label="t('address_placeholder')"
+          />
+        </div>
 
-      <!-- Footer -->
-      <footer class="modal-footer">
+        <div class="form-row">
+          <input
+            v-model="formData.city"
+            type="text"
+            class="form-input"
+            :placeholder="t('city_placeholder')"
+            :aria-label="t('city_placeholder')"
+          />
+          <input
+            v-model="formData.state"
+            type="text"
+            class="form-input form-input--state"
+            :placeholder="t('state_placeholder')"
+            :aria-label="t('state_placeholder')"
+          />
+          <input
+            v-model="formData.postalCode"
+            type="text"
+            class="form-input form-input--zip"
+            :placeholder="t('postal_code_placeholder')"
+            :aria-label="t('postal_code_placeholder')"
+          />
+        </div>
+      </section>
+
+      <section class="form-section">
+        <h3 class="section-title">{{ t('accessibility_section') }}</h3>
+
+        <LanguageTabSelector
+          ref="accessibilityLangTabs"
+          v-model="currentLanguage"
+          :languages="languages"
+          @add-language="handleAddLanguage"
+        />
+
+        <div
+          :id="accessibilityLangTabs?.panelId(currentLanguage)"
+          role="tabpanel"
+          :aria-labelledby="accessibilityLangTabs?.tabId(currentLanguage)"
+          class="form-field"
+        >
+          <textarea
+            v-model="accessibilityInfo[currentLanguage]"
+            class="form-textarea"
+            :placeholder="t('accessibility_placeholder')"
+            :aria-label="t('accessibility_aria_label', { language: currentLanguage })"
+            rows="4"
+          />
+        </div>
+      </section>
+
+      <footer class="modal-actions">
         <PillButton
           variant="ghost"
           size="sm"
           @click="handleBackToSearch"
         >
-          Back to search
+          {{ t('back_button') }}
         </PillButton>
         <PillButton
           variant="primary"
@@ -240,144 +181,36 @@ defineExpose({ close, dialogRef });
           :disabled="!isValid"
           @click="handleSubmit"
         >
-          Create Location
+          {{ t('submit_button') }}
         </PillButton>
       </footer>
     </div>
-  </dialog>
+  </Sheet>
 </template>
 
 <style scoped lang="scss">
 @use '../../assets/style/components/event-management' as *;
 
-.create-location-form {
-  position: fixed;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  max-width: 100%;
-  max-height: 100%;
-  padding: 0;
-  margin: 0;
-  border: none;
-  background: transparent;
-  overflow: auto;
-  z-index: 1000;
-
-  &::backdrop {
-    background-color: rgba(0, 0, 0, 0.5);
-    backdrop-filter: blur(4px);
-  }
-
-  &[open] {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-}
-
-.modal-content {
-  background: white;
-  border-radius: 0.75rem;
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
-  width: 90vw;
-  max-width: 42rem;
-  max-height: 85vh;
+.create-location-body {
   display: flex;
   flex-direction: column;
-  border: 1px solid var(--pav-color-stone-200);
-
-  @media (prefers-color-scheme: dark) {
-    background: var(--pav-color-stone-800);
-    border-color: var(--pav-color-stone-700);
-  }
-}
-
-.modal-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 1.5rem;
-  border-bottom: 1px solid var(--pav-color-stone-200);
-
-  @media (prefers-color-scheme: dark) {
-    border-bottom-color: var(--pav-color-stone-700);
-  }
-
-  h2 {
-    font-size: 1.25rem;
-    font-weight: 600;
-    margin: 0;
-    color: var(--pav-color-stone-900);
-
-    @media (prefers-color-scheme: dark) {
-      color: var(--pav-color-stone-100);
-    }
-  }
-
-  .close-button {
-    background: transparent;
-    border: none;
-    font-size: 2rem;
-    line-height: 1;
-    color: var(--pav-color-stone-500);
-    cursor: pointer;
-    padding: 0;
-    width: 2rem;
-    height: 2rem;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 0.25rem;
-    transition: all 0.15s ease;
-
-    &:hover {
-      background: var(--pav-color-stone-100);
-      color: var(--pav-color-stone-700);
-
-      @media (prefers-color-scheme: dark) {
-        background: var(--pav-color-stone-700);
-        color: var(--pav-color-stone-300);
-      }
-    }
-
-    &:focus-visible {
-      outline: 2px solid var(--pav-color-orange-500);
-      outline-offset: 2px;
-    }
-  }
-}
-
-.form-body {
-  flex: 1;
-  overflow-y: auto;
-  padding: 1.5rem;
+  gap: var(--pav-space-lg);
   min-height: 0;
 }
 
 .form-section {
-  margin-bottom: 2rem;
-
-  &:last-child {
-    margin-bottom: 0;
-  }
-
   .section-title {
-    font-size: 0.875rem;
-    font-weight: 600;
+    font-size: var(--pav-font-size-sm);
+    font-weight: var(--pav-font-weight-semibold);
     text-transform: uppercase;
     letter-spacing: 0.05em;
-    color: var(--pav-color-stone-600);
-    margin: 0 0 1rem 0;
-
-    @media (prefers-color-scheme: dark) {
-      color: var(--pav-color-stone-400);
-    }
+    color: var(--pav-text-secondary);
+    margin: 0 0 var(--pav-space-md) 0;
   }
 }
 
 .form-field {
-  margin-bottom: 1rem;
+  margin-bottom: var(--pav-space-md);
 }
 
 .form-input {
@@ -395,8 +228,8 @@ defineExpose({ close, dialogRef });
 
 .form-row {
   display: flex;
-  gap: 0.75rem;
-  margin-bottom: 1rem;
+  gap: var(--pav-space-sm);
+  margin-bottom: var(--pav-space-md);
 
   .form-input {
     flex: 1;
@@ -417,15 +250,11 @@ defineExpose({ close, dialogRef });
   font-family: inherit;
 }
 
-.modal-footer {
+.modal-actions {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 1.5rem;
-  border-top: 1px solid var(--pav-color-stone-200);
-
-  @media (prefers-color-scheme: dark) {
-    border-top-color: var(--pav-color-stone-700);
-  }
+  padding-top: var(--pav-space-md);
+  border-top: var(--pav-border-width-1) solid var(--pav-border-primary);
 }
 </style>

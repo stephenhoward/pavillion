@@ -6,15 +6,30 @@ import CreateLocationForm from '@/client/components/common/create-location-form.
 import PillButton from '@/client/components/common/pill-button.vue';
 import LanguageTabSelector from '@/client/components/common/language-tab-selector.vue';
 import enSystem from '@/client/locales/en/system.json';
+import enEventEditor from '@/client/locales/en/event_editor.json';
+
+const SheetStub = {
+  props: ['title'],
+  template: `
+    <dialog role="dialog" aria-modal="true">
+      <h2>{{ title }}</h2>
+      <slot/>
+    </dialog>
+  `,
+  emits: ['close'],
+  setup() {
+    return { open: () => {}, close: () => {} };
+  },
+};
 
 describe('CreateLocationForm', () => {
   beforeEach(async () => {
-    // Initialize i18next for tests
     await i18next.init({
       lng: 'en',
       resources: {
         en: {
           system: enSystem,
+          event_editor: enEventEditor,
         },
       },
     });
@@ -26,19 +41,23 @@ describe('CreateLocationForm', () => {
       global: {
         plugins: [[I18NextVue, { i18next }]],
         components: options.global?.components,
+        stubs: {
+          Sheet: SheetStub,
+          ...(options.global?.stubs ?? {}),
+        },
       },
     });
   }
 
   describe('rendering', () => {
-    it('should render dialog with title', () => {
+    it('should render with title', () => {
       const wrapper = mountWithI18n({
         props: {
           languages: ['en'],
         },
       });
 
-      expect(wrapper.find('dialog').exists()).toBe(true);
+      expect(wrapper.find('[role="dialog"]').exists()).toBe(true);
       expect(wrapper.find('h2').text()).toBe('Create Location');
     });
 
