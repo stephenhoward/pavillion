@@ -26,19 +26,30 @@ describe('CreateLocationForm', () => {
       global: {
         plugins: [[I18NextVue, { i18next }]],
         components: options.global?.components,
+        // Stub Sheet so tests don't depend on native <dialog> semantics in
+        // happy-dom. Expose the slot content so form-behavior assertions
+        // continue to target the body markup.
+        stubs: {
+          Sheet: {
+            template: '<div class="sheet-stub" role="dialog" aria-modal="true"><h2>{{ title }}</h2><slot/></div>',
+            props: ['title'],
+            emits: ['close'],
+          },
+          ...(options.global?.stubs ?? {}),
+        },
       },
     });
   }
 
   describe('rendering', () => {
-    it('should render dialog with title', () => {
+    it('should render with title', () => {
       const wrapper = mountWithI18n({
         props: {
           languages: ['en'],
         },
       });
 
-      expect(wrapper.find('dialog').exists()).toBe(true);
+      expect(wrapper.find('[role="dialog"]').exists()).toBe(true);
       expect(wrapper.find('h2').text()).toBe('Create Location');
     });
 
