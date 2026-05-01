@@ -1160,6 +1160,8 @@ button {
   <CreateLocationForm
     v-if="showCreateLocationForm"
     :languages="languages"
+    :field-errors="locationFieldErrors"
+    :submission-error="locationSubmissionError"
     @create-location="handleLocationCreated"
     @back-to-search="backToSearch"
     @close="showCreateLocationForm = false"
@@ -1212,6 +1214,7 @@ import LanguageTabSelector from '@/client/components/common/language-tab-selecto
 import LocationDisplayCard from '@/client/components/common/location-display-card.vue';
 import LocationPickerModal from '@/client/components/common/location-picker-modal.vue';
 import CreateLocationForm from '@/client/components/common/create-location-form.vue';
+import { ValidationError } from '@/common/exceptions';
 import iso6391 from 'iso-639-1-dir';
 
 // Composables
@@ -1263,6 +1266,8 @@ const {
   availableLocations,
   showLocationPicker,
   showCreateLocationForm,
+  locationFieldErrors,
+  locationSubmissionError,
   fetchLocations,
   openLocationPicker,
   selectLocation,
@@ -1473,8 +1478,12 @@ const handleLocationCreated = async (locationData) => {
       await createLocation(editorState.event.calendarId, locationData, editorState.event);
     }
     catch (error) {
-      console.error('Error creating location:', error);
-      editorState.err = 'Failed to create location';
+      // ValidationError populates locationFieldErrors / locationSubmissionError
+      // in the composable; surface a generic toast only for non-validation failures.
+      if (!(error instanceof ValidationError)) {
+        console.error('Error creating location:', error);
+        editorState.err = 'Failed to create location';
+      }
     }
   }
 };

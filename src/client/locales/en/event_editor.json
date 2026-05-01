@@ -82,7 +82,8 @@
     "accessibility_placeholder": "Accessibility information (optional)",
     "accessibility_aria_label": "Accessibility information in {{language}}",
     "back_button": "Back to search",
-    "submit_button": "Create Location"
+    "submit_button": "Create Location",
+    "error_submission": "Failed to create location. Please correct the errors and try again."
   },
   "external_link": {
     "section_title": "External Link",

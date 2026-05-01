@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { EventLocation } from '@/common/model/location';
 import { CalendarNotFoundError, InsufficientCalendarPermissionsError } from '@/common/exceptions/calendar';
-import { UnauthenticatedError, UnknownError } from '@/common/exceptions';
+import { UnauthenticatedError, UnknownError, ValidationError } from '@/common/exceptions';
 import { useLocationStore } from '@/client/stores/locationStore';
 import ModelService from '@/client/service/models';
 import { validateAndEncodeId, handleApiError } from '@/client/service/utils';
@@ -11,6 +11,7 @@ const errorMap = {
   InsufficientCalendarPermissionsError,
   UnauthenticatedError,
   UnknownError,
+  ValidationError,
 };
 
 /**

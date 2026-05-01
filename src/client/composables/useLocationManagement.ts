@@ -2,6 +2,7 @@ import { ref } from 'vue';
 import { EventLocation } from '@/common/model/location';
 import LocationService from '@/client/service/location';
 import { CalendarEvent } from '@/common/model/events';
+import { ValidationError } from '@/common/exceptions';
 
 /**
  * Composable for managing event location selection and creation.
@@ -16,6 +17,13 @@ export function useLocationManagement() {
   const availableLocations = ref<EventLocation[]>([]);
   const showLocationPicker = ref(false);
   const showCreateLocationForm = ref(false);
+  const locationFieldErrors = ref<Record<string, string>>({});
+  const locationSubmissionError = ref('');
+
+  const clearLocationErrors = (): void => {
+    locationFieldErrors.value = {};
+    locationSubmissionError.value = '';
+  };
 
   /**
    * Fetch all locations for a specific calendar
@@ -84,21 +92,38 @@ export function useLocationManagement() {
     locationData: Record<string, any>,
     event: CalendarEvent,
   ): Promise<void> => {
+    clearLocationErrors();
+
     // Convert raw form data to an EventLocation instance
     const location = EventLocation.fromObject(locationData);
 
-    // Create the location via API
-    const newLocation = await locationService.createLocation(calendarId, location);
+    try {
+      // Create the location via API
+      const newLocation = await locationService.createLocation(calendarId, location);
 
-    // Add to available locations
-    availableLocations.value.push(newLocation);
+      // Add to available locations
+      availableLocations.value.push(newLocation);
 
-    // Auto-select the newly created location
-    event.locationId = newLocation.id;
-    event.location = newLocation;
+      // Auto-select the newly created location
+      event.locationId = newLocation.id;
+      event.location = newLocation;
 
-    // Close the create form
-    showCreateLocationForm.value = false;
+      // Close the create form
+      showCreateLocationForm.value = false;
+    }
+    catch (error: unknown) {
+      if (error instanceof ValidationError) {
+        if (error.fields) {
+          const flattened: Record<string, string> = {};
+          for (const [field, messages] of Object.entries(error.fields)) {
+            if (messages.length > 0) flattened[field] = messages[0];
+          }
+          locationFieldErrors.value = flattened;
+        }
+        locationSubmissionError.value = error.message;
+      }
+      throw error;
+    }
   };
 
   /**
@@ -127,11 +152,14 @@ export function useLocationManagement() {
     availableLocations,
     showLocationPicker,
     showCreateLocationForm,
+    locationFieldErrors,
+    locationSubmissionError,
     fetchLocations,
     openLocationPicker,
     selectLocation,
     createNewLocation,
     createLocation,
+    clearLocationErrors,
     removeLocation,
     backToSearch,
   };
