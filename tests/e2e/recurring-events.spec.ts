@@ -60,7 +60,7 @@ test.describe('Recurring Event Management', () => {
     await addRecurrenceBtn.click();
 
     // Verify the sheet opens with dialog semantics and the recurrence form inside
-    const dialog = page.locator('[role="dialog"][aria-modal="true"]');
+    const dialog = page.locator('dialog[aria-modal="true"]');
     await expect(dialog).toBeVisible({ timeout: 5000 });
 
     const repeatForm = dialog.locator('form.repeats');
@@ -87,7 +87,7 @@ test.describe('Recurring Event Management', () => {
     await page.getByRole('button', { name: /add recurrence/i }).click();
 
     // Wait for the sheet/form
-    const dialog = page.locator('[role="dialog"][aria-modal="true"]');
+    const dialog = page.locator('dialog[aria-modal="true"]');
     await expect(dialog).toBeVisible({ timeout: 5000 });
 
     const repeatForm = dialog.locator('form.repeats');
@@ -147,7 +147,7 @@ test.describe('Recurring Event Management', () => {
     // Open the recurrence sheet
     await page.getByRole('button', { name: /add recurrence/i }).click();
 
-    const dialog = page.locator('[role="dialog"][aria-modal="true"]');
+    const dialog = page.locator('dialog[aria-modal="true"]');
     await expect(dialog).toBeVisible({ timeout: 5000 });
 
     const repeatForm = dialog.locator('form.repeats');
@@ -216,7 +216,7 @@ test.describe('Recurring Event Management', () => {
     await expect(recurrenceTrigger.first()).toBeVisible({ timeout: 5000 });
     await recurrenceTrigger.first().click();
 
-    const dialog = page.locator('[role="dialog"][aria-modal="true"]');
+    const dialog = page.locator('dialog[aria-modal="true"]');
     await expect(dialog).toBeVisible({ timeout: 5000 });
 
     const repeatForm = dialog.locator('form.repeats');

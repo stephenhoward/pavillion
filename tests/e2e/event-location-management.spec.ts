@@ -313,7 +313,7 @@ test.describe('Event Location Management End-to-End', () => {
     await page.waitForTimeout(500);
 
     // Check ARIA attributes on dialog
-    const pickerDialog = page.locator('[role="dialog"]');
+    const pickerDialog = page.locator('dialog');
     await expect(pickerDialog).toHaveAttribute('aria-modal', 'true');
     await expect(pickerDialog).toHaveAttribute('aria-labelledby', /.+/);
 

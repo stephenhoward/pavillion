@@ -5,10 +5,29 @@ import { ref, computed, Ref, ComputedRef } from 'vue';
  *
  * Encapsulates the open/close lifecycle, Escape handling, backdrop clicks,
  * `document.body.classList` toggle for `modal-open`, a first-focusable focus
- * trap, and deterministic title id generation.
+ * trap, Tab/Shift+Tab focus cycling, return-focus on close, and deterministic
+ * title id generation.
  *
  * Intentionally minimal: no configuration options, no extension points.
  */
+
+/**
+ * Standard tabbable-elements selector. Acknowledged 90% solution; covers the
+ * tabbable surface a Pavillion modal is expected to expose. Post-query filtering
+ * removes disabled / [tabindex="-1"] / [hidden] / display:none / visibility:hidden
+ * elements (the selector cannot express computed-style filters).
+ */
+const FOCUSABLE_SELECTOR = [
+  'a[href]',
+  'area[href]',
+  'input:not([disabled]):not([type="hidden"])',
+  'select:not([disabled])',
+  'textarea:not([disabled])',
+  'button:not([disabled])',
+  'iframe',
+  '[tabindex]:not([tabindex="-1"])',
+  '[contenteditable="true"]',
+].join(',');
 
 export interface UseDialogOptions {
   /**
@@ -52,6 +71,11 @@ export function useDialog(
   const dialogId = ref(Math.random().toString(36).substring(2, 11));
   const titleId = computed(() => `${idPrefix}-title-${dialogId.value}`);
 
+  // Element that held focus immediately before open() ran. Restored on close()
+  // when still attached to the document, nulled on close()/cleanup() to avoid
+  // stale references across open/close cycles or when the trigger is unmounted.
+  let previouslyFocused: HTMLElement | null = null;
+
   const trapFocus = () => {
     // Fallback only: <dialog>.showModal() already focuses the first [autofocus]
     // or focusable descendant per spec. Only focus the dialog element itself
@@ -65,13 +89,70 @@ export function useDialog(
     }, 0);
   };
 
+  /**
+   * Returns the currently tabbable descendants of the dialog, in document order.
+   * Filters out elements that match the selector but are not actually tabbable:
+   * disabled, tabindex="-1", hidden attribute, display:none, visibility:hidden.
+   */
+  const getFocusableElements = (el: HTMLDialogElement): HTMLElement[] => {
+    const candidates = Array.from(
+      el.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR),
+    );
+    return candidates.filter((node) => {
+      if (node.hasAttribute('disabled')) return false;
+      if (node.getAttribute('tabindex') === '-1') return false;
+      if (node.hasAttribute('hidden')) return false;
+      const style = typeof window !== 'undefined' ? window.getComputedStyle(node) : null;
+      if (style && (style.display === 'none' || style.visibility === 'hidden')) return false;
+      return true;
+    });
+  };
+
+  /**
+   * Tab-key handler that cycles focus within the dialog. Bound to the dialog
+   * element in open(), removed in close() and cleanup() (idempotent — duplicate
+   * removeEventListener is a no-op).
+   */
+  const handleKeydown = (event: KeyboardEvent) => {
+    if (event.key !== 'Tab') return;
+    const el = dialogRef.value;
+    if (!el) return;
+
+    const focusable = getFocusableElements(el);
+
+    // Empty list: prevent focus from escaping the dialog. There is nothing to
+    // cycle to inside, so the only correct behavior is to swallow the Tab.
+    if (focusable.length === 0) {
+      event.preventDefault();
+      return;
+    }
+
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    const active = document.activeElement;
+
+    if (event.shiftKey && active === first) {
+      event.preventDefault();
+      last.focus();
+    }
+    else if (!event.shiftKey && active === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  };
+
   const open = () => {
     const el = dialogRef.value;
     // No-op when the DOM target is missing or already open (concurrent open).
     if (!el || el.open) {
       return;
     }
+    // Capture the trigger so close() can restore focus to it.
+    previouslyFocused = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
     el.showModal();
+    el.addEventListener('keydown', handleKeydown);
     trapFocus();
     if (typeof document !== 'undefined') {
       document.body.classList.add('modal-open');
@@ -84,9 +165,17 @@ export function useDialog(
       return;
     }
     el.close();
+    el.removeEventListener('keydown', handleKeydown);
     if (typeof document !== 'undefined') {
       document.body.classList.remove('modal-open');
     }
+    // Restore focus only when the trigger is still in the DOM. If it was
+    // unmounted while the modal was open, skip restoration to avoid focusing
+    // a detached element.
+    if (previouslyFocused && document.body.contains(previouslyFocused)) {
+      previouslyFocused.focus();
+    }
+    previouslyFocused = null;
     emit('close');
   };
 
@@ -97,9 +186,15 @@ export function useDialog(
   };
 
   const cleanup = () => {
+    const el = dialogRef.value;
+    if (el) {
+      // Idempotent: safe even if open() never registered the listener.
+      el.removeEventListener('keydown', handleKeydown);
+    }
     if (typeof document !== 'undefined') {
       document.body.classList.remove('modal-open');
     }
+    previouslyFocused = null;
   };
 
   return {

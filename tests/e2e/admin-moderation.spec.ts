@@ -375,7 +375,7 @@ test.describe('Admin Create Report', () => {
       await page.waitForTimeout(500);
 
       // Verify modal opened
-      const modal = page.locator('.modal, [role="dialog"]').first();
+      const modal = page.locator('.modal, dialog').first();
       const hasModal = await modal.isVisible().catch(() => false);
 
       expect(hasModal).toBeTruthy();
