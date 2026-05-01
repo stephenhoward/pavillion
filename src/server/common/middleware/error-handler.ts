@@ -11,7 +11,7 @@ import { logError } from '@/server/common/helper/error-logger';
  * IMPORTANT: This must be registered AFTER all other routes and middleware.
  */
 export function globalErrorHandler(
-  err: Error,
+  err: Error & { status?: number; statusCode?: number; type?: string },
   req: Request,
   res: Response,
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -20,10 +20,17 @@ export function globalErrorHandler(
   // Log the full error details server-side
   logError(err, `Unhandled error in ${req.method} ${req.path}`);
 
-  // Send generic error response to client (no stack traces or internal details)
+  // Honor 4xx status codes set by upstream middleware (body-parser produces
+  // 413 for payload too large, 400 for malformed JSON, etc.). Anything 5xx
+  // or unset collapses to a generic 500 to avoid leaking internals.
+  const upstreamStatus = err.status ?? err.statusCode;
+  const status = (typeof upstreamStatus === 'number' && upstreamStatus >= 400 && upstreamStatus < 500)
+    ? upstreamStatus
+    : 500;
+
   if (!res.headersSent) {
-    res.status(500).json({
-      error: "Internal server error",
+    res.status(status).json({
+      error: status === 500 ? 'Internal server error' : (err.message || 'Request error'),
     });
   }
 }
