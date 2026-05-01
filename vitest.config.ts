@@ -74,6 +74,8 @@ export default defineConfig({
             'src/server/moderation/test/api/owner-report-forward.test.ts',
             'src/server/moderation/test/service/auto-escalation.test.ts',
             'src/server/moderation/test/service/moderation.test.ts',
+            // Frontend tests that transitively import sanitizePolicyHtml
+            'src/client/test/components/logged_out/instance-policy.test.ts',
           ],
           env: { NODE_ENV: 'test' },
         },
@@ -106,6 +108,22 @@ export default defineConfig({
             'src/server/moderation/test/service/auto-escalation.test.ts',
             'src/server/moderation/test/service/moderation.test.ts',
           ],
+          env: { NODE_ENV: 'test' },
+        },
+      },
+      {
+        plugins: [vue()],
+        resolve: { alias: sharedAliases },
+        test: {
+          name: 'dompurify-isolated-frontend',
+          environment: 'happy-dom',
+          globals: true,
+          pool: 'forks',
+          include: [
+            // Frontend component tests that transitively import sanitizePolicyHtml
+            'src/client/test/components/logged_out/instance-policy.test.ts',
+          ],
+          setupFiles: ['./src/client/test/lib/local-storage-stub.ts'],
           env: { NODE_ENV: 'test' },
         },
       },
