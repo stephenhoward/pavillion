@@ -8,7 +8,10 @@ import DOMPurify from 'isomorphic-dompurify';
 const ALLOWED_TAGS = [
   'p', 'br', 'strong', 'em', 'u', 's',
   'ul', 'ol', 'li',
-  'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+  // h1 omitted: the page already renders a site-level <h1> in root.vue, and
+  // a second h1 in admin-authored policy content would break heading hierarchy.
+  // h4-h6 omitted: a single policy document does not need 4+ levels of nesting.
+  'h2', 'h3',
   'a', 'blockquote', 'code', 'pre', 'hr',
 ];
 
@@ -35,6 +38,35 @@ const FORBID_ATTR = ['style', 'class', 'id', 'srcset'];
  * Permits `http(s):` and `mailto:` only; blocks `javascript:`, `data:`, etc.
  */
 const ALLOWED_URI_REGEXP = /^(?:(?:https?|mailto):|[^a-z]|[a-z+.-]+(?:[^a-z+.\-:]|$))/i;
+
+/**
+ * Shared DOMPurify configuration used by both the server save path
+ * (via `renderPolicyMarkdown`) and the client render path
+ * (via `sanitizePolicyHtml`).
+ */
+const POLICY_PURIFY_CONFIG = {
+  ALLOWED_TAGS,
+  ALLOWED_ATTR,
+  FORBID_TAGS,
+  FORBID_ATTR,
+  ALLOW_DATA_ATTR: false,
+  ALLOWED_URI_REGEXP,
+} as const;
+
+/**
+ * Sanitize already-rendered policy HTML using the same closed allowlist
+ * as `renderPolicyMarkdown`. Used as defense-in-depth on the client before
+ * binding to `v-html`, since the stored value is already sanitized at save
+ * time. Re-running with the identical allowlist guarantees that even if
+ * the storage layer is ever bypassed, dangerous markup never reaches the
+ * DOM.
+ *
+ * @param html - HTML string to sanitize
+ * @returns Sanitized HTML safe for `v-html`
+ */
+export function sanitizePolicyHtml(html: string): string {
+  return DOMPurify.sanitize(html, POLICY_PURIFY_CONFIG);
+}
 
 /**
  * Render markdown source through a two-layer sanitization pipeline producing
@@ -68,12 +100,5 @@ export function renderPolicyMarkdown(source: string): string {
   } as Parameters<typeof marked.parse>[1]) as string;
 
   // Layer 2: DOMPurify with closed allowlist + URI scheme allowlist.
-  return DOMPurify.sanitize(html, {
-    ALLOWED_TAGS,
-    ALLOWED_ATTR,
-    FORBID_TAGS,
-    FORBID_ATTR,
-    ALLOW_DATA_ATTR: false,
-    ALLOWED_URI_REGEXP,
-  });
+  return DOMPurify.sanitize(html, POLICY_PURIFY_CONFIG);
 }

@@ -111,12 +111,24 @@ describe('renderPolicyMarkdown', () => {
       expect(output).toContain('link');
     });
 
-    it('preserves headings and paragraphs', () => {
-      const output = renderPolicyMarkdown('# Title\n\nA paragraph.');
-      expect(output).toContain('<h1>');
-      expect(output).toContain('Title');
+    it('preserves h2/h3 headings and paragraphs', () => {
+      // h1 is intentionally excluded from ALLOWED_TAGS — the page already
+      // carries a site-level h1, and a second h1 in admin-authored policy
+      // content would break heading hierarchy.
+      const output = renderPolicyMarkdown('## Section\n\nA paragraph.\n\n### Subsection');
+      expect(output).toContain('<h2>');
+      expect(output).toContain('Section');
+      expect(output).toContain('<h3>');
+      expect(output).toContain('Subsection');
       expect(output).toContain('<p>');
       expect(output).toContain('A paragraph.');
+    });
+
+    it('strips h1 from admin-authored content (page already has site h1)', () => {
+      const output = renderPolicyMarkdown('# Should be stripped');
+      expect(output).not.toContain('<h1');
+      // Content text is preserved (DOMPurify keeps inner text when stripping the wrapper tag)
+      expect(output).toContain('Should be stripped');
     });
   });
 });

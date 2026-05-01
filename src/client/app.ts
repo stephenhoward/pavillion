@@ -22,6 +22,7 @@ import RegisterView from '@/client/components/logged_out/register.vue';
 import RegisterApplyView from '@/client/components/logged_out/register_apply.vue';
 import AcceptInviteView from '@/client/components/logged_out/accept_invite.vue';
 import SetupView from '@/client/components/logged_out/setup.vue';
+import InstancePolicyView from '@/client/components/logged_out/instance-policy.vue';
 
 import AppViews from '@/client/components/logged_in/root.vue';
 import CalendarsView from '@/client/components/logged_in/calendar/calendars.vue';
@@ -191,6 +192,14 @@ checkSetupMode().then((setupRequired) => {
       },
       // Convenience redirect: /login → /auth/login
       { path: '/login', redirect: '/auth/login' },
+      // Public instance policy page — anonymous and authenticated visitors both have access.
+      // Mounts the AuthViews layout but is intentionally outside the /auth namespace and
+      // carries no auth/setup guard at the route level.
+      { path: '/policy', component: AuthViews,
+        children: [
+          { path: '', component: InstancePolicyView, name: 'instance-policy' },
+        ],
+      },
     ];
 
     const router = createRouter({
