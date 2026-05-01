@@ -1739,9 +1739,12 @@ class EventService {
     }
 
 
-    let wasRepost = false;
-
     const transaction = await db.transaction();
+
+    // The acting calendar id (the reposter for repost events; the source
+    // calendar otherwise) is captured here so the post-commit repostStatus
+    // lookup can target the same calendar that owned the assignment write.
+    let actingCalendarId: string;
 
     try {
       // 1. Validate that all events exist
@@ -1771,11 +1774,10 @@ class EventService {
       // we need the reposter's calendar (which the user controls) instead.
       const {
         effectiveCalendarId,
-        wasRepost: resolvedAsRepost,
         userCalendars,
       } = await this.resolveEffectiveCalendarId(account, calendarIds[0] as string, eventIds, transaction);
       let calendarId = effectiveCalendarId;
-      wasRepost = resolvedAsRepost;
+      actingCalendarId = effectiveCalendarId;
 
       const calendar = await this.calendarService.getCalendar(calendarId);
 
@@ -1844,13 +1846,39 @@ class EventService {
       throw error;
     }
 
-    // 8. Return updated events with their categories (after successful commit)
+    // 8. Build authoritative repostStatus map for the acting calendar.
+    // Mirrors the resolution pattern in listEvents (~lines 285-307): consult
+    // SharedEventEntity (via AP interface) for auto/manual distinction, fall
+    // back to EventRepostEntity-only entries as 'manual'. A single pair of
+    // queries is issued per call regardless of event count.
+    const [reposts, sharedStatusMap] = await Promise.all([
+      EventRepostEntity.findAll({
+        where: { calendar_id: actingCalendarId },
+        attributes: ['event_id'],
+      }),
+      this.activityPubInterface!.getSharedEventStatusMap(actingCalendarId),
+    ]);
+
+    const repostStatusByEventId = new Map<string, 'auto' | 'manual'>();
+    for (const [eventId, status] of sharedStatusMap.entries()) {
+      if (UUID_REGEX.test(eventId)) {
+        repostStatusByEventId.set(eventId, status);
+      }
+    }
+    for (const r of reposts) {
+      if (!repostStatusByEventId.has(r.event_id)) {
+        repostStatusByEventId.set(r.event_id, 'manual');
+      }
+    }
+
+    // 9. Return updated events with their categories (after successful commit).
+    // repostStatus is populated authoritatively from the SharedEventEntity +
+    // EventRepostEntity union above; events not in either collection (owned by
+    // the acting calendar) default to 'none'.
     const updatedEvents = [];
     for (const eventId of eventIds) {
       const updatedEvent = await this.getEventById(eventId);
-      // wasRepost is derived from resolveEffectiveCalendarId(); preserve the
-      // legacy boolean by mapping true → 'manual' (no auto/manual context here).
-      updatedEvent.repostStatus = wasRepost ? 'manual' : 'none';
+      updatedEvent.repostStatus = repostStatusByEventId.get(eventId) ?? 'none';
       updatedEvents.push(updatedEvent);
     }
 
@@ -1888,9 +1916,12 @@ class EventService {
     // Deduplicate categoryIds to prevent false count mismatches
     const uniqueCategoryIds = [...new Set(categoryIds)];
 
-    let wasRepost = false;
-
     const transaction = await db.transaction();
+
+    // The acting calendar id (the reposter for repost events; the source
+    // calendar otherwise) is captured here so the post-commit repostStatus
+    // lookup can target the same calendar that owned the assignment write.
+    let actingCalendarId: string;
 
     try {
       // 1. Find the event
@@ -1906,10 +1937,9 @@ class EventService {
       // 2. Resolve effective calendar (handles repost lookup)
       const {
         effectiveCalendarId,
-        wasRepost: resolvedAsRepost,
         userCalendars,
       } = await this.resolveEffectiveCalendarId(account, event.calendar_id, [eventId], transaction, calendarId);
-      wasRepost = resolvedAsRepost;
+      actingCalendarId = effectiveCalendarId;
 
       // 3. Check user has permission
       const hasPermission = userCalendars.some(cal => cal.id === effectiveCalendarId);
@@ -1956,11 +1986,32 @@ class EventService {
       throw error;
     }
 
-    // Return updated event (after successful commit)
+    // 7. Build authoritative repostStatus map for the acting calendar.
+    // Mirrors the resolution pattern in listEvents (~lines 285-307): consult
+    // SharedEventEntity (via AP interface) for auto/manual distinction, fall
+    // back to EventRepostEntity-only entries as 'manual'. Owned events default
+    // to 'none'.
+    const [reposts, sharedStatusMap] = await Promise.all([
+      EventRepostEntity.findAll({
+        where: { calendar_id: actingCalendarId },
+        attributes: ['event_id'],
+      }),
+      this.activityPubInterface!.getSharedEventStatusMap(actingCalendarId),
+    ]);
+
+    let resolvedStatus: 'none' | 'manual' | 'auto' = 'none';
+    const sharedEntry = sharedStatusMap.get(eventId);
+    if (sharedEntry && UUID_REGEX.test(eventId)) {
+      resolvedStatus = sharedEntry;
+    }
+    else if (reposts.some(r => r.event_id === eventId)) {
+      resolvedStatus = 'manual';
+    }
+
+    // Return updated event (after successful commit) with authoritative
+    // repostStatus populated.
     const updatedEvent = await this.getEventById(eventId);
-    // wasRepost is derived from resolveEffectiveCalendarId(); map true → 'manual'
-    // (no auto/manual context available here).
-    updatedEvent.repostStatus = wasRepost ? 'manual' : 'none';
+    updatedEvent.repostStatus = resolvedStatus;
 
     return updatedEvent;
   }
