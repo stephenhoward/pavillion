@@ -19,7 +19,7 @@ import AnnounceActivity from "@/server/activitypub/model/action/announce";
 import CreateActivity from "@/server/activitypub/model/action/create";
 import UndoActivity from "@/server/activitypub/model/action/undo";
 import FlagActivity from "@/server/activitypub/model/action/flag";
-import { ActivityPubActivity, ActivityPubObject } from "@/server/activitypub/model/base";
+import { ActivityPubActivity, ActivityPubObject, AS_PUBLIC } from "@/server/activitypub/model/base";
 import CalendarInterface from "@/server/calendar/interface";
 import CalendarActorService from "@/server/activitypub/service/calendar_actor";
 import UserActorService from "@/server/activitypub/service/user_actor";
@@ -235,14 +235,19 @@ class ProcessOutboxService {
           throw new Error('Failed to parse Update activity');
         }
         // Honor explicit `to` for targeted single-recipient delivery (e.g.,
-        // notifying the remote calendar that owns an event). Fall back to
-        // follower fan-out for the back-compat broadcast case.
-        if (activity.to && activity.to.length > 0) {
-          recipients = activity.to;
-          logger.info({ recipientCount: recipients.length }, 'Using explicit recipients from to field for Update activity');
-        }
-        else {
-          recipients = await this.getRecipients(calendar, activity.object);
+        // notifying the remote calendar that owns an event). The as:Public
+        // IRI is an addressing marker, not a delivery target, so filter it
+        // out before deciding. Fall back to follower fan-out for the
+        // public-broadcast case.
+        {
+          const explicitTo = (activity.to ?? []).filter(uri => uri !== AS_PUBLIC);
+          if (explicitTo.length > 0) {
+            recipients = explicitTo;
+            logger.info({ recipientCount: recipients.length }, 'Using explicit recipients from to field for Update activity');
+          }
+          else {
+            recipients = await this.getRecipients(calendar, activity.object);
+          }
         }
         break;
       case 'Delete':
@@ -250,14 +255,19 @@ class ProcessOutboxService {
         if (!activity) {
           throw new Error('Failed to parse Delete activity');
         }
-        // Honor explicit `to` for targeted single-recipient delivery. Fall back
-        // to follower fan-out for the back-compat broadcast case.
-        if (activity.to && activity.to.length > 0) {
-          recipients = activity.to;
-          logger.info({ recipientCount: recipients.length }, 'Using explicit recipients from to field for Delete activity');
-        }
-        else {
-          recipients = await this.getRecipients(calendar, activity.object);
+        // Honor explicit `to` for targeted single-recipient delivery. The
+        // as:Public IRI is an addressing marker, not a delivery target, so
+        // filter it out before deciding. Fall back to follower fan-out for
+        // the public-broadcast case.
+        {
+          const explicitTo = (activity.to ?? []).filter(uri => uri !== AS_PUBLIC);
+          if (explicitTo.length > 0) {
+            recipients = explicitTo;
+            logger.info({ recipientCount: recipients.length }, 'Using explicit recipients from to field for Delete activity');
+          }
+          else {
+            recipients = await this.getRecipients(calendar, activity.object);
+          }
         }
         break;
       case 'Add':

@@ -668,6 +668,43 @@ describe('processOutboxMessage — explicit `to` honoring for Update/Delete/Add'
     expect(updateStub.getCalls()[0].args[0]['processed_status']).toBe('ok');
   });
 
+  it('Update: treats `to: [as:Public]` as a broadcast (filters public IRI, fans out to followers)', async () => {
+    // Regression: addressPublic() puts as:Public in `to` for public broadcast.
+    // The outbox must not treat the public IRI as a literal delivery target;
+    // it must fall through to follower fan-out.
+    const updateMsg = createMockUpdateActivity(LOCAL_ACTOR_URL, {
+      type: 'Event',
+      id: `${LOCAL_ACTOR_URL}/events/upd-public`,
+      name: 'Public Broadcast Update',
+    });
+    updateMsg.to = ['https://www.w3.org/ns/activitystreams#Public'];
+    updateMsg.cc = [`${LOCAL_ACTOR_URL}/followers`];
+
+    const message = ActivityPubOutboxMessageEntity.build({
+      calendar_id: TEST_CALENDAR_ID,
+      type: 'Update',
+      message: updateMsg,
+    });
+
+    const getCalendarStub = sandbox.stub(service.calendarService, 'getCalendar');
+    const postStub = sandbox.stub(axios, 'post').resolves();
+    const updateStub = sandbox.stub(ActivityPubOutboxMessageEntity.prototype, 'update');
+    const getRecipientsStub = sandbox.stub(service, 'getRecipients');
+    const resolveStub = sandbox.stub(service, 'resolveInboxUrl');
+    stubSigning(service, sandbox);
+
+    getCalendarStub.resolves(Calendar.fromObject({ id: TEST_CALENDAR_ID }));
+    getRecipientsStub.resolves([REMOTE_CALENDAR_HANDLE]);
+    resolveStub.resolves(REMOTE_INBOX_URL);
+
+    await service.processOutboxMessage(message);
+
+    expect(getRecipientsStub.calledOnce, 'getRecipients must be called when `to` is only as:Public').toBe(true);
+    expect(resolveStub.calledOnceWith(REMOTE_CALENDAR_HANDLE)).toBe(true);
+    expect(postStub.calledOnce).toBe(true);
+    expect(updateStub.getCalls()[0].args[0]['processed_status']).toBe('ok');
+  });
+
   // ---------- Delete ----------
 
   it('Delete: honors explicit `to` and skips follower fan-out', async () => {
@@ -722,6 +759,39 @@ describe('processOutboxMessage — explicit `to` honoring for Update/Delete/Add'
     await service.processOutboxMessage(message);
 
     expect(getRecipientsStub.calledOnce, 'getRecipients must be called for fan-out fallback').toBe(true);
+    expect(postStub.calledOnce).toBe(true);
+    expect(updateStub.getCalls()[0].args[0]['processed_status']).toBe('ok');
+  });
+
+  it('Delete: treats `to: [as:Public]` as a broadcast (filters public IRI, fans out to followers)', async () => {
+    // Regression: addressPublic() puts as:Public in `to` for public broadcast.
+    // The outbox must not treat the public IRI as a literal delivery target;
+    // it must fall through to follower fan-out.
+    const deleteMsg = createMockDeleteActivity(LOCAL_ACTOR_URL, `${LOCAL_ACTOR_URL}/events/del-public`);
+    deleteMsg.to = ['https://www.w3.org/ns/activitystreams#Public'];
+    deleteMsg.cc = [`${LOCAL_ACTOR_URL}/followers`];
+
+    const message = ActivityPubOutboxMessageEntity.build({
+      calendar_id: TEST_CALENDAR_ID,
+      type: 'Delete',
+      message: deleteMsg,
+    });
+
+    const getCalendarStub = sandbox.stub(service.calendarService, 'getCalendar');
+    const postStub = sandbox.stub(axios, 'post').resolves();
+    const updateStub = sandbox.stub(ActivityPubOutboxMessageEntity.prototype, 'update');
+    const getRecipientsStub = sandbox.stub(service, 'getRecipients');
+    const resolveStub = sandbox.stub(service, 'resolveInboxUrl');
+    stubSigning(service, sandbox);
+
+    getCalendarStub.resolves(Calendar.fromObject({ id: TEST_CALENDAR_ID }));
+    getRecipientsStub.resolves([REMOTE_CALENDAR_HANDLE]);
+    resolveStub.resolves(REMOTE_INBOX_URL);
+
+    await service.processOutboxMessage(message);
+
+    expect(getRecipientsStub.calledOnce, 'getRecipients must be called when `to` is only as:Public').toBe(true);
+    expect(resolveStub.calledOnceWith(REMOTE_CALENDAR_HANDLE)).toBe(true);
     expect(postStub.calledOnce).toBe(true);
     expect(updateStub.getCalls()[0].args[0]['processed_status']).toBe('ok');
   });

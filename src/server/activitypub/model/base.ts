@@ -1,6 +1,8 @@
 import config from 'config';
 import { Calendar } from '@/common/model/calendar';
 
+const AS_PUBLIC = 'https://www.w3.org/ns/activitystreams#Public';
+
 class ActivityPubActivity {
   context: string[] = ['https://www.w3.org/ns/activitystreams'];
   id: string = '';
@@ -26,7 +28,7 @@ class ActivityPubActivity {
    * public when it addresses as:Public in to or cc.
    */
   addressPublic(followersUrl: string): this {
-    this.to = ['https://www.w3.org/ns/activitystreams#Public'];
+    this.to = [AS_PUBLIC];
     this.cc = [followersUrl];
     this.published = new Date();
     return this;
@@ -93,4 +95,4 @@ class ActivityPubActor {
   }
 }
 
-export { ActivityPubActivity, ActivityPubActor, ActivityPubObject };
+export { ActivityPubActivity, ActivityPubActor, ActivityPubObject, AS_PUBLIC };
