@@ -29,6 +29,13 @@ const descriptionState = reactive({
   enabledLanguages: [],
 });
 
+// Instance policy state
+const policyState = reactive({
+  selectedLanguage: '',
+  policies: {} as Record<string, string>,
+  enabledLanguages: [] as string[],
+});
+
 // Registration mode options
 const registrationModes = [
   { value: 'open', label: t('registration_mode_open') },
@@ -52,6 +59,9 @@ onMounted(async () => {
     descriptionState.enabledLanguages = languages;
     descriptionState.selectedLanguage = languages[0] || 'en';
     descriptionState.descriptions = { ...settings.instanceDescription } || {};
+    policyState.enabledLanguages = languages;
+    policyState.selectedLanguage = languages[0] || 'en';
+    policyState.policies = { ...settings.instancePolicy } || {};
   }
   catch (error) {
     console.error('Error loading instance description settings:', error);
@@ -59,10 +69,24 @@ onMounted(async () => {
 });
 
 /**
+ * Returns the text direction for the given language code.
+ */
+function languageDir(language: string) {
+  return iso6391.getDir(language) === 'rtl' ? 'rtl' : 'ltr';
+}
+
+/**
  * Returns the text direction for the currently selected description language.
  */
 function currentLanguageDir() {
-  return iso6391.getDir(descriptionState.selectedLanguage) === 'rtl' ? 'rtl' : 'ltr';
+  return languageDir(descriptionState.selectedLanguage);
+}
+
+/**
+ * Returns the text direction for the currently selected policy language.
+ */
+function currentPolicyLanguageDir() {
+  return languageDir(policyState.selectedLanguage);
 }
 
 /**
@@ -80,6 +104,7 @@ async function updateSettings() {
       siteTitle: siteTitle.value,
       defaultDateRange: selectedDateRange.value,
       instanceDescription: descriptionState.descriptions,
+      instancePolicy: policyState.policies,
     });
 
     if (success) {
@@ -192,6 +217,26 @@ async function updateSettings() {
               v-model="descriptionState.descriptions[descriptionState.selectedLanguage]"
             />
             <p id="instance-description-help" class="form-description">{{ t("instance_description_help") }}</p>
+          </div>
+
+          <!-- Instance Policy -->
+          <div class="form-group">
+            <label for="instancePolicy" class="form-label">{{ t("instance_policy") }}</label>
+            <LanguageTabSelector
+              v-model="policyState.selectedLanguage"
+              :languages="policyState.enabledLanguages"
+            />
+            <textarea
+              id="instancePolicy"
+              class="form-textarea"
+              :disabled="saving"
+              :rows="15"
+              :dir="currentPolicyLanguageDir()"
+              :placeholder="t('instance_policy_placeholder')"
+              aria-describedby="instance-policy-help"
+              v-model="policyState.policies[policyState.selectedLanguage]"
+            />
+            <p id="instance-policy-help" class="form-description">{{ t("instance_policy_help") }}</p>
           </div>
 
           <!-- Registration Mode -->

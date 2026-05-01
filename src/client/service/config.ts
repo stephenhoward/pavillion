@@ -10,6 +10,7 @@ type Settings = {
   enabledLanguages?: string[];
   forceLanguage?: string | null;
   instanceDescription?: Record<string, string>;
+  instancePolicy?: Record<string, string>;
 };
 
 /**
