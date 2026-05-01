@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import { ref, computed, reactive } from 'vue';
+import { useTranslation } from 'i18next-vue';
 import Sheet from '@/client/components/common/Sheet.vue';
 import PillButton from '@/client/components/common/pill-button.vue';
 import LanguageTabSelector from '@/client/components/common/language-tab-selector.vue';
+
+const { t } = useTranslation('event_editor', { keyPrefix: 'create_location' });
 
 const props = defineProps<{
   languages: string[];
@@ -34,10 +37,6 @@ const accessibilityInfo = reactive<Record<string, string>>({});
 const isValid = computed(() => {
   return formData.name.trim().length > 0;
 });
-
-const handleLanguageChange = (lang: string) => {
-  currentLanguage.value = lang;
-};
 
 const handleAddLanguage = () => {
   emit('add-language');
@@ -89,20 +88,20 @@ const handleSubmit = () => {
 
 <template>
   <Sheet
-    title="Create Location"
-    @close="$emit('close')"
+    :title="t('title')"
+    @close="emit('close')"
   >
     <div class="create-location-body">
       <section class="form-section">
-        <h3 class="section-title">Basic Information</h3>
+        <h3 class="section-title">{{ t('basic_info_section') }}</h3>
 
         <div class="form-field">
           <input
             v-model="formData.name"
             type="text"
             class="form-input"
-            placeholder="Location name *"
-            aria-label="Location name (required)"
+            :placeholder="t('name_placeholder')"
+            :aria-label="t('name_aria_label')"
             required
           />
         </div>
@@ -112,8 +111,8 @@ const handleSubmit = () => {
             v-model="formData.address"
             type="text"
             class="form-input"
-            placeholder="Street address"
-            aria-label="Street address"
+            :placeholder="t('address_placeholder')"
+            :aria-label="t('address_placeholder')"
           />
         </div>
 
@@ -122,28 +121,28 @@ const handleSubmit = () => {
             v-model="formData.city"
             type="text"
             class="form-input"
-            placeholder="City"
-            aria-label="City"
+            :placeholder="t('city_placeholder')"
+            :aria-label="t('city_placeholder')"
           />
           <input
             v-model="formData.state"
             type="text"
             class="form-input form-input--state"
-            placeholder="State"
-            aria-label="State"
+            :placeholder="t('state_placeholder')"
+            :aria-label="t('state_placeholder')"
           />
           <input
             v-model="formData.postalCode"
             type="text"
             class="form-input form-input--zip"
-            placeholder="Postal code"
-            aria-label="Postal code"
+            :placeholder="t('postal_code_placeholder')"
+            :aria-label="t('postal_code_placeholder')"
           />
         </div>
       </section>
 
       <section class="form-section">
-        <h3 class="section-title">Accessibility Information</h3>
+        <h3 class="section-title">{{ t('accessibility_section') }}</h3>
 
         <LanguageTabSelector
           ref="accessibilityLangTabs"
@@ -161,8 +160,8 @@ const handleSubmit = () => {
           <textarea
             v-model="accessibilityInfo[currentLanguage]"
             class="form-textarea"
-            placeholder="Accessibility information (optional)"
-            :aria-label="`Accessibility information in ${currentLanguage}`"
+            :placeholder="t('accessibility_placeholder')"
+            :aria-label="t('accessibility_aria_label', { language: currentLanguage })"
             rows="4"
           />
         </div>
@@ -174,7 +173,7 @@ const handleSubmit = () => {
           size="sm"
           @click="handleBackToSearch"
         >
-          Back to search
+          {{ t('back_button') }}
         </PillButton>
         <PillButton
           variant="primary"
@@ -182,7 +181,7 @@ const handleSubmit = () => {
           :disabled="!isValid"
           @click="handleSubmit"
         >
-          Create Location
+          {{ t('submit_button') }}
         </PillButton>
       </footer>
     </div>
