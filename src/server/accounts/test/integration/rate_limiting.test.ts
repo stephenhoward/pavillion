@@ -153,9 +153,12 @@ describeOrSkip('Account Application Rate Limiting Integration Tests', () => {
   });
 
   describe('confirmApplicationByIp', () => {
-    it('should return 429 once the per-IP confirmation limit is exhausted', async () => {
+    it('should return 429 once the per-IP confirmation limit is exhausted, and route wiring on the real /api/v1/applications/confirm/:token endpoints is verified', async () => {
       const maxRequests = config.get<number>('rateLimit.application.confirm.byIp.max');
 
+      // Phase 1: exhaust the budget against the stub route. Asserts the
+      // limiter middleware itself behaves correctly (429 + headers + error
+      // shape).
       const responses = [];
       for (let i = 0; i < maxRequests + 1; i++) {
         responses.push(await request(app).get('/confirm-ip-only'));
@@ -174,6 +177,51 @@ describeOrSkip('Account Application Rate Limiting Integration Tests', () => {
       expect(blocked.headers['ratelimit-limit']).toBe(String(maxRequests));
       expect(blocked.headers['ratelimit-remaining']).toBe('0');
       expect(blocked.headers['retry-after']).toBeDefined();
+
+      // Phase 2: prove the same singleton limiter is wired onto the real
+      // public confirm endpoints. Because the limiter store is module-global
+      // and the budget is already exhausted from Phase 1, every fresh request
+      // to the real routes (still on localhost) must short-circuit at 429.
+      // This both:
+      //   a) confirms `confirmApplicationByIp` is mounted on the production
+      //      GET /api/v1/applications/confirm/:token route, and
+      //   b) confirms the same on the POST counterpart.
+      // Imports are deferred so we don't pay full-server init cost when this
+      // file is loaded by other suites; Phase 2 only spins up the server when
+      // the test actually runs.
+      const { TestEnvironment } = await import('@/server/common/test/lib/test_environment');
+      const { EventEmitter } = await import('events');
+      const { default: AccountService } = await import('@/server/accounts/service/account');
+      const { default: ConfigurationInterface } = await import('@/server/configuration/interface');
+      const { default: SetupInterface } = await import('@/server/setup/interface');
+
+      const realEnv = new TestEnvironment();
+      await realEnv.init();
+
+      // Setup-mode middleware blocks unauthenticated API calls with 503 until
+      // an admin exists. Provision one so the real confirm route can be
+      // reached and the rate limiter (already exhausted) is what blocks the
+      // request, not setup mode.
+      const accountService = new AccountService(
+        new EventEmitter(),
+        new ConfigurationInterface(),
+        new SetupInterface(),
+      );
+      await accountService._setupAccount('rate-limit-admin@pavillion.dev', 'testpassword!1');
+
+      const realGet = await request(realEnv.app).get(
+        '/api/v1/applications/confirm/any-token-here',
+      );
+      expect(realGet.status).toBe(429);
+      expect(realGet.body.errorName).toBe('RateLimitError');
+
+      const realPost = await request(realEnv.app).post(
+        '/api/v1/applications/confirm/any-token-here',
+      );
+      expect(realPost.status).toBe(429);
+      expect(realPost.body.errorName).toBe('RateLimitError');
+
+      await realEnv.cleanup();
     });
   });
 });
