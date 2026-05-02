@@ -7,7 +7,7 @@ import AccountInvitationEntity from '@/server/accounts/entity/account_invitation
 import EmailInterface from '@/server/email/interface';
 import ServiceSettings from '@/server/configuration/service/settings';
 import AccountService from '@/server/accounts/service/account';
-import { AccountAlreadyExistsError, AccountInviteAlreadyExistsError, AccountRegistrationClosedError, AccountApplicationAlreadyExistsError, AccountApplicationsClosedError, noAccountInviteExistsError, noAccountApplicationExistsError, AccountInvitationPermissionError } from '@/server/accounts/exceptions';
+import { AccountAlreadyExistsError, AccountInviteAlreadyExistsError, AccountRegistrationClosedError, AccountApplicationsClosedError, noAccountInviteExistsError, noAccountApplicationExistsError, AccountInvitationPermissionError } from '@/server/accounts/exceptions';
 import { ValidationError } from '@/common/exceptions/base';
 import { initI18Next } from '@/server/common/test/lib/i18next';
 import EventEmitter from 'events';
@@ -248,35 +248,204 @@ describe('applyForNewAccount', () => {
     }
   });
 
-  it('application already exists', async () => {
-    let getAllSettingsStub = applySandbox.stub(ConfigurationInterface.prototype, 'getAllSettings');
-    let getAccountByEmailStub = applySandbox.stub(accountService, 'getAccountByEmail');
-    let findApplicationStub = applySandbox.stub(AccountApplicationEntity, 'findOne');
-
-    getAllSettingsStub.resolves({ registrationMode: 'apply' });
-    getAccountByEmailStub.resolves(undefined);
-    findApplicationStub.resolves(AccountApplicationEntity.build({ email: 'test@example.com' }));
-
-    await expect(accountService.applyForNewAccount('test@example.com','test_message')).rejects
-      .toThrow(AccountApplicationAlreadyExistsError);
-  });
-
-  it('application succeeds', async () => {
-    let getAllSettingsStub = applySandbox.stub(ConfigurationInterface.prototype, 'getAllSettings');
-    let getAccountByEmailStub = applySandbox.stub(accountService, 'getAccountByEmail');
-    let findApplicationStub = applySandbox.stub(AccountApplicationEntity, 'findOne');
-    let saveApplicationStub = applySandbox.stub(AccountApplicationEntity.prototype, 'save');
-    let emailStub = applySandbox.stub(emailInterface, 'sendEmail');
+  // Branch 1: no existing account, no existing application — happy path.
+  it('Branch 1: creates pending_confirmation row with token + expiration and sends confirmation email', async () => {
+    const getAllSettingsStub = applySandbox.stub(ConfigurationInterface.prototype, 'getAllSettings');
+    const getAccountByEmailStub = applySandbox.stub(accountService, 'getAccountByEmail');
+    const findApplicationStub = applySandbox.stub(AccountApplicationEntity, 'findOne');
+    const buildSpy = applySandbox.spy(AccountApplicationEntity, 'build');
+    const saveApplicationStub = applySandbox.stub(AccountApplicationEntity.prototype, 'save').resolves();
+    const emailStub = applySandbox.stub(emailInterface, 'sendEmail').resolves();
 
     getAllSettingsStub.resolves({ registrationMode: 'apply' });
     getAccountByEmailStub.resolves(undefined);
     findApplicationStub.resolves(undefined);
 
-    let result = await accountService.applyForNewAccount('test@example.com','test_message');
+    const before = Date.now();
+    const result = await accountService.applyForNewAccount('newuser@example.com','I would like to apply');
+    const after = Date.now();
 
     expect(result).toBe(true);
     expect(saveApplicationStub.called).toBe(true);
-    expect(emailStub.called).toBe(true);
+    expect(emailStub.calledOnce).toBe(true);
+
+    // Verify the entity was built with pending_confirmation status + token + expiration
+    expect(buildSpy.calledOnce).toBe(true);
+    const buildArgs = buildSpy.firstCall.args[0] as Record<string, unknown>;
+    expect(buildArgs.email).toBe('newuser@example.com');
+    expect(buildArgs.status).toBe('pending_confirmation');
+    expect(buildArgs.message).toBe('I would like to apply');
+
+    // Token primitive: randomBytes(16).toString('hex') = 32 hex chars
+    expect(buildArgs.confirmation_token).toMatch(/^[0-9a-f]{32}$/);
+
+    // Expiration is ~7 days from now (within a few seconds tolerance)
+    const expiration = buildArgs.confirmation_token_expiration as Date;
+    expect(expiration).toBeInstanceOf(Date);
+    const expirationMs = expiration.getTime();
+    const expectedMin = before + 7 * 24 * 60 * 60 * 1000 - 5000;
+    const expectedMax = after + 7 * 24 * 60 * 60 * 1000 + 5000;
+    expect(expirationMs).toBeGreaterThanOrEqual(expectedMin);
+    expect(expirationMs).toBeLessThanOrEqual(expectedMax);
+
+    // The confirmation email must be addressed to the applicant
+    const sentMail = emailStub.firstCall.args[0];
+    expect(sentMail.emailAddress).toBe('newuser@example.com');
+  });
+
+  // Branch 2: re-applying while still pending_confirmation regenerates the
+  // token, resets the expiration, refreshes the message, and resends.
+  it('Branch 2: resubmit on pending_confirmation regenerates token, resets expiration, and resends confirmation email', async () => {
+    const originalToken = 'a'.repeat(32);
+    const originalExpiration = new Date(Date.now() + 1 * 60 * 60 * 1000); // 1hr from now
+    const existing = AccountApplicationEntity.build({
+      id: 'existing-id',
+      email: 'resubmit@example.com',
+      message: 'Original message',
+      status: 'pending_confirmation',
+      status_timestamp: new Date(Date.now() - 60 * 60 * 1000),
+      confirmation_token: originalToken,
+      confirmation_token_expiration: originalExpiration,
+    });
+
+    const saveStub = applySandbox.stub(existing, 'save').resolves();
+    const getAllSettingsStub = applySandbox.stub(ConfigurationInterface.prototype, 'getAllSettings');
+    const getAccountByEmailStub = applySandbox.stub(accountService, 'getAccountByEmail');
+    const findApplicationStub = applySandbox.stub(AccountApplicationEntity, 'findOne');
+    const emailStub = applySandbox.stub(emailInterface, 'sendEmail').resolves();
+
+    getAllSettingsStub.resolves({ registrationMode: 'apply' });
+    getAccountByEmailStub.resolves(undefined);
+    findApplicationStub.resolves(existing);
+
+    const before = Date.now();
+    const result = await accountService.applyForNewAccount('resubmit@example.com', 'Refreshed message');
+    const after = Date.now();
+
+    expect(result).toBe(true);
+    expect(saveStub.calledOnce).toBe(true);
+    expect(emailStub.calledOnce).toBe(true);
+
+    // Token must be regenerated (not the same as the original)
+    expect(existing.confirmation_token).not.toBe(originalToken);
+    expect(existing.confirmation_token).toMatch(/^[0-9a-f]{32}$/);
+
+    // Expiration is reset to ~7 days from now (not the old 1hr expiration)
+    expect(existing.confirmation_token_expiration).not.toBe(originalExpiration);
+    const newExpirationMs = (existing.confirmation_token_expiration as Date).getTime();
+    expect(newExpirationMs).toBeGreaterThanOrEqual(before + 7 * 24 * 60 * 60 * 1000 - 5000);
+    expect(newExpirationMs).toBeLessThanOrEqual(after + 7 * 24 * 60 * 60 * 1000 + 5000);
+
+    // Message refreshed
+    expect(existing.message).toBe('Refreshed message');
+
+    // Confirmation email sent to the applicant
+    const sentMail = emailStub.firstCall.args[0];
+    expect(sentMail.emailAddress).toBe('resubmit@example.com');
+  });
+
+  // Branch 3: existing application in `pending` — silently swallowed; still
+  // performs DB + email work for timing parity.
+  it('Branch 3: dup pending application silently swallows error and performs real DB + email work', async () => {
+    const buildSpy = applySandbox.spy(AccountApplicationEntity, 'build');
+    const existing = AccountApplicationEntity.build({
+      id: 'existing-id',
+      email: 'pending@example.com',
+      message: 'Original',
+      status: 'pending',
+      status_timestamp: new Date(Date.now() - 60 * 60 * 1000),
+    });
+    buildSpy.resetHistory();
+
+    const saveStub = applySandbox.stub(existing, 'save').resolves();
+    const getAllSettingsStub = applySandbox.stub(ConfigurationInterface.prototype, 'getAllSettings');
+    const getAccountByEmailStub = applySandbox.stub(accountService, 'getAccountByEmail');
+    const findApplicationStub = applySandbox.stub(AccountApplicationEntity, 'findOne');
+    const emailStub = applySandbox.stub(emailInterface, 'sendEmail').resolves();
+
+    getAllSettingsStub.resolves({ registrationMode: 'apply' });
+    getAccountByEmailStub.resolves(undefined);
+    findApplicationStub.resolves(existing);
+
+    const result = await accountService.applyForNewAccount('pending@example.com', 'Resubmit message');
+
+    // Identical success shape, no error propagated
+    expect(result).toBe(true);
+
+    // Real DB work: row was touched + saved (no new row created)
+    expect(saveStub.calledOnce).toBe(true);
+    expect(buildSpy.called).toBe(false);
+
+    // Real email work
+    expect(emailStub.calledOnce).toBe(true);
+
+    // Status not flipped (admin queue unchanged)
+    expect(existing.status).toBe('pending');
+  });
+
+  // Branch 4: existing application in `rejected` — silently swallowed; still
+  // performs DB + email work for timing parity.
+  it('Branch 4: dup rejected application silently swallows error and performs real DB + email work', async () => {
+    const buildSpy = applySandbox.spy(AccountApplicationEntity, 'build');
+    const existing = AccountApplicationEntity.build({
+      id: 'existing-id',
+      email: 'rejected@example.com',
+      message: 'Original',
+      status: 'rejected',
+      status_timestamp: new Date(Date.now() - 24 * 60 * 60 * 1000),
+    });
+    buildSpy.resetHistory();
+
+    const saveStub = applySandbox.stub(existing, 'save').resolves();
+    const getAllSettingsStub = applySandbox.stub(ConfigurationInterface.prototype, 'getAllSettings');
+    const getAccountByEmailStub = applySandbox.stub(accountService, 'getAccountByEmail');
+    const findApplicationStub = applySandbox.stub(AccountApplicationEntity, 'findOne');
+    const emailStub = applySandbox.stub(emailInterface, 'sendEmail').resolves();
+
+    getAllSettingsStub.resolves({ registrationMode: 'apply' });
+    getAccountByEmailStub.resolves(undefined);
+    findApplicationStub.resolves(existing);
+
+    const result = await accountService.applyForNewAccount('rejected@example.com', 'Resubmit');
+
+    expect(result).toBe(true);
+    expect(saveStub.calledOnce).toBe(true);
+    expect(buildSpy.called).toBe(false);
+    expect(emailStub.calledOnce).toBe(true);
+
+    // Status not flipped — admin's rejection decision is preserved
+    expect(existing.status).toBe('rejected');
+  });
+
+  // Branch 5: existing account — silently swallowed; emails the existing
+  // account owner via AccountAlreadyExistsEmail (mirrors registerNewAccount).
+  it('Branch 5: existing account silently swallows error and emails the existing account owner', async () => {
+    const buildSpy = applySandbox.spy(AccountApplicationEntity, 'build');
+    const saveStub = applySandbox.stub(AccountApplicationEntity.prototype, 'save').resolves();
+    const getAllSettingsStub = applySandbox.stub(ConfigurationInterface.prototype, 'getAllSettings');
+    const getAccountByEmailStub = applySandbox.stub(accountService, 'getAccountByEmail');
+    const findApplicationStub = applySandbox.stub(AccountApplicationEntity, 'findOne');
+    const emailStub = applySandbox.stub(emailInterface, 'sendEmail').resolves();
+
+    getAllSettingsStub.resolves({ registrationMode: 'apply' });
+    const existingAccount = new Account('account-id', 'existinguser', 'existing@example.com');
+    existingAccount.language = 'fr';
+    getAccountByEmailStub.resolves(existingAccount);
+    findApplicationStub.resolves(undefined);
+
+    const result = await accountService.applyForNewAccount('existing@example.com', 'I want to apply');
+
+    // Identical success shape, no error propagated
+    expect(result).toBe(true);
+
+    // No new application row created
+    expect(buildSpy.called).toBe(false);
+    expect(saveStub.called).toBe(false);
+
+    // Real email work — addressed to the account owner
+    expect(emailStub.calledOnce).toBe(true);
+    const sentMail = emailStub.firstCall.args[0];
+    expect(sentMail.emailAddress).toBe('existing@example.com');
   });
 });
 
