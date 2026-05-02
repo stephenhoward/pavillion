@@ -40,9 +40,10 @@ const FORBID_ATTR = ['style', 'class', 'id', 'srcset'];
 const ALLOWED_URI_REGEXP = /^(?:(?:https?|mailto):|[^a-z]|[a-z+.-]+(?:[^a-z+.\-:]|$))/i;
 
 /**
- * Shared DOMPurify configuration used by both the server save path
- * (via `renderPolicyMarkdown`) and the client render path
- * (via `sanitizePolicyHtml`).
+ * Shared DOMPurify configuration used by both `renderPolicyMarkdown`
+ * (sanitizes parsed markdown for view-time rendering) and
+ * `isPolicySourceSafe` (validates that markdown source survives the
+ * sanitization pipeline unchanged at save time).
  */
 const POLICY_PURIFY_CONFIG = {
   ALLOWED_TAGS,
@@ -52,21 +53,6 @@ const POLICY_PURIFY_CONFIG = {
   ALLOW_DATA_ATTR: false,
   ALLOWED_URI_REGEXP,
 } as const;
-
-/**
- * Sanitize already-rendered policy HTML using the same closed allowlist
- * as `renderPolicyMarkdown`. Used as defense-in-depth on the client before
- * binding to `v-html`, since the stored value is already sanitized at save
- * time. Re-running with the identical allowlist guarantees that even if
- * the storage layer is ever bypassed, dangerous markup never reaches the
- * DOM.
- *
- * @param html - HTML string to sanitize
- * @returns Sanitized HTML safe for `v-html`
- */
-export function sanitizePolicyHtml(html: string): string {
-  return DOMPurify.sanitize(html, POLICY_PURIFY_CONFIG);
-}
 
 /**
  * Module-private helper that runs Layer 1 of the policy pipeline: parse
