@@ -151,6 +151,11 @@ class EventObject extends ActivityPubObject {
       cc: [`https://${domain}/calendars/${calendar.urlName}/followers`],
     };
 
+    // published: when the event was originally created (AS 2.0 vocabulary)
+    if (event.createdAt) {
+      result.published = event.createdAt.toISOString();
+    }
+
     // summary: only when primary-language description is non-empty
     const primaryDescription = primaryContent?.description || '';
     if (primaryDescription.trim().length > 0) {
@@ -418,6 +423,16 @@ class EventObject extends ActivityPubObject {
           }
           return s;
         });
+      }
+    }
+
+    // --- published → createdAt mapping ---
+    // Map the AP `published` field to `createdAt` so CalendarEvent.fromObject()
+    // can populate the canonical publication timestamp. Guards against invalid dates.
+    if (apObject.published && typeof apObject.published === 'string') {
+      const publishedDate = new Date(apObject.published);
+      if (!isNaN(publishedDate.getTime())) {
+        result.createdAt = publishedDate;
       }
     }
 

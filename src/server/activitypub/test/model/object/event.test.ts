@@ -1425,4 +1425,110 @@ describe('EventObject', () => {
 
   });
 
+  describe('published field', () => {
+
+    describe('toActivityPubObject()', () => {
+
+      it('should emit published when event.createdAt is set', () => {
+        const calendar = new Calendar('calendar-uuid', 'mycal');
+        const event = new CalendarEvent('event-uuid', 'calendar-uuid');
+        event.addContent(new CalendarEventContent('en', 'Test Event', ''));
+        event.createdAt = new Date('2026-03-01T10:00:00.000Z');
+
+        const obj = new EventObject(calendar, event);
+        const result = obj.toActivityPubObject();
+
+        expect(result.published).toBe('2026-03-01T10:00:00.000Z');
+      });
+
+      it('should omit published when event.createdAt is null', () => {
+        const calendar = new Calendar('calendar-uuid', 'mycal');
+        const event = new CalendarEvent('event-uuid', 'calendar-uuid');
+        event.addContent(new CalendarEventContent('en', 'Test Event', ''));
+        event.createdAt = null;
+
+        const obj = new EventObject(calendar, event);
+        const result = obj.toActivityPubObject();
+
+        expect(result).not.toHaveProperty('published');
+      });
+
+      it('should be distinct from the envelope published (object vs activity timestamp)', () => {
+        // The EventObject's published = when the object was originally created.
+        // The Activity envelope's published = when the activity was sent.
+        // These are separate concerns and must not be confused.
+        const calendar = new Calendar('calendar-uuid', 'mycal');
+        const event = new CalendarEvent('event-uuid', 'calendar-uuid');
+        event.addContent(new CalendarEventContent('en', 'Test Event', ''));
+        event.createdAt = new Date('2025-01-15T08:00:00.000Z');
+
+        const obj = new EventObject(calendar, event);
+        const result = obj.toActivityPubObject();
+
+        // published exists and reflects the object creation time, not "now"
+        expect(result.published).toBe('2025-01-15T08:00:00.000Z');
+      });
+
+    });
+
+    describe('fromActivityPubObject()', () => {
+
+      it('should map published to createdAt in the result', () => {
+        const apObject = {
+          name: 'Remote Event',
+          startTime: '2026-04-15T09:00:00Z',
+          published: '2026-03-01T10:00:00.000Z',
+        };
+
+        const result = EventObject.fromActivityPubObject(apObject);
+
+        expect(result.createdAt).toBeInstanceOf(Date);
+        expect((result.createdAt as Date).toISOString()).toBe('2026-03-01T10:00:00.000Z');
+      });
+
+      it('should not set createdAt when published is absent', () => {
+        const apObject = {
+          name: 'Event Without Published',
+          startTime: '2026-04-15T09:00:00Z',
+        };
+
+        const result = EventObject.fromActivityPubObject(apObject);
+
+        expect(result).not.toHaveProperty('createdAt');
+      });
+
+      it('should not set createdAt when published is an invalid date string', () => {
+        const apObject = {
+          name: 'Event With Bad Published',
+          startTime: '2026-04-15T09:00:00Z',
+          published: 'not-a-date',
+        };
+
+        const result = EventObject.fromActivityPubObject(apObject);
+
+        expect(result).not.toHaveProperty('createdAt');
+      });
+
+      it('should survive round-trip: toActivityPubObject → fromActivityPubObject preserves published', () => {
+        const calendar = new Calendar('calendar-uuid', 'mycal');
+        const event = new CalendarEvent('event-uuid', 'calendar-uuid');
+        event.addContent(new CalendarEventContent('en', 'Round-trip Event', ''));
+        event.createdAt = new Date('2026-02-15T12:00:00.000Z');
+        const startDt = DateTime.fromISO('2026-04-15T09:00:00.000Z');
+        event.schedules = [new CalendarEventSchedule('s1', startDt)];
+
+        const obj = new EventObject(calendar, event);
+        const apRepresentation = obj.toActivityPubObject();
+
+        // Simulate receiving this AP representation
+        const parsed = EventObject.fromActivityPubObject(apRepresentation);
+
+        expect(parsed.createdAt).toBeInstanceOf(Date);
+        expect((parsed.createdAt as Date).toISOString()).toBe('2026-02-15T12:00:00.000Z');
+      });
+
+    });
+
+  });
+
 });

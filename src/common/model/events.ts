@@ -100,6 +100,13 @@ class CalendarEvent extends TranslatedModel<CalendarEventContent> {
   urlPrompt: UrlPrompt | null = null;
 
   /**
+   * Canonical publication timestamp: when the event was first created/published.
+   * Populated from the DB entity's createdAt on local events, or from the AP
+   * `published` field on remote federated events.
+   */
+  createdAt: Date | null = null;
+
+  /**
    * Derived flag: true when this event was obtained via a repost (auto or manual)
    * rather than direct ownership. Backed by {@link repostStatus}.
    */
@@ -226,6 +233,7 @@ class CalendarEvent extends TranslatedModel<CalendarEventContent> {
     event.sourceCalendar = obj.sourceCalendar ?? null;
     event.externalUrl = obj.externalUrl ?? null;
     event.urlPrompt = URL_PROMPT_VALUES.includes(obj.urlPrompt) ? obj.urlPrompt : null;
+    event.createdAt = obj.createdAt ? new Date(obj.createdAt) : null;
     event.isRecurring = obj.isRecurring === true;
     event.recurrenceSummary = obj.recurrenceSummary ?? null;
 

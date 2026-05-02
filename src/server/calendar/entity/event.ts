@@ -1,4 +1,4 @@
-import { Model, Table, Column, PrimaryKey, BelongsTo, DataType, ForeignKey, HasMany, Index } from 'sequelize-typescript';
+import { Model, Table, Column, PrimaryKey, BelongsTo, DataType, ForeignKey, HasMany, Index, CreatedAt } from 'sequelize-typescript';
 import { DateTime } from 'luxon';
 
 import { CalendarEvent, CalendarEventContent, CalendarEventSchedule, UrlPrompt, language } from '@/common/model/events';
@@ -68,6 +68,9 @@ class EventEntity extends Model {
   @Column({ type: DataType.STRING(32), allowNull: true })
   declare url_prompt: string | null;
 
+  @CreatedAt
+  declare createdAt: Date;
+
   @BelongsTo(() => EventEntity)
   declare parentEvent: EventEntity;
 
@@ -94,6 +97,7 @@ class EventEntity extends Model {
 
   toModel(): CalendarEvent {
     let model = new CalendarEvent(this.id, this.calendar_id, this.event_source_url);
+    model.createdAt = this.createdAt ?? null;
     model.locationId = this.location_id || null;
     model.mediaFocalPointX = this.media_focal_point_x;
     model.mediaFocalPointY = this.media_focal_point_y;
