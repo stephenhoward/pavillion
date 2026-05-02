@@ -144,6 +144,17 @@ rateLimit:
     byIp:
       windowMs: 60000  # 1 minute in milliseconds
       max: 60  # 60 requests per IP per minute
+  application:
+    byIp:
+      windowMs: 900000  # 15 minutes in milliseconds
+      max: 5  # 5 application submissions per IP per 15 minutes
+    byEmail:
+      windowMs: 3600000  # 1 hour in milliseconds
+      max: 3  # 3 application submissions per email per hour
+  applicationConfirm:
+    byIp:
+      windowMs: 900000  # 15 minutes in milliseconds
+      max: 20  # 20 confirmation attempts per IP per 15 minutes
 
 # Housekeeping configuration for automated server maintenance
 housekeeping:

@@ -254,3 +254,40 @@ export const configSiteByIp: RequestHandler = isRateLimitEnabled()
     'config-site',
   )
   : noOpMiddleware;
+
+/**
+ * Public account application submission rate limiter by IP address.
+ * Limits: 5 requests per IP per 15 minutes (default config).
+ */
+export const applicationByIp: RequestHandler = isRateLimitEnabled()
+  ? createIpRateLimiter(
+    config.get<number>('rateLimit.application.byIp.max'),
+    config.get<number>('rateLimit.application.byIp.windowMs'),
+    'application',
+  )
+  : noOpMiddleware;
+
+/**
+ * Public account application submission rate limiter by email address.
+ * Limits: 3 requests per email per 1 hour (default config).
+ */
+export const applicationByEmail: RequestHandler = isRateLimitEnabled()
+  ? createCredentialRateLimiter(
+    config.get<number>('rateLimit.application.byEmail.max'),
+    config.get<number>('rateLimit.application.byEmail.windowMs'),
+    'application',
+    'email',
+  )
+  : noOpMiddleware;
+
+/**
+ * Application email-confirmation rate limiter by IP address.
+ * Limits: 20 requests per IP per 15 minutes (default config).
+ */
+export const confirmApplicationByIp: RequestHandler = isRateLimitEnabled()
+  ? createIpRateLimiter(
+    config.get<number>('rateLimit.applicationConfirm.byIp.max'),
+    config.get<number>('rateLimit.applicationConfirm.byIp.windowMs'),
+    'application-confirm',
+  )
+  : noOpMiddleware;

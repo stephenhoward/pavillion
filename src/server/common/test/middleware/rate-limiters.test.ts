@@ -13,6 +13,9 @@ import {
   reportVerificationByIp,
   reportSubmissionByAccount,
   publicEventInstanceByIp,
+  applicationByIp,
+  applicationByEmail,
+  confirmApplicationByIp,
 } from '@/server/common/middleware/rate-limiters';
 
 describe('rate-limiters', () => {
@@ -89,6 +92,30 @@ describe('rate-limiters', () => {
       expect(windowMs).toBe(900000); // 15 minutes
     });
 
+    it('should use correct config values for application by IP', () => {
+      const maxRequests = config.get<number>('rateLimit.application.byIp.max');
+      const windowMs = config.get<number>('rateLimit.application.byIp.windowMs');
+
+      expect(maxRequests).toBe(5);
+      expect(windowMs).toBe(900000); // 15 minutes
+    });
+
+    it('should use correct config values for application by email', () => {
+      const maxRequests = config.get<number>('rateLimit.application.byEmail.max');
+      const windowMs = config.get<number>('rateLimit.application.byEmail.windowMs');
+
+      expect(maxRequests).toBe(3);
+      expect(windowMs).toBe(3600000); // 1 hour
+    });
+
+    it('should use correct config values for application confirm by IP', () => {
+      const maxRequests = config.get<number>('rateLimit.applicationConfirm.byIp.max');
+      const windowMs = config.get<number>('rateLimit.applicationConfirm.byIp.windowMs');
+
+      expect(maxRequests).toBe(20);
+      expect(windowMs).toBe(900000); // 15 minutes
+    });
+
     it('should check if rate limiting is enabled in config', () => {
       const enabled = config.get<boolean>('rateLimit.enabled');
       // In test environment, rate limiting is disabled
@@ -140,6 +167,21 @@ describe('rate-limiters', () => {
     it('should export publicEventInstanceByIp limiter', () => {
       expect(publicEventInstanceByIp).toBeDefined();
       expect(typeof publicEventInstanceByIp).toBe('function');
+    });
+
+    it('should export applicationByIp limiter', () => {
+      expect(applicationByIp).toBeDefined();
+      expect(typeof applicationByIp).toBe('function');
+    });
+
+    it('should export applicationByEmail limiter', () => {
+      expect(applicationByEmail).toBeDefined();
+      expect(typeof applicationByEmail).toBe('function');
+    });
+
+    it('should export confirmApplicationByIp limiter', () => {
+      expect(confirmApplicationByIp).toBeDefined();
+      expect(typeof confirmApplicationByIp).toBe('function');
     });
   });
 
@@ -497,6 +539,80 @@ describe('rate-limiters', () => {
       const response = await request(app)
         .post('/report')
         .send({ data: 'test' });
+
+      expect(response.status).toBe(200);
+
+      if (config.get<boolean>('rateLimit.enabled')) {
+        expect(response.headers['ratelimit-limit']).toBeDefined();
+        expect(response.headers['ratelimit-remaining']).toBeDefined();
+      }
+      else {
+        expect(response.headers['ratelimit-limit']).toBeUndefined();
+      }
+    });
+
+    it('should apply applicationByIp limiter to endpoint', async () => {
+      app.post('/apply', applicationByIp, (req, res) => {
+        res.json({ success: true });
+      });
+
+      const response = await request(app).post('/apply');
+      expect(response.status).toBe(200);
+
+      if (config.get<boolean>('rateLimit.enabled')) {
+        expect(response.headers['ratelimit-limit']).toBeDefined();
+        expect(response.headers['ratelimit-remaining']).toBeDefined();
+      }
+      else {
+        expect(response.headers['ratelimit-limit']).toBeUndefined();
+      }
+    });
+
+    it('should apply applicationByEmail limiter to endpoint', async () => {
+      app.post('/apply', applicationByEmail, (req, res) => {
+        res.json({ success: true });
+      });
+
+      const response = await request(app)
+        .post('/apply')
+        .send({ email: 'test@example.com' });
+
+      expect(response.status).toBe(200);
+
+      if (config.get<boolean>('rateLimit.enabled')) {
+        expect(response.headers['ratelimit-limit']).toBeDefined();
+        expect(response.headers['ratelimit-remaining']).toBeDefined();
+      }
+      else {
+        expect(response.headers['ratelimit-limit']).toBeUndefined();
+      }
+    });
+
+    it('should apply confirmApplicationByIp limiter to endpoint', async () => {
+      app.get('/confirm', confirmApplicationByIp, (req, res) => {
+        res.json({ success: true });
+      });
+
+      const response = await request(app).get('/confirm');
+      expect(response.status).toBe(200);
+
+      if (config.get<boolean>('rateLimit.enabled')) {
+        expect(response.headers['ratelimit-limit']).toBeDefined();
+        expect(response.headers['ratelimit-remaining']).toBeDefined();
+      }
+      else {
+        expect(response.headers['ratelimit-limit']).toBeUndefined();
+      }
+    });
+
+    it('should allow combining application IP and email limiters', async () => {
+      app.post('/apply', applicationByIp, applicationByEmail, (req, res) => {
+        res.json({ success: true });
+      });
+
+      const response = await request(app)
+        .post('/apply')
+        .send({ email: 'test@example.com' });
 
       expect(response.status).toBe(200);
 
