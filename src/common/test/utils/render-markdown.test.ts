@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, it, expect } from 'vitest';
-import { renderPolicyMarkdown } from '@/common/utils/render-markdown';
+import { renderPolicyMarkdown, isPolicySourceSafe } from '@/common/utils/render-markdown';
 
 /**
  * XSS regression suite for the policy-markdown sanitization pipeline.
@@ -129,6 +129,100 @@ describe('renderPolicyMarkdown', () => {
       expect(output).not.toContain('<h1');
       // Content text is preserved (DOMPurify keeps inner text when stripping the wrapper tag)
       expect(output).toContain('Should be stripped');
+    });
+  });
+});
+
+/**
+ * Direct unit tests for the `isPolicySourceSafe` predicate. The predicate
+ * runs Layer 1 (marked) and Layer 2 (DOMPurify) and reports whether
+ * DOMPurify would strip or rewrite anything from the parsed output. The
+ * persistence layer uses this to refuse dangerous input rather than
+ * silently downgrading it.
+ *
+ * Tests cover: representative safe markdown round-trips cleanly; each XSS
+ * vector class is rejected; and h1 — intentionally absent from
+ * ALLOWED_TAGS as an allowlist constraint, not an XSS vector — is
+ * rejected so the persistence layer cannot accept content the renderer
+ * would silently strip.
+ */
+describe('isPolicySourceSafe', () => {
+  describe('returns true for safe markdown', () => {
+    it('accepts h2 headings', () => {
+      expect(isPolicySourceSafe('## Section')).toBe(true);
+    });
+
+    it('accepts h3 headings', () => {
+      expect(isPolicySourceSafe('### Subsection')).toBe(true);
+    });
+
+    it('accepts paragraphs', () => {
+      expect(isPolicySourceSafe('A simple paragraph of text.')).toBe(true);
+    });
+
+    it('accepts unordered lists', () => {
+      expect(isPolicySourceSafe('- one\n- two\n- three')).toBe(true);
+    });
+
+    it('accepts ordered lists', () => {
+      expect(isPolicySourceSafe('1. one\n2. two\n3. three')).toBe(true);
+    });
+
+    it('accepts http/https links', () => {
+      expect(isPolicySourceSafe('[link](https://example.com)')).toBe(true);
+    });
+
+    it('accepts mailto: links', () => {
+      expect(isPolicySourceSafe('[mail](mailto:a@b.c)')).toBe(true);
+    });
+
+    it('accepts emphasis (em and strong)', () => {
+      expect(isPolicySourceSafe('*emph* and **bold**')).toBe(true);
+    });
+
+    it('accepts inline code and code blocks', () => {
+      expect(isPolicySourceSafe('Some `inline` code.\n\n    block code')).toBe(true);
+    });
+
+    it('accepts blockquotes', () => {
+      expect(isPolicySourceSafe('> quoted text')).toBe(true);
+    });
+  });
+
+  describe('returns false for XSS vectors', () => {
+    it('rejects raw <script> tags', () => {
+      expect(isPolicySourceSafe('<script>alert(1)</script>')).toBe(false);
+    });
+
+    it('rejects <iframe> tags', () => {
+      expect(isPolicySourceSafe('<iframe src="https://evil.example"></iframe>')).toBe(false);
+    });
+
+    it('rejects <img> with onerror handler', () => {
+      expect(isPolicySourceSafe('<img onerror=alert(1) src=x>')).toBe(false);
+    });
+
+    it('rejects markdown link with javascript: scheme', () => {
+      expect(isPolicySourceSafe('[click](javascript:alert(1))')).toBe(false);
+    });
+
+    it('rejects raw <a> with javascript: href', () => {
+      expect(isPolicySourceSafe('<a href="javascript:alert(1)">click</a>')).toBe(false);
+    });
+
+    it('rejects markdown image with data: URI', () => {
+      expect(isPolicySourceSafe('![img](data:image/svg+xml,<svg onload=alert(1)>)')).toBe(false);
+    });
+  });
+
+  describe('returns false for allowlist boundary cases', () => {
+    it('rejects h1 headings (intentional allowlist constraint — use h2)', () => {
+      // h1 is intentionally absent from ALLOWED_TAGS because the page
+      // already carries a site-level h1; admin-authored h1 would break
+      // heading hierarchy. This is not an XSS vector, but the predicate
+      // must still reject so the persistence layer never stores content
+      // the renderer would silently strip.
+      expect(isPolicySourceSafe('# Welcome')).toBe(false);
     });
   });
 });

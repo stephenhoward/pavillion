@@ -4,7 +4,7 @@ import ServiceSettingEntity from "@/server/configuration/entity/settings";
 import SettingsContentEntity from "@/server/configuration/entity/settings_content";
 import type { DefaultDateRange } from '@/common/model/calendar';
 import { isValidLanguageCode, DEFAULT_LANGUAGE_CODE, getDefaultEnabledLanguageCodes } from '@/common/i18n/languages';
-import { renderPolicyMarkdown } from '@/common/utils/render-markdown';
+import { isPolicySourceSafe } from '@/common/utils/render-markdown';
 import { createLogger } from '@/server/common/helper/logger';
 
 const logger = createLogger('configuration');
@@ -201,9 +201,11 @@ class ServiceSettings {
   }
 
   /**
-   * Returns the instance policy as a language-keyed object of sanitized
-   * HTML, loaded from the settings_content table. Filters out null / empty
-   * policy rows so callers only see languages with a real policy set.
+   * Returns the instance policy as a language-keyed object of raw markdown
+   * source, loaded from the settings_content table. Markdown is stored at
+   * rest and rendered at view time by callers (e.g. the public /policy
+   * page) via `renderPolicyMarkdown`. Filters out null / empty policy rows
+   * so callers only see languages with a real policy set.
    */
   async getInstancePolicy(): Promise<Record<string, string>> {
     const rows = await SettingsContentEntity.findAll();
@@ -218,11 +220,15 @@ class ServiceSettings {
 
   /**
    * Replaces instance policies with the provided language-keyed object of
-   * raw markdown source. Each value is rendered through `renderPolicyMarkdown`
-   * (the sanitization pipeline) before being persisted; the policy column
-   * NEVER receives unsanitized input. Languages absent from the input but
-   * present in existing rows have their policy column set to NULL (the row
-   * is preserved because description may exist). Rows where both columns are
+   * raw markdown source. Each value is dry-rendered through the
+   * marked + DOMPurify pipeline (`isPolicySourceSafe`) and the WHOLE
+   * batch is rejected if DOMPurify would strip or rewrite anything
+   * (forbidden tag, attribute, or URI scheme). Surviving values are
+   * persisted to `settings_content.policy` as raw markdown source —
+   * rendering to HTML happens at view time (e.g. the public /policy page),
+   * not at save time. Languages absent from the input but present in
+   * existing rows have their policy column set to NULL (the row is
+   * preserved because description may exist). Rows where both columns are
    * null/empty are cleaned up at the end.
    *
    * @param policies - Language-keyed object of raw markdown source strings
@@ -270,13 +276,20 @@ class ServiceSettings {
     const presentEntries = Object.entries(policies).filter(([, value]) => value !== '');
     const presentLanguages = new Set(presentEntries.map(([language]) => language));
 
-    // Render each present value through the sanitization pipeline. This is
-    // the ONLY code path in this file that writes to the policy column;
-    // every value flows through renderPolicyMarkdown before persistence.
-    const sanitized: Array<[string, string]> = presentEntries.map(([language, source]) => [
-      language,
-      renderPolicyMarkdown(source),
-    ]);
+    // Dry-render gate: refuse the whole batch if any present-language
+    // value would lose content when run through the marked + DOMPurify
+    // pipeline. This is the security-critical reject-on-save check —
+    // dangerous input never reaches the database, and the editor sees
+    // exactly what the public render path will produce.
+    for (const [language, source] of presentEntries) {
+      if (!isPolicySourceSafe(source)) {
+        logger.error(
+          { language },
+          'Invalid instancePolicy: source contains content that would be stripped by sanitization',
+        );
+        return false;
+      }
+    }
 
     // Nullify-on-missing: for any existing row whose language is not in the
     // present set, set policy = NULL (do NOT destroy — description may exist).
@@ -288,15 +301,16 @@ class ServiceSettings {
       }
     }
 
-    // Create or update rows for each present language using sanitized HTML.
-    for (const [language, sanitizedHtml] of sanitized) {
+    // Create or update rows for each present language. The policy column
+    // stores raw markdown source — rendering happens at view time.
+    for (const [language, source] of presentEntries) {
       const [entity, created] = await SettingsContentEntity.findOrCreate({
         where: { language },
-        defaults: { language, policy: sanitizedHtml },
+        defaults: { language, policy: source },
       });
 
       if (!created) {
-        entity.policy = sanitizedHtml;
+        entity.policy = source;
         await entity.save();
       }
     }

@@ -128,10 +128,11 @@ export default class SetupService {
    * setup proceeds without seeding.
    *
    * Sanitization: the raw markdown source is passed to
-   * `setInstancePolicy`, which routes the value through
-   * `renderPolicyMarkdown` exactly once before persistence. This keeps the
-   * sanitization pipeline as the single source of truth and avoids any
-   * double-sanitization concern.
+   * `setInstancePolicy`, which dry-renders the value through
+   * `isPolicySourceSafe` (marked + DOMPurify) and rejects dangerous
+   * input rather than silently downgrading it. Safe markdown is
+   * persisted as-is — render-to-HTML happens at view time on the public
+   * /policy page, not at save time.
    *
    * Defensive contract: this method MUST NEVER throw, MUST NEVER block
    * setup completion, and MUST NEVER block admin login. All errors are
@@ -168,8 +169,8 @@ export default class SetupService {
       }
 
       // Pass raw markdown to setInstancePolicy. The configuration service
-      // sanitizes via renderPolicyMarkdown before persistence — single
-      // sanitization path.
+      // dry-renders via isPolicySourceSafe and rejects dangerous input;
+      // safe markdown is persisted as-is and rendered at view time.
       await this.configInterface.setInstancePolicy({ en: markdownSource });
     }
     catch (err) {

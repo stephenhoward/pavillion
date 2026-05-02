@@ -774,12 +774,12 @@ describe('ServiceSettings', () => {
         sandbox.stub(SettingsContentEntity, 'destroy').resolves();
       });
 
-      it('should accept a valid language-keyed object', async () => {
+      it('should accept a valid language-keyed object and persist raw markdown source', async () => {
         sandbox.stub(ServiceSettingEntity, 'findAll').resolves([]);
         sandbox.stub(SettingsContentEntity, 'findAll').resolves([]);
         const findOrCreateStub = sandbox.stub(SettingsContentEntity, 'findOrCreate');
         findOrCreateStub.resolves([
-          { language: 'en', policy: '<p>Hello</p>', save: sandbox.stub().resolves() } as unknown as SettingsContentEntity,
+          { language: 'en', policy: 'Hello', save: sandbox.stub().resolves() } as unknown as SettingsContentEntity,
           true,
         ]);
 
@@ -788,6 +788,39 @@ describe('ServiceSettings', () => {
 
         expect(result).toBe(true);
         expect(findOrCreateStub.callCount).toBe(2);
+        // Raw markdown source is persisted via the `defaults.policy` payload —
+        // no HTML rendering happens at save time.
+        const enArgs = findOrCreateStub.firstCall.args[0] as { defaults?: { policy?: string } };
+        expect(enArgs.defaults?.policy).toBe('Hello');
+        const esArgs = findOrCreateStub.secondCall.args[0] as { defaults?: { policy?: string } };
+        expect(esArgs.defaults?.policy).toBe('Hola');
+      });
+
+      it('should persist legitimate markdown (headings/lists/links/emphasis/code/blockquote) as raw source', async () => {
+        sandbox.stub(ServiceSettingEntity, 'findAll').resolves([]);
+        sandbox.stub(SettingsContentEntity, 'findAll').resolves([]);
+        const findOrCreateStub = sandbox.stub(SettingsContentEntity, 'findOrCreate');
+        findOrCreateStub.resolves([
+          { language: 'en', policy: '', save: sandbox.stub().resolves() } as unknown as SettingsContentEntity,
+          true,
+        ]);
+
+        const safeMarkdown =
+          '## Section\n\n' +
+          '### Subsection\n\n' +
+          'A paragraph with *emph* and **bold** and `code`.\n\n' +
+          '- one\n- two\n\n' +
+          '> quote\n\n' +
+          '[link](https://example.com)\n' +
+          '[mail](mailto:a@b.c)\n';
+
+        const settings = await ServiceSettings.getInstance();
+        const result = await settings.setInstancePolicy({ en: safeMarkdown });
+
+        expect(result).toBe(true);
+        const args = findOrCreateStub.firstCall.args[0] as { defaults?: { policy?: string } };
+        // Persisted value is the raw markdown source, byte-for-byte.
+        expect(args.defaults?.policy).toBe(safeMarkdown);
       });
 
       it('should accept an empty object', async () => {
@@ -832,7 +865,7 @@ describe('ServiceSettings', () => {
         sandbox.stub(ServiceSettingEntity, 'findAll').resolves([]);
         sandbox.stub(SettingsContentEntity, 'findAll').resolves([]);
         sandbox.stub(SettingsContentEntity, 'findOrCreate').resolves([
-          { language: 'en', policy: '<p>...</p>', save: sandbox.stub().resolves() } as unknown as SettingsContentEntity,
+          { language: 'en', policy: exactText, save: sandbox.stub().resolves() } as unknown as SettingsContentEntity,
           true,
         ]);
 
@@ -902,14 +935,14 @@ describe('ServiceSettings', () => {
         // also null the orphan-cleanup helper would destroy it, but
         // getInstancePolicy must filter null/empty regardless.
         sandbox.stub(SettingsContentEntity, 'findAll').resolves([
-          { language: 'en', description: null, policy: '<p>Updated</p>' } as unknown as SettingsContentEntity,
+          { language: 'en', description: null, policy: '## Updated' } as unknown as SettingsContentEntity,
           { language: 'es', description: null, policy: null } as unknown as SettingsContentEntity,
         ]);
 
         const settings = await ServiceSettings.getInstance();
         const result = await settings.getInstancePolicy();
 
-        expect(result).toEqual({ en: '<p>Updated</p>' });
+        expect(result).toEqual({ en: '## Updated' });
         expect(result).not.toHaveProperty('es');
       });
 
@@ -919,15 +952,15 @@ describe('ServiceSettings', () => {
         const frRow = {
           language: 'fr',
           description: null,
-          policy: '<p>Politique</p>',
+          policy: '## Politique',
           save: frSaveStub,
         } as unknown as SettingsContentEntity;
         sandbox.stub(SettingsContentEntity, 'findAll').resolves([
-          { language: 'en', description: null, policy: '<p>Old</p>' } as unknown as SettingsContentEntity,
+          { language: 'en', description: null, policy: '## Old' } as unknown as SettingsContentEntity,
           frRow,
         ]);
         sandbox.stub(SettingsContentEntity, 'findOrCreate').resolves([
-          { language: 'en', policy: '<p>New</p>', save: sandbox.stub().resolves() } as unknown as SettingsContentEntity,
+          { language: 'en', policy: '## New', save: sandbox.stub().resolves() } as unknown as SettingsContentEntity,
           false,
         ]);
 
@@ -940,17 +973,17 @@ describe('ServiceSettings', () => {
         expect(frSaveStub.calledOnce).toBe(true);
       });
 
-      it('should load instancePolicy from database', async () => {
+      it('should load instancePolicy from database as raw markdown source', async () => {
         sandbox.stub(ServiceSettingEntity, 'findAll').resolves([]);
         sandbox.stub(SettingsContentEntity, 'findAll').resolves([
-          { language: 'en', description: null, policy: '<p>Welcome</p>' } as unknown as SettingsContentEntity,
-          { language: 'fr', description: null, policy: '<p>Bienvenue</p>' } as unknown as SettingsContentEntity,
+          { language: 'en', description: null, policy: '## Welcome' } as unknown as SettingsContentEntity,
+          { language: 'fr', description: null, policy: '## Bienvenue' } as unknown as SettingsContentEntity,
         ]);
 
         const settings = await ServiceSettings.getInstance();
         const result = await settings.getInstancePolicy();
 
-        expect(result).toEqual({ en: '<p>Welcome</p>', fr: '<p>Bienvenue</p>' });
+        expect(result).toEqual({ en: '## Welcome', fr: '## Bienvenue' });
       });
 
       it('should return empty object when no policies exist', async () => {
@@ -963,59 +996,73 @@ describe('ServiceSettings', () => {
         expect(result).toEqual({});
       });
 
-      describe('sanitize-on-save round-trip (security-critical)', () => {
-        it('should never persist unsanitized HTML — strips <script>, javascript: URLs, and event handlers', async () => {
-          sandbox.stub(ServiceSettingEntity, 'findAll').resolves([]);
-          sandbox.stub(SettingsContentEntity, 'findAll').resolves([]);
+      describe('reject-on-save dry-render gate (security-critical)', () => {
+        // Per memory `feedback-sanitize-on-save`: the persistence layer
+        // refuses dangerous input rather than silently downgrading it. The
+        // setter dry-renders through marked + DOMPurify and rejects the
+        // whole batch if DOMPurify would strip anything. No DB write is
+        // attempted — `findOrCreate` and the row-level `save` must NOT be
+        // invoked when validation fails.
+        const xssVectors: Array<{ name: string; input: string }> = [
+          { name: 'raw <script> tag', input: '<script>alert(1)</script>' },
+          { name: '<iframe> tag', input: '<iframe src="https://evil.example"></iframe>' },
+          { name: '<img> with onerror handler', input: '<img onerror=alert(1) src=x>' },
+          { name: 'markdown link with javascript: scheme', input: '[bad](javascript:foo)' },
+          { name: '<a> with javascript: href', input: '<a href="javascript:alert(1)">click</a>' },
+        ];
 
-          // Capture what is actually written to the policy column. The
-          // findOrCreate path with `created=true` persists via the `defaults`
-          // payload, so we inspect findOrCreate's args.
-          const savedRow = {
-            language: 'en',
-            policy: '',
-            save: sandbox.stub().resolves(),
-          } as unknown as SettingsContentEntity;
-          const findOrCreateStub = sandbox.stub(SettingsContentEntity, 'findOrCreate');
-          findOrCreateStub.callsFake(async (opts: { defaults?: { policy?: string } } = {}) => {
-            // Mirror the `defaults.policy` onto the returned row so that
-            // either inspection point (defaults or returned entity) reveals
-            // the sanitized value the service wants to write.
-            const policy = opts.defaults?.policy ?? '';
-            (savedRow as unknown as { policy: string }).policy = policy;
-            return [savedRow, true] as unknown as [SettingsContentEntity, boolean];
+        for (const { name, input } of xssVectors) {
+          it(`rejects dangerous input (${name}) and writes nothing to the database`, async () => {
+            sandbox.stub(ServiceSettingEntity, 'findAll').resolves([]);
+            const findAllContent = sandbox.stub(SettingsContentEntity, 'findAll').resolves([]);
+            const findOrCreateStub = sandbox.stub(SettingsContentEntity, 'findOrCreate');
+
+            const settings = await ServiceSettings.getInstance();
+            const result = await settings.setInstancePolicy({ en: input });
+
+            expect(result).toBe(false);
+            // The dry-render gate runs BEFORE any DB read or write on the
+            // present-language path; findOrCreate must not be invoked.
+            expect(findOrCreateStub.called).toBe(false);
+            // The findAll for the nullify-on-missing scan must also not run
+            // — the entire batch is rejected before any DB I/O.
+            expect(findAllContent.called).toBe(false);
           });
+        }
 
-          // Mix of XSS vectors arranged in valid markdown block structure so
-          // each construct is parsed and presented to the sanitizer in its
-          // intended form (raw HTML tags, parsed links, parsed inline HTML).
-          const dangerous =
-            '<script>alert(1)</script>\n\n' +
-            '[bad](javascript:foo)\n\n' +
-            '<a href="javascript:alert(1)">click</a>\n\n' +
-            '<img onerror=alert(1) onload=alert(2) src=x>';
+        it('rejects a batch when even one language carries dangerous input', async () => {
+          sandbox.stub(ServiceSettingEntity, 'findAll').resolves([]);
+          const findAllContent = sandbox.stub(SettingsContentEntity, 'findAll').resolves([]);
+          const findOrCreateStub = sandbox.stub(SettingsContentEntity, 'findOrCreate');
 
           const settings = await ServiceSettings.getInstance();
-          const result = await settings.setInstancePolicy({ en: dangerous });
+          const result = await settings.setInstancePolicy({
+            en: '## Safe heading',
+            es: '<script>alert(1)</script>',
+          });
 
-          expect(result).toBe(true);
+          expect(result).toBe(false);
+          expect(findOrCreateStub.called).toBe(false);
+          expect(findAllContent.called).toBe(false);
+        });
 
-          // The persisted policy value (whether read from defaults or the
-          // returned row) must contain none of the XSS vectors.
-          const persisted = (savedRow as unknown as { policy: string }).policy;
-          expect(persisted).not.toMatch(/<script/i);
-          expect(persisted).not.toMatch(/javascript:/i);
-          expect(persisted).not.toMatch(/onerror/i);
-          expect(persisted).not.toMatch(/onload/i);
+        it('rejects h1 headings (intentional allowlist constraint — use h2)', async () => {
+          // h1 is intentionally absent from ALLOWED_TAGS because the page
+          // already carries a site-level h1; admin-authored h1 would
+          // break heading hierarchy. This is not an XSS vector — it is
+          // an allowlist constraint — but the persistence layer must
+          // still reject so it never stores content the renderer would
+          // silently strip.
+          sandbox.stub(ServiceSettingEntity, 'findAll').resolves([]);
+          const findAllContent = sandbox.stub(SettingsContentEntity, 'findAll').resolves([]);
+          const findOrCreateStub = sandbox.stub(SettingsContentEntity, 'findOrCreate');
 
-          // Defense-in-depth: also confirm the findOrCreate `defaults` payload
-          // (the actual write vector for new rows) was sanitized.
-          const callArgs = findOrCreateStub.firstCall.args[0] as { defaults?: { policy?: string } };
-          const defaultsPolicy = callArgs.defaults?.policy ?? '';
-          expect(defaultsPolicy).not.toMatch(/<script/i);
-          expect(defaultsPolicy).not.toMatch(/javascript:/i);
-          expect(defaultsPolicy).not.toMatch(/onerror/i);
-          expect(defaultsPolicy).not.toMatch(/onload/i);
+          const settings = await ServiceSettings.getInstance();
+          const result = await settings.setInstancePolicy({ en: '# Welcome' });
+
+          expect(result).toBe(false);
+          expect(findOrCreateStub.called).toBe(false);
+          expect(findAllContent.called).toBe(false);
         });
       });
     });
@@ -1032,7 +1079,7 @@ describe('ServiceSettings', () => {
         const enRow = {
           language: 'en',
           description: 'Old description',
-          policy: '<p>Existing policy</p>',
+          policy: '## Existing policy',
           save: sandbox.stub().resolves(),
         } as unknown as SettingsContentEntity;
         sandbox.stub(SettingsContentEntity, 'findAll').resolves([enRow]);
@@ -1044,7 +1091,7 @@ describe('ServiceSettings', () => {
         expect(result).toBe(true);
         expect(enRow.description).toBe('New description');
         // Policy column untouched on this code path
-        expect(enRow.policy).toBe('<p>Existing policy</p>');
+        expect(enRow.policy).toBe('## Existing policy');
       });
 
       it('should preserve description when only policy is updated', async () => {
@@ -1052,20 +1099,21 @@ describe('ServiceSettings', () => {
         const enRow = {
           language: 'en',
           description: 'Existing description',
-          policy: '<p>Old policy</p>',
+          policy: '## Old policy',
           save: sandbox.stub().resolves(),
         } as unknown as SettingsContentEntity;
         sandbox.stub(SettingsContentEntity, 'findAll').resolves([enRow]);
         sandbox.stub(SettingsContentEntity, 'findOrCreate').resolves([enRow, false]);
 
         const settings = await ServiceSettings.getInstance();
-        const result = await settings.setInstancePolicy({ en: 'New policy source' });
+        const result = await settings.setInstancePolicy({ en: '## New policy source' });
 
         expect(result).toBe(true);
         // Description column untouched on this code path
         expect(enRow.description).toBe('Existing description');
-        // Policy is rewritten through the sanitization pipeline; just verify it changed
-        expect(enRow.policy).not.toBe('<p>Old policy</p>');
+        // Policy column receives the raw markdown source byte-for-byte —
+        // no rendering happens at save time.
+        expect(enRow.policy).toBe('## New policy source');
       });
 
       it('should preserve description when policy is cleared (description set, policy null still keeps row)', async () => {
@@ -1074,7 +1122,7 @@ describe('ServiceSettings', () => {
         const enRow = {
           language: 'en',
           description: 'Existing description',
-          policy: '<p>Existing policy</p>',
+          policy: '## Existing policy',
           save: enSaveStub,
         } as unknown as SettingsContentEntity;
         sandbox.stub(SettingsContentEntity, 'findAll').resolves([enRow]);
@@ -1098,7 +1146,7 @@ describe('ServiceSettings', () => {
         const enRow = {
           language: 'en',
           description: 'Existing description',
-          policy: '<p>Existing policy</p>',
+          policy: '## Existing policy',
           save: enSaveStub,
         } as unknown as SettingsContentEntity;
         sandbox.stub(SettingsContentEntity, 'findAll').resolves([enRow]);
@@ -1110,7 +1158,7 @@ describe('ServiceSettings', () => {
         expect(result).toBe(true);
         // Description nullified, policy preserved
         expect(enRow.description).toBeNull();
-        expect(enRow.policy).toBe('<p>Existing policy</p>');
+        expect(enRow.policy).toBe('## Existing policy');
         expect(enSaveStub.calledOnce).toBe(true);
         expect(findOrCreateStub.called).toBe(false);
       });
@@ -1146,7 +1194,7 @@ describe('ServiceSettings', () => {
         const enRow = {
           language: 'en',
           description: 'Initial description',
-          policy: '<p>Initial policy</p>',
+          policy: '## Initial policy',
           save: sandbox.stub().resolves(),
         } as unknown as SettingsContentEntity;
         sandbox.stub(SettingsContentEntity, 'findAll').resolves([enRow]);
@@ -1158,7 +1206,7 @@ describe('ServiceSettings', () => {
         const policy = await settings.getInstancePolicy();
 
         expect(description).toEqual({ en: 'Initial description' });
-        expect(policy).toEqual({ en: '<p>Initial policy</p>' });
+        expect(policy).toEqual({ en: '## Initial policy' });
       });
     });
   });

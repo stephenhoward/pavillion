@@ -69,6 +69,29 @@ export function sanitizePolicyHtml(html: string): string {
 }
 
 /**
+ * Module-private helper that runs Layer 1 of the policy pipeline: parse
+ * markdown source to HTML using a single, identical `marked` configuration.
+ * Both `renderPolicyMarkdown` (which then sanitizes through DOMPurify) and
+ * `isPolicySourceSafe` (which compares the parsed output against the
+ * sanitized output to detect strip events) share this helper so the
+ * marked options can never drift between the two call sites.
+ *
+ * `html: false` is passed as a security signal documenting intent (no
+ * raw-HTML passthrough at parse time). marked >=15 ignores the flag and
+ * always passes raw HTML through, so DOMPurify in Layer 2 is the
+ * authoritative defense; we keep the option for forward-compatibility and
+ * contract-clarity.
+ */
+function parsePolicyMarkdown(source: string): string {
+  return marked.parse(source, {
+    async: false,
+    gfm: true,
+    breaks: false,
+    html: false,
+  } as Parameters<typeof marked.parse>[1]) as string;
+}
+
+/**
  * Render markdown source through a two-layer sanitization pipeline producing
  * safe HTML suitable for storage and `v-html` rendering.
  *
@@ -86,19 +109,28 @@ export function sanitizePolicyHtml(html: string): string {
  * @returns Sanitized HTML safe for storage and rendering via `v-html`
  */
 export function renderPolicyMarkdown(source: string): string {
-  // Layer 1: parse markdown into HTML.
-  // `html: false` is passed as a security signal documenting intent (no
-  // raw-HTML passthrough at parse time). marked >=15 ignores the flag and
-  // always passes raw HTML through, so DOMPurify in Layer 2 is the
-  // authoritative defense; we keep the option for forward-compatibility and
-  // contract-clarity.
-  const html = marked.parse(source, {
-    async: false,
-    gfm: true,
-    breaks: false,
-    html: false,
-  } as Parameters<typeof marked.parse>[1]) as string;
-
-  // Layer 2: DOMPurify with closed allowlist + URI scheme allowlist.
+  const html = parsePolicyMarkdown(source);
   return DOMPurify.sanitize(html, POLICY_PURIFY_CONFIG);
+}
+
+/**
+ * Predicate used by the persistence layer to decide whether a markdown
+ * source string can be stored as-is. Runs the same two-layer pipeline as
+ * `renderPolicyMarkdown`, then compares the raw marked output against the
+ * DOMPurify-sanitized output. If DOMPurify would strip or rewrite
+ * anything (a forbidden tag, attribute, or URI scheme), the strings differ
+ * and the source is rejected.
+ *
+ * Intent: store markdown source at rest, not pre-rendered HTML. The render
+ * happens at view time. The save-time check refuses dangerous input rather
+ * than silently downgrading it to safe HTML, so the editor and the public
+ * page render identical content.
+ *
+ * @param source - Markdown source to validate
+ * @returns true if the source survives the sanitization pipeline unchanged
+ */
+export function isPolicySourceSafe(source: string): boolean {
+  const html = parsePolicyMarkdown(source);
+  const purified = DOMPurify.sanitize(html, POLICY_PURIFY_CONFIG);
+  return html === purified;
 }
