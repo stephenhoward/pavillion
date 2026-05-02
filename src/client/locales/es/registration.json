@@ -21,7 +21,7 @@
     "MissingFields": "Por favor completa todos los campos obligatorios.",
     "400": "error al registrar",
     "unknown_error": "Ocurrió un error desconocido",
-    "application_submitted": "TODO: Si este correo no está registrado, tu solicitud será revisada.",
+    "application_submitted": "Si tu dirección de correo electrónico es elegible, recibirás un correo de confirmación en breve. Por favor haz clic en el enlace de ese correo para completar tu solicitud.",
     "account_applications_closed": "Las solicitudes de cuenta están actualmente cerradas.",
     "application_processing_error": "Ocurrió un error al procesar tu solicitud. Por favor intenta más tarde.",
     "invalid_request": "Solicitud inválida. Por favor verifica tu información e intenta nuevamente."
