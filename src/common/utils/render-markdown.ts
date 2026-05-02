@@ -100,12 +100,49 @@ export function renderPolicyMarkdown(source: string): string {
 }
 
 /**
+ * Normalizes the subset of HTML character-entity references that DOMPurify
+ * decodes to literal characters in text content but that `marked` emits as
+ * numeric or named entity references for HTML safety. Applying this to both
+ * sides of the `isPolicySourceSafe` equality check prevents false-positive
+ * rejection of safe content such as ASCII apostrophes and double-quotes.
+ *
+ * Only the entities empirically verified to cause the asymmetry are decoded:
+ * - `&#39;` / `&#x27;` / `&apos;` → `'`  (ASCII apostrophe, U+0027)
+ * - `&quot;` / `&#34;` / `&#x22;`  → `"`  (ASCII double-quote, U+0022)
+ *
+ * `&lt;`, `&gt;`, and `&amp;` are intentionally NOT decoded — they carry
+ * HTML structural meaning, DOMPurify preserves them, and decoding them would
+ * cause the comparison to miss strip events that involve angle brackets or
+ * ampersands in text.
+ */
+function normalizeEntitiesForComparison(html: string): string {
+  return html
+    .replace(/&#39;/g, "'")
+    .replace(/&#x27;/gi, "'")
+    .replace(/&apos;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/&#34;/g, '"')
+    .replace(/&#x22;/gi, '"');
+}
+
+/**
  * Predicate used by the persistence layer to decide whether a markdown
  * source string can be stored as-is. Runs the same two-layer pipeline as
  * `renderPolicyMarkdown`, then compares the raw marked output against the
  * DOMPurify-sanitized output. If DOMPurify would strip or rewrite
  * anything (a forbidden tag, attribute, or URI scheme), the strings differ
  * and the source is rejected.
+ *
+ * Both sides of the comparison are passed through
+ * `normalizeEntitiesForComparison` before the equality check. `marked`
+ * entity-encodes ASCII apostrophes (`'` → `&#39;`) and double-quotes
+ * (`"` → `&quot;`) for HTML safety, while DOMPurify normalizes those same
+ * entities back to literal characters because they carry no HTML structural
+ * meaning in text content. Without normalization the strings differ for any
+ * source containing these characters even though no actual strip event
+ * occurred. The normalization step is applied to both sides so that real
+ * strip events — where DOMPurify removes whole tags or attributes — still
+ * cause a mismatch and are correctly rejected.
  *
  * Intent: store markdown source at rest, not pre-rendered HTML. The render
  * happens at view time. The save-time check refuses dangerous input rather
@@ -118,5 +155,5 @@ export function renderPolicyMarkdown(source: string): string {
 export function isPolicySourceSafe(source: string): boolean {
   const html = parsePolicyMarkdown(source);
   const purified = DOMPurify.sanitize(html, POLICY_PURIFY_CONFIG);
-  return html === purified;
+  return normalizeEntitiesForComparison(html) === normalizeEntitiesForComparison(purified);
 }

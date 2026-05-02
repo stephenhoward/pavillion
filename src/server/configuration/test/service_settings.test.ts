@@ -833,6 +833,28 @@ describe('ServiceSettings', () => {
         expect(result).toBe(true);
       });
 
+      it('should accept markdown containing ASCII apostrophes (contractions) and persist source verbatim', async () => {
+        // Regression test for pv-kcrx: marked entity-encodes ASCII apostrophes
+        // as &#39; while DOMPurify normalizes them back to literal ', causing
+        // the isPolicySourceSafe equality check to falsely reject contractions.
+        const source = "Don't worry, this is fine.";
+        sandbox.stub(ServiceSettingEntity, 'findAll').resolves([]);
+        sandbox.stub(SettingsContentEntity, 'findAll').resolves([]);
+        const findOrCreateStub = sandbox.stub(SettingsContentEntity, 'findOrCreate');
+        findOrCreateStub.resolves([
+          { language: 'en', policy: source, save: sandbox.stub().resolves() } as unknown as SettingsContentEntity,
+          true,
+        ]);
+
+        const settings = await ServiceSettings.getInstance();
+        const result = await settings.setInstancePolicy({ en: source });
+
+        expect(result).toBe(true);
+        // Source is persisted verbatim — no encoding or rendering at save time.
+        const args = findOrCreateStub.firstCall.args[0] as { defaults?: { policy?: string } };
+        expect(args.defaults?.policy).toBe(source);
+      });
+
       it('should reject an array value', async () => {
         sandbox.stub(ServiceSettingEntity, 'findAll').resolves([]);
 

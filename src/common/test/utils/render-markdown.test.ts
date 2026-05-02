@@ -187,6 +187,26 @@ describe('isPolicySourceSafe', () => {
     it('accepts blockquotes', () => {
       expect(isPolicySourceSafe('> quoted text')).toBe(true);
     });
+
+    // Entity-normalization cases: marked emits &#39; for ASCII apostrophes and
+    // &quot; for ASCII double-quotes; DOMPurify normalizes both back to literal
+    // characters. Without the normalizeEntitiesForComparison step the strings
+    // differ and common English contractions / quoted text are falsely rejected.
+    it('accepts ASCII apostrophe in contractions (don\'t)', () => {
+      expect(isPolicySourceSafe("don't worry")).toBe(true);
+    });
+
+    it('accepts ASCII apostrophe in multiple contractions (can\'t, won\'t, we\'re)', () => {
+      expect(isPolicySourceSafe("can't stop, won't stop, we're here")).toBe(true);
+    });
+
+    it('accepts ASCII double-quote in text', () => {
+      expect(isPolicySourceSafe('She said "hello".')).toBe(true);
+    });
+
+    it('accepts mixed apostrophe and double-quote in a heading and paragraph', () => {
+      expect(isPolicySourceSafe('## Heading with don\'t and won\'t and "quoted" text')).toBe(true);
+    });
   });
 
   describe('returns false for XSS vectors', () => {
