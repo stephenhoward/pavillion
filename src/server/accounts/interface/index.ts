@@ -74,6 +74,14 @@ export default class AccountsInterface {
     return this.accountService.applyForNewAccount(email, message);
   }
 
+  async validateConfirmationToken(token: string): Promise<boolean> {
+    return this.accountService.validateConfirmationToken(token);
+  }
+
+  async confirmAccountApplication(token: string): Promise<boolean> {
+    return this.accountService.confirmAccountApplication(token);
+  }
+
   async listAccountApplications(
     page: number = 1,
     limit: number = 50,

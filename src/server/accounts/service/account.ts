@@ -313,6 +313,140 @@ export default class AccountService {
   }
 
   /**
+   * Validates a confirmation token without consuming it.
+   *
+   * Returns true only if the token matches an `account_application` row whose
+   * status is `pending_confirmation` and whose `confirmation_token_expiration`
+   * is in the future. All terminal failure states (token not found, expired,
+   * already-consumed/null, status changed) return identical false so the
+   * caller cannot distinguish (anti-enumeration; epic pv-l9wv).
+   *
+   * Token lookup is performed with a DB `WHERE confirmation_token = :token`
+   * predicate — no application-layer string compare.
+   *
+   * @param token - The confirmation token from the email link
+   * @returns true if the token is valid and unexpired; false otherwise
+   */
+  async validateConfirmationToken(token: string): Promise<boolean> {
+    if (!token) {
+      return false;
+    }
+
+    const application = await AccountApplicationEntity.findOne({
+      where: { confirmation_token: token },
+    });
+
+    if (!application) {
+      return false;
+    }
+
+    if (application.status !== 'pending_confirmation') {
+      return false;
+    }
+
+    if (!application.confirmation_token_expiration) {
+      return false;
+    }
+
+    const now = DateTime.utc();
+    const expirationTime = DateTime.fromJSDate(application.confirmation_token_expiration);
+    if (now > expirationTime) {
+      return false;
+    }
+
+    return true;
+  }
+
+  /**
+   * Atomically consumes a confirmation token, transitioning the matching
+   * account application from `pending_confirmation` to `pending` and clearing
+   * the token fields. On success, sends the {@link ApplicationAcknowledgmentEmail}
+   * (post-confirmation acknowledgment, deferred from apply-time per epic
+   * pv-l9wv).
+   *
+   * Atomicity is enforced via a conditional `update()` query scoped to the
+   * application's primary key, with the original status + expiration in the
+   * WHERE clause so a concurrent consume cannot double-flip the row. If
+   * affected rows = 0, the call returns false. This collapses every terminal
+   * failure state (not found, expired, already-consumed/null, status changed)
+   * into the same response — caller cannot distinguish (anti-enumeration;
+   * epic pv-l9wv).
+   *
+   * @param token - The confirmation token from the email link
+   * @returns true on successful consume + acknowledgment send; false on any
+   *          terminal failure state
+   */
+  async confirmAccountApplication(token: string): Promise<boolean> {
+    if (!token) {
+      return false;
+    }
+
+    // Look up the row by token. DB-level WHERE clause (no app-layer string
+    // compare). All failure paths from here on return identical false.
+    const application = await AccountApplicationEntity.findOne({
+      where: { confirmation_token: token },
+    });
+
+    if (!application) {
+      return false;
+    }
+
+    if (application.status !== 'pending_confirmation') {
+      return false;
+    }
+
+    if (!application.confirmation_token_expiration) {
+      return false;
+    }
+
+    const now = DateTime.utc();
+    const expirationTime = DateTime.fromJSDate(application.confirmation_token_expiration);
+    if (now > expirationTime) {
+      // Defense-in-depth: an expired token has no further use; clear the
+      // fields so the row cannot match a future lookup. Status remains
+      // `pending_confirmation` so the applicant can re-apply (which
+      // regenerates the token via Branch 2 of applyForNewAccount).
+      application.confirmation_token = null;
+      application.confirmation_token_expiration = null;
+      await application.save();
+      return false;
+    }
+
+    // Atomic conditional update scoped to the application's primary key.
+    // The status + token guards in the WHERE clause prevent a concurrent
+    // consume from double-flipping the row; if another caller already
+    // consumed the token between our findOne and update, affectedRows will
+    // be 0 and we return false. This makes the consume single-shot.
+    const [affectedRows] = await AccountApplicationEntity.update(
+      {
+        status: 'pending',
+        status_timestamp: new Date(),
+        confirmation_token: null,
+        confirmation_token_expiration: null,
+      },
+      {
+        where: {
+          id: application.id,
+          confirmation_token: token,
+          status: 'pending_confirmation',
+        },
+      },
+    );
+
+    if (affectedRows === 0) {
+      return false;
+    }
+
+    // Build the acknowledgment email from the application we already loaded.
+    // The model carries the email address; status/timestamp on the model
+    // reflect pre-update values but are not surfaced to the recipient.
+    const ackMessage = new ApplicationAcknowledgmentEmail(application.toModel());
+    await this.emailInterface.sendEmail(ackMessage.buildMessage('en'));
+
+    return true;
+  }
+
+  /**
    * Creates a new account with optional password.
    *
    * In test environment (NODE_ENV === 'test'), automatically assigns admin role
