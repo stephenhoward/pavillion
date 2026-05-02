@@ -232,6 +232,59 @@ describe('app_routes', () => {
   });
 
   // -----------------------------------------------------------------------
+  // Public site routes for account-application confirmation: /apply/confirm/:token
+  // (pv-l9wv) Anonymous email-confirmation flow — must be served from the site
+  // SPA shell so visitors land in an unauthenticated context per DEC-004.
+  // -----------------------------------------------------------------------
+
+  describe('apply confirmation routes', () => {
+    it('should serve site.index.html.ejs for /apply/confirm/<token>', async () => {
+      const app = buildTestApp('en');
+      const res = await request(app).get('/apply/confirm/abc123');
+
+      expect(res.status).toBe(200);
+      expect(res.body.template).toBe('site.index.html.ejs');
+    });
+
+    it('should NOT serve client.index.html.ejs for /apply/confirm/<token>', async () => {
+      // Anonymous-visitor protection: confirmation link must NOT land in the
+      // authenticated client SPA shell (DEC-004 cookie hygiene for visitors
+      // arriving from an email link).
+      const app = buildTestApp('en');
+      const res = await request(app).get('/apply/confirm/abc123');
+
+      expect(res.body.template).not.toBe('client.index.html.ejs');
+    });
+
+    it('should serve site.index.html.ejs for /es/apply/confirm/<token> via locale_prefixed_site', async () => {
+      const mockConfig = buildMockConfigInterface('en');
+      const app = buildTestApp('es', mockConfig);
+      const res = await request(app).get('/es/apply/confirm/abc123');
+
+      expect(res.status).toBe(200);
+      expect(res.body.template).toBe('site.index.html.ejs');
+    });
+
+    it('should redirect /en/apply/confirm/<token> to /apply/confirm/<token> when en is default', async () => {
+      const mockConfig = buildMockConfigInterface('en');
+      const app = buildTestApp('en', mockConfig);
+      const res = await request(app).get('/en/apply/confirm/abc123');
+
+      expect(res.status).toBe(301);
+      expect(res.headers.location).toBe('/apply/confirm/abc123');
+    });
+
+    it('should pass locale from req.locale to the template for /es/apply/confirm/<token>', async () => {
+      const mockConfig = buildMockConfigInterface('en');
+      const app = buildTestApp('es', mockConfig);
+      const res = await request(app).get('/es/apply/confirm/abc123');
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.locale).toBe('es');
+    });
+  });
+
+  // -----------------------------------------------------------------------
   // Non-locale path segments
   // -----------------------------------------------------------------------
 

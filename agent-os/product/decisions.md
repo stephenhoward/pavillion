@@ -294,6 +294,10 @@ The original `/@calendarname` routing convention conflicted visually and concept
 - URLs are slightly longer than the `@` convention
 - Any external documentation or links using `/@` format are now invalid (acceptable pre-launch)
 
+### Addendum (pv-l9wv): Additional Public Site Namespaces
+
+The principle established here — a reserved top-level public-site namespace served from the unauthenticated site SPA shell rather than the authenticated client SPA — extends to other public anonymous flows. As of pv-l9wv, `/apply/` is also reserved as a public site namespace (currently scoped to `/apply/confirm/:token` for account-application email confirmation). Any new top-level public-site namespace must be added to the catch-all exclusion in `src/server/app_routes.ts` and routed through `handlers.site_index` / `handlers.locale_prefixed_site` so anonymous visitors do not load the authenticated client shell (DEC-004 cookie hygiene).
+
 ## 2026-03-15: Community Funding Model and Stripe Product Choice
 
 **ID:** DEC-007
