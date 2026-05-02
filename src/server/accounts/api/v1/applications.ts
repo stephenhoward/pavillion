@@ -61,6 +61,14 @@ export default class AccountApplicationRouteHandlers {
     res.json({ success: true, message: 'application_submitted' });
   }
 
+  /**
+   * GET /api/v1/applications
+   * Admin list of account applications. Accepts an optional `status` query
+   * param: `pending_confirmation`, `pending`, or `rejected`. When omitted (or
+   * given an unrecognized value), the response excludes `pending_confirmation`
+   * rows so the queue surfaces only actionable applications. The service-layer
+   * filter enforces the allow-list; see `listAccountApplications` for details.
+   */
   async listApplications(req: Request, res: Response) {
     const page = Math.max(1, parseInt(req.query.page as string) || 1);
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 50));

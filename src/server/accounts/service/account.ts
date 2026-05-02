@@ -792,9 +792,15 @@ export default class AccountService {
   /**
    * Lists account applications with optional status filtering and pagination.
    *
+   * Default behavior (no status) excludes `pending_confirmation` rows so the
+   * admin queue surfaces only actionable applications. Callers may explicitly
+   * request `pending_confirmation` to inspect that bucket. Unknown status
+   * values fall back to the default-exclude behavior rather than leaking the
+   * pending_confirmation bucket via an unrecognized filter value.
+   *
    * @param page - Page number (1-indexed)
    * @param limit - Number of items per page (max 100)
-   * @param status - Optional status filter (pending, accepted, rejected)
+   * @param status - Optional status filter: `pending_confirmation`, `pending`, or `rejected`
    * @returns Paginated account applications
    */
   async listAccountApplications(
@@ -816,9 +822,16 @@ export default class AccountService {
     const offset = (sanitizedPage - 1) * sanitizedLimit;
 
     const whereClause: any = {};
+    const ALLOWED_STATUSES = ['pending_confirmation', 'pending', 'rejected'];
+    const ACTIONABLE_STATUSES = ['pending', 'rejected'];
 
-    if (status) {
+    if (status && ALLOWED_STATUSES.includes(status)) {
       whereClause.status = status;
+    }
+    else {
+      // Default (and fallback for unknown values): exclude pending_confirmation
+      // so admins see only the actionable queue.
+      whereClause.status = { [Op.in]: ACTIONABLE_STATUSES };
     }
 
     const { count, rows: entities } = await AccountApplicationEntity.findAndCountAll({
