@@ -95,6 +95,17 @@
         "more_info": "More Information",
         "register": "Register"
     },
+    "apply_confirm": {
+        "heading": "Confirm your application",
+        "validating": "Checking your confirmation link…",
+        "valid_intro": "Click the button below to confirm your email address and submit your application for review.",
+        "confirm_button": "Confirm my email",
+        "confirming": "Confirming…",
+        "invalid_message": "This confirmation link is invalid or has expired. Please re-apply.",
+        "reapply_link": "Apply again",
+        "success_message": "Thank you. Your application is now under review.",
+        "go_home": "Go to homepage"
+    },
     "report": {
         "link_text": "Report Event",
         "form_title": "Report this Event",

@@ -95,6 +95,17 @@
         "more_info": "Más información",
         "register": "Registrarse"
     },
+    "apply_confirm": {
+        "heading": "Confirma tu solicitud",
+        "validating": "Comprobando tu enlace de confirmación…",
+        "valid_intro": "Haz clic en el botón a continuación para confirmar tu dirección de correo electrónico y enviar tu solicitud para revisión.",
+        "confirm_button": "Confirmar mi correo electrónico",
+        "confirming": "Confirmando…",
+        "invalid_message": "Este enlace de confirmación no es válido o ha caducado. Por favor, vuelve a solicitarlo.",
+        "reapply_link": "Solicitar de nuevo",
+        "success_message": "Gracias. Tu solicitud está ahora bajo revisión.",
+        "go_home": "Ir a la página principal"
+    },
     "report": {
         "link_text": "Reportar evento",
         "form_title": "Reportar este evento",
