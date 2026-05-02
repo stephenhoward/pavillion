@@ -105,11 +105,16 @@ export default class AccountApplicationRouteHandlers {
    * tokens. Tokens are never logged.
    */
   async checkConfirmationToken(req: Request, res: Response) {
-    const valid = await this.service.validateConfirmationToken(req.params.token);
-    if (valid) {
-      res.json({ valid: true });
+    try {
+      const valid = await this.service.validateConfirmationToken(req.params.token);
+      res.json({ valid: !!valid });
     }
-    else {
+    catch (error) {
+      // Anti-enumeration: a transient infrastructure failure must not produce
+      // a distinguishable HTTP 500. Collapse to the standard failure shape so
+      // not-found / expired / already-consumed / DB-error are indistinguishable
+      // to a caller (epic pv-l9wv). Token value is never included in the log.
+      logError(error, 'Error checking confirmation token');
       res.json({ valid: false });
     }
   }
@@ -125,13 +130,20 @@ export default class AccountApplicationRouteHandlers {
    * `{ success: true }`. Tokens are never logged.
    */
   async consumeConfirmationToken(req: Request, res: Response) {
-    const success = await this.service.confirmAccountApplication(req.params.token);
-    if (success) {
-      res.json({ success: true });
+    try {
+      const success = await this.service.confirmAccountApplication(req.params.token);
+      if (success) {
+        res.json({ success: true });
+      }
+      else {
+        // Identical failure shape to GET so the two endpoints are
+        // indistinguishable in any terminal failure state.
+        res.json({ valid: false });
+      }
     }
-    else {
-      // Identical failure shape to GET so the two endpoints are
-      // indistinguishable in any terminal failure state.
+    catch (error) {
+      // Anti-enumeration: see checkConfirmationToken — same rationale.
+      logError(error, 'Error consuming confirmation token');
       res.json({ valid: false });
     }
   }
