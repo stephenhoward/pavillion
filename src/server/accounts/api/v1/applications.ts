@@ -9,7 +9,11 @@ import {
 import { ValidationError } from '@/common/exceptions/base';
 import { logError } from '@/server/common/helper/error-logger';
 import { createLogger } from '@/server/common/helper/logger';
-import { confirmApplicationByIp } from '@/server/common/middleware/rate-limiters';
+import {
+  applicationByEmail,
+  applicationByIp,
+  confirmApplicationByIp,
+} from '@/server/common/middleware/rate-limiters';
 
 const logger = createLogger('accounts');
 
@@ -22,7 +26,17 @@ export default class AccountApplicationRouteHandlers {
 
   installHandlers(app: express.Application, routePrefix: string): void {
     const router = express.Router();
-    router.post('/applications', ...ExpressHelper.noUserOnly, this.applyToRegister.bind(this));
+    // Rate limit POST /applications by IP (anti-spam) and by email (anti-
+    // enumeration probing). Both limiters are pre-configured singletons in
+    // rate-limiters.ts (epic pv-l9wv); they fall back to no-op middleware
+    // when rate limiting is disabled in config.
+    router.post(
+      '/applications',
+      applicationByIp,
+      applicationByEmail,
+      ...ExpressHelper.noUserOnly,
+      this.applyToRegister.bind(this),
+    );
     // CRITICAL: confirm routes are registered BEFORE `/applications/:id` so the
     // static `confirm` segment is not matched as an `:id` parameter (Express
     // matches in registration order).
@@ -47,12 +61,22 @@ export default class AccountApplicationRouteHandlers {
         return;
       }
       else if (error instanceof AccountAlreadyExistsError) {
-        // Log internally but don't reveal account existence to requester
-        logger.info({ email: req.body.email }, 'Application attempted for existing account');
+        // Defensive: the service no longer throws this on the apply path
+        // (pv-l9wv.3.1 makes existing-account submissions silently swallow it
+        // for anti-enumeration timing). Kept as a defense-in-depth catch so a
+        // future service-layer regression cannot leak account existence to
+        // the caller. Log without the email field — it is PII and is not
+        // needed to investigate this branch (see pv-l9wv logging hygiene).
+        logger.info('Application attempted for existing account');
       }
       else if (error instanceof AccountApplicationAlreadyExistsError) {
-        // Log internally but don't reveal application existence to requester
-        logger.info({ email: req.body.email }, 'Duplicate application attempted');
+        // Defensive: the service no longer throws this on the apply path
+        // (pv-l9wv.3.1 makes duplicate submissions silently swallow it). Kept
+        // as a defense-in-depth catch so a future service-layer regression
+        // cannot leak application existence to the caller. Log without the
+        // email field — it is PII and is not needed to investigate this
+        // branch (see pv-l9wv logging hygiene).
+        logger.info('Duplicate application attempted');
       }
       else if (error instanceof AccountApplicationsClosedError) {
         // This is a system state error, not an enumeration risk, so reveal it

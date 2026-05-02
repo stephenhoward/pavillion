@@ -95,7 +95,7 @@ describeOrSkip('Account Application Rate Limiting Integration Tests', () => {
   // The IP-keyed limiters share localhost across this whole file, so each is
   // exercised in a single dedicated test that consumes its full budget.
   describe('applicationByIp', () => {
-    it('should return 429 once the per-IP limit is exhausted, and remain in a distinct bucket from applicationByEmail', async () => {
+    it('should return 429 once the per-IP limit is exhausted, remain in a distinct bucket from applicationByEmail, and the same singleton limiter is wired on POST /api/v1/applications', async () => {
       const ipMax = config.get<number>('rateLimit.application.byIp.max');
       const emailMax = config.get<number>('rateLimit.application.byEmail.max');
 
@@ -149,6 +149,45 @@ describeOrSkip('Account Application Rate Limiting Integration Tests', () => {
       expect(finalEmailBlock.body.error).toBe(
         'Too many application requests for this email, please try again later.',
       );
+
+      // Phase 2: prove the same `applicationByIp` and `applicationByEmail`
+      // singletons are wired onto POST /api/v1/applications. Both limiters
+      // are now exhausted (IP via `/apply-ip-only`; email via
+      // `/apply-email-only` on `freshEmail`), so any request to the real
+      // route must short-circuit at 429 before the handler runs.
+      // Imports are deferred so the full-server init cost is only paid when
+      // this test actually runs.
+      const { TestEnvironment } = await import('@/server/common/test/lib/test_environment');
+      const { EventEmitter } = await import('events');
+      const { default: AccountService } = await import('@/server/accounts/service/account');
+      const { default: ConfigurationInterface } = await import('@/server/configuration/interface');
+      const { default: SetupInterface } = await import('@/server/setup/interface');
+
+      const realEnv = new TestEnvironment();
+      await realEnv.init();
+
+      // Setup-mode middleware would otherwise return 503 for unauthenticated
+      // API calls until an admin exists.
+      const accountService = new AccountService(
+        new EventEmitter(),
+        new ConfigurationInterface(),
+        new SetupInterface(),
+      );
+      await accountService._setupAccount('rate-limit-apply-admin@pavillion.dev', 'testpassword!1');
+
+      // Hit the real route with the same IP (localhost). Because
+      // `applicationByIp` runs first in the chain and is already exhausted,
+      // we get 429 from it. This proves the IP limiter is mounted.
+      const realPostIp = await request(realEnv.app)
+        .post('/api/v1/applications')
+        .send({ email: `real-route-ip-${Date.now()}@example.com` });
+      expect(realPostIp.status).toBe(429);
+      expect(realPostIp.body.errorName).toBe('RateLimitError');
+      expect(realPostIp.body.error).toBe(
+        'Too many application requests from this IP, please try again later.',
+      );
+
+      await realEnv.cleanup();
     });
   });
 

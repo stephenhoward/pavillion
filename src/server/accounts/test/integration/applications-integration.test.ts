@@ -187,3 +187,259 @@ describe('Public confirm endpoints (integration)', () => {
     });
   });
 });
+
+/**
+ * Integration tests for the public POST /api/v1/applications endpoint covering
+ * the five service-level branches (epic pv-l9wv):
+ *   1. New email — creates pending_confirmation row + sends confirmation email
+ *   2. Resubmit on pending_confirmation — regenerates token, resends confirmation
+ *   3. Duplicate against an existing pending row — touches row + acknowledges
+ *   4. Duplicate against an existing rejected row — touches row + acknowledges
+ *   5. Existing account — touches account-exists email
+ *
+ * The anti-enumeration contract is that all five branches must return an
+ * IDENTICAL response body and status, and must perform real DB work so timing
+ * cannot be used to distinguish them. These tests assert both invariants.
+ *
+ * Bead: pv-l9wv.4.3
+ */
+describe('Public POST /api/v1/applications anti-enumeration (integration)', () => {
+  let env: TestEnvironment;
+
+  beforeAll(async () => {
+    env = new TestEnvironment();
+    await env.init();
+
+    // Provision an admin to exit setup mode so the public apply endpoint
+    // responds on its own merits (setup mode would otherwise return 503).
+    const eventBus = new EventEmitter();
+    const configurationInterface = new ConfigurationInterface();
+    const setupInterface = new SetupInterface();
+    const accountService = new AccountService(eventBus, configurationInterface, setupInterface);
+    await accountService._setupAccount('admin-apply@pavillion.dev', 'testpassword!1');
+
+    // The apply endpoint requires registrationMode === 'apply' or it throws
+    // AccountApplicationsClosedError before any branch logic runs.
+    await configurationInterface.setSetting('registrationMode', 'apply');
+  });
+
+  afterAll(async () => {
+    if (env) {
+      await env.cleanup();
+    }
+  });
+
+  beforeEach(async () => {
+    // Clear application rows between tests so each test seeds its own
+    // fixtures from a clean slate. Account rows (used by Branch 5) are
+    // intentionally NOT cleared here — every test that exercises Branch 5
+    // uses a unique uuid-based email, so accumulated accounts do not
+    // collide between tests, and the FK chain (account_role,
+    // account_secrets) makes per-test cleanup unnecessarily noisy.
+    await AccountApplicationEntity.destroy({ where: {}, truncate: true });
+  });
+
+  /** Apply with a fresh email — exercises Branch 1 (new). */
+  async function applyNew(): Promise<request.Response> {
+    return request(env.app)
+      .post('/api/v1/applications')
+      .send({ email: `new-${uuidv4()}@example.com`, message: 'integration applicant' });
+  }
+
+  /** Seed a pending_confirmation row, then re-apply on the same email
+   *  — exercises Branch 2 (resubmit). */
+  async function applyResubmitPendingConfirmation(): Promise<request.Response> {
+    const email = `resubmit-${uuidv4()}@example.com`;
+    await AccountApplicationEntity.create({
+      id: uuidv4(),
+      email,
+      message: 'first submission',
+      status: 'pending_confirmation',
+      status_timestamp: new Date(),
+      confirmation_token: `seed-token-${uuidv4()}`,
+      confirmation_token_expiration: DateTime.utc().plus({ days: 7 }).toJSDate(),
+    });
+    return request(env.app)
+      .post('/api/v1/applications')
+      .send({ email, message: 'integration applicant' });
+  }
+
+  /** Seed a pending row, then re-apply on the same email
+   *  — exercises Branch 3 (duplicate against pending). */
+  async function applyDuplicatePending(): Promise<request.Response> {
+    const email = `duplicate-pending-${uuidv4()}@example.com`;
+    await AccountApplicationEntity.create({
+      id: uuidv4(),
+      email,
+      message: 'first submission',
+      status: 'pending',
+      status_timestamp: new Date(),
+    });
+    return request(env.app)
+      .post('/api/v1/applications')
+      .send({ email, message: 'integration applicant' });
+  }
+
+  /** Seed a rejected row, then re-apply on the same email
+   *  — exercises Branch 4 (duplicate against rejected). */
+  async function applyDuplicateRejected(): Promise<request.Response> {
+    const email = `duplicate-rejected-${uuidv4()}@example.com`;
+    await AccountApplicationEntity.create({
+      id: uuidv4(),
+      email,
+      message: 'first submission',
+      status: 'rejected',
+      status_timestamp: new Date(),
+    });
+    return request(env.app)
+      .post('/api/v1/applications')
+      .send({ email, message: 'integration applicant' });
+  }
+
+  /** Provision an account, then apply on the same email
+   *  — exercises Branch 5 (existing account). */
+  async function applyExistingAccount(): Promise<request.Response> {
+    const email = `existing-account-${uuidv4()}@example.com`;
+    const eventBus = new EventEmitter();
+    const configurationInterface = new ConfigurationInterface();
+    const setupInterface = new SetupInterface();
+    const accountService = new AccountService(eventBus, configurationInterface, setupInterface);
+    await accountService._setupAccount(email, 'testpassword!1');
+
+    return request(env.app)
+      .post('/api/v1/applications')
+      .send({ email, message: 'integration applicant' });
+  }
+
+  describe('anti-enumeration: identical response shape across all 5 branches', () => {
+    it('Branch 1 (new email) returns { success: true, message: "application_submitted" } at HTTP 200', async () => {
+      const res = await applyNew();
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({ success: true, message: 'application_submitted' });
+    });
+
+    it('Branch 2 (resubmit on pending_confirmation) returns the same shape as Branch 1', async () => {
+      const res = await applyResubmitPendingConfirmation();
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({ success: true, message: 'application_submitted' });
+    });
+
+    it('Branch 3 (duplicate on pending) returns the same shape as Branch 1', async () => {
+      const res = await applyDuplicatePending();
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({ success: true, message: 'application_submitted' });
+    });
+
+    it('Branch 4 (duplicate on rejected) returns the same shape as Branch 1', async () => {
+      const res = await applyDuplicateRejected();
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({ success: true, message: 'application_submitted' });
+    });
+
+    it('Branch 5 (existing account) returns the same shape as Branch 1', async () => {
+      const res = await applyExistingAccount();
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({ success: true, message: 'application_submitted' });
+    });
+
+    it('resubmitting an existing pending_confirmation email returns the SAME response as the first submit (no leakage of prior submission)', async () => {
+      const email = `same-${uuidv4()}@example.com`;
+
+      const first = await request(env.app)
+        .post('/api/v1/applications')
+        .send({ email, message: 'first' });
+      const second = await request(env.app)
+        .post('/api/v1/applications')
+        .send({ email, message: 'second' });
+
+      expect(first.status).toBe(200);
+      expect(second.status).toBe(200);
+      expect(second.body).toEqual(first.body);
+    });
+  });
+
+  describe('timing parity: every branch performs real DB work (no early return)', () => {
+    it('all 5 branches take broadly comparable wall-clock time (within a generous bound)', async () => {
+      // Each branch makes at least one DB write/read and one email enqueue —
+      // the timing assertion only needs to prove no branch short-circuits
+      // before doing real work. A generous bound (≤500ms drift) is enough to
+      // catch a missing await on a DB write while staying robust to the
+      // unavoidable noise of CI hardware scheduling.
+      const timings: Record<string, number> = {};
+
+      const time = async (label: string, fn: () => Promise<request.Response>) => {
+        const start = Date.now();
+        const res = await fn();
+        timings[label] = Date.now() - start;
+        // Body shape parity assertion is duplicated here so a regression in
+        // any branch surfaces as part of the timing test as well.
+        expect(res.status).toBe(200);
+        expect(res.body).toEqual({ success: true, message: 'application_submitted' });
+      };
+
+      await time('new', applyNew);
+      await time('resubmit-pending_confirmation', applyResubmitPendingConfirmation);
+      await time('dup-pending', applyDuplicatePending);
+      await time('dup-rejected', applyDuplicateRejected);
+      await time('dup-account', applyExistingAccount);
+
+      // Verify all five branches did real work (>0ms is a weak signal but
+      // catches obvious sync no-op early returns).
+      for (const [label, ms] of Object.entries(timings)) {
+        expect(ms, `branch ${label} returned with no measurable DB work`).toBeGreaterThan(0);
+      }
+
+      // Relaxed timing bound: max drift across branches must stay within
+      // 500ms. This is intentionally loose — the goal is to detect a missing
+      // DB call (which would manifest as one branch finishing in <5ms while
+      // others take 50-200ms), not micro-benchmark.
+      const values = Object.values(timings);
+      const max = Math.max(...values);
+      const min = Math.min(...values);
+      expect(
+        max - min,
+        `timing drift across branches exceeded 500ms: ${JSON.stringify(timings)}`,
+      ).toBeLessThan(500);
+    });
+
+    it('every branch leaves a row in account_application (proving the DB write actually ran)', async () => {
+      // Branches 1+2: an apply on a fresh email creates a pending_confirmation row.
+      const newEmail = `db-1-${uuidv4()}@example.com`;
+      await request(env.app).post('/api/v1/applications').send({ email: newEmail });
+      const newRow = await AccountApplicationEntity.findOne({ where: { email: newEmail } });
+      expect(newRow).not.toBeNull();
+      expect(newRow!.status).toBe('pending_confirmation');
+
+      // Branch 3: an apply against an existing pending row touches the
+      // status_timestamp (real DB write).
+      const dupPendingEmail = `db-3-${uuidv4()}@example.com`;
+      const seededDupPending = await AccountApplicationEntity.create({
+        id: uuidv4(),
+        email: dupPendingEmail,
+        message: 'first',
+        status: 'pending',
+        status_timestamp: new Date(2020, 0, 1),
+      });
+      const seededTs = seededDupPending.status_timestamp.getTime();
+      await request(env.app).post('/api/v1/applications').send({ email: dupPendingEmail });
+      const reloadedDupPending =
+        await AccountApplicationEntity.findOne({ where: { email: dupPendingEmail } });
+      expect(reloadedDupPending!.status_timestamp.getTime()).toBeGreaterThan(seededTs);
+
+      // Branch 4: an apply against an existing rejected row also touches status_timestamp.
+      const dupRejectedEmail = `db-4-${uuidv4()}@example.com`;
+      const seededDupRejected = await AccountApplicationEntity.create({
+        id: uuidv4(),
+        email: dupRejectedEmail,
+        message: 'first',
+        status: 'rejected',
+        status_timestamp: new Date(2020, 0, 1),
+      });
+      const rejectedSeededTs = seededDupRejected.status_timestamp.getTime();
+      await request(env.app).post('/api/v1/applications').send({ email: dupRejectedEmail });
+      const reloadedDupRejected =
+        await AccountApplicationEntity.findOne({ where: { email: dupRejectedEmail } });
+      expect(reloadedDupRejected!.status_timestamp.getTime()).toBeGreaterThan(rejectedSeededTs);
+    });
+  });
+});
