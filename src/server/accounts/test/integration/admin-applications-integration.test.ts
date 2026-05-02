@@ -1,8 +1,7 @@
-import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest';
 import { EventEmitter } from 'events';
 import { v4 as uuidv4 } from 'uuid';
 
-import { Account } from '@/common/model/account';
 import { AccountApplicationEntity } from '@/server/common/entity/account';
 import AccountService from '@/server/accounts/service/account';
 import ConfigurationInterface from '@/server/configuration/interface';
@@ -24,7 +23,6 @@ import { TestEnvironment } from '@/server/common/test/lib/test_environment';
  */
 describe('Admin GET /api/v1/applications status filter (integration)', () => {
   let env: TestEnvironment;
-  let adminAccount: Account;
   let adminToken: string;
 
   const adminEmail = 'admin-applications@pavillion.dev';
@@ -40,10 +38,15 @@ describe('Admin GET /api/v1/applications status filter (integration)', () => {
     const accountService = new AccountService(eventBus, configurationInterface, setupInterface);
 
     // First account in test mode is granted admin role automatically.
-    const adminInfo = await accountService._setupAccount(adminEmail, adminPassword);
-    adminAccount = adminInfo.account;
+    await accountService._setupAccount(adminEmail, adminPassword);
 
     adminToken = await env.login(adminEmail, adminPassword);
+  });
+
+  afterAll(async () => {
+    if (env) {
+      await env.cleanup();
+    }
   });
 
   beforeEach(async () => {
