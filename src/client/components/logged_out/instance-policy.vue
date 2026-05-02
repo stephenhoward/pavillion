@@ -2,7 +2,7 @@
 import { computed, inject } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import i18next from 'i18next';
-import { sanitizePolicyHtml } from '@/common/utils/render-markdown';
+import { renderPolicyMarkdown } from '@/common/utils/render-markdown';
 
 /**
  * InstancePolicy — public /policy page rendering the instance's community
@@ -12,10 +12,12 @@ import { sanitizePolicyHtml } from '@/common/utils/render-markdown';
  * resolves the displayed HTML via the standard fallback chain
  * (current language → instance default language → empty-fallback message).
  *
- * Defense-in-depth: even though the stored value is already sanitized at
- * save time by `renderPolicyMarkdown`, we re-run `sanitizePolicyHtml` here
- * with the identical allowlist before binding via `v-html`. This guarantees
- * that any future storage-layer bypass cannot reach the DOM.
+ * The stored value is markdown source (validated at save time by
+ * `isPolicySourceSafe`). Rendering happens at view time via
+ * `renderPolicyMarkdown`, which runs marked + DOMPurify with the closed
+ * allowlist before the result is bound via `v-html`. DOMPurify in the
+ * render path remains the authoritative defense against any markup that
+ * would otherwise reach the DOM.
  */
 
 const site_config = inject('site_config') as { settings: () => {
@@ -35,12 +37,12 @@ const policyHtml = computed<string>(() => {
 
   const currentLang = i18next.language;
   if (policy[currentLang]) {
-    return sanitizePolicyHtml(policy[currentLang]);
+    return renderPolicyMarkdown(policy[currentLang]);
   }
 
   const defaultLang = settings.value.defaultLanguage;
   if (defaultLang && policy[defaultLang]) {
-    return sanitizePolicyHtml(policy[defaultLang]);
+    return renderPolicyMarkdown(policy[defaultLang]);
   }
 
   return `<p>${t('empty_fallback')}</p>`;
