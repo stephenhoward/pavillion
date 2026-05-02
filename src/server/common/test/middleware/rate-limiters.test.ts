@@ -109,8 +109,8 @@ describe('rate-limiters', () => {
     });
 
     it('should use correct config values for application confirm by IP', () => {
-      const maxRequests = config.get<number>('rateLimit.applicationConfirm.byIp.max');
-      const windowMs = config.get<number>('rateLimit.applicationConfirm.byIp.windowMs');
+      const maxRequests = config.get<number>('rateLimit.application.confirm.byIp.max');
+      const windowMs = config.get<number>('rateLimit.application.confirm.byIp.windowMs');
 
       expect(maxRequests).toBe(20);
       expect(windowMs).toBe(900000); // 15 minutes

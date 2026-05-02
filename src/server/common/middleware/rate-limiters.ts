@@ -286,8 +286,8 @@ export const applicationByEmail: RequestHandler = isRateLimitEnabled()
  */
 export const confirmApplicationByIp: RequestHandler = isRateLimitEnabled()
   ? createIpRateLimiter(
-    config.get<number>('rateLimit.applicationConfirm.byIp.max'),
-    config.get<number>('rateLimit.applicationConfirm.byIp.windowMs'),
+    config.get<number>('rateLimit.application.confirm.byIp.max'),
+    config.get<number>('rateLimit.application.confirm.byIp.windowMs'),
     'application-confirm',
   )
   : noOpMiddleware;
