@@ -71,24 +71,57 @@ describe('Configuration site API — full stack', () => {
       expect([401, 403]).toContain(response.status);
     });
 
-    it('accepts admin POST with valid instancePolicy', async () => {
+    it('accepts admin POST with valid instancePolicy and round-trips markdown source', async () => {
+      const markdownSource = '## Community guidelines\n\nBe excellent.';
       const response = await request(env.app)
         .post('/api/config/v1/site')
         .set('Authorization', 'Bearer ' + adminAuthKey)
-        .send({ instancePolicy: { en: '## Community guidelines\n\nBe excellent.' } });
+        .send({ instancePolicy: { en: markdownSource } });
 
       expect(response.status).toBe(200);
 
-      // Verify the policy was persisted and round-trips through GET
+      // Markdown is now stored at rest and rendered at view time. The GET
+      // response must return the raw markdown source verbatim — no <h2>,
+      // <p>, or other rendered HTML tags should appear in the payload.
       const getResponse = await request(env.app).get('/api/config/v1/site');
       expect(getResponse.status).toBe(200);
       expect(getResponse.body.instancePolicy).toHaveProperty('en');
-      // Stored as sanitized HTML; should contain rendered headings/paragraphs
-      const storedHtml = getResponse.body.instancePolicy.en as string;
-      expect(storedHtml).toContain('Community guidelines');
-      expect(storedHtml).toContain('Be excellent.');
-      // Sanitization stripped any dangerous content that wasn't there to begin with
-      expect(storedHtml).not.toContain('<script');
+      const storedSource = getResponse.body.instancePolicy.en as string;
+      expect(storedSource).toBe(markdownSource);
+      expect(storedSource).not.toContain('<h2');
+      expect(storedSource).not.toContain('<p>');
+    });
+
+    it('rejects admin POST with unsafe instancePolicy and does not mutate the column', async () => {
+      // First, seed a known-good value so we can assert the column was NOT
+      // overwritten by the rejected request.
+      const safeSource = '## Safe baseline\n\nThis must remain after the rejection.';
+      const seedResponse = await request(env.app)
+        .post('/api/config/v1/site')
+        .set('Authorization', 'Bearer ' + adminAuthKey)
+        .send({ instancePolicy: { en: safeSource } });
+      expect(seedResponse.status).toBe(200);
+
+      // Payload contains content that DOMPurify would strip: a raw <script>
+      // tag and a javascript: URL inside a markdown link. The dry-render
+      // check in setInstancePolicy must reject the whole batch.
+      const unsafeSource =
+        '<script>alert(1)</script>\n\n[bad](javascript:foo)\n\n<a href="javascript:alert(1)">click</a>';
+      const response = await request(env.app)
+        .post('/api/config/v1/site')
+        .set('Authorization', 'Bearer ' + adminAuthKey)
+        .send({ instancePolicy: { en: unsafeSource } });
+
+      expect(response.status).toBe(400);
+
+      // Read-after-failure: the column must still hold the prior safe value,
+      // and none of the dangerous payload may appear anywhere in it.
+      const getResponse = await request(env.app).get('/api/config/v1/site');
+      expect(getResponse.status).toBe(200);
+      const storedSource = getResponse.body.instancePolicy.en as string;
+      expect(storedSource).toBe(safeSource);
+      expect(storedSource).not.toContain('<script');
+      expect(storedSource).not.toContain('javascript:');
     });
   });
 
