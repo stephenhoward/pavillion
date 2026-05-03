@@ -50,6 +50,10 @@
       >
         {{ t("go_login") }}
       </router-link>
+
+      <p class="policy-link">
+        <PolicyLink source="register" />
+      </p>
     </form>
   </div>
 </template>
@@ -61,6 +65,7 @@ import { useTranslation } from 'i18next-vue';
 import { isValidEmail } from '@/common/validation/email';
 import ErrorAlert from './error-alert.vue';
 import SuccessState from './success-state.vue';
+import PolicyLink from '@/client/components/common/PolicyLink.vue';
 
 const site_config = inject('site_config');
 const router = useRouter();

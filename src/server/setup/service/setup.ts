@@ -1,9 +1,16 @@
 import { v4 as uuidv4 } from 'uuid';
 import { scryptSync, randomBytes } from 'crypto';
+import { readFile } from 'fs/promises';
+import path from 'path';
 
 import { AccountEntity, AccountRoleEntity, AccountSecretsEntity } from '@/server/common/entity/account';
 import ConfigurationInterface from '@/server/configuration/interface';
 import { validatePassword } from '@/common/validation/password';
+import { createLogger } from '@/server/common/helper/logger';
+
+const logger = createLogger('setup');
+
+const DEFAULT_INSTANCE_POLICY_PATH = 'config/defaults/instance-policy.en.md';
 
 /**
  * Service for managing first-run setup operations.
@@ -101,10 +108,76 @@ export default class SetupService {
     await this.configInterface.setSetting('registrationMode', registrationMode);
     await this.configInterface.setSetting('defaultLanguage', defaultLanguage);
 
+    // Seed the default instance policy from the bundled markdown stub.
+    // This MUST NEVER throw or block setup completion / admin login.
+    await this.seedDefaultInstancePolicy();
+
     // Invalidate the setup mode cache
     SetupService.clearCache();
 
     return true;
+  }
+
+  /**
+   * Seeds the default instance policy on first-run setup if no policy has
+   * been configured for any language yet.
+   *
+   * Idempotent: the skip-condition (any non-empty policy row exists) means
+   * this method can be invoked repeatedly without overwriting operator
+   * edits. A missing or unreadable default file is logged as a warning and
+   * setup proceeds without seeding.
+   *
+   * Sanitization: the raw markdown source is passed to
+   * `setInstancePolicy`, which dry-renders the value through
+   * `isPolicySourceSafe` (marked + DOMPurify) and rejects dangerous
+   * input rather than silently downgrading it. Safe markdown is
+   * persisted as-is — render-to-HTML happens at view time on the public
+   * /policy page, not at save time.
+   *
+   * Defensive contract: this method MUST NEVER throw, MUST NEVER block
+   * setup completion, and MUST NEVER block admin login. All errors are
+   * caught and logged.
+   */
+  async seedDefaultInstancePolicy(): Promise<void> {
+    try {
+      // Skip-condition: if any language already has a non-empty policy,
+      // the operator has either configured it or a previous seeding ran.
+      // Either way, do not overwrite.
+      const existingPolicies = await this.configInterface.getInstancePolicy();
+      const hasAnyPolicy = Object.values(existingPolicies).some(
+        (value) => typeof value === 'string' && value !== '',
+      );
+      if (hasAnyPolicy) {
+        return;
+      }
+
+      // Path is intentionally hardcoded relative to process.cwd(); the
+      // default file ships with the application repository.
+      const filePath = path.join(process.cwd(), DEFAULT_INSTANCE_POLICY_PATH);
+      let markdownSource: string;
+      try {
+        markdownSource = await readFile(filePath, 'utf-8');
+      }
+      catch (err) {
+        // A missing or unreadable default file is acceptable — setup
+        // proceeds without seeding. Never throw, never block.
+        logger.warn(
+          { path: filePath, err },
+          'Default instance policy file unavailable; skipping seed',
+        );
+        return;
+      }
+
+      // Pass raw markdown to setInstancePolicy. The configuration service
+      // dry-renders via isPolicySourceSafe and rejects dangerous input;
+      // safe markdown is persisted as-is and rendered at view time.
+      await this.configInterface.setInstancePolicy({ en: markdownSource });
+    }
+    catch (err) {
+      // Last-resort safety net. The seed hook must never block setup
+      // completion or admin login under any circumstance.
+      logger.warn({ err }, 'Failed to seed default instance policy');
+    }
   }
 
   /**

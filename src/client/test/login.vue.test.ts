@@ -6,6 +6,7 @@ import sinon from 'sinon';
 import { mountComponent } from '@/client/test/lib/vue';
 import Login from '@/client/components/logged_out/login.vue';
 import LoginForm from '@/client/components/logged_out/LoginForm.vue';
+import PolicyLink from '@/client/components/common/PolicyLink.vue';
 
 const routes: RouteRecordRaw[] = [
   { path: '/login',  component: {}, name: 'login', props: true },
@@ -15,6 +16,7 @@ const routes: RouteRecordRaw[] = [
   { path: '/apply',  component: {}, name: 'register-apply', props: true },
   { path: '/reset',  component: {}, name: 'reset_password', props: true },
   { path: '/calendar', component: {}, name: 'calendar' },
+  { path: '/policy', component: {}, name: 'instance-policy' },
 ];
 
 const mountLoginView = async (settings: Record<string, any> = {}, queryEmail?: string) => {
@@ -257,6 +259,14 @@ describe('Login Info Panel', () => {
       expect(learnMoreLink.attributes('href')).toContain('pavillion.social');
       expect(learnMoreLink.attributes('target')).toBe('_blank');
       expect(learnMoreLink.attributes('rel')).toContain('noopener');
+    });
+  });
+
+  describe('policy link', () => {
+
+    it('renders the shared PolicyLink component', async () => {
+      const { wrapper } = await mountLoginView({});
+      expect(wrapper.findComponent(PolicyLink).exists()).toBe(true);
     });
   });
 });

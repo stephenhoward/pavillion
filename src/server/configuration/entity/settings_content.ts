@@ -9,6 +9,9 @@ class SettingsContentEntity extends Model {
 
   @Column({ type: DataType.TEXT })
   declare description: string;
+
+  @Column({ type: DataType.TEXT, allowNull: true })
+  declare policy: string | null;
 }
 
 db.addModels([SettingsContentEntity]);

@@ -3,6 +3,7 @@ import express, { Request, Response } from 'express';
 import ExpressHelper from '../../../common/helper/express';
 import ConfigurationInterface from '@/server/configuration/interface';
 import { createLogger } from '@/server/common/helper/logger';
+import { configSiteByIp } from '@/server/common/middleware/rate-limiters';
 
 const logger = createLogger('configuration');
 
@@ -19,7 +20,7 @@ export default class SiteRouteHandlers {
   }
   installHandlers(app: express.Application, routePrefix: string): void {
     const router = express.Router();
-    router.get('/site', this.getSettings.bind(this));
+    router.get('/site', configSiteByIp, this.getSettings.bind(this));
     router.post('/site', ExpressHelper.adminOnly, this.updateSettings.bind(this));
     app.use(routePrefix, router);
   }
@@ -34,6 +35,7 @@ export default class SiteRouteHandlers {
       enabledLanguages: await this.service.getEnabledLanguages(),
       forceLanguage: await this.service.getForceLanguage(),
       instanceDescription: await this.service.getInstanceDescription(),
+      instancePolicy: await this.service.getInstancePolicy(),
     });
   }
 
@@ -44,6 +46,15 @@ export default class SiteRouteHandlers {
         const success = await this.service.setInstanceDescription(req.body.instanceDescription);
         if (!success) {
           res.status(400).json({ error: 'Invalid value for setting: "instanceDescription"' });
+          return;
+        }
+      }
+
+      // Handle instancePolicy separately via its dedicated content table
+      if (req.body.instancePolicy !== undefined) {
+        const success = await this.service.setInstancePolicy(req.body.instancePolicy);
+        if (!success) {
+          res.status(400).json({ error: 'Invalid value for setting: "instancePolicy"' });
           return;
         }
       }

@@ -5,6 +5,7 @@ import { nextTick } from 'vue';
 import { flushPromises } from '@vue/test-utils';
 import { mountComponent } from '@/client/test/lib/vue';
 import SettingsRoot from '@/client/components/logged_in/settings/root.vue';
+import PolicyLink from '@/client/components/common/PolicyLink.vue';
 import AccountService from '@/client/service/account';
 import FundingService from '@/client/service/funding';
 import * as localeService from '@/client/service/locale';
@@ -15,6 +16,7 @@ const routes: RouteRecordRaw[] = [
   { path: '/settings', component: {}, name: 'settings' },
   { path: '/logout', component: {}, name: 'logout' },
   { path: '/admin/settings', component: {}, name: 'admin-settings' },
+  { path: '/policy', component: {}, name: 'instance-policy' },
 ];
 
 /**
@@ -215,6 +217,15 @@ describe('Settings Language Switcher', () => {
 
       const select = wrapper.find('select#language');
       expect(select.attributes('disabled')).toBeUndefined();
+    });
+  });
+
+  describe('policy link', () => {
+    it('renders the shared PolicyLink component', async () => {
+      const { wrapper } = mountSettings();
+      await flushPromises();
+
+      expect(wrapper.findComponent(PolicyLink).exists()).toBe(true);
     });
   });
 });

@@ -8,15 +8,18 @@
     "SettingsContentEntity": [
         {
             "language": "en",
-            "description": "Welcome to the Pavillion development instance. This is a federated events calendar for discovering and sharing community events."
+            "description": "Welcome to the Pavillion development instance. This is a federated events calendar for discovering and sharing community events.",
+            "policy": "This is a development instance. Be excellent to each other.\n\n- Respect other community members.\n- Keep events relevant and accurate.\n- Report concerns to the instance administrator.\n"
         },
         {
             "language": "es",
-            "description": "Bienvenido a la instancia de desarrollo de Pavillion. Este es un calendario de eventos federado para descubrir y compartir eventos comunitarios."
+            "description": "Bienvenido a la instancia de desarrollo de Pavillion. Este es un calendario de eventos federado para descubrir y compartir eventos comunitarios.",
+            "policy": "Esta es una instancia de desarrollo. Tratense con respeto.\n\n- Respeta a los demas miembros de la comunidad.\n- Mantenga los eventos relevantes y precisos.\n- Informe cualquier inquietud al administrador.\n"
         },
         {
             "language": "fr",
-            "description": "Bienvenue sur l'instance de developpement de Pavillion. Ceci est un calendrier d'evenements federe pour decouvrir et partager des evenements communautaires."
+            "description": "Bienvenue sur l'instance de developpement de Pavillion. Ceci est un calendrier d'evenements federe pour decouvrir et partager des evenements communautaires.",
+            "policy": "Ceci est une instance de developpement. Soyez bienveillants les uns envers les autres.\n\n- Respectez les autres membres de la communaute.\n- Gardez les evenements pertinents et precis.\n- Signalez vos preoccupations a l’administrateur.\n"
         }
     ]
 }

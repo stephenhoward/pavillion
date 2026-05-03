@@ -120,4 +120,30 @@ export default class ConfigurationInterface {
     return settings.setInstanceDescription(descriptions);
   }
 
+  /**
+   * Returns the instance policy as a language-keyed object.
+   *
+   * @returns Promise resolving to a Record mapping language codes to policy strings
+   */
+  async getInstancePolicy(): Promise<Record<string, string>> {
+    try {
+      const settings = await SettingsService.getInstance();
+      return await settings.getInstancePolicy();
+    }
+    catch {
+      return {};
+    }
+  }
+
+  /**
+   * Updates the instance policy for all provided languages.
+   *
+   * @param policies - Language-keyed object of policy strings
+   * @returns Promise resolving to true if update succeeded
+   */
+  async setInstancePolicy(policies: Record<string, string>): Promise<boolean> {
+    const settings = await SettingsService.getInstance();
+    return settings.setInstancePolicy(policies);
+  }
+
 }

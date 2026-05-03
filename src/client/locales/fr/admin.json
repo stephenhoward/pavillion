@@ -74,6 +74,9 @@
     "instance_settings": "Paramètres de l'instance",
     "instance_description": "Description de l’instance",
     "instance_description_placeholder": "Décrivez votre instance...",
-    "instance_description_help": "Une courte description de votre instance affichée sur les pages publiques et dans les métadonnées de fédération. 500 caractères maximum."
+    "instance_description_help": "Une courte description de votre instance affichée sur les pages publiques et dans les métadonnées de fédération. 500 caractères maximum.",
+    "instance_policy": "Politique de l'instance",
+    "instance_policy_placeholder": "p. ex. Décrivez le contenu et le comportement autorisés sur votre instance...",
+    "instance_policy_help": "Le formatage Markdown est pris en charge. Le contenu est stocké au format Markdown et converti en HTML lors de l'affichage."
   }
 }

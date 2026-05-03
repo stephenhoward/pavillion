@@ -580,6 +580,10 @@ describe('ServiceSettings', () => {
     });
 
     describe('instanceDescription', () => {
+      beforeEach(() => {
+        sandbox.stub(SettingsContentEntity, 'destroy').resolves();
+      });
+
       it('should accept a valid language-keyed object', async () => {
         sandbox.stub(ServiceSettingEntity, 'findAll').resolves([]);
         sandbox.stub(SettingsContentEntity, 'findAll').resolves([]);
@@ -701,12 +705,18 @@ describe('ServiceSettings', () => {
         expect(result).toEqual({});
       });
 
-      it('should delete removed languages when updating', async () => {
+      it('should nullify description for removed languages when updating', async () => {
         sandbox.stub(ServiceSettingEntity, 'findAll').resolves([]);
-        const destroyStub = sandbox.stub().resolves();
+        const frSaveStub = sandbox.stub().resolves();
+        const frRow = {
+          language: 'fr',
+          description: 'Bonjour',
+          policy: null,
+          save: frSaveStub,
+        } as unknown as SettingsContentEntity;
         sandbox.stub(SettingsContentEntity, 'findAll').resolves([
-          { language: 'en', description: 'Hello', destroy: destroyStub } as unknown as SettingsContentEntity,
-          { language: 'fr', description: 'Bonjour', destroy: destroyStub } as unknown as SettingsContentEntity,
+          { language: 'en', description: 'Hello', policy: null } as unknown as SettingsContentEntity,
+          frRow,
         ]);
         sandbox.stub(SettingsContentEntity, 'findOrCreate').resolves([
           { language: 'en', description: 'Updated', save: sandbox.stub().resolves() } as unknown as SettingsContentEntity,
@@ -717,8 +727,9 @@ describe('ServiceSettings', () => {
         const result = await settings.setInstanceDescription({ en: 'Updated' });
 
         expect(result).toBe(true);
-        // 'fr' should have been destroyed since it's not in the new set
-        expect(destroyStub.calledOnce).toBe(true);
+        // 'fr' is not in the new set → description set to null and saved (preserves the row in case it carries a policy)
+        expect(frRow.description).toBeNull();
+        expect(frSaveStub.calledOnce).toBe(true);
       });
 
       it('should update existing descriptions', async () => {
@@ -737,6 +748,487 @@ describe('ServiceSettings', () => {
 
         expect(result).toBe(true);
         expect(saveStub.calledOnce).toBe(true);
+      });
+
+      it('should not return removed languages from getInstanceDescription after they are dropped', async () => {
+        sandbox.stub(ServiceSettingEntity, 'findAll').resolves([]);
+        // Simulate the post-update DB state: 'fr' row had its description nullified
+        // (policy column null too, so cleanupOrphanSettingsContentRows would
+        // destroy it — getInstanceDescription must filter null/empty entries
+        // regardless).
+        sandbox.stub(SettingsContentEntity, 'findAll').resolves([
+          { language: 'en', description: 'Updated', policy: null } as unknown as SettingsContentEntity,
+          { language: 'fr', description: null, policy: null } as unknown as SettingsContentEntity,
+        ]);
+
+        const settings = await ServiceSettings.getInstance();
+        const result = await settings.getInstanceDescription();
+
+        expect(result).toEqual({ en: 'Updated' });
+        expect(result).not.toHaveProperty('fr');
+      });
+    });
+
+    describe('instancePolicy', () => {
+      beforeEach(() => {
+        sandbox.stub(SettingsContentEntity, 'destroy').resolves();
+      });
+
+      it('should accept a valid language-keyed object and persist raw markdown source', async () => {
+        sandbox.stub(ServiceSettingEntity, 'findAll').resolves([]);
+        sandbox.stub(SettingsContentEntity, 'findAll').resolves([]);
+        const findOrCreateStub = sandbox.stub(SettingsContentEntity, 'findOrCreate');
+        findOrCreateStub.resolves([
+          { language: 'en', policy: 'Hello', save: sandbox.stub().resolves() } as unknown as SettingsContentEntity,
+          true,
+        ]);
+
+        const settings = await ServiceSettings.getInstance();
+        const result = await settings.setInstancePolicy({ en: 'Hello', es: 'Hola' });
+
+        expect(result).toBe(true);
+        expect(findOrCreateStub.callCount).toBe(2);
+        // Raw markdown source is persisted via the `defaults.policy` payload —
+        // no HTML rendering happens at save time.
+        const enArgs = findOrCreateStub.firstCall.args[0] as { defaults?: { policy?: string } };
+        expect(enArgs.defaults?.policy).toBe('Hello');
+        const esArgs = findOrCreateStub.secondCall.args[0] as { defaults?: { policy?: string } };
+        expect(esArgs.defaults?.policy).toBe('Hola');
+      });
+
+      it('should persist legitimate markdown (headings/lists/links/emphasis/code/blockquote) as raw source', async () => {
+        sandbox.stub(ServiceSettingEntity, 'findAll').resolves([]);
+        sandbox.stub(SettingsContentEntity, 'findAll').resolves([]);
+        const findOrCreateStub = sandbox.stub(SettingsContentEntity, 'findOrCreate');
+        findOrCreateStub.resolves([
+          { language: 'en', policy: '', save: sandbox.stub().resolves() } as unknown as SettingsContentEntity,
+          true,
+        ]);
+
+        const safeMarkdown =
+          '## Section\n\n' +
+          '### Subsection\n\n' +
+          'A paragraph with *emph* and **bold** and `code`.\n\n' +
+          '- one\n- two\n\n' +
+          '> quote\n\n' +
+          '[link](https://example.com)\n' +
+          '[mail](mailto:a@b.c)\n';
+
+        const settings = await ServiceSettings.getInstance();
+        const result = await settings.setInstancePolicy({ en: safeMarkdown });
+
+        expect(result).toBe(true);
+        const args = findOrCreateStub.firstCall.args[0] as { defaults?: { policy?: string } };
+        // Persisted value is the raw markdown source, byte-for-byte.
+        expect(args.defaults?.policy).toBe(safeMarkdown);
+      });
+
+      it('should accept an empty object', async () => {
+        sandbox.stub(ServiceSettingEntity, 'findAll').resolves([]);
+        sandbox.stub(SettingsContentEntity, 'findAll').resolves([]);
+
+        const settings = await ServiceSettings.getInstance();
+        const result = await settings.setInstancePolicy({});
+
+        expect(result).toBe(true);
+      });
+
+      it('should accept markdown containing ASCII apostrophes (contractions) and persist source verbatim', async () => {
+        // Regression test for pv-kcrx: marked entity-encodes ASCII apostrophes
+        // as &#39; while DOMPurify normalizes them back to literal ', causing
+        // the isPolicySourceSafe equality check to falsely reject contractions.
+        const source = "Don't worry, this is fine.";
+        sandbox.stub(ServiceSettingEntity, 'findAll').resolves([]);
+        sandbox.stub(SettingsContentEntity, 'findAll').resolves([]);
+        const findOrCreateStub = sandbox.stub(SettingsContentEntity, 'findOrCreate');
+        findOrCreateStub.resolves([
+          { language: 'en', policy: source, save: sandbox.stub().resolves() } as unknown as SettingsContentEntity,
+          true,
+        ]);
+
+        const settings = await ServiceSettings.getInstance();
+        const result = await settings.setInstancePolicy({ en: source });
+
+        expect(result).toBe(true);
+        // Source is persisted verbatim — no encoding or rendering at save time.
+        const args = findOrCreateStub.firstCall.args[0] as { defaults?: { policy?: string } };
+        expect(args.defaults?.policy).toBe(source);
+      });
+
+      it('should reject an array value', async () => {
+        sandbox.stub(ServiceSettingEntity, 'findAll').resolves([]);
+
+        const settings = await ServiceSettings.getInstance();
+        const result = await settings.setInstancePolicy([] as unknown as Record<string, string>);
+
+        expect(result).toBe(false);
+      });
+
+      it('should reject a null value', async () => {
+        sandbox.stub(ServiceSettingEntity, 'findAll').resolves([]);
+
+        const settings = await ServiceSettings.getInstance();
+        const result = await settings.setInstancePolicy(null as unknown as Record<string, string>);
+
+        expect(result).toBe(false);
+      });
+
+      it('should reject values that are not strings', async () => {
+        sandbox.stub(ServiceSettingEntity, 'findAll').resolves([]);
+
+        const settings = await ServiceSettings.getInstance();
+        const result = await settings.setInstancePolicy({ en: 123 } as unknown as Record<string, string>);
+
+        expect(result).toBe(false);
+      });
+
+      it('should accept a value at exactly the input length cap (50000 chars)', async () => {
+        const exactText = 'a'.repeat(50000);
+        sandbox.stub(ServiceSettingEntity, 'findAll').resolves([]);
+        sandbox.stub(SettingsContentEntity, 'findAll').resolves([]);
+        sandbox.stub(SettingsContentEntity, 'findOrCreate').resolves([
+          { language: 'en', policy: exactText, save: sandbox.stub().resolves() } as unknown as SettingsContentEntity,
+          true,
+        ]);
+
+        const settings = await ServiceSettings.getInstance();
+        const result = await settings.setInstancePolicy({ en: exactText });
+
+        expect(result).toBe(true);
+      });
+
+      it('should reject a value one character over the input length cap (50001 chars)', async () => {
+        sandbox.stub(ServiceSettingEntity, 'findAll').resolves([]);
+
+        const tooLong = 'a'.repeat(50001);
+        const settings = await ServiceSettings.getInstance();
+        const result = await settings.setInstancePolicy({ en: tooLong });
+
+        expect(result).toBe(false);
+      });
+
+      it('should reject an object with more than 20 language keys', async () => {
+        sandbox.stub(ServiceSettingEntity, 'findAll').resolves([]);
+
+        const tooManyKeys: Record<string, string> = {};
+        for (let i = 0; i < 21; i++) {
+          tooManyKeys[`k${i}`] = `value ${i}`;
+        }
+
+        const settings = await ServiceSettings.getInstance();
+        const result = await settings.setInstancePolicy(tooManyKeys);
+
+        expect(result).toBe(false);
+      });
+
+      it('should reject invalid language codes', async () => {
+        sandbox.stub(ServiceSettingEntity, 'findAll').resolves([]);
+
+        const settings = await ServiceSettings.getInstance();
+        const result = await settings.setInstancePolicy({ zz: 'some policy' });
+
+        expect(result).toBe(false);
+      });
+
+      it('should reject language codes containing a null byte', async () => {
+        sandbox.stub(ServiceSettingEntity, 'findAll').resolves([]);
+
+        const settings = await ServiceSettings.getInstance();
+        const result = await settings.setInstancePolicy({ 'en\0': 'some policy' } as Record<string, string>);
+
+        expect(result).toBe(false);
+      });
+
+      it('should reject overlong language codes (>20 chars)', async () => {
+        sandbox.stub(ServiceSettingEntity, 'findAll').resolves([]);
+
+        const longKey = 'a'.repeat(21);
+        const settings = await ServiceSettings.getInstance();
+        const result = await settings.setInstancePolicy({ [longKey]: 'some policy' });
+
+        expect(result).toBe(false);
+      });
+
+      it('should not return removed languages from getInstancePolicy after they are dropped', async () => {
+        // First "call": setInstancePolicy({en, es}) — simulated via DB state below
+        // Second "call": setInstancePolicy({en}) — verify es no longer in get response
+        sandbox.stub(ServiceSettingEntity, 'findAll').resolves([]);
+        // Post-update DB state: 'es' had its policy nullified; with description
+        // also null the orphan-cleanup helper would destroy it, but
+        // getInstancePolicy must filter null/empty regardless.
+        sandbox.stub(SettingsContentEntity, 'findAll').resolves([
+          { language: 'en', description: null, policy: '## Updated' } as unknown as SettingsContentEntity,
+          { language: 'es', description: null, policy: null } as unknown as SettingsContentEntity,
+        ]);
+
+        const settings = await ServiceSettings.getInstance();
+        const result = await settings.getInstancePolicy();
+
+        expect(result).toEqual({ en: '## Updated' });
+        expect(result).not.toHaveProperty('es');
+      });
+
+      it('should nullify policy for removed languages when updating', async () => {
+        sandbox.stub(ServiceSettingEntity, 'findAll').resolves([]);
+        const frSaveStub = sandbox.stub().resolves();
+        const frRow = {
+          language: 'fr',
+          description: null,
+          policy: '## Politique',
+          save: frSaveStub,
+        } as unknown as SettingsContentEntity;
+        sandbox.stub(SettingsContentEntity, 'findAll').resolves([
+          { language: 'en', description: null, policy: '## Old' } as unknown as SettingsContentEntity,
+          frRow,
+        ]);
+        sandbox.stub(SettingsContentEntity, 'findOrCreate').resolves([
+          { language: 'en', policy: '## New', save: sandbox.stub().resolves() } as unknown as SettingsContentEntity,
+          false,
+        ]);
+
+        const settings = await ServiceSettings.getInstance();
+        const result = await settings.setInstancePolicy({ en: 'New' });
+
+        expect(result).toBe(true);
+        // 'fr' is not in the new set → policy set to null and saved (preserves the row in case it carries a description)
+        expect(frRow.policy).toBeNull();
+        expect(frSaveStub.calledOnce).toBe(true);
+      });
+
+      it('should load instancePolicy from database as raw markdown source', async () => {
+        sandbox.stub(ServiceSettingEntity, 'findAll').resolves([]);
+        sandbox.stub(SettingsContentEntity, 'findAll').resolves([
+          { language: 'en', description: null, policy: '## Welcome' } as unknown as SettingsContentEntity,
+          { language: 'fr', description: null, policy: '## Bienvenue' } as unknown as SettingsContentEntity,
+        ]);
+
+        const settings = await ServiceSettings.getInstance();
+        const result = await settings.getInstancePolicy();
+
+        expect(result).toEqual({ en: '## Welcome', fr: '## Bienvenue' });
+      });
+
+      it('should return empty object when no policies exist', async () => {
+        sandbox.stub(ServiceSettingEntity, 'findAll').resolves([]);
+        sandbox.stub(SettingsContentEntity, 'findAll').resolves([]);
+
+        const settings = await ServiceSettings.getInstance();
+        const result = await settings.getInstancePolicy();
+
+        expect(result).toEqual({});
+      });
+
+      describe('reject-on-save dry-render gate (security-critical)', () => {
+        // Per memory `feedback-sanitize-on-save`: the persistence layer
+        // refuses dangerous input rather than silently downgrading it. The
+        // setter dry-renders through marked + DOMPurify and rejects the
+        // whole batch if DOMPurify would strip anything. No DB write is
+        // attempted — `findOrCreate` and the row-level `save` must NOT be
+        // invoked when validation fails.
+        const xssVectors: Array<{ name: string; input: string }> = [
+          { name: 'raw <script> tag', input: '<script>alert(1)</script>' },
+          { name: '<iframe> tag', input: '<iframe src="https://evil.example"></iframe>' },
+          { name: '<img> with onerror handler', input: '<img onerror=alert(1) src=x>' },
+          { name: 'markdown link with javascript: scheme', input: '[bad](javascript:foo)' },
+          { name: '<a> with javascript: href', input: '<a href="javascript:alert(1)">click</a>' },
+        ];
+
+        for (const { name, input } of xssVectors) {
+          it(`rejects dangerous input (${name}) and writes nothing to the database`, async () => {
+            sandbox.stub(ServiceSettingEntity, 'findAll').resolves([]);
+            const findAllContent = sandbox.stub(SettingsContentEntity, 'findAll').resolves([]);
+            const findOrCreateStub = sandbox.stub(SettingsContentEntity, 'findOrCreate');
+
+            const settings = await ServiceSettings.getInstance();
+            const result = await settings.setInstancePolicy({ en: input });
+
+            expect(result).toBe(false);
+            // The dry-render gate runs BEFORE any DB read or write on the
+            // present-language path; findOrCreate must not be invoked.
+            expect(findOrCreateStub.called).toBe(false);
+            // The findAll for the nullify-on-missing scan must also not run
+            // — the entire batch is rejected before any DB I/O.
+            expect(findAllContent.called).toBe(false);
+          });
+        }
+
+        it('rejects a batch when even one language carries dangerous input', async () => {
+          sandbox.stub(ServiceSettingEntity, 'findAll').resolves([]);
+          const findAllContent = sandbox.stub(SettingsContentEntity, 'findAll').resolves([]);
+          const findOrCreateStub = sandbox.stub(SettingsContentEntity, 'findOrCreate');
+
+          const settings = await ServiceSettings.getInstance();
+          const result = await settings.setInstancePolicy({
+            en: '## Safe heading',
+            es: '<script>alert(1)</script>',
+          });
+
+          expect(result).toBe(false);
+          expect(findOrCreateStub.called).toBe(false);
+          expect(findAllContent.called).toBe(false);
+        });
+
+        it('rejects h1 headings (intentional allowlist constraint — use h2)', async () => {
+          // h1 is intentionally absent from ALLOWED_TAGS because the page
+          // already carries a site-level h1; admin-authored h1 would
+          // break heading hierarchy. This is not an XSS vector — it is
+          // an allowlist constraint — but the persistence layer must
+          // still reject so it never stores content the renderer would
+          // silently strip.
+          sandbox.stub(ServiceSettingEntity, 'findAll').resolves([]);
+          const findAllContent = sandbox.stub(SettingsContentEntity, 'findAll').resolves([]);
+          const findOrCreateStub = sandbox.stub(SettingsContentEntity, 'findOrCreate');
+
+          const settings = await ServiceSettings.getInstance();
+          const result = await settings.setInstancePolicy({ en: '# Welcome' });
+
+          expect(result).toBe(false);
+          expect(findOrCreateStub.called).toBe(false);
+          expect(findAllContent.called).toBe(false);
+        });
+      });
+    });
+
+    describe('instanceDescription + instancePolicy coexistence', () => {
+      beforeEach(() => {
+        sandbox.stub(SettingsContentEntity, 'destroy').resolves();
+      });
+
+      it('should preserve policy when only description is updated', async () => {
+        sandbox.stub(ServiceSettingEntity, 'findAll').resolves([]);
+        // Row carries an existing policy; setInstanceDescription must not
+        // touch the policy column (it should only manage description).
+        const enRow = {
+          language: 'en',
+          description: 'Old description',
+          policy: '## Existing policy',
+          save: sandbox.stub().resolves(),
+        } as unknown as SettingsContentEntity;
+        sandbox.stub(SettingsContentEntity, 'findAll').resolves([enRow]);
+        sandbox.stub(SettingsContentEntity, 'findOrCreate').resolves([enRow, false]);
+
+        const settings = await ServiceSettings.getInstance();
+        const result = await settings.setInstanceDescription({ en: 'New description' });
+
+        expect(result).toBe(true);
+        expect(enRow.description).toBe('New description');
+        // Policy column untouched on this code path
+        expect(enRow.policy).toBe('## Existing policy');
+      });
+
+      it('should preserve description when only policy is updated', async () => {
+        sandbox.stub(ServiceSettingEntity, 'findAll').resolves([]);
+        const enRow = {
+          language: 'en',
+          description: 'Existing description',
+          policy: '## Old policy',
+          save: sandbox.stub().resolves(),
+        } as unknown as SettingsContentEntity;
+        sandbox.stub(SettingsContentEntity, 'findAll').resolves([enRow]);
+        sandbox.stub(SettingsContentEntity, 'findOrCreate').resolves([enRow, false]);
+
+        const settings = await ServiceSettings.getInstance();
+        const result = await settings.setInstancePolicy({ en: '## New policy source' });
+
+        expect(result).toBe(true);
+        // Description column untouched on this code path
+        expect(enRow.description).toBe('Existing description');
+        // Policy column receives the raw markdown source byte-for-byte —
+        // no rendering happens at save time.
+        expect(enRow.policy).toBe('## New policy source');
+      });
+
+      it('should preserve description when policy is cleared (description set, policy null still keeps row)', async () => {
+        sandbox.stub(ServiceSettingEntity, 'findAll').resolves([]);
+        const enSaveStub = sandbox.stub().resolves();
+        const enRow = {
+          language: 'en',
+          description: 'Existing description',
+          policy: '## Existing policy',
+          save: enSaveStub,
+        } as unknown as SettingsContentEntity;
+        sandbox.stub(SettingsContentEntity, 'findAll').resolves([enRow]);
+        // setInstancePolicy({}) — no findOrCreate calls expected
+        const findOrCreateStub = sandbox.stub(SettingsContentEntity, 'findOrCreate');
+
+        const settings = await ServiceSettings.getInstance();
+        const result = await settings.setInstancePolicy({});
+
+        expect(result).toBe(true);
+        // Policy nullified, description preserved
+        expect(enRow.policy).toBeNull();
+        expect(enRow.description).toBe('Existing description');
+        expect(enSaveStub.calledOnce).toBe(true);
+        expect(findOrCreateStub.called).toBe(false);
+      });
+
+      it('should preserve policy when description is cleared (policy set, description null still keeps row)', async () => {
+        sandbox.stub(ServiceSettingEntity, 'findAll').resolves([]);
+        const enSaveStub = sandbox.stub().resolves();
+        const enRow = {
+          language: 'en',
+          description: 'Existing description',
+          policy: '## Existing policy',
+          save: enSaveStub,
+        } as unknown as SettingsContentEntity;
+        sandbox.stub(SettingsContentEntity, 'findAll').resolves([enRow]);
+        const findOrCreateStub = sandbox.stub(SettingsContentEntity, 'findOrCreate');
+
+        const settings = await ServiceSettings.getInstance();
+        const result = await settings.setInstanceDescription({});
+
+        expect(result).toBe(true);
+        // Description nullified, policy preserved
+        expect(enRow.description).toBeNull();
+        expect(enRow.policy).toBe('## Existing policy');
+        expect(enSaveStub.calledOnce).toBe(true);
+        expect(findOrCreateStub.called).toBe(false);
+      });
+
+      it('should call cleanupOrphanSettingsContentRows after description update so rows with both columns empty are destroyed', async () => {
+        sandbox.stub(ServiceSettingEntity, 'findAll').resolves([]);
+        sandbox.stub(SettingsContentEntity, 'findAll').resolves([]);
+        const destroyStub = SettingsContentEntity.destroy as unknown as sinon.SinonStub;
+
+        const settings = await ServiceSettings.getInstance();
+        const result = await settings.setInstanceDescription({});
+
+        expect(result).toBe(true);
+        // The orphan cleanup helper should have been invoked
+        expect(destroyStub.called).toBe(true);
+      });
+
+      it('should call cleanupOrphanSettingsContentRows after policy update so rows with both columns empty are destroyed', async () => {
+        sandbox.stub(ServiceSettingEntity, 'findAll').resolves([]);
+        sandbox.stub(SettingsContentEntity, 'findAll').resolves([]);
+        const destroyStub = SettingsContentEntity.destroy as unknown as sinon.SinonStub;
+
+        const settings = await ServiceSettings.getInstance();
+        const result = await settings.setInstancePolicy({});
+
+        expect(result).toBe(true);
+        // The orphan cleanup helper should have been invoked
+        expect(destroyStub.called).toBe(true);
+      });
+
+      it('should preserve both columns on a single row when description and policy are set for the same language', async () => {
+        sandbox.stub(ServiceSettingEntity, 'findAll').resolves([]);
+        const enRow = {
+          language: 'en',
+          description: 'Initial description',
+          policy: '## Initial policy',
+          save: sandbox.stub().resolves(),
+        } as unknown as SettingsContentEntity;
+        sandbox.stub(SettingsContentEntity, 'findAll').resolves([enRow]);
+        sandbox.stub(SettingsContentEntity, 'findOrCreate').resolves([enRow, false]);
+
+        const settings = await ServiceSettings.getInstance();
+        // Both getters should reflect both columns from the same row
+        const description = await settings.getInstanceDescription();
+        const policy = await settings.getInstancePolicy();
+
+        expect(description).toEqual({ en: 'Initial description' });
+        expect(policy).toEqual({ en: '## Initial policy' });
       });
     });
   });

@@ -19,6 +19,10 @@
     >
       <h3>{{ t('title') }}</h3>
 
+      <p class="policy-link">
+        <PolicyLink source="register-apply" />
+      </p>
+
       <ErrorAlert id="apply-error" :error="state.err" />
 
       <div class="form-stack">
@@ -66,6 +70,7 @@
       >
         {{ t("go_login") }}
       </router-link>
+
     </form>
   </div>
 </template>
@@ -77,6 +82,7 @@ import { useTranslation } from 'i18next-vue';
 import { isValidEmail } from '@/common/validation/email';
 import ErrorAlert from './error-alert.vue';
 import SuccessState from './success-state.vue';
+import PolicyLink from '@/client/components/common/PolicyLink.vue';
 
 const router = useRouter();
 const authn = inject('authn');
@@ -207,4 +213,13 @@ async function doApply() {
     color: var(--pav-color-stone-300);
   }
 }
+
+h3 {
+  margin-block-end: var(--pav-space-4);
+}
+
+.policy-link {
+  margin-block-end: var(--pav-space-8);
+}
+
 </style>

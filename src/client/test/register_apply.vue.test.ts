@@ -6,12 +6,14 @@ import sinon from 'sinon';
 
 import { mountComponent } from '@/client/test/lib/vue';
 import RegisterApply from '@/client/components/logged_out/register_apply.vue';
+import PolicyLink from '@/client/components/common/PolicyLink.vue';
 
 const routes: RouteRecordRaw[] = [
   { path: '/login',  component: {}, name: 'login', props: true },
   { path: '/register', component: {}, name: 'register', props: true },
   { path: '/apply',  component: {}, name: 'register-apply', props: true },
   { path: '/reset',  component: {}, name: 'reset_password', props: true },
+  { path: '/policy', component: {}, name: 'instance-policy' },
 ];
 
 const mountedApply = () => {
@@ -91,6 +93,14 @@ describe('Register Apply Form Validation', () => {
 
     expect(wrapper.find('[role="alert"]').exists()).toBe(true);
     expect(applyStub.called).toBe(false);
+  });
+
+  it('renders the shared PolicyLink component', async () => {
+    const { wrapper } = mountedApply();
+    currentWrapper = wrapper;
+    await flushPromises();
+
+    expect(wrapper.findComponent(PolicyLink).exists()).toBe(true);
   });
 
   it('valid email with message proceeds to apply', async () => {

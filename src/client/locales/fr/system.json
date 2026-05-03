@@ -21,7 +21,9 @@
   "navigation": {
     "skip_to_content": "Aller au contenu principal",
     "main_label": "Navigation principale",
-    "mobile_label": "Navigation mobile"
+    "mobile_label": "Navigation mobile",
+    "view_policy": "{1} for calendars hosted on {{domain}}",
+    "view_policy_link_text": "Read the rules"
   },
   "copy_button": {
     "copy": "Copier",
