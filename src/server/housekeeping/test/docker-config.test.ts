@@ -8,6 +8,26 @@ import { parse as parseYaml } from 'yaml';
  * These tests verify that the Docker Compose configuration and entrypoint script
  * are correctly set up for the web/worker architecture.
  */
+
+/**
+ * Returns the body of a named multi-stage build target from a Dockerfile.
+ * The body runs from the matching FROM ... AS <name> line up to (but not
+ * including) the next FROM line, or end of file.
+ */
+function extractStage(dockerfile: string, stageName: string): string {
+  const startPattern = new RegExp(`^FROM\\s+\\S+\\s+AS\\s+${stageName}\\b`, 'mi');
+  const startMatch = dockerfile.match(startPattern);
+  if (!startMatch || startMatch.index === undefined) {
+    throw new Error(`Stage "${stageName}" not found in Dockerfile`);
+  }
+
+  const after = dockerfile.slice(startMatch.index + startMatch[0].length);
+  const nextStageMatch = after.match(/^FROM\s+/m);
+  return nextStageMatch && nextStageMatch.index !== undefined
+    ? after.slice(0, nextStageMatch.index)
+    : after;
+}
+
 describe('Docker Configuration', () => {
   describe('docker-compose.yml', () => {
     it('should include both app and worker services', () => {
@@ -159,6 +179,35 @@ describe('Docker Configuration', () => {
       expect(healthcheck.timeout).toBeDefined();
       expect(healthcheck.retries).toBeGreaterThanOrEqual(1);
       expect(healthcheck.start_period).toBeDefined();
+    });
+  });
+
+  describe('Dockerfile production stage', () => {
+    // The worker container runs the production stage and must include the
+    // postgres client binaries (pg_dump/pg_restore) for backup:daily to succeed.
+    // Without this, the job throws "spawn pg_dump ENOENT" every night.
+    it('should install postgresql-client in the production stage', () => {
+      const dockerfile = readFileSync('Dockerfile', 'utf-8');
+      const productionStage = extractStage(dockerfile, 'production');
+
+      expect(productionStage).toMatch(/postgresql-client-\d+/);
+    });
+
+    it('should install a postgresql-client major version matching the postgres server', () => {
+      const dockerfile = readFileSync('Dockerfile', 'utf-8');
+      const compose = parseYaml(readFileSync('docker-compose.yml', 'utf-8'));
+
+      const productionStage = extractStage(dockerfile, 'production');
+      const clientVersionMatch = productionStage.match(/postgresql-client-(\d+)/);
+      expect(clientVersionMatch).not.toBeNull();
+      const clientMajor = clientVersionMatch![1];
+
+      const dbImage = compose.services.db.image as string;
+      const dbVersionMatch = dbImage.match(/postgres:(\d+)/);
+      expect(dbVersionMatch).not.toBeNull();
+      const dbMajor = dbVersionMatch![1];
+
+      expect(clientMajor).toBe(dbMajor);
     });
   });
 
