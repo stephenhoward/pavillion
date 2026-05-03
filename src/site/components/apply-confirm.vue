@@ -86,54 +86,58 @@ onMounted(async () => {
 </script>
 
 <template>
-  <main class="apply-confirm">
-    <h1 class="apply-confirm__heading">{{ t('heading') }}</h1>
+  <main class="logged-out">
+    <section>
+      <div class="welcome-card apply-confirm">
+        <h3>{{ t('heading') }}</h3>
 
-    <!-- Validating state -->
-    <p
-      v-if="state.render === 'validating'"
-      class="apply-confirm__status"
-      role="status"
-      aria-live="polite"
-    >
-      {{ t('validating') }}
-    </p>
+        <!-- Validating state -->
+        <p
+          v-if="state.render === 'validating'"
+          class="apply-confirm__status"
+          role="status"
+          aria-live="polite"
+        >
+          {{ t('validating') }}
+        </p>
 
-    <!-- Valid token: explicit confirm button -->
-    <div v-else-if="state.render === 'valid'" class="apply-confirm__valid">
-      <p class="apply-confirm__intro">{{ t('valid_intro') }}</p>
-      <button
-        type="button"
-        class="apply-confirm__button"
-        :disabled="state.isSubmitting"
-        :aria-disabled="state.isSubmitting || undefined"
-        @click="handleConfirmClick"
-      >{{ state.isSubmitting ? t('confirming') : t('confirm_button') }}</button>
-    </div>
+        <!-- Valid token: explicit confirm button -->
+        <div v-else-if="state.render === 'valid'" class="apply-confirm__valid">
+          <p class="apply-confirm__intro">{{ t('valid_intro') }}</p>
+          <button
+            type="button"
+            class="apply-confirm__button"
+            :disabled="state.isSubmitting"
+            :aria-disabled="state.isSubmitting || undefined"
+            @click="handleConfirmClick"
+          >{{ state.isSubmitting ? t('confirming') : t('confirm_button') }}</button>
+        </div>
 
-    <!-- Success state -->
-    <div v-else-if="state.render === 'success'" class="apply-confirm__success">
-      <p
-        class="apply-confirm__success-message"
-        role="status"
-      >{{ t('success_message') }}</p>
-      <a
-        href="/"
-        class="apply-confirm__home-link"
-      >{{ t('go_home') }}</a>
-    </div>
+        <!-- Success state -->
+        <div v-else-if="state.render === 'success'" class="apply-confirm__success">
+          <p
+            class="apply-confirm__success-message"
+            role="status"
+          >{{ t('success_message') }}</p>
+          <a
+            href="/"
+            class="apply-confirm__home-link"
+          >{{ t('go_home') }}</a>
+        </div>
 
-    <!-- Invalid / expired / failed state -->
-    <div v-else class="apply-confirm__invalid">
-      <p
-        class="apply-confirm__invalid-message"
-        role="alert"
-      >{{ t('invalid_message') }}</p>
-      <a
-        href="/auth/apply"
-        class="apply-confirm__reapply-link"
-      >{{ t('reapply_link') }}</a>
-    </div>
+        <!-- Invalid / expired / failed state -->
+        <div v-else class="apply-confirm__invalid">
+          <p
+            class="apply-confirm__invalid-message"
+            role="alert"
+          >{{ t('invalid_message') }}</p>
+          <a
+            href="/auth/apply"
+            class="apply-confirm__reapply-link"
+          >{{ t('reapply_link') }}</a>
+        </div>
+      </div>
+    </section>
   </main>
 </template>
 
@@ -147,27 +151,16 @@ onMounted(async () => {
 // after submitting an account application. Anti-enumeration: every
 // failure state collapses to the same generic copy. The POST is fired
 // only by an explicit user click (email-scanner protection).
+//
+// The card chrome (`.logged-out` + `.welcome-card`) is reused verbatim
+// from the client app's auth screens (register_apply, password_forgot)
+// — the layout/logged-out partial is loaded into the site stylesheet so
+// these classes resolve identically. Only state-specific copy and
+// action styling is defined locally.
 // ================================================================
 
 .apply-confirm {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
   text-align: center;
-  padding: $public-space-3xl $public-space-xl;
-  flex: 1;
-}
-
-.apply-confirm__heading {
-  font-size: $public-font-size-2xl;
-  font-weight: $public-font-weight-semibold;
-  color: $public-text-primary-light;
-  margin: 0 0 $public-space-lg 0;
-
-  @include public-dark-mode {
-    color: $public-text-primary-dark;
-  }
 }
 
 .apply-confirm__status,
@@ -189,15 +182,15 @@ onMounted(async () => {
   flex-direction: column;
   align-items: center;
   gap: $public-space-lg;
-  width: 100%;
-  max-width: 480px;
 }
 
 .apply-confirm__button {
   @include public-button-primary;
 
-  padding: $public-space-sm $public-space-xl;
-  font-size: $public-font-size-base;
+  width: 100%;
+  padding: $public-space-md $public-space-xl;
+  border-radius: $public-radius-full;
+  font-size: $public-font-size-md;
 }
 
 .apply-confirm__success-message {
@@ -226,8 +219,9 @@ onMounted(async () => {
 .apply-confirm__reapply-link {
   @include public-button-ghost;
 
-  padding: $public-space-sm $public-space-lg;
-  font-size: $public-font-size-base;
+  padding: $public-space-md $public-space-xl;
+  border-radius: $public-radius-full;
+  font-size: $public-font-size-md;
   text-decoration: none;
 
   &:hover {
