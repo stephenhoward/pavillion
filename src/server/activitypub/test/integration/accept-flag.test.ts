@@ -7,7 +7,7 @@ import ProcessInboxService from '@/server/activitypub/service/inbox';
 import CalendarInterface from '@/server/calendar/interface';
 import ModerationInterface from '@/server/moderation/interface';
 import { Calendar } from '@/common/model/calendar';
-import { Report, ReportCategory, ReportStatus } from '@/common/model/report';
+import { Report, ReportCategory, ReportStatus, ForwardStatus } from '@/common/model/report';
 import AcceptActivity from '@/server/activitypub/model/action/accept';
 
 describe('ProcessInboxService - Accept Flag Activity', () => {
@@ -36,7 +36,7 @@ describe('ProcessInboxService - Accept Flag Activity', () => {
     testReport.status = ReportStatus.SUBMITTED;
     testReport.forwardedReportId = 'https://local.instance/flags/original-flag-id';
     testReport.forwardedToActorUri = 'https://remote.instance/calendars/remote-calendar';
-    testReport.forwardStatus = 'pending';
+    testReport.forwardStatus = ForwardStatus.PENDING;
 
     // Mock CalendarInterface
     calendarInterface = {} as any;

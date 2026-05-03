@@ -9,8 +9,8 @@ import {
   Index,
 } from 'sequelize-typescript';
 
-import { Report, ReportCategory, ReportStatus } from '@/common/model/report';
-import type { ReporterType, AdminPriority, EscalationType, ForwardStatus } from '@/common/model/report';
+import { Report, ReportCategory, ReportStatus, ForwardStatus } from '@/common/model/report';
+import type { ReporterType, AdminPriority, EscalationType } from '@/common/model/report';
 import db from '@/server/common/entity/db';
 
 /**

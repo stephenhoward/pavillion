@@ -41,7 +41,11 @@ type EscalationType = 'manual' | 'automatic';
 /**
  * Acknowledgment status for forwarded reports.
  */
-type ForwardStatus = 'pending' | 'acknowledged' | 'no_response';
+enum ForwardStatus {
+  PENDING = 'pending',
+  ACKNOWLEDGED = 'acknowledged',
+  NO_RESPONSE = 'no_response',
+}
 
 /**
  * Represents a report filed against an event.
@@ -296,5 +300,5 @@ class Report extends PrimaryModel {
   }
 }
 
-export { Report, ReportCategory, ReportStatus };
-export type { ReporterType, AdminPriority, EscalationType, ForwardStatus };
+export { Report, ReportCategory, ReportStatus, ForwardStatus };
+export type { ReporterType, AdminPriority, EscalationType };
