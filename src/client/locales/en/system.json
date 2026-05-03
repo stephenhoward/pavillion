@@ -25,7 +25,8 @@
     "skip_to_content": "Skip to main content",
     "main_label": "Main navigation",
     "mobile_label": "Mobile navigation",
-    "view_policy": "View policy"
+    "view_policy": "{1} for calendars hosted on {{domain}}",
+    "view_policy_link_text": "Read the rules"
   },
   "modal": {
     "close": "Close dialog"

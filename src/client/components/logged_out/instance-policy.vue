@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, inject } from 'vue';
+import { useRoute } from 'vue-router';
 import { useTranslation } from 'i18next-vue';
 import i18next from 'i18next';
 import { renderPolicyMarkdown } from '@/common/utils/render-markdown';
@@ -18,12 +19,20 @@ import { renderPolicyMarkdown } from '@/common/utils/render-markdown';
  * allowlist before the result is bound via `v-html`. DOMPurify in the
  * render path remains the authoritative defense against any markup that
  * would otherwise reach the DOM.
+ *
+ * The back link is contextual: a `?from=<source>` query (set by PolicyLink
+ * at the call site) chooses the destination, falling back to settings for
+ * authenticated visitors and login otherwise.
  */
 
 const site_config = inject('site_config') as { settings: () => {
   instancePolicy?: Record<string, string>;
   defaultLanguage?: string;
 } };
+
+const authn = inject('authn') as { isLoggedIn?: () => boolean } | undefined;
+
+const route = useRoute();
 
 const { t } = useTranslation('policy');
 
@@ -47,6 +56,26 @@ const policyHtml = computed<string>(() => {
 
   return `<p>${t('empty_fallback')}</p>`;
 });
+
+const backLink = computed<{ name: string; label: string }>(() => {
+  const from = typeof route.query.from === 'string' ? route.query.from : '';
+
+  switch (from) {
+    case 'login':
+      return { name: 'login', label: t('back_to_login') };
+    case 'register':
+      return { name: 'register', label: t('back_to_register') };
+    case 'register-apply':
+      return { name: 'register-apply', label: t('back_to_apply') };
+    case 'settings':
+      return { name: 'profile', label: t('back_to_settings') };
+  }
+
+  if (authn?.isLoggedIn?.()) {
+    return { name: 'profile', label: t('back_to_settings') };
+  }
+  return { name: 'login', label: t('back_to_login') };
+});
 </script>
 
 <template>
@@ -58,8 +87,8 @@ const policyHtml = computed<string>(() => {
                v-html="policyHtml" />
 
       <router-link class="forgot"
-                   :to="{ name: 'login' }">
-        {{ t('back_to_login') }}
+                   :to="{ name: backLink.name }">
+        {{ backLink.label }}
       </router-link>
     </div>
   </div>
@@ -88,6 +117,18 @@ const policyHtml = computed<string>(() => {
   :deep(ol) {
     margin-block-end: var(--pav-space-4);
     padding-inline-start: var(--pav-space-6);
+  }
+
+  :deep(ul) {
+    list-style: disc;
+  }
+
+  :deep(ol) {
+    list-style: decimal;
+  }
+
+  :deep(li) {
+    margin-block-end: var(--pav-space-2);
   }
 }
 </style>

@@ -10,7 +10,12 @@ const routes: RouteRecordRaw[] = [
   { path: '/policy', component: {}, name: 'instance-policy' },
 ];
 
-const mountPolicyLink = async (props: Record<string, unknown> = {}) => {
+type MountOpts = {
+  props?: Record<string, unknown>;
+  domain?: string | null;
+};
+
+const mountPolicyLink = async ({ props = {}, domain = 'pavillion.dev' }: MountOpts = {}) => {
   const router: Router = createRouter({
     history: createMemoryHistory(),
     routes,
@@ -19,7 +24,11 @@ const mountPolicyLink = async (props: Record<string, unknown> = {}) => {
   await router.push('/');
   await router.isReady();
 
-  return mountComponent(PolicyLink, router, { props });
+  const provide = {
+    site_config: domain === null ? {} : { settings: () => ({ domain }) },
+  };
+
+  return mountComponent(PolicyLink, router, { props, provide });
 };
 
 describe('PolicyLink', () => {
@@ -32,17 +41,39 @@ describe('PolicyLink', () => {
     expect(link.props('to')).toEqual({ name: 'instance-policy' });
   });
 
-  it('uses the navigation.view_policy translation as the default label', async () => {
+  it('renders only the "Read the rules" portion as a link with the rest as plain text', async () => {
     const wrapper = await mountPolicyLink();
     await flushPromises();
 
-    expect(wrapper.text()).toBe('View policy');
+    const link = wrapper.findComponent(RouterLink);
+    expect(link.text()).toBe('Read the rules');
+    expect(wrapper.html()).toContain('for calendars hosted on pavillion.dev');
   });
 
-  it('honors a custom label prop when provided', async () => {
-    const wrapper = await mountPolicyLink({ label: 'Read our policy' });
+  it('falls back to an empty domain when site_config is missing', async () => {
+    const wrapper = await mountPolicyLink({ domain: null });
     await flushPromises();
 
+    expect(wrapper.html()).toContain('for calendars hosted on');
+  });
+
+  it('honors a custom label prop by rendering the entire label as the link text', async () => {
+    const wrapper = await mountPolicyLink({ props: { label: 'Read our policy' } });
+    await flushPromises();
+
+    const link = wrapper.findComponent(RouterLink);
+    expect(link.text()).toBe('Read our policy');
     expect(wrapper.text()).toBe('Read our policy');
+  });
+
+  it('forwards the source prop as a from query param so the policy page can render a contextual back link', async () => {
+    const wrapper = await mountPolicyLink({ props: { source: 'register-apply' } });
+    await flushPromises();
+
+    const link = wrapper.findComponent(RouterLink);
+    expect(link.props('to')).toEqual({
+      name: 'instance-policy',
+      query: { from: 'register-apply' },
+    });
   });
 });

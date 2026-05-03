@@ -2,5 +2,8 @@
   "page_title": "Instance Policy",
   "heading": "Community Guidelines",
   "empty_fallback": "This instance has not yet published a policy.",
-  "back_to_login": "Back to login"
+  "back_to_login": "← back to sign in",
+  "back_to_register": "← back to registration",
+  "back_to_apply": "← back to your application",
+  "back_to_settings": "← back to settings"
 }

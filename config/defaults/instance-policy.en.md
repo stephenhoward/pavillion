@@ -1,15 +1,6 @@
-# Community Guidelines
-
 ## Welcome
 
-Welcome to our community calendar. This space is shared by organizers and neighbors who want to make local events easier to find and attend.
-
-## Conduct
-
-- Treat other members with respect and good faith.
-- No harassment, hate speech, threats, or personal attacks.
-- Disagree with ideas, not with people.
-- Respect privacy — do not share personal information about others without consent.
+Welcome to our Pavillion instance. This space is shared by event organizers who want to make local events easier to find and attend.
 
 ## Content guidelines
 
@@ -20,4 +11,4 @@ Welcome to our community calendar. This space is shared by organizers and neighb
 
 ## Customizing this policy
 
-This is the default policy shipped with a fresh installation. Instance operators are encouraged to replace it with guidelines that reflect their community's values. You can edit this policy from the admin settings page.
+This is the default policy shipped with a fresh installation. Instance operators are encouraged to replace it with guidelines that reflect the content they wish to host. You can edit this policy from the admin settings page.

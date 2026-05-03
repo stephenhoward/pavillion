@@ -98,6 +98,10 @@ function onLoginSuccess() {
         </i18next>
       </p>
 
+      <p class="policy-link">
+        <PolicyLink source="login" />
+      </p>
+
       <a href="https://pavillion.social"
          target="_blank"
          rel="noopener noreferrer"
@@ -105,9 +109,6 @@ function onLoginSuccess() {
         {{ t('info_panel.learn_more') }}
       </a>
 
-      <p class="policy-link">
-        <PolicyLink />
-      </p>
     </aside>
   </div>
 </template>
@@ -122,6 +123,5 @@ function onLoginSuccess() {
 
 .policy-link {
   margin-block-start: var(--pav-space-4);
-  font-size: 0.875rem;
 }
 </style>

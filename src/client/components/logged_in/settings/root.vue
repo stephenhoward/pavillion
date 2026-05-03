@@ -292,7 +292,7 @@ onMounted(async () => {
         <!-- Logout Section -->
         <section class="logout-section">
           <p class="policy-link">
-            <PolicyLink />
+            <PolicyLink source="settings" />
           </p>
           <button
             type="button"

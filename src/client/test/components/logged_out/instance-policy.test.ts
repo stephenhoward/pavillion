@@ -9,20 +9,36 @@ import InstancePolicy from '@/client/components/logged_out/instance-policy.vue';
 
 const routes: RouteRecordRaw[] = [
   { path: '/login', component: {}, name: 'login' },
+  { path: '/auth/register', component: {}, name: 'register' },
+  { path: '/auth/apply', component: {}, name: 'register-apply' },
+  { path: '/profile', component: {}, name: 'profile' },
   { path: '/policy', component: {}, name: 'instance-policy' },
 ];
 
-const mountInstancePolicy = async (settings: Record<string, unknown> = {}) => {
+type MountOpts = {
+  settings?: Record<string, unknown>;
+  policyPath?: string;
+  isLoggedIn?: boolean;
+};
+
+const mountInstancePolicy = async ({
+  settings = {},
+  policyPath = '/policy',
+  isLoggedIn = false,
+}: MountOpts = {}) => {
   const router: Router = createRouter({
     history: createMemoryHistory(),
     routes,
   });
-  await router.push('/policy');
+  await router.push(policyPath);
   await router.isReady();
   const wrapper = mountComponent(InstancePolicy, router, {
     provide: {
       site_config: {
         settings: () => settings,
+      },
+      authn: {
+        isLoggedIn: () => isLoggedIn,
       },
     },
   });
@@ -43,13 +59,13 @@ describe('InstancePolicy fallback chain', () => {
 
   it('renders the current-language policy markdown when present', async () => {
     await i18next.changeLanguage('en');
-    const { wrapper } = await mountInstancePolicy({
+    const { wrapper } = await mountInstancePolicy({ settings: {
       instancePolicy: {
         en: '## English Heading\n\nEnglish policy paragraph with [link](https://example.com).\n\n- first bullet\n- second bullet',
         es: '## Encabezado\n\nContenido en español.',
       },
       defaultLanguage: 'en',
-    });
+    } });
 
     const article = wrapper.find('article.policy-content');
     expect(article.exists()).toBe(true);
@@ -78,12 +94,12 @@ describe('InstancePolicy fallback chain', () => {
 
   it('falls back to instance default language when current language is missing', async () => {
     await i18next.changeLanguage('fr');
-    const { wrapper } = await mountInstancePolicy({
+    const { wrapper } = await mountInstancePolicy({ settings: {
       instancePolicy: {
         en: '## Default Heading\n\nDefault language policy content.',
       },
       defaultLanguage: 'en',
-    });
+    } });
 
     const article = wrapper.find('article.policy-content');
     expect(article.exists()).toBe(true);
@@ -96,10 +112,10 @@ describe('InstancePolicy fallback chain', () => {
 
   it('renders the empty-fallback message when instancePolicy is empty', async () => {
     await i18next.changeLanguage('en');
-    const { wrapper } = await mountInstancePolicy({
+    const { wrapper } = await mountInstancePolicy({ settings: {
       instancePolicy: {},
       defaultLanguage: 'en',
-    });
+    } });
 
     const article = wrapper.find('article.policy-content');
     expect(article.exists()).toBe(true);
@@ -109,12 +125,12 @@ describe('InstancePolicy fallback chain', () => {
 
   it('strips dangerous payloads at render time (DOMPurify defense-in-depth)', async () => {
     await i18next.changeLanguage('en');
-    const { wrapper } = await mountInstancePolicy({
+    const { wrapper } = await mountInstancePolicy({ settings: {
       instancePolicy: {
         en: '## Safe Heading\n\n<script>alert(1)</script>\n\n<img src="x" onerror="alert(1)">\n\n[bad](javascript:alert(1))',
       },
       defaultLanguage: 'en',
-    });
+    } });
 
     const article = wrapper.find('article.policy-content');
     expect(article.exists()).toBe(true);
@@ -129,5 +145,55 @@ describe('InstancePolicy fallback chain', () => {
     expect(html).not.toContain('javascript:');
     expect(article.find('script').exists()).toBe(false);
     expect(article.find('img').exists()).toBe(false);
+  });
+});
+
+describe('InstancePolicy back link', () => {
+  beforeAll(() => {
+    initI18Next();
+  });
+
+  const settings = { instancePolicy: { en: '## ok' }, defaultLanguage: 'en' };
+
+  it('routes back to login when from=login', async () => {
+    const { wrapper } = await mountInstancePolicy({ settings, policyPath: '/policy?from=login' });
+    const link = wrapper.find('a.forgot');
+    expect(link.attributes('href')).toBe('/login');
+    expect(link.text()).toContain('sign in');
+  });
+
+  it('routes back to register when from=register', async () => {
+    const { wrapper } = await mountInstancePolicy({ settings, policyPath: '/policy?from=register' });
+    const link = wrapper.find('a.forgot');
+    expect(link.attributes('href')).toBe('/auth/register');
+    expect(link.text()).toContain('registration');
+  });
+
+  it('routes back to the application page when from=register-apply', async () => {
+    const { wrapper } = await mountInstancePolicy({ settings, policyPath: '/policy?from=register-apply' });
+    const link = wrapper.find('a.forgot');
+    expect(link.attributes('href')).toBe('/auth/apply');
+    expect(link.text()).toContain('application');
+  });
+
+  it('routes back to settings when from=settings', async () => {
+    const { wrapper } = await mountInstancePolicy({ settings, policyPath: '/policy?from=settings' });
+    const link = wrapper.find('a.forgot');
+    expect(link.attributes('href')).toBe('/profile');
+    expect(link.text()).toContain('settings');
+  });
+
+  it('falls back to settings when no source is given but the visitor is logged in', async () => {
+    const { wrapper } = await mountInstancePolicy({ settings, isLoggedIn: true });
+    const link = wrapper.find('a.forgot');
+    expect(link.attributes('href')).toBe('/profile');
+    expect(link.text()).toContain('settings');
+  });
+
+  it('falls back to login when no source is given and the visitor is anonymous', async () => {
+    const { wrapper } = await mountInstancePolicy({ settings });
+    const link = wrapper.find('a.forgot');
+    expect(link.attributes('href')).toBe('/login');
+    expect(link.text()).toContain('sign in');
   });
 });

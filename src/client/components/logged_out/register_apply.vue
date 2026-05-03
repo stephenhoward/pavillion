@@ -19,6 +19,10 @@
     >
       <h3>{{ t('title') }}</h3>
 
+      <p class="policy-link">
+        <PolicyLink source="register-apply" />
+      </p>
+
       <ErrorAlert id="apply-error" :error="state.err" />
 
       <div class="form-stack">
@@ -67,9 +71,6 @@
         {{ t("go_login") }}
       </router-link>
 
-      <p class="policy-link">
-        <PolicyLink />
-      </p>
     </form>
   </div>
 </template>
@@ -212,4 +213,13 @@ async function doApply() {
     color: var(--pav-color-stone-300);
   }
 }
+
+h3 {
+  margin-block-end: var(--pav-space-4);
+}
+
+.policy-link {
+  margin-block-end: var(--pav-space-8);
+}
+
 </style>

@@ -52,7 +52,7 @@
       </router-link>
 
       <p class="policy-link">
-        <PolicyLink />
+        <PolicyLink source="register" />
       </p>
     </form>
   </div>
