@@ -410,7 +410,7 @@
     "instance_description_help": "A short description of your instance shown on public pages and in federation metadata. Maximum 500 characters.",
     "instance_policy": "Instance Policy",
     "instance_policy_placeholder": "e.g. Describe what content and conduct your instance allows...",
-    "instance_policy_help": "Markdown formatting is supported and will be converted to HTML on save. You can also edit the HTML directly."
+    "instance_policy_help": "Markdown formatting is supported. Content is stored as Markdown and rendered as HTML when displayed."
   },
   "federation": {
     "title": "Federation",
