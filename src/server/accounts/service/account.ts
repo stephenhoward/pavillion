@@ -313,51 +313,6 @@ export default class AccountService {
   }
 
   /**
-   * Validates a confirmation token without consuming it.
-   *
-   * Returns true only if the token matches an `account_application` row whose
-   * status is `pending_confirmation` and whose `confirmation_token_expiration`
-   * is in the future. All terminal failure states (token not found, expired,
-   * already-consumed/null, status changed) return identical false so the
-   * caller cannot distinguish (anti-enumeration; epic pv-l9wv).
-   *
-   * Token lookup is performed with a DB `WHERE confirmation_token = :token`
-   * predicate — no application-layer string compare.
-   *
-   * @param token - The confirmation token from the email link
-   * @returns true if the token is valid and unexpired; false otherwise
-   */
-  async validateConfirmationToken(token: string): Promise<boolean> {
-    if (!token) {
-      return false;
-    }
-
-    const application = await AccountApplicationEntity.findOne({
-      where: { confirmation_token: token },
-    });
-
-    if (!application) {
-      return false;
-    }
-
-    if (application.status !== 'pending_confirmation') {
-      return false;
-    }
-
-    if (!application.confirmation_token_expiration) {
-      return false;
-    }
-
-    const now = DateTime.utc();
-    const expirationTime = DateTime.fromJSDate(application.confirmation_token_expiration);
-    if (now > expirationTime) {
-      return false;
-    }
-
-    return true;
-  }
-
-  /**
    * Atomically consumes a confirmation token, transitioning the matching
    * account application from `pending_confirmation` to `pending` and clearing
    * the token fields. On success, sends the {@link ApplicationAcknowledgmentEmail}

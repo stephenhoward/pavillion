@@ -450,12 +450,6 @@ describe('applyForNewAccount', () => {
 });
 
 describe('confirmAccountApplication', () => {
-  // Per testing-advisor (bead pv-l9wv.3.2): the validateConfirmationToken
-  // describe block is folded into this one since validateConfirmationToken
-  // is an internal helper that mirrors the same lookup/validation logic
-  // used inside confirmAccountApplication. Each terminal failure state is
-  // covered for both methods inline below.
-
   let confirmSandbox = sinon.createSandbox();
   let accountService: AccountService;
   let emailInterface: EmailInterface;
@@ -512,7 +506,7 @@ describe('confirmAccountApplication', () => {
   });
 
   // Terminal failure: token not found
-  it('returns false when token not found (covers validateConfirmationToken too)', async () => {
+  it('returns false when token not found', async () => {
     const findOneStub = confirmSandbox.stub(AccountApplicationEntity, 'findOne');
     const updateStub = confirmSandbox.stub(AccountApplicationEntity, 'update');
     const emailStub = confirmSandbox.stub(emailInterface, 'sendEmail').resolves();
@@ -523,10 +517,6 @@ describe('confirmAccountApplication', () => {
     expect(confirmResult).toBe(false);
     expect(updateStub.called).toBe(false);
     expect(emailStub.called).toBe(false);
-
-    // validate also returns false for the same token
-    const validateResult = await accountService.validateConfirmationToken('no-such-token');
-    expect(validateResult).toBe(false);
   });
 
   // Terminal failure: empty/missing token
@@ -536,9 +526,6 @@ describe('confirmAccountApplication', () => {
 
     const confirmResult = await accountService.confirmAccountApplication('');
     expect(confirmResult).toBe(false);
-
-    const validateResult = await accountService.validateConfirmationToken('');
-    expect(validateResult).toBe(false);
 
     // No DB or email work attempted on empty token
     expect(findOneStub.called).toBe(false);
@@ -604,10 +591,6 @@ describe('confirmAccountApplication', () => {
     const confirmResult = await accountService.confirmAccountApplication(token);
     expect(confirmResult).toBe(false);
     expect(updateStub.called).toBe(false);
-
-    findOneStub.resolves(application); // re-resolve for second call
-    const validateResult = await accountService.validateConfirmationToken(token);
-    expect(validateResult).toBe(false);
   });
 
   // Terminal failure: status not pending_confirmation (covers double-consume
@@ -692,36 +675,13 @@ describe('confirmAccountApplication', () => {
     expect(emailStub.called).toBe(false);
   });
 
-  // validateConfirmationToken happy path
-  it('validateConfirmationToken returns true for a valid, unexpired pending_confirmation token', async () => {
-    const token = 'g'.repeat(32);
-    const application = AccountApplicationEntity.build({
-      id: 'app-id',
-      email: 'applicant@example.com',
-      status: 'pending_confirmation',
-      status_timestamp: new Date(),
-      confirmation_token: token,
-      confirmation_token_expiration: new Date(Date.now() + 60 * 60 * 1000),
-    });
-
-    const findOneStub = confirmSandbox.stub(AccountApplicationEntity, 'findOne');
-    findOneStub.resolves(application);
-
-    const result = await accountService.validateConfirmationToken(token);
-    expect(result).toBe(true);
-
-    // validate must NOT mutate or send anything
-    const updateStub = confirmSandbox.stub(AccountApplicationEntity, 'update');
-    expect(updateStub.called).toBe(false);
-  });
-
   // Token lookup uses the DB WHERE clause, not an app-layer compare
   it('looks up the token via findOne WHERE confirmation_token = :token (no app-layer compare)', async () => {
     const token = 'h'.repeat(32);
     const findOneStub = confirmSandbox.stub(AccountApplicationEntity, 'findOne');
     findOneStub.resolves(null);
 
-    await accountService.validateConfirmationToken(token);
+    await accountService.confirmAccountApplication(token);
 
     expect(findOneStub.calledOnce).toBe(true);
     const callArgs = findOneStub.firstCall.args[0] as { where: Record<string, unknown> };

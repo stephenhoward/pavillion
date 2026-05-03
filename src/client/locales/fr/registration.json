@@ -28,10 +28,7 @@
   },
   "apply_confirm": {
     "title": "Confirmez votre demande",
-    "validating": "Vérification de votre lien de confirmation…",
-    "valid_intro": "Cliquez sur le bouton ci-dessous pour confirmer votre adresse e-mail et soumettre votre demande à examen.",
-    "confirm_button": "Confirmer mon e-mail",
-    "confirming": "Confirmation en cours…",
+    "confirming": "Confirmation de votre adresse e-mail…",
     "success_message": "Merci. Votre demande est maintenant à l'examen.",
     "go_login": "← retour à la connexion",
     "invalid_message": "Ce lien de confirmation est invalide ou a expiré. Veuillez refaire votre demande.",

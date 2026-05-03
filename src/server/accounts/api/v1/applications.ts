@@ -37,13 +37,13 @@ export default class AccountApplicationRouteHandlers {
       ...ExpressHelper.noUserOnly,
       this.applyToRegister.bind(this),
     );
-    // CRITICAL: confirm routes are registered BEFORE `/applications/:id` so the
-    // static `confirm` segment is not matched as an `:id` parameter (Express
-    // matches in registration order).
-    // These endpoints are anonymous: the URL-path token IS the bearer
-    // credential, so no session middleware and no CSRF token are applied —
-    // either would break the email-link flow.
-    router.get('/applications/confirm/:token', confirmApplicationByIp, this.checkConfirmationToken.bind(this));
+    // CRITICAL: the confirm route is registered BEFORE `/applications/:id` so
+    // the static `confirm` segment is not matched as an `:id` parameter
+    // (Express matches in registration order).
+    // This endpoint is anonymous: the URL-path token IS the bearer credential,
+    // so no session middleware and no CSRF token are applied — either would
+    // break the email-link flow. The SPA fires it automatically on mount so
+    // the user-facing flow is single-click (the email link itself).
     router.post('/applications/confirm/:token', confirmApplicationByIp, this.consumeConfirmationToken.bind(this));
     router.get('/applications', ...ExpressHelper.adminOnly, this.listApplications.bind(this));
     router.post('/applications/:id', ...ExpressHelper.adminOnly, this.processApplication.bind(this));
@@ -95,39 +95,13 @@ export default class AccountApplicationRouteHandlers {
   }
 
   /**
-   * GET /api/v1/applications/confirm/:token
-   * Anonymous endpoint that reports whether a confirmation token is currently
-   * valid. The URL-path token is the bearer credential — no session, no CSRF.
-   * All terminal failure states (token not found, expired, already-consumed,
-   * wrong status) collapse to the same `{ valid: false }` response so an
-   * enumerator cannot distinguish them (anti-enumeration; epic pv-l9wv).
-   * HTTP status is always 200 to keep the same shape for valid and invalid
-   * tokens. Tokens are never logged.
-   */
-  async checkConfirmationToken(req: Request, res: Response) {
-    try {
-      const valid = await this.service.validateConfirmationToken(req.params.token);
-      res.json({ valid: !!valid });
-    }
-    catch (error) {
-      // Anti-enumeration: a transient infrastructure failure must not produce
-      // a distinguishable HTTP 500. Collapse to the standard failure shape so
-      // not-found / expired / already-consumed / DB-error are indistinguishable
-      // to a caller (epic pv-l9wv). Token value is never included in the log.
-      logError(error, 'Error checking confirmation token');
-      res.json({ valid: false });
-    }
-  }
-
-  /**
    * POST /api/v1/applications/confirm/:token
    * Anonymous endpoint that atomically consumes a confirmation token,
    * transitioning the matching application from `pending_confirmation` to
-   * `pending`. Same anti-enumeration posture as the GET counterpart: every
-   * terminal failure state collapses to `{ valid: false }` (HTTP 200) so a
-   * caller cannot distinguish "not found" from "expired" from
-   * "already-consumed" from "wrong status". On success, returns
-   * `{ success: true }`. Tokens are never logged.
+   * `pending`. Every terminal failure state (token not found, expired,
+   * already-consumed, wrong status) collapses to `{ valid: false }` (HTTP 200)
+   * so a caller cannot distinguish them (anti-enumeration; epic pv-l9wv). On
+   * success, returns `{ success: true }`. Tokens are never logged.
    */
   async consumeConfirmationToken(req: Request, res: Response) {
     try {
@@ -136,13 +110,17 @@ export default class AccountApplicationRouteHandlers {
         res.json({ success: true });
       }
       else {
-        // Identical failure shape to GET so the two endpoints are
-        // indistinguishable in any terminal failure state.
+        // Anti-enumeration: every terminal failure (not found / expired /
+        // already-consumed / wrong status) collapses to the same shape so a
+        // caller cannot distinguish them.
         res.json({ valid: false });
       }
     }
     catch (error) {
-      // Anti-enumeration: see checkConfirmationToken — same rationale.
+      // Anti-enumeration: a transient infrastructure failure must not produce
+      // a distinguishable HTTP 500. Collapse to the standard failure shape so
+      // not-found / expired / already-consumed / DB-error are indistinguishable
+      // to a caller (epic pv-l9wv). Token value is never included in the log.
       logError(error, 'Error consuming confirmation token');
       res.json({ valid: false });
     }

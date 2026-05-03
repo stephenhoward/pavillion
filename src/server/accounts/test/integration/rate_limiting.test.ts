@@ -53,7 +53,7 @@ describeOrSkip('Account Application Rate Limiting Integration Tests', () => {
     app.post('/apply-email-only', applicationByEmail, (req, res) => {
       res.json({ route: 'email' });
     });
-    app.get('/confirm-ip-only', confirmApplicationByIp, (req, res) => {
+    app.post('/confirm-ip-only', confirmApplicationByIp, (req, res) => {
       res.json({ route: 'confirm' });
     });
   });
@@ -192,7 +192,7 @@ describeOrSkip('Account Application Rate Limiting Integration Tests', () => {
   });
 
   describe('confirmApplicationByIp', () => {
-    it('should return 429 once the per-IP confirmation limit is exhausted, and route wiring on the real /api/v1/applications/confirm/:token endpoints is verified', async () => {
+    it('should return 429 once the per-IP confirmation limit is exhausted, and route wiring on the real /api/v1/applications/confirm/:token endpoint is verified', async () => {
       const maxRequests = config.get<number>('rateLimit.application.confirm.byIp.max');
 
       // Phase 1: exhaust the budget against the stub route. Asserts the
@@ -200,7 +200,7 @@ describeOrSkip('Account Application Rate Limiting Integration Tests', () => {
       // shape).
       const responses = [];
       for (let i = 0; i < maxRequests + 1; i++) {
-        responses.push(await request(app).get('/confirm-ip-only'));
+        responses.push(await request(app).post('/confirm-ip-only'));
       }
 
       for (let i = 0; i < maxRequests; i++) {
@@ -218,13 +218,11 @@ describeOrSkip('Account Application Rate Limiting Integration Tests', () => {
       expect(blocked.headers['retry-after']).toBeDefined();
 
       // Phase 2: prove the same singleton limiter is wired onto the real
-      // public confirm endpoints. Because the limiter store is module-global
-      // and the budget is already exhausted from Phase 1, every fresh request
-      // to the real routes (still on localhost) must short-circuit at 429.
-      // This both:
-      //   a) confirms `confirmApplicationByIp` is mounted on the production
-      //      GET /api/v1/applications/confirm/:token route, and
-      //   b) confirms the same on the POST counterpart.
+      // public confirm endpoint. Because the limiter store is module-global
+      // and the budget is already exhausted from Phase 1, a fresh request to
+      // the real route (still on localhost) must short-circuit at 429. This
+      // confirms `confirmApplicationByIp` is mounted on the production
+      // POST /api/v1/applications/confirm/:token route.
       // Imports are deferred so we don't pay full-server init cost when this
       // file is loaded by other suites; Phase 2 only spins up the server when
       // the test actually runs.
@@ -247,12 +245,6 @@ describeOrSkip('Account Application Rate Limiting Integration Tests', () => {
         new SetupInterface(),
       );
       await accountService._setupAccount('rate-limit-admin@pavillion.dev', 'testpassword!1');
-
-      const realGet = await request(realEnv.app).get(
-        '/api/v1/applications/confirm/any-token-here',
-      );
-      expect(realGet.status).toBe(429);
-      expect(realGet.body.errorName).toBe('RateLimitError');
 
       const realPost = await request(realEnv.app).post(
         '/api/v1/applications/confirm/any-token-here',

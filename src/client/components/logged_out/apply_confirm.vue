@@ -13,58 +13,19 @@ const route = useRoute();
 /**
  * Render state for the confirmation page.
  *
- * - 'validating': initial GET in flight
- * - 'valid':      token validated, awaiting explicit user click
- * - 'invalid':    token rejected, expired, missing, or network failure
+ * - 'confirming': POST in flight (also the initial state)
  * - 'success':    POST succeeded; show success copy
+ * - 'invalid':    token rejected, expired, missing, or network failure
  *
  * Anti-enumeration / email-scanner protection: all failure modes (404,
- * expired, already-consumed, network error, POST failure) collapse to the
- * same 'invalid' state and the same single user-facing copy. The POST
- * is only fired by the user clicking the button — never on mount.
+ * expired, already-consumed, network error) collapse to the same 'invalid'
+ * state and the same single user-facing copy.
  */
-type RenderState = 'validating' | 'valid' | 'invalid' | 'success';
+type RenderState = 'confirming' | 'success' | 'invalid';
 
 const state = reactive({
-  render: 'validating' as RenderState,
-  isSubmitting: false,
+  render: 'confirming' as RenderState,
 });
-
-/**
- * Confirms the application token by POSTing to the confirm endpoint.
- *
- * SECURITY: This must only be invoked by an explicit user click. Email
- * security gateways and prefetch services follow GET links automatically;
- * the explicit POST is the user-action gate that prevents accidental
- * confirmation by automated link scanners.
- */
-async function handleConfirmClick() {
-  if (state.isSubmitting) {
-    return;
-  }
-  state.isSubmitting = true;
-  const token = route.params.token as string;
-
-  try {
-    const response = await axios.post(`/api/v1/applications/confirm/${token}`);
-    if (response?.data?.success === true) {
-      state.render = 'success';
-    }
-    else {
-      // Backend returns { valid: false } for every terminal failure. Collapse
-      // any non-success shape to the same generic invalid state.
-      state.render = 'invalid';
-    }
-  }
-  catch {
-    // Network or server failure: same anti-enumeration posture as the
-    // backend — collapse to the generic invalid copy.
-    state.render = 'invalid';
-  }
-  finally {
-    state.isSubmitting = false;
-  }
-}
 
 onMounted(async () => {
   const token = route.params.token as string;
@@ -76,10 +37,12 @@ onMounted(async () => {
   }
 
   try {
-    const response = await axios.get(`/api/v1/applications/confirm/${token}`);
-    state.render = response?.data?.valid === true ? 'valid' : 'invalid';
+    const response = await axios.post(`/api/v1/applications/confirm/${token}`);
+    state.render = response?.data?.success === true ? 'success' : 'invalid';
   }
   catch {
+    // Network or server failure: same anti-enumeration posture as the
+    // backend — collapse to the generic invalid copy.
     state.render = 'invalid';
   }
 });
@@ -87,29 +50,16 @@ onMounted(async () => {
 
 <template>
   <div>
-    <!-- Validating state -->
-    <div v-if="state.render === 'validating'" class="welcome-card">
+    <!-- Confirming state (initial + while POST is in flight) -->
+    <div v-if="state.render === 'confirming'" class="welcome-card">
       <h3>{{ t('title') }}</h3>
       <p
         class="status-message"
         role="status"
         aria-live="polite"
       >
-        {{ t('validating') }}
+        {{ t('confirming') }}
       </p>
-    </div>
-
-    <!-- Valid token: explicit confirm button -->
-    <div v-else-if="state.render === 'valid'" class="welcome-card">
-      <h3>{{ t('title') }}</h3>
-      <p class="intro-message">{{ t('valid_intro') }}</p>
-      <button
-        type="button"
-        class="btn btn--pill btn--primary"
-        :disabled="state.isSubmitting"
-        :aria-disabled="state.isSubmitting || undefined"
-        @click="handleConfirmClick"
-      >{{ state.isSubmitting ? t('confirming') : t('confirm_button') }}</button>
     </div>
 
     <!-- Success state -->
@@ -147,7 +97,6 @@ h3 {
 }
 
 .status-message,
-.intro-message,
 .success-message,
 .invalid-message {
   font-size: 1.125rem; /* 18px */
