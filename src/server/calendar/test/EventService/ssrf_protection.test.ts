@@ -1,33 +1,33 @@
 /**
  * Tests for federated ActivityPub dispatch in EventService.
  *
- * All three call sites (Create, Update, Delete) are now migrated off the inline
- * axios.post pathway:
- *   - Create  -> activityPubInterface.deliverActivitySigned (signed sync delivery
- *                because the caller reads back the remote response body to
- *                construct the local CalendarEvent model). SSRF validation,
- *                signing, and timeout enforcement happen inside the helper.
- *   - Update  -> activityPubInterface.addToOutbox (signed async delivery via
- *                the outbox worker, single-recipient via explicit `to`).
- *   - Delete  -> activityPubInterface.addToOutbox (same as Update).
+ * All three call sites (Create, Update, Delete) now delegate to typed
+ * publisher methods on ActivityPubInterface. The AP domain owns activity
+ * construction, signing-actor resolution, and remote response handling:
+ *   - Create  -> activityPubInterface.publishEventCreate (synchronous because
+ *                the caller reads the remote response body to construct the
+ *                local CalendarEvent model). 403 surfaces as
+ *                InsufficientCalendarPermissionsError; other non-2xx and
+ *                FederationDeliveryError surface as a generic Error.
+ *   - Update  -> activityPubInterface.publishEventUpdate (fire-and-forget).
+ *   - Delete  -> activityPubInterface.publishEventDelete (fire-and-forget).
  *
- * SSRF protection for the migrated paths is exercised in the AP-domain tests
- * for the outbox helper / worker. The calendar-domain tests here verify the
- * service-layer contract: which AP method is called, with what activity shape,
- * and how the helper's response/exceptions are mapped to caller-visible errors.
+ * SSRF protection is enforced inside the AP-domain helpers (outbox worker /
+ * deliverActivitySigned) and is exercised in the AP-domain tests. The
+ * calendar-domain tests here verify the service-layer contract: which
+ * publisher method is called with which arguments, and how publisher
+ * exceptions surface to callers.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import sinon from 'sinon';
 import { EventEmitter } from 'events';
 
 import { Account } from '@/common/model/account';
-import { Calendar } from '@/common/model/calendar';
+import { CalendarEvent } from '@/common/model/events';
 import type { CalendarActor } from '@/server/activitypub/entity/calendar_actor';
 import EventService from '@/server/calendar/service/events';
-import CalendarService from '@/server/calendar/service/calendar';
 import { InsufficientCalendarPermissionsError } from '@/common/exceptions/calendar';
-import { FederationDeliveryError } from '@/common/exceptions/activitypub';
 
 const REMOTE_INBOX_URL = 'https://remote.example.com/inbox';
 
@@ -54,37 +54,31 @@ function buildRemoteCalendarActor(inboxUrl: string): CalendarActor {
 }
 
 /**
- * Creates a mock ActivityPubInterface with the methods used by EventService
- * stubbed: getUserActorUri, addToOutbox, and deliverActivitySigned.
+ * Creates a mock ActivityPubInterface stubbed with the typed publish methods
+ * EventService now calls. Defaults to no-op resolutions.
  */
 function buildMockApInterface() {
   return {
-    getUserActorUri: sinon.stub().resolves('https://local.example.com/users/test'),
-    addToOutbox: sinon.stub().resolves(),
-    deliverActivitySigned: sinon.stub().resolves({ status: 202, data: null }),
+    publishEventCreate: sinon.stub().resolves(),
+    publishEventUpdate: sinon.stub().resolves(),
+    publishEventDelete: sinon.stub().resolves(),
   } as any;
 }
 
 describe('EventService', () => {
-  describe('createRemoteEvent (migrated to deliverActivitySigned)', () => {
+  describe('createRemoteEvent (migrated to publishEventCreate)', () => {
     let service: EventService;
-    let sandbox: sinon.SinonSandbox;
     let account: Account;
     let mockApInterface: any;
 
     beforeEach(() => {
-      sandbox = sinon.createSandbox();
       service = new EventService(new EventEmitter());
       mockApInterface = buildMockApInterface();
       service.setActivityPubInterface(mockApInterface);
       account = new Account('account-123', 'test@example.com', 'test@example.com');
     });
 
-    afterEach(() => {
-      sandbox.restore();
-    });
-
-    it('signs Create delivery with the user actor URI matching activity.actor', async () => {
+    it('delegates to publishEventCreate with eventId, eventParams, and remoteCalendarActor', async () => {
       const remoteCalendarActor = buildRemoteCalendarActor(REMOTE_INBOX_URL);
       const eventParams = {
         content: { en: { name: 'Test Event', description: 'Test description' } },
@@ -92,23 +86,21 @@ describe('EventService', () => {
         start_time: '10:00',
       };
 
-      mockApInterface.deliverActivitySigned.resolves({ status: 202, data: null });
+      const stubReturn = new CalendarEvent('returned-id', remoteCalendarActor.id, '', false);
+      mockApInterface.publishEventCreate.resolves(stubReturn);
 
       await (service as any).createRemoteEvent(account, remoteCalendarActor, eventParams);
 
-      expect(mockApInterface.deliverActivitySigned.calledOnce).toBe(true);
-      const [signingActorUri, activityArg, inboxUrlArg] = mockApInterface.deliverActivitySigned.firstCall.args;
-      // Per epic per-call-site signing actor table: Create signs with the user
-      // actor URI, which must equal the activity's `actor` field so the keyId
-      // is valid at the receiver.
-      expect(signingActorUri).toBe('https://local.example.com/users/test');
-      expect(activityArg.actor).toBe(signingActorUri);
-      expect(activityArg.type).toBe('Create');
-      expect(activityArg.to).toEqual([remoteCalendarActor.actorUri]);
-      expect(inboxUrlArg).toBe(REMOTE_INBOX_URL);
+      expect(mockApInterface.publishEventCreate.calledOnce).toBe(true);
+      const [accountArg, eventInput, actorArg] = mockApInterface.publishEventCreate.firstCall.args;
+      expect(accountArg).toBe(account);
+      expect(eventInput).toHaveProperty('eventId');
+      expect(typeof eventInput.eventId).toBe('string');
+      expect(eventInput.eventParams).toBe(eventParams);
+      expect(actorArg).toBe(remoteCalendarActor);
     });
 
-    it('uses returned event data when remote response has data with an id', async () => {
+    it('returns the CalendarEvent resolved by publishEventCreate', async () => {
       const remoteCalendarActor = buildRemoteCalendarActor(REMOTE_INBOX_URL);
       const eventParams = {
         content: { en: { name: 'Test Event', description: 'Test description' } },
@@ -116,20 +108,14 @@ describe('EventService', () => {
         start_time: '10:00',
       };
 
-      const remoteEventId = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
-      mockApInterface.deliverActivitySigned.resolves({
-        status: 200,
-        data: {
-          id: remoteEventId,
-          calendarId: remoteCalendarActor.id,
-        },
-      });
+      const expected = new CalendarEvent('publisher-eventid', remoteCalendarActor.id, '', false);
+      mockApInterface.publishEventCreate.resolves(expected);
 
       const result = await (service as any).createRemoteEvent(account, remoteCalendarActor, eventParams);
-      expect(result.id).toBe(remoteEventId);
+      expect(result).toBe(expected);
     });
 
-    it('falls back to a locally-constructed event when response.data is null (e.g. empty 202)', async () => {
+    it('propagates InsufficientCalendarPermissionsError thrown by publishEventCreate (e.g. remote 403)', async () => {
       const remoteCalendarActor = buildRemoteCalendarActor(REMOTE_INBOX_URL);
       const eventParams = {
         content: { en: { name: 'Test Event', description: 'Test description' } },
@@ -137,49 +123,16 @@ describe('EventService', () => {
         start_time: '10:00',
       };
 
-      mockApInterface.deliverActivitySigned.resolves({ status: 202, data: null });
-
-      const result = await (service as any).createRemoteEvent(account, remoteCalendarActor, eventParams);
-      // Falls back to a locally-constructed CalendarEvent with the calendar ID
-      // matching the remote calendar actor.
-      expect(result).toBeDefined();
-      expect(result.calendarId).toBe(remoteCalendarActor.id);
-    });
-
-    it('falls back when response.data is non-null but has no id', async () => {
-      const remoteCalendarActor = buildRemoteCalendarActor(REMOTE_INBOX_URL);
-      const eventParams = {
-        content: { en: { name: 'Test Event', description: 'Test description' } },
-        start_date: '2026-03-01',
-        start_time: '10:00',
-      };
-
-      // Some receivers return an empty object on success.
-      mockApInterface.deliverActivitySigned.resolves({ status: 200, data: {} });
-
-      const result = await (service as any).createRemoteEvent(account, remoteCalendarActor, eventParams);
-      expect(result).toBeDefined();
-      expect(result.calendarId).toBe(remoteCalendarActor.id);
-    });
-
-    it('throws InsufficientCalendarPermissionsError when remote returns 403', async () => {
-      const remoteCalendarActor = buildRemoteCalendarActor(REMOTE_INBOX_URL);
-      const eventParams = {
-        content: { en: { name: 'Test Event', description: 'Test description' } },
-        start_date: '2026-03-01',
-        start_time: '10:00',
-      };
-
-      // Per the new contract, non-2xx is a *resolved* { status, data: null }
-      // — the service must inspect status, not catch an axios-style error.
-      mockApInterface.deliverActivitySigned.resolves({ status: 403, data: null });
+      mockApInterface.publishEventCreate.rejects(
+        new InsufficientCalendarPermissionsError('You are not authorized to create events on this calendar'),
+      );
 
       await expect(
         (service as any).createRemoteEvent(account, remoteCalendarActor, eventParams),
       ).rejects.toThrow(InsufficientCalendarPermissionsError);
     });
 
-    it('throws a generic error for other non-2xx statuses', async () => {
+    it('propagates generic errors thrown by publishEventCreate (non-2xx, federation delivery, etc.)', async () => {
       const remoteCalendarActor = buildRemoteCalendarActor(REMOTE_INBOX_URL);
       const eventParams = {
         content: { en: { name: 'Test Event', description: 'Test description' } },
@@ -187,23 +140,8 @@ describe('EventService', () => {
         start_time: '10:00',
       };
 
-      mockApInterface.deliverActivitySigned.resolves({ status: 500, data: null });
-
-      await expect(
-        (service as any).createRemoteEvent(account, remoteCalendarActor, eventParams),
-      ).rejects.toThrow('Failed to create event on remote calendar');
-    });
-
-    it('wraps FederationDeliveryError thrown by the helper as a generic error', async () => {
-      const remoteCalendarActor = buildRemoteCalendarActor(REMOTE_INBOX_URL);
-      const eventParams = {
-        content: { en: { name: 'Test Event', description: 'Test description' } },
-        start_date: '2026-03-01',
-        start_time: '10:00',
-      };
-
-      mockApInterface.deliverActivitySigned.rejects(
-        new FederationDeliveryError('Network failure delivering to remote inbox'),
+      mockApInterface.publishEventCreate.rejects(
+        new Error('[AP] Failed to create event on remote calendar: remote returned status 500'),
       );
 
       await expect(
@@ -212,30 +150,19 @@ describe('EventService', () => {
     });
   });
 
-  describe('updateRemoteEventViaActivityPub (migrated to addToOutbox)', () => {
+  describe('updateRemoteEventViaActivityPub (migrated to publishEventUpdate)', () => {
     let service: EventService;
-    let sandbox: sinon.SinonSandbox;
     let account: Account;
     let mockApInterface: any;
 
     beforeEach(() => {
-      sandbox = sinon.createSandbox();
       service = new EventService(new EventEmitter());
       mockApInterface = buildMockApInterface();
       service.setActivityPubInterface(mockApInterface);
       account = new Account('account-123', 'test@example.com', 'test@example.com');
-
-      // The migrated path looks up the user's editable local calendars to
-      // anchor the outbox message (calendar_id FK). Provide one.
-      const userCalendar = new Calendar('local-cal-id', 'local_cal');
-      sandbox.stub(CalendarService.prototype, 'editableCalendarsForUser').resolves([userCalendar]);
     });
 
-    afterEach(() => {
-      sandbox.restore();
-    });
-
-    it('should enqueue an Update activity via addToOutbox with explicit `to`', async () => {
+    it('delegates to publishEventUpdate with eventId, eventParams, and remoteCalendarActor', async () => {
       const remoteCalendarActor = buildRemoteCalendarActor(REMOTE_INBOX_URL);
       const eventId = '11111111-1111-4111-8111-111111111111';
       const eventParams = {
@@ -246,79 +173,81 @@ describe('EventService', () => {
 
       await (service as any).updateRemoteEventViaActivityPub(account, remoteCalendarActor, eventId, eventParams);
 
-      expect(mockApInterface.addToOutbox.calledOnce).toBe(true);
-      const [calendarArg, activityArg] = mockApInterface.addToOutbox.firstCall.args;
-      expect(calendarArg.id).toBe('local-cal-id');
-      expect(activityArg.type).toBe('Update');
-      expect(activityArg.actor).toBe('https://local.example.com/users/test');
-      // Explicit single-recipient delivery — outbox worker honors `to` and
-      // skips follower fan-out for Update activities (per pv-dyyw.1.2).
-      expect(activityArg.to).toEqual([remoteCalendarActor.actorUri]);
+      expect(mockApInterface.publishEventUpdate.calledOnce).toBe(true);
+      const [accountArg, eventInput, actorArg] = mockApInterface.publishEventUpdate.firstCall.args;
+      expect(accountArg).toBe(account);
+      expect(eventInput).toEqual({ eventId, eventParams });
+      expect(actorArg).toBe(remoteCalendarActor);
     });
 
-    it('should throw when remote calendar inbox URL is missing', async () => {
-      const remoteCalendarActor = buildRemoteCalendarActor('') as any;
-      remoteCalendarActor.inboxUrl = null;
+    it('returns a locally-constructed CalendarEvent reflecting the input params', async () => {
+      const remoteCalendarActor = buildRemoteCalendarActor(REMOTE_INBOX_URL);
       const eventId = '11111111-1111-4111-8111-111111111111';
       const eventParams = {
         content: { en: { name: 'Updated Event', description: 'Updated description' } },
       };
 
+      const result = await (service as any).updateRemoteEventViaActivityPub(
+        account,
+        remoteCalendarActor,
+        eventId,
+        eventParams,
+      );
+
+      expect(result).toBeDefined();
+      expect(result.id).toBe(eventId);
+      expect(result.calendarId).toBe(remoteCalendarActor.id);
+    });
+
+    it('propagates errors thrown by publishEventUpdate (e.g. missing inbox URL)', async () => {
+      const remoteCalendarActor = buildRemoteCalendarActor('');
+      const eventId = '11111111-1111-4111-8111-111111111111';
+      const eventParams = {
+        content: { en: { name: 'Updated Event', description: 'Updated description' } },
+      };
+
+      mockApInterface.publishEventUpdate.rejects(new Error('Remote calendar inbox URL not configured'));
+
       await expect(
         (service as any).updateRemoteEventViaActivityPub(account, remoteCalendarActor, eventId, eventParams),
       ).rejects.toThrow();
-
-      expect(mockApInterface.addToOutbox.called).toBe(false);
     });
   });
 
-  describe('deleteRemoteEventViaActivityPub (migrated to addToOutbox)', () => {
+  describe('deleteRemoteEventViaActivityPub (migrated to publishEventDelete)', () => {
     let service: EventService;
-    let sandbox: sinon.SinonSandbox;
     let account: Account;
     let mockApInterface: any;
 
     beforeEach(() => {
-      sandbox = sinon.createSandbox();
       service = new EventService(new EventEmitter());
       mockApInterface = buildMockApInterface();
       service.setActivityPubInterface(mockApInterface);
       account = new Account('account-123', 'test@example.com', 'test@example.com');
-
-      const userCalendar = new Calendar('local-cal-id', 'local_cal');
-      sandbox.stub(CalendarService.prototype, 'editableCalendarsForUser').resolves([userCalendar]);
     });
 
-    afterEach(() => {
-      sandbox.restore();
-    });
-
-    it('should enqueue a Delete activity via addToOutbox with explicit `to`', async () => {
+    it('delegates to publishEventDelete with eventId and remoteCalendarActor', async () => {
       const remoteCalendarActor = buildRemoteCalendarActor(REMOTE_INBOX_URL);
       const eventId = '22222222-2222-4222-8222-222222222222';
 
       await (service as any).deleteRemoteEventViaActivityPub(account, remoteCalendarActor, eventId);
 
-      expect(mockApInterface.addToOutbox.calledOnce).toBe(true);
-      const [calendarArg, activityArg] = mockApInterface.addToOutbox.firstCall.args;
-      expect(calendarArg.id).toBe('local-cal-id');
-      expect(activityArg.type).toBe('Delete');
-      expect(activityArg.actor).toBe('https://local.example.com/users/test');
-      // Explicit single-recipient delivery — outbox worker honors `to` and
-      // skips follower fan-out for Delete activities (per pv-dyyw.1.2).
-      expect(activityArg.to).toEqual([remoteCalendarActor.actorUri]);
+      expect(mockApInterface.publishEventDelete.calledOnce).toBe(true);
+      const [accountArg, eventIdArg, actorArg] = mockApInterface.publishEventDelete.firstCall.args;
+      expect(accountArg).toBe(account);
+      expect(eventIdArg).toBe(eventId);
+      expect(actorArg).toBe(remoteCalendarActor);
     });
 
-    it('should throw when remote calendar inbox URL is missing', async () => {
-      const remoteCalendarActor = buildRemoteCalendarActor('') as any;
-      remoteCalendarActor.inboxUrl = null;
+    it('propagates errors thrown by publishEventDelete (e.g. missing inbox URL)', async () => {
+      const remoteCalendarActor = buildRemoteCalendarActor('');
       const eventId = '22222222-2222-4222-8222-222222222222';
+
+      mockApInterface.publishEventDelete.rejects(new Error('Remote calendar inbox URL not configured'));
 
       await expect(
         (service as any).deleteRemoteEventViaActivityPub(account, remoteCalendarActor, eventId),
       ).rejects.toThrow();
-
-      expect(mockApInterface.addToOutbox.called).toBe(false);
     });
   });
 });

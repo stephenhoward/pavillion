@@ -20,8 +20,6 @@ import LocationService from "@/server/calendar/service/locations";
 import { EventEmitter } from 'events';
 import type MediaInterface from '@/server/media/interface';
 import type ActivityPubInterface from '@/server/activitypub/interface';
-import UpdateActivity from '@/server/activitypub/model/action/update';
-import DeleteActivity from '@/server/activitypub/model/action/delete';
 import { EventNotFoundError, InsufficientCalendarPermissionsError, CalendarNotFoundError, BulkEventsNotFoundError, MixedCalendarEventsError, CategoriesNotFoundError, LocationValidationError, InvalidExternalUrlError } from '@/common/exceptions/calendar';
 import { ValidationError } from '@/common/exceptions/base';
 import CategoryService from './categories';
@@ -31,12 +29,7 @@ import { EventCategoryContentEntity } from '@/server/calendar/entity/event_categ
 import { EventCategoryAssignmentEntity } from '@/server/calendar/entity/event_category_assignment';
 import { EventInstanceEntity } from '@/server/calendar/entity/event_instance';
 import { EventRepostEntity } from '@/server/calendar/entity/event_repost';
-import { FederationDeliveryError } from '@/common/exceptions/activitypub';
 import db from '@/server/common/entity/db';
-import { logError } from '@/server/common/helper/error-logger';
-import { createLogger } from '@/server/common/helper/logger';
-
-const logger = createLogger('calendar');
 import { Op, literal, where, fn, col, type Transaction } from 'sequelize';
 
 /**
@@ -421,7 +414,9 @@ class EventService {
   }
 
   /**
-   * Creates an event on a remote calendar by sending an ActivityPub Create activity
+   * Creates an event on a remote calendar by delegating to the AP domain's
+   * typed publisher. The publisher owns activity construction, signing-actor
+   * resolution, and remote response handling.
    *
    * @param account - The local account creating the event
    * @param remoteCalendarActor - The CalendarActor representing the remote calendar
@@ -433,125 +428,25 @@ class EventService {
     remoteCalendarActor: CalendarActor,
     eventParams: Record<string, any>,
   ): Promise<CalendarEvent> {
-    // Get the local user's actor URI for signing the activity
-    const actorUri = await this.activityPubInterface!.getUserActorUri(account.id);
-    if (!actorUri) {
-      throw new InsufficientCalendarPermissionsError('User does not have an ActivityPub identity configured');
-    }
-
-    const localDomain = config.get<string>('domain');
     const eventId = this.generateEventId();
-
-    // Build the ActivityPub Create activity
-    const createActivity = {
-      '@context': 'https://www.w3.org/ns/activitystreams',
-      type: 'Create',
-      id: `https://${localDomain}/activities/${uuidv4()}`,
-      actor: actorUri,
-      to: [remoteCalendarActor.actorUri],
-      object: {
-        type: 'Event',
-        id: `https://${localDomain}/events/${eventId}`,
-        name: eventParams.content?.en?.name || eventParams.name || 'Untitled Event',
-        summary: eventParams.content?.en?.description || eventParams.description || '',
-        startTime: this.buildIsoDateTime(eventParams.start_date, eventParams.start_time),
-        endTime: this.buildIsoDateTime(eventParams.end_date, eventParams.end_time),
-        attributedTo: actorUri,
-        calendarId: remoteCalendarActor.id,
-        eventParams: eventParams,
-      },
-    };
-
-    // Send to the remote calendar's inbox
-    const inboxUrl = remoteCalendarActor.inboxUrl;
-    if (!inboxUrl) {
-      throw new CalendarNotFoundError('Remote calendar inbox URL not configured');
-    }
-
-    logger.info({ inboxUrl }, 'Sending Create activity to remote calendar');
-
-    // Delegate signed federation delivery to the AP domain. The helper handles
-    // SSRF validation, HTTP signing, and per-status response shaping internally.
-    // Network/TLS/timeout/signing failures throw FederationDeliveryError; non-2xx
-    // and empty 202 responses resolve as { status, data: null }. The signing
-    // actor URI must equal the activity's `actor` field so the receiver can
-    // resolve the keyId — both are `actorUri` here (per pv-dyyw signing table).
-    let response: { status: number; data: any };
-    try {
-      response = await this.activityPubInterface!.deliverActivitySigned(actorUri, createActivity, inboxUrl);
-    }
-    catch (error: any) {
-      logError(error, '[Calendar] Failed to create event on remote calendar');
-      if (error instanceof FederationDeliveryError) {
-        throw new Error(`Failed to create event on remote calendar: ${error.message}`);
-      }
-      throw error;
-    }
-
-    // 403 response from the remote calendar: caller is not authorized to create
-    // events there. The new contract surfaces this as a resolved { status: 403,
-    // data: null } object rather than an axios error, so check `status` directly.
-    if (response.status === 403) {
-      throw new InsufficientCalendarPermissionsError('You are not authorized to create events on this calendar');
-    }
-
-    // Other non-2xx statuses still need to surface as a meaningful error.
-    if (response.status < 200 || response.status >= 300) {
-      logError(
-        new Error(`Remote inbox returned status ${response.status}`),
-        '[Calendar] Failed to create event on remote calendar',
-      );
-      throw new Error(`Failed to create event on remote calendar: remote returned status ${response.status}`);
-    }
-
-    logger.info({ status: response.status }, 'Remote calendar accepted Create activity');
-
-    // The remote calendar should return the created event as JSON. `data` may
-    // be null (empty 202) — guard before constructing the model from it.
-    if (response.data && typeof response.data === 'object' && response.data?.id) {
-      // Use the event data returned by the remote calendar
-      const event = CalendarEvent.fromObject(response.data);
-      return event;
-    }
-
-    // Fallback: construct a local representation of the event if no response data
-    const event = new CalendarEvent(
-      eventId,
-      remoteCalendarActor.id,
-      this.generateEventUrl(eventId),
-      false,
+    return this.activityPubInterface!.publishEventCreate(
+      account,
+      { eventId, eventParams },
+      remoteCalendarActor,
     );
-
-    // Add content from params
-    if (eventParams.content) {
-      for (const [language, content] of Object.entries(eventParams.content)) {
-        const contentObj = content as any;
-        event.addContent(new CalendarEventContent(language, contentObj.name || '', contentObj.description || ''));
-      }
-    }
-
-    return event;
   }
 
   /**
-   * Helper to build ISO date-time string from date and time parts
-   */
-  private buildIsoDateTime(date: string, time?: string): string {
-    if (!date) return '';
-    if (time) {
-      return `${date}T${time}:00`;
-    }
-    return `${date}T00:00:00`;
-  }
-
-  /**
-   * Updates an event on a remote calendar by sending an ActivityPub Update activity
+   * Updates an event on a remote calendar by delegating to the AP domain's
+   * typed publisher (fire-and-forget). Constructs a local CalendarEvent
+   * representation from the inputs for the caller — the publisher returns
+   * void.
    *
    * @param account - The local account updating the event
    * @param remoteCalendarActor - The CalendarActor representing the remote calendar
    * @param eventId - The ID of the event to update
    * @param eventParams - The updated event parameters
-   * @returns A promise that resolves to the updated event
+   * @returns A promise that resolves to a local representation of the updated event
    */
   private async updateRemoteEventViaActivityPub(
     account: Account,
@@ -559,73 +454,11 @@ class EventService {
     eventId: string,
     eventParams: Record<string, any>,
   ): Promise<CalendarEvent> {
-    // Get the local user's actor URI for signing the activity
-    const actorUri = await this.activityPubInterface!.getUserActorUri(account.id);
-    if (!actorUri) {
-      throw new InsufficientCalendarPermissionsError('User does not have an ActivityPub identity configured');
-    }
-
-    const localDomain = config.get<string>('domain');
-
-    // Build the ActivityPub Update activity
-    // Include the local event ID in eventParams so the remote can look it up
-    const eventParamsWithId = { ...eventParams, id: eventId };
-
-    const updateActivityObject = {
-      '@context': 'https://www.w3.org/ns/activitystreams',
-      type: 'Update',
-      id: `https://${localDomain}/activities/${uuidv4()}`,
-      actor: actorUri,
-      // Explicit single-recipient delivery: the outbox worker honors `to` and
-      // skips follower fan-out for Update activities (per pv-dyyw.1.2).
-      to: [remoteCalendarActor.actorUri],
-      object: {
-        type: 'Event',
-        id: `https://${localDomain}/events/${eventId}`,
-        name: eventParams.content?.en?.name || eventParams.name || 'Untitled Event',
-        summary: eventParams.content?.en?.description || eventParams.description || '',
-        startTime: this.buildIsoDateTime(eventParams.start_date, eventParams.start_time),
-        endTime: this.buildIsoDateTime(eventParams.end_date, eventParams.end_time),
-        attributedTo: actorUri,
-        calendarId: remoteCalendarActor.id,
-        eventParams: eventParamsWithId,
-      },
-    };
-
-    // Verify the remote calendar inbox is configured. The outbox worker
-    // resolves and validates the inbox URL (SSRF guard) at delivery time.
-    if (!remoteCalendarActor.inboxUrl) {
-      throw new CalendarNotFoundError('Remote calendar inbox URL not configured');
-    }
-
-    logger.info({ inboxUrl: remoteCalendarActor.inboxUrl }, 'Enqueuing Update activity for remote calendar');
-
-    // Wrap as an UpdateActivity model so addToOutbox receives the expected
-    // ActivityPubActivity shape. The activity's `actor` field (user actor URI)
-    // is what the outbox worker uses to resolve the signing key via
-    // buildSignedHeaders (per pv-dyyw.1.1).
-    const updateActivity = UpdateActivity.fromObject(updateActivityObject);
-    if (!updateActivity) {
-      throw new Error('Failed to construct UpdateActivity for remote event update');
-    }
-
-    // The outbox helper requires a local Calendar to anchor the message
-    // (calendar_id FK). For user-actor activities, no specific calendar is
-    // semantically the "owner" — pick the first local calendar the user can
-    // edit as the bookkeeping anchor. Delivery routing is driven by the
-    // activity's explicit `to` field, not by this calendar.
-    const userCalendars = await this.calendarService.editableCalendarsForUser(account);
-    if (userCalendars.length === 0) {
-      throw new InsufficientCalendarPermissionsError('User has no local calendar to anchor outbox delivery');
-    }
-
-    // Fire-and-forget enqueue. Errors surface asynchronously through the
-    // outbox worker's per-recipient delivery error accumulation (no synchronous
-    // 403 mapping — that pattern was tied to the inline axios.post path).
-    // TODO(pv-yowo): userCalendars[0] is bookkeeping-only — the FK on the outbox
-    // row needs an anchor but delivery is driven by activity.to. Activity
-    // construction migration into the AP domain (pv-yowo) will resolve this.
-    await this.activityPubInterface!.addToOutbox(userCalendars[0], updateActivity);
+    await this.activityPubInterface!.publishEventUpdate(
+      account,
+      { eventId, eventParams },
+      remoteCalendarActor,
+    );
 
     // Construct a local representation of the updated event for the caller.
     const event = new CalendarEvent(
@@ -646,79 +479,20 @@ class EventService {
   }
 
   /**
-   * Deletes an event on a remote calendar by sending an ActivityPub Delete activity
+   * Deletes an event on a remote calendar by delegating to the AP domain's
+   * typed publisher (fire-and-forget).
    *
    * @param account - The local account deleting the event
    * @param remoteCalendarActor - The CalendarActor representing the remote calendar
    * @param eventId - The ID of the event to delete
-   * @returns A promise that resolves when the delete is complete
+   * @returns A promise that resolves when the delete is enqueued
    */
   private async deleteRemoteEventViaActivityPub(
     account: Account,
     remoteCalendarActor: CalendarActor,
     eventId: string,
   ): Promise<void> {
-    // Get the local user's actor URI for signing the activity
-    const actorUri = await this.activityPubInterface!.getUserActorUri(account.id);
-    if (!actorUri) {
-      throw new InsufficientCalendarPermissionsError('User does not have an ActivityPub identity configured');
-    }
-
-    const localDomain = config.get<string>('domain');
-
-    // Build the ActivityPub Delete activity
-    // Include the local event ID so the remote can look it up
-    const deleteActivityObject = {
-      '@context': 'https://www.w3.org/ns/activitystreams',
-      type: 'Delete',
-      id: `https://${localDomain}/activities/${uuidv4()}`,
-      actor: actorUri,
-      // Explicit single-recipient delivery: the outbox worker honors `to` and
-      // skips follower fan-out for Delete activities (per pv-dyyw.1.2).
-      to: [remoteCalendarActor.actorUri],
-      object: {
-        type: 'Tombstone',
-        id: `https://${localDomain}/events/${eventId}`,
-        formerType: 'Event',
-        calendarId: remoteCalendarActor.id,
-        eventId: eventId,
-      },
-    };
-
-    // Verify the remote calendar inbox is configured. The outbox worker
-    // resolves and validates the inbox URL (SSRF guard) at delivery time.
-    if (!remoteCalendarActor.inboxUrl) {
-      throw new CalendarNotFoundError('Remote calendar inbox URL not configured');
-    }
-
-    logger.info({ inboxUrl: remoteCalendarActor.inboxUrl }, 'Enqueuing Delete activity for remote calendar');
-
-    // Wrap as a DeleteActivity model so addToOutbox receives the expected
-    // ActivityPubActivity shape. The full Tombstone object is preserved on
-    // the activity (DeleteActivity.fromObject keeps `object` as-is) so the
-    // remote inbox can read formerType / eventId fields.
-    const deleteActivity = DeleteActivity.fromObject(deleteActivityObject);
-    if (!deleteActivity) {
-      throw new Error('Failed to construct DeleteActivity for remote event delete');
-    }
-
-    // The outbox helper requires a local Calendar to anchor the message
-    // (calendar_id FK). For user-actor activities, no specific calendar is
-    // semantically the "owner" — pick the first local calendar the user can
-    // edit as the bookkeeping anchor. Delivery routing is driven by the
-    // activity's explicit `to` field, not by this calendar.
-    const userCalendars = await this.calendarService.editableCalendarsForUser(account);
-    if (userCalendars.length === 0) {
-      throw new InsufficientCalendarPermissionsError('User has no local calendar to anchor outbox delivery');
-    }
-
-    // Fire-and-forget enqueue. Errors surface asynchronously through the
-    // outbox worker's per-recipient delivery error accumulation (no synchronous
-    // 403 mapping — that pattern was tied to the inline axios.post path).
-    // TODO(pv-yowo): userCalendars[0] is bookkeeping-only — the FK on the outbox
-    // row needs an anchor but delivery is driven by activity.to. Activity
-    // construction migration into the AP domain (pv-yowo) will resolve this.
-    await this.activityPubInterface!.addToOutbox(userCalendars[0], deleteActivity);
+    await this.activityPubInterface!.publishEventDelete(account, eventId, remoteCalendarActor);
   }
 
   /**
