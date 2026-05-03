@@ -3,6 +3,8 @@ dist
 build
 .DS_Store
 coverage
+docs/.vitepress/dist
+docs/.vitepress/cache
 .claude/orchestrators/logs/
 logs
 .vscode
