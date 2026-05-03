@@ -22,10 +22,18 @@
     "MissingFields": "Please fill in all required fields.",
     "400": "bad sign in",
     "unknown_error": "An unknown error occurred",
-    "application_submitted": "If this email is not already registered, your application will be reviewed.",
+    "application_submitted": "If your email address is eligible, you'll receive a confirmation email shortly. Please click the link in that email to complete your application.",
     "account_applications_closed": "Account applications are currently closed.",
     "application_processing_error": "An error occurred while processing your application. Please try again later.",
     "invalid_request": "Invalid request. Please check your input and try again."
+  },
+  "apply_confirm": {
+    "title": "Confirm your application",
+    "confirming": "Confirming your email address…",
+    "success_message": "Thank you. Your application is now under review.",
+    "go_login": "← back to sign in",
+    "invalid_message": "This confirmation link is invalid or has expired. Please re-apply.",
+    "reapply_link": "Apply again"
   },
   "accept_invite": {
     "bad_invite_title": "Invitation expired",
