@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { CalendarEventSchedule } from '@/common/model/events';
-import { generateRecurrenceText, getRecurrenceText } from '@/common/utils/recurrence-text';
+import { generateRecurrenceText, getRecurrenceText, type TranslateFn } from '@/common/utils/recurrence-text';
 
 function makeSchedule(overrides: Partial<{
   frequency: string | null;
@@ -16,157 +16,201 @@ function makeSchedule(overrides: Partial<{
   return schedule;
 }
 
+/**
+ * Identity-style translator stub: returns the key, optionally suffixed with a
+ * deterministic JSON-serialized params object. This lets the tests assert on
+ * key-routing logic (which is what the function is now responsible for)
+ * without coupling the assertions to translation-file contents.
+ */
+const stubT: TranslateFn = (key, params) => {
+  if (!params || Object.keys(params).length === 0) {
+    return key;
+  }
+  // Stable param ordering for deterministic assertion strings
+  const sortedKeys = Object.keys(params).sort();
+  const sortedParams: Record<string, unknown> = {};
+  for (const k of sortedKeys) {
+    sortedParams[k] = params[k];
+  }
+  return key + ':' + JSON.stringify(sortedParams);
+};
+
 describe('generateRecurrenceText', () => {
   describe('null frequency', () => {
     it('should return empty string for schedule without frequency', () => {
       const schedule = makeSchedule({ frequency: null });
-      expect(generateRecurrenceText(schedule)).toBe('');
+      expect(generateRecurrenceText(schedule, stubT)).toBe('');
     });
   });
 
   describe('daily frequency', () => {
-    it('should return "Every day" for interval=1', () => {
+    it('should return every_day key for interval=1', () => {
       const schedule = makeSchedule({ frequency: 'daily', interval: 1 });
-      expect(generateRecurrenceText(schedule)).toBe('Every day');
+      expect(generateRecurrenceText(schedule, stubT)).toBe('recurrence.every_day');
     });
 
-    it('should return "Every 2 days" for interval=2', () => {
+    it('should return every_n_days key with n=2', () => {
       const schedule = makeSchedule({ frequency: 'daily', interval: 2 });
-      expect(generateRecurrenceText(schedule)).toBe('Every 2 days');
+      expect(generateRecurrenceText(schedule, stubT)).toBe('recurrence.every_n_days:{"n":2}');
     });
 
-    it('should return "Every 3 days" for interval=3', () => {
+    it('should return every_n_days key with n=3', () => {
       const schedule = makeSchedule({ frequency: 'daily', interval: 3 });
-      expect(generateRecurrenceText(schedule)).toBe('Every 3 days');
+      expect(generateRecurrenceText(schedule, stubT)).toBe('recurrence.every_n_days:{"n":3}');
     });
   });
 
   describe('weekly frequency', () => {
-    it('should return "Every week" when no byDay specified', () => {
+    it('should return weekly_every_week key when no byDay specified', () => {
       const schedule = makeSchedule({ frequency: 'weekly', interval: 1 });
-      expect(generateRecurrenceText(schedule)).toBe('Every week');
+      expect(generateRecurrenceText(schedule, stubT)).toBe('recurrence.weekly_every_week');
     });
 
-    it('should return "Every Saturday" for single day', () => {
+    it('should return weekly_on_days key with single day translated via stub', () => {
       const schedule = makeSchedule({ frequency: 'weekly', interval: 1, byDay: ['SA'] });
-      expect(generateRecurrenceText(schedule)).toBe('Every Saturday');
+      expect(generateRecurrenceText(schedule, stubT)).toBe('recurrence.weekly_on_days:{"days":"recurrence.SA"}');
     });
 
-    it('should return "Every Monday" for single day', () => {
+    it('should return weekly_on_days key for single Monday', () => {
       const schedule = makeSchedule({ frequency: 'weekly', interval: 1, byDay: ['MO'] });
-      expect(generateRecurrenceText(schedule)).toBe('Every Monday');
+      expect(generateRecurrenceText(schedule, stubT)).toBe('recurrence.weekly_on_days:{"days":"recurrence.MO"}');
     });
 
-    it('should return "Every Monday and Wednesday" for two days', () => {
+    it('should join two days via Intl.ListFormat in en', () => {
       const schedule = makeSchedule({ frequency: 'weekly', interval: 1, byDay: ['MO', 'WE'] });
-      expect(generateRecurrenceText(schedule)).toBe('Every Monday and Wednesday');
+      // Intl.ListFormat('en', conjunction) for ['recurrence.MO', 'recurrence.WE']
+      // produces "recurrence.MO and recurrence.WE"
+      expect(generateRecurrenceText(schedule, stubT, 'en'))
+        .toBe('recurrence.weekly_on_days:{"days":"recurrence.MO and recurrence.WE"}');
     });
 
-    it('should return "Every Monday, Wednesday, and Friday" for three days', () => {
+    it('should join three days via Intl.ListFormat in en', () => {
       const schedule = makeSchedule({ frequency: 'weekly', interval: 1, byDay: ['MO', 'WE', 'FR'] });
-      expect(generateRecurrenceText(schedule)).toBe('Every Monday, Wednesday, and Friday');
+      expect(generateRecurrenceText(schedule, stubT, 'en'))
+        .toBe('recurrence.weekly_on_days:{"days":"recurrence.MO, recurrence.WE, and recurrence.FR"}');
     });
 
-    it('should return "Every 2 weeks" for biweekly without days', () => {
+    it('should return every_n_weeks key for biweekly without days', () => {
       const schedule = makeSchedule({ frequency: 'weekly', interval: 2 });
-      expect(generateRecurrenceText(schedule)).toBe('Every 2 weeks');
+      expect(generateRecurrenceText(schedule, stubT)).toBe('recurrence.every_n_weeks:{"n":2}');
     });
 
-    it('should return "Every 2 weeks on Saturday" for biweekly with one day', () => {
+    it('should return every_n_weeks_on_days key for biweekly with one day', () => {
       const schedule = makeSchedule({ frequency: 'weekly', interval: 2, byDay: ['SA'] });
-      expect(generateRecurrenceText(schedule)).toBe('Every 2 weeks on Saturday');
+      expect(generateRecurrenceText(schedule, stubT))
+        .toBe('recurrence.every_n_weeks_on_days:{"days":"recurrence.SA","n":2}');
     });
 
-    it('should return "Every 2 weeks on Monday and Friday" for biweekly with two days', () => {
+    it('should return every_n_weeks_on_days key for biweekly with two days', () => {
       const schedule = makeSchedule({ frequency: 'weekly', interval: 2, byDay: ['MO', 'FR'] });
-      expect(generateRecurrenceText(schedule)).toBe('Every 2 weeks on Monday and Friday');
+      expect(generateRecurrenceText(schedule, stubT, 'en'))
+        .toBe('recurrence.every_n_weeks_on_days:{"days":"recurrence.MO and recurrence.FR","n":2}');
+    });
+
+    it('uses locale-correct conjunction for non-English language', () => {
+      const schedule = makeSchedule({ frequency: 'weekly', interval: 1, byDay: ['MO', 'TU'] });
+      // Spanish Intl.ListFormat conjunction joins with " y " for two items
+      const enResult = generateRecurrenceText(schedule, stubT, 'en');
+      const esResult = generateRecurrenceText(schedule, stubT, 'es');
+      expect(enResult).toContain('recurrence.MO and recurrence.TU');
+      expect(esResult).toContain('recurrence.MO y recurrence.TU');
+      expect(esResult).not.toEqual(enResult);
     });
   });
 
   describe('monthly frequency', () => {
-    it('should return "Monthly" for plain monthly without byDay', () => {
+    it('should return monthly key for plain monthly without byDay', () => {
       const schedule = makeSchedule({ frequency: 'monthly', interval: 1 });
-      expect(generateRecurrenceText(schedule)).toBe('Monthly');
+      expect(generateRecurrenceText(schedule, stubT)).toBe('recurrence.monthly');
     });
 
-    it('should return "First Saturday of the month" for 1SA', () => {
+    it('should return nth_weekday_of_month key for 1SA', () => {
       const schedule = makeSchedule({ frequency: 'monthly', interval: 1, byDay: ['1SA'] });
-      expect(generateRecurrenceText(schedule)).toBe('First Saturday of the month');
+      expect(generateRecurrenceText(schedule, stubT))
+        .toBe('recurrence.nth_weekday_of_month:{"day":"recurrence.SA","ordinal":"recurrence.1ord"}');
     });
 
-    it('should return "Second Monday of the month" for 2MO', () => {
+    it('should return nth_weekday_of_month key for 2MO', () => {
       const schedule = makeSchedule({ frequency: 'monthly', interval: 1, byDay: ['2MO'] });
-      expect(generateRecurrenceText(schedule)).toBe('Second Monday of the month');
+      expect(generateRecurrenceText(schedule, stubT))
+        .toBe('recurrence.nth_weekday_of_month:{"day":"recurrence.MO","ordinal":"recurrence.2ord"}');
     });
 
-    it('should return "Third Friday of the month" for 3FR', () => {
+    it('should return nth_weekday_of_month key for 3FR', () => {
       const schedule = makeSchedule({ frequency: 'monthly', interval: 1, byDay: ['3FR'] });
-      expect(generateRecurrenceText(schedule)).toBe('Third Friday of the month');
+      expect(generateRecurrenceText(schedule, stubT))
+        .toBe('recurrence.nth_weekday_of_month:{"day":"recurrence.FR","ordinal":"recurrence.3ord"}');
     });
 
-    it('should return "Fourth Wednesday of the month" for 4WE', () => {
+    it('should return nth_weekday_of_month key for 4WE', () => {
       const schedule = makeSchedule({ frequency: 'monthly', interval: 1, byDay: ['4WE'] });
-      expect(generateRecurrenceText(schedule)).toBe('Fourth Wednesday of the month');
+      expect(generateRecurrenceText(schedule, stubT))
+        .toBe('recurrence.nth_weekday_of_month:{"day":"recurrence.WE","ordinal":"recurrence.4ord"}');
     });
 
-    it('should return "Last Saturday of the month" for -1SA', () => {
+    it('should return nth_weekday_of_month key for -1SA (last)', () => {
       const schedule = makeSchedule({ frequency: 'monthly', interval: 1, byDay: ['-1SA'] });
-      expect(generateRecurrenceText(schedule)).toBe('Last Saturday of the month');
+      expect(generateRecurrenceText(schedule, stubT))
+        .toBe('recurrence.nth_weekday_of_month:{"day":"recurrence.SA","ordinal":"recurrence.-1ord"}');
     });
 
-    it('should return "First Saturday every 2 months" for 1SA with interval=2', () => {
+    it('should return nth_weekday_every_n_months key for 1SA with interval=2', () => {
       const schedule = makeSchedule({ frequency: 'monthly', interval: 2, byDay: ['1SA'] });
-      expect(generateRecurrenceText(schedule)).toBe('First Saturday every 2 months');
+      expect(generateRecurrenceText(schedule, stubT))
+        .toBe('recurrence.nth_weekday_every_n_months:{"day":"recurrence.SA","n":2,"ordinal":"recurrence.1ord"}');
     });
 
-    it('should return "Every 3 months" for interval=3 without byDay', () => {
+    it('should return every_n_months key for interval=3 without byDay', () => {
       const schedule = makeSchedule({ frequency: 'monthly', interval: 3 });
-      expect(generateRecurrenceText(schedule)).toBe('Every 3 months');
+      expect(generateRecurrenceText(schedule, stubT)).toBe('recurrence.every_n_months:{"n":3}');
     });
   });
 
   describe('yearly frequency', () => {
-    it('should return "Yearly" for interval=1', () => {
+    it('should return yearly key for interval=1', () => {
       const schedule = makeSchedule({ frequency: 'yearly', interval: 1 });
-      expect(generateRecurrenceText(schedule)).toBe('Yearly');
+      expect(generateRecurrenceText(schedule, stubT)).toBe('recurrence.yearly');
     });
 
-    it('should return "Every 2 years" for interval=2', () => {
+    it('should return every_n_years key for interval=2', () => {
       const schedule = makeSchedule({ frequency: 'yearly', interval: 2 });
-      expect(generateRecurrenceText(schedule)).toBe('Every 2 years');
+      expect(generateRecurrenceText(schedule, stubT)).toBe('recurrence.every_n_years:{"n":2}');
     });
   });
 });
 
 describe('getRecurrenceText', () => {
   it('should return empty string for empty schedules array', () => {
-    expect(getRecurrenceText([])).toBe('');
+    expect(getRecurrenceText([], stubT)).toBe('');
   });
 
   it('should return empty string when all schedules are exclusions', () => {
     const schedule = makeSchedule({ frequency: 'weekly', isExclusion: true });
-    expect(getRecurrenceText([schedule])).toBe('');
+    expect(getRecurrenceText([schedule], stubT)).toBe('');
   });
 
   it('should return empty string when all schedules have no frequency', () => {
     const schedule = makeSchedule({ frequency: null });
-    expect(getRecurrenceText([schedule])).toBe('');
+    expect(getRecurrenceText([schedule], stubT)).toBe('');
   });
 
   it('should return text for the first non-exclusion schedule', () => {
     const exclusion = makeSchedule({ frequency: 'weekly', isExclusion: true, byDay: ['MO'] });
     const primary = makeSchedule({ frequency: 'weekly', byDay: ['SA'] });
-    expect(getRecurrenceText([exclusion, primary])).toBe('Every Saturday');
+    expect(getRecurrenceText([exclusion, primary], stubT))
+      .toBe('recurrence.weekly_on_days:{"days":"recurrence.SA"}');
   });
 
   it('should return text from the first schedule with frequency', () => {
     const noFreq = makeSchedule({ frequency: null });
     const weekly = makeSchedule({ frequency: 'weekly', byDay: ['FR'] });
-    expect(getRecurrenceText([noFreq, weekly])).toBe('Every Friday');
+    expect(getRecurrenceText([noFreq, weekly], stubT))
+      .toBe('recurrence.weekly_on_days:{"days":"recurrence.FR"}');
   });
 
   it('should return text for a single weekly schedule', () => {
     const schedule = makeSchedule({ frequency: 'weekly', byDay: ['SA'] });
-    expect(getRecurrenceText([schedule])).toBe('Every Saturday');
+    expect(getRecurrenceText([schedule], stubT))
+      .toBe('recurrence.weekly_on_days:{"days":"recurrence.SA"}');
   });
 });

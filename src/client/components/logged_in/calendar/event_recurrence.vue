@@ -94,7 +94,7 @@
 <template>
   <div class="recurrence-rule">
     <div class="schedule-header">
-      <span>Schedule {{ props.index + 1 }}</span>
+      <span>{{ tEventEditor('recurrence.schedule_header', { n: props.index + 1 }) }}</span>
       <button
         v-if="props.canRemove"
         type="button"
@@ -155,7 +155,7 @@
     <!-- Recurrence summary + trigger -->
     <div class="recurrence-summary">
       <template v-if="props.schedule.frequency">
-        <span class="summary-text">{{ generateRecurrenceText(props.schedule) }}</span>
+        <span class="summary-text">{{ generateRecurrenceText(props.schedule, tEventEditor, i18next.language) }}</span>
         <button type="button" class="btn btn--secondary" @click="openRecurrenceSheet">
           <CalendarSync :size="16" aria-hidden="true" />
           {{ t('edit_recurrence') }}
@@ -181,6 +181,7 @@
 import { reactive } from 'vue';
 import { CalendarEventSchedule } from '@/common/model/events';
 import { useTranslation } from 'i18next-vue';
+import i18next from 'i18next';
 import { DateTime } from 'luxon';
 import { CalendarSync, Trash2 } from 'lucide-vue-next';
 import RecurrenceEditorSheet from './RecurrenceEditorSheet.vue';
@@ -203,6 +204,10 @@ const emit = defineEmits(['remove-schedule']);
 const { t } = useTranslation('event_editor', {
   keyPrefix: 'recurrence',
 });
+
+// Unprefixed translator for full-key lookups (e.g. when handing `t` to
+// utilities that resolve their own keys, such as generateRecurrenceText).
+const { t: tEventEditor } = useTranslation('event_editor');
 
 /**
  * Returns the full list of IANA timezone identifiers supported by the browser.
