@@ -1,0 +1,83 @@
+name: Deploy Docs Site
+
+on:
+  release:
+    types: [released]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Git ref (tag/branch/sha) to deploy. Defaults to the workflow run ref.'
+        required: false
+        default: ''
+
+concurrency:
+  group: deploy-docs
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Build and deploy docs to Cloudflare Pages
+    runs-on: ubuntu-latest
+    environment:
+      name: docs-production
+      url: https://docs.pavillion.social
+    permissions:
+      contents: read
+      deployments: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Stamp build with version.json
+        run: |
+          mkdir -p docs/public
+          SHORT_SHA=$(git rev-parse --short=7 HEAD)
+          BUILT_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          TAG="${GITHUB_REF_NAME}"
+          cat > docs/public/version.json <<EOF
+          {
+            "sha": "${GITHUB_SHA}",
+            "shortSha": "${SHORT_SHA}",
+            "tag": "${TAG}",
+            "builtAt": "${BUILT_AT}",
+            "repo": "${GITHUB_REPOSITORY}"
+          }
+          EOF
+          echo "Stamped version.json:"
+          cat docs/public/version.json
+
+      - name: Build VitePress site
+        run: npm run docs:build
+
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          gitHubToken: ${{ secrets.GITHUB_TOKEN }}
+          command: pages deploy docs/.vitepress/dist --project-name=pavillion-docs --branch=main --commit-dirty=true
+
+      - name: Verify deployed version.json
+        run: |
+          for i in 1 2 3 4 5; do
+            DEPLOYED=$(curl -fsSL https://docs.pavillion.social/version.json | jq -r .sha 2>/dev/null || echo "")
+            if [ "$DEPLOYED" = "$GITHUB_SHA" ]; then
+              echo "Deployed sha matches: $DEPLOYED"
+              exit 0
+            fi
+            echo "Attempt $i: deployed=$DEPLOYED expected=$GITHUB_SHA — waiting for edge propagation"
+            sleep 10
+          done
+          echo "::warning::version.json sha did not match within 50s; deploy may still be propagating"
