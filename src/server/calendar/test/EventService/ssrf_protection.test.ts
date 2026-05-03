@@ -19,7 +19,7 @@
  * exceptions surface to callers.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import sinon from 'sinon';
 import { EventEmitter } from 'events';
 
@@ -68,20 +68,14 @@ function buildMockApInterface() {
 describe('EventService', () => {
   describe('createRemoteEvent (migrated to publishEventCreate)', () => {
     let service: EventService;
-    let sandbox: sinon.SinonSandbox;
     let account: Account;
     let mockApInterface: any;
 
     beforeEach(() => {
-      sandbox = sinon.createSandbox();
       service = new EventService(new EventEmitter());
       mockApInterface = buildMockApInterface();
       service.setActivityPubInterface(mockApInterface);
       account = new Account('account-123', 'test@example.com', 'test@example.com');
-    });
-
-    afterEach(() => {
-      sandbox.restore();
     });
 
     it('delegates to publishEventCreate with eventId, eventParams, and remoteCalendarActor', async () => {
@@ -158,20 +152,14 @@ describe('EventService', () => {
 
   describe('updateRemoteEventViaActivityPub (migrated to publishEventUpdate)', () => {
     let service: EventService;
-    let sandbox: sinon.SinonSandbox;
     let account: Account;
     let mockApInterface: any;
 
     beforeEach(() => {
-      sandbox = sinon.createSandbox();
       service = new EventService(new EventEmitter());
       mockApInterface = buildMockApInterface();
       service.setActivityPubInterface(mockApInterface);
       account = new Account('account-123', 'test@example.com', 'test@example.com');
-    });
-
-    afterEach(() => {
-      sandbox.restore();
     });
 
     it('delegates to publishEventUpdate with eventId, eventParams, and remoteCalendarActor', async () => {
@@ -228,20 +216,14 @@ describe('EventService', () => {
 
   describe('deleteRemoteEventViaActivityPub (migrated to publishEventDelete)', () => {
     let service: EventService;
-    let sandbox: sinon.SinonSandbox;
     let account: Account;
     let mockApInterface: any;
 
     beforeEach(() => {
-      sandbox = sinon.createSandbox();
       service = new EventService(new EventEmitter());
       mockApInterface = buildMockApInterface();
       service.setActivityPubInterface(mockApInterface);
       account = new Account('account-123', 'test@example.com', 'test@example.com');
-    });
-
-    afterEach(() => {
-      sandbox.restore();
     });
 
     it('delegates to publishEventDelete with eventId and remoteCalendarActor', async () => {

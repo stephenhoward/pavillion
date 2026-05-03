@@ -30,9 +30,6 @@ import { EventCategoryAssignmentEntity } from '@/server/calendar/entity/event_ca
 import { EventInstanceEntity } from '@/server/calendar/entity/event_instance';
 import { EventRepostEntity } from '@/server/calendar/entity/event_repost';
 import db from '@/server/common/entity/db';
-import { createLogger } from '@/server/common/helper/logger';
-
-const logger = createLogger('calendar');
 import { Op, literal, where, fn, col, type Transaction } from 'sequelize';
 
 /**
