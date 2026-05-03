@@ -436,17 +436,8 @@ export function createRouter(
   // Public site routes (unprefixed — default language, as-needed strategy)
   router.get(/^\/view\/.*/i, handlers.site_index);
 
-  // Locale-prefixed public site routes for account-application confirmation: /[locale]/apply/...
-  // Anonymous email-confirmation flow (pv-l9wv); must be served from the site SPA shell so
-  // visitors clicking the email link land in an unauthenticated context per DEC-004.
-  // Must come before the unprefixed apply route so prefixed URLs are handled first.
-  router.get(/^\/[a-z]{2,8}\/apply\//i, handlers.locale_prefixed_site);
-
-  // Public site routes for account-application confirmation (unprefixed — default language)
-  router.get(/^\/apply\/.*/i, handlers.site_index);
-
   // Client app catch-all (goes last)
-  router.get(/^\/(?!(api|assets|\.well-known|calendars|users|view|widget|apply)\/).*/i, handlers.client_index);
+  router.get(/^\/(?!(api|assets|\.well-known|calendars|users|view|widget)\/).*/i, handlers.client_index);
 
   return { router, handlers };
 }

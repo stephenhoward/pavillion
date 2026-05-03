@@ -232,55 +232,47 @@ describe('app_routes', () => {
   });
 
   // -----------------------------------------------------------------------
-  // Public site routes for account-application confirmation: /apply/confirm/:token
-  // (pv-l9wv) Anonymous email-confirmation flow — must be served from the site
-  // SPA shell so visitors land in an unauthenticated context per DEC-004.
+  // Account-application confirmation routes: /auth/apply/confirm/:token
+  //
+  // (pv-e92c, supersedes pv-l9wv) The confirm landing page lives in the
+  // client SPA's logged-out auth flow alongside login, register-apply, and
+  // password_forgot. The page is served by the client SPA catch-all; the
+  // anti-enumeration / cookie-hygiene posture is enforced at the API layer
+  // (the GET/POST endpoints return identical generic responses for any
+  // failure mode and run with no session middleware), independent of which
+  // SPA shell renders the user-facing page.
   // -----------------------------------------------------------------------
 
   describe('apply confirmation routes', () => {
-    it('should serve site.index.html.ejs for /apply/confirm/<token>', async () => {
+    it('should serve client.index.html.ejs for /auth/apply/confirm/<token>', async () => {
+      const app = buildTestApp('en');
+      const res = await request(app).get('/auth/apply/confirm/abc123');
+
+      expect(res.status).toBe(200);
+      expect(res.body.template).toBe('client.index.html.ejs');
+    });
+
+    it('should NOT route /apply/confirm/<token> through the site SPA shell', async () => {
+      // After pv-e92c, the legacy /apply/ namespace is no longer reserved for
+      // the site SPA. Requests fall through to the client SPA catch-all.
       const app = buildTestApp('en');
       const res = await request(app).get('/apply/confirm/abc123');
 
-      expect(res.status).toBe(200);
-      expect(res.body.template).toBe('site.index.html.ejs');
+      expect(res.body.template).not.toBe('site.index.html.ejs');
+      expect(res.body.template).toBe('client.index.html.ejs');
     });
 
-    it('should NOT serve client.index.html.ejs for /apply/confirm/<token>', async () => {
-      // Anonymous-visitor protection: confirmation link must NOT land in the
-      // authenticated client SPA shell (DEC-004 cookie hygiene for visitors
-      // arriving from an email link).
-      const app = buildTestApp('en');
-      const res = await request(app).get('/apply/confirm/abc123');
-
-      expect(res.body.template).not.toBe('client.index.html.ejs');
-    });
-
-    it('should serve site.index.html.ejs for /es/apply/confirm/<token> via locale_prefixed_site', async () => {
+    it('should serve client.index.html.ejs for /es/auth/apply/confirm/<token>', async () => {
+      // The locale-prefixed variant of the canonical confirm URL must also
+      // render through the client SPA shell, not the site SPA. The /auth/
+      // path does not match the site-app reserved /view/ regex, so it falls
+      // through to the client SPA catch-all the same way /es/auth/login does.
       const mockConfig = buildMockConfigInterface('en');
       const app = buildTestApp('es', mockConfig);
-      const res = await request(app).get('/es/apply/confirm/abc123');
+      const res = await request(app).get('/es/auth/apply/confirm/abc123');
 
       expect(res.status).toBe(200);
-      expect(res.body.template).toBe('site.index.html.ejs');
-    });
-
-    it('should redirect /en/apply/confirm/<token> to /apply/confirm/<token> when en is default', async () => {
-      const mockConfig = buildMockConfigInterface('en');
-      const app = buildTestApp('en', mockConfig);
-      const res = await request(app).get('/en/apply/confirm/abc123');
-
-      expect(res.status).toBe(301);
-      expect(res.headers.location).toBe('/apply/confirm/abc123');
-    });
-
-    it('should pass locale from req.locale to the template for /es/apply/confirm/<token>', async () => {
-      const mockConfig = buildMockConfigInterface('en');
-      const app = buildTestApp('es', mockConfig);
-      const res = await request(app).get('/es/apply/confirm/abc123');
-
-      expect(res.status).toBe(200);
-      expect(res.body.data.locale).toBe('es');
+      expect(res.body.template).toBe('client.index.html.ejs');
     });
   });
 

@@ -26,6 +26,17 @@
     "application_processing_error": "Une erreur s'est produite lors du traitement de votre demande. Veuillez réessayer plus tard.",
     "invalid_request": "Demande invalide. Veuillez vérifier vos informations et réessayer."
   },
+  "apply_confirm": {
+    "title": "Confirmez votre demande",
+    "validating": "Vérification de votre lien de confirmation…",
+    "valid_intro": "Cliquez sur le bouton ci-dessous pour confirmer votre adresse e-mail et soumettre votre demande à examen.",
+    "confirm_button": "Confirmer mon e-mail",
+    "confirming": "Confirmation en cours…",
+    "success_message": "Merci. Votre demande est maintenant à l'examen.",
+    "go_login": "← retour à la connexion",
+    "invalid_message": "Ce lien de confirmation est invalide ou a expiré. Veuillez refaire votre demande.",
+    "reapply_link": "Refaire une demande"
+  },
   "accept_invite": {
     "bad_invite_title": "Invitation expirée",
     "bad_invite_explanation": "Votre invitation a expiré ou est invalide. Veuillez contacter l'administrateur pour une nouvelle invitation.",

@@ -17,7 +17,7 @@ class ApplicationConfirmationEmail extends EmailMessage {
   }
 
   buildMessage(language: string): MailData {
-    const confirmationUrl = config.get('domain') + '/apply/confirm/' + this.token;
+    const confirmationUrl = config.get('domain') + '/auth/apply/confirm/' + this.token;
 
     return {
       emailAddress: this.application.email,

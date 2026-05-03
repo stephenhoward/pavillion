@@ -8,28 +8,8 @@
 // Created: 2025-12-14
 // ================================================================
 
-@use 'sass:meta';
 @use './mixins' as *;
 @use '../../client/assets/fonts';
-
-// ===== CLIENT DESIGN-SYSTEM TOKENS REUSED BY AUTH-LIKE SCREENS =====
-//
-// The /apply/confirm/:token landing page (and any future anonymous flow
-// that wants the welcome-card visual treatment) reuses the client app's
-// `.logged-out` + `.welcome-card` classes. Those rules consume `--pav-*`
-// CSS custom properties, so we pull in the relevant token + theme + layout
-// partials here. The token and theme files only emit `:root { … }` rules
-// (no global selectors), and `_logged-out.scss` is fully namespaced under
-// `.logged-out`, so loading them does not touch the public site's own
-// design system.
-@include meta.load-css('../../client/assets/style/tokens/colors');
-@include meta.load-css('../../client/assets/style/tokens/typography');
-@include meta.load-css('../../client/assets/style/tokens/spacing');
-@include meta.load-css('../../client/assets/style/tokens/borders');
-@include meta.load-css('../../client/assets/style/tokens/shadows');
-@include meta.load-css('../../client/assets/style/themes/light');
-@include meta.load-css('../../client/assets/style/themes/dark');
-@include meta.load-css('../../client/assets/style/layout/logged-out');
 
 // ===== GLOBAL RESETS =====
 

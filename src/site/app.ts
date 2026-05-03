@@ -11,7 +11,6 @@ import CalendarView from '@/site/components/calendar.vue';
 import EventView from '@/site/components/event.vue';
 import EventInstanceView from '@/site/components/event-instance.vue';
 import SeriesView from '@/site/components/series-view.vue';
-import ApplyConfirmView from '@/site/components/apply-confirm.vue';
 import Authentication from '@/client/service/authn';
 import Config from '@/client/service/config';
 import { AVAILABLE_LANGUAGES, DEFAULT_LANGUAGE_CODE } from '@/common/i18n/languages';
@@ -30,9 +29,6 @@ Config.init().then( async (config) => {
     { path: '/view/:calendar/events/:event', component: EventView, name: 'event' },
     { path: '/view/:calendar/events/:event/:startTime(\\d{8}-\\d{4})', component: EventInstanceView, name: 'instance' },
     { path: '/view/:calendar/series/:series', component: SeriesView, name: 'series' },
-    // Public account-application email confirmation. Anonymous, no session
-    // middleware, anti-enumeration: see src/site/components/apply-confirm.vue.
-    { path: '/apply/confirm/:token', component: ApplyConfirmView, name: 'apply-confirm' },
   ];
 
   const nonDefaultLocales = AVAILABLE_LANGUAGES
@@ -48,7 +44,6 @@ Config.init().then( async (config) => {
       { path: `/:locale(${pattern})/view/:calendar/events/:event`, component: EventView },
       { path: `/:locale(${pattern})/view/:calendar/events/:event/:startTime(\\d{8}-\\d{4})`, component: EventInstanceView },
       { path: `/:locale(${pattern})/view/:calendar/series/:series`, component: SeriesView },
-      { path: `/:locale(${pattern})/apply/confirm/:token`, component: ApplyConfirmView },
     );
   }
 

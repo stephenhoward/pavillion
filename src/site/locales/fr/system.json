@@ -95,17 +95,6 @@
         "more_info": "Plus d'informations",
         "register": "S'inscrire"
     },
-    "apply_confirm": {
-        "heading": "Confirmez votre demande",
-        "validating": "Vérification de votre lien de confirmation…",
-        "valid_intro": "Cliquez sur le bouton ci-dessous pour confirmer votre adresse e-mail et soumettre votre demande à examen.",
-        "confirm_button": "Confirmer mon e-mail",
-        "confirming": "Confirmation en cours…",
-        "invalid_message": "Ce lien de confirmation est invalide ou a expiré. Veuillez refaire votre demande.",
-        "reapply_link": "Refaire une demande",
-        "success_message": "Merci. Votre demande est maintenant à l'examen.",
-        "go_home": "Retour à l'accueil"
-    },
     "report": {
         "link_text": "Signaler l'événement",
         "form_title": "Signaler cet événement",

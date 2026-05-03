@@ -27,6 +27,17 @@
     "application_processing_error": "An error occurred while processing your application. Please try again later.",
     "invalid_request": "Invalid request. Please check your input and try again."
   },
+  "apply_confirm": {
+    "title": "Confirm your application",
+    "validating": "Checking your confirmation link…",
+    "valid_intro": "Click the button below to confirm your email address and submit your application for review.",
+    "confirm_button": "Confirm my email",
+    "confirming": "Confirming…",
+    "success_message": "Thank you. Your application is now under review.",
+    "go_login": "← back to sign in",
+    "invalid_message": "This confirmation link is invalid or has expired. Please re-apply.",
+    "reapply_link": "Apply again"
+  },
   "accept_invite": {
     "bad_invite_title": "Invitation expired",
     "bad_invite_explanation": "Your invite has expired or is invalid. Please contact the administrator for a new invite.",

@@ -20,6 +20,7 @@ import PasswordForgotView from '@/client/components/logged_out/password_forgot.v
 import PasswordResetView from '@/client/components/logged_out/password_reset.vue';
 import RegisterView from '@/client/components/logged_out/register.vue';
 import RegisterApplyView from '@/client/components/logged_out/register_apply.vue';
+import ApplyConfirmView from '@/client/components/logged_out/apply_confirm.vue';
 import AcceptInviteView from '@/client/components/logged_out/accept_invite.vue';
 import SetupView from '@/client/components/logged_out/setup.vue';
 import InstancePolicyView from '@/client/components/logged_out/instance-policy.vue';
@@ -186,6 +187,7 @@ checkSetupMode().then((setupRequired) => {
           { path: 'register', component: RegisterView, name: 'register', props: true, beforeEnter: authRouteGuard },
           { path: 'invitation', component: AcceptInviteView, name: 'accept_invite', props: true, beforeEnter: authRouteGuard },
           { path: 'apply', component: RegisterApplyView, name: 'register-apply', props: true, beforeEnter: authRouteGuard },
+          { path: 'apply/confirm/:token', component: ApplyConfirmView, name: 'apply-confirm', props: true, beforeEnter: authRouteGuard },
           { path: 'forgot', component: PasswordForgotView, name: 'forgot_password', props: true, beforeEnter: authRouteGuard },
           { path: 'password', component: PasswordResetView, name: 'reset_password', props: true, beforeEnter: authRouteGuard },
         ],

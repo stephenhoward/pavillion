@@ -26,6 +26,17 @@
     "application_processing_error": "Ocurrió un error al procesar tu solicitud. Por favor intenta más tarde.",
     "invalid_request": "Solicitud inválida. Por favor verifica tu información e intenta nuevamente."
   },
+  "apply_confirm": {
+    "title": "Confirma tu solicitud",
+    "validating": "Comprobando tu enlace de confirmación…",
+    "valid_intro": "Haz clic en el botón a continuación para confirmar tu dirección de correo electrónico y enviar tu solicitud para revisión.",
+    "confirm_button": "Confirmar mi correo electrónico",
+    "confirming": "Confirmando…",
+    "success_message": "Gracias. Tu solicitud está ahora bajo revisión.",
+    "go_login": "← volver a iniciar sesión",
+    "invalid_message": "Este enlace de confirmación no es válido o ha caducado. Por favor, vuelve a solicitarlo.",
+    "reapply_link": "Solicitar de nuevo"
+  },
   "accept_invite": {
     "bad_invite_title": "Invitación expirada",
     "bad_invite_explanation": "Tu invitación ha expirado o es inválida. Por favor contacta al administrador para una nueva invitación.",

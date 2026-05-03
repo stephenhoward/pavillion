@@ -42,7 +42,7 @@ describe('ApplicationConfirmationEmail', () => {
 
     const message = email.buildMessage('en');
 
-    expect(message.textMessage).toContain(domain + '/apply/confirm/' + token);
+    expect(message.textMessage).toContain(domain + '/auth/apply/confirm/' + token);
   });
 
   it('should include the confirmation URL with token in HTML', () => {
@@ -52,7 +52,7 @@ describe('ApplicationConfirmationEmail', () => {
 
     const message = email.buildMessage('en');
 
-    expect(message.htmlMessage).toContain(domain + '/apply/confirm/' + token);
+    expect(message.htmlMessage).toContain(domain + '/auth/apply/confirm/' + token);
   });
 
   it('should render a CTA label in HTML', () => {
@@ -92,7 +92,7 @@ describe('ApplicationConfirmationEmail', () => {
 
     expect(message.subject).toContain('Confirmez');
     expect(message.htmlMessage).toContain('Confirmer mon e-mail');
-    expect(message.textMessage).toContain(domain + '/apply/confirm/' + token);
+    expect(message.textMessage).toContain(domain + '/auth/apply/confirm/' + token);
   });
 
   it('should produce identical content for the same token (no resend hint)', () => {
