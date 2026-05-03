@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, reactive } from 'vue';
+import { ref, computed, reactive, nextTick, watch } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import Sheet from '@/client/components/common/Sheet.vue';
 import PillButton from '@/client/components/common/pill-button.vue';
@@ -7,9 +7,14 @@ import LanguageTabSelector from '@/client/components/common/language-tab-selecto
 
 const { t } = useTranslation('event_editor', { keyPrefix: 'create_location' });
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   languages: string[];
-}>();
+  fieldErrors?: Record<string, string>;
+  submissionError?: string;
+}>(), {
+  fieldErrors: () => ({}),
+  submissionError: '',
+});
 
 const emit = defineEmits<{
   (e: 'create-location', data: any): void;
@@ -20,6 +25,14 @@ const emit = defineEmits<{
 
 const currentLanguage = ref(props.languages[0] || 'en');
 const accessibilityLangTabs = ref<InstanceType<typeof LanguageTabSelector> | null>(null);
+const submissionErrorEl = ref<HTMLElement | null>(null);
+
+watch(() => props.submissionError, async (newVal) => {
+  if (newVal) {
+    await nextTick();
+    submissionErrorEl.value?.focus();
+  }
+});
 
 // Form state
 const formData = reactive({
@@ -97,13 +110,26 @@ const handleSubmit = () => {
 
         <div class="form-field">
           <input
+            id="create-location-name"
             v-model="formData.name"
             type="text"
             class="form-input"
+            :class="{ 'form-input--error': props.fieldErrors?.name }"
             :placeholder="t('name_placeholder')"
             :aria-label="t('name_aria_label')"
+            :aria-invalid="props.fieldErrors?.name ? 'true' : undefined"
+            :aria-describedby="props.fieldErrors?.name ? 'create-location-name-error' : undefined"
             required
           />
+          <div
+            v-if="props.fieldErrors?.name"
+            id="create-location-name-error"
+            class="form__error"
+            role="alert"
+            aria-live="polite"
+          >
+            {{ props.fieldErrors.name }}
+          </div>
         </div>
 
         <div class="form-field">
@@ -167,6 +193,17 @@ const handleSubmit = () => {
         </div>
       </section>
 
+      <div
+        v-if="props.submissionError"
+        ref="submissionErrorEl"
+        class="alert alert--error"
+        role="alert"
+        aria-live="polite"
+        tabindex="-1"
+      >
+        {{ props.submissionError }}
+      </div>
+
       <footer class="modal-actions">
         <PillButton
           variant="ghost"
@@ -216,6 +253,10 @@ const handleSubmit = () => {
 .form-input {
   @include form-input-rounded;
   width: 100%;
+
+  &--error {
+    border-color: var(--pav-color-error);
+  }
 
   &--state {
     width: 6rem;

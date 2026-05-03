@@ -356,4 +356,90 @@ describe('CreateLocationForm', () => {
       expect(wrapper.emitted('back-to-search')).toBeTruthy();
     });
   });
+
+  describe('field-level errors', () => {
+    it('should show a field error for the name input when fieldErrors.name is set', () => {
+      const wrapper = mountWithI18n({
+        props: {
+          languages: ['en'],
+          fieldErrors: { name: 'Location name is required' },
+        },
+      });
+
+      const errorEl = wrapper.find('#create-location-name-error');
+      expect(errorEl.exists()).toBe(true);
+      expect(errorEl.text()).toBe('Location name is required');
+    });
+
+    it('should not render the name error element when fieldErrors.name is absent', () => {
+      const wrapper = mountWithI18n({
+        props: {
+          languages: ['en'],
+        },
+      });
+
+      expect(wrapper.find('#create-location-name-error').exists()).toBe(false);
+    });
+
+    it('should set aria-invalid on the name input when fieldErrors.name is set', () => {
+      const wrapper = mountWithI18n({
+        props: {
+          languages: ['en'],
+          fieldErrors: { name: 'Location name is required' },
+        },
+      });
+
+      const nameInput = wrapper.find('input#create-location-name');
+      expect(nameInput.attributes('aria-invalid')).toBe('true');
+    });
+
+    it('should set aria-describedby on the name input pointing to the error element', () => {
+      const wrapper = mountWithI18n({
+        props: {
+          languages: ['en'],
+          fieldErrors: { name: 'Location name is required' },
+        },
+      });
+
+      const nameInput = wrapper.find('input#create-location-name');
+      expect(nameInput.attributes('aria-describedby')).toBe('create-location-name-error');
+    });
+
+    it('should not set aria-invalid or aria-describedby when there is no field error', () => {
+      const wrapper = mountWithI18n({
+        props: {
+          languages: ['en'],
+        },
+      });
+
+      const nameInput = wrapper.find('input#create-location-name');
+      expect(nameInput.attributes('aria-invalid')).toBeUndefined();
+      expect(nameInput.attributes('aria-describedby')).toBeUndefined();
+    });
+
+    it('should display submission error when submissionError prop is set', () => {
+      const wrapper = mountWithI18n({
+        props: {
+          languages: ['en'],
+          submissionError: 'Failed to create location. Please correct the errors and try again.',
+        },
+      });
+
+      const errorEl = wrapper.find('[role="alert"]');
+      expect(errorEl.exists()).toBe(true);
+      expect(errorEl.text()).toContain('Failed to create location');
+    });
+
+    it('should not display submission error when submissionError prop is empty', () => {
+      const wrapper = mountWithI18n({
+        props: {
+          languages: ['en'],
+        },
+      });
+
+      // No submission error element — only name error is absent too
+      const alerts = wrapper.findAll('[role="alert"]');
+      expect(alerts.length).toBe(0);
+    });
+  });
 });
