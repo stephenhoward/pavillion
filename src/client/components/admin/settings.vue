@@ -22,18 +22,14 @@ const selectedRegistrationMode = ref(site_config.settings().registrationMode || 
 const siteTitle = ref(site_config.settings().siteTitle);
 const selectedDateRange = ref(site_config.settings().defaultDateRange || '2weeks');
 
-// Instance description state
-const descriptionState = reactive({
+// Shared translatable content state — one selected language drives both
+// the instance description and instance policy fields, matching the
+// event editor pattern where a single tabset governs multiple fields.
+const translationState = reactive({
   selectedLanguage: '',
-  descriptions: {},
-  enabledLanguages: [],
-});
-
-// Instance policy state
-const policyState = reactive({
-  selectedLanguage: '',
-  policies: {} as Record<string, string>,
   enabledLanguages: [] as string[],
+  descriptions: {} as Record<string, string>,
+  policies: {} as Record<string, string>,
 });
 
 // Registration mode options
@@ -56,37 +52,18 @@ onMounted(async () => {
     const configService = await Config.init();
     const settings = configService.settings();
     const languages = settings.enabledLanguages ?? ['en'];
-    descriptionState.enabledLanguages = languages;
-    descriptionState.selectedLanguage = languages[0] || 'en';
-    descriptionState.descriptions = { ...settings.instanceDescription } || {};
-    policyState.enabledLanguages = languages;
-    policyState.selectedLanguage = languages[0] || 'en';
-    policyState.policies = { ...settings.instancePolicy } || {};
+    translationState.enabledLanguages = languages;
+    translationState.selectedLanguage = languages[0] || 'en';
+    translationState.descriptions = { ...settings.instanceDescription } || {};
+    translationState.policies = { ...settings.instancePolicy } || {};
   }
   catch (error) {
     console.error('Error loading instance description settings:', error);
   }
 });
 
-/**
- * Returns the text direction for the given language code.
- */
-function languageDir(language: string) {
-  return iso6391.getDir(language) === 'rtl' ? 'rtl' : 'ltr';
-}
-
-/**
- * Returns the text direction for the currently selected description language.
- */
 function currentLanguageDir() {
-  return languageDir(descriptionState.selectedLanguage);
-}
-
-/**
- * Returns the text direction for the currently selected policy language.
- */
-function currentPolicyLanguageDir() {
-  return languageDir(policyState.selectedLanguage);
+  return iso6391.getDir(translationState.selectedLanguage) === 'rtl' ? 'rtl' : 'ltr';
 }
 
 /**
@@ -103,8 +80,8 @@ async function updateSettings() {
       registrationMode: selectedRegistrationMode.value,
       siteTitle: siteTitle.value,
       defaultDateRange: selectedDateRange.value,
-      instanceDescription: descriptionState.descriptions,
-      instancePolicy: policyState.policies,
+      instanceDescription: translationState.descriptions,
+      instancePolicy: translationState.policies,
     });
 
     if (success) {
@@ -188,6 +165,7 @@ async function updateSettings() {
           <!-- Instance Name -->
           <div class="form-group">
             <label for="instanceName" class="form-label">{{ t("instance_name") }}</label>
+            <p id="site-title-description" class="form-description">{{ t("site_title_description") }}</p>
             <input
               id="instanceName"
               type="text"
@@ -196,52 +174,50 @@ async function updateSettings() {
               aria-describedby="site-title-description"
               v-model="siteTitle"
             />
-            <p id="site-title-description" class="form-description">{{ t("site_title_description") }}</p>
           </div>
 
-          <!-- Instance Description -->
-          <div class="form-group">
-            <label for="instanceDescription" class="form-label">{{ t("instance_description") }}</label>
+          <!-- Translatable instance content (description + policy share one language tabset) -->
+          <div class="translatable-fields">
             <LanguageTabSelector
-              v-model="descriptionState.selectedLanguage"
-              :languages="descriptionState.enabledLanguages"
+              v-model="translationState.selectedLanguage"
+              :languages="translationState.enabledLanguages"
             />
-            <textarea
-              id="instanceDescription"
-              class="form-textarea"
-              :disabled="saving"
-              :maxlength="500"
-              :dir="currentLanguageDir()"
-              :placeholder="t('instance_description_placeholder')"
-              aria-describedby="instance-description-help"
-              v-model="descriptionState.descriptions[descriptionState.selectedLanguage]"
-            />
-            <p id="instance-description-help" class="form-description">{{ t("instance_description_help") }}</p>
-          </div>
 
-          <!-- Instance Policy -->
-          <div class="form-group">
-            <label for="instancePolicy" class="form-label">{{ t("instance_policy") }}</label>
-            <LanguageTabSelector
-              v-model="policyState.selectedLanguage"
-              :languages="policyState.enabledLanguages"
-            />
-            <textarea
-              id="instancePolicy"
-              class="form-textarea"
-              :disabled="saving"
-              :rows="15"
-              :dir="currentPolicyLanguageDir()"
-              :placeholder="t('instance_policy_placeholder')"
-              aria-describedby="instance-policy-help"
-              v-model="policyState.policies[policyState.selectedLanguage]"
-            />
-            <p id="instance-policy-help" class="form-description">{{ t("instance_policy_help") }}</p>
+            <div class="form-group">
+              <label for="instanceDescription" class="form-label">{{ t("instance_description") }}</label>
+              <p id="instance-description-help" class="form-description">{{ t("instance_description_help") }}</p>
+              <textarea
+                id="instanceDescription"
+                class="form-textarea"
+                :disabled="saving"
+                :maxlength="500"
+                :dir="currentLanguageDir()"
+                :placeholder="t('instance_description_placeholder')"
+                aria-describedby="instance-description-help"
+                v-model="translationState.descriptions[translationState.selectedLanguage]"
+              />
+            </div>
+
+            <div class="form-group">
+              <label for="instancePolicy" class="form-label">{{ t("instance_policy") }}</label>
+              <p id="instance-policy-help" class="form-description">{{ t("instance_policy_help") }}</p>
+              <textarea
+                id="instancePolicy"
+                class="form-textarea"
+                :disabled="saving"
+                :rows="15"
+                :dir="currentLanguageDir()"
+                :placeholder="t('instance_policy_placeholder')"
+                aria-describedby="instance-policy-help"
+                v-model="translationState.policies[translationState.selectedLanguage]"
+              />
+            </div>
           </div>
 
           <!-- Registration Mode -->
           <div class="form-group">
             <label for="registrationMode" class="form-label">{{ t("registration_mode") }}</label>
+            <p id="reg-mode-description" class="form-description">{{ t("registration_mode_description") }}</p>
             <select
               id="registrationMode"
               class="form-select"
@@ -253,12 +229,12 @@ async function updateSettings() {
                 {{ mode.label }}
               </option>
             </select>
-            <p id="reg-mode-description" class="form-description">{{ t("registration_mode_description") }}</p>
           </div>
 
           <!-- Default Date Range -->
           <div class="form-group">
             <label for="defaultDateRange" class="form-label">{{ t("default_date_range") }}</label>
+            <p id="date-range-description" class="form-description">{{ t("default_date_range_description") }}</p>
             <select
               id="defaultDateRange"
               class="form-select"
@@ -270,7 +246,6 @@ async function updateSettings() {
                 {{ range.label }}
               </option>
             </select>
-            <p id="date-range-description" class="form-description">{{ t("default_date_range_description") }}</p>
           </div>
 
           <!-- Save Button -->
@@ -368,6 +343,16 @@ async function updateSettings() {
         flex-direction: column;
         gap: var(--pav-space-5);
 
+        // Wrapper that groups the instance description and instance policy
+        // fields under a single shared LanguageTabSelector. Matches the
+        // settings-form gap so the wrapped fields keep the same vertical
+        // rhythm as the surrounding form-groups.
+        .translatable-fields {
+          display: flex;
+          flex-direction: column;
+          gap: var(--pav-space-5);
+        }
+
         .form-group {
           .form-label {
             display: block;
@@ -422,8 +407,10 @@ async function updateSettings() {
             padding-right: var(--pav-space-10);
           }
 
+          // Help text sits between the label and the field so users see
+          // guidance before interacting with the input.
           .form-description {
-            margin: var(--pav-space-1_5) 0 0 0;
+            margin: 0 0 var(--pav-space-2) 0;
             font-size: var(--pav-font-size-2xs);
             color: var(--pav-color-text-muted);
           }
