@@ -1,0 +1,84 @@
+{
+  "retry": "Réessayer",
+  "replace": "Remplacer",
+  "upload": {
+    "title": "Téléverser des images",
+    "title_single": "Téléverser une image",
+    "drag_drop_text_one": "Glissez-déposez une image ici",
+    "drag_drop_text_other": "Glissez-déposez des images ici",
+    "or": "ou",
+    "click_to_select_one": "cliquez pour sélectionner un fichier",
+    "click_to_select_other": "cliquez pour sélectionner des fichiers",
+    "browse_files": "Parcourir les fichiers",
+    "uploading": "Téléversement en cours...",
+    "processing": "Traitement en cours...",
+    "upload_complete": "Téléversement terminé",
+    "upload_files_one": "Téléverser le fichier",
+    "upload_files_other": "Téléverser les fichiers",
+    "upload_failed": "Échec du téléversement",
+    "retry": "Réessayer",
+    "remove": "Supprimer",
+    "replace": "Remplacer",
+    "cancel": "Annuler"
+  },
+  "validation": {
+    "file_too_large": "La taille du fichier {{fileSizeFormatted}} dépasse la taille maximale autorisée de {{maxFileSizeFormatted}}",
+    "invalid_file_type": "Le type de fichier {{fileType}} n'est pas autorisé. Types autorisés : {{allowedTypes}}",
+    "invalid_extension": "L'extension de fichier {{extension}} n'est pas autorisée. Extensions autorisées : {{allowedExtensions}}",
+    "no_files_selected": "Aucun fichier sélectionné",
+    "max_files_exceeded": "Trop de fichiers sélectionnés. Maximum autorisé : {{maxFiles}}"
+  },
+  "errors": {
+    "FILE_TOO_LARGE": "Ce fichier est trop volumineux. Veuillez choisir une image plus petite.",
+    "INVALID_MIME_TYPE": "Ce type de fichier n'est pas pris en charge. Veuillez utiliser une image JPG, PNG ou HEIC.",
+    "INVALID_EXTENSION": "Ce type de fichier n'est pas pris en charge. Veuillez utiliser une image JPG, PNG ou HEIC.",
+    "INVALID_TYPE": "Ce type de fichier n'est pas pris en charge. Veuillez utiliser une image JPG, PNG ou HEIC.",
+    "VALIDATION_FAILED": "Ce fichier n'a pas pu être téléversé. Veuillez essayer une autre image.",
+    "NETWORK_ERROR": "Impossible de se connecter au serveur. Veuillez vérifier votre connexion et réessayer.",
+    "SERVER_ERROR": "Une erreur s'est produite. Veuillez réessayer plus tard.",
+    "UPLOAD_ABORTED": "Le téléversement a été annulé.",
+    "PREVIEW_GENERATION_FAILED": "Impossible de prévisualiser cette image. Veuillez essayer un autre fichier.",
+    "NOT_AN_IMAGE": "Ce fichier n'est pas une image. Veuillez sélectionner un fichier image.",
+    "TOO_MANY_FILES": "Trop de fichiers sélectionnés. Maximum autorisé : {{maxFiles}}",
+    "SINGLE_FILE_ONLY": "Une seule image peut être téléversée à la fois.",
+    "PERMISSION_DENIED": "Vous n'avez pas la permission de téléverser des images dans ce calendrier."
+  },
+  "status": {
+    "pending": "En attente",
+    "uploading": "Téléversement",
+    "processing": "Traitement",
+    "complete": "Terminé",
+    "failed": "Échoué",
+    "cancelled": "Annulé"
+  },
+  "accessibility": {
+    "drag_drop_zone": "Zone de glisser-déposer pour le téléversement de fichiers",
+    "file_input": "Sélectionner les fichiers à téléverser",
+    "file_preview": "Aperçu de {{filename}}",
+    "upload_progress": "Progression du téléversement de {{filename}} : {{percentage}}%",
+    "remove_file": "Retirer {{filename}} de la file d'attente de téléversement",
+    "retry_upload": "Réessayer le téléversement de {{filename}}",
+    "replace_file": "Remplacer le fichier sélectionné",
+    "dismiss_error": "Ignorer l'erreur de téléversement",
+    "image_workspace": "Espace de travail d'image avec ajustement du point focal",
+    "focal_point_marker": "Marqueur du point focal. Glissez pour repositionner.",
+    "zoom_slider": "Niveau de zoom de l'image"
+  },
+  "display": {
+    "processing_image": "L'image est en cours de traitement",
+    "image_load_error": "Échec du chargement de l'image",
+    "image_unavailable": "Image indisponible"
+  },
+  "help": {
+    "supported_formats": "Formats pris en charge :",
+    "max_file_size": "Taille maximale du fichier : {{maxSize}}",
+    "drag_drop_instructions": "Vous pouvez glisser plusieurs fichiers à la fois ou cliquer pour parcourir",
+    "drag_drop_instructions_single": "Glissez un seul fichier ou cliquez pour parcourir"
+  },
+  "workspace": {
+    "focal_hint": "Glissez n'importe où pour définir le point focal",
+    "focal_explanation": "Le point focal détermine la façon dont votre image est recadrée dans les affichages de carte et de bannière.",
+    "replace_image": "Remplacer l'image",
+    "remove": "Supprimer"
+  }
+}

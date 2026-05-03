@@ -119,7 +119,10 @@
         "error_generic": "Une erreur est survenue. Veuillez réessayer.",
         "error_validation": "Veuillez remplir tous les champs obligatoires.",
         "error_description_too_long": "La description doit contenir 2000 caractères ou moins.",
-        "close_dialog": "Fermer la boîte de dialogue"
+        "close_dialog": "Fermer la boîte de dialogue",
+        "field_error_category": "Veuillez sélectionner une catégorie.",
+        "field_error_description": "Veuillez fournir une description.",
+        "field_error_email": "Veuillez saisir une adresse e-mail valide."
     },
     "recurrence": {
         "every_day": "Tous les jours",

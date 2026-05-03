@@ -1,0 +1,69 @@
+{
+  "title": "Plan de financement",
+  "back_to_settings": "← Retour aux paramètres",
+  "loading": "Chargement des informations de financement...",
+  "load_error": "Échec du chargement des informations de financement. Veuillez réessayer.",
+
+  "no_funding_plan": "Aucun plan de financement actif",
+  "no_funding_plan_description": "Abonnez-vous pour soutenir cette instance et accéder aux fonctionnalités premium.",
+  "no_plan_redirect": "Pour démarrer un plan de financement, accédez à un calendrier dont vous êtes propriétaire et ouvrez l'onglet Financement.",
+  "monthly_option": "Mensuel",
+  "yearly_option": "Annuel",
+  "subscribe_button": "S'abonner maintenant",
+
+  "subscribe_title": "Choisissez votre plan de financement",
+  "select_provider": "Mode de paiement",
+  "select_cycle": "Cycle de facturation",
+  "billing_cycle_monthly": "Mensuel",
+  "billing_cycle_yearly": "Annuel",
+  "custom_amount_label": "Montant personnalisé (optionnel)",
+  "custom_amount_description": "Saisissez un montant personnalisé pour soutenir cette instance (payez ce que vous pouvez).",
+  "monthly_amount_label": "Montant mensuel",
+  "yearly_opt_in_label": "Passer en annuel pour {{amount}}",
+  "yearly_discount_note": "Économisez {{percent}} % avec la facturation annuelle",
+  "suggested_amount": "Suggéré : {{amount}}",
+  "select_provider_error": "Veuillez sélectionner un mode de paiement.",
+  "confirm_subscribe_button": "Confirmer et s'abonner",
+  "cancel_button": "Annuler",
+
+  "subscribe_success": "Plan de financement créé avec succès !",
+  "subscribe_error": "Échec de la création du plan de financement. Veuillez réessayer.",
+
+  "checkout_done_button": "Terminé",
+  "checkout_try_again_button": "Réessayer",
+
+  "current_funding_plan": "Plan de financement actuel",
+  "status_label": "Statut",
+  "billing_cycle_label": "Cycle de facturation",
+  "amount_label": "Montant",
+  "current_period_label": "Période actuelle",
+  "cancelled_at_label": "Annulé le",
+
+  "status_active": "Actif",
+  "status_past_due": "Paiement en retard",
+  "status_suspended": "Suspendu",
+  "status_cancelled": "Annulé",
+
+  "cancellation_info": "Votre plan de financement restera actif jusqu'au {{date}}",
+  "past_due_warning": "Votre paiement a échoué. Veuillez mettre à jour votre mode de paiement pour maintenir votre plan de financement actif.",
+  "suspended_message": "Votre plan de financement a été suspendu en raison d'un échec de paiement. Veuillez contacter le support.",
+
+  "manage_payment_button": "Gérer le mode de paiement",
+  "cancel_funding_plan_button": "Annuler le plan de financement",
+  "cancel_confirm": "Êtes-vous sûr de vouloir annuler votre plan de financement ? Vous conserverez l'accès jusqu'à la fin de votre période de facturation.",
+  "cancel_success": "Plan de financement annulé avec succès. Vous conserverez l'accès jusqu'à la fin de votre période de facturation.",
+  "cancel_error": "Échec de l'annulation du plan de financement. Veuillez réessayer.",
+
+  "portal_error": "Impossible d'accéder au portail de facturation. Veuillez réessayer.",
+
+  "funding_disabled": "Le financement n'est pas actuellement activé sur cette instance.",
+
+  "subscribe_to_fund_title": "Activer les fonctionnalités du calendrier",
+  "subscribe_to_fund_description": "Ces fonctionnalités sont disponibles lorsque vous contribuez à {{instanceName}}. Votre contribution aide à pérenniser ce service pour tout le monde.",
+
+  "redirect_message": "Redirection vers le fournisseur de paiement...",
+  "processing_message": "Traitement de votre paiement...",
+  "funded_calendars_title": "Calendriers financés",
+  "no_funded_calendars": "Aucun calendrier n'est actuellement financé dans le cadre de ce plan.",
+  "funded_calendar_amount": "{{amount}} par cycle de facturation"
+}
