@@ -16,6 +16,31 @@ import { ValidationError } from '@/common/exceptions/base';
 import db from '@/server/common/entity/db';
 import type { Transaction } from 'sequelize';
 
+/**
+ * Builds a stub ActivityPubInterface mirroring the helper in
+ * event_service.test.ts. getSharedEventStatusMap drives authoritative
+ * repostStatus resolution post-commit.
+ */
+function buildMockApInterface(
+  sharedEventIds: string[] = [],
+  statusOverrides: Record<string, 'auto' | 'manual'> = {},
+  calendarIdsForEvent: Record<string, string[]> = {},
+) {
+  const statusMap = new Map<string, 'auto' | 'manual'>();
+  for (const id of sharedEventIds) {
+    statusMap.set(id, statusOverrides[id] ?? 'manual');
+  }
+  const getCalendarIdsForSharedEvent = sinon.stub();
+  getCalendarIdsForSharedEvent.callsFake(async (eventId: string) => {
+    return calendarIdsForEvent[eventId] ?? [];
+  });
+  return {
+    getSharedEventIds: sinon.stub().resolves(sharedEventIds),
+    getSharedEventStatusMap: sinon.stub().resolves(statusMap),
+    getCalendarIdsForSharedEvent,
+  } as any;
+}
+
 describe('EventService.replaceEventCategories', () => {
   let service: EventService;
   let sandbox = sinon.createSandbox();
@@ -73,6 +98,9 @@ describe('EventService.replaceEventCategories', () => {
 
   beforeEach(() => {
     service = new EventService(new EventEmitter());
+    // Default AP interface: empty status map. Tests that need a SharedEventEntity
+    // signal override this in-test.
+    service.setActivityPubInterface(buildMockApInterface());
     mockAccount = new Account('test-account-id', 'test@example.com');
   });
 
@@ -95,6 +123,8 @@ describe('EventService.replaceEventCategories', () => {
       eventEntity: mockEvent,
       categories: mockCategories,
       userCalendars: [new Calendar(calendarId, 'test-calendar')],
+      // Owned event: no repost rows. Authoritative repostStatus = 'none'.
+      repostEntity: [],
     });
 
     const destroyStub = sandbox.stub(EventCategoryAssignmentEntity, 'destroy').resolves(0);
@@ -109,6 +139,7 @@ describe('EventService.replaceEventCategories', () => {
 
     expect(result).toBeDefined();
     expect(result.id).toBe(validEventId);
+    expect(result.repostStatus).toBe('none');
     expect(destroyStub.calledOnce).toBe(true);
     expect(bulkCreateStub.calledOnce).toBe(true);
     expect((mockTransaction.commit as sinon.SinonStub).calledOnce).toBe(true);
@@ -124,6 +155,8 @@ describe('EventService.replaceEventCategories', () => {
     const mockTransaction = stubCommonDependencies({
       eventEntity: mockEvent,
       userCalendars: [new Calendar(calendarId, 'test-calendar')],
+      // Owned event: no repost rows for the post-commit lookup.
+      repostEntity: [],
     });
 
     const destroyStub = sandbox.stub(EventCategoryAssignmentEntity, 'destroy').resolves(0);
@@ -251,7 +284,11 @@ describe('EventService.replaceEventCategories', () => {
     );
 
     expect(result).toBeDefined();
-    expect(result.isRepost).toBe(true);
+    // pv-7kxw.1 (option b): repostStatus is now populated authoritatively
+    // post-commit. EventRepostEntity has a row matching the acting calendar
+    // and SharedEventEntity has no entry, so the legacy fallback resolves
+    // to 'manual'.
+    expect(result.repostStatus).toBe('manual');
     expect((mockTransaction.commit as sinon.SinonStub).calledOnce).toBe(true);
   });
 
@@ -287,7 +324,6 @@ describe('EventService.replaceEventCategories', () => {
     sandbox.stub(EventCategoryAssignmentEntity, 'bulkCreate').resolves([]);
 
     const returnedEvent = new CalendarEvent(validEventId, reposterCalendarId);
-    returnedEvent.repostStatus = 'none';
     sandbox.stub(service, 'getEventById').resolves(returnedEvent);
 
     const result = await service.replaceEventCategories(
@@ -295,6 +331,10 @@ describe('EventService.replaceEventCategories', () => {
     );
 
     expect(result).toBeDefined();
+    // pv-7kxw.1 (option b): EventRepostEntity has a row on the reposter
+    // calendar and SharedEventEntity has no entry, so the legacy fallback
+    // resolves repostStatus to 'manual'.
+    expect(result.repostStatus).toBe('manual');
     expect(result.isRepost).toBe(true);
     expect((mockTransaction.commit as sinon.SinonStub).calledOnce).toBe(true);
   });
@@ -330,16 +370,71 @@ describe('EventService.replaceEventCategories', () => {
     stubCommonDependencies({
       eventEntity: mockEvent,
       userCalendars: [new Calendar(calendarId, 'test-calendar')],
+      // Owned event: post-commit lookup finds no repost rows.
+      repostEntity: [],
     });
 
     sandbox.stub(EventCategoryAssignmentEntity, 'destroy').resolves(0);
 
     const returnedEvent = new CalendarEvent(validEventId, calendarId);
-    returnedEvent.repostStatus = 'none';
     sandbox.stub(service, 'getEventById').resolves(returnedEvent);
 
     const result = await service.replaceEventCategories(mockAccount, validEventId, []);
 
+    // pv-7kxw.1 (option b): repostStatus is populated authoritatively from
+    // SharedEventEntity + EventRepostEntity. Owned events resolve to 'none'.
+    expect(result.repostStatus).toBe('none');
     expect(result.isRepost).toBe(false);
+  });
+
+  it('should set repostStatus="auto" when SharedEventEntity reports auto_posted (pv-7kxw.1)', async () => {
+    // pv-7kxw.1 (option b): SharedEventEntity takes precedence over the
+    // EventRepostEntity legacy fallback. An auto-posted share must surface
+    // as 'auto' on the return shape.
+    const originalCalendarId = 'original-0000-4000-8000-000000000001';
+    const reposterCalendarId = 'reposter-0000-4000-8000-000000000001';
+
+    service.setActivityPubInterface(
+      buildMockApInterface([validEventId], { [validEventId]: 'auto' }),
+    );
+
+    const mockEvent = EventEntity.build({
+      id: validEventId,
+      calendar_id: originalCalendarId,
+      account_id: 'other-account-id',
+    });
+
+    const mockCategory = EventCategoryEntity.build({
+      id: validCategoryId1,
+      calendar_id: reposterCalendarId,
+    });
+
+    const mockRepost = EventRepostEntity.build({
+      id: 'repost-uuid',
+      event_id: validEventId,
+      calendar_id: reposterCalendarId,
+    });
+
+    const mockTransaction = stubCommonDependencies({
+      eventEntity: mockEvent,
+      categories: [mockCategory],
+      userCalendars: [new Calendar(reposterCalendarId, 'reposter-calendar')],
+      repostEntity: [mockRepost],
+    });
+
+    sandbox.stub(EventCategoryAssignmentEntity, 'destroy').resolves(0);
+    sandbox.stub(EventCategoryAssignmentEntity, 'bulkCreate').resolves([]);
+
+    const returnedEvent = new CalendarEvent(validEventId, reposterCalendarId);
+    sandbox.stub(service, 'getEventById').resolves(returnedEvent);
+
+    const result = await service.replaceEventCategories(
+      mockAccount, validEventId, [validCategoryId1],
+    );
+
+    // SharedEventEntity 'auto' wins over the EventRepostEntity legacy row.
+    expect(result.repostStatus).toBe('auto');
+    expect(result.isRepost).toBe(true);
+    expect((mockTransaction.commit as sinon.SinonStub).calledOnce).toBe(true);
   });
 });

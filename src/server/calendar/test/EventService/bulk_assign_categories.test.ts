@@ -15,6 +15,33 @@ import { BulkEventsNotFoundError, MixedCalendarEventsError, CategoriesNotFoundEr
 import db from '@/server/common/entity/db';
 import type { Transaction } from 'sequelize';
 
+/**
+ * Builds a stub ActivityPubInterface that returns the supplied SharedEventEntity
+ * status map from getSharedEventStatusMap. Mirrors the helper used in
+ * event_service.test.ts so authoritative repostStatus resolution can be driven
+ * from the test inputs.
+ */
+function buildMockApInterface(
+  sharedEventIds: string[] = [],
+  statusOverrides: Record<string, 'auto' | 'manual'> = {},
+  calendarIdsForEvent: Record<string, string[]> = {},
+) {
+  const statusMap = new Map<string, 'auto' | 'manual'>();
+  for (const id of sharedEventIds) {
+    statusMap.set(id, statusOverrides[id] ?? 'manual');
+  }
+  const getCalendarIdsForSharedEvent = sinon.stub();
+  // Default behavior: return [] for any event id not explicitly mapped.
+  getCalendarIdsForSharedEvent.callsFake(async (eventId: string) => {
+    return calendarIdsForEvent[eventId] ?? [];
+  });
+  return {
+    getSharedEventIds: sinon.stub().resolves(sharedEventIds),
+    getSharedEventStatusMap: sinon.stub().resolves(statusMap),
+    getCalendarIdsForSharedEvent,
+  } as any;
+}
+
 describe('EventService.bulkAssignCategories', () => {
   let service: EventService;
   let sandbox = sinon.createSandbox();
@@ -22,6 +49,9 @@ describe('EventService.bulkAssignCategories', () => {
 
   beforeEach(() => {
     service = new EventService(new EventEmitter());
+    // Default AP interface returns no shared events; tests that need
+    // SharedEventEntity-driven repostStatus override this in-test.
+    service.setActivityPubInterface(buildMockApInterface());
     mockAccount = new Account('test-account-id', 'test@example.com');
   });
 
@@ -66,6 +96,11 @@ describe('EventService.bulkAssignCategories', () => {
     const findExistingStub = sandbox.stub(EventCategoryAssignmentEntity, 'findAll');
     findExistingStub.resolves([]);
 
+    // Post-commit repostStatus lookup queries EventRepostEntity by calendar_id;
+    // for owned events there are no rows, so the resolved status falls back
+    // to 'none' (matched by getSharedEventStatusMap returning empty in beforeEach).
+    sandbox.stub(EventRepostEntity, 'findAll').resolves([]);
+
     // Mock transaction
     const mockTransaction = {
       commit: sandbox.stub().resolves(),
@@ -83,11 +118,9 @@ describe('EventService.bulkAssignCategories', () => {
     // Mock getEventById for the return values
     const getEventByIdStub = sandbox.stub(service, 'getEventById');
     eventIds.forEach(id => {
-      getEventByIdStub.withArgs(id).resolves({
-        id,
-        calendarId,
-        categories: mockCategories.map(cat => cat.toModel()),
-      } as any);
+      const ev = new CalendarEvent(id, calendarId);
+      ev.categories = mockCategories.map(cat => cat.toModel());
+      getEventByIdStub.withArgs(id).resolves(ev);
     });
 
     // Act
@@ -99,6 +132,12 @@ describe('EventService.bulkAssignCategories', () => {
     expect(result[0].id).toBe('11111111-1111-4111-8111-111111111111');
     expect(result[1].id).toBe('22222222-2222-4222-8222-222222222222');
     expect(result[2].id).toBe('33333333-3333-4333-8333-333333333333');
+    // Owned events: authoritative repostStatus is 'none' (no SharedEventEntity
+    // or EventRepostEntity row matching the acting calendar).
+    result.forEach(r => {
+      expect(r.repostStatus).toBe('none');
+      expect(r.isRepost).toBe(false);
+    });
     expect(bulkCreateStub.calledOnce).toBe(true);
     expect(mockTransaction.commit.calledOnce).toBe(true);
   });
@@ -213,6 +252,9 @@ describe('EventService.bulkAssignCategories', () => {
     const findExistingStub = sandbox.stub(EventCategoryAssignmentEntity, 'findAll');
     findExistingStub.resolves(existingAssignments);
 
+    // Post-commit repostStatus lookup: owned event, no repost rows.
+    sandbox.stub(EventRepostEntity, 'findAll').resolves([]);
+
     const mockTransaction = {
       commit: sandbox.stub().resolves(),
       rollback: sandbox.stub().resolves(),
@@ -227,11 +269,9 @@ describe('EventService.bulkAssignCategories', () => {
 
     // Mock getEventById for the return values
     const getEventByIdStub = sandbox.stub(service, 'getEventById');
-    getEventByIdStub.withArgs('11111111-1111-4111-8111-111111111111').resolves({
-      id: '11111111-1111-4111-8111-111111111111',
-      calendarId,
-      categories: mockCategories.map(cat => cat.toModel()),
-    } as any);
+    const returnedEvent = new CalendarEvent('11111111-1111-4111-8111-111111111111', calendarId);
+    returnedEvent.categories = mockCategories.map(cat => cat.toModel());
+    getEventByIdStub.withArgs('11111111-1111-4111-8111-111111111111').resolves(returnedEvent);
 
     // Act
     const result = await service.bulkAssignCategories(mockAccount, eventIds, categoryIds);
@@ -240,6 +280,8 @@ describe('EventService.bulkAssignCategories', () => {
     expect(Array.isArray(result)).toBe(true);
     expect(result).toHaveLength(1);
     expect(result[0].id).toBe('11111111-1111-4111-8111-111111111111');
+    // Owned event: authoritative repostStatus is 'none'.
+    expect(result[0].repostStatus).toBe('none');
     expect(mockTransaction.commit.calledOnce).toBe(true);
     // Only cat2 should be newly assigned (cat1 was already assigned)
   });
@@ -295,7 +337,8 @@ describe('EventService.bulkAssignCategories', () => {
     const bulkCreateStub = sandbox.stub(EventCategoryAssignmentEntity, 'bulkCreate').resolves([]);
 
     const getEventByIdStub = sandbox.stub(service, 'getEventById');
-    getEventByIdStub.withArgs(eventId).resolves({ id: eventId, calendarId: reposterCalendarId, categories: [] } as any);
+    const returnedEvent = new CalendarEvent(eventId, reposterCalendarId);
+    getEventByIdStub.withArgs(eventId).resolves(returnedEvent);
 
     const result = await service.bulkAssignCategories(mockAccount, [eventId], [categoryId]);
 
@@ -303,17 +346,95 @@ describe('EventService.bulkAssignCategories', () => {
     expect(result).toHaveLength(1);
     expect(bulkCreateStub.calledOnce).toBe(true);
     expect(mockTransaction.commit.calledOnce).toBe(true);
+    // The event lives in EventRepostEntity (legacy direct-repost link) but not
+    // in SharedEventEntity (the AP mock returns an empty status map). The
+    // legacy fallback resolves to 'manual'.
+    expect(result[0].repostStatus).toBe('manual');
+    expect(result[0].isRepost).toBe(true);
   });
 
-  it('should set isRepost=true on returned events when a repost resolution occurred', async () => {
-    // Verifies Bug 2 fix: getEventById never sets isRepost, so after bulkAssignCategories
-    // resolves through the repost path, returned events must have isRepost=true set
-    // explicitly so the store reflects the correct state without requiring a page refresh.
+  it('should set repostStatus="auto" when SharedEventEntity reports auto_posted (pv-7kxw.1)', async () => {
+    // pv-7kxw.1 (option b): bulkAssignCategories now consults
+    // getSharedEventStatusMap post-commit and sets repostStatus
+    // authoritatively. An event reported as 'auto' by SharedEventEntity must
+    // surface as 'auto' in the return shape — the lossy 'manual' synthesis is
+    // gone. Companion bead pv-7kxw.2 will add additional lock-in coverage.
     const eventId = '11111111-1111-4111-8111-111111111111';
     const categoryId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
     const originalCalendarId = 'original-calendar-uuid';
     const reposterCalendarId = 'reposter-calendar-uuid';
 
+    // SharedEventEntity reports the event as auto-posted on the reposter.
+    service.setActivityPubInterface(
+      buildMockApInterface([eventId], { [eventId]: 'auto' }),
+    );
+
+    const mockEvent = EventEntity.build({
+      id: eventId,
+      calendar_id: originalCalendarId,
+      account_id: 'other-account-id',
+    });
+
+    const mockCategory = EventCategoryEntity.build({
+      id: categoryId,
+      calendar_id: reposterCalendarId,
+    });
+
+    const mockRepost = EventRepostEntity.build({
+      id: 'repost-uuid',
+      event_id: eventId,
+      calendar_id: reposterCalendarId,
+    });
+
+    sandbox.stub(EventEntity, 'findAll').resolves([mockEvent]);
+
+    sandbox.stub(CalendarService.prototype, 'editableCalendarsForUser')
+      .resolves([new Calendar(reposterCalendarId, 'reposter-calendar')]);
+
+    // EventRepostEntity.findAll is consulted twice: once inside
+    // resolveEffectiveCalendarId (event_id filter) and once post-commit
+    // (calendar_id filter). The flat stub satisfies both shapes.
+    sandbox.stub(EventRepostEntity, 'findAll').resolves([mockRepost]);
+
+    sandbox.stub(CalendarService.prototype, 'getCalendar')
+      .resolves(new Calendar(reposterCalendarId, 'reposter-calendar'));
+
+    sandbox.stub(EventCategoryEntity, 'findAll').resolves([mockCategory]);
+    sandbox.stub(EventCategoryAssignmentEntity, 'findAll').resolves([]);
+
+    const mockTransaction = {
+      commit: sandbox.stub().resolves(),
+      rollback: sandbox.stub().resolves(),
+      afterCommit: sandbox.stub(),
+      LOCK: {},
+    } as unknown as Transaction;
+    sandbox.stub(db, 'transaction').resolves(mockTransaction);
+
+    sandbox.stub(EventCategoryAssignmentEntity, 'bulkCreate').resolves([]);
+
+    const returnedEvent = new CalendarEvent(eventId, reposterCalendarId);
+    const getEventByIdStub = sandbox.stub(service, 'getEventById');
+    getEventByIdStub.withArgs(eventId).resolves(returnedEvent);
+
+    const result = await service.bulkAssignCategories(mockAccount, [eventId], [categoryId]);
+
+    // SharedEventEntity takes precedence over EventRepostEntity legacy fallback.
+    expect(result).toHaveLength(1);
+    expect(result[0].repostStatus).toBe('auto');
+    expect(result[0].isRepost).toBe(true);
+  });
+
+  it('should set repostStatus="manual" via EventRepostEntity legacy fallback (pv-7kxw.1)', async () => {
+    // pv-7kxw.1 (option b): when SharedEventEntity has no entry but
+    // EventRepostEntity does (legacy direct-repost link), the resolved
+    // repostStatus is 'manual'. This proves the fallback chain matches the
+    // listEvents resolution.
+    const eventId = '11111111-1111-4111-8111-111111111111';
+    const categoryId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    const originalCalendarId = 'original-calendar-uuid';
+    const reposterCalendarId = 'reposter-calendar-uuid';
+
+    // beforeEach already wires an empty getSharedEventStatusMap.
     const mockEvent = EventEntity.build({
       id: eventId,
       calendar_id: originalCalendarId,
@@ -354,23 +475,21 @@ describe('EventService.bulkAssignCategories', () => {
 
     sandbox.stub(EventCategoryAssignmentEntity, 'bulkCreate').resolves([]);
 
-    // getEventById returns an event with isRepost=false (as it always does, since it
-    // doesn't know about the repost relationship)
     const returnedEvent = new CalendarEvent(eventId, reposterCalendarId);
-    returnedEvent.repostStatus = 'none';
     const getEventByIdStub = sandbox.stub(service, 'getEventById');
     getEventByIdStub.withArgs(eventId).resolves(returnedEvent);
 
     const result = await service.bulkAssignCategories(mockAccount, [eventId], [categoryId]);
 
-    // The service must correct isRepost to true since repost resolution occurred
     expect(result).toHaveLength(1);
+    expect(result[0].repostStatus).toBe('manual');
     expect(result[0].isRepost).toBe(true);
   });
 
-  it('should set isRepost=false on returned events when no repost resolution occurred', async () => {
-    // Verifies that the wasRepost flag stays false for normal (non-repost) events,
-    // so local events continue to have isRepost=false after category assignment.
+  it('should set repostStatus="none" for owned events with no repost rows (pv-7kxw.1)', async () => {
+    // pv-7kxw.1 (option b): owned events have no SharedEventEntity entry and
+    // no EventRepostEntity row matching the acting calendar — repostStatus
+    // resolves to 'none' (the default from the resolved status map).
     const eventId = '11111111-1111-4111-8111-111111111111';
     const categoryId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
     const calendarId = 'local-calendar-uuid';
@@ -388,7 +507,7 @@ describe('EventService.bulkAssignCategories', () => {
 
     sandbox.stub(EventEntity, 'findAll').resolves([mockEvent]);
 
-    // User owns the calendar directly — no repost resolution needed
+    // User owns the calendar directly — no repost resolution needed.
     sandbox.stub(CalendarService.prototype, 'editableCalendarsForUser')
       .resolves([new Calendar(calendarId, 'local-calendar')]);
 
@@ -397,6 +516,9 @@ describe('EventService.bulkAssignCategories', () => {
 
     sandbox.stub(EventCategoryEntity, 'findAll').resolves([mockCategory]);
     sandbox.stub(EventCategoryAssignmentEntity, 'findAll').resolves([]);
+
+    // Post-commit lookup queries EventRepostEntity by calendar_id; no rows.
+    sandbox.stub(EventRepostEntity, 'findAll').resolves([]);
 
     const mockTransaction = {
       commit: sandbox.stub().resolves(),
@@ -409,13 +531,13 @@ describe('EventService.bulkAssignCategories', () => {
     sandbox.stub(EventCategoryAssignmentEntity, 'bulkCreate').resolves([]);
 
     const returnedEvent = new CalendarEvent(eventId, calendarId);
-    returnedEvent.repostStatus = 'none';
     const getEventByIdStub = sandbox.stub(service, 'getEventById');
     getEventByIdStub.withArgs(eventId).resolves(returnedEvent);
 
     const result = await service.bulkAssignCategories(mockAccount, [eventId], [categoryId]);
 
     expect(result).toHaveLength(1);
+    expect(result[0].repostStatus).toBe('none');
     expect(result[0].isRepost).toBe(false);
   });
 

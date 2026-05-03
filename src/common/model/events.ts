@@ -80,10 +80,15 @@ class CalendarEvent extends TranslatedModel<CalendarEventContent> {
    * for events shared to the querying calendar, or 'manual' for legacy EventRepostEntity
    * entries, or 'none' for owned events.
    *
-   * NOT populated by: EventService.getEventById(), EventService.updateEvent(), or
-   * EventService.bulkAssignCategories() (which calls getEventById() internally). Events
-   * returned by those methods will always have repostStatus='none' regardless of actual
-   * repost state.
+   * Also populated by: EventService.bulkAssignCategories() and
+   * EventService.replaceEventCategories(). After commit each method issues a
+   * single getSharedEventStatusMap + EventRepostEntity lookup against the
+   * acting (resolved) calendar and assigns the resolved status to each
+   * returned event, mirroring the listEvents resolution.
+   *
+   * NOT populated by: EventService.getEventById() or EventService.updateEvent().
+   * Events returned by those methods will always have repostStatus='none'
+   * regardless of actual repost state. (Tracked by follow-up bead pv-n1uy.)
    *
    * Default: 'none'. Must be explicitly set after retrieval if needed.
    */
