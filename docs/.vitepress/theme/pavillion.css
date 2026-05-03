@@ -1,0 +1,75 @@
+/*
+ * Maps VitePress's default-theme brand variables onto the Pavillion palette
+ * defined in src/client/assets/style/tokens/_colors.scss. Hex values are
+ * duplicated here because the docs site does not load the app SCSS tokens —
+ * keep them in sync if the source palette shifts.
+ *
+ * Choices that are not arbitrary:
+ *   - Light brand-3 / button-bg uses orange-700 (#C2410C) so white button text
+ *     keeps a 5.08:1 contrast ratio. Orange-500/600 fail AA on white text.
+ *   - Dark button text is stone-900 (#1C1917) on orange-500 (6.25:1). White on
+ *     orange-500 fails AA at 2.75:1.
+ */
+
+:root {
+  /* Brand ramp (Pavillion orange) */
+  --vp-c-brand-1: #C2410C;            /* orange-700 — accent text on light surface */
+  --vp-c-brand-2: #9A3412;            /* orange-800 — hover */
+  --vp-c-brand-3: #EA580C;            /* orange-600 — soft accents */
+  --vp-c-brand-soft: rgba(249, 115, 22, 0.14);  /* orange-500 @ alpha */
+
+  /* CTA buttons */
+  --vp-button-brand-border: transparent;
+  --vp-button-brand-text: #FFFFFF;
+  --vp-button-brand-bg: #C2410C;       /* orange-700 (AA-safe with white text) */
+  --vp-button-brand-hover-border: transparent;
+  --vp-button-brand-hover-text: #FFFFFF;
+  --vp-button-brand-hover-bg: #9A3412; /* orange-800 */
+  --vp-button-brand-active-border: transparent;
+  --vp-button-brand-active-text: #FFFFFF;
+  --vp-button-brand-active-bg: #7C2D12; /* orange-900 */
+
+  /* Home hero */
+  --vp-home-hero-name-color: transparent;
+  --vp-home-hero-name-background: linear-gradient(120deg, #F97316 30%, #C2410C);
+  --vp-home-hero-image-background-image: linear-gradient(-45deg, #FB923C 50%, #FDBA74 50%);
+  --vp-home-hero-image-filter: blur(40px);
+
+  /* Subtle warm tint on alt surfaces (sidebar, code block bg) */
+  --vp-c-bg-alt: #FAFAF9;             /* stone-50 */
+  --vp-c-bg-soft: #F5F5F4;            /* stone-100 */
+
+  /* Inline code chip uses the orange-soft tint */
+  --vp-code-bg: var(--vp-c-brand-soft);
+  --vp-code-color: #C2410C;            /* orange-700 */
+}
+
+.dark {
+  /* Brand ramp */
+  --vp-c-brand-1: #FB923C;            /* orange-400 — readable on dark */
+  --vp-c-brand-2: #FDBA74;            /* orange-300 — hover */
+  --vp-c-brand-3: #F97316;            /* orange-500 — solid */
+  --vp-c-brand-soft: rgba(251, 146, 60, 0.16);  /* orange-400 @ alpha */
+
+  /* CTA buttons — dark text on orange for contrast */
+  --vp-button-brand-text: #1C1917;     /* stone-900 */
+  --vp-button-brand-bg: #F97316;       /* orange-500 (6.25:1 with stone-900) */
+  --vp-button-brand-hover-text: #1C1917;
+  --vp-button-brand-hover-bg: #FB923C; /* orange-400 */
+  --vp-button-brand-active-text: #1C1917;
+  --vp-button-brand-active-bg: #FDBA74; /* orange-300 */
+
+  /* Home hero */
+  --vp-home-hero-name-background: linear-gradient(120deg, #FB923C 30%, #FDBA74);
+  --vp-home-hero-image-background-image: linear-gradient(-45deg, #F97316 50%, #FB923C 50%);
+
+  /* Stone-tinted dark surfaces */
+  --vp-c-bg: #1C1917;                  /* stone-900 */
+  --vp-c-bg-alt: #292524;              /* stone-800 */
+  --vp-c-bg-soft: #292524;             /* stone-800 */
+  --vp-c-bg-elv: #292524;              /* stone-800 */
+
+  /* Inline code chip */
+  --vp-code-bg: var(--vp-c-brand-soft);
+  --vp-code-color: #FDBA74;            /* orange-300 */
+}

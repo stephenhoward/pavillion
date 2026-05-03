@@ -10,12 +10,13 @@ import AccountApplication from '@/common/model/application';
 import EmailInterface from "@/server/email/interface";
 import { AccountEntity, AccountSecretsEntity, AccountRoleEntity, AccountApplicationEntity } from "@/server/common/entity/account";
 import AccountInvitationEntity from '@/server/accounts/entity/account_invitation';
-import { AccountApplicationAlreadyExistsError, noAccountInviteExistsError, AccountRegistrationClosedError, AccountApplicationsClosedError, AccountAlreadyExistsError, AccountInviteAlreadyExistsError, noAccountApplicationExistsError, AccountInvitationPermissionError } from '@/server/accounts/exceptions';
+import { noAccountInviteExistsError, AccountRegistrationClosedError, AccountApplicationsClosedError, AccountAlreadyExistsError, AccountInviteAlreadyExistsError, noAccountApplicationExistsError, AccountInvitationPermissionError } from '@/server/accounts/exceptions';
 import AccountRegistrationEmail from '@/server/accounts/model/registration_email';
 import AccountInvitationEmail from '@/server/accounts/model/invitation_email';
 import ApplicationAcceptedEmail from '@/server/accounts/model/application_accepted_email';
 import ApplicationRejectedEmail from '@/server/accounts/model/application_rejected_email';
 import ApplicationAcknowledgmentEmail from '@/server/accounts/model/application_acknowledgment_email';
+import ApplicationConfirmationEmail from '@/server/accounts/model/application_confirmation_email';
 import AccountAlreadyExistsEmail from '@/server/accounts/model/account_already_exists_email';
 import ConfigurationInterface from '@/server/configuration/interface';
 import SetupInterface from '@/server/setup/interface';
@@ -194,13 +195,34 @@ export default class AccountService {
   }
 
   /**
-    * Allows a user to apply for an account when registration mode is set to 'apply'
+    * Allows a user to apply for an account when registration mode is set to 'apply'.
+    *
+    * Implements a two-step lifecycle (epic pv-l9wv): submit creates a row in
+    * `pending_confirmation` status and emails a confirmation link; the applicant
+    * confirms via {@link confirmAccountApplication} which transitions to `pending`
+    * for admin review.
+    *
+    * Five branches, all of which perform real DB + email work to keep response
+    * timing uniform across states (anti-enumeration; DEC-004):
+    *
+    *   1. New email, no existing account or application: create
+    *      `pending_confirmation` row + send `ApplicationConfirmationEmail`.
+    *   2. Existing application in `pending_confirmation`: regenerate token,
+    *      reset 7-day expiration, refresh message, resend
+    *      `ApplicationConfirmationEmail`.
+    *   3. Existing application in `pending`: silently swallow
+    *      `AccountApplicationAlreadyExistsError`. Touch the row + send a generic
+    *      acknowledgment for timing parity.
+    *   4. Existing application in `rejected`: silently swallow
+    *      `AccountApplicationAlreadyExistsError`. Touch the row + send a generic
+    *      acknowledgment for timing parity.
+    *   5. Existing account: silently swallow `AccountAlreadyExistsError`. Send
+    *      `AccountAlreadyExistsEmail` (mirrors `registerNewAccount` pattern).
     *
     * @param email - The email address of the applicant
     * @param message - Any message the applicant wants to include with their application
-    * @returns A promise that resolves to true if the application was successfully created
-    * @throws AccountAlreadyExistsError if an account already exists for the provided email
-    * @throws AccountApplicationAlreadyExistsError if an application already exists for the provided email
+    * @returns A promise that resolves to true once the apply request has been processed
+    * @throws ValidationError if the email format is invalid
     * @throws AccountApplicationsClosedError if the system is not accepting applications
     */
   async applyForNewAccount(email: string, message?: string): Promise<boolean> {
@@ -215,34 +237,166 @@ export default class AccountService {
       throw new AccountApplicationsClosedError();
     }
 
-    if ( await this.getAccountByEmail(email) ) {
-      throw new AccountAlreadyExistsError();
-    }
-
-    // Check for existing application with any status
+    const existingAccount = await this.getAccountByEmail(email);
     const existingApplication = await AccountApplicationEntity.findOne({
       where: { email: email },
     });
 
-    if (existingApplication) {
-      throw new AccountApplicationAlreadyExistsError();
+    // Branch 5: existing account — silently swallow AccountAlreadyExistsError.
+    // Email the account owner (mirrors registerNewAccount) so the work timing
+    // matches the create-and-confirm branches.
+    if (existingAccount) {
+      const accountExistsMessage = new AccountAlreadyExistsEmail(existingAccount);
+      await this.emailInterface.sendEmail(
+        accountExistsMessage.buildMessage(existingAccount.language),
+      );
+      return true;
     }
+
+    // Branch 2: existing application awaiting confirmation — regenerate the
+    // token, reset the 7-day expiration, refresh the optional message, and
+    // resend the confirmation email. Identical email content to first-send
+    // (no "we resent your link" copy that would leak prior submission state).
+    if (existingApplication && existingApplication.status === 'pending_confirmation') {
+      existingApplication.confirmation_token = randomBytes(16).toString('hex');
+      existingApplication.confirmation_token_expiration = DateTime.now().plus({ days: 7 }).toJSDate();
+      existingApplication.message = message ?? existingApplication.message ?? '';
+      existingApplication.status_timestamp = new Date();
+      await existingApplication.save();
+
+      const application = existingApplication.toModel();
+      const confirmationMessage = new ApplicationConfirmationEmail(
+        application,
+        existingApplication.confirmation_token,
+      );
+      await this.emailInterface.sendEmail(confirmationMessage.buildMessage('en'));
+      return true;
+    }
+
+    // Branches 3 & 4: existing application is already pending or already
+    // rejected. Silently swallow AccountApplicationAlreadyExistsError. Touch
+    // the row (status_timestamp save) and send a generic acknowledgment so
+    // response timing matches the create branches; the user already received
+    // the original email and the admin queue/decision is unchanged.
+    if (existingApplication) {
+      existingApplication.status_timestamp = new Date();
+      await existingApplication.save();
+
+      const ackMessage = new ApplicationAcknowledgmentEmail(existingApplication.toModel());
+      await this.emailInterface.sendEmail(ackMessage.buildMessage('en'));
+      return true;
+    }
+
+    // Branch 1: new application — create in pending_confirmation, generate
+    // token + 7-day expiration, send confirmation email. The acknowledgment
+    // email is held until the applicant confirms (epic pv-l9wv).
+    const confirmationToken = randomBytes(16).toString('hex');
+    const confirmationExpiration = DateTime.now().plus({ days: 7 }).toJSDate();
 
     const applicationEntity = AccountApplicationEntity.build({
       id: uuidv4(),
       email: email,
       message: message || '',
-      status: 'pending',
+      status: 'pending_confirmation',
       status_timestamp: new Date(),
+      confirmation_token: confirmationToken,
+      confirmation_token_expiration: confirmationExpiration,
     });
 
     await applicationEntity.save();
 
     const application = applicationEntity.toModel();
+    const confirmationMessage = new ApplicationConfirmationEmail(application, confirmationToken);
+    await this.emailInterface.sendEmail(confirmationMessage.buildMessage('en'));
 
-    // Send acknowledgment email to applicant
-    const emailMessage = new ApplicationAcknowledgmentEmail(application);
-    await this.emailInterface.sendEmail(emailMessage.buildMessage('en'));
+    return true;
+  }
+
+  /**
+   * Atomically consumes a confirmation token, transitioning the matching
+   * account application from `pending_confirmation` to `pending` and clearing
+   * the token fields. On success, sends the {@link ApplicationAcknowledgmentEmail}
+   * (post-confirmation acknowledgment, deferred from apply-time per epic
+   * pv-l9wv).
+   *
+   * Atomicity is enforced via a conditional `update()` query scoped to the
+   * application's primary key, with the original status + expiration in the
+   * WHERE clause so a concurrent consume cannot double-flip the row. If
+   * affected rows = 0, the call returns false. This collapses every terminal
+   * failure state (not found, expired, already-consumed/null, status changed)
+   * into the same response — caller cannot distinguish (anti-enumeration;
+   * epic pv-l9wv).
+   *
+   * @param token - The confirmation token from the email link
+   * @returns true on successful consume + acknowledgment send; false on any
+   *          terminal failure state
+   */
+  async confirmAccountApplication(token: string): Promise<boolean> {
+    if (!token) {
+      return false;
+    }
+
+    // Look up the row by token. DB-level WHERE clause (no app-layer string
+    // compare). All failure paths from here on return identical false.
+    const application = await AccountApplicationEntity.findOne({
+      where: { confirmation_token: token },
+    });
+
+    if (!application) {
+      return false;
+    }
+
+    if (application.status !== 'pending_confirmation') {
+      return false;
+    }
+
+    if (!application.confirmation_token_expiration) {
+      return false;
+    }
+
+    const now = DateTime.utc();
+    const expirationTime = DateTime.fromJSDate(application.confirmation_token_expiration);
+    if (now > expirationTime) {
+      // Defense-in-depth: an expired token has no further use; clear the
+      // fields so the row cannot match a future lookup. Status remains
+      // `pending_confirmation` so the applicant can re-apply (which
+      // regenerates the token via Branch 2 of applyForNewAccount).
+      application.confirmation_token = null;
+      application.confirmation_token_expiration = null;
+      await application.save();
+      return false;
+    }
+
+    // Atomic conditional update scoped to the application's primary key.
+    // The status + token guards in the WHERE clause prevent a concurrent
+    // consume from double-flipping the row; if another caller already
+    // consumed the token between our findOne and update, affectedRows will
+    // be 0 and we return false. This makes the consume single-shot.
+    const [affectedRows] = await AccountApplicationEntity.update(
+      {
+        status: 'pending',
+        status_timestamp: new Date(),
+        confirmation_token: null,
+        confirmation_token_expiration: null,
+      },
+      {
+        where: {
+          id: application.id,
+          confirmation_token: token,
+          status: 'pending_confirmation',
+        },
+      },
+    );
+
+    if (affectedRows === 0) {
+      return false;
+    }
+
+    // Build the acknowledgment email from the application we already loaded.
+    // The model carries the email address; status/timestamp on the model
+    // reflect pre-update values but are not surfaced to the recipient.
+    const ackMessage = new ApplicationAcknowledgmentEmail(application.toModel());
+    await this.emailInterface.sendEmail(ackMessage.buildMessage('en'));
 
     return true;
   }
@@ -593,9 +747,15 @@ export default class AccountService {
   /**
    * Lists account applications with optional status filtering and pagination.
    *
+   * Default behavior (no status) excludes `pending_confirmation` rows so the
+   * admin queue surfaces only actionable applications. Callers may explicitly
+   * request `pending_confirmation` to inspect that bucket. Unknown status
+   * values fall back to the default-exclude behavior rather than leaking the
+   * pending_confirmation bucket via an unrecognized filter value.
+   *
    * @param page - Page number (1-indexed)
    * @param limit - Number of items per page (max 100)
-   * @param status - Optional status filter (pending, accepted, rejected)
+   * @param status - Optional status filter: `pending_confirmation`, `pending`, or `rejected`
    * @returns Paginated account applications
    */
   async listAccountApplications(
@@ -617,9 +777,16 @@ export default class AccountService {
     const offset = (sanitizedPage - 1) * sanitizedLimit;
 
     const whereClause: any = {};
+    const ALLOWED_STATUSES = ['pending_confirmation', 'pending', 'rejected'];
+    const ACTIONABLE_STATUSES = ['pending', 'rejected'];
 
-    if (status) {
+    if (status && ALLOWED_STATUSES.includes(status)) {
       whereClause.status = status;
+    }
+    else {
+      // Default (and fallback for unknown values): exclude pending_confirmation
+      // so admins see only the actionable queue.
+      whereClause.status = { [Op.in]: ACTIONABLE_STATUSES };
     }
 
     const { count, rows: entities } = await AccountApplicationEntity.findAndCountAll({

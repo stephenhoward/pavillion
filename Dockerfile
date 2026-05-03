@@ -77,8 +77,17 @@ FROM node:22-slim AS production
 
 # Install required system packages
 # - dumb-init: proper signal handling for Node.js in containers
+# - postgresql-client-17: provides pg_dump/pg_restore for the worker's backup job
+#   (must match the postgres:17 server version; pulled from pgdg apt repo)
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    curl \
+    gnupg \
+    && curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | gpg --dearmor -o /usr/share/keyrings/postgresql-archive-keyring.gpg \
+    && echo "deb [signed-by=/usr/share/keyrings/postgresql-archive-keyring.gpg] http://apt.postgresql.org/pub/repos/apt bookworm-pgdg main" > /etc/apt/sources.list.d/pgdg.list \
+    && apt-get update && apt-get install -y --no-install-recommends \
     dumb-init \
+    postgresql-client-17 \
     && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user for security

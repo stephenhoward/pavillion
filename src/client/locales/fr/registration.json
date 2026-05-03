@@ -22,10 +22,18 @@
     "MissingFields": "Veuillez remplir tous les champs obligatoires.",
     "400": "erreur lors de l'inscription",
     "unknown_error": "Une erreur inconnue s'est produite",
-    "application_submitted": "Si cette adresse e-mail n'est pas encore enregistrée, votre demande sera examinée.",
+    "application_submitted": "Si votre adresse e-mail est éligible, vous recevrez un e-mail de confirmation sous peu. Veuillez cliquer sur le lien dans cet e-mail pour finaliser votre demande.",
     "account_applications_closed": "Les demandes de compte sont actuellement fermées.",
     "application_processing_error": "Une erreur s'est produite lors du traitement de votre demande. Veuillez réessayer plus tard.",
     "invalid_request": "Demande invalide. Veuillez vérifier vos informations et réessayer."
+  },
+  "apply_confirm": {
+    "title": "Confirmez votre demande",
+    "confirming": "Confirmation de votre adresse e-mail…",
+    "success_message": "Merci. Votre demande est maintenant à l'examen.",
+    "go_login": "← retour à la connexion",
+    "invalid_message": "Ce lien de confirmation est invalide ou a expiré. Veuillez refaire votre demande.",
+    "reapply_link": "Refaire une demande"
   },
   "accept_invite": {
     "bad_invite_title": "Invitation expirée",

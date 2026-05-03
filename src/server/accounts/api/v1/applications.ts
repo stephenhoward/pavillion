@@ -9,6 +9,11 @@ import {
 import { ValidationError } from '@/common/exceptions/base';
 import { logError } from '@/server/common/helper/error-logger';
 import { createLogger } from '@/server/common/helper/logger';
+import {
+  applicationByEmail,
+  applicationByIp,
+  confirmApplicationByIp,
+} from '@/server/common/middleware/rate-limiters';
 
 const logger = createLogger('accounts');
 
@@ -21,7 +26,25 @@ export default class AccountApplicationRouteHandlers {
 
   installHandlers(app: express.Application, routePrefix: string): void {
     const router = express.Router();
-    router.post('/applications', ...ExpressHelper.noUserOnly, this.applyToRegister.bind(this));
+    // Rate limit POST /applications by IP (anti-spam) and by email (anti-
+    // enumeration probing). Both limiters are pre-configured singletons in
+    // rate-limiters.ts (epic pv-l9wv); they fall back to no-op middleware
+    // when rate limiting is disabled in config.
+    router.post(
+      '/applications',
+      applicationByIp,
+      applicationByEmail,
+      ...ExpressHelper.noUserOnly,
+      this.applyToRegister.bind(this),
+    );
+    // CRITICAL: the confirm route is registered BEFORE `/applications/:id` so
+    // the static `confirm` segment is not matched as an `:id` parameter
+    // (Express matches in registration order).
+    // This endpoint is anonymous: the URL-path token IS the bearer credential,
+    // so no session middleware and no CSRF token are applied — either would
+    // break the email-link flow. The SPA fires it automatically on mount so
+    // the user-facing flow is single-click (the email link itself).
+    router.post('/applications/confirm/:token', confirmApplicationByIp, this.consumeConfirmationToken.bind(this));
     router.get('/applications', ...ExpressHelper.adminOnly, this.listApplications.bind(this));
     router.post('/applications/:id', ...ExpressHelper.adminOnly, this.processApplication.bind(this));
     app.use(routePrefix, router);
@@ -38,12 +61,22 @@ export default class AccountApplicationRouteHandlers {
         return;
       }
       else if (error instanceof AccountAlreadyExistsError) {
-        // Log internally but don't reveal account existence to requester
-        logger.info({ email: req.body.email }, 'Application attempted for existing account');
+        // Defensive: the service no longer throws this on the apply path
+        // (pv-l9wv.3.1 makes existing-account submissions silently swallow it
+        // for anti-enumeration timing). Kept as a defense-in-depth catch so a
+        // future service-layer regression cannot leak account existence to
+        // the caller. Log without the email field — it is PII and is not
+        // needed to investigate this branch (see pv-l9wv logging hygiene).
+        logger.info('Application attempted for existing account');
       }
       else if (error instanceof AccountApplicationAlreadyExistsError) {
-        // Log internally but don't reveal application existence to requester
-        logger.info({ email: req.body.email }, 'Duplicate application attempted');
+        // Defensive: the service no longer throws this on the apply path
+        // (pv-l9wv.3.1 makes duplicate submissions silently swallow it). Kept
+        // as a defense-in-depth catch so a future service-layer regression
+        // cannot leak application existence to the caller. Log without the
+        // email field — it is PII and is not needed to investigate this
+        // branch (see pv-l9wv logging hygiene).
+        logger.info('Duplicate application attempted');
       }
       else if (error instanceof AccountApplicationsClosedError) {
         // This is a system state error, not an enumeration risk, so reveal it
@@ -61,6 +94,46 @@ export default class AccountApplicationRouteHandlers {
     res.json({ success: true, message: 'application_submitted' });
   }
 
+  /**
+   * POST /api/v1/applications/confirm/:token
+   * Anonymous endpoint that atomically consumes a confirmation token,
+   * transitioning the matching application from `pending_confirmation` to
+   * `pending`. Every terminal failure state (token not found, expired,
+   * already-consumed, wrong status) collapses to `{ valid: false }` (HTTP 200)
+   * so a caller cannot distinguish them (anti-enumeration; epic pv-l9wv). On
+   * success, returns `{ success: true }`. Tokens are never logged.
+   */
+  async consumeConfirmationToken(req: Request, res: Response) {
+    try {
+      const success = await this.service.confirmAccountApplication(req.params.token);
+      if (success) {
+        res.json({ success: true });
+      }
+      else {
+        // Anti-enumeration: every terminal failure (not found / expired /
+        // already-consumed / wrong status) collapses to the same shape so a
+        // caller cannot distinguish them.
+        res.json({ valid: false });
+      }
+    }
+    catch (error) {
+      // Anti-enumeration: a transient infrastructure failure must not produce
+      // a distinguishable HTTP 500. Collapse to the standard failure shape so
+      // not-found / expired / already-consumed / DB-error are indistinguishable
+      // to a caller (epic pv-l9wv). Token value is never included in the log.
+      logError(error, 'Error consuming confirmation token');
+      res.json({ valid: false });
+    }
+  }
+
+  /**
+   * GET /api/v1/applications
+   * Admin list of account applications. Accepts an optional `status` query
+   * param: `pending_confirmation`, `pending`, or `rejected`. When omitted (or
+   * given an unrecognized value), the response excludes `pending_confirmation`
+   * rows so the queue surfaces only actionable applications. The service-layer
+   * filter enforces the allow-list; see `listAccountApplications` for details.
+   */
   async listApplications(req: Request, res: Response) {
     const page = Math.max(1, parseInt(req.query.page as string) || 1);
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 50));

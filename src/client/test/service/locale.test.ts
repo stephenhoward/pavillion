@@ -212,6 +212,21 @@ describe('locale service', () => {
       const result = initI18Next('en');
       expect(result).toBe(i18next);
     });
+
+    // Regression guard for pv-2qdy: the loader must wire event_editor into es and fr,
+    // otherwise users in those languages silently fall back to English recurrence text.
+    it('should register event_editor namespace for en, es, and fr', () => {
+      initI18Next('en');
+
+      const config = vi.mocked(i18next.init).mock.calls[0][0] as { resources: Record<string, Record<string, Record<string, unknown>>> };
+      // Assert each binding exists AND is non-empty — catches both an accidentally
+      // dropped binding and a binding wired to an empty/swapped object.
+      for (const lang of ['en', 'es', 'fr']) {
+        const ns = config.resources[lang]?.event_editor;
+        expect(ns).toBeDefined();
+        expect(Object.keys(ns).length).toBeGreaterThan(0);
+      }
+    });
   });
 
   describe('applyAccountLanguage', () => {

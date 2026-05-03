@@ -17,8 +17,11 @@ export default defineConfig({
       },
     },
     teardownTimeout: 15000,
-    // Only include the rate limiting integration test file
-    include: ['**/authentication/test/integration/rate_limiting.test.ts'],
+    // Only include the rate limiting integration test files
+    include: [
+      '**/authentication/test/integration/rate_limiting.test.ts',
+      '**/accounts/test/integration/rate_limiting.test.ts',
+    ],
     exclude: [
       '**/node_modules/**',
       '**/dist/**',

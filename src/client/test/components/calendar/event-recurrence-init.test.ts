@@ -88,6 +88,9 @@ describe('event_recurrence.vue — initialization from existing schedule data', 
     // Retained: exercises event_recurrence.vue's summary/trigger rendering
     // when a frequency is already set. Assertion migrated to check for the
     // "Edit recurrence" trigger + summary text rather than the inline form.
+    // Also asserts rendered summary content + schedule header to catch
+    // i18n key-routing regressions (e.g. accidental prefixed `t` on the
+    // utility call would surface here as a raw key string).
     it('shows "Edit recurrence" trigger and summary when schedule already has a frequency set', () => {
       const schedule = new CalendarEventSchedule('schedule-id');
       schedule.frequency = EventFrequency.WEEKLY;
@@ -98,7 +101,8 @@ describe('event_recurrence.vue — initialization from existing schedule data', 
       const trigger = findRecurrenceTrigger(wrapper);
       expect(trigger.exists()).toBe(true);
       expect(trigger.text()).toContain('Edit recurrence');
-      expect(wrapper.find('.recurrence-summary .summary-text').exists()).toBe(true);
+      expect(wrapper.find('.recurrence-summary .summary-text').text()).toBe('Every week');
+      expect(wrapper.find('.schedule-header span').text()).toBe('Schedule 1');
     });
 
     // Retained: same as above for daily.
@@ -109,7 +113,7 @@ describe('event_recurrence.vue — initialization from existing schedule data', 
 
       const wrapper = mountRecurrence(schedule);
 
-      expect(wrapper.find('.recurrence-summary .summary-text').exists()).toBe(true);
+      expect(wrapper.find('.recurrence-summary .summary-text').text()).toBe('Every 2 days');
       expect(findRecurrenceTrigger(wrapper).text()).toContain('Edit recurrence');
     });
 
@@ -121,7 +125,7 @@ describe('event_recurrence.vue — initialization from existing schedule data', 
 
       const wrapper = mountRecurrence(schedule);
 
-      expect(wrapper.find('.recurrence-summary .summary-text').exists()).toBe(true);
+      expect(wrapper.find('.recurrence-summary .summary-text').text()).toBe('Monthly');
       expect(findRecurrenceTrigger(wrapper).text()).toContain('Edit recurrence');
     });
 
@@ -133,7 +137,7 @@ describe('event_recurrence.vue — initialization from existing schedule data', 
 
       const wrapper = mountRecurrence(schedule);
 
-      expect(wrapper.find('.recurrence-summary .summary-text').exists()).toBe(true);
+      expect(wrapper.find('.recurrence-summary .summary-text').text()).toBe('Yearly');
       expect(findRecurrenceTrigger(wrapper).text()).toContain('Edit recurrence');
     });
 

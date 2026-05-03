@@ -12,6 +12,10 @@ import ActivityPubMemberService from '@/server/activitypub/service/members';
 import ActivityPubServerService from '@/server/activitypub/service/server';
 import ProcessInboxService from '../service/inbox';
 import ProcessOutboxService from '../service/outbox';
+import FederationPublisher, {
+  FederationEventInput,
+  FederationRemoteUserActor,
+} from '@/server/activitypub/service/federation_publisher';
 import { ActivityPubOutboxMessageEntity, ActivityPubInboxMessageEntity, FollowingCalendarEntity, SharedEventEntity } from '@/server/activitypub/entity/activitypub';
 import { EventObjectEntity } from '@/server/activitypub/entity/event_object';
 import { CalendarActorEntity, CalendarActor } from '@/server/activitypub/entity/calendar_actor';
@@ -32,6 +36,7 @@ export default class ActivityPubInterface {
   private serverService: ActivityPubServerService;
   private inboxSerivce: ProcessInboxService;
   private outboxService: ProcessOutboxService;
+  private federationPublisher: FederationPublisher;
   private calendarInterface: CalendarInterface;
 
   constructor(
@@ -45,6 +50,7 @@ export default class ActivityPubInterface {
     this.serverService = new ActivityPubServerService(eventBus, calendarInterface, accountsInterface);
     this.inboxSerivce = new ProcessInboxService(eventBus, this.calendarInterface, moderationInterface);
     this.outboxService = new ProcessOutboxService(eventBus, this.inboxSerivce);
+    this.federationPublisher = new FederationPublisher(eventBus, calendarInterface, this.outboxService);
   }
 
   async actorUrl(calendar: Calendar): Promise<string> {
@@ -101,14 +107,19 @@ export default class ActivityPubInterface {
   }
 
   /**
-   * Default federation delivery path: enqueues an activity onto the outbox so
-   * the worker signs it and fans it out to every configured recipient
-   * asynchronously. Use this for fire-and-forget. The activity is signed and
-   * delivered by the outbox worker — the caller does not see the remote
-   * response and does not need to.
+   * AP-internal transport primitive: enqueues a pre-built ActivityPub activity
+   * onto a calendar's outbox so the worker signs it and fans it out to every
+   * configured recipient asynchronously.
    *
-   * For the rare case where the caller MUST read the remote response body,
-   * use `deliverActivitySigned` instead.
+   * **Non-AP callers should NOT use this method.** Use the typed publish/send
+   * methods instead, which own activity construction inside the AP domain:
+   *   - `publishEventCreate` / `publishEventUpdate` / `publishEventDelete`
+   *     for event lifecycle activities.
+   *   - `sendEditorInvite` for Add(remoteUserActor) editor invites.
+   *
+   * This method remains exposed because AP-internal services (members service
+   * for follow/unfollow/share/unshare, inbox forwarding for announce/accept)
+   * legitimately enqueue activities they have already constructed.
    *
    * @param calendar The calendar that owns the outbox.
    * @param message The activity to enqueue for delivery.
@@ -118,11 +129,14 @@ export default class ActivityPubInterface {
   }
 
   /**
-   * Escape hatch for synchronous signed federation delivery. ONLY use this
-   * when the caller must read the remote response body — currently only
-   * `events.ts:createRemoteEventViaActivityPub` qualifies, because it needs
-   * the created event echoed back from the remote calendar to construct the
-   * local domain model. Every other call site MUST use `addToOutbox`.
+   * AP-internal transport primitive: escape hatch for synchronous signed
+   * federation delivery. Used when the AP domain needs to read the remote
+   * response body (currently only Create(Event) delivery qualifies, because
+   * the local CalendarEvent model is built from the remote echo).
+   *
+   * **Non-AP callers should NOT use this method.** Use `publishEventCreate`
+   * instead — it owns activity construction, signing-actor resolution, and
+   * the synchronous response handling inside the AP domain.
    *
    * The signing actor URI must equal `activity.actor` so the keyId is valid
    * at the receiver. The activity is JSON-stringified once and the same
@@ -146,6 +160,79 @@ export default class ActivityPubInterface {
     inboxUrl: string,
   ): Promise<{ status: number; data: any }> {
     return this.outboxService.deliverActivitySigned(signingActorUri, activity, inboxUrl);
+  }
+
+  /**
+   * Publishes a Create(Event) activity to a remote calendar synchronously.
+   * The AP domain owns activity construction, signing-actor resolution, and
+   * remote response handling; the caller passes typed domain inputs and
+   * receives the local CalendarEvent built from the remote echo.
+   *
+   * Use this when creating an event on a remote (federated) calendar. Errors
+   * are mapped to `InsufficientCalendarPermissionsError` on 403 from the
+   * remote inbox; other non-2xx responses surface as a generic Error.
+   *
+   * @param account The local account creating the event.
+   * @param event The event input (eventId + raw eventParams).
+   * @param remoteCalendarActor The remote calendar's CalendarActor.
+   * @returns The created CalendarEvent (from remote response).
+   */
+  async publishEventCreate(
+    account: Account,
+    event: FederationEventInput,
+    remoteCalendarActor: CalendarActor,
+  ): Promise<CalendarEvent> {
+    return this.federationPublisher.publishEventCreate(account, event, remoteCalendarActor);
+  }
+
+  /**
+   * Publishes an Update(Event) activity to a remote calendar via the outbox
+   * (fire-and-forget). The AP domain owns activity construction and outbox
+   * anchor resolution; the caller passes typed domain inputs.
+   *
+   * @param account The local account updating the event.
+   * @param event The event input (eventId + raw eventParams).
+   * @param remoteCalendarActor The remote calendar's CalendarActor.
+   */
+  async publishEventUpdate(
+    account: Account,
+    event: FederationEventInput,
+    remoteCalendarActor: CalendarActor,
+  ): Promise<void> {
+    return this.federationPublisher.publishEventUpdate(account, event, remoteCalendarActor);
+  }
+
+  /**
+   * Publishes a Delete(Tombstone) activity to a remote calendar via the
+   * outbox (fire-and-forget). The AP domain owns activity construction and
+   * outbox anchor resolution; the caller passes the local event id.
+   *
+   * @param account The local account deleting the event.
+   * @param eventId The local event id to delete.
+   * @param remoteCalendarActor The remote calendar's CalendarActor.
+   */
+  async publishEventDelete(
+    account: Account,
+    eventId: string,
+    remoteCalendarActor: CalendarActor,
+  ): Promise<void> {
+    return this.federationPublisher.publishEventDelete(account, eventId, remoteCalendarActor);
+  }
+
+  /**
+   * Sends an Add(remoteUserActor) editor-invite activity from a local
+   * calendar to a remote user actor via the outbox (fire-and-forget). The
+   * activity is signed by the calendar actor (per pv-dyyw signing table)
+   * and anchored on the calendar's own outbox.
+   *
+   * @param calendar The local calendar inviting the editor.
+   * @param remoteUserActor The remote user actor being invited.
+   */
+  async sendEditorInvite(
+    calendar: Calendar,
+    remoteUserActor: FederationRemoteUserActor,
+  ): Promise<void> {
+    return this.federationPublisher.sendEditorInvite(calendar, remoteUserActor);
   }
 
   async addToInbox(calendar: Calendar, message: ActivityPubActivity): Promise<null> {

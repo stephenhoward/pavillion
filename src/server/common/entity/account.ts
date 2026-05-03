@@ -84,7 +84,7 @@ class AccountApplicationEntity extends Model {
   declare message: string;
 
   @Column({
-    type: DataType.ENUM('pending', 'rejected'),
+    type: DataType.ENUM('pending_confirmation', 'pending', 'rejected'),
     defaultValue: 'pending',
   })
   declare status: string;
@@ -92,13 +92,29 @@ class AccountApplicationEntity extends Model {
   @Column({ type: DataType.DATE })
   declare status_timestamp: Date;
 
+  // Credential material for the email-confirmation step (epic pv-l9wv).
+  // Generated at apply-time, consumed (nulled) at confirm-time. Intentionally
+  // entity-only: NOT exposed via toModel() because the AccountApplication
+  // domain model is what the admin UI receives, and admins should never see
+  // applicants' confirmation tokens.
+  @Column({ type: DataType.STRING, allowNull: true })
+  declare confirmation_token: string | null;
+
+  @Column({ type: DataType.DATE, allowNull: true })
+  declare confirmation_token_expiration: Date | null;
+
   toModel(): AccountApplication {
     return new AccountApplication(this.id, this.email, this.message, this.status, this.status_timestamp);
   };
 
   @BeforeCreate
   static setInitialStatus(instance: AccountApplicationEntity) {
-    instance.status = 'pending';
+    // Only set the default if the caller didn't already specify a status
+    // (e.g. 'pending_confirmation' set by applyForNewAccount when the
+    // email-confirmation flow is active).
+    if (!instance.status) {
+      instance.status = 'pending';
+    }
     instance.status_timestamp = new Date();
   }
 };

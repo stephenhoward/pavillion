@@ -33,6 +33,9 @@
     "test:federation": "NODE_TLS_REJECT_UNAUTHORIZED=0 npx playwright test --config=playwright.federation.config.ts --quiet",
     "lint": "eslint --ext .ts,.js,.vue src",
     "lint:fix": "eslint --ext .ts,.js,.vue src --fix",
+    "docs:dev": "vitepress dev docs",
+    "docs:build": "vitepress build docs",
+    "docs:preview": "vitepress preview docs",
     "federation:start": "./docker/federation/start.sh",
     "federation:stop": "docker compose -f docker-compose.federation.yml down",
     "federation:logs": "docker compose -f docker-compose.federation.yml logs -f",
@@ -150,6 +153,7 @@
     "typescript-eslint": "^8.32.0",
     "vite": "^6.3.5",
     "vite-tsconfig-paths": "^5.1.4",
+    "vitepress": "^1.6.4",
     "vitest": "^3.2.4",
     "vue-tsc": "^2.2.10",
     "yaml": "^2.8.2"

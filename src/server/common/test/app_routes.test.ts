@@ -232,6 +232,51 @@ describe('app_routes', () => {
   });
 
   // -----------------------------------------------------------------------
+  // Account-application confirmation routes: /auth/apply/confirm/:token
+  //
+  // (pv-e92c, supersedes pv-l9wv) The confirm landing page lives in the
+  // client SPA's logged-out auth flow alongside login, register-apply, and
+  // password_forgot. The page is served by the client SPA catch-all; the
+  // anti-enumeration / cookie-hygiene posture is enforced at the API layer
+  // (the GET/POST endpoints return identical generic responses for any
+  // failure mode and run with no session middleware), independent of which
+  // SPA shell renders the user-facing page.
+  // -----------------------------------------------------------------------
+
+  describe('apply confirmation routes', () => {
+    it('should serve client.index.html.ejs for /auth/apply/confirm/<token>', async () => {
+      const app = buildTestApp('en');
+      const res = await request(app).get('/auth/apply/confirm/abc123');
+
+      expect(res.status).toBe(200);
+      expect(res.body.template).toBe('client.index.html.ejs');
+    });
+
+    it('should NOT route /apply/confirm/<token> through the site SPA shell', async () => {
+      // After pv-e92c, the legacy /apply/ namespace is no longer reserved for
+      // the site SPA. Requests fall through to the client SPA catch-all.
+      const app = buildTestApp('en');
+      const res = await request(app).get('/apply/confirm/abc123');
+
+      expect(res.body.template).not.toBe('site.index.html.ejs');
+      expect(res.body.template).toBe('client.index.html.ejs');
+    });
+
+    it('should serve client.index.html.ejs for /es/auth/apply/confirm/<token>', async () => {
+      // The locale-prefixed variant of the canonical confirm URL must also
+      // render through the client SPA shell, not the site SPA. The /auth/
+      // path does not match the site-app reserved /view/ regex, so it falls
+      // through to the client SPA catch-all the same way /es/auth/login does.
+      const mockConfig = buildMockConfigInterface('en');
+      const app = buildTestApp('es', mockConfig);
+      const res = await request(app).get('/es/auth/apply/confirm/abc123');
+
+      expect(res.status).toBe(200);
+      expect(res.body.template).toBe('client.index.html.ejs');
+    });
+  });
+
+  // -----------------------------------------------------------------------
   // Non-locale path segments
   // -----------------------------------------------------------------------
 
