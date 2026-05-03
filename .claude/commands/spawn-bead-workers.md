@@ -14,7 +14,7 @@ This command orchestrates around three skills that hold the authoritative prose.
 
 - [`bead-wave-orchestration`](../skills/bead-wave-orchestration/SKILL.md) — wave lifecycle: the 3-implementer cap, per-bead auditor cascade, wave-end verification chain (cross-bead-integration-verifier → architecture-auditor → build-guardian), failure handling, retry rules, epic completion sweep.
 - [`implementer-prompt-template`](../skills/implementer-prompt-template/SKILL.md) — canonical implementer subagent prompt: bead-first read, refusal protocol for unenriched beads, TDD, pre-close checklist (kill vitest, lint, targeted tests, `bd close`).
-- [`agent-discovery`](../skills/agent-discovery/SKILL.md) — dynamic discovery and matching of auditor/verifier agents. Primary entry points used here: `match-agents.sh auditor` (per-bead) and `discover-agents.sh {auditor,verifier}` (epic-completion sweep). The `reviewer` suffix is reserved for future use; no `*-reviewer` agents currently exist.
+- [`agent-discovery`](../skills/agent-discovery/SKILL.md) — dynamic discovery and matching of auditor/verifier agents. Primary entry points used here: `match-agents.sh auditor` (per-bead) and `discover-agents.sh {auditor,verifier}` (epic-completion sweep).
 
 ## Overview
 

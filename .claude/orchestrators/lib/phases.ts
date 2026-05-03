@@ -708,7 +708,7 @@ async function runAdvisorPass(
 
   // 2. Empty selection -> escalate (not silent skip).
   // The selector returns empty only when it cannot identify any applicable
-  // reviewer, or when its dispatch failed/returned malformed output. Either
+  // advisor, or when its dispatch failed/returned malformed output. Either
   // way the bead should not advance without review.
   if (advisors.length === 0) {
     const reason = 'agent-selector returned empty advisor selection';

@@ -1179,7 +1179,7 @@ export function reopenBead(
  *
  * Empty selection is treated as a failed audit (not a silent skip): the
  * selector returns empty only when dispatch failed, output was malformed,
- * or it genuinely could not identify any applicable reviewer — none of
+ * or it genuinely could not identify any applicable auditor — none of
  * which should let the bead advance without review.
  */
 export async function runAudit(
