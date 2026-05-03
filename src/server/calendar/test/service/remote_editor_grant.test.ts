@@ -10,7 +10,6 @@ import { validateUrlNotPrivate } from '@/server/common/helper/ip-validation';
 import { v4 as uuidv4 } from 'uuid';
 import sinon from 'sinon';
 import axios from 'axios';
-import config from 'config';
 
 import db from '@/server/common/entity/db';
 import CalendarService from '@/server/calendar/service/calendar';
@@ -21,7 +20,6 @@ import { UserActorEntity } from '@/server/activitypub/entity/user_actor';
 import { Account } from '@/common/model/account';
 import AccountsInterface from '@/server/accounts/interface';
 import type ActivityPubInterface from '@/server/activitypub/interface';
-import AddActivity from '@/server/activitypub/model/action/add';
 import { EventEmitter } from 'events';
 
 /**
@@ -29,11 +27,12 @@ import { EventEmitter } from 'events';
  * to the real UserActorEntity database. This allows integration-style tests
  * to create DB rows directly while the service uses interface-based calls.
  *
- * `addToOutbox` is a sinon stub so editor-invite tests can assert the activity
- * shape (actor, to, object, target, calendarId, calendarInboxUrl) that the
- * service enqueues for delivery via the signed outbox path (pv-dyyw).
+ * `sendEditorInvite` is a sinon stub so editor-invite tests can assert that
+ * the calendar service hands off the typed (calendar, remoteUserActor) pair
+ * to the AP domain. Activity construction itself lives in the AP domain
+ * (FederationPublisher) and is exercised by federation-side tests.
  */
-function createMockActivityPubInterface(addToOutboxStub: sinon.SinonStub): Partial<ActivityPubInterface> {
+function createMockActivityPubInterface(sendEditorInviteStub: sinon.SinonStub): Partial<ActivityPubInterface> {
   return {
     async findUserActorByUri(actorUri: string) {
       const entity = await UserActorEntity.findOne({ where: { actor_uri: actorUri } });
@@ -56,7 +55,7 @@ function createMockActivityPubInterface(addToOutboxStub: sinon.SinonStub): Parti
       });
       return { id: entity.id };
     },
-    addToOutbox: addToOutboxStub as unknown as ActivityPubInterface['addToOutbox'],
+    sendEditorInvite: sendEditorInviteStub as unknown as ActivityPubInterface['sendEditorInvite'],
   };
 }
 
@@ -71,14 +70,14 @@ describe('CalendarService.grantEditAccessByEmail - Remote Editors', () => {
   let sandbox: sinon.SinonSandbox;
   let service: CalendarService;
   let mockAccountsInterface: Partial<AccountsInterface>;
-  let addToOutboxStub: sinon.SinonStub;
+  let sendEditorInviteStub: sinon.SinonStub;
   let testAccountId: string;
   let testCalendarId: string;
   let testAccount: Account;
 
   beforeEach(async () => {
     sandbox = sinon.createSandbox();
-    addToOutboxStub = sandbox.stub().resolves();
+    sendEditorInviteStub = sandbox.stub().resolves();
     await db.sync({ force: true });
 
     // Create test account
@@ -120,7 +119,7 @@ describe('CalendarService.grantEditAccessByEmail - Remote Editors', () => {
     );
 
     // Wire up mock ActivityPub interface for user actor lookups
-    service.setActivityPubInterface(createMockActivityPubInterface(addToOutboxStub) as ActivityPubInterface);
+    service.setActivityPubInterface(createMockActivityPubInterface(sendEditorInviteStub) as ActivityPubInterface);
   });
 
   afterEach(async () => {
@@ -255,23 +254,15 @@ describe('CalendarService.grantEditAccessByEmail - Remote Editors', () => {
       });
       expect(membership).not.toBeNull();
 
-      // Verify the Add activity was enqueued via the signed outbox path with
-      // the calendar actor as the signing actor and the remote user as the
-      // single explicit recipient (so the outbox honors targeted delivery
-      // rather than fanning out to followers).
-      const localDomain = config.get<string>('domain');
-      const expectedCalendarActorUri = `https://${localDomain}/calendars/test_calendar`;
-      expect(addToOutboxStub.calledOnce).toBe(true);
-      const [calendarArg, activityArg] = addToOutboxStub.firstCall.args;
+      // Verify the calendar service handed off to the typed AP method with
+      // the calendar and remote user actor; activity construction (Add wire
+      // shape, signing-actor selection, outbox enqueue) lives in the AP
+      // domain and is exercised by federation_publisher tests.
+      expect(sendEditorInviteStub.calledOnce).toBe(true);
+      const [calendarArg, remoteUserArg] = sendEditorInviteStub.firstCall.args;
       expect(calendarArg.id).toBe(testCalendarId);
-      expect(activityArg).toBeInstanceOf(AddActivity);
-      expect(activityArg.type).toBe('Add');
-      expect(activityArg.actor).toBe(expectedCalendarActorUri);
-      expect(activityArg.object).toBe('https://beta.federation.local/users/Admin');
-      expect(activityArg.target).toBe(`${expectedCalendarActorUri}/editors`);
-      expect(activityArg.to).toEqual(['https://beta.federation.local/users/Admin']);
-      expect(activityArg.calendarId).toBe(testCalendarId);
-      expect(activityArg.calendarInboxUrl).toBe(`${expectedCalendarActorUri}/inbox`);
+      expect(remoteUserArg.actorUri).toBe('https://beta.federation.local/users/Admin');
+      expect(remoteUserArg.inbox).toBe('https://beta.federation.local/users/Admin/inbox');
     });
 
     it('should throw error if remote editor already exists', async () => {
@@ -403,13 +394,14 @@ describe('CalendarService.grantEditAccessByEmail - Remote Editors', () => {
         },
       });
 
-      // Simulate a failure enqueuing the Add activity (e.g. transient DB error
-      // on the ap_outbox insert). The local membership row should still be
-      // created — local state is not contingent on remote delivery success.
-      // SSRF protection for the remote inbox URL is enforced by the outbox
-      // worker (deliverViaHttp -> validateUrlNotPrivate), so the calendar
-      // service no longer needs to gate on it itself.
-      addToOutboxStub.rejects(new Error('outbox insert failed'));
+      // Simulate a failure dispatching the Add activity via the typed AP
+      // method (e.g. transient DB error on the ap_outbox insert). The local
+      // membership row should still be created — local state is not
+      // contingent on remote delivery success. SSRF protection for the
+      // remote inbox URL is enforced by the outbox worker
+      // (deliverViaHttp -> validateUrlNotPrivate), so the calendar service
+      // no longer needs to gate on it itself.
+      sendEditorInviteStub.rejects(new Error('outbox insert failed'));
 
       const result = await service.grantEditAccessByEmail(
         testAccount,
