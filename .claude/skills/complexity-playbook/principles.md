@@ -284,3 +284,38 @@ class CommandBus {
 }
 // Four files and two abstractions for what was one line of code
 ```
+
+---
+
+## Reuse Before Adding
+
+The most common source of frontend bloat — and a recurring source of backend bloat — is re-implementing something the codebase already has. Every duplicated component, composable, helper, mixin, or service multiplies the maintenance surface and makes the codebase harder for one person to hold in their head.
+
+### Threats
+
+- **Parallel implementations**: Two slightly-different versions of the same modal, button, or form drift apart over time
+- **Hidden duplication**: A new helper does what a `src/common/` utility already does, but with different naming
+- **Mixin re-rolls**: A component re-implements layout or color logic that an existing SCSS mixin provides
+- **Store/composable bypass**: A component reaches into the API directly instead of using the existing store action or composable
+
+### Red Flags
+
+**In code:**
+- New Vue component whose markup pattern matches a neighbor in the same directory (modal, sheet, form, card layout)
+- New composable whose responsibilities overlap with an existing `useX` composable
+- New utility function in a new file when `src/common/` already exports a similar helper
+- Hand-rolled SCSS for spacing, color, or layout that an existing mixin in `assets/mixins/` provides
+- New store action that duplicates an existing one with a different name
+- Inline API calls from a component when the corresponding store already wraps that endpoint
+
+### Safe Patterns
+
+Before adding a new component, composable, helper, or mixin, look at what exists:
+
+1. **For Vue components**: scan the same `components/` directory and `src/common/` for a building block that already does most of the job
+2. **For composables**: list `src/client/composables/` and `src/site/composables/` — check whether `useToast`, `useBulkSelection`, etc. already cover the need
+3. **For SCSS**: look in `assets/mixins/` and the design-token files before writing new color/layout/typography rules
+4. **For stores**: check whether an existing store already exposes the action; only add a new store when introducing a genuinely new resource
+5. **For backend helpers**: search `src/common/` and the domain's own `service/` directory before creating a new utility module
+
+When you find something that mostly fits, prefer extending or composing the existing thing over forking a parallel implementation. When nothing fits and the new thing will be genuinely shared, place it where future callers will find it (`src/common/`, a domain `service/`, an `assets/mixins/` partial) rather than burying it in the consumer.

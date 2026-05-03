@@ -14,7 +14,7 @@ This command orchestrates around three skills that hold the authoritative prose.
 
 - [`bead-wave-orchestration`](../skills/bead-wave-orchestration/SKILL.md) — wave lifecycle: the 3-implementer cap, per-bead auditor cascade, wave-end verification chain (cross-bead-integration-verifier → architecture-auditor → build-guardian), failure handling, retry rules, epic completion sweep.
 - [`implementer-prompt-template`](../skills/implementer-prompt-template/SKILL.md) — canonical implementer subagent prompt: bead-first read, refusal protocol for unenriched beads, TDD, pre-close checklist (kill vitest, lint, targeted tests, `bd close`).
-- [`agent-discovery`](../skills/agent-discovery/SKILL.md) — dynamic discovery and matching of auditor/reviewer/verifier agents. Primary entry points used here: `match-agents.sh auditor` (per-bead) and `discover-agents.sh {reviewer,auditor,verifier}` (epic-completion sweep).
+- [`agent-discovery`](../skills/agent-discovery/SKILL.md) — dynamic discovery and matching of auditor/verifier agents. Primary entry points used here: `match-agents.sh auditor` (per-bead) and `discover-agents.sh {auditor,verifier}` (epic-completion sweep). The `reviewer` suffix is reserved for future use; no `*-reviewer` agents currently exist.
 
 ## Overview
 
@@ -114,7 +114,6 @@ When every wave has closed and every bead is complete:
 1. Verify epic status: `bd show <epic-id>`.
 2. Discover comprehensive agents via `agent-discovery`:
    ```bash
-   bash .claude/skills/agent-discovery/discover-agents.sh reviewer
    bash .claude/skills/agent-discovery/discover-agents.sh auditor
    bash .claude/skills/agent-discovery/discover-agents.sh verifier
    ```

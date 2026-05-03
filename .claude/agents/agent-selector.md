@@ -31,7 +31,7 @@ For each candidate, ask: *does the work touch any of the file types or concerns 
 |---|---|
 | Any code file at all | `consistency-*`, `complexity-*` |
 | API handlers, services, entities, models, migrations | `architecture-*`, `security-*`, `privacy-*` |
-| Vue files (`.vue`) | `accessibility-*`, `stylesheet-*`, `frontend-standards-reviewer` |
+| Vue files (`.vue`) | `accessibility-*`, `stylesheet-*`, `consistency-*` (Vue/Pinia/composable conventions), `complexity-*` (reuse-before-adding) |
 | SCSS / styles | `stylesheet-*` |
 | Locale files OR Vue templates with user text | `i18n-auditor` |
 | Test files OR a bead that explicitly discusses test coverage | `testing-*` |
@@ -76,7 +76,7 @@ git log: feat(funding): add cancellation endpoint
     {"name": "privacy-auditor", "rationale": "funding domain touches PII boundaries"},
     {"name": "testing-auditor", "rationale": "new test file added"}
   ],
-  "reasoning": "Backend-only change with new API endpoint, service edits, and tests. Skipped accessibility, stylesheet, i18n, and frontend-standards-reviewer — no Vue or SCSS files."
+  "reasoning": "Backend-only change with new API endpoint, service edits, and tests. Skipped accessibility, stylesheet, and i18n — no Vue or SCSS files."
 }
 ```
 

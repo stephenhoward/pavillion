@@ -16,13 +16,14 @@ This Skill provides complexity and maintainability standards for the Pavillion c
 | New patterns, naming, architectural choices | Consistency |
 | Long functions, deep nesting, coupled modules | Maintainability |
 | Indirection layers, wrappers, generalizations | Simplicity |
+| New components, composables, helpers, mixins, stores | Reuse Before Adding |
 
 ## Instructions
 
 For all complexity dimensions, refer to:
 [principles](./principles.md)
 
-The principles file covers: scope creep, YAGNI, consistency, maintainability, and simplicity — each with **Threats**, **Red Flags**, and **Safe Patterns**.
+The principles file covers: scope creep, YAGNI, consistency, maintainability, simplicity, and reuse-before-adding — each with **Threats**, **Red Flags**, and **Safe Patterns**.
 
 When reviewing:
 

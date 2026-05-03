@@ -85,9 +85,11 @@ Defined in [`review-mode-auditor`](../review-mode-auditor/SKILL.md).
 | **PASS WITH WARNINGS** | Record warnings in the wave summary and in the final PR body. Do not block the PR. |
 | **FAIL** | Do not submit the PR. Return findings to the implementer subagent for a single retry round. If a second audit still fails, escalate via `bdEscalate` and exit with the branch preserved. |
 
-### Reviewers and verifiers
+### Verifiers
 
-Reviewers (e.g. `frontend-standards-reviewer`) return free-form guidance; the orchestrator incorporates their output into the PR description but does not block on them. Verifiers (e.g. `cross-bead-integration-verifier`, `build-guardian`) return PASS/FAIL-like verdicts and are treated like auditors for blocking purposes. They run outside the agent-selector path — the orchestrator invokes them on wave-level signals, not per-file context.
+Verifiers (e.g. `cross-bead-integration-verifier`, `build-guardian`) return PASS/FAIL-like verdicts and are treated like auditors for blocking purposes. They run outside the agent-selector path — the orchestrator invokes them on wave-level signals, not per-file context.
+
+The `*-reviewer` suffix is reserved for future free-form guidance agents (output incorporated into the PR description, non-blocking). No `*-reviewer` agents currently exist; the suffix is still accepted by `discoverAgents` so adding one later requires no code change.
 
 ## Parallel-spawn pattern
 

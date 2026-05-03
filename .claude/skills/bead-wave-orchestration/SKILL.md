@@ -322,11 +322,11 @@ a final comprehensive sweep before declaring the epic done.
 
 1. **Discover applicable comprehensive agents** via
    [`agent-discovery`](../agent-discovery/SKILL.md):
-   - `discover-agents.sh reviewer` — all `*-reviewer` agents (e.g.
-     `frontend-standards-reviewer`).
    - `discover-agents.sh auditor` — all `*-auditor` agents whose
      descriptions indicate comprehensive / final-pass scope.
    - `discover-agents.sh verifier` — all `*-verifier` agents.
+   - (`*-reviewer` is also enumerable but no reviewer agents
+     currently exist — skip until one is added.)
 2. **Filter matches** against the epic's full changed file set (union of
    all waves' changes: `git diff --name-only main...HEAD`).
 3. **Always include `implementation-verifier`** if present, regardless

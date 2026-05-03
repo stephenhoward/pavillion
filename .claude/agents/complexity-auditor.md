@@ -36,6 +36,7 @@ Follow the auditor protocol's "Identify Changed Files" and "Classify Each Change
 - Any file -> **Consistency** (quick check -- detailed convention auditing is handled by the consistency-auditor)
 - Service/handler files -> **Maintainability** (function length, nesting, coupling)
 - Wrapper/adapter/helper files -> **Simplicity** (does the indirection add value?)
+- New Vue components, composables, helpers, mixins, stores -> **Reuse Before Adding** (does an existing thing already do most of this?)
 
 ### Step 3: Load Relevant Complexity Standards
 
