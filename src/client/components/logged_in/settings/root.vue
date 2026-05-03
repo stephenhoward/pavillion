@@ -714,6 +714,10 @@ onMounted(async () => {
   padding: var(--pav-space-6);
 }
 
+.policy-link {
+  margin-block-end: var(--pav-space-4);
+}
+
 .logout-button {
   display: flex;
   align-items: center;
