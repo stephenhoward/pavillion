@@ -4,6 +4,9 @@ export default defineConfig({
   title: 'Pavillion',
   description: 'Federated events calendar documentation',
   cleanUrls: true,
+  head: [
+    ['link', { rel: 'icon', type: 'image/svg+xml', href: '/pavillion-logo.svg' }],
+  ],
   srcExclude: [
     'CODE_OF_CONDUCT.md',
     'CONTRIBUTING.md',
@@ -16,6 +19,7 @@ export default defineConfig({
     'upgrading.md',
   ],
   themeConfig: {
+    logo: '/pavillion-logo.svg',
     nav: [
       { text: 'Home', link: '/' },
     ],
