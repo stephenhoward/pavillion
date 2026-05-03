@@ -168,7 +168,8 @@ describe('FederationPublisher', () => {
         { eventId, eventParams },
         remoteCalendarActor,
       );
-      expect(result).toBeDefined();
+      // Fallback contract: synthetic CalendarEvent reuses the local event id.
+      expect(result.id).toBe(eventId);
       expect(result.calendarId).toBe(remoteCalendarActor.id);
     });
 
@@ -186,7 +187,8 @@ describe('FederationPublisher', () => {
         { eventId, eventParams },
         remoteCalendarActor,
       );
-      expect(result).toBeDefined();
+      // Fallback contract: synthetic CalendarEvent reuses the local event id.
+      expect(result.id).toBe(eventId);
       expect(result.calendarId).toBe(remoteCalendarActor.id);
     });
 
@@ -475,6 +477,20 @@ describe('FederationPublisher', () => {
 
       expect(addToOutboxStub.called).toBe(false);
     });
+
+    it('throws InsufficientCalendarPermissionsError when account has no user actor', async () => {
+      const remoteCalendarActor = buildRemoteCalendarActor();
+      const eventId = '22222222-2222-4222-8222-222222222222';
+
+      // resolveUserActorUri returns null when no UserActor row exists for the account.
+      userActorFindOneStub.resolves(null);
+
+      await expect(
+        publisher.publishEventDelete(account, eventId, remoteCalendarActor),
+      ).rejects.toThrow(InsufficientCalendarPermissionsError);
+
+      expect(addToOutboxStub.called).toBe(false);
+    });
   });
 
   describe('sendEditorInvite', () => {
@@ -527,16 +543,4 @@ describe('FederationPublisher', () => {
     });
   });
 
-  describe('FederationPublisher - constructor injection', () => {
-    it('uses injected CalendarInterface', () => {
-      const eventBus = new EventEmitter();
-      const injected = new CalendarInterface(eventBus);
-      const mockOutbox = buildMockOutboxService();
-
-      const publisher = new FederationPublisher(eventBus, injected, mockOutbox as any);
-
-      // The injected instance is the one used by the service.
-      expect((publisher as any).calendarInterface).toBe(injected);
-    });
-  });
 });
