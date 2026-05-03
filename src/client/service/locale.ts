@@ -25,18 +25,36 @@ import enPolicy from '@/client/locales/en/policy.json';
 // Import Spanish translation resources
 import esSystem from '@/client/locales/es/system.json';
 import esAuthentication from '@/client/locales/es/authentication.json';
-import esSetup from '@/client/locales/es/setup.json';
-import esFeed from '@/client/locales/es/feed.json';
+import esRegistration from '@/client/locales/es/registration.json';
+import esCalendars from '@/client/locales/es/calendars.json';
+import esEditEvent from '@/client/locales/es/event_editor.json';
+import esProfile from '@/client/locales/es/profile.json';
+import esAdmin from '@/client/locales/es/admin.json';
 import esInbox from '@/client/locales/es/inbox.json';
+import esFeed from '@/client/locales/es/feed.json';
+import esMedia from '@/client/locales/es/media.json';
+import esCategories from '@/client/locales/es/categories.json';
+import esSeries from '@/client/locales/es/series.json';
+import esSetup from '@/client/locales/es/setup.json';
+import esFunding from '@/client/locales/es/funding.json';
 import esPolicy from '@/client/locales/es/policy.json';
 import esEditEvent from '@/client/locales/es/event_editor.json';
 
 // Import French translation resources
 import frSystem from '@/client/locales/fr/system.json';
 import frAuthentication from '@/client/locales/fr/authentication.json';
-import frSetup from '@/client/locales/fr/setup.json';
-import frFeed from '@/client/locales/fr/feed.json';
+import frRegistration from '@/client/locales/fr/registration.json';
+import frCalendars from '@/client/locales/fr/calendars.json';
+import frEditEvent from '@/client/locales/fr/event_editor.json';
+import frProfile from '@/client/locales/fr/profile.json';
+import frAdmin from '@/client/locales/fr/admin.json';
 import frInbox from '@/client/locales/fr/inbox.json';
+import frFeed from '@/client/locales/fr/feed.json';
+import frMedia from '@/client/locales/fr/media.json';
+import frCategories from '@/client/locales/fr/categories.json';
+import frSeries from '@/client/locales/fr/series.json';
+import frSetup from '@/client/locales/fr/setup.json';
+import frFunding from '@/client/locales/fr/funding.json';
 import frPolicy from '@/client/locales/fr/policy.json';
 import frEditEvent from '@/client/locales/fr/event_editor.json';
 
@@ -116,18 +134,36 @@ export const initI18Next = (serverLanguage?: string) => {
       es: {
         system: esSystem,
         authentication: esAuthentication,
-        setup: esSetup,
-        feed: esFeed,
+        registration: esRegistration,
+        calendars: esCalendars,
+        event_editor: esEditEvent,
+        profile: esProfile,
+        admin: esAdmin,
         inbox: esInbox,
+        feed: esFeed,
+        media: esMedia,
+        categories: esCategories,
+        series: esSeries,
+        setup: esSetup,
+        funding: esFunding,
         policy: esPolicy,
         event_editor: esEditEvent,
       },
       fr: {
         system: frSystem,
         authentication: frAuthentication,
-        setup: frSetup,
-        feed: frFeed,
+        registration: frRegistration,
+        calendars: frCalendars,
+        event_editor: frEditEvent,
+        profile: frProfile,
+        admin: frAdmin,
         inbox: frInbox,
+        feed: frFeed,
+        media: frMedia,
+        categories: frCategories,
+        series: frSeries,
+        setup: frSetup,
+        funding: frFunding,
         policy: frPolicy,
         event_editor: frEditEvent,
       },

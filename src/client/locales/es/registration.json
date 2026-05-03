@@ -8,9 +8,9 @@
     "MissingEmail": "Por favor ingresa tu correo electrónico",
     "400": "error al registrar",
     "unknown_error": "Ocurrió un error desconocido",
-    "registration_submitted": "TODO: Si este correo no está registrado, recibirás un correo en breve.",
-    "registration_closed": "TODO: El registro de cuentas está actualmente cerrado.",
-    "error_creating_account": "TODO: Ocurrió un error al crear tu cuenta. Por favor intenta más tarde."
+    "registration_submitted": "Si este correo no está registrado, recibirás un correo en breve.",
+    "registration_closed": "El registro de cuentas está actualmente cerrado.",
+    "error_creating_account": "Ocurrió un error al crear tu cuenta. Por favor intenta más tarde."
   },
   "apply": {
     "title": "Solicitar una cuenta",
@@ -18,6 +18,7 @@
     "email": "correo electrónico",
     "message_label": "Mensaje",
     "go_login": "← volver a iniciar sesión",
+    "InvalidEmail": "por favor ingresa una dirección de correo válida",
     "MissingFields": "Por favor completa todos los campos obligatorios.",
     "400": "error al registrar",
     "unknown_error": "Ocurrió un error desconocido",

@@ -1,0 +1,84 @@
+{
+  "retry": "Reintentar",
+  "replace": "Reemplazar",
+  "upload": {
+    "title": "Subir imágenes",
+    "title_single": "Subir imagen",
+    "drag_drop_text_one": "Arrastra y suelta una imagen aquí",
+    "drag_drop_text_other": "Arrastra y suelta imágenes aquí",
+    "or": "o",
+    "click_to_select_one": "haz clic para seleccionar un archivo",
+    "click_to_select_other": "haz clic para seleccionar archivos",
+    "browse_files": "Explorar archivos",
+    "uploading": "Subiendo...",
+    "processing": "Procesando...",
+    "upload_complete": "Subida completa",
+    "upload_files_one": "Subir archivo",
+    "upload_files_other": "Subir archivos",
+    "upload_failed": "Error al subir",
+    "retry": "Reintentar",
+    "remove": "Eliminar",
+    "replace": "Reemplazar",
+    "cancel": "Cancelar"
+  },
+  "validation": {
+    "file_too_large": "El tamaño del archivo {{fileSizeFormatted}} supera el tamaño máximo permitido de {{maxFileSizeFormatted}}",
+    "invalid_file_type": "El tipo de archivo {{fileType}} no está permitido. Tipos permitidos: {{allowedTypes}}",
+    "invalid_extension": "La extensión de archivo {{extension}} no está permitida. Extensiones permitidas: {{allowedExtensions}}",
+    "no_files_selected": "Ningún archivo seleccionado",
+    "max_files_exceeded": "Demasiados archivos seleccionados. Máximo permitido: {{maxFiles}}"
+  },
+  "errors": {
+    "FILE_TOO_LARGE": "Este archivo es demasiado grande. Por favor, elige una imagen más pequeña.",
+    "INVALID_MIME_TYPE": "Este tipo de archivo no es compatible. Por favor, usa una imagen JPG, PNG o HEIC.",
+    "INVALID_EXTENSION": "Este tipo de archivo no es compatible. Por favor, usa una imagen JPG, PNG o HEIC.",
+    "INVALID_TYPE": "Este tipo de archivo no es compatible. Por favor, usa una imagen JPG, PNG o HEIC.",
+    "VALIDATION_FAILED": "No se pudo subir este archivo. Por favor, prueba con otra imagen.",
+    "NETWORK_ERROR": "No se pudo conectar con el servidor. Por favor, comprueba tu conexión e inténtalo de nuevo.",
+    "SERVER_ERROR": "Algo salió mal. Por favor, inténtalo de nuevo más tarde.",
+    "UPLOAD_ABORTED": "La subida fue cancelada.",
+    "PREVIEW_GENERATION_FAILED": "No se pudo previsualizar esta imagen. Por favor, prueba con otro archivo.",
+    "NOT_AN_IMAGE": "Este archivo no es una imagen. Por favor, selecciona un archivo de imagen.",
+    "TOO_MANY_FILES": "Demasiados archivos seleccionados. Máximo permitido: {{maxFiles}}",
+    "SINGLE_FILE_ONLY": "Solo se puede subir una imagen a la vez.",
+    "PERMISSION_DENIED": "No tienes permiso para subir imágenes a este calendario."
+  },
+  "status": {
+    "pending": "Pendiente",
+    "uploading": "Subiendo",
+    "processing": "Procesando",
+    "complete": "Completado",
+    "failed": "Fallido",
+    "cancelled": "Cancelado"
+  },
+  "accessibility": {
+    "drag_drop_zone": "Zona de arrastrar y soltar para subir archivos",
+    "file_input": "Selecciona archivos para subir",
+    "file_preview": "Vista previa de {{filename}}",
+    "upload_progress": "Progreso de subida de {{filename}}: {{percentage}}%",
+    "remove_file": "Eliminar {{filename}} de la cola de subida",
+    "retry_upload": "Reintentar subida de {{filename}}",
+    "replace_file": "Reemplazar el archivo seleccionado",
+    "dismiss_error": "Descartar error de subida",
+    "image_workspace": "Espacio de trabajo de imagen con ajuste del punto focal",
+    "focal_point_marker": "Marcador del punto focal. Arrastra para reposicionar.",
+    "zoom_slider": "Nivel de zoom de la imagen"
+  },
+  "display": {
+    "processing_image": "La imagen se está procesando",
+    "image_load_error": "No se pudo cargar la imagen",
+    "image_unavailable": "Imagen no disponible"
+  },
+  "help": {
+    "supported_formats": "Formatos compatibles:",
+    "max_file_size": "Tamaño máximo de archivo: {{maxSize}}",
+    "drag_drop_instructions": "Puedes arrastrar varios archivos a la vez o hacer clic para explorar",
+    "drag_drop_instructions_single": "Arrastra un solo archivo o haz clic para explorar"
+  },
+  "workspace": {
+    "focal_hint": "Arrastra en cualquier lugar para establecer el punto focal",
+    "focal_explanation": "El punto focal determina cómo se recorta tu imagen en las visualizaciones de tarjeta y banner.",
+    "replace_image": "Reemplazar imagen",
+    "remove": "Eliminar"
+  }
+}

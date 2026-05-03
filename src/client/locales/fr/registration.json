@@ -18,6 +18,7 @@
     "email": "adresse e-mail",
     "message_label": "Message",
     "go_login": "← retour à la connexion",
+    "InvalidEmail": "veuillez saisir une adresse e-mail valide",
     "MissingFields": "Veuillez remplir tous les champs obligatoires.",
     "400": "erreur lors de l'inscription",
     "unknown_error": "Une erreur inconnue s'est produite",
