@@ -1046,7 +1046,7 @@ export function prBody(
  * Read agent files matching a suffix from disk.
  * Reads YAML frontmatter for name and description.
  *
- * @param suffix - e.g. 'auditor', 'advisor', 'reviewer', 'verifier'
+ * @param suffix - e.g. 'auditor', 'advisor', 'verifier'
  * @param agentsDir - defaults to '.claude/agents'
  */
 export function discoverAgents(

@@ -123,14 +123,16 @@ export interface AnalyzeReport {
   waves?: string[][];
 }
 
+export interface AdvisorTriageFollowup {
+  title: string;
+  description: string;
+  labels?: string[];
+}
+
 export interface AdvisorTriageVerdict {
   verdict: 'followup' | 'escalate';
   reason: string;
-  followup?: {
-    title: string;
-    description: string;
-    labels?: string[];
-  };
+  followups?: AdvisorTriageFollowup[];
 }
 
 // =============================================================================
@@ -458,10 +460,13 @@ export function buildAdvisorTriagePrompt(
     '  extra test coverage, adjacent refactors, documentation gaps, or',
     '  follow-on quality work that does not block the current bead.',
     '',
-    'When returning `followup`, write a single aggregated follow-up bead that',
-    'summarizes every deferred concern (one bead per triage, not per advisor).',
-    'The parent bead will be advanced as if the advisor pass were clean; the',
-    'follow-up bead will be filed with a `followup-from:' + beadId + '` label.',
+    'When returning `followup`, file one bead per concern using this clustering',
+    'rule: start with one bead per advisor; split when a single advisor surfaced',
+    'disparate concerns (different files, different code paths, different',
+    'conceptual axes); merge across advisors only when two advisors flagged the',
+    'same root cause. The parent bead will be advanced as if the advisor pass',
+    'were clean; every follow-up bead will be filed with a',
+    '`followup-from:' + beadId + '` label.',
     '',
     '## Output format',
     '',
@@ -471,15 +476,18 @@ export function buildAdvisorTriagePrompt(
     '{',
     '  "verdict": "followup" | "escalate",',
     '  "reason": "<one line>",',
-    '  "followup": {',
-    '    "title": "<short imperative title>",',
-    '    "description": "<multi-line summary of the deferred concerns>",',
-    '    "labels": ["needs-shape"]',
-    '  }',
+    '  "followups": [',
+    '    {',
+    '      "title": "<short imperative title>",',
+    '      "description": "<multi-line summary of the concern(s) in this bead>",',
+    '      "labels": ["needs-shape"]',
+    '    }',
+    '  ]',
     '}',
     '```',
     '',
-    'Omit the `followup` object when verdict is `escalate`.',
+    'Omit `followups` (or set it to `[]`) when verdict is `escalate`.',
+    'When verdict is `followup`, `followups` must contain at least one entry.',
   ].join('\n');
 }
 
@@ -489,21 +497,41 @@ export function buildAdvisorTriagePrompt(
  * JSON — optionally wrapped in a fenced code block.
  */
 export function parseAdvisorTriageVerdict(raw: unknown): AdvisorTriageVerdict | null {
+  const parseFollowupEntry = (val: unknown): AdvisorTriageFollowup | null => {
+    if (!val || typeof val !== 'object') return null;
+    const f = val as Record<string, unknown>;
+    const title = typeof f.title === 'string' ? f.title.trim() : '';
+    const description = typeof f.description === 'string' ? f.description : '';
+    if (!title || !description) return null;
+    const labels = Array.isArray(f.labels)
+      ? f.labels.filter((x): x is string => typeof x === 'string')
+      : [];
+    return { title, description, labels };
+  };
+
   const fromObject = (obj: Record<string, unknown>): AdvisorTriageVerdict | null => {
     if (obj.verdict !== 'followup' && obj.verdict !== 'escalate') return null;
     const reason = typeof obj.reason === 'string' ? obj.reason : '';
     const result: AdvisorTriageVerdict = { verdict: obj.verdict, reason };
-    if (obj.verdict === 'followup' && obj.followup && typeof obj.followup === 'object') {
-      const f = obj.followup as Record<string, unknown>;
-      const title = typeof f.title === 'string' ? f.title.trim() : '';
-      const description = typeof f.description === 'string' ? f.description : '';
-      if (!title || !description) return null;
-      const labels = Array.isArray(f.labels)
-        ? f.labels.filter((x): x is string => typeof x === 'string')
-        : [];
-      result.followup = { title, description, labels };
+
+    if (obj.verdict === 'followup') {
+      const entries: AdvisorTriageFollowup[] = [];
+      if (Array.isArray(obj.followups)) {
+        for (const item of obj.followups) {
+          const entry = parseFollowupEntry(item);
+          if (!entry) return null;
+          entries.push(entry);
+        }
+      }
+      else if (obj.followup && typeof obj.followup === 'object') {
+        // Back-compat: tolerate old single-bead schema.
+        const entry = parseFollowupEntry(obj.followup);
+        if (!entry) return null;
+        entries.push(entry);
+      }
+      if (entries.length === 0) return null;
+      result.followups = entries;
     }
-    if (result.verdict === 'followup' && !result.followup) return null;
     return result;
   };
 
@@ -592,22 +620,35 @@ export async function applyAdvisorTriage(
   const triageFn = deps.triageFn ?? defaultAdvisorTriage;
   const triage = await triageFn(ctx, report, config.logTag, deps);
 
-  if (triage?.verdict === 'followup' && triage.followup) {
-    const followup = bdCreateFollowup(
-      {
-        parentBeadId: ctx.beadId,
-        title: triage.followup.title,
-        description: triage.followup.description,
-        labels: triage.followup.labels ?? ['needs-shape'],
-      },
-      { spawnFn: deps.spawnFn },
-    );
+  if (triage?.verdict === 'followup' && triage.followups && triage.followups.length > 0) {
+    const created: string[] = [];
+    const failed: Array<{ title: string; rawOutput: string }> = [];
 
-    if (followup.beadId) {
+    for (const entry of triage.followups) {
+      const result = bdCreateFollowup(
+        {
+          parentBeadId: ctx.beadId,
+          title: entry.title,
+          description: entry.description,
+          labels: entry.labels ?? ['needs-shape'],
+        },
+        { spawnFn: deps.spawnFn },
+      );
+
+      if (result.beadId) {
+        created.push(result.beadId);
+      }
+      else {
+        failed.push({ title: entry.title, rawOutput: result.rawOutput });
+      }
+    }
+
+    if (created.length > 0) {
       ctx.logger.appendRunJson({
         event: `${tagKey}_triaged_followup`,
         beadId: ctx.beadId,
-        followupBeadId: followup.beadId,
+        followupBeadIds: created,
+        failedFollowups: failed.length > 0 ? failed : undefined,
         reason: triage.reason,
       });
       return { next: config.nextOnClean, ctx };
@@ -616,7 +657,7 @@ export async function applyAdvisorTriage(
     ctx.logger.appendRunJson({
       event: `${tagKey}_triage_followup_failed`,
       beadId: ctx.beadId,
-      rawOutput: followup.rawOutput,
+      failedFollowups: failed,
     });
   }
 
@@ -667,7 +708,7 @@ async function runAdvisorPass(
 
   // 2. Empty selection -> escalate (not silent skip).
   // The selector returns empty only when it cannot identify any applicable
-  // reviewer, or when its dispatch failed/returned malformed output. Either
+  // advisor, or when its dispatch failed/returned malformed output. Either
   // way the bead should not advance without review.
   if (advisors.length === 0) {
     const reason = 'agent-selector returned empty advisor selection';

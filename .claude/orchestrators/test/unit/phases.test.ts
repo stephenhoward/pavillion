@@ -1245,46 +1245,90 @@ describe('refinement round cap', () => {
 // =============================================================================
 
 describe('parseAdvisorTriageVerdict', () => {
-  it('parses a well-formed followup verdict object', () => {
+  it('parses a well-formed followup verdict with a single bead', () => {
     const verdict = parseAdvisorTriageVerdict({
       verdict: 'followup',
       reason: 'minor concerns',
+      followups: [
+        {
+          title: 'Address deferred advisor concerns',
+          description: 'Summary of concerns',
+          labels: ['needs-shape'],
+        },
+      ],
+    });
+    expect(verdict?.verdict).toBe('followup');
+    expect(verdict?.followups).toHaveLength(1);
+    expect(verdict?.followups?.[0]?.title).toBe('Address deferred advisor concerns');
+    expect(verdict?.followups?.[0]?.labels).toEqual(['needs-shape']);
+  });
+
+  it('parses a followup verdict with multiple beads', () => {
+    const verdict = parseAdvisorTriageVerdict({
+      verdict: 'followup',
+      reason: 'two unrelated concerns',
+      followups: [
+        { title: 'Rename query params', description: 'snake_case → camelCase', labels: ['needs-shape'] },
+        { title: 'Extract shared helper', description: 'duplicated logic', labels: ['needs-shape'] },
+      ],
+    });
+    expect(verdict?.followups).toHaveLength(2);
+    expect(verdict?.followups?.[0]?.title).toBe('Rename query params');
+    expect(verdict?.followups?.[1]?.title).toBe('Extract shared helper');
+  });
+
+  it('accepts the legacy single-followup schema for back-compat', () => {
+    const verdict = parseAdvisorTriageVerdict({
+      verdict: 'followup',
+      reason: 'legacy schema',
       followup: {
-        title: 'Address deferred advisor concerns',
-        description: 'Summary of concerns',
+        title: 'Old shape',
+        description: 'still works',
         labels: ['needs-shape'],
       },
     });
-    expect(verdict?.verdict).toBe('followup');
-    expect(verdict?.followup?.title).toBe('Address deferred advisor concerns');
-    expect(verdict?.followup?.labels).toEqual(['needs-shape']);
+    expect(verdict?.followups).toHaveLength(1);
+    expect(verdict?.followups?.[0]?.title).toBe('Old shape');
   });
 
-  it('parses a well-formed escalate verdict without followup', () => {
+  it('parses a well-formed escalate verdict without followups', () => {
     const verdict = parseAdvisorTriageVerdict({
       verdict: 'escalate',
       reason: 'design is unsound',
     });
     expect(verdict?.verdict).toBe('escalate');
-    expect(verdict?.followup).toBeUndefined();
+    expect(verdict?.followups).toBeUndefined();
   });
 
   it('parses JSON from a fenced code block string', () => {
-    const raw = '```json\n{"verdict":"followup","reason":"ok","followup":{"title":"t","description":"d","labels":[]}}\n```';
+    const raw = '```json\n{"verdict":"followup","reason":"ok","followups":[{"title":"t","description":"d","labels":[]}]}\n```';
     const verdict = parseAdvisorTriageVerdict(raw);
     expect(verdict?.verdict).toBe('followup');
+    expect(verdict?.followups).toHaveLength(1);
   });
 
-  it('rejects followup without a followup object', () => {
+  it('rejects followup with no followups field at all', () => {
     const verdict = parseAdvisorTriageVerdict({ verdict: 'followup', reason: 'x' });
     expect(verdict).toBeNull();
   });
 
-  it('rejects followup with missing title', () => {
+  it('rejects followup with empty followups array', () => {
     const verdict = parseAdvisorTriageVerdict({
       verdict: 'followup',
       reason: 'x',
-      followup: { title: '', description: 'd' },
+      followups: [],
+    });
+    expect(verdict).toBeNull();
+  });
+
+  it('rejects followup when any entry is missing a title', () => {
+    const verdict = parseAdvisorTriageVerdict({
+      verdict: 'followup',
+      reason: 'x',
+      followups: [
+        { title: 'ok', description: 'd' },
+        { title: '', description: 'd' },
+      ],
     });
     expect(verdict).toBeNull();
   });
@@ -1322,7 +1366,9 @@ describe('buildAdvisorTriagePrompt', () => {
     expect(prompt).toContain('missing edge case test');
     expect(prompt).not.toContain('advisor-a'); // clean verdicts are filtered out
     expect(prompt).toContain('"verdict": "followup" | "escalate"');
+    expect(prompt).toContain('"followups": [');
     expect(prompt).toContain('followup-from:pv-test-1');
+    expect(prompt).toContain('one bead per concern');
   });
 
   it('handles a report with no non-clean advisors gracefully', () => {
@@ -1360,7 +1406,7 @@ describe('applyAdvisorTriage', () => {
     summary: 'unresolved after 3 rounds',
   };
 
-  it('advances to nextOnClean after filing a followup bead when triage returns followup', async () => {
+  it('advances to nextOnClean after filing a single followup bead when triage returns followup', async () => {
     const spawnCalls: string[][] = [];
     const spawn = vi.fn().mockImplementation((_cmd: string, args: string[]) => {
       spawnCalls.push(args as string[]);
@@ -1373,11 +1419,13 @@ describe('applyAdvisorTriage', () => {
     const triageFn = async (): Promise<AdvisorTriageVerdict> => ({
       verdict: 'followup',
       reason: 'non-blocking',
-      followup: {
-        title: 'Follow up on complexity concerns',
-        description: 'Detailed notes',
-        labels: ['needs-shape'],
-      },
+      followups: [
+        {
+          title: 'Follow up on complexity concerns',
+          description: 'Detailed notes',
+          labels: ['needs-shape'],
+        },
+      ],
     });
 
     const ctx = makeCtx();
@@ -1389,10 +1437,81 @@ describe('applyAdvisorTriage', () => {
 
     expect(result.next).toBe(PhaseName.Branch);
     const flat = spawnCalls.map(a => a.join(' '));
-    expect(flat.some(s => s.startsWith('create'))).toBe(true);
+    expect(flat.filter(s => s.startsWith('create'))).toHaveLength(1);
     expect(flat.some(s => s.includes('label add') && s.includes('followup-from:pv-test-1'))).toBe(true);
     // bdEscalate should NOT have been called: no label add for needs-human
     expect(flat.some(s => s.includes('needs-human'))).toBe(false);
+  });
+
+  it('files multiple followup beads when triage returns multiple entries', async () => {
+    const spawnCalls: string[][] = [];
+    let createCount = 0;
+    const spawn = vi.fn().mockImplementation((_cmd: string, args: string[]) => {
+      spawnCalls.push(args as string[]);
+      if ((args as string[])[0] === 'create') {
+        createCount += 1;
+        return fakeSpawn(`✓ Created issue: pv-new${createCount} — deferred`, '', 0);
+      }
+      return fakeSpawn('', '', 0);
+    });
+
+    const triageFn = async (): Promise<AdvisorTriageVerdict> => ({
+      verdict: 'followup',
+      reason: 'two unrelated concerns',
+      followups: [
+        { title: 'Rename query params', description: 'snake_case → camelCase', labels: ['needs-shape'] },
+        { title: 'Extract shared helper', description: 'duplicated logic', labels: ['needs-shape'] },
+      ],
+    });
+
+    const ctx = makeCtx();
+    const result = await applyAdvisorTriage(ctx, refinementReport, 'fallback', {
+      logTag: PhaseName.AnalyzeAdvisors,
+      escalateTag: '5.5',
+      nextOnClean: PhaseName.Branch,
+    }, { spawnFn: spawn, triageFn });
+
+    expect(result.next).toBe(PhaseName.Branch);
+    const flat = spawnCalls.map(a => a.join(' '));
+    expect(flat.filter(s => s.startsWith('create'))).toHaveLength(2);
+    const parentLabelCalls = flat.filter(s => s.includes('label add') && s.includes('followup-from:pv-test-1'));
+    expect(parentLabelCalls).toHaveLength(2);
+    expect(flat.some(s => s.includes('needs-human'))).toBe(false);
+  });
+
+  it('advances when at least one followup bead creates successfully (partial failure)', async () => {
+    let createCount = 0;
+    const spawn = vi.fn().mockImplementation((_cmd: string, args: string[]) => {
+      if ((args as string[])[0] === 'create') {
+        createCount += 1;
+        // First create succeeds, second fails.
+        if (createCount === 1) {
+          return fakeSpawn('✓ Created issue: pv-new1 — first', '', 0);
+        }
+        return fakeSpawn('', 'bd create: database locked', 1);
+      }
+      return fakeSpawn('', '', 0);
+    });
+
+    const triageFn = async (): Promise<AdvisorTriageVerdict> => ({
+      verdict: 'followup',
+      reason: 'mixed result',
+      followups: [
+        { title: 'Bead one', description: 'first concern', labels: ['needs-shape'] },
+        { title: 'Bead two', description: 'second concern', labels: ['needs-shape'] },
+      ],
+    });
+
+    const ctx = makeCtx();
+    const result = await applyAdvisorTriage(ctx, refinementReport, 'fallback', {
+      logTag: PhaseName.AnalyzeAdvisors,
+      escalateTag: '5.5',
+      nextOnClean: PhaseName.Branch,
+    }, { spawnFn: spawn, triageFn });
+
+    expect(result.next).toBe(PhaseName.Branch);
+    const calls = spawn.mock.calls.map((c) => (c[1] as string[]).join(' '));
+    expect(calls.some(c => c.includes('needs-human'))).toBe(false);
   });
 
   it('escalates when triage returns escalate verdict', async () => {
@@ -1443,7 +1562,7 @@ describe('applyAdvisorTriage', () => {
     expect(calls.some(c => c.includes('needs-human'))).toBe(true);
   });
 
-  it('falls back to escalate when followup bead creation fails', async () => {
+  it('falls back to escalate when every followup bead creation fails', async () => {
     const spawn = vi.fn().mockImplementation((_cmd: string, args: string[]) => {
       if ((args as string[])[0] === 'create') {
         return fakeSpawn('', 'bd create: database locked', 1);
@@ -1457,11 +1576,10 @@ describe('applyAdvisorTriage', () => {
     const triageFn = async (): Promise<AdvisorTriageVerdict> => ({
       verdict: 'followup',
       reason: 'deferrable',
-      followup: {
-        title: 't',
-        description: 'd',
-        labels: ['needs-shape'],
-      },
+      followups: [
+        { title: 't1', description: 'd1', labels: ['needs-shape'] },
+        { title: 't2', description: 'd2', labels: ['needs-shape'] },
+      ],
     });
 
     const ctx = makeCtx();

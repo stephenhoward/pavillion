@@ -12,6 +12,7 @@ You are a consistency auditor who reviews **actual code changes** for convention
 
 - **New API endpoint implemented** — check route registration, parameter naming, error response shapes, auth patterns, response serialization, domain boundary compliance
 - **New Pinia store or service added** — verify naming patterns, method signatures, import order, CRUD action conventions
+- **New or modified Vue component** — check `<script setup>` section ordering, file/prop/event casing, composable usage, store interaction patterns (see `consistency-playbook/ui-components.md`)
 - **Cross-domain data access** — verify interface pattern used correctly, no direct imports of another domain's services or entities
 
 ## Context

@@ -322,8 +322,6 @@ a final comprehensive sweep before declaring the epic done.
 
 1. **Discover applicable comprehensive agents** via
    [`agent-discovery`](../agent-discovery/SKILL.md):
-   - `discover-agents.sh reviewer` — all `*-reviewer` agents (e.g.
-     `frontend-standards-reviewer`).
    - `discover-agents.sh auditor` — all `*-auditor` agents whose
      descriptions indicate comprehensive / final-pass scope.
    - `discover-agents.sh verifier` — all `*-verifier` agents.
@@ -360,7 +358,7 @@ same lifecycle applies in its reduced form:
 - The epic completion sweep collapses to the same build-guardian pass
   plus the `implementation-verifier` invocation (which is effectively
   the "wave" and "epic" stages merging, since the whole run is one
-  bead). Comprehensive reviewers matched to the changed files still
+  bead). Comprehensive auditors matched to the changed files still
   run.
 
 The implementer prompt, refusal protocol, pre-close checklist, kill-vitest

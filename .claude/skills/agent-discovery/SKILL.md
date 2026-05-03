@@ -1,11 +1,11 @@
 ---
 name: Agent Discovery
-description: Dynamically pick the right advisor, auditor, reviewer, or verifier agent for a given bead or changed file set. Use this skill when spawning review subagents at planning checkpoints (post-shape, post-analyze) or after code changes (per-bead audits), when an orchestrator needs to know which agents exist without hard-coding their names, or when dispatching parallel review subagents via the Task tool.
+description: Dynamically pick the right advisor, auditor, or verifier agent for a given bead or changed file set. Use this skill when spawning review subagents at planning checkpoints (post-shape, post-analyze) or after code changes (per-bead audits), when an orchestrator needs to know which agents exist without hard-coding their names, or when dispatching parallel review subagents via the Task tool.
 ---
 
 # Agent Discovery
 
-This skill governs how the orchestrator commands (`/process-backlog`, `/spawn-bead-workers`, `/shape-spec`, `/shape-bead`, and any future review runner) find the right advisor, auditor, reviewer, or verifier for a given context. It converts two inputs — a **role** (`advisor` / `auditor`) and a **work context** (bead content or git diff) — into a list of subagents to invoke, using LLM judgment rather than a mechanical tag table.
+This skill governs how the orchestrator commands (`/process-backlog`, `/spawn-bead-workers`, `/shape-spec`, `/shape-bead`, and any future review runner) find the right advisor, auditor, or verifier for a given context. It converts two inputs — a **role** (`advisor` / `auditor`) and a **work context** (bead content or git diff) — into a list of subagents to invoke, using LLM judgment rather than a mechanical tag table.
 
 ## Two-stage process
 
@@ -21,7 +21,7 @@ Helper functions live in `.claude/orchestrators/lib/helpers.ts`:
 
 | Function | Purpose |
 |---|---|
-| `discoverAgents(suffix, agentsDir?)` | Lists `.claude/agents/*-<suffix>.md` files. Parses YAML frontmatter for `name` and `description`. Returns `[{name, path, description}, ...]`. Valid suffixes: `auditor`, `advisor`, `reviewer`, `verifier`. |
+| `discoverAgents(suffix, agentsDir?)` | Lists `.claude/agents/*-<suffix>.md` files. Parses YAML frontmatter for `name` and `description`. Returns `[{name, path, description}, ...]`. Valid suffixes: `auditor`, `advisor`, `verifier`. |
 
 Selection logic lives in the role-specific call sites:
 
@@ -59,7 +59,7 @@ When `selected` is empty the orchestrator **escalates the bead as `needs-human`*
 - **Legacy**: empty file hints or empty tag match → skip advisor review; empty auditor match → pass audit. Silent, undetectable.
 - **New**: empty selection → log the empty verdict, call `bdEscalate`, halt the run. Visible in logs, visible on the bead.
 
-An empty selection should only happen when the selector genuinely cannot identify any applicable reviewer (rare), or when its dispatch failed / output was malformed. In either case human review is the correct fallback.
+An empty selection should only happen when the selector genuinely cannot identify any applicable agent (rare), or when its dispatch failed / output was malformed. In either case human review is the correct fallback.
 
 ## Verdict interpretation
 
@@ -85,9 +85,9 @@ Defined in [`review-mode-auditor`](../review-mode-auditor/SKILL.md).
 | **PASS WITH WARNINGS** | Record warnings in the wave summary and in the final PR body. Do not block the PR. |
 | **FAIL** | Do not submit the PR. Return findings to the implementer subagent for a single retry round. If a second audit still fails, escalate via `bdEscalate` and exit with the branch preserved. |
 
-### Reviewers and verifiers
+### Verifiers
 
-Reviewers (e.g. `frontend-standards-reviewer`) return free-form guidance; the orchestrator incorporates their output into the PR description but does not block on them. Verifiers (e.g. `cross-bead-integration-verifier`, `build-guardian`) return PASS/FAIL-like verdicts and are treated like auditors for blocking purposes. They run outside the agent-selector path — the orchestrator invokes them on wave-level signals, not per-file context.
+Verifiers (e.g. `cross-bead-integration-verifier`, `build-guardian`) return PASS/FAIL-like verdicts and are treated like auditors for blocking purposes. They run outside the agent-selector path — the orchestrator invokes them on wave-level signals, not per-file context.
 
 ## Parallel-spawn pattern
 
