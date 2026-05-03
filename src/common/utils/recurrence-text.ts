@@ -16,43 +16,6 @@ export interface RecurrenceSummary {
 const VALID_DAY_CODES = new Set(['MO', 'TU', 'WE', 'TH', 'FR', 'SA', 'SU']);
 
 /**
- * Maps day code abbreviations to human-readable English day names.
- * Retained for the legacy {@link generateRecurrenceText} helper only.
- */
-const DAY_NAMES: Record<string, string> = {
-  MO: 'Monday',
-  TU: 'Tuesday',
-  WE: 'Wednesday',
-  TH: 'Thursday',
-  FR: 'Friday',
-  SA: 'Saturday',
-  SU: 'Sunday',
-};
-
-/**
- * Maps ordinal position numbers to human-readable English ordinal words.
- * Retained for the legacy {@link generateRecurrenceText} helper only.
- */
-const ORDINAL_NAMES: Record<string, string> = {
-  '1': 'First',
-  '2': 'Second',
-  '3': 'Third',
-  '4': 'Fourth',
-  '-1': 'Last',
-};
-
-/**
- * Formats a list of day names into a readable joined English string.
- * Retained for the legacy {@link generateRecurrenceText} helper only.
- */
-function formatDayList(days: string[]): string {
-  if (days.length === 0) return '';
-  if (days.length === 1) return days[0];
-  if (days.length === 2) return `${days[0]} and ${days[1]}`;
-  return `${days.slice(0, -1).join(', ')}, and ${days[days.length - 1]}`;
-}
-
-/**
  * Pattern matching nth-weekday BYDAY codes such as `1MO`, `3FR`, `-1SA`.
  */
 const NTH_WEEKDAY_PATTERN = /^(-?\d+)([A-Z]{2})$/;
@@ -172,26 +135,59 @@ export function getRecurrenceSummary(schedules: CalendarEventSchedule[]): Recurr
 }
 
 /**
- * Generates a human-readable English recurrence pattern string from a
+ * Translation function shape compatible with i18next's `t`. Accepts a key and
+ * optional interpolation params and returns the rendered string.
+ */
+export type TranslateFn = (key: string, params?: Record<string, unknown>) => string;
+
+/**
+ * Joins a list of pre-translated day names into a single locale-correct string
+ * using `Intl.ListFormat` so multi-day phrases respect the active locale's
+ * conjunction conventions (e.g. "Monday and Tuesday" vs. "Monday y Tuesday").
+ *
+ * @param days - Array of pre-translated day names
+ * @param language - BCP-47 language tag (defaults to 'en')
+ */
+function joinDayList(days: string[], language: string): string {
+  if (days.length === 0) return '';
+  if (days.length === 1) return days[0];
+  try {
+    const formatter = new Intl.ListFormat(language, { style: 'long', type: 'conjunction' });
+    return formatter.format(days);
+  }
+  catch {
+    // Defensive fallback for environments without Intl.ListFormat support
+    if (days.length === 2) return `${days[0]} and ${days[1]}`;
+    return `${days.slice(0, -1).join(', ')}, and ${days[days.length - 1]}`;
+  }
+}
+
+/**
+ * Generates a localized, human-readable recurrence pattern string from a
  * CalendarEventSchedule.
  *
- * Retained as the legacy English helper for authenticated-client callers
- * (event_recurrence.vue, events-tab.vue) that have not yet migrated to the
- * structured {@link generateRecurrenceSummary} API. Do not use for new code.
+ * The function is i18n-aware: callers pass an UNPREFIXED i18next `t` (i.e. one
+ * obtained via `useTranslation('event_editor')` without `keyPrefix`) so the
+ * utility can resolve full keys like `recurrence.every_day`. The optional
+ * `language` parameter feeds `Intl.ListFormat` for locale-correct day-list
+ * conjunction joining; defaults to `'en'` when omitted.
  *
- * Examples:
- * - Daily: "Every day"
- * - Weekly on specific days: "Every Saturday" / "Every Monday and Wednesday"
- * - Monthly by weekday: "First Saturday of the month" / "Third Friday of the month"
- * - Monthly by date: "Monthly"
- * - Yearly: "Yearly"
- * - With interval > 1: "Every 2 weeks on Monday" / "Every 3 months"
+ * Used by authenticated-client callers (event_recurrence.vue) that need a
+ * compact rendered summary. Server / public site code should prefer the
+ * structured {@link generateRecurrenceSummary} API and render at the
+ * presentation layer.
  *
  * @param schedule - The CalendarEventSchedule to generate text for
- * @returns Human-readable recurrence pattern string, or empty string if not recurring
- * @deprecated Use {@link generateRecurrenceSummary} and render at the presentation layer.
+ * @param t - Unprefixed i18next translation function for `event_editor` namespace
+ * @param language - Optional BCP-47 language tag for `Intl.ListFormat`
+ * @returns Localized recurrence pattern string, or empty string if not recurring
+ * @deprecated Prefer {@link generateRecurrenceSummary} and render at the presentation layer.
  */
-export function generateRecurrenceText(schedule: CalendarEventSchedule): string {
+export function generateRecurrenceText(
+  schedule: CalendarEventSchedule,
+  t: TranslateFn,
+  language: string = 'en',
+): string {
   if (!schedule.frequency) {
     return '';
   }
@@ -202,65 +198,63 @@ export function generateRecurrenceText(schedule: CalendarEventSchedule): string 
   switch (schedule.frequency) {
     case EventFrequency.DAILY: {
       if (interval === 1) {
-        return 'Every day';
+        return t('recurrence.every_day');
       }
-      return `Every ${interval} days`;
+      return t('recurrence.every_n_days', { n: interval });
     }
 
     case EventFrequency.WEEKLY: {
       const dayNames = byDay
-        .filter(d => DAY_NAMES[d])
-        .map(d => DAY_NAMES[d]);
+        .filter(d => VALID_DAY_CODES.has(d))
+        .map(d => t('recurrence.' + d));
 
-      const daysText = dayNames.length > 0
-        ? formatDayList(dayNames)
-        : '';
+      const daysText = joinDayList(dayNames, language);
 
       if (interval === 1) {
-        return daysText ? `Every ${daysText}` : 'Every week';
+        return daysText
+          ? t('recurrence.weekly_on_days', { days: daysText })
+          : t('recurrence.weekly_every_week');
       }
       return daysText
-        ? `Every ${interval} weeks on ${daysText}`
-        : `Every ${interval} weeks`;
+        ? t('recurrence.every_n_weeks_on_days', { n: interval, days: daysText })
+        : t('recurrence.every_n_weeks', { n: interval });
     }
 
     case EventFrequency.MONTHLY: {
-      // Check for "Nth weekday of the month" pattern (e.g., '1MO', '3FR', '-1SA')
-      const nthWeekdayPattern = /^(-?\d+)([A-Z]{2})$/;
-      const nthEntries = byDay
-        .map(d => {
-          const match = d.match(nthWeekdayPattern);
-          if (match) {
-            return { ordinal: match[1], dayCode: match[2] };
-          }
-          return null;
-        })
-        .filter((e): e is { ordinal: string; dayCode: string } => e !== null);
+      // Detect "Nth weekday of the month" patterns (e.g. '1MO', '3FR', '-1SA')
+      const nthEntry = byDay
+        .map(parseNthWeekday)
+        .find((entry): entry is { ordinal: number; day: string } => entry !== null);
 
-      if (nthEntries.length > 0) {
-        // Use the first nth-weekday entry for display
-        const entry = nthEntries[0];
-        const ordinalName = ORDINAL_NAMES[entry.ordinal] ?? `${entry.ordinal}th`;
-        const dayName = DAY_NAMES[entry.dayCode] ?? entry.dayCode;
+      if (nthEntry) {
+        const ordinalText = t('recurrence.' + nthEntry.ordinal + 'ord');
+        const dayText = t('recurrence.' + nthEntry.day);
 
         if (interval === 1) {
-          return `${ordinalName} ${dayName} of the month`;
+          return t('recurrence.nth_weekday_of_month', {
+            ordinal: ordinalText,
+            day: dayText,
+          });
         }
-        return `${ordinalName} ${dayName} every ${interval} months`;
+        return t('recurrence.nth_weekday_every_n_months', {
+          ordinal: ordinalText,
+          day: dayText,
+          n: interval,
+        });
       }
 
       // Plain monthly recurrence
       if (interval === 1) {
-        return 'Monthly';
+        return t('recurrence.monthly');
       }
-      return `Every ${interval} months`;
+      return t('recurrence.every_n_months', { n: interval });
     }
 
     case EventFrequency.YEARLY: {
       if (interval === 1) {
-        return 'Yearly';
+        return t('recurrence.yearly');
       }
-      return `Every ${interval} years`;
+      return t('recurrence.every_n_years', { n: interval });
     }
 
     default:
@@ -269,16 +263,23 @@ export function generateRecurrenceText(schedule: CalendarEventSchedule): string 
 }
 
 /**
- * Generates recurrence text from the first non-exclusion schedule in an array.
+ * Generates localized recurrence text from the first non-exclusion schedule in
+ * an array.
  *
  * @param schedules - Array of CalendarEventSchedule objects
- * @returns Human-readable recurrence pattern string, or empty string if no recurring schedule
- * @deprecated Use {@link getRecurrenceSummary} and render at the presentation layer.
+ * @param t - Unprefixed i18next translation function for `event_editor` namespace
+ * @param language - Optional BCP-47 language tag for `Intl.ListFormat`
+ * @returns Localized recurrence pattern string, or empty string if no recurring schedule
+ * @deprecated Prefer {@link getRecurrenceSummary} and render at the presentation layer.
  */
-export function getRecurrenceText(schedules: CalendarEventSchedule[]): string {
+export function getRecurrenceText(
+  schedules: CalendarEventSchedule[],
+  t: TranslateFn,
+  language: string = 'en',
+): string {
   const primarySchedule = schedules.find(s => !s.isExclusion && s.frequency !== null);
   if (!primarySchedule) {
     return '';
   }
-  return generateRecurrenceText(primarySchedule);
+  return generateRecurrenceText(primarySchedule, t, language);
 }
