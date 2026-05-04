@@ -39,7 +39,7 @@ export default defineConfig({
         {
           text: 'Build out your calendar',
           items: [
-            { text: 'Run a recurring event', link: '/guides/calendar-owners/recurring-events' },
+            { text: 'Post a recurring event', link: '/guides/calendar-owners/recurring-events' },
             { text: 'Organize events with categories', link: '/guides/calendar-owners/categories' },
             { text: 'Reuse venues with places', link: '/guides/calendar-owners/places' },
             { text: 'Group related events into a series', link: '/guides/calendar-owners/series' },
