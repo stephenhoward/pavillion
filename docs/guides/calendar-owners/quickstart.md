@@ -10,13 +10,13 @@ A working calendar at a public URL, with one event on it, that you can paste int
 
 ## Before you start
 
-You need an account on a Pavillion instance. If you don't have one yet, that's an instance-administrator question — Pavillion accounts aren't self-serve. Whoever runs the instance you're joining (your local arts council, your neighborhood mesh, your housing co-op) is the person who issues accounts.
+You need an account on a Pavillion instance. Sign-up varies by instance: some accept open applications through the site, others run on invitation only — your local arts council, neighborhood mesh, or housing co-op decides which posture fits the community. Either way, signing up is the part where you provide an email address you control, confirm it through a link, and choose a password. By the time you're reading this, that's done and you have credentials in hand.
 
 Throughout this guide, "your instance" means the Pavillion server your account lives on. The URLs you see will use that instance's domain. We'll write `your-instance.example` as a stand-in.
 
 ## Step 1: Log in
 
-Go to `https://your-instance.example/` and sign in with the email and password you were given. The first thing you'll land on is your feed — the activity stream for any calendars you eventually follow. It will be empty for now. That's expected.
+Go to `https://your-instance.example/` and sign in with the email address and password you set up. The first thing you'll land on is your feed — the activity stream for any calendars you eventually follow. It will be empty for now. That's expected.
 
 You don't have a calendar yet. The next step is to make one.
 
