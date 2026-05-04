@@ -1,11 +1,11 @@
 # For calendar owners
 
-These guides are for the people running calendars on a Pavillion instance — community organizers, venue staff, neighborhood associations, regional councils, anyone whose job it is to publish events that other people can find.
+These guides are for the people running calendars on Pavillion — community organizers, venue staff, neighborhood associations, regional councils, anyone whose job it is to publish events that other people can find.
 
 Two ways to read this section:
 
 - **New to Pavillion?** Start with the [Quickstart](./quickstart). It takes you from a fresh login to a published calendar with one real event in about ten minutes. Everything else in this section is reference material you can come back to as you need it.
-- **Already running a calendar?** Browse the sidebar. Each guide answers a specific goal — running a recurring event, inviting an editor, importing from another calendar, sharing your public URL. Read the one you need.
+- **Already running a calendar?** Browse the sidebar. Each guide answers a specific goal — running a recurring event, inviting a collaborator, importing from another calendar, sharing your public URL. Read the one you need.
 
 ## What's in this section
 
