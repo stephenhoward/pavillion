@@ -35,7 +35,7 @@ Submit the form. You'll land on your new calendar's events management page. It's
 
 The two things you just entered are the bare minimum to create the calendar. Before publishing an event, fill in the rest of the basics:
 
-1. From your calendar's page, open **Manage Calendar**.
+1. From your calendar's page, open <Btn>Manage Calendar</Btn>.
 2. Add a **description**. One or two sentences: who this calendar is for and what kinds of events it lists. Visitors to your public page will read this. So will other calendar owners deciding whether to follow your calendar.
 3. The **primary language** is set to your account's language by default. If you only plan to publish in one language — leave it as is. If you'll publish in more than one, add the additional languages here too. The title and description fields then grow a small row of language tabs above them — one tab per language you've added — and clicking a tab swaps the field below to that language's text. You edit one language at a time.
 
@@ -51,7 +51,7 @@ Back on your calendar's page, look for the button to add an event (it lives near
 
 **Event details.** Give the event a title. Add a description — a short paragraph is fine, more if there's logistics worth spelling out. If accessibility info is relevant (wheelchair access, ASL interpretation, scent-free space), there's a dedicated field for it; visitors look for that information specifically and it shouldn't be buried in the description.
 
-**Location.** Click **Add location**. The location picker opens. You probably don't have any places saved yet, so choose **Create new place**, fill in the name and address, and confirm. The place is now reusable — for the next event you create at the same venue you will be able pick it from a list rather than re-typing the address.
+**Location.** Click <Btn>Add location</Btn>. The location picker opens. You probably don't have any places saved yet, so choose <Btn>Create new place</Btn>, fill in the name and address, and confirm. The place is now reusable — for the next event you create at the same venue you will be able pick it from a list rather than re-typing the address.
 
 ::: tip <Lightbulb /> A note on places.
 A "place" in Pavillion is its own thing — separate from the events that reference it. The address is stored once, on the place. Events point at the place. So when the venue changes its name or you correct a typo in the address, you fix it once and every event there is updated.
@@ -71,7 +71,7 @@ Categories are how visitors filter your public page (`Show only Sports events`) 
 
 **Date & time.** Set the start and end. For this first event, pick a date within the next week or two — the public page opens to a default two-week window, and a date much further out won't be visible there until the visitor changes the filter. (You can always add the real, far-out events afterwards; this is just so the page you're about to share has something on it.) Leave it as a single occurrence for now — no recurrence rules. If your event repeats on a schedule, recurrence handles that, but it's easier to learn the editor on a one-off first.
 
-When the form is filled in, click **Save Changes** in the page header. The event is now published — Pavillion doesn't have a draft state. If you change your mind, you can edit, cancel, or delete it from the events list.
+When the form is filled in, click <Btn>Save Changes</Btn> in the page header. The event is now published — Pavillion doesn't have a draft state. If you change your mind, you can edit, cancel, or delete it from the events list.
 
 ## Step 5: See what visitors see
 
@@ -81,7 +81,7 @@ Open a new browser tab and go to `https://your-instance.example/view/your-handle
 
 What you're looking at is what anyone on the internet sees. No login required. Your event should be there, with the place, the date, the description, and the category you chose. Click into the event to see its detail page — that's the URL you'd share for a single event.
 
-If you don't see it, the most likely reason is the date filter. The public page opens to a default window — two weeks out by default — and an event further in the future is still there, just hidden until a visitor widens the range. The date control near the top of the page lets you (and visitors) jump forward. You can also change the calendar's default window from **Manage Calendar** if two weeks isn't right for your community's rhythm.
+If you don't see it, the most likely reason is the date filter. The public page opens to a default window — two weeks out by default — and an event further in the future is still there, just hidden until a visitor widens the range. The date control near the top of the page lets you (and visitors) jump forward. You can also change the calendar's default window from <Btn>Manage Calendar</Btn> if two weeks isn't right for your community's rhythm.
 
 Paste your calendar's URL into a chat with a friend. Have them open it. Ask whether the event makes sense to them as someone who's never seen it before. That feedback — from a fresh pair of eyes who is the audience, not the organizer — is more useful than any checklist.
 
