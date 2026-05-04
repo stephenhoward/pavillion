@@ -42,6 +42,13 @@
   /* Inline code chip uses the orange-soft tint */
   --vp-code-bg: var(--vp-c-brand-soft);
   --vp-code-color: #C2410C;            /* orange-700 */
+
+  /* Tip blocks borrow the Pavillion blue secondary so they stay
+     visually distinct from the orange brand-tinted info blocks. */
+  --vp-custom-block-tip-border: transparent;
+  --vp-custom-block-tip-text: #115293;        /* brand-secondary-dark — AA on tinted bg */
+  --vp-custom-block-tip-bg: rgba(25, 118, 210, 0.10);
+  --vp-custom-block-tip-code-bg: rgba(25, 118, 210, 0.10);
 }
 
 .dark {
@@ -72,4 +79,22 @@
   /* Inline code chip */
   --vp-code-bg: var(--vp-c-brand-soft);
   --vp-code-color: #FDBA74;            /* orange-300 */
+
+  /* Tip blocks — blue secondary, lifted to brand-secondary-light
+     so it stays readable on the dark surface. */
+  --vp-custom-block-tip-text: #63A4FF;        /* brand-secondary-light */
+  --vp-custom-block-tip-bg: rgba(99, 164, 255, 0.14);
+  --vp-custom-block-tip-code-bg: rgba(99, 164, 255, 0.14);
+}
+
+.custom-block-title .lucide {
+  display: inline-block;
+  vertical-align: -0.2em;
+  margin-inline-end: 0.4em;
+  width: 1.1em;
+  height: 1.1em;
+}
+
+.custom-block:has(.custom-block-title .lucide) .custom-block-title ~ * {
+  margin-inline-start: 1.5em;
 }
