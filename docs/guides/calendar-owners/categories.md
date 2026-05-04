@@ -6,13 +6,15 @@ The list is short on purpose. A small, durable category vocabulary is one of the
 
 ## What categories do
 
-Two jobs:
+Three jobs:
 
 **Filter the public page.** Visitors browsing your calendar see a row of category pills above the events. Clicking *Concerts* hides everything that isn't a concert. A casual visitor who came looking for something specific finds it faster; a regular who wants the full picture leaves the filter alone. Either way, categories are the main way visitors *narrow down* a busy calendar.
 
+**Jump from one event to related events.** On every event's detail page, the categories it carries appear as clickable badges. A visitor reading about Tuesday's concert can click *Concert* and land back on the calendar filtered to every other concert you've published. It's the "more like this" path — different from the filter row in that the visitor enters from a specific event they were already interested in, not from the top of the calendar. This is where stable category names earn their keep: if last month's *Live Music* and this month's *Concerts* are technically the same kind of event under different labels, the jump from one to the other doesn't work.
+
 **Give other calendars something to match against.** When another calendar reposts an event from yours, their categories rarely line up with yours one-to-one — your *Concerts* might be their *Live Music*, your *Workshops* might be their *Classes*. Category names are the signal each calendar uses to translate between vocabularies. Stable, recognizable category names mean other calendars can route your events to the right place on theirs without you (or them) doing it by hand every time.
 
-Categories don't appear in the event title or description. They're metadata — sorting and matching information — not part of the event copy.
+Categories don't appear in the event title or description. They're metadata — sorting, navigation, and matching information — not part of the event copy.
 
 ## Create a category
 
