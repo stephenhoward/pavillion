@@ -56,6 +56,7 @@ export default defineConfig({
         {
           text: 'Connect with other calendars',
           items: [
+            { text: 'Decide when to make a calendar', link: '/guides/calendar-owners/when-to-create-a-calendar' },
             { text: 'Follow other calendars and repost their events', link: '/guides/calendar-owners/follow-and-repost' },
             { text: 'Match categories from other calendars to yours', link: '/guides/calendar-owners/category-matching' },
             { text: 'Be a good neighbor across calendars', link: '/guides/calendar-owners/federation-etiquette' },
