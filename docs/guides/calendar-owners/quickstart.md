@@ -25,7 +25,9 @@ The form asks for two things:
 - **Calendar title** — the human-readable name. "Westside Community Garden Events," "Riverbend Folk Series," "Maplewood Mutual Aid Calendar." Whatever your community will recognize.
 - **URL handle** — the short, URL-safe name that becomes part of your calendar's web address. Pavillion auto-fills this based on the title, and you can edit it before submitting. The full handle for your calendar takes the form `your-calendar-handle@your-instance.example` — the `@` shape matters because that's how other Pavillion calendars (on this instance or any other) will find and follow your calendar.
 
-> **A note on choosing a handle.** The handle is hard to change after the fact — once people have linked to it, bookmarked it, or pasted it into an email, changes break those links. Pick something short, durable, and tied to the community rather than to a moment in time. `riverbend-folk` ages better than `riverbend-2026-season`.
+::: tip <Lightbulb /> A note on choosing a handle.
+The handle is hard to change after the fact — once people have linked to it, bookmarked it, or pasted it into an email, changes break those links. Pick something short, durable, and tied to the community rather than to a moment in time. `riverbend-folk` ages better than `riverbend-2026-season`.
+:::
 
 Submit the form. You'll land on your new calendar's events management page. It's empty. We'll fix that.
 
@@ -35,11 +37,13 @@ The two things you just entered are the bare minimum to create the calendar. Bef
 
 1. From your calendar's page, open **Manage Calendar**.
 2. Add a **description**. One or two sentences: who this calendar is for and what kinds of events it lists. Visitors to your public page will read this. So will other calendar owners deciding whether to follow your calendar.
-3. The **primary language** is set to your account's language by default. Most calendars will run in one language — leave it as is. If you'll publish in more than one, add the additional languages here too. The title and description fields then grow a small row of language tabs above them — one tab per language you've added — and clicking a tab swaps the field below to that language's text. You edit one language at a time.
+3. The **primary language** is set to your account's language by default. If you only plan to publish in one language — leave it as is. If you'll publish in more than one, add the additional languages here too. The title and description fields then grow a small row of language tabs above them — one tab per language you've added — and clicking a tab swaps the field below to that language's text. You edit one language at a time.
 
 Settings save as you go: text fields save when you click out of them, dropdowns save when you pick a new value, the default event image saves as soon as upload finishes. There's no separate "save" button for the basics. Move on when you're satisfied.
 
-> **A note on calendar description.** Treat the description as something a stranger reads before deciding to follow your calendar. "Events organized by and for the Westside community garden — workdays, harvests, potlucks, and quarterly meetings" tells a visitor whether they're in the right place. "All events" tells them nothing.
+::: tip <Lightbulb /> A note on calendar description.
+Treat the description as something a stranger reads before deciding to follow your calendar. "Events organized by and for the Westside community garden — workdays, harvests, potlucks, and quarterly meetings" tells a visitor whether they're in the right place. "All events" tells them nothing.
+:::
 
 ## Step 4: Add your first event
 
@@ -49,7 +53,9 @@ Back on your calendar's page, look for the button to add an event (it lives near
 
 **Location.** Click **Add location**. The location picker opens. You probably don't have any places saved yet, so choose **Create new place**, fill in the name and address, and confirm. The place is now reusable — for the next event you create at the same venue you will be able pick it from a list rather than re-typing the address.
 
-> **A note on places.** A "place" in Pavillion is its own thing — separate from the events that reference it. The address is stored once, on the place. Events point at the place. So when the venue changes its name or you correct a typo in the address, you fix it once and every event there is updated.
+::: tip <Lightbulb /> A note on places.
+A "place" in Pavillion is its own thing — separate from the events that reference it. The address is stored once, on the place. Events point at the place. So when the venue changes its name or you correct a typo in the address, you fix it once and every event there is updated.
+:::
 
 **External link** (optional). If the event has a registration page, ticket link, or external info page elsewhere, paste the URL here and pick the prompt that matches it ("More info," "Tickets," "RSVP"). Skip this if there's nothing external to link to.
 
@@ -57,7 +63,9 @@ Back on your calendar's page, look for the button to add an event (it lives near
 
 **Categories.** Pick at least one. If your calendar is brand new, no categories exist yet — you'll need to create one. From the category section, add a category like "Community gathering" or "Music" or whatever fits. You can add more later.
 
-> **A note on categories.** Categories are how visitors filter your public page (`Show only Sports events`) and how your events get matched up when other calendars repost them. A small, durable vocabulary works better than a long list of one-off labels — "Concert" can help visitors find many events; "Tuesday night jazz quartet" won't.
+::: tip <Lightbulb /> A note on categories
+Categories are how visitors filter your public page (`Show only Sports events`) and how your events get matched up when other calendars repost them. A small, durable vocabulary works better than a long list of one-off labels — "Concert" can help visitors find many events; "Tuesday night jazz quartet" won't.
+:::
 
 **Series.** Skip for this first event. A series is for grouping multiple distinct events under one named program (a summer concert series, a fall lecture series). One-off events don't need it.
 
