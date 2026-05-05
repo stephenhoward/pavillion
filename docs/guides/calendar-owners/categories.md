@@ -22,7 +22,7 @@ Open <Btn>Manage Calendar</Btn> from your calendar page and find the **Categorie
 
 Click <Btn>+ Add category</Btn>. A small editor opens with one field: a name. Type the category name — *Concert*, *Workshop*, *Volunteer day* — and click <Btn>Create</Btn>. The new category appears in the list with an event count of zero.
 
-If your calendar publishes in more than one language, the editor lets you provide the category name in each — click <Btn>+ Add language</Btn>, pick the language, and fill in the translation. Visitors browsing the page in French see *Concert*; visitors browsing in English see whatever name you gave it in English. The category itself is one thing with multiple labels, not multiple categories.
+If your calendar publishes in more than one language, the editor lets you provide the category name in each — click <Btn>+ Add language</Btn>, pick the language, and fill in the translation. A *Workshop* category in English becomes *Atelier* for visitors browsing the page in French. The category itself is one thing with multiple labels, not multiple categories.
 
 Once a category exists, it shows up in two places:
 
