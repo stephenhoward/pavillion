@@ -9,6 +9,7 @@ import { useWidgetStore } from '../stores/widgetStore';
 import NotFound from '@/site/components/not-found.vue';
 import EventDetailBody from '@/site/components/EventDetailBody.vue';
 import { parseInstanceSlug } from '@/common/utils/instance-slug';
+import type { EventCategory } from '@/common/model/event_category';
 
 const { t } = useTranslation('system');
 const route = useRoute();
@@ -35,6 +36,19 @@ const goBack = () => {
     params: { urlName: widgetStore.calendarUrlName! },
   });
 };
+
+/**
+ * Builds a widget-scoped category filter href that returns to the widget
+ * calendar list pre-filtered by the chosen category. Uses the resolved
+ * router URL so the iframe-aware base path is preserved.
+ */
+function categoryHrefBuilder(category: EventCategory): string {
+  return router.resolve({
+    name: 'widget-calendar',
+    params: { urlName: widgetStore.calendarUrlName! },
+    query: { categories: category.id },
+  }).href;
+}
 
 onBeforeMount(async () => {
   try {
@@ -66,6 +80,7 @@ onBeforeMount(async () => {
       const instance = await calendarService.loadEventInstance(
         eventId as string,
         parsedStartTime,
+        calendarId as string,
       );
       if (!instance) {
         state.notFound = true;
@@ -135,6 +150,7 @@ onBeforeMount(async () => {
         <EventDetailBody
           :instance="state.instance"
           :calendar="state.calendar"
+          :category-href-builder="categoryHrefBuilder"
         />
       </main>
     </div>

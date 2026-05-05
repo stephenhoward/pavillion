@@ -1402,6 +1402,39 @@ describe('EventInstanceService.findOrMaterializeInstanceWithDetails', () => {
     expect(result!.start.toMillis()).toBe(MATCHING_START.toMillis());
   });
 
+  it('forwards an explicit displayCalendarId to getEventCategories so reposted events resolve display-calendar mappings', async () => {
+    const eventEntity = buildEventWithWeeklyMondaySchedule();
+    const cached = buildCachedInstanceEntity(eventEntity, MATCHING_START);
+    sandbox.stub(EventInstanceEntity, 'findOne').resolves(cached);
+
+    // Replace the no-arg stub with one we can inspect — the row's calendar_id
+    // is the originating calendar but the caller passes a different display
+    // calendar id (the repost target). The override must win.
+    (service['categoryService'].getEventCategories as sinon.SinonStub).restore();
+    const categoryStub = sandbox.stub(service['categoryService'], 'getEventCategories').resolves([]);
+
+    await service.findOrMaterializeInstanceWithDetails(EVENT_ID, MATCHING_START, 'display-cal-id');
+
+    expect(categoryStub.calledOnce).toBe(true);
+    const [, calendarIdArg] = categoryStub.firstCall.args;
+    expect(calendarIdArg).toBe('display-cal-id');
+  });
+
+  it('falls back to the row calendar_id when no displayCalendarId override is provided', async () => {
+    const eventEntity = buildEventWithWeeklyMondaySchedule();
+    const cached = buildCachedInstanceEntity(eventEntity, MATCHING_START);
+    sandbox.stub(EventInstanceEntity, 'findOne').resolves(cached);
+
+    (service['categoryService'].getEventCategories as sinon.SinonStub).restore();
+    const categoryStub = sandbox.stub(service['categoryService'], 'getEventCategories').resolves([]);
+
+    await service.findOrMaterializeInstanceWithDetails(EVENT_ID, MATCHING_START);
+
+    expect(categoryStub.calledOnce).toBe(true);
+    const [, calendarIdArg] = categoryStub.firstCall.args;
+    expect(calendarIdArg).toBe(CALENDAR_ID);
+  });
+
   it('short-circuits RRule validation on cache hit', async () => {
     // Even if the current schedule would reject the date, a pre-existing row
     // is authoritative: the RRule-check must not be invoked on the cache-hit

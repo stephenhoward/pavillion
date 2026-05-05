@@ -128,7 +128,7 @@ onBeforeMount(async () => {
     }
     else {
       // Load events for this calendar
-      state.event = await calendarService.loadEvent(eventId);
+      state.event = await calendarService.loadEvent(eventId, state.calendar.urlName);
       if (!state.event) {
         state.notFound = true;
         return;

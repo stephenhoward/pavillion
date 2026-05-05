@@ -93,19 +93,28 @@ export default class CalendarService {
    * `/api/public/v1/events/:eventId/instances/:startTime`. The DateTime is
    * converted to UTC before formatting, so callers may pass a zoned value.
    *
+   * When `calendarUrlName` is supplied it is forwarded as `?calendar=<urlName>`
+   * so the backend scopes category mappings to that display calendar — needed
+   * for reposted events where the originating calendar's categories should be
+   * suppressed in favor of the reposting calendar's.
+   *
    * @param eventId - The parent event id (UUID)
    * @param startTime - The instance's start time; converted to UTC for the slug
+   * @param calendarUrlName - Optional display calendar URL name
    * @returns The loaded instance, or `null` if the backend returned 404
    */
   async loadEventInstance(
     eventId: string,
     startTime: DateTime,
+    calendarUrlName?: string,
   ): Promise<CalendarEventInstance | null> {
     try {
       const slug = formatInstanceSlug(startTime);
-      const instance = await ModelService.getModel(
-        `/api/public/v1/events/${eventId}/instances/${slug}`,
-      );
+      const path = `/api/public/v1/events/${eventId}/instances/${slug}`;
+      const url = calendarUrlName
+        ? `${path}?calendar=${encodeURIComponent(calendarUrlName)}`
+        : path;
+      const instance = await ModelService.getModel(url);
       if (instance) {
         const calendarEvent = CalendarEventInstance.fromObject(instance);
         this.eventStore.addEvent(calendarEvent);
@@ -120,9 +129,13 @@ export default class CalendarService {
   }
 
 
-  async loadEvent(eventId: string): Promise<CalendarEvent|null> {
+  async loadEvent(eventId: string, calendarUrlName?: string): Promise<CalendarEvent|null> {
     try {
-      const event = await ModelService.getModel(`/api/public/v1/events/${eventId}`);
+      const path = `/api/public/v1/events/${eventId}`;
+      const url = calendarUrlName
+        ? `${path}?calendar=${encodeURIComponent(calendarUrlName)}`
+        : path;
+      const event = await ModelService.getModel(url);
       if (event) {
         const calendarEvent = CalendarEvent.fromObject(event);
         return calendarEvent;

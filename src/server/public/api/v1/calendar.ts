@@ -409,7 +409,13 @@ export default class CalendarRoutes {
 
   async getEvent(req: Request, res: Response) {
     const eventId = req.params.id;
-    const event = await this.service.getEventById(eventId);
+
+    // Optional `?calendar=<urlName>` scopes category mappings to the display
+    // calendar. Without this, reposted events would expose the originating
+    // calendar's categories instead of the calendar the visitor is viewing.
+    const displayCalendarId = await this.resolveDisplayCalendarId(req.query.calendar);
+
+    const event = await this.service.getEventById(eventId, displayCalendarId);
     if ( event ) {
       res.json(toPublicEventObject(event.toObject()));
     }
@@ -419,6 +425,20 @@ export default class CalendarRoutes {
         errorName: 'EventNotFoundError',
       });
     }
+  }
+
+  /**
+   * Resolve a `?calendar=<urlName>` query param to a calendar id, or undefined.
+   * Silently ignores unknown / malformed values so a bad query string never
+   * 404s the detail page; the handler simply falls back to the originating
+   * calendar's categories (the prior behavior).
+   */
+  private async resolveDisplayCalendarId(rawCalendar: unknown): Promise<string | undefined> {
+    if (typeof rawCalendar !== 'string') return undefined;
+    const urlName = rawCalendar.trim();
+    if (!urlName) return undefined;
+    const calendar = await this.service.getCalendarByName(urlName);
+    return calendar?.id;
   }
 
   async getEventInstance(req: Request, res: Response) {
@@ -448,7 +468,15 @@ export default class CalendarRoutes {
     }
 
     try {
-      const instance = await this.service.findOrMaterializeInstanceWithDetails(eventId, startTime);
+      // Optional `?calendar=<urlName>` scopes category mappings to the display
+      // calendar so reposted events show the reposting calendar's categories.
+      const displayCalendarId = await this.resolveDisplayCalendarId(req.query.calendar);
+
+      const instance = await this.service.findOrMaterializeInstanceWithDetails(
+        eventId,
+        startTime,
+        displayCalendarId,
+      );
       if (!instance) {
         res.status(404).json({
           "error": "instance not found",
