@@ -30,19 +30,17 @@ Once a category exists, it shows up in three places:
 - On your public calendar page, as a button in the filter row — but only once at least one event uses it. Empty categories don't clutter the filter.
 - On the detail page of every event that uses it, as a clickable badge that takes the visitor back to the calendar filtered to similar events.
 
-To rename or retranslate a category, click the pencil icon on its row in the list. To delete one, click the trash icon — the dialog asks whether to remove the category from its events (the events stay, they just lose that category) or migrate those events to a different category in one move. There's also a multi-select on the list itself for merging two or more categories into one when you decide they were a single thing all along.
+To rename or retranslate a category, click the pencil icon on its row in the list. To delete one, click the trash icon — the dialog asks whether to remove the category from its events (the events stay, they just lose that category) or migrate those events to a different category in one move. There's also a multi-select on the list itself for merging two or more categories into one when you decide they were a single grouping after all.
 
 ## Designing the list
 
-A short, durable list works better than a long, descriptive one. Three reasons:
+A short, durable list works better than a long, descriptive one, for two reasons:
 
-**Visitors scan the filter row.** A list of six categories is a row people read in a glance. A list of thirty is a wall of text — and most filter rows on most pages get scrolled or wrapped, so the categories at the end might as well not be there.
+**Visitors scan the filter row.** A list of six categories is a row people read in a glance. A list of thirty is a wall of text — and most filter rows on most pages get scrolled, so the categories at the end might as well not be there.
 
-**Tagging shouldn't be a fresh decision every time.** Each event you publish, you pick its categories from your list. If the list is too granular ("Acoustic Folk Concert," "Indie Rock Concert," "Open Mic Night") that pick becomes a small decision every time — and different editors will make those calls differently, so the same kind of event ends up under different labels. A coarser category ("Music") absorbs all three, makes the choice automatic, and keeps tagging consistent across the calendar.
+**Tagging shouldn't be a fresh decision every time.** Each event you publish, you pick its categories from your list. If the list is too granular ("Acoustic Folk Concert," "Indie Rock Concert," "Open Mic Night") that pick becomes a small decision every time — and different editors will make those calls differently, so the same kind of event ends up under different labels. A coarser category ("Music") absorbs all four, makes the choice simple, and keeps tagging consistent across the calendar.
 
-**Other calendars are matching against your category names, not your event titles.** A specific event title can carry the detail. The category name is the bucket. Reach for the name that *most* events of that kind would still want to wear a year from now.
-
-A useful starting point is five to ten categories that cover the general shape of what you publish. *Music*, *Workshop*, *Community gathering*, *Volunteer*, *Talk*, *Family-friendly*, *Online* — you'll know your community's actual buckets better than any generic list. The point is the *count*, not the exact words.
+A useful starting point is five to ten categories that cover the general shape of what you publish. *Music*, *Workshop*, *Community gathering*, *Volunteer*, *Talk*, *Family-friendly*, *Online* — you'll know your community's actual buckets better than any generic list.
 
 ## When you're tempted to add a category
 
@@ -64,14 +62,14 @@ Renaming a category looks free from inside the editor — the change saves immed
 
 It is more of a deal than it looks, for two reasons.
 
-**Other calendars have rules wired up to your category names.** If another calendar is reposting your events onto theirs, they may have set up a rule that says "events from your-calendar tagged *Concert* go on our *Live Music* calendar." Renaming your *Concert* category to *Concerts & DJ Sets* breaks that rule until they notice and update it. Several reposting calendars means several broken rules. Your events still propagate (the underlying connection isn't broken), but they may land in the wrong category on the other end, or fall into a "needs review" pile that the other owner has to triage.
+**Other calendars have rules matching your category names.** If another calendar is reposting your events onto theirs, they may have set up a rule that says "events from your-calendar tagged *Concert* go on our *Live Music* category." Renaming your *Concert* category to *Concerts & DJ Sets* breaks that rule until they notice and update it. Several reposting calendars means several broken rules. Your events still propagate (the underlying connection isn't broken), but they may land in the wrong category on the other end, or fall into a "needs review" pile that the other owner has to triage.
 
-**Visitors and editors have built up muscle memory.** Regulars know your filter row. Co-editors know which category to pick for a given event. Renaming or splitting a category invalidates that knowledge — every editor relearns the list, every visitor wonders where *Music* went and why everything is now under *Sound*.
+**Visitors and editors have built up muscle memory.** Regulars know your filters. Co-editors know which category to pick for a given event. Renaming or splitting a category invalidates that knowledge — every editor relearns the list, every visitor wonders where *Music* went and why everything is now under *Sound*.
 
-Both of these argue for the same thing: pick category names that age well. Names tied to the kind of event ("Concert," "Workshop") age better than names tied to a moment ("Summer 2026 series"). Names that other communities would also recognize ("Volunteer day") age better than insider terminology ("Stewardship hours"). Names short enough to fit in a filter button on a phone screen age better than long ones that will get truncated.
+Pick category names that age well. Names tied to the kind of event ("Concert," "Workshop") age better than names tied to a moment ("Summer 2026 series"). Names that other communities would also recognize ("Volunteer day") age better than insider terminology ("Stewardship hours"). Names short enough to fit in a filter button on a phone screen age better than long ones that will get truncated.
 
 When you do need to change a name, the editor's pencil icon updates the label without disturbing the events on it. That's the right tool for a small fix — correcting a typo, adjusting capitalization, refining a translation. For bigger restructurings — collapsing two categories into one, splitting one into two — the merge and migrate tools in the category list are designed for exactly that work, and they'll handle the event reassignments in one move rather than one event at a time.
 
 ::: tip <Lightbulb /> A note on the first month.
-The category list you set up in the first weeks of a new calendar is a draft, not a commitment. Watch what kinds of events you actually publish for a month or two before treating the list as fixed. The categories you'll use most are usually obvious by then — and the ones you'll never use again are obvious too. A small cleanup in month two costs much less than a big restructuring in year two.
+The category list you set up in the first weeks of a new calendar is a draft, not a commitment. Watch what kinds of events you actually publish for a month or two before treating the list as fixed. The categories you'll use most are usually obvious by then — and the ones you'll never use again are obvious too.
 :::
