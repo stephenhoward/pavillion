@@ -1,33 +1,33 @@
 # Organize events with categories
 
-Categories are the short list of buckets your events fall into — *Concert*, *Workshop*, *Community gathering*, *Volunteer day*. Visitors use them to filter your public page down to what they're looking for, and other calendars use them as the basis for matching when they repost your events alongside their own.
+Categories are the short list of buckets your events fall into — *Concert*, *Workshop*, *Community gathering*, *Volunteer days*. Visitors use them to filter your public page down to what they're looking for, and other calendars use them as the basis for matching when they repost your events alongside their own.
 
-The list is short on purpose. A small, durable category vocabulary is one of the highest-leverage decisions you'll make as a calendar owner — and one that's hard to undo well. This guide is about designing that vocabulary so it serves you over time.
+Your category list should be short. A small, durable category vocabulary is one of the highest-leverage decisions you'll make as a calendar owner. This guide is about designing that vocabulary so it serves you over time.
 
 ## What categories do
 
 Three jobs:
 
-**Filter the public page.** Visitors browsing your calendar see a row of category pills above the events. Clicking *Concerts* hides everything that isn't a concert. A casual visitor who came looking for something specific finds it faster; a regular who wants the full picture leaves the filter alone. Either way, categories are the main way visitors *narrow down* a busy calendar.
+**Filter the public page.** Visitors browsing your calendar see a row of category buttons above the events. Clicking *Concerts* hides everything that isn't a concert. Categories are the main way visitors *narrow down* a busy calendar.
 
-**Jump from one event to related events.** On every event's detail page, the categories it carries appear as clickable badges. A visitor reading about Tuesday's concert can click *Concert* and land back on the calendar filtered to every other concert you've published. It's the "more like this" path — different from the filter row in that the visitor enters from a specific event they were already interested in, not from the top of the calendar. This is where stable category names earn their keep: if last month's *Live Music* and this month's *Concerts* are technically the same kind of event under different labels, the jump from one to the other doesn't work.
+**Jump from one event to related events.** On every event's detail page, the categories it carries appear as clickable links. A visitor reading about Tuesday's concert can click *Concert* and land back on the calendar filtered to every other concert you've published. It's the "more like this" path. This is where consistent category names are valuable: if last month's *Live Music* and this month's *Concerts* are technically the same kind of event under different labels, the jump from one to the other doesn't work.
 
-**Give other calendars something to match against.** When another calendar reposts an event from yours, their categories rarely line up with yours one-to-one — your *Concerts* might be their *Live Music*, your *Workshops* might be their *Classes*. Category names are the signal each calendar uses to translate between vocabularies. Stable, recognizable category names mean other calendars can route your events to the right place on theirs without you (or them) doing it by hand every time.
+**Give other calendars something to match against.** When another calendar reposts an event from yours, their categories rarely line up with yours one-to-one — your *Concerts* might be their *Live Music*, your *Workshops* might be their *Classes*. Category names are the signal each calendar uses to translate between vocabularies. Stable, recognizable category names mean other organizers can route your events to the right place on their calendars without you (or them) doing it by hand every time.
 
-Categories don't appear in the event title or description. They're metadata — sorting, navigation, and matching information — not part of the event copy. They're also not strictly required; an event with no categories will still publish. But it won't show up when visitors filter, won't appear under "more like this" on a related event, and won't have anything for other calendars to match against — which is enough reason to tag every event.
+Categories aren't strictly required; an event with no categories will still publish. But it won't show up when visitors filter, won't appear under "more like this" on a related event, and won't have anything for other calendars to match against — which is enough reason to tag every event.
 
 ## Create a category
 
 Open <Btn>Manage Calendar</Btn> from your calendar page and find the **Categories** tab. The first time you visit, the list is empty.
 
-Click <Btn>+ Add category</Btn>. A small editor opens with one field: a name. Type the category name — *Concert*, *Workshop*, *Volunteer day* — and click <Btn>Create</Btn>. The new category appears in the list with an event count of zero.
+Click <Btn>+ Add category</Btn>. A small editor opens with one field: a name. Type the category name — *Concert*, *Workshop*, *Volunteer days* — and click <Btn>Create</Btn>. The new category appears in the list with an event count of zero.
 
 If your calendar publishes in more than one language, the editor lets you provide the category name in each — click <Btn>+ Add language</Btn>, pick the language, and fill in the translation. A *Workshop* category in English becomes *Atelier* for visitors browsing the page in French. The category itself is one thing with multiple labels, not multiple categories.
 
 Once a category exists, it shows up in three places:
 
 - In the **Categories** section of the event editor, where you check the categories that apply to the event you're creating or editing.
-- On your public calendar page, as a pill in the filter row — but only once at least one event uses it. Empty categories don't clutter the filter.
+- On your public calendar page, as a button in the filter row — but only once at least one event uses it. Empty categories don't clutter the filter.
 - On the detail page of every event that uses it, as a clickable badge that takes the visitor back to the calendar filtered to similar events.
 
 To rename or retranslate a category, click the pencil icon on its row in the list. To delete one, click the trash icon — the dialog asks whether to remove the category from its events (the events stay, they just lose that category) or migrate those events to a different category in one move. There's also a multi-select on the list itself for merging two or more categories into one when you decide they were a single thing all along.
@@ -68,7 +68,7 @@ It is more of a deal than it looks, for two reasons.
 
 **Visitors and editors have built up muscle memory.** Regulars know your filter row. Co-editors know which category to pick for a given event. Renaming or splitting a category invalidates that knowledge — every editor relearns the list, every visitor wonders where *Music* went and why everything is now under *Sound*.
 
-Both of these argue for the same thing: pick category names that age well. Names tied to the kind of event ("Concert," "Workshop") age better than names tied to a moment ("Summer 2026 series"). Names that other communities would also recognize ("Volunteer day") age better than insider terminology ("Stewardship hours"). Names short enough to fit in a filter pill on a phone screen age better than long ones that will get truncated.
+Both of these argue for the same thing: pick category names that age well. Names tied to the kind of event ("Concert," "Workshop") age better than names tied to a moment ("Summer 2026 series"). Names that other communities would also recognize ("Volunteer day") age better than insider terminology ("Stewardship hours"). Names short enough to fit in a filter button on a phone screen age better than long ones that will get truncated.
 
 When you do need to change a name, the editor's pencil icon updates the label without disturbing the events on it. That's the right tool for a small fix — correcting a typo, adjusting capitalization, refining a translation. For bigger restructurings — collapsing two categories into one, splitting one into two — the merge and migrate tools in the category list are designed for exactly that work, and they'll handle the event reassignments in one move rather than one event at a time.
 
