@@ -202,8 +202,9 @@ export default class PublicCalendarService {
   async findOrMaterializeInstanceWithDetails(
     eventId: string,
     startTime: DateTime,
+    displayCalendarId?: string,
   ): Promise<CalendarEventInstance | null> {
-    return this.calendarInterface.findOrMaterializeInstanceWithDetails(eventId, startTime);
+    return this.calendarInterface.findOrMaterializeInstanceWithDetails(eventId, startTime, displayCalendarId);
   }
 
   /**

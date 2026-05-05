@@ -74,7 +74,7 @@ onBeforeMount(async () => {
       return;
     }
 
-    state.instance = await calendarService.loadEventInstance(eventId, parsedStartTime);
+    state.instance = await calendarService.loadEventInstance(eventId, parsedStartTime, state.calendar.urlName);
     if (!state.instance) {
       state.notFound = true;
       return;

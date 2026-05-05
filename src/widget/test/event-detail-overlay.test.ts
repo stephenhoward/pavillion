@@ -236,7 +236,7 @@ describe('widget event-detail-overlay shell', () => {
     wrapper.unmount();
   });
 
-  it('passes the loaded instance and calendar to EventDetailBody, and omits categoryHrefBuilder', async () => {
+  it('passes the loaded instance, calendar, and a category href builder to EventDetailBody', async () => {
     const { wrapper } = await mountOverlay('/widget/test_calendar/events/evt-1');
 
     const body = wrapper.findComponent({ name: 'EventDetailBody' });
@@ -244,8 +244,13 @@ describe('widget event-detail-overlay shell', () => {
     expect(body.props('instance')).toBeTruthy();
     expect((body.props('instance') as any).id).toBe('inst-1');
     expect((body.props('calendar') as any).urlName).toBe('test_calendar');
-    // Widget shell omits categoryHrefBuilder so categories render as <span>.
-    expect(body.props('categoryHrefBuilder')).toBeUndefined();
+    // Widget shell supplies a categoryHrefBuilder so categories render as
+    // clickable <a> badges that filter the widget calendar list.
+    const builder = body.props('categoryHrefBuilder') as ((c: { id: string }) => string) | undefined;
+    expect(typeof builder).toBe('function');
+    const href = builder!({ id: 'cat-123' } as any);
+    expect(href).toContain('/widget/test_calendar');
+    expect(href).toContain('categories=cat-123');
     wrapper.unmount();
   });
 });
@@ -301,10 +306,13 @@ describe('widget event-detail-overlay slug routing', () => {
     const { wrapper } = await mountOverlay('/widget/test_calendar/events/evt-1/20260508-1800');
 
     expect(loadEventInstanceMock).toHaveBeenCalledTimes(1);
-    const [calledEventId, calledStartTime] = loadEventInstanceMock.mock.calls[0];
+    const [calledEventId, calledStartTime, calledCalendar] = loadEventInstanceMock.mock.calls[0];
     expect(calledEventId).toBe('evt-1');
     // parseInstanceSlug('20260508-1800') → 2026-05-08T18:00:00Z DateTime
     expect(calledStartTime.toISO()).toBe('2026-05-08T18:00:00.000Z');
+    // Calendar urlName forwarded so reposted-event categories scope to the
+    // display calendar via the backend's `?calendar=` query param.
+    expect(calledCalendar).toBe('test_calendar');
     // The fallback list-scan path must NOT run when the slug path is taken.
     expect(loadCalendarEventsMock).not.toHaveBeenCalled();
     wrapper.unmount();

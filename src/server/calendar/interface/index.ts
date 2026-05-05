@@ -270,8 +270,8 @@ export default class CalendarInterface {
     return this.eventService.listEvents(calendar, options);
   }
 
-  async getEventById(eventId: string): Promise<CalendarEvent> {
-    return this.eventService.getEventById(eventId);
+  async getEventById(eventId: string, displayCalendarId?: string): Promise<CalendarEvent> {
+    return this.eventService.getEventById(eventId, displayCalendarId);
   }
 
   async createEvent(account: Account, eventParams: Record<string, any>): Promise<CalendarEvent> {
@@ -418,8 +418,9 @@ export default class CalendarInterface {
   async findOrMaterializeInstanceWithDetails(
     eventId: string,
     startTime: DateTime,
+    displayCalendarId?: string,
   ): Promise<CalendarEventInstance | null> {
-    return this.eventInstanceService.findOrMaterializeInstanceWithDetails(eventId, startTime);
+    return this.eventInstanceService.findOrMaterializeInstanceWithDetails(eventId, startTime, displayCalendarId);
   }
 
   /**

@@ -34,8 +34,8 @@ export default class PublicCalendarInterface {
     return this.publicCalendarService.listEventInstances(calendar);
   }
 
-  async getEventById(eventId: string): Promise<CalendarEvent> {
-    return this.calendarInterface.getEventById(eventId);
+  async getEventById(eventId: string, displayCalendarId?: string): Promise<CalendarEvent> {
+    return this.calendarInterface.getEventById(eventId, displayCalendarId);
   }
 
   /**
@@ -51,12 +51,17 @@ export default class PublicCalendarInterface {
    * Find or materialize an event instance by (eventId, startTime) for the
    * public detail page. Delegates to the calendar domain via its interface;
    * Public domain does not import calendar services directly.
+   *
+   * @param displayCalendarId - Optional display calendar id (resolved from a
+   *   `?calendar=urlName` query param by the handler). Forwarded so reposted
+   *   events show the display calendar's category mappings.
    */
   async findOrMaterializeInstanceWithDetails(
     eventId: string,
     startTime: DateTime,
+    displayCalendarId?: string,
   ): Promise<CalendarEventInstance | null> {
-    return this.publicCalendarService.findOrMaterializeInstanceWithDetails(eventId, startTime);
+    return this.publicCalendarService.findOrMaterializeInstanceWithDetails(eventId, startTime, displayCalendarId);
   }
 
   async listCategoriesForCalendar(

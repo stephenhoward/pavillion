@@ -1326,7 +1326,17 @@ class EventService {
     }
   }
 
-  async getEventById(eventId: string): Promise<CalendarEvent> {
+  /**
+   * Look up an event by id, eagerly loading content/location/schedules/media/series.
+   *
+   * @param eventId - The event id to fetch
+   * @param displayCalendarId - Optional display calendar id. When provided,
+   *   categories are filtered to assignments on that calendar so reposted
+   *   events display the reposting calendar's category mappings rather than
+   *   the originating calendar's. The public detail handler resolves this
+   *   from the `?calendar=urlName` query param.
+   */
+  async getEventById(eventId: string, displayCalendarId?: string): Promise<CalendarEvent> {
     // Validate eventId parameter
     if (!eventId || (typeof eventId === 'string' && eventId.trim() === '')) {
       throw new ValidationError('eventId is required');
@@ -1366,7 +1376,7 @@ class EventService {
       e.media = event.media.toModel();
     }
 
-    e.categories = await this.categoryService.getEventCategories(event.id);
+    e.categories = await this.categoryService.getEventCategories(event.id, displayCalendarId);
 
     return e;
   }

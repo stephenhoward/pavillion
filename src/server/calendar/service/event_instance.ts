@@ -524,9 +524,17 @@ export default class EventInstanceService {
    * Schedules are stripped at the public API boundary (see toPublicEventObject)
    * so they never reach the wire — populating them here is safe for both
    * internal consumers and the public detail page.
+   *
+   * @param displayCalendarId - Optional. When the caller knows the display
+   *   calendar (e.g. the public detail handler resolved it from a `?calendar=`
+   *   query param), pass its id so reposted events show that calendar's
+   *   category mappings. Under the single-producer model the row's
+   *   `calendar_id` is always the originating calendar, so without an explicit
+   *   override repost categories on the display calendar are filtered out.
    */
   private async hydrateInstanceEntity(
     eventInstance: EventInstanceEntity,
+    displayCalendarId?: string,
   ): Promise<CalendarEventInstance> {
     const instance = eventInstance.toModel();
     const event = eventInstance.event;
@@ -542,17 +550,19 @@ export default class EventInstanceService {
       instance.event.location = event.location.toModel();
     }
 
-    // Populate categories via the category service, filtered to the display calendar
-    // so reposted events only show the display calendar's categories
+    // Populate categories via the category service, filtered to the display
+    // calendar so reposted events only show the display calendar's categories.
+    // Caller-supplied displayCalendarId wins; otherwise fall back to the row's
+    // calendar_id (the originating calendar under the single-producer model).
     instance.event.categories = await this.categoryService.getEventCategories(
       instance.event.id,
-      eventInstance.calendar_id,
+      displayCalendarId ?? eventInstance.calendar_id,
     );
 
     // Resolve source calendar information for reposted events
     const repostContext: RepostContext = {
       event: instance.event,
-      displayCalendarId: eventInstance.calendar_id,
+      displayCalendarId: displayCalendarId ?? eventInstance.calendar_id,
       eventCalendarId: eventInstance.event?.calendar_id ?? null,
       sourceCalendarUrlName: eventInstance.event?.calendar?.url_name,
     };
@@ -642,11 +652,16 @@ export default class EventInstanceService {
    *
    * @param eventId - The owning event ID
    * @param startTime - Occurrence start datetime (minute precision)
+   * @param displayCalendarId - Optional display calendar id (e.g. resolved from
+   *   a `?calendar=urlName` query param). Forwarded to hydration so reposted
+   *   events show category mappings on the display calendar rather than the
+   *   originating calendar.
    * @returns Hydrated CalendarEventInstance or null if not found / invalid
    */
   async findOrMaterializeInstanceWithDetails(
     eventId: string,
     startTime: DateTime,
+    displayCalendarId?: string,
   ): Promise<CalendarEventInstance | null> {
     const startMs = startTime.toUTC().toMillis();
     const startDate = new Date(startMs);
@@ -670,7 +685,7 @@ export default class EventInstanceService {
       // Short-circuit: do not re-validate against the RRuleSet. Materialized
       // rows are authoritative; a subsequent schedule edit that would now
       // reject this date does not invalidate a pre-existing bookmark.
-      return this.hydrateInstanceEntity(cached);
+      return this.hydrateInstanceEntity(cached, displayCalendarId);
     }
 
     // 2. Load the event with BOTH schedules and the detail-page associations
@@ -721,7 +736,7 @@ export default class EventInstanceService {
       }
       // Shown cancellation: build a transient in-memory instance directly
       // from the already-loaded eventEntity. No second fetch, no persistence.
-      return this.buildTransientCancelledInstance(eventEntity, startTime);
+      return this.buildTransientCancelledInstance(eventEntity, startTime, displayCalendarId);
     }
 
     // 6. Materialization cap.
@@ -774,7 +789,7 @@ export default class EventInstanceService {
       }],
     });
     if (!persisted) return null;
-    return this.hydrateInstanceEntity(persisted);
+    return this.hydrateInstanceEntity(persisted, displayCalendarId);
   }
 
   /**
@@ -808,6 +823,7 @@ export default class EventInstanceService {
   private async buildTransientCancelledInstance(
     eventEntity: EventEntity,
     startTime: DateTime,
+    displayCalendarId?: string,
   ): Promise<CalendarEventInstance> {
     const eventModel = eventEntity.toModel();
     const scheduleEntities = (eventEntity.getDataValue('schedules') ?? []) as EventScheduleEntity[];
@@ -817,7 +833,7 @@ export default class EventInstanceService {
     }
     eventModel.categories = await this.categoryService.getEventCategories(
       eventModel.id,
-      eventEntity.calendar_id,
+      displayCalendarId ?? eventEntity.calendar_id,
     );
 
     const endTime = this.computeOccurrenceEndTime(eventModel, startTime);
@@ -831,7 +847,7 @@ export default class EventInstanceService {
 
     const repostContext: RepostContext = {
       event: instance.event,
-      displayCalendarId: eventEntity.calendar_id,
+      displayCalendarId: displayCalendarId ?? eventEntity.calendar_id,
       eventCalendarId: eventEntity.calendar_id ?? null,
       sourceCalendarUrlName: eventEntity.calendar?.url_name,
     };

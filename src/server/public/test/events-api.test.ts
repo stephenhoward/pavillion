@@ -418,6 +418,42 @@ describe('Public API - toPublicEventObject shape contract', () => {
       });
       assertMediaProjection(response.body.media);
     });
+
+    it('forwards ?calendar=<urlName> as displayCalendarId so reposted-event categories scope to the display calendar', async () => {
+      const displayCalendar = new Calendar('display-cal-id', 'mitown');
+      const event = new CalendarEvent('event-1', 'source-cal-id');
+      event.schedules = [];
+
+      const calendarStub = apiSandbox.stub(publicInterface, 'getCalendarByName').resolves(displayCalendar);
+      const eventStub = apiSandbox.stub(publicInterface, 'getEventById').resolves(event);
+
+      router.get('/handler/:id', (req, res) => {
+        routes.getEvent(req, res);
+      });
+
+      const response = await request(testApp(router)).get('/handler/event-1?calendar=mitown');
+
+      expect(response.status).toBe(200);
+      expect(calendarStub.calledOnceWith('mitown')).toBe(true);
+      expect(eventStub.calledOnceWith('event-1', 'display-cal-id')).toBe(true);
+    });
+
+    it('silently ignores an unknown ?calendar=<urlName> and falls back to default category scoping', async () => {
+      const event = new CalendarEvent('event-1', 'source-cal-id');
+      event.schedules = [];
+
+      apiSandbox.stub(publicInterface, 'getCalendarByName').resolves(null);
+      const eventStub = apiSandbox.stub(publicInterface, 'getEventById').resolves(event);
+
+      router.get('/handler/:id', (req, res) => {
+        routes.getEvent(req, res);
+      });
+
+      const response = await request(testApp(router)).get('/handler/event-1?calendar=ghost');
+
+      expect(response.status).toBe(200);
+      expect(eventStub.calledOnceWith('event-1', undefined)).toBe(true);
+    });
   });
 
   describe('getEventInstance', () => {
@@ -537,6 +573,30 @@ describe('Public API - toPublicEventObject shape contract', () => {
       expect(eventIdArg).toBe(EVENT_UUID);
       // Slug 20260508-1800 = UTC 2026-05-08T18:00Z
       expect(startArg.toUTC().toISO()).toBe('2026-05-08T18:00:00.000Z');
+    });
+
+    it('forwards ?calendar=<urlName> as displayCalendarId for reposted-event category scoping', async () => {
+      const displayCalendar = new Calendar('display-cal-id', 'mitown');
+      const event = new CalendarEvent('event-1', 'source-cal-id');
+      event.schedules = [];
+      const instance = new CalendarEventInstance('inst-1', event, DateTime.utc(2026, 5, 8, 18, 0), null);
+
+      const calendarStub = apiSandbox.stub(publicInterface, 'getCalendarByName').resolves(displayCalendar);
+      const stub = apiSandbox.stub(publicInterface, 'findOrMaterializeInstanceWithDetails').resolves(instance);
+
+      router.get('/handler/:eventId/:startTime', (req, res) => {
+        routes.getEventInstance(req, res);
+      });
+
+      const response = await request(testApp(router))
+        .get(`/handler/${EVENT_UUID}/${VALID_SLUG}?calendar=mitown`);
+
+      expect(response.status).toBe(200);
+      expect(calendarStub.calledOnceWith('mitown')).toBe(true);
+      expect(stub.calledOnce).toBe(true);
+      const [eventIdArg, _startArg, displayCalendarIdArg] = stub.firstCall.args;
+      expect(eventIdArg).toBe(EVENT_UUID);
+      expect(displayCalendarIdArg).toBe('display-cal-id');
     });
   });
 
