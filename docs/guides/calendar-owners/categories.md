@@ -31,7 +31,7 @@ Once a category exists, it shows up in two places:
 
 To rename or retranslate a category, click the pencil icon on its row in the list. To delete one, click the trash icon — the dialog asks whether to remove the category from its events (the events stay, they just lose that category) or migrate those events to a different category in one move. There's also a multi-select on the list itself for merging two or more categories into one when you decide they were a single thing all along.
 
-## Designing your vocabulary
+## Designing the list
 
 A short, durable list works better than a long, descriptive one. Three reasons:
 
@@ -43,39 +43,19 @@ A short, durable list works better than a long, descriptive one. Three reasons:
 
 A useful starting point is five to ten categories that cover the general shape of what you publish. *Music*, *Workshop*, *Community gathering*, *Volunteer*, *Talk*, *Family-friendly*, *Online* — you'll know your community's actual buckets better than any generic list. The point is the *count*, not the exact words.
 
-::: tip <Lightbulb /> A note on overlap.
-Events can carry more than one category. A workshop that's also a fundraiser doesn't need a *Workshop fundraisers* category — it can be tagged *Workshop* and *Fundraiser* both. When you find yourself wanting to combine two existing categories into a compound one, the answer is almost always "use both, separately."
-:::
+## When you're tempted to add a category
 
-## When to add a new category vs. extend an existing one
+A new event arrives that doesn't *quite* fit any existing category, and the impulse is to add a new one. Before you do, ask whether what you're trying to flag really is a category at all — most of the time the impulse is pointing at something that belongs in a different tool.
 
-Most calendars eventually face this judgment call: a new event arrives that doesn't *quite* fit any existing category. Something has to give.
+**Is this a detail of this one event?** The name of the band, the topic of the talk, the cuisine at the potluck — those are details of *this* event. They belong in the event's title or description, where they're searchable and where visitors actually read them. A category is for the *kind of thing* the event is, not for the specifics of what's happening at it.
 
-Three questions to ask, in order:
+**Is this a program of distinct events?** A summer concert series with a different artist each week, a fall lecture series with rotating speakers, a recurring book club where the topic changes each session — these are programs with several distinct events under them. The right tool is a series, which groups related events under one program name. Adding *Summer Concert Series* as a category just to find this year's events again creates a label that goes stale by definition.
 
-**Will this category have at least three or four events on it within the next year?** If yes, it's a real category. If no — if it's the one outdoor film screening you're hosting in August — don't make a category for it. Use an existing close-fit category and put the specifics in the event title and description. A category with one event on it does no work for visitors and drifts toward becoming dead weight.
+**Could the event carry two existing categories instead of one new one?** Events can carry more than one category. A workshop that's also a fundraiser doesn't need a *Workshop fundraisers* category — tag it *Workshop* and *Fundraiser* both. When you find yourself wanting to combine two existing categories into a compound one, the answer is usually to use them both, separately.
 
-**Will visitors filter for it?** *Concerts* is a category visitors filter for. *Tuesday-evening events* is not — visitors are not browsing your calendar by weekday. Categories that don't help a visitor find what they're looking for are using up filter-row space without earning it.
+If the event genuinely belongs in none of those, a new category may be the right move. One last practical check: will it have at least three or four events on it within the next year, and will visitors filter for it? A category with one event does no work for visitors and drifts toward becoming dead weight; a category nobody filters for ("Tuesday-evening events," "2026 season") uses up filter-row space without earning it.
 
-**Could the existing category absorb it without losing meaning?** If the new event is "a slightly different kind of workshop," and your *Workshop* category is broad enough to include it, the answer is to use *Workshop*. If it's a kind of thing that genuinely doesn't belong under any current label — a *Performance* in a calendar that previously only ran *Talks* and *Workshops* — that's when a new category earns its place.
-
-The bias should be toward fewer categories rather than more. It's easier to split a category later (one busy *Workshop* category becomes *Workshop* and *Class*) than to consolidate ten thin ones back down.
-
-## Why no free-form tags
-
-Pavillion doesn't have free-form tags — the kind of label where every event can have its own list of words and phrases attached. That's deliberate.
-
-Tags drift. *Live music*, *live-music*, *livemusic*, *concert*, *concerts*, and *gig* all describe the same thing, and on a tag-based system they all coexist as separate labels. Visitors filtering by *concerts* miss the events tagged *gig*. Search-by-tag becomes unreliable. Other calendars trying to repost your events get a different vocabulary on every event.
-
-Categories trade flexibility for shared meaning. The list is short, the names are stable, the same word means the same thing across every event on the calendar — and across the federated network when other calendars are deciding which of your events match theirs. That predictability is what makes filtering and matching work.
-
-If you find yourself reaching for a tag, there are usually two better tools:
-
-**Use the event title and description.** Specifics that apply to *this event* — the name of the band, the topic of the talk, the cuisine at the potluck — belong in the event itself. They're searchable in the description. They show up in the title where visitors actually read them. They don't need to live as a label.
-
-**Use a series.** A run of events that share an identity — a summer concert series, a fall lecture series, a recurring book club — is what a series is for. The series name groups related events on the public page without needing a category for each one.
-
-Between titles, descriptions, categories, and series, almost every reach-for-a-tag impulse turns out to belong somewhere else.
+The bias should be toward fewer categories rather than more. It's easier to split a busy *Workshop* category into *Workshop* and *Class* later than to consolidate ten thin ones back down.
 
 ## The cost of churning category names later
 
