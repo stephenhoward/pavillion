@@ -59,11 +59,15 @@ export default class JobQueueService {
       return 'postgres://test:test@localhost:5432/test';
     }
 
-    const user = dbConfig.user || dbConfig.username || 'postgres';
-    const password = dbConfig.password || '';
+    // URL-encode credentials and database name so URL-special characters
+    // (e.g. @ : / ? # %) in a password don't produce a malformed connection
+    // string. pg-connection-string.parse() throws on invalid URLs, which
+    // crashes pg-boss start in worker mode.
+    const user = encodeURIComponent(dbConfig.user || dbConfig.username || 'postgres');
+    const password = encodeURIComponent(dbConfig.password || '');
     const host = dbConfig.host || 'localhost';
     const port = dbConfig.port || 5432;
-    const database = dbConfig.database || 'pavillion';
+    const database = encodeURIComponent(dbConfig.database || 'pavillion');
 
     return `postgres://${user}:${password}@${host}:${port}/${database}`;
   }

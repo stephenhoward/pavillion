@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { parse as parseConnectionString } from 'pg-connection-string';
 import JobQueueService from '@/server/housekeeping/service/job-queue';
 import PgBoss from 'pg-boss';
 
@@ -65,6 +66,28 @@ describe('JobQueueService', () => {
 
       expect(PgBoss.prototype.start).toHaveBeenCalledTimes(2);
       expect(PgBoss.prototype.stop).toHaveBeenCalledTimes(1);
+    });
+
+    it('passes a connection string parseable by pg-connection-string when the password contains URL-special chars', async () => {
+      const tricky = new JobQueueService({
+        host: 'db',
+        port: 5432,
+        database: 'pavillion',
+        user: 'pavillion',
+        password: 'p@ss/word#1?two[three]',
+      });
+      await tricky.start();
+
+      const cs = (PgBoss as unknown as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0] as string;
+      expect(typeof cs).toBe('string');
+
+      // The whole point: this must not throw on a password full of URL-special chars.
+      const parsed = parseConnectionString(cs);
+      expect(parsed.user).toBe('pavillion');
+      expect(parsed.password).toBe('p@ss/word#1?two[three]');
+      expect(parsed.host).toBe('db');
+      expect(parsed.port).toBe('5432');
+      expect(parsed.database).toBe('pavillion');
     });
   });
 
