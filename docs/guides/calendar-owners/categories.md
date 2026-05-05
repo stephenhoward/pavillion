@@ -38,7 +38,7 @@ A short, durable list works better than a long, descriptive one. Three reasons:
 
 **Visitors scan the filter row.** A list of six categories is a row people read in a glance. A list of thirty is a wall of text — and most filter rows on most pages get scrolled or wrapped, so the categories at the end might as well not be there.
 
-**Tagging shouldn't be a fresh decision every time.** Each event you publish, you pick its categories from your list. If the list is too granular ("Acoustic Folk Concert," "Indie Rock Concert," "Open Mic Night") that pick becomes a small decision every time — and different editors will make those calls differently, so the same kind of event ends up under different labels. A coarser list ("Concerts," "Open Mic") makes the choice automatic and keeps tagging consistent across the calendar.
+**Tagging shouldn't be a fresh decision every time.** Each event you publish, you pick its categories from your list. If the list is too granular ("Acoustic Folk Concert," "Indie Rock Concert," "Open Mic Night") that pick becomes a small decision every time — and different editors will make those calls differently, so the same kind of event ends up under different labels. A coarser category ("Music") absorbs all three, makes the choice automatic, and keeps tagging consistent across the calendar.
 
 **Other calendars are matching against your category names, not your event titles.** A specific event title can carry the detail. The category name is the bucket. Reach for the name that *most* events of that kind would still want to wear a year from now.
 
