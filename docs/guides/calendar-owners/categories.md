@@ -14,7 +14,7 @@ Three jobs:
 
 **Give other calendars something to match against.** When another calendar reposts an event from yours, their categories rarely line up with yours one-to-one — your *Concerts* might be their *Live Music*, your *Workshops* might be their *Classes*. Category names are the signal each calendar uses to translate between vocabularies. Stable, recognizable category names mean other calendars can route your events to the right place on theirs without you (or them) doing it by hand every time.
 
-Categories don't appear in the event title or description. They're metadata — sorting, navigation, and matching information — not part of the event copy.
+Categories don't appear in the event title or description. They're metadata — sorting, navigation, and matching information — not part of the event copy. They're also not strictly required; an event with no categories will still publish. But it won't show up when visitors filter, won't appear under "more like this" on a related event, and won't have anything for other calendars to match against — which is enough reason to tag every event.
 
 ## Create a category
 
@@ -37,7 +37,7 @@ A short, durable list works better than a long, descriptive one. Three reasons:
 
 **Visitors scan the filter row.** A list of six categories is a row people read in a glance. A list of thirty is a wall of text — and most filter rows on most pages get scrolled or wrapped, so the categories at the end might as well not be there.
 
-**Each event needs at least one category.** That's a rule the editor enforces. If your vocabulary is too granular ("Acoustic Folk Concert," "Indie Rock Concert," "Open Mic Night") you'll spend more time deciding which one each event is than the visitor will spend reading them all. A coarser list ("Concerts," "Open Mic") makes the choice automatic.
+**Tagging shouldn't be a fresh decision every time.** Each event you publish, you pick its categories from your list. If the list is too granular ("Acoustic Folk Concert," "Indie Rock Concert," "Open Mic Night") that pick becomes a small decision every time — and different editors will make those calls differently, so the same kind of event ends up under different labels. A coarser list ("Concerts," "Open Mic") makes the choice automatic and keeps tagging consistent across the calendar.
 
 **Other calendars are matching against your category names, not your event titles.** A specific event title can carry the detail. The category name is the bucket. Reach for the name that *most* events of that kind would still want to wear a year from now.
 
