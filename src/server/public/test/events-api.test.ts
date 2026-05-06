@@ -7,6 +7,7 @@ import { DateTime } from 'luxon';
 
 import { Calendar } from '@/common/model/calendar';
 import { CalendarEvent, CalendarEventSchedule, EventFrequency } from '@/common/model/events';
+import { EventNotFoundError } from '@/common/exceptions/calendar';
 import CalendarEventInstance from '@/common/model/event_instance';
 import { EventSeries } from '@/common/model/event_series';
 import { EventSeriesContent } from '@/common/model/event_series_content';
@@ -426,6 +427,8 @@ describe('Public API - toPublicEventObject shape contract', () => {
   });
 
   describe('getEvent', () => {
+    const EVENT_UUID = '11111111-1111-4111-8111-111111111111';
+
     it('strips schedules[], projects media, and computes recurrenceSummary', async () => {
       const event = makeRecurringEventWithMedia();
       apiSandbox.stub(publicInterface, 'getEventById').resolves(event);
@@ -434,7 +437,7 @@ describe('Public API - toPublicEventObject shape contract', () => {
         routes.getEvent(req, res);
       });
 
-      const response = await request(testApp(router)).get('/handler/event-1');
+      const response = await request(testApp(router)).get(`/handler/${EVENT_UUID}`);
 
       expect(response.status).toBe(200);
       assertPublicEventShape(response.body);
@@ -448,7 +451,7 @@ describe('Public API - toPublicEventObject shape contract', () => {
 
     it('forwards ?calendar=<urlName> as displayCalendarId so reposted-event categories scope to the display calendar', async () => {
       const displayCalendar = new Calendar('display-cal-id', 'mitown');
-      const event = new CalendarEvent('event-1', 'source-cal-id');
+      const event = new CalendarEvent(EVENT_UUID, 'source-cal-id');
       event.schedules = [];
 
       const calendarStub = apiSandbox.stub(publicInterface, 'getCalendarByName').resolves(displayCalendar);
@@ -458,15 +461,15 @@ describe('Public API - toPublicEventObject shape contract', () => {
         routes.getEvent(req, res);
       });
 
-      const response = await request(testApp(router)).get('/handler/event-1?calendar=mitown');
+      const response = await request(testApp(router)).get(`/handler/${EVENT_UUID}?calendar=mitown`);
 
       expect(response.status).toBe(200);
       expect(calendarStub.calledOnceWith('mitown')).toBe(true);
-      expect(eventStub.calledOnceWith('event-1', 'display-cal-id')).toBe(true);
+      expect(eventStub.calledOnceWith(EVENT_UUID, 'display-cal-id')).toBe(true);
     });
 
     it('silently ignores an unknown ?calendar=<urlName> and falls back to default category scoping', async () => {
-      const event = new CalendarEvent('event-1', 'source-cal-id');
+      const event = new CalendarEvent(EVENT_UUID, 'source-cal-id');
       event.schedules = [];
 
       apiSandbox.stub(publicInterface, 'getCalendarByName').resolves(null);
@@ -476,10 +479,47 @@ describe('Public API - toPublicEventObject shape contract', () => {
         routes.getEvent(req, res);
       });
 
-      const response = await request(testApp(router)).get('/handler/event-1?calendar=ghost');
+      const response = await request(testApp(router)).get(`/handler/${EVENT_UUID}?calendar=ghost`);
 
       expect(response.status).toBe(200);
-      expect(eventStub.calledOnceWith('event-1', undefined)).toBe(true);
+      expect(eventStub.calledOnceWith(EVENT_UUID, undefined)).toBe(true);
+    });
+
+    // Regression for pv-vvei: a request for an unknown event id used to crash
+    // the backend because the handler did not catch EventNotFoundError thrown
+    // by the service. The handler now translates that throw into a clean 404.
+    it('returns 404 with EventNotFoundError when the service throws for an unknown id', async () => {
+      apiSandbox.stub(publicInterface, 'getEventById').rejects(
+        new EventNotFoundError(EVENT_UUID),
+      );
+
+      router.get('/handler/:id', (req, res) => {
+        routes.getEvent(req, res);
+      });
+
+      const response = await request(testApp(router)).get(`/handler/${EVENT_UUID}`);
+
+      expect(response.status).toBe(404);
+      expect(response.body.errorName).toBe('EventNotFoundError');
+    });
+
+    // Defense-in-depth UUID validation matching the getEventInstance handler:
+    // a malformed/path-traversal id must be rejected before the service is
+    // called. 404 (not 400) so format recognition cannot be probed.
+    it('returns 404 for a non-UUID id without calling the service', async () => {
+      const eventStub = apiSandbox.stub(publicInterface, 'getEventById').resolves(
+        new CalendarEvent('unused', 'unused'),
+      );
+
+      router.get('/handler/:id', (req, res) => {
+        routes.getEvent(req, res);
+      });
+
+      const response = await request(testApp(router)).get('/handler/not-a-uuid');
+
+      expect(response.status).toBe(404);
+      expect(response.body.errorName).toBe('EventNotFoundError');
+      expect(eventStub.called).toBe(false);
     });
   });
 
@@ -673,8 +713,10 @@ describe('Public API - toPublicEventObject shape contract', () => {
    * listInstances, getEventInstance, and getSeries.
    */
   describe('space projection (pv-ix7v.3.4)', () => {
+    const SPACE_PROJ_EVENT_UUID = '22222222-2222-4222-8222-222222222222';
+
     it('getEvent: returns space as { content } when an event has a Space', async () => {
-      const event = new CalendarEvent('event-1', 'cal-id');
+      const event = new CalendarEvent(SPACE_PROJ_EVENT_UUID, 'cal-id');
       event.schedules = [];
       event.space = makeSpace();
 
@@ -684,14 +726,14 @@ describe('Public API - toPublicEventObject shape contract', () => {
         routes.getEvent(req, res);
       });
 
-      const response = await request(testApp(router)).get('/handler/event-1');
+      const response = await request(testApp(router)).get(`/handler/${SPACE_PROJ_EVENT_UUID}`);
 
       expect(response.status).toBe(200);
       assertSpaceProjection(response.body.space);
     });
 
     it('getEvent: returns space === null when an event has no Space', async () => {
-      const event = new CalendarEvent('event-1', 'cal-id');
+      const event = new CalendarEvent(SPACE_PROJ_EVENT_UUID, 'cal-id');
       event.schedules = [];
       // event.space defaults to null
 
@@ -701,7 +743,7 @@ describe('Public API - toPublicEventObject shape contract', () => {
         routes.getEvent(req, res);
       });
 
-      const response = await request(testApp(router)).get('/handler/event-1');
+      const response = await request(testApp(router)).get(`/handler/${SPACE_PROJ_EVENT_UUID}`);
 
       expect(response.status).toBe(200);
       expect(response.body).toHaveProperty('space');
@@ -709,7 +751,7 @@ describe('Public API - toPublicEventObject shape contract', () => {
     });
 
     it('getEvent: leaves the existing `location` shape unchanged (additive guarantee)', async () => {
-      const event = new CalendarEvent('event-1', 'cal-id');
+      const event = new CalendarEvent(SPACE_PROJ_EVENT_UUID, 'cal-id');
       event.schedules = [];
       event.location = new EventLocation(
         'loc-1',
@@ -728,7 +770,7 @@ describe('Public API - toPublicEventObject shape contract', () => {
         routes.getEvent(req, res);
       });
 
-      const response = await request(testApp(router)).get('/handler/event-1');
+      const response = await request(testApp(router)).get(`/handler/${SPACE_PROJ_EVENT_UUID}`);
 
       expect(response.status).toBe(200);
       // location must retain its full existing shape — adding `space`

@@ -54,6 +54,36 @@ const location = computed(() => {
 });
 
 /**
+ * Returns the localized name of the Space (sub-area within a Place), or empty
+ * string when no Space is attached to the event.
+ */
+const spaceName = computed(() => {
+  const space = props.instance?.event?.space;
+  if (!space || typeof space.hasContent !== 'function') {
+    return '';
+  }
+  try {
+    const content = localizedContent(space);
+    return content?.name ?? '';
+  }
+  catch {
+    return '';
+  }
+});
+
+/**
+ * Display label for the card location line. Renders "Place — Space" via the
+ * shared i18n format key when a Space is present; otherwise the Place name alone.
+ */
+const locationDisplayName = computed(() => {
+  const placeName = location.value?.name ?? '';
+  if (spaceName.value) {
+    return t('place.format.with_space', { place: placeName, space: spaceName.value });
+  }
+  return placeName;
+});
+
+/**
  * Returns the event description from localized content.
  */
 const description = computed(() => {
@@ -232,7 +262,7 @@ const detailPath = computed(() => {
           :size="16"
           aria-hidden="true"
         />
-        {{ location.name }}
+        {{ locationDisplayName }}
       </p>
       <p
         v-if="description"

@@ -189,7 +189,14 @@ export default class EventInstanceService {
       where: { event_id: { [Op.in]: visibleEventIds } },
       include: [{
         model: EventEntity,
-        include: [EventContentEntity, LocationEntity, EventScheduleEntity, MediaEntity, CalendarEntity],
+        include: [
+          EventContentEntity,
+          LocationEntity,
+          { model: LocationSpaceEntity, include: [LocationSpaceContentEntity] },
+          EventScheduleEntity,
+          MediaEntity,
+          CalendarEntity,
+        ],
       }],
     });
 
@@ -230,6 +237,7 @@ export default class EventInstanceService {
         include: [
           EventContentEntity,
           LocationEntity,
+          { model: LocationSpaceEntity, include: [LocationSpaceContentEntity] },
           EventScheduleEntity,
           MediaEntity,
           { model: EventSeriesEntity, include: [EventSeriesContentEntity] },
@@ -290,6 +298,7 @@ export default class EventInstanceService {
           },
           include: [
             LocationEntity,
+            { model: LocationSpaceEntity, include: [LocationSpaceContentEntity] },
             MediaEntity,
             CalendarEntity,
             // Schedules are required to mark shown-cancellation instances in-memory.

@@ -396,10 +396,19 @@ defineExpose({ close, sheetRef });
   cursor: pointer;
   transition: all 0.15s ease;
 
-  // Indent Space entries so they nest visually under their parent Place.
-  // Logical property keeps the indent on the inline-start side in RTL too.
+  // Indent and shrink Space entries so they read as children of the Place
+  // entry above. Margin (not padding) moves the box itself; a subtle
+  // accent border on the inline-start edge provides a tree-connector cue
+  // so the Place / Space hierarchy is unambiguous even on a 1-Space Place.
+  // Logical properties keep the indent + connector on the inline-start
+  // side under RTL.
   &.is-space-entry {
-    padding-inline-start: 2.5rem;
+    margin-inline-start: 1.5rem;
+    border-inline-start: 3px solid var(--pav-color-stone-300);
+
+    @media (prefers-color-scheme: dark) {
+      border-inline-start-color: var(--pav-color-stone-500);
+    }
   }
 
   &:hover {

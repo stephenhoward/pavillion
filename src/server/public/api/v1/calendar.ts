@@ -1,6 +1,7 @@
 import express, { Request, Response, Application } from 'express';
 import PublicCalendarInterface from '../../interface';
 import { SeriesNotFoundError } from '@/common/exceptions/series';
+import { EventNotFoundError } from '@/common/exceptions/calendar';
 import { logError } from '@/server/common/helper/error-logger';
 import { CalendarEventSchedule } from '@/common/model/events';
 import CalendarEventInstance from '@/common/model/event_instance';
@@ -426,19 +427,38 @@ export default class CalendarRoutes {
   async getEvent(req: Request, res: Response) {
     const eventId = req.params.id;
 
-    // Optional `?calendar=<urlName>` scopes category mappings to the display
-    // calendar. Without this, reposted events would expose the originating
-    // calendar's categories instead of the calendar the visitor is viewing.
-    const displayCalendarId = await this.resolveDisplayCalendarId(req.query.calendar);
-
-    const event = await this.service.getEventById(eventId, displayCalendarId);
-    if ( event ) {
-      res.json(toPublicEventObject(event.toObject()));
-    }
-    else {
+    // UUID validation on :id — reject malformed/path-traversal attempts before
+    // any service call. Responds 404 (not 400) to avoid leaking whether a
+    // particular id format is recognized versus valid-but-unknown.
+    if (!ExpressHelper.isValidUUID(eventId)) {
       res.status(404).json({
         "error": "event not found",
         errorName: 'EventNotFoundError',
+      });
+      return;
+    }
+
+    try {
+      // Optional `?calendar=<urlName>` scopes category mappings to the display
+      // calendar. Without this, reposted events would expose the originating
+      // calendar's categories instead of the calendar the visitor is viewing.
+      const displayCalendarId = await this.resolveDisplayCalendarId(req.query.calendar);
+
+      // getEventById throws EventNotFoundError for unknown ids — catch below.
+      const event = await this.service.getEventById(eventId, displayCalendarId);
+      res.json(toPublicEventObject(event.toObject()));
+    }
+    catch (error) {
+      if (error instanceof EventNotFoundError) {
+        res.status(404).json({
+          "error": "event not found",
+          errorName: 'EventNotFoundError',
+        });
+        return;
+      }
+      logError(error, 'Error in getEvent');
+      res.status(500).json({
+        "error": "Failed to retrieve event",
       });
     }
   }

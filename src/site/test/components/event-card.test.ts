@@ -30,6 +30,7 @@ import { EventCategory } from '@/common/model/event_category';
 import { EventCategoryContent } from '@/common/model/event_category_content';
 import { CalendarEvent } from '@/common/model/events';
 import CalendarEventInstance from '@/common/model/event_instance';
+import { EventLocationSpace, EventLocationSpaceContent } from '@/common/model/location';
 
 // ---------------------------------------------------------------------------
 // Mocks — declared before component import
@@ -75,6 +76,7 @@ function makeEvent(overrides: Record<string, any> = {}): CalendarEvent {
     hasContent: (_lang: string) => true,
     getLanguages: () => ['en'],
     location: overrides.location ?? null,
+    space: overrides.space ?? null,
     media: overrides.media ?? null,
     mediaFocalPointX: overrides.mediaFocalPointX ?? 0.5,
     mediaFocalPointY: overrides.mediaFocalPointY ?? 0.5,
@@ -86,6 +88,16 @@ function makeEvent(overrides: Record<string, any> = {}): CalendarEvent {
     series: null,
   };
   return event as unknown as CalendarEvent;
+}
+
+/**
+ * Build a Space (EventLocationSpace) with a single English content entry so
+ * the locationDisplayName computed on the card renders "Place — Space".
+ */
+function makeSpace(name: string): EventLocationSpace {
+  const space = new EventLocationSpace('space-1', 'place-1');
+  space.addContent(new EventLocationSpaceContent('en', name, ''));
+  return space;
 }
 
 /**
@@ -160,30 +172,30 @@ async function mountEventCard(
 // ---------------------------------------------------------------------------
 
 beforeAll(async () => {
+  const systemBundle = {
+    event_recurring: 'Recurring Event',
+    event_location: 'Location',
+    event_source_calendar: 'Source Calendar',
+    event_source_calendar_label: 'View source calendar {{name}}',
+    event_cancelled: 'Cancelled',
+    place: {
+      format: {
+        with_space: '{{place}} — {{space}}',
+      },
+    },
+  };
   if (!i18next.isInitialized) {
     await i18next.init({
       lng: 'en',
       resources: {
         en: {
-          system: {
-            event_recurring: 'Recurring Event',
-            event_location: 'Location',
-            event_source_calendar: 'Source Calendar',
-            event_source_calendar_label: 'View source calendar {{name}}',
-            event_cancelled: 'Cancelled',
-          },
+          system: systemBundle,
         },
       },
     });
   }
   else {
-    i18next.addResourceBundle('en', 'system', {
-      event_recurring: 'Recurring Event',
-      event_location: 'Location',
-      event_source_calendar: 'Source Calendar',
-      event_source_calendar_label: 'View source calendar {{name}}',
-      event_cancelled: 'Cancelled',
-    }, true, true);
+    i18next.addResourceBundle('en', 'system', systemBundle, true, true);
   }
 });
 
@@ -302,6 +314,39 @@ describe('EventCard', () => {
       const wrapper = await mountEventCard(instance);
 
       expect(wrapper.find('.event-location').exists()).toBe(false);
+      wrapper.unmount();
+    });
+
+    // Regression for pv-vvei: when an event is scoped to a Place + Space,
+    // the card must render "Place — Space", not just the Place name. The
+    // detail page already used this format via a `locationDisplayName`
+    // computed; the card was missing the same logic.
+    it('should render "Place — Space" when the event has a Space', async () => {
+      const event = makeEvent({
+        location: { name: 'Library Annex', address: '', city: '', state: '', postalCode: '', country: '' },
+        space: makeSpace('Reading Room'),
+      });
+      const instance = makeInstance(event, '2026-07-15T19:00:00');
+      const wrapper = await mountEventCard(instance);
+
+      const locationEl = wrapper.find('.event-location');
+      expect(locationEl.exists()).toBe(true);
+      expect(locationEl.text()).toContain('Library Annex — Reading Room');
+      wrapper.unmount();
+    });
+
+    it('should render only the Place name when there is no Space (whole-venue)', async () => {
+      const event = makeEvent({
+        location: { name: 'Park Pavilion', address: '', city: '', state: '', postalCode: '', country: '' },
+        space: null,
+      });
+      const instance = makeInstance(event, '2026-07-15T19:00:00');
+      const wrapper = await mountEventCard(instance);
+
+      const locationEl = wrapper.find('.event-location');
+      expect(locationEl.exists()).toBe(true);
+      expect(locationEl.text()).toContain('Park Pavilion');
+      expect(locationEl.text()).not.toContain('—');
       wrapper.unmount();
     });
   });

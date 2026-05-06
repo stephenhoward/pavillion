@@ -1,11 +1,14 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { EventEmitter } from 'events';
 
+import { v4 as uuidv4 } from 'uuid';
+
 import { Account } from '@/common/model/account';
 import { Calendar } from '@/common/model/calendar';
 import { CalendarEvent } from '@/common/model/events';
 import { EventLocation, EventLocationContent, EventLocationSpace } from '@/common/model/location';
 import CalendarInterface from '@/server/calendar/interface';
+import { EventInstanceEntity } from '@/server/calendar/entity/event_instance';
 import { TestEnvironment } from '@/server/common/test/lib/test_environment';
 import AccountService from '@/server/accounts/service/account';
 import ConfigurationInterface from '@/server/configuration/interface';
@@ -434,5 +437,121 @@ describe('EventService - Space persistence integration', () => {
         }),
       ).rejects.toThrow(SpaceLocationMismatchError);
     });
+  });
+});
+
+/**
+ * Regression for pv-vvei: the public-listing endpoints
+ * (`listEventInstancesForCalendar`, `listEventInstancesWithFilters`, and
+ * `getEventInstanceById`) must eager-load `LocationSpaceEntity` so listed
+ * events render the Space name on the public site card. Before the fix,
+ * only the single-event detail path included the Space, and listing
+ * responses returned `space: null` for every Space-scoped event.
+ */
+describe('EventInstanceService - Space eager-loading on listing endpoints', () => {
+  let env: TestEnvironment;
+  let calendarInterface: CalendarInterface;
+  let testAccount: Account;
+  let testCalendar: Calendar;
+  let testLocation: EventLocation;
+  let testSpace: EventLocationSpace;
+
+  beforeAll(async () => {
+    env = new TestEnvironment();
+    await env.init();
+
+    const eventBus = new EventEmitter();
+    calendarInterface = new CalendarInterface(eventBus);
+    calendarInterface.setActivityPubInterface({
+      getSharedEventIds: async () => [],
+      getSharedEventStatusMap: async () => new Map(),
+      getEventSourceActorUris: async () => new Map<string, string>(),
+      findCalendarActorByCalendarId: async () => null,
+    } as any);
+
+    const configurationInterface = new ConfigurationInterface();
+    const setupInterface = new SetupInterface();
+    const accountService = new AccountService(eventBus, configurationInterface, setupInterface);
+
+    const accountInfo = await accountService._setupAccount('listing-space@pavillion.dev', 'testpassword');
+    testAccount = accountInfo.account;
+
+    testCalendar = await calendarInterface.createCalendar(testAccount, 'listingspacecal');
+
+    testLocation = await calendarInterface.createLocation(
+      testCalendar,
+      new EventLocation(undefined, 'Library Annex', '123 Library Lane'),
+    );
+
+    testSpace = await calendarInterface.createSpace(
+      testCalendar,
+      testLocation.id,
+      { en: { name: 'Reading Room', accessibilityInfo: 'Quiet seating area' } },
+    );
+  });
+
+  afterAll(async () => {
+    await env.cleanup();
+  });
+
+  /**
+   * Helper: create a Space-scoped event on the test calendar and materialize
+   * a single canonical instance row (the locally-constructed CalendarInterface
+   * does not register the eventCreated handler that auto-builds instances).
+   */
+  async function createInstanceWithSpace(name: string, startIso: string): Promise<{ event: CalendarEvent; instanceId: string }> {
+    const event = await calendarInterface.createEvent(testAccount, {
+      calendarId: testCalendar.id,
+      locationId: testLocation.id,
+      spaceId: testSpace.id,
+      content: { en: { name, description: name } },
+      start_date: startIso.slice(0, 10),
+      start_time: startIso.slice(11, 16),
+    });
+    const instanceId = uuidv4();
+    await EventInstanceEntity.create({
+      id: instanceId,
+      event_id: event.id,
+      calendar_id: testCalendar.id,
+      start_time: new Date(startIso),
+      end_time: null,
+    });
+    return { event, instanceId };
+  }
+
+  it('listEventInstancesForCalendar populates event.space for Space-scoped events', async () => {
+    const { event } = await createInstanceWithSpace('Listing Space Event', '2026-10-01T10:00:00Z');
+
+    const instances = await calendarInterface.listEventInstancesForCalendar(testCalendar);
+    const matching = instances.filter(i => i.event.id === event.id);
+    expect(matching).toHaveLength(1);
+
+    const listed = matching[0];
+    expect(listed.event.space).not.toBeNull();
+    expect(listed.event.space?.id).toBe(testSpace.id);
+    expect(listed.event.space?.content('en').name).toBe('Reading Room');
+  });
+
+  it('listEventInstancesWithFilters populates event.space for Space-scoped events', async () => {
+    const { event } = await createInstanceWithSpace('Filtered Listing Space Event', '2026-10-02T10:00:00Z');
+
+    const instances = await calendarInterface.listEventInstancesWithFilters(testCalendar, {});
+    const matching = instances.filter(i => i.event.id === event.id);
+    expect(matching).toHaveLength(1);
+
+    const listed = matching[0];
+    expect(listed.event.space).not.toBeNull();
+    expect(listed.event.space?.id).toBe(testSpace.id);
+    expect(listed.event.space?.content('en').name).toBe('Reading Room');
+  });
+
+  it('getEventInstanceById populates event.space for Space-scoped events', async () => {
+    const { instanceId } = await createInstanceWithSpace('By-Id Space Event', '2026-10-03T10:00:00Z');
+
+    const instance = await calendarInterface.getEventInstanceById(instanceId);
+    expect(instance).not.toBeNull();
+    expect(instance!.event.space).not.toBeNull();
+    expect(instance!.event.space?.id).toBe(testSpace.id);
+    expect(instance!.event.space?.content('en').name).toBe('Reading Room');
   });
 });
