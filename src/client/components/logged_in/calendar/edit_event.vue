@@ -1149,7 +1149,9 @@ button {
     v-if="showLocationPicker"
     ref="locationPickerRef"
     :locations="availableLocations"
+    :spaces-by-place="locationStore.spacesByPlace"
     :selected-location-id="editorState.event?.locationId || null"
+    :selected-space-id="editorState.event?.space?.id || null"
     @location-selected="handleLocationSelected"
     @create-new="createNewLocation"
     @remove-location="handleRemoveLocation"
@@ -1223,6 +1225,9 @@ import { useLocationManagement } from '@/client/composables/useLocationManagemen
 import { useUnsavedChanges } from '@/client/composables/useUnsavedChanges';
 import { useLanguageManagement } from '@/client/composables/useLanguageManagement';
 
+// Stores
+import { useLocationStore } from '@/client/stores/locationStore';
+
 // Props for edit mode (eventId passed from route)
 const props = defineProps({
   eventId: {
@@ -1276,6 +1281,10 @@ const {
   removeLocation,
   backToSearch,
 } = useLocationManagement();
+
+// Location store — exposes per-Place Space cache (locationStore.spacesByPlace)
+// to the picker so it can render the flat list with whole-venue + Space entries.
+const locationStore = useLocationStore();
 
 // Unsaved changes composable
 const {
@@ -1452,20 +1461,31 @@ const handleSeriesChanged = (seriesId) => {
 };
 
 /**
- * Handle opening the location picker modal
+ * Handle opening the location picker modal.
+ *
+ * Passes both the calendar ID (for fetching Places) and the calendar URL name
+ * (for prefetching each Place's Spaces) so the picker can render its flat
+ * Place + Spaces list.
  */
 const handleOpenLocationPicker = async () => {
   if (editorState.event) {
-    await openLocationPicker(editorState.event.calendarId);
+    await openLocationPicker(
+      editorState.event.calendarId,
+      editorState.calendar?.urlName,
+    );
   }
 };
 
 /**
- * Handle location selection from the picker
+ * Handle location selection from the picker.
+ *
+ * Picker emits `{ placeId, spaceId | null }` (null = whole venue, NOT undefined).
+ * Pass through to the composable along with the locationStore's per-Place
+ * Space cache so the composable can resolve the EventLocationSpace model.
  */
-const handleLocationSelected = async (location) => {
+const handleLocationSelected = async (selection) => {
   if (editorState.event) {
-    selectLocation(location, editorState.event);
+    selectLocation(selection, editorState.event, locationStore.spacesByPlace);
   }
 };
 

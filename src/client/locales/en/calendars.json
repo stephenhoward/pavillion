@@ -403,7 +403,17 @@
             "confirm_delete_message": "Delete space \"{{name}}\"?",
             "confirm_delete_event_count": "{{count}} events will become whole-venue events.",
             "venue_accessibility_label": "Venue accessibility",
-            "space_accessibility_label": "Space accessibility"
+            "space_accessibility_label": "Space accessibility",
+            "editor_title_new": "New Space",
+            "editor_title_edit": "Edit Space",
+            "field_name": "Name",
+            "field_accessibility_info": "Accessibility Information",
+            "save": "Save",
+            "cancel": "Cancel",
+            "dismiss_error": "Dismiss error",
+            "error_name_required": "At least one language must have a non-empty name",
+            "error_saving": "Failed to save space",
+            "editor_form_aria_label": "Space Information Form"
         }
     },
     "bulk_operations": {

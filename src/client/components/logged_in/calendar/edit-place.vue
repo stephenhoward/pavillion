@@ -243,67 +243,12 @@ form {
   }
 }
 
-/* Place fields */
-.place-fields {
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
-}
-
-.form-field {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.field-label {
-  font-size: 0.875rem;
-  font-weight: 500;
-  color: var(--pav-color-stone-700);
-
-  @media (prefers-color-scheme: dark) {
-    color: var(--pav-color-stone-300);
-  }
-}
-
-.required-indicator {
-  color: var(--pav-color-red-500);
-  margin-inline-start: var(--pav-space-1);
-}
-.field-input,
-.field-textarea {
-  padding: 0.625rem 0.875rem;
-  border: 1px solid var(--pav-color-stone-200);
-  border-radius: 0.375rem;
-  font-size: 0.9375rem;
-  background: var(--pav-color-stone-50);
-  color: var(--pav-color-stone-900);
-  font-family: inherit;
-  transition: all 0.15s ease;
-
-  &:focus-visible {
-    outline: 2px solid var(--pav-color-orange-500);
-    outline-offset: 1px;
-    border-color: var(--pav-color-orange-500);
-    background: white;
-  }
-
-  @media (prefers-color-scheme: dark) {
-    background: var(--pav-color-stone-900);
-    border-color: var(--pav-color-stone-600);
-    color: var(--pav-color-stone-100);
-
-    &:focus-visible {
-      background: var(--pav-color-stone-800);
-    }
-  }
-}
-
-.field-textarea {
-  resize: vertical;
-  min-height: 80px;
-  line-height: 1.5;
-}
+/*
+ * Form-field primitives (.form-field, .field-label, .field-input,
+ * .field-textarea, .required-indicator) and the .translatable-form-fields
+ * container live in the shared _translatable-form.scss partial loaded via
+ * @layer components — see edit-space.vue for the other consumer.
+ */
 
 .address-row {
   display: grid;
@@ -458,7 +403,7 @@ form {
             <h2 class="section-header">{{ t('section_basic_info') }}</h2>
 
             <div class="section-card">
-              <div class="place-fields">
+              <div class="translatable-form-fields">
                 <div class="form-field">
                   <label for="place-name" class="field-label">{{ t('field_name') }} <span class="required-indicator" aria-hidden="true">*</span></label>
                   <input
@@ -529,7 +474,7 @@ form {
                 :id="accessibilityLangTabs?.panelId(currentLanguage)"
                 role="tabpanel"
                 :aria-labelledby="accessibilityLangTabs?.tabId(currentLanguage)"
-                class="place-fields"
+                class="translatable-form-fields"
               >
                 <div class="form-field">
                   <label :for="`place-accessibility-${currentLanguage}`" class="field-label">

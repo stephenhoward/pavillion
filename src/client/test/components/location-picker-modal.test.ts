@@ -4,8 +4,9 @@ import i18next from 'i18next';
 import I18NextVue from 'i18next-vue';
 import LocationPickerModal from '@/client/components/common/location-picker-modal.vue';
 import PillButton from '@/client/components/common/pill-button.vue';
-import { EventLocation } from '@/common/model/location';
+import { EventLocation, EventLocationSpace, EventLocationSpaceContent } from '@/common/model/location';
 import enEventEditor from '@/client/locales/en/event_editor.json';
+import enCalendars from '@/client/locales/en/calendars.json';
 
 /**
  * Sheet stub: renders a native <dialog> with the given title + slot so
@@ -30,6 +31,7 @@ beforeAll(async () => {
     resources: {
       en: {
         event_editor: enEventEditor,
+        calendars: enCalendars,
       },
     },
   });
@@ -42,6 +44,15 @@ const SHEET_GLOBAL = {
   },
 };
 
+/**
+ * Helper: build an EventLocationSpace with localized name content.
+ */
+function makeSpace(id: string, placeId: string, name: string): EventLocationSpace {
+  const space = new EventLocationSpace(id, placeId);
+  space.addContent(new EventLocationSpaceContent('en', name, ''));
+  return space;
+}
+
 describe('LocationPickerModal', () => {
   const mockLocations = [
     new EventLocation('loc-1', 'First Venue', '123 Main St', 'Portland', 'OR', '97201'),
@@ -53,7 +64,9 @@ describe('LocationPickerModal', () => {
     it('should render modal with title', () => {
       const wrapper = mount(LocationPickerModal, { ...SHEET_GLOBAL, props: {
         locations: mockLocations,
+        spacesByPlace: {},
         selectedLocationId: null,
+        selectedSpaceId: null,
       },
       });
 
@@ -64,7 +77,9 @@ describe('LocationPickerModal', () => {
     it('should render search input with icon', () => {
       const wrapper = mount(LocationPickerModal, { ...SHEET_GLOBAL, props: {
         locations: mockLocations,
+        spacesByPlace: {},
         selectedLocationId: null,
+        selectedSpaceId: null,
       },
       });
 
@@ -74,10 +89,12 @@ describe('LocationPickerModal', () => {
       expect(searchWrapper.find('input').attributes('placeholder')).toBe('Search locations...');
     });
 
-    it('should render all locations in the list', () => {
+    it('should render all locations in the list (Space-less Places: one entry each)', () => {
       const wrapper = mount(LocationPickerModal, { ...SHEET_GLOBAL, props: {
         locations: mockLocations,
+        spacesByPlace: {},
         selectedLocationId: null,
+        selectedSpaceId: null,
       },
       });
 
@@ -88,7 +105,9 @@ describe('LocationPickerModal', () => {
     it('should display location names and addresses', () => {
       const wrapper = mount(LocationPickerModal, { ...SHEET_GLOBAL, props: {
         locations: mockLocations,
+        spacesByPlace: {},
         selectedLocationId: null,
+        selectedSpaceId: null,
       },
       });
 
@@ -101,7 +120,9 @@ describe('LocationPickerModal', () => {
     it('should show checkmark for selected location', () => {
       const wrapper = mount(LocationPickerModal, { ...SHEET_GLOBAL, props: {
         locations: mockLocations,
+        spacesByPlace: {},
         selectedLocationId: 'loc-2',
+        selectedSpaceId: null,
       },
       });
 
@@ -115,7 +136,9 @@ describe('LocationPickerModal', () => {
       const wrapper = mount(LocationPickerModal, {
         props: {
           locations: mockLocations,
+          spacesByPlace: {},
           selectedLocationId: null,
+          selectedSpaceId: null,
         },
         global: {
           plugins: [[I18NextVue, { i18next }] as const],
@@ -135,11 +158,244 @@ describe('LocationPickerModal', () => {
     });
   });
 
+  describe('flatten with Spaces', () => {
+    const conventionCenter = new EventLocation('place-cc', 'Convention Center', '100 Main St', 'Portland', 'OR', '97201');
+
+    it('Place with 0 Spaces renders 1 entry that selects (placeId, null)', async () => {
+      const wrapper = mount(LocationPickerModal, { ...SHEET_GLOBAL, props: {
+        locations: [conventionCenter],
+        spacesByPlace: { 'place-cc': [] },
+        selectedLocationId: null,
+        selectedSpaceId: null,
+      },
+      });
+
+      const entries = wrapper.findAll('.location-item');
+      expect(entries).toHaveLength(1);
+      expect(entries[0].find('.location-name').text()).toBe('Convention Center');
+
+      await entries[0].trigger('click');
+      expect(wrapper.emitted('location-selected')).toBeTruthy();
+      expect(wrapper.emitted('location-selected')?.[0]).toEqual([
+        { placeId: 'place-cc', spaceId: null },
+      ]);
+    });
+
+    it('Place with 1 Space renders 2 entries (whole-venue + 1 Space)', () => {
+      const wrapper = mount(LocationPickerModal, { ...SHEET_GLOBAL, props: {
+        locations: [conventionCenter],
+        spacesByPlace: { 'place-cc': [makeSpace('space-pacific', 'place-cc', 'Pacific Room')] },
+        selectedLocationId: null,
+        selectedSpaceId: null,
+      },
+      });
+
+      const entries = wrapper.findAll('.location-item');
+      expect(entries).toHaveLength(2);
+
+      // Entry 0: whole venue
+      const entry0Text = entries[0].text();
+      expect(entry0Text).toContain('Convention Center');
+      expect(entry0Text).toContain('(whole venue)');
+
+      // Entry 1: Pacific Room
+      const entry1Text = entries[1].text();
+      expect(entry1Text).toContain('Convention Center');
+      expect(entry1Text).toContain('Pacific Room');
+    });
+
+    it('Place with 2 Spaces renders 3 entries (whole-venue + 2 Spaces)', () => {
+      const wrapper = mount(LocationPickerModal, { ...SHEET_GLOBAL, props: {
+        locations: [conventionCenter],
+        spacesByPlace: {
+          'place-cc': [
+            makeSpace('space-pacific', 'place-cc', 'Pacific Room'),
+            makeSpace('space-council', 'place-cc', 'Council Chambers'),
+          ],
+        },
+        selectedLocationId: null,
+        selectedSpaceId: null,
+      },
+      });
+
+      const entries = wrapper.findAll('.location-item');
+      expect(entries).toHaveLength(3);
+
+      expect(entries[0].text()).toContain('(whole venue)');
+      expect(entries[1].text()).toContain('Pacific Room');
+      expect(entries[2].text()).toContain('Council Chambers');
+    });
+
+    it('whole-venue entry emits {placeId, spaceId: null} (NOT undefined)', async () => {
+      const wrapper = mount(LocationPickerModal, { ...SHEET_GLOBAL, props: {
+        locations: [conventionCenter],
+        spacesByPlace: {
+          'place-cc': [makeSpace('space-pacific', 'place-cc', 'Pacific Room')],
+        },
+        selectedLocationId: null,
+        selectedSpaceId: null,
+      },
+      });
+
+      const entries = wrapper.findAll('.location-item');
+      await entries[0].trigger('click');
+
+      const payload = wrapper.emitted('location-selected')?.[0]?.[0] as { placeId: string; spaceId: string | null };
+      expect(payload).toEqual({ placeId: 'place-cc', spaceId: null });
+      // Explicit null vs undefined: spaceId must be present and null, not absent.
+      expect(Object.prototype.hasOwnProperty.call(payload, 'spaceId')).toBe(true);
+      expect(payload.spaceId).toBeNull();
+      expect(payload.spaceId).not.toBeUndefined();
+    });
+
+    it('Space entry emits {placeId, spaceId}', async () => {
+      const wrapper = mount(LocationPickerModal, { ...SHEET_GLOBAL, props: {
+        locations: [conventionCenter],
+        spacesByPlace: {
+          'place-cc': [makeSpace('space-pacific', 'place-cc', 'Pacific Room')],
+        },
+        selectedLocationId: null,
+        selectedSpaceId: null,
+      },
+      });
+
+      const entries = wrapper.findAll('.location-item');
+      await entries[1].trigger('click');
+
+      expect(wrapper.emitted('location-selected')?.[0]).toEqual([
+        { placeId: 'place-cc', spaceId: 'space-pacific' },
+      ]);
+    });
+
+    it('Space-less Place entry emits {placeId, spaceId: null}', async () => {
+      const wrapper = mount(LocationPickerModal, { ...SHEET_GLOBAL, props: {
+        locations: mockLocations,
+        spacesByPlace: {},
+        selectedLocationId: null,
+        selectedSpaceId: null,
+      },
+      });
+
+      const entries = wrapper.findAll('.location-item');
+      await entries[0].trigger('click');
+
+      expect(wrapper.emitted('location-selected')?.[0]).toEqual([
+        { placeId: 'loc-1', spaceId: null },
+      ]);
+    });
+
+    it('aria-label disambiguates whole-venue from Space entries', () => {
+      const wrapper = mount(LocationPickerModal, { ...SHEET_GLOBAL, props: {
+        locations: [conventionCenter],
+        spacesByPlace: {
+          'place-cc': [makeSpace('space-pacific', 'place-cc', 'Pacific Room')],
+        },
+        selectedLocationId: null,
+        selectedSpaceId: null,
+      },
+      });
+
+      const entries = wrapper.findAll('.location-item');
+      expect(entries[0].attributes('aria-label')).toBe('Convention Center, whole venue');
+      expect(entries[1].attributes('aria-label')).toBe('Convention Center, Pacific Room');
+    });
+
+    it('Space-less Place entry uses Place name as aria-label (no disambiguator)', () => {
+      const wrapper = mount(LocationPickerModal, { ...SHEET_GLOBAL, props: {
+        locations: [conventionCenter],
+        spacesByPlace: {},
+        selectedLocationId: null,
+        selectedSpaceId: null,
+      },
+      });
+
+      const entry = wrapper.findAll('.location-item')[0];
+      // No comma-disambiguator on Space-less Places — Place name only.
+      expect(entry.attributes('aria-label')).toBe('Convention Center');
+    });
+
+    it('shows checkmark for the selected (placeId, spaceId) combination — Space entry', () => {
+      const wrapper = mount(LocationPickerModal, { ...SHEET_GLOBAL, props: {
+        locations: [conventionCenter],
+        spacesByPlace: {
+          'place-cc': [
+            makeSpace('space-pacific', 'place-cc', 'Pacific Room'),
+            makeSpace('space-council', 'place-cc', 'Council Chambers'),
+          ],
+        },
+        selectedLocationId: 'place-cc',
+        selectedSpaceId: 'space-pacific',
+      },
+      });
+
+      const entries = wrapper.findAll('.location-item');
+      expect(entries[0].find('.checkmark').exists()).toBe(false); // whole venue
+      expect(entries[1].find('.checkmark').exists()).toBe(true);  // Pacific Room
+      expect(entries[2].find('.checkmark').exists()).toBe(false); // Council Chambers
+    });
+
+    it('shows checkmark on the whole-venue entry when selectedSpaceId is null', () => {
+      const wrapper = mount(LocationPickerModal, { ...SHEET_GLOBAL, props: {
+        locations: [conventionCenter],
+        spacesByPlace: {
+          'place-cc': [makeSpace('space-pacific', 'place-cc', 'Pacific Room')],
+        },
+        selectedLocationId: 'place-cc',
+        selectedSpaceId: null,
+      },
+      });
+
+      const entries = wrapper.findAll('.location-item');
+      expect(entries[0].find('.checkmark').exists()).toBe(true);  // whole venue
+      expect(entries[1].find('.checkmark').exists()).toBe(false); // Pacific Room
+    });
+
+    it('marks Space entries with .is-space-entry class for visual indent', () => {
+      // Visual hierarchy hook (stylesheet-advisor MED): Space entries get the
+      // .is-space-entry class so SCSS can indent them under their parent Place.
+      const wrapper = mount(LocationPickerModal, { ...SHEET_GLOBAL, props: {
+        locations: [conventionCenter],
+        spacesByPlace: {
+          'place-cc': [makeSpace('space-pacific', 'place-cc', 'Pacific Room')],
+        },
+        selectedLocationId: null,
+        selectedSpaceId: null,
+      },
+      });
+
+      const entries = wrapper.findAll('.location-item');
+      expect(entries[0].classes()).not.toContain('is-space-entry'); // whole venue
+      expect(entries[1].classes()).toContain('is-space-entry');     // Pacific Room
+    });
+
+    it('renders the (whole venue) suffix in a separate styled span for de-emphasis', () => {
+      // Visual hierarchy hook (stylesheet-advisor MED): the "(whole venue)"
+      // suffix is wrapped in .whole-venue-suffix so SCSS can render it in
+      // var(--pav-text-secondary).
+      const wrapper = mount(LocationPickerModal, { ...SHEET_GLOBAL, props: {
+        locations: [conventionCenter],
+        spacesByPlace: {
+          'place-cc': [makeSpace('space-pacific', 'place-cc', 'Pacific Room')],
+        },
+        selectedLocationId: null,
+        selectedSpaceId: null,
+      },
+      });
+
+      const entries = wrapper.findAll('.location-item');
+      const suffix = entries[0].find('.whole-venue-suffix');
+      expect(suffix.exists()).toBe(true);
+      expect(suffix.text()).toBe('(whole venue)');
+    });
+  });
+
   describe('search functionality', () => {
     it('should filter locations by name', async () => {
       const wrapper = mount(LocationPickerModal, { ...SHEET_GLOBAL, props: {
         locations: mockLocations,
+        spacesByPlace: {},
         selectedLocationId: null,
+        selectedSpaceId: null,
       },
       });
 
@@ -154,7 +410,9 @@ describe('LocationPickerModal', () => {
     it('should filter locations by address', async () => {
       const wrapper = mount(LocationPickerModal, { ...SHEET_GLOBAL, props: {
         locations: mockLocations,
+        spacesByPlace: {},
         selectedLocationId: null,
+        selectedSpaceId: null,
       },
       });
 
@@ -169,7 +427,9 @@ describe('LocationPickerModal', () => {
     it('should filter locations by city', async () => {
       const wrapper = mount(LocationPickerModal, { ...SHEET_GLOBAL, props: {
         locations: mockLocations,
+        spacesByPlace: {},
         selectedLocationId: null,
+        selectedSpaceId: null,
       },
       });
 
@@ -184,7 +444,9 @@ describe('LocationPickerModal', () => {
     it('should be case-insensitive', async () => {
       const wrapper = mount(LocationPickerModal, { ...SHEET_GLOBAL, props: {
         locations: mockLocations,
+        spacesByPlace: {},
         selectedLocationId: null,
+        selectedSpaceId: null,
       },
       });
 
@@ -199,7 +461,9 @@ describe('LocationPickerModal', () => {
     it('should show no results when search has no matches', async () => {
       const wrapper = mount(LocationPickerModal, { ...SHEET_GLOBAL, props: {
         locations: mockLocations,
+        spacesByPlace: {},
         selectedLocationId: null,
+        selectedSpaceId: null,
       },
       });
 
@@ -209,33 +473,68 @@ describe('LocationPickerModal', () => {
       const visibleItems = wrapper.findAll('.location-item');
       expect(visibleItems).toHaveLength(0);
     });
+
+    it('search "pacific" matches the rendered display string "Convention Center — Pacific Room"', async () => {
+      const conventionCenter = new EventLocation('place-cc', 'Convention Center', '100 Main St', 'Portland', 'OR', '97201');
+      const wrapper = mount(LocationPickerModal, { ...SHEET_GLOBAL, props: {
+        locations: [conventionCenter, ...mockLocations],
+        spacesByPlace: {
+          'place-cc': [
+            makeSpace('space-pacific', 'place-cc', 'Pacific Room'),
+            makeSpace('space-council', 'place-cc', 'Council Chambers'),
+          ],
+        },
+        selectedLocationId: null,
+        selectedSpaceId: null,
+      },
+      });
+
+      const searchInput = wrapper.find('.search-input-wrapper input');
+      await searchInput.setValue('pacific');
+
+      const visibleItems = wrapper.findAll('.location-item');
+      // Only "Convention Center — Pacific Room" should match (not the whole-venue
+      // entry, not Council Chambers, and not the other Places).
+      expect(visibleItems).toHaveLength(1);
+      const matched = visibleItems[0].text();
+      expect(matched).toContain('Convention Center');
+      expect(matched).toContain('Pacific Room');
+    });
   });
 
   describe('selection behavior', () => {
-    it('should emit location-selected when location clicked', async () => {
+    it('should emit location-selected with placeId/spaceId when a Place entry is clicked', async () => {
       const wrapper = mount(LocationPickerModal, { ...SHEET_GLOBAL, props: {
         locations: mockLocations,
+        spacesByPlace: {},
         selectedLocationId: null,
+        selectedSpaceId: null,
       },
       });
 
       await wrapper.findAll('.location-item')[1].trigger('click');
 
       expect(wrapper.emitted('location-selected')).toBeTruthy();
-      expect(wrapper.emitted('location-selected')?.[0]).toEqual([mockLocations[1]]);
+      expect(wrapper.emitted('location-selected')?.[0]).toEqual([
+        { placeId: 'loc-2', spaceId: null },
+      ]);
     });
 
     it('should allow clicking already selected location', async () => {
       const wrapper = mount(LocationPickerModal, { ...SHEET_GLOBAL, props: {
         locations: mockLocations,
+        spacesByPlace: {},
         selectedLocationId: 'loc-2',
+        selectedSpaceId: null,
       },
       });
 
       await wrapper.findAll('.location-item')[1].trigger('click');
 
       expect(wrapper.emitted('location-selected')).toBeTruthy();
-      expect(wrapper.emitted('location-selected')?.[0]).toEqual([mockLocations[1]]);
+      expect(wrapper.emitted('location-selected')?.[0]).toEqual([
+        { placeId: 'loc-2', spaceId: null },
+      ]);
     });
   });
 
@@ -244,7 +543,9 @@ describe('LocationPickerModal', () => {
       const wrapper = mount(LocationPickerModal, {
         props: {
           locations: mockLocations,
+          spacesByPlace: {},
           selectedLocationId: null,
+          selectedSpaceId: null,
         },
         global: {
           plugins: [[I18NextVue, { i18next }] as const],
@@ -265,7 +566,9 @@ describe('LocationPickerModal', () => {
       const wrapper = mount(LocationPickerModal, {
         props: {
           locations: mockLocations,
+          spacesByPlace: {},
           selectedLocationId: 'loc-1',
+          selectedSpaceId: null,
         },
         global: {
           plugins: [[I18NextVue, { i18next }] as const],
@@ -287,7 +590,9 @@ describe('LocationPickerModal', () => {
     it('should show message when no locations available', () => {
       const wrapper = mount(LocationPickerModal, { ...SHEET_GLOBAL, props: {
         locations: [],
+        spacesByPlace: {},
         selectedLocationId: null,
+        selectedSpaceId: null,
       },
       });
 

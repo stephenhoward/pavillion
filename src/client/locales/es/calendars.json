@@ -403,7 +403,17 @@
             "confirm_delete_message": "¿Eliminar el espacio \"{{name}}\"?",
             "confirm_delete_event_count": "{{count}} eventos se convertirán en eventos del lugar completo.",
             "venue_accessibility_label": "Accesibilidad del lugar",
-            "space_accessibility_label": "Accesibilidad del espacio"
+            "space_accessibility_label": "Accesibilidad del espacio",
+            "editor_title_new": "Nuevo espacio",
+            "editor_title_edit": "Editar espacio",
+            "field_name": "Nombre",
+            "field_accessibility_info": "Información de accesibilidad",
+            "save": "Guardar",
+            "cancel": "Cancelar",
+            "dismiss_error": "Descartar error",
+            "error_name_required": "Al menos un idioma debe tener un nombre no vacío",
+            "error_saving": "Error al guardar el espacio",
+            "editor_form_aria_label": "Formulario de información del espacio"
         }
     },
     "bulk_operations": {
