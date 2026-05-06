@@ -57,7 +57,8 @@ describe('Event API spaceId handling', () => {
       const createEventStub = sandbox.stub(calendarInterface, 'createEvent');
       const placeId = '11111111-1111-4111-8111-111111111111';
       const spaceId = '22222222-2222-4222-8222-222222222222';
-      createEventStub.throws(new SpaceLocationMismatchError(spaceId, placeId, 'other-place-id'));
+      const actualPlaceId = '99999999-9999-4999-8999-999999999999';
+      createEventStub.throws(new SpaceLocationMismatchError(spaceId, placeId, actualPlaceId));
 
       router.post('/handler', addRequestUser, (req, res) => { routes.createEvent(req, res); });
 
@@ -71,6 +72,11 @@ describe('Event API spaceId handling', () => {
 
       expect(response.status).toBe(400);
       expect(response.body.errorName).toBe('SpaceLocationMismatchError');
+      // Privacy binding: the response body must NOT leak the actualPlaceId
+      // (the real parent Place of the supplied Space). The handler returns a
+      // fixed string instead of error.message.
+      expect(response.body.error).toBe('Space does not belong to the specified Place');
+      expect(JSON.stringify(response.body)).not.toContain(actualPlaceId);
       expect(createEventStub.called).toBe(true);
     });
   });
@@ -106,7 +112,8 @@ describe('Event API spaceId handling', () => {
       const updateEventStub = sandbox.stub(calendarInterface, 'updateEvent');
       const placeId = '11111111-1111-4111-8111-111111111111';
       const spaceId = '22222222-2222-4222-8222-222222222222';
-      updateEventStub.throws(new SpaceLocationMismatchError(spaceId, placeId, 'other-place-id'));
+      const actualPlaceId = '99999999-9999-4999-8999-999999999999';
+      updateEventStub.throws(new SpaceLocationMismatchError(spaceId, placeId, actualPlaceId));
 
       router.put('/handler/:id', addRequestUser, (req, res) => { routes.updateEvent(req, res); });
 
@@ -119,6 +126,11 @@ describe('Event API spaceId handling', () => {
 
       expect(response.status).toBe(400);
       expect(response.body.errorName).toBe('SpaceLocationMismatchError');
+      // Privacy binding: the response body must NOT leak the actualPlaceId
+      // (the real parent Place of the supplied Space). The handler returns a
+      // fixed string instead of error.message.
+      expect(response.body.error).toBe('Space does not belong to the specified Place');
+      expect(JSON.stringify(response.body)).not.toContain(actualPlaceId);
       expect(updateEventStub.called).toBe(true);
     });
 

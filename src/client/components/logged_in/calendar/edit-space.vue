@@ -256,6 +256,7 @@ onBeforeMount(() => {
             v-model="nameByLang[currentLanguage]"
             type="text"
             class="field-input"
+            aria-required="true"
           />
         </div>
 

@@ -170,8 +170,15 @@ export default class EventRoutes {
         // pair refers to a Space that does not belong to the Place. Surfaced
         // as 400 with the errorName field so clients can disambiguate from
         // generic ValidationError responses.
+        //
+        // Privacy binding: error.message contains the actualPlaceId (the real
+        // parent of the supplied Space). Echoing it back to the client would
+        // let an authenticated attacker probe space ownership across calendars.
+        // Log the structured error server-side, return a fixed string to the
+        // client. Mirrors the InvalidOccurrenceDateError privacy pattern.
+        logError(error);
         res.status(400).json({
-          "error": error.message,
+          "error": "Space does not belong to the specified Place",
           "errorName": error.name,
         });
       }
@@ -241,8 +248,15 @@ export default class EventRoutes {
         // pair refers to a Space that does not belong to the Place. Surfaced
         // as 400 with the errorName field so clients can disambiguate from
         // generic ValidationError responses.
+        //
+        // Privacy binding: error.message contains the actualPlaceId (the real
+        // parent of the supplied Space). Echoing it back to the client would
+        // let an authenticated attacker probe space ownership across calendars.
+        // Log the structured error server-side, return a fixed string to the
+        // client. Mirrors the InvalidOccurrenceDateError privacy pattern.
+        logError(error);
         res.status(400).json({
-          "error": error.message,
+          "error": "Space does not belong to the specified Place",
           "errorName": error.name,
         });
       }
