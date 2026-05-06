@@ -180,8 +180,12 @@ class EventObject extends ActivityPubObject {
         result.endTime = synthesizedEnd.toISO();
       }
     }
-    // location: emitted as Place with optional PostalAddress; omitted if no location
-    const locationObj = this._buildLocation(event.location);
+    // location: emitted as Place with optional PostalAddress; omitted if no location.
+    // When a Space is present, the flat `as:Place.name` is concatenated as
+    // `Place — Space` in the primary language so non-Pavillion peers (Mobilizon,
+    // Mastodon, Gancio) see a sensible flattened label. Pavillion-aware peers
+    // ignore the flat surface and read the structured `pavillion:space` extension.
+    const locationObj = this._buildLocation(event.location, event.space, primaryLanguage);
     if (locationObj) {
       result.location = locationObj;
     }
@@ -889,8 +893,24 @@ class EventObject extends ActivityPubObject {
 
   /**
    * Builds an ActivityPub Place object from an EventLocation, or null if no location.
+   *
+   * When a Space is present, the flat `name` field is concatenated as
+   * `${Place.name} — ${Space.name}` using the supplied primary language to pick
+   * the Space's translated name. This gives non-Pavillion peers (Mobilizon,
+   * Mastodon, Gancio) a sensible flattened label since they cannot consume the
+   * structured `pavillion:space` extension. The primary-language pick MUST match
+   * the one used for event name/summary so the flat surface stays internally
+   * consistent.
+   *
+   * @param location - The event's Place, or null if the event is location-less
+   * @param space - The event's Space, if any. Suppressed when Place is absent.
+   * @param primaryLanguage - The primary language code chosen for event content
    */
-  private _buildLocation(location: EventLocation | null): Record<string, any> | null {
+  private _buildLocation(
+    location: EventLocation | null,
+    space: EventLocationSpace | null = null,
+    primaryLanguage: string = 'en',
+  ): Record<string, any> | null {
     if (!location) {
       return null;
     }
@@ -900,9 +920,32 @@ class EventObject extends ActivityPubObject {
       return null;
     }
 
+    // Concatenate Place — Space in the primary language when a Space is present.
+    // Mirrors the event-content primary-language pick: prefer the requested
+    // language, fall back to the first language with a non-empty space name.
+    let displayName = location.name;
+    if (space) {
+      const primarySpaceName = space._content[primaryLanguage]?.name;
+      let spaceName = primarySpaceName && primarySpaceName.trim().length > 0
+        ? primarySpaceName
+        : '';
+      if (!spaceName) {
+        for (const lang of Object.keys(space._content)) {
+          const c = space._content[lang];
+          if (c?.name && c.name.trim().length > 0) {
+            spaceName = c.name;
+            break;
+          }
+        }
+      }
+      if (spaceName) {
+        displayName = `${location.name} — ${spaceName}`;
+      }
+    }
+
     const place: Record<string, any> = {
       type: 'Place',
-      name: location.name,
+      name: displayName,
     };
 
     // Add PostalAddress sub-object if any address fields are present

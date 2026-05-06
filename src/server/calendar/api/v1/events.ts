@@ -4,7 +4,7 @@ import { DateTime } from 'luxon';
 import { Account } from '@/common/model/account';
 import ExpressHelper from '@/server/common/helper/express';
 import CalendarInterface from '@/server/calendar/interface';
-import { EventNotFoundError, InsufficientCalendarPermissionsError, CalendarNotFoundError, BulkEventsNotFoundError, MixedCalendarEventsError, CategoriesNotFoundError, LocationValidationError, InvalidOccurrenceDateError } from '@/common/exceptions/calendar';
+import { EventNotFoundError, InsufficientCalendarPermissionsError, CalendarNotFoundError, BulkEventsNotFoundError, MixedCalendarEventsError, CategoriesNotFoundError, LocationValidationError, InvalidOccurrenceDateError, SpaceLocationMismatchError } from '@/common/exceptions/calendar';
 import { ValidationError } from '@/common/exceptions/base';
 import { logError } from '@/server/common/helper/error-logger';
 
@@ -165,6 +165,16 @@ export default class EventRoutes {
       if (error instanceof ValidationError || error instanceof LocationValidationError) {
         ExpressHelper.sendValidationError(res, error);
       }
+      else if (error instanceof SpaceLocationMismatchError) {
+        // Cross-entity invariant violation: the supplied (locationId, spaceId)
+        // pair refers to a Space that does not belong to the Place. Surfaced
+        // as 400 with the errorName field so clients can disambiguate from
+        // generic ValidationError responses.
+        res.status(400).json({
+          "error": error.message,
+          "errorName": error.name,
+        });
+      }
       else if (error instanceof InsufficientCalendarPermissionsError) {
         res.status(403).json({
           "error": error.message,
@@ -225,6 +235,16 @@ export default class EventRoutes {
     catch (error) {
       if (error instanceof ValidationError || error instanceof LocationValidationError) {
         ExpressHelper.sendValidationError(res, error);
+      }
+      else if (error instanceof SpaceLocationMismatchError) {
+        // Cross-entity invariant violation: the supplied (locationId, spaceId)
+        // pair refers to a Space that does not belong to the Place. Surfaced
+        // as 400 with the errorName field so clients can disambiguate from
+        // generic ValidationError responses.
+        res.status(400).json({
+          "error": error.message,
+          "errorName": error.name,
+        });
       }
       else if (error instanceof EventNotFoundError) {
         res.status(404).json({

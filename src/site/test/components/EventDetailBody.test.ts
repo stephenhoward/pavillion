@@ -70,6 +70,7 @@ interface InstanceOverrides {
   media?: any;
   categories?: EventCategory[];
   location?: any;
+  space?: any;
   recurrenceSummary?: any;
   sourceCalendar?: any;
   externalUrl?: string | null;
@@ -77,6 +78,57 @@ interface InstanceOverrides {
   isCancelled?: boolean;
   end?: any;
   accessibilityInfo?: string;
+}
+
+/**
+ * Builds a mock Place (EventLocation) with optional accessibility info.
+ */
+function makePlace(opts: {
+  name?: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  postalCode?: string;
+  accessibilityInfo?: Record<string, string>;
+} = {}): any {
+  const accessibility = opts.accessibilityInfo ?? {};
+  return {
+    name: opts.name ?? 'Convention Center',
+    address: opts.address ?? '100 Main St',
+    city: opts.city ?? 'Springfield',
+    state: opts.state ?? 'IL',
+    postalCode: opts.postalCode ?? '62701',
+    hasContent: (lang: string) => lang in accessibility,
+    content: (lang: string) => ({
+      language: lang,
+      accessibilityInfo: accessibility[lang] ?? accessibility['en'] ?? '',
+    }),
+    getLanguages: () => Object.keys(accessibility),
+  };
+}
+
+/**
+ * Builds a mock Space (EventLocationSpace) with optional name and accessibility info.
+ */
+function makeSpace(opts: {
+  name?: string;
+  accessibilityInfo?: Record<string, string>;
+  language?: string;
+} = {}): any {
+  const lang = opts.language ?? 'en';
+  const name = opts.name ?? 'Pacific Room';
+  const accessibility = opts.accessibilityInfo ?? {};
+  // Space content lookup must always return an object whose `name` is the
+  // space name (the picker emits this when a Space is chosen).
+  return {
+    hasContent: (l: string) => l === lang || l in accessibility,
+    content: (l: string) => ({
+      language: l,
+      name,
+      accessibilityInfo: accessibility[l] ?? accessibility['en'] ?? '',
+    }),
+    getLanguages: () => [lang, ...Object.keys(accessibility).filter(k => k !== lang)],
+  };
 }
 
 function makeCategory(id: string, name: string): EventCategory {
@@ -119,6 +171,7 @@ function makeInstance(overrides: InstanceOverrides = {}): any {
       categories: overrides.categories ?? [],
       recurrenceSummary: overrides.recurrenceSummary ?? null,
       location: overrides.location ?? null,
+      space: overrides.space ?? null,
       sourceCalendar: overrides.sourceCalendar ?? null,
       externalUrl: overrides.externalUrl ?? null,
       urlPrompt: overrides.urlPrompt ?? null,
@@ -168,6 +221,15 @@ beforeAll(async () => {
       rsvp: 'RSVP',
       more_info: 'More Information',
       register: 'Register',
+    },
+    place: {
+      format: {
+        with_space: '{{place}} — {{space}}',
+      },
+      space: {
+        venue_accessibility_label: 'Venue accessibility',
+        space_accessibility_label: 'Space accessibility',
+      },
     },
   };
 
@@ -269,9 +331,13 @@ describe('EventDetailBody', () => {
       wrapper.unmount();
     });
 
-    it('renders the accessibility card when event accessibility info is present', () => {
+    it('renders the accessibility card when venue (Place) accessibility info is present', () => {
       const wrapper = mountBody({
-        instance: makeInstance({ accessibilityInfo: 'Wheelchair ramp at side entrance.' }),
+        instance: makeInstance({
+          location: makePlace({
+            accessibilityInfo: { en: 'Wheelchair ramp at side entrance.' },
+          }),
+        }),
       });
       expect(wrapper.find('.accessibility-card').exists()).toBe(true);
       expect(wrapper.find('.accessibility-info').text()).toBe('Wheelchair ramp at side entrance.');
@@ -337,6 +403,128 @@ describe('EventDetailBody', () => {
       expect(pill.attributes('target')).toBe('_blank');
       expect(pill.attributes('rel')).toBe('noopener noreferrer');
       wrapper.unmount();
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Place + Space layered display (pv-ix7v.4.7)
+  // -------------------------------------------------------------------------
+  describe('Place + Space layered display', () => {
+    describe('location header line', () => {
+      it('renders Place name alone when no Space is set', () => {
+        const wrapper = mountBody({
+          instance: makeInstance({
+            location: makePlace({ name: 'Convention Center' }),
+          }),
+        });
+        const nameEl = wrapper.find('.location-name');
+        expect(nameEl.exists()).toBe(true);
+        expect(nameEl.text()).toBe('Convention Center');
+        // Em-dash separator only present when Space is set
+        expect(nameEl.text()).not.toContain(' — ');
+        wrapper.unmount();
+      });
+
+      it('renders "Place — Space" when a Space is set', () => {
+        const wrapper = mountBody({
+          instance: makeInstance({
+            location: makePlace({ name: 'Convention Center' }),
+            space: makeSpace({ name: 'Pacific Room' }),
+          }),
+        });
+        const nameEl = wrapper.find('.location-name');
+        expect(nameEl.exists()).toBe(true);
+        expect(nameEl.text()).toBe('Convention Center — Pacific Room');
+        wrapper.unmount();
+      });
+    });
+
+    describe('layered accessibility subsections', () => {
+      it('hides the whole accessibility container when both venue and space are empty', () => {
+        const wrapper = mountBody({
+          instance: makeInstance({
+            location: makePlace({ accessibilityInfo: {} }),
+            space: makeSpace({ accessibilityInfo: {} }),
+          }),
+        });
+        expect(wrapper.find('.accessibility-card').exists()).toBe(false);
+        wrapper.unmount();
+      });
+
+      it('renders only the venue subsection when only Place has accessibility info', () => {
+        const wrapper = mountBody({
+          instance: makeInstance({
+            location: makePlace({
+              accessibilityInfo: { en: 'Wheelchair ramp at entrance' },
+            }),
+            space: makeSpace({ accessibilityInfo: {} }),
+          }),
+        });
+        const card = wrapper.find('.accessibility-card');
+        expect(card.exists()).toBe(true);
+        expect(wrapper.find('.accessibility-section--venue').exists()).toBe(true);
+        expect(wrapper.find('.accessibility-section--space').exists()).toBe(false);
+        expect(card.text()).toContain('Venue accessibility');
+        expect(card.text()).toContain('Wheelchair ramp at entrance');
+        expect(card.text()).not.toContain('Space accessibility');
+        wrapper.unmount();
+      });
+
+      it('renders only the space subsection when only Space has accessibility info', () => {
+        const wrapper = mountBody({
+          instance: makeInstance({
+            location: makePlace({ accessibilityInfo: {} }),
+            space: makeSpace({
+              accessibilityInfo: { en: 'Hearing loop, 3rd floor' },
+            }),
+          }),
+        });
+        const card = wrapper.find('.accessibility-card');
+        expect(card.exists()).toBe(true);
+        expect(wrapper.find('.accessibility-section--venue').exists()).toBe(false);
+        expect(wrapper.find('.accessibility-section--space').exists()).toBe(true);
+        expect(card.text()).toContain('Space accessibility');
+        expect(card.text()).toContain('Hearing loop, 3rd floor');
+        expect(card.text()).not.toContain('Venue accessibility');
+        wrapper.unmount();
+      });
+
+      it('renders both venue and space subsections when both are populated', () => {
+        const wrapper = mountBody({
+          instance: makeInstance({
+            location: makePlace({
+              accessibilityInfo: { en: 'Wheelchair ramp at entrance' },
+            }),
+            space: makeSpace({
+              accessibilityInfo: { en: 'Hearing loop, 3rd floor' },
+            }),
+          }),
+        });
+        const card = wrapper.find('.accessibility-card');
+        expect(card.exists()).toBe(true);
+        expect(wrapper.find('.accessibility-section--venue').exists()).toBe(true);
+        expect(wrapper.find('.accessibility-section--space').exists()).toBe(true);
+        expect(card.text()).toContain('Venue accessibility');
+        expect(card.text()).toContain('Wheelchair ramp at entrance');
+        expect(card.text()).toContain('Space accessibility');
+        expect(card.text()).toContain('Hearing loop, 3rd floor');
+        wrapper.unmount();
+      });
+
+      it('hides the space subsection when no Space is set, even if Place has info', () => {
+        const wrapper = mountBody({
+          instance: makeInstance({
+            location: makePlace({
+              accessibilityInfo: { en: 'Wheelchair ramp at entrance' },
+            }),
+            // no space
+          }),
+        });
+        expect(wrapper.find('.accessibility-card').exists()).toBe(true);
+        expect(wrapper.find('.accessibility-section--venue').exists()).toBe(true);
+        expect(wrapper.find('.accessibility-section--space').exists()).toBe(false);
+        wrapper.unmount();
+      });
     });
   });
 

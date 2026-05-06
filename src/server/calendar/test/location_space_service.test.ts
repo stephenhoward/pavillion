@@ -3,7 +3,7 @@ import sinon from 'sinon';
 
 import { Calendar } from '@/common/model/calendar';
 import { EventLocationSpace } from '@/common/model/location';
-import { LocationValidationError } from '@/common/exceptions/calendar';
+import { LocationNotFoundError } from '@/common/exceptions/calendar';
 import { LocationEntity } from '@/server/calendar/entity/location';
 import { LocationSpaceEntity, LocationSpaceContentEntity } from '@/server/calendar/entity/location_space';
 import { EventEntity } from '@/server/calendar/entity/event';
@@ -97,7 +97,7 @@ describe('LocationService Spaces', () => {
         service.createSpace(calendar, 'missing-place', {
           en: { name: 'Some Space', accessibilityInfo: '' },
         }),
-      ).rejects.toThrow(LocationValidationError);
+      ).rejects.toThrow(LocationNotFoundError);
       expect(findPlaceStub.called).toBe(true);
     });
 
@@ -117,7 +117,7 @@ describe('LocationService Spaces', () => {
         service.createSpace(calendar, 'place-1', {
           en: { name: 'Some Space', accessibilityInfo: '' },
         }),
-      ).rejects.toThrow(LocationValidationError);
+      ).rejects.toThrow(LocationNotFoundError);
       expect(findPlaceStub.called).toBe(true);
       expect(createSpaceStub.called).toBe(false);
     });

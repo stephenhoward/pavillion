@@ -242,4 +242,98 @@ describe('createEvent Space/Place invariant', () => {
     expect(err.expectedPlaceId).toBe(placeBId);
     expect(err.actualPlaceId).toBe('unknown');
   });
+
+  it('persists space_id on create when (locationId, spaceId) match', async () => {
+    const placeId = '66666666-6666-4666-8666-666666666666';
+    const spaceId = '77777777-7777-4777-8777-777777777777';
+
+    const findLocationByIdStub = sandbox.stub(service['locationService'], 'getLocationById');
+    findLocationByIdStub.resolves(new EventLocation(placeId, 'place', 'address'));
+
+    const findSpaceStub = sandbox.stub(LocationSpaceEntity, 'findByPk');
+    findSpaceStub.resolves(LocationSpaceEntity.build({
+      id: spaceId,
+      place_id: placeId,
+    }) as unknown as LocationSpaceEntity);
+
+    const eventSpy = sandbox.spy(EventEntity, 'fromModel');
+
+    await service.createEvent(acct, {
+      calendarId: cal.id,
+      locationId: placeId,
+      spaceId: spaceId,
+    });
+
+    // The built EventEntity should carry the supplied space_id at save time.
+    const built = eventSpy.returnValues[0];
+    expect(built.space_id).toBe(spaceId);
+    expect(built.location_id).toBe(placeId);
+  });
+
+  // Regression — Wave 6 IDOR fix.
+  // Before the fix, the (locationId && spaceId) gate skipped validation when
+  // only spaceId was provided, allowing an attacker-supplied foreign spaceId
+  // to be written to event.space_id without any parent-place check.
+  it('rejects event create when spaceId is supplied without any parent location', async () => {
+    const orphanSpaceId = '88888888-8888-4888-8888-888888888888';
+
+    // No location resolution path is exercised — the request supplies neither
+    // locationId nor an embedded location object. Stub Space lookup so we can
+    // assert it is NOT consulted (validation should reject before that point).
+    const findSpaceStub = sandbox.stub(LocationSpaceEntity, 'findByPk');
+
+    let thrown: unknown = null;
+    try {
+      await service.createEvent(acct, {
+        calendarId: cal.id,
+        spaceId: orphanSpaceId,
+      });
+    }
+    catch (err) {
+      thrown = err;
+    }
+
+    expect(thrown).toBeInstanceOf(SpaceLocationMismatchError);
+    const err = thrown as SpaceLocationMismatchError;
+    expect(err.spaceId).toBe(orphanSpaceId);
+    // No Space lookup should have happened — the early reject fires first.
+    expect(findSpaceStub.called).toBe(false);
+  });
+
+  it('validates spaceId against embedded location.id when locationId is omitted', async () => {
+    // Embedded location flows through findOrCreateLocation, which sets
+    // eventEntity.location_id. The Space invariant must run against that
+    // resolved id even though the request did not supply locationId directly.
+    const placeAId = '22222222-2222-4222-8222-222222222222';
+    const spaceUnderBId = '99999999-9999-4999-8999-999999999999';
+    const placeBId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+
+    const findOrCreateLocationStub = sandbox.stub(service['locationService'], 'findOrCreateLocation');
+    findOrCreateLocationStub.resolves(new EventLocation(placeAId, 'placeA', 'address'));
+
+    // Space belongs to Place B, but the resolved embedded location is Place A.
+    const findSpaceStub = sandbox.stub(LocationSpaceEntity, 'findByPk');
+    findSpaceStub.resolves(LocationSpaceEntity.build({
+      id: spaceUnderBId,
+      place_id: placeBId,
+    }) as unknown as LocationSpaceEntity);
+
+    let thrown: unknown = null;
+    try {
+      await service.createEvent(acct, {
+        calendarId: cal.id,
+        location: { name: 'placeA', address: 'address' },
+        spaceId: spaceUnderBId,
+      });
+    }
+    catch (err) {
+      thrown = err;
+    }
+
+    expect(thrown).toBeInstanceOf(SpaceLocationMismatchError);
+    const err = thrown as SpaceLocationMismatchError;
+    expect(err.spaceId).toBe(spaceUnderBId);
+    expect(err.expectedPlaceId).toBe(placeAId);
+    expect(err.actualPlaceId).toBe(placeBId);
+  });
 });

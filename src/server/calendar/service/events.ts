@@ -226,6 +226,122 @@ class EventService {
     }
   }
 
+  /**
+   * Resolve the Place (EventLocation) and optional Space for an inbound
+   * federated event payload (pv-ix7v.9.2).
+   *
+   * Branching contract for `eventParams.location`:
+   *   - When `location.originUri` is present, route through
+   *     LocationsService.findOrCreatePlaceByOriginUri so two events sharing
+   *     the same `pavillion:place.id` produce only one LocationEntity row
+   *     for this calendar.
+   *   - When `location.originUri` is absent, fall through to the existing
+   *     flat-create path (findOrCreateLocation) unchanged. This preserves
+   *     backward compatibility with non-aware peers (Mobilizon, Mastodon,
+   *     Gancio) whose Place objects carry no Pavillion identity hint.
+   *
+   * The same branching is applied to `eventParams.space`. Space resolution
+   * is anchored on the resolved Place (not on the calendar) because Spaces
+   * are scoped per-place; the per-calendar isolation is established by the
+   * caller having already resolved the Place against this calendar.
+   *
+   * Post-resolution, when both Place and Space are resolved, this helper
+   * runs the same `validateSpaceMatchesPlace` invariant that direct API
+   * callers do (pv-9hwi addendum). The inbound path is lower-trust than
+   * an authenticated API caller, so the defense matters more here, not
+   * less. A mismatch throws SpaceLocationMismatchError and prevents
+   * persistence.
+   *
+   * Both findOrCreate*ByOriginUri helpers do their own existence-check
+   * before write, so re-running this on the update path is idempotent.
+   *
+   * @param calendar - The local calendar receiving the event
+   * @param eventParams - Parsed inbound event params (mutated: location and
+   *                      space fields are removed once resolved so callers
+   *                      don't double-process them)
+   * @returns Object with optional resolved location and space
+   * @private
+   */
+  private async resolveRemoteLocationAndSpace(
+    calendar: Calendar,
+    eventParams: Record<string, any>,
+  ): Promise<{ location: EventLocation | null; space: LocationSpaceEntity | null }> {
+    let resolvedLocation: EventLocation | null = null;
+    let resolvedSpace: LocationSpaceEntity | null = null;
+
+    if (eventParams.location) {
+      const originUri: string | undefined = typeof eventParams.location.originUri === 'string'
+        ? eventParams.location.originUri
+        : undefined;
+
+      if (originUri) {
+        // Route through dedup helper. Two inbound events sharing the same
+        // pavillion:place.id resolve to the same LocationEntity row.
+        const placeData = EventLocation.fromObject(eventParams.location);
+        resolvedLocation = await this.locationService.findOrCreatePlaceByOriginUri(
+          calendar,
+          originUri,
+          placeData,
+        );
+      }
+      else {
+        // Flat-create path unchanged for non-aware peers.
+        resolvedLocation = await this.locationService.findOrCreateLocation(
+          calendar,
+          eventParams.location,
+        );
+      }
+    }
+
+    if (eventParams.space && resolvedLocation) {
+      const spaceOriginUri: string | undefined = typeof eventParams.space.originUri === 'string'
+        ? eventParams.space.originUri
+        : undefined;
+
+      if (spaceOriginUri) {
+        // Build the language-keyed content map the helper expects.
+        const contentByLang: Record<string, { name: string; accessibilityInfo: string }> = {};
+        const spaceContent = eventParams.space.content;
+        if (spaceContent && typeof spaceContent === 'object' && !Array.isArray(spaceContent)) {
+          for (const lang of Object.keys(spaceContent)) {
+            const entry = spaceContent[lang];
+            if (entry && typeof entry === 'object') {
+              contentByLang[lang] = {
+                name: typeof entry.name === 'string' ? entry.name : '',
+                accessibilityInfo: typeof entry.accessibilityInfo === 'string' ? entry.accessibilityInfo : '',
+              };
+            }
+          }
+        }
+
+        const spaceModel = await this.locationService.findOrCreateSpaceByOriginUri(
+          calendar,
+          resolvedLocation,
+          spaceOriginUri,
+          contentByLang,
+        );
+        // Re-load as entity so callers can read place_id / origin_uri directly
+        // and so EventEntity persistence reads space.id consistently with the
+        // local-create paths.
+        resolvedSpace = await LocationSpaceEntity.findByPk(spaceModel.id);
+      }
+    }
+
+    // Cross-entity invariant: when both Place and Space are resolved, the
+    // Space must belong to that Place. Defensive backstop for the inbox
+    // path (pv-9hwi addendum). For the dedup-by-origin_uri path the parent
+    // anchoring is structural (we passed the resolved Place into the Space
+    // helper), so this only fires on the unlikely race where a sender
+    // mismatches its own pavillion:place.id and pavillion:space.id parent
+    // path — but we run it unconditionally so the invariant is enforced
+    // identically to the direct API path.
+    if (resolvedLocation && resolvedSpace) {
+      await this.validateSpaceMatchesPlace(resolvedLocation.id, resolvedSpace.id);
+    }
+
+    return { location: resolvedLocation, space: resolvedSpace };
+  }
+
 
   /**
    * Returns the deduped set of event ids visible on the given calendar.
@@ -625,11 +741,27 @@ class EventService {
       event.location = locationEntity;
     }
 
-    // Cross-entity invariant: when both locationId and spaceId are supplied,
-    // the Space must belong to that Place. Defensive backstop for direct
-    // API callers and inbound ActivityPub.
-    if (eventParams.locationId && eventParams.spaceId) {
-      await this.validateSpaceMatchesPlace(eventParams.locationId, eventParams.spaceId);
+    // Cross-entity invariant: when spaceId is supplied, the Space must belong
+    // to the event's Place. Resolve the effective parent locationId from
+    // (1) the payload's explicit locationId, (2) the embedded location object's
+    // id (after findOrCreateLocation has run above and set eventEntity.location_id),
+    // or (3) reject — a Space cannot be validated without a parent Place.
+    // Validation MUST run before space_id is written, otherwise an attacker
+    // could submit a foreign spaceId without a locationId and bypass the check
+    // (cross-calendar IDOR). No-op when spaceId is null/undefined.
+    if (eventParams.spaceId) {
+      const effectiveLocationId = eventParams.locationId ?? eventEntity.location_id ?? null;
+      if (!effectiveLocationId) {
+        throw new SpaceLocationMismatchError(
+          eventParams.spaceId,
+          'unknown',
+          'unknown',
+          `Space ${eventParams.spaceId} cannot be attached to an event without a parent Place`,
+        );
+      }
+      await this.validateSpaceMatchesPlace(effectiveLocationId, eventParams.spaceId);
+      // Only write space_id after the invariant has been validated.
+      eventEntity.space_id = eventParams.spaceId;
     }
 
     // Handle media attachment
@@ -906,18 +1038,44 @@ class EventService {
       event.location = locationEntity;
     }
 
-    // Cross-entity invariant: when both locationId and spaceId are supplied,
-    // the Space must belong to that Place. Resolve the effective locationId
-    // from the payload first, then fall back to the persisted value so a
-    // payload that only changes spaceId is still validated against the
-    // event's existing Place.
+    // Cross-entity invariant: when spaceId is supplied, the Space must belong
+    // to the event's Place. Resolve the effective parent locationId from
+    // (1) the payload's explicit locationId, (2) the persisted location_id
+    // on the event entity (which the location-handling block above just
+    // refreshed if locationId or location was supplied), or (3) reject — a
+    // Space cannot be validated without a parent Place. Validation MUST run
+    // before space_id is written, otherwise an attacker could submit a foreign
+    // spaceId without a locationId and bypass the check (cross-calendar IDOR).
+    //
+    // Persist space_id semantics:
+    //   1. spaceId explicitly provided → validate, then write it
+    //   2. spaceId explicitly null → clear space_id
+    //   3. spaceId omitted but locationId is being changed → clear space_id
+    //      (whole-venue fallback: the prior Space belonged to the prior Place
+    //      and is no longer valid against the new Place)
+    //   4. spaceId omitted and locationId unchanged → leave space_id alone
     if (eventParams.spaceId) {
       const effectiveLocationId = eventParams.hasOwnProperty('locationId')
         ? eventParams.locationId
         : eventEntity.location_id;
-      if (effectiveLocationId) {
-        await this.validateSpaceMatchesPlace(effectiveLocationId, eventParams.spaceId);
+      if (!effectiveLocationId) {
+        throw new SpaceLocationMismatchError(
+          eventParams.spaceId,
+          'unknown',
+          'unknown',
+          `Space ${eventParams.spaceId} cannot be attached to an event without a parent Place`,
+        );
       }
+      await this.validateSpaceMatchesPlace(effectiveLocationId, eventParams.spaceId);
+      // Only write space_id after the invariant has been validated.
+      eventEntity.space_id = eventParams.spaceId;
+    }
+    else if (eventParams.hasOwnProperty('spaceId')) {
+      // Explicit null/undefined clears space_id.
+      eventEntity.space_id = null;
+    }
+    else if (eventParams.hasOwnProperty('locationId')) {
+      eventEntity.space_id = null;
     }
 
     if ( eventParams.schedules ) {
@@ -1173,10 +1331,17 @@ class EventService {
     const event = CalendarEvent.fromObject(eventParams);
     const eventEntity = EventEntity.fromModel(event);
 
-    if( eventParams.location ) {
-      let location = await this.locationService.findOrCreateLocation(calendar, eventParams.location);
-      eventEntity.location_id = location.id;
-      event.location = location;
+    // Branch on origin_uri to dedup AP-originated Places/Spaces (pv-ix7v.9.2).
+    // When the inbound Place carries a pavillion:place.id (origin_uri), two
+    // events sharing that id resolve to the same LocationEntity row. Falls
+    // back to the existing flat-create path for non-aware peers.
+    const resolved = await this.resolveRemoteLocationAndSpace(calendar, eventParams);
+    if (resolved.location) {
+      eventEntity.location_id = resolved.location.id;
+      event.location = resolved.location;
+    }
+    if (resolved.space) {
+      eventEntity.space_id = resolved.space.id;
     }
 
     await eventEntity.save();
@@ -1266,15 +1431,31 @@ class EventService {
       }
     }
 
-    // Update location
+    // Update location and space.
+    // When the inbound payload omits the location entirely, clear both the
+    // location and space references on the event. When location is present,
+    // resolve through the dedup helper (pv-ix7v.9.2): origin_uri-bearing
+    // Places route to findOrCreatePlaceByOriginUri, the rest fall back to
+    // the existing flat-create path. Same branching applies to space.
     if (eventEntity.location_id && !eventParams.location) {
       eventEntity.location_id = null;
       event.location = null;
+      eventEntity.space_id = null;
     }
     else if (eventParams.location) {
-      let locationEntity = await this.locationService.findOrCreateLocation(calendar, eventParams.location);
-      eventEntity.location_id = locationEntity.id;
-      event.location = locationEntity;
+      const resolved = await this.resolveRemoteLocationAndSpace(calendar, eventParams);
+      if (resolved.location) {
+        eventEntity.location_id = resolved.location.id;
+        event.location = resolved.location;
+      }
+      // Update space: explicit resolution wins; if the inbound payload
+      // dropped the space (no eventParams.space), clear space_id.
+      if (resolved.space) {
+        eventEntity.space_id = resolved.space.id;
+      }
+      else {
+        eventEntity.space_id = null;
+      }
     }
 
     // Update schedules

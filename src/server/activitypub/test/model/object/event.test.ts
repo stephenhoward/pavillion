@@ -895,6 +895,101 @@ describe('EventObject', () => {
 
     });
 
+    describe('flat as:Place.name concatenation with Space', () => {
+
+      it('should concatenate flat as:Place.name as "Place — Space" in the primary language when Space present', () => {
+        const calendar = new Calendar('calendar-uuid', 'mycal');
+        const event = new CalendarEvent('event-uuid', 'calendar-uuid');
+        event.addContent(new CalendarEventContent('en', 'My Event', ''));
+        event.location = new EventLocation('place-uuid-1', 'Convention Center');
+        const space = new EventLocationSpace('space-uuid-1', 'place-uuid-1');
+        space.addContent(new EventLocationSpaceContent('en', 'Pacific Room', 'Hearing loop'));
+        event.space = space;
+
+        const obj = new EventObject(calendar, event);
+        const result = obj.toActivityPubObject();
+
+        // Flat fallback for non-Pavillion peers (Mobilizon, Mastodon, Gancio)
+        // gets the concatenated label since they cannot consume pavillion:space.
+        expect(result.location.type).toBe('Place');
+        expect(result.location.name).toBe('Convention Center — Pacific Room');
+      });
+
+      it('should keep Place.name alone when no Space is present', () => {
+        const calendar = new Calendar('calendar-uuid', 'mycal');
+        const event = new CalendarEvent('event-uuid', 'calendar-uuid');
+        event.addContent(new CalendarEventContent('en', 'My Event', ''));
+        event.location = new EventLocation('place-uuid-1', 'Convention Center');
+        // No event.space — whole-venue event
+
+        const obj = new EventObject(calendar, event);
+        const result = obj.toActivityPubObject();
+
+        expect(result.location.name).toBe('Convention Center');
+        expect(result.location.name).not.toContain('—');
+      });
+
+      it('should pick the Space name in the same primary language used for event content', () => {
+        // Event has only French content, so the primary language should be 'fr'.
+        // The flat as:Place.name concatenation must use the FR space name to
+        // stay internally consistent with the rest of the flat surface (name,
+        // summary, content all come from the same primary-language pick).
+        const calendar = new Calendar('calendar-uuid', 'mycal');
+        const event = new CalendarEvent('event-uuid', 'calendar-uuid');
+        event.addContent(new CalendarEventContent('fr', 'Évènement', 'Description'));
+        event.location = new EventLocation('place-uuid-1', 'Centre des Congrès');
+        const space = new EventLocationSpace('space-uuid-1', 'place-uuid-1');
+        space.addContent(new EventLocationSpaceContent('en', 'Pacific Room', ''));
+        space.addContent(new EventLocationSpaceContent('fr', 'Salle Pacifique', ''));
+        event.space = space;
+
+        const obj = new EventObject(calendar, event);
+        const result = obj.toActivityPubObject();
+
+        // Primary language is 'fr' (event has no en content), so the Space
+        // name should be the FR translation, not the EN one.
+        expect(result.name).toBe('Évènement');
+        expect(result.location.name).toBe('Centre des Congrès — Salle Pacifique');
+      });
+
+      it('should fall back to the first available Space name when primary-language entry has no name', () => {
+        // Event content is English, but the Space has no English name (only FR).
+        // The concatenation must still produce a usable label for non-Pavillion
+        // peers by falling back to the first Space content with a non-empty name.
+        const calendar = new Calendar('calendar-uuid', 'mycal');
+        const event = new CalendarEvent('event-uuid', 'calendar-uuid');
+        event.addContent(new CalendarEventContent('en', 'My Event', ''));
+        event.location = new EventLocation('place-uuid-1', 'Convention Center');
+        const space = new EventLocationSpace('space-uuid-1', 'place-uuid-1');
+        space.addContent(new EventLocationSpaceContent('fr', 'Salle Pacifique', ''));
+        event.space = space;
+
+        const obj = new EventObject(calendar, event);
+        const result = obj.toActivityPubObject();
+
+        expect(result.location.name).toBe('Convention Center — Salle Pacifique');
+      });
+
+      it('should keep Place.name alone when Space has no per-language content (defensive)', () => {
+        // Pathological state: Space exists but has no content map. Concatenation
+        // would produce a trailing em-dash, so we suppress it and emit Place
+        // alone on the flat surface. The structured pavillion:space extension
+        // is unaffected.
+        const calendar = new Calendar('calendar-uuid', 'mycal');
+        const event = new CalendarEvent('event-uuid', 'calendar-uuid');
+        event.addContent(new CalendarEventContent('en', 'My Event', ''));
+        event.location = new EventLocation('place-uuid-1', 'Convention Center');
+        // Space with no addContent() calls — every _content[lang]?.name is undefined
+        event.space = new EventLocationSpace('space-empty', 'place-uuid-1');
+
+        const obj = new EventObject(calendar, event);
+        const result = obj.toActivityPubObject();
+
+        expect(result.location.name).toBe('Convention Center');
+      });
+
+    });
+
   });
 
   describe('fromActivityPubObject()', () => {

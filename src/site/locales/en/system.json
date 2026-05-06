@@ -82,6 +82,15 @@
     "event_accessibility": "Accessibility",
     "event_accessibility_event": "Event Accessibility",
     "event_accessibility_venue": "Venue Accessibility",
+    "place": {
+        "format": {
+            "with_space": "{{place}} — {{space}}"
+        },
+        "space": {
+            "venue_accessibility_label": "Venue accessibility",
+            "space_accessibility_label": "Space accessibility"
+        }
+    },
     "event_recurring": "Recurring Event",
     "event_cancelled": "Cancelled",
     "event_add_to_calendar": "Add to Calendar",

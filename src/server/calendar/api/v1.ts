@@ -6,6 +6,7 @@ import EditorPermissionRoutes from '@/server/calendar/api/v1/editor-permissions'
 import CategoryRoutes from '@/server/calendar/api/v1/categories';
 import CategoryMappingRoutes from '@/server/calendar/api/v1/category_mappings';
 import LocationRoutes from '@/server/calendar/api/v1/location';
+import SpaceRoutes from '@/server/calendar/api/v1/space';
 import WidgetRoutes from '@/server/calendar/api/v1/widget';
 import WidgetConfigRoutes from '@/server/calendar/api/v1/widget-config';
 import SeriesRoutes from '@/server/calendar/api/v1/series';
@@ -32,6 +33,8 @@ export default class CalendarAPI {
     categoryMappingRoutes.installHandlers(app, '/api/v1');
     let locationRoutes = new LocationRoutes(internalAPI);
     locationRoutes.installHandlers(app, '/api/v1');
+    let spaceRoutes = new SpaceRoutes(internalAPI);
+    spaceRoutes.installHandlers(app, '/api/v1');
     let seriesRoutes = new SeriesRoutes(internalAPI);
     seriesRoutes.installHandlers(app, '/api/v1');
     // ICS import source routes (per-calendar)

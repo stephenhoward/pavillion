@@ -1,7 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import { Calendar } from '@/common/model/calendar';
 import { EventLocation, EventLocationSpace } from '@/common/model/location';
-import { LocationValidationError } from '@/common/exceptions/calendar';
+import { LocationNotFoundError, LocationValidationError } from '@/common/exceptions/calendar';
 import { LocationEntity, LocationContentEntity } from '@/server/calendar/entity/location';
 import { LocationSpaceEntity, LocationSpaceContentEntity } from '@/server/calendar/entity/location_space';
 import { EventEntity } from '@/server/calendar/entity/event';
@@ -268,6 +268,33 @@ export default class LocationService {
   }
 
   /**
+   * Get a specific Space by ID, scoped to the caller's calendar via its
+   * parent Place.
+   *
+   * Eager-loads `place` so the auth chain `space.place.calendar_id` is safe to
+   * dereference. Returns null if the Space does not exist, has no loadable
+   * place association, or the parent Place is not owned by the caller's
+   * calendar (matching the "silent null" semantics used by getLocationById).
+   *
+   * @param calendar - The calendar that should own the Space (via its Place)
+   * @param spaceId - The ID of the Space to fetch
+   * @returns EventLocationSpace populated with content, or null
+   */
+  async getSpaceById(calendar: Calendar, spaceId: string): Promise<EventLocationSpace | null> {
+    const space = await LocationSpaceEntity.findByPk(spaceId, {
+      include: [
+        { model: LocationEntity, as: 'place' },
+        LocationSpaceContentEntity,
+      ],
+    });
+    if (!space || !space.place || space.place.calendar_id !== calendar.id) {
+      return null;
+    }
+
+    return space.toModel();
+  }
+
+  /**
    * Create a new Space within a Place owned by the caller's calendar.
    *
    * Verifies that the parent Place exists and belongs to the caller's calendar,
@@ -279,7 +306,7 @@ export default class LocationService {
    * @param placeId - The ID of the parent Place
    * @param contentByLang - Map of language code to {name, accessibilityInfo}
    * @returns Newly created EventLocationSpace populated with content
-   * @throws LocationValidationError if the Place does not exist or is not
+   * @throws LocationNotFoundError if the Place does not exist or is not
    *         owned by the caller's calendar
    */
   async createSpace(
@@ -289,7 +316,7 @@ export default class LocationService {
   ): Promise<EventLocationSpace> {
     const place = await LocationEntity.findByPk(placeId);
     if (!place || place.calendar_id !== calendar.id) {
-      throw new LocationValidationError(['Place not found or not owned by calendar']);
+      throw new LocationNotFoundError('Place not found or not owned by calendar');
     }
 
     const spaceId = uuidv4();

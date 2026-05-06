@@ -107,6 +107,18 @@ export class CategoriesNotFoundError extends Error {
 }
 
 /**
+ * Custom error class for location (Place) or Space not found
+ */
+export class LocationNotFoundError extends Error {
+  constructor(message: string = 'Location not found') {
+    super(message);
+    this.name = 'LocationNotFoundError';
+    // Maintaining proper prototype chain in ES5+
+    Object.setPrototypeOf(this, LocationNotFoundError.prototype);
+  }
+}
+
+/**
  * Custom error class for invalid location data
  * Contains an array of validation error messages
  */
