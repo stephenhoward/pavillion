@@ -387,6 +387,26 @@ describe('LocationPickerModal', () => {
       expect(suffix.exists()).toBe(true);
       expect(suffix.text()).toBe('(whole venue)');
     });
+
+    it('a11y: whole-venue entry text content contains whitespace between place name and suffix', () => {
+      // Regression guard for pv-exp1: the place name and "(whole venue)" suffix
+      // must be separated by whitespace in the DOM so AT flat-text concatenation
+      // reads "Convention Center (whole venue)", not "Convention Center(whole venue)".
+      const wrapper = mount(LocationPickerModal, { ...SHEET_GLOBAL, props: {
+        locations: [conventionCenter],
+        spacesByPlace: {
+          'place-cc': [makeSpace('space-pacific', 'place-cc', 'Pacific Room')],
+        },
+        selectedLocationId: null,
+        selectedSpaceId: null,
+      },
+      });
+
+      const locationName = wrapper.findAll('.location-item')[0].find('.location-name');
+      // The normalized text ("Convention Center (whole venue)") must contain a
+      // space between the place name and the suffix — not run them together.
+      expect(locationName.text()).toMatch(/Convention Center\s+\(whole venue\)/);
+    });
   });
 
   describe('search functionality', () => {

@@ -749,6 +749,11 @@ class EventService {
     // Validation MUST run before space_id is written, otherwise an attacker
     // could submit a foreign spaceId without a locationId and bypass the check
     // (cross-calendar IDOR). No-op when spaceId is null/undefined.
+    //
+    // After the client wire fix (pv-on9o), toObject() emits both spaceId and
+    // space:{id}, so the spaceId branch fires on the create path. The
+    // space:{id} fallback is defense-in-depth for federation inbound (where
+    // the canonical wire shape is space:{id} only, no top-level spaceId).
     if (eventParams.spaceId) {
       const effectiveLocationId = eventParams.locationId ?? eventEntity.location_id ?? null;
       if (!effectiveLocationId) {
@@ -762,6 +767,21 @@ class EventService {
       await this.validateSpaceMatchesPlace(effectiveLocationId, eventParams.spaceId);
       // Only write space_id after the invariant has been validated.
       eventEntity.space_id = eventParams.spaceId;
+    }
+    else if (eventParams.space?.id) {
+      // Federation inbound / legacy shape: space:{id} object but no top-level spaceId.
+      // Defense-in-depth IDOR guard — validate before writing.
+      const effectiveLocationId = eventParams.locationId ?? eventEntity.location_id ?? null;
+      if (!effectiveLocationId) {
+        throw new SpaceLocationMismatchError(
+          eventParams.space.id,
+          'unknown',
+          'unknown',
+          `Space ${eventParams.space.id} cannot be attached to an event without a parent Place`,
+        );
+      }
+      await this.validateSpaceMatchesPlace(effectiveLocationId, eventParams.space.id);
+      eventEntity.space_id = eventParams.space.id;
     }
 
     // Handle media attachment
@@ -1049,33 +1069,53 @@ class EventService {
     //
     // Persist space_id semantics:
     //   1. spaceId explicitly provided → validate, then write it
-    //   2. spaceId explicitly null → clear space_id
-    //   3. spaceId omitted but locationId is being changed → clear space_id
+    //   2. space:{id} object provided (no top-level spaceId) → validate, then
+    //      write it (federation/legacy client shape — pv-on9o fix)
+    //   3. spaceId explicitly null → clear space_id
+    //   4. spaceId omitted but locationId is being changed → clear space_id
     //      (whole-venue fallback: the prior Space belonged to the prior Place
     //      and is no longer valid against the new Place)
-    //   4. spaceId omitted and locationId unchanged → leave space_id alone
-    if (eventParams.spaceId) {
+    //   5. spaceId omitted and locationId unchanged → leave space_id alone
+    // Resolve the incoming space identifier to a canonical spaceId string.
+    // The client sends either a top-level `spaceId` (new wire contract after
+    // pv-on9o) or a nested `space:{id}` object (federation / legacy shape).
+    // Whichever is present, validate before writing (IDOR guard) and eagerly
+    // load the space model so the returned `event.space` is populated without
+    // a second DB round-trip.
+    const incomingSpaceId: string | null = eventParams.spaceId ?? eventParams.space?.id ?? null;
+    if (incomingSpaceId) {
       const effectiveLocationId = eventParams.hasOwnProperty('locationId')
         ? eventParams.locationId
         : eventEntity.location_id;
       if (!effectiveLocationId) {
         throw new SpaceLocationMismatchError(
-          eventParams.spaceId,
+          incomingSpaceId,
           'unknown',
           'unknown',
-          `Space ${eventParams.spaceId} cannot be attached to an event without a parent Place`,
+          `Space ${incomingSpaceId} cannot be attached to an event without a parent Place`,
         );
       }
-      await this.validateSpaceMatchesPlace(effectiveLocationId, eventParams.spaceId);
+      await this.validateSpaceMatchesPlace(effectiveLocationId, incomingSpaceId);
       // Only write space_id after the invariant has been validated.
-      eventEntity.space_id = eventParams.spaceId;
+      eventEntity.space_id = incomingSpaceId;
+      // Populate the returned model so callers see event.space without a
+      // second getEventById round-trip. The space entity was validated above
+      // so it exists; re-load with content so toModel() has full content.
+      const spaceEntity = await LocationSpaceEntity.findByPk(incomingSpaceId, {
+        include: [LocationSpaceContentEntity],
+      });
+      if (spaceEntity) {
+        event.space = spaceEntity.toModel();
+      }
     }
     else if (eventParams.hasOwnProperty('spaceId')) {
-      // Explicit null/undefined clears space_id.
+      // Explicit null clears space_id.
       eventEntity.space_id = null;
+      event.space = null;
     }
     else if (eventParams.hasOwnProperty('locationId')) {
       eventEntity.space_id = null;
+      event.space = null;
     }
 
     if ( eventParams.schedules ) {

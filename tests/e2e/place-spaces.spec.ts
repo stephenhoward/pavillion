@@ -25,6 +25,14 @@ import { startTestServer, TestEnvironment } from './helpers/test-server';
  *          assertion paired with the absence-of-Pacific-Room negative, per
  *          testing-advisor LOW finding).
  *        - The `.accessibility-section--space` block is hidden (.not.toBeVisible()).
+ *   7. Re-edit the SAME event and switch to a DIFFERENT Space ("Council Chambers")
+ *      to exercise the exact broken path from pv-on9o (edit existing event,
+ *      pick a Space, save — was silently clearing space_id before the fix).
+ *   8. Reload the public detail and assert:
+ *        - The location header shows "Convention Center — Council Chambers".
+ *        - The `.accessibility-section--space` block is visible (no accessibility
+ *          text for Council Chambers, but the section should be present/absent
+ *          depending on the template implementation — assert the header).
  *
  * Uses the shared isolated test-server harness (in-memory SQLite, fresh seeded
  * admin@pavillion.dev / test_calendar). The test runs serially (single-test
@@ -33,6 +41,7 @@ import { startTestServer, TestEnvironment } from './helpers/test-server';
  * Related:
  *   - Plan: docs/superpowers/plans/2026-05-05-place-spaces.md, Task 1.19
  *   - Bead: pv-ix7v.5.1 (parent epic pv-ix7v)
+ *   - Bug fix: pv-on9o (Space silently dropped on re-edit of existing event)
  */
 
 let env: TestEnvironment;
@@ -320,5 +329,37 @@ test.describe('Place + Spaces full scenario', () => {
     // Strong assertion: the space-accessibility block is hidden entirely.
     const spaceAccessibilityAfter = page.locator('.accessibility-section--space');
     await expect(spaceAccessibilityAfter).not.toBeVisible();
+
+    // 7. Re-edit the same event and switch to a DIFFERENT Space ("Council Chambers").
+    //    This is the exact broken path from pv-on9o: edit an existing event (not
+    //    create), pick a Space, save — the prior bug silently cleared space_id.
+    await editEvent(page, eventId);
+
+    const locationCard2 = page.locator('.location-display-card');
+    await expect(locationCard2).toBeVisible({ timeout: 5000 });
+    await locationCard2.getByRole('button', { name: /^change$/i }).click();
+    await page.waitForSelector('dialog.sheet-dialog[open]', { timeout: 5000 });
+
+    // Pick the Council Chambers entry (the second space).
+    const councilHeader = `${PLACE_NAME} — ${SPACE_COUNCIL}`;
+    await selectPickerEntry(page, councilHeader);
+
+    await page.locator('button.btn-save').click();
+    await page.waitForURL(`**/calendar/${ADMIN_CALENDAR}`, { timeout: 15000 });
+
+    // 8. Reload the public detail and assert that Council Chambers is now the
+    //    selected Space. Before the pv-on9o fix, the header would show only
+    //    "Convention Center" (whole venue) because space_id was silently cleared.
+    await page.goto(`${env.baseURL}/view/${ADMIN_CALENDAR}/events/${eventId}`);
+    await page.waitForSelector('.event-main', { timeout: 15000 });
+
+    const locationNameCouncil = page.locator('.event-location .location-name');
+    await expect(locationNameCouncil).toBeVisible();
+
+    // Positive assertion: the new Space name is in the header.
+    await expect(locationNameCouncil).toContainText(councilHeader);
+
+    // Negative assertion: the Pacific Room name is no longer in the header.
+    await expect(locationNameCouncil).not.toContainText(SPACE_PACIFIC);
   });
 });

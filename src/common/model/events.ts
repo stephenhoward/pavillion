@@ -295,6 +295,7 @@ class CalendarEvent extends TranslatedModel<CalendarEventContent> {
       locationId: this.locationId,
       location: this.location?.toObject(),
       space: this.space?.toObject() ?? null,
+      spaceId: this.space?.id ?? null,
       media: this.media?.toObject(),
       mediaFocalPointX: this.mediaFocalPointX,
       mediaFocalPointY: this.mediaFocalPointY,

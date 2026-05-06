@@ -263,6 +263,7 @@ defineExpose({ close, sheetRef });
               <div class="location-name">
                 <template v-if="entry.isWholeVenue">
                   <span>{{ entry.placeName }}</span>
+                  {{ ' ' }}
                   <span class="whole-venue-suffix">
                     {{ tPlaces('picker.whole_venue_suffix') }}
                   </span>

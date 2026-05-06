@@ -160,7 +160,7 @@ checkSetupMode().then((setupRequired) => {
       { path: '/event/:eventId', component: EditEventView, name: 'event_edit', beforeEnter: mustBeLoggedIn, props: true },
       // Place routes are top-level to render fullscreen without navigation
       { path: '/calendar/:calendar/places/new', component: EditPlaceView, name: 'place_new', beforeEnter: mustBeLoggedIn },
-      { path: '/calendar/:calendar/places/:placeId', component: EditPlaceView, name: 'place_edit', beforeEnter: mustBeLoggedIn, props: true },
+      { path: '/calendar/:calendar/places/:placeId', component: EditPlaceView, name: 'place_edit', beforeEnter: mustBeLoggedIn, props: (route) => ({ placeId: route.params.placeId }) },
       { path: '/admin', component: AdminViews, name: 'admin', beforeEnter: mustBeAdmin,
         children: [
           { path: 'settings', component: AdminSettingsView, name: 'admin_settings', beforeEnter: mustBeAdmin },

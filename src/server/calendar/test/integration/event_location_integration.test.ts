@@ -4,12 +4,13 @@ import { EventEmitter } from 'events';
 import { Account } from '@/common/model/account';
 import { Calendar } from '@/common/model/calendar';
 import { CalendarEvent } from '@/common/model/events';
-import { EventLocation, EventLocationContent } from '@/common/model/location';
+import { EventLocation, EventLocationContent, EventLocationSpace } from '@/common/model/location';
 import CalendarInterface from '@/server/calendar/interface';
 import { TestEnvironment } from '@/server/common/test/lib/test_environment';
 import AccountService from '@/server/accounts/service/account';
 import ConfigurationInterface from '@/server/configuration/interface';
 import SetupInterface from '@/server/setup/interface';
+import { SpaceLocationMismatchError } from '@/common/exceptions/calendar';
 
 /**
  * Integration tests for Event-Location integration
@@ -280,6 +281,158 @@ describe('EventService - Location Integration', () => {
       expect(fetchedEvent.location?.name).toBe('Test Venue');
       expect(fetchedEvent.location?.address).toBe('123 Main St');
       expect(fetchedEvent.locationId).toBe(testLocation.id);
+    });
+  });
+});
+
+/**
+ * Integration tests for Space persistence in event create/update (pv-on9o).
+ *
+ * Covers the serialization symmetry bug where updateEvent read only
+ * eventParams.spaceId but the client wire contract emits space:{id} (object).
+ * After the fix, both shapes are accepted on create and update.
+ */
+describe('EventService - Space persistence integration', () => {
+  let env: TestEnvironment;
+  let calendarInterface: CalendarInterface;
+  let testAccount: Account;
+  let testCalendar: Calendar;
+  let otherCalendar: Calendar;
+  let testLocation: EventLocation;
+  let testSpace: EventLocationSpace;
+  let otherLocation: EventLocation;
+  let otherSpace: EventLocationSpace;
+
+  const testEmail = 'eventspace@pavillion.dev';
+  const password = 'testpassword';
+
+  beforeAll(async () => {
+    env = new TestEnvironment();
+    await env.init();
+
+    const eventBus = new EventEmitter();
+    calendarInterface = new CalendarInterface(eventBus);
+    calendarInterface.setActivityPubInterface({
+      getSharedEventIds: async () => [],
+      getSharedEventStatusMap: async () => new Map(),
+    } as any);
+
+    const configurationInterface = new ConfigurationInterface();
+    const setupInterface = new SetupInterface();
+    const accountService = new AccountService(eventBus, configurationInterface, setupInterface);
+
+    const accountInfo = await accountService._setupAccount(testEmail, password);
+    testAccount = accountInfo.account;
+
+    testCalendar = await calendarInterface.createCalendar(testAccount, 'spacetestcal');
+    otherCalendar = await calendarInterface.createCalendar(testAccount, 'otherspacevcal');
+
+    testLocation = await calendarInterface.createLocation(
+      testCalendar,
+      new EventLocation(undefined, 'Space Venue', '1 Main St'),
+    );
+
+    testSpace = await calendarInterface.createSpace(
+      testCalendar,
+      testLocation.id,
+      { en: { name: 'Pacific Room', accessibilityInfo: '' } },
+    );
+
+    otherLocation = await calendarInterface.createLocation(
+      otherCalendar,
+      new EventLocation(undefined, 'Other Venue', '2 Oak St'),
+    );
+
+    otherSpace = await calendarInterface.createSpace(
+      otherCalendar,
+      otherLocation.id,
+      { en: { name: 'Other Room', accessibilityInfo: '' } },
+    );
+  });
+
+  afterAll(async () => {
+    await env.cleanup();
+  });
+
+  describe('updateEvent with spaceId (top-level wire field)', () => {
+    it('persists space_id when update sends spaceId', async () => {
+      const event = await calendarInterface.createEvent(testAccount, {
+        calendarId: testCalendar.id,
+        locationId: testLocation.id,
+        content: { en: { name: 'Space Test Event' } },
+        start_date: '2026-09-01',
+      });
+
+      const updated = await calendarInterface.updateEvent(testAccount, event.id, {
+        locationId: testLocation.id,
+        spaceId: testSpace.id,
+      });
+
+      expect(updated.space?.id).toBe(testSpace.id);
+    });
+
+    it('persists space_id when update sends space:{id} object (federation/legacy shape)', async () => {
+      const event = await calendarInterface.createEvent(testAccount, {
+        calendarId: testCalendar.id,
+        locationId: testLocation.id,
+        content: { en: { name: 'Space Object Test Event' } },
+        start_date: '2026-09-01',
+      });
+
+      // Simulate the legacy/federation wire shape: space:{id, placeId} but NO top-level spaceId.
+      const updated = await calendarInterface.updateEvent(testAccount, event.id, {
+        locationId: testLocation.id,
+        space: { id: testSpace.id, placeId: testLocation.id, content: {} },
+      });
+
+      expect(updated.space?.id).toBe(testSpace.id);
+    });
+
+    it('clears space_id when switching to whole-venue (spaceId explicitly null)', async () => {
+      const event = await calendarInterface.createEvent(testAccount, {
+        calendarId: testCalendar.id,
+        locationId: testLocation.id,
+        spaceId: testSpace.id,
+        content: { en: { name: 'Whole Venue Test Event' } },
+        start_date: '2026-09-01',
+      });
+
+      const updated = await calendarInterface.updateEvent(testAccount, event.id, {
+        locationId: testLocation.id,
+        spaceId: null,
+      });
+
+      expect(updated.space).toBeNull();
+    });
+
+    it('rejects cross-calendar spaceId on update with 400 SpaceLocationMismatchError', async () => {
+      const event = await calendarInterface.createEvent(testAccount, {
+        calendarId: testCalendar.id,
+        locationId: testLocation.id,
+        content: { en: { name: 'IDOR Guard Update Test' } },
+        start_date: '2026-09-01',
+      });
+
+      await expect(
+        calendarInterface.updateEvent(testAccount, event.id, {
+          locationId: testLocation.id,
+          spaceId: otherSpace.id,
+        }),
+      ).rejects.toThrow(SpaceLocationMismatchError);
+    });
+  });
+
+  describe('createEvent with space:{id} object (IDOR defense-in-depth)', () => {
+    it('rejects cross-calendar space:{id} on create with SpaceLocationMismatchError', async () => {
+      await expect(
+        calendarInterface.createEvent(testAccount, {
+          calendarId: testCalendar.id,
+          locationId: testLocation.id,
+          space: { id: otherSpace.id, placeId: otherLocation.id, content: {} },
+          content: { en: { name: 'IDOR Guard Create Test' } },
+          start_date: '2026-09-01',
+        }),
+      ).rejects.toThrow(SpaceLocationMismatchError);
     });
   });
 });

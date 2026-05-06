@@ -928,6 +928,7 @@ button {
 
             <LocationDisplayCard
               :location="editorState.event.location"
+              :space="editorState.event.space"
               @change-location="handleOpenLocationPicker"
               @add-location="handleOpenLocationPicker"
             />

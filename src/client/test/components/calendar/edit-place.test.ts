@@ -77,7 +77,7 @@ vi.mock('@/client/service/location', () => ({
 const routes: RouteRecordRaw[] = [
   { path: '/calendar/:calendar', component: {}, name: 'calendar' },
   { path: '/calendar/:calendar/places/new', component: EditPlaceView, name: 'place_new' },
-  { path: '/calendar/:calendar/places/:placeId', component: EditPlaceView, name: 'place_edit', props: true },
+  { path: '/calendar/:calendar/places/:placeId', component: EditPlaceView, name: 'place_edit', props: (route: { params: Record<string, string> }) => ({ placeId: route.params.placeId }) },
 ];
 
 let routerPushSpy: ReturnType<typeof vi.fn>;
