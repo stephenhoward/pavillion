@@ -4,6 +4,7 @@ import BackupService from '@/server/housekeeping/service/backup';
 import config from 'config';
 import * as fs from 'fs';
 import { BackupEntity } from '@/server/housekeeping/entity/backup';
+import { BackupCreateError } from '@/common/exceptions/housekeeping';
 
 // Mock fs (a non-built-in wrapper that can be mocked) and the database entity.
 // Note: child_process is a Node.js built-in and cannot be mocked via vi.mock() in
@@ -99,6 +100,75 @@ describe('BackupService', () => {
 
       const result = await service.createBackup('manual');
       expect(result.verified).toBe(false);
+    });
+
+    describe('error wrapping', () => {
+      it('should wrap pg_dump (executeCommand) failures in BackupCreateError', async () => {
+        // Force the PostgreSQL code path so executeCommand is invoked
+        const buildArgsSpy = vi.spyOn(service as any, 'buildPgDumpArgs').mockReturnValue({
+          file: 'pg_dump',
+          args: ['-Fc', '-f', '/tmp/x'],
+          env: process.env,
+        });
+        const originalError = new Error('pg_dump exited with code 1');
+        vi.spyOn(service as any, 'executeCommand').mockRejectedValue(originalError);
+
+        let caught: unknown;
+        try {
+          await service.createBackup('scheduled');
+        }
+        catch (e) {
+          caught = e;
+        }
+
+        expect(caught).toBeInstanceOf(BackupCreateError);
+        const wrapped = caught as BackupCreateError;
+        expect(wrapped.message).toBe('pg_dump exited with code 1');
+        expect(wrapped.filename).toMatch(/^pavillion_\d{8}_\d{6}_scheduled\.dump$/);
+        expect(wrapped.cause).toBe(originalError);
+
+        buildArgsSpy.mockRestore();
+      });
+
+      it('should wrap fs.writeFileSync failures in BackupCreateError (SQLite path)', async () => {
+        const originalError = new Error('EACCES: permission denied');
+        vi.mocked(fs.writeFileSync).mockImplementation(() => {
+          throw originalError;
+        });
+
+        let caught: unknown;
+        try {
+          await service.createBackup('manual');
+        }
+        catch (e) {
+          caught = e;
+        }
+
+        expect(caught).toBeInstanceOf(BackupCreateError);
+        const wrapped = caught as BackupCreateError;
+        expect(wrapped.message).toBe('EACCES: permission denied');
+        expect(wrapped.filename).toMatch(/^pavillion_\d{8}_\d{6}_manual\.dump$/);
+        expect(wrapped.cause).toBe(originalError);
+      });
+
+      it('should wrap BackupEntity.create failures in BackupCreateError', async () => {
+        const originalError = new Error('database connection lost');
+        vi.mocked(BackupEntity.create).mockRejectedValue(originalError);
+
+        let caught: unknown;
+        try {
+          await service.createBackup('scheduled');
+        }
+        catch (e) {
+          caught = e;
+        }
+
+        expect(caught).toBeInstanceOf(BackupCreateError);
+        const wrapped = caught as BackupCreateError;
+        expect(wrapped.message).toBe('database connection lost');
+        expect(wrapped.filename).toMatch(/^pavillion_\d{8}_\d{6}_scheduled\.dump$/);
+        expect(wrapped.cause).toBe(originalError);
+      });
     });
 
     it('should record backup metadata', async () => {

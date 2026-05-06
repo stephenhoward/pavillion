@@ -48,6 +48,38 @@ vi.mock('@/server/housekeeping/model/disk-critical-email', () => ({
   },
 }));
 
+// Track BackupFailedEmail constructor and buildMessage calls for assertion
+const backupFailedEmailConstructorCalls: any[][] = [];
+const backupFailedEmailBuildMessageCalls: string[] = [];
+
+vi.mock('@/server/housekeeping/model/backup-failed-email', () => ({
+  default: class {
+    constructor(
+      public backupType: string,
+      public filename: string,
+      public errorMessage: string,
+      public occurredAt: string,
+      private recipientEmail: string,
+    ) {
+      backupFailedEmailConstructorCalls.push([backupType, filename, errorMessage, occurredAt, recipientEmail]);
+    }
+    buildMessage(language: string) {
+      backupFailedEmailBuildMessageCalls.push(language);
+      return {
+        from: 'noreply@test.com',
+        to: (this as any).recipientEmail,
+        subject: 'Backup Failed',
+        text: `Backup Failed (${language}): ${(this as any).backupType} ${(this as any).filename}`,
+        backupType: (this as any).backupType,
+        filename: (this as any).filename,
+        errorMessage: (this as any).errorMessage,
+        occurredAt: (this as any).occurredAt,
+        language,
+      };
+    }
+  },
+}));
+
 describe('AlertsService', () => {
   let service: AlertsService;
   let mockEmailInterface: EmailInterface;
@@ -60,6 +92,10 @@ describe('AlertsService', () => {
     sandbox = sinon.createSandbox();
     mockEmailInterface = new EmailInterface();
     sendEmailStub = sandbox.stub(mockEmailInterface, 'sendEmail').resolves(null);
+
+    // Reset BackupFailedEmail trackers for each test
+    backupFailedEmailConstructorCalls.length = 0;
+    backupFailedEmailBuildMessageCalls.length = 0;
 
     // Mock admin accounts with different language preferences
     const mockAdmins = [
@@ -155,6 +191,114 @@ describe('AlertsService', () => {
 
       // Should not attempt to send emails
       expect(sendEmailStub.callCount).toBe(0);
+    });
+  });
+
+  describe('sendBackupFailed', () => {
+    const backupType = 'scheduled' as const;
+    const filename = 'pavillion-backup-2026-05-06.tar.gz';
+    const errorMessage = 'pg_dump: connection refused';
+    const occurredAt = new Date('2026-05-06T12:34:56.000Z');
+
+    it('should send emails to all admin accounts in their preferred languages', async () => {
+      await service.sendBackupFailed(backupType, filename, errorMessage, occurredAt);
+
+      // Should query for admin accounts
+      expect(getAdminsStub.calledOnce).toBe(true);
+
+      // Should send email to each admin (3 admins)
+      expect(sendEmailStub.callCount).toBe(3);
+
+      // Verify emails sent to correct recipients
+      const calls = sendEmailStub.getCalls();
+      expect(calls[0].args[0].to).toBe('admin1@test.com');
+      expect(calls[1].args[0].to).toBe('admin2@test.com');
+      expect(calls[2].args[0].to).toBe('admin3@test.com');
+
+      // Verify each admin's email was rendered in their preferred language
+      expect(backupFailedEmailBuildMessageCalls).toEqual(['en', 'es', 'fr']);
+    });
+
+    it('should pass backupType, filename, errorMessage, and occurredAt to the email model', async () => {
+      await service.sendBackupFailed(backupType, filename, errorMessage, occurredAt);
+
+      // Constructor called once per admin (3 admins)
+      expect(backupFailedEmailConstructorCalls.length).toBe(3);
+
+      // Each constructor call should carry the same backup details (and admin email)
+      const expectedOccurredAt = occurredAt.toISOString();
+      const adminEmails = ['admin1@test.com', 'admin2@test.com', 'admin3@test.com'];
+      backupFailedEmailConstructorCalls.forEach((args, idx) => {
+        const [type, file, errMsg, when, recipient] = args;
+        expect(type).toBe(backupType);
+        expect(file).toBe(filename);
+        expect(errMsg).toBe(errorMessage);
+        expect(when).toBe(expectedOccurredAt);
+        expect(recipient).toBe(adminEmails[idx]);
+      });
+
+      // The MailData passed to sendEmail should also reflect those values (via the mock buildMessage)
+      const sendEmailCalls = sendEmailStub.getCalls();
+      sendEmailCalls.forEach((call, idx) => {
+        const mailData = call.args[0];
+        expect(mailData.backupType).toBe(backupType);
+        expect(mailData.filename).toBe(filename);
+        expect(mailData.errorMessage).toBe(errorMessage);
+        expect(mailData.occurredAt).toBe(expectedOccurredAt);
+        expect(mailData.to).toBe(adminEmails[idx]);
+      });
+    });
+
+    it('should accept a pre-formatted occurredAt string', async () => {
+      const occurredAtStr = '2026-05-06 12:34:56 UTC';
+      await service.sendBackupFailed('manual', filename, errorMessage, occurredAtStr);
+
+      expect(backupFailedEmailConstructorCalls.length).toBe(3);
+      backupFailedEmailConstructorCalls.forEach((args) => {
+        // String is passed through unchanged
+        expect(args[3]).toBe(occurredAtStr);
+        expect(args[0]).toBe('manual');
+      });
+    });
+
+    it('should not abort the loop when one admin send fails', async () => {
+      // First call rejects, subsequent calls succeed
+      sendEmailStub.onFirstCall().rejects(new Error('SMTP rejected for admin1'));
+      sendEmailStub.onSecondCall().resolves(null);
+      sendEmailStub.onThirdCall().resolves(null);
+
+      await expect(
+        service.sendBackupFailed(backupType, filename, errorMessage, occurredAt),
+      ).resolves.not.toThrow();
+
+      // All three admins were attempted
+      expect(sendEmailStub.callCount).toBe(3);
+
+      // Remaining admins still received their emails
+      const calls = sendEmailStub.getCalls();
+      expect(calls[1].args[0].to).toBe('admin2@test.com');
+      expect(calls[2].args[0].to).toBe('admin3@test.com');
+    });
+
+    it('should not throw if email sending fails for all admins', async () => {
+      sendEmailStub.rejects(new Error('SMTP not configured'));
+
+      // Should not throw - graceful degradation
+      await expect(
+        service.sendBackupFailed(backupType, filename, errorMessage, occurredAt),
+      ).resolves.not.toThrow();
+    });
+
+    it('should skip sending if no admins found', async () => {
+      getAdminsStub.resolves([]);
+
+      await expect(
+        service.sendBackupFailed(backupType, filename, errorMessage, occurredAt),
+      ).resolves.not.toThrow();
+
+      // Should not attempt to send emails
+      expect(sendEmailStub.callCount).toBe(0);
+      expect(backupFailedEmailConstructorCalls.length).toBe(0);
     });
   });
 });

@@ -7,4 +7,5 @@ export * from './activitypub';
 export * from './report';
 export * from './series';
 export * from './funding';
+export * from './housekeeping';
 export * from './import';

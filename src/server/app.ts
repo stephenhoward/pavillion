@@ -19,8 +19,12 @@ const main = async (providedApp?: express.Application): Promise<express.Applicat
     logger.info('Starting in worker mode');
     logger.info('Job processing: enabled');
 
-    // Import and start worker instead of web server
-    await import('@/server/worker');
+    // Import and explicitly start the worker. The worker module exposes
+    // startWorker as a named export so tests can import other symbols
+    // (e.g. registerJobHandlers) without triggering a real database/pg-boss
+    // connection.
+    const { startWorker } = await import('@/server/worker');
+    await startWorker();
 
     // Return a dummy app for consistency (worker doesn't use Express)
     return express();

@@ -1,0 +1,18 @@
+{
+  "subject": "❌ Échec de la sauvegarde : sauvegarde {{backupType}} de {{filename}}",
+  "title": "Échec de la tâche de sauvegarde",
+  "greeting": "Bonjour Administrateur,",
+  "alert_message": "Une tâche de sauvegarde Pavillion a échoué et n'a pas pu être complétée.",
+  "backup_type": "Type de sauvegarde : {{backupType}}",
+  "filename": "Nom du fichier de sauvegarde : {{filename}}",
+  "error_message": "Détails de l'erreur : {{errorMessage}}",
+  "occurred_at": "Heure de l'échec : {{occurredAt}}",
+  "recommendations": "Actions recommandées :",
+  "action_1": "Examinez les détails de l'erreur ci-dessus pour identifier la cause de l'échec",
+  "action_2": "Vérifiez que la destination de sauvegarde dispose d'un espace disque suffisant et est accessible en écriture",
+  "action_3": "Consultez les journaux de l'application pour plus de contexte",
+  "action_4": "Relancez la sauvegarde manuellement une fois le problème sous-jacent résolu",
+  "footer_note": "Des échecs répétés peuvent indiquer un problème de configuration ou d'infrastructure qui nécessite une attention.",
+  "signature": "Système de maintenance Pavillion",
+  "footer_text": "Ceci est une alerte automatique. Les tâches de sauvegarde sont surveillées à chaque exécution planifiée ou manuelle."
+}

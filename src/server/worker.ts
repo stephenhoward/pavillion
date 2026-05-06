@@ -14,6 +14,7 @@ import CalendarInterface from '@/server/calendar/interface';
 import IpCleanupService from '@/server/moderation/service/ip-cleanup';
 import NotificationService from '@/server/notifications/service/notification';
 import ActivityPubInterface from '@/server/activitypub/interface';
+import { BackupCreateError } from '@/common/exceptions/housekeeping';
 import { createLogger } from '@/server/common/helper/logger';
 
 const logger = createLogger('worker');
@@ -34,6 +35,28 @@ let healthServer: http.Server | null = null;
 const HEALTH_PORT = 3001;
 
 /**
+ * Extracts a human-readable error message from a backup failure.
+ *
+ * For BackupCreateError, prefers the underlying cause's message (so the
+ * alert reflects the original failure). BackupService always constructs
+ * BackupCreateError with an Error instance as the cause, so the
+ * `cause instanceof Error` branch is the live path. For any other error,
+ * uses the error's own message or a String coercion.
+ *
+ * @param error - The error thrown by BackupService.createBackup
+ * @returns A string suitable for the alert payload
+ */
+function backupErrorMessage(error: unknown): string {
+  if (error instanceof BackupCreateError && error.cause instanceof Error) {
+    return error.cause.message;
+  }
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return String(error);
+}
+
+/**
  * Registers job handlers for scheduled tasks.
  *
  * @param queue - JobQueueService instance
@@ -51,7 +74,7 @@ async function registerJobHandlers(queue: JobQueueService): Promise<void> {
   const activityPubInterface = new ActivityPubInterface(eventBus, calendarInterface, accountsInterface);
 
   // Manual backup job handler (triggered via API/CLI)
-  await queue.subscribe('backup:create', async (data: any) => {
+  await queue.subscribe('backup:create', async (data: any, meta) => {
     logger.info('Executing manual backup job');
     try {
       const type = data?.type || 'manual';
@@ -64,12 +87,20 @@ async function registerJobHandlers(queue: JobQueueService): Promise<void> {
     }
     catch (error) {
       logger.error({ err: error }, 'Manual backup failed');
+      // Dispatch alert only on the final retry attempt; otherwise the user
+      // would receive one email per attempt during a retry storm.
+      if (meta && meta.retryCount >= meta.retryLimit) {
+        const backupType: 'manual' | 'scheduled' = data?.type === 'scheduled' ? 'scheduled' : 'manual';
+        const filename = error instanceof BackupCreateError ? error.filename : 'unknown';
+        const errorMessage = backupErrorMessage(error);
+        await alertsService.sendBackupFailed(backupType, filename, errorMessage, new Date());
+      }
       throw error;
     }
   });
 
   // Backup job handler (scheduled daily at 2 AM)
-  await queue.schedule('backup:daily', '0 2 * * *', async (data) => {
+  await queue.schedule('backup:daily', '0 2 * * *', async (data, meta) => {
     logger.info('Executing backup:daily job');
     try {
       const metadata = await backupService.createBackup('scheduled');
@@ -81,6 +112,13 @@ async function registerJobHandlers(queue: JobQueueService): Promise<void> {
     }
     catch (error) {
       logger.error({ err: error }, 'Backup failed');
+      // Dispatch alert only on the final retry attempt; otherwise the user
+      // would receive one email per attempt during a retry storm.
+      if (meta && meta.retryCount >= meta.retryLimit) {
+        const filename = error instanceof BackupCreateError ? error.filename : 'unknown';
+        const errorMessage = backupErrorMessage(error);
+        await alertsService.sendBackupFailed('scheduled', filename, errorMessage, new Date());
+      }
       throw error;
     }
   });
@@ -321,7 +359,14 @@ async function startWorker(): Promise<void> {
   }
 }
 
-// Start the worker
-startWorker();
+// In production and dev the worker is launched via app.ts (see
+// `bin/entrypoint.sh` and `src/server/app.ts`). app.ts imports this module
+// and calls the exported `startWorker` explicitly. This guard remains so that
+// running `tsx src/server/worker.ts` directly still boots the worker, while
+// test imports of `registerJobHandlers` do not trigger a real database/pg-boss
+// connection.
+if (import.meta.url === `file://${process.argv[1]}`) {
+  startWorker();
+}
 
 export { startWorker, registerJobHandlers };
