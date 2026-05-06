@@ -1,6 +1,6 @@
 ---
 name: git-workflow
-description: Pavillion git and GitHub conventions for branches, commits, pull requests, and releases. Use when naming a branch, drafting a commit message, opening a pull request, or cutting a release.
+description: Pavillion git and GitHub conventions for branches, commits, pushes, pull requests, and releases. Use when naming a branch, drafting a commit message, pushing a branch to origin, opening a pull request, or cutting a release.
 ---
 
 # Git Workflow
@@ -17,6 +17,7 @@ GitHub artifacts must be self-contained for GitHub readers. Local-only reference
 |---|---|
 | Naming a branch | [branches.md](branches.md) |
 | Writing a commit | [commits.md](commits.md) |
+| Pushing a branch to origin | [pull-requests.md](pull-requests.md) (also see local-vs-remote in [branches.md](branches.md)) |
 | Opening a pull request | [pull-requests.md](pull-requests.md) |
 | Cutting a release | [releases.md](releases.md) |
 

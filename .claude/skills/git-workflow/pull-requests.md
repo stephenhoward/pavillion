@@ -46,6 +46,18 @@ In the PR body, place the reference wherever it reads naturally — top of Motiv
 - **Push to origin** only after build-guardian PASS (lint, unit, integration, build, e2e via build-guardian).
 - **Squash merge** on landing.
 
+## Pushing to origin
+
+Before the first push, verify the local branch name conforms to [branches.md](branches.md). If it does **not** (for example, an auto-generated name from `superset.sh` like `apple-father` or `abrupt-grapple`), push with an explicit remote ref so the GitHub branch follows the convention:
+
+```bash
+git push -u origin HEAD:<type>/<kebab-title>
+```
+
+The `-u` flag wires the local branch's upstream to the renamed remote, so future pushes (`git push`) go to the same ref without re-specifying it.
+
+If the local branch already conforms, `git push -u origin HEAD` is sufficient.
+
 ## Disallowed
 
 - Bead IDs or other local tracker references in title or body.
