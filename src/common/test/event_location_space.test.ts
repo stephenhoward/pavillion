@@ -195,4 +195,59 @@ describe('EventLocationSpace Model', () => {
     expect(restored.content('es').accessibilityInfo).toBe('Acceso para sillas de ruedas');
     expect(restored.content('de').accessibilityInfo).toBe('Rollstuhlgerechte Eingänge');
   });
+
+  test('originUri defaults to null on a freshly constructed space', () => {
+    const space = new EventLocationSpace('s1', 'p1');
+
+    expect(space.originUri).toBeNull();
+  });
+
+  test('toObject omits originUri when null (data minimization)', () => {
+    const space = new EventLocationSpace('s1', 'p1');
+
+    const obj = space.toObject();
+
+    expect(obj).not.toHaveProperty('originUri');
+  });
+
+  test('toObject emits originUri when set', () => {
+    const space = new EventLocationSpace('s1', 'p1');
+    space.originUri = 'https://remote.example/spaces/abc';
+
+    const obj = space.toObject();
+
+    expect(obj.originUri).toBe('https://remote.example/spaces/abc');
+  });
+
+  test('fromObject reads originUri when present', () => {
+    const obj = {
+      id: 's1',
+      placeId: 'p1',
+      originUri: 'https://remote.example/spaces/xyz',
+    };
+
+    const restored = EventLocationSpace.fromObject(obj);
+
+    expect(restored.originUri).toBe('https://remote.example/spaces/xyz');
+  });
+
+  test('fromObject leaves originUri as null when absent', () => {
+    const obj = {
+      id: 's1',
+      placeId: 'p1',
+    };
+
+    const restored = EventLocationSpace.fromObject(obj);
+
+    expect(restored.originUri).toBeNull();
+  });
+
+  test('originUri round-trips through toObject and fromObject', () => {
+    const original = new EventLocationSpace('s-rt', 'p-rt');
+    original.originUri = 'https://remote.example/spaces/round-trip';
+
+    const restored = EventLocationSpace.fromObject(original.toObject());
+
+    expect(restored.originUri).toBe('https://remote.example/spaces/round-trip');
+  });
 });

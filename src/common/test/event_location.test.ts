@@ -68,3 +68,60 @@ describe('EventLocation Model - Country Field', () => {
     expect(location.country).toBe('');
   });
 });
+
+describe('EventLocation Model - originUri Field', () => {
+  it('defaults originUri to null on a freshly constructed model', () => {
+    const location = new EventLocation('id-1', 'Local Place');
+
+    expect(location.originUri).toBeNull();
+  });
+
+  it('toObject omits originUri when null (data minimization)', () => {
+    const location = new EventLocation('id-1', 'Local Place');
+
+    const obj = location.toObject();
+
+    expect(obj).not.toHaveProperty('originUri');
+  });
+
+  it('toObject emits originUri when set', () => {
+    const location = new EventLocation('id-1', 'Federated Place');
+    location.originUri = 'https://remote.example/places/abc';
+
+    const obj = location.toObject();
+
+    expect(obj.originUri).toBe('https://remote.example/places/abc');
+  });
+
+  it('fromObject reads originUri when present', () => {
+    const obj = {
+      id: 'id-1',
+      name: 'Federated Place',
+      originUri: 'https://remote.example/places/xyz',
+    };
+
+    const location = EventLocation.fromObject(obj);
+
+    expect(location.originUri).toBe('https://remote.example/places/xyz');
+  });
+
+  it('fromObject leaves originUri as null when absent', () => {
+    const obj = {
+      id: 'id-1',
+      name: 'Local Place',
+    };
+
+    const location = EventLocation.fromObject(obj);
+
+    expect(location.originUri).toBeNull();
+  });
+
+  it('originUri round-trips through toObject and fromObject', () => {
+    const original = new EventLocation('id-rt', 'Round Trip');
+    original.originUri = 'https://remote.example/places/round-trip';
+
+    const restored = EventLocation.fromObject(original.toObject());
+
+    expect(restored.originUri).toBe('https://remote.example/places/round-trip');
+  });
+});

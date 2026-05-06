@@ -110,6 +110,9 @@ class EventLocation extends TranslatedModel<EventLocationContent> {
   state: string = '';
   postalCode: string = '';
   country: string = '';
+  // Identity hint for AP-originated records (inbound dedup, pv-ix7v).
+  // Null for locally-created Places.
+  originUri: string | null = null;
 
   /**
    * Constructor for EventLocation.
@@ -151,6 +154,9 @@ class EventLocation extends TranslatedModel<EventLocationContent> {
    */
   static fromObject(obj: Record<string, any>): EventLocation {
     const location = new EventLocation(obj.id, obj.name, obj.address, obj.city, obj.state, obj.postalCode, obj.country);
+    if (obj.originUri !== undefined && obj.originUri !== null) {
+      location.originUri = obj.originUri;
+    }
 
     // Load content if present
     if (obj.content) {
@@ -174,7 +180,7 @@ class EventLocation extends TranslatedModel<EventLocationContent> {
    * @returns {Record<string, any>} Plain object representation of the location
    */
   toObject(): Record<string, any> {
-    return {
+    const obj: Record<string, any> = {
       id: this.id,  // Include id field to preserve location identity during event updates (LOC-003)
       name: this.name,
       address: this.address,
@@ -187,6 +193,11 @@ class EventLocation extends TranslatedModel<EventLocationContent> {
           .map(([language, content]: [string, EventLocationContent]) => [language, content.toObject()]),
       ),
     };
+    // Emit originUri only when non-null (data minimization, DEC-004 spirit)
+    if (this.originUri !== null) {
+      obj.originUri = this.originUri;
+    }
+    return obj;
   }
 };
 
@@ -198,6 +209,9 @@ class EventLocation extends TranslatedModel<EventLocationContent> {
 class EventLocationSpace extends TranslatedModel<EventLocationSpaceContent> {
   _content: Record<string, EventLocationSpaceContent> = {};
   placeId: string = '';
+  // Identity hint for AP-originated records (inbound dedup, pv-ix7v).
+  // Null for locally-created Spaces.
+  originUri: string | null = null;
 
   /**
    * Constructor for EventLocationSpace.
@@ -229,6 +243,9 @@ class EventLocationSpace extends TranslatedModel<EventLocationSpaceContent> {
    */
   static fromObject(obj: Record<string, any>): EventLocationSpace {
     const space = new EventLocationSpace(obj.id, obj.placeId);
+    if (obj.originUri !== undefined && obj.originUri !== null) {
+      space.originUri = obj.originUri;
+    }
 
     // Load content if present
     if (obj.content) {
@@ -250,7 +267,7 @@ class EventLocationSpace extends TranslatedModel<EventLocationSpaceContent> {
    * @returns {Record<string, any>} Plain object representation of the space
    */
   toObject(): Record<string, any> {
-    return {
+    const obj: Record<string, any> = {
       id: this.id,
       placeId: this.placeId,
       content: Object.fromEntries(
@@ -258,6 +275,11 @@ class EventLocationSpace extends TranslatedModel<EventLocationSpaceContent> {
           .map(([language, content]: [string, EventLocationSpaceContent]) => [language, content.toObject()]),
       ),
     };
+    // Emit originUri only when non-null (data minimization, DEC-004 spirit)
+    if (this.originUri !== null) {
+      obj.originUri = this.originUri;
+    }
+    return obj;
   }
 };
 

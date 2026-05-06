@@ -1,7 +1,7 @@
 import { DateTime } from 'luxon';
 
 import { Model, TranslatedModel, TranslatedContentModel } from '@/common/model/model';
-import { EventLocation } from '@/common/model/location';
+import { EventLocation, EventLocationSpace } from '@/common/model/location';
 import { Media } from '@/common/model/media';
 import { EventCategory } from '@/common/model/event_category';
 import { EventSeries } from '@/common/model/event_series';
@@ -56,6 +56,12 @@ class CalendarEvent extends TranslatedModel<CalendarEventContent> {
    * Kept for backward compatibility during transition period.
    */
   location: EventLocation | null = null;
+  /**
+   * Optional named sub-area within the event's Place (e.g. a specific room
+   * within a community center). When set, the space's placeId must match
+   * this event's locationId — invariant enforced by the events service.
+   */
+  space: EventLocationSpace | null = null;
   media: Media | null = null;
   mediaId: string | null = null; // Temporary field for API communication
   /** Horizontal focal point for media cropping (0.0 = left, 1.0 = right). */
@@ -219,6 +225,7 @@ class CalendarEvent extends TranslatedModel<CalendarEventContent> {
     event.date = obj.date || '';
     event.locationId = obj.locationId ?? null;
     event.location = obj.location ? EventLocation.fromObject(obj.location) : null;
+    event.space = obj.space ? EventLocationSpace.fromObject(obj.space) : null;
     event.media = obj.media ? Media.fromObject(obj.media) : null;
     event.mediaId = obj.mediaId || null;
     event.mediaFocalPointX = obj.mediaFocalPointX ?? 0.5;
@@ -287,6 +294,7 @@ class CalendarEvent extends TranslatedModel<CalendarEventContent> {
       sourceCalendar: this.sourceCalendar,
       locationId: this.locationId,
       location: this.location?.toObject(),
+      space: this.space?.toObject() ?? null,
       media: this.media?.toObject(),
       mediaFocalPointX: this.mediaFocalPointX,
       mediaFocalPointY: this.mediaFocalPointY,

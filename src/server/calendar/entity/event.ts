@@ -4,6 +4,7 @@ import { DateTime } from 'luxon';
 import { CalendarEvent, CalendarEventContent, CalendarEventSchedule, UrlPrompt, language } from '@/common/model/events';
 import db from '@/server/common/entity/db';
 import { LocationEntity } from '@/server/calendar/entity/location';
+import { LocationSpaceEntity } from '@/server/calendar/entity/location_space';
 import { MediaEntity } from '@/server/media/entity/media';
 import { CalendarEntity } from '@/server/calendar/entity/calendar';
 import { EventSeriesEntity } from '@/server/calendar/entity/event_series';
@@ -45,6 +46,10 @@ class EventEntity extends Model {
   @Column({ type: DataType.UUID })
   declare location_id: string;
 
+  @ForeignKey(() => LocationSpaceEntity)
+  @Column({ type: DataType.UUID, allowNull: true })
+  declare space_id: string | null;
+
   @ForeignKey(() => MediaEntity)
   @Column({ type: DataType.UUID })
   declare media_id: string;
@@ -83,6 +88,9 @@ class EventEntity extends Model {
   @BelongsTo(() => LocationEntity)
   declare location: LocationEntity;
 
+  @BelongsTo(() => LocationSpaceEntity, 'space_id')
+  declare space: LocationSpaceEntity;
+
   @BelongsTo(() => MediaEntity)
   declare media: MediaEntity;
 
@@ -107,6 +115,9 @@ class EventEntity extends Model {
     if (this.location) {
       model.location = this.location.toModel();
     }
+    if (this.space) {
+      model.space = this.space.toModel();
+    }
     if (this.media) {
       model.media = this.media.toModel();
     }
@@ -129,6 +140,7 @@ class EventEntity extends Model {
       id: event.id,
       event_source_url: event.eventSourceUrl,
       calendar_id: event.calendarId,
+      space_id: event.space?.id ?? null,
       media_id: event.media?.id,
       media_focal_point_x: event.mediaFocalPointX,
       media_focal_point_y: event.mediaFocalPointY,

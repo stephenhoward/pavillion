@@ -34,6 +34,11 @@ class LocationEntity extends Model {
   @Column({ type: DataType.STRING })
   declare country: string;
 
+  // origin_uri identifies AP-originated records for inbound dedup (pv-ix7v).
+  // Should be cleared when the source calendar is unfollowed — see follow-up.
+  @Column({ type: DataType.STRING(2048), allowNull: true })
+  declare origin_uri: string | null;
+
   @CreatedAt
   declare createdAt: Date;
 
@@ -59,6 +64,7 @@ class LocationEntity extends Model {
       this.postal_code,
       this.country,
     );
+    location.originUri = this.origin_uri ?? null;
 
     // Add content if loaded
     if (this.content) {
@@ -79,6 +85,7 @@ class LocationEntity extends Model {
       state: location.state,
       postal_code: location.postalCode,
       country: location.country,
+      origin_uri: location.originUri ?? null,
     });
   }
 }

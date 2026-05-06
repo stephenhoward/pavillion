@@ -1,8 +1,9 @@
 import { v4 as uuidv4 } from 'uuid';
 import { Calendar } from '@/common/model/calendar';
-import { EventLocation } from '@/common/model/location';
+import { EventLocation, EventLocationSpace } from '@/common/model/location';
 import { LocationValidationError } from '@/common/exceptions/calendar';
 import { LocationEntity, LocationContentEntity } from '@/server/calendar/entity/location';
+import { LocationSpaceEntity, LocationSpaceContentEntity } from '@/server/calendar/entity/location_space';
 import { EventEntity } from '@/server/calendar/entity/event';
 
 export default class LocationService {
@@ -196,6 +197,79 @@ export default class LocationService {
     await entity.destroy();
 
     return true;
+  }
+
+  /**
+   * Get all Spaces belonging to a Place.
+   *
+   * Verifies that the Place exists and belongs to the caller's calendar before
+   * looking up its Spaces. Returns an empty array when the Place is missing or
+   * owned by a different calendar (matching the "silent empty" semantics used
+   * elsewhere in this service for unauthorized lookups).
+   *
+   * @param calendar - The calendar that should own the parent Place
+   * @param placeId - The ID of the parent Place (LocationEntity)
+   * @returns Array of EventLocationSpace models with multilingual content;
+   *          empty if the Place does not exist or is not owned by the calendar
+   */
+  async getSpacesForPlace(calendar: Calendar, placeId: string): Promise<EventLocationSpace[]> {
+    const place = await LocationEntity.findByPk(placeId);
+    if (!place || place.calendar_id !== calendar.id) {
+      return [];
+    }
+
+    const entities = await LocationSpaceEntity.findAll({
+      where: { place_id: placeId },
+      include: [LocationSpaceContentEntity],
+    });
+
+    return entities.map(entity => entity.toModel());
+  }
+
+  /**
+   * Create a new Space within a Place owned by the caller's calendar.
+   *
+   * Verifies that the parent Place exists and belongs to the caller's calendar,
+   * then creates the Space row plus one content row per supplied language.
+   * Returns the populated EventLocationSpace (re-loaded with content rows
+   * attached so callers receive the full multilingual model).
+   *
+   * @param calendar - The calendar that should own the parent Place
+   * @param placeId - The ID of the parent Place
+   * @param contentByLang - Map of language code to {name, accessibilityInfo}
+   * @returns Newly created EventLocationSpace populated with content
+   * @throws LocationValidationError if the Place does not exist or is not
+   *         owned by the caller's calendar
+   */
+  async createSpace(
+    calendar: Calendar,
+    placeId: string,
+    contentByLang: Record<string, { name: string; accessibilityInfo: string }>,
+  ): Promise<EventLocationSpace> {
+    const place = await LocationEntity.findByPk(placeId);
+    if (!place || place.calendar_id !== calendar.id) {
+      throw new LocationValidationError(['Place not found or not owned by calendar']);
+    }
+
+    const spaceId = uuidv4();
+    await LocationSpaceEntity.create({
+      id: spaceId,
+      place_id: placeId,
+    });
+
+    for (const [language, content] of Object.entries(contentByLang)) {
+      await LocationSpaceContentEntity.create({
+        space_id: spaceId,
+        language,
+        name: content.name,
+        accessibility_info: content.accessibilityInfo,
+      });
+    }
+
+    const fetched = await LocationSpaceEntity.findByPk(spaceId, {
+      include: [LocationSpaceContentEntity],
+    });
+    return fetched!.toModel();
   }
 
   /**

@@ -20,6 +20,11 @@ class LocationSpaceEntity extends Model {
   @Column({ type: DataType.UUID, allowNull: false })
   declare place_id: string;
 
+  // origin_uri identifies AP-originated records for inbound dedup (pv-ix7v).
+  // Should be cleared when the source calendar is unfollowed — see follow-up.
+  @Column({ type: DataType.STRING(2048), allowNull: true })
+  declare origin_uri: string | null;
+
   @CreatedAt
   declare createdAt: Date;
 
@@ -34,6 +39,7 @@ class LocationSpaceEntity extends Model {
 
   toModel(): EventLocationSpace {
     const space = new EventLocationSpace(this.id, this.place_id);
+    space.originUri = this.origin_uri ?? null;
 
     if (this.content) {
       for (const contentEntity of this.content) {
@@ -48,6 +54,7 @@ class LocationSpaceEntity extends Model {
     return LocationSpaceEntity.build({
       id: space.id,
       place_id: space.placeId,
+      origin_uri: space.originUri ?? null,
     });
   }
 }
