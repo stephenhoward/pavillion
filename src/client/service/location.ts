@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { EventLocation } from '@/common/model/location';
+import { EventLocation, EventLocationSpace } from '@/common/model/location';
 import { CalendarNotFoundError, InsufficientCalendarPermissionsError } from '@/common/exceptions/calendar';
 import { UnauthenticatedError, UnknownError, ValidationError } from '@/common/exceptions';
 import { useLocationStore } from '@/client/stores/locationStore';
@@ -13,6 +13,12 @@ const errorMap = {
   UnknownError,
   ValidationError,
 };
+
+/**
+ * Per-language content payload shape accepted by the Space create/update endpoints.
+ * Mirrors the server-side `extractContentByLang` shape in SpaceRoutes.
+ */
+export type SpaceContentByLang = Record<string, { name: string; accessibilityInfo: string }>;
 
 /**
  * Service for managing event locations
@@ -133,6 +139,118 @@ export default class LocationService {
     }
     catch (error: unknown) {
       console.error('Error deleting location:', error);
+      handleApiError(error, errorMap);
+    }
+  }
+
+  /**
+   * Get all Spaces for a Place within a calendar.
+   *
+   * HTTP-layer only — does not touch the locationStore. Store integration is
+   * added by the locationStore Space accessors task (pv-ix7v.4.3).
+   *
+   * @param calendarUrlName - The URL name of the calendar
+   * @param placeId - The ID of the parent Place (EventLocation)
+   * @returns Promise<EventLocationSpace[]> The list of Spaces under the Place
+   */
+  async getSpaces(calendarUrlName: string, placeId: string): Promise<EventLocationSpace[]> {
+    const encodedCalendarUrlName = validateAndEncodeId(calendarUrlName, 'Calendar URL name');
+    const encodedPlaceId = validateAndEncodeId(placeId, 'Place ID');
+
+    try {
+      const response = await axios.get(
+        `/api/v1/calendars/${encodedCalendarUrlName}/places/${encodedPlaceId}/spaces`,
+      );
+      return response.data.map((spaceData: any) => EventLocationSpace.fromObject(spaceData));
+    }
+    catch (error) {
+      console.error('Error loading spaces:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Create a new Space under a Place within a calendar.
+   *
+   * HTTP-layer only — does not touch the locationStore. Store integration is
+   * added by the locationStore Space accessors task (pv-ix7v.4.3).
+   *
+   * @param calendarUrlName - The URL name of the calendar
+   * @param placeId - The ID of the parent Place (EventLocation)
+   * @param contentByLang - Per-language `{ name, accessibilityInfo }` content map
+   * @returns Promise<EventLocationSpace> The created Space
+   */
+  async createSpace(
+    calendarUrlName: string,
+    placeId: string,
+    contentByLang: SpaceContentByLang,
+  ): Promise<EventLocationSpace> {
+    const encodedCalendarUrlName = validateAndEncodeId(calendarUrlName, 'Calendar URL name');
+    const encodedPlaceId = validateAndEncodeId(placeId, 'Place ID');
+
+    try {
+      const response = await axios.post(
+        `/api/v1/calendars/${encodedCalendarUrlName}/places/${encodedPlaceId}/spaces`,
+        { content: contentByLang },
+      );
+      return EventLocationSpace.fromObject(response.data);
+    }
+    catch (error: unknown) {
+      console.error('Error creating space:', error);
+      handleApiError(error, errorMap);
+    }
+  }
+
+  /**
+   * Update an existing Space's multilingual content (full replacement).
+   *
+   * HTTP-layer only — does not touch the locationStore. Store integration is
+   * added by the locationStore Space accessors task (pv-ix7v.4.3).
+   *
+   * @param calendarUrlName - The URL name of the calendar
+   * @param spaceId - The ID of the Space to update
+   * @param contentByLang - Per-language `{ name, accessibilityInfo }` content map
+   * @returns Promise<EventLocationSpace> The updated Space
+   */
+  async updateSpace(
+    calendarUrlName: string,
+    spaceId: string,
+    contentByLang: SpaceContentByLang,
+  ): Promise<EventLocationSpace> {
+    const encodedCalendarUrlName = validateAndEncodeId(calendarUrlName, 'Calendar URL name');
+    const encodedSpaceId = validateAndEncodeId(spaceId, 'Space ID');
+
+    try {
+      const response = await axios.put(
+        `/api/v1/calendars/${encodedCalendarUrlName}/spaces/${encodedSpaceId}`,
+        { content: contentByLang },
+      );
+      return EventLocationSpace.fromObject(response.data);
+    }
+    catch (error: unknown) {
+      console.error('Error updating space:', error);
+      handleApiError(error, errorMap);
+    }
+  }
+
+  /**
+   * Delete a Space from a calendar.
+   *
+   * HTTP-layer only — does not touch the locationStore. Store integration is
+   * added by the locationStore Space accessors task (pv-ix7v.4.3).
+   *
+   * @param calendarUrlName - The URL name of the calendar
+   * @param spaceId - The ID of the Space to delete
+   */
+  async deleteSpace(calendarUrlName: string, spaceId: string): Promise<void> {
+    const encodedCalendarUrlName = validateAndEncodeId(calendarUrlName, 'Calendar URL name');
+    const encodedSpaceId = validateAndEncodeId(spaceId, 'Space ID');
+
+    try {
+      await axios.delete(`/api/v1/calendars/${encodedCalendarUrlName}/spaces/${encodedSpaceId}`);
+    }
+    catch (error: unknown) {
+      console.error('Error deleting space:', error);
       handleApiError(error, errorMap);
     }
   }

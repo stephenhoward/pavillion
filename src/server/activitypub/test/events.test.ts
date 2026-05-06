@@ -9,8 +9,10 @@ import CalendarInterface from '@/server/calendar/interface';
 import { ActivityPubInboxMessageEntity, ActivityPubOutboxMessageEntity } from '@/server/activitypub/entity/activitypub';
 import { EventObjectEntity } from '@/server/activitypub/entity/event_object';
 import { ActivityPubActor } from '@/server/activitypub/model/base';
+import { EventObject } from '@/server/activitypub/model/object/event';
 import { Calendar } from '@/common/model/calendar';
-import { CalendarEvent } from '@/common/model/events';
+import { CalendarEvent, CalendarEventContent } from '@/common/model/events';
+import { EventLocation, EventLocationContent, EventLocationSpace, EventLocationSpaceContent } from '@/common/model/location';
 import { setupActivityPubSchema, teardownActivityPubSchema } from '@/server/common/test/helpers/database';
 
 describe('inbox event listener', () => {
@@ -324,4 +326,140 @@ describe('handleEventCreated', () => {
     expect(eventObject, 'no EventObjectEntity row for remote-origin event').toBeNull();
   });
 
+});
+
+describe('AP serialize → parse round-trip (Place + Space + multilingual content)', () => {
+  // Integration test for the Place + Spaces federation surface (pv-ix7v.10.1).
+  //
+  // This test exercises both the outbound emit path (toActivityPubObject — pv-ix7v.7.1
+  // and pv-ix7v.7.2) and the inbound priority-consumption path
+  // (fromActivityPubObject — pv-ix7v.8.1) together. It is the structural guard
+  // against drift between the two surfaces: when emit changes shape but consume
+  // does not (or vice versa), this test fails.
+  //
+  // Per the Option B wire shape, content[lang] entries on both pavillion:place
+  // and pavillion:space carry BOTH name and accessibilityInfo. The inbound
+  // parser uses the structured pavillion:place content[lang].name to populate
+  // restored.location.name (NOT the concatenated flat as:Place.name, which is
+  // a non-Pavillion-peer fallback only).
+
+  it('round-trips Place + Space + multilingual content via AP serialization', () => {
+    // Build a fully-populated event with a Place (with address + per-language
+    // accessibility content) and a Space (with per-language name +
+    // accessibility content), in two languages.
+    const calendar = new Calendar(uuidv4(), 'mycal');
+    const event = new CalendarEvent(uuidv4(), calendar.id);
+    event.addContent(new CalendarEventContent('en', 'My Event', 'Description'));
+    event.addContent(new CalendarEventContent('fr', 'Mon Évènement', 'La description'));
+
+    const location = new EventLocation(
+      uuidv4(),
+      'Convention Center',
+      '100 Main St',
+      'Springfield',
+      'OR',
+      '97477',
+      'US',
+    );
+    location.addContent(new EventLocationContent('en', 'Accessible parking'));
+    location.addContent(new EventLocationContent('fr', 'Stationnement accessible'));
+    event.location = location;
+
+    const space = new EventLocationSpace(uuidv4(), location.id);
+    space.addContent(new EventLocationSpaceContent('en', 'Pacific Room', 'Hearing loop'));
+    space.addContent(new EventLocationSpaceContent('fr', 'Salle Pacifique', 'Boucle auditive'));
+    event.space = space;
+
+    // Serialize → parse round trip.
+    const apObject = new EventObject(calendar, event).toActivityPubObject();
+    const restored = EventObject.fromActivityPubObject(apObject);
+
+    // --- Place restoration ---
+    // restored.location must be populated. Guarded with not.toBeNull() so a
+    // structural failure here gives a clear error, not a TypeError on the
+    // following property accesses.
+    expect(restored.location, 'restored.location must be present after round-trip').not.toBeNull();
+    expect(restored.location, 'restored.location must be present after round-trip').toBeDefined();
+
+    // restored.location.name comes from the structured pavillion:place
+    // content[lang].name (priority-consumed by fromActivityPubObject), NOT
+    // from the concatenated flat as:Place.name (which would be
+    // 'Convention Center — Pacific Room' for this event). The inbound parser
+    // picks the first available content[lang].name, which today carries the
+    // single-string Place name in every language slot.
+    expect(restored.location.name).toBe('Convention Center');
+
+    // Address fields round-trip via the flat top-level keys on pavillion:place.
+    expect(restored.location.address).toBe('100 Main St');
+    expect(restored.location.city).toBe('Springfield');
+    expect(restored.location.state).toBe('OR');
+    expect(restored.location.postalCode).toBe('97477');
+    expect(restored.location.country).toBe('US');
+
+    // Per-language accessibility content survives. The local model's
+    // EventLocation content stores accessibilityInfo only (Place names are
+    // not yet translatable), so the inbound parser strips the per-language
+    // name from content[lang] when shaping for EventLocation.fromObject.
+    expect(restored.location.content, 'restored.location.content must be present').not.toBeNull();
+    expect(restored.location.content).toBeDefined();
+    expect(restored.location.content.en).toBeDefined();
+    expect(restored.location.content.fr).toBeDefined();
+    expect(restored.location.content.en.accessibilityInfo).toBe('Accessible parking');
+    expect(restored.location.content.fr.accessibilityInfo).toBe('Stationnement accessible');
+
+    // --- Wire-shape assertion: Option B content carries name in every entry ---
+    // Distinct from the EventLocation-shaped restored.location: the AP wire
+    // object itself MUST carry name alongside accessibilityInfo per language
+    // on pavillion:place.content. This is the Option B contract — when Place
+    // names later become translatable, only the local-model storage changes;
+    // the wire format stays identical.
+    expect(apObject['pavillion:place'], 'pavillion:place must be present on the wire').toBeDefined();
+    expect(apObject['pavillion:place'].content.en).toEqual({
+      name: 'Convention Center',
+      accessibilityInfo: 'Accessible parking',
+    });
+    expect(apObject['pavillion:place'].content.fr).toEqual({
+      name: 'Convention Center',
+      accessibilityInfo: 'Stationnement accessible',
+    });
+
+    // --- Wire-shape assertion: flat as:Place.name is the concatenated label ---
+    // Non-Pavillion peers (Mobilizon, Mastodon, Gancio) read the flat
+    // as:Place.name. With a Space present, that flat surface MUST carry the
+    // concatenated 'Place — Space' label so the non-aware-peer rendering is
+    // still useful. The inbound parser does NOT consume this — it consumes
+    // the structured pavillion:place content[lang].name instead — so the
+    // restored.location.name above must stay 'Convention Center', not the
+    // concatenation. This pair of assertions guards against a regression
+    // where the inbound parser starts reading the flat name (which would
+    // pollute restored Place names with the Space name on every round trip).
+    expect(apObject.location.type).toBe('Place');
+    expect(apObject.location.name).toBe('Convention Center — Pacific Room');
+
+    // --- Space restoration ---
+    expect(restored.space, 'restored.space must be present after round-trip').not.toBeNull();
+    expect(restored.space, 'restored.space must be present after round-trip').toBeDefined();
+    expect(restored.space.content, 'restored.space.content must be present').toBeDefined();
+
+    // Per-language Space content survives. Unlike Place names, Space names
+    // are translatable today, so each language entry carries its own name
+    // alongside its own accessibilityInfo.
+    expect(restored.space.content.en).toBeDefined();
+    expect(restored.space.content.fr).toBeDefined();
+    expect(restored.space.content.en.name).toBe('Pacific Room');
+    expect(restored.space.content.en.accessibilityInfo).toBe('Hearing loop');
+    expect(restored.space.content.fr.name).toBe('Salle Pacifique');
+    expect(restored.space.content.fr.accessibilityInfo).toBe('Boucle auditive');
+
+    // --- Identity preservation across the round trip ---
+    // The pavillion:place and pavillion:space ids on the wire become
+    // originUri stamps on the restored entries (dedup-by-origin_uri path).
+    // The space id MUST be anchored under the place id segment so the
+    // inbound parent-path prefix check (`${placeId}/spaces/`) passes; if the
+    // outbound emitter ever drifts away from that nesting, the inbound
+    // parser drops the Space and this assertion fails.
+    expect(restored.location.originUri).toBe(apObject['pavillion:place'].id);
+    expect(restored.space.originUri).toBe(apObject['pavillion:space'].id);
+    expect(restored.space.originUri.startsWith(`${restored.location.originUri}/spaces/`)).toBe(true);
+  });
 });

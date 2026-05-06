@@ -3,7 +3,7 @@ import sinon from 'sinon';
 import axios from 'axios';
 import LocationService from '@/client/service/location';
 import ModelService from '@/client/service/models';
-import { EventLocation } from '@/common/model/location';
+import { EventLocation, EventLocationSpace } from '@/common/model/location';
 import { CalendarNotFoundError, InsufficientCalendarPermissionsError } from '@/common/exceptions/calendar';
 import { UnknownError } from '@/common/exceptions';
 import { useLocationStore } from '@/client/stores/locationStore';
@@ -313,6 +313,295 @@ describe('LocationService', () => {
       mockCreateModel.rejects(mockError);
 
       await expect(service.createLocation('cal-123', location)).rejects.toThrow(UnknownError);
+    });
+  });
+
+  describe('getSpaces', () => {
+    it('should fetch all spaces for a place under a calendar', async () => {
+      const mockSpaceData = {
+        id: 'https://pavillion.dev/spaces/sp-123',
+        placeId: 'place-1',
+        content: {
+          en: { language: 'en', name: 'Main Hall', accessibilityInfo: 'Step-free entry' },
+        },
+      };
+
+      const axiosGetStub = sandbox.stub(axios, 'get');
+      axiosGetStub.resolves({ data: [mockSpaceData] });
+
+      const spaces = await service.getSpaces('mycal', 'place-1');
+
+      expect(axiosGetStub.calledOnce).toBe(true);
+      expect(axiosGetStub.calledWith('/api/v1/calendars/mycal/places/place-1/spaces')).toBe(true);
+      expect(spaces).toHaveLength(1);
+      expect(spaces[0]).toBeInstanceOf(EventLocationSpace);
+      expect(spaces[0].id).toBe('https://pavillion.dev/spaces/sp-123');
+      expect(spaces[0].placeId).toBe('place-1');
+      expect(spaces[0].content('en').name).toBe('Main Hall');
+    });
+
+    it('should return an empty array when no spaces exist', async () => {
+      const axiosGetStub = sandbox.stub(axios, 'get');
+      axiosGetStub.resolves({ data: [] });
+
+      const spaces = await service.getSpaces('mycal', 'place-1');
+
+      expect(spaces).toEqual([]);
+    });
+
+    it('should not touch the location store when fetching spaces', async () => {
+      const axiosGetStub = sandbox.stub(axios, 'get');
+      axiosGetStub.resolves({ data: [] });
+
+      await service.getSpaces('mycal', 'place-1');
+
+      expect((mockStore.setLocationsForCalendar as sinon.SinonStub).called).toBe(false);
+      expect((mockStore.addLocation as sinon.SinonStub).called).toBe(false);
+      expect((mockStore.updateLocation as sinon.SinonStub).called).toBe(false);
+      expect((mockStore.removeLocation as sinon.SinonStub).called).toBe(false);
+    });
+
+    it('should encode calendar URL name and place ID with special characters', async () => {
+      const axiosGetStub = sandbox.stub(axios, 'get');
+      axiosGetStub.resolves({ data: [] });
+
+      await service.getSpaces('cal/123', 'https://example.com/places/456');
+
+      expect(axiosGetStub.calledWith(
+        '/api/v1/calendars/cal%2F123/places/https%3A%2F%2Fexample.com%2Fplaces%2F456/spaces',
+      )).toBe(true);
+    });
+
+    it('should handle errors when fetching spaces', async () => {
+      const axiosGetStub = sandbox.stub(axios, 'get');
+      const consoleErrorStub = sandbox.stub(console, 'error');
+      const testError = new Error('API Error');
+
+      axiosGetStub.rejects(testError);
+
+      await expect(service.getSpaces('mycal', 'place-1')).rejects.toThrow('API Error');
+      expect(consoleErrorStub.calledWith('Error loading spaces:', testError)).toBe(true);
+    });
+  });
+
+  describe('createSpace', () => {
+    it('should POST contentByLang wrapped in { content } and return the created Space', async () => {
+      const contentByLang = {
+        en: { name: 'Main Hall', accessibilityInfo: 'Step-free entry' },
+      };
+      const mockResponseData = {
+        id: 'https://pavillion.dev/spaces/sp-456',
+        placeId: 'place-1',
+        content: {
+          en: { language: 'en', name: 'Main Hall', accessibilityInfo: 'Step-free entry' },
+        },
+      };
+
+      const axiosPostStub = sandbox.stub(axios, 'post');
+      axiosPostStub.resolves({ data: mockResponseData });
+
+      const result = await service.createSpace('mycal', 'place-1', contentByLang);
+
+      expect(axiosPostStub.calledOnce).toBe(true);
+      expect(axiosPostStub.calledWith(
+        '/api/v1/calendars/mycal/places/place-1/spaces',
+        { content: contentByLang },
+      )).toBe(true);
+      expect(result).toBeInstanceOf(EventLocationSpace);
+      expect(result.id).toBe('https://pavillion.dev/spaces/sp-456');
+      expect(result.placeId).toBe('place-1');
+      expect(result.content('en').name).toBe('Main Hall');
+    });
+
+    it('should not touch the location store when creating a space', async () => {
+      const axiosPostStub = sandbox.stub(axios, 'post');
+      axiosPostStub.resolves({
+        data: { id: 'sp-1', placeId: 'place-1', content: {} },
+      });
+
+      await service.createSpace('mycal', 'place-1', { en: { name: 'X', accessibilityInfo: '' } });
+
+      expect((mockStore.addLocation as sinon.SinonStub).called).toBe(false);
+      expect((mockStore.updateLocation as sinon.SinonStub).called).toBe(false);
+      expect((mockStore.setLocationsForCalendar as sinon.SinonStub).called).toBe(false);
+      expect((mockStore.removeLocation as sinon.SinonStub).called).toBe(false);
+    });
+
+    it('should encode calendar URL name and place ID when creating', async () => {
+      const axiosPostStub = sandbox.stub(axios, 'post');
+      axiosPostStub.resolves({
+        data: { id: 'sp-1', placeId: 'p/1', content: {} },
+      });
+
+      await service.createSpace('cal/123', 'p/1', { en: { name: 'X', accessibilityInfo: '' } });
+
+      expect(axiosPostStub.calledWith(
+        '/api/v1/calendars/cal%2F123/places/p%2F1/spaces',
+        { content: { en: { name: 'X', accessibilityInfo: '' } } },
+      )).toBe(true);
+    });
+
+    it('should map InsufficientCalendarPermissionsError responses through handleApiError', async () => {
+      const mockError = {
+        response: {
+          data: {
+            errorName: 'InsufficientCalendarPermissionsError',
+          },
+        },
+      };
+
+      const axiosPostStub = sandbox.stub(axios, 'post');
+      axiosPostStub.rejects(mockError);
+
+      await expect(
+        service.createSpace('mycal', 'place-1', { en: { name: 'X', accessibilityInfo: '' } }),
+      ).rejects.toThrow(InsufficientCalendarPermissionsError);
+    });
+  });
+
+  describe('updateSpace', () => {
+    it('should PUT contentByLang wrapped in { content } and return the updated Space', async () => {
+      const contentByLang = {
+        en: { name: 'Renamed Hall', accessibilityInfo: 'Updated info' },
+      };
+      const mockResponseData = {
+        id: 'sp-789',
+        placeId: 'place-1',
+        content: {
+          en: { language: 'en', name: 'Renamed Hall', accessibilityInfo: 'Updated info' },
+        },
+      };
+
+      const axiosPutStub = sandbox.stub(axios, 'put');
+      axiosPutStub.resolves({ data: mockResponseData });
+
+      const result = await service.updateSpace('mycal', 'sp-789', contentByLang);
+
+      expect(axiosPutStub.calledOnce).toBe(true);
+      expect(axiosPutStub.calledWith(
+        '/api/v1/calendars/mycal/spaces/sp-789',
+        { content: contentByLang },
+      )).toBe(true);
+      expect(result).toBeInstanceOf(EventLocationSpace);
+      expect(result.id).toBe('sp-789');
+      expect(result.content('en').name).toBe('Renamed Hall');
+    });
+
+    it('should not touch the location store when updating a space', async () => {
+      const axiosPutStub = sandbox.stub(axios, 'put');
+      axiosPutStub.resolves({
+        data: { id: 'sp-1', placeId: 'place-1', content: {} },
+      });
+
+      await service.updateSpace('mycal', 'sp-1', { en: { name: 'X', accessibilityInfo: '' } });
+
+      expect((mockStore.addLocation as sinon.SinonStub).called).toBe(false);
+      expect((mockStore.updateLocation as sinon.SinonStub).called).toBe(false);
+      expect((mockStore.setLocationsForCalendar as sinon.SinonStub).called).toBe(false);
+      expect((mockStore.removeLocation as sinon.SinonStub).called).toBe(false);
+    });
+
+    it('should encode calendar URL name and space ID when updating', async () => {
+      const axiosPutStub = sandbox.stub(axios, 'put');
+      axiosPutStub.resolves({
+        data: { id: 'sp-1', placeId: 'place-1', content: {} },
+      });
+
+      await service.updateSpace('cal/123', 'https://example.com/sp/1', {
+        en: { name: 'X', accessibilityInfo: '' },
+      });
+
+      expect(axiosPutStub.calledWith(
+        '/api/v1/calendars/cal%2F123/spaces/https%3A%2F%2Fexample.com%2Fsp%2F1',
+        { content: { en: { name: 'X', accessibilityInfo: '' } } },
+      )).toBe(true);
+    });
+
+    it('should map CalendarNotFoundError responses through handleApiError', async () => {
+      const mockError = {
+        response: {
+          data: {
+            errorName: 'CalendarNotFoundError',
+          },
+        },
+      };
+
+      const axiosPutStub = sandbox.stub(axios, 'put');
+      axiosPutStub.rejects(mockError);
+
+      await expect(
+        service.updateSpace('mycal', 'sp-missing', { en: { name: 'X', accessibilityInfo: '' } }),
+      ).rejects.toThrow(CalendarNotFoundError);
+    });
+
+    it('should throw UnknownError for unrecognized error responses', async () => {
+      const mockError = new Error('Unknown error');
+
+      const axiosPutStub = sandbox.stub(axios, 'put');
+      axiosPutStub.rejects(mockError);
+
+      await expect(
+        service.updateSpace('mycal', 'sp-1', { en: { name: 'X', accessibilityInfo: '' } }),
+      ).rejects.toThrow(UnknownError);
+    });
+  });
+
+  describe('deleteSpace', () => {
+    it('should DELETE the Space endpoint with encoded params', async () => {
+      const axiosDeleteStub = sandbox.stub(axios, 'delete');
+      axiosDeleteStub.resolves({ data: {} });
+
+      await service.deleteSpace('mycal', 'sp-123');
+
+      expect(axiosDeleteStub.calledOnce).toBe(true);
+      expect(axiosDeleteStub.calledWith('/api/v1/calendars/mycal/spaces/sp-123')).toBe(true);
+    });
+
+    it('should not touch the location store when deleting a space', async () => {
+      const axiosDeleteStub = sandbox.stub(axios, 'delete');
+      axiosDeleteStub.resolves({ data: {} });
+
+      await service.deleteSpace('mycal', 'sp-123');
+
+      expect((mockStore.removeLocation as sinon.SinonStub).called).toBe(false);
+      expect((mockStore.addLocation as sinon.SinonStub).called).toBe(false);
+      expect((mockStore.updateLocation as sinon.SinonStub).called).toBe(false);
+      expect((mockStore.setLocationsForCalendar as sinon.SinonStub).called).toBe(false);
+    });
+
+    it('should encode calendar URL name and space ID when deleting', async () => {
+      const axiosDeleteStub = sandbox.stub(axios, 'delete');
+      axiosDeleteStub.resolves({ data: {} });
+
+      await service.deleteSpace('cal/123', 'https://example.com/sp/1');
+
+      expect(axiosDeleteStub.calledWith(
+        '/api/v1/calendars/cal%2F123/spaces/https%3A%2F%2Fexample.com%2Fsp%2F1',
+      )).toBe(true);
+    });
+
+    it('should map CalendarNotFoundError responses through handleApiError', async () => {
+      const mockError = {
+        response: {
+          data: {
+            errorName: 'CalendarNotFoundError',
+          },
+        },
+      };
+
+      const axiosDeleteStub = sandbox.stub(axios, 'delete');
+      axiosDeleteStub.rejects(mockError);
+
+      await expect(service.deleteSpace('mycal', 'sp-123')).rejects.toThrow(CalendarNotFoundError);
+    });
+
+    it('should throw UnknownError for unrecognized error responses', async () => {
+      const mockError = new Error('Unknown error');
+
+      const axiosDeleteStub = sandbox.stub(axios, 'delete');
+      axiosDeleteStub.rejects(mockError);
+
+      await expect(service.deleteSpace('mycal', 'sp-123')).rejects.toThrow(UnknownError);
     });
   });
 });
