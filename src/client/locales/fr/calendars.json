@@ -390,7 +390,21 @@
         "LOCATION_STATE_REQUIRES_ADDRESS": "La région nécessite une adresse",
         "LOCATION_CITY_REQUIRES_ADDRESS": "La ville nécessite une adresse",
         "editor_aria_label": "Éditeur de lieux",
-        "editor_form_aria_label": "Formulaire d'informations sur le lieu"
+        "editor_form_aria_label": "Formulaire d'informations sur le lieu",
+        "format": {
+            "with_space": "{{place}} — {{space}}"
+        },
+        "picker": {
+            "whole_venue_suffix": "(lieu entier)"
+        },
+        "space": {
+            "section_title": "Espaces",
+            "add_button": "Ajouter un espace",
+            "confirm_delete_message": "Supprimer l'espace « {{name}} » ?",
+            "confirm_delete_event_count": "{{count}} événements deviendront des événements pour le lieu entier.",
+            "venue_accessibility_label": "Accessibilité du lieu",
+            "space_accessibility_label": "Accessibilité de l'espace"
+        }
     },
     "bulk_operations": {
         "menu_label": "Opérations groupées",

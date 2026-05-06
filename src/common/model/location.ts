@@ -48,6 +48,57 @@ class EventLocationContent extends Model implements TranslatedContentModel {
 }
 
 /**
+ * Represents translatable content for a Space within an event location.
+ * Spaces can have a name and accessibility information in multiple languages.
+ */
+class EventLocationSpaceContent extends Model implements TranslatedContentModel {
+  constructor(
+    public language: string,
+    public name: string = '',
+    public accessibilityInfo: string = '',
+  ) {
+    super();
+  }
+
+  /**
+   * Validates that the content has required information.
+   * A Space requires a non-empty language and non-empty name.
+   */
+  isValid(): boolean {
+    return this.language.length > 0 && this.name.trim().length > 0;
+  }
+
+  /**
+   * Checks if the content is empty (no name and no accessibility info).
+   */
+  isEmpty(): boolean {
+    return this.name.trim().length === 0 && this.accessibilityInfo.trim().length === 0;
+  }
+
+  /**
+   * Convert to plain object for serialization.
+   */
+  toObject(): Record<string, any> {
+    return {
+      language: this.language,
+      name: this.name,
+      accessibilityInfo: this.accessibilityInfo,
+    };
+  }
+
+  /**
+   * Create from plain object.
+   */
+  static fromObject(obj: Record<string, any>): EventLocationSpaceContent {
+    return new EventLocationSpaceContent(
+      obj.language,
+      obj.name ?? '',
+      obj.accessibilityInfo ?? '',
+    );
+  }
+}
+
+/**
  * Represents a physical location where an event takes place.
  * Contains address information and multilingual accessibility details.
  */
@@ -193,4 +244,4 @@ function validateLocationHierarchy(location: EventLocation): string[] {
   return errors;
 }
 
-export { EventLocation, EventLocationContent, validateLocationHierarchy };
+export { EventLocation, EventLocationContent, EventLocationSpaceContent, validateLocationHierarchy };

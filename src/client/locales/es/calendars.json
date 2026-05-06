@@ -390,7 +390,21 @@
         "LOCATION_STATE_REQUIRES_ADDRESS": "La provincia requiere una dirección postal",
         "LOCATION_CITY_REQUIRES_ADDRESS": "La ciudad requiere una dirección postal",
         "editor_aria_label": "Editor de lugares",
-        "editor_form_aria_label": "Formulario de información del lugar"
+        "editor_form_aria_label": "Formulario de información del lugar",
+        "format": {
+            "with_space": "{{place}} — {{space}}"
+        },
+        "picker": {
+            "whole_venue_suffix": "(lugar completo)"
+        },
+        "space": {
+            "section_title": "Espacios",
+            "add_button": "Añadir espacio",
+            "confirm_delete_message": "¿Eliminar el espacio \"{{name}}\"?",
+            "confirm_delete_event_count": "{{count}} eventos se convertirán en eventos del lugar completo.",
+            "venue_accessibility_label": "Accesibilidad del lugar",
+            "space_accessibility_label": "Accesibilidad del espacio"
+        }
     },
     "bulk_operations": {
         "menu_label": "Operaciones masivas",

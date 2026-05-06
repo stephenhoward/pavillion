@@ -148,3 +148,22 @@ export class InvalidOccurrenceDateError extends Error {
     Object.setPrototypeOf(this, InvalidOccurrenceDateError.prototype);
   }
 }
+
+/**
+ * Custom error class raised when an event's selected Space does not belong to
+ * the event's selected Place. Enforces the Space/Place invariant at the
+ * service layer.
+ */
+export class SpaceLocationMismatchError extends Error {
+  constructor(
+    public spaceId: string,
+    public expectedPlaceId: string,
+    public actualPlaceId: string,
+    message?: string,
+  ) {
+    super(message ?? `Space ${spaceId} belongs to place ${actualPlaceId}, not ${expectedPlaceId}`);
+    this.name = 'SpaceLocationMismatchError';
+    // Maintaining proper prototype chain in ES5+
+    Object.setPrototypeOf(this, SpaceLocationMismatchError.prototype);
+  }
+}

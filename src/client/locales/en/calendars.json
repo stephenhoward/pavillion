@@ -390,7 +390,21 @@
         "LOCATION_STATE_REQUIRES_ADDRESS": "State requires a street address",
         "LOCATION_CITY_REQUIRES_ADDRESS": "City requires a street address",
         "editor_aria_label": "Place Editor",
-        "editor_form_aria_label": "Place Information Form"
+        "editor_form_aria_label": "Place Information Form",
+        "format": {
+            "with_space": "{{place}} — {{space}}"
+        },
+        "picker": {
+            "whole_venue_suffix": "(whole venue)"
+        },
+        "space": {
+            "section_title": "Spaces",
+            "add_button": "Add space",
+            "confirm_delete_message": "Delete space \"{{name}}\"?",
+            "confirm_delete_event_count": "{{count}} events will become whole-venue events.",
+            "venue_accessibility_label": "Venue accessibility",
+            "space_accessibility_label": "Space accessibility"
+        }
     },
     "bulk_operations": {
         "menu_label": "Bulk Operations",
