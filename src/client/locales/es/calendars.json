@@ -400,10 +400,9 @@
         "space": {
             "section_title": "Espacios",
             "add_button": "Añadir espacio",
+            "confirm_delete_title": "Eliminar espacio",
             "confirm_delete_message": "¿Eliminar el espacio \"{{name}}\"?",
             "confirm_delete_event_count": "{{count}} eventos se convertirán en eventos del lugar completo.",
-            "venue_accessibility_label": "Accesibilidad del lugar",
-            "space_accessibility_label": "Accesibilidad del espacio",
             "editor_title_new": "Nuevo espacio",
             "editor_title_edit": "Editar espacio",
             "field_name": "Nombre",
@@ -413,7 +412,16 @@
             "dismiss_error": "Descartar error",
             "error_name_required": "Al menos un idioma debe tener un nombre no vacío",
             "error_saving": "Error al guardar el espacio",
-            "editor_form_aria_label": "Formulario de información del espacio"
+            "error_deleting": "Error al eliminar el espacio",
+            "editor_form_aria_label": "Formulario de información del espacio",
+            "loading_spaces": "Cargando espacios...",
+            "no_spaces": "Aún no hay espacios",
+            "unnamed_space": "Espacio sin nombre",
+            "edit_space_button": "Editar {{name}}",
+            "delete_button": "Eliminar",
+            "delete_space_button": "Eliminar {{name}}",
+            "deleting": "Eliminando...",
+            "space_deleted_success": "Espacio eliminado con éxito"
         }
     },
     "bulk_operations": {

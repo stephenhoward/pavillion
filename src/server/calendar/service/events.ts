@@ -12,7 +12,7 @@ import { EventContentEntity, EventEntity, EventScheduleEntity } from "@/server/c
 import { EventImportOriginEntity } from "@/server/calendar/entity/event_import_origin";
 import CalendarService from "@/server/calendar/service/calendar";
 import { LocationEntity, LocationContentEntity } from "@/server/calendar/entity/location";
-import { LocationSpaceEntity } from "@/server/calendar/entity/location_space";
+import { LocationSpaceEntity, LocationSpaceContentEntity } from "@/server/calendar/entity/location_space";
 // TODO: MediaEntity is still needed here for Sequelize eager-load association includes
 // (e.g., include: [MediaEntity] in queries). Removing this cross-domain import requires
 // either restructuring entity associations or moving eager-loading to the media domain.
@@ -1575,6 +1575,12 @@ class EventService {
       include: [
         EventContentEntity,
         { model: LocationEntity, include: [LocationContentEntity] },
+        // Eager-load the optional Space and its translatable content so the
+        // public detail / event editor can render the layered Place — Space
+        // header and the per-Space accessibility section. Without this
+        // include, EventEntity#space is undefined and `event.toModel().space`
+        // collapses to null even when space_id is set on the row (pv-ix7v.5.1).
+        { model: LocationSpaceEntity, include: [LocationSpaceContentEntity] },
         EventScheduleEntity,
         MediaEntity,
         { model: EventSeriesEntity, include: [EventSeriesContentEntity] },
@@ -1593,6 +1599,9 @@ class EventService {
     }
     if ( event.location ) {
       e.location = event.location.toModel();
+    }
+    if ( event.space ) {
+      e.space = event.space.toModel();
     }
     if ( event.schedules ) {
       for ( let s of event.schedules ) {

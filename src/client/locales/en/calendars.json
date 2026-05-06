@@ -400,10 +400,9 @@
         "space": {
             "section_title": "Spaces",
             "add_button": "Add space",
+            "confirm_delete_title": "Delete Space",
             "confirm_delete_message": "Delete space \"{{name}}\"?",
             "confirm_delete_event_count": "{{count}} events will become whole-venue events.",
-            "venue_accessibility_label": "Venue accessibility",
-            "space_accessibility_label": "Space accessibility",
             "editor_title_new": "New Space",
             "editor_title_edit": "Edit Space",
             "field_name": "Name",
@@ -413,7 +412,16 @@
             "dismiss_error": "Dismiss error",
             "error_name_required": "At least one language must have a non-empty name",
             "error_saving": "Failed to save space",
-            "editor_form_aria_label": "Space Information Form"
+            "error_deleting": "Failed to delete space",
+            "editor_form_aria_label": "Space Information Form",
+            "loading_spaces": "Loading spaces...",
+            "no_spaces": "No spaces yet",
+            "unnamed_space": "Unnamed Space",
+            "edit_space_button": "Edit {{name}}",
+            "delete_button": "Delete",
+            "delete_space_button": "Delete {{name}}",
+            "deleting": "Deleting...",
+            "space_deleted_success": "Space deleted successfully"
         }
     },
     "bulk_operations": {

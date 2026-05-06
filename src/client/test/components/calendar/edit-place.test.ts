@@ -2,9 +2,16 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { flushPromises } from '@vue/test-utils';
 import { createMemoryHistory, createRouter, Router } from 'vue-router';
 import { RouteRecordRaw } from 'vue-router';
+import { createPinia, setActivePinia } from 'pinia';
 import { mountComponent } from '@/client/test/lib/vue';
 import EditPlaceView from '@/client/components/logged_in/calendar/edit-place.vue';
-import { EventLocation, EventLocationContent } from '@/common/model/location';
+import { useLocationStore } from '@/client/stores/locationStore';
+import {
+  EventLocation,
+  EventLocationContent,
+  EventLocationSpace,
+  EventLocationSpaceContent,
+} from '@/common/model/location';
 import { Calendar } from '@/common/model/calendar';
 
 const createMockCalendar = (id: string, urlName: string) => {
@@ -24,6 +31,18 @@ const createMockLocation = (id: string, name: string) => {
   return location;
 };
 
+const createMockSpace = (
+  id: string,
+  placeId: string,
+  contents: Array<{ language: string; name: string; accessibilityInfo?: string }>,
+) => {
+  const space = new EventLocationSpace(id, placeId);
+  for (const c of contents) {
+    space.addContent(new EventLocationSpaceContent(c.language, c.name, c.accessibilityInfo ?? ''));
+  }
+  return space;
+};
+
 // Mock CalendarService
 const mockGetCalendarByUrlName = vi.fn();
 
@@ -37,12 +56,21 @@ vi.mock('@/client/service/calendar', () => ({
 const mockGetLocationById = vi.fn();
 const mockCreateLocation = vi.fn();
 const mockUpdateLocation = vi.fn();
+const mockGetSpaces = vi.fn();
+const mockCreateSpace = vi.fn();
+const mockUpdateSpace = vi.fn();
+const mockDeleteSpace = vi.fn();
 
 vi.mock('@/client/service/location', () => ({
   default: vi.fn().mockImplementation(() => ({
     getLocationById: mockGetLocationById,
     createLocation: mockCreateLocation,
     updateLocation: mockUpdateLocation,
+    // Space methods used by the locationStore CRUD wrappers.
+    getSpaces: mockGetSpaces,
+    createSpace: mockCreateSpace,
+    updateSpace: mockUpdateSpace,
+    deleteSpace: mockDeleteSpace,
   })),
 }));
 
@@ -67,8 +95,12 @@ const createWrapper = async (routeName: string = 'place_new', params: Record<str
   routerPushSpy = vi.fn();
   router.push = routerPushSpy;
 
+  const pinia = createPinia();
+  setActivePinia(pinia);
+
   const wrapper = mountComponent(EditPlaceView, router, {
     props: routeName === 'place_edit' ? { placeId: params.placeId } : {},
+    pinia,
   });
 
   await flushPromises();
@@ -81,6 +113,10 @@ describe('EditPlaceView', () => {
     mockGetLocationById.mockReset();
     mockCreateLocation.mockReset();
     mockUpdateLocation.mockReset();
+    mockGetSpaces.mockReset();
+    mockCreateSpace.mockReset();
+    mockUpdateSpace.mockReset();
+    mockDeleteSpace.mockReset();
 
     mockGetCalendarByUrlName.mockResolvedValue(
       createMockCalendar('calendar-123', 'test-calendar'),
@@ -94,6 +130,11 @@ describe('EditPlaceView', () => {
     mockUpdateLocation.mockResolvedValue(
       createMockLocation('loc-1', 'Updated Place'),
     );
+    // Default Space mocks resolve to empty so onBeforeMount fetchSpaces
+    // doesn't pollute test state. Tests that exercise Spaces seed the cache
+    // directly via locationStore.setSpacesForPlace.
+    mockGetSpaces.mockResolvedValue([]);
+    mockDeleteSpace.mockResolvedValue(undefined);
   });
 
   describe('Create mode', () => {
@@ -359,6 +400,127 @@ describe('EditPlaceView', () => {
 
       // Loading should be showing before promises resolve
       expect(wrapper.find('[role="status"]').exists()).toBe(true);
+    });
+  });
+
+  describe('Spaces section', () => {
+    it('should not render the Spaces section in create mode', async () => {
+      const wrapper = await createWrapper();
+      expect(wrapper.find('.spaces-section').exists()).toBe(false);
+    });
+
+    it('should render the Spaces section in edit mode with section title', async () => {
+      const wrapper = await createWrapper('place_edit', { placeId: 'loc-1' });
+      const section = wrapper.find('.spaces-section');
+      expect(section.exists()).toBe(true);
+      // Section header text uses places.space.section_title
+      expect(section.text()).toContain('Spaces');
+    });
+
+    it('should fetch spaces for the place on mount in edit mode', async () => {
+      const wrapper = await createWrapper('place_edit', { placeId: 'loc-1' });
+      const store = useLocationStore();
+      // Seed the cache directly to assert downstream rendering uses it.
+      store.setSpacesForPlace('loc-1', [
+        createMockSpace('space-1', 'loc-1', [{ language: 'en', name: 'Pacific Room' }]),
+      ]);
+      await flushPromises();
+
+      const items = wrapper.findAll('.space-item');
+      expect(items.length).toBe(1);
+      expect(items[0].text()).toContain('Pacific Room');
+    });
+
+    it('should render an Add Space button in edit mode', async () => {
+      const wrapper = await createWrapper('place_edit', { placeId: 'loc-1' });
+      const addBtn = wrapper.find('.spaces-section .add-space-button');
+      expect(addBtn.exists()).toBe(true);
+      expect(addBtn.text()).toContain('Add space');
+    });
+
+    it('should mount edit-space.vue when Add Space button is clicked', async () => {
+      const wrapper = await createWrapper('place_edit', { placeId: 'loc-1' });
+
+      expect(wrapper.find('.space-editor').exists()).toBe(false);
+      await wrapper.find('.add-space-button').trigger('click');
+      await flushPromises();
+
+      expect(wrapper.find('.space-editor').exists()).toBe(true);
+    });
+
+    it('should mount edit-space.vue with the space when Edit is clicked', async () => {
+      const wrapper = await createWrapper('place_edit', { placeId: 'loc-1' });
+      const store = useLocationStore();
+      store.setSpacesForPlace('loc-1', [
+        createMockSpace('space-1', 'loc-1', [{ language: 'en', name: 'Pacific Room' }]),
+      ]);
+      await flushPromises();
+
+      await wrapper.find('.space-item .edit-space-button').trigger('click');
+      await flushPromises();
+
+      expect(wrapper.find('.space-editor').exists()).toBe(true);
+    });
+
+    it('should show delete confirmation with event-count message when delete clicked', async () => {
+      const wrapper = await createWrapper('place_edit', { placeId: 'loc-1' });
+      const store = useLocationStore();
+      const space = createMockSpace('space-1', 'loc-1', [
+        { language: 'en', name: 'Pacific Room' },
+      ]);
+      // Add eventCount as a runtime property (server augments space payloads
+      // similarly to places).
+      (space as any).eventCount = 3;
+      store.setSpacesForPlace('loc-1', [space]);
+      await flushPromises();
+
+      await wrapper.find('.space-item .delete-space-button').trigger('click');
+      await flushPromises();
+
+      // Delete confirm dialog renders the space delete-confirm message
+      // and the event-count consequence sentence.
+      expect(wrapper.text()).toContain('Pacific Room');
+      expect(wrapper.text()).toContain('whole-venue events');
+    });
+
+    it('should call locationStore.deleteSpace on confirm', async () => {
+      const wrapper = await createWrapper('place_edit', { placeId: 'loc-1' });
+      const store = useLocationStore();
+      store.setSpacesForPlace('loc-1', [
+        createMockSpace('space-1', 'loc-1', [{ language: 'en', name: 'Pacific Room' }]),
+      ]);
+      const deleteSpy = vi.spyOn(store, 'deleteSpace').mockResolvedValue(undefined);
+      await flushPromises();
+
+      await wrapper.find('.space-item .delete-space-button').trigger('click');
+      await flushPromises();
+
+      // Click the confirm button inside ConfirmDeleteDialog
+      const confirmBtn = wrapper.find('.delete-space-modal button.btn--danger, .delete-space-modal .btn-danger, .delete-space-modal [data-testid="confirm-delete"]');
+      // Fall back: find any button that emits "confirm" — the ConfirmDeleteDialog
+      // renders a primary button with the delete label.
+      const buttons = wrapper.findAll('.delete-space-modal button');
+      const deleteBtn = confirmBtn.exists()
+        ? confirmBtn
+        : buttons.find(b => b.text().trim() === 'Delete') ?? buttons[buttons.length - 1];
+      await deleteBtn.trigger('click');
+      await flushPromises();
+
+      expect(deleteSpy).toHaveBeenCalledWith('test-calendar', 'loc-1', 'space-1');
+    });
+
+    it('should close edit-space editor when child emits cancel', async () => {
+      const wrapper = await createWrapper('place_edit', { placeId: 'loc-1' });
+
+      await wrapper.find('.add-space-button').trigger('click');
+      await flushPromises();
+      expect(wrapper.find('.space-editor').exists()).toBe(true);
+
+      // Click cancel inside the space editor
+      await wrapper.find('.space-editor .btn-cancel').trigger('click');
+      await flushPromises();
+
+      expect(wrapper.find('.space-editor').exists()).toBe(false);
     });
   });
 });
