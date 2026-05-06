@@ -142,17 +142,15 @@ export interface AdvisorTriageVerdict {
 export const PREFLIGHT_MESSAGES: Record<string, string> = {
   dirty_tree:
     'Working tree is dirty \u2014 commit or stash before re-running /process-backlog.',
-  wrong_branch:
-    'Not on main \u2014 return to main (or finish your current branch\u2019s PR) before re-running /process-backlog.',
-  stale_main:
-    'Local main is out of sync with origin/main \u2014 `git pull` (or fix remote access) before re-running /process-backlog.',
+  behind_main:
+    'HEAD is not at origin/main \u2014 pull, rebase, or check out a fresh branch from origin/main before re-running /process-backlog.',
   empty_backlog:
     'No ready beads available (or every ready bead is labelled `needs-human`) \u2014 shape or unlabel a bead before re-running /process-backlog.',
 };
 
 export const GIT_SAFE_MESSAGES: Record<number, string> = {
-  1: 'Not on main \u2014 return to main (or finish your current branch\u2019s PR) before re-running /process-backlog.',
-  2: 'Not on main \u2014 return to main (or finish your current branch\u2019s PR) before re-running /process-backlog.',
+  1: 'HEAD is not at origin/main \u2014 pull, rebase, or check out a fresh branch from origin/main before re-running /process-backlog.',
+  2: 'HEAD is not at origin/main \u2014 pull, rebase, or check out a fresh branch from origin/main before re-running /process-backlog.',
 };
 
 // =============================================================================
@@ -953,13 +951,6 @@ export async function preflight(ctx: PhaseCtx, deps: PhaseDeps = {}): Promise<Ph
 
   // Step 1: Run preflight checks
   const preflightResult = runPreflightCheck({ spawnFn: deps.spawnFn });
-
-  if (preflightResult.recovered) {
-    ctx.logger.appendRunJson({
-      event: 'preflight_recovered',
-      orphanedBranch: preflightResult.recovered.orphanedBranch,
-    });
-  }
 
   // When an explicit bead is given, backlog emptiness is not a blocker:
   // the user may be picking up a partially-processed or non-ready bead.

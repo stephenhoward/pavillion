@@ -335,11 +335,11 @@ describe('classifyVerdict', () => {
     expect(classifyVerdict(ctx)).toBe('transient_halt');
   });
 
-  it('returns transient_halt when preflight halts on wrong_branch', () => {
+  it('returns transient_halt when preflight halts on behind_main', () => {
     const ctx = makeCtx({
       phaseHistory: [
         { phase: PhaseName.Preflight, ok: false, durationMs: 300,
-          error: 'wrong_branch: expected main but on feat/x' },
+          error: 'behind_main: HEAD is not at origin/main' },
       ] as PhaseResult[],
     });
     expect(classifyVerdict(ctx)).toBe('transient_halt');

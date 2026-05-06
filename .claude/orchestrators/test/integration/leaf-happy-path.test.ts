@@ -85,17 +85,18 @@ describe('Integration: leaf happy path', () => {
 
       // gitSafeToStart + preflight status checks
       if (a.includes('status --porcelain')) return { exitCode: 0, stdout: '', stderr: '' };
-      // gitSafeToStart branch check
+      // gitSafeToStart inside-repo check
       if (a.includes('rev-parse --is-inside-work-tree')) return { exitCode: 0, stdout: 'true', stderr: '' };
-      if (a.includes('rev-parse --abbrev-ref')) return { exitCode: 0, stdout: 'main', stderr: '' };
-      // preflight branch check
+      // preflight + gitSafeToStart "current with main" check: HEAD == origin/main
+      if (a.includes('rev-parse HEAD') || a.includes('rev-parse origin/')) {
+        return { exitCode: 0, stdout: 'abc1234567890abcdef', stderr: '' };
+      }
+      // branch phase: branch --show-current — main triggers checkout
       if (a.includes('branch --show-current')) {
-        // branch phase: first call → main (trigger checkout); second call in PR → feature branch
         return { exitCode: 0, stdout: 'main', stderr: '' };
       }
-      // preflight fetch/diff
+      // preflight fetch
       if (a.includes('fetch origin')) return { exitCode: 0, stdout: '', stderr: '' };
-      if (a.includes('diff')) return { exitCode: 0, stdout: '', stderr: '' };
       // branch phase: checkout
       if (a.includes('checkout')) return { exitCode: 0, stdout: '', stderr: '' };
       // PR phase: push
