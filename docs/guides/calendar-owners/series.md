@@ -1,6 +1,6 @@
 # Group related events into a series
 
-A series is a named program made up of distinct events that share an identity — a *Summer Music Series* of concerts on different dates with different performers, a *Fall Lecture Series* with a different speaker each Thursday, a *Neighborhood Repair Café* that meets monthly with a different focus each time. The events differ in their substance, but they belong together under one program name. A series is how you tell visitors *these are part of the same thing*, even when no two of them are alike.
+A series is a named program made up of distinct events that share an identity — a *Summer Music Series* of concerts on different dates with different performers, a *Fall Lecture Series* with a different speaker each Thursday, a *Neighborhood Repair Café* that meets monthly with a different focus or location each time. The events differ in their substance, but they belong together under one program name. A series is how you tell visitors *these are part of the same thing*, even when no two of them are alike.
 
 Series and recurring events both answer the question *"this thing happens more than once"* — but they answer it differently, and choosing the right tool up front saves a lot of editing later.
 
@@ -12,7 +12,7 @@ A few shapes that are series:
 
 - **Same program, rotating content.** A summer concert series with a different artist each week. A lecture series with a different speaker each session. A film series where the film changes each screening.
 - **Same theme, varied formats.** A *Climate Resilience Week* with a panel discussion, a workshop, a bike tour, and a film screening — all under one banner, none of them the same kind of event.
-- **Episodic programs.** A book club where each session has a different book, a discussion group with a different topic each time, a community kitchen with a different menu each month.
+- **Same program, rotating venue.** A *Neighborhood Walks* series where each walk explores a different part of town. A pop-up dinner series hosted at a different restaurant each month. A house-concert series moving from one host's living room to the next.
 
 The thread is *identity over content*. A visitor looking at any one event in the series should be able to land on the series page and see the rest of the program, the way you might browse the back catalog of a podcast or the season archive of a TV show.
 
@@ -52,11 +52,7 @@ The URL name is the only field that can't be changed after creation, because cha
 
 ## Add events to a series
 
-A series is empty until you put events in it. There are two paths.
-
-**While creating or editing an event.** In the event editor, find the **Series** section. There's a single dropdown labeled *Series*; the default is *No series*. Pick the series this event belongs to from the list and save. That's all — the event is now part of the series.
-
-**Moving an existing event into a series.** Open the event in the editor, change the Series dropdown from its current value to the one you want, and save. To remove an event from a series, set the dropdown back to *No series*.
+A series is empty until you put events in it. In the event editor — whether you're creating a new event or editing an existing one — find the **Series** section. There's a single dropdown labeled *Series*; the default is *No series*. Pick the series this event belongs to and save. To remove an event from a series, set the dropdown back to *No series*.
 
 An event can belong to *one* series at a time, not several. If a single event genuinely fits more than one program — say, a panel discussion that's both part of a *Climate Resilience Week* and a *Speakers Series* — you'll have to pick one. Categories can do the cross-tagging; series are the primary affiliation.
 
@@ -68,7 +64,7 @@ Newly-created series don't have any events yet, and the series doesn't show up o
 
 When a series has events, visitors can find it in two places.
 
-**The series' own public page** — `/view/your-calendar/series/your-series-url-name`. The page shows the banner image at the top (if you uploaded one), the series name, the description, and the full list of events in the series. Long series paginate. Each event in the list links to that event's detail page. There's a back-link in the breadcrumb that returns the visitor to your main calendar.
+**The series' own public page** — `/view/your-calendar/series/your-series-url-name`. The page shows the banner image at the top (if you uploaded one), the series name, the description, and the full list of events in the series. Long series split into pages with next- and previous-page buttons at the bottom. Each event in the list links to that event's detail page. There's a back-link in the breadcrumb that returns the visitor to your main calendar.
 
 **The footer of every event in the series.** On any event's detail page, the footer carries a small *Series:* label followed by a link to the series page. A visitor reading about *Concert: Maya García* on Tuesday can click that link and land on the *Summer Music Series* page with every concert in the program listed. That's the path most visitors will actually find a series through — the discovery flow is event → series → other events in the series, not the other way around.
 
