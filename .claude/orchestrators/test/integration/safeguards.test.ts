@@ -48,36 +48,27 @@ function unshapedBeadText(): string {
  * Mount a full passing preflight on a ScriptRouter.
  *
  * Covers all git/bd calls made by:
- *   - runPreflightCheck(): git status, git branch, git fetch, git diff, bd ready, bd label list
- *   - gitSafeToStart():    git rev-parse (work tree), git rev-parse (branch), git status
+ *   - runPreflightCheck(): git status, git fetch, git rev-parse HEAD,
+ *                          git rev-parse origin/main, bd ready, bd label list
+ *   - gitSafeToStart():    git rev-parse (work tree), git rev-parse HEAD,
+ *                          git rev-parse origin/main, git status
  */
 function mountPassingPreflight(scripts: ScriptRouter, beadId = 'pv-test.1'): void {
-  let preflightCallCount = 0;
-  let gitSafeCallCount = 0;
-
   scripts.on('git', (args) => {
-    // Both preflight and gitSafeToStart call git. We distinguish by call order.
     const argStr = args.join(' ');
 
     if (argStr.includes('status --porcelain')) {
-      preflightCallCount++;
-      // First call: from runPreflightCheck; second: from gitSafeToStart
       return { exitCode: 0, stdout: '', stderr: '' };
-    }
-    if (argStr.includes('branch --show-current')) {
-      return { exitCode: 0, stdout: 'main', stderr: '' };
     }
     if (argStr.includes('fetch origin')) {
-      return { exitCode: 0, stdout: '', stderr: '' };
-    }
-    if (argStr.includes('diff')) {
       return { exitCode: 0, stdout: '', stderr: '' };
     }
     if (argStr.includes('rev-parse --is-inside-work-tree')) {
       return { exitCode: 0, stdout: 'true', stderr: '' };
     }
-    if (argStr.includes('rev-parse --abbrev-ref')) {
-      return { exitCode: 0, stdout: 'main', stderr: '' };
+    if (argStr.includes('rev-parse HEAD') || argStr.includes('rev-parse origin/')) {
+      // Both HEAD and origin/main return the same SHA → preflight/gitSafe pass
+      return { exitCode: 0, stdout: 'abc1234567890abcdef', stderr: '' };
     }
     return { exitCode: 0, stdout: '', stderr: '' };
   });

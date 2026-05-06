@@ -48,13 +48,6 @@ export interface PreflightFailure {
 export interface PreflightResult {
   ok: boolean;
   failures: PreflightFailure[];
-  /**
-   * Set when preflight detected an orphaned orchestrator branch (see
-   * tryRecoverOrphanBranch) and successfully returned the working tree to
-   * main. The Phase 0 runner uses this to emit a `preflight_recovered`
-   * event so the condition is visible in run logs.
-   */
-  recovered?: { orphanedBranch: string };
 }
 
 export interface BeadJson {
@@ -145,12 +138,16 @@ function run(
 // =============================================================================
 
 /**
- * Check that the working tree is clean and we are on the main branch.
+ * Check that the working tree is clean and HEAD is current with origin/main.
  *
- * Mirrors git-safe-to-start.sh logic:
  *   - must be inside a git work tree
- *   - current branch must be 'main' (or GIT_SAFE_MAIN_BRANCH override)
+ *   - HEAD commit must equal origin/<mainBranch> (any branch name is fine)
  *   - working tree must be clean (git status --porcelain is empty)
+ *
+ * The "current with main" model (rather than "on main") supports worktree-based
+ * workflows where each worktree's branch starts at origin/main and feature
+ * branches are cut from there. The env var `GIT_SAFE_MAIN_BRANCH` still
+ * configures the upstream branch name (default: `main`).
  */
 export function gitSafeToStart(deps: SpawnDeps = {}): GitSafeResult {
   const spawn = deps.spawnFn ?? nodeSpawnSync;
@@ -162,15 +159,22 @@ export function gitSafeToStart(deps: SpawnDeps = {}): GitSafeResult {
     return { ok: false, reason: 'not inside a git work tree' };
   }
 
-  // Check branch
-  const branchResult = run('git', ['rev-parse', '--abbrev-ref', 'HEAD'], spawn);
-  if (branchResult.exitCode !== 0) {
-    return { ok: false, reason: 'git rev-parse failed unexpectedly' };
+  // Check HEAD == origin/<mainBranch>
+  const headSha = run('git', ['rev-parse', 'HEAD'], spawn);
+  if (headSha.exitCode !== 0) {
+    return { ok: false, reason: 'git rev-parse HEAD failed unexpectedly' };
   }
-  if (branchResult.stdout !== mainBranch) {
+  const baseSha = run('git', ['rev-parse', `origin/${mainBranch}`], spawn);
+  if (baseSha.exitCode !== 0) {
     return {
       ok: false,
-      reason: `on '${branchResult.stdout}', expected '${mainBranch}'`,
+      reason: `could not resolve origin/${mainBranch}; check remote access`,
+    };
+  }
+  if (headSha.stdout !== baseSha.stdout) {
+    return {
+      ok: false,
+      reason: `HEAD is not at origin/${mainBranch} (HEAD=${headSha.stdout.slice(0, 7)}, origin/${mainBranch}=${baseSha.stdout.slice(0, 7)})`,
     };
   }
 
@@ -191,81 +195,20 @@ export function gitSafeToStart(deps: SpawnDeps = {}): GitSafeResult {
 // =============================================================================
 
 /**
- * Orchestrator-generated branch pattern. Matches legacy branches that still
- * carry a `-pv-<beadId>` suffix from before pv-p85n stripped bead IDs out of
- * git artifacts. New `branchName()` output (`<type>/<kebab-title>`) will not
- * match — the orphan-recovery shortcut is intentionally legacy-only because
- * a no-suffix pattern is too loose to safely distinguish abandoned
- * orchestrator branches from real user work.
- *
- * A branch that matches this pattern still has to pass every other recovery
- * guard (clean tree, no commits ahead of main, no open PR) before preflight
- * will touch it.
- */
-const ORCHESTRATOR_BRANCH_PATTERN = /^(chore|feat|fix)\/[a-z0-9][a-z0-9-]*-pv-[a-z0-9-]+$/;
-
-/**
- * Decide whether the current non-main branch is a stale, abandoned
- * orchestrator branch that's safe to check out of automatically.
- *
- * Safe-to-recover requires ALL of:
- *   - branch name matches the orchestrator-generated pattern
- *   - working tree is clean (no uncommitted changes)
- *   - branch has no commits ahead of main
- *   - no open PR exists for the branch
- *
- * Any gh/git failure returns false — safer to halt than to guess.
- */
-function canRecoverOrphanBranch(
-  branch: string,
-  mainBranch: string,
-  spawn: SpawnFn,
-): boolean {
-  if (!ORCHESTRATOR_BRANCH_PATTERN.test(branch)) return false;
-
-  const status = run('git', ['status', '--porcelain'], spawn);
-  if (status.exitCode !== 0 || status.stdout.length > 0) return false;
-
-  const revList = run('git', ['rev-list', '--count', `${mainBranch}..${branch}`], spawn);
-  if (revList.exitCode !== 0) return false;
-  const ahead = parseInt(revList.stdout || '0', 10);
-  if (Number.isNaN(ahead) || ahead > 0) return false;
-
-  const prList = run(
-    'gh',
-    ['pr', 'list', '--head', branch, '--state', 'open', '--json', 'number'],
-    spawn,
-  );
-  if (prList.exitCode !== 0) return false;
-
-  try {
-    const prs = JSON.parse(prList.stdout || '[]');
-    if (Array.isArray(prs) && prs.length > 0) return false;
-  }
-  catch {
-    return false;
-  }
-
-  return true;
-}
-
-/**
  * Full preflight gate. Checks:
  *   - dirty_tree:     working tree has uncommitted changes
- *   - wrong_branch:   not on main (or GIT_SAFE_MAIN_BRANCH)
- *   - stale_main:     local main differs from origin/main
+ *   - behind_main:    HEAD is not at origin/<mainBranch> (or fetch failed)
  *   - empty_backlog:  no ready beads excluding needs-human beads
  *
- * Before reporting `wrong_branch`, preflight attempts to recover from an
- * orphaned orchestrator branch (see canRecoverOrphanBranch). Successful
- * recovery sets `result.recovered` and silences the `wrong_branch` failure.
+ * The branch name is not enforced: any branch is acceptable as long as HEAD
+ * is at origin/main. This supports worktree workflows where each worktree's
+ * branch starts at origin/main.
  */
 export function preflight(deps: SpawnDeps = {}): PreflightResult {
   const spawn = deps.spawnFn ?? nodeSpawnSync;
   const mainBranch = process.env.PREFLIGHT_MAIN_BRANCH ?? 'main';
   const readyLimit = parseInt(process.env.PREFLIGHT_READY_LIMIT ?? '50', 10);
   const failures: PreflightFailure[] = [];
-  let recovered: { orphanedBranch: string } | undefined;
 
   // 1. Clean working tree
   const statusResult = run('git', ['status', '--porcelain'], spawn);
@@ -276,40 +219,27 @@ export function preflight(deps: SpawnDeps = {}): PreflightResult {
     });
   }
 
-  // 2. On main branch — attempt orphan recovery first
-  const branchResult = run('git', ['branch', '--show-current'], spawn);
-  let currentBranch = branchResult.stdout;
-  if (currentBranch && currentBranch !== mainBranch) {
-    if (canRecoverOrphanBranch(currentBranch, mainBranch, spawn)) {
-      const checkout = run('git', ['checkout', mainBranch], spawn);
-      if (checkout.exitCode === 0) {
-        recovered = { orphanedBranch: currentBranch };
-        currentBranch = mainBranch;
-      }
-    }
-  }
-
-  if (currentBranch !== mainBranch) {
-    failures.push({
-      kind: 'wrong_branch',
-      reason: `expected to be on '${mainBranch}' but currently on '${currentBranch}'`,
-    });
-  }
-
-  // 3. Local main in sync with origin/main
+  // 2. HEAD is current with origin/<mainBranch>
   const fetchResult = run('git', ['fetch', 'origin', mainBranch], spawn, { timeout: 30_000 });
   if (fetchResult.exitCode !== 0) {
     failures.push({
-      kind: 'stale_main',
+      kind: 'behind_main',
       reason: `could not fetch origin/${mainBranch}; check network or remote`,
     });
   }
   else {
-    const diffResult = run('git', ['diff', `origin/${mainBranch}`, '--quiet'], spawn);
-    if (diffResult.exitCode !== 0) {
+    const headSha = run('git', ['rev-parse', 'HEAD'], spawn);
+    const baseSha = run('git', ['rev-parse', `origin/${mainBranch}`], spawn);
+    if (headSha.exitCode !== 0 || baseSha.exitCode !== 0) {
       failures.push({
-        kind: 'stale_main',
-        reason: `local ${mainBranch} differs from origin/${mainBranch}; pull or reset before /process-backlog`,
+        kind: 'behind_main',
+        reason: `could not resolve HEAD or origin/${mainBranch}`,
+      });
+    }
+    else if (headSha.stdout !== baseSha.stdout) {
+      failures.push({
+        kind: 'behind_main',
+        reason: `HEAD is not at origin/${mainBranch} (HEAD=${headSha.stdout.slice(0, 7)}, origin/${mainBranch}=${baseSha.stdout.slice(0, 7)}); pull, rebase, or check out a fresh branch from origin/${mainBranch}`,
       });
     }
   }
@@ -346,7 +276,6 @@ export function preflight(deps: SpawnDeps = {}): PreflightResult {
   return {
     ok: failures.length === 0,
     failures,
-    ...(recovered ? { recovered } : {}),
   };
 }
 

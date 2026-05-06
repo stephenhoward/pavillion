@@ -115,43 +115,45 @@ function beadTextExecuting(): string {
 }
 
 // =============================================================================
-// Canonical seqSpawn sequences for gitSafeToStart() (3 git calls)
+// Canonical seqSpawn sequences for gitSafeToStart() (4 git calls)
 // =============================================================================
 
-/** 3 spawn calls that satisfy gitSafeToStart() successfully */
+/** 4 spawn calls that satisfy gitSafeToStart() successfully */
 function gitSafeOkSpawns(): SpawnSyncReturns<Buffer>[] {
   return [
-    fakeSpawn('true', '', 0),   // git rev-parse --is-inside-work-tree
-    fakeSpawn('main', '', 0),   // git rev-parse --abbrev-ref HEAD
-    fakeSpawn('', '', 0),       // git status --porcelain (clean)
+    fakeSpawn('true', '', 0),       // git rev-parse --is-inside-work-tree
+    fakeSpawn('abc1234', '', 0),    // git rev-parse HEAD
+    fakeSpawn('abc1234', '', 0),    // git rev-parse origin/main (matches HEAD)
+    fakeSpawn('', '', 0),           // git status --porcelain (clean)
   ];
 }
 
-/** 3 spawn calls that make gitSafeToStart() fail on dirty tree */
+/** 4 spawn calls that make gitSafeToStart() fail on dirty tree */
 function gitSafeDirtySpawns(): SpawnSyncReturns<Buffer>[] {
   return [
     fakeSpawn('true', '', 0),        // git rev-parse --is-inside-work-tree
-    fakeSpawn('main', '', 0),        // git rev-parse --abbrev-ref HEAD
+    fakeSpawn('abc1234', '', 0),     // git rev-parse HEAD
+    fakeSpawn('abc1234', '', 0),     // git rev-parse origin/main
     fakeSpawn('M somefile', '', 0),  // git status --porcelain (dirty)
   ];
 }
 
 // =============================================================================
 // Canonical seqSpawn sequences for preflight() / runPreflightCheck() (6 calls)
-// then gitSafeToStart() (3 calls) = 9 total for full success
+// then gitSafeToStart() (4 calls) = 10 total for full success
 // =============================================================================
 
 /**
- * 9 spawn calls for a fully passing preflight() (runPreflightCheck + gitSafeToStart).
+ * 10 spawn calls for a fully passing preflight() (runPreflightCheck + gitSafeToStart).
  * Bead id used for label check is passed in.
  */
 function preflightPassingSpawns(beadId = 'pv-abc-1'): SpawnSyncReturns<Buffer>[] {
   return [
     // runPreflightCheck:
     fakeSpawn('', '', 0),                                  // git status --porcelain (clean)
-    fakeSpawn('main', '', 0),                              // git branch --show-current
     fakeSpawn('', '', 0),                                  // git fetch origin main
-    fakeSpawn('', '', 0),                                  // git diff origin/main --quiet
+    fakeSpawn('abc1234', '', 0),                           // git rev-parse HEAD
+    fakeSpawn('abc1234', '', 0),                           // git rev-parse origin/main (matches)
     fakeSpawn(JSON.stringify([{ id: beadId }]), '', 0),    // bd ready --limit=50 --json
     fakeSpawn('- other-label', '', 0),                     // bd label list <id>
     // gitSafeToStart:
@@ -234,15 +236,13 @@ describe('preflight', () => {
     const spawn = seqSpawn(
       // runPreflightCheck passes:
       fakeSpawn('', '', 0),                                      // git status --porcelain (clean)
-      fakeSpawn('main', '', 0),                                  // git branch --show-current
       fakeSpawn('', '', 0),                                      // git fetch origin main
-      fakeSpawn('', '', 0),                                      // git diff origin/main --quiet
+      fakeSpawn('abc1234', '', 0),                               // git rev-parse HEAD
+      fakeSpawn('abc1234', '', 0),                               // git rev-parse origin/main (matches)
       fakeSpawn(JSON.stringify([{ id: 'pv-abc-1' }]), '', 0),   // bd ready --limit=50 --json
       fakeSpawn('- other-label', '', 0),                         // bd label list
       // gitSafeToStart fails:
-      fakeSpawn('true', '', 0),    // git rev-parse --is-inside-work-tree
-      fakeSpawn('main', '', 0),    // git rev-parse --abbrev-ref HEAD
-      fakeSpawn('M file', '', 0),  // git status --porcelain (dirty)
+      ...gitSafeDirtySpawns(),
     );
 
     vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -254,9 +254,9 @@ describe('preflight', () => {
   it('should halt when backlog is empty (automatic selection mode)', async () => {
     const spawn = seqSpawn(
       fakeSpawn('', '', 0),        // git status --porcelain (clean)
-      fakeSpawn('main', '', 0),    // git branch --show-current
       fakeSpawn('', '', 0),        // git fetch origin main
-      fakeSpawn('', '', 0),        // git diff origin/main --quiet
+      fakeSpawn('abc1234', '', 0), // git rev-parse HEAD
+      fakeSpawn('abc1234', '', 0), // git rev-parse origin/main (matches)
       fakeSpawn('[]', '', 0),      // bd ready: empty array
     );
 
@@ -272,9 +272,9 @@ describe('preflight', () => {
     const spawn = seqSpawn(
       // runPreflightCheck (empty_backlog is the only failure):
       fakeSpawn('', '', 0),        // git status --porcelain (clean)
-      fakeSpawn('main', '', 0),    // git branch --show-current
       fakeSpawn('', '', 0),        // git fetch origin main
-      fakeSpawn('', '', 0),        // git diff origin/main --quiet
+      fakeSpawn('abc1234', '', 0), // git rev-parse HEAD
+      fakeSpawn('abc1234', '', 0), // git rev-parse origin/main (matches)
       fakeSpawn('[]', '', 0),      // bd ready: empty array
       // gitSafeToStart passes:
       ...gitSafeOkSpawns(),
@@ -1064,10 +1064,11 @@ describe('branch', () => {
   beforeEach(() => vi.restoreAllMocks());
 
   it('should halt when git-safe-to-start fails', async () => {
-    // gitSafeToStart: 3 calls (work tree ok, main ok, dirty)
+    // gitSafeToStart: 4 calls (work tree ok, HEAD, origin/main, dirty)
     const spawn = seqSpawn(
       fakeSpawn('true', '', 0),       // git rev-parse --is-inside-work-tree
-      fakeSpawn('main', '', 0),       // git rev-parse --abbrev-ref HEAD
+      fakeSpawn('abc1234', '', 0),    // git rev-parse HEAD
+      fakeSpawn('abc1234', '', 0),    // git rev-parse origin/main
       fakeSpawn('M dirty', '', 0),    // git status --porcelain (dirty)
     );
 
@@ -1080,9 +1081,10 @@ describe('branch', () => {
   it('should create branch and route epic to Epic phase', async () => {
     const bdShowJson = JSON.stringify([{ issue_type: 'epic', title: 'My Epic Feature' }]);
     const spawn = seqSpawn(
-      // gitSafeToStart (3 calls):
+      // gitSafeToStart (4 calls):
       fakeSpawn('true', '', 0),            // git rev-parse --is-inside-work-tree
-      fakeSpawn('main', '', 0),            // git rev-parse --abbrev-ref HEAD
+      fakeSpawn('abc1234', '', 0),         // git rev-parse HEAD
+      fakeSpawn('abc1234', '', 0),         // git rev-parse origin/main
       fakeSpawn('', '', 0),                // git status --porcelain (clean)
       // bd show --json (for title + issueType):
       fakeSpawn(bdShowJson, '', 0),
@@ -1102,7 +1104,8 @@ describe('branch', () => {
     const spawn = seqSpawn(
       // gitSafeToStart:
       fakeSpawn('true', '', 0),
-      fakeSpawn('main', '', 0),
+      fakeSpawn('abc1234', '', 0),
+      fakeSpawn('abc1234', '', 0),
       fakeSpawn('', '', 0),
       // bd show --json:
       fakeSpawn(bdShowJson, '', 0),
@@ -1124,7 +1127,8 @@ describe('branch', () => {
     const spawn = seqSpawn(
       // gitSafeToStart:
       fakeSpawn('true', '', 0),
-      fakeSpawn('main', '', 0),
+      fakeSpawn('abc1234', '', 0),
+      fakeSpawn('abc1234', '', 0),
       fakeSpawn('', '', 0),
       // bd show --json:
       fakeSpawn(bdShowJson, '', 0),
@@ -1136,8 +1140,8 @@ describe('branch', () => {
     const result = await branch(makeCtx(), { spawnFn: spawn });
 
     expect(result.next).toBe(PhaseName.Leaf);
-    // 5 spawn calls total (no checkout)
-    expect(spawn).toHaveBeenCalledTimes(5);
+    // 6 spawn calls total (no checkout)
+    expect(spawn).toHaveBeenCalledTimes(6);
   });
 });
 
@@ -1146,9 +1150,9 @@ describe('branch', () => {
 // =============================================================================
 
 describe('message constants', () => {
-  it('should have exactly 4 preflight message kinds', () => {
+  it('should have exactly 3 preflight message kinds', () => {
     expect(Object.keys(PREFLIGHT_MESSAGES)).toEqual([
-      'dirty_tree', 'wrong_branch', 'stale_main', 'empty_backlog',
+      'dirty_tree', 'behind_main', 'empty_backlog',
     ]);
   });
 

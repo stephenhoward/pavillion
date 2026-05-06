@@ -170,8 +170,7 @@ export type RunVerdict = 'completed' | 'transient_halt' | 'needs_human';
 const TRANSIENT_ERROR_PATTERNS = [
   /timed out/i,
   /timeout/i,
-  /wrong_branch/i,
-  /stale_main/i,
+  /behind_main/i,
 ];
 
 export function classifyVerdict(ctx: OrchestratorCtx): RunVerdict {

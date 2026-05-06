@@ -59,33 +59,58 @@ function seqSpawn(...results: SpawnSyncReturns<Buffer>[]) {
 // =============================================================================
 
 describe('gitSafeToStart', () => {
-  it('returns ok=true when inside repo, on main, clean tree', () => {
+  it('returns ok=true when inside repo, HEAD at origin/main, clean tree', () => {
     const spawn = seqSpawn(
-      fakeSpawn('true'),         // rev-parse --is-inside-work-tree
-      fakeSpawn('main'),         // rev-parse --abbrev-ref HEAD
-      fakeSpawn(''),             // git status --porcelain (empty = clean)
+      fakeSpawn('true'),                                            // rev-parse --is-inside-work-tree
+      fakeSpawn('abc1234567890abcdef1234567890abcdef123456'),       // rev-parse HEAD
+      fakeSpawn('abc1234567890abcdef1234567890abcdef123456'),       // rev-parse origin/main
+      fakeSpawn(''),                                                // git status --porcelain (clean)
     );
     const result = gitSafeToStart({ spawnFn: spawn as never });
     expect(result.ok).toBe(true);
     expect(result.reason).toBeUndefined();
   });
 
-  it('returns ok=false with reason when on wrong branch', () => {
+  it('returns ok=true on a non-main branch as long as HEAD == origin/main', () => {
     const spawn = seqSpawn(
-      fakeSpawn('true'),         // rev-parse --is-inside-work-tree
-      fakeSpawn('feat/my-work'), // wrong branch
-      fakeSpawn(''),             // status (won't be called but safe to stub)
+      fakeSpawn('true'),
+      fakeSpawn('def4567890abcdef1234567890abcdef12345678'),
+      fakeSpawn('def4567890abcdef1234567890abcdef12345678'),
+      fakeSpawn(''),
+    );
+    const result = gitSafeToStart({ spawnFn: spawn as never });
+    expect(result.ok).toBe(true);
+  });
+
+  it('returns ok=false with reason when HEAD differs from origin/main', () => {
+    const spawn = seqSpawn(
+      fakeSpawn('true'),
+      fakeSpawn('aaaaaaa1234567890abcdef1234567890abcdef1'),       // HEAD
+      fakeSpawn('bbbbbbb1234567890abcdef1234567890abcdef1'),       // origin/main differs
+      fakeSpawn(''),
     );
     const result = gitSafeToStart({ spawnFn: spawn as never });
     expect(result.ok).toBe(false);
-    expect(result.reason).toContain('feat/my-work');
+    expect(result.reason).toContain('origin/main');
+  });
+
+  it('returns ok=false when origin/main cannot be resolved', () => {
+    const spawn = seqSpawn(
+      fakeSpawn('true'),
+      fakeSpawn('abc1234'),                                         // HEAD ok
+      fakeSpawn('', 'unknown ref', 128),                            // origin/main missing
+    );
+    const result = gitSafeToStart({ spawnFn: spawn as never });
+    expect(result.ok).toBe(false);
+    expect(result.reason).toContain('origin/main');
   });
 
   it('returns ok=false when tree is dirty', () => {
     const spawn = seqSpawn(
       fakeSpawn('true'),
-      fakeSpawn('main'),
-      fakeSpawn(' M src/server/app.ts\n'), // dirty
+      fakeSpawn('abc1234'),
+      fakeSpawn('abc1234'),
+      fakeSpawn(' M src/server/app.ts\n'),                          // dirty
     );
     const result = gitSafeToStart({ spawnFn: spawn as never });
     expect(result.ok).toBe(false);
@@ -106,128 +131,79 @@ describe('gitSafeToStart', () => {
 
 describe('preflight', () => {
   it('returns ok=true when all checks pass', () => {
-    // Calls in order: git status, git branch --show-current, git fetch, git diff,
+    // Calls in order: git status, git fetch, git rev-parse HEAD, git rev-parse origin/main,
     // bd ready --json, bd label list (per bead)
     const beadsJson = JSON.stringify([
       { id: 'pv-abc1', priority: 1, created_at: '2026-01-01' },
     ]);
     const spawn = seqSpawn(
-      fakeSpawn(''),           // git status --porcelain (clean)
-      fakeSpawn('main'),       // git branch --show-current
-      fakeSpawn(''),           // git fetch origin main (success)
-      fakeSpawn('', '', 0),   // git diff origin/main --quiet (no diff)
-      fakeSpawn(beadsJson),   // bd ready --json
-      fakeSpawn('  - backlog'),  // bd label list pv-abc1 (no needs-human)
+      fakeSpawn(''),                  // git status --porcelain (clean)
+      fakeSpawn(''),                  // git fetch origin main (success)
+      fakeSpawn('abc1234'),           // git rev-parse HEAD
+      fakeSpawn('abc1234'),           // git rev-parse origin/main (matches)
+      fakeSpawn(beadsJson),           // bd ready --json
+      fakeSpawn('  - backlog'),       // bd label list pv-abc1 (no needs-human)
     );
     const result = preflight({ spawnFn: spawn as never });
     expect(result.ok).toBe(true);
     expect(result.failures).toHaveLength(0);
   });
 
-  it('reports dirty_tree and wrong_branch failures', () => {
+  it('passes when on a non-main branch as long as HEAD == origin/main', () => {
+    const beadsJson = JSON.stringify([
+      { id: 'pv-abc1', priority: 1, created_at: '2026-01-01' },
+    ]);
+    const spawn = seqSpawn(
+      fakeSpawn(''),                  // clean
+      fakeSpawn(''),                  // fetch ok
+      fakeSpawn('def5678'),           // HEAD
+      fakeSpawn('def5678'),           // origin/main matches
+      fakeSpawn(beadsJson),
+      fakeSpawn('  - other'),
+    );
+    const result = preflight({ spawnFn: spawn as never });
+    expect(result.ok).toBe(true);
+  });
+
+  it('reports dirty_tree, behind_main, and empty_backlog failures together', () => {
     const spawn = seqSpawn(
       fakeSpawn(' M src/file.ts'),   // dirty
-      fakeSpawn('feat/branch'),       // wrong branch
-      fakeSpawn('', '', 1),           // fetch fails → stale_main
-      fakeSpawn('[]'),               // bd ready (empty → empty_backlog)
+      fakeSpawn('', '', 1),           // fetch fails → behind_main
+      fakeSpawn('[]'),                // bd ready (empty → empty_backlog)
     );
     const result = preflight({ spawnFn: spawn as never });
     expect(result.ok).toBe(false);
     const kinds = result.failures.map(f => f.kind);
     expect(kinds).toContain('dirty_tree');
-    expect(kinds).toContain('wrong_branch');
-    expect(kinds).toContain('stale_main');
+    expect(kinds).toContain('behind_main');
     expect(kinds).toContain('empty_backlog');
+  });
+
+  it('reports behind_main when HEAD differs from origin/main', () => {
+    const spawn = seqSpawn(
+      fakeSpawn(''),                  // clean
+      fakeSpawn(''),                  // fetch ok
+      fakeSpawn('aaaaaaa'),           // HEAD
+      fakeSpawn('bbbbbbb'),           // origin/main differs
+      fakeSpawn('[]'),                // bd ready (empty → empty_backlog too)
+    );
+    const result = preflight({ spawnFn: spawn as never });
+    const kinds = result.failures.map(f => f.kind);
+    expect(kinds).toContain('behind_main');
   });
 
   it('reports empty_backlog when all ready beads have needs-human label', () => {
     const beadsJson = JSON.stringify([{ id: 'pv-x1', priority: 1, created_at: '2026-01-01' }]);
     const spawn = seqSpawn(
-      fakeSpawn(''),              // clean tree
-      fakeSpawn('main'),          // on main
-      fakeSpawn(''),              // fetch ok
-      fakeSpawn('', '', 0),      // no diff
-      fakeSpawn(beadsJson),       // bd ready
-      fakeSpawn('  - needs-human'),  // label list: has needs-human
+      fakeSpawn(''),                  // clean tree
+      fakeSpawn(''),                  // fetch ok
+      fakeSpawn('abc1234'),           // HEAD
+      fakeSpawn('abc1234'),           // origin/main matches
+      fakeSpawn(beadsJson),           // bd ready
+      fakeSpawn('  - needs-human'),   // label list: has needs-human
     );
     const result = preflight({ spawnFn: spawn as never });
     expect(result.failures.map(f => f.kind)).toContain('empty_backlog');
-  });
-
-  // ---------------------------------------------------------------------------
-  // Orphan branch recovery
-  // ---------------------------------------------------------------------------
-
-  it('recovers from an orphaned orchestrator branch and continues preflight', () => {
-    // Branch matches pattern, tree clean, no commits ahead, no open PR →
-    // checkout main and proceed without reporting wrong_branch.
-    const beadsJson = JSON.stringify([{ id: 'pv-x1', priority: 1, created_at: '2026-01-01' }]);
-    const spawn = seqSpawn(
-      fakeSpawn(''),                           // git status (clean)
-      fakeSpawn('chore/some-title-pv-abc'),    // git branch --show-current
-      // canRecoverOrphanBranch:
-      fakeSpawn(''),                           // git status (clean)
-      fakeSpawn('0'),                          // git rev-list --count main..branch
-      fakeSpawn('[]'),                         // gh pr list (no open PR)
-      fakeSpawn('', '', 0),                    // git checkout main (success)
-      // Resume preflight:
-      fakeSpawn('', '', 0),                    // git fetch origin main
-      fakeSpawn('', '', 0),                    // git diff (no diff)
-      fakeSpawn(beadsJson),                    // bd ready
-      fakeSpawn('  - other'),                  // bd label list pv-x1
-    );
-    const result = preflight({ spawnFn: spawn as never });
-    expect(result.ok).toBe(true);
-    expect(result.recovered).toEqual({ orphanedBranch: 'chore/some-title-pv-abc' });
-    expect(result.failures.map(f => f.kind)).not.toContain('wrong_branch');
-  });
-
-  it('does not recover when branch has commits ahead of main', () => {
-    const spawn = seqSpawn(
-      fakeSpawn(''),                              // git status (clean)
-      fakeSpawn('feat/wip-pv-xyz'),               // git branch
-      // canRecoverOrphanBranch:
-      fakeSpawn(''),                              // git status (clean)
-      fakeSpawn('3'),                             // git rev-list: 3 commits ahead → refuse
-      // No checkout; proceed with wrong_branch failure:
-      fakeSpawn('', '', 0),                       // git fetch
-      fakeSpawn('', '', 0),                       // git diff
-      fakeSpawn('[]'),                            // bd ready (empty)
-    );
-    const result = preflight({ spawnFn: spawn as never });
-    expect(result.recovered).toBeUndefined();
-    expect(result.failures.map(f => f.kind)).toContain('wrong_branch');
-  });
-
-  it('does not recover when branch has an open PR', () => {
-    const spawn = seqSpawn(
-      fakeSpawn(''),                              // git status
-      fakeSpawn('fix/bug-pv-pqr'),                // git branch
-      fakeSpawn(''),                              // git status (recovery check)
-      fakeSpawn('0'),                             // no commits ahead
-      fakeSpawn('[{"number":101}]'),              // gh pr list: open PR exists → refuse
-      fakeSpawn('', '', 0),                       // git fetch
-      fakeSpawn('', '', 0),                       // git diff
-      fakeSpawn('[]'),                            // bd ready
-    );
-    const result = preflight({ spawnFn: spawn as never });
-    expect(result.recovered).toBeUndefined();
-    expect(result.failures.map(f => f.kind)).toContain('wrong_branch');
-  });
-
-  it('does not recover non-orchestrator-looking branch names', () => {
-    // Branch doesn't match pattern → skip recovery entirely, report wrong_branch.
-    const spawn = seqSpawn(
-      fakeSpawn(''),                              // git status
-      fakeSpawn('my-local-experiment'),           // git branch — no type prefix
-      // canRecoverOrphanBranch returns false on pattern mismatch — no extra calls
-      fakeSpawn('', '', 0),                       // git fetch
-      fakeSpawn('', '', 0),                       // git diff
-      fakeSpawn('[]'),                            // bd ready
-    );
-    const result = preflight({ spawnFn: spawn as never });
-    expect(result.recovered).toBeUndefined();
-    expect(result.failures.map(f => f.kind)).toContain('wrong_branch');
   });
 });
 
