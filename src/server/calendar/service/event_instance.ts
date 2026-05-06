@@ -14,6 +14,7 @@ import { Calendar } from "@/common/model/calendar";
 import { DateTime } from 'luxon';
 import rrule from 'rrule';
 import { LocationEntity, LocationContentEntity } from "@/server/calendar/entity/location";
+import { LocationSpaceEntity, LocationSpaceContentEntity } from "@/server/calendar/entity/location_space";
 import { EventSeriesEntity, EventSeriesContentEntity } from '@/server/calendar/entity/event_series';
 import CalendarService from "./calendar";
 import CategoryService from "./categories";
@@ -499,6 +500,7 @@ export default class EventInstanceService {
             model: LocationEntity,
             include: [LocationContentEntity],
           },
+          { model: LocationSpaceEntity, include: [LocationSpaceContentEntity] },
           EventScheduleEntity,
           MediaEntity,
           CalendarEntity,
@@ -548,6 +550,9 @@ export default class EventInstanceService {
     // Populate location with content (accessibility info)
     if (event.location) {
       instance.event.location = event.location.toModel();
+    }
+    if (event.space) {
+      instance.event.space = event.space.toModel();
     }
 
     // Populate categories via the category service, filtered to the display
@@ -675,6 +680,7 @@ export default class EventInstanceService {
         include: [
           EventContentEntity,
           { model: LocationEntity, include: [LocationContentEntity] },
+          { model: LocationSpaceEntity, include: [LocationSpaceContentEntity] },
           EventScheduleEntity,
           MediaEntity,
           CalendarEntity,
@@ -696,6 +702,7 @@ export default class EventInstanceService {
       include: [
         EventContentEntity,
         { model: LocationEntity, include: [LocationContentEntity] },
+        { model: LocationSpaceEntity, include: [LocationSpaceContentEntity] },
         EventScheduleEntity,
         MediaEntity,
         CalendarEntity,
@@ -782,6 +789,7 @@ export default class EventInstanceService {
         include: [
           EventContentEntity,
           { model: LocationEntity, include: [LocationContentEntity] },
+          { model: LocationSpaceEntity, include: [LocationSpaceContentEntity] },
           EventScheduleEntity,
           MediaEntity,
           CalendarEntity,
@@ -830,6 +838,9 @@ export default class EventInstanceService {
     eventModel.schedules = scheduleEntities.map(s => s.toModel());
     if (eventEntity.location) {
       eventModel.location = eventEntity.location.toModel();
+    }
+    if (eventEntity.space) {
+      eventModel.space = eventEntity.space.toModel();
     }
     eventModel.categories = await this.categoryService.getEventCategories(
       eventModel.id,

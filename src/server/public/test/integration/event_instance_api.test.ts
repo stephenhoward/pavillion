@@ -28,12 +28,14 @@ describe('GET /api/public/v1/events/:eventId/instances/:startTime', () => {
   let env: TestEnvironment;
   let ownerToken: string;
   let calendarId: string;
+  let locationId: string;
+  let spaceId: string;
 
   /**
    * Create a one-shot (non-recurring) event. Its single materialized
    * EventInstance row is persisted at event-creation time.
    */
-  async function createOneShotEvent(startIso: string, endIso: string, name: string): Promise<string> {
+  async function createOneShotEvent(startIso: string, endIso: string, name: string, opts: { locationId?: string; spaceId?: string } = {}): Promise<string> {
     const response = await request(env.app)
       .post('/api/v1/events')
       .set('Authorization', `Bearer ${ownerToken}`)
@@ -45,6 +47,8 @@ describe('GET /api/public/v1/events/:eventId/instances/:startTime', () => {
           end: startIso,
           eventEndTime: endIso,
         }],
+        ...(opts.locationId ? { locationId: opts.locationId } : {}),
+        ...(opts.spaceId ? { spaceId: opts.spaceId } : {}),
       });
     if (response.status !== 201) {
       throw new Error(`Failed to create event ${name}: ${response.status} ${JSON.stringify(response.body)}`);
@@ -99,6 +103,26 @@ describe('GET /api/public/v1/events/:eventId/instances/:startTime', () => {
       throw new Error(`Failed to create calendar: ${calResponse.status} ${JSON.stringify(calResponse.body)}`);
     }
     calendarId = calResponse.body.id;
+
+    // Create a Place (Location) for space-scoped event tests.
+    const locResponse = await request(env.app)
+      .post(`/api/v1/calendars/${calendarId}/locations`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ name: 'Test Venue', address: '1 Main St', city: 'Testville' });
+    if (locResponse.status !== 201) {
+      throw new Error(`Failed to create location: ${locResponse.status} ${JSON.stringify(locResponse.body)}`);
+    }
+    locationId = locResponse.body.id;
+
+    // Create a Space under that Place.
+    const spaceResponse = await request(env.app)
+      .post(`/api/v1/calendars/instancecal/places/${locationId}/spaces`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ content: { en: { name: 'Main Hall', accessibilityInfo: 'Step-free entry; hearing loop installed.' } } });
+    if (spaceResponse.status !== 201) {
+      throw new Error(`Failed to create space: ${spaceResponse.status} ${JSON.stringify(spaceResponse.body)}`);
+    }
+    spaceId = spaceResponse.body.id;
   });
 
   afterAll(async () => {
@@ -132,6 +156,8 @@ describe('GET /api/public/v1/events/:eventId/instances/:startTime', () => {
     // Start time must match the slug.
     expect(DateTime.fromISO(response.body.start).toUTC().toISO())
       .toBe('2030-06-15T18:00:00.000Z');
+    // No space on this event — toPublicEventObject collapses absent space to null.
+    expect(response.body.event.space).toBeNull();
   });
 
   it('materializes a row on first hit for an uncached occurrence', async () => {
@@ -265,5 +291,71 @@ describe('GET /api/public/v1/events/:eventId/instances/:startTime', () => {
 
     expect(response.status).toBe(404);
     expect(response.body.errorName).toBe('NotFoundError');
+  });
+
+  it('returns space with content for a Space-scoped event (cache-hit path)', async () => {
+    // One-shot event attached to a Place+Space. The instance row is
+    // pre-materialized on creation, so the handler takes the cache-hit branch.
+    const eventId = await createOneShotEvent(
+      '2031-03-10T18:00:00Z',
+      '2031-03-10T19:00:00Z',
+      'Space Scoped Cache Hit',
+      { locationId, spaceId },
+    );
+
+    const response = await request(env.app)
+      .get(`/api/public/v1/events/${eventId}/instances/20310310-1800`);
+
+    expect(response.status).toBe(200);
+    expect(response.body.event.space).not.toBeNull();
+    expect(response.body.event.space).not.toBeUndefined();
+    expect(response.body.event.space.content.en.name).toBe('Main Hall');
+    expect(response.body.event.space.content.en.accessibilityInfo).toBe('Step-free entry; hearing loop installed.');
+    // Internal identifiers must not leak through toPublicEventObject projection.
+    expect(response.body.event.space.id).toBeUndefined();
+    expect(response.body.event.space.placeId).toBeUndefined();
+    expect(response.body.event.space.originUri).toBeUndefined();
+  });
+
+  it('returns space with content for a Space-scoped event (cache-miss / materialize path)', async () => {
+    // Weekly recurring event; probe a far-future occurrence that has no
+    // pre-materialized row — exercises the findByPk (cache-miss) branch.
+    const response = await request(env.app)
+      .post('/api/v1/events')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({
+        calendarId,
+        content: { en: { name: 'Space Scoped Cache Miss', description: 'recurring' } },
+        schedules: [{
+          start: '2031-04-04T18:00:00Z',
+          end: '2032-04-04T18:00:00Z',
+          eventEndTime: '2031-04-04T19:00:00Z',
+          frequency: 'weekly',
+          interval: 1,
+        }],
+        locationId,
+        spaceId,
+      });
+    if (response.status !== 201) {
+      throw new Error(`Failed to create recurring event: ${response.status} ${JSON.stringify(response.body)}`);
+    }
+    const eventId = response.body.id;
+
+    // Probe an occurrence ~8 months out (33 weeks from 2031-04-04 Thursday →
+    // 2031-11-28 Thursday). Should not be pre-materialized.
+    const slug = '20311128-1800';
+
+    const instanceResponse = await request(env.app)
+      .get(`/api/public/v1/events/${eventId}/instances/${slug}`);
+
+    expect(instanceResponse.status).toBe(200);
+    expect(instanceResponse.body.event.space).not.toBeNull();
+    expect(instanceResponse.body.event.space).not.toBeUndefined();
+    expect(instanceResponse.body.event.space.content.en.name).toBe('Main Hall');
+    expect(instanceResponse.body.event.space.content.en.accessibilityInfo).toBe('Step-free entry; hearing loop installed.');
+    // Internal identifiers must not leak through toPublicEventObject projection.
+    expect(instanceResponse.body.event.space.id).toBeUndefined();
+    expect(instanceResponse.body.event.space.placeId).toBeUndefined();
+    expect(instanceResponse.body.event.space.originUri).toBeUndefined();
   });
 });
