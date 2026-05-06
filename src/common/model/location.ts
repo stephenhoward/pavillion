@@ -191,6 +191,77 @@ class EventLocation extends TranslatedModel<EventLocationContent> {
 };
 
 /**
+ * Represents a Space within an EventLocation (Place).
+ * A Space is a sub-area of a Place (e.g. a specific room within a venue) with
+ * its own translatable name and accessibility information.
+ */
+class EventLocationSpace extends TranslatedModel<EventLocationSpaceContent> {
+  _content: Record<string, EventLocationSpaceContent> = {};
+  placeId: string = '';
+
+  /**
+   * Constructor for EventLocationSpace.
+   *
+   * @param {string} [id] - Unique identifier for the space
+   * @param {string} [placeId] - Identifier of the parent EventLocation (Place)
+   */
+  constructor(id?: string, placeId?: string) {
+    super(id ?? '');
+    this.placeId = placeId ?? '';
+  }
+
+  /**
+   * Creates new content for a specified language.
+   *
+   * @param {string} language - The language code to create content for
+   * @returns {EventLocationSpaceContent} New content instance for the specified language
+   * @protected
+   */
+  protected createContent(language: string): EventLocationSpaceContent {
+    return new EventLocationSpaceContent(language);
+  }
+
+  /**
+   * Creates an EventLocationSpace instance from a plain object.
+   *
+   * @param {Record<string, any>} obj - Plain object containing space data
+   * @returns {EventLocationSpace} A new EventLocationSpace instance
+   */
+  static fromObject(obj: Record<string, any>): EventLocationSpace {
+    const space = new EventLocationSpace(obj.id, obj.placeId);
+
+    // Load content if present
+    if (obj.content) {
+      for (const [language, contentObj] of Object.entries(obj.content)) {
+        if (typeof contentObj === 'object' && contentObj !== null) {
+          const contentData = contentObj as Record<string, any>;
+          contentData.language = language; // Ensure language is set
+          space.addContent(EventLocationSpaceContent.fromObject(contentData));
+        }
+      }
+    }
+
+    return space;
+  }
+
+  /**
+   * Converts the space to a plain JavaScript object.
+   *
+   * @returns {Record<string, any>} Plain object representation of the space
+   */
+  toObject(): Record<string, any> {
+    return {
+      id: this.id,
+      placeId: this.placeId,
+      content: Object.fromEntries(
+        Object.entries(this._content)
+          .map(([language, content]: [string, EventLocationSpaceContent]) => [language, content.toObject()]),
+      ),
+    };
+  }
+};
+
+/**
  * Validates location field hierarchy.
  * Enforces bottom-up validation rules where more general location information
  * requires more specific information to be filled in first.
@@ -244,4 +315,4 @@ function validateLocationHierarchy(location: EventLocation): string[] {
   return errors;
 }
 
-export { EventLocation, EventLocationContent, EventLocationSpaceContent, validateLocationHierarchy };
+export { EventLocation, EventLocationContent, EventLocationSpace, EventLocationSpaceContent, validateLocationHierarchy };

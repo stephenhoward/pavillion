@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'vitest';
-import { EventLocationSpaceContent } from '@/common/model/location';
+import { EventLocationSpace, EventLocationSpaceContent } from '@/common/model/location';
 
 describe('EventLocationSpaceContent Model', () => {
   test('creates a valid content model', () => {
@@ -114,5 +114,85 @@ describe('EventLocationSpaceContent Model', () => {
     expect(roundTrip.language).toBe(original.language);
     expect(roundTrip.name).toBe(original.name);
     expect(roundTrip.accessibilityInfo).toBe(original.accessibilityInfo);
+  });
+});
+
+describe('EventLocationSpace Model', () => {
+  test('initializes with id and placeId', () => {
+    const space = new EventLocationSpace('space-uuid', 'place-uuid');
+
+    expect(space.id).toBe('space-uuid');
+    expect(space.placeId).toBe('place-uuid');
+    expect(Object.keys(space._content)).toHaveLength(0);
+  });
+
+  test('initializes with default empty id and placeId', () => {
+    const space = new EventLocationSpace();
+
+    expect(space.id).toBe('');
+    expect(space.placeId).toBe('');
+    expect(Object.keys(space._content)).toHaveLength(0);
+  });
+
+  test('createContent (via content()) returns EventLocationSpaceContent for the language', () => {
+    const space = new EventLocationSpace();
+    const content = space.content('en');
+
+    expect(content).toBeInstanceOf(EventLocationSpaceContent);
+    expect(content.language).toBe('en');
+  });
+
+  test('toObject emits id, placeId, and per-language content map', () => {
+    const space = new EventLocationSpace('s1', 'p1');
+    space.addContent(new EventLocationSpaceContent('en', 'Pacific Room', 'Hearing loop'));
+    space.addContent(new EventLocationSpaceContent('fr', 'Salle Pacifique', 'Boucle auditive'));
+
+    const obj = space.toObject();
+
+    expect(obj.id).toBe('s1');
+    expect(obj.placeId).toBe('p1');
+    expect(obj.content.en.name).toBe('Pacific Room');
+    expect(obj.content.en.accessibilityInfo).toBe('Hearing loop');
+    expect(obj.content.fr.name).toBe('Salle Pacifique');
+    expect(obj.content.fr.accessibilityInfo).toBe('Boucle auditive');
+  });
+
+  test('fromObject reconstructs space across multiple languages', () => {
+    const obj = {
+      id: 's1',
+      placeId: 'p1',
+      content: {
+        en: { name: 'Pacific Room', accessibilityInfo: 'Hearing loop' },
+        fr: { name: 'Salle Pacifique', accessibilityInfo: 'Boucle auditive' },
+      },
+    };
+
+    const restored = EventLocationSpace.fromObject(obj);
+
+    expect(restored.id).toBe('s1');
+    expect(restored.placeId).toBe('p1');
+    expect(restored.content('en').name).toBe('Pacific Room');
+    expect(restored.content('en').accessibilityInfo).toBe('Hearing loop');
+    expect(restored.content('fr').name).toBe('Salle Pacifique');
+    expect(restored.content('fr').accessibilityInfo).toBe('Boucle auditive');
+  });
+
+  test('multilingual round-trip preserves content for every language', () => {
+    const original = new EventLocationSpace('s1', 'p1');
+    original.addContent(new EventLocationSpaceContent('en', 'Pacific Room', 'Hearing loop'));
+    original.addContent(new EventLocationSpaceContent('es', 'Sala Pacífico', 'Acceso para sillas de ruedas'));
+    original.addContent(new EventLocationSpaceContent('de', 'Pazifikraum', 'Rollstuhlgerechte Eingänge'));
+
+    const restored = EventLocationSpace.fromObject(original.toObject());
+
+    expect(restored.id).toBe(original.id);
+    expect(restored.placeId).toBe(original.placeId);
+    expect(restored.getLanguages().sort()).toEqual(['de', 'en', 'es']);
+    expect(restored.content('en').name).toBe('Pacific Room');
+    expect(restored.content('es').name).toBe('Sala Pacífico');
+    expect(restored.content('de').name).toBe('Pazifikraum');
+    expect(restored.content('en').accessibilityInfo).toBe('Hearing loop');
+    expect(restored.content('es').accessibilityInfo).toBe('Acceso para sillas de ruedas');
+    expect(restored.content('de').accessibilityInfo).toBe('Rollstuhlgerechte Eingänge');
   });
 });

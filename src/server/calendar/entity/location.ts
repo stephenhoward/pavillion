@@ -4,6 +4,7 @@ import { EventLocation } from '@/common/model/location';
 import db from '@/server/common/entity/db';
 import { CalendarEntity } from '@/server/calendar/entity/calendar';
 import { LocationContentEntity } from '@/server/calendar/entity/location_content';
+import { LocationSpaceEntity } from '@/server/calendar/entity/location_space';
 
 @Table({ tableName: 'location', timestamps: true })
 class LocationEntity extends Model {
@@ -42,6 +43,9 @@ class LocationEntity extends Model {
   @HasMany(() => LocationContentEntity)
   declare content: LocationContentEntity[];
 
+  @HasMany(() => LocationSpaceEntity)
+  declare spaces: LocationSpaceEntity[];
+
   @BelongsTo(() => CalendarEntity)
   declare calendar: CalendarEntity;
 
@@ -79,8 +83,14 @@ class LocationEntity extends Model {
   }
 }
 
-// Register both entities with Sequelize to ensure proper associations
-db.addModels([LocationEntity, LocationContentEntity]);
+// Register all related entities with Sequelize to ensure proper associations.
+// LocationSpaceEntity and LocationSpaceContentEntity are registered here
+// rather than in location_space.ts to avoid a circular-load failure: when
+// location_space.ts is loaded as a side-effect of location.ts loading,
+// LocationEntity is not yet defined, so LocationSpaceEntity's @ForeignKey
+// reference cannot be resolved at addModels time.
+import { LocationSpaceContentEntity } from '@/server/calendar/entity/location_space_content';
+db.addModels([LocationEntity, LocationContentEntity, LocationSpaceEntity, LocationSpaceContentEntity]);
 
 export {
   LocationEntity,
