@@ -12,6 +12,7 @@ import { EventContentEntity, EventEntity, EventScheduleEntity } from "@/server/c
 import { EventImportOriginEntity } from "@/server/calendar/entity/event_import_origin";
 import CalendarService from "@/server/calendar/service/calendar";
 import { LocationEntity, LocationContentEntity } from "@/server/calendar/entity/location";
+import { LocationSpaceEntity } from "@/server/calendar/entity/location_space";
 // TODO: MediaEntity is still needed here for Sequelize eager-load association includes
 // (e.g., include: [MediaEntity] in queries). Removing this cross-domain import requires
 // either restructuring entity associations or moving eager-loading to the media domain.
@@ -20,7 +21,7 @@ import LocationService from "@/server/calendar/service/locations";
 import { EventEmitter } from 'events';
 import type MediaInterface from '@/server/media/interface';
 import type ActivityPubInterface from '@/server/activitypub/interface';
-import { EventNotFoundError, InsufficientCalendarPermissionsError, CalendarNotFoundError, BulkEventsNotFoundError, MixedCalendarEventsError, CategoriesNotFoundError, LocationValidationError, InvalidExternalUrlError } from '@/common/exceptions/calendar';
+import { EventNotFoundError, InsufficientCalendarPermissionsError, CalendarNotFoundError, BulkEventsNotFoundError, MixedCalendarEventsError, CategoriesNotFoundError, LocationValidationError, InvalidExternalUrlError, SpaceLocationMismatchError } from '@/common/exceptions/calendar';
 import { ValidationError } from '@/common/exceptions/base';
 import CategoryService from './categories';
 import { EventCategoryEntity } from '@/server/calendar/entity/event_category';
@@ -199,6 +200,30 @@ class EventService {
   private isValidUUID(uuid: string): boolean {
     const UUID_V4_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
     return typeof uuid === 'string' && UUID_V4_REGEX.test(uuid);
+  }
+
+  /**
+   * Cross-entity invariant: when an event references both a Place (locationId)
+   * and a Space (spaceId), the Space must belong to that Place.
+   *
+   * Defensive backstop for direct API callers and inbound ActivityPub —
+   * the picker UI never produces a mismatched pair, but lower-trust callers
+   * could. Throws {@link SpaceLocationMismatchError} on mismatch (or when the
+   * Space row is missing entirely, with `actualPlaceId='unknown'`).
+   *
+   * No-op when either id is null/undefined — those cases are handled by the
+   * caller's own location/space resolution.
+   *
+   * @private
+   */
+  private async validateSpaceMatchesPlace(locationId: string, spaceId: string): Promise<void> {
+    const space = await LocationSpaceEntity.findByPk(spaceId);
+    if (!space) {
+      throw new SpaceLocationMismatchError(spaceId, locationId, 'unknown');
+    }
+    if (space.place_id !== locationId) {
+      throw new SpaceLocationMismatchError(spaceId, locationId, space.place_id);
+    }
   }
 
 
@@ -600,6 +625,13 @@ class EventService {
       event.location = locationEntity;
     }
 
+    // Cross-entity invariant: when both locationId and spaceId are supplied,
+    // the Space must belong to that Place. Defensive backstop for direct
+    // API callers and inbound ActivityPub.
+    if (eventParams.locationId && eventParams.spaceId) {
+      await this.validateSpaceMatchesPlace(eventParams.locationId, eventParams.spaceId);
+    }
+
     // Handle media attachment
     if (eventParams.mediaId) {
       // Verify the media belongs to the same calendar via MediaInterface
@@ -872,6 +904,20 @@ class EventService {
       let locationEntity = await this.locationService.findOrCreateLocation(calendar, eventParams.location);
       eventEntity.location_id = locationEntity.id;
       event.location = locationEntity;
+    }
+
+    // Cross-entity invariant: when both locationId and spaceId are supplied,
+    // the Space must belong to that Place. Resolve the effective locationId
+    // from the payload first, then fall back to the persisted value so a
+    // payload that only changes spaceId is still validated against the
+    // event's existing Place.
+    if (eventParams.spaceId) {
+      const effectiveLocationId = eventParams.hasOwnProperty('locationId')
+        ? eventParams.locationId
+        : eventEntity.location_id;
+      if (effectiveLocationId) {
+        await this.validateSpaceMatchesPlace(effectiveLocationId, eventParams.spaceId);
+      }
     }
 
     if ( eventParams.schedules ) {

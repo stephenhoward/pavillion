@@ -8,6 +8,8 @@ import { Calendar } from '@/common/model/calendar';
 import { EventLocation } from '@/common/model/location';
 import { Media } from '@/common/model/media';
 import { EventEntity, EventContentEntity, EventScheduleEntity } from '@/server/calendar/entity/event';
+import { LocationSpaceEntity } from '@/server/calendar/entity/location_space';
+import { SpaceLocationMismatchError } from '@/common/exceptions/calendar';
 import EventService from '@/server/calendar/service/events';
 import type MediaInterface from '@/server/media/interface';
 
@@ -157,4 +159,87 @@ describe('createEvent with mediaId', () => {
     })).rejects.toThrow('Media not found or does not belong to this calendar');
   });
 
+});
+
+describe('createEvent Space/Place invariant', () => {
+  let service: EventService;
+  let sandbox: sinon.SinonSandbox = sinon.createSandbox();
+  const cal = new Calendar('testCalendarId', 'testme');
+  const acct = new Account('testAccountId', 'testme', 'testme');
+
+  beforeEach(() => {
+    service = new EventService(new EventEmitter());
+    sandbox.stub(service['calendarService'], 'editableCalendarsForUser').resolves([cal]);
+    sandbox.stub(service['calendarService'], 'getCalendar').resolves(cal);
+    sandbox.stub(EventEntity.prototype, 'save').resolves();
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+  });
+
+  it('rejects event create with mismatched (locationId, spaceId)', async () => {
+    // Place A has a Space; the create tries to attach that Space to Place B.
+    const placeAId = '22222222-2222-4222-8222-222222222222';
+    const placeBId = '33333333-3333-4333-8333-333333333333';
+    const spaceUnderAId = '44444444-4444-4444-8444-444444444444';
+
+    // Caller-provided locationId points at Place B; resolving it succeeds.
+    const findLocationByIdStub = sandbox.stub(service['locationService'], 'getLocationById');
+    findLocationByIdStub.resolves(new EventLocation(placeBId, 'placeB', 'address'));
+
+    // Space lookup returns a Space whose place_id is Place A — the mismatch.
+    const findSpaceStub = sandbox.stub(LocationSpaceEntity, 'findByPk');
+    findSpaceStub.resolves(LocationSpaceEntity.build({
+      id: spaceUnderAId,
+      place_id: placeAId,
+    }) as unknown as LocationSpaceEntity);
+
+    let thrown: unknown = null;
+    try {
+      await service.createEvent(acct, {
+        calendarId: cal.id,
+        locationId: placeBId,
+        spaceId: spaceUnderAId,
+      });
+    }
+    catch (err) {
+      thrown = err;
+    }
+
+    expect(thrown).toBeInstanceOf(SpaceLocationMismatchError);
+    const err = thrown as SpaceLocationMismatchError;
+    expect(err.spaceId).toBe(spaceUnderAId);
+    expect(err.expectedPlaceId).toBe(placeBId);
+    expect(err.actualPlaceId).toBe(placeAId);
+  });
+
+  it('rejects event create when spaceId is set but the Space row is missing', async () => {
+    const placeBId = '33333333-3333-4333-8333-333333333333';
+    const missingSpaceId = '55555555-5555-4555-8555-555555555555';
+
+    const findLocationByIdStub = sandbox.stub(service['locationService'], 'getLocationById');
+    findLocationByIdStub.resolves(new EventLocation(placeBId, 'placeB', 'address'));
+
+    const findSpaceStub = sandbox.stub(LocationSpaceEntity, 'findByPk');
+    findSpaceStub.resolves(null);
+
+    let thrown: unknown = null;
+    try {
+      await service.createEvent(acct, {
+        calendarId: cal.id,
+        locationId: placeBId,
+        spaceId: missingSpaceId,
+      });
+    }
+    catch (err) {
+      thrown = err;
+    }
+
+    expect(thrown).toBeInstanceOf(SpaceLocationMismatchError);
+    const err = thrown as SpaceLocationMismatchError;
+    expect(err.spaceId).toBe(missingSpaceId);
+    expect(err.expectedPlaceId).toBe(placeBId);
+    expect(err.actualPlaceId).toBe('unknown');
+  });
 });

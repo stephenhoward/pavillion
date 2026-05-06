@@ -38,6 +38,11 @@ function stripDefaultEventImage(calendarObj: Record<string, any>): Record<string
  *     layer can render a localized recurrence phrase.
  *   - Projects `media` to `{ id, mimeType }` only — internal fields such as
  *     calendarId, sha256, originalFilename, fileSize, and status are removed.
+ *   - Projects `space` to `{ content }` only — the internal `id` (an AP
+ *     identity hint used for inbound dedup) and `placeId` (an internal FK)
+ *     have no Tier 1 anonymous-public use case and are stripped here.
+ *     Authenticated calendar-editor APIs may still expose the full shape;
+ *     this projection is strictly the public surface.
  *
  * CalendarEventSchedule.toObject() on the shared model remains the full
  * authenticated shape; shaping here is strictly the public API layer's
@@ -70,6 +75,17 @@ function toPublicEventObject(eventObj: Record<string, any>): Record<string, any>
       id: publicObj.media.id,
       mimeType: publicObj.media.mimeType,
     };
+  }
+
+  // Project space to { content } only. Drops id, placeId, and originUri
+  // (all internal identifiers / AP-dedup hints with no public use case).
+  // `space` may be omitted on the input object (older callers) or explicitly
+  // null; both collapse to `space: null` so the public contract stays stable.
+  if (publicObj.space) {
+    publicObj.space = { content: publicObj.space.content };
+  }
+  else {
+    publicObj.space = null;
   }
 
   return publicObj;

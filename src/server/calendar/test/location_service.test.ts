@@ -4,7 +4,9 @@ import sinon from 'sinon';
 import { Calendar } from '@/common/model/calendar';
 import { EventLocation, EventLocationContent } from '@/common/model/location';
 import { LocationEntity, LocationContentEntity } from '@/server/calendar/entity/location';
+import { LocationSpaceEntity, LocationSpaceContentEntity } from '@/server/calendar/entity/location_space';
 import { EventEntity } from '@/server/calendar/entity/event';
+import db from '@/server/common/entity/db';
 import LocationService from '@/server/calendar/service/locations';
 
 describe('LocationService', () => {
@@ -237,7 +239,18 @@ describe('LocationService', () => {
 
   describe('deleteLocation', () => {
 
-    it('should delete a location and nullify event references', async () => {
+    // Stub db.transaction so the cascade body runs inline with a fake tx handle.
+    // Individual tests still set their own per-call stubs; this fixture only
+    // wraps the transactional shell so the work executes synchronously.
+    let txStub: sinon.SinonStub;
+    beforeEach(() => {
+      txStub = sandbox.stub(db, 'transaction').callsFake(async (callback: any) => {
+        const fakeTx = { __brand: 'fake-tx' };
+        return callback(fakeTx);
+      });
+    });
+
+    it('should delete a location and nullify both location_id and space_id on referencing events', async () => {
       const calendar = new Calendar('cal-1', 'testcal');
       const existingEntity = LocationEntity.build({
         id: 'loc-1',
@@ -249,17 +262,113 @@ describe('LocationService', () => {
       findByPkStub.resolves(existingEntity);
 
       const eventUpdateStub = sandbox.stub(EventEntity, 'update').resolves([2]);
+      // No Spaces under this Place — findAll returns empty so the Space-cascade
+      // branch is skipped but the rest of the method still runs.
+      const spaceFindAllStub = sandbox.stub(LocationSpaceEntity, 'findAll').resolves([]);
+      const spaceContentDestroyStub = sandbox.stub(LocationSpaceContentEntity, 'destroy').resolves(0);
+      const spaceDestroyStub = sandbox.stub(LocationSpaceEntity, 'destroy').resolves(0);
       const contentDestroyStub = sandbox.stub(LocationContentEntity, 'destroy').resolves(1);
       const destroyStub = sandbox.stub(existingEntity, 'destroy').resolves();
 
       const result = await service.deleteLocation(calendar, 'loc-1');
 
       expect(result).toBe(true);
-      expect(eventUpdateStub.called).toBe(true);
-      expect(eventUpdateStub.firstCall.args[0]).toEqual({ location_id: null });
-      expect(eventUpdateStub.firstCall.args[1].where).toEqual({ location_id: 'loc-1' });
+      expect(txStub.calledOnce).toBe(true);
+
+      // Event side-effect: BOTH FKs nullified, scoped by location_id (not space_id),
+      // so events that referenced any Space under this Place also get cleared.
+      expect(eventUpdateStub.calledOnce).toBe(true);
+      expect(eventUpdateStub.firstCall.args[0]).toEqual({ location_id: null, space_id: null });
+      expect((eventUpdateStub.firstCall.args[1] as any).where).toEqual({ location_id: 'loc-1' });
+
+      expect(spaceFindAllStub.called).toBe(true);
+      // Empty Space set: skip the per-space cascade branch
+      expect(spaceContentDestroyStub.called).toBe(false);
+      expect(spaceDestroyStub.called).toBe(false);
+
       expect(contentDestroyStub.called).toBe(true);
       expect(destroyStub.called).toBe(true);
+    });
+
+    it('cascades Space + content removal and nullifies event.space_id when the Place has Spaces', async () => {
+      const calendar = new Calendar('cal-1', 'testcal');
+      const existingEntity = LocationEntity.build({
+        id: 'place-1',
+        calendar_id: 'cal-1',
+        name: 'Convention Center',
+      });
+
+      const findByPkStub = sandbox.stub(LocationEntity, 'findByPk');
+      findByPkStub.resolves(existingEntity);
+
+      const eventUpdateStub = sandbox.stub(EventEntity, 'update').resolves([1]);
+
+      // Two Spaces under this Place
+      const space1 = LocationSpaceEntity.build({ id: 'space-1', place_id: 'place-1' });
+      const space2 = LocationSpaceEntity.build({ id: 'space-2', place_id: 'place-1' });
+      const spaceFindAllStub = sandbox.stub(LocationSpaceEntity, 'findAll').resolves([space1, space2]);
+
+      const spaceContentDestroyStub = sandbox.stub(LocationSpaceContentEntity, 'destroy').resolves(3);
+      const spaceDestroyStub = sandbox.stub(LocationSpaceEntity, 'destroy').resolves(2);
+      const contentDestroyStub = sandbox.stub(LocationContentEntity, 'destroy').resolves(1);
+      const destroyStub = sandbox.stub(existingEntity, 'destroy').resolves();
+
+      const result = await service.deleteLocation(calendar, 'place-1');
+
+      expect(result).toBe(true);
+      expect(txStub.calledOnce).toBe(true);
+
+      // BOTH FKs nullified on referencing events
+      expect(eventUpdateStub.firstCall.args[0]).toEqual({ location_id: null, space_id: null });
+
+      // Space cascade ran — content destroyed for both Spaces, then Spaces themselves
+      expect(spaceFindAllStub.calledOnce).toBe(true);
+      expect((spaceFindAllStub.firstCall.args[0] as any).where).toEqual({ place_id: 'place-1' });
+      expect(spaceContentDestroyStub.calledOnce).toBe(true);
+      expect((spaceContentDestroyStub.firstCall.args[0] as any).where).toEqual({ space_id: ['space-1', 'space-2'] });
+      expect(spaceDestroyStub.calledOnce).toBe(true);
+      expect((spaceDestroyStub.firstCall.args[0] as any).where).toEqual({ place_id: 'place-1' });
+
+      // Place content + Place itself still destroyed
+      expect(contentDestroyStub.calledOnce).toBe(true);
+      expect(destroyStub.calledOnce).toBe(true);
+    });
+
+    it('runs the entire cascade inside a single db.transaction', async () => {
+      const calendar = new Calendar('cal-1', 'testcal');
+      const existingEntity = LocationEntity.build({
+        id: 'place-1',
+        calendar_id: 'cal-1',
+        name: 'Venue',
+      });
+      const space1 = LocationSpaceEntity.build({ id: 'space-1', place_id: 'place-1' });
+
+      sandbox.stub(LocationEntity, 'findByPk').resolves(existingEntity);
+      const eventUpdateStub = sandbox.stub(EventEntity, 'update').resolves([0]);
+      const spaceFindAllStub = sandbox.stub(LocationSpaceEntity, 'findAll').resolves([space1]);
+      const spaceContentDestroyStub = sandbox.stub(LocationSpaceContentEntity, 'destroy').resolves(0);
+      const spaceDestroyStub = sandbox.stub(LocationSpaceEntity, 'destroy').resolves(1);
+      const contentDestroyStub = sandbox.stub(LocationContentEntity, 'destroy').resolves(0);
+      const placeDestroyStub = sandbox.stub(existingEntity, 'destroy').resolves();
+
+      const result = await service.deleteLocation(calendar, 'place-1');
+
+      expect(result).toBe(true);
+      // Single transaction wraps the cascade
+      expect(txStub.calledOnce).toBe(true);
+
+      // Every write inside the cascade must thread the same tx handle through
+      // its options object. The handle is the value our stub passed to the
+      // db.transaction callback (recovered here from the first stubbed call).
+      const eventOpts = eventUpdateStub.firstCall.args[1] as any;
+      expect(eventOpts.transaction).toBeDefined();
+      const tx = eventOpts.transaction;
+
+      expect((spaceFindAllStub.firstCall.args[0] as any).transaction).toBe(tx);
+      expect((spaceContentDestroyStub.firstCall.args[0] as any).transaction).toBe(tx);
+      expect((spaceDestroyStub.firstCall.args[0] as any).transaction).toBe(tx);
+      expect((contentDestroyStub.firstCall.args[0] as any).transaction).toBe(tx);
+      expect(placeDestroyStub.firstCall.args[0]).toEqual({ transaction: tx });
     });
 
     it('should return false if location not found', async () => {

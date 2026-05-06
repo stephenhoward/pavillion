@@ -10,6 +10,7 @@ import { CalendarEvent, CalendarEventSchedule, EventFrequency } from '@/common/m
 import CalendarEventInstance from '@/common/model/event_instance';
 import { EventSeries } from '@/common/model/event_series';
 import { EventSeriesContent } from '@/common/model/event_series_content';
+import { EventLocation, EventLocationSpace, EventLocationSpaceContent } from '@/common/model/location';
 import { Media } from '@/common/model/media';
 import { testApp } from '@/server/common/test/lib/express';
 import CalendarRoutes from '@/server/public/api/v1/calendar';
@@ -335,6 +336,32 @@ describe('Public API - toPublicEventObject shape contract', () => {
     expect(mediaBody.status).toBeUndefined();
   }
 
+  /**
+   * Public Space projection contract: the response must expose only
+   * `content`. Internal fields (id, placeId, originUri) are AP-identity
+   * hints / FKs with no Tier 1 anonymous-public use case and must never
+   * appear on the public surface.
+   */
+  function assertSpaceProjection(spaceBody: Record<string, any>) {
+    expect(spaceBody).not.toBeNull();
+    expect(spaceBody.content).toBeDefined();
+    expect(spaceBody.content.en).toBeDefined();
+    expect(spaceBody.content.en.name).toBe('Pacific Room');
+    // The public projection must contain only `content` — no other keys.
+    expect(Object.keys(spaceBody)).toEqual(['content']);
+    // Spell out the disallowed internal fields for clarity / future regressions.
+    expect(spaceBody.id).toBeUndefined();
+    expect(spaceBody.placeId).toBeUndefined();
+    expect(spaceBody.originUri).toBeUndefined();
+  }
+
+  function makeSpace(): EventLocationSpace {
+    const space = new EventLocationSpace('space-1', 'place-1');
+    space.originUri = 'https://example.test/spaces/space-1';
+    space.addContent(new EventLocationSpaceContent('en', 'Pacific Room', 'Hearing loop'));
+    return space;
+  }
+
   beforeEach(() => {
     calendarInterface = new CalendarInterface(new EventEmitter());
     publicInterface = new PublicCalendarInterface(new EventEmitter(), calendarInterface);
@@ -632,6 +659,182 @@ describe('Public API - toPublicEventObject shape contract', () => {
         params: { n: 2, days: ['TU'] },
       });
       assertMediaProjection(eventBody.media);
+    });
+  });
+
+  /**
+   * Public Space projection contract (pv-ix7v.3.4):
+   *   - With Space attached → response.event.space === { content: {...} }
+   *     and never includes id, placeId, or originUri.
+   *   - Without Space → response.event.space === null.
+   *   - The pre-existing `location` shape is unchanged (additive guarantee).
+   *
+   * Covered for every public handler that returns event objects: getEvent,
+   * listInstances, getEventInstance, and getSeries.
+   */
+  describe('space projection (pv-ix7v.3.4)', () => {
+    it('getEvent: returns space as { content } when an event has a Space', async () => {
+      const event = new CalendarEvent('event-1', 'cal-id');
+      event.schedules = [];
+      event.space = makeSpace();
+
+      apiSandbox.stub(publicInterface, 'getEventById').resolves(event);
+
+      router.get('/handler/:id', (req, res) => {
+        routes.getEvent(req, res);
+      });
+
+      const response = await request(testApp(router)).get('/handler/event-1');
+
+      expect(response.status).toBe(200);
+      assertSpaceProjection(response.body.space);
+    });
+
+    it('getEvent: returns space === null when an event has no Space', async () => {
+      const event = new CalendarEvent('event-1', 'cal-id');
+      event.schedules = [];
+      // event.space defaults to null
+
+      apiSandbox.stub(publicInterface, 'getEventById').resolves(event);
+
+      router.get('/handler/:id', (req, res) => {
+        routes.getEvent(req, res);
+      });
+
+      const response = await request(testApp(router)).get('/handler/event-1');
+
+      expect(response.status).toBe(200);
+      expect(response.body).toHaveProperty('space');
+      expect(response.body.space).toBeNull();
+    });
+
+    it('getEvent: leaves the existing `location` shape unchanged (additive guarantee)', async () => {
+      const event = new CalendarEvent('event-1', 'cal-id');
+      event.schedules = [];
+      event.location = new EventLocation(
+        'loc-1',
+        'Community Hall',
+        '123 Main St',
+        'Springfield',
+        'IL',
+        '62701',
+        'USA',
+      );
+      event.space = makeSpace();
+
+      apiSandbox.stub(publicInterface, 'getEventById').resolves(event);
+
+      router.get('/handler/:id', (req, res) => {
+        routes.getEvent(req, res);
+      });
+
+      const response = await request(testApp(router)).get('/handler/event-1');
+
+      expect(response.status).toBe(200);
+      // location must retain its full existing shape — adding `space`
+      // (the new field) must not strip or reproject `location`.
+      expect(response.body.location).toMatchObject({
+        id: 'loc-1',
+        name: 'Community Hall',
+        address: '123 Main St',
+        city: 'Springfield',
+        state: 'IL',
+        postalCode: '62701',
+        country: 'USA',
+      });
+      // And space is independently projected.
+      assertSpaceProjection(response.body.space);
+    });
+
+    it('listInstances: projects space to { content } on each instance', async () => {
+      const calendar = new Calendar('cal-id', 'test-calendar');
+      const event = new CalendarEvent('event-1', 'cal-id');
+      event.schedules = [];
+      event.space = makeSpace();
+      const instance = new CalendarEventInstance('inst-1', event, DateTime.now(), null);
+
+      apiSandbox.stub(publicInterface, 'getCalendarByName').resolves(calendar);
+      apiSandbox.stub(publicInterface, 'listEventInstances').resolves([instance]);
+
+      router.get('/handler', (req, res) => {
+        req.params.calendar = 'test-calendar';
+        routes.listInstances(req, res);
+      });
+
+      const response = await request(testApp(router)).get('/handler');
+
+      expect(response.status).toBe(200);
+      expect(response.body).toHaveLength(1);
+      assertSpaceProjection(response.body[0].event.space);
+    });
+
+    it('listInstances: returns space === null when an event has no Space', async () => {
+      const calendar = new Calendar('cal-id', 'test-calendar');
+      const event = new CalendarEvent('event-1', 'cal-id');
+      event.schedules = [];
+      const instance = new CalendarEventInstance('inst-1', event, DateTime.now(), null);
+
+      apiSandbox.stub(publicInterface, 'getCalendarByName').resolves(calendar);
+      apiSandbox.stub(publicInterface, 'listEventInstances').resolves([instance]);
+
+      router.get('/handler', (req, res) => {
+        req.params.calendar = 'test-calendar';
+        routes.listInstances(req, res);
+      });
+
+      const response = await request(testApp(router)).get('/handler');
+
+      expect(response.status).toBe(200);
+      expect(response.body[0].event).toHaveProperty('space');
+      expect(response.body[0].event.space).toBeNull();
+    });
+
+    it('getEventInstance: projects space to { content } on the wrapped event', async () => {
+      const EVENT_UUID = '11111111-1111-4111-8111-111111111111';
+      const VALID_SLUG = '20260508-1800';
+      const event = new CalendarEvent('event-1', 'cal-id');
+      event.schedules = [];
+      event.space = makeSpace();
+      const instance = new CalendarEventInstance('inst-1', event, DateTime.utc(2026, 5, 8, 18, 0), null);
+
+      apiSandbox.stub(publicInterface, 'findOrMaterializeInstanceWithDetails').resolves(instance);
+
+      router.get('/handler/:eventId/:startTime', (req, res) => {
+        routes.getEventInstance(req, res);
+      });
+
+      const response = await request(testApp(router)).get(`/handler/${EVENT_UUID}/${VALID_SLUG}`);
+
+      expect(response.status).toBe(200);
+      assertSpaceProjection(response.body.event.space);
+    });
+
+    it('getSeries: projects space to { content } on every event in events[]', async () => {
+      const calendar = new Calendar('cal-id', 'test-calendar');
+      const series = new EventSeries('series-1', 'cal-id', 'yoga-classes');
+      const content = new EventSeriesContent('en');
+      content.name = 'Yoga Classes';
+      series.addContent(content);
+
+      const event = new CalendarEvent('event-1', 'cal-id');
+      event.schedules = [];
+      event.space = makeSpace();
+
+      apiSandbox.stub(publicInterface, 'getCalendarByName').resolves(calendar);
+      apiSandbox.stub(publicInterface, 'getSeriesByUrlName').resolves(series);
+      apiSandbox.stub(publicInterface, 'getSeriesEvents').resolves({ events: [event], total: 1 });
+
+      router.get('/handler', (req, res) => {
+        req.params.urlName = 'test-calendar';
+        req.params.seriesUrlName = 'yoga-classes';
+        routes.getSeries(req, res);
+      });
+
+      const response = await request(testApp(router)).get('/handler');
+
+      expect(response.status).toBe(200);
+      expect(response.body.events).toHaveLength(1);
+      assertSpaceProjection(response.body.events[0].space);
     });
   });
 });

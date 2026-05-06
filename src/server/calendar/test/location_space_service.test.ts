@@ -6,7 +6,9 @@ import { EventLocationSpace } from '@/common/model/location';
 import { LocationValidationError } from '@/common/exceptions/calendar';
 import { LocationEntity } from '@/server/calendar/entity/location';
 import { LocationSpaceEntity, LocationSpaceContentEntity } from '@/server/calendar/entity/location_space';
+import { EventEntity } from '@/server/calendar/entity/event';
 import LocationService from '@/server/calendar/service/locations';
+import db from '@/server/common/entity/db';
 
 describe('LocationService Spaces', () => {
 
@@ -192,6 +194,292 @@ describe('LocationService Spaces', () => {
       expect(result).toEqual([]);
       expect(findPlaceStub.called).toBe(true);
       expect(findAllStub.called).toBe(false);
+    });
+  });
+
+  describe('updateSpace', () => {
+
+    it('should replace content rows and return reloaded space when owned by calendar', async () => {
+      const calendar = new Calendar('cal-1', 'testcal');
+
+      // Build a Space with eager-loaded place that belongs to cal-1
+      const placeEntity = LocationEntity.build({
+        id: 'place-1',
+        calendar_id: 'cal-1',
+        name: 'Convention Center',
+      });
+      const spaceEntity = LocationSpaceEntity.build({
+        id: 'space-1',
+        place_id: 'place-1',
+      });
+      (spaceEntity as any).place = placeEntity;
+
+      // findByPk is called twice: once to load the space (with place), once to reload after update
+      const findSpaceStub = sandbox.stub(LocationSpaceEntity, 'findByPk');
+      findSpaceStub.onFirstCall().resolves(spaceEntity);
+
+      // The reload call returns the space with new content rows attached
+      findSpaceStub.onSecondCall().callsFake(async () => {
+        const reloaded = LocationSpaceEntity.build({ id: 'space-1', place_id: 'place-1' });
+        (reloaded as any).content = [
+          LocationSpaceContentEntity.build({
+            space_id: 'space-1',
+            language: 'en',
+            name: 'Pacific Room',
+            accessibility_info: 'Hearing loop',
+          }),
+          LocationSpaceContentEntity.build({
+            space_id: 'space-1',
+            language: 'fr',
+            name: 'Salle Pacifique',
+            accessibility_info: 'Boucle auditive',
+          }),
+        ];
+        return reloaded;
+      });
+
+      const destroyStub = sandbox.stub(LocationSpaceContentEntity, 'destroy').resolves(2);
+      const createContentStub = sandbox.stub(LocationSpaceContentEntity, 'create').resolves();
+
+      const result = await service.updateSpace(calendar, 'space-1', {
+        en: { name: 'Pacific Room', accessibilityInfo: 'Hearing loop' },
+        fr: { name: 'Salle Pacifique', accessibilityInfo: 'Boucle auditive' },
+      });
+
+      expect(result).toBeInstanceOf(EventLocationSpace);
+      expect(result!.id).toBe('space-1');
+      expect(result!.placeId).toBe('place-1');
+      expect(result!.getLanguages().sort()).toEqual(['en', 'fr']);
+      expect(result!.content('en').name).toBe('Pacific Room');
+      expect(result!.content('fr').name).toBe('Salle Pacifique');
+
+      // Auth chain: findByPk used eager-load include for place
+      expect(findSpaceStub.firstCall.args[1]).toBeDefined();
+      const firstInclude = (findSpaceStub.firstCall.args[1] as any).include;
+      expect(firstInclude).toBeDefined();
+
+      // destroy-then-create pattern
+      expect(destroyStub.calledOnce).toBe(true);
+      expect((destroyStub.firstCall.args[0] as any).where).toEqual({ space_id: 'space-1' });
+      expect(createContentStub.callCount).toBe(2);
+    });
+
+    it('should return null when Space does not exist', async () => {
+      const calendar = new Calendar('cal-1', 'testcal');
+      const findSpaceStub = sandbox.stub(LocationSpaceEntity, 'findByPk');
+      findSpaceStub.resolves(null);
+      const destroyStub = sandbox.stub(LocationSpaceContentEntity, 'destroy');
+
+      const result = await service.updateSpace(calendar, 'missing-space', {
+        en: { name: 'Anything', accessibilityInfo: '' },
+      });
+
+      expect(result).toBeNull();
+      expect(destroyStub.called).toBe(false);
+    });
+
+    it("should return null when Space's Place belongs to a different calendar", async () => {
+      const calendar = new Calendar('cal-1', 'testcal');
+      const placeEntity = LocationEntity.build({
+        id: 'place-1',
+        calendar_id: 'other-cal',
+        name: 'Other Place',
+      });
+      const spaceEntity = LocationSpaceEntity.build({
+        id: 'space-1',
+        place_id: 'place-1',
+      });
+      (spaceEntity as any).place = placeEntity;
+
+      const findSpaceStub = sandbox.stub(LocationSpaceEntity, 'findByPk');
+      findSpaceStub.resolves(spaceEntity);
+      const destroyStub = sandbox.stub(LocationSpaceContentEntity, 'destroy');
+
+      const result = await service.updateSpace(calendar, 'space-1', {
+        en: { name: 'Anything', accessibilityInfo: '' },
+      });
+
+      expect(result).toBeNull();
+      expect(destroyStub.called).toBe(false);
+    });
+
+    it('should return null when Space has no loadable place association (authz failure, not crash)', async () => {
+      const calendar = new Calendar('cal-1', 'testcal');
+      // Space exists but place association did not load (e.g. orphaned/missing)
+      const spaceEntity = LocationSpaceEntity.build({
+        id: 'space-1',
+        place_id: 'place-1',
+      });
+      // Note: no (spaceEntity as any).place assigned
+      const findSpaceStub = sandbox.stub(LocationSpaceEntity, 'findByPk');
+      findSpaceStub.resolves(spaceEntity);
+      const destroyStub = sandbox.stub(LocationSpaceContentEntity, 'destroy');
+
+      const result = await service.updateSpace(calendar, 'space-1', {
+        en: { name: 'Anything', accessibilityInfo: '' },
+      });
+
+      expect(result).toBeNull();
+      expect(destroyStub.called).toBe(false);
+    });
+  });
+
+  describe('deleteSpace', () => {
+
+    // Stub db.transaction so the cascade body runs inline with a fake tx handle.
+    // Mirrors the pattern in location_service.test.ts deleteLocation suite — the
+    // wrapper executes the callback synchronously so per-call stubs can observe
+    // the threaded transaction option.
+    let txStub: sinon.SinonStub;
+    beforeEach(() => {
+      txStub = sandbox.stub(db, 'transaction').callsFake(async (callback: any) => {
+        const fakeTx = { __brand: 'fake-tx' };
+        return callback(fakeTx);
+      });
+    });
+
+    it('should delete content + space and nullify event.space_id while leaving location_id intact', async () => {
+      const calendar = new Calendar('cal-1', 'testcal');
+
+      const placeEntity = LocationEntity.build({
+        id: 'place-1',
+        calendar_id: 'cal-1',
+        name: 'Convention Center',
+      });
+      const spaceEntity = LocationSpaceEntity.build({
+        id: 'space-1',
+        place_id: 'place-1',
+      });
+      (spaceEntity as any).place = placeEntity;
+
+      const findSpaceStub = sandbox.stub(LocationSpaceEntity, 'findByPk');
+      findSpaceStub.resolves(spaceEntity);
+
+      const eventUpdateStub = sandbox.stub(EventEntity, 'update').resolves([3]);
+      const contentDestroyStub = sandbox.stub(LocationSpaceContentEntity, 'destroy').resolves(2);
+      const spaceDestroyStub = sandbox.stub(spaceEntity, 'destroy').resolves();
+
+      const result = await service.deleteSpace(calendar, 'space-1');
+
+      expect(result).toBe(true);
+      expect(txStub.calledOnce).toBe(true);
+
+      // Auth chain: findByPk used eager-load include for place
+      expect(findSpaceStub.firstCall.args[1]).toBeDefined();
+      const firstInclude = (findSpaceStub.firstCall.args[1] as any).include;
+      expect(firstInclude).toBeDefined();
+
+      // Event side effect: only space_id nullified, location_id NOT touched
+      expect(eventUpdateStub.calledOnce).toBe(true);
+      const updateValues = eventUpdateStub.firstCall.args[0] as any;
+      expect(updateValues).toEqual({ space_id: null });
+      expect('location_id' in updateValues).toBe(false);
+      expect((eventUpdateStub.firstCall.args[1] as any).where).toEqual({ space_id: 'space-1' });
+
+      expect(contentDestroyStub.calledOnce).toBe(true);
+      expect((contentDestroyStub.firstCall.args[0] as any).where).toEqual({ space_id: 'space-1' });
+      expect(spaceDestroyStub.calledOnce).toBe(true);
+    });
+
+    it('runs the entire cascade inside a single db.transaction', async () => {
+      const calendar = new Calendar('cal-1', 'testcal');
+
+      const placeEntity = LocationEntity.build({
+        id: 'place-1',
+        calendar_id: 'cal-1',
+        name: 'Convention Center',
+      });
+      const spaceEntity = LocationSpaceEntity.build({
+        id: 'space-1',
+        place_id: 'place-1',
+      });
+      (spaceEntity as any).place = placeEntity;
+
+      sandbox.stub(LocationSpaceEntity, 'findByPk').resolves(spaceEntity);
+      const eventUpdateStub = sandbox.stub(EventEntity, 'update').resolves([0]);
+      const contentDestroyStub = sandbox.stub(LocationSpaceContentEntity, 'destroy').resolves(0);
+      const spaceDestroyStub = sandbox.stub(spaceEntity, 'destroy').resolves();
+
+      const result = await service.deleteSpace(calendar, 'space-1');
+
+      expect(result).toBe(true);
+      // Single transaction wraps the cascade
+      expect(txStub.calledOnce).toBe(true);
+
+      // Every write inside the cascade must thread the same tx handle through
+      // its options object. The handle is the value our stub passed to the
+      // db.transaction callback (recovered here from the EventEntity.update
+      // first call).
+      const eventOpts = eventUpdateStub.firstCall.args[1] as any;
+      expect(eventOpts.transaction).toBeDefined();
+      const tx = eventOpts.transaction;
+
+      expect((contentDestroyStub.firstCall.args[0] as any).transaction).toBe(tx);
+      expect(spaceDestroyStub.firstCall.args[0]).toEqual({ transaction: tx });
+    });
+
+    it('should return false when Space does not exist; no side effects', async () => {
+      const calendar = new Calendar('cal-1', 'testcal');
+      const findSpaceStub = sandbox.stub(LocationSpaceEntity, 'findByPk');
+      findSpaceStub.resolves(null);
+
+      const eventUpdateStub = sandbox.stub(EventEntity, 'update');
+      const contentDestroyStub = sandbox.stub(LocationSpaceContentEntity, 'destroy');
+
+      const result = await service.deleteSpace(calendar, 'missing-space');
+
+      expect(result).toBe(false);
+      expect(eventUpdateStub.called).toBe(false);
+      expect(contentDestroyStub.called).toBe(false);
+    });
+
+    it("should return false when Space's Place belongs to a different calendar; no rows affected", async () => {
+      const calendar = new Calendar('cal-1', 'testcal');
+      const placeEntity = LocationEntity.build({
+        id: 'place-1',
+        calendar_id: 'other-cal',
+        name: 'Other Place',
+      });
+      const spaceEntity = LocationSpaceEntity.build({
+        id: 'space-1',
+        place_id: 'place-1',
+      });
+      (spaceEntity as any).place = placeEntity;
+
+      const findSpaceStub = sandbox.stub(LocationSpaceEntity, 'findByPk');
+      findSpaceStub.resolves(spaceEntity);
+
+      const eventUpdateStub = sandbox.stub(EventEntity, 'update');
+      const contentDestroyStub = sandbox.stub(LocationSpaceContentEntity, 'destroy');
+      const spaceDestroyStub = sandbox.stub(spaceEntity, 'destroy');
+
+      const result = await service.deleteSpace(calendar, 'space-1');
+
+      expect(result).toBe(false);
+      expect(eventUpdateStub.called).toBe(false);
+      expect(contentDestroyStub.called).toBe(false);
+      expect(spaceDestroyStub.called).toBe(false);
+    });
+
+    it('should return false when Space has no loadable place association (authz failure, not crash)', async () => {
+      const calendar = new Calendar('cal-1', 'testcal');
+      const spaceEntity = LocationSpaceEntity.build({
+        id: 'space-1',
+        place_id: 'place-1',
+      });
+      // Note: no (spaceEntity as any).place assigned
+
+      const findSpaceStub = sandbox.stub(LocationSpaceEntity, 'findByPk');
+      findSpaceStub.resolves(spaceEntity);
+
+      const eventUpdateStub = sandbox.stub(EventEntity, 'update');
+      const contentDestroyStub = sandbox.stub(LocationSpaceContentEntity, 'destroy');
+
+      const result = await service.deleteSpace(calendar, 'space-1');
+
+      expect(result).toBe(false);
+      expect(eventUpdateStub.called).toBe(false);
+      expect(contentDestroyStub.called).toBe(false);
     });
   });
 });

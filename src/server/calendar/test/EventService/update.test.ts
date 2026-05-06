@@ -9,6 +9,8 @@ import { CalendarEventContent, CalendarEventSchedule, language, EventFrequency }
 import { EventLocation } from '@/common/model/location';
 import { EventEntity, EventContentEntity, EventScheduleEntity } from '@/server/calendar/entity/event';
 import { EventImportOriginEntity } from '@/server/calendar/entity/event_import_origin';
+import { LocationSpaceEntity } from '@/server/calendar/entity/location_space';
+import { SpaceLocationMismatchError } from '@/common/exceptions/calendar';
 import EventService from '@/server/calendar/service/events';
 
 describe('updateEvent with content', () => {
@@ -249,6 +251,102 @@ describe('updateEvent with location', () => {
   });
 
 
+});
+
+describe('updateEvent Space/Place invariant', () => {
+  let service: EventService;
+  let sandbox = sinon.createSandbox();
+  let getCalendarStub: sinon.SinonStub;
+  let editableCalendarsStub: sinon.SinonStub;
+
+  beforeEach(() => {
+    service = new EventService(new EventEmitter());
+    getCalendarStub = sandbox.stub(service['calendarService'], 'getCalendar');
+    editableCalendarsStub = sandbox.stub(service['calendarService'], 'editableCalendarsForUser');
+    const cal = new Calendar('testCalendarId', 'testme');
+    getCalendarStub.resolves(cal);
+    editableCalendarsStub.resolves([cal]);
+    sandbox.stub(EventImportOriginEntity, 'findOne').resolves(null);
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+  });
+
+  it('rejects event update with mismatched (locationId, spaceId)', async () => {
+    // Place A has a Space; the update tries to attach that Space to Place B.
+    const placeAId = '22222222-2222-4222-8222-222222222222';
+    const placeBId = '33333333-3333-4333-8333-333333333333';
+    const spaceUnderAId = '44444444-4444-4444-8444-444444444444';
+
+    const findEventStub = sandbox.stub(EventEntity, 'findByPk');
+    findEventStub.resolves(EventEntity.build({
+      account_id: 'testAccountId',
+      calendar_id: 'testCalendarId',
+    }));
+
+    // Caller-provided locationId points at Place B; resolving it succeeds.
+    const findLocationByIdStub = sandbox.stub(service['locationService'], 'getLocationById');
+    findLocationByIdStub.resolves(new EventLocation(placeBId, 'placeB', 'address'));
+
+    // Space lookup returns a Space whose place_id is Place A — the mismatch.
+    const findSpaceStub = sandbox.stub(LocationSpaceEntity, 'findByPk');
+    findSpaceStub.resolves(LocationSpaceEntity.build({
+      id: spaceUnderAId,
+      place_id: placeAId,
+    }) as unknown as LocationSpaceEntity);
+
+    let thrown: unknown = null;
+    try {
+      await service.updateEvent(new Account('testAccountId', 'testme', 'testme'), '11111111-1111-4111-8111-111111111111', {
+        locationId: placeBId,
+        spaceId: spaceUnderAId,
+      });
+    }
+    catch (err) {
+      thrown = err;
+    }
+
+    expect(thrown).toBeInstanceOf(SpaceLocationMismatchError);
+    const err = thrown as SpaceLocationMismatchError;
+    expect(err.spaceId).toBe(spaceUnderAId);
+    expect(err.expectedPlaceId).toBe(placeBId);
+    expect(err.actualPlaceId).toBe(placeAId);
+  });
+
+  it('rejects event update when spaceId is set but the Space row is missing', async () => {
+    const placeBId = '33333333-3333-4333-8333-333333333333';
+    const missingSpaceId = '55555555-5555-4555-8555-555555555555';
+
+    const findEventStub = sandbox.stub(EventEntity, 'findByPk');
+    findEventStub.resolves(EventEntity.build({
+      account_id: 'testAccountId',
+      calendar_id: 'testCalendarId',
+    }));
+
+    const findLocationByIdStub = sandbox.stub(service['locationService'], 'getLocationById');
+    findLocationByIdStub.resolves(new EventLocation(placeBId, 'placeB', 'address'));
+
+    const findSpaceStub = sandbox.stub(LocationSpaceEntity, 'findByPk');
+    findSpaceStub.resolves(null);
+
+    let thrown: unknown = null;
+    try {
+      await service.updateEvent(new Account('testAccountId', 'testme', 'testme'), '11111111-1111-4111-8111-111111111111', {
+        locationId: placeBId,
+        spaceId: missingSpaceId,
+      });
+    }
+    catch (err) {
+      thrown = err;
+    }
+
+    expect(thrown).toBeInstanceOf(SpaceLocationMismatchError);
+    const err = thrown as SpaceLocationMismatchError;
+    expect(err.spaceId).toBe(missingSpaceId);
+    expect(err.expectedPlaceId).toBe(placeBId);
+    expect(err.actualPlaceId).toBe('unknown');
+  });
 });
 
 describe('updateEvent with schedules', () => {
