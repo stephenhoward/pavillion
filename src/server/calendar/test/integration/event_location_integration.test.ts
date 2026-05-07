@@ -8,7 +8,10 @@ import { Calendar } from '@/common/model/calendar';
 import { CalendarEvent } from '@/common/model/events';
 import { EventLocation, EventLocationContent, EventLocationSpace } from '@/common/model/location';
 import CalendarInterface from '@/server/calendar/interface';
+import db from '@/server/common/entity/db';
+import { EventEntity } from '@/server/calendar/entity/event';
 import { EventInstanceEntity } from '@/server/calendar/entity/event_instance';
+import { LocationSpaceEntity } from '@/server/calendar/entity/location_space';
 import { TestEnvironment } from '@/server/common/test/lib/test_environment';
 import AccountService from '@/server/accounts/service/account';
 import ConfigurationInterface from '@/server/configuration/interface';
@@ -553,5 +556,96 @@ describe('EventInstanceService - Space eager-loading on listing endpoints', () =
     expect(instance!.event.space).not.toBeNull();
     expect(instance!.event.space?.id).toBe(testSpace.id);
     expect(instance!.event.space?.content('en').name).toBe('Reading Room');
+  });
+});
+
+/**
+ * Integration test for the events.space_id ON DELETE SET NULL FK behavior
+ * (pv-0pht.2). Architectural keystone for the Place + Spaces atomic-save
+ * model: deleting a Space must automatically null any referencing
+ * event.space_id rather than rejecting the delete or cascading the events.
+ * This lets the LocationService nest the Space delete inside the Place
+ * upsert transaction without enumerating referencing events.
+ *
+ * Real DB, real constraint — the entity decorator drives schema generation
+ * via db.sync(), and SQLite enforces the FK only when foreign_keys = ON.
+ */
+describe('EventEntity - space_id FK ON DELETE SET NULL', () => {
+  let env: TestEnvironment;
+  let calendarInterface: CalendarInterface;
+  let testAccount: Account;
+  let testCalendar: Calendar;
+  let testLocation: EventLocation;
+  let testSpace: EventLocationSpace;
+
+  beforeAll(async () => {
+    env = new TestEnvironment();
+    await env.init();
+
+    // SQLite defaults to foreign_keys = OFF, which would silently no-op the
+    // ON DELETE SET NULL behavior. Enable enforcement so the constraint is
+    // exercised end-to-end. Postgres enforces FKs unconditionally.
+    if (db.getDialect() === 'sqlite') {
+      await db.query('PRAGMA foreign_keys = ON');
+    }
+
+    const eventBus = new EventEmitter();
+    calendarInterface = new CalendarInterface(eventBus);
+    calendarInterface.setActivityPubInterface({
+      getSharedEventIds: async () => [],
+      getSharedEventStatusMap: async () => new Map(),
+    } as any);
+
+    const configurationInterface = new ConfigurationInterface();
+    const setupInterface = new SetupInterface();
+    const accountService = new AccountService(eventBus, configurationInterface, setupInterface);
+
+    const accountInfo = await accountService._setupAccount('space-fk@pavillion.dev', 'testpassword');
+    testAccount = accountInfo.account;
+
+    testCalendar = await calendarInterface.createCalendar(testAccount, 'spacefkcal');
+
+    testLocation = await calendarInterface.createLocation(
+      testCalendar,
+      new EventLocation(undefined, 'Conference Hall', '500 Park Ave'),
+    );
+
+    testSpace = await calendarInterface.createSpace(
+      testCalendar,
+      testLocation.id,
+      { en: { name: 'Studio A', accessibilityInfo: '' } },
+    );
+  });
+
+  afterAll(async () => {
+    await env.cleanup();
+  });
+
+  it('nulls events.space_id when the referenced Space is deleted (whole-venue fallback)', async () => {
+    const event = await calendarInterface.createEvent(testAccount, {
+      calendarId: testCalendar.id,
+      locationId: testLocation.id,
+      spaceId: testSpace.id,
+      content: { en: { name: 'Studio A Event' } },
+      start_date: '2026-11-01',
+    });
+
+    // Sanity: the event row genuinely points at the Space before deletion.
+    const before = await EventEntity.findByPk(event.id);
+    expect(before).not.toBeNull();
+    expect(before!.space_id).toBe(testSpace.id);
+
+    // Delete the Space row directly at the entity layer. The atomic-save
+    // service path will issue this delete inside the Place upsert
+    // transaction (pv-0pht.3); for this test we want to assert the FK
+    // semantic in isolation, not the service orchestration.
+    await LocationSpaceEntity.destroy({ where: { id: testSpace.id } });
+
+    const after = await EventEntity.findByPk(event.id);
+    expect(after).not.toBeNull();
+    // The event row survives — only the FK column is nulled out.
+    expect(after!.space_id).toBeNull();
+    // Whole-venue fallback: location_id is untouched.
+    expect(after!.location_id).toBe(testLocation.id);
   });
 });

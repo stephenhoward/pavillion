@@ -73,6 +73,13 @@ class LocationEntity extends Model {
       }
     }
 
+    // Add spaces if eager-loaded. Each space's toModel() picks up its computed
+    // eventCount from dataValues when the eager-load attached the literal
+    // subquery (pv-0pht).
+    if (this.spaces) {
+      location.spaces = this.spaces.map(spaceEntity => spaceEntity.toModel());
+    }
+
     return location;
   }
 

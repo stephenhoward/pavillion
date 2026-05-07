@@ -117,23 +117,25 @@ describe('useLocationManagement', () => {
       expect(showLocationPicker.value).toBe(false);
     });
 
-    it('should resolve Space from spacesByPlace when spaceId is set', () => {
+    it('should resolve Space from place.spaces inline when spaceId is set', () => {
       const { selectLocation, availableLocations } = useLocationManagement();
 
       const place = new EventLocation('place-cc', 'Convention Center');
-      availableLocations.value = [place];
-
       const space = new EventLocationSpace('space-pacific', 'place-cc');
       space.addContent(new EventLocationSpaceContent('en', 'Pacific Room', ''));
-      const spacesByPlace = { 'place-cc': [space] };
+      // pv-0pht: spaces[] is inline on the Place object — no separate cache.
+      place.spaces = [space];
+      availableLocations.value = [place];
 
       const event = new CalendarEvent('event1', 'calendar1');
 
-      selectLocation({ placeId: 'place-cc', spaceId: 'space-pacific' }, event, spacesByPlace);
+      selectLocation({ placeId: 'place-cc', spaceId: 'space-pacific' }, event);
 
       expect(event.locationId).toBe('place-cc');
       expect(event.location).toEqual(place);
-      expect(event.space).toBe(space);
+      // `availableLocations` is a Vue ref, so `place.spaces[0]` reads through
+      // the reactive proxy — assert deep equality rather than identity.
+      expect(event.space).toEqual(space);
     });
 
     it('should clear event.space when whole-venue is selected over a previously-set Space', () => {

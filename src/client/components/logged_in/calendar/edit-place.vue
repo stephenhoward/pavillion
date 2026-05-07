@@ -1,4 +1,6 @@
 <style scoped lang="scss">
+@use '../../../assets/style/components/calendar-admin' as *;
+
 /* Full-page place editor container - uses 100vh since it renders as a top-level route */
 .place-editor-page {
   display: flex;
@@ -455,7 +457,6 @@ form {
   }
 }
 
-.spaces-loading,
 .spaces-empty {
   margin: 0;
   padding: 0.5rem 0;
@@ -465,6 +466,106 @@ form {
   @media (prefers-color-scheme: dark) {
     color: var(--pav-color-stone-400);
   }
+}
+
+/* '(new)' affordance applied to staged-but-unsaved Spaces in the list */
+.space-info__new-affordance {
+  margin-inline-start: 0.375rem;
+  font-size: 0.875rem;
+  font-weight: 400;
+  color: var(--pav-color-stone-500);
+
+  @media (prefers-color-scheme: dark) {
+    color: var(--pav-color-stone-400);
+  }
+}
+
+/* Reassign-events dialog (eventCount > 0 branch) */
+.reassign-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+
+  &__prompt {
+    margin: 0;
+    color: var(--pav-color-stone-800);
+
+    @media (prefers-color-scheme: dark) {
+      color: var(--pav-color-stone-200);
+    }
+  }
+
+  &__options {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    margin: 0;
+    padding: 0;
+    border: none;
+  }
+
+  &__actions {
+    @include admin-dialog-layout;
+    /* admin-dialog-layout supplies .btn-ghost styling for the Cancel button */
+    display: flex;
+    align-items: center;
+    justify-content: end;
+    gap: 0.75rem;
+    margin-block-start: 0.5rem;
+  }
+}
+
+.reassign-option {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  font-size: 0.9375rem;
+
+  input[type="radio"] {
+    margin: 0;
+  }
+
+  &__default {
+    margin-inline-start: 0.25rem;
+    font-style: italic;
+    color: var(--pav-color-stone-500);
+
+    @media (prefers-color-scheme: dark) {
+      color: var(--pav-color-stone-400);
+    }
+  }
+
+  &__label {
+    flex-shrink: 0;
+  }
+
+  &__select {
+    flex: 1;
+    padding: 0.375rem 0.5rem;
+    border: 1px solid var(--pav-color-stone-300);
+    border-radius: 0.375rem;
+    background: var(--pav-color-stone-50);
+    font-size: 0.9375rem;
+
+    @media (prefers-color-scheme: dark) {
+      background: var(--pav-color-stone-900);
+      border-color: var(--pav-color-stone-600);
+      color: var(--pav-color-stone-100);
+    }
+  }
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .add-space-button {
@@ -674,38 +775,30 @@ form {
             </div>
           </section>
 
-          <!-- SPACES Section (edit mode only — Spaces require an existing Place) -->
-          <section
-            v-if="isEditMode"
-            class="editor-section spaces-section"
-            :aria-busy="state.isLoadingSpaces"
-          >
+          <!-- SPACES Section — visible in both create and edit modes per
+               pv-0pht atomic Place + Spaces save model. -->
+          <section class="editor-section spaces-section">
             <h2 class="section-header">{{ t('space.section_title') }}</h2>
 
             <div class="section-card">
-              <!-- Loading state -->
-              <div
-                v-if="state.isLoadingSpaces"
-                class="spaces-loading"
-                role="status"
-                aria-live="polite"
-              >
-                {{ t('space.loading_spaces') }}
-              </div>
-
-              <!-- Spaces list -->
+              <!-- Spaces list (working buffer view; staged Spaces show '(new)') -->
               <ul
-                v-else-if="spacesForPlace.length > 0"
+                v-if="spacesForPlace.length > 0"
                 class="space-list"
               >
                 <li
                   v-for="space in spacesForPlace"
-                  :key="space.id"
+                  :key="spaceRowKey(space)"
                   class="space-item"
                 >
                   <div class="space-info">
                     <div class="space-info__name">
                       {{ spaceDisplayName(space) }}
+                      <span
+                        v-if="isStagedSpace(space)"
+                        class="space-info__new-affordance"
+                        aria-hidden="true"
+                      >{{ t('space.reassign_new_suffix') }}</span>
                     </div>
                     <div
                       v-if="spaceAccessibilityPreview(space)"
@@ -719,19 +812,17 @@ form {
                       type="button"
                       class="icon-button edit-space-button"
                       :aria-label="t('space.edit_space_button', { name: spaceDisplayName(space) })"
-                      :disabled="state.deletingSpaceId === space.id"
-                      @click="openSpaceEditor(space.id)"
+                      @click="openSpaceEditor(spaceRowKey(space))"
                     >
-                      <Pencil :size="20" :stroke-width="2" />
+                      <Pencil :size="20" :stroke-width="2" aria-hidden="true" />
                     </button>
                     <button
                       type="button"
                       class="icon-button icon-button--danger delete-space-button"
                       :aria-label="t('space.delete_space_button', { name: spaceDisplayName(space) })"
-                      :disabled="state.deletingSpaceId === space.id"
                       @click="confirmDeleteSpace(space, $event)"
                     >
-                      <Trash2 :size="20" :stroke-width="2" />
+                      <Trash2 :size="20" :stroke-width="2" aria-hidden="true" />
                     </button>
                   </div>
                 </li>
@@ -745,19 +836,21 @@ form {
                 {{ t('space.no_spaces') }}
               </p>
 
-              <!-- Inline editor (mounts on Add or Edit click) -->
+              <!-- Inline editor (mounts on Add or Edit click). Child emits a
+                   staged `EventLocationSpace` payload on save; parent merges
+                   it into `place.spaces` (creating a new entry with a fresh
+                   `clientId` for adds, or replacing the matching entry's
+                   content for edits). Cancel closes without mutation. -->
               <EditSpace
-                v-if="state.spaceEditorOpen"
-                :calendar-url-name="calendarUrlName"
-                :place-id="props.placeId!"
-                :space-id="state.editingSpaceId"
+                v-if="editorOpen"
+                :space="editingSpace"
                 @save="handleSpaceSaved"
                 @cancel="closeSpaceEditor"
               />
 
               <!-- Add Space button (hidden while editor is open) -->
               <button
-                v-if="!state.spaceEditorOpen"
+                v-if="!editorOpen"
                 ref="addSpaceButtonRef"
                 type="button"
                 class="add-space-button"
@@ -781,19 +874,97 @@ form {
                      @select="handleAddLanguage" />
   </div>
 
-  <!-- Delete Space confirmation -->
+  <!-- Delete Space confirmation: plain confirm when eventCount === 0; the
+       reassign dialog (below) takes over when eventCount > 0. -->
   <ConfirmDeleteDialog
+    v-if="targetEventCount === 0"
     :visible="state.showDeleteSpaceDialog && !!state.spaceToDelete"
     :title="t('space.confirm_delete_title')"
     :message="deleteSpaceMessage"
-    :is-deleting="!!state.deletingSpaceId && state.deletingSpaceId === state.spaceToDelete?.id"
+    :is-deleting="false"
     :delete-label="t('space.delete_button')"
     :deleting-label="t('space.deleting')"
     :cancel-label="t('space.cancel')"
     modal-class="delete-space-modal"
-    @confirm="deleteSpace"
+    @confirm="stageSpaceRemoval"
     @close="cancelDeleteSpace"
   />
+
+  <!-- Reassign-events dialog: shown when the Space being deleted has
+       eventCount > 0. Whole-venue is the default selection (FK SET NULL on
+       events.space_id handles those automatically); a non-whole-venue choice
+       lands in pendingReassigns and fires post-save. -->
+  <ModalLayout
+    v-if="targetEventCount > 0 && state.showDeleteSpaceDialog && !!state.spaceToDelete"
+    :title="t('space.reassign_dialog_title', { name: spaceDisplayName(state.spaceToDelete) })"
+    modal-class="reassign-space-modal"
+    @close="cancelDeleteSpace"
+  >
+    <div class="reassign-dialog">
+      <p class="reassign-dialog__prompt">
+        {{ t('space.reassign_dialog_prompt', { count: targetEventCount }) }}
+      </p>
+      <fieldset class="reassign-dialog__options">
+        <legend class="visually-hidden">{{ t('space.reassign_dropdown_label') }}</legend>
+        <label class="reassign-option">
+          <input
+            type="radio"
+            name="reassign-target"
+            value="whole-venue"
+            v-model="state.reassignTarget"
+          />
+          <span>
+            {{ t('space.reassign_option_whole_venue') }}
+            <em class="reassign-option__default">{{ t('space.reassign_option_default_suffix') }}</em>
+          </span>
+        </label>
+        <label
+          v-if="reassignTargetSpaces.length > 0"
+          class="reassign-option"
+        >
+          <input
+            type="radio"
+            name="reassign-target"
+            value="other-space"
+            v-model="state.reassignTarget"
+          />
+          <span class="reassign-option__label">
+            {{ t('space.reassign_option_other_space') }}
+          </span>
+          <select
+            class="reassign-option__select"
+            :aria-label="t('space.reassign_dropdown_label')"
+            v-model="state.reassignOtherTarget"
+            @change="state.reassignTarget = 'other-space'"
+          >
+            <option
+              v-for="opt in reassignTargetSpaces"
+              :key="spaceRowKey(opt)"
+              :value="spaceRowKey(opt)"
+            >
+              {{ spaceDisplayName(opt) }}<template v-if="isStagedSpace(opt)"> {{ t('space.reassign_new_suffix') }}</template>
+            </option>
+          </select>
+        </label>
+      </fieldset>
+      <div class="reassign-dialog__actions">
+        <button
+          ref="reassignCancelRef"
+          type="button"
+          class="btn-ghost"
+          @click="cancelDeleteSpace"
+        >
+          {{ t('space.cancel') }}
+        </button>
+        <PillButton
+          variant="danger"
+          @click="stageSpaceRemoval"
+        >
+          {{ t('space.reassign_confirm_button') }}
+        </PillButton>
+      </div>
+    </div>
+  </ModalLayout>
 </template>
 
 <script setup lang="ts">
@@ -805,6 +976,8 @@ import { ArrowLeft, Pencil, Plus, Trash2 } from 'lucide-vue-next';
 import LanguageTabSelector from '@/client/components/common/language-tab-selector.vue';
 import languagePicker from '@/client/components/common/language-picker.vue';
 import ConfirmDeleteDialog from '@/client/components/common/confirm-delete-dialog.vue';
+import ModalLayout from '@/client/components/common/modal.vue';
+import PillButton from '@/client/components/common/pill-button.vue';
 import EditSpace from '@/client/components/logged_in/calendar/edit-space.vue';
 import LocationService from '@/client/service/location';
 import CalendarService from '@/client/service/calendar';
@@ -845,28 +1018,109 @@ const state = reactive({
   error: '' as string | string[],
   calendarId: '' as string,
 
-  // Spaces section state.
-  isLoadingSpaces: false,
-  spaceEditorOpen: false,
-  editingSpaceId: null as string | null,
+  // Spaces UI state. The staging buffer for Place + Spaces lives in `place`
+  // (below); this reactive only tracks transient UI flags around the inline
+  // editor and delete dialog.
   showDeleteSpaceDialog: false,
   spaceToDelete: null as EventLocationSpace | null,
-  deletingSpaceId: '' as string,
   deleteTriggerElement: null as HTMLElement | null,
+  // Reassign dialog branch (eventCount > 0). 'whole-venue' keeps the FK
+  // SET NULL behavior; 'other-space' is a sentinel meaning "use the
+  // dropdown selection in reassignOtherTarget" — this decouples the radio
+  // from the select so a keyboard user changing the select implicitly
+  // checks the "other space" radio (WCAG 3.2.2 On Input).
+  reassignTarget: 'whole-venue' as 'whole-venue' | 'other-space',
+  reassignOtherTarget: '' as string,
 });
+
+/**
+ * Single working buffer for the entire Place + Spaces tree. All edits — basic
+ * fields, accessibility content, Space adds/edits/deletes — flow through this
+ * reactive snapshot. The parent Save commits it atomically via a single
+ * PUT/POST; the post-save reassign loop fires sequentially after.
+ *
+ * Created via `EventLocation.fromObject(initialPlace.toObject())` so it's a
+ * full deep clone (sharing no references with the cache). Initial value is
+ * an empty Place; populated in onBeforeMount for edit mode.
+ */
+const initialPlace = ref<EventLocation>(new EventLocation());
+const place = ref<EventLocation>(new EventLocation());
+
+/**
+ * Reassign decisions made via the delete dialog. Only non-whole-venue targets
+ * land here — whole-venue choices are not staged because the FK SET NULL on
+ * `events.space_id` handles them automatically when the Space is dropped from
+ * `place.spaces`. Key is the deleted Space's server `id`; value is the target
+ * Space's server `id` or staged `clientId` (translated post-save via the
+ * server's clientId echo).
+ */
+const pendingReassigns = reactive<Map<string, string>>(new Map());
+
+/**
+ * Whether the inline Space editor is open. Decoupled from `editingSpaceId`
+ * so that the editor can be opened in create mode (where `editingSpaceId` is
+ * intentionally `null`) without colliding with the "closed" sentinel.
+ */
+const editorOpen = ref<boolean>(false);
+
+/**
+ * The Space currently being edited inline. `null` while the editor is in
+ * create mode; otherwise carries the row key (server `id` or `clientId`).
+ */
+const editingSpaceId = ref<string | null>(null);
 
 // Refs into the Spaces section.
 const addSpaceButtonRef = ref<HTMLElement | null>(null);
+const reassignCancelRef = ref<HTMLElement | null>(null);
 
 /**
- * Reactive view of the cached Spaces for this Place. Returns an empty array
- * when the cache has not been populated yet (e.g. in create mode, or before
- * `fetchSpaces` resolves).
+ * Clone an EventLocation into a detached working buffer. `EventLocation.toObject`
+ * intentionally omits `eventCount` (read-only, never round-tripped into writes),
+ * so the JSON-shaped clone loses it. Reattach it onto matching Space rows so the
+ * delete dialog branch logic — which keys off `space.eventCount` — survives the
+ * staging-buffer hand-off.
  */
-const spacesForPlace = computed<EventLocationSpace[]>(() => {
-  if (!props.placeId) return [];
-  return locationStore.getSpacesForPlace(props.placeId);
-});
+function cloneLocationForBuffer(source: EventLocation): EventLocation {
+  const clone = EventLocation.fromObject(source.toObject());
+  // Patch eventCount back onto each Space whose id matches a source row.
+  if (source.spaces && source.spaces.length > 0) {
+    const eventCountById = new Map<string, number>();
+    for (const sourceSpace of source.spaces) {
+      if (sourceSpace.id && typeof sourceSpace.eventCount === 'number') {
+        eventCountById.set(sourceSpace.id, sourceSpace.eventCount);
+      }
+    }
+    for (const cloneSpace of clone.spaces) {
+      if (cloneSpace.id && eventCountById.has(cloneSpace.id)) {
+        cloneSpace.eventCount = eventCountById.get(cloneSpace.id);
+      }
+    }
+  }
+  return clone;
+}
+
+/**
+ * Spaces currently in the working buffer. The list-rendering loop binds to
+ * this; existing Spaces use their server `id` as the key, staged Spaces use
+ * their `clientId`.
+ */
+const spacesForPlace = computed<EventLocationSpace[]>(() => place.value.spaces ?? []);
+
+/**
+ * Stable per-row key for the Spaces list. Existing Spaces have a server id;
+ * staged Spaces have a clientId.
+ */
+function spaceRowKey(space: EventLocationSpace): string {
+  return space.id || (space.clientId ?? '');
+}
+
+/**
+ * True when this Space is staged-but-unsaved — used to decorate the list with
+ * a '(new)' affordance and to feed the reassign-dialog dropdown.
+ */
+function isStagedSpace(space: EventLocationSpace): boolean {
+  return !space.id;
+}
 
 /**
  * Pick the best display name for a Space, preferring the current UI language
@@ -897,28 +1151,51 @@ function spaceAccessibilityPreview(space: EventLocationSpace): string {
 }
 
 /**
- * Build the delete-confirm message for the currently targeted Space, including
- * the event-count consequence sentence when the server-supplied count > 0.
+ * Plain-confirm message for delete-when-eventCount-zero. The reassign branch
+ * (eventCount > 0) renders its own dedicated dialog further down.
  */
 const deleteSpaceMessage = computed(() => {
   const space = state.spaceToDelete;
   if (!space) return '';
   const name = spaceDisplayName(space);
-  let msg = t('space.confirm_delete_message', { name });
-  // Spaces may be augmented at runtime with an event count from the server.
-  const eventCount = (space as unknown as { eventCount?: number }).eventCount ?? 0;
-  if (eventCount > 0) {
-    msg += ' ' + t('space.confirm_delete_event_count', { count: eventCount });
-  }
-  return msg;
+  return t('space.confirm_delete_message', { name });
 });
 
 /**
- * Open the inline Space editor. Pass a spaceId to edit, or null to create.
+ * `eventCount > 0` for the targeted Space → render the reassign dialog. The
+ * count is read inline from `space.eventCount` (populated by the server's
+ * GET response per pv-0pht atomic Place + Spaces wire contract).
  */
-function openSpaceEditor(spaceId: string | null) {
-  state.editingSpaceId = spaceId;
-  state.spaceEditorOpen = true;
+const targetEventCount = computed<number>(() => state.spaceToDelete?.eventCount ?? 0);
+
+/**
+ * Other Spaces in the current snapshot — excludes the Space being deleted.
+ * The reassign dropdown rebuilds from this; staged Spaces flow through with
+ * the '(new)' affordance applied at the option-label level.
+ */
+const reassignTargetSpaces = computed<EventLocationSpace[]>(() => {
+  if (!state.spaceToDelete) return [];
+  const targetKey = spaceRowKey(state.spaceToDelete);
+  return spacesForPlace.value.filter(s => spaceRowKey(s) !== targetKey);
+});
+
+/**
+ * The Space currently being edited inline as resolved against `place.spaces`.
+ * Returns null in create mode so the editor knows to start blank.
+ */
+const editingSpace = computed<EventLocationSpace | null>(() => {
+  const key = editingSpaceId.value;
+  if (!key) return null;
+  return spacesForPlace.value.find(s => spaceRowKey(s) === key) ?? null;
+});
+
+/**
+ * Open the inline Space editor. Pass a spaceId to edit (server id OR clientId
+ * for a staged-but-unsaved entry), or null to create a new entry.
+ */
+function openSpaceEditor(spaceIdOrClientId: string | null) {
+  editingSpaceId.value = spaceIdOrClientId;
+  editorOpen.value = true;
 }
 
 /**
@@ -926,36 +1203,77 @@ function openSpaceEditor(spaceId: string | null) {
  * Returns focus to the Add button so keyboard users land somewhere sensible.
  */
 function closeSpaceEditor() {
-  state.spaceEditorOpen = false;
-  state.editingSpaceId = null;
+  editorOpen.value = false;
+  editingSpaceId.value = null;
   nextTick(() => {
     addSpaceButtonRef.value?.focus();
   });
 }
 
 /**
- * Refetch Spaces and close the editor after a successful save. The store's
- * `createSpace` / `updateSpace` already refetch internally, but we re-fetch
- * defensively in case the editor was given a stale cache.
+ * Generate a transient `clientId` for a freshly-staged Space row. Used to
+ * correlate a draft entry with its server-issued `id` after the atomic save
+ * (the server echoes `clientId` on every newly-created Space row per pv-0pht).
+ *
+ * Prefers `crypto.randomUUID()` when available (browsers + modern test envs);
+ * falls back to a timestamp + random suffix to keep tests deterministic-enough
+ * without pulling in a new dependency.
  */
-async function handleSpaceSaved() {
-  closeSpaceEditor();
-  if (props.placeId) {
-    try {
-      await locationStore.fetchSpaces(calendarUrlName.value, props.placeId);
-    }
-    catch (error) {
-      console.error('Error refetching spaces:', error);
-    }
+function generateClientId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
   }
+  return `client-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
 /**
- * Open the delete-confirm dialog for a Space.
+ * Merge a staged Space content payload into `place.spaces`. Called when the
+ * inline editor emits its save event with a freshly-built `EventLocationSpace`.
+ *
+ * - Edit mode (`editingSpaceId` set): replace the matching working-buffer
+ *   entry in place. Identity is keyed on the row key (server `id` for
+ *   already-saved Spaces, `clientId` for staged-but-unsaved ones).
+ * - Create mode (`editingSpaceId` null): stamp a fresh `clientId` and append.
+ *
+ * The atomic-save commit (`handleSave`) consumes the resulting `place.spaces`
+ * snapshot; the per-row identity is what lets the server's PUT diff and the
+ * subsequent `clientId` echo line up with the staged rows.
+ */
+function handleSpaceSaved(staged: EventLocationSpace) {
+  const editingKey = editingSpaceId.value;
+
+  if (editingKey) {
+    // Edit mode: replace the matching entry in place. Preserve the row's
+    // existing identity (server id and/or clientId) — the staged payload
+    // already carries them through, so a wholesale replace is correct.
+    place.value.spaces = place.value.spaces.map(s =>
+      spaceRowKey(s) === editingKey ? staged : s,
+    );
+  }
+  else {
+    // Create mode: stamp a fresh clientId so the row has a stable key in the
+    // working buffer until the server echoes back its assigned id.
+    if (!staged.clientId) {
+      staged.clientId = generateClientId();
+    }
+    place.value.spaces = [...place.value.spaces, staged];
+  }
+
+  closeSpaceEditor();
+}
+
+/**
+ * Open the delete-confirm dialog for a Space. Branches on `eventCount` are
+ * driven entirely by the template `v-if`/`v-else` on the two dialog elements.
  */
 function confirmDeleteSpace(space: EventLocationSpace, event?: Event) {
   state.deleteTriggerElement = (event?.currentTarget as HTMLElement) ?? null;
   state.spaceToDelete = space;
+  state.reassignTarget = 'whole-venue';
+  // Seed the dropdown to the first eligible Space so the select has a
+  // valid value the moment the user switches the radio.
+  const firstOther = reassignTargetSpaces.value[0];
+  state.reassignOtherTarget = firstOther ? spaceRowKey(firstOther) : '';
   state.showDeleteSpaceDialog = true;
 }
 
@@ -966,30 +1284,35 @@ function cancelDeleteSpace() {
   const trigger = state.deleteTriggerElement;
   state.spaceToDelete = null;
   state.showDeleteSpaceDialog = false;
-  state.deletingSpaceId = '';
   state.deleteTriggerElement = null;
+  state.reassignTarget = 'whole-venue';
+  state.reassignOtherTarget = '';
   nextTick(() => trigger?.focus());
 }
 
 /**
- * Delete the Space currently targeted by the confirm dialog.
+ * Stage a Space removal in the working buffer. If the user picked a non-
+ * whole-venue reassign target, register it in `pendingReassigns`; whole-venue
+ * choices are NOT staged here — the FK SET NULL on `events.space_id` handles
+ * those automatically when the Space drops out of the snapshot.
  */
-async function deleteSpace() {
-  if (!state.spaceToDelete || !props.placeId) return;
-  const spaceId = state.spaceToDelete.id;
-  state.deletingSpaceId = spaceId;
-  try {
-    await locationStore.deleteSpace(calendarUrlName.value, props.placeId, spaceId);
-    cancelDeleteSpace();
-    toast.success(t('space.space_deleted_success'));
+function stageSpaceRemoval() {
+  if (!state.spaceToDelete) return;
+  const targetKey = spaceRowKey(state.spaceToDelete);
+  const fromId = state.spaceToDelete.id;
+
+  // Pre-existing Space with events → may need a reassign entry. Resolve
+  // the 'other-space' sentinel through the dropdown's separate selection
+  // so the radio and select stay decoupled (WCAG 3.2.2).
+  if (fromId && targetEventCount.value > 0 && state.reassignTarget === 'other-space' && state.reassignOtherTarget) {
+    pendingReassigns.set(fromId, state.reassignOtherTarget);
   }
-  catch (error) {
-    console.error('Error deleting space:', error);
-    toast.error(t('space.error_deleting'));
-  }
-  finally {
-    state.deletingSpaceId = '';
-  }
+
+  // Drop the Space from the working buffer. Existing-but-removed entries fall
+  // out of the snapshot; the server's PUT diff will destroy() them.
+  place.value.spaces = place.value.spaces.filter(s => spaceRowKey(s) !== targetKey);
+
+  cancelDeleteSpace();
 }
 
 // Error container ref for focus management
@@ -1034,9 +1357,29 @@ const availableLanguages = computed(() => {
 });
 
 /**
- * Navigate back to the places tab on the calendar view.
+ * Dirty-state predicate. Per Decision 9 (complexity-playbook): the place
+ * working-buffer diff alone is sufficient. Whole-venue choices never land in
+ * `pendingReassigns`, and any non-whole-venue choice requires a Space removal
+ * which the place diff already detects. JSON.stringify of toObject() gives a
+ * stable canonical form for both the snapshot and the original.
+ */
+const isDirty = computed<boolean>(() => {
+  // Sync formData/accessibilityInfo into the working buffer view used here.
+  const snapshot = buildLocationFromForm();
+  // Carry through the staged Spaces snapshot — buildLocationFromForm only
+  // covers the place fields and content. Spaces live on `place.value.spaces`.
+  snapshot.spaces = place.value.spaces;
+  return JSON.stringify(snapshot.toObject()) !== JSON.stringify(initialPlace.value.toObject());
+});
+
+/**
+ * Cancel/Back gate: prompt before discarding unsaved edits.
  */
 function handleBack() {
+  if (isDirty.value) {
+    const ok = window.confirm(t('discard_unsaved_changes'));
+    if (!ok) return;
+  }
   router.push(`/calendar/${calendarUrlName.value}?tab=places`);
 }
 
@@ -1066,7 +1409,9 @@ function handleAddLanguage(language: string) {
 }
 
 /**
- * Build an EventLocation model from the current form data.
+ * Build an EventLocation model from the current form data. Does NOT include
+ * `spaces[]` — callers that need a full snapshot copy `place.value.spaces`
+ * onto the result. (Used by `isDirty` and `handleSave`.)
  */
 function buildLocationFromForm(): EventLocation {
   const location = new EventLocation(
@@ -1114,7 +1459,9 @@ function populateFormFromLocation(location: EventLocation) {
 }
 
 /**
- * Handle form submission (create or update).
+ * Handle form submission (create or update). Atomic Place + Spaces save:
+ * one PUT/POST commits the entire snapshot; the post-save loop fires
+ * `pendingReassigns` sequentially via `locationStore.reassignEvents`.
  */
 async function handleSave() {
   state.error = '';
@@ -1125,7 +1472,9 @@ async function handleSave() {
     return;
   }
 
+  // Build the full snapshot: basic fields + content + the staged Spaces tree.
   const location = buildLocationFromForm();
+  location.spaces = place.value.spaces;
 
   // Validate location hierarchy
   const hierarchyErrors = validateLocationHierarchy(location);
@@ -1136,28 +1485,73 @@ async function handleSave() {
 
   state.isSaving = true;
 
+  let saved: EventLocation;
   try {
     if (isEditMode.value) {
-      await locationService.updateLocation(state.calendarId, location);
+      saved = await locationService.updateLocation(state.calendarId, location);
     }
     else {
-      await locationService.createLocation(state.calendarId, location);
+      saved = await locationService.createLocation(state.calendarId, location);
     }
-
-    // Navigate back to places tab on success
-    handleBack();
   }
   catch (error) {
+    // Place PUT/POST failure: keep snapshot and pendingReassigns intact for
+    // retry, surface inline error.
     console.error('Error saving place:', error);
     state.error = t('error_saving');
-  }
-  finally {
     state.isSaving = false;
+    return;
   }
+
+  // Build clientId → serverId map from the response. The server echoes the
+  // request's clientId on every newly-created Space row (pv-0pht).
+  const idMap = new Map<string, string>();
+  for (const space of saved.spaces ?? []) {
+    if (space.clientId && space.id) {
+      idMap.set(space.clientId, space.id);
+    }
+  }
+
+  // Fire pendingReassigns sequentially. Translate clientId targets via idMap;
+  // if a target was a staged Space whose clientId did not echo back, that's a
+  // logic bug — fail loud (this manifests as a missing key, which we surface
+  // as a partial-failure entry just like a network failure).
+  const failures: Array<{ fromId: string; targetId: string; error: unknown }> = [];
+  for (const [fromId, toTarget] of pendingReassigns) {
+    const realTargetId = idMap.get(toTarget) ?? toTarget;
+    try {
+      await locationStore.reassignEvents(state.calendarId, saved.id, fromId, realTargetId);
+    }
+    catch (error) {
+      console.error('Error reassigning events:', error);
+      failures.push({ fromId, targetId: realTargetId, error });
+      // Keep going — collect all failures, do not retain pendingReassigns
+      // for retry.
+    }
+  }
+
+  // Always clear; user re-opens editor to retry manually if any failed
+  // (no programmatic retry, no retained partial state — Decision 4).
+  pendingReassigns.clear();
+
+  if (failures.length > 0) {
+    toast.warning(t('error_reassign_partial', { count: failures.length }));
+  }
+
+  // Update the initial-snapshot baseline to the freshly-saved state so the
+  // dirty-state Cancel prompt does not fire on the navigation that follows.
+  initialPlace.value = cloneLocationForBuffer(saved);
+  place.value = cloneLocationForBuffer(saved);
+
+  state.isSaving = false;
+  router.push(`/calendar/${calendarUrlName.value}?tab=places`);
 }
 
 /**
  * Initialize the editor: resolve calendar and load existing location if editing.
+ * The working buffer `place` is seeded from the loaded location (or left as a
+ * fresh EventLocation in create mode). `initialPlace` captures the baseline
+ * for the dirty-state predicate.
  */
 onBeforeMount(async () => {
   state.isLoading = true;
@@ -1173,24 +1567,21 @@ onBeforeMount(async () => {
 
     state.calendarId = calendar.id;
 
-    // If editing, load the existing location
+    // If editing, load the existing location (with `spaces[]` inline per
+    // pv-0pht atomic Place + Spaces wire contract).
     if (isEditMode.value && props.placeId) {
       const location = await locationService.getLocationById(calendar.id, props.placeId);
       populateFormFromLocation(location);
-
-      // Fetch this Place's Spaces into the locationStore cache. Failure here
-      // is non-fatal — the Place editor itself remains usable; the Spaces
-      // section just shows the loading-failed empty state.
-      state.isLoadingSpaces = true;
-      try {
-        await locationStore.fetchSpaces(calendarUrlName.value, props.placeId);
-      }
-      catch (spacesError) {
-        console.error('Error loading spaces:', spacesError);
-      }
-      finally {
-        state.isLoadingSpaces = false;
-      }
+      // Seed the working buffer + baseline from the server response. Use the
+      // eventCount-preserving clone helper so the dialog branch logic survives
+      // (toObject omits eventCount by design).
+      place.value = cloneLocationForBuffer(location);
+      initialPlace.value = cloneLocationForBuffer(location);
+    }
+    else {
+      // Create mode: empty buffer + matching baseline.
+      place.value = new EventLocation();
+      initialPlace.value = new EventLocation();
     }
   }
   catch (error) {

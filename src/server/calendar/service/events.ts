@@ -17,7 +17,7 @@ import { LocationSpaceEntity, LocationSpaceContentEntity } from "@/server/calend
 // (e.g., include: [MediaEntity] in queries). Removing this cross-domain import requires
 // either restructuring entity associations or moving eager-loading to the media domain.
 import { MediaEntity } from "@/server/media/entity/media";
-import LocationService from "@/server/calendar/service/locations";
+import LocationService, { spacesIncludeWithEventCount } from "@/server/calendar/service/locations";
 import { EventEmitter } from 'events';
 import type MediaInterface from '@/server/media/interface';
 import type ActivityPubInterface from '@/server/activitypub/interface';
@@ -1614,12 +1614,15 @@ class EventService {
       where: { id: eventId },
       include: [
         EventContentEntity,
-        { model: LocationEntity, include: [LocationContentEntity] },
-        // Eager-load the optional Space and its translatable content so the
-        // public detail / event editor can render the layered Place — Space
-        // header and the per-Space accessibility section. Without this
-        // include, EventEntity#space is undefined and `event.toModel().space`
-        // collapses to null even when space_id is set on the row (pv-ix7v.5.1).
+        // Eager-load the Place and its full Spaces tree (with eventCount) so
+        // the event editor's location picker can render the layered list of
+        // available Spaces inline — otherwise `place.spaces` is empty and the
+        // picker collapses to a Place-only view (pv-0pht.4 helper, used here
+        // to keep the editor's wire shape aligned with the public GETs).
+        { model: LocationEntity, include: [LocationContentEntity, spacesIncludeWithEventCount()] },
+        // Eager-load the event's currently-pinned Space and its translatable
+        // content so the layered Place — Space header and per-Space
+        // accessibility section render correctly (pv-ix7v.5.1).
         { model: LocationSpaceEntity, include: [LocationSpaceContentEntity] },
         EventScheduleEntity,
         MediaEntity,

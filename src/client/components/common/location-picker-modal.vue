@@ -36,9 +36,9 @@ const { t: tPlaces } = useTranslation('calendars', { keyPrefix: 'places' });
  * @component
  *
  * Props:
- * @prop {EventLocation[]} locations - Available Places.
- * @prop {Record<string, EventLocationSpace[]>} spacesByPlace - Spaces keyed by parent Place id.
- *   Pass `locationStore.spacesByPlace` (or a derived map). Missing entries are treated as 0 Spaces.
+ * @prop {EventLocation[]} locations - Available Places. Each Place's Spaces
+ *   are read inline from `place.spaces` (pv-0pht atomic Place + Spaces wire
+ *   contract); a Place with no `spaces` array is treated as 0 Spaces.
  * @prop {string | null} selectedLocationId - Currently selected Place id, or null.
  * @prop {string | null} selectedSpaceId - Currently selected Space id, or null for whole-venue.
  *
@@ -65,7 +65,6 @@ interface PickerEntry {
 
 const props = defineProps<{
   locations: EventLocation[];
-  spacesByPlace: Record<string, EventLocationSpace[]>;
   selectedLocationId: string | null;
   selectedSpaceId: string | null;
 }>();
@@ -114,7 +113,7 @@ const allEntries = computed<PickerEntry[]>(() => {
   const entries: PickerEntry[] = [];
 
   for (const place of props.locations) {
-    const spaces = props.spacesByPlace[place.id] ?? [];
+    const spaces = place.spaces ?? [];
     const address = formatAddress(place);
 
     if (spaces.length === 0) {

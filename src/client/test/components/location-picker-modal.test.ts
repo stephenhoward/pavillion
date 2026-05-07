@@ -53,6 +53,17 @@ function makeSpace(id: string, placeId: string, name: string): EventLocationSpac
   return space;
 }
 
+/**
+ * Helper: clone a Place with the supplied Spaces inlined onto `place.spaces`.
+ * Per pv-0pht the Spaces live directly on the Place; the picker no longer
+ * accepts a separate spacesByPlace map.
+ */
+function placeWithSpaces(place: EventLocation, spaces: EventLocationSpace[]): EventLocation {
+  const cloned = EventLocation.fromObject(place.toObject());
+  cloned.spaces = spaces;
+  return cloned;
+}
+
 describe('LocationPickerModal', () => {
   const mockLocations = [
     new EventLocation('loc-1', 'First Venue', '123 Main St', 'Portland', 'OR', '97201'),
@@ -64,7 +75,6 @@ describe('LocationPickerModal', () => {
     it('should render modal with title', () => {
       const wrapper = mount(LocationPickerModal, { ...SHEET_GLOBAL, props: {
         locations: mockLocations,
-        spacesByPlace: {},
         selectedLocationId: null,
         selectedSpaceId: null,
       },
@@ -77,7 +87,6 @@ describe('LocationPickerModal', () => {
     it('should render search input with icon', () => {
       const wrapper = mount(LocationPickerModal, { ...SHEET_GLOBAL, props: {
         locations: mockLocations,
-        spacesByPlace: {},
         selectedLocationId: null,
         selectedSpaceId: null,
       },
@@ -92,7 +101,6 @@ describe('LocationPickerModal', () => {
     it('should render all locations in the list (Space-less Places: one entry each)', () => {
       const wrapper = mount(LocationPickerModal, { ...SHEET_GLOBAL, props: {
         locations: mockLocations,
-        spacesByPlace: {},
         selectedLocationId: null,
         selectedSpaceId: null,
       },
@@ -105,7 +113,6 @@ describe('LocationPickerModal', () => {
     it('should display location names and addresses', () => {
       const wrapper = mount(LocationPickerModal, { ...SHEET_GLOBAL, props: {
         locations: mockLocations,
-        spacesByPlace: {},
         selectedLocationId: null,
         selectedSpaceId: null,
       },
@@ -120,7 +127,6 @@ describe('LocationPickerModal', () => {
     it('should show checkmark for selected location', () => {
       const wrapper = mount(LocationPickerModal, { ...SHEET_GLOBAL, props: {
         locations: mockLocations,
-        spacesByPlace: {},
         selectedLocationId: 'loc-2',
         selectedSpaceId: null,
       },
@@ -136,7 +142,6 @@ describe('LocationPickerModal', () => {
       const wrapper = mount(LocationPickerModal, {
         props: {
           locations: mockLocations,
-          spacesByPlace: {},
           selectedLocationId: null,
           selectedSpaceId: null,
         },
@@ -163,8 +168,7 @@ describe('LocationPickerModal', () => {
 
     it('Place with 0 Spaces renders 1 entry that selects (placeId, null)', async () => {
       const wrapper = mount(LocationPickerModal, { ...SHEET_GLOBAL, props: {
-        locations: [conventionCenter],
-        spacesByPlace: { 'place-cc': [] },
+        locations: [placeWithSpaces(conventionCenter, [])],
         selectedLocationId: null,
         selectedSpaceId: null,
       },
@@ -183,8 +187,7 @@ describe('LocationPickerModal', () => {
 
     it('Place with 1 Space renders 2 entries (whole-venue + 1 Space)', () => {
       const wrapper = mount(LocationPickerModal, { ...SHEET_GLOBAL, props: {
-        locations: [conventionCenter],
-        spacesByPlace: { 'place-cc': [makeSpace('space-pacific', 'place-cc', 'Pacific Room')] },
+        locations: [placeWithSpaces(conventionCenter, [makeSpace('space-pacific', 'place-cc', 'Pacific Room')])],
         selectedLocationId: null,
         selectedSpaceId: null,
       },
@@ -206,13 +209,10 @@ describe('LocationPickerModal', () => {
 
     it('Place with 2 Spaces renders 3 entries (whole-venue + 2 Spaces)', () => {
       const wrapper = mount(LocationPickerModal, { ...SHEET_GLOBAL, props: {
-        locations: [conventionCenter],
-        spacesByPlace: {
-          'place-cc': [
-            makeSpace('space-pacific', 'place-cc', 'Pacific Room'),
-            makeSpace('space-council', 'place-cc', 'Council Chambers'),
-          ],
-        },
+        locations: [placeWithSpaces(conventionCenter, [
+          makeSpace('space-pacific', 'place-cc', 'Pacific Room'),
+          makeSpace('space-council', 'place-cc', 'Council Chambers'),
+        ])],
         selectedLocationId: null,
         selectedSpaceId: null,
       },
@@ -228,10 +228,7 @@ describe('LocationPickerModal', () => {
 
     it('whole-venue entry emits {placeId, spaceId: null} (NOT undefined)', async () => {
       const wrapper = mount(LocationPickerModal, { ...SHEET_GLOBAL, props: {
-        locations: [conventionCenter],
-        spacesByPlace: {
-          'place-cc': [makeSpace('space-pacific', 'place-cc', 'Pacific Room')],
-        },
+        locations: [placeWithSpaces(conventionCenter, [makeSpace('space-pacific', 'place-cc', 'Pacific Room')])],
         selectedLocationId: null,
         selectedSpaceId: null,
       },
@@ -250,10 +247,7 @@ describe('LocationPickerModal', () => {
 
     it('Space entry emits {placeId, spaceId}', async () => {
       const wrapper = mount(LocationPickerModal, { ...SHEET_GLOBAL, props: {
-        locations: [conventionCenter],
-        spacesByPlace: {
-          'place-cc': [makeSpace('space-pacific', 'place-cc', 'Pacific Room')],
-        },
+        locations: [placeWithSpaces(conventionCenter, [makeSpace('space-pacific', 'place-cc', 'Pacific Room')])],
         selectedLocationId: null,
         selectedSpaceId: null,
       },
@@ -270,7 +264,6 @@ describe('LocationPickerModal', () => {
     it('Space-less Place entry emits {placeId, spaceId: null}', async () => {
       const wrapper = mount(LocationPickerModal, { ...SHEET_GLOBAL, props: {
         locations: mockLocations,
-        spacesByPlace: {},
         selectedLocationId: null,
         selectedSpaceId: null,
       },
@@ -286,10 +279,7 @@ describe('LocationPickerModal', () => {
 
     it('aria-label disambiguates whole-venue from Space entries', () => {
       const wrapper = mount(LocationPickerModal, { ...SHEET_GLOBAL, props: {
-        locations: [conventionCenter],
-        spacesByPlace: {
-          'place-cc': [makeSpace('space-pacific', 'place-cc', 'Pacific Room')],
-        },
+        locations: [placeWithSpaces(conventionCenter, [makeSpace('space-pacific', 'place-cc', 'Pacific Room')])],
         selectedLocationId: null,
         selectedSpaceId: null,
       },
@@ -303,7 +293,6 @@ describe('LocationPickerModal', () => {
     it('Space-less Place entry uses Place name as aria-label (no disambiguator)', () => {
       const wrapper = mount(LocationPickerModal, { ...SHEET_GLOBAL, props: {
         locations: [conventionCenter],
-        spacesByPlace: {},
         selectedLocationId: null,
         selectedSpaceId: null,
       },
@@ -316,13 +305,10 @@ describe('LocationPickerModal', () => {
 
     it('shows checkmark for the selected (placeId, spaceId) combination — Space entry', () => {
       const wrapper = mount(LocationPickerModal, { ...SHEET_GLOBAL, props: {
-        locations: [conventionCenter],
-        spacesByPlace: {
-          'place-cc': [
-            makeSpace('space-pacific', 'place-cc', 'Pacific Room'),
-            makeSpace('space-council', 'place-cc', 'Council Chambers'),
-          ],
-        },
+        locations: [placeWithSpaces(conventionCenter, [
+          makeSpace('space-pacific', 'place-cc', 'Pacific Room'),
+          makeSpace('space-council', 'place-cc', 'Council Chambers'),
+        ])],
         selectedLocationId: 'place-cc',
         selectedSpaceId: 'space-pacific',
       },
@@ -336,10 +322,7 @@ describe('LocationPickerModal', () => {
 
     it('shows checkmark on the whole-venue entry when selectedSpaceId is null', () => {
       const wrapper = mount(LocationPickerModal, { ...SHEET_GLOBAL, props: {
-        locations: [conventionCenter],
-        spacesByPlace: {
-          'place-cc': [makeSpace('space-pacific', 'place-cc', 'Pacific Room')],
-        },
+        locations: [placeWithSpaces(conventionCenter, [makeSpace('space-pacific', 'place-cc', 'Pacific Room')])],
         selectedLocationId: 'place-cc',
         selectedSpaceId: null,
       },
@@ -354,10 +337,7 @@ describe('LocationPickerModal', () => {
       // Visual hierarchy hook (stylesheet-advisor MED): Space entries get the
       // .is-space-entry class so SCSS can indent them under their parent Place.
       const wrapper = mount(LocationPickerModal, { ...SHEET_GLOBAL, props: {
-        locations: [conventionCenter],
-        spacesByPlace: {
-          'place-cc': [makeSpace('space-pacific', 'place-cc', 'Pacific Room')],
-        },
+        locations: [placeWithSpaces(conventionCenter, [makeSpace('space-pacific', 'place-cc', 'Pacific Room')])],
         selectedLocationId: null,
         selectedSpaceId: null,
       },
@@ -373,10 +353,7 @@ describe('LocationPickerModal', () => {
       // suffix is wrapped in .whole-venue-suffix so SCSS can render it in
       // var(--pav-text-secondary).
       const wrapper = mount(LocationPickerModal, { ...SHEET_GLOBAL, props: {
-        locations: [conventionCenter],
-        spacesByPlace: {
-          'place-cc': [makeSpace('space-pacific', 'place-cc', 'Pacific Room')],
-        },
+        locations: [placeWithSpaces(conventionCenter, [makeSpace('space-pacific', 'place-cc', 'Pacific Room')])],
         selectedLocationId: null,
         selectedSpaceId: null,
       },
@@ -393,10 +370,7 @@ describe('LocationPickerModal', () => {
       // must be separated by whitespace in the DOM so AT flat-text concatenation
       // reads "Convention Center (whole venue)", not "Convention Center(whole venue)".
       const wrapper = mount(LocationPickerModal, { ...SHEET_GLOBAL, props: {
-        locations: [conventionCenter],
-        spacesByPlace: {
-          'place-cc': [makeSpace('space-pacific', 'place-cc', 'Pacific Room')],
-        },
+        locations: [placeWithSpaces(conventionCenter, [makeSpace('space-pacific', 'place-cc', 'Pacific Room')])],
         selectedLocationId: null,
         selectedSpaceId: null,
       },
@@ -413,7 +387,6 @@ describe('LocationPickerModal', () => {
     it('should filter locations by name', async () => {
       const wrapper = mount(LocationPickerModal, { ...SHEET_GLOBAL, props: {
         locations: mockLocations,
-        spacesByPlace: {},
         selectedLocationId: null,
         selectedSpaceId: null,
       },
@@ -430,7 +403,6 @@ describe('LocationPickerModal', () => {
     it('should filter locations by address', async () => {
       const wrapper = mount(LocationPickerModal, { ...SHEET_GLOBAL, props: {
         locations: mockLocations,
-        spacesByPlace: {},
         selectedLocationId: null,
         selectedSpaceId: null,
       },
@@ -447,7 +419,6 @@ describe('LocationPickerModal', () => {
     it('should filter locations by city', async () => {
       const wrapper = mount(LocationPickerModal, { ...SHEET_GLOBAL, props: {
         locations: mockLocations,
-        spacesByPlace: {},
         selectedLocationId: null,
         selectedSpaceId: null,
       },
@@ -464,7 +435,6 @@ describe('LocationPickerModal', () => {
     it('should be case-insensitive', async () => {
       const wrapper = mount(LocationPickerModal, { ...SHEET_GLOBAL, props: {
         locations: mockLocations,
-        spacesByPlace: {},
         selectedLocationId: null,
         selectedSpaceId: null,
       },
@@ -481,7 +451,6 @@ describe('LocationPickerModal', () => {
     it('should show no results when search has no matches', async () => {
       const wrapper = mount(LocationPickerModal, { ...SHEET_GLOBAL, props: {
         locations: mockLocations,
-        spacesByPlace: {},
         selectedLocationId: null,
         selectedSpaceId: null,
       },
@@ -497,13 +466,13 @@ describe('LocationPickerModal', () => {
     it('search "pacific" matches the rendered display string "Convention Center — Pacific Room"', async () => {
       const conventionCenter = new EventLocation('place-cc', 'Convention Center', '100 Main St', 'Portland', 'OR', '97201');
       const wrapper = mount(LocationPickerModal, { ...SHEET_GLOBAL, props: {
-        locations: [conventionCenter, ...mockLocations],
-        spacesByPlace: {
-          'place-cc': [
+        locations: [
+          placeWithSpaces(conventionCenter, [
             makeSpace('space-pacific', 'place-cc', 'Pacific Room'),
             makeSpace('space-council', 'place-cc', 'Council Chambers'),
-          ],
-        },
+          ]),
+          ...mockLocations,
+        ],
         selectedLocationId: null,
         selectedSpaceId: null,
       },
@@ -526,7 +495,6 @@ describe('LocationPickerModal', () => {
     it('should emit location-selected with placeId/spaceId when a Place entry is clicked', async () => {
       const wrapper = mount(LocationPickerModal, { ...SHEET_GLOBAL, props: {
         locations: mockLocations,
-        spacesByPlace: {},
         selectedLocationId: null,
         selectedSpaceId: null,
       },
@@ -543,7 +511,6 @@ describe('LocationPickerModal', () => {
     it('should allow clicking already selected location', async () => {
       const wrapper = mount(LocationPickerModal, { ...SHEET_GLOBAL, props: {
         locations: mockLocations,
-        spacesByPlace: {},
         selectedLocationId: 'loc-2',
         selectedSpaceId: null,
       },
@@ -563,7 +530,6 @@ describe('LocationPickerModal', () => {
       const wrapper = mount(LocationPickerModal, {
         props: {
           locations: mockLocations,
-          spacesByPlace: {},
           selectedLocationId: null,
           selectedSpaceId: null,
         },
@@ -586,7 +552,6 @@ describe('LocationPickerModal', () => {
       const wrapper = mount(LocationPickerModal, {
         props: {
           locations: mockLocations,
-          spacesByPlace: {},
           selectedLocationId: 'loc-1',
           selectedSpaceId: null,
         },
@@ -610,7 +575,6 @@ describe('LocationPickerModal', () => {
     it('should show message when no locations available', () => {
       const wrapper = mount(LocationPickerModal, { ...SHEET_GLOBAL, props: {
         locations: [],
-        spacesByPlace: {},
         selectedLocationId: null,
         selectedSpaceId: null,
       },

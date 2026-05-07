@@ -41,6 +41,18 @@ class LocationSpaceEntity extends Model {
     const space = new EventLocationSpace(this.id, this.place_id);
     space.originUri = this.origin_uri ?? null;
 
+    // Read computed eventCount from dataValues. Populated by callers that add
+    // `[literal(...), 'eventCount']` via attributes.include on the eager-load
+    // (see LocationService); absent on plain finds, in which case the field
+    // stays undefined on the model (pv-0pht).
+    const rawEventCount = this.getDataValue('eventCount' as any);
+    if (rawEventCount !== undefined && rawEventCount !== null) {
+      const parsed = typeof rawEventCount === 'number' ? rawEventCount : Number(rawEventCount);
+      if (!Number.isNaN(parsed)) {
+        space.eventCount = parsed;
+      }
+    }
+
     if (this.content) {
       for (const contentEntity of this.content) {
         space.addContent(contentEntity.toModel());

@@ -4,6 +4,7 @@ import { EventLocation } from '@/common/model/location';
 import LocationService from '@/server/calendar/service/locations';
 import { Calendar } from '@/common/model/calendar';
 import { LocationEntity } from '@/server/calendar/entity/location';
+import db from '@/server/common/entity/db';
 
 describe('LocationService - Event Update Location Handling (LOC-003)', () => {
   let sandbox: sinon.SinonSandbox;
@@ -14,6 +15,14 @@ describe('LocationService - Event Update Location Handling (LOC-003)', () => {
     sandbox = sinon.createSandbox();
     locationService = new LocationService();
     testCalendar = new Calendar('test-calendar-id', 'test-calendar');
+
+    // createLocation now wraps its writes in db.transaction (pv-0pht.3) — stub
+    // the wrapper so the body runs inline with a fake tx handle. Tests that
+    // do not exercise createLocation are unaffected (the stub is a no-op).
+    sandbox.stub(db, 'transaction').callsFake(async (callback: any) => {
+      const fakeTx = { __brand: 'fake-tx' };
+      return callback(fakeTx);
+    });
   });
 
   afterEach(() => {
@@ -84,9 +93,22 @@ describe('LocationService - Event Update Location Handling (LOC-003)', () => {
       country: 'USA',
     };
 
-    // Mock LocationEntity.findByPk to return null for empty ID
-    // (EventLocation.fromObject with no id creates location with id='')
-    const findByPkStub = sandbox.stub(LocationEntity, 'findByPk').resolves(null);
+    // findByPk is now used by createLocation for the post-write reload
+    // (pv-0pht.3) — return a built entity matching the generated id so the
+    // reload-and-toModel path produces a valid response model.
+    sandbox.stub(LocationEntity, 'findByPk').callsFake(async (id: any) => {
+      if (!id) return null;
+      return LocationEntity.build({
+        id,
+        calendar_id: testCalendar.id,
+        name: locationParams.name,
+        address: locationParams.address,
+        city: locationParams.city,
+        state: locationParams.state,
+        postal_code: locationParams.postalCode,
+        country: locationParams.country,
+      });
+    });
 
     // Mock LocationEntity.findOne to return null (location not found by field matching)
     const findOneStub = sandbox.stub(LocationEntity, 'findOne').resolves(null);
@@ -98,14 +120,6 @@ describe('LocationService - Event Update Location Handling (LOC-003)', () => {
       save: sandbox.stub().resolves(),
     };
     sandbox.stub(LocationEntity, 'fromModel').returns(mockEntity as any);
-
-    // Mock getLocationById to echo back the actual ID assigned by createLocation
-    sandbox.stub(locationService, 'getLocationById').callsFake((_calendar, id) => {
-      return Promise.resolve(new EventLocation(
-        id, locationParams.name, locationParams.address,
-        locationParams.city, locationParams.state, locationParams.postalCode, locationParams.country,
-      ));
-    });
 
     const result = await locationService.findOrCreateLocation(testCalendar, locationParams);
 
@@ -173,9 +187,22 @@ describe('LocationService - Event Update Location Handling (LOC-003)', () => {
       country: 'USA',
     };
 
-    // Mock findByPk to return null for empty ID
-    // (EventLocation.fromObject with no id creates location with id='')
-    sandbox.stub(LocationEntity, 'findByPk').resolves(null);
+    // findByPk is now used by createLocation for the post-write reload
+    // (pv-0pht.3). Return null on empty-id auth-style lookups; return a
+    // built entity for the post-write reload using the generated UUID.
+    sandbox.stub(LocationEntity, 'findByPk').callsFake(async (id: any) => {
+      if (!id) return null;
+      return LocationEntity.build({
+        id,
+        calendar_id: testCalendar.id,
+        name: newLocationParams.name,
+        address: newLocationParams.address,
+        city: newLocationParams.city,
+        state: newLocationParams.state,
+        postal_code: newLocationParams.postalCode,
+        country: newLocationParams.country,
+      });
+    });
 
     // Mock findOne to return null (new location doesn't exist yet)
     sandbox.stub(LocationEntity, 'findOne').resolves(null);
@@ -187,14 +214,6 @@ describe('LocationService - Event Update Location Handling (LOC-003)', () => {
       save: sandbox.stub().resolves(),
     };
     sandbox.stub(LocationEntity, 'fromModel').returns(mockEntity as any);
-
-    // Mock getLocationById to echo back the actual ID assigned by createLocation
-    sandbox.stub(locationService, 'getLocationById').callsFake((_calendar, id) => {
-      return Promise.resolve(new EventLocation(
-        id, newLocationParams.name, newLocationParams.address,
-        newLocationParams.city, newLocationParams.state, newLocationParams.postalCode, newLocationParams.country,
-      ));
-    });
 
     const result = await locationService.findOrCreateLocation(testCalendar, newLocationParams);
 

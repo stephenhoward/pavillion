@@ -250,4 +250,116 @@ describe('EventLocationSpace Model', () => {
 
     expect(restored.originUri).toBe('https://remote.example/spaces/round-trip');
   });
+
+  test('clientId defaults to undefined on a freshly constructed space', () => {
+    const space = new EventLocationSpace('s1', 'p1');
+
+    expect(space.clientId).toBeUndefined();
+  });
+
+  test('toObject omits clientId when undefined (conditional emit, per originUri precedent)', () => {
+    const space = new EventLocationSpace('s1', 'p1');
+
+    const obj = space.toObject();
+
+    expect(obj).not.toHaveProperty('clientId');
+  });
+
+  test('toObject emits clientId when set', () => {
+    const space = new EventLocationSpace('', 'p1');
+    space.clientId = 'tmp-1234';
+
+    const obj = space.toObject();
+
+    expect(obj.clientId).toBe('tmp-1234');
+  });
+
+  test('fromObject reads clientId when present', () => {
+    const obj = {
+      placeId: 'p1',
+      clientId: 'tmp-5678',
+    };
+
+    const restored = EventLocationSpace.fromObject(obj);
+
+    expect(restored.clientId).toBe('tmp-5678');
+  });
+
+  test('fromObject leaves clientId undefined when absent', () => {
+    const obj = {
+      id: 's1',
+      placeId: 'p1',
+    };
+
+    const restored = EventLocationSpace.fromObject(obj);
+
+    expect(restored.clientId).toBeUndefined();
+  });
+
+  test('clientId round-trips through toObject and fromObject when set', () => {
+    const original = new EventLocationSpace('', 'p1');
+    original.clientId = 'tmp-rt';
+
+    const restored = EventLocationSpace.fromObject(original.toObject());
+
+    expect(restored.clientId).toBe('tmp-rt');
+  });
+
+  test('eventCount defaults to undefined on a freshly constructed space', () => {
+    const space = new EventLocationSpace('s1', 'p1');
+
+    expect(space.eventCount).toBeUndefined();
+  });
+
+  test('fromObject reads eventCount when present', () => {
+    const obj = {
+      id: 's1',
+      placeId: 'p1',
+      eventCount: 5,
+    };
+
+    const restored = EventLocationSpace.fromObject(obj);
+
+    expect(restored.eventCount).toBe(5);
+  });
+
+  test('fromObject reads eventCount of zero', () => {
+    const obj = {
+      id: 's1',
+      placeId: 'p1',
+      eventCount: 0,
+    };
+
+    const restored = EventLocationSpace.fromObject(obj);
+
+    expect(restored.eventCount).toBe(0);
+  });
+
+  test('toObject omits eventCount entirely (read-only computed field)', () => {
+    const space = new EventLocationSpace('s1', 'p1');
+    space.eventCount = 5;
+
+    const obj = space.toObject();
+
+    expect(obj).not.toHaveProperty('eventCount');
+  });
+
+  test('round-trip preserves clientId, drops eventCount, preserves all other fields', () => {
+    const original = new EventLocationSpace('s1', 'p1');
+    original.addContent(new EventLocationSpaceContent('en', 'Pacific Room', 'Hearing loop'));
+    original.originUri = 'https://remote.example/spaces/abc';
+    original.clientId = 'tmp-9999';
+    original.eventCount = 42;
+
+    const obj = original.toObject();
+    const restored = EventLocationSpace.fromObject(obj);
+
+    expect(restored.id).toBe('s1');
+    expect(restored.placeId).toBe('p1');
+    expect(restored.originUri).toBe('https://remote.example/spaces/abc');
+    expect(restored.clientId).toBe('tmp-9999');
+    expect(restored.eventCount).toBeUndefined();
+    expect(restored.content('en').name).toBe('Pacific Room');
+    expect(restored.content('en').accessibilityInfo).toBe('Hearing loop');
+  });
 });

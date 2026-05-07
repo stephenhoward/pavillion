@@ -6,37 +6,34 @@
  * e.g. a meeting room within a community center). Pairs `LanguageTabSelector`
  * with per-language `name` + `accessibilityInfo` form fields.
  *
- * Acts as a self-contained sub-editor: emits `save` and `cancel` events
- * rather than navigating. The parent (edit-place.vue's Spaces section,
- * pv-ix7v.4.5) is responsible for mounting/dismounting this component and
- * for fetching the cached Spaces via `locationStore.fetchSpaces`.
+ * Acts as a child-emits-data sub-editor: emits `save` with a staged content
+ * payload and `cancel` with no payload. The parent (`edit-place.vue`'s Spaces
+ * section, pv-0pht) is responsible for merging the payload into its working
+ * `place.spaces` buffer (creating a new entry with a generated `clientId` for
+ * staged-but-unsaved Spaces, or replacing the existing entry's content).
  *
  * Validation rule: at least one language must have a non-empty name.
  *
- * Related plan: docs/superpowers/plans/2026-05-05-place-spaces.md, Task 1.16
+ * Related plan: docs/superpowers/plans/2026-05-05-place-spaces.md
  */
 import { ref, reactive, computed, onBeforeMount, watch, nextTick } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import LanguageTabSelector from '@/client/components/common/language-tab-selector.vue';
 import languagePicker from '@/client/components/common/language-picker.vue';
-import { useLocationStore } from '@/client/stores/locationStore';
-import type { SpaceContentByLang } from '@/client/service/location';
+import { EventLocationSpace, EventLocationSpaceContent } from '@/common/model/location';
 import iso6391 from 'iso-639-1-dir';
 
 const props = defineProps<{
-  /** URL name of the calendar (used by the locationStore Space accessors). */
-  calendarUrlName: string;
-  /** ID of the parent Place (EventLocation). */
-  placeId: string;
   /**
-   * ID of the Space being edited. When unset, the editor operates in create
-   * mode and `save` calls `locationStore.createSpace`.
+   * The Space being edited, or `null` for create mode. The parent passes its
+   * working-buffer entry directly; this component reads (but does not mutate)
+   * it during initialization and emits a fresh staged copy on save.
    */
-  spaceId?: string | null;
+  space?: EventLocationSpace | null;
 }>();
 
 const emit = defineEmits<{
-  (e: 'save'): void;
+  (e: 'save', payload: EventLocationSpace): void;
   (e: 'cancel'): void;
 }>();
 
@@ -44,12 +41,9 @@ const { t } = useTranslation('calendars', {
   keyPrefix: 'places.space',
 });
 
-const locationStore = useLocationStore();
-
-const isEditMode = computed(() => Boolean(props.spaceId));
+const isEditMode = computed(() => Boolean(props.space?.id || props.space?.clientId));
 
 const state = reactive({
-  isSaving: false,
   error: '' as string,
 });
 
@@ -99,20 +93,34 @@ function handleAddLanguage(language: string) {
 }
 
 /**
- * Build the per-language content payload accepted by the Space create/update
- * endpoints. Only languages with a non-empty name OR non-empty accessibility
- * info are included.
+ * Build a staged `EventLocationSpace` carrying the form's per-language
+ * content. Preserves the source row's identity (server `id` and/or `clientId`)
+ * when editing an existing entry; create mode leaves both fields empty so the
+ * parent can stamp a fresh `clientId` before merging into `place.spaces`.
+ *
+ * Only languages with a non-empty name OR non-empty accessibility info are
+ * included so empty tabs don't pollute the staged payload.
  */
-function buildContentByLang(): SpaceContentByLang {
-  const content: SpaceContentByLang = {};
+function buildStagedSpace(): EventLocationSpace {
+  const source = props.space ?? null;
+  const staged = new EventLocationSpace(source?.id || undefined, source?.placeId || undefined);
+  if (source?.clientId) {
+    staged.clientId = source.clientId;
+  }
+  // eventCount is read-only — preserve the source row's value so the parent's
+  // delete-dialog branch logic continues to work after an edit.
+  if (source && typeof source.eventCount === 'number') {
+    staged.eventCount = source.eventCount;
+  }
+
   for (const lang of languages.value) {
     const name = (nameByLang[lang] ?? '').trim();
     const accessibilityInfo = (accessibilityByLang[lang] ?? '').trim();
     if (name.length > 0 || accessibilityInfo.length > 0) {
-      content[lang] = { name, accessibilityInfo };
+      staged.addContent(new EventLocationSpaceContent(lang, name, accessibilityInfo));
     }
   }
-  return content;
+  return staged;
 }
 
 /**
@@ -122,7 +130,7 @@ function hasAtLeastOneName(): boolean {
   return languages.value.some(lang => (nameByLang[lang] ?? '').trim().length > 0);
 }
 
-async function handleSave() {
+function handleSave() {
   state.error = '';
 
   if (!hasAtLeastOneName()) {
@@ -130,34 +138,8 @@ async function handleSave() {
     return;
   }
 
-  const contentByLang = buildContentByLang();
-  state.isSaving = true;
-
-  try {
-    if (isEditMode.value && props.spaceId) {
-      await locationStore.updateSpace(
-        props.calendarUrlName,
-        props.placeId,
-        props.spaceId,
-        contentByLang,
-      );
-    }
-    else {
-      await locationStore.createSpace(
-        props.calendarUrlName,
-        props.placeId,
-        contentByLang,
-      );
-    }
-    emit('save');
-  }
-  catch (error) {
-    console.error('Error saving space:', error);
-    state.error = t('error_saving');
-  }
-  finally {
-    state.isSaving = false;
-  }
+  const staged = buildStagedSpace();
+  emit('save', staged);
 }
 
 function handleCancel() {
@@ -165,31 +147,26 @@ function handleCancel() {
 }
 
 /**
- * Initialize form state. In edit mode, populate from the Space cached in
- * `locationStore.spacesByPlace[placeId]`. The parent is expected to have
- * already called `locationStore.fetchSpaces` before mounting this editor.
+ * Initialize form state. In edit mode, populate per-language inputs from the
+ * source `space` prop (the parent's working-buffer entry). The component does
+ * not mutate the prop — `handleSave` emits a freshly-built staged copy.
  */
 onBeforeMount(() => {
   // Always seed the default language so the form has at least one tab.
   if (!(defaultLanguage in nameByLang)) nameByLang[defaultLanguage] = '';
   if (!(defaultLanguage in accessibilityByLang)) accessibilityByLang[defaultLanguage] = '';
 
-  if (!isEditMode.value || !props.spaceId) {
+  const source = props.space ?? null;
+  if (!source) {
     return;
   }
 
-  const cached = locationStore.getSpacesForPlace(props.placeId);
-  const space = cached.find(s => s.id === props.spaceId);
-  if (!space) {
-    return;
-  }
-
-  const contentLanguages = space.getLanguages();
+  const contentLanguages = source.getLanguages();
   for (const lang of contentLanguages) {
     if (!languages.value.includes(lang)) {
       languages.value.push(lang);
     }
-    const c = space.content(lang);
+    const c = source.content(lang);
     nameByLang[lang] = c.name ?? '';
     accessibilityByLang[lang] = c.accessibilityInfo ?? '';
   }
@@ -280,7 +257,6 @@ onBeforeMount(() => {
         <button
           type="button"
           class="btn-cancel"
-          :disabled="state.isSaving"
           @click="handleCancel"
         >
           {{ t('cancel') }}
@@ -288,9 +264,8 @@ onBeforeMount(() => {
         <button
           type="submit"
           class="btn-save"
-          :disabled="state.isSaving"
         >
-          {{ t('save') }}
+          {{ t('done') }}
         </button>
       </footer>
     </form>

@@ -342,6 +342,33 @@ export default class CalendarInterface {
     return this.locationService.deleteLocation(calendar, locationId);
   }
 
+  /**
+   * Reassign events from one Space to another within a single Place.
+   *
+   * Single SQL UPDATE inside a transaction:
+   *   UPDATE events SET space_id = :toSpaceId
+   *   WHERE place_id = :placeId AND space_id = :fromSpaceId
+   *
+   * The `place_id` WHERE-clause is the safety boundary — events outside this
+   * Place can never be touched. Out-of-Place `fromSpaceId` returns
+   * `{ count: 0, placeFound: true, toSpaceValid: true }` (idempotent no-op
+   * for retry semantics).
+   *
+   * @param calendar - The calendar that should own the Place
+   * @param placeId - The Place id; events outside this Place are never touched
+   * @param fromSpaceId - The current Space id to migrate events away from
+   * @param toSpaceId - The destination Space id; must be on this Place
+   * @returns `{ count, placeFound, toSpaceValid }` discriminator object
+   */
+  async reassignEvents(
+    calendar: Calendar,
+    placeId: string,
+    fromSpaceId: string,
+    toSpaceId: string,
+  ): Promise<{ count: number; placeFound: boolean; toSpaceValid: boolean }> {
+    return this.locationService.reassignEvents(calendar, placeId, fromSpaceId, toSpaceId);
+  }
+
   // Space (Place sub-area) operations
 
   /**

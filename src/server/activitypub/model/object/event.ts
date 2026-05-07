@@ -881,6 +881,11 @@ class EventObject extends ActivityPubObject {
   private _buildPavillionSpace(space: EventLocationSpace, calendar: Calendar): Record<string, any> {
     const domain = config.get('domain');
     return {
+      // ActivityPub identifier (NOT a route). The
+      // `/calendars/.../places/.../spaces/...` form is an opaque AP id used
+      // for cross-instance reference equality; there is no HTTP GET handler
+      // mounted at this path. Per pv-0pht.5, the per-Space CRUD routes were
+      // removed when nested Place + Spaces save subsumed them.
       id: `https://${domain}/calendars/${calendar.urlName}/places/${space.placeId}/spaces/${space.id}`,
       content: Object.fromEntries(
         Object.entries(space._content).map(([lang, c]) => [

@@ -179,3 +179,48 @@ export class SpaceLocationMismatchError extends Error {
     Object.setPrototypeOf(this, SpaceLocationMismatchError.prototype);
   }
 }
+
+/**
+ * Custom error class raised when an incoming Space `id` in a Place update
+ * snapshot does not match a row scoped by `place_id = :locationId`.
+ *
+ * This is the security boundary for nested Place + Spaces save (pv-0pht):
+ * the caller cannot smuggle a Space `id` from a sibling Place — even one
+ * owned by the same calendar — into another Place's update payload. The
+ * service-layer diff rejects any incoming Space `id` not present in the
+ * loaded set scoped to the route's `:locationId`. Serialized as HTTP 400
+ * at the API boundary with `errorName: 'SpaceHijackError'`.
+ */
+export class SpaceHijackError extends Error {
+  constructor(
+    public spaceId: string,
+    public expectedPlaceId: string,
+    message?: string,
+  ) {
+    super(message ?? `Space ${spaceId} does not belong to place ${expectedPlaceId}`);
+    this.name = 'SpaceHijackError';
+    // Maintaining proper prototype chain in ES5+
+    Object.setPrototypeOf(this, SpaceHijackError.prototype);
+  }
+}
+
+/**
+ * Custom error class raised when an incoming Space `clientId` in a Place
+ * create/update snapshot is not a valid UUID v4. Serialized as HTTP 400 at
+ * the API boundary with `errorName: 'InvalidClientIdError'`.
+ *
+ * `clientId` is a transient correlation token and never a row primary key,
+ * but it must still be a well-formed UUID so the round-trip echo cannot be
+ * abused to inject arbitrary data into the response payload (pv-0pht).
+ */
+export class InvalidClientIdError extends Error {
+  constructor(
+    public clientId: unknown,
+    message?: string,
+  ) {
+    super(message ?? 'Invalid clientId format');
+    this.name = 'InvalidClientIdError';
+    // Maintaining proper prototype chain in ES5+
+    Object.setPrototypeOf(this, InvalidClientIdError.prototype);
+  }
+}

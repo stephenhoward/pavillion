@@ -114,15 +114,27 @@ describe('GET /api/public/v1/events/:eventId/instances/:startTime', () => {
     }
     locationId = locResponse.body.id;
 
-    // Create a Space under that Place.
-    const spaceResponse = await request(env.app)
-      .post(`/api/v1/calendars/instancecal/places/${locationId}/spaces`)
+    // Add a Space under that Place via the nested-snapshot PUT endpoint
+    // (pv-0pht.5 — per-Space CRUD routes have been removed; the Place's
+    // `spaces[]` is the single write surface).
+    const placeUpdate = await request(env.app)
+      .put(`/api/v1/calendars/${calendarId}/locations/${locationId}`)
       .set('Authorization', `Bearer ${ownerToken}`)
-      .send({ content: { en: { name: 'Main Hall', accessibilityInfo: 'Step-free entry; hearing loop installed.' } } });
-    if (spaceResponse.status !== 201) {
-      throw new Error(`Failed to create space: ${spaceResponse.status} ${JSON.stringify(spaceResponse.body)}`);
+      .send({
+        name: 'Test Venue',
+        address: '1 Main St',
+        city: 'Testville',
+        spaces: [
+          { content: { en: { name: 'Main Hall', accessibilityInfo: 'Step-free entry; hearing loop installed.' } } },
+        ],
+      });
+    if (placeUpdate.status !== 200) {
+      throw new Error(`Failed to add space via Place PUT: ${placeUpdate.status} ${JSON.stringify(placeUpdate.body)}`);
     }
-    spaceId = spaceResponse.body.id;
+    if (!Array.isArray(placeUpdate.body.spaces) || placeUpdate.body.spaces.length === 0) {
+      throw new Error(`Place PUT did not return spaces[]: ${JSON.stringify(placeUpdate.body)}`);
+    }
+    spaceId = placeUpdate.body.spaces[0].id;
   });
 
   afterAll(async () => {

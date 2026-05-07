@@ -113,6 +113,10 @@ class EventLocation extends TranslatedModel<EventLocationContent> {
   // Identity hint for AP-originated records (inbound dedup, pv-ix7v).
   // Null for locally-created Places.
   originUri: string | null = null;
+  // Sub-areas (rooms, sections) of this Place. Populated by eager-load on the
+  // server and by the client when editing; serialized as a nested array so
+  // Place + Spaces can be saved atomically (pv-0pht).
+  spaces: EventLocationSpace[] = [];
 
   /**
    * Constructor for EventLocation.
@@ -170,6 +174,11 @@ class EventLocation extends TranslatedModel<EventLocationContent> {
       }
     }
 
+    // Load nested spaces if present (pv-0pht atomic Place + Spaces wire contract)
+    if (Array.isArray(obj.spaces)) {
+      location.spaces = obj.spaces.map((spaceObj: Record<string, any>) => EventLocationSpace.fromObject(spaceObj));
+    }
+
     return location;
   }
 
@@ -192,6 +201,9 @@ class EventLocation extends TranslatedModel<EventLocationContent> {
         Object.entries(this._content)
           .map(([language, content]: [string, EventLocationContent]) => [language, content.toObject()]),
       ),
+      // Always emit spaces (even when empty) so the wire contract is stable
+      // for atomic Place + Spaces save (pv-0pht).
+      spaces: this.spaces.map((space) => space.toObject()),
     };
     // Emit originUri only when non-null (data minimization, DEC-004 spirit)
     if (this.originUri !== null) {
@@ -212,6 +224,14 @@ class EventLocationSpace extends TranslatedModel<EventLocationSpaceContent> {
   // Identity hint for AP-originated records (inbound dedup, pv-ix7v).
   // Null for locally-created Spaces.
   originUri: string | null = null;
+  // Transient correlation token used by the client to match a freshly-saved
+  // Space row back to its draft form entry during atomic Place + Spaces save.
+  // NOT a row ID — set only on the wire while a Space is unsaved (pv-0pht).
+  clientId?: string;
+  // Read-only computed field reporting how many events on the parent Place
+  // currently reference this Space. Populated by server eager-loads; never
+  // sent in writes and never emitted by toObject (pv-0pht).
+  eventCount?: number;
 
   /**
    * Constructor for EventLocationSpace.
@@ -246,6 +266,12 @@ class EventLocationSpace extends TranslatedModel<EventLocationSpaceContent> {
     if (obj.originUri !== undefined && obj.originUri !== null) {
       space.originUri = obj.originUri;
     }
+    if (typeof obj.clientId === 'string') {
+      space.clientId = obj.clientId;
+    }
+    if (typeof obj.eventCount === 'number') {
+      space.eventCount = obj.eventCount;
+    }
 
     // Load content if present
     if (obj.content) {
@@ -279,6 +305,16 @@ class EventLocationSpace extends TranslatedModel<EventLocationSpaceContent> {
     if (this.originUri !== null) {
       obj.originUri = this.originUri;
     }
+    // Emit clientId only when set, mirroring the originUri precedent. Carries
+    // the transient correlation token from client to server during atomic
+    // Place + Spaces save (pv-0pht).
+    if (this.clientId !== undefined) {
+      obj.clientId = this.clientId;
+    }
+    // eventCount is intentionally omitted: it is a read-only computed field
+    // populated by server eager-loads and must never round-trip into a write.
+    // The API layer's GET serialization adds it back when present (see
+    // server/calendar/api/v1/location.ts).
     return obj;
   }
 };

@@ -1,18 +1,21 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { flushPromises } from '@vue/test-utils';
 import { createMemoryHistory, createRouter, Router } from 'vue-router';
 import { createPinia, setActivePinia, Pinia } from 'pinia';
 import { mountComponent } from '@/client/test/lib/vue';
 import EditSpaceView from '@/client/components/logged_in/calendar/edit-space.vue';
-import { useLocationStore } from '@/client/stores/locationStore';
 import { EventLocationSpace, EventLocationSpaceContent } from '@/common/model/location';
 
 /**
  * Build an `EventLocationSpace` populated with translated content for the
- * supplied languages. Used to seed the locationStore cache so the edit-mode
- * component can read existing content via `getSpacesForPlace`.
+ * supplied languages. Used as the `space` prop in edit-mode tests so the
+ * component reads existing content directly from the parent's working buffer.
  */
-const createMockSpace = (id: string, placeId: string, contents: Array<{ language: string; name: string; accessibilityInfo?: string }>) => {
+const createMockSpace = (
+  id: string | undefined,
+  placeId: string,
+  contents: Array<{ language: string; name: string; accessibilityInfo?: string }>,
+) => {
   const space = new EventLocationSpace(id, placeId);
   for (const c of contents) {
     space.addContent(new EventLocationSpaceContent(c.language, c.name, c.accessibilityInfo ?? ''));
@@ -21,7 +24,7 @@ const createMockSpace = (id: string, placeId: string, contents: Array<{ language
 };
 
 const createWrapper = async (
-  props: { calendarUrlName: string; placeId: string; spaceId?: string | null } = { calendarUrlName: 'test-calendar', placeId: 'place-1' },
+  props: { space?: EventLocationSpace | null } = {},
   pinia?: Pinia,
 ) => {
   // edit-space does not navigate, but mountComponent requires a router instance.
@@ -43,7 +46,7 @@ describe('EditSpaceView', () => {
   });
 
   describe('Create mode', () => {
-    it('renders with the New Space title', async () => {
+    it('renders with the New Space title when no space prop is provided', async () => {
       const wrapper = await createWrapper();
       const heading = wrapper.find('.space-editor-title');
       expect(heading.exists()).toBe(true);
@@ -70,88 +73,62 @@ describe('EditSpaceView', () => {
       expect(indicator.attributes('aria-hidden')).toBe('true');
     });
 
-    it('calls locationStore.createSpace with content keyed by language on save', async () => {
+    it('emits save with a staged EventLocationSpace carrying per-language content', async () => {
       const wrapper = await createWrapper();
-      const store = useLocationStore();
-      const createSpy = vi.spyOn(store, 'createSpace').mockResolvedValue(
-        createMockSpace('space-new', 'place-1', [{ language: 'en', name: 'Pacific Room' }]),
-      );
 
       await wrapper.find('[id^="space-name-"]').setValue('Pacific Room');
       await wrapper.find('[id^="space-accessibility-"]').setValue('Wheelchair accessible');
       await wrapper.find('form').trigger('submit');
       await flushPromises();
 
-      expect(createSpy).toHaveBeenCalledWith(
-        'test-calendar',
-        'place-1',
-        {
-          en: { name: 'Pacific Room', accessibilityInfo: 'Wheelchair accessible' },
-        },
-      );
+      const saveEvents = wrapper.emitted('save');
+      expect(saveEvents).toBeTruthy();
+      expect(saveEvents).toHaveLength(1);
+
+      const payload = saveEvents![0][0] as EventLocationSpace;
+      expect(payload).toBeInstanceOf(EventLocationSpace);
+      // No source row → identity fields are blank; parent stamps a clientId.
+      expect(payload.id).toBe('');
+      expect(payload.clientId).toBeUndefined();
+      expect(payload.content('en').name).toBe('Pacific Room');
+      expect(payload.content('en').accessibilityInfo).toBe('Wheelchair accessible');
     });
 
-    it('does not call updateSpace in create mode', async () => {
+    it('emits save when only the name is filled (accessibility info optional)', async () => {
       const wrapper = await createWrapper();
-      const store = useLocationStore();
-      vi.spyOn(store, 'createSpace').mockResolvedValue(
-        createMockSpace('space-new', 'place-1', [{ language: 'en', name: 'Pacific Room' }]),
-      );
-      const updateSpy = vi.spyOn(store, 'updateSpace').mockResolvedValue(
-        createMockSpace('space-new', 'place-1', [{ language: 'en', name: 'Pacific Room' }]),
-      );
 
       await wrapper.find('[id^="space-name-"]').setValue('Pacific Room');
       await wrapper.find('form').trigger('submit');
       await flushPromises();
 
-      expect(updateSpy).not.toHaveBeenCalled();
-    });
-
-    it('emits save after a successful create', async () => {
-      const wrapper = await createWrapper();
-      const store = useLocationStore();
-      vi.spyOn(store, 'createSpace').mockResolvedValue(
-        createMockSpace('space-new', 'place-1', [{ language: 'en', name: 'Pacific Room' }]),
-      );
-
-      await wrapper.find('[id^="space-name-"]').setValue('Pacific Room');
-      await wrapper.find('form').trigger('submit');
-      await flushPromises();
-
-      expect(wrapper.emitted('save')).toBeTruthy();
-      expect(wrapper.emitted('save')).toHaveLength(1);
+      const saveEvents = wrapper.emitted('save');
+      expect(saveEvents).toBeTruthy();
+      const payload = saveEvents![0][0] as EventLocationSpace;
+      expect(payload.content('en').name).toBe('Pacific Room');
+      expect(payload.content('en').accessibilityInfo).toBe('');
     });
   });
 
   describe('Validation', () => {
-    it('shows an error and does not call the store when no language has a non-empty name', async () => {
+    it('shows an error and does not emit save when no language has a non-empty name', async () => {
       const wrapper = await createWrapper();
-      const store = useLocationStore();
-      const createSpy = vi.spyOn(store, 'createSpace').mockResolvedValue(
-        createMockSpace('space-new', 'place-1', [{ language: 'en', name: 'x' }]),
-      );
 
       await wrapper.find('form').trigger('submit');
       await flushPromises();
 
-      expect(createSpy).not.toHaveBeenCalled();
+      expect(wrapper.emitted('save')).toBeFalsy();
       const error = wrapper.find('[role="alert"]');
       expect(error.exists()).toBe(true);
     });
 
     it('treats whitespace-only names as empty for validation', async () => {
       const wrapper = await createWrapper();
-      const store = useLocationStore();
-      const createSpy = vi.spyOn(store, 'createSpace').mockResolvedValue(
-        createMockSpace('space-new', 'place-1', [{ language: 'en', name: 'x' }]),
-      );
 
       await wrapper.find('[id^="space-name-"]').setValue('   ');
       await wrapper.find('form').trigger('submit');
       await flushPromises();
 
-      expect(createSpy).not.toHaveBeenCalled();
+      expect(wrapper.emitted('save')).toBeFalsy();
       const error = wrapper.find('[role="alert"]');
       expect(error.exists()).toBe(true);
     });
@@ -166,42 +143,21 @@ describe('EditSpaceView', () => {
   });
 
   describe('Edit mode', () => {
-    it('renders with the Edit Space title when spaceId is set', async () => {
-      // Seed the store cache so the edit-mode populates from cached state.
-      const pinia = createPinia();
-      setActivePinia(pinia);
-      const store = useLocationStore();
-      store.setSpacesForPlace('place-1', [
-        createMockSpace('space-1', 'place-1', [
-          { language: 'en', name: 'Pacific Room', accessibilityInfo: 'Step-free entry' },
-        ]),
+    it('renders with the Edit Space title when an existing space is passed in', async () => {
+      const space = createMockSpace('space-1', 'place-1', [
+        { language: 'en', name: 'Pacific Room', accessibilityInfo: 'Step-free entry' },
       ]);
-
-      const wrapper = await createWrapper({
-        calendarUrlName: 'test-calendar',
-        placeId: 'place-1',
-        spaceId: 'space-1',
-      }, pinia);
+      const wrapper = await createWrapper({ space });
 
       const heading = wrapper.find('.space-editor-title');
       expect(heading.text()).toBe('Edit Space');
     });
 
-    it('populates the form from cached Space content', async () => {
-      const pinia = createPinia();
-      setActivePinia(pinia);
-      const store = useLocationStore();
-      store.setSpacesForPlace('place-1', [
-        createMockSpace('space-1', 'place-1', [
-          { language: 'en', name: 'Pacific Room', accessibilityInfo: 'Step-free entry' },
-        ]),
+    it('populates the form from the source space prop', async () => {
+      const space = createMockSpace('space-1', 'place-1', [
+        { language: 'en', name: 'Pacific Room', accessibilityInfo: 'Step-free entry' },
       ]);
-
-      const wrapper = await createWrapper({
-        calendarUrlName: 'test-calendar',
-        placeId: 'place-1',
-        spaceId: 'space-1',
-      }, pinia);
+      const wrapper = await createWrapper({ space });
 
       const nameInput = wrapper.find('[id^="space-name-"]');
       const textarea = wrapper.find('[id^="space-accessibility-"]');
@@ -209,84 +165,56 @@ describe('EditSpaceView', () => {
       expect((textarea.element as HTMLTextAreaElement).value).toBe('Step-free entry');
     });
 
-    it('calls locationStore.updateSpace on save with the spaceId', async () => {
-      const pinia = createPinia();
-      setActivePinia(pinia);
-      const store = useLocationStore();
-      store.setSpacesForPlace('place-1', [
-        createMockSpace('space-1', 'place-1', [
-          { language: 'en', name: 'Pacific Room' },
-        ]),
+    it('emits save with a staged copy preserving the source row identity', async () => {
+      const space = createMockSpace('space-1', 'place-1', [
+        { language: 'en', name: 'Pacific Room' },
       ]);
-      const updateSpy = vi.spyOn(store, 'updateSpace').mockResolvedValue(
-        createMockSpace('space-1', 'place-1', [{ language: 'en', name: 'Atlantic Room' }]),
-      );
-
-      const wrapper = await createWrapper({
-        calendarUrlName: 'test-calendar',
-        placeId: 'place-1',
-        spaceId: 'space-1',
-      }, pinia);
+      const wrapper = await createWrapper({ space });
 
       await wrapper.find('[id^="space-name-"]').setValue('Atlantic Room');
       await wrapper.find('form').trigger('submit');
       await flushPromises();
 
-      expect(updateSpy).toHaveBeenCalledWith(
-        'test-calendar',
-        'place-1',
-        'space-1',
-        { en: expect.objectContaining({ name: 'Atlantic Room' }) },
-      );
+      const saveEvents = wrapper.emitted('save');
+      expect(saveEvents).toBeTruthy();
+      const payload = saveEvents![0][0] as EventLocationSpace;
+      expect(payload).toBeInstanceOf(EventLocationSpace);
+      expect(payload.id).toBe('space-1');
+      expect(payload.placeId).toBe('place-1');
+      expect(payload.content('en').name).toBe('Atlantic Room');
     });
 
-    it('does not call createSpace in edit mode', async () => {
-      const pinia = createPinia();
-      setActivePinia(pinia);
-      const store = useLocationStore();
-      store.setSpacesForPlace('place-1', [
-        createMockSpace('space-1', 'place-1', [{ language: 'en', name: 'Pacific Room' }]),
+    it('preserves the source row clientId when editing a staged-but-unsaved space', async () => {
+      const stagedSpace = createMockSpace(undefined, 'place-1', [
+        { language: 'en', name: 'Pacific Room' },
       ]);
-      const createSpy = vi.spyOn(store, 'createSpace').mockResolvedValue(
-        createMockSpace('space-x', 'place-1', [{ language: 'en', name: 'x' }]),
-      );
-      vi.spyOn(store, 'updateSpace').mockResolvedValue(
-        createMockSpace('space-1', 'place-1', [{ language: 'en', name: 'x' }]),
-      );
+      stagedSpace.clientId = 'client-abc';
 
-      const wrapper = await createWrapper({
-        calendarUrlName: 'test-calendar',
-        placeId: 'place-1',
-        spaceId: 'space-1',
-      }, pinia);
+      const wrapper = await createWrapper({ space: stagedSpace });
+
+      await wrapper.find('[id^="space-name-"]').setValue('Atlantic Room');
+      await wrapper.find('form').trigger('submit');
+      await flushPromises();
+
+      const payload = wrapper.emitted('save')![0][0] as EventLocationSpace;
+      expect(payload.id).toBe('');
+      expect(payload.clientId).toBe('client-abc');
+      expect(payload.content('en').name).toBe('Atlantic Room');
+    });
+
+    it('preserves the source row eventCount on the staged payload', async () => {
+      const space = createMockSpace('space-1', 'place-1', [
+        { language: 'en', name: 'Pacific Room' },
+      ]);
+      space.eventCount = 5;
+
+      const wrapper = await createWrapper({ space });
 
       await wrapper.find('form').trigger('submit');
       await flushPromises();
 
-      expect(createSpy).not.toHaveBeenCalled();
-    });
-
-    it('emits save after a successful update', async () => {
-      const pinia = createPinia();
-      setActivePinia(pinia);
-      const store = useLocationStore();
-      store.setSpacesForPlace('place-1', [
-        createMockSpace('space-1', 'place-1', [{ language: 'en', name: 'Pacific Room' }]),
-      ]);
-      vi.spyOn(store, 'updateSpace').mockResolvedValue(
-        createMockSpace('space-1', 'place-1', [{ language: 'en', name: 'Atlantic Room' }]),
-      );
-
-      const wrapper = await createWrapper({
-        calendarUrlName: 'test-calendar',
-        placeId: 'place-1',
-        spaceId: 'space-1',
-      }, pinia);
-
-      await wrapper.find('form').trigger('submit');
-      await flushPromises();
-
-      expect(wrapper.emitted('save')).toBeTruthy();
+      const payload = wrapper.emitted('save')![0][0] as EventLocationSpace;
+      expect(payload.eventCount).toBe(5);
     });
   });
 
@@ -300,65 +228,37 @@ describe('EditSpaceView', () => {
       expect(wrapper.emitted('cancel')).toHaveLength(1);
     });
 
-    it('does not call the store when cancelled without changes', async () => {
+    it('does not emit save when cancelled without changes', async () => {
       const wrapper = await createWrapper();
-      const store = useLocationStore();
-      const createSpy = vi.spyOn(store, 'createSpace').mockResolvedValue(
-        createMockSpace('space-new', 'place-1', [{ language: 'en', name: 'x' }]),
-      );
-      const updateSpy = vi.spyOn(store, 'updateSpace').mockResolvedValue(
-        createMockSpace('space-1', 'place-1', [{ language: 'en', name: 'x' }]),
-      );
 
       await wrapper.find('.btn-cancel').trigger('click');
-      await flushPromises();
-
-      expect(createSpy).not.toHaveBeenCalled();
-      expect(updateSpy).not.toHaveBeenCalled();
-    });
-
-    it('does not call the store when cancelled after typing into the form', async () => {
-      const wrapper = await createWrapper();
-      const store = useLocationStore();
-      const createSpy = vi.spyOn(store, 'createSpace').mockResolvedValue(
-        createMockSpace('space-new', 'place-1', [{ language: 'en', name: 'x' }]),
-      );
-
-      await wrapper.find('[id^="space-name-"]').setValue('Typed but cancelled');
-      await wrapper.find('.btn-cancel').trigger('click');
-      await flushPromises();
-
-      expect(createSpy).not.toHaveBeenCalled();
-    });
-  });
-
-  describe('Error handling', () => {
-    it('shows an error when save fails', async () => {
-      const wrapper = await createWrapper();
-      const store = useLocationStore();
-      vi.spyOn(store, 'createSpace').mockRejectedValueOnce(new Error('Server error'));
-
-      await wrapper.find('[id^="space-name-"]').setValue('Pacific Room');
-      await wrapper.find('form').trigger('submit');
-      await flushPromises();
-
-      const error = wrapper.find('[role="alert"]');
-      expect(error.exists()).toBe(true);
-    });
-
-    it('does not emit save when the store throws', async () => {
-      const wrapper = await createWrapper();
-      const store = useLocationStore();
-      vi.spyOn(store, 'createSpace').mockRejectedValueOnce(new Error('Server error'));
-
-      await wrapper.find('[id^="space-name-"]').setValue('Pacific Room');
-      await wrapper.find('form').trigger('submit');
       await flushPromises();
 
       expect(wrapper.emitted('save')).toBeFalsy();
     });
 
-    it('allows dismissing the error', async () => {
+    it('does not emit save when cancelled after typing into the form', async () => {
+      const wrapper = await createWrapper();
+
+      await wrapper.find('[id^="space-name-"]').setValue('Typed but cancelled');
+      await wrapper.find('.btn-cancel').trigger('click');
+      await flushPromises();
+
+      expect(wrapper.emitted('save')).toBeFalsy();
+    });
+  });
+
+  describe('Done button label', () => {
+    it('renders the submit button with the "Done" label', async () => {
+      const wrapper = await createWrapper();
+      const submitBtn = wrapper.find('button[type="submit"]');
+      expect(submitBtn.exists()).toBe(true);
+      expect(submitBtn.text()).toBe('Done');
+    });
+  });
+
+  describe('Error dismissal', () => {
+    it('allows dismissing the validation error', async () => {
       const wrapper = await createWrapper();
 
       await wrapper.find('form').trigger('submit');

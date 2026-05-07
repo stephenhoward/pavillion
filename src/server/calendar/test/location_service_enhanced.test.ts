@@ -4,6 +4,8 @@ import sinon from 'sinon';
 import { Calendar } from '@/common/model/calendar';
 import { EventLocation, EventLocationContent } from '@/common/model/location';
 import { LocationEntity, LocationContentEntity } from '@/server/calendar/entity/location';
+import { LocationSpaceEntity } from '@/server/calendar/entity/location_space';
+import db from '@/server/common/entity/db';
 import LocationService from '@/server/calendar/service/locations';
 
 describe('LocationService - Enhanced Methods', () => {
@@ -180,7 +182,169 @@ describe('LocationService - Enhanced Methods', () => {
     });
   });
 
+  describe('eager-loaded Spaces with eventCount (pv-0pht.4)', () => {
+    /**
+     * Build a minimal LocationSpaceEntity-like stub: real entity instance so
+     * `toModel()` runs the production path, with a fake `getDataValue` that
+     * surfaces the COUNT(events) value the production literal subquery would
+     * have produced. Keeps the assertions focused on shape (eventCount lands
+     * on the model, spaces[] is populated inline) without faking the entity
+     * itself.
+     */
+    function buildSpaceWithEventCount(spaceId: string, placeId: string, eventCount: number): LocationSpaceEntity {
+      const space = LocationSpaceEntity.build({ id: spaceId, place_id: placeId });
+      const original = space.getDataValue.bind(space);
+      space.getDataValue = ((key: any) => {
+        if (key === 'eventCount') return eventCount;
+        return original(key);
+      }) as any;
+      return space;
+    }
+
+    it('getLocationsForCalendar populates spaces[] inline with eventCount', async () => {
+      const calendar = new Calendar('cal-123', 'testcalendar');
+      const place = LocationEntity.build({
+        id: 'a1b2c3d4-0001-4000-8000-000000000001',
+        calendar_id: 'cal-123',
+        name: 'Convention Center',
+      });
+      place.spaces = [
+        buildSpaceWithEventCount('space-1', 'a1b2c3d4-0001-4000-8000-000000000001', 3),
+        buildSpaceWithEventCount('space-2', 'a1b2c3d4-0001-4000-8000-000000000001', 0),
+      ];
+
+      const findAllStub = sandbox.stub(LocationEntity, 'findAll');
+      findAllStub.resolves([place]);
+
+      const locations = await service.getLocationsForCalendar(calendar);
+
+      expect(locations).toHaveLength(1);
+      expect(locations[0].spaces).toHaveLength(2);
+      expect(locations[0].spaces[0].id).toBe('space-1');
+      expect(locations[0].spaces[0].eventCount).toBe(3);
+      expect(locations[0].spaces[1].id).toBe('space-2');
+      expect(locations[0].spaces[1].eventCount).toBe(0);
+
+      // Eager-load shape: include array carries the LocationSpaceEntity model
+      // alongside the existing LocationContentEntity. The COUNT subquery rides
+      // on the LocationSpaceEntity include's attributes.include.
+      const opts = findAllStub.firstCall.args[0] as any;
+      expect(opts.include).toBeDefined();
+      const spaceInclude = opts.include.find((inc: any) => inc?.model === LocationSpaceEntity);
+      expect(spaceInclude).toBeDefined();
+      expect(spaceInclude.attributes?.include).toBeDefined();
+      // The literal entry is shaped [literal, 'eventCount']
+      const eventCountEntry = spaceInclude.attributes.include.find(
+        (entry: any) => Array.isArray(entry) && entry[1] === 'eventCount',
+      );
+      expect(eventCountEntry).toBeDefined();
+      // N+1 guard: separate:true must be set so Sequelize issues ONE
+      // SELECT for all Spaces (joined via place_id IN-list) instead of one
+      // SELECT per Place. Without this flag a calendar with 50 Places would
+      // emit 51 queries on every list call. (testing-auditor pv-0pht.4
+      // follow-up.)
+      expect(spaceInclude.separate).toBe(true);
+    });
+
+    it('getLocationsForCalendar with no Spaces returns spaces=[] on each Place', async () => {
+      const calendar = new Calendar('cal-123', 'testcalendar');
+      const place = LocationEntity.build({
+        id: 'a1b2c3d4-0001-4000-8000-000000000001',
+        calendar_id: 'cal-123',
+        name: 'Solo Place',
+      });
+      place.spaces = [];
+
+      const findAllStub = sandbox.stub(LocationEntity, 'findAll');
+      findAllStub.resolves([place]);
+
+      const locations = await service.getLocationsForCalendar(calendar);
+
+      expect(locations).toHaveLength(1);
+      expect(locations[0].spaces).toEqual([]);
+    });
+
+    it('getLocationById populates spaces[] with eventCount', async () => {
+      const calendar = new Calendar('cal-123', 'testcalendar');
+      const place = LocationEntity.build({
+        id: 'a1b2c3d4-0001-4000-8000-000000000001',
+        calendar_id: 'cal-123',
+        name: 'Convention Center',
+      });
+      place.spaces = [
+        buildSpaceWithEventCount('space-A', 'a1b2c3d4-0001-4000-8000-000000000001', 5),
+      ];
+
+      const findByPkStub = sandbox.stub(LocationEntity, 'findByPk');
+      findByPkStub.resolves(place);
+
+      const location = await service.getLocationById(calendar, 'a1b2c3d4-0001-4000-8000-000000000001');
+
+      expect(location).not.toBeNull();
+      expect(location!.spaces).toHaveLength(1);
+      expect(location!.spaces[0].id).toBe('space-A');
+      expect(location!.spaces[0].eventCount).toBe(5);
+
+      // Eager-load shape: include block on findByPk carries the Space include
+      // with the COUNT subquery.
+      const opts = findByPkStub.firstCall.args[1] as any;
+      expect(opts.include).toBeDefined();
+      const spaceInclude = opts.include.find((inc: any) => inc?.model === LocationSpaceEntity);
+      expect(spaceInclude).toBeDefined();
+      expect(spaceInclude.attributes?.include).toBeDefined();
+      // N+1 guard: separate:true keeps the eager-load shape consistent with
+      // getLocationsForCalendar — Sequelize issues a single SELECT for the
+      // Spaces of this Place rather than nesting them in the parent SELECT.
+      // (testing-auditor pv-0pht.4 follow-up.)
+      expect(spaceInclude.separate).toBe(true);
+    });
+
+    it('getLocationById returns null without dereferencing spaces when calendar mismatched', async () => {
+      const calendar = new Calendar('cal-123', 'testcalendar');
+      const place = LocationEntity.build({
+        id: 'a1b2c3d4-0001-4000-8000-000000000001',
+        calendar_id: 'other-cal',
+        name: 'Foreign Place',
+      });
+
+      const findByPkStub = sandbox.stub(LocationEntity, 'findByPk');
+      findByPkStub.resolves(place);
+
+      const location = await service.getLocationById(calendar, 'a1b2c3d4-0001-4000-8000-000000000001');
+
+      expect(location).toBeNull();
+      expect(findByPkStub.calledOnce).toBe(true);
+    });
+  });
+
   describe('createLocation with content', () => {
+    // Stub db.transaction so the create body runs inline with a fake tx handle.
+    let txStub: sinon.SinonStub;
+    beforeEach(() => {
+      txStub = sandbox.stub(db, 'transaction').callsFake(async (callback: any) => {
+        const fakeTx = { __brand: 'fake-tx' };
+        return callback(fakeTx);
+      });
+    });
+
+    /**
+     * Helper: stub LocationEntity.findByPk so the post-write reload returns
+     * a Place built from the supplied attributes. The id is whatever the
+     * service generated and passed to findByPk.
+     */
+    function stubReload(calendarId: string, name: string, contents: { language: string; accessibility_info: string }[] = []) {
+      const stub = sandbox.stub(LocationEntity, 'findByPk');
+      stub.callsFake(async (id: any) => {
+        const place = LocationEntity.build({ id, calendar_id: calendarId, name });
+        place.content = contents.map(c =>
+          LocationContentEntity.build({ location_id: id, language: c.language, accessibility_info: c.accessibility_info }),
+        );
+        place.spaces = [];
+        return place;
+      });
+      return stub;
+    }
+
     it('should create location with accessibility content', async () => {
       const calendar = new Calendar('cal-123', 'testcalendar');
 
@@ -199,18 +363,9 @@ describe('LocationService - Enhanced Methods', () => {
       const saveStub = sandbox.stub(LocationEntity.prototype, 'save');
       const contentSaveStub = sandbox.stub(LocationContentEntity.prototype, 'save');
 
-      // Stub getLocationById to return the created location
-      const getLocationByIdStub = sandbox.stub(service, 'getLocationById');
-      const expectedLocation = new EventLocation(
-        'a1b2c3d4-0003-4000-8000-000000000003',
-        'Community Center',
-        '123 Main St',
-        'Portland',
-        'OR',
-        '97201',
-      );
-      expectedLocation.addContent(content);
-      getLocationByIdStub.resolves(expectedLocation);
+      stubReload('cal-123', 'Community Center', [
+        { language: 'en', accessibility_info: 'Elevator access to all floors.' },
+      ]);
 
       const createdLocation = await service.createLocation(calendar, location);
 
@@ -220,6 +375,7 @@ describe('LocationService - Enhanced Methods', () => {
       expect(createdLocation.content('en').accessibilityInfo).toBe('Elevator access to all floors.');
       expect(saveStub.calledOnce).toBe(true);
       expect(contentSaveStub.calledOnce).toBe(true);
+      expect(txStub.calledOnce).toBe(true);
     });
 
     it('should create location without content', async () => {
@@ -233,14 +389,7 @@ describe('LocationService - Enhanced Methods', () => {
 
       const saveStub = sandbox.stub(LocationEntity.prototype, 'save');
 
-      // Stub getLocationById to return the created location
-      const getLocationByIdStub = sandbox.stub(service, 'getLocationById');
-      const expectedLocation = new EventLocation(
-        'a1b2c3d4-0003-4000-8000-000000000003',
-        'Simple Venue',
-        '456 Oak St',
-      );
-      getLocationByIdStub.resolves(expectedLocation);
+      stubReload('cal-123', 'Simple Venue');
 
       const createdLocation = await service.createLocation(calendar, location);
 
@@ -267,16 +416,10 @@ describe('LocationService - Enhanced Methods', () => {
       const saveStub = sandbox.stub(LocationEntity.prototype, 'save');
       const contentSaveStub = sandbox.stub(LocationContentEntity.prototype, 'save');
 
-      // Stub getLocationById to return the created location
-      const getLocationByIdStub = sandbox.stub(service, 'getLocationById');
-      const expectedLocation = new EventLocation(
-        'a1b2c3d4-0003-4000-8000-000000000003',
-        'International Center',
-        '789 Global Ave',
-      );
-      expectedLocation.addContent(enContent);
-      expectedLocation.addContent(esContent);
-      getLocationByIdStub.resolves(expectedLocation);
+      stubReload('cal-123', 'International Center', [
+        { language: 'en', accessibility_info: 'Wheelchair ramps available.' },
+        { language: 'es', accessibility_info: 'Rampas para sillas de ruedas disponibles.' },
+      ]);
 
       const createdLocation = await service.createLocation(calendar, location);
 
@@ -311,11 +454,7 @@ describe('LocationService - Enhanced Methods', () => {
 
       const saveStub = sandbox.stub(LocationEntity.prototype, 'save');
 
-      // Stub getLocationById to echo back the actual ID assigned by createLocation
-      const getLocationByIdStub = sandbox.stub(service, 'getLocationById');
-      getLocationByIdStub.callsFake((_calendar, id) => {
-        return Promise.resolve(new EventLocation(id, 'Test Venue', '123 Test St'));
-      });
+      stubReload('cal-123', 'Test Venue');
 
       const createdLocation = await service.createLocation(calendar, location);
 

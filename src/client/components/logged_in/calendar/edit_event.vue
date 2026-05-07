@@ -1150,7 +1150,6 @@ button {
     v-if="showLocationPicker"
     ref="locationPickerRef"
     :locations="availableLocations"
-    :spaces-by-place="locationStore.spacesByPlace"
     :selected-location-id="editorState.event?.locationId || null"
     :selected-space-id="editorState.event?.space?.id || null"
     @location-selected="handleLocationSelected"
@@ -1227,7 +1226,6 @@ import { useUnsavedChanges } from '@/client/composables/useUnsavedChanges';
 import { useLanguageManagement } from '@/client/composables/useLanguageManagement';
 
 // Stores
-import { useLocationStore } from '@/client/stores/locationStore';
 
 // Props for edit mode (eventId passed from route)
 const props = defineProps({
@@ -1282,10 +1280,6 @@ const {
   removeLocation,
   backToSearch,
 } = useLocationManagement();
-
-// Location store — exposes per-Place Space cache (locationStore.spacesByPlace)
-// to the picker so it can render the flat list with whole-venue + Space entries.
-const locationStore = useLocationStore();
 
 // Unsaved changes composable
 const {
@@ -1470,10 +1464,7 @@ const handleSeriesChanged = (seriesId) => {
  */
 const handleOpenLocationPicker = async () => {
   if (editorState.event) {
-    await openLocationPicker(
-      editorState.event.calendarId,
-      editorState.calendar?.urlName,
-    );
+    await openLocationPicker(editorState.event.calendarId);
   }
 };
 
@@ -1481,12 +1472,12 @@ const handleOpenLocationPicker = async () => {
  * Handle location selection from the picker.
  *
  * Picker emits `{ placeId, spaceId | null }` (null = whole venue, NOT undefined).
- * Pass through to the composable along with the locationStore's per-Place
- * Space cache so the composable can resolve the EventLocationSpace model.
+ * The composable resolves the Space inline from the chosen Place's
+ * `place.spaces` array — no separate Spaces cache (pv-0pht).
  */
 const handleLocationSelected = async (selection) => {
   if (editorState.event) {
-    selectLocation(selection, editorState.event, locationStore.spacesByPlace);
+    selectLocation(selection, editorState.event);
   }
 };
 

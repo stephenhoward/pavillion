@@ -1,7 +1,6 @@
 import { ref } from 'vue';
-import { EventLocation, EventLocationSpace } from '@/common/model/location';
+import { EventLocation } from '@/common/model/location';
 import LocationService from '@/client/service/location';
-import { useLocationStore } from '@/client/stores/locationStore';
 import { CalendarEvent } from '@/common/model/events';
 import { ValidationError } from '@/common/exceptions';
 
@@ -46,57 +45,36 @@ export function useLocationManagement() {
   /**
    * Open the location picker modal and fetch latest locations.
    *
-   * When `calendarUrlName` is supplied, the composable also prefetches Spaces
-   * for every Place into `locationStore.spacesByPlace` so the picker can render
-   * its flat (Place + Spaces) entry list. The Spaces fetch is best-effort: a
-   * failure on any single Place is logged and skipped so the picker still
-   * opens with whatever Spaces were successfully cached.
+   * Spaces ride along inline on each Place via `place.spaces[]` (pv-0pht
+   * atomic Place + Spaces wire contract — eager-loaded server-side), so no
+   * separate per-Place Spaces prefetch is needed. The picker reads
+   * `place.spaces` inline.
    *
    * @param calendarId - The calendar ID to fetch locations for
-   * @param calendarUrlName - The calendar's URL name (required to prefetch Spaces)
    */
-  const openLocationPicker = async (
-    calendarId: string,
-    calendarUrlName?: string,
-  ): Promise<void> => {
-    // Fetch latest locations before showing picker
+  const openLocationPicker = async (calendarId: string): Promise<void> => {
+    // Fetch latest locations before showing picker. Each EventLocation in the
+    // response carries its `spaces[]` inline.
     await fetchLocations(calendarId);
-
-    // Prefetch Spaces for every Place so the picker can render its flat list.
-    // Skipped silently when the URL name isn't available — the picker still
-    // works (it just shows Places without their Spaces).
-    if (calendarUrlName) {
-      const store = useLocationStore();
-      await Promise.all(
-        availableLocations.value.map(async (place) => {
-          try {
-            await store.fetchSpaces(calendarUrlName, place.id);
-          }
-          catch (error) {
-            console.error(`Error fetching spaces for place ${place.id}:`, error);
-          }
-        }),
-      );
-    }
 
     showLocationPicker.value = true;
   };
 
   /**
    * Handle picker selection. The picker emits `{ placeId, spaceId | null }`
-   * — `spaceId === null` means "whole venue" (NOT undefined, see DEC-008-style
-   * advisor finding on null vs. undefined; the model serializes a null space
-   * as `space: null` which the server interprets correctly).
+   * — `spaceId === null` means "whole venue" (NOT undefined; the model
+   * serializes a null space as `space: null` which the server interprets
+   * correctly).
+   *
+   * Space lookup reads `place.spaces` inline on the resolved Place — no
+   * separate Spaces cache (pv-0pht atomic Place + Spaces wire contract).
    *
    * @param selection - `{ placeId, spaceId | null }` from the picker
    * @param event - The event to assign the location to
-   * @param spacesByPlace - Per-Place Space cache (typically `locationStore.spacesByPlace`).
-   *   Used to look up the EventLocationSpace model when `spaceId !== null`.
    */
   const selectLocation = (
     selection: { placeId: string; spaceId: string | null },
     event: CalendarEvent,
-    spacesByPlace: Record<string, EventLocationSpace[]> = {},
   ): void => {
     // Resolve the Place from the available list.
     const place = availableLocations.value.find(loc => loc.id === selection.placeId);
@@ -106,13 +84,14 @@ export function useLocationManagement() {
       event.location = place;
     }
 
-    // Resolve Space (or null for whole-venue selection).
+    // Resolve Space (or null for whole-venue selection) from the Place's
+    // inline `spaces[]`. Falls back to null if the Place couldn't be resolved
+    // or the spaceId isn't present on it (e.g. stale picker payload).
     if (selection.spaceId === null) {
       event.space = null;
     }
     else {
-      const spaces = spacesByPlace[selection.placeId] ?? [];
-      const space = spaces.find(s => s.id === selection.spaceId) ?? null;
+      const space = place?.spaces.find(s => s.id === selection.spaceId) ?? null;
       event.space = space;
     }
 
