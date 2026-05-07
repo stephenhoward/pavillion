@@ -1225,8 +1225,6 @@ import { useLocationManagement } from '@/client/composables/useLocationManagemen
 import { useUnsavedChanges } from '@/client/composables/useUnsavedChanges';
 import { useLanguageManagement } from '@/client/composables/useLanguageManagement';
 
-// Stores
-
 // Props for edit mode (eventId passed from route)
 const props = defineProps({
   eventId: {

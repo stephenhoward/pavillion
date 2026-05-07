@@ -530,7 +530,7 @@ describe('EditPlaceView', () => {
       const wrapper = await createWrapper('place_edit', { placeId: 'loc-1' });
       const addBtn = wrapper.find('.spaces-section .add-space-button');
       expect(addBtn.exists()).toBe(true);
-      expect(addBtn.text()).toContain('Add space');
+      expect(addBtn.text()).toContain('Add room or space');
     });
 
     it('mounts the inline editor when Add Space button is clicked', async () => {
@@ -606,7 +606,7 @@ describe('EditPlaceView', () => {
       expect(wrapper.find('.reassign-space-modal').exists()).toBe(true);
       expect(wrapper.find('.delete-space-modal').exists()).toBe(false);
       // Prompt copy includes the event count.
-      expect(wrapper.text()).toContain('3 events use this space');
+      expect(wrapper.text()).toContain('3 events use this room or space');
     });
 
     it('reassign dialog dropdown excludes the Space being deleted', async () => {
@@ -674,7 +674,7 @@ describe('EditPlaceView', () => {
       await flushPromises();
 
       // Confirm (the danger PillButton triggers stageSpaceRemoval).
-      const dangerBtn = wrapper.findAll('.reassign-space-modal button').find(b => b.text().includes('Remove space'));
+      const dangerBtn = wrapper.findAll('.reassign-space-modal button').find(b => b.text().includes('Remove room or space'));
       expect(dangerBtn).toBeTruthy();
       await dangerBtn!.trigger('click');
       await flushPromises();
@@ -712,7 +712,7 @@ describe('EditPlaceView', () => {
       await select.setValue('space-2');
       await flushPromises();
 
-      const dangerBtn = wrapper.findAll('.reassign-space-modal button').find(b => b.text().includes('Remove space'));
+      const dangerBtn = wrapper.findAll('.reassign-space-modal button').find(b => b.text().includes('Remove room or space'));
       await dangerBtn!.trigger('click');
       await flushPromises();
 
@@ -926,7 +926,7 @@ describe('EditPlaceView', () => {
       // Pick the staged Space and confirm.
       await select.setValue(stagedClientId);
       await flushPromises();
-      const dangerBtn = wrapper.findAll('.reassign-space-modal button').find(b => b.text().includes('Remove space'));
+      const dangerBtn = wrapper.findAll('.reassign-space-modal button').find(b => b.text().includes('Remove room or space'));
       await dangerBtn!.trigger('click');
       await flushPromises();
 

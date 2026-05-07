@@ -1,4 +1,5 @@
 import { TranslatedModel, TranslatedContentModel } from '@/common/model/model';
+import type { EventLocationSpace } from '@/common/model/location';
 import { useLocale } from './useLocale';
 import { DEFAULT_LANGUAGE_CODE } from '@/common/i18n/languages';
 
@@ -46,5 +47,15 @@ export function useLocalizedContent() {
     return model.content(locale);
   }
 
-  return { localizedContent };
+  function spaceDisplayName(space: EventLocationSpace | null | undefined): string {
+    if (!space) return '';
+    return localizedContent(space)?.name ?? '';
+  }
+
+  function spaceAccessibilityInfo(space: EventLocationSpace | null | undefined): string {
+    if (!space) return '';
+    return localizedContent(space)?.accessibilityInfo ?? '';
+  }
+
+  return { localizedContent, spaceDisplayName, spaceAccessibilityInfo };
 }

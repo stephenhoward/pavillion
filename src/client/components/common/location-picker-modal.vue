@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
-import i18next from 'i18next';
 import { useTranslation } from 'i18next-vue';
 import { Search, MapPin, Check } from 'lucide-vue-next';
 import PillButton from '@/client/components/common/pill-button.vue';
 import Sheet from '@/client/components/common/Sheet.vue';
-import type { EventLocation, EventLocationSpace } from '@/common/model/location';
+import { useLocalizedContent } from '@/client/composables/useLocalizedContent';
+import type { EventLocation } from '@/common/model/location';
 
 const { t } = useTranslation('event_editor', { keyPrefix: 'location_picker' });
 // Separate handle for the calendars/places namespace where the new
@@ -78,19 +78,7 @@ const emit = defineEmits<{
 
 const sheetRef = ref<InstanceType<typeof Sheet> | null>(null);
 const searchQuery = ref('');
-
-/**
- * Localized name for a Space using the current i18n language with fallback to
- * any populated content. Returns an empty string when no content is set.
- */
-const spaceNameForCurrentLanguage = (space: EventLocationSpace): string => {
-  const lang = i18next.language || 'en';
-  // Prefer current language; fall back to first language with content.
-  const languages = space.getLanguages();
-  if (languages.length === 0) return '';
-  const preferred = languages.includes(lang) ? lang : languages[0];
-  return space.content(preferred).name ?? '';
-};
+const { spaceDisplayName } = useLocalizedContent();
 
 const formatAddress = (location: EventLocation) => {
   const parts = [
@@ -148,7 +136,7 @@ const allEntries = computed<PickerEntry[]>(() => {
     });
 
     for (const space of spaces) {
-      const spaceName = spaceNameForCurrentLanguage(space);
+      const spaceName = spaceDisplayName(space);
       const concatenated = tPlaces('format.with_space', { place: place.name, space: spaceName });
       entries.push({
         key: `space:${space.id}`,
@@ -312,7 +300,7 @@ defineExpose({ close, sheetRef });
 </template>
 
 <style scoped lang="scss">
-@use '../../assets/style/mixins' as *;
+@use '../../assets/style/components/event-management' as *;
 
 .location-picker-body {
   display: flex;
@@ -323,51 +311,13 @@ defineExpose({ close, sheetRef });
 
 .search-section {
   .search-input-wrapper {
-    position: relative;
+    @include pill-search-input;
 
-    .search-icon {
-      position: absolute;
-      left: 1rem;
-      top: 50%;
-      transform: translateY(-50%);
-      color: var(--pav-color-stone-400);
-      pointer-events: none;
-
-      @media (prefers-color-scheme: dark) {
-        color: var(--pav-color-stone-500);
-      }
-    }
-
-    .search-input {
-      width: 100%;
-      padding: 0.75rem 1rem 0.75rem 2.75rem;
-      border-radius: 9999px;
-      border: 1px solid var(--pav-color-stone-200);
-      background: var(--pav-color-stone-50);
-      color: var(--pav-color-stone-900);
-      font-size: 0.9375rem;
-      transition: all 0.15s ease;
-
-      &::placeholder {
-        color: var(--pav-color-stone-400);
-      }
-
-      &:focus {
-        outline: none;
-        border-color: var(--pav-color-orange-500);
-        background: white;
-        box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.1);
-      }
-
-      @media (prefers-color-scheme: dark) {
-        background: var(--pav-color-stone-700);
-        border-color: var(--pav-color-stone-600);
-        color: var(--pav-color-stone-100);
-
-        &:focus {
-          background: var(--pav-color-stone-800);
-        }
-      }
+    // No clear button in this modal — collapse the right-side padding the
+    // mixin reserves for it so the placeholder sits flush with the standard
+    // input gutter.
+    input {
+      padding-inline-end: var(--pav-space-md);
     }
   }
 }

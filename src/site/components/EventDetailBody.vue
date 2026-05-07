@@ -21,7 +21,7 @@ const props = defineProps<{
 }>();
 
 const { t } = useTranslation('system');
-const { localizedContent } = useLocalizedContent();
+const { localizedContent, spaceDisplayName, spaceAccessibilityInfo: spaceAccessibilityInfoFor } = useLocalizedContent();
 
 /**
  * Returns true when start and end fall on the same calendar day.
@@ -69,37 +69,7 @@ const venueAccessibilityInfo = computed(() => {
  * Computed localized accessibility info for the Space (sub-area within a Place).
  * Returns empty string when no Space is attached to the event.
  */
-const spaceAccessibilityInfo = computed(() => {
-  const space = props.instance?.event?.space;
-  if (!space || typeof space.hasContent !== 'function') {
-    return '';
-  }
-  try {
-    const content = localizedContent(space);
-    return content?.accessibilityInfo ?? '';
-  }
-  catch {
-    return '';
-  }
-});
-
-/**
- * Computed localized name of the Space (sub-area within a Place), or empty
- * string when no Space is attached to the event.
- */
-const spaceName = computed(() => {
-  const space = props.instance?.event?.space;
-  if (!space || typeof space.hasContent !== 'function') {
-    return '';
-  }
-  try {
-    const content = localizedContent(space);
-    return content?.name ?? '';
-  }
-  catch {
-    return '';
-  }
-});
+const spaceAccessibilityInfo = computed(() => spaceAccessibilityInfoFor(props.instance?.event?.space));
 
 /**
  * Computed display label for the location header line. When a Space is set
@@ -108,8 +78,9 @@ const spaceName = computed(() => {
  */
 const locationDisplayName = computed(() => {
   const placeName = props.instance?.event?.location?.name ?? '';
-  if (spaceName.value) {
-    return t('place.format.with_space', { place: placeName, space: spaceName.value });
+  const space = spaceDisplayName(props.instance?.event?.space);
+  if (space) {
+    return t('place.format.with_space', { place: placeName, space });
   }
   return placeName;
 });

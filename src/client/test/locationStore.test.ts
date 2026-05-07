@@ -1,9 +1,7 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
-import sinon from 'sinon';
 import { useLocationStore } from '@/client/stores/locationStore';
 import { EventLocation } from '@/common/model/location';
-import LocationService from '@/client/service/location';
 
 describe('LocationStore', () => {
   beforeEach(() => {
@@ -125,39 +123,6 @@ describe('LocationStore', () => {
 
       expect(store.locations['calendar-123']).toHaveLength(1);
       expect(store.locations['calendar-123'][0]).toStrictEqual(location);
-    });
-  });
-
-  describe('reassignEvents', () => {
-    let sandbox: sinon.SinonSandbox;
-
-    beforeEach(() => {
-      sandbox = sinon.createSandbox();
-    });
-
-    afterEach(() => {
-      sandbox.restore();
-    });
-
-    it('should delegate to LocationService.reassignEvents and forward arguments', async () => {
-      const store = useLocationStore();
-      const stub = sandbox
-        .stub(LocationService.prototype, 'reassignEvents')
-        .resolves({ count: 4 });
-
-      const result = await store.reassignEvents('cal-1', 'place-1', 'sp-from', 'sp-to');
-
-      expect(stub.calledOnceWithExactly('cal-1', 'place-1', 'sp-from', 'sp-to')).toBe(true);
-      expect(result).toStrictEqual({ count: 4 });
-    });
-
-    it('should propagate service errors so the caller can collect failures', async () => {
-      const store = useLocationStore();
-      const error = new Error('reassign failed');
-      sandbox.stub(LocationService.prototype, 'reassignEvents').rejects(error);
-
-      await expect(store.reassignEvents('cal-1', 'place-1', 'sp-from', 'sp-to'))
-        .rejects.toThrow('reassign failed');
     });
   });
 });

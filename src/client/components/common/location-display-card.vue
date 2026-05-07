@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import i18next from 'i18next';
 import { useTranslation } from 'i18next-vue';
 import PillButton from '@/client/components/common/pill-button.vue';
+import { useLocalizedContent } from '@/client/composables/useLocalizedContent';
 import type { EventLocation, EventLocationSpace } from '@/common/model/location';
 
 /**
@@ -27,6 +27,7 @@ import type { EventLocation, EventLocationSpace } from '@/common/model/location'
  */
 
 const { t } = useTranslation('calendars', { keyPrefix: 'places' });
+const { spaceDisplayName } = useLocalizedContent();
 
 const props = defineProps<{
   location: EventLocation | null;
@@ -42,18 +43,7 @@ const hasLocation = computed(() => {
   return props.location !== null && !!props.location.name;
 });
 
-/**
- * Localized name for the Space, using the same fallback strategy as the picker.
- * Returns empty string when no space prop or no content is available.
- */
-const spaceName = computed(() => {
-  if (!props.space) return '';
-  const lang = i18next.language || 'en';
-  const languages = props.space.getLanguages();
-  if (languages.length === 0) return '';
-  const preferred = languages.includes(lang) ? lang : languages[0];
-  return props.space.content(preferred).name ?? '';
-});
+const spaceName = computed(() => spaceDisplayName(props.space));
 
 /**
  * Computed display name for the location header line. When a Space is set,

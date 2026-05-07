@@ -1,6 +1,5 @@
 import { defineStore } from 'pinia';
 import { EventLocation } from '@/common/model/location';
-import LocationService from '@/client/service/location';
 
 export const useLocationStore = defineStore('locations', {
   state: () => {
@@ -68,29 +67,6 @@ export const useLocationStore = defineStore('locations', {
           (l: EventLocation) => l.id !== locationId,
         );
       }
-    },
-
-    /**
-     * Bulk-reassign every Event row attached to `(placeId, fromSpaceId)` onto
-     * `toSpaceId`. Delegates to `LocationService.reassignEvents`. Errors are
-     * propagated unchanged so callers (the editor's save orchestrator) can
-     * collect per-reassign failures into a one-time partial-failure notice
-     * without retaining state for retry (pv-0pht atomic save model).
-     *
-     * @param calendarId - The ID of the calendar that owns the Place
-     * @param placeId - The ID of the parent Place (EventLocation)
-     * @param fromSpaceId - The Space whose events are being moved
-     * @param toSpaceId - The destination Space (must be on the same Place)
-     * @returns The number of event rows updated
-     */
-    async reassignEvents(
-      calendarId: string,
-      placeId: string,
-      fromSpaceId: string,
-      toSpaceId: string,
-    ): Promise<{ count: number }> {
-      const service = new LocationService(this);
-      return service.reassignEvents(calendarId, placeId, fromSpaceId, toSpaceId);
     },
   },
 });

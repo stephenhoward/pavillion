@@ -34,7 +34,7 @@
     display: flex;
     align-items: center;
     gap: 1rem;
-    margin-left: auto;
+    margin-inline-start: auto;
   }
 
   .back-button {
@@ -101,7 +101,7 @@
 
     .header-actions {
       width: 100%;
-      margin-left: 0;
+      margin-inline-start: 0;
       justify-content: flex-end;
     }
   }
@@ -113,8 +113,8 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: var(--pav-space-4xl);
-  color: var(--pav-color-text-secondary);
+  padding: var(--pav-space-2xl);
+  color: var(--pav-text-secondary);
 
   .loading-spinner {
     font-size: 24px;
@@ -149,47 +149,43 @@ form {
   padding: 0;
   border: none;
   background: none;
-  color: var(--pav-color-stone-600);
-  font-size: 0.9375rem;
-  font-weight: 400;
+  color: var(--pav-text-secondary);
+  font-size: var(--pav-font-size-sm);
   cursor: pointer;
   transition: color 0.15s ease;
 
-  &:hover {
-    color: var(--pav-color-stone-900);
+  &:hover:not(:disabled) {
+    color: var(--pav-text-primary);
   }
 
   &:focus-visible {
-    outline: 2px solid var(--pav-color-orange-500);
+    outline: 2px solid var(--pav-color-interactive-active);
     outline-offset: 2px;
   }
 
-  @media (prefers-color-scheme: dark) {
-    color: var(--pav-color-stone-400);
-
-    &:hover {
-      color: var(--pav-color-stone-200);
-    }
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
   }
 }
 
 .btn-save {
-  padding: 0.625rem 1.5rem;
+  padding: var(--pav-space-sm) var(--pav-space-lg);
   border: none;
-  background: var(--pav-color-orange-500);
-  color: white;
-  font-size: 0.9375rem;
-  font-weight: 500;
+  background: var(--pav-color-interactive-active);
+  color: var(--pav-text-inverse);
+  font-size: var(--pav-font-size-sm);
+  font-weight: var(--pav-font-weight-medium);
   cursor: pointer;
-  border-radius: 9999px;
+  border-radius: var(--pav-border-radius-full);
   transition: all 0.15s ease;
 
-  &:hover {
-    background: var(--pav-color-orange-600);
+  &:hover:not(:disabled) {
+    filter: brightness(0.95);
   }
 
   &:focus-visible {
-    outline: 2px solid var(--pav-color-orange-500);
+    outline: 2px solid var(--pav-color-interactive-active);
     outline-offset: 2px;
   }
 
@@ -280,7 +276,7 @@ form {
 
   ul {
     margin: 0;
-    padding-left: var(--pav-space-md);
+    padding-inline-start: var(--pav-space-md);
     list-style-type: disc;
   }
 
@@ -402,58 +398,10 @@ form {
 }
 
 .icon-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 36px;
-  border: none;
-  background: transparent;
-  color: var(--pav-color-stone-700);
-  border-radius: 0.375rem;
-  cursor: pointer;
-  transition: background-color 0.15s ease, color 0.15s ease;
-
-  &:hover:not(:disabled) {
-    background-color: var(--pav-color-stone-200);
-    color: var(--pav-color-stone-900);
-  }
-
-  &:focus-visible {
-    outline: 2px solid var(--pav-color-orange-500);
-    outline-offset: 2px;
-  }
-
-  &:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  @media (prefers-color-scheme: dark) {
-    color: var(--pav-color-stone-300);
-
-    &:hover:not(:disabled) {
-      background-color: var(--pav-color-stone-700);
-      color: var(--pav-color-stone-100);
-    }
-  }
+  @include admin-icon-button;
 
   &--danger {
-    color: var(--pav-color-red-700);
-
-    &:hover:not(:disabled) {
-      background-color: var(--pav-color-red-100);
-      color: var(--pav-color-red-800);
-    }
-
-    @media (prefers-color-scheme: dark) {
-      color: var(--pav-color-red-300);
-
-      &:hover:not(:disabled) {
-        background-color: rgba(239, 68, 68, 0.2);
-        color: var(--pav-color-red-200);
-      }
-    }
+    @include admin-icon-button--danger;
   }
 }
 
@@ -997,7 +945,6 @@ import PillButton from '@/client/components/common/pill-button.vue';
 import EditSpace from '@/client/components/logged_in/calendar/edit-space.vue';
 import LocationService from '@/client/service/location';
 import CalendarService from '@/client/service/calendar';
-import { useLocationStore } from '@/client/stores/locationStore';
 import { useToast } from '@/client/composables/useToast';
 import { EventLocation, EventLocationSpace, validateLocationHierarchy } from '@/common/model/location';
 import iso6391 from 'iso-639-1-dir';
@@ -1013,7 +960,6 @@ const route = useRoute();
 const router = useRouter();
 const locationService = new LocationService();
 const calendarService = new CalendarService();
-const locationStore = useLocationStore();
 const toast = useToast();
 
 const { t } = useTranslation('calendars', {
@@ -1467,7 +1413,7 @@ function populateFormFromLocation(location: EventLocation) {
 /**
  * Handle form submission (create or update). Atomic Place + Spaces save:
  * one PUT/POST commits the entire snapshot; the post-save loop fires
- * `pendingReassigns` sequentially via `locationStore.reassignEvents`.
+ * `pendingReassigns` sequentially via `locationService.reassignEvents`.
  */
 async function handleSave() {
   state.error = '';
@@ -1526,7 +1472,7 @@ async function handleSave() {
   for (const [fromId, toTarget] of pendingReassigns) {
     const realTargetId = idMap.get(toTarget) ?? toTarget;
     try {
-      await locationStore.reassignEvents(state.calendarId, saved.id, fromId, realTargetId);
+      await locationService.reassignEvents(state.calendarId, saved.id, fromId, realTargetId);
     }
     catch (error) {
       console.error('Error reassigning events:', error);

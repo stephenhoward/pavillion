@@ -19,7 +19,7 @@ const { localizedPath } = useLocale();
 const calendarId = route.params.calendar;
 const eventId = route.params.event;
 const showReportModal = ref(false);
-const { localizedContent } = useLocalizedContent();
+const { localizedContent, spaceDisplayName, spaceAccessibilityInfo: spaceAccessibilityInfoFor } = useLocalizedContent();
 const state = reactive({
   err: '',
   notFound: false,
@@ -60,37 +60,7 @@ const venueAccessibilityInfo = computed(() => {
  * Computed localized accessibility info for the Space (sub-area within a Place).
  * Returns empty string when no Space is attached to the event.
  */
-const spaceAccessibilityInfo = computed(() => {
-  const space = state.event?.space;
-  if (!space || typeof space.hasContent !== 'function') {
-    return '';
-  }
-  try {
-    const content = localizedContent(space);
-    return content?.accessibilityInfo ?? '';
-  }
-  catch {
-    return '';
-  }
-});
-
-/**
- * Computed localized name of the Space (sub-area within a Place), or empty
- * string when no Space is attached to the event.
- */
-const spaceName = computed(() => {
-  const space = state.event?.space;
-  if (!space || typeof space.hasContent !== 'function') {
-    return '';
-  }
-  try {
-    const content = localizedContent(space);
-    return content?.name ?? '';
-  }
-  catch {
-    return '';
-  }
-});
+const spaceAccessibilityInfo = computed(() => spaceAccessibilityInfoFor(state.event?.space));
 
 /**
  * Computed display label for the location header line. When a Space is set
@@ -99,8 +69,9 @@ const spaceName = computed(() => {
  */
 const locationDisplayName = computed(() => {
   const placeName = state.event?.location?.name ?? '';
-  if (spaceName.value) {
-    return t('place.format.with_space', { place: placeName, space: spaceName.value });
+  const space = spaceDisplayName(state.event?.space);
+  if (space) {
+    return t('place.format.with_space', { place: placeName, space });
   }
   return placeName;
 });
