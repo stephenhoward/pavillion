@@ -571,8 +571,9 @@ form {
 .add-space-button {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 0.375rem;
-  align-self: flex-start;
+  width: 100%;
   padding: 0.5rem 0.875rem;
   border: 1px dashed var(--pav-color-stone-300);
   background: transparent;
@@ -781,69 +782,84 @@ form {
             <h2 class="section-header">{{ t('space.section_title') }}</h2>
 
             <div class="section-card">
-              <!-- Spaces list (working buffer view; staged Spaces show '(new)') -->
+              <!-- Spaces list (working buffer view; staged Spaces show '(new)').
+                   When editing an existing row, the inline editor replaces that
+                   row's list item so the row and the editor never appear side
+                   by side. Add-new renders the editor below the list. -->
               <ul
                 v-if="spacesForPlace.length > 0"
                 class="space-list"
               >
-                <li
+                <template
                   v-for="space in spacesForPlace"
                   :key="spaceRowKey(space)"
-                  class="space-item"
                 >
-                  <div class="space-info">
-                    <div class="space-info__name">
-                      {{ spaceDisplayName(space) }}
-                      <span
-                        v-if="isStagedSpace(space)"
-                        class="space-info__new-affordance"
-                        aria-hidden="true"
-                      >{{ t('space.reassign_new_suffix') }}</span>
+                  <li
+                    v-if="editorOpen && editingSpaceId === spaceRowKey(space)"
+                    class="space-edit-slot"
+                  >
+                    <EditSpace
+                      :space="space"
+                      @save="handleSpaceSaved"
+                      @cancel="closeSpaceEditor"
+                    />
+                  </li>
+                  <li
+                    v-else
+                    class="space-item"
+                  >
+                    <div class="space-info">
+                      <div class="space-info__name">
+                        {{ spaceDisplayName(space) }}
+                        <span
+                          v-if="isStagedSpace(space)"
+                          class="space-info__new-affordance"
+                          aria-hidden="true"
+                        >{{ t('space.reassign_new_suffix') }}</span>
+                      </div>
+                      <div
+                        v-if="spaceAccessibilityPreview(space)"
+                        class="space-info__meta"
+                      >
+                        {{ spaceAccessibilityPreview(space) }}
+                      </div>
                     </div>
-                    <div
-                      v-if="spaceAccessibilityPreview(space)"
-                      class="space-info__meta"
-                    >
-                      {{ spaceAccessibilityPreview(space) }}
+                    <div class="space-actions">
+                      <button
+                        type="button"
+                        class="icon-button edit-space-button"
+                        :aria-label="t('space.edit_space_button', { name: spaceDisplayName(space) })"
+                        @click="openSpaceEditor(spaceRowKey(space))"
+                      >
+                        <Pencil :size="20" :stroke-width="2" aria-hidden="true" />
+                      </button>
+                      <button
+                        type="button"
+                        class="icon-button icon-button--danger delete-space-button"
+                        :aria-label="t('space.delete_space_button', { name: spaceDisplayName(space) })"
+                        @click="confirmDeleteSpace(space, $event)"
+                      >
+                        <Trash2 :size="20" :stroke-width="2" aria-hidden="true" />
+                      </button>
                     </div>
-                  </div>
-                  <div class="space-actions">
-                    <button
-                      type="button"
-                      class="icon-button edit-space-button"
-                      :aria-label="t('space.edit_space_button', { name: spaceDisplayName(space) })"
-                      @click="openSpaceEditor(spaceRowKey(space))"
-                    >
-                      <Pencil :size="20" :stroke-width="2" aria-hidden="true" />
-                    </button>
-                    <button
-                      type="button"
-                      class="icon-button icon-button--danger delete-space-button"
-                      :aria-label="t('space.delete_space_button', { name: spaceDisplayName(space) })"
-                      @click="confirmDeleteSpace(space, $event)"
-                    >
-                      <Trash2 :size="20" :stroke-width="2" aria-hidden="true" />
-                    </button>
-                  </div>
-                </li>
+                  </li>
+                </template>
               </ul>
 
-              <!-- Empty state -->
+              <!-- Empty state (hidden while creating the first Space inline). -->
               <p
-                v-else
+                v-else-if="!(editorOpen && !editingSpaceId)"
                 class="spaces-empty"
               >
                 {{ t('space.no_spaces') }}
               </p>
 
-              <!-- Inline editor (mounts on Add or Edit click). Child emits a
-                   staged `EventLocationSpace` payload on save; parent merges
-                   it into `place.spaces` (creating a new entry with a fresh
-                   `clientId` for adds, or replacing the matching entry's
-                   content for edits). Cancel closes without mutation. -->
+              <!-- Add-new editor: only mounts when creating a new Space.
+                   Editing an existing Space renders the editor inline above
+                   in place of the matching list item. -->
               <EditSpace
-                v-if="editorOpen"
-                :space="editingSpace"
+                v-if="editorOpen && !editingSpaceId"
+                :space="null"
                 @save="handleSpaceSaved"
                 @cancel="closeSpaceEditor"
               />
@@ -1177,16 +1193,6 @@ const reassignTargetSpaces = computed<EventLocationSpace[]>(() => {
   if (!state.spaceToDelete) return [];
   const targetKey = spaceRowKey(state.spaceToDelete);
   return spacesForPlace.value.filter(s => spaceRowKey(s) !== targetKey);
-});
-
-/**
- * The Space currently being edited inline as resolved against `place.spaces`.
- * Returns null in create mode so the editor knows to start blank.
- */
-const editingSpace = computed<EventLocationSpace | null>(() => {
-  const key = editingSpaceId.value;
-  if (!key) return null;
-  return spacesForPlace.value.find(s => spaceRowKey(s) === key) ?? null;
 });
 
 /**
