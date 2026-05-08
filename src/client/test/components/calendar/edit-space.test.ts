@@ -46,11 +46,11 @@ describe('EditSpaceView', () => {
   });
 
   describe('Create mode', () => {
-    it('renders with the New Space title when no space prop is provided', async () => {
+    it('renders with the New Room or Space title when no space prop is provided', async () => {
       const wrapper = await createWrapper();
       const heading = wrapper.find('.space-editor-title');
       expect(heading.exists()).toBe(true);
-      expect(heading.text()).toBe('New Space');
+      expect(heading.text()).toBe('New Room or Space');
     });
 
     it('renders with empty name and accessibility-info inputs', async () => {
@@ -143,14 +143,14 @@ describe('EditSpaceView', () => {
   });
 
   describe('Edit mode', () => {
-    it('renders with the Edit Space title when an existing space is passed in', async () => {
+    it('renders with the Edit Room or Space title when an existing space is passed in', async () => {
       const space = createMockSpace('space-1', 'place-1', [
         { language: 'en', name: 'Pacific Room', accessibilityInfo: 'Step-free entry' },
       ]);
       const wrapper = await createWrapper({ space });
 
       const heading = wrapper.find('.space-editor-title');
-      expect(heading.text()).toBe('Edit Space');
+      expect(heading.text()).toBe('Edit Room or Space');
     });
 
     it('populates the form from the source space prop', async () => {
