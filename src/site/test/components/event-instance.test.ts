@@ -83,7 +83,7 @@ let mockSeries: {
 } | null = null;
 
 // Mutable recurrenceSummary state so individual tests can inject a summary
-// matching the public API's `{ key, params } | null` shape (pv-kzc0.2).
+// matching the public API's `{ key, params } | null` shape.
 let mockRecurrenceSummary: { key: string; params: Record<string, unknown> } | null = null;
 
 // Mutable source calendar state so individual tests can inject source calendar data
@@ -304,7 +304,7 @@ function makeSpaceObject(
 /**
  * Creates a recurrenceSummary object matching the public API's
  * `{ key, params }` intent shape. This is the shape the frontend
- * consumes via `useRecurrenceText` (pv-kzc0.4).
+ * consumes via `useRecurrenceText`.
  */
 function makeRecurrenceSummary(
   key: string,
@@ -319,14 +319,15 @@ function makeRecurrenceSummary(
 
 beforeAll(async () => {
   const placeI18n = {
+    accessibility: {
+      section_heading: 'Accessibility',
+      event_label: 'Event accessibility',
+      venue_label: 'Venue accessibility',
+      space_label: 'Space accessibility',
+    },
     place: {
       format: {
         with_space: '{{place}} — {{space}}',
-      },
-      space: {
-        event_accessibility_label: 'Event accessibility',
-        venue_accessibility_label: 'Venue accessibility',
-        space_accessibility_label: 'Space accessibility',
       },
     },
   };
@@ -343,7 +344,6 @@ beforeAll(async () => {
             'series.view': 'View series',
             about_this_event: 'About This Event',
             event_categories: 'Categories',
-            event_accessibility: 'Accessibility',
             event_recurring: 'Recurring Event',
             event_location: 'Location',
             event_source_calendar: 'Source Calendar',
@@ -399,7 +399,6 @@ beforeAll(async () => {
       'series.view': 'View series',
       about_this_event: 'About This Event',
       event_categories: 'Categories',
-      event_accessibility: 'Accessibility',
       event_recurring: 'Recurring Event',
       event_location: 'Location',
       event_source_calendar: 'Source Calendar',

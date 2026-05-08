@@ -209,7 +209,12 @@ beforeAll(async () => {
     about_this_event: 'About This Event',
     event_categories: 'Categories',
     event_location: 'Location',
-    event_accessibility: 'Accessibility',
+    accessibility: {
+      section_heading: 'Accessibility',
+      event_label: 'Event accessibility',
+      venue_label: 'Venue accessibility',
+      space_label: 'Space accessibility',
+    },
     event_recurring: 'Recurring',
     event_cancelled: 'Cancelled',
     event_source_calendar_label: 'View source calendar {{name}}',
@@ -223,11 +228,6 @@ beforeAll(async () => {
     place: {
       format: {
         with_space: '{{place}} — {{space}}',
-      },
-      space: {
-        event_accessibility_label: 'Event accessibility',
-        venue_accessibility_label: 'Venue accessibility',
-        space_accessibility_label: 'Space accessibility',
       },
     },
   };
@@ -406,7 +406,7 @@ describe('EventDetailBody', () => {
   });
 
   // -------------------------------------------------------------------------
-  // Place + Space layered display (pv-ix7v.4.7)
+  // Place + Space layered display
   // -------------------------------------------------------------------------
   describe('Place + Space layered display', () => {
     describe('location header line', () => {
@@ -598,8 +598,7 @@ describe('EventDetailBody', () => {
   });
 
   describe('external URL CTA security guards', () => {
-    // Cases moved from src/widget/test/event-detail-overlay.test.ts (the
-    // widget overlay test slimming happens in pv-rtu1.2.4).
+    // Cases moved from src/widget/test/event-detail-overlay.test.ts.
 
     it('should render CTA anchor when externalUrl and urlPrompt are both valid', () => {
       const wrapper = mountBody({

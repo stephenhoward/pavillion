@@ -20,7 +20,7 @@ class LocationSpaceEntity extends Model {
   @Column({ type: DataType.UUID, allowNull: false })
   declare place_id: string;
 
-  // origin_uri identifies AP-originated records for inbound dedup (pv-ix7v).
+  // origin_uri identifies AP-originated records for inbound dedup.
   // Should be cleared when the source calendar is unfollowed — see follow-up.
   @Column({ type: DataType.STRING(2048), allowNull: true })
   declare origin_uri: string | null;
@@ -44,7 +44,7 @@ class LocationSpaceEntity extends Model {
     // Read computed eventCount from dataValues. Populated by callers that add
     // `[literal(...), 'eventCount']` via attributes.include on the eager-load
     // (see LocationService); absent on plain finds, in which case the field
-    // stays undefined on the model (pv-0pht).
+    // stays undefined on the model.
     const rawEventCount = this.getDataValue('eventCount' as any);
     if (rawEventCount !== undefined && rawEventCount !== null) {
       const parsed = typeof rawEventCount === 'number' ? rawEventCount : Number(rawEventCount);

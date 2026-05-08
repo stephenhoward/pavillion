@@ -1471,7 +1471,7 @@ const handleOpenLocationPicker = async () => {
  *
  * Picker emits `{ placeId, spaceId | null }` (null = whole venue, NOT undefined).
  * The composable resolves the Space inline from the chosen Place's
- * `place.spaces` array — no separate Spaces cache (pv-0pht).
+ * `place.spaces` array — no separate Spaces cache.
  */
 const handleLocationSelected = async (selection) => {
   if (editorState.event) {

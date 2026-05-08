@@ -90,7 +90,7 @@ class EventEntity extends Model {
 
   /**
    * `onDelete: 'SET NULL'` is the architectural keystone for whole-venue
-   * fallback (pv-0pht): when a Space is deleted (e.g. as part of an atomic
+   * fallback: when a Space is deleted (e.g. as part of an atomic
    * Place + Spaces save where the user removed a Space row), any events
    * still pointing at it fall back to the parent Place automatically. The
    * service layer can issue the Space delete inside the same transaction

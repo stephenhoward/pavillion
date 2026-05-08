@@ -3,7 +3,7 @@ import { loginAsAdmin } from './helpers/auth';
 import { startTestServer, TestEnvironment } from './helpers/test-server';
 
 /**
- * E2E Test: Place + Spaces full scenario (pv-ix7v.5.1)
+ * E2E Test: Place + Spaces full scenario
  *
  * Single end-to-end scenario that exercises the complete Place + Spaces stack:
  *
@@ -26,8 +26,8 @@ import { startTestServer, TestEnvironment } from './helpers/test-server';
  *          testing-advisor LOW finding).
  *        - The `.accessibility-section--space` block is hidden (.not.toBeVisible()).
  *   7. Re-edit the SAME event and switch to a DIFFERENT Space ("Council Chambers")
- *      to exercise the exact broken path from pv-on9o (edit existing event,
- *      pick a Space, save — was silently clearing space_id before the fix).
+ *      to exercise a previously-broken path (edit existing event, pick a
+ *      Space, save — was silently clearing space_id before the fix).
  *   8. Reload the public detail and assert:
  *        - The location header shows "Convention Center — Council Chambers".
  *        - The `.accessibility-section--space` block is visible (no accessibility
@@ -38,9 +38,6 @@ import { startTestServer, TestEnvironment } from './helpers/test-server';
  * admin@pavillion.dev / test_calendar). The test runs serially (single-test
  * file already implies one worker per file).
  *
- * Related:
- *   - Bead: pv-ix7v.5.1 (parent epic pv-ix7v)
- *   - Bug fix: pv-on9o (Space silently dropped on re-edit of existing event)
  */
 
 let env: TestEnvironment;
@@ -147,9 +144,9 @@ async function addSpace(page: Page, name: string, accessibility?: string): Promi
   }
 
   // Save the space. The inline editor's submit button is labelled "Done" per
-  // the child-emits-data refactor (pv-0pht.8) — clicking it stages the Space
-  // into the parent's `place.spaces` working buffer; the actual server commit
-  // fires when the parent Place form is saved.
+  // the child-emits-data refactor — clicking it stages the Space into the
+  // parent's `place.spaces` working buffer; the actual server commit fires
+  // when the parent Place form is saved.
   await page.locator('.space-editor-form').getByRole('button', { name: /^done$/i }).click();
 
   // Wait for the inline editor to unmount (parent closes it on save success).
@@ -302,8 +299,8 @@ test.describe('Place + Spaces full scenario', () => {
       page.locator('.space-list .space-item').filter({ hasText: SPACE_COUNCIL }),
     ).toBeVisible();
 
-    // Save the Place form to commit the staged Spaces. With the pv-0pht atomic
-    // save model, addSpace() only stages a Space in the client working buffer;
+    // Save the Place form to commit the staged Spaces. With the atomic save
+    // model, addSpace() only stages a Space in the client working buffer;
     // the parent Save is what writes them to the server. Without this click,
     // step 3's location picker would not see any Spaces (the server never
     // received them).
@@ -370,7 +367,7 @@ test.describe('Place + Spaces full scenario', () => {
     await expect(spaceAccessibilityAfter).not.toBeVisible();
 
     // 7. Re-edit the same event and switch to a DIFFERENT Space ("Council Chambers").
-    //    This is the exact broken path from pv-on9o: edit an existing event (not
+    //    This exercises a previously-broken path: edit an existing event (not
     //    create), pick a Space, save — the prior bug silently cleared space_id.
     await editEvent(page, eventId);
 
@@ -387,7 +384,7 @@ test.describe('Place + Spaces full scenario', () => {
     await page.waitForURL(`**/calendar/${ADMIN_CALENDAR}`, { timeout: 15000 });
 
     // 8. Reload the public detail and assert that Council Chambers is now the
-    //    selected Space. Before the pv-on9o fix, the header would show only
+    //    selected Space. Before the fix, the header would show only
     //    "Convention Center" (whole venue) because space_id was silently cleared.
     await page.goto(`${env.baseURL}/view/${ADMIN_CALENDAR}/events/${eventId}`);
     await page.waitForSelector('.event-main', { timeout: 15000 });
@@ -403,9 +400,9 @@ test.describe('Place + Spaces full scenario', () => {
   });
 
   /**
-   * E2E #1 (pv-0pht.11 AC): Create a Place + 2 Spaces from scratch in ONE
-   * save action — the entire tree commits via a single POST. Verifies the
-   * atomic save model end-to-end: no save-then-edit-again pattern.
+   * E2E #1: Create a Place + 2 Spaces from scratch in ONE save action — the
+   * entire tree commits via a single POST. Verifies the atomic save model
+   * end-to-end: no save-then-edit-again pattern.
    *
    * After save, opens the event picker and confirms both Space names appear
    * as selectable options, and that the (new) affordance is gone from any
@@ -424,7 +421,7 @@ test.describe('Place + Spaces full scenario', () => {
     await page.waitForSelector('#place-name', { timeout: 10000 });
 
     // 2. Fill the place name and stage both Spaces (the Spaces section is
-    //    visible in create mode per pv-0pht atomic save model).
+    //    visible in create mode per the atomic save model).
     await page.locator('#place-name').fill(PLACE);
     await page.waitForSelector('.spaces-section', { timeout: 5000 });
     await stageSpaceInline(page, SPACE_A);
@@ -474,7 +471,7 @@ test.describe('Place + Spaces full scenario', () => {
   });
 
   /**
-   * E2E #2 (pv-0pht.11 AC): Edit a Place, delete a Space that has events on
+   * E2E #2: Edit a Place, delete a Space that has events on
    * it, reassign those events to another Space in the same Place, save, and
    * verify the user-visible orchestration end-to-end:
    *   - The reassign dialog appears with the correct event-count prompt.

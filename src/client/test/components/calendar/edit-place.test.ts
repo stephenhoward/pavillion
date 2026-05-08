@@ -25,8 +25,8 @@ const createMockCalendar = (id: string, urlName: string) => {
 };
 
 /**
- * Build a Space with optional eventCount. Per pv-0pht atomic Place + Spaces
- * wire contract, eventCount is now a real model field populated by the
+ * Build a Space with optional eventCount. Per the atomic Place + Spaces
+ * wire contract, eventCount is a real model field populated by the
  * server's GET response — not a runtime augmentation.
  */
 const createMockSpace = (
@@ -46,7 +46,7 @@ const createMockSpace = (
 };
 
 /**
- * Build a Place with optional inline spaces. Per pv-0pht the server eager-loads
+ * Build a Place with optional inline spaces. The server eager-loads
  * spaces and returns them on the Place payload; the client reads them via
  * `place.spaces`, not via a separate store accessor.
  */
@@ -67,7 +67,7 @@ vi.mock('@/client/service/calendar', () => ({
   })),
 }));
 
-// Mock LocationService — Space CRUD methods removed in pv-0pht.6.
+// Mock LocationService — per-Space CRUD methods are no longer used.
 // Atomic save: createLocation/updateLocation accept and return spaces inline.
 const mockGetLocationById = vi.fn();
 const mockCreateLocation = vi.fn();
@@ -103,16 +103,16 @@ let routerPushSpy: ReturnType<typeof vi.fn>;
 let nextStagedSpaceName = 'Stub Space';
 
 /**
- * Stub for the EditSpace child. The real component is owned by pv-0pht.8 and
- * tested independently (`edit-space.test.ts`); stubbing it isolates this test
- * to the parent's staging buffer + dialog behavior.
+ * Stub for the EditSpace child. The real component is tested independently
+ * (`edit-space.test.ts`); stubbing it isolates this test to the parent's
+ * staging buffer + dialog behavior.
  *
- * The stub mirrors the real child's emit contract (pv-0pht.8): it emits
- * `save` with a freshly-built `EventLocationSpace` carrying per-language
- * content. When the `space` prop is set (edit mode), the staged payload
- * preserves the source row's `id`, `placeId`, and `clientId` so the parent's
- * edit-merge path is exercised. The staged name is read from the
- * module-level `nextStagedSpaceName` so tests can target specific names.
+ * The stub mirrors the real child's emit contract: it emits `save` with a
+ * freshly-built `EventLocationSpace` carrying per-language content. When the
+ * `space` prop is set (edit mode), the staged payload preserves the source
+ * row's `id`, `placeId`, and `clientId` so the parent's edit-merge path is
+ * exercised. The staged name is read from the module-level
+ * `nextStagedSpaceName` so tests can target specific names.
  */
 const EditSpaceStub = {
   name: 'EditSpace',
@@ -201,7 +201,7 @@ describe('EditPlaceView', () => {
     );
     mockCreateLocation.mockImplementation((_calendarId, location) => {
       // Echo back the saved place; copy spaces with `clientId` echo per
-      // pv-0pht atomic Place + Spaces wire contract.
+      // the atomic Place + Spaces wire contract.
       const saved = createMockLocation(location.id || 'loc-new', location.name);
       saved.spaces = (location.spaces ?? []).map((s: EventLocationSpace, i: number) => {
         const echoed = createMockSpace(s.id || `server-${i}`, saved.id, []);
@@ -690,9 +690,9 @@ describe('EditPlaceView', () => {
 
   describe('Save orchestration: post-save reassign loop', () => {
     // The clientId-target → serverId translation path is covered end-to-end
-    // in pv-0pht.11 once the inline editor's emit→staged-content path lands
-    // in pv-0pht.8. Here we cover the orchestration shape (sequential issue,
-    // partial-failure tolerance) using the existing-target dropdown branch.
+    // by integration coverage. Here we cover the orchestration shape
+    // (sequential issue, partial-failure tolerance) using the existing-target
+    // dropdown branch.
 
     it('on partial reassign failure, surfaces a one-time toast warning and clears pendingReassigns', async () => {
       mockGetLocationById.mockResolvedValueOnce(
@@ -725,8 +725,8 @@ describe('EditPlaceView', () => {
       // a toast-only signal per Decision 4 (no retained partial state).
       expect(routerPushSpy).toHaveBeenCalledWith('/calendar/test-calendar?tab=places');
 
-      // Toast assertion (pv-0pht.7 testing-auditor MEDIUM, deferred to .11):
-      // partial reassign failure must surface a `warning` toast carrying the
+      // Toast assertion: partial reassign failure must surface a `warning`
+      // toast carrying the
       // resolved `places.error_reassign_partial` translation. The message is
       // resolved (not a key) because i18next-vue rendered it, so we assert on
       // the resolved English copy ("reassignment(s) failed").
@@ -739,7 +739,7 @@ describe('EditPlaceView', () => {
 
   describe('Staging buffer: handleSpaceSaved merge path', () => {
     // The EditSpaceStub emits `save` with a real EventLocationSpace payload
-    // (per pv-0pht.8 emit contract); the parent's `handleSpaceSaved` decides
+    // (per the emit contract); the parent's `handleSpaceSaved` decides
     // whether to append (create) or replace-in-place (edit). This block
     // exercises both paths through the parent's wiring rather than through
     // child-internal logic.
@@ -791,7 +791,7 @@ describe('EditPlaceView', () => {
   });
 
   describe('Staging buffer: (new) affordance for staged Spaces', () => {
-    // Per pv-0pht atomic save contract, a staged-but-unsaved Space is
+    // Per the atomic save contract, a staged-but-unsaved Space is
     // identified by `!space.id` (it has only a `clientId`). The list-row
     // template renders `space.reassign_new_suffix` (resolved as "(new)") for
     // those rows. After atomic save, the server echoes the row back with a
@@ -850,7 +850,7 @@ describe('EditPlaceView', () => {
   });
 
   describe('clientId-target translation end-to-end (post-save reassign)', () => {
-    // The most architecturally novel contract in pv-0pht: when the user
+    // The most architecturally novel contract here: when the user
     // stages a brand-new Space AND picks it as the reassign target for an
     // existing Space they're deleting, the working buffer holds a clientId
     // (the staged row has no server id yet). At save time, the server's

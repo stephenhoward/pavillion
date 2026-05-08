@@ -317,7 +317,7 @@ describe('EventCard', () => {
       wrapper.unmount();
     });
 
-    // Regression for pv-vvei: when an event is scoped to a Place + Space,
+    // Regression: when an event is scoped to a Place + Space,
     // the card must render "Place — Space", not just the Place name. The
     // detail page already used this format via a `locationDisplayName`
     // computed; the card was missing the same logic.

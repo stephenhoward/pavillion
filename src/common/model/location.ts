@@ -48,57 +48,6 @@ class EventLocationContent extends Model implements TranslatedContentModel {
 }
 
 /**
- * Represents translatable content for a Space within an event location.
- * Spaces can have a name and accessibility information in multiple languages.
- */
-class EventLocationSpaceContent extends Model implements TranslatedContentModel {
-  constructor(
-    public language: string,
-    public name: string = '',
-    public accessibilityInfo: string = '',
-  ) {
-    super();
-  }
-
-  /**
-   * Validates that the content has required information.
-   * A Space requires a non-empty language and non-empty name.
-   */
-  isValid(): boolean {
-    return this.language.length > 0 && this.name.trim().length > 0;
-  }
-
-  /**
-   * Checks if the content is empty (no name and no accessibility info).
-   */
-  isEmpty(): boolean {
-    return this.name.trim().length === 0 && this.accessibilityInfo.trim().length === 0;
-  }
-
-  /**
-   * Convert to plain object for serialization.
-   */
-  toObject(): Record<string, any> {
-    return {
-      language: this.language,
-      name: this.name,
-      accessibilityInfo: this.accessibilityInfo,
-    };
-  }
-
-  /**
-   * Create from plain object.
-   */
-  static fromObject(obj: Record<string, any>): EventLocationSpaceContent {
-    return new EventLocationSpaceContent(
-      obj.language,
-      obj.name ?? '',
-      obj.accessibilityInfo ?? '',
-    );
-  }
-}
-
-/**
  * Represents a physical location where an event takes place.
  * Contains address information and multilingual accessibility details.
  */
@@ -110,12 +59,12 @@ class EventLocation extends TranslatedModel<EventLocationContent> {
   state: string = '';
   postalCode: string = '';
   country: string = '';
-  // Identity hint for AP-originated records (inbound dedup, pv-ix7v).
+  // Identity hint for AP-originated records (inbound dedup).
   // Null for locally-created Places.
   originUri: string | null = null;
   // Sub-areas (rooms, sections) of this Place. Populated by eager-load on the
   // server and by the client when editing; serialized as a nested array so
-  // Place + Spaces can be saved atomically (pv-0pht).
+  // Place + Spaces can be saved atomically.
   spaces: EventLocationSpace[] = [];
 
   /**
@@ -174,7 +123,7 @@ class EventLocation extends TranslatedModel<EventLocationContent> {
       }
     }
 
-    // Load nested spaces if present (pv-0pht atomic Place + Spaces wire contract)
+    // Load nested spaces if present (atomic Place + Spaces wire contract)
     if (Array.isArray(obj.spaces)) {
       location.spaces = obj.spaces.map((spaceObj: Record<string, any>) => EventLocationSpace.fromObject(spaceObj));
     }
@@ -202,7 +151,7 @@ class EventLocation extends TranslatedModel<EventLocationContent> {
           .map(([language, content]: [string, EventLocationContent]) => [language, content.toObject()]),
       ),
       // Always emit spaces (even when empty) so the wire contract is stable
-      // for atomic Place + Spaces save (pv-0pht).
+      // for atomic Place + Spaces save.
       spaces: this.spaces.map((space) => space.toObject()),
     };
     // Emit originUri only when non-null (data minimization, DEC-004 spirit)
@@ -214,6 +163,57 @@ class EventLocation extends TranslatedModel<EventLocationContent> {
 };
 
 /**
+ * Represents translatable content for a Space within an event location.
+ * Spaces can have a name and accessibility information in multiple languages.
+ */
+class EventLocationSpaceContent extends Model implements TranslatedContentModel {
+  constructor(
+    public language: string,
+    public name: string = '',
+    public accessibilityInfo: string = '',
+  ) {
+    super();
+  }
+
+  /**
+   * Validates that the content has required information.
+   * A Space requires a non-empty language and non-empty name.
+   */
+  isValid(): boolean {
+    return this.language.length > 0 && this.name.trim().length > 0;
+  }
+
+  /**
+   * Checks if the content is empty (no name and no accessibility info).
+   */
+  isEmpty(): boolean {
+    return this.name.trim().length === 0 && this.accessibilityInfo.trim().length === 0;
+  }
+
+  /**
+   * Convert to plain object for serialization.
+   */
+  toObject(): Record<string, any> {
+    return {
+      language: this.language,
+      name: this.name,
+      accessibilityInfo: this.accessibilityInfo,
+    };
+  }
+
+  /**
+   * Create from plain object.
+   */
+  static fromObject(obj: Record<string, any>): EventLocationSpaceContent {
+    return new EventLocationSpaceContent(
+      obj.language,
+      obj.name ?? '',
+      obj.accessibilityInfo ?? '',
+    );
+  }
+}
+
+/**
  * Represents a Space within an EventLocation (Place).
  * A Space is a sub-area of a Place (e.g. a specific room within a venue) with
  * its own translatable name and accessibility information.
@@ -221,16 +221,16 @@ class EventLocation extends TranslatedModel<EventLocationContent> {
 class EventLocationSpace extends TranslatedModel<EventLocationSpaceContent> {
   _content: Record<string, EventLocationSpaceContent> = {};
   placeId: string = '';
-  // Identity hint for AP-originated records (inbound dedup, pv-ix7v).
+  // Identity hint for AP-originated records (inbound dedup).
   // Null for locally-created Spaces.
   originUri: string | null = null;
   // Transient correlation token used by the client to match a freshly-saved
   // Space row back to its draft form entry during atomic Place + Spaces save.
-  // NOT a row ID — set only on the wire while a Space is unsaved (pv-0pht).
+  // NOT a row ID — set only on the wire while a Space is unsaved.
   clientId?: string;
   // Read-only computed field reporting how many events on the parent Place
   // currently reference this Space. Populated by server eager-loads; never
-  // sent in writes and never emitted by toObject (pv-0pht).
+  // sent in writes and never emitted by toObject.
   eventCount?: number;
 
   /**
@@ -307,7 +307,7 @@ class EventLocationSpace extends TranslatedModel<EventLocationSpaceContent> {
     }
     // Emit clientId only when set, mirroring the originUri precedent. Carries
     // the transient correlation token from client to server during atomic
-    // Place + Spaces save (pv-0pht).
+    // Place + Spaces save.
     if (this.clientId !== undefined) {
       obj.clientId = this.clientId;
     }

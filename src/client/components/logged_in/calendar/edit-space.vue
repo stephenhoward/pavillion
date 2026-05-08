@@ -8,7 +8,7 @@
  *
  * Acts as a child-emits-data sub-editor: emits `save` with a staged content
  * payload and `cancel` with no payload. The parent (`edit-place.vue`'s Spaces
- * section, pv-0pht) is responsible for merging the payload into its working
+ * section) is responsible for merging the payload into its working
  * `place.spaces` buffer (creating a new entry with a generated `clientId` for
  * staged-but-unsaved Spaces, or replacing the existing entry's content).
  *

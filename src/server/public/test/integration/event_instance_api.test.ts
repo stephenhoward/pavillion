@@ -12,7 +12,7 @@ import { EventInstanceEntity } from '@/server/calendar/entity/event_instance';
 /**
  * Integration tests for GET /api/public/v1/events/:eventId/instances/:startTime
  *
- * Covers the timestamp-slug public instance route introduced in pv-3hsk:
+ * Covers the timestamp-slug public instance route:
  *   - Happy path (one-shot event, cached row)
  *   - Miss-then-materialize for a recurring event (row created on first hit)
  *   - Concurrent-miss race (two parallel requests → exactly one DB row)
@@ -114,9 +114,9 @@ describe('GET /api/public/v1/events/:eventId/instances/:startTime', () => {
     }
     locationId = locResponse.body.id;
 
-    // Add a Space under that Place via the nested-snapshot PUT endpoint
-    // (pv-0pht.5 — per-Space CRUD routes have been removed; the Place's
-    // `spaces[]` is the single write surface).
+    // Add a Space under that Place via the nested-snapshot PUT endpoint.
+    // Per-Space CRUD routes are not used; the Place's `spaces[]` is the
+    // single write surface.
     const placeUpdate = await request(env.app)
       .put(`/api/v1/calendars/${calendarId}/locations/${locationId}`)
       .set('Authorization', `Bearer ${ownerToken}`)

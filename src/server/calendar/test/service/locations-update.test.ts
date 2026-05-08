@@ -16,8 +16,8 @@ describe('LocationService - Event Update Location Handling (LOC-003)', () => {
     locationService = new LocationService();
     testCalendar = new Calendar('test-calendar-id', 'test-calendar');
 
-    // createLocation now wraps its writes in db.transaction (pv-0pht.3) — stub
-    // the wrapper so the body runs inline with a fake tx handle. Tests that
+    // createLocation wraps its writes in db.transaction — stub the wrapper
+    // so the body runs inline with a fake tx handle. Tests that
     // do not exercise createLocation are unaffected (the stub is a no-op).
     sandbox.stub(db, 'transaction').callsFake(async (callback: any) => {
       const fakeTx = { __brand: 'fake-tx' };
@@ -93,9 +93,9 @@ describe('LocationService - Event Update Location Handling (LOC-003)', () => {
       country: 'USA',
     };
 
-    // findByPk is now used by createLocation for the post-write reload
-    // (pv-0pht.3) — return a built entity matching the generated id so the
-    // reload-and-toModel path produces a valid response model.
+    // findByPk is used by createLocation for the post-write reload — return
+    // a built entity matching the generated id so the reload-and-toModel
+    // path produces a valid response model.
     sandbox.stub(LocationEntity, 'findByPk').callsFake(async (id: any) => {
       if (!id) return null;
       return LocationEntity.build({
@@ -187,9 +187,9 @@ describe('LocationService - Event Update Location Handling (LOC-003)', () => {
       country: 'USA',
     };
 
-    // findByPk is now used by createLocation for the post-write reload
-    // (pv-0pht.3). Return null on empty-id auth-style lookups; return a
-    // built entity for the post-write reload using the generated UUID.
+    // findByPk is used by createLocation for the post-write reload. Return
+    // null on empty-id auth-style lookups; return a built entity for the
+    // post-write reload using the generated UUID.
     sandbox.stub(LocationEntity, 'findByPk').callsFake(async (id: any) => {
       if (!id) return null;
       return LocationEntity.build({

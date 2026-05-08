@@ -55,8 +55,8 @@ function makeSpace(id: string, placeId: string, name: string): EventLocationSpac
 
 /**
  * Helper: clone a Place with the supplied Spaces inlined onto `place.spaces`.
- * Per pv-0pht the Spaces live directly on the Place; the picker no longer
- * accepts a separate spacesByPlace map.
+ * The Spaces live directly on the Place; the picker no longer accepts a
+ * separate spacesByPlace map.
  */
 function placeWithSpaces(place: EventLocation, spaces: EventLocationSpace[]): EventLocation {
   const cloned = EventLocation.fromObject(place.toObject());
@@ -367,7 +367,7 @@ describe('LocationPickerModal', () => {
     });
 
     it('a11y: whole-venue entry text content contains whitespace between place name and suffix', () => {
-      // Regression guard for pv-exp1: the place name and "(whole venue)" suffix
+      // Regression guard: the place name and "(whole venue)" suffix
       // must be separated by whitespace in the DOM so AT flat-text concatenation
       // reads "Convention Center (whole venue)", not "Convention Center(whole venue)".
       const wrapper = mount(LocationPickerModal, { ...SHEET_GLOBAL, props: {

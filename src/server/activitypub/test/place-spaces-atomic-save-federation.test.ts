@@ -19,23 +19,22 @@ import {
 } from '@/common/model/location';
 
 /**
- * Federation regression test for the Place + Spaces atomic-save model
- * (pv-0pht.12).
+ * Federation regression test for the Place + Spaces atomic-save model.
  *
- * Architectural Decision 6 of pv-0pht commits us to leaving outbound
- * AP serialization untouched: per-event Update(Event) activities continue to
+ * The atomic-save architecture commits us to leaving outbound AP
+ * serialization untouched: per-event Update(Event) activities continue to
  * carry the existing `pavillion:place` and `pavillion:space` references,
- * exactly as in pv-ix7v wave 7. The Place save changes only what Pavillion
- * stores; what federates is still per-event.
+ * exactly as before. The Place save changes only what Pavillion stores; what
+ * federates is still per-event.
  *
  * This test asserts that contract end-to-end. It captures the AP activity
  * emitted on `eventUpdated` for an event whose Space changed via the new
  * atomic-save path and field-by-field compares its on-the-wire shape with
  * what `EventObject.toActivityPubObject()` would have produced under the
- * pv-ix7v per-Space CRUD model. If a future change to the AP model drifts
+ * legacy per-Space CRUD model. If a future change to the AP model drifts
  * the wire shape, this test fails and forces a deliberate decision.
  */
-describe('Place+Spaces atomic save: federation regression (pv-0pht.12)', () => {
+describe('Place+Spaces atomic save: federation regression', () => {
   let service: ActivityPubInterface;
   let handlers: ActivityPubEventHandlers;
   let eventBus: EventEmitter;
@@ -210,8 +209,6 @@ describe('Place+Spaces atomic save: federation regression (pv-0pht.12)', () => {
 });
 
 /**
- * Open question 2 resolution (pv-0pht.12).
- *
  * Decision: federation source-of-truth on inbound Space re-pin.
  *
  * When a federated event was Space-pinned and the local Space is later
@@ -239,12 +236,11 @@ describe('Place+Spaces atomic save: federation regression (pv-0pht.12)', () => {
  * introduced. The test below pins the behavior so a future refactor cannot
  * accidentally introduce sticky-null semantics without an explicit choice.
  *
- * Per the bead question, this is NOT a new decisions.md entry — DEC-008
- * remains the controlling authority for the sticky-vs-source-of-truth
- * pattern, and this case falls cleanly on the source-of-truth side
- * (no explicit user intent signal).
+ * This is NOT a new decisions.md entry — DEC-008 remains the controlling
+ * authority for the sticky-vs-source-of-truth pattern, and this case falls
+ * cleanly on the source-of-truth side (no explicit user intent signal).
  */
-describe('Place+Spaces inbound re-pin: federation source-of-truth (pv-0pht.12 OQ2)', () => {
+describe('Place+Spaces inbound re-pin: federation source-of-truth', () => {
   let sandbox: sinon.SinonSandbox;
 
   beforeEach(() => {

@@ -20,8 +20,8 @@ import db from '@/server/common/entity/db';
  * subquery against the `event` table.
  *
  * Centralised so the read-path (`getLocationsForCalendar`,
- * `getLocationById`) and the post-write reload path (introduced in pv-0pht.3)
- * speak the same eager-load shape — keeps the wire contract stable across
+ * `getLocationById`) and the post-write reload path speak the same
+ * eager-load shape — keeps the wire contract stable across
  * GETs and write responses, and prevents drift between the COUNT correlation
  * and the entity alias used to root the subquery.
  *
@@ -63,7 +63,7 @@ export default class LocationService {
    * matches the Space). Constant query count regardless of place count or
    * space count: one SELECT for the Places + their content, plus one
    * `separate: true` SELECT for the Spaces with the correlated COUNT subquery
-   * embedded — never N+1 (pv-0pht).
+   * embedded — never N+1.
    *
    * @param calendar - The calendar to get locations for
    * @returns Array of EventLocation models populated with content and
@@ -87,7 +87,7 @@ export default class LocationService {
    *
    * Eager-loads Spaces inline with per-Space `eventCount` so the editor can
    * decide which delete dialog to show (plain confirm vs reassign) without
-   * any follow-up round trip (pv-0pht).
+   * any follow-up round trip.
    *
    * @param calendar - The calendar that should own the location
    * @param locationId - The location ID to fetch
@@ -144,7 +144,7 @@ export default class LocationService {
 
   /**
    * Create a new location with optional accessibility content and optional
-   * nested Spaces (pv-0pht atomic Place + Spaces save).
+   * nested Spaces (atomic Place + Spaces save).
    *
    * Wraps Place insert + per-language content rows + per-Space rows + per-Space
    * content rows in a single Sequelize transaction. The Space rows ride along
@@ -170,7 +170,7 @@ export default class LocationService {
 
     // Pre-validate incoming Space clientIds before opening the transaction so
     // a malformed token never reaches the writes. UUID-format check follows
-    // the security advisor's gate for the round-trip echo (pv-0pht).
+    // the security advisor's gate for the round-trip echo.
     const incomingSpaces = location.spaces ?? [];
     for (const space of incomingSpaces) {
       if (space.clientId !== undefined && !expressHelper.isValidUUID(space.clientId)) {
@@ -340,7 +340,7 @@ export default class LocationService {
 
   /**
    * Update an existing location's fields and content, plus apply the
-   * snapshot-diff for nested Spaces atomically (pv-0pht).
+   * snapshot-diff for nested Spaces atomically.
    *
    * The whole write — Place fields + Place content rows + Space create /
    * update / destroy — runs under a single Sequelize transaction so any
@@ -355,8 +355,8 @@ export default class LocationService {
    * - Incoming Space with `clientId` and no `id` → insert a new Space with a
    *   server-generated UUID; the `clientId` is echoed back on the response.
    * - Existing Space `id` not present in the incoming snapshot → destroy.
-   *   The `events.space_id` FK with `ON DELETE SET NULL` (pv-0pht.2) handles
-   *   the event-side null automatically — no per-event sweep here.
+   *   The `events.space_id` FK with `ON DELETE SET NULL` handles the
+   *   event-side null automatically — no per-event sweep here.
    *
    * The auth gate (locationId belongs to calendar) is the calendar boundary.
    * The Space-hijack check uses `place_id = :locationId` as its own boundary
@@ -388,7 +388,7 @@ export default class LocationService {
     }
 
     // Pre-validate incoming Space clientIds before opening the transaction.
-    // Malformed tokens never reach the writes (security advisor gate, pv-0pht).
+    // Malformed tokens never reach the writes (security advisor gate).
     const incomingSpaces = location.spaces ?? [];
     for (const space of incomingSpaces) {
       if (space.clientId !== undefined && !expressHelper.isValidUUID(space.clientId)) {
@@ -470,8 +470,8 @@ export default class LocationService {
       }
 
       // Destroy any existing rows that were not echoed back in the snapshot.
-      // FK SET NULL on events.space_id (pv-0pht.2) handles the event-side
-      // null automatically — no per-event sweep needed here.
+      // FK SET NULL on events.space_id handles the event-side null
+      // automatically — no per-event sweep needed here.
       const toDestroy: string[] = [];
       for (const row of existing) {
         if (!seenExistingIds.has(row.id)) {
@@ -491,7 +491,7 @@ export default class LocationService {
     });
 
     // Reload with the canonical eager-load shape used by GET responses so
-    // the wire contract matches 1:1 (pv-0pht.4).
+    // the wire contract matches 1:1.
     const result = await this._reloadPlaceForResponse(locationId);
 
     // Echo clientIds back on the response model so the client can map
@@ -871,8 +871,8 @@ export default class LocationService {
   /**
    * Find or create a Place keyed on its AP origin URI.
    *
-   * Receiver-side dedup helper for the AP inbox path (pv-ix7v.9): when an
-   * inbound activity references a Place by its source-instance identity hint
+   * Receiver-side dedup helper for the AP inbox path: when an inbound
+   * activity references a Place by its source-instance identity hint
    * (origin_uri), this lookup either returns the previously-mirrored Place
    * for this calendar or creates a new one with the supplied data and the
    * origin_uri stamped on it.
@@ -931,8 +931,8 @@ export default class LocationService {
   /**
    * Find or create a Space keyed on its AP origin URI within a Place.
    *
-   * Receiver-side dedup helper for the AP inbox path (pv-ix7v.9). The parent
-   * Place is supplied by the caller (typically just resolved via
+   * Receiver-side dedup helper for the AP inbox path. The parent Place is
+   * supplied by the caller (typically just resolved via
    * findOrCreatePlaceByOriginUri) so that Space scoping is anchored on a
    * concrete place_id. Lookup is keyed on (place_id, origin_uri); the parent
    * Place's calendar ownership is established by the caller and is not

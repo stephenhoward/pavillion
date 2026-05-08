@@ -288,18 +288,18 @@ function closeReportModal() {
           <div v-if="hasAccessibilityInfo" class="sidebar-card accessibility-card">
             <div class="card-header">
               <Accessibility :size="16" class="card-icon" aria-hidden="true" />
-              <h3 class="card-heading">{{ t('event_accessibility') }}</h3>
+              <h3 class="card-heading">{{ t('accessibility.section_heading') }}</h3>
             </div>
             <div v-if="eventAccessibilityInfo" class="accessibility-section accessibility-section--event">
-              <h4 class="accessibility-subheading">{{ t('place.space.event_accessibility_label') }}</h4>
+              <h4 class="accessibility-subheading">{{ t('accessibility.event_label') }}</h4>
               <p class="accessibility-info">{{ eventAccessibilityInfo }}</p>
             </div>
             <div v-if="venueAccessibilityInfo" class="accessibility-section accessibility-section--venue">
-              <h4 class="accessibility-subheading">{{ t('place.space.venue_accessibility_label') }}</h4>
+              <h4 class="accessibility-subheading">{{ t('accessibility.venue_label') }}</h4>
               <p class="accessibility-info">{{ venueAccessibilityInfo }}</p>
             </div>
             <div v-if="spaceAccessibilityInfo" class="accessibility-section accessibility-section--space">
-              <h4 class="accessibility-subheading">{{ t('place.space.space_accessibility_label') }}</h4>
+              <h4 class="accessibility-subheading">{{ t('accessibility.space_label') }}</h4>
               <p class="accessibility-info">{{ spaceAccessibilityInfo }}</p>
             </div>
           </div>

@@ -25,7 +25,7 @@ export const useLocationStore = defineStore('locations', {
      * Updates an existing location in the store or adds it if not found.
      *
      * The incoming `EventLocation` carries its nested `spaces[]` snapshot inline
-     * (pv-0pht atomic Place + Spaces wire contract); replacing the cached entry
+     * (atomic Place + Spaces wire contract); replacing the cached entry
      * wholesale keeps `clientId` echoes and `eventCount` values from the server
      * response visible to subscribers.
      *

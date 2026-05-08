@@ -184,7 +184,7 @@ export class SpaceLocationMismatchError extends Error {
  * Custom error class raised when an incoming Space `id` in a Place update
  * snapshot does not match a row scoped by `place_id = :locationId`.
  *
- * This is the security boundary for nested Place + Spaces save (pv-0pht):
+ * This is the security boundary for nested Place + Spaces save:
  * the caller cannot smuggle a Space `id` from a sibling Place — even one
  * owned by the same calendar — into another Place's update payload. The
  * service-layer diff rejects any incoming Space `id` not present in the
@@ -211,7 +211,7 @@ export class SpaceHijackError extends Error {
  *
  * `clientId` is a transient correlation token and never a row primary key,
  * but it must still be a well-formed UUID so the round-trip echo cannot be
- * abused to inject arbitrary data into the response payload (pv-0pht).
+ * abused to inject arbitrary data into the response payload.
  */
 export class InvalidClientIdError extends Error {
   constructor(

@@ -322,7 +322,7 @@ describe('Location API Tests', () => {
       expect(response.body.errorName).toBe('LocationNotFoundError');
     });
 
-    it('should return location with spaces[] populated inline and eventCount per Space (pv-0pht.4)', async () => {
+    it('should return location with spaces[] populated inline and eventCount per Space', async () => {
       const locationId = 'c3d4e5f6-0001-4000-8000-000000000001';
       const location = new EventLocation(locationId, 'Convention Center');
 
@@ -509,7 +509,7 @@ describe('Location API Tests', () => {
     });
   });
 
-  describe('GET /api/v1/calendars/:calendarId/locations — spaces eventCount (pv-0pht.5)', () => {
+  describe('GET /api/v1/calendars/:calendarId/locations — spaces eventCount', () => {
     it('should include spaces[] with per-Space eventCount on the list endpoint', async () => {
       const location1 = new EventLocation('loc-1', 'Convention Center');
       const space1 = new EventLocationSpace('space-1', 'loc-1');
@@ -544,7 +544,7 @@ describe('Location API Tests', () => {
     });
   });
 
-  describe('POST/PUT spaces[] error mapping (pv-0pht.5 wave-2 deferreds)', () => {
+  describe('POST/PUT spaces[] error mapping', () => {
     it('POST returns 400 with errorName SpaceHijackError', async () => {
       (calendarInterface.getCalendar as sinon.SinonStub).resolves(testCalendar);
       (calendarInterface.userCanModifyCalendar as sinon.SinonStub).resolves(true);
@@ -607,7 +607,7 @@ describe('Location API Tests', () => {
     });
   });
 
-  describe('POST/PUT serialize spaces[] with eventCount (pv-0pht.5 wave-2 deferreds)', () => {
+  describe('POST/PUT serialize spaces[] with eventCount', () => {
     it('POST 201 response includes spaces[] with per-Space eventCount', async () => {
       const created = new EventLocation('loc-new', 'New Venue');
       const space = new EventLocationSpace('space-new', 'loc-new');
@@ -651,7 +651,7 @@ describe('Location API Tests', () => {
     });
   });
 
-  describe('POST /api/v1/calendars/:calendarId/locations/:locationId/reassign-events (pv-0pht.5)', () => {
+  describe('POST /api/v1/calendars/:calendarId/locations/:locationId/reassign-events', () => {
     const fromSpaceId = '11111111-1111-4111-8111-111111111111';
     const toSpaceId = '22222222-2222-4222-8222-222222222222';
 

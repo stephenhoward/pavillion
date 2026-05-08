@@ -4,7 +4,7 @@ import { CalendarEvent } from '@/common/model/events';
 import { EventLocationSpace } from '@/common/model/location';
 
 /**
- * Unit tests for CalendarEvent model serialization (pv-on9o).
+ * Unit tests for CalendarEvent model serialization.
  *
  * Covers toObject / fromObject round-trip for the space / spaceId wire contract.
  */

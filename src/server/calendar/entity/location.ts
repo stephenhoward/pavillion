@@ -34,7 +34,7 @@ class LocationEntity extends Model {
   @Column({ type: DataType.STRING })
   declare country: string;
 
-  // origin_uri identifies AP-originated records for inbound dedup (pv-ix7v).
+  // origin_uri identifies AP-originated records for inbound dedup.
   // Should be cleared when the source calendar is unfollowed — see follow-up.
   @Column({ type: DataType.STRING(2048), allowNull: true })
   declare origin_uri: string | null;
@@ -75,7 +75,7 @@ class LocationEntity extends Model {
 
     // Add spaces if eager-loaded. Each space's toModel() picks up its computed
     // eventCount from dataValues when the eager-load attached the literal
-    // subquery (pv-0pht).
+    // subquery.
     if (this.spaces) {
       location.spaces = this.spaces.map(spaceEntity => spaceEntity.toModel());
     }

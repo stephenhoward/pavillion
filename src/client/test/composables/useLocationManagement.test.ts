@@ -123,7 +123,7 @@ describe('useLocationManagement', () => {
       const place = new EventLocation('place-cc', 'Convention Center');
       const space = new EventLocationSpace('space-pacific', 'place-cc');
       space.addContent(new EventLocationSpaceContent('en', 'Pacific Room', ''));
-      // pv-0pht: spaces[] is inline on the Place object — no separate cache.
+      // spaces[] is inline on the Place object — no separate cache.
       place.spaces = [space];
       availableLocations.value = [place];
 

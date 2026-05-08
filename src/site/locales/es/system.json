@@ -79,15 +79,15 @@
     "get_directions": "Cómo llegar",
     "about_this_event": "Acerca de este evento",
     "event_categories": "Categorías",
-    "event_accessibility": "Accesibilidad",
+    "accessibility": {
+        "section_heading": "Accesibilidad",
+        "event_label": "Accesibilidad del evento",
+        "venue_label": "Accesibilidad del lugar",
+        "space_label": "Accesibilidad del espacio"
+    },
     "place": {
         "format": {
             "with_space": "{{place}} — {{space}}"
-        },
-        "space": {
-            "event_accessibility_label": "Accesibilidad del evento",
-            "venue_accessibility_label": "Accesibilidad del lugar",
-            "space_accessibility_label": "Accesibilidad del espacio"
         }
     },
     "event_recurring": "Evento recurrente",

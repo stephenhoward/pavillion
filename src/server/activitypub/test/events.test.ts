@@ -301,7 +301,7 @@ describe('handleEventCreated', () => {
     ).toBe(true);
   });
 
-  it('returns early without dispatching Announce when payload.calendar is null (remote-origin event, pv-13xg)', async () => {
+  it('returns early without dispatching Announce when payload.calendar is null (remote-origin event)', async () => {
     // EventService.addRemoteEvent emits eventCreated with calendar:null so the
     // calendar-domain buildEventInstances handler materializes canonical rows
     // for inbound federated events. The AP handler must early-return on the
@@ -329,13 +329,12 @@ describe('handleEventCreated', () => {
 });
 
 describe('AP serialize → parse round-trip (Place + Space + multilingual content)', () => {
-  // Integration test for the Place + Spaces federation surface (pv-ix7v.10.1).
+  // Integration test for the Place + Spaces federation surface.
   //
-  // This test exercises both the outbound emit path (toActivityPubObject — pv-ix7v.7.1
-  // and pv-ix7v.7.2) and the inbound priority-consumption path
-  // (fromActivityPubObject — pv-ix7v.8.1) together. It is the structural guard
-  // against drift between the two surfaces: when emit changes shape but consume
-  // does not (or vice versa), this test fails.
+  // This test exercises both the outbound emit path (toActivityPubObject) and
+  // the inbound priority-consumption path (fromActivityPubObject) together. It
+  // is the structural guard against drift between the two surfaces: when emit
+  // changes shape but consume does not (or vice versa), this test fails.
   //
   // Per the Option B wire shape, content[lang] entries on both pavillion:place
   // and pavillion:space carry BOTH name and accessibilityInfo. The inbound

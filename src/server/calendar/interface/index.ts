@@ -65,9 +65,9 @@ export default class CalendarInterface {
     this.eventService = new EventService(eventBus);
     this.locationService = new LocationService();
     // EventInstanceService listing depends on EventService.listEventIdsForCalendar
-    // (single-producer model under pv-hr72). Inject the shared instance so the
-    // AP-interface wiring and any future EventService configuration apply
-    // uniformly to both consumers.
+    // (single-producer model). Inject the shared instance so the AP-interface
+    // wiring and any future EventService configuration apply uniformly to both
+    // consumers.
     this.eventInstanceService = new EventInstanceService(eventBus, this.eventService);
     this.categoryService = new CategoryService(this.calendarService);
     this.widgetDomainService = new WidgetDomainService();

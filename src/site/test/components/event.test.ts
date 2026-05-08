@@ -285,7 +285,12 @@ beforeAll(async () => {
     'series.view': 'View series',
     about_this_event: 'About This Event',
     event_categories: 'Categories',
-    event_accessibility: 'Accessibility',
+    accessibility: {
+      section_heading: 'Accessibility',
+      event_label: 'Event accessibility',
+      venue_label: 'Venue accessibility',
+      space_label: 'Space accessibility',
+    },
     event_location: 'Location',
     event_source_calendar: 'Source Calendar',
     event_source_calendar_label: 'View source calendar {{name}}',
@@ -297,11 +302,6 @@ beforeAll(async () => {
     place: {
       format: {
         with_space: '{{place}} — {{space}}',
-      },
-      space: {
-        event_accessibility_label: 'Event accessibility',
-        venue_accessibility_label: 'Venue accessibility',
-        space_accessibility_label: 'Space accessibility',
       },
     },
   };
@@ -824,7 +824,7 @@ describe('event location display', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Place + Space layered display (pv-ix7v.4.7)
+// Place + Space layered display
 // ---------------------------------------------------------------------------
 
 describe('event Place + Space layered display', () => {

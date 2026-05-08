@@ -37,8 +37,8 @@ export default class LocationService {
   /**
    * Get all locations for a specific calendar.
    *
-   * Locations now ride with their nested `spaces[]` snapshot inline (pv-0pht
-   * atomic Place + Spaces wire contract). `EventLocation.fromObject` populates
+   * Locations ride with their nested `spaces[]` snapshot inline (atomic
+   * Place + Spaces wire contract). `EventLocation.fromObject` populates
    * `spaces[]` from the response payload.
    *
    * @param calendarId - The ID of the calendar

@@ -140,7 +140,7 @@ describe('LocationService', () => {
       expect(findByPkStub.called).toBe(true);
     });
 
-    it('inserts nested Spaces and echoes clientId back on the response (pv-0pht)', async () => {
+    it('inserts nested Spaces and echoes clientId back on the response', async () => {
       const calendar = new Calendar('cal-1', 'testcal');
 
       sandbox.stub(LocationEntity.prototype, 'save').resolves();
@@ -352,7 +352,7 @@ describe('LocationService', () => {
       expect((destroyStub.firstCall.args[0] as any).transaction).toBeDefined();
     });
 
-    describe('snapshot diff for spaces (pv-0pht)', () => {
+    describe('snapshot diff for spaces', () => {
       it('updates existing Space content when incoming id matches a row scoped to place_id', async () => {
         const calendar = new Calendar('cal-1', 'testcal');
         const existingEntity = LocationEntity.build({ id: 'loc-1', calendar_id: 'cal-1', name: 'Venue' });
@@ -459,7 +459,7 @@ describe('LocationService', () => {
 
         // The dropped Space was destroyed via id IN-list; FK SET NULL on
         // events.space_id handles the event-side null automatically (covered
-        // by integration tier in pv-0pht.10).
+        // by integration tier).
         expect(spaceDestroyStub.calledOnce).toBe(true);
         expect((spaceDestroyStub.firstCall.args[0] as any).where).toEqual({ id: ['drop-1'] });
 
@@ -469,7 +469,7 @@ describe('LocationService', () => {
         // survivor (`space_id: 'keep-1'`), and one in the destroy branch
         // for the dropped row (`space_id: ['drop-1']`). Find the IN-list
         // call by shape — that is the destroy-branch sweep we want to lock
-        // down. (testing-auditor pv-0pht.3 follow-up.)
+        // down.
         const dropContentCall = spaceContentDestroyStub.getCalls().find(
           (call: any) => Array.isArray((call.args[0] as any).where?.space_id),
         );
@@ -702,7 +702,7 @@ describe('LocationService', () => {
     });
   });
 
-  describe('reassignEvents (pv-0pht.5 service tier)', () => {
+  describe('reassignEvents (service tier)', () => {
     // Stub db.transaction so the body runs inline with a fake tx handle. This
     // mirrors the deleteLocation/updateLocation suites — the wrapper executes
     // the callback synchronously so per-call stubs can observe the threaded

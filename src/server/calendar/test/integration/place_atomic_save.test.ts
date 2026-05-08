@@ -14,7 +14,7 @@ import { EventEntity } from '@/server/calendar/entity/event';
 import { LocationSpaceEntity } from '@/server/calendar/entity/location_space';
 
 /**
- * Integration coverage for the Place + Spaces atomic-save model (pv-0pht.10).
+ * Integration coverage for the Place + Spaces atomic-save model.
  *
  * Tier discipline: this file exercises the HTTP layer + real DB constraint
  * behavior end-to-end. Service-tier unit tests (call-issued) live in
@@ -23,11 +23,11 @@ import { LocationSpaceEntity } from '@/server/calendar/entity/location_space';
  * SQL path actually persists, hijack-rejects, FK-nulls, and 403s through the
  * real Express + Sequelize stack.
  *
- * Covers acceptance criteria from pv-0pht.10:
+ * Covers:
  *   - create-with-spaces (clientId echo verified end-to-end)
  *   - update-with-mixed-CRUD (create + update + delete in one PUT)
  *   - delete-removes-spaces-and-nulls-events (Place delete extended; the
- *     Space-only ON DELETE SET NULL case is owned by pv-0pht.2)
+ *     Space-only ON DELETE SET NULL case is covered by the entity FK test)
  *   - reassign-events happy path returns 200 with non-zero count
  *   - reassign-events with fromSpaceId from a different Place returns 200 { count: 0 }
  *   - whole-venue path: events.space_id = NULL post-save AND reassign endpoint NOT called
@@ -246,8 +246,8 @@ describe('Place + Spaces atomic-save - Integration', () => {
   describe('DELETE place cascade', () => {
     it('removes the Place + Spaces and nulls events.location_id and events.space_id', async () => {
       // Seed a Place with one Space, attach an event to that Space, then
-      // delete the Place. The pv-0pht.2 FK SET NULL guarantees `space_id`
-      // nulls when a Space row is destroyed; the LocationService delete path
+      // delete the Place. The FK SET NULL guarantees `space_id` nulls
+      // when a Space row is destroyed; the LocationService delete path
       // additionally nulls `location_id` for events on this Place (covered
       // by the location_service.test.ts unit suite). This test validates
       // both ends of that chain on the real DB.
@@ -439,7 +439,7 @@ describe('Place + Spaces atomic-save - Integration', () => {
       // POST /reassign-events for any pending mappings. If reassign 400s
       // (here: invalid toSpaceId), the place PUT has already committed and
       // the editor surfaces a toast. This integration covers the network
-      // chain only — the toast/UI is owned by pv-0pht.11.
+      // chain only — the toast/UI is covered by component tests.
       const seed = await createPlace({
         name: 'Partial Failure Place',
         spaces: [
@@ -537,7 +537,7 @@ describe('Place + Spaces atomic-save - Integration', () => {
   });
 
   // Reference siblingCalendar so the linter doesn't flag it as unused; it is
-  // declared for parity with potential cross-calendar tests but pv-0pht.10's
+  // declared for parity with potential cross-calendar tests but the
   // sibling-Place hijack lives within a single calendar.
   it('siblingCalendar fixture exists', () => {
     expect(siblingCalendar).toBeDefined();

@@ -79,15 +79,15 @@
     "get_directions": "Get directions",
     "about_this_event": "About This Event",
     "event_categories": "Categories",
-    "event_accessibility": "Accessibility",
+    "accessibility": {
+        "section_heading": "Accessibility",
+        "event_label": "Event accessibility",
+        "venue_label": "Venue accessibility",
+        "space_label": "Space accessibility"
+    },
     "place": {
         "format": {
             "with_space": "{{place}} — {{space}}"
-        },
-        "space": {
-            "event_accessibility_label": "Event accessibility",
-            "venue_accessibility_label": "Venue accessibility",
-            "space_accessibility_label": "Space accessibility"
         }
     },
     "event_recurring": "Recurring Event",

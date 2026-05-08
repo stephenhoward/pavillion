@@ -1,6 +1,6 @@
 /**
  * Tests for EventService.addRemoteEvent / updateRemoteEvent dedup-by-origin_uri
- * routing (pv-ix7v.9.2).
+ * routing.
  *
  * The inbox path normalizes inbound `pavillion:place` / `pavillion:space`
  * extensions into `eventParams.location.originUri` and
@@ -11,8 +11,8 @@
  *                          identity collapse to one row per calendar)
  *   - originUri absent   → existing flat-create path (Mobilizon/Mastodon/Gancio)
  *
- * Per pv-9hwi addendum, the Space ↔ Place invariant
- * (validateSpaceMatchesPlace) is also enforced on this path.
+ * The Space ↔ Place invariant (validateSpaceMatchesPlace) is also enforced
+ * on this path.
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import sinon from 'sinon';
@@ -162,7 +162,7 @@ describe('EventService.addRemoteEvent — origin_uri dedup routing', () => {
     expect(findOrCreateSpaceByOriginStub.called).toBe(false);
   });
 
-  it('enforces validateSpaceMatchesPlace post-resolution (pv-9hwi addendum)', async () => {
+  it('enforces validateSpaceMatchesPlace post-resolution', async () => {
     const placeOriginUri = 'https://remote.example/calendars/x/places/abc';
     const spaceOriginUri = 'https://remote.example/calendars/x/places/abc/spaces/main-hall';
 

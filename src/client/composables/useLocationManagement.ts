@@ -45,8 +45,8 @@ export function useLocationManagement() {
   /**
    * Open the location picker modal and fetch latest locations.
    *
-   * Spaces ride along inline on each Place via `place.spaces[]` (pv-0pht
-   * atomic Place + Spaces wire contract — eager-loaded server-side), so no
+   * Spaces ride along inline on each Place via `place.spaces[]` (atomic
+   * Place + Spaces wire contract — eager-loaded server-side), so no
    * separate per-Place Spaces prefetch is needed. The picker reads
    * `place.spaces` inline.
    *
@@ -67,7 +67,7 @@ export function useLocationManagement() {
    * correctly).
    *
    * Space lookup reads `place.spaces` inline on the resolved Place — no
-   * separate Spaces cache (pv-0pht atomic Place + Spaces wire contract).
+   * separate Spaces cache (atomic Place + Spaces wire contract).
    *
    * @param selection - `{ placeId, spaceId | null }` from the picker
    * @param event - The event to assign the location to

@@ -485,7 +485,7 @@ describe('Public API - toPublicEventObject shape contract', () => {
       expect(eventStub.calledOnceWith(EVENT_UUID, undefined)).toBe(true);
     });
 
-    // Regression for pv-vvei: a request for an unknown event id used to crash
+    // Regression: a request for an unknown event id used to crash
     // the backend because the handler did not catch EventNotFoundError thrown
     // by the service. The handler now translates that throw into a clean 404.
     it('returns 404 with EventNotFoundError when the service throws for an unknown id', async () => {
@@ -703,7 +703,7 @@ describe('Public API - toPublicEventObject shape contract', () => {
   });
 
   /**
-   * Public Space projection contract (pv-ix7v.3.4):
+   * Public Space projection contract:
    *   - With Space attached → response.event.space === { content: {...} }
    *     and never includes id, placeId, or originUri.
    *   - Without Space → response.event.space === null.
@@ -712,7 +712,7 @@ describe('Public API - toPublicEventObject shape contract', () => {
    * Covered for every public handler that returns event objects: getEvent,
    * listInstances, getEventInstance, and getSeries.
    */
-  describe('space projection (pv-ix7v.3.4)', () => {
+  describe('space projection', () => {
     const SPACE_PROJ_EVENT_UUID = '22222222-2222-4222-8222-222222222222';
 
     it('getEvent: returns space as { content } when an event has a Space', async () => {

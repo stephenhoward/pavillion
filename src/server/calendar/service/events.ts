@@ -133,8 +133,8 @@ export function scrubExternalUrlForLog(externalUrl: string | null | undefined): 
  * Distinguishes user-driven mutations (HTTP handlers, UI actions) from
  * import-driven mutations (ICS sync orchestrator). The service layer — not
  * entity hooks — owns the rule because hooks cannot distinguish caller
- * intent. See pv-1qcp epic DESIGN and architecture-playbook (no entity
- * hooks for caller-intent rules).
+ * intent. See architecture-playbook (no entity hooks for caller-intent
+ * rules).
  *
  * - `'user'` (default): user-initiated mutation. On updateEvent, the
  *   service looks up the `EventImportOriginEntity` sibling row (if any)
@@ -228,7 +228,7 @@ class EventService {
 
   /**
    * Resolve the Place (EventLocation) and optional Space for an inbound
-   * federated event payload (pv-ix7v.9.2).
+   * federated event payload.
    *
    * Branching contract for `eventParams.location`:
    *   - When `location.originUri` is present, route through
@@ -247,10 +247,9 @@ class EventService {
    *
    * Post-resolution, when both Place and Space are resolved, this helper
    * runs the same `validateSpaceMatchesPlace` invariant that direct API
-   * callers do (pv-9hwi addendum). The inbound path is lower-trust than
-   * an authenticated API caller, so the defense matters more here, not
-   * less. A mismatch throws SpaceLocationMismatchError and prevents
-   * persistence.
+   * callers do. The inbound path is lower-trust than an authenticated API
+   * caller, so the defense matters more here, not less. A mismatch throws
+   * SpaceLocationMismatchError and prevents persistence.
    *
    * Both findOrCreate*ByOriginUri helpers do their own existence-check
    * before write, so re-running this on the update path is idempotent.
@@ -329,7 +328,7 @@ class EventService {
 
     // Cross-entity invariant: when both Place and Space are resolved, the
     // Space must belong to that Place. Defensive backstop for the inbox
-    // path (pv-9hwi addendum). For the dedup-by-origin_uri path the parent
+    // path. For the dedup-by-origin_uri path the parent
     // anchoring is structural (we passed the resolved Place into the Space
     // helper), so this only fires on the unlikely race where a sender
     // mismatches its own pavillion:place.id and pavillion:space.id parent
@@ -750,7 +749,7 @@ class EventService {
     // could submit a foreign spaceId without a locationId and bypass the check
     // (cross-calendar IDOR). No-op when spaceId is null/undefined.
     //
-    // After the client wire fix (pv-on9o), toObject() emits both spaceId and
+    // After the client wire fix, toObject() emits both spaceId and
     // space:{id}, so the spaceId branch fires on the create path. The
     // space:{id} fallback is defense-in-depth for federation inbound (where
     // the canonical wire shape is space:{id} only, no top-level spaceId).
@@ -1070,15 +1069,15 @@ class EventService {
     // Persist space_id semantics:
     //   1. spaceId explicitly provided → validate, then write it
     //   2. space:{id} object provided (no top-level spaceId) → validate, then
-    //      write it (federation/legacy client shape — pv-on9o fix)
+    //      write it (federation/legacy client shape)
     //   3. spaceId explicitly null → clear space_id
     //   4. spaceId omitted but locationId is being changed → clear space_id
     //      (whole-venue fallback: the prior Space belonged to the prior Place
     //      and is no longer valid against the new Place)
     //   5. spaceId omitted and locationId unchanged → leave space_id alone
     // Resolve the incoming space identifier to a canonical spaceId string.
-    // The client sends either a top-level `spaceId` (new wire contract after
-    // pv-on9o) or a nested `space:{id}` object (federation / legacy shape).
+    // The client sends either a top-level `spaceId` (current wire contract)
+    // or a nested `space:{id}` object (federation / legacy shape).
     // Whichever is present, validate before writing (IDOR guard) and eagerly
     // load the space model so the returned `event.space` is populated without
     // a second DB round-trip.
@@ -1163,8 +1162,8 @@ class EventService {
     // returns null and the flip is a no-op.
     //
     // Note: entity hooks are deliberately NOT used for this rule — hooks
-    // cannot distinguish caller intent. Service layer owns it. See pv-1qcp
-    // epic DESIGN and architecture-playbook.
+    // cannot distinguish caller intent. Service layer owns it. See
+    // architecture-playbook.
     //
     // Cost: one extra SELECT + UPDATE per user-initiated edit of an imported
     // event. Accepted per epic DESIGN for structural purity — origin
@@ -1371,7 +1370,7 @@ class EventService {
     const event = CalendarEvent.fromObject(eventParams);
     const eventEntity = EventEntity.fromModel(event);
 
-    // Branch on origin_uri to dedup AP-originated Places/Spaces (pv-ix7v.9.2).
+    // Branch on origin_uri to dedup AP-originated Places/Spaces.
     // When the inbound Place carries a pavillion:place.id (origin_uri), two
     // events sharing that id resolve to the same LocationEntity row. Falls
     // back to the existing flat-create path for non-aware peers.
@@ -1474,7 +1473,7 @@ class EventService {
     // Update location and space.
     // When the inbound payload omits the location entirely, clear both the
     // location and space references on the event. When location is present,
-    // resolve through the dedup helper (pv-ix7v.9.2): origin_uri-bearing
+    // resolve through the dedup helper: origin_uri-bearing
     // Places route to findOrCreatePlaceByOriginUri, the rest fall back to
     // the existing flat-create path. Same branching applies to space.
     if (eventEntity.location_id && !eventParams.location) {
@@ -1617,12 +1616,12 @@ class EventService {
         // Eager-load the Place and its full Spaces tree (with eventCount) so
         // the event editor's location picker can render the layered list of
         // available Spaces inline — otherwise `place.spaces` is empty and the
-        // picker collapses to a Place-only view (pv-0pht.4 helper, used here
-        // to keep the editor's wire shape aligned with the public GETs).
+        // picker collapses to a Place-only view (helper used here to keep
+        // the editor's wire shape aligned with the public GETs).
         { model: LocationEntity, include: [LocationContentEntity, spacesIncludeWithEventCount()] },
         // Eager-load the event's currently-pinned Space and its translatable
         // content so the layered Place — Space header and per-Space
-        // accessibility section render correctly (pv-ix7v.5.1).
+        // accessibility section render correctly.
         { model: LocationSpaceEntity, include: [LocationSpaceContentEntity] },
         EventScheduleEntity,
         MediaEntity,
@@ -2256,7 +2255,7 @@ class EventService {
               ),
             },
           },
-          // Events reposted by followed local calendars (pv-ru1j)
+          // Events reposted by followed local calendars
           // Note: No calendar_id outer filter — includes both local-origin and
           // remote-origin reposted events. EventRepostEntity stores event_id
           // directly, so filtering by calendar_id would incorrectly exclude

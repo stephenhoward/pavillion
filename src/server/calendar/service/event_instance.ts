@@ -176,7 +176,7 @@ export default class EventInstanceService {
 
   async listEventInstancesForCalendar(calendar: Calendar): Promise<CalendarEventInstance[]> {
 
-    // Single-producer model (pv-hr72): instances are owned by the originating
+    // Single-producer model: instances are owned by the originating
     // calendar (Option A). Listing for a calendar is the union of every
     // visible event id (own + repost links + AP shared links), then the
     // single canonical instance row per (event_id, start_time).
@@ -269,7 +269,7 @@ export default class EventInstanceService {
     startDate?: string;
     endDate?: string;
   } = {}): Promise<CalendarEventInstance[]> {
-    // Single-producer model (pv-hr72): instances are owned by the originating
+    // Single-producer model: instances are owned by the originating
     // calendar. Visibility for a calendar is the union of own + repost-link +
     // AP-share-link event ids, computed once via the EventService helper. We
     // scope the instance query by event_id IN (visible) so a single canonical

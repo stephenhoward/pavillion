@@ -725,7 +725,7 @@ form {
           </section>
 
           <!-- SPACES Section — visible in both create and edit modes per
-               pv-0pht atomic Place + Spaces save model. -->
+               the atomic Place + Spaces save model. -->
           <section class="editor-section spaces-section">
             <h2 class="section-header">{{ t('space.section_title') }}</h2>
 
@@ -1126,7 +1126,7 @@ const deleteSpaceMessage = computed(() => {
 /**
  * `eventCount > 0` for the targeted Space → render the reassign dialog. The
  * count is read inline from `space.eventCount` (populated by the server's
- * GET response per pv-0pht atomic Place + Spaces wire contract).
+ * GET response per the atomic Place + Spaces wire contract).
  */
 const targetEventCount = computed<number>(() => state.spaceToDelete?.eventCount ?? 0);
 
@@ -1165,7 +1165,7 @@ function closeSpaceEditor() {
 /**
  * Generate a transient `clientId` for a freshly-staged Space row. Used to
  * correlate a draft entry with its server-issued `id` after the atomic save
- * (the server echoes `clientId` on every newly-created Space row per pv-0pht).
+ * (the server echoes `clientId` on every newly-created Space row).
  *
  * Prefers `crypto.randomUUID()` when available (browsers + modern test envs);
  * falls back to a timestamp + random suffix to keep tests deterministic-enough
@@ -1456,7 +1456,7 @@ async function handleSave() {
   }
 
   // Build clientId → serverId map from the response. The server echoes the
-  // request's clientId on every newly-created Space row (pv-0pht).
+  // request's clientId on every newly-created Space row.
   const idMap = new Map<string, string>();
   for (const space of saved.spaces ?? []) {
     if (space.clientId && space.id) {
@@ -1520,7 +1520,7 @@ onBeforeMount(async () => {
     state.calendarId = calendar.id;
 
     // If editing, load the existing location (with `spaces[]` inline per
-    // pv-0pht atomic Place + Spaces wire contract).
+    // the atomic Place + Spaces wire contract).
     if (isEditMode.value && props.placeId) {
       const location = await locationService.getLocationById(calendar.id, props.placeId);
       populateFormFromLocation(location);

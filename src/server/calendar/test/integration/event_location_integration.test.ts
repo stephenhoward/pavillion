@@ -292,7 +292,7 @@ describe('EventService - Location Integration', () => {
 });
 
 /**
- * Integration tests for Space persistence in event create/update (pv-on9o).
+ * Integration tests for Space persistence in event create/update.
  *
  * Covers the serialization symmetry bug where updateEvent read only
  * eventParams.spaceId but the client wire contract emits space:{id} (object).
@@ -444,7 +444,7 @@ describe('EventService - Space persistence integration', () => {
 });
 
 /**
- * Regression for pv-vvei: the public-listing endpoints
+ * Regression: the public-listing endpoints
  * (`listEventInstancesForCalendar`, `listEventInstancesWithFilters`, and
  * `getEventInstanceById`) must eager-load `LocationSpaceEntity` so listed
  * events render the Space name on the public site card. Before the fix,
@@ -560,9 +560,9 @@ describe('EventInstanceService - Space eager-loading on listing endpoints', () =
 });
 
 /**
- * Integration test for the events.space_id ON DELETE SET NULL FK behavior
- * (pv-0pht.2). Architectural keystone for the Place + Spaces atomic-save
- * model: deleting a Space must automatically null any referencing
+ * Integration test for the events.space_id ON DELETE SET NULL FK behavior.
+ * Architectural keystone for the Place + Spaces atomic-save model:
+ * deleting a Space must automatically null any referencing
  * event.space_id rather than rejecting the delete or cascading the events.
  * This lets the LocationService nest the Space delete inside the Place
  * upsert transaction without enumerating referencing events.
@@ -637,8 +637,8 @@ describe('EventEntity - space_id FK ON DELETE SET NULL', () => {
 
     // Delete the Space row directly at the entity layer. The atomic-save
     // service path will issue this delete inside the Place upsert
-    // transaction (pv-0pht.3); for this test we want to assert the FK
-    // semantic in isolation, not the service orchestration.
+    // transaction; for this test we want to assert the FK semantic in
+    // isolation, not the service orchestration.
     await LocationSpaceEntity.destroy({ where: { id: testSpace.id } });
 
     const after = await EventEntity.findByPk(event.id);

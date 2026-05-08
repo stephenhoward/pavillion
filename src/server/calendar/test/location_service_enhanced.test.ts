@@ -182,7 +182,7 @@ describe('LocationService - Enhanced Methods', () => {
     });
   });
 
-  describe('eager-loaded Spaces with eventCount (pv-0pht.4)', () => {
+  describe('eager-loaded Spaces with eventCount', () => {
     /**
      * Build a minimal LocationSpaceEntity-like stub: real entity instance so
      * `toModel()` runs the production path, with a fake `getDataValue` that
@@ -241,8 +241,7 @@ describe('LocationService - Enhanced Methods', () => {
       // N+1 guard: separate:true must be set so Sequelize issues ONE
       // SELECT for all Spaces (joined via place_id IN-list) instead of one
       // SELECT per Place. Without this flag a calendar with 50 Places would
-      // emit 51 queries on every list call. (testing-auditor pv-0pht.4
-      // follow-up.)
+      // emit 51 queries on every list call.
       expect(spaceInclude.separate).toBe(true);
     });
 
@@ -295,7 +294,6 @@ describe('LocationService - Enhanced Methods', () => {
       // N+1 guard: separate:true keeps the eager-load shape consistent with
       // getLocationsForCalendar — Sequelize issues a single SELECT for the
       // Spaces of this Place rather than nesting them in the parent SELECT.
-      // (testing-auditor pv-0pht.4 follow-up.)
       expect(spaceInclude.separate).toBe(true);
     });
 

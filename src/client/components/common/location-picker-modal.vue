@@ -37,7 +37,7 @@ const { t: tPlaces } = useTranslation('calendars', { keyPrefix: 'places' });
  *
  * Props:
  * @prop {EventLocation[]} locations - Available Places. Each Place's Spaces
- *   are read inline from `place.spaces` (pv-0pht atomic Place + Spaces wire
+ *   are read inline from `place.spaces` (atomic Place + Spaces wire
  *   contract); a Place with no `spaces` array is treated as 0 Spaces.
  * @prop {string | null} selectedLocationId - Currently selected Place id, or null.
  * @prop {string | null} selectedSpaceId - Currently selected Space id, or null for whole-venue.

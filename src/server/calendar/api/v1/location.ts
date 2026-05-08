@@ -21,7 +21,7 @@ import { logError } from '@/server/common/helper/error-logger';
  * omit `eventCount` — the model contract is "writes never carry eventCount"
  * (asserted in `src/common/test/event_location_space.test.ts`). The API layer
  * is responsible for re-adding it on outbound serialization so the editor can
- * decide which delete dialog to show without a follow-up round trip (pv-0pht).
+ * decide which delete dialog to show without a follow-up round trip.
  */
 function serializeLocationForApi(location: EventLocation): Record<string, any> {
   const obj = location.toObject();

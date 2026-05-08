@@ -24,12 +24,12 @@ import {
  *   service so domain events fire and dependent bookkeeping happens
  *   explicitly.
  * - event.space_id uses ON DELETE SET NULL. The Place + Spaces atomic-save
- *   model (pv-0pht) treats Space deletion as the trigger for whole-venue
- *   fallback: when an owner removes a Space inside the Place save, any
- *   events still pointing at it should fall back to the parent Place rather
- *   than block the transaction. Surfacing that semantic through the FK lets
- *   the LocationService nest the Space delete inside the same transaction
- *   as the Place upsert without enumerating referencing events.
+ *   model treats Space deletion as the trigger for whole-venue fallback:
+ *   when an owner removes a Space inside the Place save, any events still
+ *   pointing at it should fall back to the parent Place rather than block
+ *   the transaction. Surfacing that semantic through the FK lets the
+ *   LocationService nest the Space delete inside the same transaction as
+ *   the Place upsert without enumerating referencing events.
  * - location_space_content mirrors the location_content shape (no timestamp
  *   columns; translatable rows keyed by language).
  * - event.space_id is nullable: events without a designated sub-area remain
@@ -39,8 +39,6 @@ import {
  *   Place/Space across many incoming events. Null for locally-created
  *   records. Indexed to keep the inbound dedup lookup cheap as the table
  *   grows.
- *
- * Bead: pv-ix7v + pv-0pht.
  */
 export default {
   async up({ context: sequelize }: { context: Sequelize }) {

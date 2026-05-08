@@ -94,7 +94,7 @@ class CalendarEvent extends TranslatedModel<CalendarEventContent> {
    *
    * NOT populated by: EventService.getEventById() or EventService.updateEvent().
    * Events returned by those methods will always have repostStatus='none'
-   * regardless of actual repost state. (Tracked by follow-up bead pv-n1uy.)
+   * regardless of actual repost state.
    *
    * Default: 'none'. Must be explicitly set after retrieval if needed.
    */
