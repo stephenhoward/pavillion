@@ -3,6 +3,8 @@ import iso6391 from 'iso-639-1-dir';
 import { useTranslation } from 'i18next-vue';
 import { inject, onMounted, reactive, ref } from 'vue';
 import Config from '../../service/config';
+import { useLanguageManagement } from '@/client/composables/useLanguageManagement';
+import { DEFAULT_LANGUAGE_CODE } from '@/common/i18n/languages';
 import HousekeepingStatus from './housekeeping-status.vue';
 import LanguageSettings from './language-settings.vue';
 import LanguageTabSelector from '../common/language-tab-selector.vue';
@@ -25,12 +27,15 @@ const selectedDateRange = ref(site_config.settings().defaultDateRange || '2weeks
 // Shared translatable content state — one selected language drives both
 // the instance description and instance policy fields, matching the
 // event editor pattern where a single tabset governs multiple fields.
+// Language selection is delegated to the shared useLanguageManagement
+// composable; this component is a read-only consumer (admins manage the
+// enabled-languages set through the LanguageSettings sibling card).
 const translationState = reactive({
-  selectedLanguage: '',
-  enabledLanguages: [] as string[],
   descriptions: {} as Record<string, string>,
   policies: {} as Record<string, string>,
 });
+
+const lang = useLanguageManagement();
 
 // Registration mode options
 const registrationModes = [
@@ -51,9 +56,9 @@ onMounted(async () => {
   try {
     const configService = await Config.init();
     const settings = configService.settings();
-    const languages = settings.enabledLanguages ?? ['en'];
-    translationState.enabledLanguages = languages;
-    translationState.selectedLanguage = languages[0] || 'en';
+    const languages = settings.enabledLanguages ?? [DEFAULT_LANGUAGE_CODE];
+    lang.languages.value = languages;
+    lang.currentLanguage.value = languages[0] || DEFAULT_LANGUAGE_CODE;
     translationState.descriptions = { ...settings.instanceDescription } || {};
     translationState.policies = { ...settings.instancePolicy } || {};
   }
@@ -63,7 +68,7 @@ onMounted(async () => {
 });
 
 function currentLanguageDir() {
-  return iso6391.getDir(translationState.selectedLanguage) === 'rtl' ? 'rtl' : 'ltr';
+  return iso6391.getDir(lang.currentLanguage.value) === 'rtl' ? 'rtl' : 'ltr';
 }
 
 /**
@@ -179,8 +184,8 @@ async function updateSettings() {
           <!-- Translatable instance content (description + policy share one language tabset) -->
           <div class="translatable-fields">
             <LanguageTabSelector
-              v-model="translationState.selectedLanguage"
-              :languages="translationState.enabledLanguages"
+              v-model="lang.currentLanguage.value"
+              :languages="lang.languages.value"
             />
 
             <div class="form-group">
@@ -194,7 +199,7 @@ async function updateSettings() {
                 :dir="currentLanguageDir()"
                 :placeholder="t('instance_description_placeholder')"
                 aria-describedby="instance-description-help"
-                v-model="translationState.descriptions[translationState.selectedLanguage]"
+                v-model="translationState.descriptions[lang.currentLanguage.value]"
               />
             </div>
 
@@ -209,7 +214,7 @@ async function updateSettings() {
                 :dir="currentLanguageDir()"
                 :placeholder="t('instance_policy_placeholder')"
                 aria-describedby="instance-policy-help"
-                v-model="translationState.policies[translationState.selectedLanguage]"
+                v-model="translationState.policies[lang.currentLanguage.value]"
               />
             </div>
           </div>
