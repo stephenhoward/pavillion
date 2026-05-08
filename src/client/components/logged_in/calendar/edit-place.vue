@@ -946,6 +946,7 @@ import EditSpace from '@/client/components/logged_in/calendar/edit-space.vue';
 import LocationService from '@/client/service/location';
 import CalendarService from '@/client/service/calendar';
 import { useToast } from '@/client/composables/useToast';
+import { DEFAULT_LANGUAGE_CODE } from '@/common/i18n/languages';
 import { EventLocation, EventLocationSpace, validateLocationHierarchy } from '@/common/model/location';
 import iso6391 from 'iso-639-1-dir';
 
@@ -1283,9 +1284,8 @@ const formData = reactive({
 const accessibilityInfo = reactive<Record<string, string>>({});
 
 // Language management
-const defaultLanguage = 'en';
-const languages = ref<string[]>([defaultLanguage]);
-const currentLanguage = ref(defaultLanguage);
+const languages = ref<string[]>([DEFAULT_LANGUAGE_CODE]);
+const currentLanguage = ref(DEFAULT_LANGUAGE_CODE);
 const showLanguagePicker = ref(false);
 const accessibilityLangTabs = ref<InstanceType<typeof LanguageTabSelector> | null>(null);
 

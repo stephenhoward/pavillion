@@ -18,6 +18,7 @@ import { ref, reactive, computed, onBeforeMount, watch, nextTick } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import LanguageTabSelector from '@/client/components/common/language-tab-selector.vue';
 import languagePicker from '@/client/components/common/language-picker.vue';
+import { DEFAULT_LANGUAGE_CODE } from '@/common/i18n/languages';
 import { EventLocationSpace, EventLocationSpaceContent } from '@/common/model/location';
 import iso6391 from 'iso-639-1-dir';
 
@@ -53,9 +54,8 @@ const nameByLang = reactive<Record<string, string>>({});
 const accessibilityByLang = reactive<Record<string, string>>({});
 
 // Language tab management.
-const defaultLanguage = 'en';
-const languages = ref<string[]>([defaultLanguage]);
-const currentLanguage = ref(defaultLanguage);
+const languages = ref<string[]>([DEFAULT_LANGUAGE_CODE]);
+const currentLanguage = ref(DEFAULT_LANGUAGE_CODE);
 const showLanguagePicker = ref(false);
 const langTabs = ref<InstanceType<typeof LanguageTabSelector> | null>(null);
 
@@ -151,8 +151,8 @@ function handleCancel() {
  */
 onBeforeMount(() => {
   // Always seed the default language so the form has at least one tab.
-  if (!(defaultLanguage in nameByLang)) nameByLang[defaultLanguage] = '';
-  if (!(defaultLanguage in accessibilityByLang)) accessibilityByLang[defaultLanguage] = '';
+  if (!(DEFAULT_LANGUAGE_CODE in nameByLang)) nameByLang[DEFAULT_LANGUAGE_CODE] = '';
+  if (!(DEFAULT_LANGUAGE_CODE in accessibilityByLang)) accessibilityByLang[DEFAULT_LANGUAGE_CODE] = '';
 
   const source = props.space ?? null;
   if (!source) {

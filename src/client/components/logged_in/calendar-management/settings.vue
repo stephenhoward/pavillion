@@ -223,6 +223,7 @@
 import { reactive, ref, computed, onMounted } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import iso6391 from 'iso-639-1-dir';
+import { DEFAULT_LANGUAGE_CODE } from '@/common/i18n/languages';
 import { CalendarContent } from '@/common/model/calendar';
 import CalendarService from '@/client/service/calendar';
 import FundingService from '@/client/service/funding';
@@ -254,9 +255,8 @@ const fundingService = new FundingService();
 // Instance name for extended features description
 const instanceName = ref('this instance');
 
-const defaultLanguage = 'en';
 let allLanguages = iso6391.getAllCodes();
-allLanguages.unshift(defaultLanguage);
+allLanguages.unshift(DEFAULT_LANGUAGE_CODE);
 const availableLanguages = ref([...new Set(allLanguages)]);
 
 // Local calendar clone for translatable content editing
@@ -269,7 +269,7 @@ const state = reactive({
   isSaving: false,
   error: '',
   success: '',
-  currentLanguage: defaultLanguage,
+  currentLanguage: DEFAULT_LANGUAGE_CODE,
   showLanguagePicker: false,
   defaultDateRange: '2weeks',
   defaultEventImage: null,

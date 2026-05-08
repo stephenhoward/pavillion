@@ -1217,6 +1217,7 @@ import LocationDisplayCard from '@/client/components/common/location-display-car
 import LocationPickerModal from '@/client/components/common/location-picker-modal.vue';
 import CreateLocationForm from '@/client/components/common/create-location-form.vue';
 import { ValidationError } from '@/common/exceptions';
+import { DEFAULT_LANGUAGE_CODE } from '@/common/i18n/languages';
 import iso6391 from 'iso-639-1-dir';
 
 // Composables
@@ -1247,9 +1248,6 @@ const { t: tCancellations } = useTranslation('event_editor', {
   keyPrefix: 'cancellations',
 });
 
-// Initialize composables
-const defaultLanguage = 'en';
-
 // Event editor composable
 const {
   state: editorState,
@@ -1261,7 +1259,7 @@ const {
   initializeEvent,
   saveEvent,
   pageTitle,
-} = useEventEditor(defaultLanguage);
+} = useEventEditor(DEFAULT_LANGUAGE_CODE);
 
 // Location management composable
 const {
