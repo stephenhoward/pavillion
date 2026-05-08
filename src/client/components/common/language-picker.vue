@@ -120,7 +120,7 @@
   <Sheet :title="t('select_language')" @close="closeModal">
     <div
       class="language-picker-body"
-      :dir="iso6391.getDir(defaultLanguage) == 'rtl' ? 'rtl' : ''"
+      :dir="iso6391.getDir(DEFAULT_LANGUAGE_CODE) == 'rtl' ? 'rtl' : ''"
     >
       <!-- Search -->
       <div class="search-section">
@@ -175,6 +175,7 @@
 import { reactive, computed } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import iso6391 from 'iso-639-1-dir';
+import { DEFAULT_LANGUAGE_CODE } from '@/common/i18n/languages';
 import Sheet from '@/client/components/common/Sheet.vue';
 
 const emit = defineEmits(['close', 'select']);
@@ -182,8 +183,6 @@ const emit = defineEmits(['close', 'select']);
 const { t } = useTranslation('system', {
   keyPrefix: 'language_picker',
 });
-
-const defaultLanguage = 'en';
 
 const props = defineProps({
   languages: Array,

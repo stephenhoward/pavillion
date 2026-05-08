@@ -3,6 +3,7 @@ import { reactive, ref, computed, nextTick, onMounted, watch } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import { ArrowLeft } from 'lucide-vue-next';
 import iso6391 from 'iso-639-1-dir';
+import { DEFAULT_LANGUAGE_CODE } from '@/common/i18n/languages';
 import { EventSeriesContent } from '@/common/model/event_series_content';
 import { DuplicateSeriesNameError, SeriesUrlNameAlreadyExistsError, InvalidSeriesUrlNameError } from '@/common/exceptions/series';
 import SeriesService from '@/client/service/series';
@@ -29,13 +30,12 @@ const { t: tEditor } = useTranslation('series', {
 });
 
 const seriesService = new SeriesService();
-const defaultLanguage = 'en';
 let allLanguages = iso6391.getAllCodes();
-allLanguages.unshift(defaultLanguage);
+allLanguages.unshift(DEFAULT_LANGUAGE_CODE);
 let availableLanguages = ref([...new Set(allLanguages)]);
 
 const state = reactive({
-  currentLanguage: defaultLanguage,
+  currentLanguage: DEFAULT_LANGUAGE_CODE,
   showLanguagePicker: false,
   isSaving: false,
   error: '',

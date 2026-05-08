@@ -89,6 +89,7 @@ import { reactive, ref, nextTick, onMounted, watch } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import { X } from 'lucide-vue-next';
 import iso6391 from 'iso-639-1-dir';
+import { DEFAULT_LANGUAGE_CODE } from '@/common/i18n/languages';
 import { EventCategoryContent } from '@/common/model/event_category_content';
 import { DuplicateCategoryNameError } from '@/common/exceptions/category';
 import CategoryService from '@/client/service/category';
@@ -110,13 +111,12 @@ const { t } = useTranslation('categories', {
 });
 
 const categoryService = new CategoryService();
-const defaultLanguage = 'en';
 let allLanguages = iso6391.getAllCodes();
-allLanguages.unshift(defaultLanguage);
+allLanguages.unshift(DEFAULT_LANGUAGE_CODE);
 let availableLanguages = ref([...new Set(allLanguages)]);
 
 const state = reactive({
-  currentLanguage: defaultLanguage,
+  currentLanguage: DEFAULT_LANGUAGE_CODE,
   showLanguagePicker: false,
   isSaving: false,
   error: '',

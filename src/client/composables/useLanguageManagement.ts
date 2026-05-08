@@ -1,5 +1,6 @@
 import { ref, Ref } from 'vue';
 import iso6391 from 'iso-639-1-dir';
+import { DEFAULT_LANGUAGE_CODE } from '@/common/i18n/languages';
 import { CalendarEvent } from '@/common/model/events';
 
 export interface LanguageManagement {
@@ -24,17 +25,15 @@ export interface LanguageManagement {
  * - Language picker modal state
  */
 export function useLanguageManagement(): LanguageManagement {
-  const defaultLanguage = 'en';
-
   // Active languages for the current event
-  const languages = ref<string[]>([defaultLanguage]);
+  const languages = ref<string[]>([DEFAULT_LANGUAGE_CODE]);
 
   // All available languages (default + all ISO 639-1 codes)
   const allLanguages = iso6391.getAllCodes();
-  const availableLanguages = ref<string[]>([...new Set([defaultLanguage, ...allLanguages])]);
+  const availableLanguages = ref<string[]>([...new Set([DEFAULT_LANGUAGE_CODE, ...allLanguages])]);
 
   // Current language selection
-  const currentLanguage = ref<string>(defaultLanguage);
+  const currentLanguage = ref<string>(DEFAULT_LANGUAGE_CODE);
 
   // Language picker modal state
   const showLanguagePicker = ref<boolean>(false);
@@ -68,7 +67,7 @@ export function useLanguageManagement(): LanguageManagement {
   const initializeLanguages = (event: CalendarEvent): void => {
     if (event) {
       const eventLanguages = event.getLanguages();
-      eventLanguages.unshift(defaultLanguage);
+      eventLanguages.unshift(DEFAULT_LANGUAGE_CODE);
       languages.value = [...new Set(eventLanguages)];
     }
   };
