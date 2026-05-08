@@ -37,7 +37,7 @@
             role="tabpanel"
             :aria-labelledby="contentLangTabs?.tabId(currentLanguage)"
             :dir="iso6391.getDir(currentLanguage) === 'rtl' ? 'rtl' : 'ltr'"
-            class="translatable-fields"
+            class="translatable-fields translatable-form-fields"
           >
             <div class="form-field">
               <label class="field-label" :for="`calendarTitle-${currentLanguage}`">
@@ -672,27 +672,16 @@ onMounted(async () => {
   }
 }
 
+/*
+ * `.form-field` and `.field-label` styles inside `.translatable-fields`
+ * are provided by the shared `_translatable-form.scss` partial via the
+ * `.translatable-form-fields` class added on the .translatable-fields
+ * container. Local override below preserves the legacy
+ * .translatable-fields container's margin-top spacing the partial does
+ * not set; the partial's column flex/gap layout matches the original.
+ */
 .translatable-fields {
-  display: flex;
-  flex-direction: column;
-  gap: var(--pav-space-4);
   margin-top: var(--pav-space-4);
-}
-
-.form-field {
-  display: flex;
-  flex-direction: column;
-  gap: var(--pav-space-2);
-}
-
-.field-label {
-  font-size: 0.875rem;
-  font-weight: 500;
-  color: var(--pav-color-stone-700);
-
-  @media (prefers-color-scheme: dark) {
-    color: var(--pav-color-stone-300);
-  }
 }
 
 .remove-translation-link {
