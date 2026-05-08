@@ -1218,6 +1218,7 @@ import LocationPickerModal from '@/client/components/common/location-picker-moda
 import CreateLocationForm from '@/client/components/common/create-location-form.vue';
 import { ValidationError } from '@/common/exceptions';
 import iso6391 from 'iso-639-1-dir';
+import { DEFAULT_LANGUAGE_CODE } from '@/common/i18n/languages';
 
 // Composables
 import { useEventEditor } from '@/client/composables/useEventEditor';
@@ -1248,8 +1249,6 @@ const { t: tCancellations } = useTranslation('event_editor', {
 });
 
 // Initialize composables
-const defaultLanguage = 'en';
-
 // Event editor composable
 const {
   state: editorState,
@@ -1261,7 +1260,7 @@ const {
   initializeEvent,
   saveEvent,
   pageTitle,
-} = useEventEditor(defaultLanguage);
+} = useEventEditor(DEFAULT_LANGUAGE_CODE);
 
 // Location management composable
 const {
@@ -1293,7 +1292,10 @@ const {
   setupNavigationGuard,
 } = useUnsavedChanges();
 
-// Language management composable
+// Language management composable.
+// onLanguageRemoved drops the per-language content from the event so the
+// edit_event.vue is responsible for entity-level side effects; the
+// composable owns only UI state.
 const {
   languages,
   availableLanguages,
@@ -1303,7 +1305,11 @@ const {
   removeLanguage,
   openLanguagePicker,
   closeLanguagePicker,
-} = useLanguageManagement();
+} = useLanguageManagement({
+  onLanguageRemoved: (language) => {
+    editorState.event?.dropContent(language);
+  },
+});
 
 // Error container ref for scrolling
 const errorContainer = ref(null);
@@ -1512,7 +1518,7 @@ const handleRemoveLocation = () => {
  */
 const handleAddLanguage = (language) => {
   if (editorState.event) {
-    addLanguage(language, editorState.event);
+    addLanguage(language);
   }
   closeLanguagePicker();
 };
@@ -1529,7 +1535,7 @@ const handleRemoveLanguage = (language) => {
     { language: languageName },
   );
   if (!window.confirm(message)) return;
-  removeLanguage(language, editorState.event);
+  removeLanguage(language);
 };
 
 /**
