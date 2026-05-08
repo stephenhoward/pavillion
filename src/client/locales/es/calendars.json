@@ -392,6 +392,7 @@
         "editor_aria_label": "Editor de lugares",
         "editor_form_aria_label": "Formulario de información del lugar",
         "discard_unsaved_changes": "¿Descartar los cambios no guardados?",
+        "remove_language": "Eliminar traducción al {{language}}",
         "error_reassign_partial": "Lugar guardado, pero fallaron {{count}} reasignación(es). Los eventos afectados están en el lugar completo. Vuelve a abrir el editor para reintentar.",
         "format": {
             "with_space": "{{place}} — {{space}}"

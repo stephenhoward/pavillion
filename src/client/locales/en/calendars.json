@@ -392,6 +392,7 @@
         "editor_aria_label": "Place Editor",
         "editor_form_aria_label": "Place Information Form",
         "discard_unsaved_changes": "Discard unsaved changes?",
+        "remove_language": "Remove {{language}} translation",
         "error_reassign_partial": "Place saved, but {{count}} reassignment(s) failed. Affected events are on whole venue. Reopen the editor to retry.",
         "format": {
             "with_space": "{{place}} — {{space}}"

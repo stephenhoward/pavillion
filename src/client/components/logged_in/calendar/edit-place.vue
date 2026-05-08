@@ -195,6 +195,37 @@ form {
   }
 }
 
+.remove-translation-link {
+  align-self: flex-start;
+  margin-block-start: 0.5rem;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--pav-color-red-600);
+  font-size: var(--pav-font-size-sm);
+  font-weight: var(--pav-font-weight-medium);
+  cursor: pointer;
+  transition: color 0.15s ease;
+
+  &:hover {
+    color: var(--pav-color-red-700);
+    text-decoration: underline;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--pav-color-interactive-active);
+    outline-offset: 2px;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    color: var(--pav-color-red-400);
+
+    &:hover {
+      color: var(--pav-color-red-300);
+    }
+  }
+}
+
 /* Single column container */
 .editor-container {
   display: flex;
@@ -701,6 +732,7 @@ form {
                 v-model="currentLanguage"
                 :languages="languages"
                 @add-language="openLanguagePicker"
+                @remove-language="removeLanguage"
               />
 
               <div
@@ -720,6 +752,15 @@ form {
                     rows="4"
                   />
                 </div>
+
+                <button
+                  v-if="languages.length > 1"
+                  type="button"
+                  class="remove-translation-link"
+                  @click="removeLanguage(currentLanguage)"
+                >
+                  {{ t('remove_language', { language: iso6391.getName(currentLanguage) }) }}
+                </button>
               </div>
             </div>
           </section>
@@ -946,6 +987,8 @@ import EditSpace from '@/client/components/logged_in/calendar/edit-space.vue';
 import LocationService from '@/client/service/location';
 import CalendarService from '@/client/service/calendar';
 import { useToast } from '@/client/composables/useToast';
+import { useLanguageManagement } from '@/client/composables/useLanguageManagement';
+import { DEFAULT_LANGUAGE_CODE } from '@/common/i18n/languages';
 import { EventLocation, EventLocationSpace, validateLocationHierarchy } from '@/common/model/location';
 import iso6391 from 'iso-639-1-dir';
 
@@ -1282,11 +1325,26 @@ const formData = reactive({
 // Accessibility info keyed by language
 const accessibilityInfo = reactive<Record<string, string>>({});
 
-// Language management
-const defaultLanguage = 'en';
-const languages = ref<string[]>([defaultLanguage]);
-const currentLanguage = ref(defaultLanguage);
-const showLanguagePicker = ref(false);
+// Language tab management — delegated to useLanguageManagement. The
+// accessibilityInfo form-buffer is kept in sync via the onLanguageAdded /
+// onLanguageRemoved hooks.
+const {
+  languages,
+  availableLanguages,
+  currentLanguage,
+  showLanguagePicker,
+  addLanguage,
+  removeLanguage,
+  openLanguagePicker,
+  closeLanguagePicker,
+} = useLanguageManagement({
+  onLanguageAdded: (l: string) => {
+    if (!(l in accessibilityInfo)) accessibilityInfo[l] = '';
+  },
+  onLanguageRemoved: (l: string) => {
+    delete accessibilityInfo[l];
+  },
+});
 const accessibilityLangTabs = ref<InstanceType<typeof LanguageTabSelector> | null>(null);
 
 /**
@@ -1298,14 +1356,6 @@ watch(() => state.error, async (newError) => {
     errorContainer.value?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     errorContainer.value?.focus();
   }
-});
-
-/**
- * Available languages for the language picker (excludes already-selected languages).
- */
-const availableLanguages = computed(() => {
-  const allLanguages = iso6391.getAllCodes();
-  return allLanguages.filter((code: string) => !languages.value.includes(code));
 });
 
 /**
@@ -1336,27 +1386,11 @@ function handleBack() {
 }
 
 /**
- * Open the language picker modal.
- */
-function openLanguagePicker() {
-  showLanguagePicker.value = true;
-}
-
-/**
- * Close the language picker modal.
- */
-function closeLanguagePicker() {
-  showLanguagePicker.value = false;
-}
-
-/**
- * Handle adding a new language from the picker.
+ * Handle adding a new language from the picker. Delegates the active-list
+ * mutation + accessibilityInfo seeding to the composable's addLanguage hook.
  */
 function handleAddLanguage(language: string) {
-  if (!languages.value.includes(language)) {
-    languages.value.push(language);
-    currentLanguage.value = language;
-  }
+  addLanguage(language);
   closeLanguagePicker();
 }
 
@@ -1397,16 +1431,17 @@ function populateFormFromLocation(location: EventLocation) {
   formData.state = location.state;
   formData.postalCode = location.postalCode;
 
-  // Populate accessibility info from content
+  // Populate accessibility info from content. One-shot reseed of the
+  // composable's languages ref so the default language always remains
+  // present even when the loaded location has its own language list.
   const contentLanguages = location.getLanguages();
   if (contentLanguages.length > 0) {
-    for (const lang of contentLanguages) {
-      if (!languages.value.includes(lang)) {
-        languages.value.push(lang);
-      }
-      accessibilityInfo[lang] = location.content(lang).accessibilityInfo || '';
-    }
-    currentLanguage.value = languages.value[0];
+    languages.value = [...new Set([DEFAULT_LANGUAGE_CODE, ...contentLanguages])];
+    currentLanguage.value = contentLanguages[0];
+  }
+
+  for (const lang of contentLanguages) {
+    accessibilityInfo[lang] = location.content(lang).accessibilityInfo || '';
   }
 }
 

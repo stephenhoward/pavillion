@@ -392,6 +392,7 @@
         "editor_aria_label": "Éditeur de lieux",
         "editor_form_aria_label": "Formulaire d'informations sur le lieu",
         "discard_unsaved_changes": "Abandonner les modifications non enregistrées ?",
+        "remove_language": "Supprimer la traduction en {{language}}",
         "error_reassign_partial": "Lieu enregistré, mais {{count}} réaffectation(s) ont échoué. Les événements concernés sont sur le lieu entier. Rouvrez l'éditeur pour réessayer.",
         "format": {
             "with_space": "{{place}} — {{space}}"
