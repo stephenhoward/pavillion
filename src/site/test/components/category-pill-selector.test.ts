@@ -401,52 +401,56 @@ describe('CategoryPillSelector Component', () => {
 
       const pills = wrapper.findAll('.category-pill');
 
-      // Pills should be focusable
-      expect(pills[0].attributes('tabindex')).toBe('0');
-      expect(pills[1].attributes('tabindex')).toBe('0');
+      // Native <button> elements are tab-focusable by default — no tabindex
+      // override required (negative regression guard for pv-wdyd).
+      expect(pills[0].attributes('tabindex')).toBeUndefined();
+      expect(pills[1].attributes('tabindex')).toBeUndefined();
     });
 
-    it('toggles selection with Space key', async () => {
+    it('renders entries as native <button type="button"> with no role/tabindex overrides', async () => {
+      // Accessibility regression guard: each pill must be a native <button>,
+      // not a div-as-button. Native semantics provide AT virtual-cursor
+      // activation, forced-colors styling, and built-in Enter/Space → click
+      // conversion at the browser level.
       const categories = [createTestCategory('1', 'Arts')];
 
       const { wrapper } = await mountCategoryPillSelector({ categories });
       currentWrapper = wrapper;
 
       const pill = wrapper.find('.category-pill');
-      await pill.trigger('keydown', { key: ' ' });
 
-      const emitted = wrapper.emitted('update:selectedCategories');
-      expect(emitted).toBeTruthy();
-      expect(emitted?.[0]).toEqual([['1']]);
+      // Element + type
+      expect(pill.element.tagName).toBe('BUTTON');
+      expect(pill.attributes('type')).toBe('button');
+
+      // Negative regression: no leftover ARIA/keyboard plumbing
+      expect(pill.attributes('role')).not.toBe('button');
+      expect(pill.attributes('tabindex')).toBeUndefined();
     });
 
-    it('toggles selection with Enter key', async () => {
+    it('activates via the native button without manual @keydown handlers (no onkeydown attribute, click fires once)', async () => {
+      // Single keyboard-activation invariant. The prior implementation used
+      // an explicit @keydown handler that translated Enter/Space into
+      // toggleCategory; that's gone, and a native <button type="button">
+      // converts Enter and Space into click events at the browser level.
+      // We assert (a) no leftover onkeydown attribute on the rendered element
+      // and (b) a click — which is what Enter/Space dispatch on a real button
+      // — emits the selection exactly once. Testing Enter and Space
+      // separately would over-test JSDOM rather than component logic.
       const categories = [createTestCategory('1', 'Arts')];
 
       const { wrapper } = await mountCategoryPillSelector({ categories });
       currentWrapper = wrapper;
 
       const pill = wrapper.find('.category-pill');
-      await pill.trigger('keydown', { key: 'Enter' });
+      expect(pill.attributes('onkeydown')).toBeUndefined();
+
+      await pill.trigger('click');
 
       const emitted = wrapper.emitted('update:selectedCategories');
       expect(emitted).toBeTruthy();
+      expect(emitted?.length).toBe(1);
       expect(emitted?.[0]).toEqual([['1']]);
-    });
-
-    it('does not respond to keyboard when disabled', async () => {
-      const categories = [createTestCategory('1', 'Arts')];
-
-      const { wrapper } = await mountCategoryPillSelector({
-        categories,
-        disabled: true,
-      });
-      currentWrapper = wrapper;
-
-      const pill = wrapper.find('.category-pill');
-      await pill.trigger('keydown', { key: ' ' });
-
-      expect(wrapper.emitted('update:selectedCategories')).toBeFalsy();
     });
   });
 
@@ -689,9 +693,11 @@ describe('CategoryPillSelector Component', () => {
       currentWrapper = wrapper;
 
       const pill = wrapper.find('.category-pill');
-      expect(pill.attributes('role')).toBe('button');
+      // Native <button> needs no role override and is tab-focusable by
+      // default (negative regression guard for pv-wdyd).
+      expect(pill.attributes('role')).not.toBe('button');
+      expect(pill.attributes('tabindex')).toBeUndefined();
       expect(pill.attributes('aria-pressed')).toBe('false');
-      expect(pill.attributes('tabindex')).toBe('0');
     });
 
     it('updates aria-pressed when selected', async () => {
@@ -739,7 +745,8 @@ describe('CategoryPillSelector Component', () => {
       currentWrapper = wrapper;
 
       const pill = wrapper.find('.category-pill');
-      expect(pill.attributes('tabindex')).toBe('0');
+      // Native <button> is tab-focusable without an explicit tabindex.
+      expect(pill.attributes('tabindex')).toBeUndefined();
 
       // Component should support focus styles (tested via CSS)
       expect(pill.exists()).toBe(true);
@@ -771,9 +778,10 @@ describe('CategoryPillSelector Component', () => {
 
       const pills = wrapper.findAll('.category-pill');
 
-      // All pills should be in tab order
+      // All pills should be in natural tab order via native <button> (no
+      // tabindex override).
       pills.forEach(pill => {
-        expect(pill.attributes('tabindex')).toBe('0');
+        expect(pill.attributes('tabindex')).toBeUndefined();
       });
     });
 
@@ -805,25 +813,6 @@ describe('CategoryPillSelector Component', () => {
 
       const emitted = wrapper.emitted('update:selectedCategories');
       expect(emitted).toBeTruthy();
-    });
-
-    it('handles keyboard events consistently', async () => {
-      const categories = [createTestCategory('1', 'Arts')];
-
-      const { wrapper } = await mountCategoryPillSelector({ categories });
-      currentWrapper = wrapper;
-
-      const pill = wrapper.find('.category-pill');
-
-      // Test Space key
-      await pill.trigger('keydown', { key: ' ' });
-      let emitted = wrapper.emitted('update:selectedCategories');
-      expect(emitted?.[0]).toEqual([['1']]);
-
-      // Test Enter key
-      await pill.trigger('keydown', { key: 'Enter' });
-      emitted = wrapper.emitted('update:selectedCategories');
-      expect(emitted?.length).toBe(2);
     });
 
     it('uses semantic HTML elements for better compatibility', async () => {
@@ -1284,44 +1273,6 @@ describe('CategoryPillSelector Component', () => {
 
       const pills = wrapper.findAll('.category-pill');
       await pills[1].trigger('click');
-
-      expect(wrapper.emitted('update:selectedCategories')).toBeFalsy();
-    });
-
-    it('does not emit on Enter key when pill is absent', async () => {
-      const categories = [
-        createTestCategory('1', 'Arts'),
-        createTestCategory('2', 'Sports'),
-      ];
-
-      const { wrapper } = await mountCategoryPillSelector({
-        categories,
-        selectedCategories: [],
-        presentCategoryIds: ['1'],
-      });
-      currentWrapper = wrapper;
-
-      const pills = wrapper.findAll('.category-pill');
-      await pills[1].trigger('keydown', { key: 'Enter' });
-
-      expect(wrapper.emitted('update:selectedCategories')).toBeFalsy();
-    });
-
-    it('does not emit on Space key when pill is absent', async () => {
-      const categories = [
-        createTestCategory('1', 'Arts'),
-        createTestCategory('2', 'Sports'),
-      ];
-
-      const { wrapper } = await mountCategoryPillSelector({
-        categories,
-        selectedCategories: [],
-        presentCategoryIds: ['1'],
-      });
-      currentWrapper = wrapper;
-
-      const pills = wrapper.findAll('.category-pill');
-      await pills[1].trigger('keydown', { key: ' ' });
 
       expect(wrapper.emitted('update:selectedCategories')).toBeFalsy();
     });
