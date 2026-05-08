@@ -21,9 +21,21 @@ interface DatabaseConfig {
 }
 
 /**
- * Job handler function type
+ * Job retry metadata forwarded from pg-boss to the handler.
  */
-export type JobHandler<T = any> = (data: T) => Promise<void>;
+export interface JobMeta {
+  retryCount: number;
+  retryLimit: number;
+}
+
+/**
+ * Job handler function type.
+ *
+ * Handlers may declare an optional second parameter to receive pg-boss retry
+ * metadata (`retryCount`, `retryLimit`). Legacy handlers that ignore the second
+ * argument continue to work unchanged.
+ */
+export type JobHandler<T = any> = (data: T, meta?: JobMeta) => Promise<void>;
 
 /**
  * Job queue service using pg-boss for PostgreSQL-native job scheduling.
@@ -205,10 +217,10 @@ export default class JobQueueService {
     // Ensure queue exists before subscribing
     await this.ensureQueue(jobName);
 
-    await this.boss.work(jobName, async (job) => {
+    await this.boss.work(jobName, { includeMetadata: true }, async (job: any) => {
       try {
         logger.info({ jobName, jobId: job.id }, 'Processing job');
-        await handler(job.data);
+        await handler(job.data, { retryCount: job.retryCount, retryLimit: job.retryLimit });
         logger.info({ jobName, jobId: job.id }, 'Completed job');
       }
       catch (error) {

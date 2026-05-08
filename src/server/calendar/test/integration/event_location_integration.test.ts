@@ -6,7 +6,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { Account } from '@/common/model/account';
 import { Calendar } from '@/common/model/calendar';
 import { CalendarEvent } from '@/common/model/events';
-import { EventLocation, EventLocationContent, EventLocationSpace } from '@/common/model/location';
+import { EventLocation, EventLocationSpace, EventLocationSpaceContent } from '@/common/model/location';
 import CalendarInterface from '@/server/calendar/interface';
 import db from '@/server/common/entity/db';
 import { EventEntity } from '@/server/calendar/entity/event';
@@ -333,27 +333,19 @@ describe('EventService - Space persistence integration', () => {
     testCalendar = await calendarInterface.createCalendar(testAccount, 'spacetestcal');
     otherCalendar = await calendarInterface.createCalendar(testAccount, 'otherspacevcal');
 
-    testLocation = await calendarInterface.createLocation(
-      testCalendar,
-      new EventLocation(undefined, 'Space Venue', '1 Main St'),
-    );
+    const testPlaceModel = new EventLocation(undefined, 'Space Venue', '1 Main St');
+    const testSpaceModel = new EventLocationSpace();
+    testSpaceModel.addContent(new EventLocationSpaceContent('en', 'Pacific Room', ''));
+    testPlaceModel.spaces = [testSpaceModel];
+    testLocation = await calendarInterface.createLocation(testCalendar, testPlaceModel);
+    testSpace = testLocation.spaces[0];
 
-    testSpace = await calendarInterface.createSpace(
-      testCalendar,
-      testLocation.id,
-      { en: { name: 'Pacific Room', accessibilityInfo: '' } },
-    );
-
-    otherLocation = await calendarInterface.createLocation(
-      otherCalendar,
-      new EventLocation(undefined, 'Other Venue', '2 Oak St'),
-    );
-
-    otherSpace = await calendarInterface.createSpace(
-      otherCalendar,
-      otherLocation.id,
-      { en: { name: 'Other Room', accessibilityInfo: '' } },
-    );
+    const otherPlaceModel = new EventLocation(undefined, 'Other Venue', '2 Oak St');
+    const otherSpaceModel = new EventLocationSpace();
+    otherSpaceModel.addContent(new EventLocationSpaceContent('en', 'Other Room', ''));
+    otherPlaceModel.spaces = [otherSpaceModel];
+    otherLocation = await calendarInterface.createLocation(otherCalendar, otherPlaceModel);
+    otherSpace = otherLocation.spaces[0];
   });
 
   afterAll(async () => {
@@ -481,16 +473,12 @@ describe('EventInstanceService - Space eager-loading on listing endpoints', () =
 
     testCalendar = await calendarInterface.createCalendar(testAccount, 'listingspacecal');
 
-    testLocation = await calendarInterface.createLocation(
-      testCalendar,
-      new EventLocation(undefined, 'Library Annex', '123 Library Lane'),
-    );
-
-    testSpace = await calendarInterface.createSpace(
-      testCalendar,
-      testLocation.id,
-      { en: { name: 'Reading Room', accessibilityInfo: 'Quiet seating area' } },
-    );
+    const placeModel = new EventLocation(undefined, 'Library Annex', '123 Library Lane');
+    const spaceModel = new EventLocationSpace();
+    spaceModel.addContent(new EventLocationSpaceContent('en', 'Reading Room', 'Quiet seating area'));
+    placeModel.spaces = [spaceModel];
+    testLocation = await calendarInterface.createLocation(testCalendar, placeModel);
+    testSpace = testLocation.spaces[0];
   });
 
   afterAll(async () => {
@@ -605,16 +593,12 @@ describe('EventEntity - space_id FK ON DELETE SET NULL', () => {
 
     testCalendar = await calendarInterface.createCalendar(testAccount, 'spacefkcal');
 
-    testLocation = await calendarInterface.createLocation(
-      testCalendar,
-      new EventLocation(undefined, 'Conference Hall', '500 Park Ave'),
-    );
-
-    testSpace = await calendarInterface.createSpace(
-      testCalendar,
-      testLocation.id,
-      { en: { name: 'Studio A', accessibilityInfo: '' } },
-    );
+    const placeModel = new EventLocation(undefined, 'Conference Hall', '500 Park Ave');
+    const spaceModel = new EventLocationSpace();
+    spaceModel.addContent(new EventLocationSpaceContent('en', 'Studio A', ''));
+    placeModel.spaces = [spaceModel];
+    testLocation = await calendarInterface.createLocation(testCalendar, placeModel);
+    testSpace = testLocation.spaces[0];
   });
 
   afterAll(async () => {

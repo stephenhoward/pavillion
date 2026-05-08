@@ -66,6 +66,7 @@
 import { reactive, computed, onMounted, ref, nextTick, watch } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import i18next from 'i18next';
+import { DEFAULT_LANGUAGE_CODE } from '@/common/i18n/languages';
 import { EventCategory } from '@/common/model/event_category';
 import { EventCategoryContent } from '@/common/model/event_category_content';
 import CategoryService from '@/client/service/category';
@@ -107,13 +108,12 @@ const state = reactive({
 
 /**
  * Construct a fresh EventCategory scoped to the current calendar and open
- * the CategoryEditor modal in create mode. The 'en' default matches
- * category-editor.vue's internal defaultLanguage constant — if either
- * changes, both must change in lock-step.
+ * the CategoryEditor modal in create mode. Uses DEFAULT_LANGUAGE_CODE so
+ * the seeded content matches the editor's initial language tab.
  */
 function openCreateCategory() {
   const fresh = new EventCategory('', props.calendarId);
-  fresh.addContent(new EventCategoryContent('en', ''));
+  fresh.addContent(new EventCategoryContent(DEFAULT_LANGUAGE_CODE, ''));
   state.newCategory = fresh;
   state.showCategoryEditor = true;
 }

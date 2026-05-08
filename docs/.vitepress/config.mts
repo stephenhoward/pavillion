@@ -41,7 +41,7 @@ export default defineConfig({
           items: [
             { text: 'Post a recurring event', link: '/guides/calendar-owners/recurring-events' },
             { text: 'Organize events with categories', link: '/guides/calendar-owners/categories' },
-            { text: 'Reuse venues with places', link: '/guides/calendar-owners/places' },
+            { text: 'Manage event locations', link: '/guides/calendar-owners/places' },
             { text: 'Group related events into a series', link: '/guides/calendar-owners/series' },
             { text: "Customize your calendar's identity", link: '/guides/calendar-owners/identity' },
             { text: 'Publish in multiple languages', link: '/guides/calendar-owners/multilingual' },

@@ -223,8 +223,8 @@
 import { reactive, ref, computed, onMounted } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import iso6391 from 'iso-639-1-dir';
-import { CalendarContent } from '@/common/model/calendar';
 import { DEFAULT_LANGUAGE_CODE } from '@/common/i18n/languages';
+import { CalendarContent } from '@/common/model/calendar';
 import CalendarService from '@/client/service/calendar';
 import FundingService from '@/client/service/funding';
 import Config from '@/client/service/config';

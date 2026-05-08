@@ -18,9 +18,9 @@ import { ref, reactive, computed, onBeforeMount, watch, nextTick } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import LanguageTabSelector from '@/client/components/common/language-tab-selector.vue';
 import languagePicker from '@/client/components/common/language-picker.vue';
+import { DEFAULT_LANGUAGE_CODE } from '@/common/i18n/languages';
 import { EventLocationSpace, EventLocationSpaceContent } from '@/common/model/location';
 import { useLanguageManagement } from '@/client/composables/useLanguageManagement';
-import { DEFAULT_LANGUAGE_CODE } from '@/common/i18n/languages';
 import iso6391 from 'iso-639-1-dir';
 
 const props = defineProps<{

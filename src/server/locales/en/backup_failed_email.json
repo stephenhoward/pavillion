@@ -1,0 +1,18 @@
+{
+  "subject": "❌ Backup Failed: {{backupType}} backup of {{filename}}",
+  "title": "Backup Job Failed",
+  "greeting": "Hello Administrator,",
+  "alert_message": "A Pavillion backup job has failed and could not be completed.",
+  "backup_type": "Backup type: {{backupType}}",
+  "filename": "Backup filename: {{filename}}",
+  "error_message": "Error details: {{errorMessage}}",
+  "occurred_at": "Failure time: {{occurredAt}}",
+  "recommendations": "Recommended actions:",
+  "action_1": "Review the error details above for the failure cause",
+  "action_2": "Verify backup destination has sufficient disk space and is writable",
+  "action_3": "Check the application logs for additional context",
+  "action_4": "Re-run the backup manually once the underlying issue is resolved",
+  "footer_note": "Repeated failures may indicate a configuration or infrastructure problem that requires attention.",
+  "signature": "Pavillion Housekeeping System",
+  "footer_text": "This is an automated alert. Backup jobs are monitored on each scheduled or manual run."
+}
