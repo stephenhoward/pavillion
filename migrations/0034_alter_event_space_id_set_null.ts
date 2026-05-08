@@ -24,8 +24,7 @@ import { Sequelize } from 'sequelize';
  *   here at the entity layer; see commentary on the entity decorator in
  *   src/server/calendar/entity/event.ts.
  *
- * Reference: docs/superpowers/specs/2026-05-06-place-spaces-atomic-save-design.md,
- * bead pv-0pht.2.
+ * Bead: pv-0pht.2.
  */
 export default {
   async up({ context: sequelize }: { context: Sequelize }) {

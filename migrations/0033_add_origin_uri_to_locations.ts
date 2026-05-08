@@ -14,8 +14,7 @@ import {
  * for locally-created records. Indexed to keep the inbound dedup lookup
  * cheap as the table grows.
  *
- * Reference: docs/superpowers/plans/2026-05-05-place-spaces.md (Task 2.1),
- * bead pv-ix7v.6.1.
+ * Bead: pv-ix7v.6.1.
  */
 export default {
   async up({ context: sequelize }: { context: Sequelize }) {

@@ -39,7 +39,6 @@ import { startTestServer, TestEnvironment } from './helpers/test-server';
  * file already implies one worker per file).
  *
  * Related:
- *   - Plan: docs/superpowers/plans/2026-05-05-place-spaces.md, Task 1.19
  *   - Bead: pv-ix7v.5.1 (parent epic pv-ix7v)
  *   - Bug fix: pv-on9o (Space silently dropped on re-edit of existing event)
  */

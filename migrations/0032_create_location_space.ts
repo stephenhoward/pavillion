@@ -26,8 +26,7 @@ import {
  * - event.space_id is nullable: events without a designated sub-area remain
  *   "whole-venue" events.
  *
- * Reference: docs/superpowers/plans/2026-05-05-place-spaces.md (Task 1.1),
- * bead pv-ix7v.1.1.
+ * Bead: pv-ix7v.1.1.
  */
 export default {
   async up({ context: sequelize }: { context: Sequelize }) {

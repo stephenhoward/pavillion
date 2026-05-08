@@ -13,8 +13,6 @@
  * staged-but-unsaved Spaces, or replacing the existing entry's content).
  *
  * Validation rule: at least one language must have a non-empty name.
- *
- * Related plan: docs/superpowers/plans/2026-05-05-place-spaces.md
  */
 import { ref, reactive, computed, onBeforeMount, watch, nextTick } from 'vue';
 import { useTranslation } from 'i18next-vue';
