@@ -272,4 +272,58 @@ describe('EditSpaceView', () => {
       expect(wrapper.find('[role="alert"]').exists()).toBe(false);
     });
   });
+
+  describe('Language Management Wiring', () => {
+    it('drops nameByLang and accessibilityByLang entries when LanguageTabSelector emits remove-language', async () => {
+      // Seed the component with two languages so the removal path is reachable
+      // (the composable's last-language guard makes removeLanguage a no-op
+      // when only one language is active).
+      const space = createMockSpace('space-1', 'place-1', [
+        { language: 'en', name: 'Pacific Room', accessibilityInfo: 'Step-free entry' },
+        { language: 'fr', name: 'Salle Pacifique', accessibilityInfo: 'Entrée sans marches' },
+      ]);
+      const wrapper = await createWrapper({ space });
+
+      // Pre-condition: switching to the French tab surfaces French content,
+      // confirming the per-language form-buffer keys exist for both languages.
+      const tabSelector = wrapper.findComponent({ name: 'LanguageTabSelector' });
+      expect(tabSelector.exists()).toBe(true);
+
+      await tabSelector.vm.$emit('update:modelValue', 'fr');
+      await flushPromises();
+
+      expect(
+        (wrapper.find('[id^="space-name-"]').element as HTMLInputElement).value,
+      ).toBe('Salle Pacifique');
+      expect(
+        (wrapper.find('[id^="space-accessibility-"]').element as HTMLTextAreaElement).value,
+      ).toBe('Entrée sans marches');
+
+      // Trigger remove-language for 'fr' — the onLanguageRemoved hook should
+      // delete both `nameByLang.fr` and `accessibilityByLang.fr`.
+      await tabSelector.vm.$emit('remove-language', 'fr');
+      await flushPromises();
+
+      // Now re-add 'fr' via the same composable surface. The onLanguageAdded
+      // hook seeds blank entries ONLY when the keys are missing
+      // (`if (!(l in nameByLang)) nameByLang[l] = ''`). So if the removal hook
+      // had failed to delete the keys, re-adding 'fr' would surface the stale
+      // French content. Selecting the fr tab and observing empty inputs is the
+      // observable proof that both `nameByLang.fr` and `accessibilityByLang.fr`
+      // were deleted by onLanguageRemoved.
+      await tabSelector.vm.$emit('add-language');
+      await flushPromises();
+      const picker = wrapper.findComponent({ name: 'languagePicker' });
+      expect(picker.exists()).toBe(true);
+      await picker.vm.$emit('select', 'fr');
+      await flushPromises();
+
+      expect(
+        (wrapper.find('[id^="space-name-"]').element as HTMLInputElement).value,
+      ).toBe('');
+      expect(
+        (wrapper.find('[id^="space-accessibility-"]').element as HTMLTextAreaElement).value,
+      ).toBe('');
+    });
+  });
 });

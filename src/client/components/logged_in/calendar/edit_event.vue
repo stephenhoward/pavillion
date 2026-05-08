@@ -1291,7 +1291,10 @@ const {
   setupNavigationGuard,
 } = useUnsavedChanges();
 
-// Language management composable
+// Language management composable.
+// onLanguageRemoved drops the per-language content from the event so the
+// edit_event.vue is responsible for entity-level side effects; the
+// composable owns only UI state.
 const {
   languages,
   availableLanguages,
@@ -1301,7 +1304,11 @@ const {
   removeLanguage,
   openLanguagePicker,
   closeLanguagePicker,
-} = useLanguageManagement();
+} = useLanguageManagement({
+  onLanguageRemoved: (language) => {
+    editorState.event?.dropContent(language);
+  },
+});
 
 // Error container ref for scrolling
 const errorContainer = ref(null);
@@ -1510,7 +1517,7 @@ const handleRemoveLocation = () => {
  */
 const handleAddLanguage = (language) => {
   if (editorState.event) {
-    addLanguage(language, editorState.event);
+    addLanguage(language);
   }
   closeLanguagePicker();
 };
@@ -1527,7 +1534,7 @@ const handleRemoveLanguage = (language) => {
     { language: languageName },
   );
   if (!window.confirm(message)) return;
-  removeLanguage(language, editorState.event);
+  removeLanguage(language);
 };
 
 /**

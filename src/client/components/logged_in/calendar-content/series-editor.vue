@@ -7,6 +7,7 @@ import { DEFAULT_LANGUAGE_CODE } from '@/common/i18n/languages';
 import { EventSeriesContent } from '@/common/model/event_series_content';
 import { DuplicateSeriesNameError, SeriesUrlNameAlreadyExistsError, InvalidSeriesUrlNameError } from '@/common/exceptions/series';
 import SeriesService from '@/client/service/series';
+import { useLanguageManagement } from '@/client/composables/useLanguageManagement';
 import LanguagePicker from '@/client/components/common/language-picker.vue';
 import LanguageTabSelector from '@/client/components/common/language-tab-selector.vue';
 import ImageUpload from '@/client/components/common/media/image-upload.vue';
@@ -30,13 +31,8 @@ const { t: tEditor } = useTranslation('series', {
 });
 
 const seriesService = new SeriesService();
-let allLanguages = iso6391.getAllCodes();
-allLanguages.unshift(DEFAULT_LANGUAGE_CODE);
-let availableLanguages = ref([...new Set(allLanguages)]);
 
 const state = reactive({
-  currentLanguage: DEFAULT_LANGUAGE_CODE,
-  showLanguagePicker: false,
   isSaving: false,
   error: '',
 });
@@ -44,10 +40,43 @@ const state = reactive({
 // Create a local copy of the series to avoid mutating props
 const localSeries = ref(null);
 
-// Initialize the local series when props change
+// Language management composable. Entity-level side effects (adding/dropping
+// per-language content on the series) are wired through the hooks; the
+// composable owns only UI state (active languages, current selection,
+// picker modal visibility). Destructured so refs auto-unwrap in the
+// template.
+const {
+  languages,
+  availableLanguages,
+  currentLanguage,
+  showLanguagePicker,
+  addLanguage,
+  removeLanguage,
+  openLanguagePicker,
+  closeLanguagePicker,
+} = useLanguageManagement({
+  onLanguageAdded: (language) => {
+    if (!localSeries.value) return;
+    if (localSeries.value.getLanguages().includes(language)) return;
+    localSeries.value.addContent(new EventSeriesContent(language, '', ''));
+  },
+  onLanguageRemoved: (language) => {
+    if (!localSeries.value) return;
+    localSeries.value.dropContent(language);
+  },
+});
+
+// Initialize the local series when props change. Re-seed the language
+// composable's active list from the entity so async-loaded series populate
+// their tabs correctly.
 watch(() => props.series, (newSeries) => {
   if (newSeries) {
     localSeries.value = newSeries;
+    const seriesLanguages = newSeries.getLanguages();
+    if (seriesLanguages.length > 0) {
+      languages.value = [...new Set([DEFAULT_LANGUAGE_CODE, ...seriesLanguages])];
+      currentLanguage.value = seriesLanguages[0];
+    }
   }
 }, { immediate: true });
 
@@ -61,8 +90,8 @@ const currentMedia = computed(() => {
 
 const erroredTabs = computed(() => {
   if (!localSeries.value) return [];
-  return localSeries.value.getLanguages().filter(lang => {
-    const content = localSeries.value.content(lang);
+  return localSeries.value.getLanguages().filter(language => {
+    const content = localSeries.value.content(language);
     return !content || !content.name || content.name.trim().length === 0;
   });
 });
@@ -82,9 +111,9 @@ function canSaveSeries() {
   }
 
   // Must have at least one non-empty name
-  const languages = localSeries.value.getLanguages();
-  return languages.some(lang => {
-    const content = localSeries.value.content(lang);
+  const seriesLanguages = localSeries.value.getLanguages();
+  return seriesLanguages.some(language => {
+    const content = localSeries.value.content(language);
     return content && content.name.trim().length > 0;
   });
 }
@@ -144,51 +173,19 @@ function handleFilesChanged(files) {
 }
 
 /**
- * Add a new language to the series
+ * Handle adding a language from the picker. Delegates to the composable
+ * for state and entity side effects (via onLanguageAdded), then closes
+ * the picker modal.
  */
-function addLanguage(language) {
-  if (!localSeries.value) return;
-
-  // Check if language already exists
-  if (localSeries.value.getLanguages().includes(language)) {
-    state.showLanguagePicker = false;
-    return;
-  }
-
-  // Add new language with empty content
-  localSeries.value.addContent(new EventSeriesContent(language, '', ''));
-  state.currentLanguage = language;
-  state.showLanguagePicker = false;
+function handleAddLanguage(language) {
+  addLanguage(language);
+  closeLanguagePicker();
 }
 
-/**
- * Remove a language from the series
- */
-function removeLanguage(language) {
-  if (!localSeries.value) return;
-
-  // Don't allow removing the last language
-  if (localSeries.value.getLanguages().length <= 1) {
-    return;
-  }
-
-  localSeries.value.dropContent(language);
-
-  // Switch to the first available language
-  const remainingLanguages = localSeries.value.getLanguages();
-  if (remainingLanguages.length > 0) {
-    state.currentLanguage = remainingLanguages[0];
-  }
-}
-
-// Focus input when component mounts
+// Focus input when component mounts. The watch above handles seeding the
+// composable's currentLanguage from the entity; here we just focus the
+// first input.
 onMounted(() => {
-  // Set current language to first available language
-  const languages = localSeries.value?.getLanguages();
-  if (languages && languages.length > 0) {
-    state.currentLanguage = languages[0];
-  }
-
   nextTick(() => {
     if (nameInput.value) {
       nameInput.value.focus();
@@ -268,26 +265,26 @@ onMounted(() => {
 
             <!-- Multilingual name and description fields -->
             <LanguageTabSelector
-              v-model="state.currentLanguage"
+              v-model="currentLanguage"
               :languages="localSeries?.getLanguages() || []"
               :errored-tabs="erroredTabs"
-              @add-language="state.showLanguagePicker = true"
+              @add-language="openLanguagePicker"
               @remove-language="removeLanguage"
             />
 
             <div
-              :dir="iso6391.getDir(state.currentLanguage) === 'rtl' ? 'rtl' : 'ltr'"
+              :dir="iso6391.getDir(currentLanguage) === 'rtl' ? 'rtl' : 'ltr'"
               class="event-fields"
             >
               <div class="form-field">
-                <label class="field-label" :for="`name-${state.currentLanguage}`">
+                <label class="field-label" :for="`name-${currentLanguage}`">
                   {{ tEditor('name') }}
                 </label>
                 <input
-                  :id="`name-${state.currentLanguage}`"
+                  :id="`name-${currentLanguage}`"
                   type="text"
                   class="field-input"
-                  v-model="localSeries.content(state.currentLanguage).name"
+                  v-model="localSeries.content(currentLanguage).name"
                   :placeholder="tEditor('name_placeholder')"
                   :disabled="state.isSaving"
                   @keyup.enter="saveSeries"
@@ -296,13 +293,13 @@ onMounted(() => {
               </div>
 
               <div class="form-field">
-                <label class="field-label" :for="`description-${state.currentLanguage}`">
+                <label class="field-label" :for="`description-${currentLanguage}`">
                   {{ tEditor('description') }}
                 </label>
                 <textarea
-                  :id="`description-${state.currentLanguage}`"
+                  :id="`description-${currentLanguage}`"
                   class="field-textarea"
-                  v-model="localSeries.content(state.currentLanguage).description"
+                  v-model="localSeries.content(currentLanguage).description"
                   :placeholder="tEditor('description_placeholder')"
                   :disabled="state.isSaving"
                   rows="3"
@@ -313,9 +310,9 @@ onMounted(() => {
                 v-if="localSeries && localSeries.getLanguages().length > 1"
                 type="button"
                 class="remove-translation-link"
-                @click="removeLanguage(state.currentLanguage)"
+                @click="removeLanguage(currentLanguage)"
               >
-                {{ t('remove_language', { language: iso6391.getName(state.currentLanguage) }) }}
+                {{ t('remove_language', { language: iso6391.getName(currentLanguage) }) }}
               </button>
             </div>
           </div>
@@ -349,11 +346,11 @@ onMounted(() => {
 
   <!-- Language Picker - rendered outside main for proper stacking -->
   <LanguagePicker
-    v-if="state.showLanguagePicker"
+    v-if="showLanguagePicker"
     :languages="availableLanguages"
     :selectedLanguages="localSeries ? localSeries.getLanguages() : []"
-    @select="addLanguage"
-    @close="state.showLanguagePicker = false"
+    @select="handleAddLanguage"
+    @close="closeLanguagePicker"
   />
 </template>
 

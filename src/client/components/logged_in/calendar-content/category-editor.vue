@@ -49,7 +49,7 @@
       <button
         type="button"
         class="add-language-button"
-        @click="state.showLanguagePicker = true"
+        @click="openLanguagePicker"
       >
         + {{ t('add_language') }}
       </button>
@@ -75,11 +75,11 @@
 
     <!-- Language Picker - Inside dialog for proper z-index layering -->
     <LanguagePicker
-      v-if="state.showLanguagePicker"
+      v-if="showLanguagePicker"
       :languages="availableLanguages"
       :selectedLanguages="localCategory ? localCategory.getLanguages() : []"
-      @select="addLanguage"
-      @close="state.showLanguagePicker = false"
+      @select="handleAddLanguage"
+      @close="closeLanguagePicker"
     />
   </ModalLayout>
 </template>
@@ -93,6 +93,7 @@ import { DEFAULT_LANGUAGE_CODE } from '@/common/i18n/languages';
 import { EventCategoryContent } from '@/common/model/event_category_content';
 import { DuplicateCategoryNameError } from '@/common/exceptions/category';
 import CategoryService from '@/client/service/category';
+import { useLanguageManagement } from '@/client/composables/useLanguageManagement';
 import ModalLayout from '@/client/components/common/modal.vue';
 import LanguagePicker from '@/client/components/common/language-picker.vue';
 import PillButton from '@/client/components/common/pill-button.vue';
@@ -111,13 +112,8 @@ const { t } = useTranslation('categories', {
 });
 
 const categoryService = new CategoryService();
-let allLanguages = iso6391.getAllCodes();
-allLanguages.unshift(DEFAULT_LANGUAGE_CODE);
-let availableLanguages = ref([...new Set(allLanguages)]);
 
 const state = reactive({
-  currentLanguage: DEFAULT_LANGUAGE_CODE,
-  showLanguagePicker: false,
   isSaving: false,
   error: '',
 });
@@ -125,10 +121,43 @@ const state = reactive({
 // Create a local copy of the category to avoid mutating props
 const localCategory = ref(null);
 
-// Initialize the local category when props change
+// Language management composable. Entity-level side effects (adding/dropping
+// per-language content on the category) are wired through the hooks; the
+// composable owns only UI state (active languages, current selection,
+// picker modal visibility). Destructured so refs auto-unwrap in the
+// template.
+const {
+  languages,
+  availableLanguages,
+  showLanguagePicker,
+  addLanguage,
+  removeLanguage,
+  openLanguagePicker,
+  closeLanguagePicker,
+} = useLanguageManagement({
+  onLanguageAdded: (language) => {
+    if (!localCategory.value) return;
+    if (localCategory.value.getLanguages().includes(language)) return;
+    localCategory.value.addContent(new EventCategoryContent(language, ''));
+  },
+  onLanguageRemoved: (language) => {
+    if (!localCategory.value) return;
+    localCategory.value.dropContent(language);
+  },
+});
+
+// Initialize the local category when props change. Re-seed the language
+// composable's active list from the entity so async-loaded categories
+// populate `availableLanguages` (which the picker excludes from). The
+// composable's `currentLanguage` is unused here — this component renders
+// all languages inline via v-for rather than via a tab selector.
 watch(() => props.category, (newCategory) => {
   if (newCategory) {
     localCategory.value = newCategory;
+    const categoryLanguages = newCategory.getLanguages();
+    if (categoryLanguages.length > 0) {
+      languages.value = [...new Set([DEFAULT_LANGUAGE_CODE, ...categoryLanguages])];
+    }
   }
 }, { immediate: true });
 
@@ -139,9 +168,9 @@ const categoryNameInput = ref(null);
  */
 function canSaveCategory() {
   if (!localCategory.value) return false;
-  const languages = localCategory.value.getLanguages();
-  return languages.some(lang => {
-    const content = localCategory.value.content(lang);
+  const categoryLanguages = localCategory.value.getLanguages();
+  return categoryLanguages.some(language => {
+    const content = localCategory.value.content(language);
     return content && content.name.trim().length > 0;
   });
 }
@@ -180,51 +209,19 @@ async function saveCategory() {
 }
 
 /**
- * Add a new language to the category
+ * Handle adding a language from the picker. Delegates to the composable
+ * for state and entity side effects (via onLanguageAdded), then closes
+ * the picker modal.
  */
-function addLanguage(language) {
-  if (!localCategory.value) return;
-
-  // Check if language already exists
-  if (localCategory.value.getLanguages().includes(language)) {
-    state.showLanguagePicker = false;
-    return;
-  }
-
-  // Add new language with empty content
-  localCategory.value.addContent(new EventCategoryContent(language, ''));
-  state.currentLanguage = language;
-  state.showLanguagePicker = false;
+function handleAddLanguage(language) {
+  addLanguage(language);
+  closeLanguagePicker();
 }
 
-/**
- * Remove a language from the category
- */
-function removeLanguage(language) {
-  if (!localCategory.value) return;
-
-  // Don't allow removing the last language
-  if (localCategory.value.getLanguages().length <= 1) {
-    return;
-  }
-
-  localCategory.value.dropContent(language);
-
-  // Switch to the first available language
-  const remainingLanguages = localCategory.value.getLanguages();
-  if (remainingLanguages.length > 0) {
-    state.currentLanguage = remainingLanguages[0];
-  }
-}
-
-// Focus input when component mounts
+// Focus input when component mounts. The watch above handles seeding the
+// composable's currentLanguage from the entity; here we just focus the
+// first input.
 onMounted(() => {
-  // Set current language to first available language
-  const languages = localCategory.value?.getLanguages();
-  if (languages && languages.length > 0) {
-    state.currentLanguage = languages[0];
-  }
-
   nextTick(() => {
     // categoryNameInput.value is an array because the ref is used in a v-for
     const firstInput = Array.isArray(categoryNameInput.value)

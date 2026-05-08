@@ -25,29 +25,29 @@
 
           <LanguageTabSelector
             ref="contentLangTabs"
-            v-model="state.currentLanguage"
+            v-model="currentLanguage"
             :languages="localCalendar ? localCalendar.getLanguages() : []"
             :errored-tabs="erroredTabs"
-            @add-language="state.showLanguagePicker = true"
+            @add-language="openLanguagePicker"
             @remove-language="removeLanguage"
           />
 
           <div
-            :id="contentLangTabs?.panelId(state.currentLanguage)"
+            :id="contentLangTabs?.panelId(currentLanguage)"
             role="tabpanel"
-            :aria-labelledby="contentLangTabs?.tabId(state.currentLanguage)"
-            :dir="iso6391.getDir(state.currentLanguage) === 'rtl' ? 'rtl' : 'ltr'"
+            :aria-labelledby="contentLangTabs?.tabId(currentLanguage)"
+            :dir="iso6391.getDir(currentLanguage) === 'rtl' ? 'rtl' : 'ltr'"
             class="translatable-fields"
           >
             <div class="form-field">
-              <label class="field-label" :for="`calendarTitle-${state.currentLanguage}`">
+              <label class="field-label" :for="`calendarTitle-${currentLanguage}`">
                 {{ t('calendar_title_label') }}
               </label>
               <input
-                :id="`calendarTitle-${state.currentLanguage}`"
+                :id="`calendarTitle-${currentLanguage}`"
                 type="text"
                 class="setting-input"
-                v-model="localCalendar.content(state.currentLanguage).name"
+                v-model="localCalendar.content(currentLanguage).name"
                 :disabled="state.isSaving"
                 :placeholder="t('calendar_title_placeholder')"
                 @blur="saveSettings"
@@ -55,14 +55,14 @@
             </div>
 
             <div class="form-field">
-              <label class="field-label" :for="`calendarDescription-${state.currentLanguage}`">
+              <label class="field-label" :for="`calendarDescription-${currentLanguage}`">
                 {{ t('calendar_description_label') }}
               </label>
               <p class="input-description">{{ t('calendar_description_help') }}</p>
               <textarea
-                :id="`calendarDescription-${state.currentLanguage}`"
+                :id="`calendarDescription-${currentLanguage}`"
                 class="setting-textarea"
-                v-model="localCalendar.content(state.currentLanguage).description"
+                v-model="localCalendar.content(currentLanguage).description"
                 :disabled="state.isSaving"
                 :placeholder="t('calendar_description_placeholder')"
                 rows="3"
@@ -74,9 +74,9 @@
               v-if="localCalendar && localCalendar.getLanguages().length > 1"
               type="button"
               class="remove-translation-link"
-              @click="removeLanguage(state.currentLanguage)"
+              @click="removeLanguage(currentLanguage)"
             >
-              {{ t('remove_language', { language: iso6391.getName(state.currentLanguage) }) }}
+              {{ t('remove_language', { language: iso6391.getName(currentLanguage) }) }}
             </button>
           </div>
         </div>
@@ -203,11 +203,11 @@
   </div>
 
   <LanguagePicker
-    v-if="state.showLanguagePicker"
+    v-if="showLanguagePicker"
     :languages="availableLanguages"
     :selectedLanguages="localCalendar ? localCalendar.getLanguages() : []"
-    @select="addLanguage"
-    @close="state.showLanguagePicker = false"
+    @select="handleAddLanguage"
+    @close="closeLanguagePicker"
   />
 
   <FundingSheet
@@ -228,6 +228,7 @@ import { CalendarContent } from '@/common/model/calendar';
 import CalendarService from '@/client/service/calendar';
 import FundingService from '@/client/service/funding';
 import Config from '@/client/service/config';
+import { useLanguageManagement } from '@/client/composables/useLanguageManagement';
 import LoadingMessage from '@/client/components/common/loading_message.vue';
 import ImageUpload from '@/client/components/common/media/image-upload.vue';
 import EventImage from '@/client/components/common/media/event-image.vue';
@@ -255,10 +256,6 @@ const fundingService = new FundingService();
 // Instance name for extended features description
 const instanceName = ref('this instance');
 
-let allLanguages = iso6391.getAllCodes();
-allLanguages.unshift(DEFAULT_LANGUAGE_CODE);
-const availableLanguages = ref([...new Set(allLanguages)]);
-
 // Local calendar clone for translatable content editing
 const localCalendar = ref(null);
 const contentLangTabs = ref(null);
@@ -269,8 +266,6 @@ const state = reactive({
   isSaving: false,
   error: '',
   success: '',
-  currentLanguage: DEFAULT_LANGUAGE_CODE,
-  showLanguagePicker: false,
   defaultDateRange: '2weeks',
   defaultEventImage: null,
   fundingStatus: '',
@@ -279,6 +274,32 @@ const state = reactive({
   showFundingSheet: false,
   isDisabling: false,
   showDisableConfirm: false,
+});
+
+// Language management composable. Entity-level side effects (adding/dropping
+// per-language content on the calendar) are wired through the hooks; the
+// composable owns only UI state (active languages, current selection,
+// picker modal visibility). Destructured so refs auto-unwrap in the
+// template.
+const {
+  languages,
+  availableLanguages,
+  currentLanguage,
+  showLanguagePicker,
+  addLanguage,
+  removeLanguage,
+  openLanguagePicker,
+  closeLanguagePicker,
+} = useLanguageManagement({
+  onLanguageAdded: (language) => {
+    if (!localCalendar.value) return;
+    if (localCalendar.value.getLanguages().includes(language)) return;
+    localCalendar.value.addContent(new CalendarContent(language, '', ''));
+  },
+  onLanguageRemoved: (language) => {
+    if (!localCalendar.value) return;
+    localCalendar.value.dropContent(language);
+  },
 });
 
 const erroredTabs = computed(() => {
@@ -313,9 +334,15 @@ const loadSettings = async () => {
       state.defaultDateRange = calendar.defaultDateRange || '2weeks';
       state.defaultEventImage = calendar.defaultEventImage || null;
 
-      const languages = localCalendar.value.getLanguages();
-      if (languages.length > 0) {
-        state.currentLanguage = languages[0];
+      // Re-seed the composable's `languages` so its `availableLanguages`
+      // computed (used by the picker modal) excludes the languages this
+      // calendar already has. The LanguageTabSelector renders tabs from
+      // localCalendar.getLanguages() directly, so the seeding here drives
+      // the picker exclusion list, not the visible tab row.
+      const calendarLanguages = localCalendar.value.getLanguages();
+      if (calendarLanguages.length > 0) {
+        languages.value = [...new Set([DEFAULT_LANGUAGE_CODE, ...calendarLanguages])];
+        currentLanguage.value = calendarLanguages[0];
       }
     }
   }
@@ -368,37 +395,13 @@ const saveSettings = async () => {
 };
 
 /**
- * Add a new language translation
+ * Handle adding a language from the picker. Delegates to the composable
+ * for state and entity side effects (via onLanguageAdded), then closes
+ * the picker modal.
  */
-const addLanguage = (language) => {
-  if (!localCalendar.value) return;
-
-  if (localCalendar.value.getLanguages().includes(language)) {
-    state.showLanguagePicker = false;
-    return;
-  }
-
-  localCalendar.value.addContent(new CalendarContent(language, '', ''));
-  state.currentLanguage = language;
-  state.showLanguagePicker = false;
-};
-
-/**
- * Remove a language translation
- */
-const removeLanguage = (language) => {
-  if (!localCalendar.value) return;
-
-  if (localCalendar.value.getLanguages().length <= 1) {
-    return;
-  }
-
-  localCalendar.value.dropContent(language);
-
-  const remainingLanguages = localCalendar.value.getLanguages();
-  if (remainingLanguages.length > 0) {
-    state.currentLanguage = remainingLanguages[0];
-  }
+const handleAddLanguage = (language) => {
+  addLanguage(language);
+  closeLanguagePicker();
 };
 
 /**

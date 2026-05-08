@@ -500,6 +500,73 @@ describe('Location Integration', () => {
   });
 });
 
+describe('Language Management Wiring', () => {
+  let currentWrapper: any = null;
+  let pinia: Pinia;
+  let sandbox: sinon.SinonSandbox;
+  let originalConfirm: typeof window.confirm;
+
+  beforeEach(() => {
+    sinon.restore();
+    sandbox = sinon.createSandbox();
+    pinia = createPinia();
+    setActivePinia(pinia);
+    vi.clearAllMocks();
+    // Auto-accept the confirm dialog so handleRemoveLanguage proceeds.
+    // happy-dom's window.confirm property descriptor varies across full-suite
+    // runs (sometimes accessor, sometimes data, sometimes absent), so direct
+    // assignment with afterEach restore is more robust than sinon stubbing.
+    originalConfirm = window.confirm;
+    window.confirm = (() => true) as typeof window.confirm;
+  });
+
+  afterEach(async () => {
+    window.confirm = originalConfirm;
+    sandbox.restore();
+    if (currentWrapper) {
+      currentWrapper.unmount();
+      currentWrapper = null;
+      await nextTick();
+    }
+  });
+
+  it('drives event.dropContent when LanguageTabSelector emits remove-language', async () => {
+    const calendar = new Calendar('testId', 'testName');
+    calendar.addContent({ language: 'en', name: 'Test Calendar', description: '' });
+
+    const { wrapper } = await mountedEditorOnRoute('/event', [calendar]);
+    currentWrapper = wrapper;
+
+    // Spy on the live event instance — onLanguageRemoved hook reads
+    // editorState.event from closure, so the spy must be installed
+    // after the event has been created by initializeEvent.
+    const dropContentSpy = sandbox.spy(wrapper.vm.state.event, 'dropContent');
+
+    const tabSelector = wrapper.findComponent({ name: 'LanguageTabSelector' });
+    expect(tabSelector.exists()).toBe(true);
+
+    // Open the language picker via the tab selector's add-language emit,
+    // then have the picker stub emit `select('fr')` — this is the same
+    // path the real UI takes and is what wires `handleAddLanguage` via
+    // the composable.
+    await tabSelector.vm.$emit('add-language');
+    await nextTick();
+    await flushPromises();
+
+    const picker = wrapper.findComponent({ name: 'languagePicker' });
+    expect(picker.exists()).toBe(true);
+    await picker.vm.$emit('select', 'fr');
+    await nextTick();
+
+    // Now trigger the remove-language emit; the composable's
+    // onLanguageRemoved hook should call event.dropContent('fr').
+    await tabSelector.vm.$emit('remove-language', 'fr');
+    await nextTick();
+
+    expect(dropContentSpy.calledWith('fr')).toBe(true);
+  });
+});
+
 describe('External Link Section', () => {
   let currentWrapper: any = null;
   let pinia: Pinia;
