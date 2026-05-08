@@ -956,6 +956,52 @@ describe('EditPlaceView', () => {
     });
   });
 
+  describe('Language Management Wiring', () => {
+    it('drops accessibilityInfo entry when LanguageTabSelector emits remove-language', async () => {
+      // Seed an existing Place with accessibility info in two languages so the
+      // composable's last-language guard does not block the remove path.
+      const place = createMockLocation('loc-1', 'Community Center');
+      place.addContent(new EventLocationContent('fr', 'Accessible en fauteuil roulant'));
+      mockGetLocationById.mockResolvedValueOnce(place);
+
+      const wrapper = await createWrapper('place_edit', { placeId: 'loc-1' });
+
+      // Pre-condition: switching to the French tab surfaces the French
+      // accessibility-info content, confirming the form-buffer key exists.
+      const tabSelector = wrapper.findComponent({ name: 'LanguageTabSelector' });
+      expect(tabSelector.exists()).toBe(true);
+
+      await tabSelector.vm.$emit('update:modelValue', 'fr');
+      await flushPromises();
+
+      expect(
+        (wrapper.find('[id^="place-accessibility-"]').element as HTMLTextAreaElement).value,
+      ).toBe('Accessible en fauteuil roulant');
+
+      // Trigger remove-language for 'fr' — the onLanguageRemoved hook should
+      // delete `accessibilityInfo.fr`.
+      await tabSelector.vm.$emit('remove-language', 'fr');
+      await flushPromises();
+
+      // Re-add 'fr' via the picker. The onLanguageAdded hook only seeds a
+      // blank entry when the key is missing
+      // (`if (!(l in accessibilityInfo)) accessibilityInfo[l] = ''`), so if
+      // the removal hook had failed to delete the key, the stale French
+      // content would resurface. Observing an empty textarea is the proof
+      // that onLanguageRemoved actually dropped `accessibilityInfo.fr`.
+      await tabSelector.vm.$emit('add-language');
+      await flushPromises();
+      const picker = wrapper.findComponent({ name: 'languagePicker' });
+      expect(picker.exists()).toBe(true);
+      await picker.vm.$emit('select', 'fr');
+      await flushPromises();
+
+      expect(
+        (wrapper.find('[id^="place-accessibility-"]').element as HTMLTextAreaElement).value,
+      ).toBe('');
+    });
+  });
+
   describe('Dirty-state Cancel/Back prompt', () => {
     it('does not prompt when nothing has changed', async () => {
       const confirmSpy = vi.fn(() => true);
