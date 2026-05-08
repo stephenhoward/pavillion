@@ -114,7 +114,11 @@ describe('JobQueueService', () => {
 
       await service.subscribe('backup:create', handler);
 
-      expect(PgBoss.prototype.work).toHaveBeenCalledWith('backup:create', expect.any(Function));
+      expect(PgBoss.prototype.work).toHaveBeenCalledWith(
+        'backup:create',
+        { includeMetadata: true },
+        expect.any(Function),
+      );
     });
 
     it('should execute handler when job is received', async () => {
@@ -123,20 +127,80 @@ describe('JobQueueService', () => {
       let jobHandler: ((job: any) => Promise<void>) | undefined;
 
       // Capture the handler function passed to work()
-      (PgBoss.prototype.work as any).mockImplementation(async (_name: string, fn: any) => {
-        jobHandler = fn;
-        return 'worker-id';
-      });
+      (PgBoss.prototype.work as any).mockImplementation(
+        async (_name: string, _options: any, fn: any) => {
+          jobHandler = fn;
+          return 'worker-id';
+        },
+      );
 
       await service.subscribe('backup:create', handler);
 
       // Simulate pg-boss calling the handler with a job
-      const mockJob = { id: 'job-1', data: { type: 'manual' } };
+      const mockJob = { id: 'job-1', data: { type: 'manual' }, retryCount: 0, retryLimit: 2 };
       if (jobHandler) {
         await jobHandler(mockJob);
       }
 
-      expect(handler).toHaveBeenCalledWith(mockJob.data);
+      expect(handler).toHaveBeenCalledWith(mockJob.data, { retryCount: 0, retryLimit: 2 });
+    });
+
+    it('should forward retryCount and retryLimit metadata to handlers that opt in', async () => {
+      await service.start();
+      let jobHandler: ((job: any) => Promise<void>) | undefined;
+
+      (PgBoss.prototype.work as any).mockImplementation(
+        async (_name: string, _options: any, fn: any) => {
+          jobHandler = fn;
+          return 'worker-id';
+        },
+      );
+
+      const receivedMeta: { retryCount?: number; retryLimit?: number } = {};
+      const handler = vi.fn(async (_data: any, meta?: { retryCount: number; retryLimit: number }) => {
+        if (meta) {
+          receivedMeta.retryCount = meta.retryCount;
+          receivedMeta.retryLimit = meta.retryLimit;
+        }
+      });
+
+      await service.subscribe('backup:create', handler);
+
+      const mockJob = { id: 'job-1', data: { type: 'manual' }, retryCount: 1, retryLimit: 2 };
+      if (jobHandler) {
+        await jobHandler(mockJob);
+      }
+
+      expect(receivedMeta.retryCount).toBe(1);
+      expect(receivedMeta.retryLimit).toBe(2);
+    });
+
+    it('should still pass data correctly to legacy single-argument handlers', async () => {
+      await service.start();
+      let jobHandler: ((job: any) => Promise<void>) | undefined;
+
+      (PgBoss.prototype.work as any).mockImplementation(
+        async (_name: string, _options: any, fn: any) => {
+          jobHandler = fn;
+          return 'worker-id';
+        },
+      );
+
+      // Legacy handler declares only the data parameter — ignores the second arg
+      let receivedData: any;
+      const legacyHandler = vi.fn(async (data: any) => {
+        receivedData = data;
+      });
+
+      await service.subscribe('backup:create', legacyHandler);
+
+      const mockJob = { id: 'job-1', data: { type: 'manual' }, retryCount: 0, retryLimit: 2 };
+      await expect(
+        jobHandler ? jobHandler(mockJob) : Promise.resolve(),
+      ).resolves.not.toThrow();
+
+      expect(receivedData).toEqual({ type: 'manual' });
+      expect(legacyHandler).toHaveBeenCalled();
     });
 
     it('should throw error when subscribing before start', async () => {

@@ -6,6 +6,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import config from 'config';
 import { BackupEntity } from '@/server/housekeeping/entity/backup';
+import { BackupCreateError } from '@/common/exceptions/housekeeping';
 import { logError } from '@/server/common/helper/error-logger';
 import { createLogger } from '@/server/common/helper/logger';
 
@@ -137,7 +138,8 @@ export default class BackupService {
     }
     catch (error) {
       logError(error, '[Housekeeping] Failed to create backup');
-      throw error;
+      const originalMessage = error instanceof Error ? error.message : String(error);
+      throw new BackupCreateError(originalMessage, filename, error);
     }
   }
 
