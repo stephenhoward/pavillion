@@ -4,6 +4,7 @@ import { useTranslation } from 'i18next-vue';
 import Sheet from '@/client/components/common/Sheet.vue';
 import PillButton from '@/client/components/common/pill-button.vue';
 import LanguageTabSelector from '@/client/components/common/language-tab-selector.vue';
+import { useLanguageManagement } from '@/client/composables/useLanguageManagement';
 
 const { t } = useTranslation('event_editor', { keyPrefix: 'create_location' });
 
@@ -23,7 +24,14 @@ const emit = defineEmits<{
   (e: 'close'): void;
 }>();
 
-const currentLanguage = ref(props.languages[0] || 'en');
+// Read-only consumer: parent owns the languages list via props.languages.
+// initialLanguages is a one-shot factory invoked once at construction; if
+// props.languages changes after mount, the composable will not reflect it.
+// Deferred reactive prop-watch to v2 unless smoke (pv-3f2x.3) finds a real
+// workflow that exercises it.
+const lang = useLanguageManagement({
+  initialLanguages: () => props.languages,
+});
 const accessibilityLangTabs = ref<InstanceType<typeof LanguageTabSelector> | null>(null);
 const submissionErrorEl = ref<HTMLElement | null>(null);
 
@@ -172,22 +180,22 @@ const handleSubmit = () => {
 
         <LanguageTabSelector
           ref="accessibilityLangTabs"
-          v-model="currentLanguage"
-          :languages="languages"
+          v-model="lang.currentLanguage.value"
+          :languages="lang.languages.value"
           @add-language="handleAddLanguage"
         />
 
         <div
-          :id="accessibilityLangTabs?.panelId(currentLanguage)"
+          :id="accessibilityLangTabs?.panelId(lang.currentLanguage.value)"
           role="tabpanel"
-          :aria-labelledby="accessibilityLangTabs?.tabId(currentLanguage)"
+          :aria-labelledby="accessibilityLangTabs?.tabId(lang.currentLanguage.value)"
           class="form-field"
         >
           <textarea
-            v-model="accessibilityInfo[currentLanguage]"
+            v-model="accessibilityInfo[lang.currentLanguage.value]"
             class="form-textarea"
             :placeholder="t('accessibility_placeholder')"
-            :aria-label="t('accessibility_aria_label', { language: currentLanguage })"
+            :aria-label="t('accessibility_aria_label', { language: lang.currentLanguage.value })"
             rows="4"
           />
         </div>
