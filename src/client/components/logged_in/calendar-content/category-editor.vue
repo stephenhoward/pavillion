@@ -129,12 +129,11 @@ const localCategory = ref(null);
 const {
   languages,
   availableLanguages,
-  currentLanguage,
   showLanguagePicker,
+  addLanguage,
   removeLanguage,
   openLanguagePicker,
   closeLanguagePicker,
-  addLanguage,
 } = useLanguageManagement({
   onLanguageAdded: (language) => {
     if (!localCategory.value) return;
@@ -149,14 +148,15 @@ const {
 
 // Initialize the local category when props change. Re-seed the language
 // composable's active list from the entity so async-loaded categories
-// populate their language tabs correctly.
+// populate `availableLanguages` (which the picker excludes from). The
+// composable's `currentLanguage` is unused here — this component renders
+// all languages inline via v-for rather than via a tab selector.
 watch(() => props.category, (newCategory) => {
   if (newCategory) {
     localCategory.value = newCategory;
     const categoryLanguages = newCategory.getLanguages();
     if (categoryLanguages.length > 0) {
       languages.value = [...new Set([DEFAULT_LANGUAGE_CODE, ...categoryLanguages])];
-      currentLanguage.value = categoryLanguages[0];
     }
   }
 }, { immediate: true });
