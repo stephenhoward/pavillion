@@ -1,18 +1,20 @@
-# Reuse venues with places
+# Manage event locations
 
-A *place* in Pavillion is a venue you save once and reuse — an address, a name, a few details. Type the venue's address once, attach it to ten events at that venue, and when the venue changes its name or you spot a typo in the address, you fix it once and every event there is updated.
+A *place* in Pavillion is an event location you save once and reuse — an address, a name, a few details. Create the venue once and you can link it to ten different events. Then, when the venue changes its name or you spot a typo in the address, you can fix it once and every event there is updated. (You'll manage them on the **Places** tab on your calendar page, alongside Events, Categories, and Series.)
 
-A place can be flat — just an address — or it can have rooms and spaces inside it: named sub-locations like *Sterling Room*, *Children's Story Corner*, *the gym*, *the back studio*. When a venue hosts events in distinguishably different sub-areas, the rooms live as part of the place, and an event can attach to either the whole venue or a specific room within it.
+A place can be flat — just an address — or it can have rooms and spaces inside it: named sub-locations like *Main Hall*, *Children's Story Corner*, *the gym*, *the back studio*. When a venue hosts events in specific sub-areas, an event can attach to either the whole venue or a specific room within it.
 
-This guide covers what places are, how rooms and spaces fit, how to create both, how to attach them to events, and what changes when you edit one. It also covers the cases where a place is the wrong tool — online events, one-off venues — so you don't end up with a list of places you'll never reuse.
+This guide covers what places are, how rooms and spaces fit, how to create both, how to attach them to events, and what changes when you edit one. It also covers the cases where a place is the wrong tool — online events, venues that aren't settled yet.
 
 ## How places work
 
-A place lives on its own, not inside any one event. When you attach it to an event, the event doesn't take a copy of the address — it just remembers which place it's at and reads the details from there. This is the single fact that explains everything else in this guide.
+A place lives on its own, not inside any one event. When you attach it to an event, the event doesn't take a copy of the address — it just remembers which place it's at and reads the details from there. The place's name, address, and accessibility notes appear in their own dedicated spots on the event's public page, rather than a sentence buried in the event description.
 
-The day-to-day consequence is small but valuable. When the community center on Main Street renames itself, you don't go event by event correcting the venue name. You open the place once, fix the name, save. The event lists, the event detail pages, the public calendar — all of it shows the new name on the next page load.
+That structure pays off three ways:
 
-The other consequence is that places are reusable. Every event you publish at the same venue picks the place from a list rather than retyping the address. Over a year of running a calendar, a small set of recurring venues accounts for most of your events; saving them as places turns each new event's location field from a typing exercise into a one-click pick.
+- **Edit once, propagate everywhere.** When a venue renames itself, you fix the place — not every event that uses it. The lists, detail pages, and public calendar all show the new name on the next page load.
+- **Reusable across events.** Recurring venues become one-click picks instead of address retyping. Over a year of running a calendar, a small set of places covers most of your events.
+- **Free directions link.** If the place has a street address, the public event page renders it as a tap-to-open link — one-tap navigation on a phone, a map in a new tab on desktop. Just fill the address in and it happens automatically.
 
 A place belongs to a calendar. If you run more than one calendar, each calendar has its own list of places — they aren't shared. That's usually what you want, since the venues a community garden uses are different from the venues a folk concert series uses.
 
@@ -20,13 +22,13 @@ A place belongs to a calendar. If you run more than one calendar, each calendar 
 
 ## Create a place
 
-You can create a place two ways: ahead of time from the calendar's **Places** tab, or on the fly from inside the event editor. Both routes save the same place — pick whichever fits the moment.
+You can create a place two ways: ahead of time from the calendar's **Places** tab, or on the fly from inside the event editor. Both routes do the same thing — pick whichever fits the moment.
 
-**From the Places tab.** Open <Btn>Manage Calendar</Btn> from your calendar page and find the **Places** tab. The first time you visit, the list is empty. Click <Btn>Add Place</Btn>. The place editor opens as a full page with three sections:
+**From the Places tab.** On your calendar page, switch to the **Places** tab (alongside Events, Categories, and Series). The first time you visit, the list is empty. Click <Btn>Add Place</Btn>. The place editor opens as a full page with three sections:
 
 - **Basic information.** A name (required), street address, city, state or province, postal code. The name is the only required field — you could save a place with just a name if that's all you have, though for most venues the address fields are what makes the place useful.
 - **Accessibility information.** A free-text field for things that apply to the *whole venue* — wheelchair access at the main entrance, ASL interpretation policy, scent-free notes, parking notes — anything a visitor specifically needs to know about getting into and around the building. If your calendar publishes in more than one language, this field shows a row of language tabs so you can write the accessibility note once per language.
-- **Rooms & Spaces.** Optional. If the venue has named sub-locations, list them here. Click <Btn>Add room or space</Btn> to add one to the list; give it a name (required, translatable per language) and any room-specific accessibility notes (also translatable). Saving the place saves the rooms along with it — one save covers both.
+- **Rooms & Spaces.** Optional. If the venue has named sub-locations, list them here. Click <Btn>Add room or space</Btn> to add one to the list; give it a name (required, translatable per language) and any room-specific accessibility notes (also translatable). Saving the place saves the rooms along with it.
 
 Click <Btn>Save</Btn>. The place — and any rooms you added — are now in your list and available to attach to events.
 
@@ -34,8 +36,8 @@ Click <Btn>Save</Btn>. The place — and any rooms you added — are now in your
 
 The on-the-fly form is the express lane — it covers the venue itself but not its rooms. If the place needs rooms or spaces, save the basics first and then open the place from the **Places** tab to add the rooms; or create it from the **Places** tab to begin with. Either way, the place is now reusable from any future event on this calendar.
 
-::: tip <Lightbulb /> Don't pre-create rooms.
-You don't need a room for every cubby a venue has. Add rooms when you're publishing a *second* event that needs to be told apart from the first one at the same venue — that's the moment the room name starts earning its keep. Until then, the whole-venue place handles it cleanly.
+::: tip <Lightbulb /> Just create the room you need right now.
+Specific rooms help attendees find the right door — but you don't have to map out every space in a venue while you're in the middle of creating an event. Add the room this event happens in, save, and move on. The next time you publish an event at the same venue, add that room then. The list fills in as you actually use it.
 :::
 
 ## Attach a place — or a specific room — to an event
@@ -55,7 +57,7 @@ The event doesn't keep its own copy of the address. It remembers *which place �
 
 ## Edit a place after the fact
 
-Open <Btn>Manage Calendar</Btn>, find the **Places** tab, click the pencil icon on the place you want to edit, change what needs changing, save.
+On your calendar page, switch to the **Places** tab, click the pencil icon on the place you want to edit, change what needs changing, save.
 
 The change is reflected everywhere immediately. Every event currently attached to that place — past, present, future — will display the updated information on its detail page the next time the page loads. Past events aren't frozen; they show the venue's current state, not the state it was in on the day the event happened.
 
@@ -83,15 +85,11 @@ If you're not sure, leave the rooms off. A simple place is always cleaner; you c
 
 ## When not to use a place
 
-A place earns its keep through reuse. Creating one for a venue you'll list once and never again adds friction without saving any.
+Most venues belong in your places list, even ones you'll only use once — the public listing is easier to use that way. The exceptions are events without a physical location and venues you can't yet commit to.
 
 **Online-only events.** If the event is a video call, a livestream, or otherwise has no physical location, leave the location field empty and put the join link in the **External link** field. There's no venue to reuse and no address to update.
 
-**One-off venues you won't return to.** A pop-up at a borrowed location, a guest lecture in someone's living room, a single visiting artist's studio open day. If you're confident this is the only event you'll ever publish at that location, the cost of creating a place for it (a list entry to scroll past forever) outweighs the benefit (zero reuse). Put the address in the event description instead, or — if you want it more visible — in the accessibility field if it's part of the access notes.
-
 **Venues you're still figuring out.** If the booking isn't confirmed, or the address might change before the event happens, hold off on creating a place. You can attach one (or create one on the fly from the event editor) once the venue is settled.
-
-The bias should be toward fewer places, not more. A list of thirty places where you actually only use six creates exactly the friction places are supposed to remove — every new event you publish, you scroll past twenty-four near-irrelevant entries to find the one you want. Treat a place as a small commitment to reuse, and your list stays useful.
 
 ## Naming places and rooms so they're recognizable later
 
