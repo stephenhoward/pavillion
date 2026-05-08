@@ -4,6 +4,7 @@ import { DateTime } from 'luxon';
 import { CalendarEvent, CalendarEventContent, CalendarEventSchedule, UrlPrompt, language } from '@/common/model/events';
 import db from '@/server/common/entity/db';
 import { LocationEntity } from '@/server/calendar/entity/location';
+import { LocationSpaceEntity } from '@/server/calendar/entity/location_space';
 import { MediaEntity } from '@/server/media/entity/media';
 import { CalendarEntity } from '@/server/calendar/entity/calendar';
 import { EventSeriesEntity } from '@/server/calendar/entity/event_series';
@@ -45,6 +46,10 @@ class EventEntity extends Model {
   @Column({ type: DataType.UUID })
   declare location_id: string;
 
+  @ForeignKey(() => LocationSpaceEntity)
+  @Column({ type: DataType.UUID, allowNull: true })
+  declare space_id: string | null;
+
   @ForeignKey(() => MediaEntity)
   @Column({ type: DataType.UUID })
   declare media_id: string;
@@ -83,6 +88,20 @@ class EventEntity extends Model {
   @BelongsTo(() => LocationEntity)
   declare location: LocationEntity;
 
+  /**
+   * `onDelete: 'SET NULL'` is the architectural keystone for whole-venue
+   * fallback: when a Space is deleted (e.g. as part of an atomic
+   * Place + Spaces save where the user removed a Space row), any events
+   * still pointing at it fall back to the parent Place automatically. The
+   * service layer can issue the Space delete inside the same transaction
+   * as the Place upsert without needing to enumerate referencing events
+   * and null them out by hand. Sequelize-typescript propagates this to
+   * the FK constraint via `db.sync()`; migration 0034 brings the
+   * Postgres schema in line with the entity.
+   */
+  @BelongsTo(() => LocationSpaceEntity, { foreignKey: 'space_id', onDelete: 'SET NULL' })
+  declare space: LocationSpaceEntity;
+
   @BelongsTo(() => MediaEntity)
   declare media: MediaEntity;
 
@@ -107,6 +126,9 @@ class EventEntity extends Model {
     if (this.location) {
       model.location = this.location.toModel();
     }
+    if (this.space) {
+      model.space = this.space.toModel();
+    }
     if (this.media) {
       model.media = this.media.toModel();
     }
@@ -129,6 +151,7 @@ class EventEntity extends Model {
       id: event.id,
       event_source_url: event.eventSourceUrl,
       calendar_id: event.calendarId,
+      space_id: event.space?.id ?? null,
       media_id: event.media?.id,
       media_focal_point_x: event.mediaFocalPointX,
       media_focal_point_y: event.mediaFocalPointY,

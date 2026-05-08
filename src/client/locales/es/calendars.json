@@ -390,7 +390,49 @@
         "LOCATION_STATE_REQUIRES_ADDRESS": "La provincia requiere una dirección postal",
         "LOCATION_CITY_REQUIRES_ADDRESS": "La ciudad requiere una dirección postal",
         "editor_aria_label": "Editor de lugares",
-        "editor_form_aria_label": "Formulario de información del lugar"
+        "editor_form_aria_label": "Formulario de información del lugar",
+        "discard_unsaved_changes": "¿Descartar los cambios no guardados?",
+        "error_reassign_partial": "Lugar guardado, pero fallaron {{count}} reasignación(es). Los eventos afectados están en el lugar completo. Vuelve a abrir el editor para reintentar.",
+        "format": {
+            "with_space": "{{place}} — {{space}}"
+        },
+        "picker": {
+            "whole_venue_suffix": "(lugar completo)"
+        },
+        "space": {
+            "section_title": "Salas y espacios",
+            "add_button": "Añadir sala o espacio",
+            "confirm_delete_title": "Eliminar sala o espacio",
+            "confirm_delete_message": "¿Eliminar \"{{name}}\"?",
+            "confirm_delete_event_count": "{{count}} eventos del lugar completo perderán su asignación.",
+            "reassign_dialog_title": "¿Eliminar \"{{name}}\"?",
+            "reassign_dialog_prompt": "{{count}} eventos usan esta sala o espacio. ¿A dónde deberían ir?",
+            "reassign_option_whole_venue": "Lugar completo",
+            "reassign_option_default_suffix": "(predeterminado)",
+            "reassign_option_other_space": "Otra sala o espacio:",
+            "reassign_dropdown_label": "Reasignar eventos a",
+            "reassign_new_suffix": "(nuevo)",
+            "reassign_confirm_button": "Eliminar sala o espacio",
+            "editor_title_new": "Nueva sala o espacio",
+            "editor_title_edit": "Editar sala o espacio",
+            "field_name": "Nombre",
+            "field_accessibility_info": "Información de accesibilidad",
+            "done": "Listo",
+            "cancel": "Cancelar",
+            "dismiss_error": "Descartar error",
+            "error_name_required": "Al menos un idioma debe tener un nombre no vacío",
+            "error_saving": "Error al guardar la sala o espacio",
+            "error_deleting": "Error al eliminar la sala o espacio",
+            "editor_form_aria_label": "Formulario de información de sala o espacio",
+            "loading_spaces": "Cargando salas y espacios...",
+            "no_spaces": "Aún no hay salas o espacios",
+            "unnamed_space": "Sala o espacio sin nombre",
+            "edit_space_button": "Editar {{name}}",
+            "delete_button": "Eliminar",
+            "delete_space_button": "Eliminar {{name}}",
+            "deleting": "Eliminando...",
+            "space_deleted_success": "Eliminado con éxito"
+        }
     },
     "bulk_operations": {
         "menu_label": "Operaciones masivas",

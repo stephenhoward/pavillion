@@ -1,7 +1,7 @@
 import { Calendar, DefaultDateRange } from '@/common/model/calendar';
 import { CalendarEvent } from '@/common/model/events';
 import { Account } from '@/common/model/account';
-import { EventLocation } from '@/common/model/location';
+import { EventLocation, EventLocationSpace } from '@/common/model/location';
 import { CalendarEditor } from '@/common/model/calendar_editor';
 import { CalendarMember } from '@/common/model/calendar_member';
 import { EventCategory } from '@/common/model/event_category';
@@ -65,9 +65,9 @@ export default class CalendarInterface {
     this.eventService = new EventService(eventBus);
     this.locationService = new LocationService();
     // EventInstanceService listing depends on EventService.listEventIdsForCalendar
-    // (single-producer model under pv-hr72). Inject the shared instance so the
-    // AP-interface wiring and any future EventService configuration apply
-    // uniformly to both consumers.
+    // (single-producer model). Inject the shared instance so the AP-interface
+    // wiring and any future EventService configuration apply uniformly to both
+    // consumers.
     this.eventInstanceService = new EventInstanceService(eventBus, this.eventService);
     this.categoryService = new CategoryService(this.calendarService);
     this.widgetDomainService = new WidgetDomainService();
@@ -340,6 +340,100 @@ export default class CalendarInterface {
    */
   async deleteLocation(calendar: Calendar, locationId: string): Promise<boolean> {
     return this.locationService.deleteLocation(calendar, locationId);
+  }
+
+  /**
+   * Reassign events from one Space to another within a single Place.
+   *
+   * Single SQL UPDATE inside a transaction:
+   *   UPDATE events SET space_id = :toSpaceId
+   *   WHERE place_id = :placeId AND space_id = :fromSpaceId
+   *
+   * The `place_id` WHERE-clause is the safety boundary — events outside this
+   * Place can never be touched. Out-of-Place `fromSpaceId` returns
+   * `{ count: 0, placeFound: true, toSpaceValid: true }` (idempotent no-op
+   * for retry semantics).
+   *
+   * @param calendar - The calendar that should own the Place
+   * @param placeId - The Place id; events outside this Place are never touched
+   * @param fromSpaceId - The current Space id to migrate events away from
+   * @param toSpaceId - The destination Space id; must be on this Place
+   * @returns `{ count, placeFound, toSpaceValid }` discriminator object
+   */
+  async reassignEvents(
+    calendar: Calendar,
+    placeId: string,
+    fromSpaceId: string,
+    toSpaceId: string,
+  ): Promise<{ count: number; placeFound: boolean; toSpaceValid: boolean }> {
+    return this.locationService.reassignEvents(calendar, placeId, fromSpaceId, toSpaceId);
+  }
+
+  // Space (Place sub-area) operations
+
+  /**
+   * Get all Spaces under a Place owned by the caller's calendar.
+   *
+   * @param calendar - The calendar that should own the parent Place
+   * @param placeId - The ID of the parent Place
+   * @returns Array of EventLocationSpace; empty if Place is missing or unowned
+   */
+  async getSpacesForPlace(calendar: Calendar, placeId: string): Promise<EventLocationSpace[]> {
+    return this.locationService.getSpacesForPlace(calendar, placeId);
+  }
+
+  /**
+   * Get a specific Space by ID, scoped to the caller's calendar via its Place.
+   *
+   * @param calendar - The calendar that should own the Space (via its Place)
+   * @param spaceId - The ID of the Space
+   * @returns EventLocationSpace populated with content, or null if not found
+   */
+  async getSpaceById(calendar: Calendar, spaceId: string): Promise<EventLocationSpace | null> {
+    return this.locationService.getSpaceById(calendar, spaceId);
+  }
+
+  /**
+   * Create a new Space under a Place owned by the caller's calendar.
+   *
+   * @param calendar - The calendar that should own the parent Place
+   * @param placeId - The ID of the parent Place
+   * @param contentByLang - Map of language code to {name, accessibilityInfo}
+   * @returns Newly created EventLocationSpace populated with content
+   */
+  async createSpace(
+    calendar: Calendar,
+    placeId: string,
+    contentByLang: Record<string, { name: string; accessibilityInfo: string }>,
+  ): Promise<EventLocationSpace> {
+    return this.locationService.createSpace(calendar, placeId, contentByLang);
+  }
+
+  /**
+   * Update an existing Space's multilingual content (full replacement).
+   *
+   * @param calendar - The calendar that should own the Space (via its Place)
+   * @param spaceId - The ID of the Space to update
+   * @param contentByLang - Map of language code to {name, accessibilityInfo}
+   * @returns Reloaded EventLocationSpace, or null if not found / unowned
+   */
+  async updateSpace(
+    calendar: Calendar,
+    spaceId: string,
+    contentByLang: Record<string, { name: string; accessibilityInfo: string }>,
+  ): Promise<EventLocationSpace | null> {
+    return this.locationService.updateSpace(calendar, spaceId, contentByLang);
+  }
+
+  /**
+   * Delete a Space and nullify space_id on referencing events.
+   *
+   * @param calendar - The calendar that should own the Space (via its Place)
+   * @param spaceId - The ID of the Space to delete
+   * @returns True if deleted, false if not found / unowned
+   */
+  async deleteSpace(calendar: Calendar, spaceId: string): Promise<boolean> {
+    return this.locationService.deleteSpace(calendar, spaceId);
   }
 
   async buildEventInstances(event: CalendarEvent): Promise<void> {

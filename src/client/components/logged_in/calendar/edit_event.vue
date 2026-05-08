@@ -928,6 +928,7 @@ button {
 
             <LocationDisplayCard
               :location="editorState.event.location"
+              :space="editorState.event.space"
               @change-location="handleOpenLocationPicker"
               @add-location="handleOpenLocationPicker"
             />
@@ -1150,6 +1151,7 @@ button {
     ref="locationPickerRef"
     :locations="availableLocations"
     :selected-location-id="editorState.event?.locationId || null"
+    :selected-space-id="editorState.event?.space?.id || null"
     @location-selected="handleLocationSelected"
     @create-new="createNewLocation"
     @remove-location="handleRemoveLocation"
@@ -1452,7 +1454,11 @@ const handleSeriesChanged = (seriesId) => {
 };
 
 /**
- * Handle opening the location picker modal
+ * Handle opening the location picker modal.
+ *
+ * Passes both the calendar ID (for fetching Places) and the calendar URL name
+ * (for prefetching each Place's Spaces) so the picker can render its flat
+ * Place + Spaces list.
  */
 const handleOpenLocationPicker = async () => {
   if (editorState.event) {
@@ -1461,11 +1467,15 @@ const handleOpenLocationPicker = async () => {
 };
 
 /**
- * Handle location selection from the picker
+ * Handle location selection from the picker.
+ *
+ * Picker emits `{ placeId, spaceId | null }` (null = whole venue, NOT undefined).
+ * The composable resolves the Space inline from the chosen Place's
+ * `place.spaces` array — no separate Spaces cache.
  */
-const handleLocationSelected = async (location) => {
+const handleLocationSelected = async (selection) => {
   if (editorState.event) {
-    selectLocation(location, editorState.event);
+    selectLocation(selection, editorState.event);
   }
 };
 

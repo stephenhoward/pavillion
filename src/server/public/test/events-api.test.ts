@@ -7,9 +7,11 @@ import { DateTime } from 'luxon';
 
 import { Calendar } from '@/common/model/calendar';
 import { CalendarEvent, CalendarEventSchedule, EventFrequency } from '@/common/model/events';
+import { EventNotFoundError } from '@/common/exceptions/calendar';
 import CalendarEventInstance from '@/common/model/event_instance';
 import { EventSeries } from '@/common/model/event_series';
 import { EventSeriesContent } from '@/common/model/event_series_content';
+import { EventLocation, EventLocationSpace, EventLocationSpaceContent } from '@/common/model/location';
 import { Media } from '@/common/model/media';
 import { testApp } from '@/server/common/test/lib/express';
 import CalendarRoutes from '@/server/public/api/v1/calendar';
@@ -335,6 +337,32 @@ describe('Public API - toPublicEventObject shape contract', () => {
     expect(mediaBody.status).toBeUndefined();
   }
 
+  /**
+   * Public Space projection contract: the response must expose only
+   * `content`. Internal fields (id, placeId, originUri) are AP-identity
+   * hints / FKs with no Tier 1 anonymous-public use case and must never
+   * appear on the public surface.
+   */
+  function assertSpaceProjection(spaceBody: Record<string, any>) {
+    expect(spaceBody).not.toBeNull();
+    expect(spaceBody.content).toBeDefined();
+    expect(spaceBody.content.en).toBeDefined();
+    expect(spaceBody.content.en.name).toBe('Pacific Room');
+    // The public projection must contain only `content` — no other keys.
+    expect(Object.keys(spaceBody)).toEqual(['content']);
+    // Spell out the disallowed internal fields for clarity / future regressions.
+    expect(spaceBody.id).toBeUndefined();
+    expect(spaceBody.placeId).toBeUndefined();
+    expect(spaceBody.originUri).toBeUndefined();
+  }
+
+  function makeSpace(): EventLocationSpace {
+    const space = new EventLocationSpace('space-1', 'place-1');
+    space.originUri = 'https://example.test/spaces/space-1';
+    space.addContent(new EventLocationSpaceContent('en', 'Pacific Room', 'Hearing loop'));
+    return space;
+  }
+
   beforeEach(() => {
     calendarInterface = new CalendarInterface(new EventEmitter());
     publicInterface = new PublicCalendarInterface(new EventEmitter(), calendarInterface);
@@ -399,6 +427,8 @@ describe('Public API - toPublicEventObject shape contract', () => {
   });
 
   describe('getEvent', () => {
+    const EVENT_UUID = '11111111-1111-4111-8111-111111111111';
+
     it('strips schedules[], projects media, and computes recurrenceSummary', async () => {
       const event = makeRecurringEventWithMedia();
       apiSandbox.stub(publicInterface, 'getEventById').resolves(event);
@@ -407,7 +437,7 @@ describe('Public API - toPublicEventObject shape contract', () => {
         routes.getEvent(req, res);
       });
 
-      const response = await request(testApp(router)).get('/handler/event-1');
+      const response = await request(testApp(router)).get(`/handler/${EVENT_UUID}`);
 
       expect(response.status).toBe(200);
       assertPublicEventShape(response.body);
@@ -421,7 +451,7 @@ describe('Public API - toPublicEventObject shape contract', () => {
 
     it('forwards ?calendar=<urlName> as displayCalendarId so reposted-event categories scope to the display calendar', async () => {
       const displayCalendar = new Calendar('display-cal-id', 'mitown');
-      const event = new CalendarEvent('event-1', 'source-cal-id');
+      const event = new CalendarEvent(EVENT_UUID, 'source-cal-id');
       event.schedules = [];
 
       const calendarStub = apiSandbox.stub(publicInterface, 'getCalendarByName').resolves(displayCalendar);
@@ -431,15 +461,15 @@ describe('Public API - toPublicEventObject shape contract', () => {
         routes.getEvent(req, res);
       });
 
-      const response = await request(testApp(router)).get('/handler/event-1?calendar=mitown');
+      const response = await request(testApp(router)).get(`/handler/${EVENT_UUID}?calendar=mitown`);
 
       expect(response.status).toBe(200);
       expect(calendarStub.calledOnceWith('mitown')).toBe(true);
-      expect(eventStub.calledOnceWith('event-1', 'display-cal-id')).toBe(true);
+      expect(eventStub.calledOnceWith(EVENT_UUID, 'display-cal-id')).toBe(true);
     });
 
     it('silently ignores an unknown ?calendar=<urlName> and falls back to default category scoping', async () => {
-      const event = new CalendarEvent('event-1', 'source-cal-id');
+      const event = new CalendarEvent(EVENT_UUID, 'source-cal-id');
       event.schedules = [];
 
       apiSandbox.stub(publicInterface, 'getCalendarByName').resolves(null);
@@ -449,10 +479,47 @@ describe('Public API - toPublicEventObject shape contract', () => {
         routes.getEvent(req, res);
       });
 
-      const response = await request(testApp(router)).get('/handler/event-1?calendar=ghost');
+      const response = await request(testApp(router)).get(`/handler/${EVENT_UUID}?calendar=ghost`);
 
       expect(response.status).toBe(200);
-      expect(eventStub.calledOnceWith('event-1', undefined)).toBe(true);
+      expect(eventStub.calledOnceWith(EVENT_UUID, undefined)).toBe(true);
+    });
+
+    // Regression: a request for an unknown event id used to crash
+    // the backend because the handler did not catch EventNotFoundError thrown
+    // by the service. The handler now translates that throw into a clean 404.
+    it('returns 404 with EventNotFoundError when the service throws for an unknown id', async () => {
+      apiSandbox.stub(publicInterface, 'getEventById').rejects(
+        new EventNotFoundError(EVENT_UUID),
+      );
+
+      router.get('/handler/:id', (req, res) => {
+        routes.getEvent(req, res);
+      });
+
+      const response = await request(testApp(router)).get(`/handler/${EVENT_UUID}`);
+
+      expect(response.status).toBe(404);
+      expect(response.body.errorName).toBe('EventNotFoundError');
+    });
+
+    // Defense-in-depth UUID validation matching the getEventInstance handler:
+    // a malformed/path-traversal id must be rejected before the service is
+    // called. 404 (not 400) so format recognition cannot be probed.
+    it('returns 404 for a non-UUID id without calling the service', async () => {
+      const eventStub = apiSandbox.stub(publicInterface, 'getEventById').resolves(
+        new CalendarEvent('unused', 'unused'),
+      );
+
+      router.get('/handler/:id', (req, res) => {
+        routes.getEvent(req, res);
+      });
+
+      const response = await request(testApp(router)).get('/handler/not-a-uuid');
+
+      expect(response.status).toBe(404);
+      expect(response.body.errorName).toBe('EventNotFoundError');
+      expect(eventStub.called).toBe(false);
     });
   });
 
@@ -632,6 +699,184 @@ describe('Public API - toPublicEventObject shape contract', () => {
         params: { n: 2, days: ['TU'] },
       });
       assertMediaProjection(eventBody.media);
+    });
+  });
+
+  /**
+   * Public Space projection contract:
+   *   - With Space attached → response.event.space === { content: {...} }
+   *     and never includes id, placeId, or originUri.
+   *   - Without Space → response.event.space === null.
+   *   - The pre-existing `location` shape is unchanged (additive guarantee).
+   *
+   * Covered for every public handler that returns event objects: getEvent,
+   * listInstances, getEventInstance, and getSeries.
+   */
+  describe('space projection', () => {
+    const SPACE_PROJ_EVENT_UUID = '22222222-2222-4222-8222-222222222222';
+
+    it('getEvent: returns space as { content } when an event has a Space', async () => {
+      const event = new CalendarEvent(SPACE_PROJ_EVENT_UUID, 'cal-id');
+      event.schedules = [];
+      event.space = makeSpace();
+
+      apiSandbox.stub(publicInterface, 'getEventById').resolves(event);
+
+      router.get('/handler/:id', (req, res) => {
+        routes.getEvent(req, res);
+      });
+
+      const response = await request(testApp(router)).get(`/handler/${SPACE_PROJ_EVENT_UUID}`);
+
+      expect(response.status).toBe(200);
+      assertSpaceProjection(response.body.space);
+    });
+
+    it('getEvent: returns space === null when an event has no Space', async () => {
+      const event = new CalendarEvent(SPACE_PROJ_EVENT_UUID, 'cal-id');
+      event.schedules = [];
+      // event.space defaults to null
+
+      apiSandbox.stub(publicInterface, 'getEventById').resolves(event);
+
+      router.get('/handler/:id', (req, res) => {
+        routes.getEvent(req, res);
+      });
+
+      const response = await request(testApp(router)).get(`/handler/${SPACE_PROJ_EVENT_UUID}`);
+
+      expect(response.status).toBe(200);
+      expect(response.body).toHaveProperty('space');
+      expect(response.body.space).toBeNull();
+    });
+
+    it('getEvent: leaves the existing `location` shape unchanged (additive guarantee)', async () => {
+      const event = new CalendarEvent(SPACE_PROJ_EVENT_UUID, 'cal-id');
+      event.schedules = [];
+      event.location = new EventLocation(
+        'loc-1',
+        'Community Hall',
+        '123 Main St',
+        'Springfield',
+        'IL',
+        '62701',
+        'USA',
+      );
+      event.space = makeSpace();
+
+      apiSandbox.stub(publicInterface, 'getEventById').resolves(event);
+
+      router.get('/handler/:id', (req, res) => {
+        routes.getEvent(req, res);
+      });
+
+      const response = await request(testApp(router)).get(`/handler/${SPACE_PROJ_EVENT_UUID}`);
+
+      expect(response.status).toBe(200);
+      // location must retain its full existing shape — adding `space`
+      // (the new field) must not strip or reproject `location`.
+      expect(response.body.location).toMatchObject({
+        id: 'loc-1',
+        name: 'Community Hall',
+        address: '123 Main St',
+        city: 'Springfield',
+        state: 'IL',
+        postalCode: '62701',
+        country: 'USA',
+      });
+      // And space is independently projected.
+      assertSpaceProjection(response.body.space);
+    });
+
+    it('listInstances: projects space to { content } on each instance', async () => {
+      const calendar = new Calendar('cal-id', 'test-calendar');
+      const event = new CalendarEvent('event-1', 'cal-id');
+      event.schedules = [];
+      event.space = makeSpace();
+      const instance = new CalendarEventInstance('inst-1', event, DateTime.now(), null);
+
+      apiSandbox.stub(publicInterface, 'getCalendarByName').resolves(calendar);
+      apiSandbox.stub(publicInterface, 'listEventInstances').resolves([instance]);
+
+      router.get('/handler', (req, res) => {
+        req.params.calendar = 'test-calendar';
+        routes.listInstances(req, res);
+      });
+
+      const response = await request(testApp(router)).get('/handler');
+
+      expect(response.status).toBe(200);
+      expect(response.body).toHaveLength(1);
+      assertSpaceProjection(response.body[0].event.space);
+    });
+
+    it('listInstances: returns space === null when an event has no Space', async () => {
+      const calendar = new Calendar('cal-id', 'test-calendar');
+      const event = new CalendarEvent('event-1', 'cal-id');
+      event.schedules = [];
+      const instance = new CalendarEventInstance('inst-1', event, DateTime.now(), null);
+
+      apiSandbox.stub(publicInterface, 'getCalendarByName').resolves(calendar);
+      apiSandbox.stub(publicInterface, 'listEventInstances').resolves([instance]);
+
+      router.get('/handler', (req, res) => {
+        req.params.calendar = 'test-calendar';
+        routes.listInstances(req, res);
+      });
+
+      const response = await request(testApp(router)).get('/handler');
+
+      expect(response.status).toBe(200);
+      expect(response.body[0].event).toHaveProperty('space');
+      expect(response.body[0].event.space).toBeNull();
+    });
+
+    it('getEventInstance: projects space to { content } on the wrapped event', async () => {
+      const EVENT_UUID = '11111111-1111-4111-8111-111111111111';
+      const VALID_SLUG = '20260508-1800';
+      const event = new CalendarEvent('event-1', 'cal-id');
+      event.schedules = [];
+      event.space = makeSpace();
+      const instance = new CalendarEventInstance('inst-1', event, DateTime.utc(2026, 5, 8, 18, 0), null);
+
+      apiSandbox.stub(publicInterface, 'findOrMaterializeInstanceWithDetails').resolves(instance);
+
+      router.get('/handler/:eventId/:startTime', (req, res) => {
+        routes.getEventInstance(req, res);
+      });
+
+      const response = await request(testApp(router)).get(`/handler/${EVENT_UUID}/${VALID_SLUG}`);
+
+      expect(response.status).toBe(200);
+      assertSpaceProjection(response.body.event.space);
+    });
+
+    it('getSeries: projects space to { content } on every event in events[]', async () => {
+      const calendar = new Calendar('cal-id', 'test-calendar');
+      const series = new EventSeries('series-1', 'cal-id', 'yoga-classes');
+      const content = new EventSeriesContent('en');
+      content.name = 'Yoga Classes';
+      series.addContent(content);
+
+      const event = new CalendarEvent('event-1', 'cal-id');
+      event.schedules = [];
+      event.space = makeSpace();
+
+      apiSandbox.stub(publicInterface, 'getCalendarByName').resolves(calendar);
+      apiSandbox.stub(publicInterface, 'getSeriesByUrlName').resolves(series);
+      apiSandbox.stub(publicInterface, 'getSeriesEvents').resolves({ events: [event], total: 1 });
+
+      router.get('/handler', (req, res) => {
+        req.params.urlName = 'test-calendar';
+        req.params.seriesUrlName = 'yoga-classes';
+        routes.getSeries(req, res);
+      });
+
+      const response = await request(testApp(router)).get('/handler');
+
+      expect(response.status).toBe(200);
+      expect(response.body.events).toHaveLength(1);
+      assertSpaceProjection(response.body.events[0].space);
     });
   });
 });

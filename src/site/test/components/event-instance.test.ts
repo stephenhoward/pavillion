@@ -83,7 +83,7 @@ let mockSeries: {
 } | null = null;
 
 // Mutable recurrenceSummary state so individual tests can inject a summary
-// matching the public API's `{ key, params } | null` shape (pv-kzc0.2).
+// matching the public API's `{ key, params } | null` shape.
 let mockRecurrenceSummary: { key: string; params: Record<string, unknown> } | null = null;
 
 // Mutable source calendar state so individual tests can inject source calendar data
@@ -99,6 +99,13 @@ let mockUrlPrompt: string | null = null;
 
 // Mutable event-level accessibility info
 let mockEventAccessibilityInfo: string = '';
+
+// Mutable Space (EventLocationSpace) for layered Place + Space display tests
+let mockSpace: {
+  hasContent: (lang: string) => boolean;
+  content: (lang: string) => { language: string; name: string; accessibilityInfo: string };
+  getLanguages: () => string[];
+} | null = null;
 
 // Mutable isCancelled flag so tests can assert cancelled badge rendering
 let mockIsCancelled: boolean = false;
@@ -136,6 +143,7 @@ vi.mock('@/site/service/calendar', () => {
             mediaZoom: 1.0,
             categories: mockCategories,
             location: mockLocation,
+            space: mockSpace,
             series: mockSeries,
             recurrenceSummary: mockRecurrenceSummary,
             sourceCalendar: mockSourceCalendar,
@@ -276,9 +284,27 @@ function makeLocationObject(
 }
 
 /**
+ * Creates a mock EventLocationSpace (Space) with TranslatedModel interface.
+ */
+function makeSpaceObject(
+  name: string,
+  accessibilityInfo: Record<string, string> = {},
+) {
+  return {
+    hasContent: (lang: string) => lang === 'en' || lang in accessibilityInfo,
+    content: (lang: string) => ({
+      language: lang,
+      name,
+      accessibilityInfo: accessibilityInfo[lang] ?? accessibilityInfo['en'] ?? '',
+    }),
+    getLanguages: () => ['en', ...Object.keys(accessibilityInfo).filter(k => k !== 'en')],
+  };
+}
+
+/**
  * Creates a recurrenceSummary object matching the public API's
  * `{ key, params }` intent shape. This is the shape the frontend
- * consumes via `useRecurrenceText` (pv-kzc0.4).
+ * consumes via `useRecurrenceText`.
  */
 function makeRecurrenceSummary(
   key: string,
@@ -292,6 +318,20 @@ function makeRecurrenceSummary(
 // ---------------------------------------------------------------------------
 
 beforeAll(async () => {
+  const placeI18n = {
+    accessibility: {
+      section_heading: 'Accessibility',
+      event_label: 'Event accessibility',
+      venue_label: 'Venue accessibility',
+      space_label: 'Space accessibility',
+    },
+    place: {
+      format: {
+        with_space: '{{place}} — {{space}}',
+      },
+    },
+  };
+
   if (!i18next.isInitialized) {
     await i18next.init({
       lng: 'en',
@@ -304,9 +344,6 @@ beforeAll(async () => {
             'series.view': 'View series',
             about_this_event: 'About This Event',
             event_categories: 'Categories',
-            event_accessibility: 'Accessibility',
-            event_accessibility_event: 'Event Accessibility',
-            event_accessibility_venue: 'Venue Accessibility',
             event_recurring: 'Recurring Event',
             event_location: 'Location',
             event_source_calendar: 'Source Calendar',
@@ -317,6 +354,7 @@ beforeAll(async () => {
               rsvp: 'RSVP',
               more_info: 'More Information',
             },
+            ...placeI18n,
             recurrence: {
               every_day: 'Every day',
               every_n_days: 'Every {{n}} days',
@@ -361,7 +399,6 @@ beforeAll(async () => {
       'series.view': 'View series',
       about_this_event: 'About This Event',
       event_categories: 'Categories',
-      event_accessibility: 'Accessibility',
       event_recurring: 'Recurring Event',
       event_location: 'Location',
       event_source_calendar: 'Source Calendar',
@@ -372,6 +409,7 @@ beforeAll(async () => {
         rsvp: 'RSVP',
         more_info: 'More Information',
       },
+      ...placeI18n,
       recurrence: {
         every_day: 'Every day',
         every_n_days: 'Every {{n}} days',
@@ -425,6 +463,7 @@ describe('eventInstance breadcrumb locale behaviour', () => {
     mockUrlPrompt = null;
     mockEventAccessibilityInfo = '';
     mockIsCancelled = false;
+    mockSpace = null;
   });
 
   afterEach(() => {
@@ -509,6 +548,7 @@ describe('eventInstance category badge locale behaviour', () => {
     mockUrlPrompt = null;
     mockEventAccessibilityInfo = '';
     mockIsCancelled = false;
+    mockSpace = null;
   });
 
   afterEach(() => {
@@ -696,6 +736,7 @@ describe('eventInstance location display', () => {
     mockUrlPrompt = null;
     mockEventAccessibilityInfo = '';
     mockIsCancelled = false;
+    mockSpace = null;
   });
 
   afterEach(() => {
@@ -760,7 +801,7 @@ describe('eventInstance location display', () => {
     wrapper.unmount();
   });
 
-  it('should display accessibility info card when location has accessibility info', async () => {
+  it('should display accessibility info card when venue (Place) has accessibility info', async () => {
     mockLocation = makeLocationObject(
       'Community Center',
       '123 Main St',
@@ -779,7 +820,8 @@ describe('eventInstance location display', () => {
     const accessibilityCard = wrapper.find('.accessibility-card');
     expect(accessibilityCard.exists()).toBe(true);
     expect(accessibilityCard.find('.accessibility-info').text()).toContain('Wheelchair accessible');
-    expect(accessibilityCard.find('.accessibility-subheading').exists()).toBe(false);
+    expect(wrapper.find('.accessibility-section--venue').exists()).toBe(true);
+    expect(wrapper.find('.accessibility-section--space').exists()).toBe(false);
     wrapper.unmount();
   });
 
@@ -823,7 +865,7 @@ describe('eventInstance location display', () => {
     wrapper.unmount();
   });
 
-  it('should display accessibility card when event has accessibilityInfo but no location', async () => {
+  it('should display the event-level subsection when only the event has accessibility info', async () => {
     mockLocation = null;
     mockEventAccessibilityInfo = 'ASL interpreter will be provided';
 
@@ -832,23 +874,27 @@ describe('eventInstance location display', () => {
       (path) => path,
     );
 
-    const accessibilityCard = wrapper.find('.accessibility-card');
-    expect(accessibilityCard.exists()).toBe(true);
-    expect(accessibilityCard.find('.accessibility-info').text()).toContain('ASL interpreter will be provided');
+    const card = wrapper.find('.accessibility-card');
+    expect(card.exists()).toBe(true);
+    expect(wrapper.find('.accessibility-section--event').exists()).toBe(true);
+    expect(wrapper.find('.accessibility-section--venue').exists()).toBe(false);
+    expect(wrapper.find('.accessibility-section--space').exists()).toBe(false);
+    expect(card.text()).toContain('Event accessibility');
+    expect(card.text()).toContain('ASL interpreter will be provided');
     wrapper.unmount();
   });
 
-  it('should display both event and venue accessibility with subheadings when both are present', async () => {
-    mockEventAccessibilityInfo = 'ASL interpreter provided';
+  it('should display both venue and space accessibility with subheadings when both are present', async () => {
     mockLocation = makeLocationObject(
-      'Community Center',
-      '123 Main St',
+      'Convention Center',
+      '100 Main St',
       'Springfield',
       'IL',
       '62701',
       'US',
       { en: 'Wheelchair ramp at entrance' },
     );
+    mockSpace = makeSpaceObject('Pacific Room', { en: 'Hearing loop, 3rd floor' });
 
     const wrapper = await mountInstance(
       '/view/test_calendar/events/evt-1/20260301-1000',
@@ -857,10 +903,44 @@ describe('eventInstance location display', () => {
 
     const accessibilityCard = wrapper.find('.accessibility-card');
     expect(accessibilityCard.exists()).toBe(true);
-    expect(accessibilityCard.text()).toContain('Event Accessibility');
-    expect(accessibilityCard.text()).toContain('Venue Accessibility');
-    expect(accessibilityCard.text()).toContain('ASL interpreter provided');
+    expect(wrapper.find('.accessibility-section--venue').exists()).toBe(true);
+    expect(wrapper.find('.accessibility-section--space').exists()).toBe(true);
+    expect(accessibilityCard.text()).toContain('Venue accessibility');
+    expect(accessibilityCard.text()).toContain('Space accessibility');
     expect(accessibilityCard.text()).toContain('Wheelchair ramp at entrance');
+    expect(accessibilityCard.text()).toContain('Hearing loop, 3rd floor');
+    wrapper.unmount();
+  });
+
+  it('should display the event, venue, and space subsections when all three are populated', async () => {
+    mockEventAccessibilityInfo = 'ASL interpretation provided';
+    mockLocation = makeLocationObject(
+      'Convention Center',
+      '100 Main St',
+      'Springfield',
+      'IL',
+      '62701',
+      'US',
+      { en: 'Wheelchair ramp at entrance' },
+    );
+    mockSpace = makeSpaceObject('Pacific Room', { en: 'Hearing loop, 3rd floor' });
+
+    const wrapper = await mountInstance(
+      '/view/test_calendar/events/evt-1/20260301-1000',
+      (path) => path,
+    );
+
+    const card = wrapper.find('.accessibility-card');
+    expect(card.exists()).toBe(true);
+    expect(wrapper.find('.accessibility-section--event').exists()).toBe(true);
+    expect(wrapper.find('.accessibility-section--venue').exists()).toBe(true);
+    expect(wrapper.find('.accessibility-section--space').exists()).toBe(true);
+    expect(card.text()).toContain('Event accessibility');
+    expect(card.text()).toContain('ASL interpretation provided');
+    expect(card.text()).toContain('Venue accessibility');
+    expect(card.text()).toContain('Wheelchair ramp at entrance');
+    expect(card.text()).toContain('Space accessibility');
+    expect(card.text()).toContain('Hearing loop, 3rd floor');
     wrapper.unmount();
   });
 });
@@ -880,6 +960,7 @@ describe('eventInstance end time display', () => {
     mockUrlPrompt = null;
     mockEventAccessibilityInfo = '';
     mockIsCancelled = false;
+    mockSpace = null;
   });
 
   afterEach(() => {
@@ -1011,6 +1092,7 @@ describe('eventInstance series link display', () => {
     mockUrlPrompt = null;
     mockEventAccessibilityInfo = '';
     mockIsCancelled = false;
+    mockSpace = null;
   });
 
   afterEach(() => {
@@ -1118,6 +1200,7 @@ describe('eventInstance recurrence display', () => {
     mockUrlPrompt = null;
     mockEventAccessibilityInfo = '';
     mockIsCancelled = false;
+    mockSpace = null;
   });
 
   afterEach(() => {
@@ -1230,6 +1313,7 @@ describe('eventInstance source calendar pill', () => {
     mockUrlPrompt = null;
     mockEventAccessibilityInfo = '';
     mockIsCancelled = false;
+    mockSpace = null;
   });
 
   afterEach(() => {
@@ -1350,6 +1434,7 @@ describe('event instance external URL CTA button', () => {
     mockUrlPrompt = null;
     mockEventAccessibilityInfo = '';
     mockIsCancelled = false;
+    mockSpace = null;
   });
 
   afterEach(() => {
@@ -1486,6 +1571,7 @@ describe('eventInstance cancelled badge', () => {
     mockUrlPrompt = null;
     mockEventAccessibilityInfo = '';
     mockIsCancelled = false;
+    mockSpace = null;
   });
 
   afterEach(() => {
@@ -1534,6 +1620,7 @@ describe('eventInstance invalid startTime slug', () => {
     mockUrlPrompt = null;
     mockEventAccessibilityInfo = '';
     mockIsCancelled = false;
+    mockSpace = null;
   });
 
   afterEach(() => {

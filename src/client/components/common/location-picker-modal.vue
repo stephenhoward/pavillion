@@ -1,46 +1,76 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
 import { useTranslation } from 'i18next-vue';
-import { Search, MapPin, Check } from 'lucide-vue-next';
+import { Search, MapPin, DoorOpen, Check } from 'lucide-vue-next';
 import PillButton from '@/client/components/common/pill-button.vue';
 import Sheet from '@/client/components/common/Sheet.vue';
+import { useLocalizedContent } from '@/client/composables/useLocalizedContent';
 import type { EventLocation } from '@/common/model/location';
 
 const { t } = useTranslation('event_editor', { keyPrefix: 'location_picker' });
+// Separate handle for the calendars/places namespace where the new
+// place.format.with_space and place.picker.whole_venue_suffix keys live.
+const { t: tPlaces } = useTranslation('calendars', { keyPrefix: 'places' });
 
 /**
  * LocationPickerModal Component
  *
- * Modal dialog for selecting a location from a list with search functionality.
- * Displays locations with MapPin icons and shows checkmark for selected location.
+ * Modal dialog for selecting a Place or a specific Space within a Place.
+ * Renders a flat list:
+ *   - 1 entry per Space-less Place (selecting `(placeId, null)`)
+ *   - 1 + N entries per Place with N Spaces:
+ *       * `${Place.name} (whole venue)` selecting `(placeId, null)`
+ *       * `${Place.name} — ${Space.name}` per Space, selecting `(placeId, spaceId)`
  *
- * Features:
- * - Real-time search filtering by name, address, city, state, or postal code
- * - Visual indication of currently selected location with orange checkmark
- * - Options to create new location or remove current selection
- * - Pill-shaped search input following design system
+ * Search filters against the rendered display string, so typing "pacific"
+ * matches "Convention Center — Pacific Room".
+ *
+ * Selection emits `{ placeId, spaceId | null }`. Callers must treat
+ * `spaceId === null` as "whole venue" — distinct from `undefined`.
+ *
+ * Visual disambiguation:
+ *   - Whole-venue suffix is rendered in `var(--pav-text-secondary)`.
+ *   - Space entries are indented via `padding-inline-start` so they nest
+ *     visually under their parent Place.
  *
  * @component
  *
  * Props:
- * @prop {EventLocation[]} locations - Array of available locations to choose from
- * @prop {string | null} selectedLocationId - ID of currently selected location, or null if none selected
+ * @prop {EventLocation[]} locations - Available Places. Each Place's Spaces
+ *   are read inline from `place.spaces` (atomic Place + Spaces wire
+ *   contract); a Place with no `spaces` array is treated as 0 Spaces.
+ * @prop {string | null} selectedLocationId - Currently selected Place id, or null.
+ * @prop {string | null} selectedSpaceId - Currently selected Space id, or null for whole-venue.
  *
  * Emits:
- * @emits location-selected - Fired when user selects a location from the list
- *   @param {EventLocation} location - The selected location object
- * @emits create-new - Fired when user clicks "Create New Location" button
- * @emits remove-location - Fired when user clicks "Remove" button to clear location
- * @emits close - Fired when user closes the modal dialog
+ * @emits location-selected - User picked an entry.
+ *   @param {{ placeId: string, spaceId: string | null }} selection
+ * @emits create-new
+ * @emits remove-location
+ * @emits close
  */
+
+interface PickerEntry {
+  key: string;
+  placeId: string;
+  spaceId: string | null;
+  placeName: string;
+  spaceName: string | null;
+  isWholeVenue: boolean;   // true for whole-venue entries on multi-Space Places
+  isSpaceEntry: boolean;   // true for the Space entries (used for visual indent)
+  displayName: string;     // concatenated name, search target
+  ariaLabel: string;
+  address: string;
+}
 
 const props = defineProps<{
   locations: EventLocation[];
   selectedLocationId: string | null;
+  selectedSpaceId: string | null;
 }>();
 
 const emit = defineEmits<{
-  (e: 'location-selected', location: EventLocation): void;
+  (e: 'location-selected', selection: { placeId: string; spaceId: string | null }): void;
   (e: 'create-new'): void;
   (e: 'remove-location'): void;
   (e: 'close'): void;
@@ -48,35 +78,7 @@ const emit = defineEmits<{
 
 const sheetRef = ref<InstanceType<typeof Sheet> | null>(null);
 const searchQuery = ref('');
-
-// Filter locations based on search query
-const filteredLocations = computed(() => {
-  if (!searchQuery.value.trim()) {
-    return props.locations;
-  }
-
-  const query = searchQuery.value.toLowerCase();
-  return props.locations.filter(location => {
-    const searchableText = [
-      location.name,
-      location.address,
-      location.city,
-      location.state,
-      location.postalCode,
-    ]
-      .filter(Boolean)
-      .join(' ')
-      .toLowerCase();
-
-    return searchableText.includes(query);
-  });
-});
-
-const hasLocations = computed(() => props.locations.length > 0);
-
-const isSelected = (locationId: string) => {
-  return locationId === props.selectedLocationId;
-};
+const { spaceDisplayName } = useLocalizedContent();
 
 const formatAddress = (location: EventLocation) => {
   const parts = [
@@ -88,8 +90,104 @@ const formatAddress = (location: EventLocation) => {
   return parts.join(', ');
 };
 
-const handleLocationClick = (location: EventLocation) => {
-  emit('location-selected', location);
+/**
+ * Flatten Places + Spaces into a single list of picker entries.
+ * - Place with 0 Spaces → 1 entry (placeId, null)
+ * - Place with N>=1 Spaces → 1 whole-venue entry (placeId, null)
+ *   plus N Space entries (placeId, spaceId)
+ */
+const allEntries = computed<PickerEntry[]>(() => {
+  const wholeVenueSuffix = tPlaces('picker.whole_venue_suffix');
+  const entries: PickerEntry[] = [];
+
+  for (const place of props.locations) {
+    const spaces = place.spaces ?? [];
+    const address = formatAddress(place);
+
+    if (spaces.length === 0) {
+      // Space-less Place: single entry, no whole-venue suffix.
+      entries.push({
+        key: `place:${place.id}`,
+        placeId: place.id,
+        spaceId: null,
+        placeName: place.name,
+        spaceName: null,
+        isWholeVenue: false,
+        isSpaceEntry: false,
+        displayName: place.name,
+        ariaLabel: place.name,
+        address,
+      });
+      continue;
+    }
+
+    // Whole-venue entry for multi-Space Places.
+    entries.push({
+      key: `place:${place.id}:whole`,
+      placeId: place.id,
+      spaceId: null,
+      placeName: place.name,
+      spaceName: null,
+      isWholeVenue: true,
+      isSpaceEntry: false,
+      displayName: `${place.name} ${wholeVenueSuffix}`,
+      ariaLabel: `${place.name}, ${stripParens(wholeVenueSuffix)}`,
+      address,
+    });
+
+    for (const space of spaces) {
+      const spaceName = spaceDisplayName(space);
+      const concatenated = tPlaces('format.with_space', { place: place.name, space: spaceName });
+      entries.push({
+        key: `space:${space.id}`,
+        placeId: place.id,
+        spaceId: space.id,
+        placeName: place.name,
+        spaceName,
+        isWholeVenue: false,
+        isSpaceEntry: true,
+        displayName: concatenated,
+        ariaLabel: `${place.name}, ${spaceName}`,
+        address,
+      });
+    }
+  }
+
+  return entries;
+});
+
+/**
+ * Strip surrounding parentheses from a localized suffix so the aria-label
+ * reads naturally. "(whole venue)" → "whole venue".
+ */
+function stripParens(text: string): string {
+  return text.replace(/^\s*\(/, '').replace(/\)\s*$/, '');
+}
+
+// Filter entries by their rendered display string + address.
+const filteredEntries = computed<PickerEntry[]>(() => {
+  if (!searchQuery.value.trim()) {
+    return allEntries.value;
+  }
+
+  const query = searchQuery.value.toLowerCase();
+  return allEntries.value.filter((entry) => {
+    // Search target: the rendered display string the user sees, plus the
+    // Place's address fields so address-based search keeps working.
+    const haystack = [entry.displayName, entry.address].filter(Boolean).join(' ').toLowerCase();
+    return haystack.includes(query);
+  });
+});
+
+const hasLocations = computed(() => props.locations.length > 0);
+
+const isSelected = (entry: PickerEntry): boolean => {
+  return entry.placeId === props.selectedLocationId
+    && entry.spaceId === props.selectedSpaceId;
+};
+
+const handleEntryClick = (entry: PickerEntry) => {
+  emit('location-selected', { placeId: entry.placeId, spaceId: entry.spaceId });
 };
 
 const handleCreateNew = () => {
@@ -131,26 +229,53 @@ defineExpose({ close, sheetRef });
 
       <!-- Location List -->
       <div class="location-list-container">
-        <div v-if="hasLocations && filteredLocations.length > 0" class="location-list">
+        <div v-if="hasLocations && filteredEntries.length > 0" class="location-list">
           <div
-            v-for="location in filteredLocations"
-            :key="location.id"
+            v-for="entry in filteredEntries"
+            :key="entry.key"
             class="location-item"
-            :class="{ selected: isSelected(location.id) }"
+            :class="{
+              selected: isSelected(entry),
+              'is-space-entry': entry.isSpaceEntry,
+            }"
             role="button"
             tabindex="0"
-            @click="handleLocationClick(location)"
-            @keydown.enter="handleLocationClick(location)"
-            @keydown.space.prevent="handleLocationClick(location)"
+            :aria-label="entry.ariaLabel"
+            @click="handleEntryClick(entry)"
+            @keydown.enter="handleEntryClick(entry)"
+            @keydown.space.prevent="handleEntryClick(entry)"
           >
-            <MapPin :size="20" class="location-icon" />
+            <DoorOpen v-if="entry.isSpaceEntry" :size="20" class="location-icon" />
+            <MapPin v-else :size="20" class="location-icon" />
             <div class="location-info">
-              <div class="location-name">{{ location.name }}</div>
-              <div v-if="formatAddress(location)" class="location-address">
-                {{ formatAddress(location) }}
+              <div class="location-name">
+                <template v-if="entry.isWholeVenue">
+                  <span>{{ entry.placeName }}</span>
+                  {{ ' ' }}
+                  <span class="whole-venue-suffix">
+                    {{ tPlaces('picker.whole_venue_suffix') }}
+                  </span>
+                </template>
+                <template v-else-if="entry.isSpaceEntry">
+                  {{ entry.spaceName }}
+                </template>
+                <template v-else>
+                  {{ entry.displayName }}
+                </template>
+              </div>
+              <!--
+                Space entries: show parent Place name (de-emphasized) so the row
+                is self-describing when search filters out the parent. Other
+                entries: show address.
+              -->
+              <div v-if="entry.isSpaceEntry" class="location-parent-name">
+                {{ entry.placeName }}
+              </div>
+              <div v-else-if="entry.address" class="location-address">
+                {{ entry.address }}
               </div>
             </div>
-            <Check v-if="isSelected(location.id)" :size="20" class="checkmark" />
+            <Check v-if="isSelected(entry)" :size="20" class="checkmark" />
           </div>
         </div>
 
@@ -187,7 +312,7 @@ defineExpose({ close, sheetRef });
 </template>
 
 <style scoped lang="scss">
-@use '../../assets/style/mixins' as *;
+@use '../../assets/style/components/event-management' as *;
 
 .location-picker-body {
   display: flex;
@@ -198,51 +323,13 @@ defineExpose({ close, sheetRef });
 
 .search-section {
   .search-input-wrapper {
-    position: relative;
+    @include pill-search-input;
 
-    .search-icon {
-      position: absolute;
-      left: 1rem;
-      top: 50%;
-      transform: translateY(-50%);
-      color: var(--pav-color-stone-400);
-      pointer-events: none;
-
-      @media (prefers-color-scheme: dark) {
-        color: var(--pav-color-stone-500);
-      }
-    }
-
-    .search-input {
-      width: 100%;
-      padding: 0.75rem 1rem 0.75rem 2.75rem;
-      border-radius: 9999px;
-      border: 1px solid var(--pav-color-stone-200);
-      background: var(--pav-color-stone-50);
-      color: var(--pav-color-stone-900);
-      font-size: 0.9375rem;
-      transition: all 0.15s ease;
-
-      &::placeholder {
-        color: var(--pav-color-stone-400);
-      }
-
-      &:focus {
-        outline: none;
-        border-color: var(--pav-color-orange-500);
-        background: white;
-        box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.1);
-      }
-
-      @media (prefers-color-scheme: dark) {
-        background: var(--pav-color-stone-700);
-        border-color: var(--pav-color-stone-600);
-        color: var(--pav-color-stone-100);
-
-        &:focus {
-          background: var(--pav-color-stone-800);
-        }
-      }
+    // No clear button in this modal — collapse the right-side padding the
+    // mixin reserves for it so the placeholder sits flush with the standard
+    // input gutter.
+    input {
+      padding-inline-end: var(--pav-space-md);
     }
   }
 }
@@ -269,6 +356,21 @@ defineExpose({ close, sheetRef });
   background: white;
   cursor: pointer;
   transition: all 0.15s ease;
+
+  // Indent and shrink Space entries so they read as children of the Place
+  // entry above. Margin (not padding) moves the box itself; a subtle
+  // accent border on the inline-start edge provides a tree-connector cue
+  // so the Place / Space hierarchy is unambiguous even on a 1-Space Place.
+  // Logical properties keep the indent + connector on the inline-start
+  // side under RTL.
+  &.is-space-entry {
+    margin-inline-start: 1.5rem;
+    border-inline-start: 3px solid var(--pav-color-stone-300);
+
+    @media (prefers-color-scheme: dark) {
+      border-inline-start-color: var(--pav-color-stone-500);
+    }
+  }
 
   &:hover {
     background: var(--pav-color-stone-50);
@@ -323,7 +425,16 @@ defineExpose({ close, sheetRef });
     }
   }
 
-  .location-address {
+  // De-emphasize the "(whole venue)" suffix so sighted users can scan past
+  // the suffix to the Place name. Pairs with the indent on Space entries to
+  // make the Place/Space hierarchy visible at a glance.
+  .whole-venue-suffix {
+    color: var(--pav-text-secondary);
+    margin-inline-start: 0.25rem;
+  }
+
+  .location-address,
+  .location-parent-name {
     font-size: 0.875rem;
     color: var(--pav-color-stone-600);
 

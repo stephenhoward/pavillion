@@ -1,0 +1,32 @@
+{
+    "LocationSpaceContentEntity": [
+        {
+            "id": "a17cd52b-bbbb-4b22-aff7-5d488560f211",
+            "space_id": "a17cd52b-aaaa-4b22-aff7-5d488560f201",
+            "language": "en",
+            "name": "Sterling Room",
+            "accessibility_info": "Ground-floor meeting room with step-free access from the SW 10th Ave entrance. Seats up to 40 in lecture style. AV cart with HDMI input and a portable hearing loop available on request from the information desk."
+        },
+        {
+            "id": "a17cd52b-bbbb-4b22-aff7-5d488560f212",
+            "space_id": "a17cd52b-aaaa-4b22-aff7-5d488560f201",
+            "language": "es",
+            "name": "Sala Sterling",
+            "accessibility_info": "Sala de reuniones en la planta baja con acceso sin escalones desde la entrada de SW 10th Ave. Capacidad para 40 personas en estilo conferencia. Carrito audiovisual con entrada HDMI y bucle auditivo portátil disponibles bajo solicitud en el mostrador de información."
+        },
+        {
+            "id": "a17cd52b-bbbb-4b22-aff7-5d488560f221",
+            "space_id": "a17cd52b-aaaa-4b22-aff7-5d488560f202",
+            "language": "en",
+            "name": "Children's Story Corner",
+            "accessibility_info": "Carpeted programming space on the children's floor with low seating and a quiet zone. Accessible via elevator near the main entrance. Sensory-friendly lighting can be arranged for storytime sessions."
+        },
+        {
+            "id": "a17cd52b-bbbb-4b22-aff7-5d488560f222",
+            "space_id": "a17cd52b-aaaa-4b22-aff7-5d488560f202",
+            "language": "es",
+            "name": "Rincón de Cuentos Infantiles",
+            "accessibility_info": "Espacio para programas con alfombra en la planta infantil, asientos bajos y zona tranquila. Acceso por ascensor cerca de la entrada principal. Se puede coordinar iluminación adaptada para sesiones de cuentacuentos."
+        }
+    ]
+}

@@ -3,7 +3,7 @@ import sinon from 'sinon';
 import { createPinia, setActivePinia } from 'pinia';
 import { useLocationManagement } from '@/client/composables/useLocationManagement';
 import LocationService from '@/client/service/location';
-import { EventLocation } from '@/common/model/location';
+import { EventLocation, EventLocationSpace, EventLocationSpaceContent } from '@/common/model/location';
 import { CalendarEvent } from '@/common/model/events';
 
 describe('useLocationManagement', () => {
@@ -96,20 +96,63 @@ describe('useLocationManagement', () => {
   });
 
   describe('selectLocation', () => {
-    it('should assign location to event and close picker', () => {
-      const { selectLocation, showLocationPicker } = useLocationManagement();
+    it('should assign location to event and close picker (whole-venue selection)', () => {
+      const { selectLocation, showLocationPicker, availableLocations } = useLocationManagement();
+
+      // Seed the available locations so the composable can resolve the Place
+      // from the picker's `{placeId, spaceId}` payload.
+      const location = new EventLocation('loc1', 'Test Venue', '123 Main St');
+      availableLocations.value = [location];
 
       // Open picker first
       showLocationPicker.value = true;
 
-      const location = new EventLocation('loc1', 'Test Venue', '123 Main St');
       const event = new CalendarEvent('event1', 'calendar1');
 
-      selectLocation(location, event);
+      selectLocation({ placeId: 'loc1', spaceId: null }, event);
 
       expect(event.locationId).toBe('loc1');
       expect(event.location).toEqual(location);
+      expect(event.space).toBeNull();
       expect(showLocationPicker.value).toBe(false);
+    });
+
+    it('should resolve Space from place.spaces inline when spaceId is set', () => {
+      const { selectLocation, availableLocations } = useLocationManagement();
+
+      const place = new EventLocation('place-cc', 'Convention Center');
+      const space = new EventLocationSpace('space-pacific', 'place-cc');
+      space.addContent(new EventLocationSpaceContent('en', 'Pacific Room', ''));
+      // spaces[] is inline on the Place object — no separate cache.
+      place.spaces = [space];
+      availableLocations.value = [place];
+
+      const event = new CalendarEvent('event1', 'calendar1');
+
+      selectLocation({ placeId: 'place-cc', spaceId: 'space-pacific' }, event);
+
+      expect(event.locationId).toBe('place-cc');
+      expect(event.location).toEqual(place);
+      // `availableLocations` is a Vue ref, so `place.spaces[0]` reads through
+      // the reactive proxy — assert deep equality rather than identity.
+      expect(event.space).toEqual(space);
+    });
+
+    it('should clear event.space when whole-venue is selected over a previously-set Space', () => {
+      const { selectLocation, availableLocations } = useLocationManagement();
+
+      const place = new EventLocation('place-cc', 'Convention Center');
+      availableLocations.value = [place];
+
+      const event = new CalendarEvent('event1', 'calendar1');
+      // Seed a Space onto the event so we can confirm the whole-venue
+      // selection clears it (null, not undefined).
+      const seededSpace = new EventLocationSpace('space-old', 'place-cc');
+      event.space = seededSpace;
+
+      selectLocation({ placeId: 'place-cc', spaceId: null }, event);
+
+      expect(event.space).toBeNull();
     });
   });
 
@@ -265,10 +308,11 @@ describe('useLocationManagement', () => {
       expect(showLocationPicker.value).toBe(true);
 
       // Select a location
-      selectLocation(mockLocations[0], event);
+      selectLocation({ placeId: 'loc1', spaceId: null }, event);
 
       expect(event.locationId).toBe('loc1');
       expect(event.location).toEqual(mockLocations[0]);
+      expect(event.space).toBeNull();
       expect(showLocationPicker.value).toBe(false);
     });
 

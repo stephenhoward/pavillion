@@ -87,6 +87,13 @@ let mockUrlPrompt: string | null = null;
 // Mutable event-level accessibility info
 let mockEventAccessibilityInfo: string = '';
 
+// Mutable Space (EventLocationSpace) for tests covering the layered Place + Space display
+let mockSpace: {
+  hasContent: (lang: string) => boolean;
+  content: (lang: string) => { language: string; name: string; accessibilityInfo: string };
+  getLanguages: () => string[];
+} | null = null;
+
 vi.mock('@/site/service/calendar', () => {
   return {
     default: vi.fn().mockImplementation(() => ({
@@ -107,6 +114,7 @@ vi.mock('@/site/service/calendar', () => {
           mediaZoom: 1.0,
           categories: mockCategories,
           location: mockLocation,
+          space: mockSpace,
           series: mockSeries,
           schedules: [],
           sourceCalendar: mockSourceCalendar,
@@ -245,57 +253,69 @@ function makeLocationObject(
   };
 }
 
+/**
+ * Creates a mock EventLocationSpace (Space) with TranslatedModel interface.
+ * `name` is per-language; if not provided in the supplied translations, the
+ * caller's English fallback is used.
+ */
+function makeSpaceObject(
+  name: string,
+  accessibilityInfo: Record<string, string> = {},
+) {
+  return {
+    hasContent: (lang: string) => lang === 'en' || lang in accessibilityInfo,
+    content: (lang: string) => ({
+      language: lang,
+      name,
+      accessibilityInfo: accessibilityInfo[lang] ?? accessibilityInfo['en'] ?? '',
+    }),
+    getLanguages: () => ['en', ...Object.keys(accessibilityInfo).filter(k => k !== 'en')],
+  };
+}
+
 // ---------------------------------------------------------------------------
 // i18next initialisation
 // ---------------------------------------------------------------------------
 
 beforeAll(async () => {
+  const resources = {
+    back_to_calendar: 'Back to {{name}}',
+    'series.label': 'Series',
+    'series.part_of': 'Part of {{name}}',
+    'series.view': 'View series',
+    about_this_event: 'About This Event',
+    event_categories: 'Categories',
+    accessibility: {
+      section_heading: 'Accessibility',
+      event_label: 'Event accessibility',
+      venue_label: 'Venue accessibility',
+      space_label: 'Space accessibility',
+    },
+    event_location: 'Location',
+    event_source_calendar: 'Source Calendar',
+    event_source_calendar_label: 'View source calendar {{name}}',
+    url_prompt: {
+      tickets: 'Tickets',
+      rsvp: 'RSVP',
+      more_info: 'More Information',
+    },
+    place: {
+      format: {
+        with_space: '{{place}} — {{space}}',
+      },
+    },
+  };
+
   if (!i18next.isInitialized) {
     await i18next.init({
       lng: 'en',
       resources: {
-        en: {
-          system: {
-            back_to_calendar: 'Back to {{name}}',
-            'series.label': 'Series',
-            'series.part_of': 'Part of {{name}}',
-            'series.view': 'View series',
-            about_this_event: 'About This Event',
-            event_categories: 'Categories',
-            event_accessibility: 'Accessibility',
-            event_accessibility_event: 'Event Accessibility',
-            event_accessibility_venue: 'Venue Accessibility',
-            event_location: 'Location',
-            event_source_calendar: 'Source Calendar',
-            event_source_calendar_label: 'View source calendar {{name}}',
-            url_prompt: {
-              tickets: 'Tickets',
-              rsvp: 'RSVP',
-              more_info: 'More Information',
-            },
-          },
-        },
+        en: { system: resources },
       },
     });
   }
   else {
-    i18next.addResourceBundle('en', 'system', {
-      back_to_calendar: 'Back to {{name}}',
-      'series.label': 'Series',
-      'series.part_of': 'Part of {{name}}',
-      'series.view': 'View series',
-      about_this_event: 'About This Event',
-      event_categories: 'Categories',
-      event_accessibility: 'Accessibility',
-      event_location: 'Location',
-      event_source_calendar: 'Source Calendar',
-      event_source_calendar_label: 'View source calendar {{name}}',
-      url_prompt: {
-        tickets: 'Tickets',
-        rsvp: 'RSVP',
-        more_info: 'More Information',
-      },
-    }, true, true);
+    i18next.addResourceBundle('en', 'system', resources, true, true);
   }
 });
 
@@ -315,6 +335,7 @@ describe('event breadcrumb locale behaviour', () => {
     mockExternalUrl = null;
     mockUrlPrompt = null;
     mockEventAccessibilityInfo = '';
+    mockSpace = null;
   });
 
   afterEach(() => {
@@ -395,6 +416,7 @@ describe('event two-column layout', () => {
     mockExternalUrl = null;
     mockUrlPrompt = null;
     mockEventAccessibilityInfo = '';
+    mockSpace = null;
   });
 
   afterEach(() => {
@@ -482,6 +504,7 @@ describe('event category badge behaviour', () => {
     mockExternalUrl = null;
     mockUrlPrompt = null;
     mockEventAccessibilityInfo = '';
+    mockSpace = null;
   });
 
   afterEach(() => {
@@ -623,6 +646,7 @@ describe('event location display', () => {
     mockExternalUrl = null;
     mockUrlPrompt = null;
     mockEventAccessibilityInfo = '';
+    mockSpace = null;
   });
 
   afterEach(() => {
@@ -687,7 +711,7 @@ describe('event location display', () => {
     wrapper.unmount();
   });
 
-  it('should display accessibility info card when location has accessibility info', async () => {
+  it('should display accessibility info card when venue (Place) has accessibility info', async () => {
     mockLocation = makeLocationObject(
       'Community Center',
       '123 Main St',
@@ -706,7 +730,9 @@ describe('event location display', () => {
     const accessibilityCard = wrapper.find('.accessibility-card');
     expect(accessibilityCard.exists()).toBe(true);
     expect(accessibilityCard.find('.accessibility-info').text()).toContain('Wheelchair accessible');
-    expect(accessibilityCard.find('.accessibility-subheading').exists()).toBe(false);
+    // Layered display always labels visible subsections.
+    expect(wrapper.find('.accessibility-section--venue').exists()).toBe(true);
+    expect(wrapper.find('.accessibility-section--space').exists()).toBe(false);
     wrapper.unmount();
   });
 
@@ -749,7 +775,7 @@ describe('event location display', () => {
     wrapper.unmount();
   });
 
-  it('should display accessibility card when event has accessibilityInfo but no location', async () => {
+  it('should display the event-level subsection when only the event has accessibility info', async () => {
     mockLocation = null;
     mockEventAccessibilityInfo = 'ASL interpreter will be provided';
 
@@ -758,23 +784,27 @@ describe('event location display', () => {
       (path) => path,
     );
 
-    const accessibilityCard = wrapper.find('.accessibility-card');
-    expect(accessibilityCard.exists()).toBe(true);
-    expect(accessibilityCard.find('.accessibility-info').text()).toContain('ASL interpreter will be provided');
+    const card = wrapper.find('.accessibility-card');
+    expect(card.exists()).toBe(true);
+    expect(wrapper.find('.accessibility-section--event').exists()).toBe(true);
+    expect(wrapper.find('.accessibility-section--venue').exists()).toBe(false);
+    expect(wrapper.find('.accessibility-section--space').exists()).toBe(false);
+    expect(card.text()).toContain('Event accessibility');
+    expect(card.text()).toContain('ASL interpreter will be provided');
     wrapper.unmount();
   });
 
-  it('should display both event and venue accessibility with subheadings when both are present', async () => {
-    mockEventAccessibilityInfo = 'ASL interpreter provided';
+  it('should display both venue and space accessibility with subheadings when both are present', async () => {
     mockLocation = makeLocationObject(
-      'Community Center',
-      '123 Main St',
+      'Convention Center',
+      '100 Main St',
       'Springfield',
       'IL',
       '62701',
       'US',
       { en: 'Wheelchair ramp at entrance' },
     );
+    mockSpace = makeSpaceObject('Pacific Room', { en: 'Hearing loop, 3rd floor' });
 
     const wrapper = await mountEvent(
       '/view/test_calendar/events/evt-1',
@@ -783,11 +813,198 @@ describe('event location display', () => {
 
     const accessibilityCard = wrapper.find('.accessibility-card');
     expect(accessibilityCard.exists()).toBe(true);
-    expect(accessibilityCard.text()).toContain('Event Accessibility');
-    expect(accessibilityCard.text()).toContain('Venue Accessibility');
-    expect(accessibilityCard.text()).toContain('ASL interpreter provided');
+    expect(wrapper.find('.accessibility-section--venue').exists()).toBe(true);
+    expect(wrapper.find('.accessibility-section--space').exists()).toBe(true);
+    expect(accessibilityCard.text()).toContain('Venue accessibility');
+    expect(accessibilityCard.text()).toContain('Space accessibility');
     expect(accessibilityCard.text()).toContain('Wheelchair ramp at entrance');
+    expect(accessibilityCard.text()).toContain('Hearing loop, 3rd floor');
     wrapper.unmount();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Place + Space layered display
+// ---------------------------------------------------------------------------
+
+describe('event Place + Space layered display', () => {
+  beforeEach(() => {
+    mockLocalizedPath.mockReset();
+    mockCurrentLocale.value = 'en';
+    mockCategories = [];
+    mockLocation = null;
+    mockEventName = 'Test Event';
+    mockSeries = null;
+    mockSourceCalendar = null;
+    mockExternalUrl = null;
+    mockUrlPrompt = null;
+    mockEventAccessibilityInfo = '';
+    mockSpace = null;
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  describe('location header line', () => {
+    it('renders Place name alone when no Space is set', async () => {
+      mockLocation = makeLocationObject('Convention Center', '100 Main St', 'Springfield', 'IL', '62701', 'US');
+      mockSpace = null;
+
+      const wrapper = await mountEvent(
+        '/view/test_calendar/events/evt-1',
+        (path) => path,
+      );
+
+      const nameEl = wrapper.find('.location-name');
+      expect(nameEl.exists()).toBe(true);
+      expect(nameEl.text()).toBe('Convention Center');
+      expect(nameEl.text()).not.toContain(' — ');
+      wrapper.unmount();
+    });
+
+    it('renders "Place — Space" when a Space is set', async () => {
+      mockLocation = makeLocationObject('Convention Center', '100 Main St', 'Springfield', 'IL', '62701', 'US');
+      mockSpace = makeSpaceObject('Pacific Room');
+
+      const wrapper = await mountEvent(
+        '/view/test_calendar/events/evt-1',
+        (path) => path,
+      );
+
+      const nameEl = wrapper.find('.location-name');
+      expect(nameEl.exists()).toBe(true);
+      expect(nameEl.text()).toBe('Convention Center — Pacific Room');
+      wrapper.unmount();
+    });
+  });
+
+  describe('layered accessibility subsections', () => {
+    it('hides the whole accessibility container when event, venue, and space are all empty', async () => {
+      mockEventAccessibilityInfo = '';
+      mockLocation = makeLocationObject('Convention Center', '100 Main St', 'Springfield', 'IL', '62701', 'US', {});
+      mockSpace = makeSpaceObject('Pacific Room', {});
+
+      const wrapper = await mountEvent(
+        '/view/test_calendar/events/evt-1',
+        (path) => path,
+      );
+
+      expect(wrapper.find('.accessibility-card').exists()).toBe(false);
+      wrapper.unmount();
+    });
+
+    it('renders the event, venue, and space subsections when all three are populated', async () => {
+      mockEventAccessibilityInfo = 'ASL interpretation provided';
+      mockLocation = makeLocationObject(
+        'Convention Center', '100 Main St', 'Springfield', 'IL', '62701', 'US',
+        { en: 'Wheelchair ramp at entrance' },
+      );
+      mockSpace = makeSpaceObject('Pacific Room', { en: 'Hearing loop, 3rd floor' });
+
+      const wrapper = await mountEvent(
+        '/view/test_calendar/events/evt-1',
+        (path) => path,
+      );
+
+      const card = wrapper.find('.accessibility-card');
+      expect(card.exists()).toBe(true);
+      expect(wrapper.find('.accessibility-section--event').exists()).toBe(true);
+      expect(wrapper.find('.accessibility-section--venue').exists()).toBe(true);
+      expect(wrapper.find('.accessibility-section--space').exists()).toBe(true);
+      expect(card.text()).toContain('Event accessibility');
+      expect(card.text()).toContain('ASL interpretation provided');
+      expect(card.text()).toContain('Venue accessibility');
+      expect(card.text()).toContain('Wheelchair ramp at entrance');
+      expect(card.text()).toContain('Space accessibility');
+      expect(card.text()).toContain('Hearing loop, 3rd floor');
+      wrapper.unmount();
+    });
+
+    it('renders only the venue subsection when only Place has accessibility info', async () => {
+      mockLocation = makeLocationObject(
+        'Convention Center', '100 Main St', 'Springfield', 'IL', '62701', 'US',
+        { en: 'Wheelchair ramp at entrance' },
+      );
+      mockSpace = makeSpaceObject('Pacific Room', {});
+
+      const wrapper = await mountEvent(
+        '/view/test_calendar/events/evt-1',
+        (path) => path,
+      );
+
+      const card = wrapper.find('.accessibility-card');
+      expect(card.exists()).toBe(true);
+      expect(wrapper.find('.accessibility-section--venue').exists()).toBe(true);
+      expect(wrapper.find('.accessibility-section--space').exists()).toBe(false);
+      expect(card.text()).toContain('Venue accessibility');
+      expect(card.text()).toContain('Wheelchair ramp at entrance');
+      expect(card.text()).not.toContain('Space accessibility');
+      wrapper.unmount();
+    });
+
+    it('renders only the space subsection when only Space has accessibility info', async () => {
+      mockLocation = makeLocationObject(
+        'Convention Center', '100 Main St', 'Springfield', 'IL', '62701', 'US',
+        {},
+      );
+      mockSpace = makeSpaceObject('Pacific Room', { en: 'Hearing loop, 3rd floor' });
+
+      const wrapper = await mountEvent(
+        '/view/test_calendar/events/evt-1',
+        (path) => path,
+      );
+
+      const card = wrapper.find('.accessibility-card');
+      expect(card.exists()).toBe(true);
+      expect(wrapper.find('.accessibility-section--venue').exists()).toBe(false);
+      expect(wrapper.find('.accessibility-section--space').exists()).toBe(true);
+      expect(card.text()).toContain('Space accessibility');
+      expect(card.text()).toContain('Hearing loop, 3rd floor');
+      expect(card.text()).not.toContain('Venue accessibility');
+      wrapper.unmount();
+    });
+
+    it('renders both venue and space subsections when both are populated', async () => {
+      mockLocation = makeLocationObject(
+        'Convention Center', '100 Main St', 'Springfield', 'IL', '62701', 'US',
+        { en: 'Wheelchair ramp at entrance' },
+      );
+      mockSpace = makeSpaceObject('Pacific Room', { en: 'Hearing loop, 3rd floor' });
+
+      const wrapper = await mountEvent(
+        '/view/test_calendar/events/evt-1',
+        (path) => path,
+      );
+
+      const card = wrapper.find('.accessibility-card');
+      expect(card.exists()).toBe(true);
+      expect(wrapper.find('.accessibility-section--venue').exists()).toBe(true);
+      expect(wrapper.find('.accessibility-section--space').exists()).toBe(true);
+      expect(card.text()).toContain('Venue accessibility');
+      expect(card.text()).toContain('Wheelchair ramp at entrance');
+      expect(card.text()).toContain('Space accessibility');
+      expect(card.text()).toContain('Hearing loop, 3rd floor');
+      wrapper.unmount();
+    });
+
+    it('hides the space subsection when no Space is set, even if Place has info', async () => {
+      mockLocation = makeLocationObject(
+        'Convention Center', '100 Main St', 'Springfield', 'IL', '62701', 'US',
+        { en: 'Wheelchair ramp at entrance' },
+      );
+      mockSpace = null;
+
+      const wrapper = await mountEvent(
+        '/view/test_calendar/events/evt-1',
+        (path) => path,
+      );
+
+      expect(wrapper.find('.accessibility-card').exists()).toBe(true);
+      expect(wrapper.find('.accessibility-section--venue').exists()).toBe(true);
+      expect(wrapper.find('.accessibility-section--space').exists()).toBe(false);
+      wrapper.unmount();
+    });
   });
 });
 
@@ -803,6 +1020,7 @@ describe('event series link display', () => {
     mockExternalUrl = null;
     mockUrlPrompt = null;
     mockEventAccessibilityInfo = '';
+    mockSpace = null;
   });
 
   afterEach(() => {
@@ -907,6 +1125,7 @@ describe('event source calendar pill', () => {
     mockExternalUrl = null;
     mockUrlPrompt = null;
     mockEventAccessibilityInfo = '';
+    mockSpace = null;
   });
 
   afterEach(() => {
@@ -1024,6 +1243,7 @@ describe('event external URL CTA button', () => {
     mockExternalUrl = null;
     mockUrlPrompt = null;
     mockEventAccessibilityInfo = '';
+    mockSpace = null;
   });
 
   afterEach(() => {

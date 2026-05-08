@@ -5,8 +5,8 @@ import express, { Application } from 'express';
 
 import { Account } from '@/common/model/account';
 import { Calendar } from '@/common/model/calendar';
-import { EventLocation, EventLocationContent } from '@/common/model/location';
-import { LocationValidationError } from '@/common/exceptions/calendar';
+import { EventLocation, EventLocationContent, EventLocationSpace, EventLocationSpaceContent } from '@/common/model/location';
+import { InvalidClientIdError, LocationValidationError, SpaceHijackError } from '@/common/exceptions/calendar';
 import CalendarInterface from '@/server/calendar/interface';
 import LocationRoutes from '@/server/calendar/api/v1/location';
 import ExpressHelper from '@/server/common/helper/express';
@@ -43,6 +43,7 @@ describe('Location API Tests', () => {
       createLocation: sandbox.stub(),
       updateLocation: sandbox.stub(),
       deleteLocation: sandbox.stub(),
+      reassignEvents: sandbox.stub(),
     } as unknown as CalendarInterface;
 
     locationRoutes = new LocationRoutes(calendarInterface);
@@ -320,6 +321,32 @@ describe('Location API Tests', () => {
       expect(response.body.error).toBe('Location not found');
       expect(response.body.errorName).toBe('LocationNotFoundError');
     });
+
+    it('should return location with spaces[] populated inline and eventCount per Space', async () => {
+      const locationId = 'c3d4e5f6-0001-4000-8000-000000000001';
+      const location = new EventLocation(locationId, 'Convention Center');
+
+      const space1 = new EventLocationSpace('space-1', locationId);
+      space1.addContent(new EventLocationSpaceContent('en', 'Main Hall'));
+      space1.eventCount = 3;
+      const space2 = new EventLocationSpace('space-2', locationId);
+      space2.addContent(new EventLocationSpaceContent('en', 'Side Room'));
+      space2.eventCount = 0;
+      location.spaces = [space1, space2];
+
+      (calendarInterface.getCalendar as sinon.SinonStub).resolves(testCalendar);
+      (calendarInterface.getLocationById as sinon.SinonStub).resolves(location);
+
+      const response = await request(app)
+        .get(`/api/v1/calendars/cal-123/locations/${encodeURIComponent(locationId)}`)
+        .expect(200);
+
+      expect(response.body.spaces).toHaveLength(2);
+      expect(response.body.spaces[0].id).toBe('space-1');
+      expect(response.body.spaces[0].eventCount).toBe(3);
+      expect(response.body.spaces[1].id).toBe('space-2');
+      expect(response.body.spaces[1].eventCount).toBe(0);
+    });
   });
 
   describe('PUT /api/v1/calendars/:calendarId/locations/:locationId', () => {
@@ -479,6 +506,277 @@ describe('Location API Tests', () => {
 
       expect(response.body.error).toBe('Location not found');
       expect(response.body.errorName).toBe('LocationNotFoundError');
+    });
+  });
+
+  describe('GET /api/v1/calendars/:calendarId/locations — spaces eventCount', () => {
+    it('should include spaces[] with per-Space eventCount on the list endpoint', async () => {
+      const location1 = new EventLocation('loc-1', 'Convention Center');
+      const space1 = new EventLocationSpace('space-1', 'loc-1');
+      space1.addContent(new EventLocationSpaceContent('en', 'Main Hall'));
+      space1.eventCount = 5;
+      const space2 = new EventLocationSpace('space-2', 'loc-1');
+      space2.addContent(new EventLocationSpaceContent('en', 'Side Room'));
+      space2.eventCount = 0;
+      location1.spaces = [space1, space2];
+
+      const location2 = new EventLocation('loc-2', 'Studio');
+      // location2 has no spaces
+
+      (calendarInterface.getCalendar as sinon.SinonStub).resolves(testCalendar);
+      (calendarInterface.getLocationsForCalendar as sinon.SinonStub).resolves([
+        location1,
+        location2,
+      ]);
+
+      const response = await request(app)
+        .get('/api/v1/calendars/cal-123/locations')
+        .expect(200);
+
+      expect(response.body).toHaveLength(2);
+      expect(response.body[0].spaces).toHaveLength(2);
+      expect(response.body[0].spaces[0].id).toBe('space-1');
+      expect(response.body[0].spaces[0].eventCount).toBe(5);
+      expect(response.body[0].spaces[1].id).toBe('space-2');
+      expect(response.body[0].spaces[1].eventCount).toBe(0);
+      // location2 has empty spaces[] — wire contract is stable
+      expect(response.body[1].spaces).toEqual([]);
+    });
+  });
+
+  describe('POST/PUT spaces[] error mapping', () => {
+    it('POST returns 400 with errorName SpaceHijackError', async () => {
+      (calendarInterface.getCalendar as sinon.SinonStub).resolves(testCalendar);
+      (calendarInterface.userCanModifyCalendar as sinon.SinonStub).resolves(true);
+      (calendarInterface.createLocation as sinon.SinonStub).rejects(
+        new SpaceHijackError('space-from-other-place', 'loc-1'),
+      );
+
+      const response = await request(app)
+        .post('/api/v1/calendars/cal-123/locations')
+        .send({ name: 'V', spaces: [{ id: 'space-from-other-place' }] })
+        .expect(400);
+
+      expect(response.body.errorName).toBe('SpaceHijackError');
+      expect(response.body.error).toContain('space-from-other-place');
+    });
+
+    it('POST returns 400 with errorName InvalidClientIdError', async () => {
+      (calendarInterface.getCalendar as sinon.SinonStub).resolves(testCalendar);
+      (calendarInterface.userCanModifyCalendar as sinon.SinonStub).resolves(true);
+      (calendarInterface.createLocation as sinon.SinonStub).rejects(
+        new InvalidClientIdError('not-a-uuid'),
+      );
+
+      const response = await request(app)
+        .post('/api/v1/calendars/cal-123/locations')
+        .send({ name: 'V', spaces: [{ clientId: 'not-a-uuid' }] })
+        .expect(400);
+
+      expect(response.body.errorName).toBe('InvalidClientIdError');
+    });
+
+    it('PUT returns 400 with errorName SpaceHijackError', async () => {
+      (calendarInterface.getCalendar as sinon.SinonStub).resolves(testCalendar);
+      (calendarInterface.userCanModifyCalendar as sinon.SinonStub).resolves(true);
+      (calendarInterface.updateLocation as sinon.SinonStub).rejects(
+        new SpaceHijackError('hijack-id', 'loc-1'),
+      );
+
+      const response = await request(app)
+        .put('/api/v1/calendars/cal-123/locations/loc-1')
+        .send({ name: 'V', spaces: [{ id: 'hijack-id' }] })
+        .expect(400);
+
+      expect(response.body.errorName).toBe('SpaceHijackError');
+    });
+
+    it('PUT returns 400 with errorName InvalidClientIdError', async () => {
+      (calendarInterface.getCalendar as sinon.SinonStub).resolves(testCalendar);
+      (calendarInterface.userCanModifyCalendar as sinon.SinonStub).resolves(true);
+      (calendarInterface.updateLocation as sinon.SinonStub).rejects(
+        new InvalidClientIdError('not-a-uuid'),
+      );
+
+      const response = await request(app)
+        .put('/api/v1/calendars/cal-123/locations/loc-1')
+        .send({ name: 'V', spaces: [{ clientId: 'not-a-uuid' }] })
+        .expect(400);
+
+      expect(response.body.errorName).toBe('InvalidClientIdError');
+    });
+  });
+
+  describe('POST/PUT serialize spaces[] with eventCount', () => {
+    it('POST 201 response includes spaces[] with per-Space eventCount', async () => {
+      const created = new EventLocation('loc-new', 'New Venue');
+      const space = new EventLocationSpace('space-new', 'loc-new');
+      space.addContent(new EventLocationSpaceContent('en', 'Main Hall'));
+      space.eventCount = 0;
+      created.spaces = [space];
+
+      (calendarInterface.getCalendar as sinon.SinonStub).resolves(testCalendar);
+      (calendarInterface.userCanModifyCalendar as sinon.SinonStub).resolves(true);
+      (calendarInterface.createLocation as sinon.SinonStub).resolves(created);
+
+      const response = await request(app)
+        .post('/api/v1/calendars/cal-123/locations')
+        .send({ name: 'New Venue', spaces: [{ content: { en: { name: 'Main Hall' } } }] })
+        .expect(201);
+
+      expect(response.body.spaces).toHaveLength(1);
+      expect(response.body.spaces[0].id).toBe('space-new');
+      expect(response.body.spaces[0].eventCount).toBe(0);
+    });
+
+    it('PUT 200 response includes spaces[] with per-Space eventCount', async () => {
+      const updated = new EventLocation('loc-1', 'Updated');
+      const space = new EventLocationSpace('space-1', 'loc-1');
+      space.addContent(new EventLocationSpaceContent('en', 'Main Hall'));
+      space.eventCount = 7;
+      updated.spaces = [space];
+
+      (calendarInterface.getCalendar as sinon.SinonStub).resolves(testCalendar);
+      (calendarInterface.userCanModifyCalendar as sinon.SinonStub).resolves(true);
+      (calendarInterface.updateLocation as sinon.SinonStub).resolves(updated);
+
+      const response = await request(app)
+        .put('/api/v1/calendars/cal-123/locations/loc-1')
+        .send({ name: 'Updated', spaces: [{ id: 'space-1', content: { en: { name: 'Main Hall' } } }] })
+        .expect(200);
+
+      expect(response.body.spaces).toHaveLength(1);
+      expect(response.body.spaces[0].id).toBe('space-1');
+      expect(response.body.spaces[0].eventCount).toBe(7);
+    });
+  });
+
+  describe('POST /api/v1/calendars/:calendarId/locations/:locationId/reassign-events', () => {
+    const fromSpaceId = '11111111-1111-4111-8111-111111111111';
+    const toSpaceId = '22222222-2222-4222-8222-222222222222';
+
+    it('returns 200 { count } on success', async () => {
+      (calendarInterface.getCalendar as sinon.SinonStub).resolves(testCalendar);
+      (calendarInterface.userCanModifyCalendar as sinon.SinonStub).resolves(true);
+      (calendarInterface.reassignEvents as sinon.SinonStub).resolves({
+        count: 4,
+        placeFound: true,
+        toSpaceValid: true,
+      });
+
+      const response = await request(app)
+        .post('/api/v1/calendars/cal-123/locations/loc-1/reassign-events')
+        .send({ fromSpaceId, toSpaceId })
+        .expect(200);
+
+      expect(response.body).toEqual({ count: 4 });
+    });
+
+    it('returns 200 { count: 0 } when fromSpaceId is out-of-Place (idempotent no-op)', async () => {
+      (calendarInterface.getCalendar as sinon.SinonStub).resolves(testCalendar);
+      (calendarInterface.userCanModifyCalendar as sinon.SinonStub).resolves(true);
+      // The service-layer UPDATE simply matches zero rows.
+      (calendarInterface.reassignEvents as sinon.SinonStub).resolves({
+        count: 0,
+        placeFound: true,
+        toSpaceValid: true,
+      });
+
+      const response = await request(app)
+        .post('/api/v1/calendars/cal-123/locations/loc-1/reassign-events')
+        .send({ fromSpaceId, toSpaceId })
+        .expect(200);
+
+      expect(response.body).toEqual({ count: 0 });
+    });
+
+    it('returns 400 when fromSpaceId is malformed (non-UUID)', async () => {
+      const response = await request(app)
+        .post('/api/v1/calendars/cal-123/locations/loc-1/reassign-events')
+        .send({ fromSpaceId: 'not-a-uuid', toSpaceId })
+        .expect(400);
+
+      expect(response.body.errorName).toBe('ValidationError');
+      // No service call should happen on validation failure
+      expect((calendarInterface.reassignEvents as sinon.SinonStub).called).toBe(false);
+    });
+
+    it('returns 400 when fromSpaceId is missing', async () => {
+      const response = await request(app)
+        .post('/api/v1/calendars/cal-123/locations/loc-1/reassign-events')
+        .send({ toSpaceId })
+        .expect(400);
+
+      expect(response.body.errorName).toBe('ValidationError');
+    });
+
+    it('returns 400 when toSpaceId is missing', async () => {
+      const response = await request(app)
+        .post('/api/v1/calendars/cal-123/locations/loc-1/reassign-events')
+        .send({ fromSpaceId })
+        .expect(400);
+
+      expect(response.body.errorName).toBe('ValidationError');
+    });
+
+    it('returns 400 when toSpaceId is not on this Place', async () => {
+      (calendarInterface.getCalendar as sinon.SinonStub).resolves(testCalendar);
+      (calendarInterface.userCanModifyCalendar as sinon.SinonStub).resolves(true);
+      (calendarInterface.reassignEvents as sinon.SinonStub).resolves({
+        count: 0,
+        placeFound: true,
+        toSpaceValid: false,
+      });
+
+      const response = await request(app)
+        .post('/api/v1/calendars/cal-123/locations/loc-1/reassign-events')
+        .send({ fromSpaceId, toSpaceId })
+        .expect(400);
+
+      expect(response.body.errorName).toBe('ValidationError');
+      expect(response.body.error).toContain('toSpaceId');
+    });
+
+    it('returns 404 when calendar does not exist', async () => {
+      (calendarInterface.getCalendar as sinon.SinonStub).resolves(null);
+
+      const response = await request(app)
+        .post('/api/v1/calendars/nonexistent/locations/loc-1/reassign-events')
+        .send({ fromSpaceId, toSpaceId })
+        .expect(404);
+
+      expect(response.body.errorName).toBe('CalendarNotFoundError');
+    });
+
+    it('returns 404 when location is not on this calendar', async () => {
+      (calendarInterface.getCalendar as sinon.SinonStub).resolves(testCalendar);
+      (calendarInterface.userCanModifyCalendar as sinon.SinonStub).resolves(true);
+      (calendarInterface.reassignEvents as sinon.SinonStub).resolves({
+        count: 0,
+        placeFound: false,
+        toSpaceValid: false,
+      });
+
+      const response = await request(app)
+        .post('/api/v1/calendars/cal-123/locations/loc-other-calendar/reassign-events')
+        .send({ fromSpaceId, toSpaceId })
+        .expect(404);
+
+      expect(response.body.errorName).toBe('LocationNotFoundError');
+    });
+
+    it('returns 403 when user lacks calendar edit permissions', async () => {
+      (calendarInterface.getCalendar as sinon.SinonStub).resolves(testCalendar);
+      (calendarInterface.userCanModifyCalendar as sinon.SinonStub).resolves(false);
+
+      const response = await request(app)
+        .post('/api/v1/calendars/cal-123/locations/loc-1/reassign-events')
+        .send({ fromSpaceId, toSpaceId })
+        .expect(403);
+
+      expect(response.body.errorName).toBe('InsufficientCalendarPermissionsError');
+      // Auth check fails before the service call
+      expect((calendarInterface.reassignEvents as sinon.SinonStub).called).toBe(false);
     });
   });
 });

@@ -1,0 +1,14 @@
+{
+    "LocationSpaceEntity": [
+        {
+            "id": "a17cd52b-aaaa-4b22-aff7-5d488560f201",
+            "place_id": "a17cd52b-ae1e-4b22-aff7-5d488560f112",
+            "origin_uri": null
+        },
+        {
+            "id": "a17cd52b-aaaa-4b22-aff7-5d488560f202",
+            "place_id": "a17cd52b-ae1e-4b22-aff7-5d488560f112",
+            "origin_uri": null
+        }
+    ]
+}

@@ -390,7 +390,49 @@
         "LOCATION_STATE_REQUIRES_ADDRESS": "La région nécessite une adresse",
         "LOCATION_CITY_REQUIRES_ADDRESS": "La ville nécessite une adresse",
         "editor_aria_label": "Éditeur de lieux",
-        "editor_form_aria_label": "Formulaire d'informations sur le lieu"
+        "editor_form_aria_label": "Formulaire d'informations sur le lieu",
+        "discard_unsaved_changes": "Abandonner les modifications non enregistrées ?",
+        "error_reassign_partial": "Lieu enregistré, mais {{count}} réaffectation(s) ont échoué. Les événements concernés sont sur le lieu entier. Rouvrez l'éditeur pour réessayer.",
+        "format": {
+            "with_space": "{{place}} — {{space}}"
+        },
+        "picker": {
+            "whole_venue_suffix": "(lieu entier)"
+        },
+        "space": {
+            "section_title": "Salles et espaces",
+            "add_button": "Ajouter une salle ou un espace",
+            "confirm_delete_title": "Supprimer la salle ou l'espace",
+            "confirm_delete_message": "Supprimer « {{name}} » ?",
+            "confirm_delete_event_count": "{{count}} événements pour le lieu entier perdront leur affectation.",
+            "reassign_dialog_title": "Supprimer « {{name}} » ?",
+            "reassign_dialog_prompt": "{{count}} événements utilisent cette salle ou cet espace. Où doivent-ils aller ?",
+            "reassign_option_whole_venue": "Lieu entier",
+            "reassign_option_default_suffix": "(par défaut)",
+            "reassign_option_other_space": "Une autre salle ou un autre espace :",
+            "reassign_dropdown_label": "Réaffecter les événements à",
+            "reassign_new_suffix": "(nouveau)",
+            "reassign_confirm_button": "Supprimer la salle ou l'espace",
+            "editor_title_new": "Nouvelle salle ou nouvel espace",
+            "editor_title_edit": "Modifier la salle ou l'espace",
+            "field_name": "Nom",
+            "field_accessibility_info": "Informations d'accessibilité",
+            "done": "Terminé",
+            "cancel": "Annuler",
+            "dismiss_error": "Ignorer l'erreur",
+            "error_name_required": "Au moins une langue doit avoir un nom non vide",
+            "error_saving": "Échec de l'enregistrement de la salle ou de l'espace",
+            "error_deleting": "Échec de la suppression de la salle ou de l'espace",
+            "editor_form_aria_label": "Formulaire d'informations sur la salle ou l'espace",
+            "loading_spaces": "Chargement des salles et espaces...",
+            "no_spaces": "Aucune salle ou aucun espace pour le moment",
+            "unnamed_space": "Salle ou espace sans nom",
+            "edit_space_button": "Modifier {{name}}",
+            "delete_button": "Supprimer",
+            "delete_space_button": "Supprimer {{name}}",
+            "deleting": "Suppression...",
+            "space_deleted_success": "Supprimé avec succès"
+        }
     },
     "bulk_operations": {
         "menu_label": "Opérations groupées",

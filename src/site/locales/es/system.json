@@ -79,9 +79,17 @@
     "get_directions": "Cómo llegar",
     "about_this_event": "Acerca de este evento",
     "event_categories": "Categorías",
-    "event_accessibility": "Accesibilidad",
-    "event_accessibility_event": "Accesibilidad del evento",
-    "event_accessibility_venue": "Accesibilidad del lugar",
+    "accessibility": {
+        "section_heading": "Accesibilidad",
+        "event_label": "Accesibilidad del evento",
+        "venue_label": "Accesibilidad del lugar",
+        "space_label": "Accesibilidad del espacio"
+    },
+    "place": {
+        "format": {
+            "with_space": "{{place}} — {{space}}"
+        }
+    },
     "event_recurring": "Evento recurrente",
     "event_cancelled": "Cancelado",
     "event_add_to_calendar": "Agregar al calendario",

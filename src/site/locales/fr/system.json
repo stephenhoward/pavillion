@@ -79,9 +79,17 @@
     "get_directions": "Itinéraire",
     "about_this_event": "À propos de cet événement",
     "event_categories": "Catégories",
-    "event_accessibility": "Accessibilité",
-    "event_accessibility_event": "Accessibilité de l'événement",
-    "event_accessibility_venue": "Accessibilité du lieu",
+    "accessibility": {
+        "section_heading": "Accessibilité",
+        "event_label": "Accessibilité de l'événement",
+        "venue_label": "Accessibilité du lieu",
+        "space_label": "Accessibilité de l'espace"
+    },
+    "place": {
+        "format": {
+            "with_space": "{{place}} — {{space}}"
+        }
+    },
     "event_recurring": "Événement récurrent",
     "event_cancelled": "Annulé",
     "event_add_to_calendar": "Ajouter au calendrier",

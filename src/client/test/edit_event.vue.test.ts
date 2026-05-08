@@ -337,15 +337,6 @@ describe('Location Integration', () => {
     const calendar = new Calendar('testId', 'testName');
     calendar.addContent({ language: 'en', name: 'Test Calendar', description: '' });
 
-    const selectedLocation = new EventLocation(
-      'https://pavillion.dev/places/loc-1',
-      'Venue 1',
-      '123 Main St',
-      'Portland',
-      'OR',
-      '97201',
-    );
-
     const { wrapper } = await mountedEditorOnRoute('/event', [calendar]);
     currentWrapper = wrapper;
 
@@ -355,9 +346,12 @@ describe('Location Integration', () => {
     await nextTick();
     await flushPromises();
 
-    // Select a location
+    // Select a location — picker emits {placeId, spaceId|null}
     const pickerModal = wrapper.findComponent({ name: 'LocationPickerModal' });
-    await pickerModal.vm.$emit('location-selected', selectedLocation);
+    await pickerModal.vm.$emit('location-selected', {
+      placeId: 'https://pavillion.dev/places/loc-1',
+      spaceId: null,
+    });
     await nextTick();
 
     // Picker should close

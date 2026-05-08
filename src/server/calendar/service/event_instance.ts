@@ -14,6 +14,7 @@ import { Calendar } from "@/common/model/calendar";
 import { DateTime } from 'luxon';
 import rrule from 'rrule';
 import { LocationEntity, LocationContentEntity } from "@/server/calendar/entity/location";
+import { LocationSpaceEntity, LocationSpaceContentEntity } from "@/server/calendar/entity/location_space";
 import { EventSeriesEntity, EventSeriesContentEntity } from '@/server/calendar/entity/event_series';
 import CalendarService from "./calendar";
 import CategoryService from "./categories";
@@ -175,7 +176,7 @@ export default class EventInstanceService {
 
   async listEventInstancesForCalendar(calendar: Calendar): Promise<CalendarEventInstance[]> {
 
-    // Single-producer model (pv-hr72): instances are owned by the originating
+    // Single-producer model: instances are owned by the originating
     // calendar (Option A). Listing for a calendar is the union of every
     // visible event id (own + repost links + AP shared links), then the
     // single canonical instance row per (event_id, start_time).
@@ -188,7 +189,14 @@ export default class EventInstanceService {
       where: { event_id: { [Op.in]: visibleEventIds } },
       include: [{
         model: EventEntity,
-        include: [EventContentEntity, LocationEntity, EventScheduleEntity, MediaEntity, CalendarEntity],
+        include: [
+          EventContentEntity,
+          LocationEntity,
+          { model: LocationSpaceEntity, include: [LocationSpaceContentEntity] },
+          EventScheduleEntity,
+          MediaEntity,
+          CalendarEntity,
+        ],
       }],
     });
 
@@ -229,6 +237,7 @@ export default class EventInstanceService {
         include: [
           EventContentEntity,
           LocationEntity,
+          { model: LocationSpaceEntity, include: [LocationSpaceContentEntity] },
           EventScheduleEntity,
           MediaEntity,
           { model: EventSeriesEntity, include: [EventSeriesContentEntity] },
@@ -260,7 +269,7 @@ export default class EventInstanceService {
     startDate?: string;
     endDate?: string;
   } = {}): Promise<CalendarEventInstance[]> {
-    // Single-producer model (pv-hr72): instances are owned by the originating
+    // Single-producer model: instances are owned by the originating
     // calendar. Visibility for a calendar is the union of own + repost-link +
     // AP-share-link event ids, computed once via the EventService helper. We
     // scope the instance query by event_id IN (visible) so a single canonical
@@ -289,6 +298,7 @@ export default class EventInstanceService {
           },
           include: [
             LocationEntity,
+            { model: LocationSpaceEntity, include: [LocationSpaceContentEntity] },
             MediaEntity,
             CalendarEntity,
             // Schedules are required to mark shown-cancellation instances in-memory.
@@ -499,6 +509,7 @@ export default class EventInstanceService {
             model: LocationEntity,
             include: [LocationContentEntity],
           },
+          { model: LocationSpaceEntity, include: [LocationSpaceContentEntity] },
           EventScheduleEntity,
           MediaEntity,
           CalendarEntity,
@@ -548,6 +559,9 @@ export default class EventInstanceService {
     // Populate location with content (accessibility info)
     if (event.location) {
       instance.event.location = event.location.toModel();
+    }
+    if (event.space) {
+      instance.event.space = event.space.toModel();
     }
 
     // Populate categories via the category service, filtered to the display
@@ -675,6 +689,7 @@ export default class EventInstanceService {
         include: [
           EventContentEntity,
           { model: LocationEntity, include: [LocationContentEntity] },
+          { model: LocationSpaceEntity, include: [LocationSpaceContentEntity] },
           EventScheduleEntity,
           MediaEntity,
           CalendarEntity,
@@ -696,6 +711,7 @@ export default class EventInstanceService {
       include: [
         EventContentEntity,
         { model: LocationEntity, include: [LocationContentEntity] },
+        { model: LocationSpaceEntity, include: [LocationSpaceContentEntity] },
         EventScheduleEntity,
         MediaEntity,
         CalendarEntity,
@@ -782,6 +798,7 @@ export default class EventInstanceService {
         include: [
           EventContentEntity,
           { model: LocationEntity, include: [LocationContentEntity] },
+          { model: LocationSpaceEntity, include: [LocationSpaceContentEntity] },
           EventScheduleEntity,
           MediaEntity,
           CalendarEntity,
@@ -830,6 +847,9 @@ export default class EventInstanceService {
     eventModel.schedules = scheduleEntities.map(s => s.toModel());
     if (eventEntity.location) {
       eventModel.location = eventEntity.location.toModel();
+    }
+    if (eventEntity.space) {
+      eventModel.space = eventEntity.space.toModel();
     }
     eventModel.categories = await this.categoryService.getEventCategories(
       eventModel.id,

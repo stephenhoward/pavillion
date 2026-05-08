@@ -43,28 +43,57 @@ export function useLocationManagement() {
   };
 
   /**
-   * Open the location picker modal and fetch latest locations
+   * Open the location picker modal and fetch latest locations.
+   *
+   * Spaces ride along inline on each Place via `place.spaces[]` (atomic
+   * Place + Spaces wire contract — eager-loaded server-side), so no
+   * separate per-Place Spaces prefetch is needed. The picker reads
+   * `place.spaces` inline.
    *
    * @param calendarId - The calendar ID to fetch locations for
    */
   const openLocationPicker = async (calendarId: string): Promise<void> => {
-    // Fetch latest locations before showing picker
+    // Fetch latest locations before showing picker. Each EventLocation in the
+    // response carries its `spaces[]` inline.
     await fetchLocations(calendarId);
+
     showLocationPicker.value = true;
   };
 
   /**
-   * Handle location selection from the picker
+   * Handle picker selection. The picker emits `{ placeId, spaceId | null }`
+   * — `spaceId === null` means "whole venue" (NOT undefined; the model
+   * serializes a null space as `space: null` which the server interprets
+   * correctly).
    *
-   * @param location - The selected location
+   * Space lookup reads `place.spaces` inline on the resolved Place — no
+   * separate Spaces cache (atomic Place + Spaces wire contract).
+   *
+   * @param selection - `{ placeId, spaceId | null }` from the picker
    * @param event - The event to assign the location to
    */
-  const selectLocation = (location: EventLocation, event: CalendarEvent): void => {
-    // Set the locationId on the event
-    event.locationId = location.id;
+  const selectLocation = (
+    selection: { placeId: string; spaceId: string | null },
+    event: CalendarEvent,
+  ): void => {
+    // Resolve the Place from the available list.
+    const place = availableLocations.value.find(loc => loc.id === selection.placeId);
 
-    // Also set the location object for display purposes
-    event.location = location;
+    event.locationId = selection.placeId;
+    if (place) {
+      event.location = place;
+    }
+
+    // Resolve Space (or null for whole-venue selection) from the Place's
+    // inline `spaces[]`. Falls back to null if the Place couldn't be resolved
+    // or the spaceId isn't present on it (e.g. stale picker payload).
+    if (selection.spaceId === null) {
+      event.space = null;
+    }
+    else {
+      const space = place?.spaces.find(s => s.id === selection.spaceId) ?? null;
+      event.space = space;
+    }
 
     // Close the picker
     showLocationPicker.value = false;
@@ -107,6 +136,8 @@ export function useLocationManagement() {
       // Auto-select the newly created location
       event.locationId = newLocation.id;
       event.location = newLocation;
+      // Newly-created Place has no Spaces yet — clear any stale space.
+      event.space = null;
 
       // Close the create form
       showCreateLocationForm.value = false;
@@ -135,6 +166,8 @@ export function useLocationManagement() {
     // Clear the location reference
     event.locationId = null;
     event.location = new EventLocation();
+    // Removing the Place implies removing any selected Space.
+    event.space = null;
 
     // Close the picker
     showLocationPicker.value = false;

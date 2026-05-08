@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { computed } from 'vue';
+import { useTranslation } from 'i18next-vue';
 import PillButton from '@/client/components/common/pill-button.vue';
-import type { EventLocation } from '@/common/model/location';
+import { useLocalizedContent } from '@/client/composables/useLocalizedContent';
+import type { EventLocation, EventLocationSpace } from '@/common/model/location';
 
 /**
  * LocationDisplayCard Component
@@ -9,22 +11,27 @@ import type { EventLocation } from '@/common/model/location';
  * Displays event location information with a change/add button.
  * Used in event editor to show and manage location selection.
  *
- * When a location is set, displays the location name, address details, and a
- * "Change" button. When no location is set, displays an "Add Location" button
- * with a dashed border and MapPin icon.
+ * When a location is set, displays the location name (and Space name when a
+ * Space is selected), address details, and a "Change" button. When no location
+ * is set, displays an "Add Location" button with a dashed border and MapPin icon.
  *
  * @component
  *
  * Props:
  * @prop {EventLocation | null} location - The event location to display, or null for empty state
+ * @prop {EventLocationSpace | null | undefined} space - The selected Space within the location, or null/undefined for whole venue
  *
  * Emits:
  * @emits change-location - Fired when user clicks "Change" button (when location exists)
  * @emits add-location - Fired when user clicks "Add Location" button (when no location)
  */
 
+const { t } = useTranslation('calendars', { keyPrefix: 'places' });
+const { spaceDisplayName } = useLocalizedContent();
+
 const props = defineProps<{
   location: EventLocation | null;
+  space?: EventLocationSpace | null;
 }>();
 
 const emit = defineEmits<{
@@ -34,6 +41,20 @@ const emit = defineEmits<{
 
 const hasLocation = computed(() => {
   return props.location !== null && !!props.location.name;
+});
+
+const spaceName = computed(() => spaceDisplayName(props.space));
+
+/**
+ * Computed display name for the location header line. When a Space is set,
+ * renders "Place — Space" via the i18n format key; otherwise renders Place name.
+ */
+const locationDisplayName = computed(() => {
+  const placeName = props.location?.name ?? '';
+  if (spaceName.value) {
+    return t('format.with_space', { place: placeName, space: spaceName.value });
+  }
+  return placeName;
 });
 
 const addressParts = computed(() => {
@@ -62,7 +83,7 @@ const handleButtonClick = () => {
   <!-- When location is set: show info with Change button -->
   <div v-if="hasLocation" class="location-display-card location-display-card--filled">
     <div class="location-info">
-      <div class="location-name">{{ location?.name }}</div>
+      <div class="location-name">{{ locationDisplayName }}</div>
       <div v-if="formattedAddress" class="location-address">{{ formattedAddress }}</div>
     </div>
 

@@ -79,9 +79,17 @@
     "get_directions": "Get directions",
     "about_this_event": "About This Event",
     "event_categories": "Categories",
-    "event_accessibility": "Accessibility",
-    "event_accessibility_event": "Event Accessibility",
-    "event_accessibility_venue": "Venue Accessibility",
+    "accessibility": {
+        "section_heading": "Accessibility",
+        "event_label": "Event accessibility",
+        "venue_label": "Venue accessibility",
+        "space_label": "Space accessibility"
+    },
+    "place": {
+        "format": {
+            "with_space": "{{place}} — {{space}}"
+        }
+    },
     "event_recurring": "Recurring Event",
     "event_cancelled": "Cancelled",
     "event_add_to_calendar": "Add to Calendar",

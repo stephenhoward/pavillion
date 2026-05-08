@@ -1,0 +1,70 @@
+/**
+ * Translatable Form Component Styles
+ *
+ * Shared form-field primitives used by translatable-content editors that pair
+ * a `LanguageTabSelector` with one or more per-language form fields. These
+ * classes are consumed by:
+ *   - edit-place.vue (the Place editor's accessibility section)
+ *   - edit-space.vue (the Space editor)
+ *
+ * Extracted per the stylesheet-playbook duplication threshold (>10 lines OR
+ * 2+ uses). Uses semantic design tokens only — no hardcoded hex, no
+ * @media (prefers-color-scheme) blocks at the component layer.
+ */
+
+/* Container for the per-language form fields rendered inside a section card. */
+.translatable-form-fields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pav-space-lg);
+}
+
+/* Single form field: label stacked above input/textarea. */
+.translatable-form-fields .form-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pav-space-sm);
+}
+
+.translatable-form-fields .field-label {
+  font-size: var(--pav-font-size-sm);
+  font-weight: var(--pav-font-weight-medium);
+  color: var(--pav-text-primary);
+}
+
+/*
+ * Required-field indicator uses the conventional red rather than the design
+ * system's `pav-color-error` semantic token (which is purple, reserved for
+ * moderation severity). Matches the edit-place.vue convention this partial
+ * was extracted from.
+ */
+.translatable-form-fields .required-indicator {
+  color: var(--pav-color-red-500);
+  margin-inline-start: var(--pav-space-1);
+}
+
+.translatable-form-fields .field-input,
+.translatable-form-fields .field-textarea {
+  padding: var(--pav-space-sm) var(--pav-space-md);
+  border: var(--pav-border-width-1) solid var(--pav-border-secondary);
+  border-radius: var(--pav-border-radius-sm);
+  font-size: var(--pav-font-size-base);
+  background: var(--pav-surface-secondary);
+  color: var(--pav-text-primary);
+  font-family: inherit;
+  transition: all 0.15s ease;
+}
+
+.translatable-form-fields .field-input:focus-visible,
+.translatable-form-fields .field-textarea:focus-visible {
+  outline: 2px solid var(--pav-color-interactive-active);
+  outline-offset: 1px;
+  border-color: var(--pav-color-interactive-active);
+  background: var(--pav-surface-primary);
+}
+
+.translatable-form-fields .field-textarea {
+  resize: vertical;
+  min-height: 80px;
+  line-height: var(--pav-line-height-normal);
+}

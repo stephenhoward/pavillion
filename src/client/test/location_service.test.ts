@@ -3,8 +3,11 @@ import sinon from 'sinon';
 import axios from 'axios';
 import LocationService from '@/client/service/location';
 import ModelService from '@/client/service/models';
-import { EventLocation } from '@/common/model/location';
-import { CalendarNotFoundError, InsufficientCalendarPermissionsError } from '@/common/exceptions/calendar';
+import { EventLocation, EventLocationSpace } from '@/common/model/location';
+import {
+  CalendarNotFoundError,
+  InsufficientCalendarPermissionsError,
+} from '@/common/exceptions/calendar';
 import { UnknownError } from '@/common/exceptions';
 import { useLocationStore } from '@/client/stores/locationStore';
 
@@ -54,6 +57,30 @@ describe('LocationService', () => {
       expect(locations[0]).toBeInstanceOf(EventLocation);
       expect(locations[0].id).toBe('https://pavillion.dev/places/loc-123');
       expect(locations[0].name).toBe('Test Venue');
+    });
+
+    it('should populate nested spaces[] from the response payload', async () => {
+      const mockLocationData = {
+        id: 'loc-123',
+        name: 'Test Venue',
+        spaces: [
+          {
+            id: 'sp-1',
+            placeId: 'loc-123',
+            content: { en: { name: 'Main Hall', accessibilityInfo: '' } },
+          },
+        ],
+      };
+
+      const axiosGetStub = sandbox.stub(axios, 'get');
+      axiosGetStub.resolves({ data: [mockLocationData] });
+
+      const locations = await service.getLocations('cal-123');
+
+      expect(locations[0].spaces).toHaveLength(1);
+      expect(locations[0].spaces[0]).toBeInstanceOf(EventLocationSpace);
+      expect(locations[0].spaces[0].id).toBe('sp-1');
+      expect(locations[0].spaces[0].content('en').name).toBe('Main Hall');
     });
 
     it('should update store after fetching locations', async () => {
@@ -115,6 +142,37 @@ describe('LocationService', () => {
       expect(result).toBeInstanceOf(EventLocation);
       expect(result.id).toBe('https://pavillion.dev/places/loc-456');
       expect(result.name).toBe('New Venue');
+    });
+
+    it('should preserve clientId echoes on newly-created spaces from the response', async () => {
+      // The wire contract carries `clientId` on each new Space row in the
+      // response so the editor can map staged-anchor → server-assigned id.
+      const location = new EventLocation(undefined, 'New Venue');
+      const stagedSpace = new EventLocationSpace(undefined, '');
+      stagedSpace.clientId = 'client-temp-uuid-1';
+      location.spaces = [stagedSpace];
+
+      const mockResponseData = {
+        id: 'loc-456',
+        name: 'New Venue',
+        spaces: [
+          {
+            id: 'server-assigned-uuid-1',
+            placeId: 'loc-456',
+            clientId: 'client-temp-uuid-1',
+            content: { en: { name: 'Main Hall', accessibilityInfo: '' } },
+          },
+        ],
+      };
+
+      const mockCreateModel = sandbox.stub(ModelService, 'createModel');
+      mockCreateModel.resolves(mockResponseData);
+
+      const result = await service.createLocation('cal-123', location);
+
+      expect(result.spaces).toHaveLength(1);
+      expect(result.spaces[0].id).toBe('server-assigned-uuid-1');
+      expect(result.spaces[0].clientId).toBe('client-temp-uuid-1');
     });
 
     it('should update store after creating location', async () => {
@@ -218,6 +276,46 @@ describe('LocationService', () => {
       expect(result.name).toBe('Updated Venue');
     });
 
+    it('should preserve clientId echoes on newly-created spaces from the response', async () => {
+      // Snapshot semantics: PUT body carries the full `spaces[]` array. Newly
+      // staged entries arrive with a `clientId` only; the response echoes that
+      // `clientId` alongside the server-assigned `id` so the editor can patch
+      // local state.
+      const location = new EventLocation('loc-123', 'Updated Venue');
+      const existing = new EventLocationSpace('sp-existing', 'loc-123');
+      const staged = new EventLocationSpace(undefined, '');
+      staged.clientId = 'client-temp-uuid-2';
+      location.spaces = [existing, staged];
+
+      const mockResponseData = {
+        id: 'loc-123',
+        name: 'Updated Venue',
+        spaces: [
+          {
+            id: 'sp-existing',
+            placeId: 'loc-123',
+            content: { en: { name: 'Old Hall', accessibilityInfo: '' } },
+          },
+          {
+            id: 'server-assigned-uuid-2',
+            placeId: 'loc-123',
+            clientId: 'client-temp-uuid-2',
+            content: { en: { name: 'New Hall', accessibilityInfo: '' } },
+          },
+        ],
+      };
+
+      const mockUpdateModel = sandbox.stub(ModelService, 'updateModel');
+      mockUpdateModel.resolves(mockResponseData);
+
+      const result = await service.updateLocation('cal-123', location);
+
+      expect(result.spaces).toHaveLength(2);
+      expect(result.spaces[0].clientId).toBeUndefined();
+      expect(result.spaces[1].id).toBe('server-assigned-uuid-2');
+      expect(result.spaces[1].clientId).toBe('client-temp-uuid-2');
+    });
+
     it('should update store after updating location', async () => {
       const location = new EventLocation('loc-123', 'Updated Venue');
 
@@ -285,6 +383,92 @@ describe('LocationService', () => {
       axiosDeleteStub.rejects(mockError);
 
       await expect(service.deleteLocation('cal-123', 'loc-123')).rejects.toThrow(CalendarNotFoundError);
+    });
+  });
+
+  describe('reassignEvents', () => {
+    it('should POST { fromSpaceId, toSpaceId } to the action-path endpoint and return { count }', async () => {
+      const axiosPostStub = sandbox.stub(axios, 'post');
+      axiosPostStub.resolves({ data: { count: 3 } });
+
+      const result = await service.reassignEvents('cal-123', 'loc-1', 'sp-from', 'sp-to');
+
+      expect(axiosPostStub.calledOnce).toBe(true);
+      expect(axiosPostStub.calledWith(
+        '/api/v1/calendars/cal-123/locations/loc-1/reassign-events',
+        { fromSpaceId: 'sp-from', toSpaceId: 'sp-to' },
+      )).toBe(true);
+      expect(result).toStrictEqual({ count: 3 });
+    });
+
+    it('should encode calendar ID and place ID with special characters', async () => {
+      const axiosPostStub = sandbox.stub(axios, 'post');
+      axiosPostStub.resolves({ data: { count: 0 } });
+
+      await service.reassignEvents('cal/123', 'https://example.com/places/loc-1', 'sp-a', 'sp-b');
+
+      expect(axiosPostStub.calledWith(
+        '/api/v1/calendars/cal%2F123/locations/https%3A%2F%2Fexample.com%2Fplaces%2Floc-1/reassign-events',
+        { fromSpaceId: 'sp-a', toSpaceId: 'sp-b' },
+      )).toBe(true);
+    });
+
+    it('should not touch the location store on a successful reassign', async () => {
+      const axiosPostStub = sandbox.stub(axios, 'post');
+      axiosPostStub.resolves({ data: { count: 1 } });
+
+      await service.reassignEvents('cal-123', 'loc-1', 'sp-from', 'sp-to');
+
+      expect((mockStore.addLocation as sinon.SinonStub).called).toBe(false);
+      expect((mockStore.updateLocation as sinon.SinonStub).called).toBe(false);
+      expect((mockStore.setLocationsForCalendar as sinon.SinonStub).called).toBe(false);
+      expect((mockStore.removeLocation as sinon.SinonStub).called).toBe(false);
+    });
+
+    it('should map ValidationError responses through handleApiError', async () => {
+      const mockError = {
+        response: {
+          data: {
+            errorName: 'ValidationError',
+            error: 'toSpaceId does not reference a Space on this Place',
+          },
+        },
+      };
+
+      const axiosPostStub = sandbox.stub(axios, 'post');
+      axiosPostStub.rejects(mockError);
+
+      await expect(
+        service.reassignEvents('cal-123', 'loc-1', 'sp-from', 'sp-to'),
+      ).rejects.toThrow();
+    });
+
+    it('should map InsufficientCalendarPermissionsError responses through handleApiError', async () => {
+      const mockError = {
+        response: {
+          data: {
+            errorName: 'InsufficientCalendarPermissionsError',
+          },
+        },
+      };
+
+      const axiosPostStub = sandbox.stub(axios, 'post');
+      axiosPostStub.rejects(mockError);
+
+      await expect(
+        service.reassignEvents('cal-123', 'loc-1', 'sp-from', 'sp-to'),
+      ).rejects.toThrow(InsufficientCalendarPermissionsError);
+    });
+
+    it('should throw UnknownError for unrecognized error responses', async () => {
+      const mockError = new Error('Boom');
+
+      const axiosPostStub = sandbox.stub(axios, 'post');
+      axiosPostStub.rejects(mockError);
+
+      await expect(
+        service.reassignEvents('cal-123', 'loc-1', 'sp-from', 'sp-to'),
+      ).rejects.toThrow(UnknownError);
     });
   });
 

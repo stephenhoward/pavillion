@@ -5,9 +5,12 @@ import striptags from 'striptags';
 
 import { Calendar } from '@/common/model/calendar';
 import { CalendarEvent, CalendarEventSchedule, UrlPrompt, URL_PROMPT_VALUES } from '@/common/model/events';
-import { EventLocation } from '@/common/model/location';
+import { EventLocation, EventLocationSpace } from '@/common/model/location';
 import { ActivityPubObject } from '@/server/activitypub/model/base';
 import { SeriesObject } from '@/server/activitypub/model/object/series';
+import { createLogger } from '@/server/common/helper/logger';
+
+const logger = createLogger('activitypub');
 
 /**
  * English fallback labels for URL prompt tokens. Emitted in the outbound AS
@@ -177,10 +180,34 @@ class EventObject extends ActivityPubObject {
         result.endTime = synthesizedEnd.toISO();
       }
     }
-    // location: emitted as Place with optional PostalAddress; omitted if no location
-    const locationObj = this._buildLocation(event.location);
+    // location: emitted as Place with optional PostalAddress; omitted if no location.
+    // When a Space is present, the flat `as:Place.name` is concatenated as
+    // `Place — Space` in the primary language so non-Pavillion peers (Mobilizon,
+    // Mastodon, Gancio) see a sensible flattened label. Pavillion-aware peers
+    // ignore the flat surface and read the structured `pavillion:space` extension.
+    const locationObj = this._buildLocation(event.location, event.space, primaryLanguage);
     if (locationObj) {
       result.location = locationObj;
+    }
+
+    // pavillion:place: Pavillion-native Place extension. Emitted whenever a
+    // location is present, with per-language content map carrying name and
+    // accessibilityInfo. Wire shape is forward-compatible: today
+    // EventLocation.name is single-string, so every content[lang].name carries
+    // the same value; when Place names later become translatable, only local
+    // storage changes — the wire format does not.
+    if (event.location) {
+      result['pavillion:place'] = this._buildPavillionPlace(event.location, calendar);
+    }
+
+    // pavillion:space: Pavillion-native Space extension. Emitted only when
+    // BOTH a location and a space are present — a Space without its parent
+    // Place is meaningless on the wire and the inbound parser drops orphans.
+    // The space id is anchored under the place id (parent-path prefix
+    // `${placeId}/spaces/${spaceId}`) so the inbound parent-path check passes
+    // round-trip.
+    if (event.location && event.space) {
+      result['pavillion:space'] = this._buildPavillionSpace(event.space, calendar);
     }
 
     // nameMap/summaryMap: only when 2+ languages have content
@@ -445,7 +472,112 @@ class EventObject extends ActivityPubObject {
     }
 
     // --- Location normalization ---
-    if (apObject.location !== undefined) {
+    // Priority: pavillion:place (Option B extension) > flat AS location.
+    // pavillion:place carries per-language content; flat as:Place is the
+    // non-aware-peer fallback (Mobilizon, Mastodon, Gancio).
+    const pavPlace = apObject['pavillion:place'];
+    if (pavPlace && typeof pavPlace === 'object' && !Array.isArray(pavPlace)) {
+      const sanitizedPlaceContent = EventObject._sanitizeLocationContent(pavPlace.content);
+
+      // EventLocation.name is a single-string column today. Pick the first
+      // available content[lang].name; today every entry repeats the same
+      // string anyway, so the choice is benign. When Place names later become
+      // translatable, this pick becomes a per-language population.
+      let placeName = '';
+      for (const lang of Object.keys(sanitizedPlaceContent)) {
+        const entry = sanitizedPlaceContent[lang];
+        if (entry && typeof entry.name === 'string' && entry.name.length > 0) {
+          placeName = entry.name;
+          break;
+        }
+      }
+
+      // Build EventLocation-shaped object. Address fields come from flat keys
+      // on the extension; per-language accessibilityInfo lives in content.
+      const locationOut: Record<string, any> = {
+        name: placeName,
+      };
+      // Validate pavPlace.id before using it as an origin_uri identifier.
+      // Failure here means we keep the locally-known content but do NOT stamp
+      // an originUri, so the dedup-by-origin path won't see this row.
+      const validatedPlaceId = EventObject._validatePavillionId(pavPlace.id, options.actorUri);
+      if (validatedPlaceId !== null) {
+        locationOut.originUri = validatedPlaceId;
+      }
+      if (typeof pavPlace.address === 'string') locationOut.address = stripHtmlTags(pavPlace.address);
+      if (typeof pavPlace.city === 'string') locationOut.city = stripHtmlTags(pavPlace.city);
+      if (typeof pavPlace.state === 'string') locationOut.state = stripHtmlTags(pavPlace.state);
+      if (typeof pavPlace.postalCode === 'string') locationOut.postalCode = stripHtmlTags(pavPlace.postalCode);
+      if (typeof pavPlace.country === 'string') locationOut.country = stripHtmlTags(pavPlace.country);
+
+      // EventLocation.fromObject reads content[lang] = { accessibilityInfo }.
+      // We strip out the per-language `name` from the content map at the
+      // wire-shape boundary because the local model stores name as a single
+      // top-level string, not in the content entries.
+      const locationContent: Record<string, any> = {};
+      for (const lang of Object.keys(sanitizedPlaceContent)) {
+        const entry = sanitizedPlaceContent[lang];
+        if (entry && typeof entry === 'object') {
+          locationContent[lang] = {
+            accessibilityInfo: typeof entry.accessibilityInfo === 'string' ? entry.accessibilityInfo : '',
+          };
+        }
+      }
+      if (Object.keys(locationContent).length > 0) {
+        locationOut.content = locationContent;
+      }
+      result.location = locationOut;
+
+      // pavillion:space: only consume if its id parent path matches the
+      // pavillion:place.id exactly (place.id + '/spaces/'). A mismatch is
+      // dropped with a structured warning carrying structural identifiers
+      // only — never content (privacy/logging.md).
+      //
+      // The space id is validated through _validatePavillionId so the
+      // origin_uri stamp only fires for ids that survived URL/length/scheme
+      // (and, if actorUri is supplied, host) checks. The parent-path check
+      // continues to use the raw pavPlace.id string for prefix comparison —
+      // host equality between place and space is established structurally by
+      // that prefix, and either (a) the parent place id failed its own
+      // validation (so origin_uri on the place is already null) or (b) the
+      // space id will pass its own validation against the same actor host.
+      const pavSpace = apObject['pavillion:space'];
+      if (pavSpace && typeof pavSpace === 'object' && !Array.isArray(pavSpace)) {
+        const placeId = typeof pavPlace.id === 'string' ? pavPlace.id : '';
+        const spaceId = typeof pavSpace.id === 'string' ? pavSpace.id : '';
+        const expectedPrefix = placeId.length > 0 ? `${placeId}/spaces/` : '';
+        const parentMatches = expectedPrefix.length > 0 && spaceId.startsWith(expectedPrefix);
+
+        if (parentMatches) {
+          const sanitizedSpaceContent = EventObject._sanitizeSpaceContent(pavSpace.content);
+          const spaceOut: Record<string, any> = {};
+          const validatedSpaceId = EventObject._validatePavillionId(pavSpace.id, options.actorUri);
+          if (validatedSpaceId !== null) {
+            spaceOut.originUri = validatedSpaceId;
+          }
+          if (Object.keys(sanitizedSpaceContent).length > 0) {
+            spaceOut.content = sanitizedSpaceContent;
+          }
+          result.space = spaceOut;
+        }
+        else {
+          logger.warn(
+            {
+              activityId: typeof apObject.id === 'string' ? apObject.id : null,
+              senderDomain: EventObject._safeExtractDomain(apObject.attributedTo),
+              placeId: placeId || null,
+              spaceId: spaceId || null,
+            },
+            'pavillion:space dropped: parent path does not match pavillion:place.id',
+          );
+        }
+      }
+    }
+    else if (apObject.location !== undefined) {
+      // No pavillion:place extension: fall through to existing flat-path
+      // normalization. Backward compatible with Mobilizon, Mastodon, Gancio.
+      // pavillion:space without pavillion:place is dropped silently here
+      // (the ingester has no parent context to anchor it to).
       result.location = EventObject._normalizeLocation(apObject.location);
     }
 
@@ -483,6 +615,105 @@ class EventObject extends ActivityPubObject {
     catch {
       return null;
     }
+  }
+
+  /**
+   * Validates a pavillion:place / pavillion:space id from the wire. Returns
+   * the id string when it passes structural checks; returns null otherwise so
+   * the caller can treat the row as unstamped (locally-known attributes only,
+   * no `originUri` mirror key).
+   *
+   * Checks performed:
+   *   - Must be a non-empty string of at most 2048 characters.
+   *   - Must parse as a URL (rejects malformed strings).
+   *   - Scheme must be http: or https: (rejects javascript:, data:, ftp:, …).
+   *   - When `actorUri` is supplied, the parsed host must equal the actor's
+   *     host. The dedup-by-origin_uri path therefore only sees ids whose
+   *     sender has been authenticated against that host. A mismatch logs a
+   *     structured warning carrying only structural identifiers
+   *     (`{senderDomain, claimedHost}`); content is never logged
+   *     (privacy/logging.md).
+   *
+   * Never throws — null is the failure signal.
+   *
+   * @param id - The candidate id string from the AP payload
+   * @param actorUri - Optional sender actor URI for host-equality enforcement
+   */
+  private static _validatePavillionId(id: unknown, actorUri?: string): string | null {
+    if (typeof id !== 'string' || id.length === 0 || id.length > 2048) {
+      return null;
+    }
+    let parsed: URL;
+    try {
+      parsed = new URL(id);
+    }
+    catch {
+      return null;
+    }
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return null;
+    }
+    if (typeof actorUri === 'string' && actorUri.length > 0) {
+      const actorHost = EventObject._safeExtractDomain(actorUri);
+      if (!actorHost || parsed.host !== actorHost) {
+        logger.warn(
+          {
+            senderDomain: actorHost,
+            claimedHost: parsed.host,
+          },
+          'pavillion id rejected: actor host does not match claimed host',
+        );
+        return null;
+      }
+    }
+    return id;
+  }
+
+  /**
+   * Sanitizes a pavillion:place content object (language-keyed
+   * `{ name, accessibilityInfo }` entries). Strips HTML from BOTH name and
+   * accessibilityInfo per language. These fields are plaintext at every
+   * consumption surface (display, aria-label, federation echo) so
+   * strip-on-input is the right posture (privacy/security playbook for
+   * plaintext fields).
+   */
+  private static _sanitizeLocationContent(content: any): Record<string, { name: string; accessibilityInfo: string }> {
+    const sanitized: Record<string, { name: string; accessibilityInfo: string }> = {};
+    if (!content || typeof content !== 'object' || Array.isArray(content)) {
+      return sanitized;
+    }
+    for (const lang of Object.keys(content)) {
+      const entry = content[lang];
+      if (entry && typeof entry === 'object') {
+        sanitized[lang] = {
+          name: typeof entry.name === 'string' ? stripHtmlTags(entry.name) : '',
+          accessibilityInfo: typeof entry.accessibilityInfo === 'string' ? stripHtmlTags(entry.accessibilityInfo) : '',
+        };
+      }
+    }
+    return sanitized;
+  }
+
+  /**
+   * Sanitizes a pavillion:space content object (language-keyed
+   * `{ name, accessibilityInfo }` entries). Strips HTML from BOTH name and
+   * accessibilityInfo per language. Mirrors the Place sanitizer's posture.
+   */
+  private static _sanitizeSpaceContent(content: any): Record<string, { name: string; accessibilityInfo: string }> {
+    const sanitized: Record<string, { name: string; accessibilityInfo: string }> = {};
+    if (!content || typeof content !== 'object' || Array.isArray(content)) {
+      return sanitized;
+    }
+    for (const lang of Object.keys(content)) {
+      const entry = content[lang];
+      if (entry && typeof entry === 'object') {
+        sanitized[lang] = {
+          name: typeof entry.name === 'string' ? stripHtmlTags(entry.name) : '',
+          accessibilityInfo: typeof entry.accessibilityInfo === 'string' ? stripHtmlTags(entry.accessibilityInfo) : '',
+        };
+      }
+    }
+    return sanitized;
   }
 
   /**
@@ -604,9 +835,87 @@ class EventObject extends ActivityPubObject {
   }
 
   /**
-   * Builds an ActivityPub Place object from an EventLocation, or null if no location.
+   * Builds the pavillion:place extension object from an EventLocation. Emitted
+   * whenever a location is present (even with no per-language content). The id
+   * URL is minted from the canonical instance domain (config.get('domain'), NEVER
+   * req.host — host-header spoofing risk per security advisor LOW finding) plus
+   * the calendar urlName and the location UUID.
+   *
+   * Wire shape — flat top-level address fields plus a content map keyed by every
+   * language present in the location's translatable content. Each content entry
+   * carries BOTH name and accessibilityInfo; today EventLocation.name is a single
+   * string so every entry's name field carries the same value, but when Place
+   * names later become translatable the wire format stays identical and only
+   * local storage changes.
    */
-  private _buildLocation(location: EventLocation | null): Record<string, any> | null {
+  private _buildPavillionPlace(location: EventLocation, calendar: Calendar): Record<string, any> {
+    const domain = config.get('domain');
+    return {
+      id: `https://${domain}/calendars/${calendar.urlName}/places/${location.id}`,
+      address: location.address,
+      city: location.city,
+      state: location.state,
+      postalCode: location.postalCode,
+      country: location.country,
+      content: Object.fromEntries(
+        Object.entries(location._content).map(([lang, c]) => [
+          lang,
+          { name: location.name, accessibilityInfo: c.accessibilityInfo },
+        ]),
+      ),
+    };
+  }
+
+  /**
+   * Builds the pavillion:space extension object from an EventLocationSpace.
+   * The id URL is minted from the canonical instance domain (config.get('domain'),
+   * NEVER req.host — host-header spoofing risk per security advisor LOW finding)
+   * with the parent Place's id segment included so the inbound parent-path
+   * prefix check (`${placeId}/spaces/${spaceId}`) passes round-trip.
+   *
+   * Wire shape — content map keyed by every language present in the space's
+   * translatable content. Each entry carries BOTH name and accessibilityInfo;
+   * Space names are translatable today so each language entry can carry its
+   * own name string.
+   */
+  private _buildPavillionSpace(space: EventLocationSpace, calendar: Calendar): Record<string, any> {
+    const domain = config.get('domain');
+    return {
+      // ActivityPub identifier (NOT a route). The
+      // `/calendars/.../places/.../spaces/...` form is an opaque AP id used
+      // for cross-instance reference equality; there is no HTTP GET handler
+      // mounted at this path. Per-Space CRUD routes were removed when nested
+      // Place + Spaces save subsumed them.
+      id: `https://${domain}/calendars/${calendar.urlName}/places/${space.placeId}/spaces/${space.id}`,
+      content: Object.fromEntries(
+        Object.entries(space._content).map(([lang, c]) => [
+          lang,
+          { name: c.name, accessibilityInfo: c.accessibilityInfo },
+        ]),
+      ),
+    };
+  }
+
+  /**
+   * Builds an ActivityPub Place object from an EventLocation, or null if no location.
+   *
+   * When a Space is present, the flat `name` field is concatenated as
+   * `${Place.name} — ${Space.name}` using the supplied primary language to pick
+   * the Space's translated name. This gives non-Pavillion peers (Mobilizon,
+   * Mastodon, Gancio) a sensible flattened label since they cannot consume the
+   * structured `pavillion:space` extension. The primary-language pick MUST match
+   * the one used for event name/summary so the flat surface stays internally
+   * consistent.
+   *
+   * @param location - The event's Place, or null if the event is location-less
+   * @param space - The event's Space, if any. Suppressed when Place is absent.
+   * @param primaryLanguage - The primary language code chosen for event content
+   */
+  private _buildLocation(
+    location: EventLocation | null,
+    space: EventLocationSpace | null = null,
+    primaryLanguage: string = 'en',
+  ): Record<string, any> | null {
     if (!location) {
       return null;
     }
@@ -616,9 +925,32 @@ class EventObject extends ActivityPubObject {
       return null;
     }
 
+    // Concatenate Place — Space in the primary language when a Space is present.
+    // Mirrors the event-content primary-language pick: prefer the requested
+    // language, fall back to the first language with a non-empty space name.
+    let displayName = location.name;
+    if (space) {
+      const primarySpaceName = space._content[primaryLanguage]?.name;
+      let spaceName = primarySpaceName && primarySpaceName.trim().length > 0
+        ? primarySpaceName
+        : '';
+      if (!spaceName) {
+        for (const lang of Object.keys(space._content)) {
+          const c = space._content[lang];
+          if (c?.name && c.name.trim().length > 0) {
+            spaceName = c.name;
+            break;
+          }
+        }
+      }
+      if (spaceName) {
+        displayName = `${location.name} — ${spaceName}`;
+      }
+    }
+
     const place: Record<string, any> = {
       type: 'Place',
-      name: location.name,
+      name: displayName,
     };
 
     // Add PostalAddress sub-object if any address fields are present

@@ -107,6 +107,18 @@ export class CategoriesNotFoundError extends Error {
 }
 
 /**
+ * Custom error class for location (Place) or Space not found
+ */
+export class LocationNotFoundError extends Error {
+  constructor(message: string = 'Location not found') {
+    super(message);
+    this.name = 'LocationNotFoundError';
+    // Maintaining proper prototype chain in ES5+
+    Object.setPrototypeOf(this, LocationNotFoundError.prototype);
+  }
+}
+
+/**
  * Custom error class for invalid location data
  * Contains an array of validation error messages
  */
@@ -146,5 +158,69 @@ export class InvalidOccurrenceDateError extends Error {
     this.name = 'InvalidOccurrenceDateError';
     // Maintaining proper prototype chain in ES5+
     Object.setPrototypeOf(this, InvalidOccurrenceDateError.prototype);
+  }
+}
+
+/**
+ * Custom error class raised when an event's selected Space does not belong to
+ * the event's selected Place. Enforces the Space/Place invariant at the
+ * service layer.
+ */
+export class SpaceLocationMismatchError extends Error {
+  constructor(
+    public spaceId: string,
+    public expectedPlaceId: string,
+    public actualPlaceId: string,
+    message?: string,
+  ) {
+    super(message ?? `Space ${spaceId} belongs to place ${actualPlaceId}, not ${expectedPlaceId}`);
+    this.name = 'SpaceLocationMismatchError';
+    // Maintaining proper prototype chain in ES5+
+    Object.setPrototypeOf(this, SpaceLocationMismatchError.prototype);
+  }
+}
+
+/**
+ * Custom error class raised when an incoming Space `id` in a Place update
+ * snapshot does not match a row scoped by `place_id = :locationId`.
+ *
+ * This is the security boundary for nested Place + Spaces save:
+ * the caller cannot smuggle a Space `id` from a sibling Place — even one
+ * owned by the same calendar — into another Place's update payload. The
+ * service-layer diff rejects any incoming Space `id` not present in the
+ * loaded set scoped to the route's `:locationId`. Serialized as HTTP 400
+ * at the API boundary with `errorName: 'SpaceHijackError'`.
+ */
+export class SpaceHijackError extends Error {
+  constructor(
+    public spaceId: string,
+    public expectedPlaceId: string,
+    message?: string,
+  ) {
+    super(message ?? `Space ${spaceId} does not belong to place ${expectedPlaceId}`);
+    this.name = 'SpaceHijackError';
+    // Maintaining proper prototype chain in ES5+
+    Object.setPrototypeOf(this, SpaceHijackError.prototype);
+  }
+}
+
+/**
+ * Custom error class raised when an incoming Space `clientId` in a Place
+ * create/update snapshot is not a valid UUID v4. Serialized as HTTP 400 at
+ * the API boundary with `errorName: 'InvalidClientIdError'`.
+ *
+ * `clientId` is a transient correlation token and never a row primary key,
+ * but it must still be a well-formed UUID so the round-trip echo cannot be
+ * abused to inject arbitrary data into the response payload.
+ */
+export class InvalidClientIdError extends Error {
+  constructor(
+    public clientId: unknown,
+    message?: string,
+  ) {
+    super(message ?? 'Invalid clientId format');
+    this.name = 'InvalidClientIdError';
+    // Maintaining proper prototype chain in ES5+
+    Object.setPrototypeOf(this, InvalidClientIdError.prototype);
   }
 }

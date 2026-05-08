@@ -1,12 +1,24 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import config from 'config';
 import { DateTime } from 'luxon';
+
+// Hoisted logger mock so we can assert on warn calls. The real logger is
+// silent in test mode anyway, so this swap does not affect other tests.
+const { mockWarn } = vi.hoisted(() => ({
+  mockWarn: vi.fn(),
+}));
+
+vi.mock('@/server/common/helper/logger', () => ({
+  default: { child: () => ({ warn: mockWarn, error: vi.fn(), info: vi.fn(), debug: vi.fn() }) },
+  createLogger: () => ({ warn: mockWarn, error: vi.fn(), info: vi.fn(), debug: vi.fn() }),
+}));
+
 import { Calendar } from '@/common/model/calendar';
 import { CalendarEvent, CalendarEventContent, CalendarEventSchedule, UrlPrompt } from '@/common/model/events';
 import { EventCategory } from '@/common/model/event_category';
 import { EventSeries } from '@/common/model/event_series';
 import { EventSeriesContent } from '@/common/model/event_series_content';
-import { EventLocation } from '@/common/model/location';
+import { EventLocation, EventLocationContent, EventLocationSpace, EventLocationSpaceContent } from '@/common/model/location';
 import { Media } from '@/common/model/media';
 import { EventObject } from '@/server/activitypub/model/object/event';
 
@@ -576,6 +588,404 @@ describe('EventObject', () => {
 
         // AS top-level `url` is reserved for Mobilizon's canonical event page.
         expect(result).not.toHaveProperty('url');
+      });
+
+    });
+
+    describe('pavillion:place serialization', () => {
+
+      it('should emit pavillion:place when event.location is set', () => {
+        const calendar = new Calendar('calendar-uuid', 'mycal');
+        const event = new CalendarEvent('event-uuid', 'calendar-uuid');
+        event.addContent(new CalendarEventContent('en', 'Event', ''));
+        const location = new EventLocation(
+          'place-uuid-123',
+          'Convention Center',
+          '100 Main St',
+          'Springfield',
+          'OR',
+          '97477',
+          'US',
+        );
+        location.addContent(new EventLocationContent('en', 'Accessible parking'));
+        location.addContent(new EventLocationContent('fr', 'Stationnement accessible'));
+        event.location = location;
+
+        const obj = new EventObject(calendar, event);
+        const result = obj.toActivityPubObject();
+
+        expect(result['pavillion:place']).toEqual({
+          id: `https://${domain}/calendars/mycal/places/place-uuid-123`,
+          address: '100 Main St',
+          city: 'Springfield',
+          state: 'OR',
+          postalCode: '97477',
+          country: 'US',
+          content: {
+            en: { name: 'Convention Center', accessibilityInfo: 'Accessible parking' },
+            fr: { name: 'Convention Center', accessibilityInfo: 'Stationnement accessible' },
+          },
+        });
+      });
+
+      it('should omit pavillion:place when event has no location', () => {
+        const calendar = new Calendar('calendar-uuid', 'mycal');
+        const event = new CalendarEvent('event-uuid', 'calendar-uuid');
+        event.addContent(new CalendarEventContent('en', 'Event', ''));
+
+        const obj = new EventObject(calendar, event);
+        const result = obj.toActivityPubObject();
+
+        expect(result).not.toHaveProperty('pavillion:place');
+      });
+
+      it('should mint id URL from configured domain, calendar urlName, and location.id', () => {
+        const calendar = new Calendar('calendar-uuid', 'testcalendar');
+        const event = new CalendarEvent('event-uuid', 'calendar-uuid');
+        event.addContent(new CalendarEventContent('en', 'Event', ''));
+        event.location = new EventLocation('specific-place-id', 'Some Venue');
+
+        const obj = new EventObject(calendar, event);
+        const result = obj.toActivityPubObject();
+
+        // Domain MUST come from config, not request host (host-header spoofing risk)
+        expect(result['pavillion:place'].id).toBe(
+          `https://${domain}/calendars/testcalendar/places/specific-place-id`,
+        );
+      });
+
+      it('should emit pavillion:place with empty content when location has no per-language content', () => {
+        const calendar = new Calendar('calendar-uuid', 'mycal');
+        const event = new CalendarEvent('event-uuid', 'calendar-uuid');
+        event.addContent(new CalendarEventContent('en', 'Event', ''));
+        // Location with no addContent() calls — _content is empty
+        event.location = new EventLocation(
+          'place-empty',
+          'Bare Venue',
+          '50 Side St',
+          'Portland',
+          'OR',
+          '97200',
+          'US',
+        );
+
+        const obj = new EventObject(calendar, event);
+        const result = obj.toActivityPubObject();
+
+        expect(result['pavillion:place']).toEqual({
+          id: `https://${domain}/calendars/mycal/places/place-empty`,
+          address: '50 Side St',
+          city: 'Portland',
+          state: 'OR',
+          postalCode: '97200',
+          country: 'US',
+          content: {},
+        });
+      });
+
+      it('should emit pavillion:place with flat top-level address fields (not nested)', () => {
+        const calendar = new Calendar('calendar-uuid', 'mycal');
+        const event = new CalendarEvent('event-uuid', 'calendar-uuid');
+        event.addContent(new CalendarEventContent('en', 'Event', ''));
+        event.location = new EventLocation(
+          'place-flat',
+          'Venue',
+          '1 First St',
+          'Eugene',
+          'OR',
+          '97401',
+          'US',
+        );
+
+        const obj = new EventObject(calendar, event);
+        const result = obj.toActivityPubObject();
+
+        const place = result['pavillion:place'];
+        // Address fields are flat keys at the top level of pavillion:place,
+        // NOT nested in a PostalAddress sub-object (that's the AS location shape).
+        expect(place.address).toBe('1 First St');
+        expect(place.city).toBe('Eugene');
+        expect(place.state).toBe('OR');
+        expect(place.postalCode).toBe('97401');
+        expect(place.country).toBe('US');
+        expect(place).not.toHaveProperty('PostalAddress');
+        // The address field is a string, not a sub-object
+        expect(typeof place.address).toBe('string');
+      });
+
+      it('should mirror event.location.name into every content entry name field (single-string source)', () => {
+        const calendar = new Calendar('calendar-uuid', 'mycal');
+        const event = new CalendarEvent('event-uuid', 'calendar-uuid');
+        event.addContent(new CalendarEventContent('en', 'Event', ''));
+        const location = new EventLocation('place-multi', 'Shared Venue Name');
+        location.addContent(new EventLocationContent('en', 'EN access'));
+        location.addContent(new EventLocationContent('fr', 'FR access'));
+        location.addContent(new EventLocationContent('es', 'ES access'));
+        event.location = location;
+
+        const obj = new EventObject(calendar, event);
+        const result = obj.toActivityPubObject();
+
+        const content = result['pavillion:place'].content;
+        // Today, EventLocation.name is single-string. Wire shape carries
+        // per-language name slots so when names later become translatable, the
+        // wire format does not need to change.
+        expect(content.en.name).toBe('Shared Venue Name');
+        expect(content.fr.name).toBe('Shared Venue Name');
+        expect(content.es.name).toBe('Shared Venue Name');
+        expect(content.en.accessibilityInfo).toBe('EN access');
+        expect(content.fr.accessibilityInfo).toBe('FR access');
+        expect(content.es.accessibilityInfo).toBe('ES access');
+      });
+
+      it('should emit address fields as empty strings when location has no address data', () => {
+        const calendar = new Calendar('calendar-uuid', 'mycal');
+        const event = new CalendarEvent('event-uuid', 'calendar-uuid');
+        event.addContent(new CalendarEventContent('en', 'Event', ''));
+        // Location with only id and name — no address fields
+        event.location = new EventLocation('place-noaddr', 'Name Only');
+
+        const obj = new EventObject(calendar, event);
+        const result = obj.toActivityPubObject();
+
+        const place = result['pavillion:place'];
+        expect(place.id).toBe(`https://${domain}/calendars/mycal/places/place-noaddr`);
+        expect(place.address).toBe('');
+        expect(place.city).toBe('');
+        expect(place.state).toBe('');
+        expect(place.postalCode).toBe('');
+        expect(place.country).toBe('');
+      });
+
+    });
+
+    describe('pavillion:space serialization', () => {
+
+      it('should emit pavillion:space when event.location AND event.space are set', () => {
+        const calendar = new Calendar('calendar-uuid', 'mycal');
+        const event = new CalendarEvent('event-uuid', 'calendar-uuid');
+        event.addContent(new CalendarEventContent('en', 'Event', ''));
+        event.location = new EventLocation('place-uuid-1', 'Convention Center');
+        const space = new EventLocationSpace('space-uuid-1', 'place-uuid-1');
+        space.addContent(new EventLocationSpaceContent('en', 'Pacific Room', 'Hearing loop, 3rd floor'));
+        space.addContent(new EventLocationSpaceContent('fr', 'Salle Pacifique', 'Boucle auditive, 3e étage'));
+        event.space = space;
+
+        const obj = new EventObject(calendar, event);
+        const result = obj.toActivityPubObject();
+
+        expect(result['pavillion:space']).toEqual({
+          id: `https://${domain}/calendars/mycal/places/place-uuid-1/spaces/space-uuid-1`,
+          content: {
+            en: { name: 'Pacific Room', accessibilityInfo: 'Hearing loop, 3rd floor' },
+            fr: { name: 'Salle Pacifique', accessibilityInfo: 'Boucle auditive, 3e étage' },
+          },
+        });
+      });
+
+      it('should omit pavillion:space when event has no space', () => {
+        const calendar = new Calendar('calendar-uuid', 'mycal');
+        const event = new CalendarEvent('event-uuid', 'calendar-uuid');
+        event.addContent(new CalendarEventContent('en', 'Event', ''));
+        event.location = new EventLocation('place-uuid-1', 'Convention Center');
+        // No event.space
+
+        const obj = new EventObject(calendar, event);
+        const result = obj.toActivityPubObject();
+
+        expect(result).not.toHaveProperty('pavillion:space');
+        // pavillion:place should still be present
+        expect(result['pavillion:place']).toBeDefined();
+      });
+
+      it('should omit pavillion:space when event has space but no location (defensive)', () => {
+        const calendar = new Calendar('calendar-uuid', 'mycal');
+        const event = new CalendarEvent('event-uuid', 'calendar-uuid');
+        event.addContent(new CalendarEventContent('en', 'Event', ''));
+        // Pathological state: a Space without its Place is meaningless on the
+        // wire. The outbound emitter must defensively skip it.
+        const space = new EventLocationSpace('space-uuid-1', 'place-uuid-1');
+        space.addContent(new EventLocationSpaceContent('en', 'Pacific Room', 'Hearing loop'));
+        event.space = space;
+        // No event.location
+
+        const obj = new EventObject(calendar, event);
+        const result = obj.toActivityPubObject();
+
+        expect(result).not.toHaveProperty('pavillion:space');
+        expect(result).not.toHaveProperty('pavillion:place');
+      });
+
+      it('should mint id URL whose parent path matches the parent pavillion:place.id segment (round-trip)', () => {
+        const calendar = new Calendar('calendar-uuid', 'testcalendar');
+        const event = new CalendarEvent('event-uuid', 'calendar-uuid');
+        event.addContent(new CalendarEventContent('en', 'Event', ''));
+        event.location = new EventLocation('specific-place-id', 'Some Venue');
+        const space = new EventLocationSpace('specific-space-id', 'specific-place-id');
+        space.addContent(new EventLocationSpaceContent('en', 'Room', ''));
+        event.space = space;
+
+        const obj = new EventObject(calendar, event);
+        const result = obj.toActivityPubObject();
+
+        // The space id MUST contain the parent place id segment so the inbound
+        // parent-path prefix check (`${placeId}/spaces/`) passes round-trip.
+        const placeId = result['pavillion:place'].id;
+        const spaceId = result['pavillion:space'].id;
+        expect(spaceId).toBe(`${placeId}/spaces/specific-space-id`);
+        expect(spaceId.startsWith(`${placeId}/spaces/`)).toBe(true);
+      });
+
+      it('should mint id URL from configured domain (NOT request host — host-header spoofing risk)', () => {
+        const calendar = new Calendar('calendar-uuid', 'mycal');
+        const event = new CalendarEvent('event-uuid', 'calendar-uuid');
+        event.addContent(new CalendarEventContent('en', 'Event', ''));
+        event.location = new EventLocation('place-1', 'Venue');
+        const space = new EventLocationSpace('space-1', 'place-1');
+        space.addContent(new EventLocationSpaceContent('en', 'Room', ''));
+        event.space = space;
+
+        const obj = new EventObject(calendar, event);
+        const result = obj.toActivityPubObject();
+
+        // Domain MUST come from config, not request host
+        expect(result['pavillion:space'].id).toBe(
+          `https://${domain}/calendars/mycal/places/place-1/spaces/space-1`,
+        );
+      });
+
+      it('should emit per-language content map keyed by every language present in space._content', () => {
+        const calendar = new Calendar('calendar-uuid', 'mycal');
+        const event = new CalendarEvent('event-uuid', 'calendar-uuid');
+        event.addContent(new CalendarEventContent('en', 'Event', ''));
+        event.location = new EventLocation('place-1', 'Venue');
+        const space = new EventLocationSpace('space-1', 'place-1');
+        space.addContent(new EventLocationSpaceContent('en', 'EN Name', 'EN access'));
+        space.addContent(new EventLocationSpaceContent('fr', 'FR Name', 'FR access'));
+        space.addContent(new EventLocationSpaceContent('es', 'ES Name', 'ES access'));
+        event.space = space;
+
+        const obj = new EventObject(calendar, event);
+        const result = obj.toActivityPubObject();
+
+        const content = result['pavillion:space'].content;
+        // Unlike Place (single-string name), Space names are translatable today
+        // so each entry carries its own name string.
+        expect(content.en).toEqual({ name: 'EN Name', accessibilityInfo: 'EN access' });
+        expect(content.fr).toEqual({ name: 'FR Name', accessibilityInfo: 'FR access' });
+        expect(content.es).toEqual({ name: 'ES Name', accessibilityInfo: 'ES access' });
+      });
+
+      it('should emit pavillion:space with empty content map when space has no per-language content', () => {
+        const calendar = new Calendar('calendar-uuid', 'mycal');
+        const event = new CalendarEvent('event-uuid', 'calendar-uuid');
+        event.addContent(new CalendarEventContent('en', 'Event', ''));
+        event.location = new EventLocation('place-1', 'Venue');
+        // Space with no addContent() calls — _content is empty
+        event.space = new EventLocationSpace('space-empty', 'place-1');
+
+        const obj = new EventObject(calendar, event);
+        const result = obj.toActivityPubObject();
+
+        expect(result['pavillion:space']).toEqual({
+          id: `https://${domain}/calendars/mycal/places/place-1/spaces/space-empty`,
+          content: {},
+        });
+      });
+
+    });
+
+    describe('flat as:Place.name concatenation with Space', () => {
+
+      it('should concatenate flat as:Place.name as "Place — Space" in the primary language when Space present', () => {
+        const calendar = new Calendar('calendar-uuid', 'mycal');
+        const event = new CalendarEvent('event-uuid', 'calendar-uuid');
+        event.addContent(new CalendarEventContent('en', 'My Event', ''));
+        event.location = new EventLocation('place-uuid-1', 'Convention Center');
+        const space = new EventLocationSpace('space-uuid-1', 'place-uuid-1');
+        space.addContent(new EventLocationSpaceContent('en', 'Pacific Room', 'Hearing loop'));
+        event.space = space;
+
+        const obj = new EventObject(calendar, event);
+        const result = obj.toActivityPubObject();
+
+        // Flat fallback for non-Pavillion peers (Mobilizon, Mastodon, Gancio)
+        // gets the concatenated label since they cannot consume pavillion:space.
+        expect(result.location.type).toBe('Place');
+        expect(result.location.name).toBe('Convention Center — Pacific Room');
+      });
+
+      it('should keep Place.name alone when no Space is present', () => {
+        const calendar = new Calendar('calendar-uuid', 'mycal');
+        const event = new CalendarEvent('event-uuid', 'calendar-uuid');
+        event.addContent(new CalendarEventContent('en', 'My Event', ''));
+        event.location = new EventLocation('place-uuid-1', 'Convention Center');
+        // No event.space — whole-venue event
+
+        const obj = new EventObject(calendar, event);
+        const result = obj.toActivityPubObject();
+
+        expect(result.location.name).toBe('Convention Center');
+        expect(result.location.name).not.toContain('—');
+      });
+
+      it('should pick the Space name in the same primary language used for event content', () => {
+        // Event has only French content, so the primary language should be 'fr'.
+        // The flat as:Place.name concatenation must use the FR space name to
+        // stay internally consistent with the rest of the flat surface (name,
+        // summary, content all come from the same primary-language pick).
+        const calendar = new Calendar('calendar-uuid', 'mycal');
+        const event = new CalendarEvent('event-uuid', 'calendar-uuid');
+        event.addContent(new CalendarEventContent('fr', 'Évènement', 'Description'));
+        event.location = new EventLocation('place-uuid-1', 'Centre des Congrès');
+        const space = new EventLocationSpace('space-uuid-1', 'place-uuid-1');
+        space.addContent(new EventLocationSpaceContent('en', 'Pacific Room', ''));
+        space.addContent(new EventLocationSpaceContent('fr', 'Salle Pacifique', ''));
+        event.space = space;
+
+        const obj = new EventObject(calendar, event);
+        const result = obj.toActivityPubObject();
+
+        // Primary language is 'fr' (event has no en content), so the Space
+        // name should be the FR translation, not the EN one.
+        expect(result.name).toBe('Évènement');
+        expect(result.location.name).toBe('Centre des Congrès — Salle Pacifique');
+      });
+
+      it('should fall back to the first available Space name when primary-language entry has no name', () => {
+        // Event content is English, but the Space has no English name (only FR).
+        // The concatenation must still produce a usable label for non-Pavillion
+        // peers by falling back to the first Space content with a non-empty name.
+        const calendar = new Calendar('calendar-uuid', 'mycal');
+        const event = new CalendarEvent('event-uuid', 'calendar-uuid');
+        event.addContent(new CalendarEventContent('en', 'My Event', ''));
+        event.location = new EventLocation('place-uuid-1', 'Convention Center');
+        const space = new EventLocationSpace('space-uuid-1', 'place-uuid-1');
+        space.addContent(new EventLocationSpaceContent('fr', 'Salle Pacifique', ''));
+        event.space = space;
+
+        const obj = new EventObject(calendar, event);
+        const result = obj.toActivityPubObject();
+
+        expect(result.location.name).toBe('Convention Center — Salle Pacifique');
+      });
+
+      it('should keep Place.name alone when Space has no per-language content (defensive)', () => {
+        // Pathological state: Space exists but has no content map. Concatenation
+        // would produce a trailing em-dash, so we suppress it and emit Place
+        // alone on the flat surface. The structured pavillion:space extension
+        // is unaffected.
+        const calendar = new Calendar('calendar-uuid', 'mycal');
+        const event = new CalendarEvent('event-uuid', 'calendar-uuid');
+        event.addContent(new CalendarEventContent('en', 'My Event', ''));
+        event.location = new EventLocation('place-uuid-1', 'Convention Center');
+        // Space with no addContent() calls — every _content[lang]?.name is undefined
+        event.space = new EventLocationSpace('space-empty', 'place-uuid-1');
+
+        const obj = new EventObject(calendar, event);
+        const result = obj.toActivityPubObject();
+
+        expect(result.location.name).toBe('Convention Center');
       });
 
     });
@@ -1312,6 +1722,431 @@ describe('EventObject', () => {
 
         expect(result.externalUrl).toBeNull();
         expect(result.urlPrompt).toBeNull();
+      });
+
+    });
+
+    describe('pavillion:place / pavillion:space consumption (Option B)', () => {
+
+      beforeEach(() => {
+        mockWarn.mockClear();
+      });
+
+      it('should consume pavillion:place with priority over flat location (Place + content)', () => {
+        const apObject = {
+          location: {
+            type: 'Place',
+            // Flat AS Place name MUST be ignored when extension is present
+            name: 'Flat Fallback Name',
+            address: { type: 'PostalAddress', streetAddress: '999 Old Address' },
+          },
+          'pavillion:place': {
+            id: 'https://origin.example/calendars/owner/places/place-uuid-1',
+            address: '100 Main St',
+            city: 'Springfield',
+            state: 'OR',
+            postalCode: '97477',
+            country: 'US',
+            content: {
+              en: { name: 'Convention Center', accessibilityInfo: 'Accessible parking' },
+              fr: { name: 'Centre Convention', accessibilityInfo: 'Stationnement accessible' },
+            },
+          },
+        };
+
+        const result = EventObject.fromActivityPubObject(apObject);
+
+        // Address fields come from the extension's flat keys
+        expect(result.location.address).toBe('100 Main St');
+        expect(result.location.city).toBe('Springfield');
+        expect(result.location.state).toBe('OR');
+        expect(result.location.postalCode).toBe('97477');
+        expect(result.location.country).toBe('US');
+        // name comes from first available content[lang].name, NOT the flat fallback
+        expect(result.location.name).toBe('Convention Center');
+        expect(result.location.name).not.toBe('Flat Fallback Name');
+        // originUri set from extension id
+        expect(result.location.originUri).toBe('https://origin.example/calendars/owner/places/place-uuid-1');
+        // content carries per-language accessibilityInfo
+        expect(result.location.content.en.accessibilityInfo).toBe('Accessible parking');
+        expect(result.location.content.fr.accessibilityInfo).toBe('Stationnement accessible');
+      });
+
+      it('should fall back to flat _normalizeLocation when no pavillion:place extension present', () => {
+        const apObject = {
+          location: {
+            type: 'Place',
+            name: 'City Park',
+            address: {
+              type: 'PostalAddress',
+              streetAddress: '123 Main St',
+              addressLocality: 'Springfield',
+            },
+          },
+        };
+
+        const result = EventObject.fromActivityPubObject(apObject);
+
+        // The existing _normalizeLocation flat-path output is preserved
+        expect(result.location.name).toBe('City Park');
+        expect(result.location.address).toBe('123 Main St');
+        expect(result.location.city).toBe('Springfield');
+        // No originUri or content from flat path
+        expect(result.location.originUri).toBeUndefined();
+        expect(result.location.content).toBeUndefined();
+        // No space when no extension
+        expect(result.space).toBeUndefined();
+      });
+
+      it('should consume pavillion:space when its id parent path matches pavillion:place.id', () => {
+        const placeId = 'https://origin.example/calendars/owner/places/place-uuid-1';
+        const spaceId = `${placeId}/spaces/space-uuid-1`;
+        const apObject = {
+          'pavillion:place': {
+            id: placeId,
+            content: {
+              en: { name: 'Convention Center', accessibilityInfo: '' },
+            },
+          },
+          'pavillion:space': {
+            id: spaceId,
+            content: {
+              en: { name: 'Pacific Room', accessibilityInfo: 'Hearing loop, 3rd floor' },
+              fr: { name: 'Salle Pacifique', accessibilityInfo: 'Boucle auditive, 3e étage' },
+            },
+          },
+        };
+
+        const result = EventObject.fromActivityPubObject(apObject);
+
+        expect(result.space).toBeDefined();
+        expect(result.space.originUri).toBe(spaceId);
+        expect(result.space.content.en.name).toBe('Pacific Room');
+        expect(result.space.content.en.accessibilityInfo).toBe('Hearing loop, 3rd floor');
+        expect(result.space.content.fr.name).toBe('Salle Pacifique');
+        expect(result.space.content.fr.accessibilityInfo).toBe('Boucle auditive, 3e étage');
+      });
+
+      it('should sanitize HTML from BOTH name and accessibilityInfo on Place per language', () => {
+        const apObject = {
+          'pavillion:place': {
+            id: 'https://origin.example/calendars/owner/places/place-uuid-1',
+            content: {
+              en: {
+                name: '<script>alert(1)</script>Convention Center',
+                accessibilityInfo: '<img src=x onerror=alert(1)>Accessible parking',
+              },
+              fr: {
+                name: '<b>Centre</b> Convention',
+                accessibilityInfo: '<em>Stationnement</em> accessible',
+              },
+            },
+          },
+        };
+
+        const result = EventObject.fromActivityPubObject(apObject);
+
+        expect(result.location.content.en.accessibilityInfo).toBe('Accessible parking');
+        expect(result.location.content.fr.accessibilityInfo).toBe('Stationnement accessible');
+        // The single-string EventLocation.name comes from first available content.name (sanitized)
+        expect(result.location.name).toBe('alert(1)Convention Center');
+        expect(result.location.name).not.toContain('<script>');
+      });
+
+      it('should sanitize HTML from BOTH name and accessibilityInfo on Space per language', () => {
+        const placeId = 'https://origin.example/calendars/owner/places/place-uuid-1';
+        const spaceId = `${placeId}/spaces/space-uuid-1`;
+        const apObject = {
+          'pavillion:place': {
+            id: placeId,
+            content: {
+              en: { name: 'Convention Center', accessibilityInfo: '' },
+            },
+          },
+          'pavillion:space': {
+            id: spaceId,
+            content: {
+              en: {
+                name: '<script>alert("xss")</script>Pacific Room',
+                accessibilityInfo: '<img src=x onerror=alert(1)>Hearing loop',
+              },
+              fr: {
+                name: '<b>Salle</b> Pacifique',
+                accessibilityInfo: '<em>Boucle</em> auditive',
+              },
+            },
+          },
+        };
+
+        const result = EventObject.fromActivityPubObject(apObject);
+
+        expect(result.space.content.en.name).toBe('alert("xss")Pacific Room');
+        expect(result.space.content.en.name).not.toContain('<script>');
+        expect(result.space.content.en.accessibilityInfo).toBe('Hearing loop');
+        expect(result.space.content.fr.name).toBe('Salle Pacifique');
+        expect(result.space.content.fr.accessibilityInfo).toBe('Boucle auditive');
+      });
+
+      it('should drop pavillion:space and emit structured warning when parent path does not match pavillion:place.id', () => {
+        mockWarn.mockClear();
+        const placeId = 'https://origin.example/calendars/owner/places/place-uuid-1';
+        const spaceId = 'https://origin.example/calendars/other-owner/places/different-place/spaces/space-uuid-1';
+        const apObject = {
+          id: 'https://origin.example/calendars/owner/events/evt-1',
+          attributedTo: 'https://origin.example/calendars/owner',
+          'pavillion:place': {
+            id: placeId,
+            content: { en: { name: 'Convention Center', accessibilityInfo: '' } },
+          },
+          'pavillion:space': {
+            id: spaceId,
+            content: { en: { name: 'Pacific Room', accessibilityInfo: '' } },
+          },
+        };
+
+        const result = EventObject.fromActivityPubObject(apObject);
+
+        // Place still ingests
+        expect(result.location).toBeDefined();
+        expect(result.location.originUri).toBe(placeId);
+        // Space dropped
+        expect(result.space).toBeUndefined();
+
+        // Structured warning logged with structural identifiers only
+        expect(mockWarn).toHaveBeenCalledOnce();
+        const [payload] = mockWarn.mock.calls[0];
+        expect(payload).toMatchObject({
+          activityId: 'https://origin.example/calendars/owner/events/evt-1',
+          senderDomain: 'origin.example',
+          placeId: placeId,
+          spaceId: spaceId,
+        });
+        // Content fields MUST NOT be logged
+        expect(payload).not.toHaveProperty('content');
+        expect(payload).not.toHaveProperty('name');
+        expect(payload).not.toHaveProperty('accessibilityInfo');
+        expect(JSON.stringify(payload)).not.toContain('Convention Center');
+        expect(JSON.stringify(payload)).not.toContain('Pacific Room');
+      });
+
+      it('should drop pavillion:space silently and fall through to _normalizeLocation when pavillion:place is absent', () => {
+        const apObject = {
+          location: {
+            type: 'Place',
+            name: 'City Park',
+            address: {
+              type: 'PostalAddress',
+              streetAddress: '123 Main St',
+            },
+          },
+          'pavillion:space': {
+            id: 'https://origin.example/calendars/owner/places/place-uuid-1/spaces/space-uuid-1',
+            content: { en: { name: 'Pacific Room', accessibilityInfo: '' } },
+          },
+        };
+
+        const result = EventObject.fromActivityPubObject(apObject);
+
+        // Space orphan dropped
+        expect(result.space).toBeUndefined();
+        // Flat _normalizeLocation path runs
+        expect(result.location.name).toBe('City Park');
+        expect(result.location.address).toBe('123 Main St');
+      });
+
+      it('should run existing _normalizeLocation unchanged when neither extension is present (Mobilizon/Mastodon/Gancio regression guard)', () => {
+        const apObject = {
+          location: [
+            {
+              type: 'Place',
+              name: 'Conference Center',
+              address: {
+                type: 'PostalAddress',
+                streetAddress: '456 Oak Ave',
+                addressLocality: 'Portland',
+              },
+            },
+            {
+              type: 'VirtualLocation',
+              url: 'https://meet.example.com/room-123',
+            },
+          ],
+        };
+
+        const result = EventObject.fromActivityPubObject(apObject);
+
+        expect(result.location.name).toBe('Conference Center');
+        expect(result.location.address).toBe('456 Oak Ave');
+        expect(result.location.city).toBe('Portland');
+        expect(result.location.virtualUrl).toBe('https://meet.example.com/room-123');
+        expect(result.space).toBeUndefined();
+      });
+
+      it('should pick first available content[lang].name when populating EventLocation.name (no preferred-language hint)', () => {
+        const apObject = {
+          'pavillion:place': {
+            id: 'https://origin.example/calendars/owner/places/place-uuid-1',
+            content: {
+              fr: { name: 'Centre Français', accessibilityInfo: '' },
+              en: { name: 'English Center', accessibilityInfo: '' },
+            },
+          },
+        };
+
+        const result = EventObject.fromActivityPubObject(apObject);
+
+        // First available content entry's name is used; either is acceptable per spec.
+        expect(['Centre Français', 'English Center']).toContain(result.location.name);
+      });
+
+      it('should drop mismatched-parent Space without crashing when activityId or attributedTo are missing', () => {
+        const apObject = {
+          'pavillion:place': {
+            id: 'https://origin.example/calendars/owner/places/place-uuid-1',
+            content: { en: { name: 'Place', accessibilityInfo: '' } },
+          },
+          'pavillion:space': {
+            id: 'https://origin.example/calendars/other/places/different/spaces/space-1',
+            content: { en: { name: 'Space', accessibilityInfo: '' } },
+          },
+        };
+
+        const result = EventObject.fromActivityPubObject(apObject);
+        expect(result.location).toBeDefined();
+        expect(result.space).toBeUndefined();
+      });
+
+      it('should NOT stamp originUri when pavillion:place.id is oversized (>2048 chars)', () => {
+        // Build an id that is unambiguously over the 2048-char limit. The
+        // origin host is fine; only the path is bloated. Place content still
+        // ingests so the row is locally usable, but the origin_uri dedup key
+        // is withheld because the wire id failed validation.
+        const oversizedPath = 'a'.repeat(2100);
+        const apObject = {
+          'pavillion:place': {
+            id: `https://origin.example/${oversizedPath}`,
+            content: { en: { name: 'Convention Center', accessibilityInfo: '' } },
+          },
+        };
+
+        const result = EventObject.fromActivityPubObject(apObject);
+
+        expect(result.location).toBeDefined();
+        expect(result.location.name).toBe('Convention Center');
+        expect(result.location.originUri).toBeUndefined();
+      });
+
+      it('should NOT stamp originUri when pavillion:place.id has a non-http(s) scheme', () => {
+        const apObject = {
+          'pavillion:place': {
+            id: 'javascript:alert(1)',
+            content: { en: { name: 'Convention Center', accessibilityInfo: '' } },
+          },
+        };
+
+        const result = EventObject.fromActivityPubObject(apObject);
+
+        expect(result.location).toBeDefined();
+        expect(result.location.originUri).toBeUndefined();
+      });
+
+      it('should NOT stamp originUri when pavillion:place.id has a data: scheme', () => {
+        const apObject = {
+          'pavillion:place': {
+            id: 'data:text/html,<script>alert(1)</script>',
+            content: { en: { name: 'Convention Center', accessibilityInfo: '' } },
+          },
+        };
+
+        const result = EventObject.fromActivityPubObject(apObject);
+
+        expect(result.location).toBeDefined();
+        expect(result.location.originUri).toBeUndefined();
+      });
+
+      it('should NOT stamp originUri when pavillion:place.id fails to parse as a URL', () => {
+        const apObject = {
+          'pavillion:place': {
+            id: 'not a url at all !!!',
+            content: { en: { name: 'Convention Center', accessibilityInfo: '' } },
+          },
+        };
+
+        const result = EventObject.fromActivityPubObject(apObject);
+
+        expect(result.location).toBeDefined();
+        expect(result.location.originUri).toBeUndefined();
+      });
+
+      it('should NOT stamp originUri when actorUri host does not match pavillion:place.id host', () => {
+        mockWarn.mockClear();
+        const apObject = {
+          'pavillion:place': {
+            // Claims origin.example...
+            id: 'https://origin.example/calendars/owner/places/place-uuid-1',
+            content: { en: { name: 'Convention Center', accessibilityInfo: '' } },
+          },
+        };
+
+        // ...but the sender is impostor.example
+        const result = EventObject.fromActivityPubObject(apObject, {
+          actorUri: 'https://impostor.example/calendars/attacker',
+        });
+
+        expect(result.location).toBeDefined();
+        // Place content still ingests
+        expect(result.location.name).toBe('Convention Center');
+        // But the origin_uri stamp is withheld so dedup-by-origin won't fire
+        expect(result.location.originUri).toBeUndefined();
+        // Structured warning emitted with structural identifiers only
+        expect(mockWarn).toHaveBeenCalled();
+        const payload = mockWarn.mock.calls[mockWarn.mock.calls.length - 1][0];
+        expect(payload).toMatchObject({
+          senderDomain: 'impostor.example',
+          claimedHost: 'origin.example',
+        });
+        // Content fields MUST NOT be logged
+        expect(JSON.stringify(payload)).not.toContain('Convention Center');
+      });
+
+      it('should stamp originUri when actorUri host matches pavillion:place.id host', () => {
+        const apObject = {
+          'pavillion:place': {
+            id: 'https://origin.example/calendars/owner/places/place-uuid-1',
+            content: { en: { name: 'Convention Center', accessibilityInfo: '' } },
+          },
+        };
+
+        const result = EventObject.fromActivityPubObject(apObject, {
+          actorUri: 'https://origin.example/calendars/owner',
+        });
+
+        expect(result.location.originUri).toBe('https://origin.example/calendars/owner/places/place-uuid-1');
+      });
+
+      it('should NOT stamp space originUri when space id has a non-http(s) scheme even if parent path matches', () => {
+        // The parent-path prefix check passes (space id starts with place.id +
+        // '/spaces/') because the place.id is itself a javascript: URL — but
+        // _validatePavillionId rejects both, so neither gets an originUri.
+        const placeId = 'javascript:alert(1)';
+        const spaceId = `${placeId}/spaces/space-1`;
+        const apObject = {
+          'pavillion:place': {
+            id: placeId,
+            content: { en: { name: 'Place', accessibilityInfo: '' } },
+          },
+          'pavillion:space': {
+            id: spaceId,
+            content: { en: { name: 'Pacific Room', accessibilityInfo: '' } },
+          },
+        };
+
+        const result = EventObject.fromActivityPubObject(apObject);
+
+        expect(result.space).toBeDefined();
+        expect(result.space.originUri).toBeUndefined();
+        // Space content still ingests despite missing origin_uri
+        expect(result.space.content.en.name).toBe('Pacific Room');
       });
 
     });

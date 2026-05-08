@@ -21,7 +21,7 @@ const props = defineProps<{
 }>();
 
 const { t } = useTranslation('system');
-const { localizedContent } = useLocalizedContent();
+const { localizedContent, spaceDisplayName, spaceAccessibilityInfo: spaceAccessibilityInfoFor } = useLocalizedContent();
 
 /**
  * Returns true when start and end fall on the same calendar day.
@@ -48,10 +48,10 @@ const eventAccessibilityInfo = computed(() => {
 });
 
 /**
- * Computed localized accessibility info for the location.
+ * Computed localized accessibility info for the venue (Place).
  * Handles both EventLocation models (TranslatedModel) and plain objects.
  */
-const locationAccessibilityInfo = computed(() => {
+const venueAccessibilityInfo = computed(() => {
   const location = props.instance?.event?.location;
   if (!location || typeof location.hasContent !== 'function') {
     return '';
@@ -66,10 +66,31 @@ const locationAccessibilityInfo = computed(() => {
 });
 
 /**
- * Whether to show the accessibility card (either event or location has info).
+ * Computed localized accessibility info for the Space (sub-area within a Place).
+ * Returns empty string when no Space is attached to the event.
+ */
+const spaceAccessibilityInfo = computed(() => spaceAccessibilityInfoFor(props.instance?.event?.space));
+
+/**
+ * Computed display label for the location header line. When a Space is set
+ * with a non-empty name, returns "Place — Space" via the i18n format key;
+ * otherwise returns the Place name alone.
+ */
+const locationDisplayName = computed(() => {
+  const placeName = props.instance?.event?.location?.name ?? '';
+  const space = spaceDisplayName(props.instance?.event?.space);
+  if (space) {
+    return t('place.format.with_space', { place: placeName, space });
+  }
+  return placeName;
+});
+
+/**
+ * Whether to show the accessibility card. Visible when the event, venue, or
+ * Space has localized accessibility content; hidden when all three are empty.
  */
 const hasAccessibilityInfo = computed(() => {
-  return !!(eventAccessibilityInfo.value || locationAccessibilityInfo.value);
+  return !!(eventAccessibilityInfo.value || venueAccessibilityInfo.value || spaceAccessibilityInfo.value);
 });
 
 /**
@@ -229,7 +250,7 @@ const safePrompt = computed<UrlPrompt | null>(() => {
           <MapPin :size="16" class="card-icon" aria-hidden="true" />
           <h3 class="card-heading">{{ t('event_location') }}</h3>
         </div>
-        <p class="location-name">{{ instance.event.location.name }}</p>
+        <p class="location-name">{{ locationDisplayName }}</p>
         <p v-if="instance.event.location.address" class="location-address">
           <a :href="'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent([instance.event.location.address, instance.event.location.city, instance.event.location.state].filter(Boolean).join(', '))"
              target="_blank"
@@ -245,19 +266,26 @@ const safePrompt = computed<UrlPrompt | null>(() => {
         </p>
       </div>
 
-      <!-- Accessibility card -->
+      <!-- Accessibility card: layered Event + Venue (Place) + Space subsections.
+           Whole card hidden when all three subsections are empty; each subsection
+           hidden independently when its source has no localized content. -->
       <div v-if="hasAccessibilityInfo" class="sidebar-card accessibility-card">
         <div class="card-header">
           <Accessibility :size="16" class="card-icon" aria-hidden="true" />
-          <h3 class="card-heading">{{ t('event_accessibility') }}</h3>
+          <h3 class="card-heading">{{ t('accessibility.section_heading') }}</h3>
         </div>
-        <div v-if="eventAccessibilityInfo && locationAccessibilityInfo">
-          <h4 class="accessibility-subheading">{{ t('event_accessibility_event') }}</h4>
+        <div v-if="eventAccessibilityInfo" class="accessibility-section accessibility-section--event">
+          <h4 class="accessibility-subheading">{{ t('accessibility.event_label') }}</h4>
           <p class="accessibility-info">{{ eventAccessibilityInfo }}</p>
-          <h4 class="accessibility-subheading">{{ t('event_accessibility_venue') }}</h4>
-          <p class="accessibility-info">{{ locationAccessibilityInfo }}</p>
         </div>
-        <p v-else class="accessibility-info">{{ eventAccessibilityInfo || locationAccessibilityInfo }}</p>
+        <div v-if="venueAccessibilityInfo" class="accessibility-section accessibility-section--venue">
+          <h4 class="accessibility-subheading">{{ t('accessibility.venue_label') }}</h4>
+          <p class="accessibility-info">{{ venueAccessibilityInfo }}</p>
+        </div>
+        <div v-if="spaceAccessibilityInfo" class="accessibility-section accessibility-section--space">
+          <h4 class="accessibility-subheading">{{ t('accessibility.space_label') }}</h4>
+          <p class="accessibility-info">{{ spaceAccessibilityInfo }}</p>
+        </div>
       </div>
 
       <!-- Recurrence details card -->
@@ -653,16 +681,19 @@ const safePrompt = computed<UrlPrompt | null>(() => {
   }
 }
 
-// Accessibility card
+// Accessibility card — layered Venue (Place) + Space subsections.
+// Each `.accessibility-section` is an independently hidden labeled block;
+// adjacent sections are spaced via the sibling combinator so the spacing
+// rule survives any combination of present/absent subsections.
+.accessibility-section + .accessibility-section {
+  margin-top: $public-space-md;
+}
+
 .accessibility-subheading {
   font-size: $public-font-size-sm;
   font-weight: $public-font-weight-semibold;
   color: $public-text-secondary-light;
   margin: 0 0 $public-space-xs 0;
-
-  &:not(:first-child) {
-    margin-top: $public-space-md;
-  }
 
   @include public-dark-mode {
     color: $public-text-secondary-dark;

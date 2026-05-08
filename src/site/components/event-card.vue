@@ -18,7 +18,7 @@ const props = defineProps<{
 }>();
 
 const { t } = useTranslation('system');
-const { localizedContent } = useLocalizedContent();
+const { localizedContent, spaceDisplayName } = useLocalizedContent();
 const { localizedPath } = useLocale();
 
 /**
@@ -51,6 +51,19 @@ const timeRange = computed(() => {
  */
 const location = computed(() => {
   return props.instance.event.location ?? null;
+});
+
+/**
+ * Display label for the card location line. Renders "Place — Space" via the
+ * shared i18n format key when a Space is present; otherwise the Place name alone.
+ */
+const locationDisplayName = computed(() => {
+  const placeName = location.value?.name ?? '';
+  const space = spaceDisplayName(props.instance?.event?.space);
+  if (space) {
+    return t('place.format.with_space', { place: placeName, space });
+  }
+  return placeName;
 });
 
 /**
@@ -232,7 +245,7 @@ const detailPath = computed(() => {
           :size="16"
           aria-hidden="true"
         />
-        {{ location.name }}
+        {{ locationDisplayName }}
       </p>
       <p
         v-if="description"

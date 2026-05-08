@@ -159,4 +159,63 @@ describe('LocationEntity', () => {
 
     expect(model.getLanguages()).toHaveLength(0);
   });
+
+  test('toModel sets originUri to null when origin_uri column is null', () => {
+    const entity = LocationEntity.build(sampleData);
+    entity.content = [];
+
+    const model = entity.toModel();
+
+    expect(model.originUri).toBeNull();
+  });
+
+  test('toModel propagates origin_uri when set on the entity', () => {
+    const entity = LocationEntity.build({
+      ...sampleData,
+      origin_uri: 'https://remote.example/places/abc-123',
+    });
+    entity.content = [];
+
+    const model = entity.toModel();
+
+    expect(model.originUri).toBe('https://remote.example/places/abc-123');
+  });
+
+  test('fromModel writes originUri to the origin_uri column', () => {
+    const model = new EventLocation(
+      'https://pavillion.dev/places/loc-fed',
+      'Federated Place',
+    );
+    model.originUri = 'https://remote.example/places/xyz-789';
+
+    const entity = LocationEntity.fromModel(model);
+
+    expect(entity.origin_uri).toBe('https://remote.example/places/xyz-789');
+  });
+
+  test('fromModel writes null origin_uri when model originUri is null', () => {
+    const model = new EventLocation(
+      'https://pavillion.dev/places/loc-local',
+      'Local Place',
+    );
+    // originUri stays at the default null
+
+    const entity = LocationEntity.fromModel(model);
+
+    expect(entity.origin_uri).toBeNull();
+  });
+
+  test('originUri round-trips through model -> entity -> model', () => {
+    const original = new EventLocation(
+      'https://pavillion.dev/places/loc-rt',
+      'Round Trip Place',
+    );
+    original.originUri = 'https://remote.example/places/round-trip';
+
+    const entity = LocationEntity.fromModel(original);
+    entity.content = [];
+    const restored = entity.toModel();
+
+    expect(restored.originUri).toBe('https://remote.example/places/round-trip');
+  });
 });
