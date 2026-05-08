@@ -417,6 +417,7 @@
             "editor_title_edit": "Modifier la salle ou l'espace",
             "field_name": "Nom",
             "field_accessibility_info": "Informations d'accessibilité",
+            "remove_language": "Supprimer la traduction en {{language}}",
             "done": "Terminé",
             "cancel": "Annuler",
             "dismiss_error": "Ignorer l'erreur",

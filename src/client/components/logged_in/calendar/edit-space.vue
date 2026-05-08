@@ -19,6 +19,8 @@ import { useTranslation } from 'i18next-vue';
 import LanguageTabSelector from '@/client/components/common/language-tab-selector.vue';
 import languagePicker from '@/client/components/common/language-picker.vue';
 import { EventLocationSpace, EventLocationSpaceContent } from '@/common/model/location';
+import { useLanguageManagement } from '@/client/composables/useLanguageManagement';
+import { DEFAULT_LANGUAGE_CODE } from '@/common/i18n/languages';
 import iso6391 from 'iso-639-1-dir';
 
 const props = defineProps<{
@@ -52,11 +54,27 @@ const errorContainer = ref<HTMLElement | null>(null);
 const nameByLang = reactive<Record<string, string>>({});
 const accessibilityByLang = reactive<Record<string, string>>({});
 
-// Language tab management.
-const defaultLanguage = 'en';
-const languages = ref<string[]>([defaultLanguage]);
-const currentLanguage = ref(defaultLanguage);
-const showLanguagePicker = ref(false);
+// Language tab management — delegated to useLanguageManagement. Form-buffer
+// keys are kept in sync via the onLanguageAdded / onLanguageRemoved hooks.
+const {
+  languages,
+  availableLanguages,
+  currentLanguage,
+  showLanguagePicker,
+  addLanguage,
+  removeLanguage,
+  openLanguagePicker,
+  closeLanguagePicker,
+} = useLanguageManagement({
+  onLanguageAdded: (l: string) => {
+    if (!(l in nameByLang)) nameByLang[l] = '';
+    if (!(l in accessibilityByLang)) accessibilityByLang[l] = '';
+  },
+  onLanguageRemoved: (l: string) => {
+    delete nameByLang[l];
+    delete accessibilityByLang[l];
+  },
+});
 const langTabs = ref<InstanceType<typeof LanguageTabSelector> | null>(null);
 
 watch(() => state.error, async (newError) => {
@@ -67,26 +85,8 @@ watch(() => state.error, async (newError) => {
   }
 });
 
-const availableLanguages = computed(() => {
-  const allLanguages = iso6391.getAllCodes();
-  return allLanguages.filter((code: string) => !languages.value.includes(code));
-});
-
-function openLanguagePicker() {
-  showLanguagePicker.value = true;
-}
-
-function closeLanguagePicker() {
-  showLanguagePicker.value = false;
-}
-
 function handleAddLanguage(language: string) {
-  if (!languages.value.includes(language)) {
-    languages.value.push(language);
-    if (!(language in nameByLang)) nameByLang[language] = '';
-    if (!(language in accessibilityByLang)) accessibilityByLang[language] = '';
-    currentLanguage.value = language;
-  }
+  addLanguage(language);
   closeLanguagePicker();
 }
 
@@ -111,11 +111,11 @@ function buildStagedSpace(): EventLocationSpace {
     staged.eventCount = source.eventCount;
   }
 
-  for (const lang of languages.value) {
-    const name = (nameByLang[lang] ?? '').trim();
-    const accessibilityInfo = (accessibilityByLang[lang] ?? '').trim();
+  for (const l of languages.value) {
+    const name = (nameByLang[l] ?? '').trim();
+    const accessibilityInfo = (accessibilityByLang[l] ?? '').trim();
     if (name.length > 0 || accessibilityInfo.length > 0) {
-      staged.addContent(new EventLocationSpaceContent(lang, name, accessibilityInfo));
+      staged.addContent(new EventLocationSpaceContent(l, name, accessibilityInfo));
     }
   }
   return staged;
@@ -125,7 +125,7 @@ function buildStagedSpace(): EventLocationSpace {
  * Validate that at least one language has a non-empty name.
  */
 function hasAtLeastOneName(): boolean {
-  return languages.value.some(lang => (nameByLang[lang] ?? '').trim().length > 0);
+  return languages.value.some((l: string) => (nameByLang[l] ?? '').trim().length > 0);
 }
 
 function handleSave() {
@@ -151,8 +151,8 @@ function handleCancel() {
  */
 onBeforeMount(() => {
   // Always seed the default language so the form has at least one tab.
-  if (!(defaultLanguage in nameByLang)) nameByLang[defaultLanguage] = '';
-  if (!(defaultLanguage in accessibilityByLang)) accessibilityByLang[defaultLanguage] = '';
+  if (!(DEFAULT_LANGUAGE_CODE in nameByLang)) nameByLang[DEFAULT_LANGUAGE_CODE] = '';
+  if (!(DEFAULT_LANGUAGE_CODE in accessibilityByLang)) accessibilityByLang[DEFAULT_LANGUAGE_CODE] = '';
 
   const source = props.space ?? null;
   if (!source) {
@@ -160,16 +160,15 @@ onBeforeMount(() => {
   }
 
   const contentLanguages = source.getLanguages();
-  for (const lang of contentLanguages) {
-    if (!languages.value.includes(lang)) {
-      languages.value.push(lang);
-    }
-    const c = source.content(lang);
-    nameByLang[lang] = c.name ?? '';
-    accessibilityByLang[lang] = c.accessibilityInfo ?? '';
-  }
   if (contentLanguages.length > 0) {
+    languages.value = [...new Set([DEFAULT_LANGUAGE_CODE, ...contentLanguages])];
     currentLanguage.value = contentLanguages[0];
+  }
+
+  for (const l of contentLanguages) {
+    const c = source.content(l);
+    nameByLang[l] = c.name ?? '';
+    accessibilityByLang[l] = c.accessibilityInfo ?? '';
   }
 });
 </script>
@@ -210,6 +209,7 @@ onBeforeMount(() => {
         v-model="currentLanguage"
         :languages="languages"
         @add-language="openLanguagePicker"
+        @remove-language="removeLanguage"
       />
 
       <div
@@ -249,6 +249,15 @@ onBeforeMount(() => {
             rows="4"
           />
         </div>
+
+        <button
+          v-if="languages.length > 1"
+          type="button"
+          class="remove-translation-link"
+          @click="removeLanguage(currentLanguage)"
+        >
+          {{ t('remove_language', { language: iso6391.getName(currentLanguage) }) }}
+        </button>
       </div>
 
       <footer class="space-editor-actions">
@@ -377,6 +386,36 @@ onBeforeMount(() => {
   &:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+  }
+}
+
+.remove-translation-link {
+  align-self: flex-start;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--pav-color-red-600);
+  font-size: var(--pav-font-size-sm);
+  font-weight: var(--pav-font-weight-medium);
+  cursor: pointer;
+  transition: color 0.15s ease;
+
+  &:hover {
+    color: var(--pav-color-red-700);
+    text-decoration: underline;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--pav-color-interactive-active);
+    outline-offset: 2px;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    color: var(--pav-color-red-400);
+
+    &:hover {
+      color: var(--pav-color-red-300);
+    }
   }
 }
 

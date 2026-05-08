@@ -417,6 +417,7 @@
             "editor_title_edit": "Edit Room or Space",
             "field_name": "Name",
             "field_accessibility_info": "Accessibility Information",
+            "remove_language": "Remove {{language}} translation",
             "done": "Done",
             "cancel": "Cancel",
             "dismiss_error": "Dismiss error",

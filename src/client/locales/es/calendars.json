@@ -417,6 +417,7 @@
             "editor_title_edit": "Editar sala o espacio",
             "field_name": "Nombre",
             "field_accessibility_info": "Información de accesibilidad",
+            "remove_language": "Eliminar traducción al {{language}}",
             "done": "Listo",
             "cancel": "Cancelar",
             "dismiss_error": "Descartar error",
