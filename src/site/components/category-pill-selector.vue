@@ -84,19 +84,6 @@ const toggleCategory = (category: EventCategory): void => {
 };
 
 /**
- * Handle keyboard interactions
- */
-const handleKeydown = (event: KeyboardEvent, category: EventCategory): void => {
-  if (props.disabled) return;
-  if (isCategoryAbsent(category)) return;
-
-  if (event.key === ' ' || event.key === 'Enter') {
-    event.preventDefault();
-    toggleCategory(category);
-  }
-};
-
-/**
  * Get the display name for a category in the current language
  */
 const getCategoryDisplayName = (category: EventCategory): string => {
@@ -232,6 +219,7 @@ onUnmounted(() => {
       <button
         v-for="category in categories"
         :key="category.id"
+        type="button"
         class="category-pill"
         :class="{
           selected: isCategorySelected(category),
@@ -242,10 +230,7 @@ onUnmounted(() => {
         :aria-disabled="isCategoryAbsent(category) || null"
         :aria-label="getCategoryAriaLabel(category)"
         :title="isCategoryAbsent(category) ? absentTooltip : undefined"
-        role="button"
-        tabindex="0"
         @click="toggleCategory(category)"
-        @keydown="handleKeydown($event, category)"
       >
         <span class="category-name">{{ getCategoryDisplayName(category) }}</span>
         <span
