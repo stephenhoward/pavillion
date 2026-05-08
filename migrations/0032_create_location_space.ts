@@ -3,12 +3,14 @@ import {
   createTableIfNotExists,
   addColumnIfNotExists,
   removeColumnIfExists,
+  addIndexIfNotExists,
+  removeIndexIfExists,
   tableExists,
 } from '../src/server/common/migrations/helpers.js';
 
 /**
- * Create location_space and location_space_content tables, and add the
- * event.space_id column.
+ * Create location_space and location_space_content tables, add event.space_id,
+ * and add origin_uri to location and location_space.
  *
  * Spaces represent named sub-areas within a Place (e.g., a meeting room
  * within a community center, the gazebo in a park). They have translatable
@@ -16,17 +18,29 @@ import {
  * (Place, Space) pair, or to just a Place (whole-venue event).
  *
  * Design:
- * - place_id and space_id foreign keys are declared without ON DELETE
- *   cascade. Cascade behaviour is service-orchestrated rather than enforced
- *   at the DB layer, matching the Place/Space design in the spec: removal
- *   flows through the locations service so domain events fire and dependent
- *   bookkeeping (e.g. event.space_id null-out) happens explicitly.
+ * - place_id is declared without ON DELETE cascade. Cascade behaviour is
+ *   service-orchestrated rather than enforced at the DB layer, matching the
+ *   Place/Space design in the spec: removal flows through the locations
+ *   service so domain events fire and dependent bookkeeping happens
+ *   explicitly.
+ * - event.space_id uses ON DELETE SET NULL. The Place + Spaces atomic-save
+ *   model (pv-0pht) treats Space deletion as the trigger for whole-venue
+ *   fallback: when an owner removes a Space inside the Place save, any
+ *   events still pointing at it should fall back to the parent Place rather
+ *   than block the transaction. Surfacing that semantic through the FK lets
+ *   the LocationService nest the Space delete inside the same transaction
+ *   as the Place upsert without enumerating referencing events.
  * - location_space_content mirrors the location_content shape (no timestamp
  *   columns; translatable rows keyed by language).
  * - event.space_id is nullable: events without a designated sub-area remain
  *   "whole-venue" events.
+ * - origin_uri on location and location_space serves as an identity hint
+ *   for AP-originated records so the inbox can dedup the same source
+ *   Place/Space across many incoming events. Null for locally-created
+ *   records. Indexed to keep the inbound dedup lookup cheap as the table
+ *   grows.
  *
- * Bead: pv-ix7v.1.1.
+ * Bead: pv-ix7v + pv-0pht.
  */
 export default {
   async up({ context: sequelize }: { context: Sequelize }) {
@@ -47,6 +61,10 @@ export default {
           key: 'id',
         },
       },
+      origin_uri: {
+        type: DataTypes.STRING(2048),
+        allowNull: true,
+      },
       createdAt: {
         type: DataTypes.DATE,
         allowNull: false,
@@ -59,8 +77,11 @@ export default {
       },
     });
 
-    await queryInterface.addIndex('location_space', ['place_id'], {
+    await addIndexIfNotExists(queryInterface, 'location_space', ['place_id'], {
       name: 'idx_location_space_place_id',
+    });
+    await addIndexIfNotExists(queryInterface, 'location_space', ['origin_uri'], {
+      name: 'idx_location_space_origin_uri',
     });
 
     await createTableIfNotExists(queryInterface, 'location_space_content', {
@@ -94,7 +115,7 @@ export default {
       },
     });
 
-    await queryInterface.addIndex('location_space_content', ['space_id'], {
+    await addIndexIfNotExists(queryInterface, 'location_space_content', ['space_id'], {
       name: 'idx_location_space_content_space_id',
     });
 
@@ -105,11 +126,23 @@ export default {
         model: 'location_space',
         key: 'id',
       },
+      onDelete: 'SET NULL',
+    });
+
+    await addColumnIfNotExists(queryInterface, 'location', 'origin_uri', {
+      type: DataTypes.STRING(2048),
+      allowNull: true,
+    });
+    await addIndexIfNotExists(queryInterface, 'location', ['origin_uri'], {
+      name: 'idx_location_origin_uri',
     });
   },
 
   async down({ context: sequelize }: { context: Sequelize }) {
     const queryInterface = sequelize.getQueryInterface();
+
+    await removeIndexIfExists(queryInterface, 'location', 'idx_location_origin_uri');
+    await removeColumnIfExists(queryInterface, 'location', 'origin_uri');
 
     await removeColumnIfExists(queryInterface, 'event', 'space_id');
 
