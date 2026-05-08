@@ -201,10 +201,11 @@ describe('LocationPickerModal', () => {
       expect(entry0Text).toContain('Convention Center');
       expect(entry0Text).toContain('(whole venue)');
 
-      // Entry 1: Pacific Room
-      const entry1Text = entries[1].text();
-      expect(entry1Text).toContain('Convention Center');
-      expect(entry1Text).toContain('Pacific Room');
+      // Entry 1: Space entry — primary line is just the Space name; the
+      // parent Place name appears as a de-emphasized secondary line.
+      const entry1 = entries[1];
+      expect(entry1.find('.location-name').text()).toBe('Pacific Room');
+      expect(entry1.find('.location-parent-name').text()).toBe('Convention Center');
     });
 
     it('Place with 2 Spaces renders 3 entries (whole-venue + 2 Spaces)', () => {
@@ -222,8 +223,8 @@ describe('LocationPickerModal', () => {
       expect(entries).toHaveLength(3);
 
       expect(entries[0].text()).toContain('(whole venue)');
-      expect(entries[1].text()).toContain('Pacific Room');
-      expect(entries[2].text()).toContain('Council Chambers');
+      expect(entries[1].find('.location-name').text()).toBe('Pacific Room');
+      expect(entries[2].find('.location-name').text()).toBe('Council Chambers');
     });
 
     it('whole-venue entry emits {placeId, spaceId: null} (NOT undefined)', async () => {
@@ -463,7 +464,7 @@ describe('LocationPickerModal', () => {
       expect(visibleItems).toHaveLength(0);
     });
 
-    it('search "pacific" matches the rendered display string "Convention Center — Pacific Room"', async () => {
+    it('search "pacific" matches the Space whose concatenated name contains "Pacific Room"', async () => {
       const conventionCenter = new EventLocation('place-cc', 'Convention Center', '100 Main St', 'Portland', 'OR', '97201');
       const wrapper = mount(LocationPickerModal, { ...SHEET_GLOBAL, props: {
         locations: [
@@ -482,12 +483,36 @@ describe('LocationPickerModal', () => {
       await searchInput.setValue('pacific');
 
       const visibleItems = wrapper.findAll('.location-item');
-      // Only "Convention Center — Pacific Room" should match (not the whole-venue
-      // entry, not Council Chambers, and not the other Places).
+      // Only the Pacific Room Space entry should match. Search target is the
+      // concatenated "Convention Center — Pacific Room" string, but the row
+      // renders the trimmed "Pacific Room" with "Convention Center" as the
+      // de-emphasized parent line.
       expect(visibleItems).toHaveLength(1);
-      const matched = visibleItems[0].text();
-      expect(matched).toContain('Convention Center');
-      expect(matched).toContain('Pacific Room');
+      expect(visibleItems[0].find('.location-name').text()).toBe('Pacific Room');
+      expect(visibleItems[0].find('.location-parent-name').text()).toBe('Convention Center');
+    });
+
+    it('Space row carries parent Place name as a de-emphasized secondary line so it stays self-describing when search filters out the parent', async () => {
+      // Regression guard: searching for the Space name alone (which won't match
+      // the parent) must still leave the Space row with visible parent context.
+      const conventionCenter = new EventLocation('place-cc', 'Convention Center', '100 Main St', 'Portland', 'OR', '97201');
+      const wrapper = mount(LocationPickerModal, { ...SHEET_GLOBAL, props: {
+        locations: [
+          placeWithSpaces(conventionCenter, [
+            makeSpace('space-pacific', 'place-cc', 'Pacific Room'),
+          ]),
+        ],
+        selectedLocationId: null,
+        selectedSpaceId: null,
+      },
+      });
+
+      await wrapper.find('.search-input-wrapper input').setValue('Pacific Room');
+
+      const visibleItems = wrapper.findAll('.location-item');
+      expect(visibleItems).toHaveLength(1); // parent whole-venue filtered out
+      expect(visibleItems[0].find('.location-name').text()).toBe('Pacific Room');
+      expect(visibleItems[0].find('.location-parent-name').text()).toBe('Convention Center');
     });
   });
 

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
 import { useTranslation } from 'i18next-vue';
-import { Search, MapPin, Check } from 'lucide-vue-next';
+import { Search, MapPin, DoorOpen, Check } from 'lucide-vue-next';
 import PillButton from '@/client/components/common/pill-button.vue';
 import Sheet from '@/client/components/common/Sheet.vue';
 import { useLocalizedContent } from '@/client/composables/useLocalizedContent';
@@ -245,7 +245,8 @@ defineExpose({ close, sheetRef });
             @keydown.enter="handleEntryClick(entry)"
             @keydown.space.prevent="handleEntryClick(entry)"
           >
-            <MapPin :size="20" class="location-icon" />
+            <DoorOpen v-if="entry.isSpaceEntry" :size="20" class="location-icon" />
+            <MapPin v-else :size="20" class="location-icon" />
             <div class="location-info">
               <div class="location-name">
                 <template v-if="entry.isWholeVenue">
@@ -255,11 +256,22 @@ defineExpose({ close, sheetRef });
                     {{ tPlaces('picker.whole_venue_suffix') }}
                   </span>
                 </template>
+                <template v-else-if="entry.isSpaceEntry">
+                  {{ entry.spaceName }}
+                </template>
                 <template v-else>
                   {{ entry.displayName }}
                 </template>
               </div>
-              <div v-if="entry.address" class="location-address">
+              <!--
+                Space entries: show parent Place name (de-emphasized) so the row
+                is self-describing when search filters out the parent. Other
+                entries: show address.
+              -->
+              <div v-if="entry.isSpaceEntry" class="location-parent-name">
+                {{ entry.placeName }}
+              </div>
+              <div v-else-if="entry.address" class="location-address">
                 {{ entry.address }}
               </div>
             </div>
@@ -421,7 +433,8 @@ defineExpose({ close, sheetRef });
     margin-inline-start: 0.25rem;
   }
 
-  .location-address {
+  .location-address,
+  .location-parent-name {
     font-size: 0.875rem;
     color: var(--pav-color-stone-600);
 
