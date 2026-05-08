@@ -208,22 +208,31 @@ async function createEventWithLocation(
 }
 
 /**
- * Click the picker entry whose visible display name matches `entryName`. The
- * entry is matched against the rendered text inside `.location-name`, which
- * carries either the bare Place name or the concatenated "Place — Space"
- * string (or "Place (whole venue)").
+ * Click the picker entry whose visible label matches `entryName`. The picker
+ * splits Space entries across two elements — `.location-name` carries just
+ * the Space name and `.location-parent-name` carries the parent Place — so
+ * the concatenated "Place — Space" string never appears in any single
+ * element. We accept the human-readable "Place — Space" form (matching the
+ * public-detail header) and scope to a `.location-item` containing both
+ * halves; bare Place names and "(whole venue)" entries fall through to a
+ * single-text match on `.location-item`.
  */
 async function selectPickerEntry(page: Page, entryName: string): Promise<void> {
-  // Match the entry by its exact rendered location-name text to avoid
-  // ambiguity. We click the parent .location-item (the role="button" surface)
-  // rather than the inner .location-name, since the click handler is bound on
-  // the parent in the picker template.
-  const nameLocator = page.locator('.location-item .location-name', { hasText: entryName });
-  await expect(nameLocator.first()).toBeVisible({ timeout: 5000 });
+  const dashMatch = entryName.match(/^(.+?)\s+—\s+(.+)$/);
+  let itemLocator;
+  if (dashMatch) {
+    const [, placeName, spaceName] = dashMatch;
+    itemLocator = page
+      .locator('.location-item')
+      .filter({ has: page.locator('.location-name', { hasText: spaceName }) })
+      .filter({ has: page.locator('.location-parent-name', { hasText: placeName }) });
+  }
+  else {
+    itemLocator = page.locator('.location-item').filter({ hasText: entryName });
+  }
 
-  // Walk up to the .location-item parent (the click target).
-  const itemLocator = nameLocator.first().locator('xpath=ancestor::*[contains(@class, "location-item")][1]');
-  await itemLocator.click();
+  await expect(itemLocator.first()).toBeVisible({ timeout: 5000 });
+  await itemLocator.first().click();
 
   // The picker closes itself on selection.
   await page.waitForSelector('dialog.sheet-dialog[open]', { state: 'detached', timeout: 5000 });
