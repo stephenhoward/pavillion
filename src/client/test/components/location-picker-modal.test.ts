@@ -138,6 +138,89 @@ describe('LocationPickerModal', () => {
       expect(items[2].find('.checkmark').exists()).toBe(false);
     });
 
+    it('renders entries as native <button type="button"> with no role/tabindex overrides', () => {
+      // Accessibility regression guard: each picker entry must be a native
+      // <button>, not a div-as-button. The global button:not([role="tab"]) reset
+      // and the .location-item width/text-align delta reproduce the prior
+      // visuals; native semantics ensure AT virtual-cursor activation,
+      // forced-colors mode styling, and built-in Enter/Space activation.
+      const wrapper = mount(LocationPickerModal, { ...SHEET_GLOBAL, props: {
+        locations: mockLocations,
+        selectedLocationId: null,
+        selectedSpaceId: null,
+      },
+      });
+
+      const items = wrapper.findAll('.location-item');
+      expect(items.length).toBeGreaterThan(0);
+
+      // Element + type
+      expect(items[0].element.tagName).toBe('BUTTON');
+      expect(items[0].attributes('type')).toBe('button');
+
+      // Negative regression: no leftover ARIA/keyboard plumbing
+      expect(items[0].attributes('role')).not.toBe('button');
+      expect(items[0].attributes('tabindex')).toBeUndefined();
+    });
+
+    it('wraps entries in <ul role="list"> with one <li> per entry', () => {
+      // Explicit role="list" is a deliberate Safari/VoiceOver workaround:
+      // when CSS removes default markers (via _reset.scss), Safari strips
+      // list semantics. role="list" restores them.
+      const wrapper = mount(LocationPickerModal, { ...SHEET_GLOBAL, props: {
+        locations: mockLocations,
+        selectedLocationId: null,
+        selectedSpaceId: null,
+      },
+      });
+
+      const list = wrapper.find('ul.location-list');
+      expect(list.exists()).toBe(true);
+      expect(list.attributes('role')).toBe('list');
+      expect(list.findAll('li')).toHaveLength(mockLocations.length);
+    });
+
+    it('exposes aria-pressed on selected and unselected entries', () => {
+      const wrapper = mount(LocationPickerModal, { ...SHEET_GLOBAL, props: {
+        locations: mockLocations,
+        selectedLocationId: 'loc-2',
+        selectedSpaceId: null,
+      },
+      });
+
+      const items = wrapper.findAll('.location-item');
+      expect(items[0].attributes('aria-pressed')).toBe('false');
+      expect(items[1].attributes('aria-pressed')).toBe('true');
+      expect(items[2].attributes('aria-pressed')).toBe('false');
+    });
+
+    it('activates via the native button without manual @keydown handlers (no onkeydown attribute, click fires once)', async () => {
+      // Single keyboard-activation invariant. The prior div-as-button shim
+      // had explicit @keydown.enter / @keydown.space.prevent handlers; those
+      // are gone, and a native <button type="button"> converts Enter and
+      // Space into click events at the browser level. We assert (a) no
+      // leftover onkeydown attribute on the rendered element and (b) a click
+      // — which is what Enter/Space dispatch on a real button — emits the
+      // selection exactly once. Testing Enter and Space separately would
+      // over-test JSDOM rather than component logic (per testing-advisor).
+      const wrapper = mount(LocationPickerModal, { ...SHEET_GLOBAL, props: {
+        locations: mockLocations,
+        selectedLocationId: null,
+        selectedSpaceId: null,
+      },
+      });
+
+      const item = wrapper.findAll('.location-item')[0];
+      expect(item.attributes('onkeydown')).toBeUndefined();
+
+      await item.trigger('click');
+
+      const events = wrapper.emitted('location-selected');
+      expect(events).toBeTruthy();
+      expect(events?.length).toBe(1);
+      expect(events?.[0]).toEqual([{ placeId: 'loc-1', spaceId: null }]);
+    });
+
     it('should render footer buttons', () => {
       const wrapper = mount(LocationPickerModal, {
         props: {

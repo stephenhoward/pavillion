@@ -229,55 +229,53 @@ defineExpose({ close, sheetRef });
 
       <!-- Location List -->
       <div class="location-list-container">
-        <div v-if="hasLocations && filteredEntries.length > 0" class="location-list">
-          <div
-            v-for="entry in filteredEntries"
-            :key="entry.key"
-            class="location-item"
-            :class="{
-              selected: isSelected(entry),
-              'is-space-entry': entry.isSpaceEntry,
-            }"
-            role="button"
-            tabindex="0"
-            :aria-label="entry.ariaLabel"
-            @click="handleEntryClick(entry)"
-            @keydown.enter="handleEntryClick(entry)"
-            @keydown.space.prevent="handleEntryClick(entry)"
-          >
-            <DoorOpen v-if="entry.isSpaceEntry" :size="20" class="location-icon" />
-            <MapPin v-else :size="20" class="location-icon" />
-            <div class="location-info">
-              <div class="location-name">
-                <template v-if="entry.isWholeVenue">
-                  <span>{{ entry.placeName }}</span>
-                  {{ ' ' }}
-                  <span class="whole-venue-suffix">
-                    {{ tPlaces('picker.whole_venue_suffix') }}
-                  </span>
-                </template>
-                <template v-else-if="entry.isSpaceEntry">
-                  {{ entry.spaceName }}
-                </template>
-                <template v-else>
-                  {{ entry.displayName }}
-                </template>
+        <ul v-if="hasLocations && filteredEntries.length > 0" role="list" class="location-list">
+          <li v-for="entry in filteredEntries" :key="entry.key">
+            <button
+              type="button"
+              class="location-item"
+              :class="{
+                selected: isSelected(entry),
+                'is-space-entry': entry.isSpaceEntry,
+              }"
+              :aria-label="entry.ariaLabel"
+              :aria-pressed="isSelected(entry)"
+              @click="handleEntryClick(entry)"
+            >
+              <DoorOpen v-if="entry.isSpaceEntry" :size="20" class="location-icon" />
+              <MapPin v-else :size="20" class="location-icon" />
+              <div class="location-info">
+                <div class="location-name">
+                  <template v-if="entry.isWholeVenue">
+                    <span>{{ entry.placeName }}</span>
+                    {{ ' ' }}
+                    <span class="whole-venue-suffix">
+                      {{ tPlaces('picker.whole_venue_suffix') }}
+                    </span>
+                  </template>
+                  <template v-else-if="entry.isSpaceEntry">
+                    {{ entry.spaceName }}
+                  </template>
+                  <template v-else>
+                    {{ entry.displayName }}
+                  </template>
+                </div>
+                <!--
+                  Space entries: show parent Place name (de-emphasized) so the row
+                  is self-describing when search filters out the parent. Other
+                  entries: show address.
+                -->
+                <div v-if="entry.isSpaceEntry" class="location-parent-name">
+                  {{ entry.placeName }}
+                </div>
+                <div v-else-if="entry.address" class="location-address">
+                  {{ entry.address }}
+                </div>
               </div>
-              <!--
-                Space entries: show parent Place name (de-emphasized) so the row
-                is self-describing when search filters out the parent. Other
-                entries: show address.
-              -->
-              <div v-if="entry.isSpaceEntry" class="location-parent-name">
-                {{ entry.placeName }}
-              </div>
-              <div v-else-if="entry.address" class="location-address">
-                {{ entry.address }}
-              </div>
-            </div>
-            <Check v-if="isSelected(entry)" :size="20" class="checkmark" />
-          </div>
-        </div>
+              <Check v-if="isSelected(entry)" :size="20" class="checkmark" />
+            </button>
+          </li>
+        </ul>
 
         <div v-else-if="!hasLocations" class="empty-state">
           <MapPin :size="48" class="empty-icon" />
@@ -353,9 +351,14 @@ defineExpose({ close, sheetRef });
   padding: 1rem;
   border-radius: 0.5rem;
   border: 1px solid var(--pav-color-stone-200);
-  background: white;
+  background: var(--pav-surface-card);
   cursor: pointer;
   transition: all 0.15s ease;
+  // Native button delta over the global button:not([role="tab"]) reset:
+  // entries are full-width rows with leading-aligned content, not the
+  // centered inline-flex shape the global rule sets up.
+  text-align: start;
+  width: 100%;
 
   // Indent and shrink Space entries so they read as children of the Place
   // entry above. Margin (not padding) moves the box itself; a subtle
@@ -388,7 +391,6 @@ defineExpose({ close, sheetRef });
   }
 
   @media (prefers-color-scheme: dark) {
-    background: var(--pav-color-stone-700);
     border-color: var(--pav-color-stone-600);
 
     &:hover {
