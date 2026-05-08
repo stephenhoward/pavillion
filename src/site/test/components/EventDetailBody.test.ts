@@ -210,8 +210,6 @@ beforeAll(async () => {
     event_categories: 'Categories',
     event_location: 'Location',
     event_accessibility: 'Accessibility',
-    event_accessibility_event: 'Event',
-    event_accessibility_venue: 'Venue',
     event_recurring: 'Recurring',
     event_cancelled: 'Cancelled',
     event_source_calendar_label: 'View source calendar {{name}}',
@@ -227,6 +225,7 @@ beforeAll(async () => {
         with_space: '{{place}} — {{space}}',
       },
       space: {
+        event_accessibility_label: 'Event accessibility',
         venue_accessibility_label: 'Venue accessibility',
         space_accessibility_label: 'Space accessibility',
       },
@@ -440,14 +439,59 @@ describe('EventDetailBody', () => {
     });
 
     describe('layered accessibility subsections', () => {
-      it('hides the whole accessibility container when both venue and space are empty', () => {
+      it('hides the whole accessibility container when event, venue, and space are all empty', () => {
         const wrapper = mountBody({
           instance: makeInstance({
+            accessibilityInfo: '',
             location: makePlace({ accessibilityInfo: {} }),
             space: makeSpace({ accessibilityInfo: {} }),
           }),
         });
         expect(wrapper.find('.accessibility-card').exists()).toBe(false);
+        wrapper.unmount();
+      });
+
+      it('renders only the event subsection when only the event has accessibility info', () => {
+        const wrapper = mountBody({
+          instance: makeInstance({
+            accessibilityInfo: 'ASL interpretation provided',
+            location: makePlace({ accessibilityInfo: {} }),
+            space: makeSpace({ accessibilityInfo: {} }),
+          }),
+        });
+        const card = wrapper.find('.accessibility-card');
+        expect(card.exists()).toBe(true);
+        expect(wrapper.find('.accessibility-section--event').exists()).toBe(true);
+        expect(wrapper.find('.accessibility-section--venue').exists()).toBe(false);
+        expect(wrapper.find('.accessibility-section--space').exists()).toBe(false);
+        expect(card.text()).toContain('Event accessibility');
+        expect(card.text()).toContain('ASL interpretation provided');
+        wrapper.unmount();
+      });
+
+      it('renders the event, venue, and space subsections when all three are populated', () => {
+        const wrapper = mountBody({
+          instance: makeInstance({
+            accessibilityInfo: 'ASL interpretation provided',
+            location: makePlace({
+              accessibilityInfo: { en: 'Wheelchair ramp at entrance' },
+            }),
+            space: makeSpace({
+              accessibilityInfo: { en: 'Hearing loop, 3rd floor' },
+            }),
+          }),
+        });
+        const card = wrapper.find('.accessibility-card');
+        expect(card.exists()).toBe(true);
+        expect(wrapper.find('.accessibility-section--event').exists()).toBe(true);
+        expect(wrapper.find('.accessibility-section--venue').exists()).toBe(true);
+        expect(wrapper.find('.accessibility-section--space').exists()).toBe(true);
+        expect(card.text()).toContain('Event accessibility');
+        expect(card.text()).toContain('ASL interpretation provided');
+        expect(card.text()).toContain('Venue accessibility');
+        expect(card.text()).toContain('Wheelchair ramp at entrance');
+        expect(card.text()).toContain('Space accessibility');
+        expect(card.text()).toContain('Hearing loop, 3rd floor');
         wrapper.unmount();
       });
 

@@ -86,11 +86,11 @@ const locationDisplayName = computed(() => {
 });
 
 /**
- * Whether to show the accessibility card. Visible when either the venue or
- * Space has localized accessibility content; hidden when both are empty.
+ * Whether to show the accessibility card. Visible when the event, venue, or
+ * Space has localized accessibility content; hidden when all three are empty.
  */
 const hasAccessibilityInfo = computed(() => {
-  return !!(venueAccessibilityInfo.value || spaceAccessibilityInfo.value);
+  return !!(eventAccessibilityInfo.value || venueAccessibilityInfo.value || spaceAccessibilityInfo.value);
 });
 
 /**
@@ -266,13 +266,17 @@ const safePrompt = computed<UrlPrompt | null>(() => {
         </p>
       </div>
 
-      <!-- Accessibility card: layered Venue (Place) + Space subsections.
-           Whole card hidden when both subsections are empty; each subsection
+      <!-- Accessibility card: layered Event + Venue (Place) + Space subsections.
+           Whole card hidden when all three subsections are empty; each subsection
            hidden independently when its source has no localized content. -->
       <div v-if="hasAccessibilityInfo" class="sidebar-card accessibility-card">
         <div class="card-header">
           <Accessibility :size="16" class="card-icon" aria-hidden="true" />
           <h3 class="card-heading">{{ t('event_accessibility') }}</h3>
+        </div>
+        <div v-if="eventAccessibilityInfo" class="accessibility-section accessibility-section--event">
+          <h4 class="accessibility-subheading">{{ t('place.space.event_accessibility_label') }}</h4>
+          <p class="accessibility-info">{{ eventAccessibilityInfo }}</p>
         </div>
         <div v-if="venueAccessibilityInfo" class="accessibility-section accessibility-section--venue">
           <h4 class="accessibility-subheading">{{ t('place.space.venue_accessibility_label') }}</h4>

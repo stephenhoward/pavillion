@@ -324,6 +324,7 @@ beforeAll(async () => {
         with_space: '{{place}} — {{space}}',
       },
       space: {
+        event_accessibility_label: 'Event accessibility',
         venue_accessibility_label: 'Venue accessibility',
         space_accessibility_label: 'Space accessibility',
       },
@@ -343,8 +344,6 @@ beforeAll(async () => {
             about_this_event: 'About This Event',
             event_categories: 'Categories',
             event_accessibility: 'Accessibility',
-            event_accessibility_event: 'Event Accessibility',
-            event_accessibility_venue: 'Venue Accessibility',
             event_recurring: 'Recurring Event',
             event_location: 'Location',
             event_source_calendar: 'Source Calendar',
@@ -867,7 +866,7 @@ describe('eventInstance location display', () => {
     wrapper.unmount();
   });
 
-  it('should not display accessibility card when neither venue nor space has info', async () => {
+  it('should display the event-level subsection when only the event has accessibility info', async () => {
     mockLocation = null;
     mockEventAccessibilityInfo = 'ASL interpreter will be provided';
 
@@ -876,9 +875,13 @@ describe('eventInstance location display', () => {
       (path) => path,
     );
 
-    // Layered display is venue/space only — event-level accessibilityInfo
-    // no longer drives the accessibility card on the public detail view.
-    expect(wrapper.find('.accessibility-card').exists()).toBe(false);
+    const card = wrapper.find('.accessibility-card');
+    expect(card.exists()).toBe(true);
+    expect(wrapper.find('.accessibility-section--event').exists()).toBe(true);
+    expect(wrapper.find('.accessibility-section--venue').exists()).toBe(false);
+    expect(wrapper.find('.accessibility-section--space').exists()).toBe(false);
+    expect(card.text()).toContain('Event accessibility');
+    expect(card.text()).toContain('ASL interpreter will be provided');
     wrapper.unmount();
   });
 
@@ -907,6 +910,38 @@ describe('eventInstance location display', () => {
     expect(accessibilityCard.text()).toContain('Space accessibility');
     expect(accessibilityCard.text()).toContain('Wheelchair ramp at entrance');
     expect(accessibilityCard.text()).toContain('Hearing loop, 3rd floor');
+    wrapper.unmount();
+  });
+
+  it('should display the event, venue, and space subsections when all three are populated', async () => {
+    mockEventAccessibilityInfo = 'ASL interpretation provided';
+    mockLocation = makeLocationObject(
+      'Convention Center',
+      '100 Main St',
+      'Springfield',
+      'IL',
+      '62701',
+      'US',
+      { en: 'Wheelchair ramp at entrance' },
+    );
+    mockSpace = makeSpaceObject('Pacific Room', { en: 'Hearing loop, 3rd floor' });
+
+    const wrapper = await mountInstance(
+      '/view/test_calendar/events/evt-1/20260301-1000',
+      (path) => path,
+    );
+
+    const card = wrapper.find('.accessibility-card');
+    expect(card.exists()).toBe(true);
+    expect(wrapper.find('.accessibility-section--event').exists()).toBe(true);
+    expect(wrapper.find('.accessibility-section--venue').exists()).toBe(true);
+    expect(wrapper.find('.accessibility-section--space').exists()).toBe(true);
+    expect(card.text()).toContain('Event accessibility');
+    expect(card.text()).toContain('ASL interpretation provided');
+    expect(card.text()).toContain('Venue accessibility');
+    expect(card.text()).toContain('Wheelchair ramp at entrance');
+    expect(card.text()).toContain('Space accessibility');
+    expect(card.text()).toContain('Hearing loop, 3rd floor');
     wrapper.unmount();
   });
 });

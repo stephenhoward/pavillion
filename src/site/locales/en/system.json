@@ -80,13 +80,12 @@
     "about_this_event": "About This Event",
     "event_categories": "Categories",
     "event_accessibility": "Accessibility",
-    "event_accessibility_event": "Event Accessibility",
-    "event_accessibility_venue": "Venue Accessibility",
     "place": {
         "format": {
             "with_space": "{{place}} — {{space}}"
         },
         "space": {
+            "event_accessibility_label": "Event accessibility",
             "venue_accessibility_label": "Venue accessibility",
             "space_accessibility_label": "Space accessibility"
         }
