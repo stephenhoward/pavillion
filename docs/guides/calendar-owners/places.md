@@ -2,7 +2,7 @@
 
 A *place* in Pavillion is a venue you save once and reuse — an address, a name, a few details. Type the venue's address once, attach it to ten events at that venue, and when the venue changes its name or you spot a typo in the address, you fix it once and every event there is updated.
 
-A place can be flat — just an address — or it can have **Rooms & Spaces** inside it: named sub-locations like *Sterling Room*, *Children's Story Corner*, *the gym*, *the back studio*. When a venue hosts events in distinguishably different sub-areas, the rooms live as part of the place, and an event can attach to either the whole venue or a specific room within it.
+A place can be flat — just an address — or it can have rooms and spaces inside it: named sub-locations like *Sterling Room*, *Children's Story Corner*, *the gym*, *the back studio*. When a venue hosts events in distinguishably different sub-areas, the rooms live as part of the place, and an event can attach to either the whole venue or a specific room within it.
 
 This guide covers what places are, how rooms and spaces fit, how to create both, how to attach them to events, and what changes when you edit one. It also covers the cases where a place is the wrong tool — online events, one-off venues — so you don't end up with a list of places you'll never reuse.
 
