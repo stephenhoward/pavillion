@@ -17,8 +17,11 @@
  * Justified Divergence — Genuinely Unique Visual Context.
  *
  * Extracted per the stylesheet-playbook duplication threshold (>10 lines OR
- * 2+ uses). Uses semantic design tokens only — no hardcoded hex, no
- * @media (prefers-color-scheme) blocks at the component layer.
+ * 2+ uses). Uses semantic design tokens for color, spacing, and typography.
+ * The one exception is the `--pav-color-red-*` palette references for the
+ * required-indicator and validation states (rationale documented inline);
+ * those raw tokens require an explicit dark-mode override at the bottom of
+ * this file, matching the red-600/red-400 split used by _calendar-admin.scss.
  */
 
 /* Container for the per-language form fields rendered inside a section card. */
@@ -138,4 +141,30 @@
   margin: 0;
   font-size: var(--pav-font-size-xs);
   color: var(--pav-text-muted);
+}
+
+/*
+ * Dark-mode override for the raw red palette refs above. The red palette
+ * is not a semantic token, so dark adaptation does not happen automatically.
+ * Lighter shades preserve readable contrast on the dark stone surface,
+ * matching the red-600/red-400 split established by _calendar-admin.scss.
+ */
+@media (prefers-color-scheme: dark) {
+  .translatable-form-fields .required-indicator,
+  .translatable-form-fields .form-required {
+    color: var(--pav-color-red-400);
+  }
+
+  .translatable-form-fields .field-input--error {
+    border-color: var(--pav-color-red-300);
+  }
+
+  .translatable-form-fields .field-input--error:focus-visible {
+    outline-color: var(--pav-color-red-400);
+    border-color: var(--pav-color-red-400);
+  }
+
+  .translatable-form-fields .form-error {
+    color: var(--pav-color-red-400);
+  }
 }
