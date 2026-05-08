@@ -197,7 +197,7 @@ form {
 
 .remove-translation-link {
   align-self: flex-start;
-  margin-block-start: 0.5rem;
+  margin-block-start: var(--pav-space-2);
   padding: 0;
   border: none;
   background: none;

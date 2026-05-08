@@ -286,10 +286,10 @@ const {
   availableLanguages,
   currentLanguage,
   showLanguagePicker,
+  addLanguage,
   removeLanguage,
   openLanguagePicker,
   closeLanguagePicker,
-  addLanguage,
 } = useLanguageManagement({
   onLanguageAdded: (language) => {
     if (!localCalendar.value) return;
@@ -334,8 +334,11 @@ const loadSettings = async () => {
       state.defaultDateRange = calendar.defaultDateRange || '2weeks';
       state.defaultEventImage = calendar.defaultEventImage || null;
 
-      // Re-seed the language composable's active list from the entity so
-      // the language tabs reflect the calendar's actual languages.
+      // Re-seed the composable's `languages` so its `availableLanguages`
+      // computed (used by the picker modal) excludes the languages this
+      // calendar already has. The LanguageTabSelector renders tabs from
+      // localCalendar.getLanguages() directly, so the seeding here drives
+      // the picker exclusion list, not the visible tab row.
       const calendarLanguages = localCalendar.value.getLanguages();
       if (calendarLanguages.length > 0) {
         languages.value = [...new Set([DEFAULT_LANGUAGE_CODE, ...calendarLanguages])];
