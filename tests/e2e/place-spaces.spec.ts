@@ -521,7 +521,7 @@ test.describe('Place + Spaces full scenario', () => {
     // confirm dialog. Wait for the modal class.
     await page.waitForSelector('.reassign-space-modal', { timeout: 5000 });
     // Prompt copy carries the event count (we created 2 events on the source).
-    await expect(page.locator('.reassign-space-modal')).toContainText('2 events use this space');
+    await expect(page.locator('.reassign-space-modal')).toContainText('2 events use this room or space');
 
     // 4. Pick TARGET_SPACE in the dropdown. The dropdown excludes the Space
     //    being deleted (covered by component test); the test asserts via
@@ -535,8 +535,8 @@ test.describe('Place + Spaces full scenario', () => {
     }
     await select.selectOption(targetOptionValue);
 
-    // Confirm with the danger PillButton (label "Remove space").
-    await page.locator('.reassign-space-modal').getByRole('button', { name: /^remove space$/i }).click();
+    // Confirm with the danger PillButton (label "Remove room or space").
+    await page.locator('.reassign-space-modal').getByRole('button', { name: /^remove room or space$/i }).click();
 
     // The dialog closes and the source Space row is gone from the staging list.
     await page.waitForSelector('.reassign-space-modal', { state: 'detached', timeout: 5000 });
