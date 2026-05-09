@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import { Search, MapPin, DoorOpen, Check } from 'lucide-vue-next';
 import PillButton from '@/client/components/common/pill-button.vue';
@@ -41,6 +41,11 @@ const { t: tPlaces } = useTranslation('calendars', { keyPrefix: 'places' });
  *   contract); a Place with no `spaces` array is treated as 0 Spaces.
  * @prop {string | null} selectedLocationId - Currently selected Place id, or null.
  * @prop {string | null} selectedSpaceId - Currently selected Space id, or null for whole-venue.
+ * @prop {string} [initialSearch] - Optional seed for the search input. Applied
+ *   on mount and when the prop transitions from empty to non-empty (so a
+ *   parent that re-opens the modal without unmounting it can seed a fresh
+ *   search). Defaults to ''. The user can edit or clear the seeded value
+ *   freely once the modal is open.
  *
  * Emits:
  * @emits location-selected - User picked an entry.
@@ -63,11 +68,14 @@ interface PickerEntry {
   address: string;
 }
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   locations: EventLocation[];
   selectedLocationId: string | null;
   selectedSpaceId: string | null;
-}>();
+  initialSearch?: string;
+}>(), {
+  initialSearch: '',
+});
 
 const emit = defineEmits<{
   (e: 'location-selected', selection: { placeId: string; spaceId: string | null }): void;
@@ -77,8 +85,22 @@ const emit = defineEmits<{
 }>();
 
 const sheetRef = ref<InstanceType<typeof Sheet> | null>(null);
-const searchQuery = ref('');
+// Seed from initialSearch on mount so a parent that opens the modal with a
+// pre-populated query (e.g. resuming a search after creating a new place)
+// sees the term reflected in the input and the filtered list immediately.
+const searchQuery = ref(props.initialSearch);
 const { spaceDisplayName } = useLocalizedContent();
+
+// Re-seed when initialSearch transitions from empty to non-empty. Covers the
+// case where the parent reuses (rather than unmounts) the modal across opens
+// — without this the second open would still show the first open's query.
+// We deliberately do not reseed on non-empty -> non-empty changes or on
+// clears so we never overwrite edits the user has typed mid-session.
+watch(() => props.initialSearch, (next, prev) => {
+  if (next && !prev) {
+    searchQuery.value = next;
+  }
+});
 
 const formatAddress = (location: EventLocation) => {
   const parts = [

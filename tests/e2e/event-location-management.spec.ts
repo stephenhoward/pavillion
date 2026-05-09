@@ -415,26 +415,21 @@ test.describe('Event Location Management End-to-End', () => {
     await expect(createLocationButton).toBeEnabled();
     await createLocationButton.click();
 
-    // After save the create form closes and the new place auto-selects as
-    // whole-venue. Confirm the editor returned to the event with the new
-    // place visible on the LocationDisplayCard.
+    // After save, the create form closes and — because the new place was
+    // staged with a room — the picker re-opens automatically with
+    // whole-venue pre-selected (pv-24jz acceptance criteria). The user has
+    // not yet clicked anything in the re-opened picker.
     await expect(createDialog).not.toBeVisible();
-    const locationCard = page.locator('.location-display-card');
-    await expect(locationCard).toBeVisible();
-    await expect(locationCard).toContainText('Inline Place with Room');
-
-    // Reopen the picker to verify the new room appears and is selectable.
-    // The whole-venue auto-select is the default; the room entry must be
-    // explicitly chosen by the user (auto-room-select-after-save is out of
-    // scope per pv-ibpm.3.2 acceptance criteria).
-    const changeButton = locationCard.getByRole('button', { name: 'Change', exact: true });
-    await expect(changeButton).toBeVisible();
-    await changeButton.click();
     await expect(pickerModal).toBeVisible();
 
     // Search-fallback if there are many entries — narrow to the new place.
+    // pv-24jz.3 will seed the search input automatically; until that wave
+    // lands, fall back to manual filtering so this test stays decoupled
+    // from the seeding mechanism (the contract under test here is "the
+    // picker re-opens and the new room is selectable", not "search is
+    // pre-filled").
     const searchInput = page.locator('.search-input');
-    if (await searchInput.isVisible()) {
+    if (await searchInput.isVisible() && (await searchInput.inputValue()) === '') {
       await searchInput.fill('Inline Place');
     }
 
@@ -444,11 +439,12 @@ test.describe('Event Location Management End-to-End', () => {
     const roomEntry = page.locator('.location-item', { hasText: 'Pacific Room' });
     await expect(roomEntry).toBeVisible();
 
-    // Select the new room.
+    // Select the new room — refines the whole-venue default to the staged room.
     await roomEntry.click();
 
     // Picker closes and the LocationDisplayCard reflects the room selection.
     await expect(pickerModal).not.toBeVisible();
+    const locationCard = page.locator('.location-display-card');
     await expect(locationCard).toBeVisible();
     await expect(locationCard).toContainText('Inline Place with Room');
     await expect(locationCard).toContainText('Pacific Room');

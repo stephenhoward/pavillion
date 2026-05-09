@@ -467,6 +467,93 @@ describe('LocationPickerModal', () => {
     });
   });
 
+  describe('initialSearch prop', () => {
+    const conventionCenter = new EventLocation('place-cc', 'Convention Center', '100 Main St', 'Portland', 'OR', '97201');
+
+    it('seeds the search input from initialSearch on mount and filters the list accordingly', () => {
+      // Mounting with a non-empty initialSearch must (a) populate the input
+      // value and (b) drive the same filter pipeline as a user-typed query,
+      // so the rendered entry list reflects the seeded term immediately.
+      const wrapper = mount(LocationPickerModal, { ...SHEET_GLOBAL, props: {
+        locations: [
+          placeWithSpaces(conventionCenter, []),
+          ...mockLocations,
+        ],
+        selectedLocationId: null,
+        selectedSpaceId: null,
+        initialSearch: 'Convention Center',
+      },
+      });
+
+      const searchInput = wrapper.find<HTMLInputElement>('.search-input-wrapper input');
+      expect(searchInput.element.value).toBe('Convention Center');
+
+      const visibleItems = wrapper.findAll('.location-item');
+      expect(visibleItems).toHaveLength(1);
+      expect(visibleItems[0].find('.location-name').text()).toBe('Convention Center');
+    });
+
+    it('defaults to empty string when initialSearch is omitted (no regression on default behavior)', () => {
+      const wrapper = mount(LocationPickerModal, { ...SHEET_GLOBAL, props: {
+        locations: mockLocations,
+        selectedLocationId: null,
+        selectedSpaceId: null,
+      },
+      });
+
+      const searchInput = wrapper.find<HTMLInputElement>('.search-input-wrapper input');
+      expect(searchInput.element.value).toBe('');
+      expect(wrapper.findAll('.location-item')).toHaveLength(mockLocations.length);
+    });
+
+    it('reseeds searchQuery and filtered list when initialSearch transitions from empty to non-empty on a mounted modal', async () => {
+      // Covers the re-open-without-unmount case: a parent that toggles modal
+      // visibility via a v-if-less wrapper (or keeps the component mounted
+      // and rebinds the prop) must still get the new seed reflected.
+      const wrapper = mount(LocationPickerModal, { ...SHEET_GLOBAL, props: {
+        locations: mockLocations,
+        selectedLocationId: null,
+        selectedSpaceId: null,
+        initialSearch: '',
+      },
+      });
+
+      // Sanity: empty seed shows everything.
+      expect(wrapper.findAll('.location-item')).toHaveLength(mockLocations.length);
+
+      await wrapper.setProps({ initialSearch: 'Second' });
+
+      const searchInput = wrapper.find<HTMLInputElement>('.search-input-wrapper input');
+      expect(searchInput.element.value).toBe('Second');
+
+      const visibleItems = wrapper.findAll('.location-item');
+      expect(visibleItems).toHaveLength(1);
+      expect(visibleItems[0].find('.location-name').text()).toBe('Second Venue');
+    });
+
+    it('does not overwrite a user-typed query when initialSearch stays the same', async () => {
+      // Once the modal is open the user owns the input. A re-render that
+      // leaves initialSearch unchanged must not stomp the user's edits.
+      const wrapper = mount(LocationPickerModal, { ...SHEET_GLOBAL, props: {
+        locations: mockLocations,
+        selectedLocationId: null,
+        selectedSpaceId: null,
+        initialSearch: 'First',
+      },
+      });
+
+      const searchInput = wrapper.find<HTMLInputElement>('.search-input-wrapper input');
+      await searchInput.setValue('Third');
+      expect(searchInput.element.value).toBe('Third');
+
+      // Trigger a re-render with the same prop value (no-op transition).
+      await wrapper.setProps({ initialSearch: 'First' });
+
+      // The user's typed value must survive.
+      expect(searchInput.element.value).toBe('Third');
+    });
+  });
+
   describe('search functionality', () => {
     it('should filter locations by name', async () => {
       const wrapper = mount(LocationPickerModal, { ...SHEET_GLOBAL, props: {
