@@ -136,7 +136,8 @@ export function useLocationManagement() {
       // Auto-select the newly created location
       event.locationId = newLocation.id;
       event.location = newLocation;
-      // Newly-created Place has no Spaces yet — clear any stale space.
+      // Auto-select the whole venue. Inline-staged Spaces become selectable
+      // via the picker; auto-room-select is a deferred follow-up.
       event.space = null;
 
       // Close the create form

@@ -32,7 +32,7 @@ You can create a place two ways: ahead of time from the calendar's **Places** ta
 
 Click <Btn>Save</Btn>. The place — and any rooms you added — are now in your list and available to attach to events.
 
-**From inside the event editor.** While editing an event, click <Btn>Add Location</Btn> in the **Location** section. A picker opens showing every place this calendar already has. If the venue isn't in the list, click <Btn>Create New</Btn>, fill in the basic information and accessibility notes, and confirm. The place is saved to the calendar (it sticks around for future events) and is attached to the event you're editing.
+**From inside the event editor.** While editing an event, click <Btn>Add Location</Btn> in the **Location** section. A picker opens showing every place this calendar already has. If the venue isn't in the list, click <Btn>Create New</Btn>, fill in the basic information, accessibility notes, and any rooms you need, and confirm. The place is saved to the calendar (it sticks around for future events) and is attached to the event you're editing.
 
 The on-the-fly form is the express lane — it covers the venue and any rooms or spaces you need to add. The place is now reusable from any future event on this calendar.
 
