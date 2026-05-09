@@ -422,16 +422,10 @@ test.describe('Event Location Management End-to-End', () => {
     await expect(createDialog).not.toBeVisible();
     await expect(pickerModal).toBeVisible();
 
-    // Search-fallback if there are many entries — narrow to the new place.
-    // pv-24jz.3 will seed the search input automatically; until that wave
-    // lands, fall back to manual filtering so this test stays decoupled
-    // from the seeding mechanism (the contract under test here is "the
-    // picker re-opens and the new room is selectable", not "search is
-    // pre-filled").
+    // The picker's search input is pre-seeded with the new place's name so
+    // the user lands on a list filtered to what they just created.
     const searchInput = page.locator('.search-input');
-    if (await searchInput.isVisible() && (await searchInput.inputValue()) === '') {
-      await searchInput.fill('Inline Place');
-    }
+    await expect(searchInput).toHaveValue('Inline Place with Room');
 
     // Find the room entry. The picker renders the space entry's
     // `.location-name` as just the space name ("Pacific Room") with the
