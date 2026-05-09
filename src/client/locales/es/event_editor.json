@@ -73,6 +73,7 @@
     "title": "Crear ubicación",
     "basic_info_section": "Información básica",
     "accessibility_section": "Información de accesibilidad",
+    "spaces_section": "Rooms & Spaces",
     "name_placeholder": "Nombre de la ubicación *",
     "name_aria_label": "Nombre de la ubicación (obligatorio)",
     "address_placeholder": "Dirección",

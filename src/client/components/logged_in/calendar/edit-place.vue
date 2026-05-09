@@ -351,114 +351,6 @@ form {
   }
 }
 
-/*
- * Spaces section list — scoped to this section. The list-item card with
- * name + accessibility preview + edit/delete buttons is a new pattern; if a
- * second consumer appears, lift the .space-item / .space-actions / .icon-button
- * triplet out into a shared partial. (Tracked in the bead's commit message.)
- */
-.spaces-section .section-card {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-}
-
-.space-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.space-item {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 0.75rem 1rem;
-  border: 1px solid var(--pav-color-stone-200);
-  border-radius: 0.5rem;
-  background: var(--pav-color-stone-50);
-
-  @media (prefers-color-scheme: dark) {
-    border-color: var(--pav-color-stone-700);
-    background: var(--pav-color-stone-900);
-  }
-}
-
-.space-info {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.125rem;
-
-  &__name {
-    font-weight: 500;
-    color: var(--pav-color-stone-900);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-
-    @media (prefers-color-scheme: dark) {
-      color: var(--pav-color-stone-100);
-    }
-  }
-
-  &__meta {
-    font-size: 0.875rem;
-    color: var(--pav-color-stone-600);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-
-    @media (prefers-color-scheme: dark) {
-      color: var(--pav-color-stone-400);
-    }
-  }
-}
-
-.space-actions {
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
-  flex-shrink: 0;
-}
-
-.icon-button {
-  @include admin-icon-button;
-
-  &--danger {
-    @include admin-icon-button--danger;
-  }
-}
-
-.spaces-empty {
-  margin: 0;
-  padding: 0.5rem 0;
-  font-size: 0.9375rem;
-  color: var(--pav-color-stone-600);
-
-  @media (prefers-color-scheme: dark) {
-    color: var(--pav-color-stone-400);
-  }
-}
-
-/* '(new)' affordance applied to staged-but-unsaved Spaces in the list */
-.space-info__new-affordance {
-  margin-inline-start: 0.375rem;
-  font-size: 0.875rem;
-  font-weight: 400;
-  color: var(--pav-color-stone-500);
-
-  @media (prefers-color-scheme: dark) {
-    color: var(--pav-color-stone-400);
-  }
-}
-
 /* Reassign-events dialog (eventCount > 0 branch) */
 .reassign-dialog {
   display: flex;
@@ -547,44 +439,6 @@ form {
   border: 0;
 }
 
-.add-space-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.375rem;
-  width: 100%;
-  padding: 0.5rem 0.875rem;
-  border: 1px dashed var(--pav-color-stone-300);
-  background: transparent;
-  color: var(--pav-color-stone-700);
-  border-radius: 0.5rem;
-  font-size: 0.9375rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
-
-  &:hover {
-    background-color: var(--pav-color-stone-100);
-    border-color: var(--pav-color-stone-400);
-    color: var(--pav-color-stone-900);
-  }
-
-  &:focus-visible {
-    outline: 2px solid var(--pav-color-orange-500);
-    outline-offset: 2px;
-  }
-
-  @media (prefers-color-scheme: dark) {
-    border-color: var(--pav-color-stone-600);
-    color: var(--pav-color-stone-300);
-
-    &:hover {
-      background-color: var(--pav-color-stone-800);
-      border-color: var(--pav-color-stone-500);
-      color: var(--pav-color-stone-100);
-    }
-  }
-}
 </style>
 
 <template>
@@ -766,104 +620,19 @@ form {
           </section>
 
           <!-- SPACES Section — visible in both create and edit modes per
-               the atomic Place + Spaces save model. -->
+               the atomic Place + Spaces save model. The list/inline-editor/
+               add-button surface lives in SpacesEditor; the parent retains
+               ownership of the spaces array (via @update:spaces) and of the
+               eventCount-aware reassign dialog (via @remove-space). -->
           <section class="editor-section spaces-section">
             <h2 class="section-header">{{ t('space.section_title') }}</h2>
 
             <div class="section-card">
-              <!-- Spaces list (working buffer view; staged Spaces show '(new)').
-                   When editing an existing row, the inline editor replaces that
-                   row's list item so the row and the editor never appear side
-                   by side. Add-new renders the editor below the list. -->
-              <ul
-                v-if="spacesForPlace.length > 0"
-                class="space-list"
-              >
-                <template
-                  v-for="space in spacesForPlace"
-                  :key="spaceRowKey(space)"
-                >
-                  <li
-                    v-if="editorOpen && editingSpaceId === spaceRowKey(space)"
-                    class="space-edit-slot"
-                  >
-                    <EditSpace
-                      :space="space"
-                      @save="handleSpaceSaved"
-                      @cancel="closeSpaceEditor"
-                    />
-                  </li>
-                  <li
-                    v-else
-                    class="space-item"
-                  >
-                    <div class="space-info">
-                      <div class="space-info__name">
-                        {{ spaceDisplayName(space) }}
-                        <span
-                          v-if="isStagedSpace(space)"
-                          class="space-info__new-affordance"
-                          aria-hidden="true"
-                        >{{ t('space.reassign_new_suffix') }}</span>
-                      </div>
-                      <div
-                        v-if="spaceAccessibilityPreview(space)"
-                        class="space-info__meta"
-                      >
-                        {{ spaceAccessibilityPreview(space) }}
-                      </div>
-                    </div>
-                    <div class="space-actions">
-                      <button
-                        type="button"
-                        class="icon-button edit-space-button"
-                        :aria-label="t('space.edit_space_button', { name: spaceDisplayName(space) })"
-                        @click="openSpaceEditor(spaceRowKey(space))"
-                      >
-                        <Pencil :size="20" :stroke-width="2" aria-hidden="true" />
-                      </button>
-                      <button
-                        type="button"
-                        class="icon-button icon-button--danger delete-space-button"
-                        :aria-label="t('space.delete_space_button', { name: spaceDisplayName(space) })"
-                        @click="confirmDeleteSpace(space, $event)"
-                      >
-                        <Trash2 :size="20" :stroke-width="2" aria-hidden="true" />
-                      </button>
-                    </div>
-                  </li>
-                </template>
-              </ul>
-
-              <!-- Empty state (hidden while creating the first Space inline). -->
-              <p
-                v-else-if="!(editorOpen && !editingSpaceId)"
-                class="spaces-empty"
-              >
-                {{ t('space.no_spaces') }}
-              </p>
-
-              <!-- Add-new editor: only mounts when creating a new Space.
-                   Editing an existing Space renders the editor inline above
-                   in place of the matching list item. -->
-              <EditSpace
-                v-if="editorOpen && !editingSpaceId"
-                :space="null"
-                @save="handleSpaceSaved"
-                @cancel="closeSpaceEditor"
+              <SpacesEditor
+                :spaces="place.spaces"
+                @update:spaces="onSpacesUpdate"
+                @remove-space="onRemoveSpace"
               />
-
-              <!-- Add Space button (hidden while editor is open) -->
-              <button
-                v-if="!editorOpen"
-                ref="addSpaceButtonRef"
-                type="button"
-                class="add-space-button"
-                @click="openSpaceEditor(null)"
-              >
-                <Plus :size="18" :stroke-width="2" aria-hidden="true" />
-                <span>{{ t('space.add_button') }}</span>
-              </button>
             </div>
           </section>
 
@@ -977,13 +746,13 @@ import { ref, reactive, computed, onBeforeMount, watch, nextTick } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useTranslation } from 'i18next-vue';
 import i18next from 'i18next';
-import { ArrowLeft, Pencil, Plus, Trash2 } from 'lucide-vue-next';
+import { ArrowLeft } from 'lucide-vue-next';
 import LanguageTabSelector from '@/client/components/common/language-tab-selector.vue';
 import languagePicker from '@/client/components/common/language-picker.vue';
 import ConfirmDeleteDialog from '@/client/components/common/confirm-delete-dialog.vue';
 import ModalLayout from '@/client/components/common/modal.vue';
 import PillButton from '@/client/components/common/pill-button.vue';
-import EditSpace from '@/client/components/logged_in/calendar/edit-space.vue';
+import SpacesEditor from '@/client/components/logged_in/calendar/SpacesEditor.vue';
 import LocationService from '@/client/service/location';
 import CalendarService from '@/client/service/calendar';
 import { useToast } from '@/client/composables/useToast';
@@ -1061,21 +830,7 @@ const place = ref<EventLocation>(new EventLocation());
  */
 const pendingReassigns = reactive<Map<string, string>>(new Map());
 
-/**
- * Whether the inline Space editor is open. Decoupled from `editingSpaceId`
- * so that the editor can be opened in create mode (where `editingSpaceId` is
- * intentionally `null`) without colliding with the "closed" sentinel.
- */
-const editorOpen = ref<boolean>(false);
-
-/**
- * The Space currently being edited inline. `null` while the editor is in
- * create mode; otherwise carries the row key (server `id` or `clientId`).
- */
-const editingSpaceId = ref<string | null>(null);
-
-// Refs into the Spaces section.
-const addSpaceButtonRef = ref<HTMLElement | null>(null);
+// Ref into the reassign dialog's cancel button — used by focus-management code.
 const reassignCancelRef = ref<HTMLElement | null>(null);
 
 /**
@@ -1105,32 +860,20 @@ function cloneLocationForBuffer(source: EventLocation): EventLocation {
 }
 
 /**
- * Spaces currently in the working buffer. The list-rendering loop binds to
- * this; existing Spaces use their server `id` as the key, staged Spaces use
- * their `clientId`.
- */
-const spacesForPlace = computed<EventLocationSpace[]>(() => place.value.spaces ?? []);
-
-/**
- * Stable per-row key for the Spaces list. Existing Spaces have a server id;
- * staged Spaces have a clientId.
+ * Helpers retained for the eventCount-aware reassign dialog (which still
+ * lives in this component). Mirror the implementations inside SpacesEditor —
+ * the dialog needs them to render the dropdown options + the prompt copy and
+ * to key the pendingReassigns map. If a third consumer ever needs these,
+ * promote them to a shared `spaces-helpers` module.
  */
 function spaceRowKey(space: EventLocationSpace): string {
   return space.id || (space.clientId ?? '');
 }
 
-/**
- * True when this Space is staged-but-unsaved — used to decorate the list with
- * a '(new)' affordance and to feed the reassign-dialog dropdown.
- */
 function isStagedSpace(space: EventLocationSpace): boolean {
   return !space.id;
 }
 
-/**
- * Pick the best display name for a Space, preferring the current UI language
- * with a fallback to the Space's first available content language.
- */
 function spaceDisplayName(space: EventLocationSpace): string {
   const preferred = space.content(uiLanguage.value)?.name;
   if (preferred && preferred.trim().length > 0) return preferred;
@@ -1139,20 +882,6 @@ function spaceDisplayName(space: EventLocationSpace): string {
     if (name && name.trim().length > 0) return name;
   }
   return t('space.unnamed_space');
-}
-
-/**
- * Pick the best accessibility-info preview for a Space, mirroring the
- * `spaceDisplayName` fallback logic.
- */
-function spaceAccessibilityPreview(space: EventLocationSpace): string {
-  const preferred = space.content(uiLanguage.value)?.accessibilityInfo;
-  if (preferred && preferred.trim().length > 0) return preferred;
-  for (const lang of space.getLanguages()) {
-    const info = space.content(lang)?.accessibilityInfo;
-    if (info && info.trim().length > 0) return info;
-  }
-  return '';
 }
 
 /**
@@ -1181,88 +910,33 @@ const targetEventCount = computed<number>(() => state.spaceToDelete?.eventCount 
 const reassignTargetSpaces = computed<EventLocationSpace[]>(() => {
   if (!state.spaceToDelete) return [];
   const targetKey = spaceRowKey(state.spaceToDelete);
-  return spacesForPlace.value.filter(s => spaceRowKey(s) !== targetKey);
+  return (place.value.spaces ?? []).filter(s => spaceRowKey(s) !== targetKey);
 });
 
 /**
- * Open the inline Space editor. Pass a spaceId to edit (server id OR clientId
- * for a staged-but-unsaved entry), or null to create a new entry.
+ * Receive an `update:spaces` mutation from SpacesEditor (add or edit). The
+ * working buffer's `spaces` array is owned here; SpacesEditor never mutates
+ * `place` directly, so this handler is the single commit point for all
+ * non-removal mutations.
  */
-function openSpaceEditor(spaceIdOrClientId: string | null) {
-  editingSpaceId.value = spaceIdOrClientId;
-  editorOpen.value = true;
+function onSpacesUpdate(updated: EventLocationSpace[]) {
+  place.value.spaces = updated;
 }
 
 /**
- * Close the inline Space editor (used by both cancel and successful save).
- * Returns focus to the Add button so keyboard users land somewhere sensible.
- */
-function closeSpaceEditor() {
-  editorOpen.value = false;
-  editingSpaceId.value = null;
-  nextTick(() => {
-    addSpaceButtonRef.value?.focus();
-  });
-}
-
-/**
- * Generate a transient `clientId` for a freshly-staged Space row. Used to
- * correlate a draft entry with its server-issued `id` after the atomic save
- * (the server echoes `clientId` on every newly-created Space row).
+ * Receive a `remove-space` request from SpacesEditor. Opens the delete-confirm
+ * dialog (or the reassign dialog when eventCount > 0). SpacesEditor is
+ * removal-policy-agnostic by design — it never reads eventCount, so the
+ * branch logic stays here in the parent.
  *
- * Prefers `crypto.randomUUID()` when available (browsers + modern test envs);
- * falls back to a timestamp + random suffix to keep tests deterministic-enough
- * without pulling in a new dependency.
+ * The child emit does not carry the click event, so we record the previously
+ * focused element via `document.activeElement` to keep focus restoration on
+ * cancel working. If activeElement is unavailable (no focused element, or the
+ * body), the focus restore on cancel falls back to <body>, which is acceptable.
  */
-function generateClientId(): string {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID();
-  }
-  return `client-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-}
-
-/**
- * Merge a staged Space content payload into `place.spaces`. Called when the
- * inline editor emits its save event with a freshly-built `EventLocationSpace`.
- *
- * - Edit mode (`editingSpaceId` set): replace the matching working-buffer
- *   entry in place. Identity is keyed on the row key (server `id` for
- *   already-saved Spaces, `clientId` for staged-but-unsaved ones).
- * - Create mode (`editingSpaceId` null): stamp a fresh `clientId` and append.
- *
- * The atomic-save commit (`handleSave`) consumes the resulting `place.spaces`
- * snapshot; the per-row identity is what lets the server's PUT diff and the
- * subsequent `clientId` echo line up with the staged rows.
- */
-function handleSpaceSaved(staged: EventLocationSpace) {
-  const editingKey = editingSpaceId.value;
-
-  if (editingKey) {
-    // Edit mode: replace the matching entry in place. Preserve the row's
-    // existing identity (server id and/or clientId) — the staged payload
-    // already carries them through, so a wholesale replace is correct.
-    place.value.spaces = place.value.spaces.map(s =>
-      spaceRowKey(s) === editingKey ? staged : s,
-    );
-  }
-  else {
-    // Create mode: stamp a fresh clientId so the row has a stable key in the
-    // working buffer until the server echoes back its assigned id.
-    if (!staged.clientId) {
-      staged.clientId = generateClientId();
-    }
-    place.value.spaces = [...place.value.spaces, staged];
-  }
-
-  closeSpaceEditor();
-}
-
-/**
- * Open the delete-confirm dialog for a Space. Branches on `eventCount` are
- * driven entirely by the template `v-if`/`v-else` on the two dialog elements.
- */
-function confirmDeleteSpace(space: EventLocationSpace, event?: Event) {
-  state.deleteTriggerElement = (event?.currentTarget as HTMLElement) ?? null;
+function onRemoveSpace(space: EventLocationSpace) {
+  const active = (typeof document !== 'undefined' ? document.activeElement : null);
+  state.deleteTriggerElement = (active instanceof HTMLElement) ? active : null;
   state.spaceToDelete = space;
   state.reassignTarget = 'whole-venue';
   // Seed the dropdown to the first eligible Space so the select has a
