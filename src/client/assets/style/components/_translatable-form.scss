@@ -6,10 +6,22 @@
  * classes are consumed by:
  *   - edit-place.vue (the Place editor's accessibility section)
  *   - edit-space.vue (the Space editor)
+ *   - edit_event.vue (the Event editor)
+ *   - series-editor.vue (the Series editor)
+ *   - calendar-management/settings.vue (the Calendar settings translatable section)
+ *
+ * The `.form-group` / `.form-input` / `.form-textarea` system used by
+ * `admin/settings.vue` and `common/create-location-form.vue` is intentionally
+ * NOT served by this partial; those forms keep their distinct visual treatment
+ * (rounded-xl pill inputs / mixed translatable+non-translatable layout) per
+ * Justified Divergence — Genuinely Unique Visual Context.
  *
  * Extracted per the stylesheet-playbook duplication threshold (>10 lines OR
- * 2+ uses). Uses semantic design tokens only — no hardcoded hex, no
- * @media (prefers-color-scheme) blocks at the component layer.
+ * 2+ uses). Uses semantic design tokens for color, spacing, and typography.
+ * The one exception is the `--pav-color-red-*` palette references for the
+ * required-indicator and validation states (rationale documented inline);
+ * those raw tokens require an explicit dark-mode override at the bottom of
+ * this file, matching the red-600/red-400 split used by _calendar-admin.scss.
  */
 
 /* Container for the per-language form fields rendered inside a section card. */
@@ -33,12 +45,26 @@
 }
 
 /*
+ * Inline info icon nested in a field label (e.g. accessibility-tooltip
+ * indicator on event-editor labels). Muted color so it does not compete
+ * with the label text.
+ */
+.translatable-form-fields .field-label .info-icon {
+  margin-inline-start: var(--pav-space-1);
+  color: var(--pav-text-muted);
+  cursor: help;
+}
+
+/*
  * Required-field indicator uses the conventional red rather than the design
  * system's `pav-color-error` semantic token (which is purple, reserved for
  * moderation severity). Matches the edit-place.vue convention this partial
- * was extracted from.
+ * was extracted from. `.form-required` is an alias for the same role used
+ * by older consumers (edit_event.vue) and is preserved to keep their
+ * markup stable through this unification.
  */
-.translatable-form-fields .required-indicator {
+.translatable-form-fields .required-indicator,
+.translatable-form-fields .form-required {
   color: var(--pav-color-red-500);
   margin-inline-start: var(--pav-space-1);
 }
@@ -67,4 +93,78 @@
   resize: vertical;
   min-height: 80px;
   line-height: var(--pav-line-height-normal);
+}
+
+/*
+ * `<select class="field-input">` needs an explicit `appearance: none` and
+ * a custom chevron so the dropdown sits inside the same rectangular shell
+ * as text inputs. Used by edit_event.vue's external-link prompt.
+ */
+.translatable-form-fields select.field-input {
+  appearance: none;
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right var(--pav-space-md) center;
+  background-size: 1.25rem 1.25rem;
+  padding-inline-end: var(--pav-space-9);
+}
+
+/*
+ * Validation states. `--error` modifier paints the input border red and
+ * keeps the red ring on focus to signal the invalid state through the
+ * focus interaction. `.form-error` styles the message rendered below.
+ * Both use the conventional red rather than `--pav-color-error` (purple,
+ * reserved for moderation) — same exception documented above for
+ * `.required-indicator` / `.form-required`.
+ */
+.translatable-form-fields .field-input--error {
+  border-color: var(--pav-color-red-400);
+}
+
+.translatable-form-fields .field-input--error:focus-visible {
+  outline-color: var(--pav-color-red-500);
+  border-color: var(--pav-color-red-500);
+  box-shadow: 0 0 0 3px var(--pav-color-red-100);
+}
+
+.translatable-form-fields .form-error {
+  margin: var(--pav-space-1) 0 0;
+  font-size: var(--pav-font-size-xs);
+  color: var(--pav-color-red-600);
+}
+
+/*
+ * Help text under a field. Used by series-editor.vue (URL name help)
+ * and calendar settings. Smaller and muted relative to the field label.
+ */
+.translatable-form-fields .field-help {
+  margin: 0;
+  font-size: var(--pav-font-size-xs);
+  color: var(--pav-text-muted);
+}
+
+/*
+ * Dark-mode override for the raw red palette refs above. The red palette
+ * is not a semantic token, so dark adaptation does not happen automatically.
+ * Lighter shades preserve readable contrast on the dark stone surface,
+ * matching the red-600/red-400 split established by _calendar-admin.scss.
+ */
+@media (prefers-color-scheme: dark) {
+  .translatable-form-fields .required-indicator,
+  .translatable-form-fields .form-required {
+    color: var(--pav-color-red-400);
+  }
+
+  .translatable-form-fields .field-input--error {
+    border-color: var(--pav-color-red-300);
+  }
+
+  .translatable-form-fields .field-input--error:focus-visible {
+    outline-color: var(--pav-color-red-400);
+    border-color: var(--pav-color-red-400);
+  }
+
+  .translatable-form-fields .form-error {
+    color: var(--pav-color-red-400);
+  }
 }

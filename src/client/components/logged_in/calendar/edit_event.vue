@@ -246,96 +246,14 @@ form {
   }
 }
 
-/* Event fields */
-.event-fields {
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
-}
-
-.form-field {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.field-label {
-  font-size: 0.875rem;
-  font-weight: 500;
-  color: var(--pav-color-stone-700);
-
-  @media (prefers-color-scheme: dark) {
-    color: var(--pav-color-stone-300);
-  }
-
-  .info-icon {
-    margin-left: 0.25rem;
-    color: var(--pav-color-stone-400);
-    cursor: help;
-  }
-}
-
-.field-input,
-.field-textarea {
-  // appearance: none needed so WebKit accepts custom padding/height on <select>
-  appearance: none;
-  padding: 0.625rem 0.875rem;
-  border: 1px solid var(--pav-color-stone-200);
-  border-radius: 0.375rem;
-  font-size: 0.9375rem;
-  background: var(--pav-color-stone-50);
-  color: var(--pav-color-stone-900);
-  font-family: inherit;
-  transition: all 0.15s ease;
-
-  &:focus {
-    outline: none;
-    border-color: var(--pav-color-orange-500);
-    background: white;
-  }
-
-  @media (prefers-color-scheme: dark) {
-    background: var(--pav-color-stone-900);
-    border-color: var(--pav-color-stone-600);
-    color: var(--pav-color-stone-100);
-
-    &:focus {
-      background: var(--pav-color-stone-800);
-    }
-  }
-}
-
-select.field-input {
-  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 0.75rem center;
-  background-size: 1.25rem 1.25rem;
-  padding-inline-end: 2.25rem;
-}
-
-.field-input--error {
-  border-color: var(--pav-color-red-400);
-
-  &:focus {
-    border-color: var(--pav-color-red-500);
-    box-shadow: 0 0 0 3px var(--pav-color-red-100);
-  }
-}
-
-.form-error {
-  margin: var(--pav-space-1) 0 0;
-  font-size: var(--pav-font-size-xs);
-  color: var(--pav-color-red-600);
-
-  @media (prefers-color-scheme: dark) {
-    color: var(--pav-color-red-400);
-  }
-}
-
-.form-required {
-  color: var(--pav-color-red-500);
-  margin-inline-start: 0.125rem;
-}
+/*
+ * Form-field layout (.form-field, .field-label, .field-input,
+ * .field-textarea, .field-input--error, .form-error, .form-required,
+ * select.field-input chevron, .field-label .info-icon) and the
+ * .event-fields / .external-link-row container layout are provided by
+ * the shared `_translatable-form.scss` partial via the
+ * `.translatable-form-fields` class added on those container elements.
+ */
 
 .external-link-row {
   display: flex;
@@ -364,12 +282,6 @@ select.field-input {
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border: 0;
-}
-
-.field-textarea {
-  resize: vertical;
-  min-height: 80px;
-  line-height: 1.5;
 }
 
 .remove-translation-link {
@@ -857,7 +769,7 @@ button {
               <!-- Event Content Fields (for selected language) -->
               <div
                 :dir="iso6391.getDir(currentLanguage) === 'rtl' ? 'rtl' : 'ltr'"
-                class="event-fields"
+                class="event-fields translatable-form-fields"
               >
                 <div class="form-field">
                   <label :for="`event-name-${currentLanguage}`" class="field-label">
@@ -938,7 +850,7 @@ button {
           <section class="editor-section">
             <h2 class="section-header">{{ tExternalLink('section_title') }}</h2>
 
-            <div class="section-card">
+            <div class="section-card translatable-form-fields">
               <div class="external-link-row">
                 <div class="form-field external-link-prompt">
                   <label for="event-url-prompt" class="visually-hidden">
@@ -1088,14 +1000,15 @@ button {
                 Add multiple schedules to create events that occur at different times or with different patterns.
               </p>
 
-              <p
-                v-if="fieldErrors.schedule"
-                id="event-schedule-error"
-                class="form-error"
-                role="alert"
-              >
-                {{ fieldErrors.schedule }}
-              </p>
+              <div v-if="fieldErrors.schedule" class="translatable-form-fields">
+                <p
+                  id="event-schedule-error"
+                  class="form-error"
+                  role="alert"
+                >
+                  {{ fieldErrors.schedule }}
+                </p>
+              </div>
 
               <!-- Cancellations Panel Trigger (only for recurring events) -->
               <div

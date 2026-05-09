@@ -246,7 +246,7 @@ onMounted(() => {
         <section class="editor-section">
           <h2 class="section-header">{{ tEditor('details_section') }}</h2>
 
-          <div class="section-card">
+          <div class="section-card translatable-form-fields">
             <!-- URL Name field - only shown for new series -->
             <div v-if="!localSeries?.id" class="form-field">
               <label class="field-label" for="series-url-name">
@@ -322,7 +322,7 @@ onMounted(() => {
         <section class="editor-section">
           <h2 class="section-header">{{ tEditor('image_section') }}</h2>
 
-          <div class="section-card">
+          <div class="section-card translatable-form-fields">
             <!-- Existing image preview (hidden when a new upload is in progress) -->
             <div v-if="currentMedia && !hasNewUpload" class="current-image-section">
               <p class="field-label">{{ tEditor('current_image') }}</p>
@@ -583,94 +583,17 @@ onMounted(() => {
   }
 }
 
-/* Form fields */
+/*
+ * Form-field styling (.form-field, .field-label, .field-input,
+ * .field-textarea, .field-help) is provided by the shared
+ * `_translatable-form.scss` partial via the `.translatable-form-fields`
+ * class added on .section-card. The .event-fields container uses the
+ * same flex column layout as .section-card itself.
+ */
 .event-fields {
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
-}
-
-.form-field {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.field-label {
-  font-size: 0.875rem;
-  font-weight: 500;
-  color: var(--pav-color-stone-700);
-
-  @media (prefers-color-scheme: dark) {
-    color: var(--pav-color-stone-300);
-  }
-}
-
-.field-input {
-  padding: 0.625rem 0.875rem;
-  border: 1px solid var(--pav-color-stone-200);
-  border-radius: 0.375rem;
-  font-size: 0.9375rem;
-  background: var(--pav-color-stone-50);
-  color: var(--pav-color-stone-900);
-  font-family: inherit;
-  transition: all 0.15s ease;
-
-  &:focus {
-    outline: none;
-    border-color: var(--pav-color-orange-500);
-    background: white;
-  }
-
-  @media (prefers-color-scheme: dark) {
-    background: var(--pav-color-stone-900);
-    border-color: var(--pav-color-stone-600);
-    color: var(--pav-color-stone-100);
-
-    &:focus {
-      background: var(--pav-color-stone-800);
-    }
-  }
-}
-
-.field-textarea {
-  padding: 0.625rem 0.875rem;
-  border: 1px solid var(--pav-color-stone-200);
-  border-radius: 0.375rem;
-  font-size: 0.9375rem;
-  background: var(--pav-color-stone-50);
-  color: var(--pav-color-stone-900);
-  font-family: inherit;
-  transition: all 0.15s ease;
-  resize: vertical;
-  min-height: 80px;
-  line-height: 1.5;
-
-  &:focus {
-    outline: none;
-    border-color: var(--pav-color-orange-500);
-    background: white;
-  }
-
-  @media (prefers-color-scheme: dark) {
-    background: var(--pav-color-stone-900);
-    border-color: var(--pav-color-stone-600);
-    color: var(--pav-color-stone-100);
-
-    &:focus {
-      background: var(--pav-color-stone-800);
-    }
-  }
-}
-
-.field-help {
-  margin: 0;
-  font-size: 0.75rem;
-  color: var(--pav-color-stone-500);
-
-  @media (prefers-color-scheme: dark) {
-    color: var(--pav-color-stone-400);
-  }
+  gap: var(--pav-space-lg);
 }
 
 .remove-translation-link {
