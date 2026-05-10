@@ -4,7 +4,9 @@ import { useTranslation } from 'i18next-vue';
 import Sheet from '@/client/components/common/Sheet.vue';
 import PillButton from '@/client/components/common/pill-button.vue';
 import LanguageTabSelector from '@/client/components/common/language-tab-selector.vue';
+import SpacesEditor from '@/client/components/logged_in/calendar/SpacesEditor.vue';
 import { useLanguageManagement } from '@/client/composables/useLanguageManagement';
+import { EventLocationSpace } from '@/common/model/location';
 
 const { t } = useTranslation('event_editor', { keyPrefix: 'create_location' });
 
@@ -54,6 +56,12 @@ const formData = reactive({
 // Accessibility info keyed by language
 const accessibilityInfo = reactive<Record<string, string>>({});
 
+// Staged rooms/spaces. Empty by default; the SpacesEditor v-model writes here.
+// On submit, the array is mapped to plain objects and stamped onto the
+// emitted payload — the atomic Place + Spaces wire contract preserves nested
+// spaces[] through EventLocation.fromObject() in useLocationManagement.
+const spaces = ref<EventLocationSpace[]>([]);
+
 // Validation
 const isValid = computed(() => {
   return formData.name.trim().length > 0;
@@ -65,6 +73,15 @@ const handleAddLanguage = () => {
 
 const handleBackToSearch = () => {
   emit('back-to-search');
+};
+
+// SpacesEditor is removal-policy-agnostic: it emits `remove-space` and never
+// mutates the array itself. For this brand-new-place flow no persisted Spaces
+// exist, so a simple filter (matched on `id || clientId`) is sufficient.
+const handleRemoveSpace = (space: EventLocationSpace) => {
+  spaces.value = spaces.value.filter(s =>
+    (s.id || s.clientId) !== (space.id || space.clientId),
+  );
 };
 
 const handleSubmit = () => {
@@ -102,6 +119,13 @@ const handleSubmit = () => {
       };
     }
   }
+
+  // Stamp staged rooms onto the payload. Always include `spaces` (even when
+  // empty) per the model's stable wire contract — see EventLocation.toObject()
+  // which always emits `spaces`. The atomic Place + Spaces wire contract
+  // preserves nested spaces[] through EventLocation.fromObject() in
+  // useLocationManagement.createLocation().
+  locationData.spaces = spaces.value.map(s => s.toObject());
 
   emit('create-location', locationData);
 };
@@ -199,6 +223,14 @@ const handleSubmit = () => {
             rows="4"
           />
         </div>
+      </section>
+
+      <section class="form-section">
+        <h3 class="section-title">{{ t('spaces_section') }}</h3>
+        <SpacesEditor
+          v-model:spaces="spaces"
+          @remove-space="handleRemoveSpace"
+        />
       </section>
 
       <div

@@ -93,6 +93,29 @@ describe('useLocationManagement', () => {
       expect(availableLocations.value).toEqual(mockLocations);
       expect(showLocationPicker.value).toBe(true);
     });
+
+    it('should default initialSearch to empty string when options are omitted', async () => {
+      vi.spyOn(LocationService.prototype, 'getLocations').mockResolvedValue([]);
+
+      const { openLocationPicker, initialSearch } = useLocationManagement();
+
+      // Pre-seed something to confirm a fresh open clears it.
+      initialSearch.value = 'stale value';
+
+      await openLocationPicker('calendar123');
+
+      expect(initialSearch.value).toBe('');
+    });
+
+    it('should seed initialSearch when options.initialSearch is provided', async () => {
+      vi.spyOn(LocationService.prototype, 'getLocations').mockResolvedValue([]);
+
+      const { openLocationPicker, initialSearch } = useLocationManagement();
+
+      await openLocationPicker('calendar123', { initialSearch: 'Convention Center' });
+
+      expect(initialSearch.value).toBe('Convention Center');
+    });
   });
 
   describe('selectLocation', () => {
@@ -154,6 +177,21 @@ describe('useLocationManagement', () => {
 
       expect(event.space).toBeNull();
     });
+
+    it('should reset initialSearch when picker closes via selectLocation', () => {
+      const { selectLocation, availableLocations, initialSearch } = useLocationManagement();
+
+      const place = new EventLocation('place-cc', 'Convention Center');
+      availableLocations.value = [place];
+
+      // Simulate the post-create state where the picker is open and seeded.
+      initialSearch.value = 'Convention Center';
+
+      const event = new CalendarEvent('event1', 'calendar1');
+      selectLocation({ placeId: 'place-cc', spaceId: null }, event);
+
+      expect(initialSearch.value).toBe('');
+    });
   });
 
   describe('createNewLocation', () => {
@@ -214,6 +252,67 @@ describe('useLocationManagement', () => {
         createLocation('calendar1', { name: 'Test' }, event),
       ).rejects.toThrow('Creation failed');
     });
+
+    it('should NOT re-open picker or touch initialSearch when new place has zero spaces', async () => {
+      const newLocation = new EventLocation('loc-zero', 'Zero-Space Venue', '1 First St');
+      // Belt-and-suspenders: model defaults spaces to [], but assert the precondition.
+      expect(newLocation.spaces).toHaveLength(0);
+
+      vi.spyOn(LocationService.prototype, 'createLocation').mockResolvedValue(newLocation);
+
+      const {
+        createLocation,
+        showLocationPicker,
+        showCreateLocationForm,
+        initialSearch,
+      } = useLocationManagement();
+
+      // Open create form first (typical flow)
+      showCreateLocationForm.value = true;
+
+      const event = new CalendarEvent('event1', 'calendar1');
+
+      await createLocation('calendar1', { name: 'Zero-Space Venue' }, event);
+
+      // Form closes, picker stays closed, initialSearch untouched.
+      expect(showCreateLocationForm.value).toBe(false);
+      expect(showLocationPicker.value).toBe(false);
+      expect(initialSearch.value).toBe('');
+      // event.space pre-selected to whole-venue (null).
+      expect(event.space).toBeNull();
+    });
+
+    it('should re-open picker seeded with new place name when new place has >=1 spaces', async () => {
+      const newLocation = new EventLocation('loc-multi', 'Convention Center', '500 Center Way');
+      const space = new EventLocationSpace('space-pacific', 'loc-multi');
+      space.addContent(new EventLocationSpaceContent('en', 'Pacific Room', ''));
+      newLocation.spaces = [space];
+
+      vi.spyOn(LocationService.prototype, 'createLocation').mockResolvedValue(newLocation);
+
+      const {
+        createLocation,
+        showLocationPicker,
+        showCreateLocationForm,
+        initialSearch,
+      } = useLocationManagement();
+
+      // Open create form first (typical flow)
+      showCreateLocationForm.value = true;
+
+      const event = new CalendarEvent('event1', 'calendar1');
+
+      await createLocation('calendar1', { name: 'Convention Center' }, event);
+
+      // Form closes, picker re-opens, initialSearch seeded with the new place name.
+      expect(showCreateLocationForm.value).toBe(false);
+      expect(showLocationPicker.value).toBe(true);
+      expect(initialSearch.value).toBe('Convention Center');
+      // event.space pre-selected to whole-venue (null) — picker UI handles
+      // rendering the whole-venue checkmark via prop-driven logic.
+      expect(event.space).toBeNull();
+      expect(event.locationId).toBe('loc-multi');
+    });
   });
 
   describe('removeLocation', () => {
@@ -234,6 +333,21 @@ describe('useLocationManagement', () => {
       expect(event.location?.id).toBe('');
       expect(event.location?.name).toBe('');
       expect(showLocationPicker.value).toBe(false);
+    });
+
+    it('should reset initialSearch when picker closes via removeLocation', () => {
+      const { removeLocation, showLocationPicker, initialSearch } = useLocationManagement();
+
+      showLocationPicker.value = true;
+      initialSearch.value = 'Convention Center';
+
+      const event = new CalendarEvent('event1', 'calendar1');
+      event.locationId = 'loc1';
+      event.location = new EventLocation('loc1', 'Test Venue');
+
+      removeLocation(event);
+
+      expect(initialSearch.value).toBe('');
     });
   });
 

@@ -73,6 +73,7 @@
     "title": "Create Location",
     "basic_info_section": "Basic Information",
     "accessibility_section": "Accessibility Information",
+    "spaces_section": "Rooms & Spaces",
     "name_placeholder": "Location name *",
     "name_aria_label": "Location name (required)",
     "address_placeholder": "Street address",

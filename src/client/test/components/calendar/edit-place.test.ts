@@ -92,10 +92,10 @@ const routes: RouteRecordRaw[] = [
 let routerPushSpy: ReturnType<typeof vi.fn>;
 
 /**
- * Module-level "next staged Space name" used by the EditSpaceStub when it
- * emits `save`. Tests can write to this variable BEFORE clicking the stub's
- * Save button to control what name the staged payload carries — used by the
- * (new) affordance and clientId-echo end-to-end tests.
+ * Module-level "next staged Space name" used by the SpacesEditorStub when the
+ * Add button is clicked. Tests can write to this variable BEFORE clicking the
+ * stub's Add button to control what name the staged payload carries — used by
+ * the (new) affordance and clientId-echo end-to-end tests.
  *
  * Default value ('Stub Space') keeps existing tests that don't care about the
  * name working unchanged. Reset in `beforeEach`.
@@ -103,38 +103,70 @@ let routerPushSpy: ReturnType<typeof vi.fn>;
 let nextStagedSpaceName = 'Stub Space';
 
 /**
- * Stub for the EditSpace child. The real component is tested independently
- * (`edit-space.test.ts`); stubbing it isolates this test to the parent's
- * staging buffer + dialog behavior.
+ * Stub for the SpacesEditor child. The real component is tested independently
+ * (`SpacesEditor.test.ts`); stubbing it at the new component boundary isolates
+ * this test to the parent's working-buffer + reassign-dialog behavior.
  *
- * The stub mirrors the real child's emit contract: it emits `save` with a
- * freshly-built `EventLocationSpace` carrying per-language content. When the
- * `space` prop is set (edit mode), the staged payload preserves the source
- * row's `id`, `placeId`, and `clientId` so the parent's edit-merge path is
- * exercised. The staged name is read from the module-level
- * `nextStagedSpaceName` so tests can target specific names.
+ * The stub mirrors SpacesEditor's contract:
+ *   - props: `spaces` (the working buffer)
+ *   - emits: `update:spaces` (add/edit) and `remove-space` (delete request)
+ *
+ * Add path: clicking `.add-space-button` stages a new EventLocationSpace
+ * carrying a fresh `clientId` (matching SpacesEditor's clientId stamping in
+ * create mode) and emits `update:spaces` with the appended array. The clientId
+ * stamp is load-bearing for the post-save reassign translation contract — the
+ * parent's idMap depends on every staged row carrying a clientId.
+ *
+ * Delete path: clicking `.space-item .delete-space-button` emits `remove-space`
+ * with the targeted Space, which the parent's `onRemoveSpace` consumes to open
+ * the delete-confirm or reassign dialog.
+ *
+ * The stub does NOT implement an inline edit affordance; in-place edit is an
+ * internal SpacesEditor concern and is covered by SpacesEditor.test.ts.
  */
-const EditSpaceStub = {
-  name: 'EditSpace',
-  props: ['space'],
-  emits: ['save', 'cancel'],
+const SpacesEditorStub = {
+  name: 'SpacesEditor',
+  props: ['spaces'],
+  emits: ['update:spaces', 'remove-space'],
   methods: {
-    buildStaged(this: { space?: EventLocationSpace | null }): EventLocationSpace {
-      const source = this.space ?? null;
-      const staged = new EventLocationSpace(
-        source?.id || undefined,
-        source?.placeId || undefined,
-      );
-      if (source?.clientId) staged.clientId = source.clientId;
-      const name = source ? source.content('en').name : nextStagedSpaceName;
-      staged.addContent(new EventLocationSpaceContent('en', name, ''));
-      return staged;
+    stageNewSpace(this: { spaces: EventLocationSpace[]; $emit: (event: string, ...args: unknown[]) => void }) {
+      const staged = new EventLocationSpace(undefined, undefined);
+      // Stamp a fresh clientId to mirror SpacesEditor's create-mode behavior.
+      // The parent's post-save reassign loop relies on this token for the
+      // clientId → serverId echo translation.
+      staged.clientId = `client-${Math.random().toString(36).slice(2, 10)}`;
+      staged.addContent(new EventLocationSpaceContent('en', nextStagedSpaceName, ''));
+      this.$emit('update:spaces', [...(this.spaces ?? []), staged]);
     },
   },
   template: `
-    <div class="space-editor">
-      <button type="button" class="btn-cancel" @click="$emit('cancel')">Cancel</button>
-      <button type="button" class="btn-save" @click="$emit('save', buildStaged())">Save</button>
+    <div class="spaces-editor">
+      <ul class="space-list" v-if="spaces && spaces.length > 0">
+        <li
+          v-for="space in spaces"
+          :key="space.id || space.clientId"
+          class="space-item"
+        >
+          <span class="space-info__name">
+            {{ space.content('en')?.name || '' }}
+            <span v-if="!space.id" class="space-info__new-affordance">(new)</span>
+          </span>
+          <button
+            type="button"
+            class="icon-button edit-space-button"
+          >Edit</button>
+          <button
+            type="button"
+            class="icon-button delete-space-button"
+            @click="$emit('remove-space', space)"
+          >Delete</button>
+        </li>
+      </ul>
+      <button
+        type="button"
+        class="add-space-button"
+        @click="stageNewSpace"
+      >Add</button>
     </div>
   `,
 };
@@ -175,7 +207,7 @@ const createWrapper = async (
     props: routeName === 'place_edit' ? { placeId: params.placeId } : {},
     pinia,
     stubs: {
-      EditSpace: EditSpaceStub,
+      SpacesEditor: SpacesEditorStub,
       ModalLayout: ModalLayoutStub,
       ...(options.stubs ?? {}),
     },
@@ -526,49 +558,17 @@ describe('EditPlaceView', () => {
       expect(items[0].text()).toContain('Pacific Room');
     });
 
-    it('renders an Add Space button', async () => {
+    it('renders SpacesEditor with an Add Space button', async () => {
       const wrapper = await createWrapper('place_edit', { placeId: 'loc-1' });
       const addBtn = wrapper.find('.spaces-section .add-space-button');
       expect(addBtn.exists()).toBe(true);
-      expect(addBtn.text()).toContain('Add room or space');
     });
 
-    it('mounts the inline editor when Add Space button is clicked', async () => {
-      const wrapper = await createWrapper('place_edit', { placeId: 'loc-1' });
-
-      expect(wrapper.find('.space-editor').exists()).toBe(false);
-      await wrapper.find('.add-space-button').trigger('click');
-      await flushPromises();
-
-      expect(wrapper.find('.space-editor').exists()).toBe(true);
-    });
-
-    it('mounts the inline editor with the existing space when Edit is clicked', async () => {
-      mockGetLocationById.mockResolvedValueOnce(
-        createMockLocation('loc-1', 'Community Center', [
-          createMockSpace('space-1', 'loc-1', [{ language: 'en', name: 'Pacific Room' }]),
-        ]),
-      );
-      const wrapper = await createWrapper('place_edit', { placeId: 'loc-1' });
-
-      await wrapper.find('.space-item .edit-space-button').trigger('click');
-      await flushPromises();
-
-      expect(wrapper.find('.space-editor').exists()).toBe(true);
-    });
-
-    it('closes the inline editor when child emits cancel', async () => {
-      const wrapper = await createWrapper('place_edit', { placeId: 'loc-1' });
-
-      await wrapper.find('.add-space-button').trigger('click');
-      await flushPromises();
-      expect(wrapper.find('.space-editor').exists()).toBe(true);
-
-      await wrapper.find('.space-editor .btn-cancel').trigger('click');
-      await flushPromises();
-
-      expect(wrapper.find('.space-editor').exists()).toBe(false);
-    });
+    // Inline-editor mount/close behavior is owned by SpacesEditor and is
+    // covered by SpacesEditor.test.ts. The parent boundary tests below cover
+    // only the parent's responsibilities: passing `place.spaces` into the
+    // child, receiving `update:spaces` mutations, and routing `remove-space`
+    // emissions through the delete-confirm/reassign dialog.
   });
 
   describe('Delete-Space dialog branch', () => {
@@ -737,53 +737,25 @@ describe('EditPlaceView', () => {
     });
   });
 
-  describe('Staging buffer: handleSpaceSaved merge path', () => {
-    // The EditSpaceStub emits `save` with a real EventLocationSpace payload
-    // (per the emit contract); the parent's `handleSpaceSaved` decides
-    // whether to append (create) or replace-in-place (edit). This block
-    // exercises both paths through the parent's wiring rather than through
-    // child-internal logic.
+  describe('Staging buffer: SpacesEditor → place.spaces commit path', () => {
+    // The SpacesEditorStub emits `update:spaces` with the appended array when
+    // the Add button is clicked; the parent's `onSpacesUpdate` writes the new
+    // array onto `place.value.spaces`. This block exercises the parent's
+    // working-buffer commit point without reaching into the child's internal
+    // editor state machine — that lives in SpacesEditor.test.ts.
 
-    it('appends a staged Space to the list when Add Space → stub Save is clicked', async () => {
+    it('appends a staged Space to the list when SpacesEditor emits update:spaces', async () => {
       const wrapper = await createWrapper('place_edit', { placeId: 'loc-1' });
 
       // Pre-condition: no spaces on this Place.
       expect(wrapper.findAll('.space-item').length).toBe(0);
 
-      // Open the inline editor and emit save with a payload named 'Pacific Room'.
+      // Stub stages a new row with name 'Pacific Room' and emits update:spaces.
       nextStagedSpaceName = 'Pacific Room';
       await wrapper.find('.add-space-button').trigger('click');
       await flushPromises();
-      await wrapper.find('.space-editor .btn-save').trigger('click');
-      await flushPromises();
 
       // The new Space appears in the list with its name.
-      const items = wrapper.findAll('.space-item');
-      expect(items.length).toBe(1);
-      expect(items[0].text()).toContain('Pacific Room');
-    });
-
-    it('replaces an existing Space row in place when Edit → stub Save is clicked', async () => {
-      mockGetLocationById.mockResolvedValueOnce(
-        createMockLocation('loc-1', 'Community Center', [
-          createMockSpace('space-1', 'loc-1', [{ language: 'en', name: 'Pacific Room' }]),
-        ]),
-      );
-      const wrapper = await createWrapper('place_edit', { placeId: 'loc-1' });
-
-      // Pre-condition: one existing Space.
-      expect(wrapper.findAll('.space-item').length).toBe(1);
-
-      // Open the editor for the existing Space; the stub passes the source
-      // row through, so its `buildStaged()` will preserve id+placeId and use
-      // the existing name "Pacific Room" — exercising the in-place replace.
-      await wrapper.find('.space-item .edit-space-button').trigger('click');
-      await flushPromises();
-      await wrapper.find('.space-editor .btn-save').trigger('click');
-      await flushPromises();
-
-      // Still one row, still named "Pacific Room" — the row was replaced
-      // in-place, not appended.
       const items = wrapper.findAll('.space-item');
       expect(items.length).toBe(1);
       expect(items[0].text()).toContain('Pacific Room');
@@ -804,13 +776,11 @@ describe('EditPlaceView', () => {
       nextStagedSpaceName = 'Pacific Room';
       await wrapper.find('.add-space-button').trigger('click');
       await flushPromises();
-      await wrapper.find('.space-editor .btn-save').trigger('click');
-      await flushPromises();
 
       const items = wrapper.findAll('.space-item');
       expect(items.length).toBe(1);
-      // Affordance is present on the staged row — text is the resolved
-      // `(new)` copy from places.space.reassign_new_suffix.
+      // Affordance is present on the staged row — the SpacesEditorStub
+      // mirrors SpacesEditor's `!space.id` rule for rendering it.
       const affordance = items[0].find('.space-info__new-affordance');
       expect(affordance.exists()).toBe(true);
       expect(affordance.text()).toBe('(new)');
@@ -824,8 +794,6 @@ describe('EditPlaceView', () => {
       await wrapper.find('#place-name').setValue('New Place');
       nextStagedSpaceName = 'Pacific Room';
       await wrapper.find('.add-space-button').trigger('click');
-      await flushPromises();
-      await wrapper.find('.space-editor .btn-save').trigger('click');
       await flushPromises();
 
       // Sanity: affordance is present pre-save.
@@ -886,11 +854,11 @@ describe('EditPlaceView', () => {
 
       const wrapper = await createWrapper('place_edit', { placeId: 'loc-1' });
 
-      // Stage a brand-new Space (clientId only, no server id).
+      // Stage a brand-new Space (clientId only, no server id). The
+      // SpacesEditorStub stamps a fresh clientId on Add to mirror SpacesEditor's
+      // create-mode behavior — the parent's idMap depends on it.
       nextStagedSpaceName = 'Atlantic Room';
       await wrapper.find('.add-space-button').trigger('click');
-      await flushPromises();
-      await wrapper.find('.space-editor .btn-save').trigger('click');
       await flushPromises();
 
       // Confirm the new Space rendered with the (new) affordance.

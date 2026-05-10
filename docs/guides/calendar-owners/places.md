@@ -32,12 +32,15 @@ You can create a place two ways: ahead of time from the calendar's **Places** ta
 
 Click <Btn>Save</Btn>. The place — and any rooms you added — are now in your list and available to attach to events.
 
-**From inside the event editor.** While editing an event, click <Btn>Add Location</Btn> in the **Location** section. A picker opens showing every place this calendar already has. If the venue isn't in the list, click <Btn>Create New</Btn>, fill in the basic information and accessibility notes, and confirm. The place is saved to the calendar (it sticks around for future events) and is attached to the event you're editing.
+**From inside the event editor.** While editing an event, click <Btn>Add Location</Btn> in the **Location** section. A picker opens showing every place this calendar already has. If the venue isn't in the list, click <Btn>Create New</Btn>, fill in the basic information, accessibility notes, and any rooms you need, and confirm. What happens next depends on whether you added rooms:
 
-The on-the-fly form is the express lane — it covers the venue itself but not its rooms. If the place needs rooms or spaces, save the basics first and then open the place from the **Places** tab to add the rooms; or create it from the **Places** tab to begin with. Either way, the place is now reusable from any future event on this calendar.
+- **No rooms.** The new place is attached to the event right away, with the whole venue selected. You're done.
+- **One or more rooms.** The picker re-opens with the search pre-filled with the new place's name and the whole-venue entry pre-selected. Click a room to refine the choice, or close the picker to keep the whole venue. Either way the place is saved to the calendar and reusable from future events.
+
+The on-the-fly form is the express lane — it covers the venue and any rooms or spaces you need to add. The place is now reusable from any future event on this calendar.
 
 ::: tip <Lightbulb /> Just create the room you need right now.
-Specific rooms help attendees find the right door — but you don't have to map out every space in a venue while you're in the middle of creating an event. Add the room this event happens in, save, and move on. The next time you publish an event at the same venue, add that room then. The list fills in as you actually use it.
+Specific rooms help attendees find the right door — but you don't have to map out every space in a venue while you're in the middle of creating an event. Add the room this event happens in, save, and the picker re-opens with the new place ready to choose from — pick the room you just added, or stick with the whole venue. The next time you publish an event at the same venue, add another room then if you need one. The list fills in as you actually use it.
 :::
 
 ## Attach a place — or a specific room — to an event

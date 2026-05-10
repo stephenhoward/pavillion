@@ -1065,6 +1065,7 @@ button {
     :locations="availableLocations"
     :selected-location-id="editorState.event?.locationId || null"
     :selected-space-id="editorState.event?.space?.id || null"
+    :initial-search="locationInitialSearch"
     @location-selected="handleLocationSelected"
     @create-new="createNewLocation"
     @remove-location="handleRemoveLocation"
@@ -1181,6 +1182,7 @@ const {
   showCreateLocationForm,
   locationFieldErrors,
   locationSubmissionError,
+  initialSearch: locationInitialSearch,
   fetchLocations,
   openLocationPicker,
   selectLocation,

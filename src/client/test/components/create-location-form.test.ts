@@ -5,6 +5,7 @@ import I18NextVue from 'i18next-vue';
 import CreateLocationForm from '@/client/components/common/create-location-form.vue';
 import PillButton from '@/client/components/common/pill-button.vue';
 import LanguageTabSelector from '@/client/components/common/language-tab-selector.vue';
+import { EventLocationSpace, EventLocationSpaceContent } from '@/common/model/location';
 import enSystem from '@/client/locales/en/system.json';
 import enEventEditor from '@/client/locales/en/event_editor.json';
 
@@ -20,6 +21,41 @@ const SheetStub = {
   setup() {
     return { open: () => {}, close: () => {} };
   },
+};
+
+// SpacesEditor stub. Mirrors the real component's contract: it owns no
+// removal policy and emits `remove-space` on delete-button clicks. Additions
+// and edits go via `update:spaces` (the v-model channel).
+const SpacesEditorStub = {
+  name: 'SpacesEditor',
+  props: ['spaces'],
+  emits: ['update:spaces', 'remove-space'],
+  methods: {
+    addStagedSpace(this: { spaces: EventLocationSpace[]; $emit: (event: string, ...args: any[]) => void }) {
+      const staged = new EventLocationSpace(undefined, undefined);
+      staged.clientId = `client-${Math.random().toString(36).slice(2, 10)}`;
+      staged.addContent(new EventLocationSpaceContent('en', 'Staged Room', ''));
+      this.$emit('update:spaces', [...(this.spaces ?? []), staged]);
+    },
+    // Emits `remove-space` for the first staged space — matches what the real
+    // SpacesEditor does when its delete icon is clicked. The parent is
+    // responsible for filtering the array; the stub does not mutate it.
+    removeFirstViaEmit(this: { spaces: EventLocationSpace[]; $emit: (event: string, ...args: any[]) => void }) {
+      const first = (this.spaces ?? [])[0];
+      if (first) {
+        this.$emit('remove-space', first);
+      }
+    },
+  },
+  template: `
+    <div class="spaces-editor-stub">
+      <button type="button" class="stub-add-space" @click="addStagedSpace">Add</button>
+      <button type="button" class="stub-remove-first" @click="removeFirstViaEmit">Remove</button>
+      <ul>
+        <li v-for="s in spaces" :key="s.id || s.clientId">{{ s.content('en')?.name }}</li>
+      </ul>
+    </div>
+  `,
 };
 
 describe('CreateLocationForm', () => {
@@ -43,6 +79,7 @@ describe('CreateLocationForm', () => {
         components: options.global?.components,
         stubs: {
           Sheet: SheetStub,
+          SpacesEditor: SpacesEditorStub,
           ...(options.global?.stubs ?? {}),
         },
       },
@@ -335,6 +372,87 @@ describe('CreateLocationForm', () => {
       expect(emittedData.city).toBeUndefined();
       expect(emittedData.state).toBeUndefined();
       expect(emittedData.postalCode).toBeUndefined();
+    });
+
+    it('emits create-location with empty spaces array when no rooms staged', async () => {
+      const wrapper = mountWithI18n({
+        props: { languages: ['en'] },
+        global: { components: { PillButton } },
+      });
+      await wrapper.find('input[placeholder="Location name *"]').setValue('Empty Venue');
+
+      const buttons = wrapper.findAllComponents(PillButton);
+      const createButton = buttons.find(b => b.text() === 'Create Location');
+      await createButton?.vm.$emit('click');
+
+      const emitted = wrapper.emitted('create-location')?.[0][0] as any;
+      expect(emitted.spaces).toEqual([]);
+    });
+
+    it('emits create-location with one staged space carrying clientId and per-language content', async () => {
+      const wrapper = mountWithI18n({
+        props: { languages: ['en'] },
+        global: { components: { PillButton } },
+      });
+      await wrapper.find('input[placeholder="Location name *"]').setValue('Venue with Room');
+
+      // Stage a room via the SpacesEditor stub
+      await wrapper.find('.stub-add-space').trigger('click');
+
+      const buttons = wrapper.findAllComponents(PillButton);
+      const createButton = buttons.find(b => b.text() === 'Create Location');
+      await createButton?.vm.$emit('click');
+
+      const emitted = wrapper.emitted('create-location')?.[0][0] as any;
+      expect(emitted.spaces).toHaveLength(1);
+      expect(emitted.spaces[0].clientId).toBeTruthy();
+      expect(emitted.spaces[0].content?.en?.name).toBe('Staged Room');
+    });
+
+    it('emits create-location with empty spaces array after staging then removing a room', async () => {
+      const wrapper = mountWithI18n({
+        props: { languages: ['en'] },
+        global: { components: { PillButton } },
+      });
+      await wrapper.find('input[placeholder="Location name *"]').setValue('Venue add-then-remove');
+
+      // Stage then remove. The stub's remove button emits `remove-space`,
+      // exercising the parent's @remove-space handler (handleRemoveSpace).
+      await wrapper.find('.stub-add-space').trigger('click');
+      await wrapper.find('.stub-remove-first').trigger('click');
+
+      const buttons = wrapper.findAllComponents(PillButton);
+      const createButton = buttons.find(b => b.text() === 'Create Location');
+      await createButton?.vm.$emit('click');
+
+      const emitted = wrapper.emitted('create-location')?.[0][0] as any;
+      expect(emitted.spaces).toEqual([]);
+    });
+
+    // Verifies the parent's @remove-space wiring against the actual event the
+    // real SpacesEditor emits. With two rooms staged, removing the first
+    // should leave the second intact — confirming the filter in
+    // handleRemoveSpace targets the correct space by clientId.
+    it('emits create-location with the remaining staged space after removing one of two rooms', async () => {
+      const wrapper = mountWithI18n({
+        props: { languages: ['en'] },
+        global: { components: { PillButton } },
+      });
+      await wrapper.find('input[placeholder="Location name *"]').setValue('Venue with Two Rooms');
+
+      // Stage two rooms, then remove the first via the `remove-space` event.
+      await wrapper.find('.stub-add-space').trigger('click');
+      await wrapper.find('.stub-add-space').trigger('click');
+      await wrapper.find('.stub-remove-first').trigger('click');
+
+      const buttons = wrapper.findAllComponents(PillButton);
+      const createButton = buttons.find(b => b.text() === 'Create Location');
+      await createButton?.vm.$emit('click');
+
+      const emitted = wrapper.emitted('create-location')?.[0][0] as any;
+      expect(emitted.spaces).toHaveLength(1);
+      expect(emitted.spaces[0].clientId).toBeTruthy();
+      expect(emitted.spaces[0].content?.en?.name).toBe('Staged Room');
     });
   });
 

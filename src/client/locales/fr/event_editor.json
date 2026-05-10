@@ -73,6 +73,7 @@
     "title": "Créer un lieu",
     "basic_info_section": "Informations de base",
     "accessibility_section": "Informations sur l'accessibilité",
+    "spaces_section": "Salles et espaces",
     "name_placeholder": "Nom du lieu *",
     "name_aria_label": "Nom du lieu (obligatoire)",
     "address_placeholder": "Adresse",

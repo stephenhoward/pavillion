@@ -19,6 +19,11 @@ export function useLocationManagement() {
   const showCreateLocationForm = ref(false);
   const locationFieldErrors = ref<Record<string, string>>({});
   const locationSubmissionError = ref('');
+  // Seed value for the picker's search field. Set transiently when re-opening
+  // the picker after creating a Place with spaces[] (see createLocation), and
+  // reset to '' on every picker-close path so a subsequent fresh open from
+  // "Add Location" starts clean.
+  const initialSearch = ref('');
 
   const clearLocationErrors = (): void => {
     locationFieldErrors.value = {};
@@ -51,12 +56,19 @@ export function useLocationManagement() {
    * `place.spaces` inline.
    *
    * @param calendarId - The calendar ID to fetch locations for
+   * @param options - Optional behavior tweaks. `initialSearch` seeds the
+   *                  picker's search field — used by the post-create flow
+   *                  to land the user back on the just-created Place.
    */
-  const openLocationPicker = async (calendarId: string): Promise<void> => {
+  const openLocationPicker = async (
+    calendarId: string,
+    options: { initialSearch?: string } = {},
+  ): Promise<void> => {
     // Fetch latest locations before showing picker. Each EventLocation in the
     // response carries its `spaces[]` inline.
     await fetchLocations(calendarId);
 
+    initialSearch.value = options.initialSearch ?? '';
     showLocationPicker.value = true;
   };
 
@@ -95,8 +107,10 @@ export function useLocationManagement() {
       event.space = space;
     }
 
-    // Close the picker
+    // Close the picker (and reset the search seed so a subsequent
+    // fresh open from "Add Location" starts clean).
     showLocationPicker.value = false;
+    initialSearch.value = '';
   };
 
   /**
@@ -127,20 +141,43 @@ export function useLocationManagement() {
     const location = EventLocation.fromObject(locationData);
 
     try {
-      // Create the location via API
+      // Create the location via API.
       const newLocation = await locationService.createLocation(calendarId, location);
 
-      // Add to available locations
-      availableLocations.value.push(newLocation);
+      // Add to available locations only if not already present.
+      // `locationService.createLocation` pushes the saved record into the
+      // Pinia store; when `availableLocations.value` was populated via the
+      // service-backed `fetchLocations` path it shares the same array
+      // reference (`setLocationsForCalendar` stores the reference, not a
+      // copy), so the store's push has already added it. Without this
+      // guard the legacy push would double-list the new Place — invisible
+      // under the legacy flow because the next picker open re-ran
+      // `fetchLocations` and reset the array, but visible now that
+      // pv-24jz.1 re-opens the picker without a re-fetch.
+      if (!availableLocations.value.some(loc => loc.id === newLocation.id)) {
+        availableLocations.value.push(newLocation);
+      }
 
       // Auto-select the newly created location
       event.locationId = newLocation.id;
       event.location = newLocation;
-      // Newly-created Place has no Spaces yet — clear any stale space.
+      // Auto-select the whole venue. Inline-staged Spaces become selectable
+      // via the picker; auto-room-select is a deferred follow-up.
       event.space = null;
 
       // Close the create form
       showCreateLocationForm.value = false;
+
+      // Branch on whether the new Place arrived with inline spaces[]: when
+      // the user staged one or more rooms during creation, re-open the
+      // picker seeded with the new Place's name so they can pick a room
+      // (whole-venue stays pre-selected via the picker's prop-driven
+      // checkmark logic). Zero spaces — preserve the legacy behavior:
+      // close the form and leave the picker closed.
+      if ((newLocation.spaces?.length ?? 0) > 0) {
+        initialSearch.value = newLocation.name;
+        showLocationPicker.value = true;
+      }
     }
     catch (error: unknown) {
       if (error instanceof ValidationError) {
@@ -169,8 +206,10 @@ export function useLocationManagement() {
     // Removing the Place implies removing any selected Space.
     event.space = null;
 
-    // Close the picker
+    // Close the picker (and reset the search seed so a subsequent fresh
+    // open from "Add Location" starts clean).
     showLocationPicker.value = false;
+    initialSearch.value = '';
   };
 
   /**
@@ -187,6 +226,7 @@ export function useLocationManagement() {
     showCreateLocationForm,
     locationFieldErrors,
     locationSubmissionError,
+    initialSearch,
     fetchLocations,
     openLocationPicker,
     selectLocation,

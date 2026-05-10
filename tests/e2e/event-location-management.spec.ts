@@ -356,4 +356,91 @@ test.describe('Event Location Management End-to-End', () => {
     const accessibilityTextarea = page.locator('textarea[placeholder*="Accessibility"]');
     await expect(accessibilityTextarea).toHaveAttribute('aria-label');
   });
+
+  // pv-ibpm.3.2: Inline place + room creation; new room appears in picker and is selectable.
+  test('should allow user to create place inline with a room and select the new room as the event location', async ({ page }) => {
+    await page.goto(env.baseURL + '/event');
+
+    // Open location picker (modern locator + visibility assertion, no waitForTimeout).
+    const addLocationButton = page.getByRole('button', { name: /add location/i });
+    await expect(addLocationButton).toBeVisible();
+    await addLocationButton.click();
+
+    const pickerModal = page.locator('dialog.sheet-dialog[open]');
+    await expect(pickerModal).toBeVisible();
+
+    // Open the inline Create New form.
+    const createNewButton = page.getByRole('button', { name: 'Create New' });
+    await expect(createNewButton).toBeVisible();
+    await createNewButton.click();
+
+    // Verify the create form is open.
+    const createDialog = page.getByRole('dialog', { name: 'Create Location' });
+    await expect(createDialog).toBeVisible();
+
+    // Fill basic info.
+    const nameInput = page.locator('input[placeholder="Location name *"]');
+    await expect(nameInput).toBeVisible();
+    await nameInput.fill('Inline Place with Room');
+    await page.locator('input[placeholder="Street address"]').fill('100 Inline Way');
+    await page.locator('input[placeholder="City"]').fill('Portland');
+
+    // Stage a room via the SpacesEditor inside the inline form. The button text
+    // comes from `calendars.places.space.add_button` ("Add room or space").
+    const addRoomButton = page.getByRole('button', { name: /add room or space/i });
+    await expect(addRoomButton).toBeVisible();
+    await addRoomButton.click();
+
+    // EditSpace inline editor opens. Its "Name" field is labeled by the
+    // calendars.places.space.field_name key (rendered as a real <label for>).
+    // The create-location-form's location-name input uses aria-label
+    // "Location name (required)", not "Name", so this match is unambiguous.
+    const roomNameInput = page.getByRole('textbox', { name: 'Name', exact: true });
+    await expect(roomNameInput).toBeVisible();
+    await roomNameInput.fill('Pacific Room');
+
+    // Save the staged room — "Done" comes from calendars.places.space.done.
+    const roomDoneButton = page.getByRole('button', { name: /^done$/i });
+    await expect(roomDoneButton).toBeVisible();
+    await roomDoneButton.click();
+
+    // The EditSpace form should close, returning the SpacesEditor to its
+    // list view. The "Add room or space" button reappears once the editor
+    // closes — wait for that to confirm the staged room is persisted in the
+    // working buffer.
+    await expect(addRoomButton).toBeVisible();
+
+    // Submit the inline place form (atomic Place + Spaces save).
+    const createLocationButton = page.getByRole('button', { name: 'Create Location' });
+    await expect(createLocationButton).toBeEnabled();
+    await createLocationButton.click();
+
+    // After save, the create form closes and — because the new place was
+    // staged with a room — the picker re-opens automatically with
+    // whole-venue pre-selected (pv-24jz acceptance criteria). The user has
+    // not yet clicked anything in the re-opened picker.
+    await expect(createDialog).not.toBeVisible();
+    await expect(pickerModal).toBeVisible();
+
+    // The picker's search input is pre-seeded with the new place's name so
+    // the user lands on a list filtered to what they just created.
+    const searchInput = page.locator('.search-input');
+    await expect(searchInput).toHaveValue('Inline Place with Room');
+
+    // Find the room entry. The picker renders the space entry's
+    // `.location-name` as just the space name ("Pacific Room") with the
+    // parent place name shown in `.location-parent-name`.
+    const roomEntry = page.locator('.location-item', { hasText: 'Pacific Room' });
+    await expect(roomEntry).toBeVisible();
+
+    // Select the new room — refines the whole-venue default to the staged room.
+    await roomEntry.click();
+
+    // Picker closes and the LocationDisplayCard reflects the room selection.
+    await expect(pickerModal).not.toBeVisible();
+    const locationCard = page.locator('.location-display-card');
+    await expect(locationCard).toBeVisible();
+    await expect(locationCard).toContainText('Inline Place with Room');
+    await expect(locationCard).toContainText('Pacific Room');
+  });
 });
