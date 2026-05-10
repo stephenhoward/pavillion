@@ -467,6 +467,115 @@ describe('LocationPickerModal', () => {
     });
   });
 
+  describe('add-space action button', () => {
+    const conventionCenter = new EventLocation('place-cc', 'Convention Center', '100 Main St', 'Portland', 'OR', '97201');
+
+    it('renders add-space action on Space-less Place header rows (place:placeId)', () => {
+      // Space-less Place: a single header row that needs the add-space affordance
+      // so the user can split a flat Place into Place + Spaces.
+      const wrapper = mount(LocationPickerModal, { ...SHEET_GLOBAL, props: {
+        locations: [conventionCenter],
+        selectedLocationId: null,
+        selectedSpaceId: null,
+      },
+      });
+
+      const rows = wrapper.findAll('li');
+      expect(rows).toHaveLength(1);
+      expect(rows[0].find('.picker-add-space-button').exists()).toBe(true);
+    });
+
+    it('renders add-space action on the whole-venue header row (place:placeId:whole)', () => {
+      // Multi-Space Place: only the whole-venue header row gets the action;
+      // the Space sub-rows below it must NOT carry it (separate test).
+      const wrapper = mount(LocationPickerModal, { ...SHEET_GLOBAL, props: {
+        locations: [placeWithSpaces(conventionCenter, [makeSpace('space-pacific', 'place-cc', 'Pacific Room')])],
+        selectedLocationId: null,
+        selectedSpaceId: null,
+      },
+      });
+
+      const rows = wrapper.findAll('li');
+      expect(rows).toHaveLength(2);
+      // Row 0 is the whole-venue header.
+      expect(rows[0].find('.picker-add-space-button').exists()).toBe(true);
+    });
+
+    it('does NOT render add-space action on Space sub-rows (space:spaceId)', () => {
+      // Space sub-rows cannot host their own Spaces; the action button is
+      // strictly a Place-header affordance.
+      const wrapper = mount(LocationPickerModal, { ...SHEET_GLOBAL, props: {
+        locations: [placeWithSpaces(conventionCenter, [
+          makeSpace('space-pacific', 'place-cc', 'Pacific Room'),
+          makeSpace('space-council', 'place-cc', 'Council Chambers'),
+        ])],
+        selectedLocationId: null,
+        selectedSpaceId: null,
+      },
+      });
+
+      const rows = wrapper.findAll('li');
+      expect(rows).toHaveLength(3);
+      // Row 0 = whole-venue header (has action).
+      expect(rows[0].find('.picker-add-space-button').exists()).toBe(true);
+      // Rows 1 & 2 = Space sub-rows (no action).
+      expect(rows[1].find('.picker-add-space-button').exists()).toBe(false);
+      expect(rows[2].find('.picker-add-space-button').exists()).toBe(false);
+    });
+
+    it('clicking add-space emits {placeId} and does NOT emit location-selected', async () => {
+      const wrapper = mount(LocationPickerModal, { ...SHEET_GLOBAL, props: {
+        locations: [placeWithSpaces(conventionCenter, [makeSpace('space-pacific', 'place-cc', 'Pacific Room')])],
+        selectedLocationId: null,
+        selectedSpaceId: null,
+      },
+      });
+
+      const wholeVenueRow = wrapper.findAll('li')[0];
+      await wholeVenueRow.find('.picker-add-space-button').trigger('click');
+
+      expect(wrapper.emitted('add-space')).toBeTruthy();
+      expect(wrapper.emitted('add-space')?.[0]).toEqual([{ placeId: 'place-cc' }]);
+      // Independent action: the parent select stays untouched.
+      expect(wrapper.emitted('location-selected')).toBeFalsy();
+    });
+
+    it('aria-label uses the interpolated place name (source of truth, not title)', () => {
+      const wrapper = mount(LocationPickerModal, { ...SHEET_GLOBAL, props: {
+        locations: [conventionCenter],
+        selectedLocationId: null,
+        selectedSpaceId: null,
+      },
+      });
+
+      const action = wrapper.find('.picker-add-space-button');
+      expect(action.exists()).toBe(true);
+      expect(action.attributes('aria-label')).toBe('Add space to Convention Center');
+    });
+
+    it('action button is a sibling of (not nested inside) the select-button', () => {
+      // Nested interactives are an a11y bug (button-in-button is invalid HTML
+      // and AT-hostile). Both buttons must be direct children of .location-row.
+      const wrapper = mount(LocationPickerModal, { ...SHEET_GLOBAL, props: {
+        locations: [conventionCenter],
+        selectedLocationId: null,
+        selectedSpaceId: null,
+      },
+      });
+
+      const row = wrapper.find('.location-row');
+      expect(row.exists()).toBe(true);
+      // Both buttons live as direct children of the row wrapper.
+      const directChildren = Array.from(row.element.children);
+      const selectButton = directChildren.find((el) => el.classList.contains('location-item'));
+      const actionButton = directChildren.find((el) => el.classList.contains('picker-add-space-button'));
+      expect(selectButton).toBeDefined();
+      expect(actionButton).toBeDefined();
+      // Negative regression: the action button must NOT be inside the select-button.
+      expect(selectButton?.contains(actionButton ?? null)).toBe(false);
+    });
+  });
+
   describe('initialSearch prop', () => {
     const conventionCenter = new EventLocation('place-cc', 'Convention Center', '100 Main St', 'Portland', 'OR', '97201');
 

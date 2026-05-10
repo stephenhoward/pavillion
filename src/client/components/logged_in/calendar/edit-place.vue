@@ -757,6 +757,7 @@ import LocationService from '@/client/service/location';
 import CalendarService from '@/client/service/calendar';
 import { useToast } from '@/client/composables/useToast';
 import { useLanguageManagement } from '@/client/composables/useLanguageManagement';
+import { cloneLocationForBuffer } from '@/client/composables/location-helpers';
 import { DEFAULT_LANGUAGE_CODE } from '@/common/i18n/languages';
 import { EventLocation, EventLocationSpace, validateLocationHierarchy } from '@/common/model/location';
 import iso6391 from 'iso-639-1-dir';
@@ -832,32 +833,6 @@ const pendingReassigns = reactive<Map<string, string>>(new Map());
 
 // Ref into the reassign dialog's cancel button — used by focus-management code.
 const reassignCancelRef = ref<HTMLElement | null>(null);
-
-/**
- * Clone an EventLocation into a detached working buffer. `EventLocation.toObject`
- * intentionally omits `eventCount` (read-only, never round-tripped into writes),
- * so the JSON-shaped clone loses it. Reattach it onto matching Space rows so the
- * delete dialog branch logic — which keys off `space.eventCount` — survives the
- * staging-buffer hand-off.
- */
-function cloneLocationForBuffer(source: EventLocation): EventLocation {
-  const clone = EventLocation.fromObject(source.toObject());
-  // Patch eventCount back onto each Space whose id matches a source row.
-  if (source.spaces && source.spaces.length > 0) {
-    const eventCountById = new Map<string, number>();
-    for (const sourceSpace of source.spaces) {
-      if (sourceSpace.id && typeof sourceSpace.eventCount === 'number') {
-        eventCountById.set(sourceSpace.id, sourceSpace.eventCount);
-      }
-    }
-    for (const cloneSpace of clone.spaces) {
-      if (cloneSpace.id && eventCountById.has(cloneSpace.id)) {
-        cloneSpace.eventCount = eventCountById.get(cloneSpace.id);
-      }
-    }
-  }
-  return clone;
-}
 
 /**
  * Helpers retained for the eventCount-aware reassign dialog (which still

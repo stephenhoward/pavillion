@@ -67,7 +67,8 @@
     "empty_help": "Crea tu primera ubicación para comenzar",
     "no_results": "Ninguna ubicación coincide con tu búsqueda",
     "remove_button": "Eliminar ubicación",
-    "create_new_button": "Crear nueva"
+    "create_new_button": "Crear nueva",
+    "add_space_aria": "Añadir espacio a {{name}}"
   },
   "create_location": {
     "title": "Crear ubicación",

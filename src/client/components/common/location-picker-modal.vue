@@ -2,6 +2,7 @@
 import { ref, computed, watch } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import { Search, MapPin, DoorOpen, Check } from 'lucide-vue-next';
+import DoorPlus from '@/client/components/common/icons/door-plus.vue';
 import PillButton from '@/client/components/common/pill-button.vue';
 import Sheet from '@/client/components/common/Sheet.vue';
 import { useLocalizedContent } from '@/client/composables/useLocalizedContent';
@@ -50,6 +51,8 @@ const { t: tPlaces } = useTranslation('calendars', { keyPrefix: 'places' });
  * Emits:
  * @emits location-selected - User picked an entry.
  *   @param {{ placeId: string, spaceId: string | null }} selection
+ * @emits add-space - User clicked the per-Place "add space" action button.
+ *   @param {{ placeId: string }} payload
  * @emits create-new
  * @emits remove-location
  * @emits close
@@ -79,6 +82,7 @@ const props = withDefaults(defineProps<{
 
 const emit = defineEmits<{
   (e: 'location-selected', selection: { placeId: string; spaceId: string | null }): void;
+  (e: 'add-space', payload: { placeId: string }): void;
   (e: 'create-new'): void;
   (e: 'remove-location'): void;
   (e: 'close'): void;
@@ -212,6 +216,10 @@ const handleEntryClick = (entry: PickerEntry) => {
   emit('location-selected', { placeId: entry.placeId, spaceId: entry.spaceId });
 };
 
+const handleAddSpace = (entry: PickerEntry) => {
+  emit('add-space', { placeId: entry.placeId });
+};
+
 const handleCreateNew = () => {
   emit('create-new');
 };
@@ -253,49 +261,66 @@ defineExpose({ close, sheetRef });
       <div class="location-list-container">
         <ul v-if="hasLocations && filteredEntries.length > 0" role="list" class="location-list">
           <li v-for="entry in filteredEntries" :key="entry.key">
-            <button
-              type="button"
-              class="location-item"
-              :class="{
-                selected: isSelected(entry),
-                'is-space-entry': entry.isSpaceEntry,
-              }"
-              :aria-label="entry.ariaLabel"
-              :aria-pressed="isSelected(entry)"
-              @click="handleEntryClick(entry)"
-            >
-              <DoorOpen v-if="entry.isSpaceEntry" :size="20" class="location-icon" />
-              <MapPin v-else :size="20" class="location-icon" />
-              <div class="location-info">
-                <div class="location-name">
-                  <template v-if="entry.isWholeVenue">
-                    <span>{{ entry.placeName }}</span>
-                    {{ ' ' }}
-                    <span class="whole-venue-suffix">
-                      {{ tPlaces('picker.whole_venue_suffix') }}
-                    </span>
-                  </template>
-                  <template v-else-if="entry.isSpaceEntry">
-                    {{ entry.spaceName }}
-                  </template>
-                  <template v-else>
-                    {{ entry.displayName }}
-                  </template>
+            <div class="location-row">
+              <button
+                type="button"
+                class="location-item"
+                :class="{
+                  selected: isSelected(entry),
+                  'is-space-entry': entry.isSpaceEntry,
+                }"
+                :aria-label="entry.ariaLabel"
+                :aria-pressed="isSelected(entry)"
+                @click="handleEntryClick(entry)"
+              >
+                <DoorOpen v-if="entry.isSpaceEntry" :size="20" class="location-icon" />
+                <MapPin v-else :size="20" class="location-icon" />
+                <div class="location-info">
+                  <div class="location-name">
+                    <template v-if="entry.isWholeVenue">
+                      <span>{{ entry.placeName }}</span>
+                      {{ ' ' }}
+                      <span class="whole-venue-suffix">
+                        {{ tPlaces('picker.whole_venue_suffix') }}
+                      </span>
+                    </template>
+                    <template v-else-if="entry.isSpaceEntry">
+                      {{ entry.spaceName }}
+                    </template>
+                    <template v-else>
+                      {{ entry.displayName }}
+                    </template>
+                  </div>
+                  <!--
+                    Space entries: show parent Place name (de-emphasized) so the row
+                    is self-describing when search filters out the parent. Other
+                    entries: show address.
+                  -->
+                  <div v-if="entry.isSpaceEntry" class="location-parent-name">
+                    {{ entry.placeName }}
+                  </div>
+                  <div v-else-if="entry.address" class="location-address">
+                    {{ entry.address }}
+                  </div>
                 </div>
-                <!--
-                  Space entries: show parent Place name (de-emphasized) so the row
-                  is self-describing when search filters out the parent. Other
-                  entries: show address.
-                -->
-                <div v-if="entry.isSpaceEntry" class="location-parent-name">
-                  {{ entry.placeName }}
-                </div>
-                <div v-else-if="entry.address" class="location-address">
-                  {{ entry.address }}
-                </div>
-              </div>
-              <Check v-if="isSelected(entry)" :size="20" class="checkmark" />
-            </button>
+                <Check v-if="isSelected(entry)" :size="20" class="checkmark" />
+              </button>
+              <!--
+                Per-Place "add space" affordance. Renders as a sibling of the
+                select-button so AT users can tab to it independently and so it
+                does not nest interactives. Hidden on Space sub-rows — those
+                cannot host their own Spaces.
+              -->
+              <button
+                v-if="!entry.isSpaceEntry"
+                type="button"
+                class="picker-add-space-button"
+                :aria-label="t('add_space_aria', { name: entry.placeName })"
+                @click="handleAddSpace(entry)"
+              >
+                <DoorPlus :size="20" />
+              </button>
+            </div>
           </li>
         </ul>
 
@@ -366,6 +391,18 @@ defineExpose({ close, sheetRef });
   gap: 0.5rem;
 }
 
+// Row wrapper: hosts the select-button and the optional sibling
+// picker-add-space-button so they read as visually distinct slots without
+// nesting interactives. align-items: stretch lets the action button match
+// the select-button's hover/selected box height; min-width: 0 on the
+// select button (below) keeps the info column ellipsizable before the
+// action gets squashed.
+.location-row {
+  display: flex;
+  align-items: stretch;
+  gap: 0.5rem;
+}
+
 .location-item {
   display: flex;
   align-items: center;
@@ -380,7 +417,11 @@ defineExpose({ close, sheetRef });
   // entries are full-width rows with leading-aligned content, not the
   // centered inline-flex shape the global rule sets up.
   text-align: start;
-  width: 100%;
+  // flex 1 so the select-button consumes the row's free width; min-width 0
+  // lets the inner .location-info ellipsize before the sibling add-space
+  // action gets squeezed.
+  flex: 1;
+  min-width: 0;
 
   // Indent and shrink Space entries so they read as children of the Place
   // entry above. Margin (not padding) moves the box itself; a subtle
@@ -470,6 +511,56 @@ defineExpose({ close, sheetRef });
   .checkmark {
     flex-shrink: 0;
     color: var(--pav-color-orange-500);
+  }
+}
+
+// Per-Place "add space" sibling action. Sits at the row's true trailing
+// edge (outside the select-button) so it cannot nest inside the select
+// affordance and gets its own tab stop. Hit area is at least 44x44 CSS px
+// per WCAG 2.5.5; padding is tuned to wrap the 20px DoorPlus icon.
+//
+// Class is namespaced (`picker-add-space-button`) to avoid colliding with
+// SpacesEditor's `.add-space-button` when both components render in the
+// same test wrapper — `wrapper.find('.add-space-button')` would otherwise
+// match ambiguously.
+.picker-add-space-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  min-inline-size: 44px;
+  min-block-size: 44px;
+  padding: 0.625rem; // (44 - 20) / 2 / 16 ≈ 0.75rem visual; tighter so the
+  // icon centers without dwarfing the hit area.
+  border-radius: 0.5rem;
+  border: 1px solid var(--pav-color-stone-200);
+  background: var(--pav-surface-card);
+  color: var(--pav-color-stone-600);
+  cursor: pointer;
+  transition: all 0.15s ease;
+
+  &:hover {
+    background: var(--pav-color-stone-50);
+    border-color: var(--pav-color-stone-300);
+    color: var(--pav-color-stone-900);
+  }
+
+  // Match the existing orange ring on .location-item so the two siblings
+  // read as a coherent affordance set under keyboard focus.
+  &:focus-visible {
+    outline: 2px solid var(--pav-color-orange-500);
+    outline-offset: 2px;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    border-color: var(--pav-color-stone-600);
+    color: var(--pav-color-stone-400);
+
+    &:hover {
+      background: var(--pav-color-stone-600);
+      border-color: var(--pav-color-stone-500);
+      color: var(--pav-color-stone-100);
+    }
   }
 }
 

@@ -35,7 +35,7 @@ Click <Btn>Save</Btn>. The place — and any rooms you added — are now in your
 **From inside the event editor.** While editing an event, click <Btn>Add Location</Btn> in the **Location** section. A picker opens showing every place this calendar already has. If the venue isn't in the list, click <Btn>Create New</Btn>, fill in the basic information, accessibility notes, and any rooms you need, and confirm. What happens next depends on whether you added rooms:
 
 - **No rooms.** The new place is attached to the event right away, with the whole venue selected. You're done.
-- **One or more rooms.** The picker re-opens with the search pre-filled with the new place's name and the whole-venue entry pre-selected. Click a room to refine the choice, or close the picker to keep the whole venue. Either way the place is saved to the calendar and reusable from future events.
+- **One or more rooms.** The picker re-opens. Click a room to refine the choice, or close the picker to use the whole venue. Either way the place is saved to the calendar and reusable from future events.
 
 The on-the-fly form is the express lane — it covers the venue and any rooms or spaces you need to add. The place is now reusable from any future event on this calendar.
 

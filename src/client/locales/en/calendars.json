@@ -400,6 +400,12 @@
         "picker": {
             "whole_venue_suffix": "(whole venue)"
         },
+        "add_space": {
+            "title": "Add a space to {{name}}",
+            "save_button": "Save",
+            "cancel_button": "Cancel",
+            "error_saving": "Could not save the space. Please try again."
+        },
         "space": {
             "section_title": "Rooms & Spaces",
             "add_button": "Add room or space",

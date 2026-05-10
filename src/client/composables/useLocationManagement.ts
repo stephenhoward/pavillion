@@ -17,6 +17,8 @@ export function useLocationManagement() {
   const availableLocations = ref<EventLocation[]>([]);
   const showLocationPicker = ref(false);
   const showCreateLocationForm = ref(false);
+  const showAddSpace = ref(false);
+  const addSpaceTargetPlaceId = ref<string | null>(null);
   const locationFieldErrors = ref<Record<string, string>>({});
   const locationSubmissionError = ref('');
   // Seed value for the picker's search field. Set transiently when re-opening
@@ -220,10 +222,70 @@ export function useLocationManagement() {
     showLocationPicker.value = true;
   };
 
+  /**
+   * Open the add-space sheet for an existing Place. Mirrors the
+   * createNewLocation pattern: closes the picker and opens the add-space
+   * sheet, with the target placeId captured for the sheet to operate on.
+   *
+   * @param placeId - ID of the Place to add a Space to
+   */
+  const openAddSpace = (placeId: string): void => {
+    showLocationPicker.value = false;
+    addSpaceTargetPlaceId.value = placeId;
+    showAddSpace.value = true;
+    initialSearch.value = '';
+  };
+
+  /**
+   * Persist the result of the add-space sheet. The sheet has already called
+   * LocationService.updateLocation; this handler swaps the updated Place
+   * into availableLocations (find by id; push if missing), closes the
+   * sheet, and re-opens the picker seeded with the Place name so the user
+   * lands back where they were and can see the new Space sub-row.
+   *
+   * Mirrors the post-create reopen flow in createLocation. The picker's
+   * `initialSearch` watch only reseeds on empty -> non-empty transitions,
+   * so we explicitly clear before setting to satisfy the watcher.
+   *
+   * @param updatedPlace - The Place returned from the update call,
+   *                       carrying the new Space inline on `spaces[]`.
+   */
+  const saveAddSpace = (updatedPlace: EventLocation): void => {
+    const idx = availableLocations.value.findIndex(loc => loc.id === updatedPlace.id);
+    if (idx >= 0) {
+      availableLocations.value[idx] = updatedPlace;
+    }
+    else {
+      availableLocations.value.push(updatedPlace);
+    }
+
+    showAddSpace.value = false;
+    addSpaceTargetPlaceId.value = null;
+
+    // Force a transition empty -> non-empty so the picker's initialSearch
+    // watcher reseeds the search input.
+    initialSearch.value = '';
+    initialSearch.value = updatedPlace.name;
+    showLocationPicker.value = true;
+  };
+
+  /**
+   * Cancel the add-space sheet. Closes the sheet and re-opens the picker
+   * with no search seed. Mirrors the backToSearch pattern.
+   */
+  const cancelAddSpace = (): void => {
+    showAddSpace.value = false;
+    addSpaceTargetPlaceId.value = null;
+    initialSearch.value = '';
+    showLocationPicker.value = true;
+  };
+
   return {
     availableLocations,
     showLocationPicker,
     showCreateLocationForm,
+    showAddSpace,
+    addSpaceTargetPlaceId,
     locationFieldErrors,
     locationSubmissionError,
     initialSearch,
@@ -235,5 +297,8 @@ export function useLocationManagement() {
     clearLocationErrors,
     removeLocation,
     backToSearch,
+    openAddSpace,
+    saveAddSpace,
+    cancelAddSpace,
   };
 }

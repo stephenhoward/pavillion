@@ -400,6 +400,12 @@
         "picker": {
             "whole_venue_suffix": "(lugar completo)"
         },
+        "add_space": {
+            "title": "Añadir un espacio a {{name}}",
+            "save_button": "Guardar",
+            "cancel_button": "Cancelar",
+            "error_saving": "No se pudo guardar el espacio. Inténtalo de nuevo."
+        },
         "space": {
             "section_title": "Salas y espacios",
             "add_button": "Añadir sala o espacio",

@@ -365,6 +365,145 @@ describe('useLocationManagement', () => {
     });
   });
 
+  describe('openAddSpace', () => {
+    it('should close the picker, capture the target placeId, open the add-space sheet, and clear initialSearch', () => {
+      const {
+        openAddSpace,
+        showLocationPicker,
+        showAddSpace,
+        addSpaceTargetPlaceId,
+        initialSearch,
+      } = useLocationManagement();
+
+      // Simulate state where the picker is open and seeded.
+      showLocationPicker.value = true;
+      initialSearch.value = 'Convention Center';
+
+      openAddSpace('place-cc');
+
+      expect(showLocationPicker.value).toBe(false);
+      expect(addSpaceTargetPlaceId.value).toBe('place-cc');
+      expect(showAddSpace.value).toBe(true);
+      expect(initialSearch.value).toBe('');
+    });
+  });
+
+  describe('saveAddSpace', () => {
+    it('should replace the matching place in availableLocations, close the sheet, and re-open the picker seeded with the place name', () => {
+      const {
+        saveAddSpace,
+        availableLocations,
+        showLocationPicker,
+        showAddSpace,
+        addSpaceTargetPlaceId,
+        initialSearch,
+      } = useLocationManagement();
+
+      // Seed an existing Place; we'll replace it with an updated copy.
+      const existing = new EventLocation('place-cc', 'Convention Center', '500 Center Way');
+      availableLocations.value = [existing];
+
+      // Simulate the add-space sheet being open over the picker.
+      showAddSpace.value = true;
+      addSpaceTargetPlaceId.value = 'place-cc';
+
+      // Updated Place returned from LocationService.updateLocation, carrying
+      // the new Space inline on spaces[].
+      const updatedPlace = new EventLocation('place-cc', 'Convention Center', '500 Center Way');
+      const newSpace = new EventLocationSpace('space-pacific', 'place-cc');
+      newSpace.addContent(new EventLocationSpaceContent('en', 'Pacific Room', ''));
+      updatedPlace.spaces = [newSpace];
+
+      saveAddSpace(updatedPlace);
+
+      // Place was replaced (not duplicated). `availableLocations` is a Vue
+      // ref so its members are read through the reactive proxy — assert
+      // deep equality and confirm the new Space rode along inline.
+      expect(availableLocations.value).toHaveLength(1);
+      expect(availableLocations.value[0]).toEqual(updatedPlace);
+      expect(availableLocations.value[0].spaces).toHaveLength(1);
+      expect(availableLocations.value[0].spaces[0].id).toBe('space-pacific');
+
+      // Sheet closed, target cleared.
+      expect(showAddSpace.value).toBe(false);
+      expect(addSpaceTargetPlaceId.value).toBeNull();
+
+      // Picker re-opened seeded with the Place name.
+      expect(showLocationPicker.value).toBe(true);
+      expect(initialSearch.value).toBe('Convention Center');
+    });
+
+    it('should push the place when not already present in availableLocations', () => {
+      const { saveAddSpace, availableLocations } = useLocationManagement();
+
+      // Start with no places.
+      availableLocations.value = [];
+
+      const updatedPlace = new EventLocation('place-new', 'New Venue');
+      const newSpace = new EventLocationSpace('space-a', 'place-new');
+      newSpace.addContent(new EventLocationSpaceContent('en', 'Room A', ''));
+      updatedPlace.spaces = [newSpace];
+
+      saveAddSpace(updatedPlace);
+
+      expect(availableLocations.value).toHaveLength(1);
+      expect(availableLocations.value[0]).toEqual(updatedPlace);
+      expect(availableLocations.value[0].id).toBe('place-new');
+    });
+
+    it('should make no service calls', () => {
+      const getLocationsSpy = vi.spyOn(LocationService.prototype, 'getLocations');
+      const createLocationSpy = vi.spyOn(LocationService.prototype, 'createLocation');
+
+      const { saveAddSpace, availableLocations } = useLocationManagement();
+
+      const existing = new EventLocation('place-cc', 'Convention Center');
+      availableLocations.value = [existing];
+
+      const updatedPlace = new EventLocation('place-cc', 'Convention Center');
+      saveAddSpace(updatedPlace);
+
+      expect(getLocationsSpy).not.toHaveBeenCalled();
+      expect(createLocationSpy).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('cancelAddSpace', () => {
+    it('should close the sheet, clear the target, and re-open the picker without a search seed', () => {
+      const {
+        cancelAddSpace,
+        showLocationPicker,
+        showAddSpace,
+        addSpaceTargetPlaceId,
+        initialSearch,
+      } = useLocationManagement();
+
+      // Simulate the add-space sheet being open.
+      showAddSpace.value = true;
+      addSpaceTargetPlaceId.value = 'place-cc';
+      initialSearch.value = 'leftover';
+
+      cancelAddSpace();
+
+      expect(showAddSpace.value).toBe(false);
+      expect(addSpaceTargetPlaceId.value).toBeNull();
+      expect(showLocationPicker.value).toBe(true);
+      expect(initialSearch.value).toBe('');
+    });
+
+    it('should make no service calls', () => {
+      const getLocationsSpy = vi.spyOn(LocationService.prototype, 'getLocations');
+      const createLocationSpy = vi.spyOn(LocationService.prototype, 'createLocation');
+
+      const { cancelAddSpace } = useLocationManagement();
+
+      cancelAddSpace();
+
+      expect(getLocationsSpy).not.toHaveBeenCalled();
+      expect(createLocationSpy).not.toHaveBeenCalled();
+    });
+  });
+
   describe('modal state transitions', () => {
     it('should transition from picker to create form and back', () => {
       const {

@@ -400,6 +400,12 @@
         "picker": {
             "whole_venue_suffix": "(lieu entier)"
         },
+        "add_space": {
+            "title": "Ajouter un espace à {{name}}",
+            "save_button": "Enregistrer",
+            "cancel_button": "Annuler",
+            "error_saving": "Impossible d'enregistrer l'espace. Veuillez réessayer."
+        },
         "space": {
             "section_title": "Salles et espaces",
             "add_button": "Ajouter une salle ou un espace",

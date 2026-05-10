@@ -39,6 +39,7 @@ const locationServiceMocks = {
   getLocations: vi.fn().mockResolvedValue([]),
   createLocation: vi.fn().mockResolvedValue({}),
   getLocationById: vi.fn().mockResolvedValue({}),
+  updateLocation: vi.fn().mockResolvedValue({}),
 };
 
 // Mock LocationService
@@ -238,6 +239,7 @@ describe('Location Integration', () => {
     locationServiceMocks.getLocations.mockResolvedValue([]);
     locationServiceMocks.createLocation.mockResolvedValue({});
     locationServiceMocks.getLocationById.mockResolvedValue({});
+    locationServiceMocks.updateLocation.mockResolvedValue({});
   });
 
   afterEach(async () => {
@@ -768,6 +770,177 @@ describe('Location Integration', () => {
       expect(freshPicker.exists()).toBe(true);
       // initialSearch must be empty on the fresh open — no stale seed.
       expect(freshPicker.props('initialSearch')).toBe('');
+    });
+  });
+
+  // pv-s6s3.8: Add-space sheet flow from the picker — clicking the per-Place
+  // add-space action opens AddSpaceSheet over the picker, saving a new Space
+  // calls LocationService.updateLocation with the merged spaces[] and then
+  // re-opens the picker seeded with the place name.
+  describe('Add-space flow from picker', () => {
+    /**
+     * Seed an EventLocation with one existing Space so the picker has a
+     * well-formed parent row that exposes the per-Place add-space action.
+     */
+    const buildExistingPlace = (
+      placeId: string,
+      placeName: string,
+      spaceId: string,
+      spaceName: string,
+    ) => {
+      const place = new EventLocation(placeId, placeName, '200 Main St', 'Portland', 'OR', '97201');
+      const space = new EventLocationSpace(spaceId, placeId);
+      space.addContent(new EventLocationSpaceContent('en', spaceName, ''));
+      place.spaces = [space];
+      return place;
+    };
+
+    it('add-space happy path: picker -> sheet -> save -> picker re-opens with new space sub-row', async () => {
+      const calendar = new Calendar('testCalendarId', 'testName');
+      calendar.addContent({ language: 'en', name: 'Test Calendar', description: '' });
+
+      const existingPlace = buildExistingPlace('place-1', 'Civic Hall', 'space-existing', 'Foyer');
+      locationServiceMocks.getLocations.mockResolvedValue([existingPlace]);
+
+      // Synthetic updateLocation response: a copy of the place with the
+      // newly-staged Space appended (server-issued id, clientId echoed).
+      locationServiceMocks.updateLocation.mockImplementationOnce(
+        async (_calendarId: string, snapshot: EventLocation) => {
+          const updated = new EventLocation(
+            snapshot.id, snapshot.name, snapshot.address, snapshot.city,
+            snapshot.state, snapshot.postalCode, snapshot.country,
+          );
+          updated.spaces = (snapshot.spaces ?? []).map((s, i) => {
+            const persisted = new EventLocationSpace(s.id || `server-space-${i}`, updated.id);
+            if (s.clientId) persisted.clientId = s.clientId;
+            // Carry the staged content forward so the picker can render the
+            // new sub-row by name.
+            for (const lang of s.getLanguages()) {
+              const c = s.content(lang);
+              persisted.addContent(
+                new EventLocationSpaceContent(lang, c.name, c.accessibilityInfo ?? ''),
+              );
+            }
+            return persisted;
+          });
+          return updated;
+        },
+      );
+
+      const { wrapper } = await mountedEditorOnRoute('/event', [calendar]);
+      currentWrapper = wrapper;
+
+      // Open the picker.
+      const locationCard = wrapper.findComponent({ name: 'LocationDisplayCard' });
+      await locationCard.vm.$emit('add-location');
+      await nextTick();
+      await flushPromises();
+
+      const pickerModal = wrapper.findComponent({ name: 'LocationPickerModal' });
+      expect(pickerModal.exists()).toBe(true);
+
+      // Click the per-Place add-space action.
+      await pickerModal.vm.$emit('add-space', { placeId: 'place-1' });
+      await nextTick();
+      await flushPromises();
+
+      // Sheet visible, picker hidden.
+      const addSpaceSheet = wrapper.findComponent({ name: 'AddSpaceSheet' });
+      expect(addSpaceSheet.exists()).toBe(true);
+      expect(wrapper.findComponent({ name: 'LocationPickerModal' }).exists()).toBe(false);
+
+      // Sheet received the resolved Place + calendarId.
+      expect(addSpaceSheet.props('place').id).toBe('place-1');
+      expect(addSpaceSheet.props('calendarId')).toBe('testCalendarId');
+
+      // Stage a new Space via the real SpacesEditor's update:spaces emit
+      // (skipping the inline EditSpace UI keeps this test focused on the
+      // sheet wiring rather than the per-row form).
+      const spacesEditor = wrapper.findComponent({ name: 'SpacesEditor' });
+      expect(spacesEditor.exists()).toBe(true);
+      const stagedSpace = new EventLocationSpace(undefined, 'place-1');
+      stagedSpace.clientId = 'client-staged-1';
+      stagedSpace.addContent(new EventLocationSpaceContent('en', 'Atrium', ''));
+      const currentBuffer = spacesEditor.props('spaces') as EventLocationSpace[];
+      await spacesEditor.vm.$emit('update:spaces', [...currentBuffer, stagedSpace]);
+      await nextTick();
+      await flushPromises();
+
+      // Click Save — find the primary PillButton in the sheet's footer.
+      const sheetButtons = addSpaceSheet.findAllComponents({ name: 'PillButton' });
+      const saveButton = sheetButtons.find(b => b.props('variant') === 'primary');
+      expect(saveButton).toBeDefined();
+      await saveButton!.trigger('click');
+      await nextTick();
+      await flushPromises();
+
+      // updateLocation called once with the merged spaces[].
+      expect(locationServiceMocks.updateLocation).toHaveBeenCalledTimes(1);
+      const [calledCalendarId, calledSnapshot] = locationServiceMocks.updateLocation.mock.calls[0];
+      expect(calledCalendarId).toBe('testCalendarId');
+      expect(calledSnapshot).toBeInstanceOf(EventLocation);
+      expect(calledSnapshot.id).toBe('place-1');
+      expect(calledSnapshot.name).toBe('Civic Hall');
+      // The merged buffer carries both the existing Space and the staged one.
+      expect(calledSnapshot.spaces).toHaveLength(2);
+      expect(calledSnapshot.spaces.map((s: EventLocationSpace) => s.clientId ?? null))
+        .toContain('client-staged-1');
+
+      // Sheet closes; picker re-opens seeded with the place name.
+      expect(wrapper.findComponent({ name: 'AddSpaceSheet' }).exists()).toBe(false);
+      const reopenedPicker = wrapper.findComponent({ name: 'LocationPickerModal' });
+      expect(reopenedPicker.exists()).toBe(true);
+      expect(reopenedPicker.props('initialSearch')).toBe('Civic Hall');
+
+      // The new Space appears as a sub-row under the place — the picker's
+      // `locations` prop carries the updated Place with both spaces.
+      const places = reopenedPicker.props('locations') as EventLocation[];
+      const updatedRow = places.find(p => p.id === 'place-1');
+      expect(updatedRow).toBeDefined();
+      expect(updatedRow?.spaces).toHaveLength(2);
+      expect(updatedRow?.spaces.some(s => (s.content('en')?.name ?? '') === 'Atrium')).toBe(true);
+    });
+
+    it('add-space cancel path: clicking Cancel in the sheet returns to the picker without a service call', async () => {
+      const calendar = new Calendar('testCalendarId', 'testName');
+      calendar.addContent({ language: 'en', name: 'Test Calendar', description: '' });
+
+      const existingPlace = buildExistingPlace('place-2', 'Library Annex', 'space-foyer', 'Lobby');
+      locationServiceMocks.getLocations.mockResolvedValue([existingPlace]);
+
+      const { wrapper } = await mountedEditorOnRoute('/event', [calendar]);
+      currentWrapper = wrapper;
+
+      // Open picker -> click add-space.
+      const locationCard = wrapper.findComponent({ name: 'LocationDisplayCard' });
+      await locationCard.vm.$emit('add-location');
+      await nextTick();
+      await flushPromises();
+
+      const pickerModal = wrapper.findComponent({ name: 'LocationPickerModal' });
+      await pickerModal.vm.$emit('add-space', { placeId: 'place-2' });
+      await nextTick();
+      await flushPromises();
+
+      const addSpaceSheet = wrapper.findComponent({ name: 'AddSpaceSheet' });
+      expect(addSpaceSheet.exists()).toBe(true);
+
+      // Click Cancel — find the ghost PillButton in the sheet's footer.
+      const sheetButtons = addSpaceSheet.findAllComponents({ name: 'PillButton' });
+      const cancelButton = sheetButtons.find(b => b.props('variant') === 'ghost');
+      expect(cancelButton).toBeDefined();
+      await cancelButton!.trigger('click');
+      await nextTick();
+      await flushPromises();
+
+      // Sheet closed; picker re-opened with no search seed.
+      expect(wrapper.findComponent({ name: 'AddSpaceSheet' }).exists()).toBe(false);
+      const reopenedPicker = wrapper.findComponent({ name: 'LocationPickerModal' });
+      expect(reopenedPicker.exists()).toBe(true);
+      expect(reopenedPicker.props('initialSearch')).toBe('');
+
+      // No service call was made.
+      expect(locationServiceMocks.updateLocation).not.toHaveBeenCalled();
     });
   });
 });
