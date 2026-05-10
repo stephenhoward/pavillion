@@ -67,7 +67,8 @@
     "empty_help": "Créez votre premier lieu pour commencer",
     "no_results": "Aucun lieu ne correspond à votre recherche",
     "remove_button": "Supprimer le lieu",
-    "create_new_button": "Créer un nouveau"
+    "create_new_button": "Créer un nouveau",
+    "add_space_aria": "Ajouter un espace à {{name}}"
   },
   "create_location": {
     "title": "Créer un lieu",

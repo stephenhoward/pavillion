@@ -170,6 +170,7 @@
               <Pencil :size="20" :stroke-width="2" aria-hidden="true" />
             </button>
             <button
+              v-if="!hideRemove"
               type="button"
               class="icon-button icon-button--danger delete-space-button"
               :aria-label="t('space.delete_space_button', { name: spaceDisplayName(space) })"
@@ -238,9 +239,22 @@ import { Pencil, Plus, Trash2 } from 'lucide-vue-next';
 import EditSpace from '@/client/components/logged_in/calendar/edit-space.vue';
 import { EventLocationSpace } from '@/common/model/location';
 
-const props = defineProps<{
-  spaces: EventLocationSpace[];
-}>();
+const props = withDefaults(
+  defineProps<{
+    spaces: EventLocationSpace[];
+    /**
+     * When true, the per-row delete button is not rendered. The component
+     * still emits `remove-space` programmatically if a parent calls it, but
+     * the editor's own UI offers no removal affordance — used by consumers
+     * (like the add-space sheet) where deletion is handled in a dedicated
+     * full place editor and would be out of scope here.
+     */
+    hideRemove?: boolean;
+  }>(),
+  {
+    hideRemove: false,
+  },
+);
 
 const emit = defineEmits<{
   (e: 'update:spaces', value: EventLocationSpace[]): void;

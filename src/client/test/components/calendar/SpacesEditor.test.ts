@@ -80,7 +80,7 @@ const EditSpaceStub = {
 };
 
 const mountSpacesEditor = async (
-  props: { spaces: EventLocationSpace[] },
+  props: { spaces: EventLocationSpace[]; hideRemove?: boolean },
 ) => {
   const router: Router = createRouter({
     history: createMemoryHistory(),
@@ -309,6 +309,64 @@ describe('SpacesEditor', () => {
       expect(
         wrapper.find('.space-item .space-info__new-affordance').exists(),
       ).toBe(false);
+    });
+  });
+
+  describe('hideRemove prop', () => {
+    it('hides per-row delete buttons when hideRemove is true', async () => {
+      const a = createMockSpace('space-1', 'place-1', [
+        { language: 'en', name: 'Pacific Room' },
+      ]);
+      const b = createMockSpace('space-2', 'place-1', [
+        { language: 'en', name: 'Atlantic Room' },
+      ]);
+      const wrapper = await mountSpacesEditor({
+        spaces: [a, b],
+        hideRemove: true,
+      });
+
+      // No delete buttons rendered anywhere in the list.
+      expect(wrapper.findAll('.delete-space-button')).toHaveLength(0);
+
+      // Edit buttons are still present on every row — add-space-sheet
+      // still needs the rename affordance.
+      expect(wrapper.findAll('.edit-space-button')).toHaveLength(2);
+    });
+
+    it('still allows adding a new space when hideRemove is true', async () => {
+      const wrapper = await mountSpacesEditor({
+        spaces: [],
+        hideRemove: true,
+      });
+
+      // Add affordance is unaffected by hideRemove.
+      expect(wrapper.find('.add-space-button').exists()).toBe(true);
+
+      nextStagedSpaceName = 'Pacific Room';
+      await wrapper.find('.add-space-button').trigger('click');
+      await flushPromises();
+      await wrapper.find('.space-editor .btn-save').trigger('click');
+      await flushPromises();
+
+      const emissions = wrapper.emitted('update:spaces');
+      expect(emissions).toBeTruthy();
+      const last = emissions!.at(-1)![0] as EventLocationSpace[];
+      expect(last).toHaveLength(1);
+      expect(last[0].content('en').name).toBe('Pacific Room');
+      expect(last[0].clientId).toBeTruthy();
+
+      // Critically: the editor's own UI never fires remove-space when
+      // hideRemove is on (no delete button to click).
+      expect(wrapper.emitted('remove-space')).toBeFalsy();
+    });
+
+    it('renders delete buttons by default (hideRemove omitted)', async () => {
+      const a = createMockSpace('space-1', 'place-1', [
+        { language: 'en', name: 'Pacific Room' },
+      ]);
+      const wrapper = await mountSpacesEditor({ spaces: [a] });
+
+      expect(wrapper.findAll('.delete-space-button')).toHaveLength(1);
     });
   });
 

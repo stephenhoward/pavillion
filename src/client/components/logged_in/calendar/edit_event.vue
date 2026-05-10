@@ -1069,6 +1069,7 @@ button {
     @location-selected="handleLocationSelected"
     @create-new="createNewLocation"
     @remove-location="handleRemoveLocation"
+    @add-space="handleAddSpace"
     @close="showLocationPicker = false"
   />
 
@@ -1081,6 +1082,15 @@ button {
     @create-location="handleLocationCreated"
     @back-to-search="backToSearch"
     @close="showCreateLocationForm = false"
+  />
+
+  <!-- Add Space Sheet -->
+  <AddSpaceSheet
+    v-if="showAddSpace && addSpaceTargetPlace && editorState.event"
+    :place="addSpaceTargetPlace"
+    :calendar-id="editorState.event.calendarId"
+    @saved="saveAddSpace"
+    @cancelled="cancelAddSpace"
   />
 
   <!-- Unsaved Changes Confirmation Dialog -->
@@ -1130,6 +1140,7 @@ import LanguageTabSelector from '@/client/components/common/language-tab-selecto
 import LocationDisplayCard from '@/client/components/common/location-display-card.vue';
 import LocationPickerModal from '@/client/components/common/location-picker-modal.vue';
 import CreateLocationForm from '@/client/components/common/create-location-form.vue';
+import AddSpaceSheet from '@/client/components/common/add-space-sheet.vue';
 import { ValidationError } from '@/common/exceptions';
 import { DEFAULT_LANGUAGE_CODE } from '@/common/i18n/languages';
 import iso6391 from 'iso-639-1-dir';
@@ -1180,6 +1191,8 @@ const {
   availableLocations,
   showLocationPicker,
   showCreateLocationForm,
+  showAddSpace,
+  addSpaceTargetPlaceId,
   locationFieldErrors,
   locationSubmissionError,
   initialSearch: locationInitialSearch,
@@ -1190,7 +1203,19 @@ const {
   createLocation,
   removeLocation,
   backToSearch,
+  openAddSpace,
+  saveAddSpace,
+  cancelAddSpace,
 } = useLocationManagement();
+
+/**
+ * Resolved Place for the add-space sheet. Looks up the target placeId in
+ * availableLocations; returns null if the target is unset or the place
+ * is no longer present (defensive — should not happen in practice).
+ */
+const addSpaceTargetPlace = computed(() =>
+  availableLocations.value.find(loc => loc.id === addSpaceTargetPlaceId.value) ?? null,
+);
 
 // Unsaved changes composable
 const {
@@ -1425,6 +1450,15 @@ const handleRemoveLocation = () => {
   if (editorState.event) {
     removeLocation(editorState.event);
   }
+};
+
+/**
+ * Handle the picker's per-Place "add space" action — hands off to the
+ * composable, which closes the picker and opens the add-space sheet for
+ * the target Place.
+ */
+const handleAddSpace = ({ placeId }) => {
+  openAddSpace(placeId);
 };
 
 /**
