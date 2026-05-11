@@ -9,7 +9,9 @@ import { CalendarActorEntity } from '@/server/activitypub/entity/calendar_actor'
 import { EventObjectEntity } from '@/server/activitypub/entity/event_object';
 import FollowActivity from '@/server/activitypub/model/action/follow';
 import AnnounceActivity from '@/server/activitypub/model/action/announce';
+import CreateActivity from '@/server/activitypub/model/action/create';
 import UpdateActivity from '@/server/activitypub/model/action/update';
+import DeleteActivity from '@/server/activitypub/model/action/delete';
 import { Calendar, CalendarContent } from '@/common/model/calendar';
 import { CalendarEvent, CalendarEventContent } from '@/common/model/events';
 import { CalendarEntity } from '@/server/calendar/entity/calendar';
@@ -1507,5 +1509,172 @@ describe('ProcessInboxService - processShareEvent SSRF Protection', () => {
 
     // addRemoteEvent must NOT have been called — SSRF protection blocked the fetch
     expect(addRemoteEventSpy.called).toBe(false);
+  });
+});
+
+/**
+ * Pavillion's outbox emits a paired Create(Note)/Update(Note)/Delete(Note)
+ * alongside every Announce(Event)/Update(Event)/Delete(Event) so Mastodon-class
+ * peers render the post on profile timelines. Notes are interop-only — the
+ * note.ts comment is explicit: "Pavillion never ingests remote Notes."
+ *
+ * Before this guard, the inbox dispatcher routed every Create/Update to
+ * processCreateEvent/processUpdateEvent without inspecting object.type and
+ * every Delete to processDeleteEvent without inspecting the target IRI.
+ * A Create(Note) would therefore be parsed as a Create(Event), creating a
+ * phantom EventEntity attributed to the source actor with the Note IRI as
+ * eventSourceUrl. In mutual auto-repost setups (federation Scenario 5) the
+ * phantom passed the loop-prevention guard and cascaded back to the source,
+ * tripping rate-limits and crowding the real Announce(Event) out of the
+ * test timeout window.
+ */
+describe('ProcessInboxService - Note-wrapped activities are skipped', () => {
+  let sandbox: sinon.SinonSandbox;
+  let inboxService: ProcessInboxService;
+  let eventBus: EventEmitter;
+  let testCalendar: Calendar;
+  let calendarInterface: CalendarInterface;
+
+  const remoteActorUri = 'https://remote.instance/calendars/source-calendar';
+  const eventApId = 'https://remote.instance/calendars/source-calendar/events/abc';
+  const noteApId = `${eventApId}/note`;
+
+  beforeEach(async () => {
+    await setupActivityPubSchema();
+    sandbox = sinon.createSandbox();
+    eventBus = new EventEmitter();
+    calendarInterface = new CalendarInterface(eventBus);
+    inboxService = new ProcessInboxService(eventBus, calendarInterface);
+
+    testCalendar = new Calendar('note-skip-calendar-id', 'note-skip-calendar');
+    testCalendar.addContent('en', new CalendarContent('en'));
+    testCalendar.content('en').title = 'Note Skip Test Calendar';
+
+    await CalendarEntity.create({
+      id: testCalendar.id,
+      url_name: testCalendar.urlName,
+      account_id: uuidv4(),
+      languages: 'en',
+    });
+
+    sandbox.stub(console, 'log');
+    sandbox.stub(console, 'warn');
+  });
+
+  afterEach(async () => {
+    sandbox.restore();
+    await teardownActivityPubSchema();
+  });
+
+  it('processCreateEvent skips Note-typed objects without creating an EventObjectEntity or calling addRemoteEvent', async () => {
+    const addRemoteEventSpy = sandbox.stub(calendarInterface, 'addRemoteEvent');
+    const ownsObjectSpy = sandbox.stub(inboxService as any, 'actorOwnsObject');
+
+    const createNote = new CreateActivity(remoteActorUri, {
+      id: noteApId,
+      type: 'Note',
+      attributedTo: remoteActorUri,
+      name: 'Untrusted Note',
+      content: '<p>arbitrary</p>',
+    } as any);
+
+    const result = await inboxService['processCreateEvent'](testCalendar, createNote);
+
+    expect(result).toBeNull();
+    expect(addRemoteEventSpy.called).toBe(false);
+    // Short-circuit must happen before remote ownership verification: the
+    // helper would otherwise dereference the Note IRI over HTTP.
+    expect(ownsObjectSpy.called).toBe(false);
+
+    const persistedPhantom = await EventObjectEntity.findOne({
+      where: { ap_id: noteApId },
+    });
+    expect(persistedPhantom).toBeNull();
+  });
+
+  it('processUpdateEvent skips Note-typed objects even when a stale EventObjectEntity exists at the Note IRI', async () => {
+    // Seed the kind of phantom row a pre-fix Create(Note) would have minted.
+    // Without the Note-type guard, processUpdateEvent would find this row,
+    // load its event, and forward the Note payload to updateRemoteEvent.
+    const phantomEventId = uuidv4();
+    await EventObjectEntity.create({
+      event_id: phantomEventId,
+      ap_id: noteApId,
+      attributed_to: remoteActorUri,
+    });
+    sandbox.stub(calendarInterface, 'getEventById').resolves(new CalendarEvent(phantomEventId, null));
+    sandbox.stub(inboxService as any, 'isPersonActorUri').resolves(false);
+
+    const updateSpy = sandbox.stub(calendarInterface, 'updateRemoteEvent');
+
+    const updateNote = UpdateActivity.fromObject({
+      type: 'Update',
+      actor: remoteActorUri,
+      object: {
+        id: noteApId,
+        type: 'Note',
+        attributedTo: remoteActorUri,
+        name: 'Untrusted Note',
+        content: '<p>arbitrary</p>',
+      },
+    });
+
+    const result = await inboxService.processUpdateEvent(testCalendar, updateNote!);
+
+    expect(result).toBeNull();
+    expect(updateSpy.called).toBe(false);
+  });
+
+  it('processDeleteEvent skips Note IRIs (object string ending in /note) even when an EventObjectEntity exists at that IRI', async () => {
+    // Seed the kind of phantom row a pre-fix Create(Note) would have minted.
+    // Without the Note IRI guard, processDeleteEvent would resolve this row,
+    // verify ownership, and call deleteRemoteEvent — destroying a phantom
+    // event the system never should have had in the first place.
+    const phantomEventId = uuidv4();
+    await EventObjectEntity.create({
+      event_id: phantomEventId,
+      ap_id: noteApId,
+      attributed_to: remoteActorUri,
+    });
+    sandbox.stub(calendarInterface, 'getEventById').resolves(new CalendarEvent(phantomEventId, null));
+    sandbox.stub(inboxService as any, 'isPersonActorUri').resolves(false);
+    // Stub ownership verification to true so the test cannot pass for the
+    // wrong reason (i.e. the real fetcher failing on an unreachable IRI).
+    sandbox.stub(inboxService as any, 'actorOwnsObject').resolves(true);
+
+    const deleteEventSpy = sandbox.stub(calendarInterface, 'deleteRemoteEvent');
+
+    const deleteNote = new DeleteActivity(remoteActorUri, noteApId);
+    await inboxService.processDeleteEvent(testCalendar, deleteNote);
+
+    expect(deleteEventSpy.called).toBe(false);
+  });
+
+  it('processDeleteEvent skips Tombstone objects whose formerType is Note', async () => {
+    const phantomEventId = uuidv4();
+    await EventObjectEntity.create({
+      event_id: phantomEventId,
+      ap_id: noteApId,
+      attributed_to: remoteActorUri,
+    });
+    sandbox.stub(calendarInterface, 'getEventById').resolves(new CalendarEvent(phantomEventId, null));
+    sandbox.stub(inboxService as any, 'isPersonActorUri').resolves(false);
+    sandbox.stub(inboxService as any, 'actorOwnsObject').resolves(true);
+
+    const deleteEventSpy = sandbox.stub(calendarInterface, 'deleteRemoteEvent');
+
+    const deleteTombstone = DeleteActivity.fromObject({
+      type: 'Delete',
+      actor: remoteActorUri,
+      object: {
+        id: noteApId,
+        type: 'Tombstone',
+        formerType: 'Note',
+      },
+    });
+
+    await inboxService.processDeleteEvent(testCalendar, deleteTombstone!);
+
+    expect(deleteEventSpy.called).toBe(false);
   });
 });

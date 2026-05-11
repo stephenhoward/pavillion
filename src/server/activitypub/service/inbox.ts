@@ -663,6 +663,15 @@ class ProcessInboxService {
       return null;
     }
 
+    // Pavillion never ingests remote Notes — they are interop-only, minted on
+    // the wire to wrap a peer's canonical Event for Mastodon-class consumers
+    // (see note.ts). Parsing a Note payload through EventObject.fromActivityPubObject
+    // produces a phantom event that, in mutual auto-repost setups, cascades back
+    // to the source and trips federation rate-limits.
+    if ((message.object as any).type === 'Note') {
+      return null;
+    }
+
     const apObjectId = message.object.id;
     const actorUri = message.actor;
 
@@ -1271,6 +1280,13 @@ class ProcessInboxService {
       return null;
     }
 
+    // See processCreateEvent: Pavillion never ingests remote Notes. An Update
+    // of a Note must short-circuit so it cannot find a stale EventObjectEntity
+    // (from any pre-fix Create(Note) ingest) and mutate it.
+    if ((message.object as any).type === 'Note') {
+      return null;
+    }
+
     const apObjectId = message.object.id;
     const actorUri = message.actor;
 
@@ -1468,6 +1484,17 @@ class ProcessInboxService {
     const objectValue = message.object as any;
     const apObjectId = typeof objectValue === 'string' ? objectValue : objectValue.id;
     const actorUri = message.actor;
+
+    // See processCreateEvent: Pavillion never ingests remote Notes. A Delete
+    // targeting a Note IRI — string form ending in `/note` or a Tombstone
+    // whose `formerType` is `Note` — must short-circuit so it cannot resolve
+    // and remove a phantom event.
+    const targetsNote = (typeof apObjectId === 'string' && apObjectId.endsWith('/note'))
+      || (typeof objectValue === 'object' && objectValue !== null
+        && (objectValue.formerType === 'Note' || objectValue.type === 'Note'));
+    if (targetsNote) {
+      return;
+    }
 
     // Look up the local event by its AP ID
     let apObject = await EventObjectEntity.findOne({
