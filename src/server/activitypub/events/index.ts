@@ -16,6 +16,7 @@ import UpdateActivity from '../model/action/update';
 import DeleteActivity from '../model/action/delete';
 import AnnounceActivity from '../model/action/announce';
 import { EventObject } from '../model/object/event';
+import { NoteObject } from '../model/object/note';
 import { ActivityPubOutboxMessageEntity, ActivityPubInboxMessageEntity } from '@/server/activitypub/entity/activitypub';
 import { EventObjectEntity } from '@/server/activitypub/entity/event_object';
 import UserActorService from '../service/user_actor';
@@ -99,6 +100,17 @@ export default class ActivityPubEventHandlers implements DomainEventHandlers {
       payload.calendar,
       new AnnounceActivity(actorUrl, eventUrl).addressPublic(`${actorUrl}/followers`),
     );
+
+    // Paired Create(Note) emission for Mastodon-class peers that ignore
+    // Event-typed activities on profile timelines. The Note wraps the same
+    // canonical event so the activity renders in Mastodon profile feeds.
+    await this.service.addToOutbox(
+      payload.calendar,
+      new CreateActivity(
+        actorUrl,
+        new NoteObject(payload.calendar, payload.event),
+      ).addressPublic(`${actorUrl}/followers`),
+    );
   }
 
   /**
@@ -121,6 +133,16 @@ export default class ActivityPubEventHandlers implements DomainEventHandlers {
         new EventObject(payload.calendar, payload.event),
       ).addressPublic(`${actorUrl}/followers`),
     );
+
+    // Paired Update(Note) emission so Mastodon-class peers see edits reflected
+    // in profile timelines alongside the Pavillion-native Update(Event).
+    await this.service.addToOutbox(
+      payload.calendar,
+      new UpdateActivity(
+        actorUrl,
+        new NoteObject(payload.calendar, payload.event),
+      ).addressPublic(`${actorUrl}/followers`),
+    );
   }
 
   private async handleEventDeleted(payload: ActivityPubEventDeletedPayload): Promise<void> {
@@ -130,6 +152,17 @@ export default class ActivityPubEventHandlers implements DomainEventHandlers {
       new DeleteActivity(
         actorUrl,
         EventObject.eventUrl(payload.calendar, payload.event),
+      ).addressPublic(`${actorUrl}/followers`),
+    );
+
+    // Paired Delete(Note) emission. Uses the Note IRI string form because
+    // DeleteActivity takes the object URL directly, mirroring the Event
+    // Delete shape.
+    await this.service.addToOutbox(
+      payload.calendar,
+      new DeleteActivity(
+        actorUrl,
+        NoteObject.noteUrl(payload.calendar, payload.event),
       ).addressPublic(`${actorUrl}/followers`),
     );
   }

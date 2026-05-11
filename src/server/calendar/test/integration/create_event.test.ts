@@ -96,14 +96,18 @@ describe('Event API', () => {
     });
     let entity = await EventEntity.findOne({ where: { id: response.body.id } });
 
-    // Poll for the outbox message to be processed (ARM CI runners need more time)
+    // Poll for the outbox message to be processed (ARM CI runners need more time).
+    // Event creation now emits paired Announce(Event) + Create(Note) so we
+    // filter by activity type instead of ordering — protects against future
+    // activity additions and removes order-dependence.
     let message: ActivityPubOutboxMessageEntity | null = null;
     for (let i = 0; i < 20; i++) {
       await new Promise(resolve => setTimeout(resolve, 100));
-      message = await ActivityPubOutboxMessageEntity.findOne({
+      const messages = await ActivityPubOutboxMessageEntity.findAll({
         where: { calendar_id: calendar.id },
-        order: [['message_time', 'DESC']],
+        order: [['message_time', 'ASC']],
       });
+      message = messages.find(m => (m.message as any)?.type === 'Announce') ?? null;
       if (message?.processed_time) break;
     }
 
@@ -122,6 +126,9 @@ describe('Event API', () => {
       expect(messageObj.object, "has an appropriate event URL").toContain(entity.id);
       expect(message.processed_time,"message in the outbox was processed").not.toBe(null);
     }
-    expect(postStub.calledOnce,"post to remote inbox").toBe(true);
+    // Paired emission: Announce(Event) + Create(Note) both post to follower
+    // inboxes. The remote-post contract under test is "the event reached
+    // federation" — assert at least one post (the Announce leg) happened.
+    expect(postStub.called,"post to remote inbox").toBe(true);
   });
 });

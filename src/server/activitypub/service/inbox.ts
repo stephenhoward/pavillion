@@ -19,6 +19,7 @@ import { EventObjectEntity } from "@/server/activitypub/entity/event_object";
 import { CalendarActorEntity } from "@/server/activitypub/entity/calendar_actor";
 import RemoteCalendarService from "@/server/activitypub/service/remote_calendar";
 import { EventObject } from "@/server/activitypub/model/object/event";
+import { NoteObject } from "@/server/activitypub/model/object/note";
 import { ActivityPubActor } from "@/server/activitypub/model/base";
 import CalendarInterface from "@/server/calendar/interface";
 import ModerationInterface from "@/server/moderation/interface";
@@ -931,6 +932,24 @@ class ProcessInboxService {
     // Add to outbox
     await addToOutbox(this.eventBus, calendar, announceActivity);
 
+    // Paired Create(Note) emission for Mastodon-class peers that ignore
+    // Announce(Event) on profile timelines. The Note is attributed to the
+    // reposting calendar (this calendar's actor URL) and carries the remote
+    // event's canonical IRI as `urlOverride`; NoteObject runs that override
+    // through `sanitizeExternalUrlHref` so a malicious or malformed scheme
+    // falls back to omitting `url` rather than landing in the wire payload.
+    // Both emissions live below the DEC-008 dismissal gate above, so a
+    // dismissed event suppresses both Announce(Event) and Create(Note)
+    // together.
+    const event = await this.calendarInterface.getEventById(eventObject.event_id);
+    if (event) {
+      const noteActivity = new CreateActivity(
+        localActorUrl,
+        new NoteObject(calendar, event, { urlOverride: eventApId }),
+      ).addressPublic(`${localActorUrl}/followers`);
+      await addToOutbox(this.eventBus, calendar, noteActivity);
+    }
+
     // Apply category mappings from stored AP payload (failure-safe)
     // remoteCalendar.id is the CalendarActorEntity UUID used as the source actor key
     try {
@@ -947,7 +966,13 @@ class ProcessInboxService {
 
     // Emit eventReposted so downstream handlers (e.g. event instance building)
     // can process the newly auto-reposted event on the reposter's calendar.
-    const event = await this.calendarInterface.getEventById(eventObject.event_id);
+    // Note: Update(Event) / Delete(Event) cascades for SharedEventEntity-bound
+    // events do not exist as distinct inbox emission sites — `processUpdateEvent`
+    // emits `eventUpdated` with `calendar: null` (which the outbox handler
+    // returns from early), and `processDeleteEvent` makes no bus emission.
+    // The paired Note Update/Delete propagation for locally-owned events lives
+    // in the outbox event handlers (handleEventUpdated/handleEventDeleted) and
+    // is covered by sibling pv-l35p.2.
     if (event) {
       this.eventBus.emit('eventReposted', { event, calendar });
     }

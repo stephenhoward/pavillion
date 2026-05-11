@@ -113,11 +113,18 @@ describe('Place+Spaces atomic save: federation regression', () => {
     eventBus.emit('eventUpdated', { calendar, event });
     await new Promise(resolve => setTimeout(resolve, 50));
 
-    // Assert — exactly one outbox enqueue happened, and it carried an Update
-    // (NOT something Place-shaped). Architectural Decision 6 forbids Place-
-    // level AP activities; this assertion is the load-bearing guard.
-    expect(addToOutboxStub.calledOnce, 'exactly one Update enqueued for the event').toBe(true);
-    const [calendarArg, activity] = addToOutboxStub.getCall(0).args;
+    // Assert — paired Update(Event) + Update(Note) enqueued for the event.
+    // The first call carries the Pavillion-native Update(Event) (which is the
+    // subject of this regression — NOT something Place-shaped — Architectural
+    // Decision 6 forbids Place-level AP activities). The second call carries
+    // the paired Update(Note) for Mastodon-class peers; it does not affect
+    // the Place/Space wire shape this test pins.
+    expect(addToOutboxStub.calledTwice, 'paired Update(Event) + Update(Note) enqueued').toBe(true);
+    const eventCall = addToOutboxStub.getCalls().find(
+      call => (call.args[1] as any)?.object?.type === 'Event',
+    );
+    expect(eventCall, 'Update(Event) leg present in outbox calls').toBeDefined();
+    const [calendarArg, activity] = eventCall!.args;
     expect(calendarArg).toBe(calendar);
     expect(activity).toBeInstanceOf(UpdateActivity);
     expect((activity as UpdateActivity).type).toBe('Update');
@@ -194,8 +201,14 @@ describe('Place+Spaces atomic save: federation regression', () => {
     eventBus.emit('eventUpdated', { calendar, event });
     await new Promise(resolve => setTimeout(resolve, 50));
 
-    expect(addToOutboxStub.calledOnce).toBe(true);
-    const activity = addToOutboxStub.getCall(0).args[1];
+    // Paired Update(Event) + Update(Note) emission — filter to the Event leg,
+    // which is the one carrying the pavillion:place wire shape this test pins.
+    expect(addToOutboxStub.calledTwice).toBe(true);
+    const eventCall = addToOutboxStub.getCalls().find(
+      call => (call.args[1] as any)?.object?.type === 'Event',
+    );
+    expect(eventCall, 'Update(Event) leg present in outbox calls').toBeDefined();
+    const activity = eventCall!.args[1];
     const emittedAp = (activity as any).object.toActivityPubObject();
 
     expect(emittedAp['pavillion:place']).toBeDefined();

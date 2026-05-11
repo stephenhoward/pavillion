@@ -1,6 +1,7 @@
 import express, { Request, Response, Application, RequestHandler } from 'express';
 import config from 'config';
 
+import ExpressHelper from '@/server/common/helper/express';
 import CreateActivity from '@/server/activitypub/model/action/create';
 import UpdateActivity from '@/server/activitypub/model/action/update';
 import DeleteActivity from '@/server/activitypub/model/action/delete';
@@ -11,6 +12,7 @@ import UndoActivity from '@/server/activitypub/model/action/undo';
 import ActivityPubInterface from '@/server/activitypub/interface';
 import { logError } from '@/server/common/helper/error-logger';
 import CalendarInterface from '@/server/calendar/interface';
+import { EventNotFoundError } from '@/common/exceptions/calendar';
 import { createLogger } from '@/server/common/helper/logger';
 
 const logger = createLogger('activitypub');
@@ -54,6 +56,7 @@ export default class ActivityPubServerRoutes {
     // Calendar (Group) actor endpoints
     router.get('/calendars/:urlname', this.getCalendarActor.bind(this));
     router.get('/calendars/:urlname/events/:eventid', this.getEvent.bind(this));
+    router.get('/calendars/:urlname/events/:eventid/note', this.getNote.bind(this));
     router.get('/calendars/:urlname/series', this.getSeriesCollection.bind(this));
     router.get('/calendars/:urlname/series/:seriesid', this.getSeries.bind(this));
     router.get('/calendars/:urlname/outbox', this.readOutbox.bind(this));
@@ -181,6 +184,56 @@ export default class ActivityPubServerRoutes {
     }
     catch (error) {
       logError(error, `Error fetching event ${req.params.eventid}`);
+      res.status(500).send('Internal server error');
+    }
+  }
+
+  /**
+   * Get a calendar event rendered as an ActivityStreams Note for Mastodon-class
+   * consumers. Mirrors `getEvent`'s posture: unauthenticated, 404 on missing
+   * calendar or missing event. The `:eventid` path param is UUID-validated to
+   * avoid wasting a DB query (and to satisfy security-playbook path-param
+   * validation).
+   *
+   * @param urlname - calendar URL name
+   * @param eventid - event UUID
+   * @returns Note object as ActivityPub JSON-LD
+   */
+  async getNote(req: Request, res: Response): Promise<void> {
+    const { urlname, eventid } = req.params;
+
+    if (!ExpressHelper.isValidUUID(eventid)) {
+      res.status(400).send('Invalid event id');
+      return;
+    }
+
+    try {
+      const calendar = await this.calendarService.getCalendarByName(urlname);
+      if (!calendar) {
+        res.status(404).send('Calendar not found');
+        return;
+      }
+
+      let event;
+      try {
+        event = await this.calendarService.getEventById(eventid);
+      }
+      catch (error) {
+        if (error instanceof EventNotFoundError) {
+          res.status(404).send('Event not found');
+          return;
+        }
+        throw error;
+      }
+
+      const { NoteObject } = await import('@/server/activitypub/model/object/note');
+      const noteObject = new NoteObject(calendar, event);
+
+      res.setHeader('Content-Type', 'application/activity+json');
+      res.json(noteObject.toActivityPubObject());
+    }
+    catch (error) {
+      logError(error, `Error fetching note for event ${req.params.eventid}`);
       res.status(500).send('Internal server error');
     }
   }
