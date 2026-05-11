@@ -169,6 +169,11 @@ architecture:
     description: Conceptual integrity, decision adherence, narrative coherence, responsibility clarity, federation model alignment, product direction
     skill: architecture-playbook
 
+documentation:
+  voice-and-structure:
+    description: Voice, structure, and scope standards for user-facing guides in docs/guides/; pre-publish checklist; continuity with the marketing site at pavillion.social
+    skill: documentation-playbook
+
 testing:
   test-tiers:
     description: Which test type to use (unit, integration, e2e), testing boundaries, tier selection rules
