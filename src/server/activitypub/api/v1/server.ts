@@ -225,6 +225,10 @@ export default class ActivityPubServerRoutes {
         }
         throw error;
       }
+      if (!event) {
+        res.status(404).send('Event not found');
+        return;
+      }
 
       const { NoteObject } = await import('@/server/activitypub/model/object/note');
       const noteObject = new NoteObject(calendar, event);

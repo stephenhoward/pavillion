@@ -165,6 +165,20 @@ describe('GET /calendars/:urlname/events/:eventid/note', () => {
     expect(res.send.calledWith('Event not found')).toBe(true);
   });
 
+  it('should return 404 when getEventById resolves to null', async () => {
+    sandbox.stub(calendarAPI, 'getCalendarByName').resolves(new Calendar('cal-id', 'mycal'));
+    sandbox.stub(calendarAPI, 'getEventById').resolves(null as any);
+
+    const req = { params: { urlname: 'mycal', eventid: validEventId } };
+    const res = { status: sinon.stub(), send: sinon.stub(), setHeader: sinon.stub(), json: sinon.stub() };
+    res.status.returns(res);
+
+    await routes.getNote(req as any, res as any);
+
+    expect(res.status.calledWith(404)).toBe(true);
+    expect(res.send.calledWith('Event not found')).toBe(true);
+  });
+
   it('should return a properly serialized ActivityPub Note object', async () => {
     const calendar = new Calendar('cal-id', 'mycal');
     const event = new CalendarEvent(validEventId, 'cal-id');
