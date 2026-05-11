@@ -48,7 +48,7 @@ Right after a successful connection, a second step in the dialog offers to match
 
 Two things populate as a result of connecting to another calendar.
 
-**Your feed.** The **Events** tab in the Feed section is the stream of incoming events from every calendar this one is connected to, newest first. A feed event isn't on your public calendar — it's just visible to you, the owner, as something you *could* publish. Each row has a <Btn>Repost</Btn> button for publishing it onto your calendar, plus a <Btn>Details</Btn> button for the full event view and a <Btn>Report</Btn> button for flagging anything that doesn't belong.
+**Your feed.** The **Events** tab in the Feed section is the stream of incoming events from every calendar this one is connected to, newest first. A feed event isn't on your public calendar — it's just visible to you, the owner, as something you *could* publish. Each row has a <Btn>Repost</Btn> button for publishing it onto your calendar, plus a <Btn>Details</Btn> button for the full event view and a <Btn>Report</Btn> button for flagging genuinely problematic content — spam, harassment, misleading information, or content that violates your instance's policies. If an event just isn't a fit for your calendar, don't report it; not publishing it is the right response.
 
 **Your inbox.** The <Btn>Inbox</Btn> in the main navigation is the activity log for *your* calendar — notifications when someone new connects to you, or when another calendar publishes one of your events on theirs. Connecting to a calendar doesn't directly change your inbox; the inbox is about what other calendars are doing with *yours*.
 
