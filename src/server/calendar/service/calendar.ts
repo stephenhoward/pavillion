@@ -1684,6 +1684,106 @@ class CalendarService {
   }
 
   /**
+   * List public-discoverable calendars for the /view/ discovery page.
+   *
+   * Returns every calendar with `listed = true`, paired with the timestamp of
+   * its most-recent publicly-visible event activity, sorted by that timestamp
+   * descending (calendars without events sort last via NULLS LAST), capped at
+   * 500 rows. Eager-loads `contentEntities` for the localized name +
+   * description. Does NOT eager-load `defaultEventImage` — discovery tiles
+   * don't render images in v1 (epic decision; YAGNI).
+   *
+   * Single SQL round-trip:
+   *   SELECT calendar.*, calendar_content.*,
+   *          (SELECT MAX(event.updatedAt)
+   *             FROM event
+   *             WHERE event.calendar_id = calendar.id
+   *               AND EXISTS (
+   *                 SELECT 1 FROM event_schedule
+   *                 WHERE event_schedule.event_id = event.id
+   *                   AND NOT (event_schedule.is_exclusion = true
+   *                            AND event_schedule.hide_from_public = true)
+   *               )
+   *          ) AS lastEventActivity
+   *   FROM calendar
+   *   LEFT JOIN calendar_content ON calendar_content.calendar_id = calendar.id
+   *   WHERE calendar.listed = true
+   *   ORDER BY lastEventActivity DESC NULLS LAST
+   *   LIMIT 500
+   *
+   * "Publicly visible event" predicate: an event contributes to
+   * `lastEventActivity` only if it owns at least one schedule row that is NOT
+   * a hidden cancellation. The canonical definition lives in
+   * EventInstanceService.rrules() — a schedule suppresses an occurrence
+   * (EXDATE-style) when BOTH `is_exclusion = true` AND `hide_from_public = true`.
+   * An event whose every schedule is a hidden cancellation produces no public
+   * occurrences and must not inflate the calendar's discovery activity. Events
+   * with no event_schedule rows at all are intentionally excluded from
+   * lastEventActivity — they have no published recurrence and therefore no
+   * surface for the public to encounter (matching rrules() emitting nothing).
+   *
+   * Foreign events reposted onto a calendar are tracked via EventRepostEntity
+   * and SharedEventEntity — those links intentionally do NOT influence
+   * `lastEventActivity` here, since the discovery page should rank calendars
+   * by their own publishing cadence, not by their syndication activity.
+   *
+   * @returns Calendars + lastEventActivity tuples, sorted activity-descending,
+   *   capped at 500 rows
+   */
+  async listPublicCalendars(): Promise<Array<{ calendar: Calendar; lastEventActivity: Date | null }>> {
+    const PUBLIC_DISCOVERY_LIMIT = 500;
+
+    // Correlated subquery: an event contributes to MAX(event.updatedAt) only
+    // when it has at least one event_schedule row that is NOT a hidden
+    // cancellation (NOT (is_exclusion AND hide_from_public)). Mirrors the
+    // canonical suppression predicate in EventInstanceService.rrules().
+    // The `lastEventActivity` predicate matches the public events listing
+    // visibility semantics: events whose every schedule is an EXDATE-style
+    // hidden cancellation produce no public occurrences and must not inflate
+    // discovery activity.
+    //
+    // NOTE: the alias 'last_event_activity' is load-bearing — the two ORDER BY
+    // literals below reference it by name. Keep them all in lockstep on rename
+    // or the sort silently regresses.
+    const rows = await CalendarEntity.findAll({
+      where: { listed: true },
+      attributes: {
+        include: [
+          [
+            literal(
+              '(SELECT MAX("event"."updatedAt") FROM "event" '
+              + 'WHERE "event"."calendar_id" = "CalendarEntity"."id" '
+              + 'AND EXISTS (SELECT 1 FROM "event_schedule" '
+              + 'WHERE "event_schedule"."event_id" = "event"."id" '
+              + 'AND NOT ("event_schedule"."is_exclusion" = true '
+              + 'AND "event_schedule"."hide_from_public" = true)))',
+            ),
+            'last_event_activity',
+          ],
+        ],
+      },
+      include: [CalendarContentEntity],
+      order: [
+        // NULLS LAST: calendars with no events sort after calendars that have
+        // published activity. SQLite emits NULLs first by default; PostgreSQL
+        // emits NULLs last on DESC by default but is order-stable with the
+        // explicit clause. Using literal here keeps the ORDER BY portable.
+        [literal('last_event_activity IS NULL'), 'ASC'],
+        [literal('last_event_activity'), 'DESC'],
+      ],
+      limit: PUBLIC_DISCOVERY_LIMIT,
+      subQuery: false,
+    } as any);
+
+    return rows.map((entity) => {
+      const calendar = this.withPublicUrl(entity.toModel());
+      const rawActivity = entity.get('last_event_activity');
+      const lastEventActivity = rawActivity ? new Date(rawActivity as string | number | Date) : null;
+      return { calendar, lastEventActivity };
+    });
+  }
+
+  /**
    * List all local calendars for admin visibility.
    *
    * Returns paginated rows joined with the owner membership and account,

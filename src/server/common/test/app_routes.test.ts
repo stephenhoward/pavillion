@@ -77,6 +77,38 @@ describe('app_routes', () => {
       expect(res.body.template).toBe('site.index.html.ejs');
     });
 
+    // -------------------------------------------------------------------
+    // pv-u4ew.3 — bare /view (with or without trailing slash) must resolve
+    // to the site SPA, not the client SPA. The /view/ discovery landing
+    // page is served by the site shell; the prior regex only matched
+    // /view/.* and fell through to the client catch-all on bare /view.
+    // -------------------------------------------------------------------
+
+    it('should serve site.index.html.ejs for bare /view (no trailing slash)', async () => {
+      const app = buildTestApp('en');
+      const res = await request(app).get('/view');
+
+      expect(res.status).toBe(200);
+      expect(res.body.template).toBe('site.index.html.ejs');
+    });
+
+    it('should serve site.index.html.ejs for /view/ (trailing slash, no calendar)', async () => {
+      const app = buildTestApp('en');
+      const res = await request(app).get('/view/');
+
+      expect(res.status).toBe(200);
+      expect(res.body.template).toBe('site.index.html.ejs');
+    });
+
+    it('should NOT route bare /view through the client SPA catch-all', async () => {
+      // Regression for the prior catch-all exclusion (`view\/`) which only
+      // matched a trailing slash; bare /view leaked to the client shell.
+      const app = buildTestApp('en');
+      const res = await request(app).get('/view');
+
+      expect(res.body.template).not.toBe('client.index.html.ejs');
+    });
+
     it('should serve site.index.html.ejs for /view/calendar/event/123', async () => {
       const app = buildTestApp('en');
       const res = await request(app).get('/view/mycalendar/event/123');
@@ -138,6 +170,30 @@ describe('app_routes', () => {
       const mockConfig = buildMockConfigInterface('en');
       const app = buildTestApp('es', mockConfig);
       const res = await request(app).get('/es/view/mycalendar');
+
+      expect(res.status).toBe(200);
+      expect(res.body.template).toBe('site.index.html.ejs');
+    });
+
+    // -------------------------------------------------------------------
+    // pv-u4ew.3 — bare /[locale]/view (with or without trailing slash)
+    // must also resolve to the site SPA so the discovery landing page is
+    // reachable under a locale prefix.
+    // -------------------------------------------------------------------
+
+    it('should serve site.index.html.ejs for bare /es/view (no trailing slash) when es is not default', async () => {
+      const mockConfig = buildMockConfigInterface('en');
+      const app = buildTestApp('es', mockConfig);
+      const res = await request(app).get('/es/view');
+
+      expect(res.status).toBe(200);
+      expect(res.body.template).toBe('site.index.html.ejs');
+    });
+
+    it('should serve site.index.html.ejs for /es/view/ (trailing slash) when es is not default', async () => {
+      const mockConfig = buildMockConfigInterface('en');
+      const app = buildTestApp('es', mockConfig);
+      const res = await request(app).get('/es/view/');
 
       expect(res.status).toBe(200);
       expect(res.body.template).toBe('site.index.html.ejs');

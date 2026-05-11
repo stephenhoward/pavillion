@@ -11,6 +11,7 @@ import CalendarView from '@/site/components/calendar.vue';
 import EventView from '@/site/components/event.vue';
 import EventInstanceView from '@/site/components/event-instance.vue';
 import SeriesView from '@/site/components/series-view.vue';
+import Discovery from '@/site/components/discovery.vue';
 import Authentication from '@/client/service/authn';
 import Config from '@/client/service/config';
 import { AVAILABLE_LANGUAGES, DEFAULT_LANGUAGE_CODE } from '@/common/i18n/languages';
@@ -25,6 +26,7 @@ Config.init().then( async (config) => {
   const authentication = new Authentication(localStorage);
 
   const routes: RouteRecordRaw[] = [
+    { path: '/view', component: Discovery, name: 'discovery' },
     { path: '/view/:calendar', component: CalendarView, name: 'calendar' },
     { path: '/view/:calendar/events/:event', component: EventView, name: 'event' },
     { path: '/view/:calendar/events/:event/:startTime(\\d{8}-\\d{4})', component: EventInstanceView, name: 'instance' },
@@ -40,6 +42,7 @@ Config.init().then( async (config) => {
     // Locale-prefixed variants — unnamed intentionally.
     // Navigation uses the default-locale named routes; useLocale.localizedPath() adds the prefix.
     routes.push(
+      { path: `/:locale(${pattern})/view`, component: Discovery },
       { path: `/:locale(${pattern})/view/:calendar`, component: CalendarView },
       { path: `/:locale(${pattern})/view/:calendar/events/:event`, component: EventView },
       { path: `/:locale(${pattern})/view/:calendar/events/:event/:startTime(\\d{8}-\\d{4})`, component: EventInstanceView },

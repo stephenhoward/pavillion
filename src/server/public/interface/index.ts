@@ -30,6 +30,20 @@ export default class PublicCalendarInterface {
     return this.calendarInterface.getCalendarByName(name);
   }
 
+  /**
+   * List public-discoverable calendars for the /view/ discovery page.
+   * Proxies directly to the calendar-domain interface (cross-domain call;
+   * Public never touches Calendar entities directly per DEC-003). No
+   * intermediate service hop — this is a pure facade. Matches the
+   * getCalendarByName pattern above.
+   *
+   * @returns Calendars + lastEventActivity tuples, sorted activity-descending,
+   *   capped at 500 rows server-side
+   */
+  async listPublicCalendars(): Promise<Array<{ calendar: Calendar; lastEventActivity: Date | null }>> {
+    return this.calendarInterface.listPublicCalendars();
+  }
+
   async listEventInstances(calendar: Calendar): Promise<CalendarEventInstance[]> {
     return this.publicCalendarService.listEventInstances(calendar);
   }

@@ -256,6 +256,23 @@ export const configSiteByIp: RequestHandler = isRateLimitEnabled()
   : noOpMiddleware;
 
 /**
+ * Public calendar discovery list endpoint rate limiter by IP.
+ * Limits: 60 requests per IP per minute (default config).
+ *
+ * Caps anonymous traffic to GET /api/public/v1/calendars, which is read by
+ * the /view/ discovery landing page. The limit is permissive enough for
+ * legitimate page-render and pagination traffic while preventing scrape-style
+ * abuse of the listed-calendar enumeration surface.
+ */
+export const publicCalendarListByIp: RequestHandler = isRateLimitEnabled()
+  ? createIpRateLimiter(
+    config.get<number>('rateLimit.publicCalendarList.byIp.max'),
+    config.get<number>('rateLimit.publicCalendarList.byIp.windowMs'),
+    'public-calendar-list',
+  )
+  : noOpMiddleware;
+
+/**
  * Public account application submission rate limiter by IP address.
  * Limits: 5 requests per IP per 15 minutes (default config).
  */

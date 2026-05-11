@@ -144,6 +144,10 @@ rateLimit:
     byIp:
       windowMs: 60000  # 1 minute in milliseconds
       max: 60  # 60 requests per IP per minute
+  publicCalendarList:
+    byIp:
+      windowMs: 60000  # 1 minute in milliseconds
+      max: 60  # 60 requests per IP per minute
   application:
     byIp:
       windowMs: 900000  # 15 minutes in milliseconds

@@ -83,6 +83,52 @@ describe('Calendar Model', () => {
       expect(restored.content('es').name).toBe('Nombre');
     });
 
+    it('should default `listed` to true and preserve it through round-trip', () => {
+      const calendar = new Calendar('cal-listed-default', 'default-listed');
+      calendar.languages = ['en'];
+
+      // Default at construction time.
+      expect(calendar.listed).toBe(true);
+
+      const obj = calendar.toObject();
+      expect(obj.listed).toBe(true);
+
+      const restored = Calendar.fromObject(obj);
+      expect(restored.listed).toBe(true);
+    });
+
+    it('should preserve explicit `listed: false` through round-trip', () => {
+      const calendar = new Calendar('cal-unlisted', 'unlisted');
+      calendar.languages = ['en'];
+      calendar.listed = false;
+
+      const obj = calendar.toObject();
+      expect(obj.listed).toBe(false);
+
+      const restored = Calendar.fromObject(obj);
+      expect(restored.listed).toBe(false);
+    });
+
+    it('should default `listed` to true when the key is absent from fromObject input', () => {
+      // Backward compatibility: serialized calendars from before the flag
+      // existed must default to listed=true so they continue appearing on
+      // public discovery exactly as they did pre-feature.
+      const obj = {
+        id: 'cal-legacy',
+        urlName: 'legacy-calendar',
+        languages: ['en'],
+        description: '',
+        defaultDateRange: null,
+        widgetAllowedDomain: null,
+        defaultEventImageId: null,
+        defaultEventImage: null,
+        content: {},
+      };
+
+      const calendar = Calendar.fromObject(obj);
+      expect(calendar.listed).toBe(true);
+    });
+
     it('should handle defaultEventImageId without object via fromObject', () => {
       const obj = {
         id: 'cal-4',

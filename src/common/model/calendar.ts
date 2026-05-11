@@ -19,6 +19,7 @@ class Calendar extends TranslatedModel<CalendarContent> {
   widgetAllowedDomain: string | null = null;
   defaultEventImageId: string | null = null;
   defaultEventImage: Media | null = null;
+  listed: boolean = true;
   _content: Record<string, CalendarContent> = {};
 
   /**
@@ -59,6 +60,7 @@ class Calendar extends TranslatedModel<CalendarContent> {
       widgetAllowedDomain: this.widgetAllowedDomain,
       defaultEventImageId: this.defaultEventImageId,
       defaultEventImage: this.defaultEventImage?.toObject() ?? null,
+      listed: this.listed,
       content: Object.fromEntries(
         Object.entries(this._content)
           .map(([language, strings]: [string, CalendarContent]) => [language, strings.toObject()]),
@@ -81,6 +83,9 @@ class Calendar extends TranslatedModel<CalendarContent> {
     calendar.widgetAllowedDomain = obj.widgetAllowedDomain || null;
     calendar.defaultEventImageId = obj.defaultEventImageId || null;
     calendar.defaultEventImage = obj.defaultEventImage ? Media.fromObject(obj.defaultEventImage) : null;
+    // Default to true when the key is absent (backward compatibility with
+    // serialized calendars from before the `listed` flag existed).
+    calendar.listed = obj.listed === undefined ? true : Boolean(obj.listed);
 
     // Deserialize content if present
     if (obj.content && typeof obj.content === 'object') {

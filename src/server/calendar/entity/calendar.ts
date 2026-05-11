@@ -25,6 +25,9 @@ class CalendarEntity extends Model {
   @Column({ type: DataType.UUID, allowNull: true })
   declare default_event_image_id: string | null;
 
+  @Column({ type: DataType.BOOLEAN, allowNull: false, defaultValue: true })
+  declare listed: boolean;
+
   @HasMany(() => CalendarContentEntity)
   declare contentEntities: CalendarContentEntity[];
 
@@ -51,6 +54,7 @@ class CalendarEntity extends Model {
     calendar.defaultDateRange = this.default_date_range as DefaultDateRange || null;
     calendar.widgetAllowedDomain = this.widget_allowed_domain || null;
     calendar.defaultEventImageId = this.default_event_image_id || null;
+    calendar.listed = this.listed;
 
     if (this.defaultEventImage) {
       calendar.defaultEventImage = this.defaultEventImage.toModel();
@@ -74,6 +78,7 @@ class CalendarEntity extends Model {
       default_date_range: calendar.defaultDateRange,
       widget_allowed_domain: calendar.widgetAllowedDomain,
       default_event_image_id: calendar.defaultEventImageId,
+      listed: calendar.listed,
     });
   }
 };

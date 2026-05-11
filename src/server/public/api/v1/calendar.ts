@@ -7,21 +7,35 @@ import { CalendarEventSchedule } from '@/common/model/events';
 import CalendarEventInstance from '@/common/model/event_instance';
 import { getRecurrenceSummary } from '@/common/utils/recurrence-text';
 import { parseInstanceSlug } from '@/common/utils/instance-slug';
-import { publicEventInstanceByIp } from '@/server/common/middleware/rate-limiters';
+import { publicEventInstanceByIp, publicCalendarListByIp } from '@/server/common/middleware/rate-limiters';
 import ExpressHelper from '@/server/common/helper/express';
 
 /**
- * Strips sensitive fields from a defaultEventImage object for public responses.
- * Only id and mimeType are exposed; internal fields like originalFilename,
- * fileSize, status, sha256, calendarId, and storageFilename are removed.
+ * Shapes a Calendar.toObject() result for public responses.
+ *
+ * Responsibilities:
+ *   - Strips internal fields not intended for anonymous public consumers.
+ *     Currently drops `listed` (an admin-discovery flag — knowing whether
+ *     a calendar is hidden from the /view/ index is not the public's
+ *     business; the calendar is reachable by direct URL regardless).
+ *   - Projects `defaultEventImage` to `{ id, mimeType }` only — internal
+ *     fields like originalFilename, fileSize, status, sha256, calendarId,
+ *     and storageFilename are removed.
+ *
+ * Allow-list / strip-by-name posture matches the toPublicEventObject helper
+ * below so future additions to Calendar.toObject() do not silently leak
+ * through this surface.
  */
-function stripDefaultEventImage(calendarObj: Record<string, any>): Record<string, any> {
-  if (!calendarObj.defaultEventImage) return calendarObj;
+function toPublicCalendarObject(calendarObj: Record<string, any>): Record<string, any> {
+  // Drop `listed` (admin-discovery flag) via destructure-and-discard; the
+  // ESLint config treats leading-underscore names as intentionally unused.
+  const { listed: _listed, ...rest } = calendarObj; // eslint-disable-line @typescript-eslint/no-unused-vars
+  if (!rest.defaultEventImage) return rest;
   return {
-    ...calendarObj,
+    ...rest,
     defaultEventImage: {
-      id: calendarObj.defaultEventImage.id,
-      mimeType: calendarObj.defaultEventImage.mimeType,
+      id: rest.defaultEventImage.id,
+      mimeType: rest.defaultEventImage.mimeType,
     },
   };
 }
@@ -155,6 +169,7 @@ export default class CalendarRoutes {
 
   installHandlers(app: Application, routePrefix: string): void {
     const router = express.Router();
+    router.get('/calendars', publicCalendarListByIp, this.listPublicCalendars.bind(this));
     router.get('/calendar/:urlName', this.getCalendar.bind(this));
     router.get('/calendar/:urlName/categories', this.listCategories.bind(this));
     router.get('/calendar/:urlName/series', this.listSeries.bind(this));
@@ -169,12 +184,61 @@ export default class CalendarRoutes {
     app.use(routePrefix, router);
   }
 
+  /**
+   * GET /api/public/v1/calendars — list listed calendars for the /view/
+   * discovery landing page.
+   *
+   * Returns a bare array of `{ id, urlName, content[], lastEventActivity }`
+   * built field-by-field via an explicit allow-list projection. This is
+   * deliberately NOT `Calendar.toObject()` passthrough — `toObject()`
+   * exposes `widgetAllowedDomain`, `publicUrl`, `defaultEventImage`,
+   * `defaultEventImageId`, `languages`, `defaultDateRange`, and `listed`,
+   * none of which the discovery surface needs and several of which leak
+   * server/operator-internal configuration. Future additions to
+   * `Calendar.toObject()` must NOT silently appear here.
+   *
+   * Response shape per row:
+   *   - id: string (UUID)
+   *   - urlName: string
+   *   - content: Array<{ language, name, description }>
+   *   - lastEventActivity: ISO 8601 string | null
+   *
+   * No success-path logging (privacy/logging standard). Error path uses
+   * logError so operational signal is preserved without leaking PII into
+   * the success log stream.
+   */
+  async listPublicCalendars(req: Request, res: Response) {
+    try {
+      const rows = await this.service.listPublicCalendars();
+      const body = rows.map(({ calendar, lastEventActivity }) => ({
+        id: calendar.id,
+        urlName: calendar.urlName,
+        content: calendar.getLanguages().map((language) => {
+          const c = calendar.content(language);
+          return {
+            language: c.language,
+            name: c.name,
+            description: c.description,
+          };
+        }),
+        lastEventActivity: lastEventActivity ? lastEventActivity.toISOString() : null,
+      }));
+      res.json(body);
+    }
+    catch (error) {
+      logError(error, 'Error in listPublicCalendars');
+      res.status(500).json({
+        "error": "Failed to retrieve calendars",
+      });
+    }
+  }
+
   async getCalendar(req: Request, res: Response) {
 
     const calendar = await this.service.getCalendarByName(req.params.urlName);
     if (calendar) {
       const calendarObj = calendar.toObject();
-      res.json(stripDefaultEventImage(calendarObj));
+      res.json(toPublicCalendarObject(calendarObj));
     }
     else {
       res.status(404).json({
