@@ -46,13 +46,9 @@ Right after a successful connection, a second step in the dialog offers to match
 
 ## What lands in your feed
 
-Two things populate as a result of connecting to another calendar.
+The **Events** tab in the Feed section is the stream of incoming events from every calendar this one is connected to, newest first. A feed event isn't on your public calendar — it's just visible to you, the owner, as something you *could* publish. Each row has a <Btn>Repost</Btn> button for publishing it onto your calendar, plus a <Btn>Details</Btn> button for the full event view and a <Btn>Report</Btn> button for flagging genuinely problematic content — spam, harassment, misleading information, or content that violates your instance's policies. If an event just isn't a fit for your calendar, don't report it; not publishing it is the right response.
 
-**Your feed.** The **Events** tab in the Feed section is the stream of incoming events from every calendar this one is connected to, newest first. A feed event isn't on your public calendar — it's just visible to you, the owner, as something you *could* publish. Each row has a <Btn>Repost</Btn> button for publishing it onto your calendar, plus a <Btn>Details</Btn> button for the full event view and a <Btn>Report</Btn> button for flagging genuinely problematic content — spam, harassment, misleading information, or content that violates your instance's policies. If an event just isn't a fit for your calendar, don't report it; not publishing it is the right response.
-
-**Your inbox.** The <Btn>Inbox</Btn> in the main navigation is the activity log for *your* calendar — notifications when someone new connects to you, or when another calendar publishes one of your events on theirs. Connecting to a calendar doesn't directly change your inbox; the inbox is about what other calendars are doing with *yours*.
-
-In short: **the feed is what's coming in. The inbox is what's happening to your work.** A visitor to your public page never sees what's in your feed — they see what you've already published. The feed is your editorial space; the calendar is your public face.
+A visitor to your public page never sees what's in your feed — they see what you've already published. The feed is your editorial space; the calendar is your public face.
 
 ## Publish an event by hand
 
@@ -87,6 +83,12 @@ Two clarifications about the stickiness:
 - **It applies to that one event, not to the whole connection.** Unpublishing a single concert doesn't mean you've disconnected from the venue or stopped getting their other events. Future events from the same source still flow through the same way.
 
 If you change your mind, click <Btn>Repost</Btn> on the same event in your feed; that publishes it again, overriding the prior unpublish, and the event is back on your calendar.
+
+## When other calendars connect to yours
+
+Everything above is *you* reaching out to other calendars. The inverse also happens: other calendars connect to yours, and they may publish your events onto theirs. The <Btn>Inbox</Btn> in the main navigation is where you see that activity — notifications when a new calendar follows yours, or when one of your events gets reposted somewhere else.
+
+The inbox doesn't fill up because *you* connected to another calendar; it fills up because *they* connected to you. The mechanics of being followed, and what to do about reports raised against your events, are covered in the federation-etiquette and moderation guides.
 
 ## Aggregator vs. curated: a framing decision
 
