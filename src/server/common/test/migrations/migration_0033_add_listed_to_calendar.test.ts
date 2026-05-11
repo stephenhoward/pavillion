@@ -135,6 +135,20 @@ describe('Migration 0033: add listed to calendar', () => {
     expect('listed' in afterDown).toBe(false);
   });
 
+  it('adds idx_calendar_listed on up and removes it on down', async () => {
+    // Index supports the `WHERE listed = true` predicate in
+    // CalendarService.listPublicCalendars (the public discovery query).
+    await migration.up({ context: sequelize });
+
+    const indexesAfterUp = await sequelize.getQueryInterface().showIndex('calendar') as { name: string }[];
+    expect(indexesAfterUp.some((ix) => ix.name === 'idx_calendar_listed')).toBe(true);
+
+    await migration.down({ context: sequelize });
+
+    const indexesAfterDown = await sequelize.getQueryInterface().showIndex('calendar') as { name: string }[];
+    expect(indexesAfterDown.some((ix) => ix.name === 'idx_calendar_listed')).toBe(false);
+  });
+
   it('is idempotent on a second up run', async () => {
     await migration.up({ context: sequelize });
     await migration.up({ context: sequelize });

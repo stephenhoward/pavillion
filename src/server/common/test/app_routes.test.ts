@@ -84,6 +84,8 @@ describe('app_routes', () => {
     // /view/.* and fell through to the client catch-all on bare /view.
     // -------------------------------------------------------------------
 
+    // Regression for the prior catch-all exclusion (`view\/`) which only
+    // matched a trailing slash; bare /view leaked to the client shell.
     it('should serve site.index.html.ejs for bare /view (no trailing slash)', async () => {
       const app = buildTestApp('en');
       const res = await request(app).get('/view');
@@ -98,15 +100,6 @@ describe('app_routes', () => {
 
       expect(res.status).toBe(200);
       expect(res.body.template).toBe('site.index.html.ejs');
-    });
-
-    it('should NOT route bare /view through the client SPA catch-all', async () => {
-      // Regression for the prior catch-all exclusion (`view\/`) which only
-      // matched a trailing slash; bare /view leaked to the client shell.
-      const app = buildTestApp('en');
-      const res = await request(app).get('/view');
-
-      expect(res.body.template).not.toBe('client.index.html.ejs');
     });
 
     it('should serve site.index.html.ejs for /view/calendar/event/123', async () => {

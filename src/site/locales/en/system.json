@@ -6,6 +6,9 @@
         "beta_label": "Beta"
     },
     "powered_by": "Powered by Pavillion",
+    "footer": {
+        "login_link": "Log in"
+    },
     "discovery": {
         "page_title": "Calendars on this instance",
         "meta_description": "Browse public calendars hosted on this Pavillion instance.",

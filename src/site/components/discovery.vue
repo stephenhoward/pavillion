@@ -2,8 +2,8 @@
 import { ref, computed, inject, onBeforeMount, watch } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import { Calendar as CalendarIcon } from 'lucide-vue-next';
-import type Config from '@/client/service/config';
 
+import type Config from '@/client/service/config';
 import CalendarService, { type PublicCalendarListing } from '../service/calendar';
 import { useLocale } from '../composables/useLocale';
 import { useLocalizedContent } from '../composables/useLocalizedContent';
@@ -56,25 +56,36 @@ function calendarPath(urlName: string): string {
   return localizedPath(`/view/${urlName}`);
 }
 
-function tileName(listing: PublicCalendarListing): string {
-  const content = localizedContent(listing.calendar);
-  return content?.name || listing.calendar.urlName;
-}
-
-function tileDescription(listing: PublicCalendarListing): string {
-  const content = localizedContent(listing.calendar);
-  return content?.description || '';
-}
-
 const instanceHost = computed<string>(() => {
   return siteConfig?.settings?.()?.domain ?? '';
 });
 
-function tileHandle(listing: PublicCalendarListing): string {
+/**
+ * Precomputed per-tile view model. Memoizing here ensures each tile's
+ * localizedContent() lookup runs once per render (not once per template
+ * reference) and gives the template a single, explicit cache point.
+ */
+type DisplayListing = {
+  listing: PublicCalendarListing;
+  href: string;
+  name: string;
+  description: string;
+  handle: string;
+};
+
+const displayListings = computed<DisplayListing[]>(() => {
   const host = instanceHost.value;
-  if (!host) return '';
-  return `${listing.calendar.urlName}@${host}`;
-}
+  return calendars.value.map((listing) => {
+    const content = localizedContent(listing.calendar);
+    return {
+      listing,
+      href: calendarPath(listing.calendar.urlName),
+      name: content?.name || listing.calendar.urlName,
+      description: content?.description || '',
+      handle: host ? `${listing.calendar.urlName}@${host}` : '',
+    };
+  });
+});
 
 /**
  * Sets <title> and <meta name="description"> for the discovery page.
@@ -121,7 +132,7 @@ onBeforeMount(async () => {
 
 <template>
   <main class="discovery">
-    <header class="discovery-header">
+    <div class="discovery-header">
       <div class="discovery-header-inner">
         <h1 class="discovery-title">{{ siteTitle }}</h1>
         <p
@@ -137,68 +148,88 @@ onBeforeMount(async () => {
             rel="noopener noreferrer"
           >
             {{ t('discovery.learn_more') }}
+            <span class="sr-only"> ({{ t('opens_in_new_tab') }})</span>
           </a>
         </p>
       </div>
-    </header>
+    </div>
 
-    <section class="discovery-main">
-      <h2 class="discovery-subheading">{{ t('discovery.page_title') }}</h2>
-
-      <div
-        v-if="state === 'loading'"
-        role="status"
-        class="discovery-loading"
+    <section
+      class="discovery-main"
+      aria-labelledby="discovery-calendars-heading"
+    >
+      <h2
+        id="discovery-calendars-heading"
+        class="discovery-subheading"
       >
-        {{ t('discovery.loading_label') }}
+        {{ t('discovery.page_title') }}
+      </h2>
+
+      <!--
+        Single always-present live region for loading + empty + populated
+        announcements. AT registers the container before any text is injected,
+        so the swap is announced. Errors use a separate role="alert" container
+        so they interrupt regardless of the polite queue.
+      -->
+      <div
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+        class="discovery-status"
+      >
+        <span
+          v-if="state === 'loading'"
+          class="discovery-loading"
+        >
+          {{ t('discovery.loading_label') }}
+        </span>
+        <div
+          v-else-if="state === 'empty'"
+          class="discovery-empty"
+        >
+          <h3 class="discovery-empty-heading">{{ t('discovery.empty_state_heading') }}</h3>
+          <p class="discovery-empty-body">{{ t('discovery.empty_state_body') }}</p>
+        </div>
       </div>
 
       <div
-        v-else-if="state === 'error'"
+        v-if="state === 'error'"
         role="alert"
         class="discovery-error"
       >
         {{ t('discovery.error_message') }}
       </div>
 
-      <div
-        v-else-if="state === 'empty'"
-        class="discovery-empty"
-      >
-        <h3 class="discovery-empty-heading">{{ t('discovery.empty_state_heading') }}</h3>
-        <p class="discovery-empty-body">{{ t('discovery.empty_state_body') }}</p>
-      </div>
-
       <ul
-        v-else
+        v-if="state === 'populated'"
         role="list"
         class="discovery-list"
       >
         <li
-          v-for="listing in calendars"
-          :key="listing.calendar.id"
+          v-for="item in displayListings"
+          :key="item.listing.calendar.id"
           class="discovery-list-item"
         >
           <RouterLink
-            :to="calendarPath(listing.calendar.urlName)"
+            :to="item.href"
             class="discovery-tile"
           >
-            <h3 class="discovery-tile-title">{{ tileName(listing) }}</h3>
+            <h3 class="discovery-tile-title">{{ item.name }}</h3>
             <p
-              v-if="tileDescription(listing)"
+              v-if="item.description"
               class="discovery-tile-description"
             >
-              {{ tileDescription(listing) }}
+              {{ item.description }}
             </p>
             <span
-              v-if="tileHandle(listing)"
+              v-if="item.handle"
               class="discovery-tile-handle"
             >
               <CalendarIcon
                 :size="14"
                 aria-hidden="true"
               />
-              <span>{{ tileHandle(listing) }}</span>
+              <span>{{ item.handle }}</span>
             </span>
           </RouterLink>
         </li>
@@ -243,14 +274,9 @@ onBeforeMount(async () => {
   letter-spacing: $public-letter-spacing-tight;
   line-height: $public-line-height-tight;
   margin: 0 0 $public-space-sm 0;
-  color: $public-text-primary-light;
 
   @include public-tablet-up {
-    font-size: 2.25rem;
-  }
-
-  @include public-dark-mode {
-    color: $public-text-primary-dark;
+    font-size: $public-font-size-3xl;
   }
 }
 
@@ -270,10 +296,7 @@ onBeforeMount(async () => {
   margin: 0;
 
   a {
-    color: $public-accent-light;
-    text-decoration: none;
     border-bottom: 1px solid transparent;
-    transition: $public-transition-normal;
 
     &:hover {
       border-bottom-color: currentColor;
@@ -282,11 +305,11 @@ onBeforeMount(async () => {
     &:focus-visible {
       @include public-focus-visible;
     }
-
-    @include public-dark-mode {
-      color: $public-accent-dark;
-    }
   }
+}
+
+.sr-only {
+  @include public-sr-only;
 }
 
 // ================================================================
@@ -311,11 +334,6 @@ onBeforeMount(async () => {
   letter-spacing: $public-letter-spacing-tight;
   line-height: $public-line-height-tight;
   margin: 0 0 $public-space-lg 0;
-  color: $public-text-primary-light;
-
-  @include public-dark-mode {
-    color: $public-text-primary-dark;
-  }
 }
 
 .discovery-list {
@@ -341,11 +359,14 @@ onBeforeMount(async () => {
 }
 
 .discovery-tile {
+  // Inherits background, border (color/width), and dark-mode bg/border from
+  // the sidebar-card mixin. Overrides below: tile-specific radius, padding,
+  // hover lift, layout, and link semantics.
+  @include public-sidebar-card;
+
   display: flex;
   flex-direction: column;
   padding: $public-space-xl;
-  background: $public-bg-primary-light;
-  border: 1px solid $public-border-subtle-light;
   border-radius: $public-radius-lg;
   text-decoration: none;
   color: inherit;
@@ -363,9 +384,6 @@ onBeforeMount(async () => {
   }
 
   @include public-dark-mode {
-    background: $public-bg-primary-dark;
-    border-color: $public-border-subtle-dark;
-
     &:hover {
       border-color: $public-border-medium-dark;
       box-shadow: $public-shadow-md-dark;
@@ -379,11 +397,6 @@ onBeforeMount(async () => {
   line-height: $public-line-height-tight;
   letter-spacing: $public-letter-spacing-tight;
   margin: 0 0 $public-space-sm 0;
-  color: $public-text-primary-light;
-
-  @include public-dark-mode {
-    color: $public-text-primary-dark;
-  }
 }
 
 .discovery-tile-description {
@@ -426,6 +439,9 @@ onBeforeMount(async () => {
   font-size: $public-font-size-lg;
   font-weight: $public-font-weight-semibold;
   margin: 0 0 $public-space-sm 0;
+  // Intentional override: the empty-state mixin sets the container to the
+  // secondary text color so paragraph copy is muted, but the heading should
+  // read as primary text to anchor the empty state visually.
   color: $public-text-primary-light;
 
   @include public-dark-mode {
@@ -435,12 +451,9 @@ onBeforeMount(async () => {
 
 .discovery-empty-body {
   font-size: $public-font-size-base;
-  color: $public-text-secondary-light;
   margin: 0;
   line-height: $public-line-height-relaxed;
-
-  @include public-dark-mode {
-    color: $public-text-secondary-dark;
-  }
+  // Color inherited from the public-empty-state mixin on the container
+  // (secondary text, with dark-mode override). No need to re-declare here.
 }
 </style>

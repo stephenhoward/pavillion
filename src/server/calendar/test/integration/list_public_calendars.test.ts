@@ -25,7 +25,7 @@ import AccountService from '@/server/accounts/service/account';
 import ConfigurationInterface from '@/server/configuration/interface';
 import SetupInterface from '@/server/setup/interface';
 import { TestEnvironment } from '@/server/common/test/lib/test_environment';
-import { CalendarEntity } from '@/server/calendar/entity/calendar';
+import { CalendarEntity, CalendarContentEntity } from '@/server/calendar/entity/calendar';
 import { EventEntity, EventScheduleEntity } from '@/server/calendar/entity/event';
 
 describe('CalendarService.listPublicCalendars (pv-u4ew.2)', () => {
@@ -55,6 +55,7 @@ describe('CalendarService.listPublicCalendars (pv-u4ew.2)', () => {
   async function resetDiscoveryFixtures(): Promise<void> {
     await EventScheduleEntity.destroy({ where: {}, truncate: false, force: true });
     await EventEntity.destroy({ where: {}, truncate: false, force: true });
+    await CalendarContentEntity.destroy({ where: {}, truncate: false, force: true });
     await CalendarEntity.destroy({ where: {}, truncate: false, force: true });
   }
 
@@ -388,6 +389,54 @@ describe('CalendarService.listPublicCalendars (pv-u4ew.2)', () => {
 
       // Hard cap, exactly 500.
       expect(result).toHaveLength(500);
+    }, 30000);
+
+    it('caps distinct calendars at 500 even with multi-language content rows', async () => {
+      // Regression cap: with a LEFT JOIN on CalendarContentEntity and a
+      // single-query LIMIT, the cap would silently apply to joined rows, so a
+      // calendar with 3 language rows would consume 3 of the 500 slots and
+      // the query would return ~167 distinct calendars instead of 500. The
+      // service splits the query in two so the cap applies to distinct
+      // calendars regardless of how many content rows each has.
+      await resetDiscoveryFixtures();
+
+      const calendarRows = [];
+      const contentRows = [];
+      const TOTAL_CALENDARS = 501;
+      const LANGUAGES = ['en', 'fr', 'es'];
+
+      for (let i = 0; i < TOTAL_CALENDARS; i++) {
+        const id = uuidv4();
+        calendarRows.push({
+          id,
+          url_name: `multilingual-${i.toString().padStart(4, '0')}`,
+          languages: 'en,fr,es',
+          default_date_range: null,
+          widget_allowed_domain: null,
+          default_event_image_id: null,
+          listed: true,
+        });
+        for (const language of LANGUAGES) {
+          contentRows.push({
+            id: uuidv4(),
+            calendar_id: id,
+            language,
+            name: `Name in ${language} for ${i}`,
+            description: '',
+          });
+        }
+      }
+      await CalendarEntity.bulkCreate(calendarRows);
+      await CalendarContentEntity.bulkCreate(contentRows);
+
+      const result = await calendarInterface.listPublicCalendars();
+
+      // Hard cap, exactly 500 DISTINCT calendars (not joined rows).
+      expect(result).toHaveLength(500);
+
+      // Sanity: each returned calendar should be unique.
+      const returnedIds = new Set(result.map((r) => r.calendar.id));
+      expect(returnedIds.size).toBe(500);
     }, 30000);
   });
 });

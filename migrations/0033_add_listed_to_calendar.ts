@@ -2,6 +2,8 @@ import { Sequelize, DataTypes } from 'sequelize';
 import {
   addColumnIfNotExists,
   removeColumnIfExists,
+  addIndexIfNotExists,
+  removeIndexIfExists,
 } from '../src/server/common/migrations/helpers.js';
 
 /**
@@ -26,11 +28,19 @@ export default {
       allowNull: false,
       defaultValue: true,
     });
+
+    // Index supports the `WHERE listed = true` predicate in
+    // CalendarService.listPublicCalendars, mirroring the indexing pattern of
+    // neighbor migration 0032 for other query-path columns.
+    await addIndexIfNotExists(queryInterface, 'calendar', ['listed'], {
+      name: 'idx_calendar_listed',
+    });
   },
 
   async down({ context: sequelize }: { context: Sequelize }) {
     const queryInterface = sequelize.getQueryInterface();
 
+    await removeIndexIfExists(queryInterface, 'calendar', 'idx_calendar_listed');
     await removeColumnIfExists(queryInterface, 'calendar', 'listed');
   },
 };

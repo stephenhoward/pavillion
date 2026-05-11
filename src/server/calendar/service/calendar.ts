@@ -1733,36 +1733,42 @@ class CalendarService {
   async listPublicCalendars(): Promise<Array<{ calendar: Calendar; lastEventActivity: Date | null }>> {
     const PUBLIC_DISCOVERY_LIMIT = 500;
 
+    // Split into two queries because `subQuery: false` + LIMIT + a
+    // CalendarContentEntity LEFT JOIN would cap *joined rows*, not distinct
+    // calendars — a multilingual instance with N content rows per calendar
+    // would return ~LIMIT/N distinct calendars. The discovery cap must apply
+    // to calendars, not to language-content fan-out.
+    //
+    // Step 1 — select calendar ids (+ aliased last_event_activity) under the
+    // listed=true predicate, the ORDER BY clauses, and the LIMIT. No content
+    // join, so the cap is over distinct calendars by construction.
+    //
     // Correlated subquery: an event contributes to MAX(event.updatedAt) only
     // when it has at least one event_schedule row that is NOT a hidden
     // cancellation (NOT (is_exclusion AND hide_from_public)). Mirrors the
     // canonical suppression predicate in EventInstanceService.rrules().
-    // The `lastEventActivity` predicate matches the public events listing
-    // visibility semantics: events whose every schedule is an EXDATE-style
-    // hidden cancellation produce no public occurrences and must not inflate
-    // discovery activity.
+    // Events whose every schedule is an EXDATE-style hidden cancellation
+    // produce no public occurrences and must not inflate discovery activity.
     //
     // NOTE: the alias 'last_event_activity' is load-bearing — the two ORDER BY
     // literals below reference it by name. Keep them all in lockstep on rename
     // or the sort silently regresses.
-    const rows = await CalendarEntity.findAll({
+    const idRows = await CalendarEntity.findAll({
       where: { listed: true },
-      attributes: {
-        include: [
-          [
-            literal(
-              '(SELECT MAX("event"."updatedAt") FROM "event" '
-              + 'WHERE "event"."calendar_id" = "CalendarEntity"."id" '
-              + 'AND EXISTS (SELECT 1 FROM "event_schedule" '
-              + 'WHERE "event_schedule"."event_id" = "event"."id" '
-              + 'AND NOT ("event_schedule"."is_exclusion" = true '
-              + 'AND "event_schedule"."hide_from_public" = true)))',
-            ),
-            'last_event_activity',
-          ],
+      attributes: [
+        'id',
+        [
+          literal(
+            '(SELECT MAX("event"."updatedAt") FROM "event" '
+            + 'WHERE "event"."calendar_id" = "CalendarEntity"."id" '
+            + 'AND EXISTS (SELECT 1 FROM "event_schedule" '
+            + 'WHERE "event_schedule"."event_id" = "event"."id" '
+            + 'AND NOT ("event_schedule"."is_exclusion" = true '
+            + 'AND "event_schedule"."hide_from_public" = true)))',
+          ),
+          'last_event_activity',
         ],
-      },
-      include: [CalendarContentEntity],
+      ],
       order: [
         // NULLS LAST: calendars with no events sort after calendars that have
         // published activity. SQLite emits NULLs first by default; PostgreSQL
@@ -1772,15 +1778,45 @@ class CalendarService {
         [literal('last_event_activity'), 'DESC'],
       ],
       limit: PUBLIC_DISCOVERY_LIMIT,
-      subQuery: false,
     } as any);
 
-    return rows.map((entity) => {
-      const calendar = this.withPublicUrl(entity.toModel());
-      const rawActivity = entity.get('last_event_activity');
-      const lastEventActivity = rawActivity ? new Date(rawActivity as string | number | Date) : null;
-      return { calendar, lastEventActivity };
+    if (idRows.length === 0) {
+      return [];
+    }
+
+    // Build the ordered id list and an id → lastEventActivity lookup so we can
+    // preserve step 1's ordering when we hydrate full entities in step 2.
+    const orderedIds: string[] = idRows.map((r) => r.id);
+    const activityById = new Map<string, Date | null>();
+    for (const r of idRows) {
+      const rawActivity = (r as any).get('last_event_activity');
+      activityById.set(r.id, rawActivity ? new Date(rawActivity as string | number | Date) : null);
+    }
+
+    // Step 2 — hydrate full entities (with CalendarContentEntity) keyed by the
+    // ids from step 1. The JOIN now fans out language rows safely; Sequelize
+    // collapses duplicate calendar rows when an include is present. The ORDER
+    // BY here is not load-bearing — we re-sort to step 1's order below.
+    const hydrated = await CalendarEntity.findAll({
+      where: { id: { [Op.in]: orderedIds } },
+      include: [CalendarContentEntity],
     });
+
+    // Preserve step 1's ordering: build an id → entity map and walk the
+    // ordered id list.
+    const entityById = new Map<string, typeof hydrated[number]>();
+    for (const entity of hydrated) {
+      entityById.set(entity.id, entity);
+    }
+
+    return orderedIds
+      .map((id) => entityById.get(id))
+      .filter((entity): entity is typeof hydrated[number] => entity !== undefined)
+      .map((entity) => {
+        const calendar = this.withPublicUrl(entity.toModel());
+        const lastEventActivity = activityById.get(entity.id) ?? null;
+        return { calendar, lastEventActivity };
+      });
   }
 
   /**
