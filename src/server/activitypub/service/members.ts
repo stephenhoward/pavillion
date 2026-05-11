@@ -516,7 +516,15 @@ class ActivityPubService {
 
       // Side effects fire only after the transaction commits — mirrors shareEvent.
       this.addToOutbox(calendar, new UndoActivity(actorUrl, shareActivityId));
-      this.eventBus.emit('eventUnreposted', { eventId, calendarId: calendar.id });
+      // Resolve actor identity at emit site (where Account is in scope) so the
+      // notifications-domain handler does not need a secondary account lookup.
+      // actorName falls back to username when displayName is unset.
+      this.eventBus.emit('eventUnreposted', {
+        eventId,
+        calendarId: calendar.id,
+        actorAccountId: account.id,
+        actorName: account.displayName ?? account.username,
+      });
     }
   }
 

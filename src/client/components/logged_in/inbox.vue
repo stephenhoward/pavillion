@@ -5,12 +5,14 @@ import i18nextInstance from 'i18next';
 import EmptyLayout from '@/client/components/common/empty_state.vue';
 import { useNotificationStore } from '@/client/stores/notificationStore';
 import { useCalendarStore } from '@/client/stores/calendarStore';
+import { useEventStore } from '@/client/stores/eventStore';
 import CalendarService from '@/client/service/calendar';
 import type { Notification } from '@/common/model/notification';
 
 const { t } = useTranslation('inbox');
 const store = useNotificationStore();
 const calendarStore = useCalendarStore();
+const eventStore = useEventStore();
 const calendarService = new CalendarService(calendarStore);
 
 const notifications = computed(() => store.notifications);
@@ -55,12 +57,88 @@ const getFollowPhrase = (notification: Notification): string => {
 };
 
 /**
- * Returns the translated suffix for a repost notification. Sibling bead
- * pv-lrt5 will replace this with a full interpolated description that
- * includes the event title and calendar name.
+ * Resolves the human-readable event title for a repost notification.
+ * Looks up the event in the eventStore by calendarId+eventId. Returns
+ * null when the event is not in the store (e.g. event deleted, or the
+ * calendar tab has not been visited so events were never loaded). The
+ * caller renders a generic fallback phrase in that case.
  */
-const getRepostSuffix = (notification: Notification): string => {
-  return t('notifications.repost_suffix', { eventId: notification.eventId ?? '' });
+const resolveEventTitle = (notification: Notification): string | null => {
+  if (!notification.calendarId || !notification.eventId) {
+    return null;
+  }
+  const event = eventStore
+    .eventsForCalendar(notification.calendarId)
+    .find((e) => e.id === notification.eventId);
+  if (!event) {
+    return null;
+  }
+  const lang = i18nextInstance.resolvedLanguage ?? 'en';
+  const title = event.content(lang).name || event.content('en').name;
+  return title || null;
+};
+
+/**
+ * Returns the translated phrase for a repost notification with the actor
+ * name left as the `{1}` slot marker and (when the event title is
+ * resolvable) the event title left as the `{2}` slot marker for the
+ * `<i18next>` component to substitute the actor link and a RouterLink to
+ * the event. When the event cannot be resolved (deleted or store not
+ * loaded), falls back to a generic phrase that omits the event title.
+ */
+const getRepostPhrase = (notification: Notification): string => {
+  const eventTitle = resolveEventTitle(notification);
+  if (eventTitle) {
+    return t('notifications.repost_description', { eventTitle });
+  }
+  return t('notifications.repost_description_no_event');
+};
+
+/**
+ * Returns the translated phrase for an unshare notification. The actor is a
+ * local editor who unposted a reposted event (DEC-008 sticky dismissal flow);
+ * actorUrl is always null on these notifications so the phrase renders the
+ * actor name as plain text with Mustache interpolation rather than the
+ * slot-based pattern used for follow/repost rows. When the calendar cannot be
+ * resolved (deleted or store not loaded), falls back to a generic phrase that
+ * omits the calendar name.
+ */
+const getUnsharePhrase = (notification: Notification): string => {
+  const calendarName = resolveCalendarName(notification);
+  const actorName = notification.actorName;
+  if (calendarName) {
+    return t('notifications.unshare_description', { actorName, calendarName });
+  }
+  return t('notifications.unshare_description_no_calendar', { actorName });
+};
+
+/**
+ * Returns the translated phrase for a moderation-report notification.
+ * Reporter identity is never surfaced (DEC-004, moderation-privacy) —
+ * the phrase is generic across all reporter types. When the calendar
+ * cannot be resolved (deleted or store not loaded), falls back to a
+ * generic phrase that omits the calendar name.
+ *
+ * Supported types: report_received, report_verified, report_escalated.
+ */
+const getReportPhrase = (notification: Notification): string => {
+  const calendarName = resolveCalendarName(notification);
+  const key = `notifications.${notification.type}`;
+  const fallbackKey = `${key}_no_calendar`;
+  if (calendarName) {
+    return t(key, { calendarName });
+  }
+  return t(fallbackKey);
+};
+
+/**
+ * True for any notification type that surfaces a moderation report.
+ * Used to route report rows to a generic, reporter-free template path.
+ */
+const isReportNotification = (notification: Notification): boolean => {
+  return notification.type === 'report_received'
+    || notification.type === 'report_verified'
+    || notification.type === 'report_escalated';
 };
 
 /**
@@ -157,21 +235,43 @@ onUnmounted(() => {
           </i18next>
         </p>
         <p
+          v-else-if="isReportNotification(notification)"
+          class="notification-text"
+        >
+          {{ getReportPhrase(notification) }}
+        </p>
+        <p
+          v-else-if="notification.type === 'unshare'"
+          class="notification-text"
+        >
+          {{ getUnsharePhrase(notification) }}
+        </p>
+        <p
           v-else
           class="notification-text"
         >
-          <a
-            v-if="notification.actorUrl"
-            :href="notification.actorUrl"
-            rel="noopener noreferrer"
-            target="_blank"
-            class="actor-link"
-          >{{ notification.actorName }}<span class="sr-only">{{ t('notifications.opens_in_new_tab') }}</span></a>
-          <span
-            v-else
-            class="actor-name"
-          >{{ notification.actorName }}</span>
-          {{ ' ' + getRepostSuffix(notification) }}
+          <i18next :translation="getRepostPhrase(notification)">
+            <template #1>
+              <a
+                v-if="notification.actorUrl"
+                :href="notification.actorUrl"
+                rel="noopener noreferrer"
+                target="_blank"
+                class="actor-link"
+              >{{ notification.actorName }}<span class="sr-only">{{ t('notifications.opens_in_new_tab') }}</span></a>
+              <span
+                v-else
+                class="actor-name"
+              >{{ notification.actorName }}</span>
+            </template>
+            <template #2>
+              <router-link
+                v-if="notification.eventId"
+                :to="{ name: 'event_edit', params: { eventId: notification.eventId } }"
+                class="event-link"
+              >{{ resolveEventTitle(notification) }}</router-link>
+            </template>
+          </i18next>
         </p>
       </li>
 
@@ -247,7 +347,8 @@ div.inbox-container {
         line-height: 1.5;
       }
 
-      a.actor-link {
+      a.actor-link,
+      a.event-link {
         color: var(--pav-color-text-link);
         text-decoration: underline;
 

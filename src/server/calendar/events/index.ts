@@ -23,10 +23,18 @@ export interface EventRepostedPayload {
  * instances. eventUnreposted sends primitive IDs because only deletion by
  * compound key is needed, and by the time the event fires the share record
  * may already be destroyed.
+ *
+ * `actorAccountId` and `actorName` identify the local editor who performed the
+ * unpost (DEC-008 sticky dismissal flow). They are resolved at the emit site
+ * (where the Account is already in scope) so downstream listeners — notably the
+ * notifications-domain handler that fans out co-editor notifications while
+ * excluding the actor — do not need a secondary account lookup.
  */
 export interface EventUnrepostedPayload {
   eventId: string;
   calendarId: string;
+  actorAccountId: string;
+  actorName: string;
 }
 
 /**

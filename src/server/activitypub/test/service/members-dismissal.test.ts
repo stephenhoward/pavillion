@@ -109,12 +109,15 @@ describe('unshareEvent - RepostDismissalEntity upsert', () => {
     const addToOutboxStub = service.addToOutbox as sinon.SinonStub;
     expect(addToOutboxStub.callCount).toBe(1);
 
-    // eventBus.emit must fire exactly once for eventUnreposted with the exact
-    // payload — captured share.event_id must survive entity destroy.
+    // eventBus.emit must fire exactly once for eventUnreposted with the
+    // expected core identifiers — captured share.event_id must survive entity
+    // destroy. The payload also carries actorAccountId/actorName for the
+    // notifications-domain handler (pv-nb0q); sinon.match is used so this
+    // assertion stays focused on the dismissal-flow contract.
     const unrepostEmits = emitSpy.getCalls().filter((c) => c.args[0] === 'eventUnreposted');
     expect(unrepostEmits).toHaveLength(1);
     expect(
-      emitSpy.calledWith('eventUnreposted', { eventId: localEventId, calendarId }),
+      emitSpy.calledWith('eventUnreposted', sinon.match({ eventId: localEventId, calendarId })),
     ).toBe(true);
   });
 
