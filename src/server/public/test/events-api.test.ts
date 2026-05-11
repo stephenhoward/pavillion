@@ -427,12 +427,12 @@ describe('Public API - toPublicEventObject shape contract', () => {
    */
   function assertSeriesProjection(seriesBody: Record<string, any>) {
     expect(seriesBody).not.toBeNull();
-    // Allow-listed fields are present
+    // Allow-listed fields carry the values set by makeSeries().
     expect(seriesBody.id).toBe('series-1');
     expect(seriesBody.urlName).toBe('yoga-classes');
-    expect(seriesBody.mediaFocalPointX).toBeDefined();
-    expect(seriesBody.mediaFocalPointY).toBeDefined();
-    expect(seriesBody.mediaZoom).toBeDefined();
+    expect(seriesBody.mediaFocalPointX).toBe(0.4);
+    expect(seriesBody.mediaFocalPointY).toBe(0.6);
+    expect(seriesBody.mediaZoom).toBe(1.2);
     expect(seriesBody.content).toBeDefined();
     expect(seriesBody.content.en).toBeDefined();
     expect(seriesBody.content.en.name).toBe('Yoga Classes');
@@ -456,23 +456,29 @@ describe('Public API - toPublicEventObject shape contract', () => {
 
   /**
    * Public Category projection contract: the response must allow-list only
-   * `{ id, eventCount, content }`. The internal FK `calendarId` must never
-   * appear on the public surface — DEC-005 establishes that category.id is
-   * the public identifier within a calendar context (the calendar is already
-   * established by the API route).
+   * `{ id, content }`. The internal FK `calendarId` must never appear on the
+   * public surface — DEC-005 establishes that category.id is the public
+   * identifier within a calendar context (the calendar is already established
+   * by the API route).
+   *
+   * `eventCount` is a service-supplied aggregate, not part of the projection.
+   * The `listCategories` handler augments rows with it; callers that receive
+   * such a row should destructure the augmentation off before asserting the
+   * bare projection, mirroring how `listSeries` is tested.
    */
   function assertCategoryProjection(categoryBody: Record<string, any>) {
     expect(categoryBody).not.toBeNull();
-    // Allow-listed fields are present
+    // Allow-listed fields carry the values set by makeCategory().
     expect(categoryBody.id).toBe('cat-1');
-    expect(typeof categoryBody.eventCount).toBe('number');
     expect(categoryBody.content).toBeDefined();
     expect(categoryBody.content.en).toBeDefined();
     expect(categoryBody.content.en.name).toBe('Music');
     // The public projection must contain only the allow-listed keys.
-    expect(Object.keys(categoryBody).sort()).toEqual(['content', 'eventCount', 'id']);
+    expect(Object.keys(categoryBody).sort()).toEqual(['content', 'id']);
     // Spell out the disallowed internal FK for clarity / future regressions.
     expect(categoryBody.calendarId).toBeUndefined();
+    // `eventCount` is not part of this projection.
+    expect(categoryBody.eventCount).toBeUndefined();
   }
 
   function makeCategory(): EventCategory {
@@ -494,33 +500,31 @@ describe('Public API - toPublicEventObject shape contract', () => {
   function assertEventRootProjection(eventBody: Record<string, any>) {
     expect(eventBody).not.toBeNull();
 
-    // Positive allow-list assertion. Optional fields (media/space/location/series/
-    // categories) may be present or absent depending on the fixture, but the
-    // set of keys must never contain anything outside this allow-list.
-    const allowed = new Set([
-      'id',
+    // Bidirectional allow-list assertion. `toPublicEventObject` always emits
+    // every field as a key (optional nested objects collapse to null, not
+    // omitted), so the key set is fixed. `toEqual` catches both an extra key
+    // (FK leak) and a missing required key (dropped public field).
+    expect(Object.keys(eventBody).sort()).toEqual([
+      'categories',
+      'content',
       'date',
-      'repostStatus',
+      'eventSourceUrl',
+      'externalUrl',
+      'id',
+      'isRecurring',
       'isRepost',
-      'sourceCalendar',
+      'location',
+      'media',
       'mediaFocalPointX',
       'mediaFocalPointY',
       'mediaZoom',
-      'eventSourceUrl',
-      'externalUrl',
-      'urlPrompt',
-      'isRecurring',
       'recurrenceSummary',
-      'content',
-      'location',
-      'space',
-      'media',
+      'repostStatus',
       'series',
-      'categories',
+      'sourceCalendar',
+      'space',
+      'urlPrompt',
     ]);
-    for (const key of Object.keys(eventBody)) {
-      expect(allowed.has(key)).toBe(true);
-    }
 
     // Disallowed internal fields must be absent.
     expect(eventBody.calendarId).toBeUndefined();
@@ -1286,10 +1290,13 @@ describe('Public API - toPublicEventObject shape contract', () => {
 
   /**
    * Public Series projection contract:
-   *   - Series allow-list applies wherever a series is rendered: top-level
-   *     of getSeries, each row of listSeries, and the nested
-   *     event.series object inside getEvent / listInstances / getEventInstance
-   *     / getSeries.events[].
+   *   - Series allow-list applies wherever a series is rendered. This block
+   *     covers the top-level shape from getSeries, the per-row shape from
+   *     listSeries, and the nested `event.series` shape from getEvent. The
+   *     same projection helper feeds the nested series in listInstances /
+   *     getEventInstance / getSeries.events[]; the cross-cutting
+   *     `event root projection` block exercises those four event handlers
+   *     with a populated fixture, guarding against the broader FK leak class.
    *   - `calendarId` and `mediaId` are internal FKs and must never appear.
    */
   describe('series projection', () => {
@@ -1363,9 +1370,13 @@ describe('Public API - toPublicEventObject shape contract', () => {
 
   /**
    * Public Category projection contract:
-   *   - Category allow-list applies wherever a category is rendered: each
-   *     row of listCategories, and each entry in event.categories[] inside
-   *     getEvent / listInstances / getEventInstance / getSeries.events[].
+   *   - Category allow-list applies wherever a category is rendered. This
+   *     block covers the per-row shape from listCategories and the nested
+   *     `event.categories[]` shape from getEvent. The same projection helper
+   *     feeds the nested categories in listInstances / getEventInstance /
+   *     getSeries.events[]; the cross-cutting `event root projection` block
+   *     exercises those four event handlers with a populated fixture,
+   *     guarding against the broader FK leak class.
    *   - `calendarId` is an internal FK and must never appear (DEC-005:
    *     category.id is the public identifier within a calendar context).
    */
@@ -1389,8 +1400,10 @@ describe('Public API - toPublicEventObject shape contract', () => {
       expect(response.status).toBe(200);
       expect(response.body).toHaveLength(1);
       const row = response.body[0];
+      // Row carries an `eventCount` on top of the category allow-list.
       expect(row.eventCount).toBe(3);
-      assertCategoryProjection(row);
+      const { eventCount: _eventCount, ...categoryBody } = row;
+      assertCategoryProjection(categoryBody);
     });
 
     it('getEvent: returns the category allow-list on each entry of event.categories[]; calendarId absent', async () => {

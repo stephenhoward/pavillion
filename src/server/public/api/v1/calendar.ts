@@ -60,8 +60,13 @@ function toPublicSeriesObject(series: EventSeries | Record<string, any>): Record
  * internally) or an already-serialized plain object.
  *
  * Allow-listed fields: id (DEC-005 — category.id is the public identifier
- * within a calendar context), eventCount, content. Drops the internal FK
- * `calendarId`.
+ * within a calendar context), content. Drops the internal FK `calendarId`.
+ *
+ * `eventCount` is not part of this projection — it is a service-supplied
+ * aggregate, not a property of the category. The `listCategories` handler
+ * augments the projection with `eventCount` from its service tuple; the
+ * nested `event.categories[]` path has no use for a count and does not
+ * include one. This mirrors `toPublicSeriesObject` which is also count-free.
  *
  * Per DEC-003 the canonical `EventCategory.toObject()` shape is unchanged.
  */
@@ -69,7 +74,6 @@ function toPublicCategoryObject(category: EventCategory | Record<string, any>): 
   const obj = category instanceof EventCategory ? category.toObject() : category;
   return {
     id: obj.id,
-    eventCount: obj.eventCount,
     content: obj.content,
   };
 }
