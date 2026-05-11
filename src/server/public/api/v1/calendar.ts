@@ -5,6 +5,8 @@ import { EventNotFoundError } from '@/common/exceptions/calendar';
 import { logError } from '@/server/common/helper/error-logger';
 import { CalendarEventSchedule } from '@/common/model/events';
 import CalendarEventInstance from '@/common/model/event_instance';
+import { EventSeries } from '@/common/model/event_series';
+import { EventCategory } from '@/common/model/event_category';
 import { getRecurrenceSummary } from '@/common/utils/recurrence-text';
 import { parseInstanceSlug } from '@/common/utils/instance-slug';
 import { publicEventInstanceByIp } from '@/server/common/middleware/rate-limiters';
@@ -27,35 +29,87 @@ function stripDefaultEventImage(calendarObj: Record<string, any>): Record<string
 }
 
 /**
- * Shapes a raw event object (from CalendarEvent.toObject()) for public consumption.
+ * Shapes a raw EventSeries object for public consumption via an explicit
+ * allow-list. Accepts either a model instance (and calls `.toObject()`
+ * internally) or an already-serialized plain object — this mirrors the
+ * shape of `toPublicInstanceObject` below and lets `toPublicEventObject`
+ * pass nested series shapes through transparently.
  *
- * Responsibilities:
- *   - Removes `schedules[]` so internal recurrence-row details (including
- *     hideFromPublic and isException cancellation metadata) cannot leak.
- *   - Removes the legacy English-only `recurrenceText` field if present.
- *   - Adds `isRecurring: boolean`, derived from whether the event has any
- *     non-exclusion schedule with a frequency.
- *   - Adds `recurrenceSummary: { key, params } | null` so the presentation
- *     layer can render a localized recurrence phrase.
- *   - Projects `media` to `{ id, mimeType }` only — internal fields such as
- *     calendarId, sha256, originalFilename, fileSize, and status are removed.
- *   - Projects `space` to `{ content }` only — the internal `id` (an AP
- *     identity hint used for inbound dedup) and `placeId` (an internal FK)
- *     have no Tier 1 anonymous-public use case and are stripped here.
- *     Authenticated calendar-editor APIs may still expose the full shape;
- *     this projection is strictly the public surface.
- *   - Projects `location` to address-display fields plus `content` only.
- *     Drops `originUri` (an AP-dedup identity hint, server-internal),
- *     `id` (parallels the space projection — AP identity hint with no
- *     Tier 1 use case), and `spaces[]` (unused on the public surface — the
- *     event's chosen sub-space is carried independently on `event.space`,
- *     so the array is an internal leak vector for nested originUri/clientId).
- *     Absent / null location collapses to `location: null` so the public
- *     contract stays stable.
+ * Allow-listed fields: id, urlName, mediaFocalPointX, mediaFocalPointY,
+ * mediaZoom, content. Drops the internal FKs `calendarId` and `mediaId`.
  *
- * CalendarEventSchedule.toObject() on the shared model remains the full
- * authenticated shape; shaping here is strictly the public API layer's
- * responsibility (per DEC-003 domain boundaries and DEC-004 privacy-first).
+ * Per DEC-003 the canonical `EventSeries.toObject()` shape is unchanged;
+ * the privacy boundary is a property of the audience, not the data
+ * (authenticated APIs need the full shape for cross-resource navigation).
+ */
+function toPublicSeriesObject(series: EventSeries | Record<string, any>): Record<string, any> {
+  const obj = series instanceof EventSeries ? series.toObject() : series;
+  return {
+    id: obj.id,
+    urlName: obj.urlName,
+    mediaFocalPointX: obj.mediaFocalPointX,
+    mediaFocalPointY: obj.mediaFocalPointY,
+    mediaZoom: obj.mediaZoom,
+    content: obj.content,
+  };
+}
+
+/**
+ * Shapes a raw EventCategory object for public consumption via an explicit
+ * allow-list. Accepts either a model instance (and calls `.toObject()`
+ * internally) or an already-serialized plain object.
+ *
+ * Allow-listed fields: id (DEC-005 — category.id is the public identifier
+ * within a calendar context), eventCount, content. Drops the internal FK
+ * `calendarId`.
+ *
+ * Per DEC-003 the canonical `EventCategory.toObject()` shape is unchanged.
+ */
+function toPublicCategoryObject(category: EventCategory | Record<string, any>): Record<string, any> {
+  const obj = category instanceof EventCategory ? category.toObject() : category;
+  return {
+    id: obj.id,
+    eventCount: obj.eventCount,
+    content: obj.content,
+  };
+}
+
+/**
+ * Shapes a raw event object (from CalendarEvent.toObject()) for public
+ * consumption via an explicit, file-uniform allow-list.
+ *
+ * Why allow-list (not delete-by-name): future additions to
+ * `CalendarEvent.toObject()` (and the nested `*.toObject()` shapes it
+ * composes) must fail loudly, not silently leak.
+ *
+ * Why in the public domain (not on the model): authenticated calendar/owner
+ * APIs legitimately need the full shape — `calendarId`, `locationId`,
+ * `spaceId`, `mediaId` are required for cross-resource navigation. Per
+ * DEC-003 the canonical `*.toObject()` shape stays full; per DEC-004 the
+ * privacy boundary is a property of the audience (Tier 1 anonymous public).
+ *
+ * Event root allow-list:
+ *   id, date, repostStatus, isRepost, sourceCalendar, mediaFocalPointX,
+ *   mediaFocalPointY, mediaZoom, eventSourceUrl, externalUrl, urlPrompt,
+ *   isRecurring, recurrenceSummary, content, plus projected location, space,
+ *   media, series, categories.
+ *
+ * Dropped from the event root: calendarId, locationId, spaceId, mediaId
+ * (internal FKs), schedules (cancellation / hide-from-public metadata),
+ * recurrenceText (legacy English-only field).
+ *
+ * Nested-object projections (all allow-listed, all bound to the public
+ * audience's minimum need):
+ *   - `media` → `{ id, mimeType }`.
+ *   - `space` → `{ content }`; absent/null collapses to `null`.
+ *   - `location` → address-display fields + `content`; drops `originUri`,
+ *     `id`, and `spaces[]`; absent/null collapses to `null`.
+ *   - `series` → via `toPublicSeriesObject`; absent/null collapses to `null`.
+ *   - `categories[]` → via `toPublicCategoryObject` for each row.
+ *
+ * `isRecurring` and `recurrenceSummary` are computed here (not carried from
+ * the model) so the model can keep the full authenticated payload while
+ * presentation receives a localized-summary intent.
  */
 function toPublicEventObject(eventObj: Record<string, any>): Record<string, any> {
   const rawSchedules = Array.isArray(eventObj.schedules) ? eventObj.schedules : [];
@@ -69,47 +123,24 @@ function toPublicEventObject(eventObj: Record<string, any>): Record<string, any>
   const summary = getRecurrenceSummary(scheduleModels);
   const isRecurring = summary !== null;
 
-  // Strip schedules and recurrenceText from the output; build a fresh object
-  // so downstream spread/mutation cannot reintroduce internal fields.
-  const publicObj: Record<string, any> = {
-    ...eventObj,
-    isRecurring,
-    recurrenceSummary: summary,
-  };
-  delete publicObj.schedules;
-  delete publicObj.recurrenceText;
+  // Project media to { id, mimeType } only — internal fields such as
+  // calendarId, sha256, originalFilename, fileSize, and status are removed.
+  const media = eventObj.media
+    ? { id: eventObj.media.id, mimeType: eventObj.media.mimeType }
+    : null;
 
-  if (publicObj.media) {
-    publicObj.media = {
-      id: publicObj.media.id,
-      mimeType: publicObj.media.mimeType,
-    };
-  }
+  // Project space to { content } only. Drops id, placeId, and originUri.
+  // Absent / null space collapses to `null` so the public contract stays stable.
+  const space = eventObj.space ? { content: eventObj.space.content } : null;
 
-  // Project space to { content } only. Drops id, placeId, and originUri
-  // (all internal identifiers / AP-dedup hints with no public use case).
-  // `space` may be omitted on the input object (older callers) or explicitly
-  // null; both collapse to `space: null` so the public contract stays stable.
-  if (publicObj.space) {
-    publicObj.space = { content: publicObj.space.content };
-  }
-  else {
-    publicObj.space = null;
-  }
-
-  // Project location to address-display fields + content only. Drops:
-  //   - `originUri` (AP-dedup identity hint, server-internal)
-  //   - `id` (parallels the space projection — AP identity hint with no
-  //     Tier 1 use case)
-  //   - `spaces[]` (unused on the public surface — `event.space` carries the
-  //     selected sub-space; the array is an internal leak vector for nested
-  //     originUri / clientId on each space row)
-  // Allow-list, not delete-by-name, so future additions to
-  // EventLocation.toObject() do not silently leak. Absent / null location
-  // collapses to `location: null` so the public contract stays stable.
-  if (publicObj.location) {
-    const loc = publicObj.location;
-    publicObj.location = {
+  // Project location to address-display fields + content only. Drops
+  // `originUri` (AP-dedup identity hint), `id` (parallels the space projection),
+  // and `spaces[]` (the event's chosen sub-space is carried on `event.space`;
+  // the array is an internal leak vector for nested originUri / clientId).
+  let location: Record<string, any> | null = null;
+  if (eventObj.location) {
+    const loc = eventObj.location;
+    location = {
       name: loc.name,
       address: loc.address,
       city: loc.city,
@@ -119,11 +150,35 @@ function toPublicEventObject(eventObj: Record<string, any>): Record<string, any>
       content: loc.content,
     };
   }
-  else {
-    publicObj.location = null;
-  }
 
-  return publicObj;
+  const series = eventObj.series ? toPublicSeriesObject(eventObj.series) : null;
+  const categories = Array.isArray(eventObj.categories)
+    ? eventObj.categories.map((c: Record<string, any>) => toPublicCategoryObject(c))
+    : [];
+
+  // Explicit allow-list build, not a spread-then-delete: future additions to
+  // CalendarEvent.toObject() must fail loudly here.
+  return {
+    id: eventObj.id,
+    date: eventObj.date,
+    repostStatus: eventObj.repostStatus,
+    isRepost: eventObj.isRepost,
+    sourceCalendar: eventObj.sourceCalendar,
+    mediaFocalPointX: eventObj.mediaFocalPointX,
+    mediaFocalPointY: eventObj.mediaFocalPointY,
+    mediaZoom: eventObj.mediaZoom,
+    eventSourceUrl: eventObj.eventSourceUrl,
+    externalUrl: eventObj.externalUrl,
+    urlPrompt: eventObj.urlPrompt,
+    isRecurring,
+    recurrenceSummary: summary,
+    content: eventObj.content,
+    location,
+    space,
+    media,
+    series,
+    categories,
+  };
 }
 
 /**
@@ -230,12 +285,10 @@ export default class CalendarRoutes {
       const categoriesWithCounts = await this.service.listCategoriesForCalendar(calendar, options);
 
       res.json(
-        categoriesWithCounts.map(({ category, eventCount }) => {
-          return {
-            ...category.toObject(),
-            eventCount,
-          };
-        }),
+        categoriesWithCounts.map(({ category, eventCount }) => ({
+          ...toPublicCategoryObject(category),
+          eventCount,
+        })),
       );
     }
     catch (error: any) {
@@ -271,7 +324,7 @@ export default class CalendarRoutes {
       const seriesWithCounts = await this.service.listSeriesForCalendar(calendar);
       res.json(
         seriesWithCounts.map(({ series, eventCount }) => ({
-          ...series.toObject(),
+          ...toPublicSeriesObject(series),
           eventCount,
         })),
       );
@@ -323,7 +376,7 @@ export default class CalendarRoutes {
       const { events, total } = await this.service.getSeriesEvents(series.id, calendar.id, limit, offset);
 
       res.json({
-        ...series.toObject(),
+        ...toPublicSeriesObject(series),
         events: events.map(event => toPublicEventObject(event.toObject())),
         pagination: {
           total,
@@ -424,13 +477,7 @@ export default class CalendarRoutes {
         instances = await this.service.listEventInstances(calendar);
       }
 
-      res.json(instances.map((instance) => {
-        const obj = instance.toObject();
-        return {
-          ...obj,
-          event: toPublicEventObject(obj.event),
-        };
-      }));
+      res.json(instances.map(toPublicInstanceObject));
     }
     catch (error: any) {
       // Log the full error for debugging
