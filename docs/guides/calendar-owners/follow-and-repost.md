@@ -1,16 +1,14 @@
 # Bring in events from other calendars
 
-The neighborhood association down the street already runs a calendar. So does the music venue across town and the regional climate-action group. This guide is about bringing some of *their* events onto *your* calendar — finding the calendars that matter to your community, deciding what to do with what shows up, and choosing what to share onward.
-
-The mechanism underneath is ActivityPub federation. The interface uses "Follow" and "Repost" on the buttons, and this guide names those buttons literally when walking you through them — but also describes what they *do* in plainer terms: connecting to another calendar, and publishing an event from it onto yours.
+The neighborhood association down the street already runs a calendar. So does the music venue across town and the regional climate-action group. This guide is about bringing some of *their* events onto *your* calendar — finding the calendars that matter to your community, deciding what to do with what shows up, and choosing what to share.
 
 ## Two steps, on purpose
 
-The action splits into two stages, and the separation matters.
+Sharing events happens in two stages, and the separation matters.
 
 **Connect.** You point your calendar at another one — say, the music venue's — and from then on, their events arrive in a stream visible only to you. Nothing about your *public* calendar has changed yet; your visitors still see exactly what they saw before. A connection is a private feed for you, the owner, to look through.
 
-**Publish.** When an event in that private feed is worth surfacing on your public calendar, you publish it. *Now* visitors see it. Publishing can happen by hand — one event at a time, deliberately — or by rule, where you've told Pavillion to publish certain incoming events automatically.
+**Publish.** When an event in that private feed is worth surfacing on your public calendar, you repost it. *Now* visitors see it. Reposting can happen by hand — one event at a time, deliberately — or by rule, where you've told Pavillion to publish certain incoming events automatically.
 
 The separation is what gives you editorial control. Connecting to a calendar doesn't commit you to publishing anything from it; it just opens the door so you can decide.
 
@@ -21,24 +19,20 @@ There's no central directory of Pavillion calendars. Federation works the same w
 A few starting places:
 
 - **Calendars listed on the websites of organizations you already work with.** A neighborhood association, a music venue, an arts council, a coworking space, a climate or mutual-aid group. Their site footer or events page often points at their calendar.
-- **The sources behind events you already like.** On a calendar you trust, reposted events link back to the calendar they came from — a small calendar-name link beneath the event title. If a particular source keeps showing up on calendars you respect, that's a good signal it's worth connecting to yourself.
+- **The sources behind events you already like.** On a calendar you trust, reposted events link back to the calendar they came from — a small calendar-name link beneath the event title. If a particular source keeps showing up on calendars you respect with events that fit your own calendar, that's a good signal it's worth connecting to yourself.
 - **Word of mouth.** Other calendar owners will tell you which calendars to track. The federated network tends to grow through introductions, not directory listings.
 
-Calendar handles take the shape `calendar-name@domain.example`. The part before the `@` is the calendar's URL handle on its instance; the part after is the instance's domain. *`riverbend-folk@arts.example`* points at the `riverbend-folk` calendar on `arts.example`. (Calendars on your *own* instance can be referenced by just their URL handle — `riverbend-folk` is enough if you're both running on the same instance.)
+Calendar handles take the shape `calendar-name@domain.example`. The part before the `@` is the calendar's URL handle on its instance; the part after is the instance's domain. *`riverbend-folk@arts.example`* points at the `riverbend-folk` calendar on `arts.example`. (Calendars on your *own* instance can be referenced by just their URL handle — `riverbend-folk` is enough if you're both hosted on the same instance.)
 
 ## Connect to a calendar
 
-Open <Btn>Feed</Btn> from the main navigation. The Feed has three tabs: **Events** (events from calendars you're connected to), **Following** (the calendars you've connected to), and **Followers** (calendars connected to yours). If you run more than one calendar, a calendar selector at the top scopes the feed — connections are *per-calendar*, not per-account; each of your calendars has its own list, its own feed, and its own followers.
+Connecting lives in **Feed > Following**. If you run more than one calendar, the selector at the top loads the right feed — connections are *per-calendar*, not per-account; each of your calendars has its own list, its own feed, and its own followers.
 
-In the **Following** tab, click <Btn>Follow a Calendar</Btn>. A dialog opens with one field: the calendar's identifier — `name@domain.example` for a remote calendar, or just `name` for one on your own instance.
+Click <Btn>Follow a Calendar</Btn> and type the identifier — `name@domain.example` for a remote calendar, or just `name` for one on your own instance. Pavillion looks it up and shows a preview matching the calendar's public page; use it to confirm you've got the right one. The auto-repost toggles below the preview control what happens to *new* events arriving from this connection from now on — see [Let rules publish for you](#let-rules-publish-for-you) below for what each one does. If you're not sure what to pick, leave both off; you can publish any individual event by hand, and you can change these toggles for any connection at any time.
 
-Type the identifier. Pavillion looks the calendar up after a brief pause and shows you a preview — the calendar's name, description, and domain. The preview is everything you'd see on the calendar's public page; use it to confirm you've got the right one before connecting.
+Click <Btn>Follow</Btn>. Once the source server accepts the request (usually immediate), their events start arriving in your feed.
 
-Below the preview are the auto-repost toggles. They control what happens automatically when *new* events arrive from this calendar from now on — see [Let rules publish for you](#let-rules-publish-for-you) below for what each one does. If you're not sure what to pick, leave both off; you can publish any individual event by hand later, and you can change these toggles for any connection at any time.
-
-Click <Btn>Follow</Btn>. Pavillion sends a follow request to the source calendar; once their server has accepted it (which is usually immediate), their events start arriving in your feed.
-
-To disconnect entirely, find the calendar's row in the **Following** tab and click <Btn>Unfollow</Btn>. That's a heavier action than unpublishing a single event — it ends the connection completely, no future events flow in, and any auto-repost rules on the connection go away with it.
+To disconnect entirely, find the row in the **Following** tab and click <Btn>Unfollow</Btn>. That's a heavier action than unpublishing a single event — it ends the connection completely, no future events flow in, and any auto-repost rules on the connection go away with it.
 
 ::: tip <Lightbulb /> A note on the optional category-matching step.
 Right after a successful connection, a second step in the dialog offers to match the source calendar's categories to your own — *their* `Live Music` to *your* `Concerts`, for example. Setting these up now means any event you publish from this calendar — by hand or by rule — lands in the right category on yours without re-tagging. You can skip the step and configure it later from the **Match categories** link on the connection's row in your Following tab; the category-matching guide covers the details.
@@ -46,13 +40,13 @@ Right after a successful connection, a second step in the dialog offers to match
 
 ## What lands in your feed
 
-The **Events** tab in the Feed section is the stream of incoming events from every calendar this one is connected to, newest first. A feed event isn't on your public calendar — it's just visible to you, the owner, as something you *could* publish. Each row has a <Btn>Repost</Btn> button for publishing it onto your calendar, plus a <Btn>Details</Btn> button for the full event view and a <Btn>Report</Btn> button for flagging genuinely problematic content — spam, harassment, misleading information, or content that violates your instance's policies. If an event just isn't a fit for your calendar, don't report it; not publishing it is the right response.
+The feed is your editorial space; the calendar is your public face. A visitor to your public page never sees what's in your feed — they see what you've already published. In the **Events** tab, each incoming event is something you *could* publish, not something that already is.
 
-A visitor to your public page never sees what's in your feed — they see what you've already published. The feed is your editorial space; the calendar is your public face.
+Alongside <Btn>Repost</Btn> and <Btn>Details</Btn>, each row has a <Btn>Report</Btn> button. Report is for genuinely problematic content — spam, harassment, misleading information, or content that violates your instance's policies. If an event just isn't a fit for your calendar, don't report it; not publishing it is the right response.
 
 ## Publish an event by hand
 
-In the Feed > Events tab, find an event you want on your public calendar and click <Btn>Repost</Btn>. If the source event has categories that aren't yet matched to one of yours, a small dialog opens letting you pick the right local categories — or pull the source's category names onto your calendar in one click, if you'd like to adopt them as new categories of your own. Confirm, and the event lands on your public calendar.
+In the **Feed > Events** tab, find an event you want on your public calendar and click <Btn>Repost</Btn>. If the source event has categories that aren't yet matched to one of yours, a small dialog opens letting you pick the right local categories — or pull the source's category names onto your calendar in one click, if you'd like to adopt them as new categories of your own. Confirm, and the event lands on your public calendar.
 
 The button on that event in your feed now reads **Reposted**, in green. To unpublish, click the **Reposted** label — see [Unpublish an event](#unpublish-an-event) below.
 
@@ -70,14 +64,14 @@ Both rules are forward-only. Turning a toggle on doesn't reach back and publish 
 Rule-published events show up on your calendar like any other published event, with one small visible difference *in your feed*: the button reads **Auto-posted** in muted gray rather than **Reposted** in green. That's so you can tell at a glance which events you chose by hand and which arrived through a rule. Visitors to your public calendar see the same thing either way.
 
 ::: tip <Lightbulb /> A note on auto-repost and category matching.
-Rule-driven publishing works best when category matching is set up first. Without matchings, a rule-published event can land on your calendar with no categories — it'll publish, but it won't show up under any of your filters and won't appear under "more like this" on related events. The category-matching guide walks through the rules; if you're enabling auto-repost on a connection you didn't pre-map, take a minute to set the mappings up afterwards.
+Rule-driven publishing works best when category matching is set up first. Without matchings, a rule-published event can land on your calendar with no categories — it'll publish, but it won't show up under any of your filters. The category-matching guide walks through the rules; if you're enabling auto-repost on a connection you didn't pre-map, take a minute to set the mappings up afterwards.
 :::
 
 ## Unpublish an event
 
-In the Feed > Events tab, click the **Reposted** or **Auto-posted** label on any event currently on your calendar. The event is removed from your calendar immediately — visitors no longer see it there.
+In the **Feed > Events** tab, click the **Reposted** or **Auto-posted** label on any event currently on your calendar. The event is removed from your calendar immediately — visitors no longer see it there.
 
-The unpublish *sticks*. If the source calendar later edits and re-broadcasts that same event — a name change, a venue update, a re-share — your calendar does **not** pick it up again. Once you've said no to a particular event, your no is durable; the source can't accidentally undo your decision by republishing.
+The unpublish *sticks*. If the source calendar later edits and re-broadcasts that same event — a name change, a venue update, a re-share — your calendar does **not** pick it up again. Once you've said no to a particular event, your decision is durable; the source can't accidentally undo your decision by republishing.
 
 Two clarifications about the stickiness:
 
@@ -88,7 +82,7 @@ If you change your mind, click <Btn>Repost</Btn> on the same event in your feed;
 
 ## When other calendars connect to yours
 
-Everything above is *you* reaching out to other calendars. The inverse also happens: other calendars connect to yours, and they may publish your events onto theirs. The <Btn>Inbox</Btn> in the main navigation is where you see that activity — notifications when a new calendar follows yours, or when one of your events gets reposted somewhere else.
+Everything above is *you* reaching out to other calendars. The inverse also happens: other calendars can connect to yours, and they may publish your events onto theirs. The <Btn>Inbox</Btn> in the main navigation is where you see that activity — notifications when a new calendar follows yours, or when one of your events gets reposted somewhere else.
 
 The inbox doesn't fill up because *you* connected to another calendar; it fills up because *they* connected to you. The mechanics of being followed, and what to do about reports raised against your events, are covered in the federation-etiquette and moderation guides.
 
@@ -102,11 +96,11 @@ Most calendar owners who repost events face this choice within their first few w
 
 Two things about this choice:
 
-**It isn't binary.** Auto-repost rules are per-connection. You can be an aggregator for some sources (the city's parks-and-rec calendar, where you trust everything they post) and curated for others (a peer venue, where their events are interesting but you want the final say). Most established calendars end up a mix.
+**It isn't binary.** Auto-repost rules are per-connection. You can be an aggregator for some sources (the city's parks-and-rec calendar, where you trust everything they post) and curated for others (a peer venue, where their events are interesting but you want the final say).
 
-**You can change posture later, but the directions aren't symmetric.** Switching from curated to aggregator is straightforward — flip the toggles on existing connections, set up category matchings, accept the increased throughput. Switching the other way is harder; once visitors associate your calendar with a particular flow, dropping a stream of auto-published events they were used to seeing is a noticeable change. Lean toward starting curated and opening up later, rather than starting open and tightening down.
+**You can change your mind later.** Switching from curated to aggregator is straightforward — flip the toggles on existing connections, set up category matchings, accept the increased throughput. Switching the other way is harder; once visitors associate your calendar with a particular flow, dropping a stream of auto-published events they were used to seeing is a noticeable change. Lean toward starting curated and opening up later, rather than starting open and tightening down.
 
-The right starting posture depends on your calendar's purpose and your editorial bandwidth. A small volunteer group with one editor and a few hours a week probably can't sustain a curated calendar of fifty connected sources; an aggregator posture lets the rules carry the load. A neighborhood newsletter run by a single careful editor probably *should* be curated; visitors come to it for the editor's judgment, and an unfiltered firehose loses that.
+The right starting posture depends on your calendar's purpose and your editorial bandwidth. A small volunteer group with one editor and a few hours a week probably can't sustain a curated calendar of fifty connected sources; an aggregator mindset lets the rules carry the load. A neighborhood newsletter run by a single careful editor probably *should* be curated; visitors come to it for the editor's judgment, and an unfiltered firehose loses that.
 
 ::: tip <Lightbulb /> A note on the first month.
 Like the category list, your aggregator-vs-curated posture is a draft, not a commitment. Watch what kinds of events actually flow through your connections for a month or two before tuning the toggles. The connections that consistently surface things worth publishing are obvious by then — and the ones that mostly add noise are obvious too.
