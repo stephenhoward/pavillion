@@ -72,14 +72,6 @@ There is no top-level series listing on your calendar's home page; series surfac
 
 ## Things that trip people up
 
-A short list of the most common stumbles.
-
-**Treating a series like a recurring event.** A weekly film screening where the film changes each week is *not* a recurring event with the same title — visitors won't be able to tell which film is playing on which date, and the event editor will fight you when you try to give each occurrence a distinct name. That's a series of distinct events.
-
-**Treating a recurring event like a series.** The reverse: making a series for the third-Wednesday board meeting that happens every month with the same name and the same agenda template. That's one recurring event, not twelve identical series entries — the recurrence panel exists exactly for this case.
-
 **A series with no events on it.** A series that hasn't been assigned to any events doesn't show up to visitors anywhere. If a series you created isn't appearing on the public side, check whether at least one event has been assigned to it.
 
-**Trying to put one event in two series.** An event can carry one series affiliation, not several. If you want a single event to surface under two programs, the second affiliation should be a category, not a second series.
-
-**Renaming the URL to fix a typo.** The URL name can't be edited after creation by design — changing it would break links visitors and other calendars have saved. If the URL name is genuinely wrong, the only fix is to delete the series, recreate it with the correct slug, and reassign the events. The display name and description are freely editable; the slug is the one that's permanent.
+**A typo in the URL.** The URL slug can't be edited after creation — changing it would break links visitors and other calendars have saved. If the slug is genuinely wrong, the only fix is to delete the series, recreate it with the correct slug, and reassign the events. (The display name and description are freely editable; only the slug is permanent.)

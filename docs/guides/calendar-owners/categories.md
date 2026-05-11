@@ -30,7 +30,7 @@ Once a category exists, it shows up in three places:
 - On your public calendar page, as a button in the filter row — but only once at least one event uses it. Empty categories don't clutter the filter.
 - On the detail page of every event that uses it, as a clickable badge that takes the visitor back to the calendar filtered to similar events.
 
-To rename or retranslate a category, click the pencil icon on its row in the list. To delete one, click the trash icon — the dialog asks whether to remove the category from its events (the events stay, they just lose that category) or migrate those events to a different category in one move. There's also a multi-select on the list itself for merging two or more categories into one when you decide they were a single grouping after all.
+To rename or retranslate a category, click the pencil icon on its row in the list. To delete one, click the trash icon — the dialog asks whether to remove the category from its events (the events stay, they just lose that category) or migrate those events to a different category in one move. (For collapsing several categories into one or splitting one into two, see *The cost of churning category names later* below.)
 
 ## Designing the list
 

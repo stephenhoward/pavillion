@@ -49,9 +49,7 @@ Multiple schedules are also the way to express "the same meeting at two differen
 
 For a recurring event, the editor shows a <Btn>Manage cancellations</Btn> button below the schedule blocks. Click it to expand a **Cancellations** panel — a horizontal row of cards for the upcoming dates, each showing date and time. Later dates live further down the row; <Btn>Show more</Btn> appends the next batch, and <Btn>Jump to month</Btn> lets you skip ahead to a specific month.
 
-To cancel one occurrence, find its card and click <Btn>Cancel</Btn>. A confirmation modal opens — *Cancel this instance?* — with a **Hide from public** toggle and two buttons: <Btn>Cancel</Btn> (dismiss the modal) and <Btn>Cancel instance</Btn> (confirm).
-
-The toggle is the important choice:
+To cancel one occurrence, find its card and click <Btn>Cancel</Btn>. The confirmation that opens has one decision worth thinking about — a **Hide from public** toggle:
 
 - **Off (the default): show as cancelled.** The occurrence stays on the calendar. Visitors and any calendar reposting from yours still see it, but it's marked **Cancelled**. This is the right choice for an event that *was* announced and that people might be planning to attend — cancelling-but-showing tells them the meeting they had on their calendar isn't happening.
 - **On: hide from public.** The occurrence is removed from the public page and from any calendar reposting from yours. This is the right choice for occurrences that haven't been visible long enough for anyone to be planning around them — for example, a brand-new recurring event where you want to skip an upcoming holiday week before the public page has had time to surface those occurrences.
@@ -89,5 +87,3 @@ A short list of the most common stumbles.
 **"Show as cancelled" on an event nobody was attending yet.** If you skip an occurrence on a brand-new recurring event before anyone's seen the public page, the **Cancelled** badge is just noise. Use **Hide from public** instead so the occurrence quietly drops out.
 
 **Setting an end date earlier than the start date.** If the schedule's end date is before its start date, the event won't show any dates on the calendar. The editor allows this combination — it just means an empty schedule. Double-check both fields if a recurring event isn't appearing.
-
-**Treating a series like a recurring event.** A weekly film screening where the film changes each week is *not* a recurring event with the same title — visitors won't be able to tell which film is playing on which date. That's a series.
