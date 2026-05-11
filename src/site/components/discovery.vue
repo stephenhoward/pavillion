@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, inject, onBeforeMount, watch } from 'vue';
 import { useTranslation } from 'i18next-vue';
+import { Calendar as CalendarIcon } from 'lucide-vue-next';
 import type Config from '@/client/service/config';
 
 import CalendarService, { type PublicCalendarListing } from '../service/calendar';
@@ -63,6 +64,16 @@ function tileName(listing: PublicCalendarListing): string {
 function tileDescription(listing: PublicCalendarListing): string {
   const content = localizedContent(listing.calendar);
   return content?.description || '';
+}
+
+const instanceHost = computed<string>(() => {
+  return siteConfig?.settings?.()?.domain ?? '';
+});
+
+function tileHandle(listing: PublicCalendarListing): string {
+  const host = instanceHost.value;
+  if (!host) return '';
+  return `${listing.calendar.urlName}@${host}`;
 }
 
 /**
@@ -179,6 +190,16 @@ onBeforeMount(async () => {
             >
               {{ tileDescription(listing) }}
             </p>
+            <span
+              v-if="tileHandle(listing)"
+              class="discovery-tile-handle"
+            >
+              <CalendarIcon
+                :size="14"
+                aria-hidden="true"
+              />
+              <span>{{ tileHandle(listing) }}</span>
+            </span>
           </RouterLink>
         </li>
       </ul>
@@ -374,6 +395,13 @@ onBeforeMount(async () => {
   @include public-dark-mode {
     color: $public-text-secondary-dark;
   }
+}
+
+.discovery-tile-handle {
+  @include public-source-calendar-pill;
+  align-self: flex-start;
+  margin-top: auto;
+  cursor: inherit;
 }
 
 // ================================================================

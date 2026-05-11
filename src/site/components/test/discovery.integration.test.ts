@@ -181,6 +181,10 @@ describe('discovery.vue - five behavioral states', () => {
     const secondTile = items[1];
     expect(secondTile.find('.discovery-tile-description').exists()).toBe(false);
 
+    // Calendar handle pill renders urlName@domain on every tile.
+    expect(firstTile.find('.discovery-tile-handle').text()).toBe('alpha@test.local');
+    expect(secondTile.find('.discovery-tile-handle').text()).toBe('beta@test.local');
+
     // applyHead() must have written the page_title into document.title — catches
     // a typo or wrong key path in the head metadata wiring.
     expect(document.title).toContain(enSystem.discovery.page_title);
