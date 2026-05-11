@@ -16,12 +16,12 @@ The separation is what gives you editorial control. Connecting to a calendar doe
 
 ## Find calendars worth connecting to
 
-There's no central directory of Pavillion calendars. Federation works the same way email does: to connect to someone's calendar, you need its address, and the way you get its address is the same way you'd get someone's email — ask, look at their website, find it in another calendar's "calendars they follow" list.
+There's no central directory of Pavillion calendars. Federation works the same way email does: to connect to someone's calendar, you need its address, and the way you get its address is the same way you'd get someone's email — ask, or look at their website.
 
 A few starting places:
 
 - **Calendars listed on the websites of organizations you already work with.** A neighborhood association, a music venue, an arts council, a coworking space, a climate or mutual-aid group. Their site footer or events page often points at their calendar.
-- **The follow list on calendars you do know.** Once you've got one foothold — your local arts council, say — open their calendar and look at who *they* follow. That's a curated list of peers and partners they consider worth tracking, which is usually a good starting set for you too.
+- **The sources behind events you already like.** On a calendar you trust, reposted events link back to the calendar they came from — a small calendar-name link beneath the event title. If a particular source keeps showing up on calendars you respect, that's a good signal it's worth connecting to yourself.
 - **Word of mouth.** Other calendar owners will tell you which calendars to track. The federated network tends to grow through introductions, not directory listings.
 
 Calendar handles take the shape `calendar-name@domain.example`. The part before the `@` is the calendar's URL handle on its instance; the part after is the instance's domain. *`riverbend-folk@arts.example`* points at the `riverbend-folk` calendar on `arts.example`. (Calendars on your *own* instance can be referenced by just their URL handle — `riverbend-folk` is enough if you're both running on the same instance.)
