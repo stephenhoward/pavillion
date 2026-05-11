@@ -11,7 +11,7 @@ import { EventNotFoundError } from '@/common/exceptions/calendar';
 import CalendarEventInstance from '@/common/model/event_instance';
 import { EventSeries } from '@/common/model/event_series';
 import { EventSeriesContent } from '@/common/model/event_series_content';
-import { EventLocation, EventLocationSpace, EventLocationSpaceContent } from '@/common/model/location';
+import { EventLocation, EventLocationContent, EventLocationSpace, EventLocationSpaceContent } from '@/common/model/location';
 import { Media } from '@/common/model/media';
 import { testApp } from '@/server/common/test/lib/express';
 import CalendarRoutes from '@/server/public/api/v1/calendar';
@@ -363,6 +363,59 @@ describe('Public API - toPublicEventObject shape contract', () => {
     return space;
   }
 
+  /**
+   * Public Location projection contract: the response must expose only
+   * address-display fields and translatable content. Internal fields
+   * (id, originUri, spaces[]) are AP-identity hints / nested leak vectors
+   * with no Tier 1 anonymous-public use case and must never appear on the
+   * public surface.
+   */
+  function assertLocationProjection(locationBody: Record<string, any>) {
+    expect(locationBody).not.toBeNull();
+    // Allow-listed fields are present
+    expect(locationBody.name).toBe('Community Hall');
+    expect(locationBody.address).toBe('123 Main St');
+    expect(locationBody.city).toBe('Springfield');
+    expect(locationBody.state).toBe('IL');
+    expect(locationBody.postalCode).toBe('62701');
+    expect(locationBody.country).toBe('USA');
+    expect(locationBody.content).toBeDefined();
+    expect(locationBody.content.en).toBeDefined();
+    expect(locationBody.content.en.accessibilityInfo).toBe('Wheelchair accessible; gender-neutral restrooms.');
+    // The public projection must contain only the allow-listed keys.
+    expect(Object.keys(locationBody).sort()).toEqual(
+      ['address', 'city', 'content', 'country', 'name', 'postalCode', 'state'],
+    );
+    // Spell out the disallowed internal fields for clarity / future regressions.
+    expect(locationBody.id).toBeUndefined();
+    expect(locationBody.originUri).toBeUndefined();
+    expect(locationBody.spaces).toBeUndefined();
+  }
+
+  function makeLocation(): EventLocation {
+    const location = new EventLocation(
+      'loc-1',
+      'Community Hall',
+      '123 Main St',
+      'Springfield',
+      'IL',
+      '62701',
+      'USA',
+    );
+    location.originUri = 'https://example.test/locations/loc-1';
+    location.addContent(
+      new EventLocationContent('en', 'Wheelchair accessible; gender-neutral restrooms.'),
+    );
+    // Nested space carries its own originUri + clientId — both must be
+    // eliminated by the projection (we drop spaces[] entirely).
+    const nestedSpace = new EventLocationSpace('space-nested', 'loc-1');
+    nestedSpace.originUri = 'https://example.test/spaces/space-nested';
+    nestedSpace.clientId = 'draft-1';
+    nestedSpace.addContent(new EventLocationSpaceContent('en', 'Side Room', 'Hearing loop'));
+    location.spaces = [nestedSpace];
+    return location;
+  }
+
   beforeEach(() => {
     calendarInterface = new CalendarInterface(new EventEmitter());
     publicInterface = new PublicCalendarInterface(new EventEmitter(), calendarInterface);
@@ -707,7 +760,7 @@ describe('Public API - toPublicEventObject shape contract', () => {
    *   - With Space attached → response.event.space === { content: {...} }
    *     and never includes id, placeId, or originUri.
    *   - Without Space → response.event.space === null.
-   *   - The pre-existing `location` shape is unchanged (additive guarantee).
+   *   - Location is independently projected (see `describe('location projection')` below).
    *
    * Covered for every public handler that returns event objects: getEvent,
    * listInstances, getEventInstance, and getSeries.
@@ -750,18 +803,10 @@ describe('Public API - toPublicEventObject shape contract', () => {
       expect(response.body.space).toBeNull();
     });
 
-    it('getEvent: leaves the existing `location` shape unchanged (additive guarantee)', async () => {
+    it('getEvent: strips originUri, drops spaces[], and drops id from location while still projecting space', async () => {
       const event = new CalendarEvent(SPACE_PROJ_EVENT_UUID, 'cal-id');
       event.schedules = [];
-      event.location = new EventLocation(
-        'loc-1',
-        'Community Hall',
-        '123 Main St',
-        'Springfield',
-        'IL',
-        '62701',
-        'USA',
-      );
+      event.location = makeLocation();
       event.space = makeSpace();
 
       apiSandbox.stub(publicInterface, 'getEventById').resolves(event);
@@ -773,17 +818,9 @@ describe('Public API - toPublicEventObject shape contract', () => {
       const response = await request(testApp(router)).get(`/handler/${SPACE_PROJ_EVENT_UUID}`);
 
       expect(response.status).toBe(200);
-      // location must retain its full existing shape — adding `space`
-      // (the new field) must not strip or reproject `location`.
-      expect(response.body.location).toMatchObject({
-        id: 'loc-1',
-        name: 'Community Hall',
-        address: '123 Main St',
-        city: 'Springfield',
-        state: 'IL',
-        postalCode: '62701',
-        country: 'USA',
-      });
+      // location must be projected to address-display fields + content only.
+      // originUri, spaces[], and id must all be absent.
+      assertLocationProjection(response.body.location);
       // And space is independently projected.
       assertSpaceProjection(response.body.space);
     });
@@ -877,6 +914,148 @@ describe('Public API - toPublicEventObject shape contract', () => {
       expect(response.status).toBe(200);
       expect(response.body.events).toHaveLength(1);
       assertSpaceProjection(response.body.events[0].space);
+    });
+  });
+
+  /**
+   * Public Location projection contract:
+   *   - With a Location attached → response.event.location is projected to
+   *     address-display fields plus `content`. `originUri`, `spaces[]`, and
+   *     `id` must never appear on the public surface (originUri is an
+   *     AP-dedup identity hint, spaces[] is unused on the public surface,
+   *     and id parallels the space projection's id-stripping rationale).
+   *   - Without a Location → response.event.location is null or absent
+   *     (eventObj does not synthesize a value; the input pass-through
+   *     leaves it null/undefined).
+   *
+   * Covered for every public handler that returns event objects: getEvent,
+   * listInstances, getEventInstance, and getSeries.
+   */
+  describe('location projection', () => {
+    const LOC_PROJ_EVENT_UUID = '33333333-3333-4333-8333-333333333333';
+
+    it('getEvent: projects location to address-display fields + content; strips originUri, spaces, and id', async () => {
+      const event = new CalendarEvent(LOC_PROJ_EVENT_UUID, 'cal-id');
+      event.schedules = [];
+      event.location = makeLocation();
+
+      apiSandbox.stub(publicInterface, 'getEventById').resolves(event);
+
+      router.get('/handler/:id', (req, res) => {
+        routes.getEvent(req, res);
+      });
+
+      const response = await request(testApp(router)).get(`/handler/${LOC_PROJ_EVENT_UUID}`);
+
+      expect(response.status).toBe(200);
+      assertLocationProjection(response.body.location);
+    });
+
+    it('getEvent: returns location === null when an event has no Location', async () => {
+      const event = new CalendarEvent(LOC_PROJ_EVENT_UUID, 'cal-id');
+      event.schedules = [];
+      // event.location defaults to null
+
+      apiSandbox.stub(publicInterface, 'getEventById').resolves(event);
+
+      router.get('/handler/:id', (req, res) => {
+        routes.getEvent(req, res);
+      });
+
+      const response = await request(testApp(router)).get(`/handler/${LOC_PROJ_EVENT_UUID}`);
+
+      expect(response.status).toBe(200);
+      expect(response.body.location).toBeNull();
+    });
+
+    it('listInstances: projects location on each instance; strips originUri, spaces, and id', async () => {
+      const calendar = new Calendar('cal-id', 'test-calendar');
+      const event = new CalendarEvent('event-1', 'cal-id');
+      event.schedules = [];
+      event.location = makeLocation();
+      const instance = new CalendarEventInstance('inst-1', event, DateTime.now(), null);
+
+      apiSandbox.stub(publicInterface, 'getCalendarByName').resolves(calendar);
+      apiSandbox.stub(publicInterface, 'listEventInstances').resolves([instance]);
+
+      router.get('/handler', (req, res) => {
+        req.params.calendar = 'test-calendar';
+        routes.listInstances(req, res);
+      });
+
+      const response = await request(testApp(router)).get('/handler');
+
+      expect(response.status).toBe(200);
+      expect(response.body).toHaveLength(1);
+      assertLocationProjection(response.body[0].event.location);
+    });
+
+    it('listInstances: returns location === null when an event has no Location', async () => {
+      const calendar = new Calendar('cal-id', 'test-calendar');
+      const event = new CalendarEvent('event-1', 'cal-id');
+      event.schedules = [];
+      const instance = new CalendarEventInstance('inst-1', event, DateTime.now(), null);
+
+      apiSandbox.stub(publicInterface, 'getCalendarByName').resolves(calendar);
+      apiSandbox.stub(publicInterface, 'listEventInstances').resolves([instance]);
+
+      router.get('/handler', (req, res) => {
+        req.params.calendar = 'test-calendar';
+        routes.listInstances(req, res);
+      });
+
+      const response = await request(testApp(router)).get('/handler');
+
+      expect(response.status).toBe(200);
+      expect(response.body[0].event.location).toBeNull();
+    });
+
+    it('getEventInstance: projects location on the wrapped event; strips originUri, spaces, and id', async () => {
+      const EVENT_UUID = '11111111-1111-4111-8111-111111111111';
+      const VALID_SLUG = '20260508-1800';
+      const event = new CalendarEvent('event-1', 'cal-id');
+      event.schedules = [];
+      event.location = makeLocation();
+      const instance = new CalendarEventInstance('inst-1', event, DateTime.utc(2026, 5, 8, 18, 0), null);
+
+      apiSandbox.stub(publicInterface, 'findOrMaterializeInstanceWithDetails').resolves(instance);
+
+      router.get('/handler/:eventId/:startTime', (req, res) => {
+        routes.getEventInstance(req, res);
+      });
+
+      const response = await request(testApp(router)).get(`/handler/${EVENT_UUID}/${VALID_SLUG}`);
+
+      expect(response.status).toBe(200);
+      assertLocationProjection(response.body.event.location);
+    });
+
+    it('getSeries: projects location on every event in events[]', async () => {
+      const calendar = new Calendar('cal-id', 'test-calendar');
+      const series = new EventSeries('series-1', 'cal-id', 'yoga-classes');
+      const content = new EventSeriesContent('en');
+      content.name = 'Yoga Classes';
+      series.addContent(content);
+
+      const event = new CalendarEvent('event-1', 'cal-id');
+      event.schedules = [];
+      event.location = makeLocation();
+
+      apiSandbox.stub(publicInterface, 'getCalendarByName').resolves(calendar);
+      apiSandbox.stub(publicInterface, 'getSeriesByUrlName').resolves(series);
+      apiSandbox.stub(publicInterface, 'getSeriesEvents').resolves({ events: [event], total: 1 });
+
+      router.get('/handler', (req, res) => {
+        req.params.urlName = 'test-calendar';
+        req.params.seriesUrlName = 'yoga-classes';
+        routes.getSeries(req, res);
+      });
+
+      const response = await request(testApp(router)).get('/handler');
+
+      expect(response.status).toBe(200);
+      expect(response.body.events).toHaveLength(1);
+      assertLocationProjection(response.body.events[0].location);
     });
   });
 });
