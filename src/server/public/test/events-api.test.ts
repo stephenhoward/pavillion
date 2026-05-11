@@ -11,6 +11,8 @@ import { EventNotFoundError } from '@/common/exceptions/calendar';
 import CalendarEventInstance from '@/common/model/event_instance';
 import { EventSeries } from '@/common/model/event_series';
 import { EventSeriesContent } from '@/common/model/event_series_content';
+import { EventCategory } from '@/common/model/event_category';
+import { EventCategoryContent } from '@/common/model/event_category_content';
 import { EventLocation, EventLocationContent, EventLocationSpace, EventLocationSpaceContent } from '@/common/model/location';
 import { Media } from '@/common/model/media';
 import { testApp } from '@/server/common/test/lib/express';
@@ -414,6 +416,123 @@ describe('Public API - toPublicEventObject shape contract', () => {
     nestedSpace.addContent(new EventLocationSpaceContent('en', 'Side Room', 'Hearing loop'));
     location.spaces = [nestedSpace];
     return location;
+  }
+
+  /**
+   * Public Series projection contract: the response must allow-list only
+   * `{ id, urlName, mediaFocalPointX, mediaFocalPointY, mediaZoom, content }`.
+   * Internal FKs (`calendarId`, `mediaId`) must never appear on the public
+   * surface — they identify internal database rows and have no Tier 1
+   * anonymous-public use case.
+   */
+  function assertSeriesProjection(seriesBody: Record<string, any>) {
+    expect(seriesBody).not.toBeNull();
+    // Allow-listed fields carry the values set by makeSeries().
+    expect(seriesBody.id).toBe('series-1');
+    expect(seriesBody.urlName).toBe('yoga-classes');
+    expect(seriesBody.mediaFocalPointX).toBe(0.4);
+    expect(seriesBody.mediaFocalPointY).toBe(0.6);
+    expect(seriesBody.mediaZoom).toBe(1.2);
+    expect(seriesBody.content).toBeDefined();
+    expect(seriesBody.content.en).toBeDefined();
+    expect(seriesBody.content.en.name).toBe('Yoga Classes');
+    // The public projection must contain only the allow-listed keys.
+    expect(Object.keys(seriesBody).sort()).toEqual(
+      ['content', 'id', 'mediaFocalPointX', 'mediaFocalPointY', 'mediaZoom', 'urlName'],
+    );
+    // Spell out the disallowed internal FKs for clarity / future regressions.
+    expect(seriesBody.calendarId).toBeUndefined();
+    expect(seriesBody.mediaId).toBeUndefined();
+  }
+
+  function makeSeries(): EventSeries {
+    const series = new EventSeries('series-1', 'cal-id', 'yoga-classes', 'media-99');
+    series.mediaFocalPointX = 0.4;
+    series.mediaFocalPointY = 0.6;
+    series.mediaZoom = 1.2;
+    series.addContent(new EventSeriesContent('en', 'Yoga Classes', 'Weekly yoga.'));
+    return series;
+  }
+
+  /**
+   * Public Category projection contract: the response must allow-list only
+   * `{ id, content }`. The internal FK `calendarId` must never appear on the
+   * public surface — DEC-005 establishes that category.id is the public
+   * identifier within a calendar context (the calendar is already established
+   * by the API route).
+   *
+   * `eventCount` is a service-supplied aggregate, not part of the projection.
+   * The `listCategories` handler augments rows with it; callers that receive
+   * such a row should destructure the augmentation off before asserting the
+   * bare projection, mirroring how `listSeries` is tested.
+   */
+  function assertCategoryProjection(categoryBody: Record<string, any>) {
+    expect(categoryBody).not.toBeNull();
+    // Allow-listed fields carry the values set by makeCategory().
+    expect(categoryBody.id).toBe('cat-1');
+    expect(categoryBody.content).toBeDefined();
+    expect(categoryBody.content.en).toBeDefined();
+    expect(categoryBody.content.en.name).toBe('Music');
+    // The public projection must contain only the allow-listed keys.
+    expect(Object.keys(categoryBody).sort()).toEqual(['content', 'id']);
+    // Spell out the disallowed internal FK for clarity / future regressions.
+    expect(categoryBody.calendarId).toBeUndefined();
+    // `eventCount` is not part of this projection.
+    expect(categoryBody.eventCount).toBeUndefined();
+  }
+
+  function makeCategory(): EventCategory {
+    const category = new EventCategory('cat-1', 'cal-id');
+    category.eventCount = 0;
+    category.addContent(new EventCategoryContent('en', 'Music'));
+    return category;
+  }
+
+  /**
+   * Public Event root projection contract: response must allow-list only the
+   * documented public fields. Internal FKs (`calendarId`, `locationId`,
+   * `spaceId`, `mediaId`) and internal-only fields (`schedules`,
+   * `recurrenceText`) must never appear on the public surface.
+   *
+   * Nested objects (location, space, media, series, categories) are checked
+   * independently by their own `assert*Projection` helpers.
+   */
+  function assertEventRootProjection(eventBody: Record<string, any>) {
+    expect(eventBody).not.toBeNull();
+
+    // Bidirectional allow-list assertion. `toPublicEventObject` always emits
+    // every field as a key (optional nested objects collapse to null, not
+    // omitted), so the key set is fixed. `toEqual` catches both an extra key
+    // (FK leak) and a missing required key (dropped public field).
+    expect(Object.keys(eventBody).sort()).toEqual([
+      'categories',
+      'content',
+      'date',
+      'eventSourceUrl',
+      'externalUrl',
+      'id',
+      'isRecurring',
+      'isRepost',
+      'location',
+      'media',
+      'mediaFocalPointX',
+      'mediaFocalPointY',
+      'mediaZoom',
+      'recurrenceSummary',
+      'repostStatus',
+      'series',
+      'sourceCalendar',
+      'space',
+      'urlPrompt',
+    ]);
+
+    // Disallowed internal fields must be absent.
+    expect(eventBody.calendarId).toBeUndefined();
+    expect(eventBody.locationId).toBeUndefined();
+    expect(eventBody.spaceId).toBeUndefined();
+    expect(eventBody.mediaId).toBeUndefined();
+    expect(eventBody.schedules).toBeUndefined();
+    expect(eventBody.recurrenceText).toBeUndefined();
   }
 
   beforeEach(() => {
@@ -1056,6 +1175,253 @@ describe('Public API - toPublicEventObject shape contract', () => {
       expect(response.status).toBe(200);
       expect(response.body.events).toHaveLength(1);
       assertLocationProjection(response.body.events[0].location);
+    });
+  });
+
+  /**
+   * Public Event root projection contract:
+   *   - Top-level keys must be the documented allow-list only.
+   *   - Internal FKs (calendarId, locationId, spaceId, mediaId) and internal
+   *     fields (schedules, recurrenceText) must never appear.
+   *
+   * Covered for every public handler that returns event objects: getEvent,
+   * listInstances (via wrapping instance), getEventInstance (via wrapping
+   * instance), and getSeries (via events[]).
+   */
+  describe('event root projection', () => {
+    const EVENT_PROJ_UUID = '44444444-4444-4444-8444-444444444444';
+    const VALID_SLUG = '20260508-1800';
+
+    function makeEventWithFkLeakSurface(): CalendarEvent {
+      // Construct an event with every field set so any spread-then-leak path
+      // surfaces in the response. Schedules, location, space, media, series,
+      // categories all populated.
+      const event = new CalendarEvent(EVENT_PROJ_UUID, 'cal-id');
+      const schedule = new CalendarEventSchedule();
+      schedule.frequency = EventFrequency.WEEKLY;
+      schedule.interval = 1;
+      schedule.byDay = ['MO'];
+      schedule.isExclusion = false;
+      event.schedules = [schedule];
+      event.locationId = 'loc-row-1';
+      event.location = makeLocation();
+      event.space = makeSpace();
+      event.media = new Media('media-1', 'cal-id', 'sha', 'photo.jpg', 'image/jpeg', 100, 'approved');
+      event.mediaId = 'media-1';
+      event.series = makeSeries();
+      event.categories = [makeCategory()];
+      return event;
+    }
+
+    it('getEvent: returns only allow-listed event-root keys; FKs and schedules absent', async () => {
+      const event = makeEventWithFkLeakSurface();
+      apiSandbox.stub(publicInterface, 'getEventById').resolves(event);
+
+      router.get('/handler/:id', (req, res) => {
+        routes.getEvent(req, res);
+      });
+
+      const response = await request(testApp(router)).get(`/handler/${EVENT_PROJ_UUID}`);
+
+      expect(response.status).toBe(200);
+      assertEventRootProjection(response.body);
+    });
+
+    it('listInstances: returns only allow-listed event-root keys on each instance event', async () => {
+      const calendar = new Calendar('cal-id', 'test-calendar');
+      const event = makeEventWithFkLeakSurface();
+      const instance = new CalendarEventInstance('inst-1', event, DateTime.now(), null);
+
+      apiSandbox.stub(publicInterface, 'getCalendarByName').resolves(calendar);
+      apiSandbox.stub(publicInterface, 'listEventInstances').resolves([instance]);
+
+      router.get('/handler', (req, res) => {
+        req.params.calendar = 'test-calendar';
+        routes.listInstances(req, res);
+      });
+
+      const response = await request(testApp(router)).get('/handler');
+
+      expect(response.status).toBe(200);
+      expect(response.body).toHaveLength(1);
+      assertEventRootProjection(response.body[0].event);
+      // Also: instance-row calendarId must not leak.
+      expect(response.body[0].calendarId).toBeUndefined();
+    });
+
+    it('getEventInstance: returns only allow-listed event-root keys on the wrapped event', async () => {
+      const event = makeEventWithFkLeakSurface();
+      const instance = new CalendarEventInstance('inst-1', event, DateTime.utc(2026, 5, 8, 18, 0), null);
+      apiSandbox.stub(publicInterface, 'findOrMaterializeInstanceWithDetails').resolves(instance);
+
+      router.get('/handler/:eventId/:startTime', (req, res) => {
+        routes.getEventInstance(req, res);
+      });
+
+      const response = await request(testApp(router)).get(`/handler/${EVENT_PROJ_UUID}/${VALID_SLUG}`);
+
+      expect(response.status).toBe(200);
+      assertEventRootProjection(response.body.event);
+    });
+
+    it('getSeries: returns only allow-listed event-root keys on each event in events[]', async () => {
+      const calendar = new Calendar('cal-id', 'test-calendar');
+      const series = makeSeries();
+
+      const event = makeEventWithFkLeakSurface();
+
+      apiSandbox.stub(publicInterface, 'getCalendarByName').resolves(calendar);
+      apiSandbox.stub(publicInterface, 'getSeriesByUrlName').resolves(series);
+      apiSandbox.stub(publicInterface, 'getSeriesEvents').resolves({ events: [event], total: 1 });
+
+      router.get('/handler', (req, res) => {
+        req.params.urlName = 'test-calendar';
+        req.params.seriesUrlName = 'yoga-classes';
+        routes.getSeries(req, res);
+      });
+
+      const response = await request(testApp(router)).get('/handler');
+
+      expect(response.status).toBe(200);
+      expect(response.body.events).toHaveLength(1);
+      assertEventRootProjection(response.body.events[0]);
+    });
+  });
+
+  /**
+   * Public Series projection contract:
+   *   - Series allow-list applies wherever a series is rendered. This block
+   *     covers the top-level shape from getSeries, the per-row shape from
+   *     listSeries, and the nested `event.series` shape from getEvent. The
+   *     same projection helper feeds the nested series in listInstances /
+   *     getEventInstance / getSeries.events[]; the cross-cutting
+   *     `event root projection` block exercises those four event handlers
+   *     with a populated fixture, guarding against the broader FK leak class.
+   *   - `calendarId` and `mediaId` are internal FKs and must never appear.
+   */
+  describe('series projection', () => {
+    const SERIES_PROJ_EVENT_UUID = '55555555-5555-4555-8555-555555555555';
+
+    it('getSeries: returns the top-level series allow-list; calendarId and mediaId absent', async () => {
+      const calendar = new Calendar('cal-id', 'test-calendar');
+      const series = makeSeries();
+
+      apiSandbox.stub(publicInterface, 'getCalendarByName').resolves(calendar);
+      apiSandbox.stub(publicInterface, 'getSeriesByUrlName').resolves(series);
+      apiSandbox.stub(publicInterface, 'getSeriesEvents').resolves({ events: [], total: 0 });
+
+      router.get('/handler', (req, res) => {
+        req.params.urlName = 'test-calendar';
+        req.params.seriesUrlName = 'yoga-classes';
+        routes.getSeries(req, res);
+      });
+
+      const response = await request(testApp(router)).get('/handler');
+
+      expect(response.status).toBe(200);
+      // The response wraps the series projection with `events` and `pagination`.
+      // Extract just the series-shaped keys for the projection assertion.
+      const { events, pagination, ...seriesBody } = response.body;
+      expect(events).toEqual([]);
+      expect(pagination).toBeDefined();
+      assertSeriesProjection(seriesBody);
+    });
+
+    it('listSeries: returns the series allow-list on each row, augmented with eventCount; calendarId and mediaId absent', async () => {
+      const calendar = new Calendar('cal-id', 'test-calendar');
+      const series = makeSeries();
+
+      apiSandbox.stub(publicInterface, 'getCalendarByName').resolves(calendar);
+      apiSandbox.stub(publicInterface, 'listSeriesForCalendar').resolves([{ series, eventCount: 7 }]);
+
+      router.get('/handler', (req, res) => {
+        req.params.urlName = 'test-calendar';
+        routes.listSeries(req, res);
+      });
+
+      const response = await request(testApp(router)).get('/handler');
+
+      expect(response.status).toBe(200);
+      expect(response.body).toHaveLength(1);
+      const row = response.body[0];
+      // Row carries an `eventCount` on top of the series allow-list.
+      expect(row.eventCount).toBe(7);
+      const { eventCount: _eventCount, ...seriesBody } = row;
+      assertSeriesProjection(seriesBody);
+    });
+
+    it('getEvent: returns the series allow-list on event.series; calendarId and mediaId absent', async () => {
+      const event = new CalendarEvent(SERIES_PROJ_EVENT_UUID, 'cal-id');
+      event.schedules = [];
+      event.series = makeSeries();
+
+      apiSandbox.stub(publicInterface, 'getEventById').resolves(event);
+
+      router.get('/handler/:id', (req, res) => {
+        routes.getEvent(req, res);
+      });
+
+      const response = await request(testApp(router)).get(`/handler/${SERIES_PROJ_EVENT_UUID}`);
+
+      expect(response.status).toBe(200);
+      assertSeriesProjection(response.body.series);
+    });
+  });
+
+  /**
+   * Public Category projection contract:
+   *   - Category allow-list applies wherever a category is rendered. This
+   *     block covers the per-row shape from listCategories and the nested
+   *     `event.categories[]` shape from getEvent. The same projection helper
+   *     feeds the nested categories in listInstances / getEventInstance /
+   *     getSeries.events[]; the cross-cutting `event root projection` block
+   *     exercises those four event handlers with a populated fixture,
+   *     guarding against the broader FK leak class.
+   *   - `calendarId` is an internal FK and must never appear (DEC-005:
+   *     category.id is the public identifier within a calendar context).
+   */
+  describe('category projection', () => {
+    const CATEGORY_PROJ_EVENT_UUID = '66666666-6666-4666-8666-666666666666';
+
+    it('listCategories: returns the category allow-list on each row, augmented with eventCount; calendarId absent', async () => {
+      const calendar = new Calendar('cal-id', 'test-calendar');
+      const category = makeCategory();
+
+      apiSandbox.stub(publicInterface, 'getCalendarByName').resolves(calendar);
+      apiSandbox.stub(publicInterface, 'listCategoriesForCalendar').resolves([{ category, eventCount: 3 }]);
+
+      router.get('/handler', (req, res) => {
+        req.params.urlName = 'test-calendar';
+        routes.listCategories(req, res);
+      });
+
+      const response = await request(testApp(router)).get('/handler');
+
+      expect(response.status).toBe(200);
+      expect(response.body).toHaveLength(1);
+      const row = response.body[0];
+      // Row carries an `eventCount` on top of the category allow-list.
+      expect(row.eventCount).toBe(3);
+      const { eventCount: _eventCount, ...categoryBody } = row;
+      assertCategoryProjection(categoryBody);
+    });
+
+    it('getEvent: returns the category allow-list on each entry of event.categories[]; calendarId absent', async () => {
+      const event = new CalendarEvent(CATEGORY_PROJ_EVENT_UUID, 'cal-id');
+      event.schedules = [];
+      event.categories = [makeCategory()];
+
+      apiSandbox.stub(publicInterface, 'getEventById').resolves(event);
+
+      router.get('/handler/:id', (req, res) => {
+        routes.getEvent(req, res);
+      });
+
+      const response = await request(testApp(router)).get(`/handler/${CATEGORY_PROJ_EVENT_UUID}`);
+
+      expect(response.status).toBe(200);
+      expect(response.body.categories).toHaveLength(1);
+      assertCategoryProjection(response.body.categories[0]);
     });
   });
 });
