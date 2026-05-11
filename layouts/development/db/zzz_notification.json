@@ -1,0 +1,126 @@
+{
+    "_comment": "Seed inbox notifications for MultiCalendarTestUser (multicalendar@example.com / id 6e87d5ca-...-2222). They own multicalendar_calendar and are co-editor on testuser_calendar, so every notification carries meaningful calendar attribution. Covers all 6 notification types: follow, repost, report_received, report_verified, report_escalated, unshare. Dates shift relative to today (2026-01-08 → today, 2026-01-01 → today-7).",
+    "NotificationEntity": [
+        {
+            "id": "9ec1f00d-0000-4000-8000-000000000001",
+            "account_id": "6e87d5ca-4d89-42c1-aa9d-5ef437fe2222",
+            "type": "report_escalated",
+            "calendar_id": "cbe74815-939e-48b3-af44-1cd4eb3671bb",
+            "event_id": "34ca7066-322c-4b66-ad78-00360f71e698",
+            "actor_name": "",
+            "actor_url": null,
+            "seen": false,
+            "created_at": "2026-01-08T10:30:00.000Z"
+        },
+        {
+            "id": "9ec1f00d-0000-4000-8000-000000000002",
+            "account_id": "6e87d5ca-4d89-42c1-aa9d-5ef437fe2222",
+            "type": "repost",
+            "calendar_id": "cbe74815-939e-48b3-af44-1cd4eb3671bb",
+            "event_id": "d09334bd-e24d-4bfc-a46c-8c6dcf8f0b17",
+            "actor_name": "Maya Okonkwo",
+            "actor_url": "https://gather.fediverse.example/@maya",
+            "seen": false,
+            "created_at": "2026-01-08T08:15:00.000Z"
+        },
+        {
+            "id": "9ec1f00d-0000-4000-8000-000000000003",
+            "account_id": "6e87d5ca-4d89-42c1-aa9d-5ef437fe2222",
+            "type": "follow",
+            "calendar_id": "c8569a35-dccb-4f97-a214-a4dec6c84262",
+            "event_id": null,
+            "actor_name": "Riku Tanaka",
+            "actor_url": "https://mobilizon.example.org/@riku",
+            "seen": false,
+            "created_at": "2026-01-07T17:42:00.000Z"
+        },
+        {
+            "id": "9ec1f00d-0000-4000-8000-000000000004",
+            "account_id": "6e87d5ca-4d89-42c1-aa9d-5ef437fe2222",
+            "type": "report_received",
+            "calendar_id": "c8569a35-dccb-4f97-a214-a4dec6c84262",
+            "event_id": "6ec0637c-9dae-4489-ae74-f6b4301f318d",
+            "actor_name": "",
+            "actor_url": null,
+            "seen": false,
+            "created_at": "2026-01-07T14:08:00.000Z"
+        },
+        {
+            "id": "9ec1f00d-0000-4000-8000-000000000005",
+            "account_id": "6e87d5ca-4d89-42c1-aa9d-5ef437fe2222",
+            "type": "unshare",
+            "calendar_id": "cbe74815-939e-48b3-af44-1cd4eb3671bb",
+            "event_id": "72a94cd2-eb3f-4f08-a008-574d54f809c9",
+            "actor_name": "Test Q. User",
+            "actor_url": null,
+            "seen": false,
+            "created_at": "2026-01-06T20:30:00.000Z"
+        },
+        {
+            "id": "9ec1f00d-0000-4000-8000-000000000006",
+            "account_id": "6e87d5ca-4d89-42c1-aa9d-5ef437fe2222",
+            "type": "report_verified",
+            "calendar_id": "c8569a35-dccb-4f97-a214-a4dec6c84262",
+            "event_id": "5b41c6b3-1335-4bc5-aaee-ae44db2a114e",
+            "actor_name": "",
+            "actor_url": null,
+            "seen": true,
+            "created_at": "2026-01-06T11:20:00.000Z"
+        },
+        {
+            "id": "9ec1f00d-0000-4000-8000-000000000007",
+            "account_id": "6e87d5ca-4d89-42c1-aa9d-5ef437fe2222",
+            "type": "repost",
+            "calendar_id": "c8569a35-dccb-4f97-a214-a4dec6c84262",
+            "event_id": "4383e093-e939-4fb2-a572-47b914fad047",
+            "actor_name": "Sören Liljedahl",
+            "actor_url": "https://gancio.example.coop/@soren",
+            "seen": true,
+            "created_at": "2026-01-05T19:50:00.000Z"
+        },
+        {
+            "id": "9ec1f00d-0000-4000-8000-000000000008",
+            "account_id": "6e87d5ca-4d89-42c1-aa9d-5ef437fe2222",
+            "type": "follow",
+            "calendar_id": "cbe74815-939e-48b3-af44-1cd4eb3671bb",
+            "event_id": null,
+            "actor_name": "Alma Castellanos",
+            "actor_url": "https://mobilizon.example.org/@alma",
+            "seen": true,
+            "created_at": "2026-01-05T13:05:00.000Z"
+        },
+        {
+            "id": "9ec1f00d-0000-4000-8000-000000000009",
+            "account_id": "6e87d5ca-4d89-42c1-aa9d-5ef437fe2222",
+            "type": "report_received",
+            "calendar_id": "c8569a35-dccb-4f97-a214-a4dec6c84262",
+            "event_id": "4a9f09c3-8ab1-45e0-a14b-ee3b1bfb1c76",
+            "actor_name": "",
+            "actor_url": null,
+            "seen": true,
+            "created_at": "2026-01-04T15:45:00.000Z"
+        },
+        {
+            "id": "9ec1f00d-0000-4000-8000-00000000000a",
+            "account_id": "6e87d5ca-4d89-42c1-aa9d-5ef437fe2222",
+            "type": "follow",
+            "calendar_id": "c8569a35-dccb-4f97-a214-a4dec6c84262",
+            "event_id": null,
+            "actor_name": "Yael Brommer",
+            "actor_url": "https://nodename.example.network/@yael",
+            "seen": true,
+            "created_at": "2026-01-03T10:12:00.000Z"
+        },
+        {
+            "id": "9ec1f00d-0000-4000-8000-00000000000b",
+            "account_id": "6e87d5ca-4d89-42c1-aa9d-5ef437fe2222",
+            "type": "repost",
+            "calendar_id": "cbe74815-939e-48b3-af44-1cd4eb3671bb",
+            "event_id": "792895df-c319-4920-a09e-9a8749cd3d76",
+            "actor_name": "Ines Marchetti",
+            "actor_url": "https://events.coopsphere.example/@ines",
+            "seen": true,
+            "created_at": "2026-01-02T16:30:00.000Z"
+        }
+    ]
+}
