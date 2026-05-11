@@ -53,6 +53,8 @@ import { TestEnvironment } from '@/server/common/test/lib/test_environment';
 import { CalendarActorEntity } from '@/server/activitypub/entity/calendar_actor';
 import CalendarActorService from '@/server/activitypub/service/calendar_actor';
 import { ActivityPubActor } from '@/server/activitypub/model/base';
+import { EventObject } from '@/server/activitypub/model/object/event';
+import { NoteObject } from '@/server/activitypub/model/object/note';
 import {
   FollowingCalendarEntity,
   FollowerCalendarEntity,
@@ -311,12 +313,18 @@ describe('Outbox Local Dispatch (cross-hop remote follower regression)', () => {
     // The outbox Announce row is written immediately after SharedEvent in
     // checkAndPerformAutoRepost but through a separate await chain; poll
     // for it to ensure the addToOutbox call has resolved before we assert.
+    // We fetch ALL of B's outbox messages and filter in JS by activity type
+    // so that future paired activity additions (e.g., Create(Note) from
+    // pv-l35p) cannot silently affect this assertion: the filter pins the
+    // assertion to the specific `Announce` activity type that this
+    // regression gate cares about.
     await waitFor(
       async () => {
         const messages = await ActivityPubOutboxMessageEntity.findAll({
-          where: { calendar_id: calendarB.id, type: 'Announce' },
+          where: { calendar_id: calendarB.id },
         });
-        return messages.length > 0 ? messages : null;
+        const announces = messages.filter(m => m.type === 'Announce');
+        return announces.length > 0 ? announces : null;
       },
       { maxWaitMs: 2000, label: 'ActivityPubOutboxMessageEntity Announce for B' },
     );
@@ -326,18 +334,19 @@ describe('Outbox Local Dispatch (cross-hop remote follower regression)', () => {
     // intermediate local calendars but never queued Announce activities in
     // their outboxes, so remote followers of those intermediate calendars
     // silently missed the event. The unified dispatcher fixes this.
-    const bOutboxMessages = await ActivityPubOutboxMessageEntity.findAll({
-      where: { calendar_id: calendarB.id, type: 'Announce' },
+    const bAllOutboxMessages = await ActivityPubOutboxMessageEntity.findAll({
+      where: { calendar_id: calendarB.id },
     });
+    const bAnnounceMessages = bAllOutboxMessages.filter(m => m.type === 'Announce');
     expect(
-      bOutboxMessages.length,
+      bAnnounceMessages.length,
       'B must queue an Announce in its outbox so D (remote) receives it',
     ).toBeGreaterThan(0);
 
     // Assertion 3: the queued Announce's recipient list must include D's actor URI.
     const outboxService = (apInterface as any).outboxService;
     const { default: AnnounceActivity } = await import('@/server/activitypub/model/action/announce');
-    const parsedActivity = AnnounceActivity.fromObject(bOutboxMessages[0].message);
+    const parsedActivity = AnnounceActivity.fromObject(bAnnounceMessages[0].message);
     expect(parsedActivity, 'outbox Announce must parse cleanly').not.toBeNull();
     const recipients = await outboxService.getRecipients(calendarB, parsedActivity!.object);
     expect(
@@ -365,6 +374,100 @@ describe('Outbox Local Dispatch (cross-hop remote follower regression)', () => {
       deliveredToD,
       'axios.post must be called with D inbox_url so the event actually reaches D',
     ).toBe(true);
+  });
+
+  it('emits paired Announce(Event) + Create(Note) rows in A outbox with matching public addressing', async () => {
+    // pv-l35p paired-emission contract: handleEventCreated queues an
+    // Announce(Event) (Pavillion-native consumers) AND a Create(Note)
+    // (Mastodon-class peer rendering). Both must address the public
+    // collection with followers in cc, otherwise Mastodon drops them
+    // from profile timelines. We fetch ALL of A's outbox messages and
+    // filter by activity type + wrapped object type in JS so the
+    // assertion stays valid as more paired activity types are added.
+    const event = await calendarInterface.createEvent(accountA, {
+      calendarId: calendarA.id,
+      content: { en: { name: 'paired emission', description: 'Event + Note paired emission' } },
+      start_date: '2026-05-08',
+      start_time: '18:00',
+      end_date: '2026-05-08',
+      end_time: '20:00',
+    });
+
+    const actorUrlA = await apInterface.actorUrl(calendarA);
+    const eventUrl = EventObject.eventUrl(calendarA, event);
+    const noteUrl = NoteObject.noteUrl(calendarA, event);
+    const publicCollection = 'https://www.w3.org/ns/activitystreams#Public';
+    const followersCollection = `${actorUrlA}/followers`;
+
+    // Poll until both the Announce(Event) and the Create(Note) are queued.
+    // handleEventCreated awaits the two addToOutbox calls sequentially, so
+    // observing the second row guarantees the first is also present. Each
+    // filter is scoped to this event's specific Event/Note IRI so prior
+    // tests in this file (which also create events on A) cannot accidentally
+    // satisfy the assertion.
+    await waitFor(
+      async () => {
+        const messages = await ActivityPubOutboxMessageEntity.findAll({
+          where: { calendar_id: calendarA.id },
+        });
+        const announceEvent = messages.find(
+          m => m.type === 'Announce' && (m.message as any)?.object === eventUrl,
+        );
+        const createNote = messages.find(
+          m => m.type === 'Create' && (m.message as any)?.object?.type === 'Note' && (m.message as any)?.object?.id === noteUrl,
+        );
+        return announceEvent && createNote ? { announceEvent, createNote } : null;
+      },
+      { maxWaitMs: 2000, label: 'paired Announce(Event) + Create(Note) rows in A outbox' },
+    );
+
+    const aOutboxMessages = await ActivityPubOutboxMessageEntity.findAll({
+      where: { calendar_id: calendarA.id },
+    });
+
+    // Type-specific filter for the Announce(Event) row. The Announce wraps
+    // an IRI string (not a nested object), so we identify it by the
+    // matching canonical event URL. Filtering in JS (rather than a
+    // SQL `type:` clause) is deliberate: it documents at the call site
+    // that future paired activity additions cannot silently bump this
+    // count, because the assertion is pinned to a single activity type
+    // wrapping a specific object IRI.
+    const announceEventRows = aOutboxMessages.filter(
+      m => m.type === 'Announce' && (m.message as any)?.object === eventUrl,
+    );
+    expect(
+      announceEventRows.length,
+      'A must queue exactly one Announce(Event) for this event',
+    ).toBe(1);
+
+    // Type-specific filter for the Create(Note) row. The Create wraps a
+    // full Note object, so we identify it by the wrapped object's type
+    // AND its canonical Note IRI (event-scoped, so prior tests on A
+    // don't satisfy this assertion).
+    const createNoteRows = aOutboxMessages.filter(
+      m => m.type === 'Create' && (m.message as any)?.object?.type === 'Note' && (m.message as any)?.object?.id === noteUrl,
+    );
+    expect(
+      createNoteRows.length,
+      'A must queue exactly one Create(Note) paired with the Announce(Event)',
+    ).toBe(1);
+
+    // Both rows must be addressed publicly with followers in cc — without
+    // this, Mastodon ignores the activities in profile timelines and HTTP
+    // delivery loses audience info. This is the addressing invariant the
+    // paired-emission contract relies on.
+    const announceMessage = announceEventRows[0].message as any;
+    expect(announceMessage.to).toEqual([publicCollection]);
+    expect(announceMessage.cc).toEqual([followersCollection]);
+
+    const createMessage = createNoteRows[0].message as any;
+    expect(createMessage.to).toEqual([publicCollection]);
+    expect(createMessage.cc).toEqual([followersCollection]);
+
+    // The wrapped Note must point back to the same canonical event so
+    // Mastodon-class peers render a post that links to the Pavillion event
+    // and Pavillion-aware peers can correlate the two activities.
+    expect(createMessage.object.attributedTo).toBe(actorUrlA);
   });
 
   it('single-hop: B auto-reposts A event when B follows A with originals enabled', async () => {
@@ -660,7 +763,6 @@ describe('Outbox Local Dispatch (cross-hop remote follower regression)', () => {
     // (event_id, calendar_id) constraint on SharedEventEntity must keep the
     // row count at exactly one on B regardless of how many Announces A emits.
     const actorUrl = await apInterface.actorUrl(calendarA);
-    const { EventObject } = await import('@/server/activitypub/model/object/event');
     const eventUrl = EventObject.eventUrl(calendarA, event);
     const { default: AnnounceActivity } = await import('@/server/activitypub/model/action/announce');
     await apInterface.addToOutbox(calendarA, new AnnounceActivity(actorUrl, eventUrl));

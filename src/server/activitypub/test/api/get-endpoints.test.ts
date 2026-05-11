@@ -10,6 +10,7 @@ import { EventSeriesContent } from '@/common/model/event_series_content';
 import ActivityPubServerRoutes from '@/server/activitypub/api/v1/server';
 import ActivityPubInterface from '@/server/activitypub/interface';
 import CalendarInterface from '@/server/calendar/interface';
+import { EventNotFoundError } from '@/common/exceptions/calendar';
 
 describe('GET /calendars/:urlname/events/:eventid', () => {
   let routes: ActivityPubServerRoutes;
@@ -106,6 +107,101 @@ describe('GET /calendars/:urlname/events/:eventid', () => {
     expect(result.nameMap.fr).toBe('Titre Francais');
     expect(result.summaryMap).toBeDefined();
     expect(result.contentMap).toBeDefined();
+  });
+});
+
+describe('GET /calendars/:urlname/events/:eventid/note', () => {
+  let routes: ActivityPubServerRoutes;
+  let sandbox: sinon.SinonSandbox = sinon.createSandbox();
+  let calendarAPI: CalendarInterface;
+
+  const validEventId = '11111111-1111-4111-8111-111111111111';
+
+  beforeEach(() => {
+    const eventBus = new EventEmitter();
+    const activityPubInterface = new ActivityPubInterface(eventBus);
+    calendarAPI = new CalendarInterface(eventBus);
+    routes = new ActivityPubServerRoutes(activityPubInterface, calendarAPI);
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+  });
+
+  it('should return 400 when eventid is not a valid UUID', async () => {
+    const req = { params: { urlname: 'mycal', eventid: 'not-a-uuid' } };
+    const res = { status: sinon.stub(), send: sinon.stub(), setHeader: sinon.stub(), json: sinon.stub() };
+    res.status.returns(res);
+
+    await routes.getNote(req as any, res as any);
+
+    expect(res.status.calledWith(400)).toBe(true);
+  });
+
+  it('should return 404 when calendar not found', async () => {
+    sandbox.stub(calendarAPI, 'getCalendarByName').resolves(null);
+
+    const req = { params: { urlname: 'nonexistent', eventid: validEventId } };
+    const res = { status: sinon.stub(), send: sinon.stub(), setHeader: sinon.stub(), json: sinon.stub() };
+    res.status.returns(res);
+
+    await routes.getNote(req as any, res as any);
+
+    expect(res.status.calledWith(404)).toBe(true);
+    expect(res.send.calledWith('Calendar not found')).toBe(true);
+  });
+
+  it('should return 404 when event not found', async () => {
+    sandbox.stub(calendarAPI, 'getCalendarByName').resolves(new Calendar('cal-id', 'mycal'));
+    sandbox.stub(calendarAPI, 'getEventById').rejects(new EventNotFoundError(validEventId));
+
+    const req = { params: { urlname: 'mycal', eventid: validEventId } };
+    const res = { status: sinon.stub(), send: sinon.stub(), setHeader: sinon.stub(), json: sinon.stub() };
+    res.status.returns(res);
+
+    await routes.getNote(req as any, res as any);
+
+    expect(res.status.calledWith(404)).toBe(true);
+    expect(res.send.calledWith('Event not found')).toBe(true);
+  });
+
+  it('should return 404 when getEventById resolves to null', async () => {
+    sandbox.stub(calendarAPI, 'getCalendarByName').resolves(new Calendar('cal-id', 'mycal'));
+    sandbox.stub(calendarAPI, 'getEventById').resolves(null as any);
+
+    const req = { params: { urlname: 'mycal', eventid: validEventId } };
+    const res = { status: sinon.stub(), send: sinon.stub(), setHeader: sinon.stub(), json: sinon.stub() };
+    res.status.returns(res);
+
+    await routes.getNote(req as any, res as any);
+
+    expect(res.status.calledWith(404)).toBe(true);
+    expect(res.send.calledWith('Event not found')).toBe(true);
+  });
+
+  it('should return a properly serialized ActivityPub Note object', async () => {
+    const calendar = new Calendar('cal-id', 'mycal');
+    const event = new CalendarEvent(validEventId, 'cal-id');
+    event.addContent(new CalendarEventContent('en', 'Test Event', 'A description'));
+    const startDt = DateTime.fromISO('2026-04-15T09:00:00.000Z');
+    event.schedules = [new CalendarEventSchedule('s1', startDt)];
+
+    sandbox.stub(calendarAPI, 'getCalendarByName').resolves(calendar);
+    sandbox.stub(calendarAPI, 'getEventById').resolves(event);
+
+    const req = { params: { urlname: 'mycal', eventid: validEventId } };
+    const res = { setHeader: sinon.stub(), json: sinon.stub() };
+
+    await routes.getNote(req as any, res as any);
+
+    expect(res.setHeader.calledWith('Content-Type', 'application/activity+json')).toBe(true);
+    expect(res.json.calledOnce).toBe(true);
+
+    const result = res.json.firstCall.args[0];
+    expect(result.type).toBe('Note');
+    expect(result.id).toMatch(/\/note$/);
+    expect(result.id).toContain(`/calendars/mycal/events/${validEventId}/note`);
+    expect(result.attributedTo).toContain('/calendars/mycal');
   });
 });
 

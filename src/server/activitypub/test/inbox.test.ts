@@ -9,9 +9,11 @@ import { CalendarActorEntity } from '@/server/activitypub/entity/calendar_actor'
 import { EventObjectEntity } from '@/server/activitypub/entity/event_object';
 import FollowActivity from '@/server/activitypub/model/action/follow';
 import AnnounceActivity from '@/server/activitypub/model/action/announce';
+import CreateActivity from '@/server/activitypub/model/action/create';
 import UpdateActivity from '@/server/activitypub/model/action/update';
+import DeleteActivity from '@/server/activitypub/model/action/delete';
 import { Calendar, CalendarContent } from '@/common/model/calendar';
-import { CalendarEvent } from '@/common/model/events';
+import { CalendarEvent, CalendarEventContent } from '@/common/model/events';
 import { CalendarEntity } from '@/server/calendar/entity/calendar';
 import { EventEmitter } from 'events';
 import CalendarInterface from '@/server/calendar/interface';
@@ -872,6 +874,229 @@ describe('ProcessInboxService - checkAndPerformAutoRepost dismissal gating', () 
   });
 });
 
+describe('ProcessInboxService - checkAndPerformAutoRepost paired Note emission', () => {
+  let sandbox: sinon.SinonSandbox;
+  let inboxService: ProcessInboxService;
+  let eventBus: EventEmitter;
+  let testCalendar: Calendar;
+  let calendarInterface: CalendarInterface;
+
+  const sourceActorUri = 'https://remote.instance/calendars/source-calendar';
+
+  beforeEach(async () => {
+    await setupActivityPubSchema();
+    sandbox = sinon.createSandbox();
+    eventBus = new EventEmitter();
+    calendarInterface = new CalendarInterface(eventBus);
+    inboxService = new ProcessInboxService(eventBus, calendarInterface);
+
+    testCalendar = new Calendar('test-calendar-id', 'test-calendar');
+    testCalendar.addContent('en', new CalendarContent('en'));
+    testCalendar.content('en').title = 'Test Calendar';
+
+    await CalendarEntity.create({
+      id: testCalendar.id,
+      url_name: testCalendar.urlName,
+      account_id: uuidv4(),
+      languages: 'en',
+    });
+
+    // Other test files may leave `PRAGMA foreign_keys = ON` on the shared
+    // SQLite connection. The auto-repost path persists rows referencing
+    // EventEntity which setupActivityPubSchema() does not sync.
+    const db = (await import('@/server/common/entity/db')).default;
+    await db.query('PRAGMA foreign_keys = OFF');
+
+    sandbox.stub(console, 'log');
+    sandbox.stub(console, 'warn');
+  });
+
+  afterEach(async () => {
+    sandbox.restore();
+    await teardownActivityPubSchema();
+    const db = (await import('@/server/common/entity/db')).default;
+    await db.query('PRAGMA foreign_keys = ON');
+  });
+
+  async function seedAutoRepostPrerequisites(eventId: string, eventApId: string) {
+    const remoteCalendarActorId = uuidv4();
+    await CalendarActorEntity.create({
+      id: remoteCalendarActorId,
+      actor_type: 'remote',
+      actor_uri: sourceActorUri,
+      remote_display_name: null,
+      remote_domain: 'remote.instance',
+      calendar_id: null,
+      private_key: null,
+    });
+
+    await FollowingCalendarEntity.create({
+      id: uuidv4(),
+      calendar_actor_id: remoteCalendarActorId,
+      calendar_id: testCalendar.id,
+      auto_repost_originals: true,
+      auto_repost_reposts: false,
+    });
+
+    await EventObjectEntity.create({
+      event_id: eventId,
+      ap_id: eventApId,
+      attributed_to: sourceActorUri,
+    });
+  }
+
+  function buildReconstitutedEvent(eventId: string): CalendarEvent {
+    // Mirrors the shape the inbox cascade hands to NoteObject: a CalendarEvent
+    // with at least one language of content so the Note serialization produces
+    // a non-empty `name`/`content` payload.
+    const event = new CalendarEvent(eventId, null);
+    event.addContent(new CalendarEventContent('en', 'Reposted Event', ''));
+    return event;
+  }
+
+  it('emits paired Announce(Event) + Create(Note) on cascade, with Note attributed to the reposting calendar', async () => {
+    // Arrange
+    const eventId = uuidv4();
+    const eventApId = `https://remote.instance/events/${eventId}`;
+    await seedAutoRepostPrerequisites(eventId, eventApId);
+
+    sandbox.stub(calendarInterface.categoryMappingService, 'assignAutoRepostCategories').resolves();
+    sandbox.stub(calendarInterface, 'getEventById').resolves(buildReconstitutedEvent(eventId));
+
+    // Capture activities at outbox-enqueue time so assertions see the
+    // in-memory `NoteObject` instance (with its serialization methods
+    // intact) rather than the JSON-stringified shape from the DB row.
+    const enqueuedActivities: any[] = [];
+    eventBus.on('outboxMessageAdded', (activity) => enqueuedActivities.push(activity));
+
+    // Act
+    await (inboxService as any).checkAndPerformAutoRepost(
+      testCalendar, sourceActorUri, eventApId, true,
+    );
+
+    // Assert — paired Announce(Event) and Create(Note) in order.
+    const announces = enqueuedActivities.filter(a => a.type === 'Announce');
+    const creates = enqueuedActivities.filter(a => a.type === 'Create');
+    expect(announces.length).toBe(1);
+    expect(creates.length).toBe(1);
+
+    // Announce wraps the remote event IRI directly (string object form).
+    expect(announces[0].object).toBe(eventApId);
+    expect(announces[0].to).toContain('https://www.w3.org/ns/activitystreams#Public');
+
+    // Create wraps a NoteObject attributed to the reposting calendar's actor
+    // URL. The remote canonical IRI is carried via `urlOverride` and surfaces
+    // in the AS payload as `url` after `toActivityPubObject()` runs it through
+    // sanitizeExternalUrlHref.
+    const createActivity = creates[0];
+    expect(createActivity.object.type).toBe('Note');
+    expect(createActivity.object.attributedTo).toContain('/calendars/test-calendar');
+    expect(createActivity.to).toContain('https://www.w3.org/ns/activitystreams#Public');
+    expect(createActivity.cc[0]).toContain('/calendars/test-calendar/followers');
+
+    // Serialize the Note via its toActivityPubObject() to verify the
+    // post-sanitization `url` field — that path is what the wire payload
+    // hits via ActivityPubActivity.toObject() at delivery time.
+    const apForm = createActivity.object.toActivityPubObject();
+    expect(apForm.url).toBe(eventApId);
+  });
+
+  it('suppresses both Announce(Event) and Create(Note) when a DEC-008 dismissal exists', async () => {
+    // Arrange
+    const eventId = uuidv4();
+    const eventApId = `https://remote.instance/events/${eventId}`;
+    await seedAutoRepostPrerequisites(eventId, eventApId);
+
+    // Sticky dismissal for this (event_id, calendar_id) pair — gate must
+    // suppress BOTH paired activities together.
+    await RepostDismissalEntity.create({
+      id: uuidv4(),
+      event_id: eventId,
+      calendar_id: testCalendar.id,
+    });
+
+    sandbox.stub(calendarInterface.categoryMappingService, 'assignAutoRepostCategories').resolves();
+    sandbox.stub(calendarInterface, 'getEventById').resolves(buildReconstitutedEvent(eventId));
+
+    const enqueuedActivities: any[] = [];
+    eventBus.on('outboxMessageAdded', (activity) => enqueuedActivities.push(activity));
+
+    // Act
+    await (inboxService as any).checkAndPerformAutoRepost(
+      testCalendar, sourceActorUri, eventApId, true,
+    );
+
+    // Assert — neither Event nor Note activity should reach the outbox.
+    expect(enqueuedActivities.filter(a => a.type === 'Announce').length).toBe(0);
+    expect(enqueuedActivities.filter(a => a.type === 'Create').length).toBe(0);
+  });
+
+  it('emits the Note with `url` omitted when the remote canonical IRI uses an invalid scheme', async () => {
+    // Arrange — remote canonical IRI uses a javascript: scheme. NoteObject
+    // must validate via sanitizeExternalUrlHref and drop the `url` field
+    // rather than propagating a dangerous href to Mastodon followers.
+    const eventId = uuidv4();
+    const eventApId = 'javascript:alert(1)';
+
+    // Seed prerequisites manually because seedAutoRepostPrerequisites stores
+    // attributed_to keyed off sourceActorUri but the EventObjectEntity needs
+    // the malformed ap_id as the lookup key for checkAndPerformAutoRepost.
+    const remoteCalendarActorId = uuidv4();
+    await CalendarActorEntity.create({
+      id: remoteCalendarActorId,
+      actor_type: 'remote',
+      actor_uri: sourceActorUri,
+      remote_display_name: null,
+      remote_domain: 'remote.instance',
+      calendar_id: null,
+      private_key: null,
+    });
+    await FollowingCalendarEntity.create({
+      id: uuidv4(),
+      calendar_actor_id: remoteCalendarActorId,
+      calendar_id: testCalendar.id,
+      auto_repost_originals: true,
+      auto_repost_reposts: false,
+    });
+    await EventObjectEntity.create({
+      event_id: eventId,
+      ap_id: eventApId,
+      attributed_to: sourceActorUri,
+    });
+
+    sandbox.stub(calendarInterface.categoryMappingService, 'assignAutoRepostCategories').resolves();
+    sandbox.stub(calendarInterface, 'getEventById').resolves(buildReconstitutedEvent(eventId));
+
+    const enqueuedActivities: any[] = [];
+    eventBus.on('outboxMessageAdded', (activity) => enqueuedActivities.push(activity));
+
+    // Act
+    await (inboxService as any).checkAndPerformAutoRepost(
+      testCalendar, sourceActorUri, eventApId, true,
+    );
+
+    // Assert — paired Create(Note) still emitted, but the AP-serialized
+    // payload omits `url` because sanitizeExternalUrlHref rejects the
+    // javascript: scheme. The Note itself MUST still be emitted so
+    // Mastodon followers still see a post for the re-shared event.
+    const creates = enqueuedActivities.filter(a => a.type === 'Create');
+    expect(creates.length).toBe(1);
+    const note = creates[0].object;
+    expect(note.type).toBe('Note');
+    const apForm = note.toActivityPubObject();
+    expect(apForm.url).toBeUndefined();
+  });
+
+  // GAP DOCUMENTATION: Update(Event) and Delete(Event) cascades for
+  // SharedEventEntity-bound events do not exist as distinct inbox emission
+  // sites. `processUpdateEvent` emits `eventUpdated` with calendar: null
+  // (which the outbox handler returns from early — loop prevention) and
+  // `processDeleteEvent` makes no bus emission at all. Paired Note Update /
+  // Delete propagation for locally-owned events lives in the outbox event
+  // handlers (handleEventUpdated / handleEventDeleted) and is covered by
+  // sibling pv-l35p.2.
+});
+
 describe('ProcessInboxService - processUpdateEvent', () => {
   let sandbox: sinon.SinonSandbox;
   let inboxService: ProcessInboxService;
@@ -1284,5 +1509,172 @@ describe('ProcessInboxService - processShareEvent SSRF Protection', () => {
 
     // addRemoteEvent must NOT have been called — SSRF protection blocked the fetch
     expect(addRemoteEventSpy.called).toBe(false);
+  });
+});
+
+/**
+ * Pavillion's outbox emits a paired Create(Note)/Update(Note)/Delete(Note)
+ * alongside every Announce(Event)/Update(Event)/Delete(Event) so Mastodon-class
+ * peers render the post on profile timelines. Notes are interop-only — the
+ * note.ts comment is explicit: "Pavillion never ingests remote Notes."
+ *
+ * Before this guard, the inbox dispatcher routed every Create/Update to
+ * processCreateEvent/processUpdateEvent without inspecting object.type and
+ * every Delete to processDeleteEvent without inspecting the target IRI.
+ * A Create(Note) would therefore be parsed as a Create(Event), creating a
+ * phantom EventEntity attributed to the source actor with the Note IRI as
+ * eventSourceUrl. In mutual auto-repost setups (federation Scenario 5) the
+ * phantom passed the loop-prevention guard and cascaded back to the source,
+ * tripping rate-limits and crowding the real Announce(Event) out of the
+ * test timeout window.
+ */
+describe('ProcessInboxService - Note-wrapped activities are skipped', () => {
+  let sandbox: sinon.SinonSandbox;
+  let inboxService: ProcessInboxService;
+  let eventBus: EventEmitter;
+  let testCalendar: Calendar;
+  let calendarInterface: CalendarInterface;
+
+  const remoteActorUri = 'https://remote.instance/calendars/source-calendar';
+  const eventApId = 'https://remote.instance/calendars/source-calendar/events/abc';
+  const noteApId = `${eventApId}/note`;
+
+  beforeEach(async () => {
+    await setupActivityPubSchema();
+    sandbox = sinon.createSandbox();
+    eventBus = new EventEmitter();
+    calendarInterface = new CalendarInterface(eventBus);
+    inboxService = new ProcessInboxService(eventBus, calendarInterface);
+
+    testCalendar = new Calendar('note-skip-calendar-id', 'note-skip-calendar');
+    testCalendar.addContent('en', new CalendarContent('en'));
+    testCalendar.content('en').title = 'Note Skip Test Calendar';
+
+    await CalendarEntity.create({
+      id: testCalendar.id,
+      url_name: testCalendar.urlName,
+      account_id: uuidv4(),
+      languages: 'en',
+    });
+
+    sandbox.stub(console, 'log');
+    sandbox.stub(console, 'warn');
+  });
+
+  afterEach(async () => {
+    sandbox.restore();
+    await teardownActivityPubSchema();
+  });
+
+  it('processCreateEvent skips Note-typed objects without creating an EventObjectEntity or calling addRemoteEvent', async () => {
+    const addRemoteEventSpy = sandbox.stub(calendarInterface, 'addRemoteEvent');
+    const ownsObjectSpy = sandbox.stub(inboxService as any, 'actorOwnsObject');
+
+    const createNote = new CreateActivity(remoteActorUri, {
+      id: noteApId,
+      type: 'Note',
+      attributedTo: remoteActorUri,
+      name: 'Untrusted Note',
+      content: '<p>arbitrary</p>',
+    } as any);
+
+    const result = await inboxService['processCreateEvent'](testCalendar, createNote);
+
+    expect(result).toBeNull();
+    expect(addRemoteEventSpy.called).toBe(false);
+    // Short-circuit must happen before remote ownership verification: the
+    // helper would otherwise dereference the Note IRI over HTTP.
+    expect(ownsObjectSpy.called).toBe(false);
+
+    const persistedPhantom = await EventObjectEntity.findOne({
+      where: { ap_id: noteApId },
+    });
+    expect(persistedPhantom).toBeNull();
+  });
+
+  it('processUpdateEvent skips Note-typed objects even when a stale EventObjectEntity exists at the Note IRI', async () => {
+    // Seed the kind of phantom row a pre-fix Create(Note) would have minted.
+    // Without the Note-type guard, processUpdateEvent would find this row,
+    // load its event, and forward the Note payload to updateRemoteEvent.
+    const phantomEventId = uuidv4();
+    await EventObjectEntity.create({
+      event_id: phantomEventId,
+      ap_id: noteApId,
+      attributed_to: remoteActorUri,
+    });
+    sandbox.stub(calendarInterface, 'getEventById').resolves(new CalendarEvent(phantomEventId, null));
+    sandbox.stub(inboxService as any, 'isPersonActorUri').resolves(false);
+
+    const updateSpy = sandbox.stub(calendarInterface, 'updateRemoteEvent');
+
+    const updateNote = UpdateActivity.fromObject({
+      type: 'Update',
+      actor: remoteActorUri,
+      object: {
+        id: noteApId,
+        type: 'Note',
+        attributedTo: remoteActorUri,
+        name: 'Untrusted Note',
+        content: '<p>arbitrary</p>',
+      },
+    });
+
+    const result = await inboxService.processUpdateEvent(testCalendar, updateNote!);
+
+    expect(result).toBeNull();
+    expect(updateSpy.called).toBe(false);
+  });
+
+  it('processDeleteEvent skips Note IRIs (object string ending in /note) even when an EventObjectEntity exists at that IRI', async () => {
+    // Seed the kind of phantom row a pre-fix Create(Note) would have minted.
+    // Without the Note IRI guard, processDeleteEvent would resolve this row,
+    // verify ownership, and call deleteRemoteEvent — destroying a phantom
+    // event the system never should have had in the first place.
+    const phantomEventId = uuidv4();
+    await EventObjectEntity.create({
+      event_id: phantomEventId,
+      ap_id: noteApId,
+      attributed_to: remoteActorUri,
+    });
+    sandbox.stub(calendarInterface, 'getEventById').resolves(new CalendarEvent(phantomEventId, null));
+    sandbox.stub(inboxService as any, 'isPersonActorUri').resolves(false);
+    // Stub ownership verification to true so the test cannot pass for the
+    // wrong reason (i.e. the real fetcher failing on an unreachable IRI).
+    sandbox.stub(inboxService as any, 'actorOwnsObject').resolves(true);
+
+    const deleteEventSpy = sandbox.stub(calendarInterface, 'deleteRemoteEvent');
+
+    const deleteNote = new DeleteActivity(remoteActorUri, noteApId);
+    await inboxService.processDeleteEvent(testCalendar, deleteNote);
+
+    expect(deleteEventSpy.called).toBe(false);
+  });
+
+  it('processDeleteEvent skips Tombstone objects whose formerType is Note', async () => {
+    const phantomEventId = uuidv4();
+    await EventObjectEntity.create({
+      event_id: phantomEventId,
+      ap_id: noteApId,
+      attributed_to: remoteActorUri,
+    });
+    sandbox.stub(calendarInterface, 'getEventById').resolves(new CalendarEvent(phantomEventId, null));
+    sandbox.stub(inboxService as any, 'isPersonActorUri').resolves(false);
+    sandbox.stub(inboxService as any, 'actorOwnsObject').resolves(true);
+
+    const deleteEventSpy = sandbox.stub(calendarInterface, 'deleteRemoteEvent');
+
+    const deleteTombstone = DeleteActivity.fromObject({
+      type: 'Delete',
+      actor: remoteActorUri,
+      object: {
+        id: noteApId,
+        type: 'Tombstone',
+        formerType: 'Note',
+      },
+    });
+
+    await inboxService.processDeleteEvent(testCalendar, deleteTombstone!);
+
+    expect(deleteEventSpy.called).toBe(false);
   });
 });

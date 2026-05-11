@@ -10,6 +10,7 @@ import { ActivityPubInboxMessageEntity, ActivityPubOutboxMessageEntity } from '@
 import { EventObjectEntity } from '@/server/activitypub/entity/event_object';
 import { ActivityPubActor } from '@/server/activitypub/model/base';
 import { EventObject } from '@/server/activitypub/model/object/event';
+import { NoteObject } from '@/server/activitypub/model/object/note';
 import { Calendar } from '@/common/model/calendar';
 import { CalendarEvent, CalendarEventContent } from '@/common/model/events';
 import { EventLocation, EventLocationContent, EventLocationSpace, EventLocationSpaceContent } from '@/common/model/location';
@@ -173,7 +174,7 @@ describe('handleEventUpdated guard', () => {
     expect(addToOutboxStub.called).toBe(false);
   });
 
-  it('should broadcast update when payload.calendar is present (local event update)', async () => {
+  it('should broadcast paired Update(Event) + Update(Note) when payload.calendar is present (local event update)', async () => {
     const calendar = Calendar.fromObject({ id: 'local-calendar-id', urlName: 'my_calendar' });
     const event = CalendarEvent.fromObject({ id: 'local-event-id' });
 
@@ -189,18 +190,32 @@ describe('handleEventUpdated guard', () => {
     await new Promise(resolve => setTimeout(resolve, 100));
 
     expect(actorUrlStub.calledOnce).toBe(true);
-    expect(addToOutboxStub.calledOnce).toBe(true);
+    // Paired emission: Update(Event) + Update(Note) so Mastodon-class peers see
+    // the edit on profile timelines alongside the Pavillion-native Update(Event).
+    expect(addToOutboxStub.calledTwice).toBe(true);
 
-    const outboxCall = addToOutboxStub.getCall(0);
-    expect(outboxCall.args[0]).toBe(calendar);
-    const update = outboxCall.args[1];
-    expect(update.type).toBe('Update');
+    const eventCall = addToOutboxStub.getCall(0);
+    expect(eventCall.args[0]).toBe(calendar);
+    const updateEvent = eventCall.args[1];
+    expect(updateEvent.type).toBe('Update');
+    expect(updateEvent.object.type).toBe('Event');
     // Update activities must be addressed publicly so AP consumers (Mastodon
     // included) treat them as visible profile timeline activity rather than
     // private/addressless updates.
-    expect(update.to).toEqual(['https://www.w3.org/ns/activitystreams#Public']);
-    expect(update.cc).toEqual(['https://example.com/calendars/my_calendar/followers']);
-    expect(update.published).toBeInstanceOf(Date);
+    expect(updateEvent.to).toEqual(['https://www.w3.org/ns/activitystreams#Public']);
+    expect(updateEvent.cc).toEqual(['https://example.com/calendars/my_calendar/followers']);
+    expect(updateEvent.published).toBeInstanceOf(Date);
+
+    const noteCall = addToOutboxStub.getCall(1);
+    // Attribution invariant: the same calendar argument flows to both calls so
+    // outbox dispatcher attribution remains consistent across the pair.
+    expect(noteCall.args[0]).toBe(calendar);
+    const updateNote = noteCall.args[1];
+    expect(updateNote.type).toBe('Update');
+    expect(updateNote.object.type).toBe('Note');
+    expect(updateNote.to).toEqual(['https://www.w3.org/ns/activitystreams#Public']);
+    expect(updateNote.cc).toEqual(['https://example.com/calendars/my_calendar/followers']);
+    expect(updateNote.published).toBeInstanceOf(Date);
   });
 });
 
@@ -224,7 +239,7 @@ describe('handleEventCreated', () => {
     await teardownActivityPubSchema();
   });
 
-  it('creates an EventObjectEntity for the local event before dispatching Announce', async () => {
+  it('creates an EventObjectEntity for the local event before dispatching paired Announce(Event) + Create(Note)', async () => {
     const calendar = Calendar.fromObject({ id: uuidv4(), urlName: 'my_calendar' });
     const event = CalendarEvent.fromObject({ id: uuidv4() });
     const actorUrl = ActivityPubActor.actorUrl(calendar);
@@ -240,16 +255,34 @@ describe('handleEventCreated', () => {
     const eventObject = await EventObjectEntity.findOne({ where: { event_id: event.id } });
     expect(eventObject, 'EventObjectEntity must exist for local event').not.toBeNull();
     expect(eventObject!.attributed_to).toBe(actorUrl);
-    expect(addToOutboxStub.calledOnce).toBe(true);
+    // Paired emission: Announce(Event) first, Create(Note) second, both with
+    // public addressing so Mastodon-class peers render the Note while
+    // Pavillion-aware peers consume the Event.
+    expect(addToOutboxStub.calledTwice).toBe(true);
 
     // Announce envelope must be addressed publicly with followers in cc and a
     // populated published timestamp — without these, Mastodon ignores the
     // activity in profile timelines and HTTP delivery loses audience info.
-    const announce = addToOutboxStub.getCall(0).args[1];
+    const announceCall = addToOutboxStub.getCall(0);
+    expect(announceCall.args[0]).toBe(calendar);
+    const announce = announceCall.args[1];
     expect(announce.type).toBe('Announce');
     expect(announce.to).toEqual(['https://www.w3.org/ns/activitystreams#Public']);
     expect(announce.cc).toEqual([`${actorUrl}/followers`]);
     expect(announce.published).toBeInstanceOf(Date);
+
+    // Paired Create(Note) emission with matching public addressing. The Note
+    // wraps the same canonical event so Mastodon-class peers render it on
+    // profile timelines.
+    const createCall = addToOutboxStub.getCall(1);
+    // Attribution invariant: the same calendar argument flows to both calls.
+    expect(createCall.args[0]).toBe(calendar);
+    const create = createCall.args[1];
+    expect(create.type).toBe('Create');
+    expect(create.object.type).toBe('Note');
+    expect(create.to).toEqual(['https://www.w3.org/ns/activitystreams#Public']);
+    expect(create.cc).toEqual([`${actorUrl}/followers`]);
+    expect(create.published).toBeInstanceOf(Date);
   });
 
   it('logs a warning but does not overwrite EventObjectEntity when a pre-existing row has mismatched attributed_to', async () => {
@@ -294,10 +327,10 @@ describe('handleEventCreated', () => {
 
     // Secondary assertion: despite the integrity signal, the event is still
     // dispatched to the outbox. This is the documented behavior — the warn is
-    // a signal, not a hard stop.
+    // a signal, not a hard stop. Both legs of the paired emission run.
     expect(
-      addToOutboxStub.calledOnce,
-      'addToOutbox must still be called so the event reaches federation',
+      addToOutboxStub.calledTwice,
+      'addToOutbox must still be called for both legs of the pair so the event reaches federation',
     ).toBe(true);
   });
 
@@ -326,6 +359,64 @@ describe('handleEventCreated', () => {
     expect(eventObject, 'no EventObjectEntity row for remote-origin event').toBeNull();
   });
 
+});
+
+describe('handleEventDeleted', () => {
+  let service: ActivityPubInterface;
+  let handlers: ActivityPubEventHandlers;
+  let eventBus: EventEmitter;
+  let sandbox: sinon.SinonSandbox = sinon.createSandbox();
+
+  beforeEach(() => {
+    eventBus = new EventEmitter();
+    service = new ActivityPubInterface(eventBus);
+    handlers = new ActivityPubEventHandlers(service, new CalendarInterface(eventBus));
+    handlers.install(eventBus);
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+  });
+
+  it('should broadcast paired Delete(Event) + Delete(Note) with public addressing and the same calendar arg', async () => {
+    const calendar = Calendar.fromObject({ id: uuidv4(), urlName: 'my_calendar' });
+    const event = CalendarEvent.fromObject({ id: uuidv4() });
+    const actorUrl = ActivityPubActor.actorUrl(calendar);
+
+    sandbox.stub(service, 'actorUrl').resolves(actorUrl);
+    const addToOutboxStub = sandbox.stub(service, 'addToOutbox').resolves();
+
+    // Invoke the private handler directly so the paired emission is asserted
+    // deterministically without racing setImmediate hops.
+    await (handlers as any)['handleEventDeleted']({ calendar, event });
+
+    // Paired emission: Delete(Event) first, Delete(Note) second.
+    expect(addToOutboxStub.calledTwice).toBe(true);
+
+    const eventCall = addToOutboxStub.getCall(0);
+    expect(eventCall.args[0]).toBe(calendar);
+    const deleteEvent = eventCall.args[1];
+    expect(deleteEvent.type).toBe('Delete');
+    // Delete activities carry the object URL as a string (not an embedded
+    // object), so we assert the canonical Event IRI form.
+    expect(deleteEvent.object).toBe(EventObject.eventUrl(calendar, event));
+    expect(deleteEvent.to).toEqual(['https://www.w3.org/ns/activitystreams#Public']);
+    expect(deleteEvent.cc).toEqual([`${actorUrl}/followers`]);
+    expect(deleteEvent.published).toBeInstanceOf(Date);
+
+    const noteCall = addToOutboxStub.getCall(1);
+    // Attribution invariant: the same calendar argument flows to both calls.
+    expect(noteCall.args[0]).toBe(calendar);
+    const deleteNote = noteCall.args[1];
+    expect(deleteNote.type).toBe('Delete');
+    // The Delete(Note) carries the Note IRI string form, NOT a Note object —
+    // mirroring the Event Delete shape.
+    expect(deleteNote.object).toBe(NoteObject.noteUrl(calendar, event));
+    expect(typeof deleteNote.object).toBe('string');
+    expect(deleteNote.to).toEqual(['https://www.w3.org/ns/activitystreams#Public']);
+    expect(deleteNote.cc).toEqual([`${actorUrl}/followers`]);
+    expect(deleteNote.published).toBeInstanceOf(Date);
+  });
 });
 
 describe('AP serialize → parse round-trip (Place + Space + multilingual content)', () => {
