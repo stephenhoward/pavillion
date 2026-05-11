@@ -53,8 +53,8 @@ describe('NotificationEventHandlers', () => {
       expect(eventBus.listenerCount('activitypub:event:reposted')).toBe(1);
     });
 
-    it('should register listener for eventUnreposted', () => {
-      expect(eventBus.listenerCount('eventUnreposted')).toBe(1);
+    it('should register listener for activitypub:event:unreposted', () => {
+      expect(eventBus.listenerCount('activitypub:event:unreposted')).toBe(1);
     });
 
     it('should register listener for reportCreated', () => {
@@ -752,10 +752,10 @@ describe('NotificationEventHandlers', () => {
   });
 
   // ---------------------------------------------------------------------------
-  // eventUnreposted
+  // activitypub:event:unreposted
   // ---------------------------------------------------------------------------
 
-  describe('eventUnreposted', () => {
+  describe('activitypub:event:unreposted', () => {
     it('should call createNotification for each editor excluding the actor', async () => {
       const calendarId = uuidv4();
       const eventId = uuidv4();
@@ -767,11 +767,12 @@ describe('NotificationEventHandlers', () => {
       getEditorsStub.resolves([accountA, accountB, accountC]);
       createNotificationStub.resolves(null);
 
-      eventBus.emit('eventUnreposted', {
+      eventBus.emit('activitypub:event:unreposted', {
         eventId,
         calendarId,
         actorAccountId: actorId,
         actorName: 'Alice',
+        actorUrl: null,
       });
 
       await new Promise(resolve => setImmediate(resolve));
@@ -796,11 +797,12 @@ describe('NotificationEventHandlers', () => {
       getEditorsStub.resolves([actor, coEditor]);
       createNotificationStub.resolves(null);
 
-      eventBus.emit('eventUnreposted', {
+      eventBus.emit('activitypub:event:unreposted', {
         eventId,
         calendarId,
         actorAccountId: actorId,
         actorName: 'Alice Display',
+        actorUrl: null,
       });
 
       await new Promise(resolve => setImmediate(resolve));
@@ -821,11 +823,12 @@ describe('NotificationEventHandlers', () => {
       getEditorsStub.resolves([actor]);
       createNotificationStub.resolves(null);
 
-      eventBus.emit('eventUnreposted', {
+      eventBus.emit('activitypub:event:unreposted', {
         eventId: uuidv4(),
         calendarId: uuidv4(),
         actorAccountId: actorId,
         actorName: 'Solo',
+        actorUrl: null,
       });
 
       await new Promise(resolve => setImmediate(resolve));
@@ -837,11 +840,12 @@ describe('NotificationEventHandlers', () => {
       getEditorsStub.resolves([]);
       createNotificationStub.resolves(null);
 
-      eventBus.emit('eventUnreposted', {
+      eventBus.emit('activitypub:event:unreposted', {
         eventId: uuidv4(),
         calendarId: uuidv4(),
         actorAccountId: uuidv4(),
         actorName: 'Alice',
+        actorUrl: null,
       });
 
       await new Promise(resolve => setImmediate(resolve));
@@ -857,11 +861,12 @@ describe('NotificationEventHandlers', () => {
       getEditorsStub.resolves([coEditor]);
       createNotificationStub.resolves(null);
 
-      eventBus.emit('eventUnreposted', {
+      eventBus.emit('activitypub:event:unreposted', {
         eventId: uuidv4(),
         calendarId,
         actorAccountId: actorId,
         actorName: 'Alice',
+        actorUrl: null,
       });
 
       await new Promise(resolve => setImmediate(resolve));
@@ -873,11 +878,12 @@ describe('NotificationEventHandlers', () => {
     it('should not rethrow errors from getEditorsForCalendar', async () => {
       getEditorsStub.rejects(new Error('DB error'));
 
-      eventBus.emit('eventUnreposted', {
+      eventBus.emit('activitypub:event:unreposted', {
         eventId: uuidv4(),
         calendarId: uuidv4(),
         actorAccountId: uuidv4(),
         actorName: 'Alice',
+        actorUrl: null,
       });
 
       await new Promise(resolve => setImmediate(resolve));
@@ -892,11 +898,12 @@ describe('NotificationEventHandlers', () => {
       createNotificationStub.rejects(new Error('insert error'));
 
       // Should not throw
-      eventBus.emit('eventUnreposted', {
+      eventBus.emit('activitypub:event:unreposted', {
         eventId: uuidv4(),
         calendarId: uuidv4(),
         actorAccountId: actorId,
         actorName: 'Alice',
+        actorUrl: null,
       });
 
       await new Promise(resolve => setImmediate(resolve));

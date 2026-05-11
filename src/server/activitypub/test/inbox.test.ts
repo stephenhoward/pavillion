@@ -196,10 +196,12 @@ describe('ProcessInboxService - Follow Activity Processing', () => {
     });
 
     it('should use remoteDisplayName as followerName when available', async () => {
-      // Arrange
-      const remoteActorUrl = 'https://remote.instance/calendars/remote-calendar';
+      // Arrange - fixture deliberately uses a human-readable calendar-style display
+      // name that is structurally distinct from the actor URI, so an assertion on
+      // followerName cannot pass by accident (e.g. by leaking the URI through).
+      const remoteActorUrl = 'https://remote.instance/calendars/brewery-tour';
       const followActivity = new FollowActivity(remoteActorUrl, testCalendar.id);
-      const displayName = 'Remote Calendar Display Name';
+      const displayName = 'Brewery Tour Collective';
 
       // Pre-create the CalendarActorEntity with a display name
       await CalendarActorEntity.create({
@@ -218,9 +220,41 @@ describe('ProcessInboxService - Follow Activity Processing', () => {
       // Act
       await inboxService.processFollowAccount(testCalendar, followActivity);
 
-      // Assert - display name used when available
+      // Contract: followerName MUST originate from CalendarActorEntity.remote_display_name.
+      // The AP actor for Follow is always a Calendar, so the human-readable display name
+      // is the calendar's display name — not the account/user name or the actor URI.
       expect(emittedEvents).toHaveLength(1);
       expect(emittedEvents[0].followerName).toBe(displayName);
+      // Defensive: ensure the assertion isn't tautologically passing via the URI.
+      expect(emittedEvents[0].followerName).not.toBe(remoteActorUrl);
+    });
+
+    it('should fall back to actor URI as followerName when remote_display_name is null', async () => {
+      // Arrange - CalendarActorEntity exists but has no cached display name yet.
+      const remoteActorUrl = 'https://remote.instance/calendars/brewery-tour';
+      const followActivity = new FollowActivity(remoteActorUrl, testCalendar.id);
+
+      await CalendarActorEntity.create({
+        id: uuidv4(),
+        actor_type: 'remote',
+        actor_uri: remoteActorUrl,
+        remote_display_name: null,
+        remote_domain: 'remote.instance',
+        calendar_id: null,
+        private_key: null,
+      });
+
+      const emittedEvents: any[] = [];
+      eventBus.on('activitypub:calendar:followed', (payload) => emittedEvents.push(payload));
+
+      // Act
+      await inboxService.processFollowAccount(testCalendar, followActivity);
+
+      // Contract: when remote_display_name is null, followerName falls back to the
+      // actor URI so downstream consumers always have a non-empty identifier to render.
+      expect(emittedEvents).toHaveLength(1);
+      expect(emittedEvents[0].followerName).toBe(remoteActorUrl);
+      expect(emittedEvents[0].followerName).toBeTruthy();
     });
   });
 
@@ -398,9 +432,12 @@ describe('ProcessInboxService - Follow Activity Processing', () => {
     });
 
     it('should use remoteDisplayName as reposterName when available', async () => {
-      // Arrange: actor and object must be on the same domain (domain-match security check)
-      const remoteActorUrl = 'https://remote.instance/calendars/remote-calendar';
-      const displayName = 'Remote Calendar Name';
+      // Arrange: actor and object must be on the same domain (domain-match security check).
+      // Fixture deliberately uses a human-readable calendar-style display name that is
+      // structurally distinct from the actor URI, so an assertion on reposterName
+      // cannot pass by accident (e.g. by leaking the URI through).
+      const remoteActorUrl = 'https://remote.instance/calendars/brewery-tour';
+      const displayName = 'Brewery Tour Collective';
       const localEventId = uuidv4();
       const apObjectId = `https://remote.instance/events/${localEventId}`;
 
@@ -437,9 +474,57 @@ describe('ProcessInboxService - Follow Activity Processing', () => {
       // Act
       await inboxService.processShareEvent(testCalendar, announceActivity);
 
-      // Assert
+      // Contract: reposterName MUST originate from CalendarActorEntity.remote_display_name.
+      // The AP actor for Announce is always a Calendar, so the human-readable display name
+      // is the calendar's display name — not the account/user name or the actor URI.
       expect(emittedEvents).toHaveLength(1);
       expect(emittedEvents[0].reposterName).toBe(displayName);
+      // Defensive: ensure the assertion isn't tautologically passing via the URI.
+      expect(emittedEvents[0].reposterName).not.toBe(remoteActorUrl);
+    });
+
+    it('should fall back to actor URI as reposterName when remote_display_name is null', async () => {
+      // Arrange: actor and object must be on the same domain (domain-match security check).
+      // CalendarActorEntity exists but has no cached display name yet.
+      const remoteActorUrl = 'https://remote.instance/calendars/brewery-tour';
+      const localEventId = uuidv4();
+      const apObjectId = `https://remote.instance/events/${localEventId}`;
+
+      await CalendarActorEntity.create({
+        id: uuidv4(),
+        actor_type: 'remote',
+        actor_uri: remoteActorUrl,
+        remote_display_name: null,
+        remote_domain: 'remote.instance',
+        calendar_id: null,
+        private_key: null,
+      });
+
+      await EventObjectEntity.create({
+        event_id: localEventId,
+        ap_id: apObjectId,
+        attributed_to: 'https://remote.instance/calendars/test-calendar',
+      });
+
+      const localEvent = new CalendarEvent(localEventId, testCalendar.id);
+      sandbox.stub(calendarInterface, 'getEventById').resolves(localEvent);
+
+      const announceActivity = new AnnounceActivity(remoteActorUrl, apObjectId);
+
+      const emittedEvents: any[] = [];
+      eventBus.on('activitypub:event:reposted', (payload) => emittedEvents.push(payload));
+
+      sandbox.stub(EventActivityEntity, 'findOne').resolves(null);
+      sandbox.stub(EventActivityEntity, 'create').resolves({} as any);
+
+      // Act
+      await inboxService.processShareEvent(testCalendar, announceActivity);
+
+      // Contract: when remote_display_name is null, reposterName falls back to the
+      // actor URI so downstream consumers always have a non-empty identifier to render.
+      expect(emittedEvents).toHaveLength(1);
+      expect(emittedEvents[0].reposterName).toBe(remoteActorUrl);
+      expect(emittedEvents[0].reposterName).toBeTruthy();
     });
   });
 });

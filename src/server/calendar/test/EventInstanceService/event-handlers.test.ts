@@ -25,7 +25,7 @@ import { DateTime } from 'luxon';
  *   - The cancel/restore handlers re-emit eventUpdated with skipRebuild:true
  *     so federation propagation runs but the calendar-domain eventUpdated
  *     handler skips its rebuild for the same race-avoidance reason.
- *   - eventReposted / eventUnreposted are signal-preservation stubs only:
+ *   - eventReposted / activitypub:event:unreposted are signal-preservation stubs only:
  *     creating or removing a repost link does NOT trigger any instance
  *     materialization, because the originating-calendar row already exists
  *     (or was already removed when the source event was deleted).
@@ -200,9 +200,9 @@ describe('CalendarEventHandlers (single-producer model)', () => {
     });
   });
 
-  describe('eventUnreposted handler (signal preservation stub)', () => {
+  describe('activitypub:event:unreposted handler (signal preservation stub)', () => {
     it('should not call removeEventInstances or any fan-out helper', async () => {
-      eventBus.emit('eventUnreposted', { eventId: 'event-1', calendarId: 'repost-calendar' });
+      eventBus.emit('activitypub:event:unreposted', { eventId: 'event-1', calendarId: 'repost-calendar' });
 
       await new Promise(resolve => setTimeout(resolve, 10));
 
@@ -212,9 +212,9 @@ describe('CalendarEventHandlers (single-producer model)', () => {
     });
 
     it('should execute without throwing on malformed payloads', async () => {
-      eventBus.emit('eventUnreposted', { eventId: '', calendarId: 'repost-calendar' });
-      eventBus.emit('eventUnreposted', { eventId: 'event-1', calendarId: '' });
-      eventBus.emit('eventUnreposted', {});
+      eventBus.emit('activitypub:event:unreposted', { eventId: '', calendarId: 'repost-calendar' });
+      eventBus.emit('activitypub:event:unreposted', { eventId: 'event-1', calendarId: '' });
+      eventBus.emit('activitypub:event:unreposted', {});
 
       await new Promise(resolve => setTimeout(resolve, 10));
 

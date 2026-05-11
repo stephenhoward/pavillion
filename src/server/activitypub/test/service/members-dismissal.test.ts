@@ -109,15 +109,16 @@ describe('unshareEvent - RepostDismissalEntity upsert', () => {
     const addToOutboxStub = service.addToOutbox as sinon.SinonStub;
     expect(addToOutboxStub.callCount).toBe(1);
 
-    // eventBus.emit must fire exactly once for eventUnreposted with the
-    // expected core identifiers — captured share.event_id must survive entity
-    // destroy. The payload also carries actorAccountId/actorName for the
-    // notifications-domain handler (pv-nb0q); sinon.match is used so this
-    // assertion stays focused on the dismissal-flow contract.
-    const unrepostEmits = emitSpy.getCalls().filter((c) => c.args[0] === 'eventUnreposted');
+    // eventBus.emit must fire exactly once for activitypub:event:unreposted
+    // with the expected core identifiers — captured share.event_id must
+    // survive entity destroy. The payload also carries actorAccountId /
+    // actorName / actorUrl for the notifications-domain handler (pv-nb0q,
+    // pv-cou0); sinon.match is used so this assertion stays focused on the
+    // dismissal-flow contract.
+    const unrepostEmits = emitSpy.getCalls().filter((c) => c.args[0] === 'activitypub:event:unreposted');
     expect(unrepostEmits).toHaveLength(1);
     expect(
-      emitSpy.calledWith('eventUnreposted', sinon.match({ eventId: localEventId, calendarId })),
+      emitSpy.calledWith('activitypub:event:unreposted', sinon.match({ eventId: localEventId, calendarId })),
     ).toBe(true);
   });
 
@@ -242,7 +243,7 @@ describe('unshareEvent - RepostDismissalEntity upsert', () => {
     }
   });
 
-  it('does not fire addToOutbox or eventUnreposted emit when the transaction rolls back', async () => {
+  it('does not fire addToOutbox or activitypub:event:unreposted emit when the transaction rolls back', async () => {
     // Seed the AP URL → local event UUID lookup
     await EventObjectEntity.create({
       event_id: localEventId,
@@ -281,9 +282,10 @@ describe('unshareEvent - RepostDismissalEntity upsert', () => {
       // never run when the transaction rolls back.
       expect(addToOutboxStub.called).toBe(false);
 
-      // eventBus.emit must NOT have fired for 'eventUnreposted'. Filter by
-      // channel name so unrelated emits on the shared bus cannot flake this.
-      const unrepostEmits = emitSpy.getCalls().filter((c) => c.args[0] === 'eventUnreposted');
+      // eventBus.emit must NOT have fired for 'activitypub:event:unreposted'.
+      // Filter by channel name so unrelated emits on the shared bus cannot
+      // flake this.
+      const unrepostEmits = emitSpy.getCalls().filter((c) => c.args[0] === 'activitypub:event:unreposted');
       expect(unrepostEmits).toHaveLength(0);
 
       // Sanity-check: the SharedEventEntity row still exists, confirming the

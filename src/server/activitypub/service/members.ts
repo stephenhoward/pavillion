@@ -519,11 +519,12 @@ class ActivityPubService {
       // Resolve actor identity at emit site (where Account is in scope) so the
       // notifications-domain handler does not need a secondary account lookup.
       // actorName falls back to username when displayName is unset.
-      this.eventBus.emit('eventUnreposted', {
+      this.eventBus.emit('activitypub:event:unreposted', {
         eventId,
         calendarId: calendar.id,
-        actorAccountId: account.id,
         actorName: account.displayName ?? account.username,
+        actorUrl: null,
+        actorAccountId: account.id,
       });
     }
   }

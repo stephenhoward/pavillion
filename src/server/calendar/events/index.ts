@@ -15,26 +15,42 @@ export interface EventRepostedPayload {
 }
 
 /**
- * Payload for the eventUnreposted event bus emission.
- * Emitted by the AP members service when a calendar un-reposts an event.
+ * Payload for the activitypub:event:unreposted event bus emission.
+ * Emitted by the AP members service for both flows:
+ *   - Local unpost (owner-initiated): a local editor un-reposts an event on
+ *     their calendar via members.unshareEvent. Carries the editor identity
+ *     (actorAccountId set, actorUrl null).
+ *   - Inbound unshare (federation-initiated): a remote calendar sends an
+ *     Undo(Announce) for an event we currently auto-repost. Carries the
+ *     remote actor identity (actorAccountId null, actorUrl set to the
+ *     remote actor's https:// URL).
+ *
+ * Local-event invariant: the event being unreposted is local to this
+ * instance. Inbound unshare for remote-origin events is out of scope and
+ * filtered at the inbox emit site.
+ *
+ * Idempotency: emit fires once per destroyed SharedEventEntity row. A
+ * second unshare on an already-dismissed event has no row to destroy and
+ * therefore no emit (see DEC-008 sticky-dismissal flow).
  *
  * Note: The payload asymmetry with EventRepostedPayload is intentional.
  * eventReposted sends full objects because the event data is needed to generate
- * instances. eventUnreposted sends primitive IDs because only deletion by
- * compound key is needed, and by the time the event fires the share record
- * may already be destroyed.
+ * instances. activitypub:event:unreposted sends primitive IDs because only
+ * deletion by compound key is needed, and by the time the event fires the
+ * share record may already be destroyed.
  *
- * `actorAccountId` and `actorName` identify the local editor who performed the
- * unpost (DEC-008 sticky dismissal flow). They are resolved at the emit site
- * (where the Account is already in scope) so downstream listeners — notably the
- * notifications-domain handler that fans out co-editor notifications while
- * excluding the actor — do not need a secondary account lookup.
+ * `actorAccountId` identifies the local editor who performed the unpost so
+ * the notifications-domain handler can exclude the actor from the co-editor
+ * fan-out. `actorUrl` carries the remote actor's profile URL on the inbound
+ * branch so the notification can link back to them. Exactly one of the two
+ * is non-null depending on which flow emitted.
  */
 export interface EventUnrepostedPayload {
   eventId: string;
   calendarId: string;
-  actorAccountId: string;
   actorName: string;
+  actorUrl: string | null;
+  actorAccountId: string | null;
 }
 
 /**
@@ -177,7 +193,7 @@ export default class CalendarEventHandlers implements DomainEventHandlers {
     // sufficient to stop the calendar from showing the event via the listing
     // union. No per-calendar instance rows exist to delete under the
     // single-producer model.
-    eventBus.on('eventUnreposted', async () => {
+    eventBus.on('activitypub:event:unreposted', async () => {
       /* signal preservation: no instance fan-out under pv-hr72 single-producer */
     });
 

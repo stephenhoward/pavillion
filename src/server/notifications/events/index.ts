@@ -22,20 +22,38 @@ export interface EventRepostedPayload {
 }
 
 /**
- * Payload for the eventUnreposted event bus emission. The notifications
- * domain is one of multiple listeners; the canonical type lives in the
- * calendar domain (src/server/calendar/events/index.ts) but is restated here
- * because cross-domain imports are not permitted. The shape must stay in sync.
+ * Payload for the activitypub:event:unreposted event bus emission. The
+ * notifications domain is one of multiple listeners; the canonical type lives
+ * in the calendar domain (src/server/calendar/events/index.ts) but is restated
+ * here because cross-domain imports are not permitted. The shape must stay in
+ * sync.
  *
- * `actorAccountId` identifies the local editor who initiated the unpost so the
- * handler can exclude that account from the co-editor fan-out (the
- * "owner-initiated actions exclude initiator" convention).
+ * Emitted by both the local-unpost flow and the inbound-unshare flow:
+ *   - Local flow: actorAccountId set (the local editor who unposted),
+ *     actorUrl null.
+ *   - Inbound flow: actorAccountId null, actorUrl set to the remote actor's
+ *     https:// profile URL.
+ *
+ * Local-event invariant: the event being unreposted is local to this
+ * instance. Inbound unshare for remote-origin events is filtered at the
+ * inbox emit site, not here.
+ *
+ * Idempotency: emit fires once per destroyed SharedEventEntity row. A
+ * second unshare on an already-dismissed event has no row to destroy and
+ * therefore no emit (see DEC-008 sticky-dismissal flow).
+ *
+ * Handler branching: the handler uses actorAccountId presence to decide
+ * audience — local-flow emissions exclude the initiating editor from the
+ * co-editor fan-out ("owner-initiated actions exclude initiator"
+ * convention); inbound-flow emissions notify every editor (no initiator on
+ * this instance).
  */
 export interface EventUnrepostedPayload {
   eventId: string;
   calendarId: string;
-  actorAccountId: string;
   actorName: string;
+  actorUrl: string | null;
+  actorAccountId: string | null;
 }
 
 export interface ReportCreatedPayload {
@@ -68,7 +86,7 @@ export default class NotificationEventHandlers implements DomainEventHandlers {
   install(eventBus: EventEmitter): void {
     eventBus.on('activitypub:calendar:followed', this.handleCalendarFollowed.bind(this));
     eventBus.on('activitypub:event:reposted', this.handleEventReposted.bind(this));
-    eventBus.on('eventUnreposted', this.handleEventUnreposted.bind(this));
+    eventBus.on('activitypub:event:unreposted', this.handleEventUnreposted.bind(this));
     eventBus.on('reportCreated', this.handleReportCreated.bind(this));
     eventBus.on('reportReceived', this.handleReportReceived.bind(this));
     eventBus.on('reportVerified', this.handleReportVerified.bind(this));
@@ -115,33 +133,40 @@ export default class NotificationEventHandlers implements DomainEventHandlers {
   }
 
   /**
-   * Handles the eventUnreposted event by notifying co-editors of the calendar
-   * that a reposted event was unposted (DEC-008 sticky dismissal flow). The
-   * actor — the editor who performed the unpost — is excluded from the fan-out
-   * to avoid a redundant self-notification, establishing the
-   * "owner-initiated actions exclude initiator" convention.
+   * Handles the activitypub:event:unreposted event by notifying calendar
+   * editors that a reposted event was unposted (DEC-008 sticky dismissal
+   * flow).
    *
-   * actor_url is null because the actor is a local user; co-editors already
-   * share calendar access with the actor, so a profile link adds no
-   * disambiguation value (privacy-playbook: data minimization).
+   * Audience branches on actorAccountId presence:
+   *   - Local flow (actorAccountId set): the editor who performed the unpost
+   *     is excluded from the fan-out — the "owner-initiated actions exclude
+   *     initiator" convention. actorUrl is null because the actor is a local
+   *     user already known to co-editors (privacy-playbook: data
+   *     minimization).
+   *   - Inbound flow (actorAccountId null): a remote calendar undid a share
+   *     of a local event. No local initiator exists, so every editor is
+   *     notified, and actorUrl carries the remote actor's profile URL so
+   *     the notification can link back to them.
    */
   private async handleEventUnreposted(payload: EventUnrepostedPayload): Promise<void> {
     try {
       const accounts = await this.calendarInterface.getEditorsForCalendar(payload.calendarId);
-      const recipients = accounts.filter(account => account.id !== payload.actorAccountId);
+      const recipients = payload.actorAccountId
+        ? accounts.filter(account => account.id !== payload.actorAccountId)
+        : accounts;
       for (const account of recipients) {
         await this.service.createNotification(
           'unshare',
           payload.calendarId,
           payload.eventId,
           payload.actorName,
-          null,
+          payload.actorUrl,
           account.id,
         );
       }
     }
     catch (error) {
-      logger.error({ err: error }, 'Error handling eventUnreposted');
+      logger.error({ err: error }, 'Error handling activitypub:event:unreposted');
     }
   }
 

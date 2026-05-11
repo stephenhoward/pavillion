@@ -1084,7 +1084,7 @@ describe("unshareEvent - UUID resolution", () => {
   });
 });
 
-describe("unshareEvent - eventUnreposted emission", () => {
+describe("unshareEvent - activitypub:event:unreposted emission", () => {
   let service: ActivityPubService;
   let eventBus: EventEmitter;
   let sandbox: sinon.SinonSandbox = sinon.createSandbox();
@@ -1105,7 +1105,7 @@ describe("unshareEvent - eventUnreposted emission", () => {
     sandbox.restore();
   });
 
-  it('should emit eventUnreposted with { eventId, calendarId } for each share before destruction', async () => {
+  it('should emit activitypub:event:unreposted with { eventId, calendarId } for each share before destruction', async () => {
     const account = Account.fromObject({ id: 'test-account-id' });
     const calendar = Calendar.fromObject({ id: 'test-calendar-id', urlName: 'test-calendar' });
     const eventApUrl = 'https://remote.example.com/events/event-456';
@@ -1135,21 +1135,21 @@ describe("unshareEvent - eventUnreposted emission", () => {
     // Stub addToOutbox
     sandbox.stub(service, 'addToOutbox').resolves();
 
-    // Listen for the eventUnreposted emission
+    // Listen for the activitypub:event:unreposted emission
     const emittedPayloads: any[] = [];
-    eventBus.on('eventUnreposted', (payload) => {
+    eventBus.on('activitypub:event:unreposted', (payload) => {
       emittedPayloads.push(payload);
     });
 
     await service.unshareEvent(account, calendar, eventApUrl);
 
-    // Verify eventUnreposted was emitted with correct payload
+    // Verify activitypub:event:unreposted was emitted with correct payload
     expect(emittedPayloads).toHaveLength(1);
     expect(emittedPayloads[0].eventId).toBe(localEventUuid);
     expect(emittedPayloads[0].calendarId).toBe(calendar.id);
   });
 
-  it('should emit eventUnreposted after the transaction commits (after share.destroy)', async () => {
+  it('should emit activitypub:event:unreposted after the transaction commits (after share.destroy)', async () => {
     const account = Account.fromObject({ id: 'test-account-id' });
     const calendar = Calendar.fromObject({ id: 'test-calendar-id', urlName: 'test-calendar' });
     const eventApUrl = 'https://remote.example.com/events/event-789';
@@ -1179,7 +1179,7 @@ describe("unshareEvent - eventUnreposted emission", () => {
     sandbox.stub(service, 'actorUrl').resolves('https://local.example.com/calendars/test-calendar');
     sandbox.stub(service, 'addToOutbox').resolves();
 
-    eventBus.on('eventUnreposted', () => {
+    eventBus.on('activitypub:event:unreposted', () => {
       operationOrder.push('emit');
     });
 
@@ -1189,7 +1189,7 @@ describe("unshareEvent - eventUnreposted emission", () => {
     expect(operationOrder).toEqual(['destroy', 'emit']);
   });
 
-  it('should emit eventUnreposted for each share when multiple shares exist', async () => {
+  it('should emit activitypub:event:unreposted for each share when multiple shares exist', async () => {
     const account = Account.fromObject({ id: 'test-account-id' });
     const calendar = Calendar.fromObject({ id: 'test-calendar-id', urlName: 'test-calendar' });
     const eventApUrl = 'https://remote.example.com/events/event-multi';
@@ -1210,13 +1210,13 @@ describe("unshareEvent - eventUnreposted emission", () => {
     sandbox.stub(service, 'addToOutbox').resolves();
 
     const emittedPayloads: any[] = [];
-    eventBus.on('eventUnreposted', (payload) => {
+    eventBus.on('activitypub:event:unreposted', (payload) => {
       emittedPayloads.push(payload);
     });
 
     await service.unshareEvent(account, calendar, eventApUrl);
 
-    // Verify eventUnreposted was emitted for each share
+    // Verify activitypub:event:unreposted was emitted for each share
     expect(emittedPayloads).toHaveLength(2);
     expect(emittedPayloads[0].eventId).toBe(localEventUuid);
     expect(emittedPayloads[0].calendarId).toBe(calendar.id);
@@ -1224,7 +1224,7 @@ describe("unshareEvent - eventUnreposted emission", () => {
     expect(emittedPayloads[1].calendarId).toBe(calendar.id);
   });
 
-  it('should not emit eventUnreposted when no shares exist', async () => {
+  it('should not emit activitypub:event:unreposted when no shares exist', async () => {
     const account = Account.fromObject({ id: 'test-account-id' });
     const calendar = Calendar.fromObject({ id: 'test-calendar-id', urlName: 'test-calendar' });
     const eventApUrl = 'https://remote.example.com/events/event-no-shares';
@@ -1239,7 +1239,7 @@ describe("unshareEvent - eventUnreposted emission", () => {
     sandbox.stub(service, 'actorUrl').resolves('https://local.example.com/calendars/test-calendar');
 
     const emittedPayloads: any[] = [];
-    eventBus.on('eventUnreposted', (payload) => {
+    eventBus.on('activitypub:event:unreposted', (payload) => {
       emittedPayloads.push(payload);
     });
 
