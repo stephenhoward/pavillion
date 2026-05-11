@@ -3,9 +3,9 @@
     "description": "",
     "noNotifications": "",
     "notifications": {
-        "follow_suffix": "",
         "repost_suffix": "",
         "follow_description": "",
+        "follow_description_no_calendar": "",
         "repost_description": "",
         "empty_state": "",
         "mark_all_seen": "",

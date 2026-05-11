@@ -3,9 +3,9 @@
     "description": "Notifications of follows and reposts",
     "noNotifications": "You have no notifications.",
     "notifications": {
-        "follow_suffix": "followed your calendar",
         "repost_suffix": "reposted one of your events",
-        "follow_description": "{{actorName}} followed {{calendarName}}",
+        "follow_description": "{1} followed {{calendarName}}",
+        "follow_description_no_calendar": "{1} followed your calendar",
         "repost_description": "{{actorName}} reposted {{eventTitle}}",
         "empty_state": "No notifications yet",
         "mark_all_seen": "Mark all as read",

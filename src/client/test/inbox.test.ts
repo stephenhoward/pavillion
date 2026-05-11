@@ -6,8 +6,11 @@ import i18next from 'i18next';
 import I18NextVue from 'i18next-vue';
 import InboxView from '@/client/components/logged_in/inbox.vue';
 import { useNotificationStore } from '@/client/stores/notificationStore';
+import { useCalendarStore } from '@/client/stores/calendarStore';
 import NotificationService from '@/client/service/notification';
+import CalendarService from '@/client/service/calendar';
 import { Notification } from '@/common/model/notification';
+import { Calendar } from '@/common/model/calendar';
 
 describe('InboxView', () => {
   let pinia: ReturnType<typeof createPinia>;
@@ -26,6 +29,16 @@ describe('InboxView', () => {
       ...overrides,
     });
 
+  const makeCalendar = (id: string, urlName: string, name: string): Calendar => {
+    return Calendar.fromObject({
+      id,
+      urlName,
+      content: {
+        en: { name, description: '' },
+      },
+    });
+  };
+
   beforeEach(async () => {
     pinia = createPinia();
     setActivePinia(pinia);
@@ -34,6 +47,11 @@ describe('InboxView', () => {
     // Stub service layer so tests don't make real HTTP requests
     sandbox.stub(NotificationService.prototype, 'getNotifications').resolves([]);
     sandbox.stub(NotificationService.prototype, 'markAllSeen').resolves();
+    // The inbox view triggers a calendar hydration on mount; stub it so
+    // tests can seed the store directly without going through HTTP.
+    sandbox.stub(CalendarService.prototype, 'loadCalendars').callsFake(async function (this: CalendarService) {
+      return this.store.calendars;
+    });
 
     await i18next.init({
       lng: 'en',
@@ -44,8 +62,9 @@ describe('InboxView', () => {
             title: 'Notifications',
             noNotifications: 'You have no notifications.',
             notifications: {
-              follow_suffix: 'followed your calendar',
               repost_suffix: 'reposted one of your events',
+              follow_description: '{1} followed {{calendarName}}',
+              follow_description_no_calendar: '{1} followed your calendar',
               empty_state: 'No notifications yet',
               loading_more: 'Loading more notifications...',
               opens_in_new_tab: '(opens in new tab)',
@@ -103,13 +122,17 @@ describe('InboxView', () => {
     expect(items).toHaveLength(2);
   });
 
-  it('renders follow notification with actor link and follow suffix', async () => {
+  it('renders follow notification with actor link and calendar name when calendar is in the store', async () => {
+    const calendarStore = useCalendarStore();
+    calendarStore.setCalendars([makeCalendar('cal-1', 'my-cal', 'Community Garden Events')]);
+
     const store = useNotificationStore();
     vi.spyOn(store, 'fetchNotifications').mockResolvedValue(undefined);
     vi.spyOn(store, 'markAllSeen').mockResolvedValue(undefined);
     store.notifications = [
       makeNotification({
         type: 'follow',
+        calendarId: 'cal-1',
         actorName: 'Alice',
         actorUrl: 'https://example.com/alice',
       }),
@@ -121,14 +144,76 @@ describe('InboxView', () => {
       },
     });
 
+    // Allow onMounted async work (calendar hydration) to complete
+    await new Promise((resolve) => setTimeout(resolve, 0));
     await wrapper.vm.$nextTick();
+
     const link = wrapper.find('a.actor-link');
     expect(link.exists()).toBe(true);
     expect(link.text()).toContain('Alice');
     expect(link.attributes('href')).toBe('https://example.com/alice');
     expect(link.attributes('rel')).toBe('noopener noreferrer');
     expect(link.attributes('target')).toBe('_blank');
+    expect(wrapper.text()).toContain('followed Community Garden Events');
+  });
+
+  it('falls back to generic "followed your calendar" phrasing when calendarId is not in the store', async () => {
+    const calendarStore = useCalendarStore();
+    calendarStore.setCalendars([]);
+
+    const store = useNotificationStore();
+    vi.spyOn(store, 'fetchNotifications').mockResolvedValue(undefined);
+    vi.spyOn(store, 'markAllSeen').mockResolvedValue(undefined);
+    store.notifications = [
+      makeNotification({
+        type: 'follow',
+        calendarId: 'unknown-cal',
+        actorName: 'Alice',
+        actorUrl: 'https://example.com/alice',
+      }),
+    ];
+
+    const wrapper = mount(InboxView, {
+      global: {
+        plugins: [pinia, [I18NextVue, { i18next }]],
+      },
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.find('a.actor-link').exists()).toBe(true);
     expect(wrapper.text()).toContain('followed your calendar');
+    expect(wrapper.text()).not.toContain('followed undefined');
+  });
+
+  it('shows distinct calendar names for follow notifications across multiple calendars', async () => {
+    const calendarStore = useCalendarStore();
+    calendarStore.setCalendars([
+      makeCalendar('cal-a', 'cal-a', 'Pottery Studio'),
+      makeCalendar('cal-b', 'cal-b', 'Bike Repair Co-op'),
+    ]);
+
+    const store = useNotificationStore();
+    vi.spyOn(store, 'fetchNotifications').mockResolvedValue(undefined);
+    vi.spyOn(store, 'markAllSeen').mockResolvedValue(undefined);
+    store.notifications = [
+      makeNotification({ id: 'n1', type: 'follow', calendarId: 'cal-a', actorName: 'Alice' }),
+      makeNotification({ id: 'n2', type: 'follow', calendarId: 'cal-b', actorName: 'Bob' }),
+    ];
+
+    const wrapper = mount(InboxView, {
+      global: {
+        plugins: [pinia, [I18NextVue, { i18next }]],
+      },
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await wrapper.vm.$nextTick();
+
+    const items = wrapper.findAll('[data-testid="notification-item"]');
+    expect(items[0].text()).toContain('Pottery Studio');
+    expect(items[1].text()).toContain('Bike Repair Co-op');
   });
 
   it('renders repost notification with actor name as text when no actorUrl', async () => {

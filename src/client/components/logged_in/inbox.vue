@@ -1,12 +1,17 @@
 <script setup lang="ts">
 import { computed, ref, onMounted, onUnmounted } from 'vue';
 import { useTranslation } from 'i18next-vue';
+import i18nextInstance from 'i18next';
 import EmptyLayout from '@/client/components/common/empty_state.vue';
 import { useNotificationStore } from '@/client/stores/notificationStore';
+import { useCalendarStore } from '@/client/stores/calendarStore';
+import CalendarService from '@/client/service/calendar';
 import type { Notification } from '@/common/model/notification';
 
 const { t } = useTranslation('inbox');
 const store = useNotificationStore();
+const calendarStore = useCalendarStore();
+const calendarService = new CalendarService(calendarStore);
 
 const notifications = computed(() => store.notifications);
 const hasMore = computed(() => store.hasMore);
@@ -16,16 +21,46 @@ const sentinelRef = ref<HTMLElement | null>(null);
 let observer: IntersectionObserver | null = null;
 
 /**
- * Returns the translated description text for a notification, excluding actor name.
+ * Resolves the human-readable calendar name for a notification.
+ * Returns null when the calendar is not loaded in the store (e.g. deleted
+ * or store not yet hydrated). Callers must handle that case with a
+ * generic fallback phrasing.
  */
-const getNotificationSuffix = (notification: Notification): string => {
-  if (notification.type === 'follow') {
-    return t('notifications.follow_suffix');
+const resolveCalendarName = (notification: Notification): string | null => {
+  if (!notification.calendarId) {
+    return null;
   }
-  if (notification.type === 'repost') {
-    return t('notifications.repost_suffix', { eventId: notification.eventId ?? '' });
+  const calendar = calendarStore.getCalendarById(notification.calendarId);
+  if (!calendar) {
+    return null;
   }
-  return '';
+  const lang = i18nextInstance.resolvedLanguage ?? 'en';
+  const name = calendar.content(lang).name || calendar.content('en').name || calendar.urlName;
+  return name || null;
+};
+
+/**
+ * Returns the translated phrase for a follow notification with the actor
+ * name left as the `{1}` slot marker for the `<i18next>` component to
+ * substitute the actor link or plain span. When the calendar cannot be
+ * resolved (deleted or store not loaded), falls back to a generic phrase
+ * that omits the calendar name.
+ */
+const getFollowPhrase = (notification: Notification): string => {
+  const calendarName = resolveCalendarName(notification);
+  if (calendarName) {
+    return t('notifications.follow_description', { calendarName });
+  }
+  return t('notifications.follow_description_no_calendar');
+};
+
+/**
+ * Returns the translated suffix for a repost notification. Sibling bead
+ * pv-lrt5 will replace this with a full interpolated description that
+ * includes the event title and calendar name.
+ */
+const getRepostSuffix = (notification: Notification): string => {
+  return t('notifications.repost_suffix', { eventId: notification.eventId ?? '' });
 };
 
 /**
@@ -39,7 +74,9 @@ const loadMore = () => {
 
 /**
  * Setup Intersection Observer for infinite scroll, then load initial
- * notifications and clear the unread badge.
+ * notifications and clear the unread badge. Also ensure the calendar
+ * store is hydrated so notification rows can resolve their calendar
+ * name from notification.calendarId.
  */
 onMounted(async () => {
   if (sentinelRef.value) {
@@ -56,6 +93,16 @@ onMounted(async () => {
       },
     );
     observer.observe(sentinelRef.value);
+  }
+
+  // Hydrate calendar store so getCalendarById can resolve calendar names.
+  // Failure here degrades to the no-calendar fallback phrasing; do not
+  // block notification rendering on it.
+  try {
+    await calendarService.loadCalendars();
+  }
+  catch {
+    // Intentionally ignored — getFollowPhrase falls back gracefully.
   }
 
   await store.fetchNotifications();
@@ -89,7 +136,30 @@ onUnmounted(() => {
         class="notification-item"
         data-testid="notification-item"
       >
-        <p class="notification-text">
+        <p
+          v-if="notification.type === 'follow'"
+          class="notification-text"
+        >
+          <i18next :translation="getFollowPhrase(notification)">
+            <template #1>
+              <a
+                v-if="notification.actorUrl"
+                :href="notification.actorUrl"
+                rel="noopener noreferrer"
+                target="_blank"
+                class="actor-link"
+              >{{ notification.actorName }}<span class="sr-only">{{ t('notifications.opens_in_new_tab') }}</span></a>
+              <span
+                v-else
+                class="actor-name"
+              >{{ notification.actorName }}</span>
+            </template>
+          </i18next>
+        </p>
+        <p
+          v-else
+          class="notification-text"
+        >
           <a
             v-if="notification.actorUrl"
             :href="notification.actorUrl"
@@ -101,7 +171,7 @@ onUnmounted(() => {
             v-else
             class="actor-name"
           >{{ notification.actorName }}</span>
-          {{ ' ' + getNotificationSuffix(notification) }}
+          {{ ' ' + getRepostSuffix(notification) }}
         </p>
       </li>
 
