@@ -92,5 +92,5 @@ You have a calendar. You have one event on it. You have a URL you can share. The
 - **More events.** Add the rest of what's coming up. Events that repeat (weekly meetings, monthly meetups) — see the recurring-events guide. Series of distinct events under a program name — see the series guide.
 - **More structure.** A bigger event list benefits from a richer set of categories and a tidied-up list of places — those have their own guides.
 - **More people.** If you're not running this alone, invite editors so others can publish too — the editors guide covers that.
-- **More reach.** Find other calendars in your community to follow, and decide whether to repost their events onto yours — the follow-and-repost guide covers that. If you're migrating from an existing calendar (Google Calendar, Nextcloud, a WordPress plugin, an existing Gancio or Mobilizon calendar), the ICS-import guide shows how to bring that history in.
+- **More reach.** Find other calendars in your community to connect to, and decide which of their events to publish onto yours — the follow-and-repost guide covers that. If you're migrating from an existing calendar (Google Calendar, Nextcloud, a WordPress plugin, an existing Gancio or Mobilizon calendar), the ICS-import guide shows how to bring that history in.
 
