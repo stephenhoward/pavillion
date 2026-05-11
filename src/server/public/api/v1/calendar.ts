@@ -44,6 +44,14 @@ function stripDefaultEventImage(calendarObj: Record<string, any>): Record<string
  *     have no Tier 1 anonymous-public use case and are stripped here.
  *     Authenticated calendar-editor APIs may still expose the full shape;
  *     this projection is strictly the public surface.
+ *   - Projects `location` to address-display fields plus `content` only.
+ *     Drops `originUri` (an AP-dedup identity hint, server-internal),
+ *     `id` (parallels the space projection — AP identity hint with no
+ *     Tier 1 use case), and `spaces[]` (unused on the public surface — the
+ *     event's chosen sub-space is carried independently on `event.space`,
+ *     so the array is an internal leak vector for nested originUri/clientId).
+ *     Absent / null location collapses to `location: null` so the public
+ *     contract stays stable.
  *
  * CalendarEventSchedule.toObject() on the shared model remains the full
  * authenticated shape; shaping here is strictly the public API layer's
@@ -87,6 +95,32 @@ function toPublicEventObject(eventObj: Record<string, any>): Record<string, any>
   }
   else {
     publicObj.space = null;
+  }
+
+  // Project location to address-display fields + content only. Drops:
+  //   - `originUri` (AP-dedup identity hint, server-internal)
+  //   - `id` (parallels the space projection — AP identity hint with no
+  //     Tier 1 use case)
+  //   - `spaces[]` (unused on the public surface — `event.space` carries the
+  //     selected sub-space; the array is an internal leak vector for nested
+  //     originUri / clientId on each space row)
+  // Allow-list, not delete-by-name, so future additions to
+  // EventLocation.toObject() do not silently leak. Absent / null location
+  // collapses to `location: null` so the public contract stays stable.
+  if (publicObj.location) {
+    const loc = publicObj.location;
+    publicObj.location = {
+      name: loc.name,
+      address: loc.address,
+      city: loc.city,
+      state: loc.state,
+      postalCode: loc.postalCode,
+      country: loc.country,
+      content: loc.content,
+    };
+  }
+  else {
+    publicObj.location = null;
   }
 
   return publicObj;
