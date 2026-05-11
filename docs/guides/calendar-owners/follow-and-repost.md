@@ -94,11 +94,11 @@ The inbox doesn't fill up because *you* connected to another calendar; it fills 
 
 ## Aggregator vs. curated: a framing decision
 
-Most calendar owners face this choice within their first few weeks of running a calendar. It's a question you'll probably revisit a few times as your calendar grows.
+Most calendar owners who repost events face this choice within their first few weeks of running a calendar. It's a question you'll probably revisit a few times as your calendar grows.
 
 **An aggregator calendar connects broadly and lets rules publish most of what comes in.** The bias is toward inclusion: anyone running events relevant to your community gets surfaced on your calendar, with category-matching rules doing most of the editorial work. The result is a busy calendar that functions as a regional or topical clearinghouse — *the* place to look up "what's happening this weekend in our town" or "all climate-action events in the region this month." A municipality's all-events calendar, a coworking space's tech-meetup roundup, or a regional arts council page tend to be aggregators.
 
-**A curated calendar connects selectively and publishes deliberately, mostly by hand.** The bias is toward editorial fit: a smaller list of events that meet a higher bar, individually picked, sometimes re-introduced or re-framed in description. The result is a calendar that earns visitors' trust through what it leaves *out* as much as what it includes — *the* place to look up "the events the editor of this calendar personally vouches for." A neighborhood association's "what we recommend this week" or a single venue's hand-picked partner-event list tend to be curated.
+**A curated calendar connects selectively and publishes deliberately, mostly by hand.** The bias is toward editorial fit: a smaller list of events that meet a higher bar, individually picked, each placed in your own categories. The result is a calendar that earns visitors' trust through what it leaves *out* as much as what it includes — *the* place to look up "the events the editor of this calendar personally vouches for." A neighborhood association's "what we recommend this week" or a single venue's hand-picked partner-event list tend to be curated.
 
 Two things about this choice:
 
