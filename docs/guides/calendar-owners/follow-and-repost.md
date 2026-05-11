@@ -34,7 +34,7 @@ In the **Following** tab, click <Btn>Follow a Calendar</Btn>. A dialog opens wit
 
 Type the identifier. Pavillion looks the calendar up after a brief pause and shows you a preview — the calendar's name, description, and domain. The preview is everything you'd see on the calendar's public page; use it to confirm you've got the right one before connecting.
 
-Below the preview are the auto-repost toggles. They control what happens automatically when events arrive from this calendar — see [Let rules publish for you](#let-rules-publish-for-you) below for what each one does. If you're not sure what to pick, leave both off; you can publish any individual event by hand later, and you can change these toggles for any connection at any time.
+Below the preview are the auto-repost toggles. They control what happens automatically when *new* events arrive from this calendar from now on — see [Let rules publish for you](#let-rules-publish-for-you) below for what each one does. If you're not sure what to pick, leave both off; you can publish any individual event by hand later, and you can change these toggles for any connection at any time.
 
 Click <Btn>Follow</Btn>. Pavillion sends a follow request to the source calendar; once their server has accepted it (which is usually immediate), their events start arriving in your feed.
 
@@ -62,8 +62,10 @@ Publishing by hand is the right pace when you want editorial control over what l
 
 If the calendar you're connected to posts the kind of events you'd publish almost every time anyway, you can let a rule do it for you. From the **Following** tab, find the connection's row and use the toggles in its right-hand column. There are two, in nesting order:
 
-- **Auto-repost original events.** When the source calendar posts an event of their own, publish it on yours automatically.
-- **Also auto-repost shared events.** Only available when the first toggle is on. When the source calendar *itself* publishes an event from another calendar, publish their repost too. This is how an event from a third calendar two hops away can end up on yours; turn it on if you trust the source's editorial taste, off if you only want the events they originate themselves.
+- **Auto-repost original events.** From now on, when the source calendar posts an event of their own, publish it on yours automatically.
+- **Also auto-repost shared events.** Only available when the first toggle is on. From now on, when the source calendar *itself* publishes an event from another calendar, publish their repost too. This is how an event from a third calendar two hops away can end up on yours; turn it on if you trust the source's editorial taste, off if you only want the events they originate themselves.
+
+Both rules are forward-only. Turning a toggle on doesn't reach back and publish events from this calendar that are already sitting in your feed — only events that arrive from the source *after* the toggle is on get auto-published. To put already-arrived events on your calendar, publish them by hand from the **Events** tab.
 
 Rule-published events show up on your calendar like any other published event, with one small visible difference *in your feed*: the button reads **Auto-posted** in muted gray rather than **Reposted** in green. That's so you can tell at a glance which events you chose by hand and which arrived through a rule. Visitors to your public calendar see the same thing either way.
 
