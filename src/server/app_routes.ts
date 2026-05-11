@@ -428,16 +428,25 @@ export function createRouter(
 
   router.get(/^\/widget\/.*/i, handlers.widget_index);
 
-  // Locale-prefixed public site routes: /[locale]/view/...
+  // Locale-prefixed public site routes: /[locale]/view, /[locale]/view/...
   // Handles both non-default locale serving and default-locale redirects.
   // Must come before the unprefixed site route so prefixed URLs are handled first.
-  router.get(/^\/[a-z]{2,8}\/view\//i, handlers.locale_prefixed_site);
+  // The `(\/.*)?` tail matches both bare `/[locale]/view` and `/[locale]/view/<rest>`.
+  router.get(/^\/[a-z]{2,8}\/view(\/.*)?$/i, handlers.locale_prefixed_site);
 
-  // Public site routes (unprefixed — default language, as-needed strategy)
-  router.get(/^\/view\/.*/i, handlers.site_index);
+  // Public site routes (unprefixed — default language, as-needed strategy).
+  // The `(\/.*)?` tail matches both bare `/view` (the discovery landing page)
+  // and `/view/<rest>` (calendar pages); previously bare `/view` fell through
+  // to the client SPA catch-all.
+  router.get(/^\/view(\/.*)?$/i, handlers.site_index);
 
-  // Client app catch-all (goes last)
-  router.get(/^\/(?!(api|assets|\.well-known|calendars|users|view|widget)\/).*/i, handlers.client_index);
+  // Client app catch-all (goes last).
+  // The `view(?:\/|$)` exclusion stops the catch-all from absorbing bare `/view`
+  // alongside `/view/<rest>`; the other reserved segments still require a
+  // trailing `/` to exclude (api/, assets/, etc.). Without the `$` anchor the
+  // prior exclusion only matched `view\/` and bare `/view` reached the client
+  // SPA — the discovery landing page must resolve to the site SPA shell.
+  router.get(/^\/(?!(api|assets|\.well-known|calendars|users|widget)\/|view(?:\/|$)).*/i, handlers.client_index);
 
   return { router, handlers };
 }

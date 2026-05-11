@@ -6,6 +6,15 @@
         "beta_label": "Beta"
     },
     "powered_by": "Powered by Pavillion",
+    "discovery": {
+        "page_title": "Calendars on this instance",
+        "meta_description": "Browse public calendars hosted on this Pavillion instance.",
+        "empty_state_heading": "No calendars yet",
+        "empty_state_body": "There are no public calendars listed on this instance yet. Check back soon.",
+        "error_message": "Failed to load calendars. Please try again.",
+        "loading_label": "Loading calendars...",
+        "learn_more": "Learn more about Pavillion"
+    },
     "not_found_error_message": "Not Found",
     "not_found_suggestion": "The calendar or event you are looking for does not exist or may have been removed.",
     "not_found_go_home": "Go to Homepage",

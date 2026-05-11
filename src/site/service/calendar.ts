@@ -1,5 +1,5 @@
 import { DateTime } from 'luxon';
-import { Calendar } from '@/common/model/calendar';
+import { Calendar, CalendarContent } from '@/common/model/calendar';
 import ModelService from '@/client/service/models';
 import { useCalendarStore } from '@/client/stores/calendarStore';
 import { useEventInstanceStore } from '@/site/stores/eventInstanceStore';
@@ -18,6 +18,18 @@ export type SeriesDetail = {
   };
 };
 
+/**
+ * A single row from the public discovery listing.
+ *
+ * The backend returns lastEventActivity as an ISO 8601 string (or null) — the
+ * service keeps the Calendar hydrated so locale-aware content lookups can run
+ * via useLocalizedContent on the consuming component.
+ */
+export type PublicCalendarListing = {
+  calendar: Calendar;
+  lastEventActivity: string | null;
+};
+
 export default class CalendarService {
   store: ReturnType<typeof useCalendarStore>;
   eventStore: ReturnType<typeof useEventInstanceStore>;
@@ -27,6 +39,39 @@ export default class CalendarService {
     this.eventStore = eventStore;
   }
 
+
+  /**
+   * List public discoverable calendars for the /view/ landing page.
+   *
+   * Calls GET /api/public/v1/calendars, which returns a bare array of
+   * { id, urlName, content[], lastEventActivity } rows sorted by
+   * lastEventActivity descending (server-provided order — the caller does
+   * NOT re-sort).
+   *
+   * Each row's `content` field is an array of { language, name, description }
+   * which we adapt into Calendar instances so the component can pick the
+   * visitor's locale via useLocalizedContent (which operates on TranslatedModel).
+   *
+   * @returns Promise resolving to an array of { calendar, lastEventActivity }
+   *   tuples in the server's order. Throws on network or 5xx error.
+   */
+  async listPublicCalendars(): Promise<PublicCalendarListing[]> {
+    const result = await ModelService.listModels('/api/public/v1/calendars');
+    return result.items.map((row: Record<string, any>) => {
+      const calendar = new Calendar(row.id, row.urlName);
+      if (Array.isArray(row.content)) {
+        for (const c of row.content) {
+          if (c && typeof c === 'object' && typeof c.language === 'string') {
+            calendar.addContent(new CalendarContent(c.language, c.name ?? '', c.description ?? ''));
+          }
+        }
+      }
+      return {
+        calendar,
+        lastEventActivity: row.lastEventActivity ?? null,
+      };
+    });
+  }
 
   /**
    * Get a calendar by its URL name

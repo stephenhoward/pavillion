@@ -6,6 +6,15 @@
         "beta_label": "Beta"
     },
     "powered_by": "Propulsé par Pavillion",
+    "discovery": {
+        "page_title": "Calendriers sur cette instance",
+        "meta_description": "Parcourez les calendriers publics hébergés sur cette instance Pavillion.",
+        "empty_state_heading": "Aucun calendrier pour le moment",
+        "empty_state_body": "Aucun calendrier public n'est listé sur cette instance pour le moment. Revenez bientôt.",
+        "error_message": "Échec du chargement des calendriers. Veuillez réessayer.",
+        "loading_label": "Chargement des calendriers...",
+        "learn_more": "En savoir plus sur Pavillion"
+    },
     "not_found_error_message": "Page non trouvée",
     "not_found_suggestion": "Le calendrier ou l'événement que vous recherchez n'existe pas ou a peut-être été supprimé.",
     "not_found_go_home": "Retour à l'accueil",

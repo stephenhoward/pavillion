@@ -262,6 +262,18 @@ export default class CalendarInterface {
     return this.calendarService.listAllCalendarsForAdmin(filters);
   }
 
+  /**
+   * List public-discoverable calendars for the /view/ discovery page.
+   * Thin proxy to CalendarService.listPublicCalendars; see service docs for
+   * the full query shape, predicate semantics, and 500-row cap.
+   *
+   * @returns Calendars + lastEventActivity tuples, sorted activity-descending,
+   *   capped at 500 rows
+   */
+  async listPublicCalendars(): Promise<Array<{ calendar: Calendar; lastEventActivity: Date | null }>> {
+    return this.calendarService.listPublicCalendars();
+  }
+
   // Event operations
   async listEvents(calendar: Calendar, options?: {
     search?: string;
