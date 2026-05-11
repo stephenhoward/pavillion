@@ -8,11 +8,9 @@ This guide covers what places are, how rooms and spaces fit, how to create both,
 
 ## How places work
 
-A place lives on its own, not inside any one event. When you attach it to an event, the event doesn't take a copy of the address — it just remembers which place it's at and reads the details from there. The place's name, address, and accessibility notes appear in their own dedicated spots on the event's public page, rather than a sentence buried in the event description.
+A place lives on its own, separate from any one event. Its name, address, and accessibility notes appear in their own dedicated spots on the event's public page, rather than buried in a sentence in the description. That arrangement pays off three ways:
 
-That structure pays off three ways:
-
-- **Edit once, propagate everywhere.** When a venue renames itself, you fix the place — not every event that uses it. The lists, detail pages, and public calendar all show the new name on the next page load.
+- **Edit once, propagate everywhere.** When a venue renames itself or you fix a typo in the address, you change the place once and every event there updates on the next page load — no editing each event.
 - **Reusable across events.** Recurring venues become one-click picks instead of address retyping. Over a year of running a calendar, a small set of places covers most of your events.
 - **Free directions link.** If the place has a street address, the public event page renders it as a tap-to-open link — one-tap navigation on a phone, a map in a new tab on desktop. Just fill the address in and it happens automatically.
 
@@ -72,7 +70,7 @@ The same applies to rooms. Rename *Conference Room A* to *Sterling Room* in the 
 Because past events show the venue's current state, the archive of your calendar is a record of *what happened*, not *what the listing said at the time*. If you want a permanent snapshot of the original address — say, for an event ticket stub or a community history project — copy that detail somewhere outside Pavillion (the event description, an external doc) before the venue changes. This is rarely worth doing, but worth knowing.
 :::
 
-**Deleting a room.** When you remove a room from a place, the editor checks how many events are using it. If none, the room just goes. If some events use it, you get a small dialog asking where those events should go: onto the whole venue (the default and usually right answer), or onto a different room of your choosing. The events don't disappear and they don't lose their place — they just stop being attached to the room you removed.
+**Deleting a room.** If events are using the room, the editor asks where to move them — onto the whole venue (usually the right answer) or onto a different room. The events don't disappear and don't lose their place; they just stop being attached to that specific room.
 
 **Deleting a whole place.** The delete dialog tells you how many events currently use the place; if you proceed, the place is removed from your list and every affected event keeps existing but loses its location entirely. The events don't disappear — they just no longer have a venue attached. You can attach a different place (or a new one) to any of them by editing the event.
 

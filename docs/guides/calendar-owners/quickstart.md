@@ -69,7 +69,7 @@ Categories are how visitors filter your public page (`Show only Sports events`) 
 
 **Series.** Skip for this first event. A series is for grouping multiple distinct events under one named program (a summer concert series, a fall lecture series). One-off events don't need it.
 
-**Date & time.** Set the start and end. For this first event, pick a date within the next week or two — the public page opens to a default two-week window, and a date much further out won't be visible there until the visitor changes the filter. (You can always add the real, far-out events afterwards; this is just so the page you're about to share has something on it.) Leave it as a single occurrence for now — no recurrence rules. If your event repeats on a schedule, recurrence handles that, but it's easier to learn the editor on a one-off first.
+**Date & time.** Set the start and end. For this first event, pick a date within the next week or two so it shows up immediately on the public page you're about to share — you can always add further-out events afterwards. Leave it as a single occurrence for now — no recurrence rules. If your event repeats on a schedule, recurrence handles that, but it's easier to learn the editor on a one-off first.
 
 When the form is filled in, click <Btn>Save Changes</Btn> in the page header. The event is now published — Pavillion doesn't have a draft state. If you change your mind, you can edit, cancel, or delete it from the events list.
 
