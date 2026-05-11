@@ -20,6 +20,13 @@ type LoadState = 'loading' | 'populated' | 'empty' | 'error';
 const state = ref<LoadState>('loading');
 const calendars = ref<PublicCalendarListing[]>([]);
 
+const PAVILLION_URL = 'https://pavillion.social';
+
+const siteTitle = computed<string>(() => {
+  const title = siteConfig?.settings?.()?.siteTitle;
+  return typeof title === 'string' && title.length > 0 ? title : 'Pavillion';
+});
+
 /**
  * Localized instance description, picked from the site config's
  * instanceDescription (a Record<lang, string>) by visitor locale with fallback
@@ -66,7 +73,7 @@ function tileDescription(listing: PublicCalendarListing): string {
  * on this anonymous discovery surface.
  */
 function applyHead() {
-  const title = `${t('discovery.page_title')} | Pavillion`;
+  const title = `${t('discovery.page_title')} | ${siteTitle.value}`;
   document.title = title;
   const description = t('discovery.meta_description');
   let meta = document.head.querySelector('meta[name="description"]') as HTMLMetaElement | null;
@@ -105,17 +112,28 @@ onBeforeMount(async () => {
   <main class="discovery">
     <header class="discovery-header">
       <div class="discovery-header-inner">
-        <h1 class="discovery-title">{{ t('discovery.page_title') }}</h1>
+        <h1 class="discovery-title">{{ siteTitle }}</h1>
         <p
           v-if="instanceDescription"
           class="discovery-instance-description"
         >
           {{ instanceDescription }}
         </p>
+        <p class="discovery-learn-more">
+          <a
+            :href="PAVILLION_URL"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            {{ t('discovery.learn_more') }}
+          </a>
+        </p>
       </div>
     </header>
 
     <section class="discovery-main">
+      <h2 class="discovery-subheading">{{ t('discovery.page_title') }}</h2>
+
       <div
         v-if="state === 'loading'"
         role="status"
@@ -136,7 +154,7 @@ onBeforeMount(async () => {
         v-else-if="state === 'empty'"
         class="discovery-empty"
       >
-        <h2 class="discovery-empty-heading">{{ t('discovery.empty_state_heading') }}</h2>
+        <h3 class="discovery-empty-heading">{{ t('discovery.empty_state_heading') }}</h3>
         <p class="discovery-empty-body">{{ t('discovery.empty_state_body') }}</p>
       </div>
 
@@ -154,7 +172,7 @@ onBeforeMount(async () => {
             :to="calendarPath(listing.calendar.urlName)"
             class="discovery-tile"
           >
-            <h2 class="discovery-tile-title">{{ tileName(listing) }}</h2>
+            <h3 class="discovery-tile-title">{{ tileName(listing) }}</h3>
             <p
               v-if="tileDescription(listing)"
               class="discovery-tile-description"
@@ -218,11 +236,35 @@ onBeforeMount(async () => {
 .discovery-instance-description {
   font-size: $public-font-size-md;
   color: $public-text-secondary-light;
-  margin: 0;
+  margin: 0 0 $public-space-md 0;
   line-height: $public-line-height-relaxed;
 
   @include public-dark-mode {
     color: $public-text-secondary-dark;
+  }
+}
+
+.discovery-learn-more {
+  font-size: $public-font-size-sm;
+  margin: 0;
+
+  a {
+    color: $public-accent-light;
+    text-decoration: none;
+    border-bottom: 1px solid transparent;
+    transition: $public-transition-normal;
+
+    &:hover {
+      border-bottom-color: currentColor;
+    }
+
+    &:focus-visible {
+      @include public-focus-visible;
+    }
+
+    @include public-dark-mode {
+      color: $public-accent-dark;
+    }
   }
 }
 
@@ -239,6 +281,19 @@ onBeforeMount(async () => {
   @include public-tablet-up {
     padding-top: $public-space-2xl;
     padding-bottom: $public-space-3xl;
+  }
+}
+
+.discovery-subheading {
+  font-size: $public-font-size-xl;
+  font-weight: $public-font-weight-semibold;
+  letter-spacing: $public-letter-spacing-tight;
+  line-height: $public-line-height-tight;
+  margin: 0 0 $public-space-lg 0;
+  color: $public-text-primary-light;
+
+  @include public-dark-mode {
+    color: $public-text-primary-dark;
   }
 }
 

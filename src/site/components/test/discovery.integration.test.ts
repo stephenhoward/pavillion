@@ -32,16 +32,17 @@ import frSystem from '@/site/locales/fr/system.json';
 vi.mock('@/client/service/models');
 
 // A minimal stub for the site_config Config object the component injects.
-// The discovery page only reads settings().instanceDescription; everything
-// else can be omitted.
-function makeSiteConfig(instanceDescription?: Record<string, string>) {
+// The discovery page reads settings().siteTitle and settings().instanceDescription;
+// everything else can be omitted.
+function makeSiteConfig(opts?: { instanceDescription?: Record<string, string>; siteTitle?: string }) {
   return {
     settings: () => ({
       registrationMode: 'closed',
       defaultDateRange: '1month',
       defaultLanguage: 'en',
       domain: 'test.local',
-      instanceDescription,
+      siteTitle: opts?.siteTitle,
+      instanceDescription: opts?.instanceDescription,
     }),
   };
 }
@@ -289,7 +290,7 @@ describe('discovery.vue - five behavioral states', () => {
       global: {
         plugins: [pinia, router, [I18NextVue, { i18next }]],
         provide: {
-          site_config: makeSiteConfig({ en: 'Welcome to the local instance' }),
+          site_config: makeSiteConfig({ instanceDescription: { en: 'Welcome to the local instance' } }),
         },
       },
     });
@@ -298,6 +299,55 @@ describe('discovery.vue - five behavioral states', () => {
     const desc = wrapper.find('.discovery-instance-description');
     expect(desc.exists()).toBe(true);
     expect(desc.text()).toBe('Welcome to the local instance');
+  });
+
+  it('renders the configured siteTitle as the <h1> at the top of the page', async () => {
+    vi.mocked(ModelService.listModels).mockResolvedValue(ListResult.fromArray([]));
+    await router.push('/view');
+
+    const wrapper = mount(Discovery, {
+      global: {
+        plugins: [pinia, router, [I18NextVue, { i18next }]],
+        provide: { site_config: makeSiteConfig({ siteTitle: 'Local Events Hub' }) },
+      },
+    });
+    await flushPromises();
+
+    expect(wrapper.find('h1.discovery-title').text()).toBe('Local Events Hub');
+  });
+
+  it('falls back to "Pavillion" in the <h1> when siteTitle is not configured', async () => {
+    vi.mocked(ModelService.listModels).mockResolvedValue(ListResult.fromArray([]));
+    await router.push('/view');
+    const wrapper = mountDiscovery();
+    await flushPromises();
+
+    expect(wrapper.find('h1.discovery-title').text()).toBe('Pavillion');
+  });
+
+  it('renders "Calendars on this instance" as an <h2> subheading after the description', async () => {
+    vi.mocked(ModelService.listModels).mockResolvedValue(ListResult.fromArray([]));
+    await router.push('/view');
+    const wrapper = mountDiscovery();
+    await flushPromises();
+
+    const subheading = wrapper.find('h2.discovery-subheading');
+    expect(subheading.exists()).toBe(true);
+    expect(subheading.text()).toBe(enSystem.discovery.page_title);
+  });
+
+  it('renders a "Learn more about Pavillion" link pointing to pavillion.social with rel=noopener', async () => {
+    vi.mocked(ModelService.listModels).mockResolvedValue(ListResult.fromArray([]));
+    await router.push('/view');
+    const wrapper = mountDiscovery();
+    await flushPromises();
+
+    const link = wrapper.find('.discovery-learn-more a');
+    expect(link.exists()).toBe(true);
+    expect(link.attributes('href')).toBe('https://pavillion.social');
+    expect(link.attributes('target')).toBe('_blank');
+    expect(link.attributes('rel')).toContain('noopener');
+    expect(link.text()).toBe(enSystem.discovery.learn_more);
   });
 });
 
@@ -318,8 +368,10 @@ describe('discovery.vue - per-locale rendering smoke', () => {
 
   /**
    * Mount the discovery page under a specific locale and read the rendered
-   * h1 text. Asserts that the i18n bundle is wired up — the page_title key
-   * must resolve to a translated string, not the literal "discovery.page_title".
+   * subheading (h2) text. Asserts that the i18n bundle is wired up — the
+   * page_title key must resolve to a translated string, not the literal
+   * "discovery.page_title". The h1 carries siteTitle (Pavillion fallback),
+   * not the translated page_title, so the subheading is the right target.
    */
   async function pageTitleFor(locale: 'en' | 'es' | 'fr', path: string): Promise<string> {
     await i18next.changeLanguage(locale);
@@ -331,7 +383,7 @@ describe('discovery.vue - per-locale rendering smoke', () => {
       },
     });
     await flushPromises();
-    const text = wrapper.find('h1').text();
+    const text = wrapper.find('.discovery-subheading').text();
     wrapper.unmount();
     return text;
   }

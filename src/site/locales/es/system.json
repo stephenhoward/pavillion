@@ -12,7 +12,8 @@
         "empty_state_heading": "Aún no hay calendarios",
         "empty_state_body": "Todavía no hay calendarios públicos listados en esta instancia. Vuelve pronto.",
         "error_message": "Error al cargar los calendarios. Inténtalo de nuevo.",
-        "loading_label": "Cargando calendarios..."
+        "loading_label": "Cargando calendarios...",
+        "learn_more": "Más información sobre Pavillion"
     },
     "not_found_error_message": "No encontrado",
     "not_found_suggestion": "El calendario o evento que buscas no existe o puede haber sido eliminado.",
