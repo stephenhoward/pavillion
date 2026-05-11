@@ -1,5 +1,5 @@
 {
-    "_comment": "Seed inbox notifications for MultiCalendarTestUser (multicalendar@example.com / id 6e87d5ca-...-2222). They own multicalendar_calendar and are co-editor on testuser_calendar, so every notification carries meaningful calendar attribution. Covers all 6 notification types: follow, repost, report_received, report_verified, report_escalated, unshare. Dates shift relative to today (2026-01-08 → today, 2026-01-01 → today-7).",
+    "_comment": "Seed inbox notifications for MultiCalendarTestUser (multicalendar@example.com / id 6e87d5ca-...-2222). They own multicalendar_calendar and are co-editor on testuser_calendar, so every notification carries meaningful calendar attribution. Covers all 6 notification types: follow, repost, report_received, report_verified, report_escalated, unshare. Actor names for follow/repost are remote *calendar* display names (matches the AP model — calendars are the actors for federation actions; see inbox.ts emit sites for activitypub:calendar:followed and activitypub:event:reposted). For unshare the actor is currently the local editor's display name; whether that should be calendar-centric instead is tracked as a follow-up bead. Dates shift relative to today (2026-01-08 → today, 2026-01-01 → today-7).",
     "NotificationEntity": [
         {
             "id": "9ec1f00d-0000-4000-8000-000000000001",
@@ -18,8 +18,8 @@
             "type": "repost",
             "calendar_id": "cbe74815-939e-48b3-af44-1cd4eb3671bb",
             "event_id": "d09334bd-e24d-4bfc-a46c-8c6dcf8f0b17",
-            "actor_name": "Maya Okonkwo",
-            "actor_url": "https://gather.fediverse.example/@maya",
+            "actor_name": "Brewery Tour Collective",
+            "actor_url": "https://gather.fediverse.example/calendars/brewery-tour",
             "seen": false,
             "created_at": "2026-01-08T08:15:00.000Z"
         },
@@ -29,8 +29,8 @@
             "type": "follow",
             "calendar_id": "c8569a35-dccb-4f97-a214-a4dec6c84262",
             "event_id": null,
-            "actor_name": "Riku Tanaka",
-            "actor_url": "https://mobilizon.example.org/@riku",
+            "actor_name": "Mutual Aid Network",
+            "actor_url": "https://mobilizon.example.org/calendars/mutual-aid-net",
             "seen": false,
             "created_at": "2026-01-07T17:42:00.000Z"
         },
@@ -73,8 +73,8 @@
             "type": "repost",
             "calendar_id": "c8569a35-dccb-4f97-a214-a4dec6c84262",
             "event_id": "4383e093-e939-4fb2-a572-47b914fad047",
-            "actor_name": "Sören Liljedahl",
-            "actor_url": "https://gancio.example.coop/@soren",
+            "actor_name": "Sörgården Climate Hub",
+            "actor_url": "https://gancio.example.coop/calendars/sorgarden-climate",
             "seen": true,
             "created_at": "2026-01-05T19:50:00.000Z"
         },
@@ -84,8 +84,8 @@
             "type": "follow",
             "calendar_id": "cbe74815-939e-48b3-af44-1cd4eb3671bb",
             "event_id": null,
-            "actor_name": "Alma Castellanos",
-            "actor_url": "https://mobilizon.example.org/@alma",
+            "actor_name": "Cooperative Brewers' Calendar",
+            "actor_url": "https://mobilizon.example.org/calendars/coop-brewers",
             "seen": true,
             "created_at": "2026-01-05T13:05:00.000Z"
         },
@@ -106,8 +106,8 @@
             "type": "follow",
             "calendar_id": "c8569a35-dccb-4f97-a214-a4dec6c84262",
             "event_id": null,
-            "actor_name": "Yael Brommer",
-            "actor_url": "https://nodename.example.network/@yael",
+            "actor_name": "Resilience Tech Workshop",
+            "actor_url": "https://nodename.example.network/calendars/resilience-tech",
             "seen": true,
             "created_at": "2026-01-03T10:12:00.000Z"
         },
@@ -117,8 +117,8 @@
             "type": "repost",
             "calendar_id": "cbe74815-939e-48b3-af44-1cd4eb3671bb",
             "event_id": "792895df-c319-4920-a09e-9a8749cd3d76",
-            "actor_name": "Ines Marchetti",
-            "actor_url": "https://events.coopsphere.example/@ines",
+            "actor_name": "Storytellers' Guild",
+            "actor_url": "https://events.coopsphere.example/calendars/storytellers-guild",
             "seen": true,
             "created_at": "2026-01-02T16:30:00.000Z"
         }
