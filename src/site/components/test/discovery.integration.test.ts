@@ -118,10 +118,16 @@ describe('discovery.vue - five behavioral states', () => {
     const wrapper = mountDiscovery();
 
     // Synchronous-ish read before flushPromises: the loading state should be
-    // the initial render. The discovery-loading container carries role=status.
+    // the initial render. The shared live-region container carries role=status
+    // and is always present in the DOM so AT registers it before any text is
+    // injected; the loading text is swapped in via v-if.
+    const liveRegion = wrapper.find('.discovery-status');
+    expect(liveRegion.exists()).toBe(true);
+    expect(liveRegion.attributes('role')).toBe('status');
+    expect(liveRegion.attributes('aria-live')).toBe('polite');
+
     const loading = wrapper.find('.discovery-loading');
     expect(loading.exists()).toBe(true);
-    expect(loading.attributes('role')).toBe('status');
     expect(loading.text()).toContain(enSystem.discovery.loading_label);
 
     // List/empty/error must NOT render in the loading frame.
@@ -351,7 +357,9 @@ describe('discovery.vue - five behavioral states', () => {
     expect(link.attributes('href')).toBe('https://pavillion.social');
     expect(link.attributes('target')).toBe('_blank');
     expect(link.attributes('rel')).toContain('noopener');
-    expect(link.text()).toBe(enSystem.discovery.learn_more);
+    expect(link.text()).toContain(enSystem.discovery.learn_more);
+    // SR-only context warns assistive tech that the link opens in a new tab.
+    expect(link.text()).toContain(enSystem.opens_in_new_tab);
   });
 });
 

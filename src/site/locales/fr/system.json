@@ -6,6 +6,9 @@
         "beta_label": "Beta"
     },
     "powered_by": "Propulsé par Pavillion",
+    "footer": {
+        "login_link": "Se connecter"
+    },
     "discovery": {
         "page_title": "Calendriers sur cette instance",
         "meta_description": "Parcourez les calendriers publics hébergés sur cette instance Pavillion.",

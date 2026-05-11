@@ -304,7 +304,7 @@ onBeforeMount(async () => {
   margin: 0 0 $public-space-sm 0;
 
   @include public-tablet-up {
-    font-size: 2.25rem;
+    font-size: $public-font-size-3xl;
   }
 }
 

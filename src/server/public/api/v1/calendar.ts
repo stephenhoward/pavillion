@@ -3,6 +3,7 @@ import PublicCalendarInterface from '../../interface';
 import { SeriesNotFoundError } from '@/common/exceptions/series';
 import { EventNotFoundError } from '@/common/exceptions/calendar';
 import { logError } from '@/server/common/helper/error-logger';
+import { Calendar } from '@/common/model/calendar';
 import { CalendarEventSchedule } from '@/common/model/events';
 import CalendarEventInstance from '@/common/model/event_instance';
 import { EventSeries } from '@/common/model/event_series';
@@ -13,32 +14,45 @@ import { publicEventInstanceByIp, publicCalendarListByIp } from '@/server/common
 import ExpressHelper from '@/server/common/helper/express';
 
 /**
- * Shapes a Calendar.toObject() result for public responses.
+ * Shapes a raw Calendar object for public consumption via an explicit
+ * allow-list. Accepts either a model instance (and calls `.toObject()`
+ * internally) or an already-serialized plain object — same shape contract
+ * as `toPublicSeriesObject` and `toPublicCategoryObject` below.
  *
- * Responsibilities:
- *   - Strips internal fields not intended for anonymous public consumers.
- *     Currently drops `listed` (an admin-discovery flag — knowing whether
- *     a calendar is hidden from the /view/ index is not the public's
- *     business; the calendar is reachable by direct URL regardless).
- *   - Projects `defaultEventImage` to `{ id, mimeType }` only — internal
- *     fields like originalFilename, fileSize, status, sha256, calendarId,
- *     and storageFilename are removed.
+ * Allow-listed fields: id, urlName, publicUrl, description, languages,
+ * defaultDateRange, content, plus a projected `defaultEventImage`.
  *
- * Allow-list / strip-by-name posture matches the toPublicEventObject helper
- * below so future additions to Calendar.toObject() do not silently leak
- * through this surface.
+ * Dropped from the calendar root:
+ *   - `listed` — owner-discovery flag; knowing whether a calendar is hidden
+ *     from the /view/ index is not the public's business.
+ *   - `widgetAllowedDomain` — operator-internal embed-policy config.
+ *   - `defaultEventImageId` — internal FK; the projected
+ *     `defaultEventImage.id` already carries the identifier callers need.
+ *
+ * Nested `defaultEventImage` → `{ id, mimeType }`; absent collapses to null.
+ *
+ * Per DEC-003 the canonical `Calendar.toObject()` shape stays full because
+ * authenticated calendar/owner APIs legitimately need the FKs and embed
+ * config; per DEC-004 the privacy boundary is a property of the audience
+ * (Tier 1 anonymous public).
+ *
+ * Why allow-list (not delete-by-name): future additions to
+ * `Calendar.toObject()` must fail loudly here, not silently leak.
  */
-function toPublicCalendarObject(calendarObj: Record<string, any>): Record<string, any> {
-  // Drop `listed` (admin-discovery flag) via destructure-and-discard; the
-  // ESLint config treats leading-underscore names as intentionally unused.
-  const { listed: _listed, ...rest } = calendarObj; // eslint-disable-line @typescript-eslint/no-unused-vars
-  if (!rest.defaultEventImage) return rest;
+function toPublicCalendarObject(calendar: Calendar | Record<string, any>): Record<string, any> {
+  const obj = calendar instanceof Calendar ? calendar.toObject() : calendar;
+  const defaultEventImage = obj.defaultEventImage
+    ? { id: obj.defaultEventImage.id, mimeType: obj.defaultEventImage.mimeType }
+    : null;
   return {
-    ...rest,
-    defaultEventImage: {
-      id: rest.defaultEventImage.id,
-      mimeType: rest.defaultEventImage.mimeType,
-    },
+    id: obj.id,
+    urlName: obj.urlName,
+    publicUrl: obj.publicUrl,
+    description: obj.description,
+    languages: obj.languages,
+    defaultDateRange: obj.defaultDateRange,
+    defaultEventImage,
+    content: obj.content,
   };
 }
 
@@ -296,8 +310,7 @@ export default class CalendarRoutes {
 
     const calendar = await this.service.getCalendarByName(req.params.urlName);
     if (calendar) {
-      const calendarObj = calendar.toObject();
-      res.json(toPublicCalendarObject(calendarObj));
+      res.json(toPublicCalendarObject(calendar));
     }
     else {
       res.status(404).json({

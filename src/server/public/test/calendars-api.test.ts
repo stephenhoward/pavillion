@@ -145,16 +145,46 @@ describe('Public Calendars Discovery API (pv-u4ew.3)', () => {
     });
   });
 
-  describe('GET /api/public/v1/calendars - allow-list projection (enumerated negative fields)', () => {
-    /**
-     * Per privacy/api-responses, the discovery list must use an allow-list
-     * projection — NOT a toObject() passthrough. Each negative-field assertion
-     * is enumerated individually so a future toObject() addition is caught
-     * field-by-field, not swallowed by a single broad `expect.objectContaining`.
-     */
-    let row: any;
+  /**
+   * Public discovery row projection contract: each row must allow-list only
+   * `{ content, id, lastEventActivity, urlName }`. Internal/operator fields
+   * (`widgetAllowedDomain`, `defaultEventImageId`, `defaultEventImage`,
+   * `publicUrl`, `languages`, `defaultDateRange`, `listed`, top-level
+   * `description`) and any account FKs (`accountId`, `ownerId`) must never
+   * appear — they are either internal config or have no Tier-1 anonymous
+   * public use case for the discovery surface.
+   *
+   * Mirrors the pv-3vso allow-list assertion pattern from `events-api.test.ts`
+   * (assertSeriesProjection / assertCategoryProjection): bidirectional
+   * `Object.keys().sort().toEqual()` plus explicit per-field absence asserts
+   * for clarity / future-regression readability.
+   */
+  function assertDiscoveryListingProjection(row: Record<string, any>) {
+    expect(row).not.toBeNull();
+    // Bidirectional allow-list check — catches both an extra key (leak) and
+    // a missing required key (dropped public field).
+    expect(Object.keys(row).sort()).toEqual(
+      ['content', 'id', 'lastEventActivity', 'urlName'],
+    );
+    // Spell out the disallowed fields for clarity / future regressions.
+    expect(row.widgetAllowedDomain).toBeUndefined();
+    expect(row.defaultEventImageId).toBeUndefined();
+    expect(row.defaultEventImage).toBeUndefined();
+    expect(row.publicUrl).toBeUndefined();
+    expect(row.languages).toBeUndefined();
+    expect(row.defaultDateRange).toBeUndefined();
+    expect(row.listed).toBeUndefined();
+    expect(row.description).toBeUndefined();
+    expect(row.account).toBeUndefined();
+    expect(row.accountId).toBeUndefined();
+    expect(row.owner).toBeUndefined();
+    expect(row.ownerId).toBeUndefined();
+    expect(row.createdAt).toBeUndefined();
+    expect(row.updatedAt).toBeUndefined();
+  }
 
-    beforeEach(async () => {
+  describe('GET /api/public/v1/calendars - allow-list projection', () => {
+    it('row contains only allow-listed keys and no internal/operator fields', async () => {
       const cal = buildLeakyCalendar('cal-1', 'alpha');
       const listStub = apiSandbox.stub(publicInterface, 'listPublicCalendars');
       listStub.resolves([
@@ -162,54 +192,8 @@ describe('Public Calendars Discovery API (pv-u4ew.3)', () => {
       ]);
 
       const response = await request(buildApp()).get('/api/public/v1/calendars');
-      row = response.body[0];
-    });
 
-    it('does NOT include widgetAllowedDomain', () => {
-      expect(row.widgetAllowedDomain).toBeUndefined();
-    });
-
-    it('does NOT include defaultEventImageId', () => {
-      expect(row.defaultEventImageId).toBeUndefined();
-    });
-
-    it('does NOT include defaultEventImage', () => {
-      expect(row.defaultEventImage).toBeUndefined();
-    });
-
-    it('does NOT include publicUrl', () => {
-      expect(row.publicUrl).toBeUndefined();
-    });
-
-    it('does NOT include languages', () => {
-      expect(row.languages).toBeUndefined();
-    });
-
-    it('does NOT include defaultDateRange', () => {
-      expect(row.defaultDateRange).toBeUndefined();
-    });
-
-    it('does NOT include listed', () => {
-      expect(row.listed).toBeUndefined();
-    });
-
-    it('does NOT include owner / account info', () => {
-      expect(row.account).toBeUndefined();
-      expect(row.accountId).toBeUndefined();
-      expect(row.owner).toBeUndefined();
-      expect(row.ownerId).toBeUndefined();
-    });
-
-    it('does NOT include internal createdAt / updatedAt timestamps', () => {
-      expect(row.createdAt).toBeUndefined();
-      expect(row.updatedAt).toBeUndefined();
-    });
-
-    it('does NOT include top-level description (only per-language description survives)', () => {
-      // The Calendar model carries a top-level `description` separate from the
-      // per-language content.description. The allow-list projection drops the
-      // top-level field; per-language descriptions arrive inside content[].
-      expect(row.description).toBeUndefined();
+      assertDiscoveryListingProjection(response.body[0]);
     });
   });
 
@@ -275,11 +259,13 @@ describe('Public Calendars Discovery API (pv-u4ew.3)', () => {
 });
 
 /**
- * Cross-bead regression from pv-u4ew.1 privacy-audit note: the existing
- * single-calendar endpoint GET /api/public/v1/calendar/:urlName must NOT
- * expose the `listed` flag now that Calendar.toObject() includes it.
+ * Single-calendar projection contract: GET /api/public/v1/calendar/:urlName
+ * must allow-list only the public-tier fields. Internal config
+ * (`widgetAllowedDomain`), internal FKs (`defaultEventImageId`), and the
+ * owner-discovery flag (`listed`) must never appear. Mirrors the pv-3vso
+ * projection-helper assertion pattern in events-api.test.ts.
  */
-describe('Public Calendar API - listed field NOT exposed on single-calendar endpoint (pv-u4ew.1 audit)', () => {
+describe('Public Calendar API - GET /calendar/:urlName projection', () => {
   let routes: CalendarRoutes;
   let router: express.Router;
   let publicInterface: PublicCalendarInterface;
@@ -297,10 +283,46 @@ describe('Public Calendar API - listed field NOT exposed on single-calendar endp
     apiSandbox.restore();
   });
 
-  it('strips listed=true from GET /calendar/:urlName response', async () => {
-    const calendar = new Calendar('cal-id', 'test-calendar');
-    calendar.listed = true;
+  /**
+   * Public single-calendar projection contract: response allow-lists only
+   * `{ content, defaultDateRange, defaultEventImage, description, id,
+   *    languages, publicUrl, urlName }`. Internal/operator fields must
+   * never appear.
+   */
+  function assertCalendarRootProjection(body: Record<string, any>) {
+    expect(body).not.toBeNull();
+    expect(Object.keys(body).sort()).toEqual(
+      [
+        'content',
+        'defaultDateRange',
+        'defaultEventImage',
+        'description',
+        'id',
+        'languages',
+        'publicUrl',
+        'urlName',
+      ],
+    );
+    // Spell out the disallowed fields for clarity / future regressions.
+    expect(body.listed).toBeUndefined();
+    expect(body.widgetAllowedDomain).toBeUndefined();
+    expect(body.defaultEventImageId).toBeUndefined();
+  }
 
+  function buildCalendarWithLeakyInternals(listed: boolean): Calendar {
+    const calendar = new Calendar('cal-id', 'test-calendar');
+    calendar.publicUrl = 'https://pavillion.dev/view/test-calendar';
+    calendar.languages = ['en'];
+    calendar.description = '';
+    calendar.defaultDateRange = '1month';
+    calendar.widgetAllowedDomain = 'widget.example.com';
+    calendar.defaultEventImageId = 'media-id-should-not-leak';
+    calendar.listed = listed;
+    return calendar;
+  }
+
+  it('returns the allow-listed projection for a listed calendar', async () => {
+    const calendar = buildCalendarWithLeakyInternals(true);
     const calendarStub = apiSandbox.stub(publicInterface, 'getCalendarByName');
     calendarStub.resolves(calendar);
 
@@ -312,15 +334,13 @@ describe('Public Calendar API - listed field NOT exposed on single-calendar endp
     const response = await request(testApp(router)).get('/handler');
 
     expect(response.status).toBe(200);
-    expect(response.body.listed).toBeUndefined();
+    assertCalendarRootProjection(response.body);
   });
 
-  it('strips listed=false from GET /calendar/:urlName response', async () => {
+  it('returns the same allow-listed projection for an unlisted calendar reachable by direct URL', async () => {
     // An unlisted calendar reachable by direct URL must not advertise its
     // hidden-from-discovery status to anonymous visitors.
-    const calendar = new Calendar('cal-id', 'test-calendar');
-    calendar.listed = false;
-
+    const calendar = buildCalendarWithLeakyInternals(false);
     const calendarStub = apiSandbox.stub(publicInterface, 'getCalendarByName');
     calendarStub.resolves(calendar);
 
@@ -332,6 +352,6 @@ describe('Public Calendar API - listed field NOT exposed on single-calendar endp
     const response = await request(testApp(router)).get('/handler');
 
     expect(response.status).toBe(200);
-    expect(response.body.listed).toBeUndefined();
+    assertCalendarRootProjection(response.body);
   });
 });

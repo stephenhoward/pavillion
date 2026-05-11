@@ -4,6 +4,8 @@ import { DateTime } from 'luxon';
 
 import CalendarService from '@/site/service/calendar';
 import ModelService from '@/client/service/models';
+import ListResult from '@/client/service/list-result';
+import { Calendar } from '@/common/model/calendar';
 import CalendarEventInstance from '@/common/model/event_instance';
 
 describe('CalendarService.loadEventInstance', () => {
@@ -94,5 +96,165 @@ describe('CalendarService.loadEventInstance', () => {
     await expect(
       service.loadEventInstance('evt-1', startTime),
     ).rejects.toThrow('Request failed with status code 400');
+  });
+});
+
+describe('CalendarService.listPublicCalendars', () => {
+  const sandbox = sinon.createSandbox();
+  let service: CalendarService;
+
+  beforeEach(() => {
+    service = new CalendarService({} as any, {} as any);
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+  });
+
+  it('maps a row with valid content[] into a Calendar with populated CalendarContent per language', async () => {
+    sandbox.stub(ModelService, 'listModels').resolves(
+      ListResult.fromArray([
+        {
+          id: 'cal-1',
+          urlName: 'mycal',
+          content: [
+            { language: 'en', name: 'My Calendar', description: 'English desc' },
+            { language: 'es', name: 'Mi Calendario', description: 'Spanish desc' },
+          ],
+          lastEventActivity: '2026-05-08T12:00:00.000Z',
+        },
+      ]),
+    );
+
+    const result = await service.listPublicCalendars();
+
+    expect(result).toHaveLength(1);
+    expect(result[0].calendar).toBeInstanceOf(Calendar);
+    expect(result[0].calendar.id).toBe('cal-1');
+    expect(result[0].calendar.urlName).toBe('mycal');
+    expect(result[0].calendar.getLanguages().sort()).toEqual(['en', 'es']);
+    expect(result[0].calendar.content('en').name).toBe('My Calendar');
+    expect(result[0].calendar.content('en').description).toBe('English desc');
+    expect(result[0].calendar.content('es').name).toBe('Mi Calendario');
+    expect(result[0].calendar.content('es').description).toBe('Spanish desc');
+    expect(result[0].lastEventActivity).toBe('2026-05-08T12:00:00.000Z');
+  });
+
+  it('produces a Calendar with no preloaded content when row.content is null', async () => {
+    sandbox.stub(ModelService, 'listModels').resolves(
+      ListResult.fromArray([
+        {
+          id: 'cal-2',
+          urlName: 'empty-content-null',
+          content: null,
+          lastEventActivity: null,
+        },
+      ]),
+    );
+
+    const result = await service.listPublicCalendars();
+
+    expect(result).toHaveLength(1);
+    expect(result[0].calendar).toBeInstanceOf(Calendar);
+    expect(result[0].calendar.getLanguages()).toEqual([]);
+  });
+
+  it('produces a Calendar with no preloaded content when row.content is an empty array', async () => {
+    sandbox.stub(ModelService, 'listModels').resolves(
+      ListResult.fromArray([
+        {
+          id: 'cal-3',
+          urlName: 'empty-content-arr',
+          content: [],
+          lastEventActivity: null,
+        },
+      ]),
+    );
+
+    const result = await service.listPublicCalendars();
+
+    expect(result).toHaveLength(1);
+    expect(result[0].calendar.getLanguages()).toEqual([]);
+  });
+
+  it('silently discards content entries missing a language', async () => {
+    sandbox.stub(ModelService, 'listModels').resolves(
+      ListResult.fromArray([
+        {
+          id: 'cal-4',
+          urlName: 'partial',
+          content: [
+            { language: 'en', name: 'Has lang', description: 'd' },
+            { name: 'No lang', description: 'd' },
+            { language: null, name: 'Null lang', description: 'd' },
+            null,
+          ],
+          lastEventActivity: null,
+        },
+      ]),
+    );
+
+    const result = await service.listPublicCalendars();
+
+    expect(result).toHaveLength(1);
+    expect(result[0].calendar.getLanguages()).toEqual(['en']);
+    expect(result[0].calendar.content('en').name).toBe('Has lang');
+  });
+
+  it('defaults missing name and description to empty string', async () => {
+    sandbox.stub(ModelService, 'listModels').resolves(
+      ListResult.fromArray([
+        {
+          id: 'cal-5',
+          urlName: 'defaults',
+          content: [
+            { language: 'en' },
+          ],
+          lastEventActivity: null,
+        },
+      ]),
+    );
+
+    const result = await service.listPublicCalendars();
+
+    expect(result[0].calendar.content('en').name).toBe('');
+    expect(result[0].calendar.content('en').description).toBe('');
+  });
+
+  it('passes lastEventActivity through as null when the API returns null', async () => {
+    sandbox.stub(ModelService, 'listModels').resolves(
+      ListResult.fromArray([
+        {
+          id: 'cal-6',
+          urlName: 'no-activity',
+          content: [{ language: 'en', name: 'n', description: 'd' }],
+          lastEventActivity: null,
+        },
+      ]),
+    );
+
+    const result = await service.listPublicCalendars();
+
+    expect(result[0].lastEventActivity).toBeNull();
+  });
+
+  it('passes lastEventActivity through as the ISO string supplied by the API', async () => {
+    // PublicCalendarListing types lastEventActivity as `string | null` — the
+    // backend serializes the timestamp as an ISO 8601 string.
+    sandbox.stub(ModelService, 'listModels').resolves(
+      ListResult.fromArray([
+        {
+          id: 'cal-7',
+          urlName: 'with-activity',
+          content: [{ language: 'en', name: 'n', description: 'd' }],
+          lastEventActivity: '2026-04-22T09:30:00.000Z',
+        },
+      ]),
+    );
+
+    const result = await service.listPublicCalendars();
+
+    expect(result[0].lastEventActivity).toBe('2026-04-22T09:30:00.000Z');
+    expect(typeof result[0].lastEventActivity).toBe('string');
   });
 });

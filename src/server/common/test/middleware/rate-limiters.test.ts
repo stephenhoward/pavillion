@@ -13,6 +13,7 @@ import {
   reportVerificationByIp,
   reportSubmissionByAccount,
   publicEventInstanceByIp,
+  publicCalendarListByIp,
   applicationByIp,
   applicationByEmail,
   confirmApplicationByIp,
@@ -92,6 +93,14 @@ describe('rate-limiters', () => {
       expect(windowMs).toBe(900000); // 15 minutes
     });
 
+    it('should use correct config values for public calendar list by IP', () => {
+      const maxRequests = config.get<number>('rateLimit.publicCalendarList.byIp.max');
+      const windowMs = config.get<number>('rateLimit.publicCalendarList.byIp.windowMs');
+
+      expect(maxRequests).toBe(60);
+      expect(windowMs).toBe(60000); // 1 minute
+    });
+
     it('should use correct config values for application by IP', () => {
       const maxRequests = config.get<number>('rateLimit.application.byIp.max');
       const windowMs = config.get<number>('rateLimit.application.byIp.windowMs');
@@ -167,6 +176,11 @@ describe('rate-limiters', () => {
     it('should export publicEventInstanceByIp limiter', () => {
       expect(publicEventInstanceByIp).toBeDefined();
       expect(typeof publicEventInstanceByIp).toBe('function');
+    });
+
+    it('should export publicCalendarListByIp limiter', () => {
+      expect(publicCalendarListByIp).toBeDefined();
+      expect(typeof publicCalendarListByIp).toBe('function');
     });
 
     it('should export applicationByIp limiter', () => {
@@ -520,6 +534,23 @@ describe('rate-limiters', () => {
       });
 
       const response = await request(app).get('/instance');
+      expect(response.status).toBe(200);
+
+      if (config.get<boolean>('rateLimit.enabled')) {
+        expect(response.headers['ratelimit-limit']).toBeDefined();
+        expect(response.headers['ratelimit-remaining']).toBeDefined();
+      }
+      else {
+        expect(response.headers['ratelimit-limit']).toBeUndefined();
+      }
+    });
+
+    it('should apply publicCalendarListByIp limiter to endpoint', async () => {
+      app.get('/calendars', publicCalendarListByIp, (req, res) => {
+        res.json({ success: true });
+      });
+
+      const response = await request(app).get('/calendars');
       expect(response.status).toBe(200);
 
       if (config.get<boolean>('rateLimit.enabled')) {

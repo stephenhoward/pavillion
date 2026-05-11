@@ -60,6 +60,7 @@ class Calendar extends TranslatedModel<CalendarContent> {
       widgetAllowedDomain: this.widgetAllowedDomain,
       defaultEventImageId: this.defaultEventImageId,
       defaultEventImage: this.defaultEventImage?.toObject() ?? null,
+      // Owner/admin-tier field: public endpoints must strip via toPublicCalendarObject (or omit from allow-list projection).
       listed: this.listed,
       content: Object.fromEntries(
         Object.entries(this._content)
