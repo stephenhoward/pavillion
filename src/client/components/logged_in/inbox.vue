@@ -272,7 +272,7 @@ onUnmounted(() => {
             </template>
             <template #2>
               <router-link
-                v-if="notification.eventId"
+                v-if="notification.eventId && resolveEventTitle(notification)"
                 :to="{ name: 'event_edit', params: { eventId: notification.eventId } }"
                 class="event-link"
               >{{ resolveEventTitle(notification) }}</router-link>
@@ -305,7 +305,7 @@ onUnmounted(() => {
             </template>
             <template #2>
               <router-link
-                v-if="notification.eventId"
+                v-if="notification.eventId && resolveEventTitle(notification)"
                 :to="{ name: 'event_edit', params: { eventId: notification.eventId } }"
                 class="event-link"
               >{{ resolveEventTitle(notification) }}</router-link>
