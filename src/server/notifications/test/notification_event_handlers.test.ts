@@ -753,6 +753,20 @@ describe('NotificationEventHandlers', () => {
 
   // ---------------------------------------------------------------------------
   // activitypub:event:unreposted
+  //
+  // Two-flow contract (pv-cou0):
+  //   - The bus event name is unified across both flows.
+  //   - The handler branches on actorAccountId presence:
+  //       * Local flow (actorAccountId set, actorUrl null): a local editor
+  //         unposted a reposted event. The initiating editor is excluded
+  //         from the fan-out — "owner-initiated actions exclude initiator".
+  //       * Inbound flow (actorAccountId null, actorUrl set): a remote
+  //         calendar undid a share of a local event. No local initiator
+  //         exists; ALL editors of the source calendar are notified, and
+  //         actorUrl carries the remote actor's https:// profile URL.
+  //   - createNotification is always called with type 'unshare' (single
+  //     type for both flows). The 5th positional argument (actorUrl) is
+  //     null on the local flow and the remote URL on the inbound flow.
   // ---------------------------------------------------------------------------
 
   describe('activitypub:event:unreposted', () => {
@@ -904,6 +918,104 @@ describe('NotificationEventHandlers', () => {
         actorAccountId: actorId,
         actorName: 'Alice',
         actorUrl: null,
+      });
+
+      await new Promise(resolve => setImmediate(resolve));
+    });
+
+    // -------------------------------------------------------------------------
+    // Inbound flow (pv-cou0.2 emit site): actorAccountId is null, actorUrl is
+    // the remote calendar's https:// profile URL. The handler must notify ALL
+    // editors (no exclusion) because there is no local initiator.
+    // -------------------------------------------------------------------------
+
+    it('should call createNotification for ALL editors on the inbound flow (no exclusion)', async () => {
+      const calendarId = uuidv4();
+      const eventId = uuidv4();
+      const accountA = new Account(uuidv4(), 'alice', 'alice@example.com');
+      const accountB = new Account(uuidv4(), 'bob', 'bob@example.com');
+      const accountC = new Account(uuidv4(), 'carol', 'carol@example.com');
+
+      getEditorsStub.resolves([accountA, accountB, accountC]);
+      createNotificationStub.resolves(null);
+
+      eventBus.emit('activitypub:event:unreposted', {
+        eventId,
+        calendarId,
+        actorAccountId: null,
+        actorName: 'Brewery Tour Collective',
+        actorUrl: 'https://remote.instance/calendars/brewery-tour',
+      });
+
+      await new Promise(resolve => setImmediate(resolve));
+
+      expect(getEditorsStub.calledOnceWith(calendarId)).toBe(true);
+      // No initiator to exclude — every editor of the source calendar is notified.
+      expect(createNotificationStub.callCount).toBe(3);
+      const recipientIds = createNotificationStub.getCalls().map(call => call.args[5]);
+      expect(recipientIds).toContain(accountA.id);
+      expect(recipientIds).toContain(accountB.id);
+      expect(recipientIds).toContain(accountC.id);
+    });
+
+    it('should create inbound unshare notifications with the remote actorUrl and actorName', async () => {
+      const calendarId = uuidv4();
+      const eventId = uuidv4();
+      const editorId = uuidv4();
+      const editor = new Account(editorId, 'alice', 'alice@example.com');
+      const remoteActorUrl = 'https://remote.instance/calendars/brewery-tour';
+
+      getEditorsStub.resolves([editor]);
+      createNotificationStub.resolves(null);
+
+      eventBus.emit('activitypub:event:unreposted', {
+        eventId,
+        calendarId,
+        actorAccountId: null,
+        actorName: 'Brewery Tour Collective',
+        actorUrl: remoteActorUrl,
+      });
+
+      await new Promise(resolve => setImmediate(resolve));
+
+      const [type, calId, evtId, actorName, actorUrl, acctId] = createNotificationStub.firstCall.args;
+      expect(type).toBe('unshare');
+      expect(calId).toBe(calendarId);
+      expect(evtId).toBe(eventId);
+      expect(actorName).toBe('Brewery Tour Collective');
+      // Inbound flow: actorUrl is the https profile URL, not null.
+      expect(actorUrl).toBe(remoteActorUrl);
+      expect(acctId).toBe(editorId);
+    });
+
+    it('should not rethrow errors from getEditorsForCalendar on the inbound flow', async () => {
+      getEditorsStub.rejects(new Error('DB error'));
+
+      eventBus.emit('activitypub:event:unreposted', {
+        eventId: uuidv4(),
+        calendarId: uuidv4(),
+        actorAccountId: null,
+        actorName: 'Brewery Tour Collective',
+        actorUrl: 'https://remote.instance/calendars/brewery-tour',
+      });
+
+      await new Promise(resolve => setImmediate(resolve));
+
+      expect(createNotificationStub.called).toBe(false);
+    });
+
+    it('should not rethrow errors from createNotification on the inbound flow', async () => {
+      const editor = new Account(uuidv4(), 'editor', 'editor@example.com');
+      getEditorsStub.resolves([editor]);
+      createNotificationStub.rejects(new Error('insert error'));
+
+      // Should not throw
+      eventBus.emit('activitypub:event:unreposted', {
+        eventId: uuidv4(),
+        calendarId: uuidv4(),
+        actorAccountId: null,
+        actorName: 'Brewery Tour Collective',
+        actorUrl: 'https://remote.instance/calendars/brewery-tour',
       });
 
       await new Promise(resolve => setImmediate(resolve));

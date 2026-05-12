@@ -85,6 +85,8 @@ describe('InboxView', () => {
               repost_description_no_event: '{1} reposted one of your events',
               unshare_description: '{{actorName}} unposted a reposted event from {{calendarName}}',
               unshare_description_no_calendar: '{{actorName}} unposted a reposted event from your calendar',
+              unshare_description_remote: '{1} unposted your event {2}',
+              unshare_description_remote_no_event: '{1} unposted one of your events',
               report_received: 'A report was filed against an event on {{calendarName}}',
               report_received_no_calendar: 'A report was filed against an event on your calendar',
               report_verified: 'A reporter completed verification for a report on {{calendarName}}',
@@ -507,6 +509,52 @@ describe('InboxView', () => {
 
     expect(wrapper.text()).toContain('Alice');
     expect(wrapper.text()).toContain('unposted a reposted event from your calendar');
+  });
+
+  it('renders inbound unshare notification with actor link when actorUrl is set', async () => {
+    // Inbound actor: actor_url is set, renderer uses i18next slot template
+    // with an <a class="actor-link"> anchor — parallels follow/repost rather
+    // than the local-flow plain-text branch above. Calendar-style display
+    // name reflects the AP model (calendars are the actors for federation
+    // actions) per pv-cou0.
+    const eventStore = useEventStore();
+    eventStore.setEventsForCalendar('cal-1', [makeEvent('evt-123', 'Pottery Workshop')]);
+
+    const store = useNotificationStore();
+    vi.spyOn(store, 'fetchNotifications').mockResolvedValue(undefined);
+    vi.spyOn(store, 'markAllSeen').mockResolvedValue(undefined);
+    store.notifications = [
+      makeNotification({
+        type: 'unshare',
+        calendarId: 'cal-1',
+        eventId: 'evt-123',
+        actorName: 'Brewery Tour Collective',
+        actorUrl: 'https://remote.instance/calendars/brewery-tour',
+      }),
+    ];
+
+    const wrapper = mount(InboxView, {
+      global: {
+        plugins: [pinia, [I18NextVue, { i18next }]],
+        stubs: { RouterLink: RouterLinkStub },
+      },
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await wrapper.vm.$nextTick();
+
+    // Actor link renders with the calendar-style display name and the https URL.
+    const link = wrapper.find('a.actor-link');
+    expect(link.exists()).toBe(true);
+    expect(link.text()).toContain('Brewery Tour Collective');
+    expect(link.attributes('href')).toBe('https://remote.instance/calendars/brewery-tour');
+    expect(link.attributes('rel')).toBe('noopener noreferrer');
+    expect(link.attributes('target')).toBe('_blank');
+    // The rendered text mentions both the actor and the event title.
+    expect(wrapper.text()).toContain('Brewery Tour Collective');
+    expect(wrapper.text()).toContain('Pottery Workshop');
+    // No span.actor-name fallback when the link is present.
+    expect(wrapper.find('span.actor-name').exists()).toBe(false);
   });
 
   // ---------------------------------------------------------------------------

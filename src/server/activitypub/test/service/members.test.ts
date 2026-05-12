@@ -1105,8 +1105,8 @@ describe("unshareEvent - activitypub:event:unreposted emission", () => {
     sandbox.restore();
   });
 
-  it('should emit activitypub:event:unreposted with { eventId, calendarId } for each share before destruction', async () => {
-    const account = Account.fromObject({ id: 'test-account-id' });
+  it('should emit activitypub:event:unreposted with the unified local-flow payload for each share before destruction', async () => {
+    const account = Account.fromObject({ id: 'test-account-id', displayName: 'Alice' });
     const calendar = Calendar.fromObject({ id: 'test-calendar-id', urlName: 'test-calendar' });
     const eventApUrl = 'https://remote.example.com/events/event-456';
     const localEventUuid = 'ffffffff-1111-2222-3333-444444444444';
@@ -1143,10 +1143,18 @@ describe("unshareEvent - activitypub:event:unreposted emission", () => {
 
     await service.unshareEvent(account, calendar, eventApUrl);
 
-    // Verify activitypub:event:unreposted was emitted with correct payload
+    // Verify activitypub:event:unreposted was emitted with the full unified
+    // local-flow payload (pv-cou0): eventId + calendarId for routing,
+    // actorAccountId set so the notification handler's local branch can
+    // exclude the initiator from fan-out, actorName carrying the editor's
+    // display name, and actorUrl null so the inbox renderer picks the
+    // plain-text Mustache template rather than the i18next slot template.
     expect(emittedPayloads).toHaveLength(1);
     expect(emittedPayloads[0].eventId).toBe(localEventUuid);
     expect(emittedPayloads[0].calendarId).toBe(calendar.id);
+    expect(emittedPayloads[0].actorAccountId).toBe(account.id);
+    expect(emittedPayloads[0].actorName).toBe(account.displayName);
+    expect(emittedPayloads[0].actorUrl).toBeNull();
   });
 
   it('should emit activitypub:event:unreposted after the transaction commits (after share.destroy)', async () => {
@@ -1190,7 +1198,7 @@ describe("unshareEvent - activitypub:event:unreposted emission", () => {
   });
 
   it('should emit activitypub:event:unreposted for each share when multiple shares exist', async () => {
-    const account = Account.fromObject({ id: 'test-account-id' });
+    const account = Account.fromObject({ id: 'test-account-id', displayName: 'Alice' });
     const calendar = Calendar.fromObject({ id: 'test-calendar-id', urlName: 'test-calendar' });
     const eventApUrl = 'https://remote.example.com/events/event-multi';
     const localEventUuid = 'dddddddd-1111-2222-3333-444444444444';
@@ -1216,12 +1224,18 @@ describe("unshareEvent - activitypub:event:unreposted emission", () => {
 
     await service.unshareEvent(account, calendar, eventApUrl);
 
-    // Verify activitypub:event:unreposted was emitted for each share
+    // Verify activitypub:event:unreposted was emitted for each share with
+    // the full local-flow payload (eventId, calendarId, actorAccountId,
+    // actorName, actorUrl: null). Per-share assertion guards against a
+    // regression that drops actor fields on subsequent emissions.
     expect(emittedPayloads).toHaveLength(2);
-    expect(emittedPayloads[0].eventId).toBe(localEventUuid);
-    expect(emittedPayloads[0].calendarId).toBe(calendar.id);
-    expect(emittedPayloads[1].eventId).toBe(localEventUuid);
-    expect(emittedPayloads[1].calendarId).toBe(calendar.id);
+    for (const payload of emittedPayloads) {
+      expect(payload.eventId).toBe(localEventUuid);
+      expect(payload.calendarId).toBe(calendar.id);
+      expect(payload.actorAccountId).toBe(account.id);
+      expect(payload.actorName).toBe(account.displayName);
+      expect(payload.actorUrl).toBeNull();
+    }
   });
 
   it('should not emit activitypub:event:unreposted when no shares exist', async () => {

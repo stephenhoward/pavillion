@@ -726,6 +726,66 @@ describe('ProcessInboxService - Follow Activity Processing', () => {
       expect(emittedEvents[0].actorName).toBe(remoteActorUrl);
       expect(emittedEvents[0].actorName).toBeTruthy();
     });
+
+    it('should not emit activitypub:event:unreposted when remoteCalendar.actor_uri uses non-https scheme', async () => {
+      // SECURITY: load-bearing https:// guard at src/server/activitypub/service/inbox.ts.
+      // The remote actor URI is stored on the resulting notification row and
+      // rendered as a link target, so a non-https scheme is unsafe to persist.
+      // The guard governs the EMIT only, not the destroy — replay idempotency
+      // depends on the EventActivityEntity row being removed regardless of
+      // scheme, so a subsequent Undo(Announce) doesn't get re-processed.
+      //
+      // Negative coverage: this test exists explicitly so the guard cannot be
+      // silently weakened (e.g. to a case-insensitive check or normalized URL
+      // check) in a later refactor without flipping a test.
+      const remoteActorUrl = 'http://remote.instance/calendars/brewery-tour';
+      const localEventId = uuidv4();
+      const apObjectId = `http://remote.instance/events/${localEventId}`;
+
+      const remoteCalendarActor = await CalendarActorEntity.create({
+        id: uuidv4(),
+        actor_type: 'remote',
+        actor_uri: remoteActorUrl,
+        remote_display_name: 'Brewery Tour Collective',
+        remote_domain: 'remote.instance',
+        calendar_id: null,
+        private_key: null,
+      });
+
+      await EventObjectEntity.create({
+        event_id: localEventId,
+        ap_id: apObjectId,
+        attributed_to: 'http://remote.instance/calendars/test-calendar',
+      });
+
+      await EventActivityEntity.create({
+        event_id: apObjectId,
+        calendar_actor_id: remoteCalendarActor.id,
+        type: 'share',
+      });
+
+      const localEvent = new CalendarEvent(localEventId, testCalendar.id);
+      sandbox.stub(calendarInterface, 'getEventById').resolves(localEvent);
+
+      const emittedEvents: any[] = [];
+      eventBus.on('activitypub:event:unreposted', (payload) => emittedEvents.push(payload));
+
+      // Act
+      await inboxService.processUnshareEvent(testCalendar, {
+        message: { object: apObjectId, actor: remoteActorUrl },
+      } as any);
+
+      // Assert: emit was skipped on the non-https scheme
+      expect(emittedEvents).toHaveLength(0);
+
+      // Assert: the EventActivityEntity row was still destroyed — the https
+      // guard governs the emit, not the destroy. Replay idempotency depends
+      // on the row being removed regardless of scheme.
+      const remainingShare = await EventActivityEntity.findOne({
+        where: { event_id: apObjectId, calendar_actor_id: remoteCalendarActor.id, type: 'share' },
+      });
+      expect(remainingShare).toBeNull();
+    });
   });
 });
 

@@ -84,7 +84,7 @@ describe('unshareEvent - RepostDismissalEntity upsert', () => {
     });
 
     const calendar = Calendar.fromObject({ id: calendarId, urlName: 'test-calendar' });
-    const account = Account.fromObject({ id: 'test-account-id' });
+    const account = Account.fromObject({ id: 'test-account-id', displayName: 'Alice' });
 
     // Spy on eventBus.emit to verify exact post-commit payload
     const emitSpy = sandbox.spy(eventBus, 'emit');
@@ -110,15 +110,24 @@ describe('unshareEvent - RepostDismissalEntity upsert', () => {
     expect(addToOutboxStub.callCount).toBe(1);
 
     // eventBus.emit must fire exactly once for activitypub:event:unreposted
-    // with the expected core identifiers — captured share.event_id must
-    // survive entity destroy. The payload also carries actorAccountId /
-    // actorName / actorUrl for the notifications-domain handler (pv-nb0q,
-    // pv-cou0); sinon.match is used so this assertion stays focused on the
-    // dismissal-flow contract.
+    // with the unified two-flow payload (pv-cou0). On the local flow the
+    // captured share.event_id must survive entity destroy, actorAccountId
+    // carries the initiating editor's id, actorName carries their display
+    // name, and actorUrl MUST be null — the inbox renderer branches on
+    // actorUrl presence to pick the plain-text Mustache template (local)
+    // vs. the i18next slot template with <a class="actor-link"> (inbound).
+    // The fuller match here would catch a regression that drops any of the
+    // three actor fields from the local-flow payload.
     const unrepostEmits = emitSpy.getCalls().filter((c) => c.args[0] === 'activitypub:event:unreposted');
     expect(unrepostEmits).toHaveLength(1);
     expect(
-      emitSpy.calledWith('activitypub:event:unreposted', sinon.match({ eventId: localEventId, calendarId })),
+      emitSpy.calledWith('activitypub:event:unreposted', sinon.match({
+        eventId: localEventId,
+        calendarId,
+        actorAccountId: account.id,
+        actorName: 'Alice',
+        actorUrl: null,
+      })),
     ).toBe(true);
   });
 
