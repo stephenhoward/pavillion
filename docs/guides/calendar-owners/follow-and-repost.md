@@ -1,3 +1,7 @@
+---
+description: Connect your Pavillion calendar to others, review incoming events in a private feed, and repost what fits onto your public calendar.
+---
+
 # Bring in events from other calendars
 
 The neighborhood association down the street already runs a calendar. So does the music venue across town and the regional climate-action group. This guide is about bringing some of *their* events onto *your* calendar — finding the calendars that matter to your community, deciding what to do with what shows up, and choosing what to share.

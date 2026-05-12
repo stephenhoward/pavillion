@@ -1,5 +1,8 @@
 ---
 layout: home
+title: Pavillion — Federated events calendar documentation
+titleTemplate: false
+description: Documentation for Pavillion, a federated, privacy-first events calendar. Guides for calendar owners, instance administrators, and contributing developers.
 
 hero:
   name: Pavillion

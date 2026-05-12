@@ -1,3 +1,7 @@
+---
+description: Share your Pavillion calendar's public URL and federation handle — what each one is for, what visitors see, and how to share them on the web or in a chat.
+---
+
 # Share your public calendar URL
 
 > Status: stub. Full guide coming before launch.

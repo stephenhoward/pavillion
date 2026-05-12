@@ -1,3 +1,7 @@
+---
+description: Design a small, durable category vocabulary for your Pavillion calendar — filter the public page, link related events, and match across federated calendars.
+---
+
 # Organize events with categories
 
 Categories are the short list of buckets your events fall into — *Concert*, *Workshop*, *Community gathering*, *Volunteer days*. Visitors use them to filter your public page down to what they're looking for, and other calendars use them as the basis for matching when they repost your events alongside their own.

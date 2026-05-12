@@ -1,3 +1,7 @@
+---
+description: Handle visitor reports on your Pavillion calendar — review the queue, take action, and understand the boundary with instance-administrator moderation.
+---
+
 # Handle reports and content moderation
 
 > Status: placeholder. This guide will be written after launch.

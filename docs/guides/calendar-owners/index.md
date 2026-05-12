@@ -1,3 +1,7 @@
+---
+description: Guides for running a calendar on Pavillion — create events, manage editors, federate with other calendars, and share with your community.
+---
+
 # For calendar owners
 
 These guides are for the people running calendars on Pavillion — community organizers, venue staff, neighborhood associations, regional councils, anyone whose job it is to publish events that other people can find.

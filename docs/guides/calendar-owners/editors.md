@@ -1,3 +1,7 @@
+---
+description: Invite editors to your Pavillion calendar, manage their access, and understand what editors can and can't do compared to the calendar owner.
+---
+
 # Invite editors and manage their access
 
 Most calendars aren't run by one person. The volunteer who handles the music shows isn't the same person who handles the workshops, and neither of them wants to be the only one with the password. This guide is about adding people to the team — inviting editors, understanding what they can and can't do, removing someone when their role changes, and shaping access in ways that scale from a two-person project to a larger collective without losing track of who's allowed to do what.

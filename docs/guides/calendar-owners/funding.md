@@ -1,3 +1,7 @@
+---
+description: Enable a community funding plan on your Pavillion calendar — voluntary contributions that sustain the calendar, closer to public radio than to a subscription.
+---
+
 # Set up community funding
 
 > Status: placeholder. This guide will be written after launch.
