@@ -1,3 +1,7 @@
+---
+description: Customize the public identity of your Pavillion calendar — display name, description, languages, branding, bio, and URL handle.
+---
+
 # Customize your calendar's identity
 
 > Status: placeholder. This guide will be written after launch, once the identity-customization surface stabilizes.

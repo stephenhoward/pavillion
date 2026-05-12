@@ -1,3 +1,7 @@
+---
+description: Migrate events into Pavillion from Google Calendar, Nextcloud, WordPress, Gancio, Mobilizon, and other tools via standard ICS import.
+---
+
 # Migrate from another calendar via ICS import
 
 > Status: stub. Full guide coming before launch.

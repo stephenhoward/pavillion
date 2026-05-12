@@ -1,3 +1,7 @@
+---
+description: Decide when to create a new Pavillion calendar versus follow an existing one — and when categories handle the subdivision for a single community.
+---
+
 # Decide when to make a calendar (and when to follow one instead)
 
 > Status: placeholder. This guide will be written after launch.

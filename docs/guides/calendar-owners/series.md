@@ -1,3 +1,7 @@
+---
+description: Group related events into a Pavillion series — a named program of distinct events that share an identity, like a concert season or a lecture run.
+---
+
 # Group related events into a series
 
 A series is a named program made up of distinct events that share an identity — a *Summer Music Series* of concerts on different dates with different performers, a *Fall Lecture Series* with a different speaker each Thursday, a *Neighborhood Repair Café* that meets monthly with a different focus or location each time. The events differ in their substance, but they belong together under one program name. A series is how you tell visitors *these are part of the same thing*, even when no two of them are alike.

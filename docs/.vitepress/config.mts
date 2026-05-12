@@ -1,12 +1,38 @@
 import { defineConfig } from 'vitepress';
 
+const SITE_URL = 'https://docs.pavillion.social';
+const SITE_NAME = 'Pavillion docs';
+
 export default defineConfig({
   title: 'Pavillion',
-  description: 'Federated events calendar documentation',
+  description: 'Guides for running and stewarding a Pavillion calendar — a federated, privacy-first events platform for community organizers and instance administrators.',
   cleanUrls: true,
+  sitemap: {
+    hostname: SITE_URL,
+  },
   head: [
     ['link', { rel: 'icon', type: 'image/svg+xml', href: '/pavillion-logo.svg' }],
   ],
+  transformHead({ pageData, siteData }) {
+    const path = pageData.relativePath
+      .replace(/(^|\/)index\.md$/, '$1')
+      .replace(/\.md$/, '');
+    const url = `${SITE_URL}/${path}`;
+    const title = pageData.title || siteData.title;
+    const description = pageData.description || siteData.description;
+    const isHome = pageData.relativePath === 'index.md';
+    return [
+      ['link', { rel: 'canonical', href: url }],
+      ['meta', { property: 'og:type', content: isHome ? 'website' : 'article' }],
+      ['meta', { property: 'og:site_name', content: SITE_NAME }],
+      ['meta', { property: 'og:title', content: title }],
+      ['meta', { property: 'og:description', content: description }],
+      ['meta', { property: 'og:url', content: url }],
+      ['meta', { name: 'twitter:card', content: 'summary' }],
+      ['meta', { name: 'twitter:title', content: title }],
+      ['meta', { name: 'twitter:description', content: description }],
+    ];
+  },
   srcExclude: [
     'CODE_OF_CONDUCT.md',
     'CONTRIBUTING.md',

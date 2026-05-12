@@ -1,3 +1,7 @@
+---
+description: Cancel vs. delete an event in Pavillion — what changes for visitors, when to use which, and how cancellations propagate to calendars reposting yours.
+---
+
 # Cancel an event the right way
 
 > Status: stub. Full guide coming before launch.

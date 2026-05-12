@@ -1,3 +1,7 @@
+---
+description: Save and reuse event venues on your Pavillion calendar — addresses, rooms and spaces inside a venue, and one-tap directions on the public event page.
+---
+
 # Manage event locations
 
 A *place* in Pavillion is an event location you save once and reuse — an address, a name, a few details. Create the venue once and you can link it to ten different events. Then, when the venue changes its name or you spot a typo in the address, you can fix it once and every event there is updated. (You'll manage them on the **Places** tab on your calendar page, alongside Events, Categories, and Series.)

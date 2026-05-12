@@ -1,3 +1,7 @@
+---
+description: Be a good neighbor across federated Pavillion calendars — attribution, when not to repost, asking before pulling a whole calendar, and what unpost means.
+---
+
 # Be a good neighbor across calendars
 
 > Status: placeholder. This guide will be written after launch.

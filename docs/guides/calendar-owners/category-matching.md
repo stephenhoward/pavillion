@@ -1,3 +1,7 @@
+---
+description: Map categories from other calendars onto your own when reposting federated events — set up rules and handle mismatches in Pavillion.
+---
+
 # Match categories from other calendars to yours
 
 > Status: placeholder. This guide will be written after launch.

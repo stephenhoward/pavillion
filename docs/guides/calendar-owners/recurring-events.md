@@ -1,3 +1,7 @@
+---
+description: Post a recurring event on Pavillion — set the schedule, handle exceptions and skipped weeks, and decide when an event has outgrown recurrence for a series.
+---
+
 # Post a recurring event
 
 Most calendars have at least one event that repeats — a weekly board meeting, a monthly meetup, a Tuesday-night open mic. This guide covers how to express those patterns in Pavillion, how to handle the inevitable exceptions ("we're skipping the week of Thanksgiving"), and how to tell when an event has outgrown recurrence and wants to be a series of distinct events instead.

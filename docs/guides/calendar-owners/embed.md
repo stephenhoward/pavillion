@@ -1,3 +1,7 @@
+---
+description: Embed your Pavillion calendar on your own website — generate the snippet, configure allowed domains, and choose what the widget shows.
+---
+
 # Embed your calendar on your own website
 
 > Status: placeholder. This guide will be written after launch.

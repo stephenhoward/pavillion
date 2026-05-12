@@ -1,3 +1,7 @@
+---
+description: Go from a fresh Pavillion login to a published calendar with one event you can share — a ten-to-fifteen-minute on-ramp for new calendar owners.
+---
+
 # Quickstart: from login to a published event
 
 This is your on-ramp. It takes you from "I just got a Pavillion account" to "I have a published calendar with one real event on it that I can share with a friend."

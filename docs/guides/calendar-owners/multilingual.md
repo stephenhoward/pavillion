@@ -1,3 +1,7 @@
+---
+description: Publish events in multiple languages on Pavillion — translatable fields, adding translations, and fallback behavior when a visitor's language doesn't match.
+---
+
 # Publish in multiple languages
 
 > Status: placeholder. This guide will be written after launch.
