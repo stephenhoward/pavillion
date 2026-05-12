@@ -95,13 +95,13 @@ const getRepostPhrase = (notification: Notification): string => {
 };
 
 /**
- * Returns the translated phrase for an unshare notification. The actor is a
- * local editor who unposted a reposted event (DEC-008 sticky dismissal flow);
- * actorUrl is always null on these notifications so the phrase renders the
- * actor name as plain text with Mustache interpolation rather than the
- * slot-based pattern used for follow/repost rows. When the calendar cannot be
- * resolved (deleted or store not loaded), falls back to a generic phrase that
- * omits the calendar name.
+ * Returns the translated phrase for a local-flow unshare notification. The
+ * actor is a local editor who unposted a reposted event (DEC-008 sticky
+ * dismissal flow); actorUrl is null on these notifications so the phrase
+ * renders the actor name as plain text with Mustache interpolation rather
+ * than the slot-based pattern used for follow/repost rows. When the calendar
+ * cannot be resolved (deleted or store not loaded), falls back to a generic
+ * phrase that omits the calendar name.
  */
 const getUnsharePhrase = (notification: Notification): string => {
   const calendarName = resolveCalendarName(notification);
@@ -110,6 +110,23 @@ const getUnsharePhrase = (notification: Notification): string => {
     return t('notifications.unshare_description', { actorName, calendarName });
   }
   return t('notifications.unshare_description_no_calendar', { actorName });
+};
+
+/**
+ * Returns the translated phrase for an inbound-flow unshare notification.
+ * The actor is a remote calendar that unposted our event from their calendar
+ * (parallel to repost). The phrase leaves the actor as `{1}` and (when the
+ * event title is resolvable) the event title as `{2}` for the `<i18next>`
+ * component to substitute the actor link + RouterLink to the event. When the
+ * event cannot be resolved (deleted or store not loaded), falls back to a
+ * generic phrase that omits the event title.
+ */
+const getUnshareRemotePhrase = (notification: Notification): string => {
+  const eventTitle = resolveEventTitle(notification);
+  if (eventTitle) {
+    return t('notifications.unshare_description_remote', { eventTitle });
+  }
+  return t('notifications.unshare_description_remote_no_event');
 };
 
 /**
@@ -239,6 +256,28 @@ onUnmounted(() => {
           class="notification-text"
         >
           {{ getReportPhrase(notification) }}
+        </p>
+        <p
+          v-else-if="notification.type === 'unshare' && notification.actorUrl"
+          class="notification-text"
+        >
+          <i18next :translation="getUnshareRemotePhrase(notification)">
+            <template #1>
+              <a
+                :href="notification.actorUrl"
+                rel="noopener noreferrer"
+                target="_blank"
+                class="actor-link"
+              >{{ notification.actorName }}<span class="sr-only">{{ t('notifications.opens_in_new_tab') }}</span></a>
+            </template>
+            <template #2>
+              <router-link
+                v-if="notification.eventId"
+                :to="{ name: 'event_edit', params: { eventId: notification.eventId } }"
+                class="event-link"
+              >{{ resolveEventTitle(notification) }}</router-link>
+            </template>
+          </i18next>
         </p>
         <p
           v-else-if="notification.type === 'unshare'"

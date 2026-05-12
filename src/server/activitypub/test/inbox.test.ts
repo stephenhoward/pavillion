@@ -527,6 +527,206 @@ describe('ProcessInboxService - Follow Activity Processing', () => {
       expect(emittedEvents[0].reposterName).toBeTruthy();
     });
   });
+
+  describe('processUnshareEvent', () => {
+    it('should emit activitypub:event:unreposted when a local event is unshared', async () => {
+      // Arrange: a remote calendar that previously reposted a local event now
+      // sends Undo(Announce). Fixture deliberately uses a calendar-style display
+      // name that is structurally distinct from the actor URI so an assertion on
+      // actorName cannot pass by accident.
+      const remoteActorUrl = 'https://remote.instance/calendars/brewery-tour';
+      const displayName = 'Brewery Tour Collective';
+      const localEventId = uuidv4();
+      const apObjectId = `https://remote.instance/events/${localEventId}`;
+
+      const remoteCalendarActor = await CalendarActorEntity.create({
+        id: uuidv4(),
+        actor_type: 'remote',
+        actor_uri: remoteActorUrl,
+        remote_display_name: displayName,
+        remote_domain: 'remote.instance',
+        calendar_id: null,
+        private_key: null,
+      });
+
+      // EventObjectEntity tracks the AP identity for this local event
+      await EventObjectEntity.create({
+        event_id: localEventId,
+        ap_id: apObjectId,
+        attributed_to: 'https://remote.instance/calendars/test-calendar',
+      });
+
+      // EventActivityEntity row representing the prior share — gets destroyed by the handler
+      await EventActivityEntity.create({
+        event_id: apObjectId,
+        calendar_actor_id: remoteCalendarActor.id,
+        type: 'share',
+      });
+
+      // Stub calendarInterface.getEventById to return a local event (has calendarId)
+      const localEvent = new CalendarEvent(localEventId, testCalendar.id);
+      sandbox.stub(calendarInterface, 'getEventById').resolves(localEvent);
+
+      const emittedEvents: any[] = [];
+      eventBus.on('activitypub:event:unreposted', (payload) => emittedEvents.push(payload));
+
+      // Act
+      await inboxService.processUnshareEvent(testCalendar, {
+        message: { object: apObjectId, actor: remoteActorUrl },
+      } as any);
+
+      // Assert
+      expect(emittedEvents).toHaveLength(1);
+      expect(emittedEvents[0].eventId).toBe(localEventId);
+      expect(emittedEvents[0].calendarId).toBe(testCalendar.id);
+      expect(emittedEvents[0].actorUrl).toBe(remoteActorUrl);
+      expect(emittedEvents[0].actorAccountId).toBeNull();
+      // Contract: actorName MUST originate from CalendarActorEntity.remote_display_name.
+      expect(emittedEvents[0].actorName).toBe(displayName);
+      // Defensive: ensure the assertion isn't tautologically passing via the URI.
+      expect(emittedEvents[0].actorName).not.toBe(remoteActorUrl);
+    });
+
+    it('should not emit activitypub:event:unreposted when no EventActivityEntity exists (phantom-emit guard)', async () => {
+      // Arrange: a duplicate / replayed Undo(Announce) arrives. The remote calendar
+      // exists, the local event exists, but no EventActivityEntity row matches —
+      // the prior share was already destroyed by a previous Undo. The handler
+      // must skip the destroy and the emit (replay idempotency).
+      const remoteActorUrl = 'https://remote.instance/calendars/brewery-tour';
+      const localEventId = uuidv4();
+      const apObjectId = `https://remote.instance/events/${localEventId}`;
+
+      await CalendarActorEntity.create({
+        id: uuidv4(),
+        actor_type: 'remote',
+        actor_uri: remoteActorUrl,
+        remote_display_name: 'Brewery Tour Collective',
+        remote_domain: 'remote.instance',
+        calendar_id: null,
+        private_key: null,
+      });
+
+      await EventObjectEntity.create({
+        event_id: localEventId,
+        ap_id: apObjectId,
+        attributed_to: 'https://remote.instance/calendars/test-calendar',
+      });
+
+      // Note: no EventActivityEntity row exists — this is the phantom-replay case.
+
+      const localEvent = new CalendarEvent(localEventId, testCalendar.id);
+      const getEventByIdStub = sandbox.stub(calendarInterface, 'getEventById').resolves(localEvent);
+
+      const emittedEvents: any[] = [];
+      eventBus.on('activitypub:event:unreposted', (payload) => emittedEvents.push(payload));
+
+      // Act
+      await inboxService.processUnshareEvent(testCalendar, {
+        message: { object: apObjectId, actor: remoteActorUrl },
+      } as any);
+
+      // Assert - no event emitted; the emit branch is gated on existingShare
+      expect(emittedEvents).toHaveLength(0);
+      // Defensive: confirm the handler short-circuited before reaching the
+      // local-event lookup — getEventById should never have been called.
+      expect(getEventByIdStub.called).toBe(false);
+    });
+
+    it('should not emit activitypub:event:unreposted when the event is remote (calendarId null)', async () => {
+      // Arrange: the Undo(Announce) is for an event that is remote to this
+      // instance (calendarId null on the local row). No editor on this
+      // instance owns the event, so no co-editor notification fan-out applies.
+      const remoteActorUrl = 'https://remote.instance/calendars/brewery-tour';
+      const remoteEventId = uuidv4();
+      const apObjectId = `https://remote.instance/events/${remoteEventId}`;
+
+      const remoteCalendarActor = await CalendarActorEntity.create({
+        id: uuidv4(),
+        actor_type: 'remote',
+        actor_uri: remoteActorUrl,
+        remote_display_name: 'Brewery Tour Collective',
+        remote_domain: 'remote.instance',
+        calendar_id: null,
+        private_key: null,
+      });
+
+      await EventObjectEntity.create({
+        event_id: remoteEventId,
+        ap_id: apObjectId,
+        attributed_to: 'https://remote.instance/calendars/their-calendar',
+      });
+
+      await EventActivityEntity.create({
+        event_id: apObjectId,
+        calendar_actor_id: remoteCalendarActor.id,
+        type: 'share',
+      });
+
+      // Stub calendarInterface.getEventById to return a remote event (calendarId null)
+      const remoteEvent = new CalendarEvent(remoteEventId, null);
+      sandbox.stub(calendarInterface, 'getEventById').resolves(remoteEvent);
+
+      const emittedEvents: any[] = [];
+      eventBus.on('activitypub:event:unreposted', (payload) => emittedEvents.push(payload));
+
+      // Act
+      await inboxService.processUnshareEvent(testCalendar, {
+        message: { object: apObjectId, actor: remoteActorUrl },
+      } as any);
+
+      // Assert - no event emitted for remote events
+      expect(emittedEvents).toHaveLength(0);
+    });
+
+    it('should fall back to actor URI as actorName when remote_display_name is null', async () => {
+      // Arrange: CalendarActorEntity exists but has no cached display name yet.
+      // Lineage check: actorName must source from remoteCalendar (DB lookup),
+      // not from the message actor URI directly — the fallback path runs only
+      // when remote_display_name is null on the stored row.
+      const remoteActorUrl = 'https://remote.instance/calendars/brewery-tour';
+      const localEventId = uuidv4();
+      const apObjectId = `https://remote.instance/events/${localEventId}`;
+
+      const remoteCalendarActor = await CalendarActorEntity.create({
+        id: uuidv4(),
+        actor_type: 'remote',
+        actor_uri: remoteActorUrl,
+        remote_display_name: null,
+        remote_domain: 'remote.instance',
+        calendar_id: null,
+        private_key: null,
+      });
+
+      await EventObjectEntity.create({
+        event_id: localEventId,
+        ap_id: apObjectId,
+        attributed_to: 'https://remote.instance/calendars/test-calendar',
+      });
+
+      await EventActivityEntity.create({
+        event_id: apObjectId,
+        calendar_actor_id: remoteCalendarActor.id,
+        type: 'share',
+      });
+
+      const localEvent = new CalendarEvent(localEventId, testCalendar.id);
+      sandbox.stub(calendarInterface, 'getEventById').resolves(localEvent);
+
+      const emittedEvents: any[] = [];
+      eventBus.on('activitypub:event:unreposted', (payload) => emittedEvents.push(payload));
+
+      // Act
+      await inboxService.processUnshareEvent(testCalendar, {
+        message: { object: apObjectId, actor: remoteActorUrl },
+      } as any);
+
+      // Contract: when remote_display_name is null, actorName falls back to the
+      // actor URI so downstream consumers always have a non-empty identifier.
+      expect(emittedEvents).toHaveLength(1);
+      expect(emittedEvents[0].actorName).toBe(remoteActorUrl);
+      expect(emittedEvents[0].actorName).toBeTruthy();
+    });
+  });
 });
 
 describe('ProcessInboxService - checkAndPerformAutoRepost eventReposted emission', () => {

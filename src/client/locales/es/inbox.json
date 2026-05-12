@@ -9,6 +9,8 @@
         "repost_description_no_event": "",
         "unshare_description": "",
         "unshare_description_no_calendar": "",
+        "unshare_description_remote": "",
+        "unshare_description_remote_no_event": "",
         "report_received": "",
         "report_received_no_calendar": "",
         "report_verified": "",

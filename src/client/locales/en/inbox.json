@@ -9,6 +9,8 @@
         "repost_description_no_event": "{1} reposted one of your events",
         "unshare_description": "{{actorName}} unposted a reposted event from {{calendarName}}",
         "unshare_description_no_calendar": "{{actorName}} unposted a reposted event from your calendar",
+        "unshare_description_remote": "{1} unposted your event {2}",
+        "unshare_description_remote_no_event": "{1} unposted one of your events",
         "report_received": "A report was filed against an event on {{calendarName}}",
         "report_received_no_calendar": "A report was filed against an event on your calendar",
         "report_verified": "A reporter completed verification for a report on {{calendarName}}",

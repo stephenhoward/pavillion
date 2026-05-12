@@ -2235,7 +2235,38 @@ class ProcessInboxService {
     });
     if ( existingShare ) {
       await existingShare.destroy();
-      // IF it's a event local to this server, send to all followers and sharers
+
+      // Emit domain event for notification system if the unreposted event is local.
+      // Phantom-emit guard: only emit when an EventActivityEntity row was actually
+      // destroyed (replay idempotency — a duplicate Undo(Announce) has no row to
+      // destroy and therefore no emit).
+      try {
+        const apObject = await EventObjectEntity.findOne({ where: { ap_id: eventId } });
+        if (apObject) {
+          const localEvent = await this.calendarInterface.getEventById(apObject.event_id);
+          if (localEvent && localEvent.calendarId !== null) {
+            // SECURITY: load-bearing https:// guard. The remote actor URI ends up
+            // stored on the notification row and rendered as a link target, so a
+            // non-https scheme here is unsafe to persist. Use a strict
+            // case-sensitive startsWith check — do NOT weaken to a case-insensitive
+            // check or a post-normalization check; either would let crafted
+            // schemes (e.g. javascript:) slip through.
+            if (remoteCalendar.actorUri.startsWith('https://')) {
+              this.eventBus.emit('activitypub:event:unreposted', {
+                eventId: localEvent.id,
+                calendarId: localEvent.calendarId,
+                actorName: remoteCalendar.remoteDisplayName ?? remoteCalendar.actorUri,
+                actorUrl: remoteCalendar.actorUri,
+                actorAccountId: null,
+              });
+            }
+          }
+        }
+      }
+      catch (error) {
+        // Non-critical: log and continue without blocking processing
+        logError(error, `[INBOX] Failed to emit unrepost event for ${eventId}`);
+      }
     };
   }
 
