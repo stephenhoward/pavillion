@@ -61,7 +61,7 @@ import {
   SharedEventEntity,
   ActivityPubOutboxMessageEntity,
 } from '@/server/activitypub/entity/activitypub';
-import { waitFor, waitForStableCount } from '@/server/common/test/lib/drain-event-bus';
+import { waitFor, waitForStableCount } from '@/server/common/test/lib/test_polling';
 
 describe('Outbox Local Dispatch (cross-hop remote follower regression)', () => {
   let env: TestEnvironment;
