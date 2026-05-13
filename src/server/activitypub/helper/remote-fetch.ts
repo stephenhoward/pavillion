@@ -77,6 +77,22 @@ async function buildSignedGetHeaders(
 }
 
 /**
+ * Optional fetch tuning for {@link fetchRemoteObject}. Currently exposes only
+ * a response-body byte cap; additional knobs may be added without breaking
+ * existing callers because the parameter itself is optional.
+ */
+export interface FetchRemoteObjectOptions {
+  /**
+   * Maximum number of bytes the axios client will accept in the response
+   * body. When the response exceeds this size axios aborts and the helper
+   * returns null. Defaults to axios's library default (effectively
+   * unbounded) when omitted. The AP follow-backfill worker passes a
+   * 1 MiB cap to stay within the documented page-size budget.
+   */
+  maxContentLength?: number;
+}
+
+/**
  * Fetches a remote ActivityPub object by URI.
  *
  * This function performs an HTTP GET request to retrieve an ActivityPub object
@@ -104,6 +120,7 @@ async function buildSignedGetHeaders(
  * @param uri - The URI of the remote ActivityPub object to fetch
  * @param signingCalendar - Optional local calendar whose actor keypair signs
  *   the outbound GET. When omitted, the request is sent unsigned.
+ * @param options - Optional fetch tuning (currently a response-body byte cap).
  * @returns The parsed JSON object, or null if the fetch fails
  *
  * @example
@@ -111,16 +128,18 @@ async function buildSignedGetHeaders(
  * // Unsigned (legacy callers)
  * const event = await fetchRemoteObject('https://remote.example/events/123');
  *
- * // Signed (Mastodon-compatible outbox pulls)
- * const event = await fetchRemoteObject(
- *   'https://remote.example/users/alice/outbox',
+ * // Signed (Mastodon-compatible outbox pulls) with a 1 MiB body cap
+ * const page = await fetchRemoteObject(
+ *   'https://remote.example/users/alice/outbox?page=true',
  *   followingCalendar,
+ *   { maxContentLength: 1_048_576 },
  * );
  * ```
  */
 export async function fetchRemoteObject(
   uri: string,
   signingCalendar?: Calendar,
+  options?: FetchRemoteObjectOptions,
 ): Promise<Record<string, unknown> | null> {
   try {
     // SECURITY: Validate that the URL does not point to a private IP address
@@ -152,11 +171,19 @@ export async function fetchRemoteObject(
       headers.Date = signedHeaders.Date;
     }
 
-    const response = await axios.get(uri, {
+    const axiosConfig: Record<string, unknown> = {
       headers,
       timeout: REMOTE_OBJECT_FETCH_TIMEOUT_MS,
       maxRedirects: 0,
-    });
+    };
+    if (options?.maxContentLength !== undefined) {
+      axiosConfig.maxContentLength = options.maxContentLength;
+      // axios's `maxBodyLength` guards request bodies (irrelevant for GETs)
+      // while `maxContentLength` guards response bodies; we set the latter
+      // here. Documented for future maintainers who confuse the two.
+    }
+
+    const response = await axios.get(uri, axiosConfig);
 
     if (response.status !== 200) {
       logger.error({ uri, status: response.status }, 'Failed to fetch remote object');

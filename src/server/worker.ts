@@ -14,6 +14,8 @@ import CalendarInterface from '@/server/calendar/interface';
 import IpCleanupService from '@/server/moderation/service/ip-cleanup';
 import NotificationService from '@/server/notifications/service/notification';
 import ActivityPubInterface from '@/server/activitypub/interface';
+import { FollowBackfillService } from '@/server/activitypub/service/backfill';
+import { ActivityPubFollowAcceptedPayload } from '@/server/activitypub/events/types';
 import { BackupCreateError } from '@/common/exceptions/housekeeping';
 import { createLogger } from '@/server/common/helper/logger';
 
@@ -72,6 +74,10 @@ async function registerJobHandlers(queue: JobQueueService): Promise<void> {
   const eventBus = new EventEmitter();
   const calendarInterface = new CalendarInterface(eventBus);
   const activityPubInterface = new ActivityPubInterface(eventBus, calendarInterface, accountsInterface);
+  const followBackfillService = new FollowBackfillService({
+    activityPubInterface,
+    calendarInterface,
+  });
 
   // Manual backup job handler (triggered via API/CLI)
   await queue.subscribe('backup:create', async (data: any, meta) => {
@@ -217,6 +223,27 @@ async function registerJobHandlers(queue: JobQueueService): Promise<void> {
       }
       catch (error) {
         logger.error({ err: error }, 'Inbox cleanup failed');
+        throw error;
+      }
+    },
+  );
+
+  // ActivityPub follow-backfill job handler. Published by
+  // ActivityPubEventHandlers#handleFollowAccepted whenever a remote
+  // Accept(Follow) confirms a follow the local instance initiated.
+  await queue.subscribe(
+    'activitypub:follow:backfill',
+    async (data: ActivityPubFollowAcceptedPayload) => {
+      logger.info(
+        { followingCalendarId: data?.followingCalendarId, sourceActorUri: data?.sourceActorUri },
+        'Executing activitypub:follow:backfill job',
+      );
+      try {
+        await followBackfillService.runBackfill(data);
+        logger.info({ followingCalendarId: data?.followingCalendarId }, 'activitypub:follow:backfill job completed');
+      }
+      catch (error) {
+        logger.error({ err: error, followingCalendarId: data?.followingCalendarId }, 'activitypub:follow:backfill job failed');
         throw error;
       }
     },
