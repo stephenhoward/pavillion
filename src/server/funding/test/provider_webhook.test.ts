@@ -73,4 +73,39 @@ describe('WebhookManager Utility Service', () => {
 
     expect(response.status).not.toBe(404);
   });
+
+  // Payment provider dashboards (Stripe, PayPal) reject non-HTTPS webhook URLs in
+  // production. If a deployment sets BASE_URL to http:// (typical when a reverse
+  // proxy terminates TLS in front of the app), the generator must still emit
+  // https:// so the URL the operator pastes is actually accepted.
+  describe('HTTPS enforcement', () => {
+    let originalBaseUrl: string | undefined;
+
+    beforeEach(() => {
+      originalBaseUrl = process.env.BASE_URL;
+    });
+
+    afterEach(() => {
+      if (originalBaseUrl === undefined) delete process.env.BASE_URL;
+      else process.env.BASE_URL = originalBaseUrl;
+    });
+
+    it('should upgrade BASE_URL http:// to https:// for non-localhost domains', () => {
+      process.env.BASE_URL = 'http://staging.pavillion.dev';
+      const url = webhookManager.generateWebhookUrl('stripe');
+      expect(url.startsWith('https://staging.pavillion.dev')).toBe(true);
+    });
+
+    it('should preserve BASE_URL https:// unchanged', () => {
+      process.env.BASE_URL = 'https://prod.pavillion.dev';
+      const url = webhookManager.generateWebhookUrl('stripe');
+      expect(url.startsWith('https://prod.pavillion.dev')).toBe(true);
+    });
+
+    it('should keep http:// for localhost so local dev still works', () => {
+      delete process.env.BASE_URL;
+      const url = webhookManager.generateWebhookUrl('stripe');
+      expect(url.startsWith('http://localhost')).toBe(true);
+    });
+  });
 });

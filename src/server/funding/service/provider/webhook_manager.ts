@@ -32,6 +32,10 @@ export class WebhookManager {
    * @private
    */
   private getInstanceDomain(): string {
+    return this.enforceHttpsForRemoteHosts(this.resolveRawDomain());
+  }
+
+  private resolveRawDomain(): string {
     // Try to get domain from config
     try {
       if (config.has('server.domain')) {
@@ -55,5 +59,23 @@ export class WebhookManager {
     // Unconditional fallback to localhost for development/test environments
     // This handles cases where NODE_ENV might not be properly set in test environments
     return 'http://localhost:3000';
+  }
+
+  /**
+   * Upgrade http:// to https:// for any non-localhost host.
+   *
+   * Payment provider dashboards (Stripe, PayPal) reject non-HTTPS webhook URLs
+   * in production. A reverse proxy that terminates TLS in front of the app
+   * commonly leaves the in-cluster BASE_URL as http://, which would otherwise
+   * leak through into the URL we hand to the operator.
+   *
+   * Localhost is left as http:// so local development still works without
+   * generating a TLS certificate.
+   */
+  private enforceHttpsForRemoteHosts(url: string): string {
+    const isLocalhost = /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/.test(url);
+    if (isLocalhost) return url;
+    if (url.startsWith('http://')) return `https://${url.slice('http://'.length)}`;
+    return url;
   }
 }
