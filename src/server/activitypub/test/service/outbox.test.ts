@@ -989,6 +989,66 @@ describe('processOutboxMessage — local/remote dispatcher split', () => {
     expect(updateStub.calledOnce).toBe(true);
   });
 
+  it('still HTTP POSTs Create activities even when recipient resolves to a local calendar', async () => {
+    // Regression test for the intentional half-migration in outbox.ts: only
+    // Announce activities are eligible for in-process local dispatch.
+    // Create/Update/Delete fall through to HTTP regardless of recipient
+    // locality, pending pv-fs02 (HTTP signatures) and a decision about
+    // whether to extend local dispatch to all activity types. If the type
+    // gate (`message.type === 'Announce'`) were removed from outbox.ts,
+    // this test would fail.
+    const eventBus = new EventEmitter();
+    const localCalendar = Calendar.fromObject({ id: 'local-cal-id' });
+    const mockInbox = {
+      handleLocalAnnounceDispatch: sandbox.stub().resolves(),
+    } as unknown as ProcessInboxService;
+
+    const service = new ProcessOutboxService(eventBus, mockInbox);
+    // Stub local-calendar resolution defensively: if the type gate were
+    // broken, the dispatcher would consult this stub and route the recipient
+    // to in-process dispatch. The assertions below verify it stays unused.
+    sandbox
+      .stub(service.calendarActorService, 'getLocalCalendarByActorUri')
+      .resolves(localCalendar);
+    stubSigning(service, sandbox);
+
+    // Build a Create outbox message — Create is the type that exercises the
+    // half-migration gate. Setup parallels the Announce-local test above
+    // except for the activity type.
+    const createMessage = createMockCreateActivity(LOCAL_ACTOR_URL, {
+      type: 'Event',
+      id: `${LOCAL_ACTOR_URL}/events/123`,
+      name: 'Test Event',
+    });
+    const message = ActivityPubOutboxMessageEntity.build({
+      calendar_id: TEST_CALENDAR_ID,
+      type: 'Create',
+      message: createMessage,
+    });
+
+    const getCalendarStub = sandbox.stub(service.calendarService, 'getCalendar');
+    const axiosPostStub = sandbox.stub(axios, 'post').resolves();
+    const updateStub = sandbox.stub(ActivityPubOutboxMessageEntity.prototype, 'update');
+    const getRecipientsStub = sandbox.stub(service, 'getRecipients');
+    const resolveInboxStub = sandbox.stub(service, 'resolveInboxUrl');
+
+    getCalendarStub.resolves(Calendar.fromObject({ id: TEST_CALENDAR_ID }));
+    getRecipientsStub.resolves([LOCAL_RECIPIENT_URI]);
+    resolveInboxStub.resolves('https://local.federation.test/calendars/localcal/inbox');
+
+    await service.processOutboxMessage(message);
+
+    expect(
+      (mockInbox.handleLocalAnnounceDispatch as sinon.SinonStub).called,
+      'handleLocalAnnounceDispatch must NOT be called for Create activities, even when recipient resolves locally',
+    ).toBe(false);
+    expect(
+      axiosPostStub.called,
+      'Create activities must be HTTP POSTed regardless of recipient locality (pending pv-fs02)',
+    ).toBe(true);
+    expect(updateStub.calledOnce).toBe(true);
+  });
+
   it('skips dispatch when getLocalCalendarByActorUri returns null for a local-looking actor with missing calendar', async () => {
     const eventBus = new EventEmitter();
     const mockInbox = {
