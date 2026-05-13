@@ -9,6 +9,7 @@ import {
   AccountCreatedPayload,
   CalendarCreatedPayload,
   RemoteEditorRevokedPayload,
+  ActivityPubFollowAcceptedPayload,
 } from './types';
 import ActivityPubInterface from '../interface';
 import CreateActivity from '../model/action/create';
@@ -22,6 +23,7 @@ import { EventObjectEntity } from '@/server/activitypub/entity/event_object';
 import UserActorService from '../service/user_actor';
 import CalendarActorService from '../service/calendar_actor';
 import CalendarInterface from '@/server/calendar/interface';
+import JobQueueService from '@/server/housekeeping/service/job-queue';
 import { Account } from '@/common/model/account';
 import { logError } from '@/server/common/helper/error-logger';
 import { Calendar } from '@/common/model/calendar';
@@ -33,11 +35,23 @@ export default class ActivityPubEventHandlers implements DomainEventHandlers {
   private service: ActivityPubInterface;
   private userActorService: UserActorService;
   private calendarActorService: CalendarActorService;
+  private jobQueue: JobQueueService | null;
 
-  constructor(service: ActivityPubInterface, calendarInterface: CalendarInterface) {
+  /**
+   * @param jobQueue Optional pg-boss queue used to publish background jobs
+   *   such as `activitypub:follow:backfill`. When null (e.g. unit tests that
+   *   don't exercise the worker path), the affected handlers no-op with a
+   *   warning rather than throwing — see `handleFollowAccepted`.
+   */
+  constructor(
+    service: ActivityPubInterface,
+    calendarInterface: CalendarInterface,
+    jobQueue: JobQueueService | null = null,
+  ) {
     this.service = service;
     this.userActorService = new UserActorService(calendarInterface);
     this.calendarActorService = new CalendarActorService(calendarInterface);
+    this.jobQueue = jobQueue;
   }
 
   install(eventBus: EventEmitter): void {
@@ -49,6 +63,7 @@ export default class ActivityPubEventHandlers implements DomainEventHandlers {
     eventBus.on('account.created', this.handleAccountCreated.bind(this));
     eventBus.on('calendar.created', this.handleCalendarCreated.bind(this));
     eventBus.on('remoteEditorRevoked', this.handleRemoteEditorRevoked.bind(this));
+    eventBus.on('activitypub:follow:accepted', this.handleFollowAccepted.bind(this));
   }
 
   /**
@@ -228,6 +243,35 @@ export default class ActivityPubEventHandlers implements DomainEventHandlers {
   private handleRemoteEditorRevoked(payload: RemoteEditorRevokedPayload): void {
     this.service.invalidateAuthorizationCache(payload.calendarId, payload.actorUri);
     logger.info({ actorUri: payload.actorUri, calendarId: payload.calendarId }, 'Invalidated authorization cache for actor');
+  }
+
+  /**
+   * Publish a follow-backfill job in response to a remote Accept(Follow) that
+   * confirmed a follow we initiated. The actual outbox pull is performed by
+   * the worker (pv-cug3.4); this handler only enqueues the job and returns
+   * synchronously — no HTTP work happens on this code path.
+   *
+   * If the JobQueueService is not configured (typically a test harness that
+   * doesn't wire one up, or a process that never publishes jobs), we log a
+   * warning and skip publication. The worker side handles eventual delivery
+   * once a publisher is available; missing this enqueue means the follower's
+   * feed simply won't be backfilled until the next trigger.
+   */
+  private async handleFollowAccepted(payload: ActivityPubFollowAcceptedPayload): Promise<void> {
+    if (!this.jobQueue) {
+      logger.warn(
+        { followingCalendarId: payload.followingCalendarId, sourceActorUri: payload.sourceActorUri },
+        'JobQueueService not configured; skipping activitypub:follow:backfill publish',
+      );
+      return;
+    }
+
+    try {
+      await this.jobQueue.publish('activitypub:follow:backfill', payload);
+    }
+    catch (error) {
+      logError(error, '[ActivityPub] Failed to publish activitypub:follow:backfill job');
+    }
   }
 
   private async handleCalendarCreated(payload: CalendarCreatedPayload): Promise<void> {
