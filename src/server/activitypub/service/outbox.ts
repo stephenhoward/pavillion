@@ -37,24 +37,17 @@ class ProcessOutboxService {
   calendarService: CalendarInterface;
   calendarActorService: CalendarActorService;
   private userActorService: UserActorService;
-  private inboxService: ProcessInboxService | null;
+  private inboxService: ProcessInboxService;
 
   /**
    * @param eventBus - Shared event bus
-   * @param inboxService - Required in production (wired by ActivityPubInterface).
-   *   Optional only to preserve backward compatibility with existing test
-   *   fixtures that construct ProcessOutboxService(eventBus). When null,
-   *   local recipients fall back to HTTP delivery — pre-Phase-3 behavior,
-   *   a test-only degradation.
+   * @param inboxService - In-process inbox service used for local Announce dispatch.
    */
-  constructor(eventBus: EventEmitter, inboxService?: ProcessInboxService) {
+  constructor(eventBus: EventEmitter, inboxService: ProcessInboxService) {
     this.calendarService = new CalendarInterface(eventBus);
     this.calendarActorService = new CalendarActorService(this.calendarService);
     this.userActorService = new UserActorService(this.calendarService);
-    this.inboxService = inboxService ?? null;
-    if (!this.inboxService) {
-      logger.warn('[OUTBOX] constructed without ProcessInboxService — local recipients will degrade to HTTP delivery (test-only path)');
-    }
+    this.inboxService = inboxService;
   }
 
   /**
@@ -346,13 +339,14 @@ class ProcessOutboxService {
 
       let deliveryErrors: string[] = [];
 
+      // Decide whether this activity type can be served in-process (local) or
+      // must be HTTP-delivered (remote). Only Announce activities are eligible
+      // for in-process dispatch; Create/Update/Delete fall through to HTTP
+      // regardless of actor type, pending pv-fs02 (HTTP signatures) and a
+      // decision about whether to extend local dispatch to all activity types.
+      const canDispatchLocally = message.type === 'Announce';
+
       for (const recipient of recipients) {
-        // Decide whether this recipient can be served in-process (local) or
-        // must be HTTP-delivered (remote). Only Announce activities are eligible
-        // for in-process dispatch; Create/Update/Delete fall through to HTTP
-        // regardless of actor type, pending pv-fs02 (HTTP signatures) and a
-        // decision about whether to extend local dispatch to all activity types.
-        const canDispatchLocally = this.inboxService !== null && message.type === 'Announce';
         const localCalendar = canDispatchLocally
           ? await this.calendarActorService.getLocalCalendarByActorUri(recipient)
           : null;
@@ -360,7 +354,7 @@ class ProcessOutboxService {
         if (localCalendar) {
           // Local in-process path: skip HTTP entirely.
           try {
-            await this.inboxService!.handleLocalAnnounceDispatch(localCalendar, activity as AnnounceActivity);
+            await this.inboxService.handleLocalAnnounceDispatch(localCalendar, activity as AnnounceActivity);
             logger.info({ recipient }, '[OUTBOX-LOCAL] Dispatched in-process');
           }
           catch (error: any) {
@@ -390,8 +384,7 @@ class ProcessOutboxService {
         }
 
         // Remote HTTP path (covers: remote actors on other hosts, WebFinger
-        // handles, local non-Announce activities, and the test-only
-        // null-inboxService fallback).
+        // handles, local non-Announce activities).
         await this.deliverViaHttp(recipient, message, activity, deliveryErrors);
       }
 
