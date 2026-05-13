@@ -1,6 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import sinon from 'sinon';
+import express from 'express';
+import request from 'supertest';
 import { WebhookManager } from '../service/provider/webhook_manager';
+import WebhookRoutes from '../api/v1/webhooks';
 
 /**
  * Tests for WebhookManager Utility Service
@@ -26,7 +29,7 @@ describe('WebhookManager Utility Service', () => {
     const webhookUrl = webhookManager.generateWebhookUrl(providerType);
 
     // Webhook URL should contain the correct path structure
-    expect(webhookUrl).toContain('/api/funding/v1/webhooks/stripe');
+    expect(webhookUrl).toContain('/api/funding/webhooks/stripe');
     expect(webhookUrl).toContain('stripe');
   });
 
@@ -43,7 +46,31 @@ describe('WebhookManager Utility Service', () => {
     const webhookUrl = webhookManager.generateWebhookUrl('stripe');
 
     // Should generate a valid webhook URL path
-    expect(webhookUrl).toContain('/api/funding/v1/webhooks/');
+    expect(webhookUrl).toContain('/api/funding/webhooks/');
     expect(webhookUrl.length).toBeGreaterThan(0);
+  });
+
+  // Regression test for the bug where the wizard surfaced /api/funding/v1/webhooks/...
+  // but the route was mounted at /api/funding/webhooks/... — operators copied the
+  // generated URL into the Stripe Dashboard verbatim and every delivery 404'd.
+  it('should generate a URL whose path resolves to the mounted webhook route', async () => {
+    const generatedUrl = webhookManager.generateWebhookUrl('stripe');
+    const pathMatch = generatedUrl.match(/\/api\/funding\/[^?#]+/);
+    expect(pathMatch, `generated URL has no /api/funding path: ${generatedUrl}`).not.toBeNull();
+    const pathname = pathMatch![0];
+
+    const handleStripeWebhook = sandbox.stub().resolves();
+    const app = express();
+    const webhookRoutes = new WebhookRoutes({ handleStripeWebhook } as any);
+    webhookRoutes.installHandlers(app, '/api/funding');
+
+    // A request without a Stripe-Signature header reaches the handler and gets
+    // 400. A 404 means the generated path does not match the mounted route.
+    const response = await request(app)
+      .post(pathname)
+      .set('Content-Type', 'application/json')
+      .send('{}');
+
+    expect(response.status).not.toBe(404);
   });
 });

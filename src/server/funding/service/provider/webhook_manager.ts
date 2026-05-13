@@ -11,14 +11,18 @@ export class WebhookManager {
   /**
    * Generate webhook URL for a specific provider
    *
-   * Format: https://{domain}/api/funding/v1/webhooks/{provider_type}
+   * Format: https://{domain}/api/funding/webhooks/{provider_type}
+   *
+   * The webhook route is intentionally mounted without the /v1 prefix in
+   * src/server/funding/api/v1.ts — webhook URLs are pasted into third-party
+   * provider dashboards and should not churn with internal API version bumps.
    *
    * @param providerType - The provider type (stripe or paypal)
    * @returns Fully qualified webhook URL
    */
   generateWebhookUrl(providerType: ProviderType): string {
     const domain = this.getInstanceDomain();
-    return `${domain}/api/funding/v1/webhooks/${providerType}`;
+    return `${domain}/api/funding/webhooks/${providerType}`;
   }
 
   /**
