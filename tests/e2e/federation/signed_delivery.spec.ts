@@ -21,16 +21,20 @@
  *
  *   This spec does NOT, on its own, prove that the receive-side cryptographic
  *   gate would reject a forged or unsigned request: the Docker federation
- *   harness sets SKIP_SIGNATURES=true on both instances, so
- *   verifyHttpSignature short-circuits on the receiver. The cryptographic
- *   round-trip (sign with a real RSA key, then verify with the matching
- *   public key, both with SKIP_SIGNATURES=false) is proven separately by the
- *   unit tests in
- *   `src/server/activitypub/test/helper/http_signature.test.ts`
- *   under describe block "HTTP Signature Cryptographic Round-Trip".
+ *   harness sets SKIP_SIGNATURES=true on both instances by default, so
+ *   verifyHttpSignature short-circuits on the receiver during this spec.
+ *   Receive-side cryptographic verification is proven separately at two
+ *   tiers:
+ *     - Unit (in-process round-trip):
+ *       `src/server/activitypub/test/helper/http_signature.test.ts`
+ *       under describe block "HTTP Signature Cryptographic Round-Trip".
+ *     - Federation e2e (cross-container, real RSA + nginx + Docker DNS):
+ *       `tests/e2e/federation/signature_strict_receive.spec.ts` (pv-3xit),
+ *       which flips beta to SKIP_SIGNATURES=false for its own duration and
+ *       restores the default afterwards so this spec is unaffected.
  *
- *   Together, this e2e (outbound pipeline) plus those unit tests
- *   (cryptographic verification) cover the bead's acceptance criteria.
+ *   Together, this e2e (outbound pipeline), the unit round-trip, and the
+ *   strict-receive federation spec cover the bead's acceptance criteria.
  *
  * Prerequisites:
  *   - Federation environment running: npm run federation:start
