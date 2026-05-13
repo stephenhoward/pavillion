@@ -47,6 +47,7 @@ export default class JobQueueService {
   private boss: PgBoss | null = null;
   private connectionString: string;
   private started: boolean = false;
+  private isSqliteDialect: boolean;
 
   /**
    * Creates a new JobQueueService instance.
@@ -55,6 +56,7 @@ export default class JobQueueService {
    */
   constructor(dbConfig?: DatabaseConfig) {
     const actualConfig = dbConfig || config.get<DatabaseConfig>('database');
+    this.isSqliteDialect = actualConfig.dialect === 'sqlite';
     this.connectionString = this.buildConnectionString(actualConfig);
   }
 
@@ -88,9 +90,24 @@ export default class JobQueueService {
    * Starts the pg-boss connection.
    * Must be called before using other methods.
    *
-   * @throws Error if connection fails
+   * In sqlite mode (used by unit/integration tests) the pg-boss server is
+   * unreachable. The service still flips its `started` flag so callers can
+   * publish without throwing; publish becomes a logged no-op in that mode.
+   *
+   * @throws Error if connection fails (postgres mode only)
    */
   async start(): Promise<void> {
+    // sqlite-mode test environments don't run a pg-boss server. Mark started
+    // so publish() returns a logged no-op instead of throwing, mirroring the
+    // graceful path already used by ensureQueue() for the same case. Checked
+    // against the constructor-time dialect so tests that pass an explicit
+    // postgres dbConfig continue to exercise the real start path.
+    if (this.isSqliteDialect) {
+      this.started = true;
+      logger.info('pg-boss start skipped (sqlite dialect)');
+      return;
+    }
+
     try {
       this.boss = new PgBoss(this.connectionString);
 
@@ -130,8 +147,16 @@ export default class JobQueueService {
    * @throws Error if service not started
    */
   async publish<T = any>(jobName: string, data: T): Promise<string | null> {
-    if (!this.started || !this.boss) {
+    if (!this.started) {
       throw new Error('JobQueueService not started. Call start() first.');
+    }
+
+    // sqlite-mode test environments don't run a pg-boss server. start() flips
+    // `started` but leaves `boss` null; publish becomes a logged no-op so
+    // wire-up code paths exercised by unit/integration tests don't fail.
+    if (!this.boss) {
+      logger.info({ jobName }, 'Publish skipped (sqlite dialect)');
+      return null;
     }
 
     const jobId = await this.boss.send(jobName, data);

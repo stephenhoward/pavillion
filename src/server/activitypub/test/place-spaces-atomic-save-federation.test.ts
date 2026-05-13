@@ -17,6 +17,7 @@ import {
   EventLocationSpace,
   EventLocationSpaceContent,
 } from '@/common/model/location';
+import { stubHousekeepingInterface } from '@/server/activitypub/test/helper/housekeeping-stub';
 
 /**
  * Federation regression test for the Place + Spaces atomic-save model.
@@ -46,7 +47,7 @@ describe('Place+Spaces atomic save: federation regression', () => {
     sandbox = sinon.createSandbox();
     eventBus = new EventEmitter();
     service = new ActivityPubInterface(eventBus);
-    handlers = new ActivityPubEventHandlers(service, new CalendarInterface(eventBus));
+    handlers = new ActivityPubEventHandlers(service, new CalendarInterface(eventBus), stubHousekeepingInterface());
     handlers.install(eventBus);
   });
 

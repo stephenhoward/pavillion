@@ -23,7 +23,7 @@ import { EventObjectEntity } from '@/server/activitypub/entity/event_object';
 import UserActorService from '../service/user_actor';
 import CalendarActorService from '../service/calendar_actor';
 import CalendarInterface from '@/server/calendar/interface';
-import JobQueueService from '@/server/housekeeping/service/job-queue';
+import HousekeepingInterface from '@/server/housekeeping/interface';
 import { Account } from '@/common/model/account';
 import { logError } from '@/server/common/helper/error-logger';
 import { Calendar } from '@/common/model/calendar';
@@ -35,23 +35,24 @@ export default class ActivityPubEventHandlers implements DomainEventHandlers {
   private service: ActivityPubInterface;
   private userActorService: UserActorService;
   private calendarActorService: CalendarActorService;
-  private jobQueue: JobQueueService | null;
+  private housekeepingInterface: HousekeepingInterface;
 
   /**
-   * @param jobQueue Optional pg-boss queue used to publish background jobs
-   *   such as `activitypub:follow:backfill`. When null (e.g. unit tests that
-   *   don't exercise the worker path), the affected handlers no-op with a
-   *   warning rather than throwing — see `handleFollowAccepted`.
+   * @param housekeepingInterface Cross-domain handle used to publish
+   *   background jobs (e.g. `activitypub:follow:backfill`) through the
+   *   housekeeping-owned pg-boss queue. Required — a missing wire is a
+   *   server-startup bug and must fail at construction time rather than
+   *   silently dropping queued work at runtime.
    */
   constructor(
     service: ActivityPubInterface,
     calendarInterface: CalendarInterface,
-    jobQueue: JobQueueService | null = null,
+    housekeepingInterface: HousekeepingInterface,
   ) {
     this.service = service;
     this.userActorService = new UserActorService(calendarInterface);
     this.calendarActorService = new CalendarActorService(calendarInterface);
-    this.jobQueue = jobQueue;
+    this.housekeepingInterface = housekeepingInterface;
   }
 
   install(eventBus: EventEmitter): void {
@@ -251,23 +252,15 @@ export default class ActivityPubEventHandlers implements DomainEventHandlers {
    * the worker (pv-cug3.4); this handler only enqueues the job and returns
    * synchronously — no HTTP work happens on this code path.
    *
-   * If the JobQueueService is not configured (typically a test harness that
-   * doesn't wire one up, or a process that never publishes jobs), we log a
-   * warning and skip publication. The worker side handles eventual delivery
-   * once a publisher is available; missing this enqueue means the follower's
-   * feed simply won't be backfilled until the next trigger.
+   * Errors from the publish call are logged but not re-thrown. EventEmitter
+   * surfaces unhandled async errors as `error` events with no listeners,
+   * which terminates the Node process; swallowing here keeps a transient
+   * pg-boss outage from crashing the server, at the cost of a missed
+   * backfill that the next Accept (or manual trigger) will re-enqueue.
    */
   private async handleFollowAccepted(payload: ActivityPubFollowAcceptedPayload): Promise<void> {
-    if (!this.jobQueue) {
-      logger.warn(
-        { followingCalendarId: payload.followingCalendarId, sourceActorUri: payload.sourceActorUri },
-        'JobQueueService not configured; skipping activitypub:follow:backfill publish',
-      );
-      return;
-    }
-
     try {
-      await this.jobQueue.publish('activitypub:follow:backfill', payload);
+      await this.housekeepingInterface.publishJob('activitypub:follow:backfill', payload);
     }
     catch (error) {
       logError(error, '[ActivityPub] Failed to publish activitypub:follow:backfill job');

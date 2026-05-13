@@ -1914,4 +1914,36 @@ describe('processAcceptActivity — activitypub:follow:accepted emission', () =>
 
     expect(emitted).toHaveLength(0);
   });
+
+  it('emits activitypub:follow:accepted on the string-URI Accept branch when hostnames match and a FollowingCalendarEntity is matched', async () => {
+    // The string-URI Accept branch fires when a peer sends `Accept` whose
+    // `object` is the IRI of our outbound Follow rather than an inline Follow
+    // object. The branch matches the FollowingCalendarEntity via
+    // remoteCalendarService.getByActorUri(message.actor) — by symmetry the
+    // emission must fire here too so backfill can run regardless of which
+    // peer shape we received.
+    sandbox.stub(service.remoteCalendarService, 'getByActorUri').resolves(mockRemoteCalendarActor as any);
+    sandbox.stub(FollowingCalendarEntity, 'findOne').resolves(mockFollowingRecord as any);
+
+    const emitted: any[] = [];
+    eventBus.on('activitypub:follow:accepted', (payload) => emitted.push(payload));
+
+    // Object is a URI on the SAME host as message.actor — required for the
+    // branch's hostname-match guard, mirroring the production wire shape
+    // where a remote instance echoes our follow IRI back inside the Accept.
+    const localFollowIri = 'https://remote.federation.test/activities/follow-123';
+    const raw = createMockAcceptActivity(REMOTE_CALENDAR_ACTOR_URL, { __unused: true });
+    raw.object = localFollowIri;
+    const stringUriAccept = AcceptActivity.fromObject(raw as Record<string, any>) as AcceptActivity;
+
+    const calendar = Calendar.fromObject({ id: TEST_CALENDAR_ID, urlName: TEST_CALENDAR_URL_NAME });
+    await service.processAcceptActivity(calendar, stringUriAccept);
+
+    expect(emitted).toHaveLength(1);
+    expect(emitted[0]).toEqual({
+      followingCalendarId: TEST_CALENDAR_ID,
+      calendarActorId: REMOTE_CALENDAR_ACTOR_ID,
+      sourceActorUri: REMOTE_CALENDAR_ACTOR_URL,
+    });
+  });
 });

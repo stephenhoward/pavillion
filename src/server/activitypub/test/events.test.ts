@@ -15,6 +15,7 @@ import { Calendar } from '@/common/model/calendar';
 import { CalendarEvent, CalendarEventContent } from '@/common/model/events';
 import { EventLocation, EventLocationContent, EventLocationSpace, EventLocationSpaceContent } from '@/common/model/location';
 import { setupActivityPubSchema, teardownActivityPubSchema } from '@/server/common/test/helpers/database';
+import { stubHousekeepingInterface } from '@/server/activitypub/test/helper/housekeeping-stub';
 
 describe('inbox event listener', () => {
   let service: ActivityPubInterface;
@@ -25,7 +26,7 @@ describe('inbox event listener', () => {
   beforeEach (() => {
     eventBus = new EventEmitter();
     service = new ActivityPubInterface(eventBus);
-    eventHandler = new ActivityPubEventHandlers(service, new CalendarInterface(eventBus));
+    eventHandler = new ActivityPubEventHandlers(service, new CalendarInterface(eventBus), stubHousekeepingInterface());
     eventHandler.install(eventBus);
   });
 
@@ -75,7 +76,7 @@ describe('outbox event listener', () => {
   beforeEach (() => {
     eventBus = new EventEmitter();
     service = new ActivityPubInterface(eventBus);
-    eventHandler = new ActivityPubEventHandlers(service, new CalendarInterface(eventBus));
+    eventHandler = new ActivityPubEventHandlers(service, new CalendarInterface(eventBus), stubHousekeepingInterface());
     eventHandler.install(eventBus);
   });
 
@@ -133,7 +134,7 @@ describe('handleEventUpdated guard', () => {
   beforeEach (() => {
     eventBus = new EventEmitter();
     service = new ActivityPubInterface(eventBus);
-    eventHandler = new ActivityPubEventHandlers(service, new CalendarInterface(eventBus));
+    eventHandler = new ActivityPubEventHandlers(service, new CalendarInterface(eventBus), stubHousekeepingInterface());
     eventHandler.install(eventBus);
   });
 
@@ -230,7 +231,7 @@ describe('handleEventCreated', () => {
     sandbox = sinon.createSandbox();
     eventBus = new EventEmitter();
     service = new ActivityPubInterface(eventBus);
-    handlers = new ActivityPubEventHandlers(service, new CalendarInterface(eventBus));
+    handlers = new ActivityPubEventHandlers(service, new CalendarInterface(eventBus), stubHousekeepingInterface());
     handlers.install(eventBus);
   });
 
@@ -370,7 +371,7 @@ describe('handleEventDeleted', () => {
   beforeEach(() => {
     eventBus = new EventEmitter();
     service = new ActivityPubInterface(eventBus);
-    handlers = new ActivityPubEventHandlers(service, new CalendarInterface(eventBus));
+    handlers = new ActivityPubEventHandlers(service, new CalendarInterface(eventBus), stubHousekeepingInterface());
     handlers.install(eventBus);
   });
 
@@ -551,5 +552,77 @@ describe('AP serialize → parse round-trip (Place + Space + multilingual conten
     expect(restored.location.originUri).toBe(apObject['pavillion:place'].id);
     expect(restored.space.originUri).toBe(apObject['pavillion:space'].id);
     expect(restored.space.originUri.startsWith(`${restored.location.originUri}/spaces/`)).toBe(true);
+  });
+});
+
+describe('handleFollowAccepted', () => {
+  // The handler turns the in-domain `activitypub:follow:accepted` event into a
+  // `activitypub:follow:backfill` job published through the housekeeping
+  // interface. The handler runs on the EventEmitter bus, so its async errors
+  // would otherwise surface as unhandled `error` events that crash the Node
+  // process — the swallow-and-log path is verified explicitly below.
+  let service: ActivityPubInterface;
+  let handlers: ActivityPubEventHandlers;
+  let eventBus: EventEmitter;
+  let sandbox: sinon.SinonSandbox;
+  let housekeeping: { publishJob: sinon.SinonStub };
+
+  beforeEach(() => {
+    sandbox = sinon.createSandbox();
+    eventBus = new EventEmitter();
+    service = new ActivityPubInterface(eventBus);
+    housekeeping = { publishJob: sinon.stub().resolves() };
+    handlers = new ActivityPubEventHandlers(
+      service,
+      new CalendarInterface(eventBus),
+      housekeeping as any,
+    );
+    handlers.install(eventBus);
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+  });
+
+  it('publishes a activitypub:follow:backfill job with the full payload when activitypub:follow:accepted fires', async () => {
+    const payload = {
+      followingCalendarId: 'local-cal-id',
+      calendarActorId: 'remote-actor-id',
+      sourceActorUri: 'https://remote.federation.test/calendars/source',
+    };
+
+    eventBus.emit('activitypub:follow:accepted', payload);
+
+    // Allow the async handler to settle. EventEmitter dispatches listeners
+    // synchronously but our handler awaits publishJob; one microtask flush
+    // is enough for the stub call to register.
+    await new Promise(resolve => setImmediate(resolve));
+
+    expect(housekeeping.publishJob.calledOnce).toBe(true);
+    expect(housekeeping.publishJob.firstCall.args[0]).toBe('activitypub:follow:backfill');
+    expect(housekeeping.publishJob.firstCall.args[1]).toEqual(payload);
+  });
+
+  it('swallows publish errors so the EventEmitter does not surface them as an unhandled error event', async () => {
+    // EventEmitter routes unhandled rejections from listeners to its `error`
+    // event; with no listener, Node terminates the process. This test pins
+    // the catch-and-log behaviour so a transient pg-boss outage during a
+    // follow-accept burst cannot crash the web process.
+    housekeeping.publishJob.rejects(new Error('pg-boss connection refused'));
+
+    let unhandled = false;
+    eventBus.on('error', () => { unhandled = true; });
+
+    const payload = {
+      followingCalendarId: 'local-cal-id',
+      calendarActorId: 'remote-actor-id',
+      sourceActorUri: 'https://remote.federation.test/calendars/source',
+    };
+
+    eventBus.emit('activitypub:follow:accepted', payload);
+    await new Promise(resolve => setImmediate(resolve));
+
+    expect(housekeeping.publishJob.calledOnce).toBe(true);
+    expect(unhandled).toBe(false);
   });
 });

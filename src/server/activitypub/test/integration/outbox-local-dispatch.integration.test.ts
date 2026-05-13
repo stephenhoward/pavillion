@@ -49,6 +49,7 @@ import SetupInterface from '@/server/setup/interface';
 import EmailInterface from '@/server/email/interface';
 import ActivityPubInterface from '@/server/activitypub/interface';
 import ActivityPubEventHandlers from '@/server/activitypub/events';
+import { stubHousekeepingInterface } from '@/server/activitypub/test/helper/housekeeping-stub';
 import { TestEnvironment } from '@/server/common/test/lib/test_environment';
 import { CalendarActorEntity } from '@/server/activitypub/entity/calendar_actor';
 import CalendarActorService from '@/server/activitypub/service/calendar_actor';
@@ -214,7 +215,7 @@ describe('Outbox Local Dispatch (cross-hop remote follower regression)', () => {
     // Now install the ActivityPub event handlers so that a subsequent
     // calendarInterface.createEvent triggers handleEventCreated, which in turn
     // runs the unified outbox dispatch path against the fixtures we just built.
-    new ActivityPubEventHandlers(apInterface, calendarInterface).install(eventBus);
+    new ActivityPubEventHandlers(apInterface, calendarInterface, stubHousekeepingInterface()).install(eventBus);
   });
 
   afterAll(async () => {
