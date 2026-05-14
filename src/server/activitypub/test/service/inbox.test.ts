@@ -743,6 +743,102 @@ describe('actorOwnsObject', () => {
 
     expect(result).toBe(false);
   });
+
+  // ---------- trustLocalOrigin short-circuit ----------
+  //
+  // The local in-process dispatch path (handleLocalActivityDispatch) passes
+  // `{ trustLocalOrigin: true }` to actorOwnsObject so the remote attributedTo
+  // fetch is skipped — the activity's authenticity is established by row
+  // provenance (it came out of our own outbox). The HTTP path MUST NOT pass
+  // this flag, even if the activity's actor URI happens to share a hostname
+  // with this instance's domain: signature verification proves actor identity,
+  // not object ownership, so the full attributedTo fetch is the only thing
+  // that gates a local actor from spoofing ownership of a cached remote
+  // object. The hostname short-circuit was the security finding repaired in
+  // pv-ojtg.1; the regression test below guards against it returning.
+  //
+  // See the JSDoc on actorOwnsObject (inbox.ts) for the full threat model.
+
+  it('trustLocalOrigin: true returns true without invoking fetchRemoteObject', async () => {
+    // Stub fetchRemoteObject to throw — if invoked, the test fails. This is
+    // the security-positive contract: when the call site asserts local
+    // provenance, the verifier must never reach out to the network.
+    mockFetchRemoteObject.mockImplementation(() => {
+      throw new Error('fetchRemoteObject must not be called when trustLocalOrigin is true');
+    });
+
+    const message = {
+      actor: 'https://local.federation.test/calendars/owner',
+      object: {
+        id: 'https://local.federation.test/events/local-evt',
+        attributedTo: 'https://local.federation.test/calendars/owner',
+      },
+    };
+
+    const result = await service.actorOwnsObject(message, { trustLocalOrigin: true });
+
+    expect(result).toBe(true);
+    expect(mockFetchRemoteObject).not.toHaveBeenCalled();
+  });
+
+  it('default (no options) invokes fetchRemoteObject for HTTP-path verification', async () => {
+    // Negative case: with no options (i.e. HTTP-arrived activity), the
+    // full attributedTo verification path runs and the remote fetch is
+    // invoked with the configured object URI.
+    mockFetchRemoteObject.mockResolvedValue({
+      id: REMOTE_EVENT_URL,
+      type: 'Event',
+      attributedTo: REMOTE_ACTOR_URL,
+    });
+
+    const message = {
+      actor: REMOTE_ACTOR_URL,
+      object: { id: REMOTE_EVENT_URL },
+    };
+
+    const result = await service.actorOwnsObject(message);
+
+    expect(result).toBe(true);
+    expect(mockFetchRemoteObject).toHaveBeenCalledOnce();
+    expect(mockFetchRemoteObject).toHaveBeenCalledWith(REMOTE_EVENT_URL);
+  });
+
+  it('SECURITY REGRESSION: HTTP path still invokes fetchRemoteObject even when actor hostname matches local domain', async () => {
+    // The earlier design short-circuited whenever the actor URI's hostname
+    // equalled this instance's domain. That was an exploit path: a local
+    // actor could HTTP-sign a Delete/Update whose object is a cached remote
+    // event it does not own and bypass ownership verification. Signature
+    // verification proves actor identity, not object ownership.
+    //
+    // This test pins the security invariant by giving the activity's actor
+    // a hostname identical to this instance's configured `domain`
+    // (pavillion.dev in test.yaml) and confirming the HTTP path still runs
+    // the full attributedTo fetch. The hostname must NOT trigger any
+    // short-circuit; only an explicit trustLocalOrigin call-site flag may.
+    mockFetchRemoteObject.mockResolvedValue({
+      id: 'https://pavillion.dev/events/local-evt',
+      type: 'Event',
+      attributedTo: 'https://pavillion.dev/calendars/owner',
+    });
+
+    const message = {
+      // Actor URI hostname == config.get('domain'). In the pre-repair
+      // design this would have short-circuited and returned true without
+      // any remote fetch. Post-repair, the only short-circuit is the
+      // explicit trustLocalOrigin flag, which this call site does NOT set.
+      actor: 'https://pavillion.dev/calendars/owner',
+      object: { id: 'https://pavillion.dev/events/local-evt' },
+    };
+
+    await service.actorOwnsObject(message);
+
+    // The security assertion: fetchRemoteObject MUST be invoked even when
+    // the actor hostname matches the local domain. If a future regression
+    // re-introduces a URI-hostname short-circuit, this stub will not be
+    // called and this test will fail.
+    expect(mockFetchRemoteObject).toHaveBeenCalledOnce();
+    expect(mockFetchRemoteObject).toHaveBeenCalledWith('https://pavillion.dev/events/local-evt');
+  });
 });
 
 describe('isAuthorizedRemoteEditor caching', () => {

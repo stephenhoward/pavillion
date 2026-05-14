@@ -41,10 +41,20 @@ describe('Flag activity outbox processing', () => {
   beforeEach(() => {
     eventBus = new EventEmitter();
     const mockInbox = {
-      handleLocalAnnounceDispatch: sandbox.stub().resolves(),
+      handleLocalActivityDispatch: sandbox.stub().resolves(),
     } as unknown as ProcessInboxService;
     service = new ProcessOutboxService(eventBus, mockInbox);
     stubSigning(service, sandbox);
+
+    // Default per-recipient local-resolution to "not local" so these
+    // HTTP-delivery focused tests don't touch the live calendar_actor
+    // table (which is not synced for this integration test fixture).
+    // The flag-outbox suite mocks the entire delivery path and asserts
+    // HTTP behavior; the local-dispatch branch is covered separately by
+    // outbox.test.ts and handle-local-activity-dispatch.integration.test.ts.
+    sandbox
+      .stub(service.calendarActorService, 'getLocalCalendarByActorUri')
+      .resolves(null);
   });
 
   afterEach(() => {

@@ -20,7 +20,7 @@ import { CalendarActorEntity } from "@/server/activitypub/entity/calendar_actor"
 import RemoteCalendarService from "@/server/activitypub/service/remote_calendar";
 import { EventObject } from "@/server/activitypub/model/object/event";
 import { NoteObject } from "@/server/activitypub/model/object/note";
-import { ActivityPubActor } from "@/server/activitypub/model/base";
+import { ActivityPubActivity, ActivityPubActor } from "@/server/activitypub/model/base";
 import CalendarInterface from "@/server/calendar/interface";
 import ModerationInterface from "@/server/moderation/interface";
 import { CalendarEvent } from "@/common/model/events";
@@ -310,134 +310,177 @@ class ProcessInboxService {
           }
         }
       }
-      switch( message.type ) {
-        case 'Create':
-          {
-            const activity = CreateActivity.fromObject(message.message);
-            if (!activity) {
-              const actorUri = (message.message as any)?.actor || 'unknown';
-              logActivityRejection({
-                rejection_type: 'parse_failure',
-                activity_type: 'Create',
-                actor_uri: actorUri,
-                actor_domain: this.extractDomain(actorUri),
-                calendar_id: calendar.id,
-                calendar_url_name: calendar.urlName,
-                reason: 'Failed to parse Create activity',
-                message_id: message.id,
-              });
-              throw new Error('Failed to parse Create activity');
-            }
-            await this.processCreateEvent(calendar, activity);
+      await this.dispatchByType(calendar, message);
+      await message.update({
+        processed_time: DateTime.now().toJSDate(),
+        processed_status: 'ok',
+      });
+    }
+    catch (e) {
+      logError(e, `Error processing inbox message for calendar ${message.calendar_id}`);
+      await message.update({
+        processed_time: DateTime.now().toJSDate(),
+        processed_status: 'error',
+      });
+    }
+  }
+
+  /**
+   * Dispatches a parsed inbox row to the per-type handler. Shared by
+   * processInboxMessage (HTTP-arrived activities) and
+   * handleLocalActivityDispatch (in-process activities from the local
+   * outbox). The trust contract for the local path is documented at
+   * `handleLocalActivityDispatch`.
+   *
+   * NOTE: the blocked-instance check and FILTERED_TYPES relationship check
+   * live on `processInboxMessage` above and are intentionally NOT inside
+   * this helper — local-origin activities bypass both by construction
+   * (you cannot block yourself; no relationship requirement applies to
+   * your own outbound traffic).
+   *
+   * @param calendar - The calendar context for the activity
+   * @param message - The persisted inbox row (HTTP path: row written by
+   *   addToInbox; local path: row written by handleLocalActivityDispatch
+   *   via the findOne-then-create idempotent insertion pattern)
+   * @param options - When `trustLocalOrigin: true`, the per-type handlers
+   *   skip remote `attributedTo` ownership verification because the
+   *   activity's authenticity is established by row provenance. Set only
+   *   on the local-dispatch path. HTTP callers omit the flag.
+   */
+  private async dispatchByType(
+    calendar: Calendar,
+    message: ActivityPubInboxMessageEntity,
+    options: { trustLocalOrigin?: boolean } = {},
+  ): Promise<void> {
+    switch( message.type ) {
+      case 'Create':
+        {
+          const activity = CreateActivity.fromObject(message.message);
+          if (!activity) {
+            const actorUri = (message.message as any)?.actor || 'unknown';
+            logActivityRejection({
+              rejection_type: 'parse_failure',
+              activity_type: 'Create',
+              actor_uri: actorUri,
+              actor_domain: this.extractDomain(actorUri),
+              calendar_id: calendar.id,
+              calendar_url_name: calendar.urlName,
+              reason: 'Failed to parse Create activity',
+              message_id: message.id,
+            });
+            throw new Error('Failed to parse Create activity');
           }
-          break;
-        case 'Update':
-          {
-            const activity = UpdateActivity.fromObject(message.message);
-            if (!activity) {
-              const actorUri = (message.message as any)?.actor || 'unknown';
-              logActivityRejection({
-                rejection_type: 'parse_failure',
-                activity_type: 'Update',
-                actor_uri: actorUri,
-                actor_domain: this.extractDomain(actorUri),
-                calendar_id: calendar.id,
-                calendar_url_name: calendar.urlName,
-                reason: 'Failed to parse Update activity',
-                message_id: message.id,
-              });
-              throw new Error('Failed to parse Update activity');
-            }
-            await this.processUpdateEvent(calendar, activity);
+          await this.processCreateEvent(calendar, activity, options);
+        }
+        break;
+      case 'Update':
+        {
+          const activity = UpdateActivity.fromObject(message.message);
+          if (!activity) {
+            const actorUri = (message.message as any)?.actor || 'unknown';
+            logActivityRejection({
+              rejection_type: 'parse_failure',
+              activity_type: 'Update',
+              actor_uri: actorUri,
+              actor_domain: this.extractDomain(actorUri),
+              calendar_id: calendar.id,
+              calendar_url_name: calendar.urlName,
+              reason: 'Failed to parse Update activity',
+              message_id: message.id,
+            });
+            throw new Error('Failed to parse Update activity');
           }
-          break;
-        case 'Delete':
-          {
-            const activity = DeleteActivity.fromObject(message.message);
-            if (!activity) {
-              const actorUri = (message.message as any)?.actor || 'unknown';
-              logActivityRejection({
-                rejection_type: 'parse_failure',
-                activity_type: 'Delete',
-                actor_uri: actorUri,
-                actor_domain: this.extractDomain(actorUri),
-                calendar_id: calendar.id,
-                calendar_url_name: calendar.urlName,
-                reason: 'Failed to parse Delete activity',
-                message_id: message.id,
-              });
-              throw new Error('Failed to parse Delete activity');
-            }
-            await this.processDeleteEvent(calendar, activity);
+          await this.processUpdateEvent(calendar, activity, options);
+        }
+        break;
+      case 'Delete':
+        {
+          const activity = DeleteActivity.fromObject(message.message);
+          if (!activity) {
+            const actorUri = (message.message as any)?.actor || 'unknown';
+            logActivityRejection({
+              rejection_type: 'parse_failure',
+              activity_type: 'Delete',
+              actor_uri: actorUri,
+              actor_domain: this.extractDomain(actorUri),
+              calendar_id: calendar.id,
+              calendar_url_name: calendar.urlName,
+              reason: 'Failed to parse Delete activity',
+              message_id: message.id,
+            });
+            throw new Error('Failed to parse Delete activity');
           }
-          break;
-        case 'Follow':
-          {
-            const activity = FollowActivity.fromObject(message.message);
-            if (!activity) {
-              const actorUri = (message.message as any)?.actor || 'unknown';
-              logActivityRejection({
-                rejection_type: 'parse_failure',
-                activity_type: 'Follow',
-                actor_uri: actorUri,
-                actor_domain: this.extractDomain(actorUri),
-                calendar_id: calendar.id,
-                calendar_url_name: calendar.urlName,
-                reason: 'Failed to parse Follow activity',
-                message_id: message.id,
-              });
-              throw new Error('Failed to parse Follow activity');
-            }
-            await this.processFollowAccount(calendar, activity);
+          await this.processDeleteEvent(calendar, activity, options);
+        }
+        break;
+      case 'Follow':
+        {
+          const activity = FollowActivity.fromObject(message.message);
+          if (!activity) {
+            const actorUri = (message.message as any)?.actor || 'unknown';
+            logActivityRejection({
+              rejection_type: 'parse_failure',
+              activity_type: 'Follow',
+              actor_uri: actorUri,
+              actor_domain: this.extractDomain(actorUri),
+              calendar_id: calendar.id,
+              calendar_url_name: calendar.urlName,
+              reason: 'Failed to parse Follow activity',
+              message_id: message.id,
+            });
+            throw new Error('Failed to parse Follow activity');
           }
-          break;
-        case 'Accept':
-          {
-            const activity = AcceptActivity.fromObject(message.message);
-            if (!activity) {
-              const actorUri = (message.message as any)?.actor || 'unknown';
-              logActivityRejection({
-                rejection_type: 'parse_failure',
-                activity_type: 'Accept',
-                actor_uri: actorUri,
-                actor_domain: this.extractDomain(actorUri),
-                calendar_id: calendar.id,
-                calendar_url_name: calendar.urlName,
-                reason: 'Failed to parse Accept activity',
-                message_id: message.id,
-              });
-              throw new Error('Failed to parse Accept activity');
-            }
-            await this.processAcceptActivity(calendar, activity);
+          await this.processFollowAccount(calendar, activity);
+        }
+        break;
+      case 'Accept':
+        {
+          const activity = AcceptActivity.fromObject(message.message);
+          if (!activity) {
+            const actorUri = (message.message as any)?.actor || 'unknown';
+            logActivityRejection({
+              rejection_type: 'parse_failure',
+              activity_type: 'Accept',
+              actor_uri: actorUri,
+              actor_domain: this.extractDomain(actorUri),
+              calendar_id: calendar.id,
+              calendar_url_name: calendar.urlName,
+              reason: 'Failed to parse Accept activity',
+              message_id: message.id,
+            });
+            throw new Error('Failed to parse Accept activity');
           }
-          break;
-        case 'Announce':
-          {
-            const activity = AnnounceActivity.fromObject(message.message);
-            if (!activity) {
-              const actorUri = (message.message as any)?.actor || 'unknown';
-              logActivityRejection({
-                rejection_type: 'parse_failure',
-                activity_type: 'Announce',
-                actor_uri: actorUri,
-                actor_domain: this.extractDomain(actorUri),
-                calendar_id: calendar.id,
-                calendar_url_name: calendar.urlName,
-                reason: 'Failed to parse Announce activity',
-                message_id: message.id,
-              });
-              throw new Error('Failed to parse Announce activity');
-            }
-            await this.processShareEvent(calendar, activity);
+          await this.processAcceptActivity(calendar, activity);
+        }
+        break;
+      case 'Announce':
+        {
+          const activity = AnnounceActivity.fromObject(message.message);
+          if (!activity) {
+            const actorUri = (message.message as any)?.actor || 'unknown';
+            logActivityRejection({
+              rejection_type: 'parse_failure',
+              activity_type: 'Announce',
+              actor_uri: actorUri,
+              actor_domain: this.extractDomain(actorUri),
+              calendar_id: calendar.id,
+              calendar_url_name: calendar.urlName,
+              reason: 'Failed to parse Announce activity',
+              message_id: message.id,
+            });
+            throw new Error('Failed to parse Announce activity');
           }
-          break;
-        case 'Flag':
-          {
-            await this.processFlagActivity(calendar, message.message);
-          }
-          break;
-        case 'Undo':
-          if (!message.message || typeof message.message !== 'object' || !message.message.object) {
+          await this.processShareEvent(calendar, activity);
+        }
+        break;
+      case 'Flag':
+        {
+          await this.processFlagActivity(calendar, message.message);
+        }
+        break;
+      case 'Undo':
+        {
+          if (!message.message || typeof message.message !== 'object' || !(message.message as any).object) {
             const actorUri = (message.message as any)?.actor || 'unknown';
             logActivityRejection({
               rejection_type: 'invalid_object',
@@ -452,12 +495,12 @@ class ProcessInboxService {
             throw new Error('Invalid Undo activity: missing message object');
           }
 
-          let targetEntity = await ActivityPubInboxMessageEntity.findOne({
-            where: { calendar_id: message.calendar_id, id: message.message.object },
+          const undoTargetId = (message.message as any).object;
+          const targetEntity = await ActivityPubInboxMessageEntity.findOne({
+            where: { calendar_id: message.calendar_id, id: undoTargetId },
           });
 
           if ( targetEntity ) {
-
             switch( targetEntity.type ) {
               case 'Follow':
                 await this.processUnfollowAccount(calendar, targetEntity);
@@ -470,21 +513,10 @@ class ProcessInboxService {
           else {
             throw new Error('Undo target not found');
           }
-          break;
-        default:
-          throw new Error('bad message type');
-      }
-      await message.update({
-        processed_time: DateTime.now().toJSDate(),
-        processed_status: 'ok',
-      });
-    }
-    catch (e) {
-      logError(e, `Error processing inbox message for calendar ${message.calendar_id}`);
-      await message.update({
-        processed_time: DateTime.now().toJSDate(),
-        processed_status: 'error',
-      });
+        }
+        break;
+      default:
+        throw new Error('bad message type');
     }
   }
 
@@ -578,9 +610,31 @@ class ProcessInboxService {
    * to own an object they don't actually control.
    *
    * @param {any} message - The message containing actor and object information
+   * @param {{ trustLocalOrigin?: boolean }} [options] - When `trustLocalOrigin`
+   *   is `true`, ownership is treated as established by row provenance and the
+   *   remote attributedTo fetch is skipped. This flag is ONLY safe to set from
+   *   the local in-process dispatch path (`handleLocalActivityDispatch`),
+   *   where the activity originates from an `ActivityPubOutboxMessageEntity`
+   *   row written by local service code via `addToOutbox()`. The HTTP-arrived
+   *   path MUST omit this flag (default `false`) and run the full
+   *   `fetchRemoteObject` + `attributedTo` verification.
+   *
+   *   THREAT MODEL the flag protects against:
+   *     The previous design short-circuited whenever the actor URI's hostname
+   *     equalled this instance's domain. HTTP signature verification proves
+   *     actor identity, NOT object ownership: a local actor A could
+   *     HTTP-sign a `Delete` whose `object` is a cached remote event A does
+   *     not own and unilaterally delete it. By gating the short-circuit on
+   *     a call-site flag instead of the URI hostname, HTTP-arrived activities
+   *     always run full attributedTo verification regardless of whose name
+   *     appears in the actor field.
+   *
    * @returns {Promise<boolean>} True if the actor owns the object, false otherwise
    */
-  async actorOwnsObject(message: any): Promise<boolean> {
+  async actorOwnsObject(
+    message: any,
+    options: { trustLocalOrigin?: boolean } = {},
+  ): Promise<boolean> {
     // Get the object URI - could be a string or an object with id
     const objectUri = typeof message.object === 'string'
       ? message.object
@@ -590,6 +644,21 @@ class ProcessInboxService {
       logger.warn('[INBOX] actorOwnsObject: No object URI found in message');
       return false;
     }
+
+    // Local-dispatch trust short-circuit. Only fires when the caller is the
+    // in-process dispatch path (`handleLocalActivityDispatch`), which sets
+    // `trustLocalOrigin: true`. Ownership on that path is established by row
+    // provenance: the activity came out of our own outbox row, written by
+    // local service code via `addToOutbox()`, so there is no remote actor
+    // identity to verify and no remote object to fetch.
+    //
+    // HTTP-arrived activities MUST NOT take this branch — see the threat-
+    // model note in the JSDoc above.
+    if (options.trustLocalOrigin === true) {
+      return true;
+    }
+
+    const actorUri = message.actor;
 
     // Fetch the object from its origin server
     const remoteObject = await fetchRemoteObject(objectUri);
@@ -608,8 +677,6 @@ class ProcessInboxService {
     }
 
     // attributedTo can be a string or an array of strings
-    const actorUri = message.actor;
-
     if (Array.isArray(attributedTo)) {
       // Check if the actor is in the array
       return attributedTo.some((attr) => {
@@ -646,9 +713,17 @@ class ProcessInboxService {
    *
    * @param {Calendar} calendar - The calendar context for the event
    * @param {CreateActivity} message - The Create activity message
+   * @param {{ trustLocalOrigin?: boolean }} [options] - When `trustLocalOrigin`
+   *   is `true`, the actorOwnsObject remote attributedTo fetch is skipped
+   *   (ownership trusted by outbox row provenance). Set only by the
+   *   local-dispatch path; HTTP callers omit it.
    * @returns {Promise<void>}
    */
-  async processCreateEvent(calendar: Calendar, message: CreateActivity): Promise<CalendarEvent | null> {
+  async processCreateEvent(
+    calendar: Calendar,
+    message: CreateActivity,
+    options: { trustLocalOrigin?: boolean } = {},
+  ): Promise<CalendarEvent | null> {
     if (!message.object || !message.object.id) {
       logger.warn('[INBOX] Create activity missing object or object.id');
       logActivityRejection({
@@ -725,7 +800,7 @@ class ProcessInboxService {
     }
     else {
       // Traditional calendar-to-calendar federation - verify ownership
-      const ok = await this.actorOwnsObject(message);
+      const ok = await this.actorOwnsObject(message, options);
       if (!ok) {
         logger.warn({ apObjectId }, '[INBOX] Actor ownership verification failed for event');
         logActivityRejection({
@@ -1263,9 +1338,18 @@ class ProcessInboxService {
    *
    * @param {Calendar} calendar - The calendar context for the event
    * @param {UpdateActivity} message - The Update activity message
+   * @param {{ trustLocalOrigin?: boolean }} [_options] - Accepted for
+   *   signature parity with the dispatch helper. processUpdateEvent verifies
+   *   ownership against the locally-stored `attributed_to` column rather
+   *   than via remote fetch, so the flag is currently unused here. Kept on
+   *   the signature so all dispatchByType branches share the same shape.
    * @returns {Promise<CalendarEvent | null>}
    */
-  async processUpdateEvent(calendar: Calendar, message: UpdateActivity): Promise<CalendarEvent | null> {
+  async processUpdateEvent(
+    calendar: Calendar,
+    message: UpdateActivity,
+    _options: { trustLocalOrigin?: boolean } = {},
+  ): Promise<CalendarEvent | null> {
     if (!message.object || !message.object.id) {
       logger.warn(`Update activity missing object or object.id`);
       logActivityRejection({
@@ -1454,9 +1538,17 @@ class ProcessInboxService {
    *
    * @param {Calendar} calendar - The calendar context for the event
    * @param {DeleteActivity} message - The Delete activity message
+   * @param {{ trustLocalOrigin?: boolean }} [options] - When `trustLocalOrigin`
+   *   is `true`, the actorOwnsObject remote attributedTo fetch is skipped
+   *   (ownership trusted by outbox row provenance). Set only by the
+   *   local-dispatch path; HTTP callers omit it.
    * @returns {Promise<void>}
    */
-  async processDeleteEvent(calendar: Calendar, message: DeleteActivity) {
+  async processDeleteEvent(
+    calendar: Calendar,
+    message: DeleteActivity,
+    options: { trustLocalOrigin?: boolean } = {},
+  ) {
     // Validate that the object field is present and has an identifiable AP ID.
     // message.object can be a string URL (standard federation) or a Tombstone object
     // with an 'id' field (cross-instance editor delete).
@@ -1561,7 +1653,7 @@ class ProcessInboxService {
         return;
       }
 
-      const ok = await this.actorOwnsObject(message);
+      const ok = await this.actorOwnsObject(message, options);
       if (!ok) {
         logActivityRejection({
           rejection_type: 'ownership_verification_failed',
@@ -1817,51 +1909,153 @@ class ProcessInboxService {
   }
 
   /**
-   * Public entry point for in-process local dispatch of an Announce from
+   * Public entry point for in-process local dispatch of an activity from
    * the outbox. Called by ProcessOutboxService when a recipient resolves
    * to a local CalendarActorEntity.
    *
+   * Covered activity types: Create, Update, Delete, Follow, Accept, Flag,
+   * Announce, Undo. Local dispatch writes an ActivityPubInboxMessageEntity
+   * row keyed on (calendar_id, id), then routes the row through the same
+   * private `dispatchByType` helper that processInboxMessage uses for
+   * HTTP-arrived activities. The row insertion mirrors the existing
+   * `addToInbox` lookup-then-build pattern so the persisted shape matches
+   * the HTTP path exactly. Idempotency: dispatching the same outbox row
+   * twice produces exactly one inbox row.
+   *
    * TRUST CONTRACT (SECURITY-CRITICAL):
-   *   This method SKIPS HTTP signature verification because the activity
-   *   originates from an ActivityPubOutboxMessageEntity on this same
-   *   instance — rows that were written exclusively by local code paths
-   *   via addToOutbox(). The caller must guarantee the activity came from
-   *   an outbox row that was produced by a local calendar actor.
+   *   This method SKIPS HTTP signature verification AND skips the remote
+   *   `attributedTo` ownership fetch inside `actorOwnsObject` (via the
+   *   `trustLocalOrigin: true` flag plumbed through `dispatchByType`).
+   *   Every other step — inbox row insertion and the dispatch switch — runs
+   *   identically to the HTTP-arrived path. The trust anchor is the outbox
+   *   row itself: ActivityPubOutboxMessageEntity rows are written exclusively
+   *   by local service code via addToOutbox(), so anything the outbox builds
+   *   the inbox can dispatch. This invariant is type-agnostic — the row
+   *   provenance argument does not depend on the activity payload shape.
    *
-   *   DO NOT call this method from any code path that has not established
-   *   this guarantee. In particular, do NOT call it with activity data
-   *   originating from HTTP request bodies, user input, or untrusted
-   *   external sources. New callers must uphold the same contract.
+   *   Per-handler audit:
+   *     - Follow / Accept / Flag: no remote fetches; no inbox-row
+   *       dependency on the local path beyond the row this method writes
+   *       (Follow's row is what Undo(Follow) later looks up). Safe by
+   *       inspection.
+   *     - Create / Update / Delete: `actorOwnsObject` is the only remote
+   *       fetch in this group. The `trustLocalOrigin: true` call-site flag
+   *       short-circuits the fetch on this path — the HTTP path does NOT
+   *       pass the flag and therefore still runs the full attributedTo
+   *       check. This split closes the earlier spoofing window where any
+   *       activity carrying a local-hostname actor URI would have bypassed
+   *       ownership verification regardless of how it arrived: an
+   *       HTTP-signed Delete from local actor A targeting a cached remote
+   *       event A does not own would have been honored, because signature
+   *       verification proves actor identity but not object ownership. The
+   *       flag is now gated by call site, not URI hostname.
+   *     - Announce: identical to the previous Announce-only path, plus
+   *       the inbox row now exists for later Undo(Announce) lookup.
+   *     - Undo: depends on the inbox-row lookup at the Undo case in
+   *       `dispatchByType`. Because this method writes the inbox row before
+   *       dispatching, Undo of a locally-dispatched Follow or Announce now
+   *       resolves correctly. (Before this method existed, same-instance
+   *       Undo of an Announce was silently broken — no inbox row existed
+   *       to resolve.)
    *
-   *   Current authorized callers: ProcessOutboxService.processOutboxMessage
-   *   (after dispatching the recipient through
-   *   CalendarActorService.getLocalCalendarByActorUri).
+   *   NOT part of `dispatchByType`: the blocked-instance check
+   *   (processInboxMessage at the moderationInterface gate) and the
+   *   FILTERED_TYPES relationship-filter check. Both remain on
+   *   `processInboxMessage` and are intentionally bypassed by local
+   *   dispatch — you cannot block your own instance from itself, and
+   *   relationship filtering does not apply to a calendar's own outbound
+   *   traffic. The row-provenance trust anchor covers both bypasses.
    *
-   * Unlike processShareEvent, this assumes the EventObjectEntity already
-   * exists (which Phase 1 guarantees for local events) and skips all
-   * remote-fetch paths.
+   *   INVARIANT: no remote-origin activity ever reaches
+   *   `handleLocalActivityDispatch`. The single caller in
+   *   ProcessOutboxService.processOutboxMessage gates entry on
+   *   CalendarActorService.getLocalCalendarByActorUri returning a non-null
+   *   local calendar; that lookup is the structural guarantee that the
+   *   recipient (and therefore the row we're about to write) belongs to
+   *   this instance. DO NOT call this method from any code path that has
+   *   not established this guarantee. In particular, do NOT call it with
+   *   activity data originating from HTTP request bodies, user input, or
+   *   untrusted external sources. New callers must uphold the same contract.
+   *
+   *   Current authorized callers: ProcessOutboxService.processOutboxMessage.
    */
-  async handleLocalAnnounceDispatch(calendar: Calendar, activity: AnnounceActivity): Promise<void> {
-    if (!activity.object) {
-      logger.warn('[LOCAL-DISPATCH] Announce activity missing object');
-      return;
-    }
-    const eventApId = typeof activity.object === 'string'
-      ? activity.object
-      : (activity.object as any)?.id;
-    if (!eventApId || typeof eventApId !== 'string') {
-      logger.warn('[LOCAL-DISPATCH] Announce activity object missing id');
+  async handleLocalActivityDispatch(calendar: Calendar, activity: ActivityPubActivity): Promise<void> {
+    if (!activity.id || !activity.type) {
+      logger.warn({ activityType: activity.type, activityId: activity.id }, '[LOCAL-DISPATCH] Activity missing id or type');
       return;
     }
 
-    const apObject = await EventObjectEntity.findOne({ where: { ap_id: eventApId } });
-    if (!apObject) {
-      logger.warn({ eventApId }, '[LOCAL-DISPATCH] No EventObjectEntity for local event — cascade step skipped');
-      return;
+    // Idempotent inbox row insertion. Mirrors the same lookup-then-build
+    // pattern used by ProcessActivityPubServerService.addToInbox so the
+    // shape of the persisted row (id == activity AP id, calendar_id ==
+    // recipient calendar) matches the HTTP-arrived path exactly. The
+    // (calendar_id, id) lookup key matches the Undo target lookup in the
+    // dispatch switch — see the Undo case in dispatchByType, which
+    // resolves Undo.object against the same column. Dispatching the same
+    // outbox row twice produces exactly one inbox row; on the race where
+    // two concurrent dispatchers both miss the findOne, the second
+    // create() lands on the primary-key constraint and we treat the
+    // pre-existing row as the canonical winner.
+    //
+    // The lookup is scoped by `(calendar_id, id)` — NOT `findByPk(activity.id)`
+    // — because a single AP activity ID can legitimately appear in multiple
+    // local calendars' inboxes on the same instance (e.g., two local
+    // followers of the same remote actor both receive the same Announce).
+    // Scoping by calendar guarantees idempotency per recipient while
+    // preserving one row per (recipient, activity) pair.
+    //
+    // Note: `findOrCreate` would also satisfy idempotency, but it always
+    // opens an internal Sequelize transaction, and SQLite (used in unit /
+    // integration tests with a shared in-memory connection) does not
+    // support nested transactions. When the outbox dispatches multiple
+    // activities for the same event in close succession (e.g., paired
+    // Announce + Create(Note) per pv-l35p), the second dispatcher's
+    // findOrCreate raced into a nested-transaction error. The
+    // findOne-then-create pattern uses no implicit transaction and
+    // matches the existing addToInbox convention for this table.
+    const messagePayload = activity.toObject();
+    const publishedDate = activity.published ?? new Date();
+    let messageEntity = await ActivityPubInboxMessageEntity.findOne({
+      where: { calendar_id: calendar.id, id: activity.id },
+    });
+    if (!messageEntity) {
+      try {
+        messageEntity = await ActivityPubInboxMessageEntity.create({
+          id: activity.id,
+          calendar_id: calendar.id,
+          type: activity.type,
+          message_time: publishedDate,
+          message: messagePayload,
+        });
+      }
+      catch (createError: any) {
+        // Race: a concurrent dispatcher inserted the same row between our
+        // findOne and create. Re-fetch and proceed; the existing row is the
+        // canonical winner.
+        messageEntity = await ActivityPubInboxMessageEntity.findOne({
+          where: { calendar_id: calendar.id, id: activity.id },
+        });
+        if (!messageEntity) {
+          throw createError;
+        }
+      }
     }
-    const isOriginal = apObject.attributed_to === activity.actor;
 
-    await this.checkAndPerformAutoRepost(calendar, activity.actor, eventApId, isOriginal);
+    try {
+      await this.dispatchByType(calendar, messageEntity, { trustLocalOrigin: true });
+      await messageEntity.update({
+        processed_time: DateTime.now().toJSDate(),
+        processed_status: 'ok',
+      });
+    }
+    catch (e) {
+      logError(e, `[LOCAL-DISPATCH] Error dispatching local activity for calendar ${calendar.id}`);
+      await messageEntity.update({
+        processed_time: DateTime.now().toJSDate(),
+        processed_status: 'error',
+      });
+      throw e;
+    }
   }
 
   /**
