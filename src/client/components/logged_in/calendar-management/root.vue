@@ -47,10 +47,16 @@ onBeforeMount(async () => {
     );
     state.calendarInfo = found ?? null;
 
-    // Restore tab from query param (e.g. after Stripe checkout redirect)
+    // Restore tab from query param (e.g. after Stripe checkout redirect, or
+    // from an inbox notification deep-link with ?tab=reports&report=<id>).
     const requestedTab = route.query.tab as string | undefined;
     if (requestedTab && visibleTabs.value.includes(requestedTab)) {
       state.activeTab = requestedTab;
+    }
+
+    // Deep-link to a specific report from the inbox.
+    if (state.activeTab === 'reports' && typeof route.query.report === 'string') {
+      selectedReportId.value = route.query.report;
     }
   }
   catch (error) {

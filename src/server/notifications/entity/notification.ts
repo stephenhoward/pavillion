@@ -47,6 +47,9 @@ class NotificationEntity extends Model {
   @Column({ type: DataType.UUID, allowNull: true })
   declare event_id: string | null;
 
+  @Column({ type: DataType.UUID, allowNull: true })
+  declare report_id: string | null;
+
   @Column({ type: DataType.STRING(256), allowNull: false })
   declare actor_name: string;
 
@@ -71,6 +74,7 @@ class NotificationEntity extends Model {
     notification.type = this.type;
     notification.calendarId = this.calendar_id;
     notification.eventId = this.event_id ?? null;
+    notification.reportId = this.report_id ?? null;
     notification.actorName = this.actor_name;
     notification.actorUrl = this.actor_url ?? null;
     notification.seen = this.seen;
@@ -94,6 +98,7 @@ class NotificationEntity extends Model {
       type: notification.type,
       calendar_id: notification.calendarId,
       event_id: notification.eventId ?? null,
+      report_id: notification.reportId ?? null,
       actor_name: notification.actorName,
       actor_url: notification.actorUrl ?? null,
       seen: notification.seen,

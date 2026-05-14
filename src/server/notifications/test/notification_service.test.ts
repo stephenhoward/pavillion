@@ -187,6 +187,38 @@ describe('NotificationService', () => {
       expect(result!.eventId).toBe(eventId);
     });
 
+    it('should store reportId for report notifications', async () => {
+      const accountId = uuidv4();
+      const calendarId = uuidv4();
+      const eventId = uuidv4();
+      const reportId = uuidv4();
+
+      findOneStub.resolves(null);
+      saveStub.resolves();
+
+      const result = await service.createNotification(
+        'report_received', calendarId, eventId, '', null, accountId, reportId,
+      );
+
+      expect(result).not.toBeNull();
+      expect(result!.reportId).toBe(reportId);
+    });
+
+    it('should default reportId to null when not provided', async () => {
+      const accountId = uuidv4();
+      const calendarId = uuidv4();
+
+      findOneStub.resolves(null);
+      saveStub.resolves();
+
+      const result = await service.createNotification(
+        'follow', calendarId, null, 'Alice', null, accountId,
+      );
+
+      expect(result).not.toBeNull();
+      expect(result!.reportId).toBeNull();
+    });
+
     it('should allow a duplicate after the 10-minute window has elapsed', async () => {
       const accountId = uuidv4();
       const calendarId = uuidv4();

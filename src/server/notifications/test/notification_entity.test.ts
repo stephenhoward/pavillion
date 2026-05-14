@@ -69,6 +69,33 @@ describe('NotificationEntity', () => {
 
       expect(entity.actor_url).toBeNull();
     });
+
+    it('should map reportId to report_id for report notifications', () => {
+      const reportId = uuidv4();
+      const notification = new Notification(uuidv4());
+      notification.type = 'report_received';
+      notification.calendarId = uuidv4();
+      notification.eventId = uuidv4();
+      notification.reportId = reportId;
+      notification.actorName = '';
+      notification.actorUrl = null;
+
+      const entity = NotificationEntity.fromModel(notification, uuidv4());
+
+      expect(entity.report_id).toBe(reportId);
+    });
+
+    it('should map null reportId to null report_id for non-report notifications', () => {
+      const notification = new Notification(uuidv4());
+      notification.type = 'follow';
+      notification.calendarId = uuidv4();
+      notification.actorName = 'Actor';
+      notification.reportId = null;
+
+      const entity = NotificationEntity.fromModel(notification, uuidv4());
+
+      expect(entity.report_id).toBeNull();
+    });
   });
 
   describe('toModel', () => {
@@ -209,6 +236,28 @@ describe('NotificationEntity', () => {
       expect(roundTrip.actorName).toBe(original.actorName);
       expect(roundTrip.actorUrl).toBeNull();
       expect(roundTrip.seen).toBe(original.seen);
+    });
+
+    it('should maintain reportId for a report notification through model-entity-model', () => {
+      const id = uuidv4();
+      const accountId = uuidv4();
+      const calendarId = uuidv4();
+      const eventId = uuidv4();
+      const reportId = uuidv4();
+
+      const original = new Notification(id);
+      original.type = 'report_received';
+      original.calendarId = calendarId;
+      original.eventId = eventId;
+      original.reportId = reportId;
+      original.actorName = '';
+      original.actorUrl = null;
+      original.seen = false;
+
+      const entity = NotificationEntity.fromModel(original, accountId);
+      const roundTrip = entity.toModel();
+
+      expect(roundTrip.reportId).toBe(reportId);
     });
   });
 });

@@ -97,6 +97,7 @@ describe('Notification API', () => {
         expect(response.body[0]).toHaveProperty('id');
         expect(response.body[0]).toHaveProperty('type');
         expect(response.body[0]).toHaveProperty('calendarId');
+        expect(response.body[0]).toHaveProperty('reportId');
         expect(response.body[0]).toHaveProperty('seen');
       });
 

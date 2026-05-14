@@ -91,6 +91,7 @@ class NotificationService {
    * @param {string} actorName - Raw display name of the actor (will be sanitized)
    * @param {string | null} actorUrl - URL of the actor (validated upstream by AP inbox)
    * @param {string} accountId - UUID of the account to notify
+   * @param {string | null} [reportId] - UUID of the related report (report_* types only)
    * @returns {Promise<Notification | null>} The created Notification model, or null if deduplicated
    */
   async createNotification(
@@ -100,6 +101,7 @@ class NotificationService {
     actorName: string,
     actorUrl: string | null,
     accountId: string,
+    reportId: string | null = null,
   ): Promise<Notification | null> {
     // Deduplication check: look for a matching record within the window
     const dedupCutoff = new Date(Date.now() - DEDUP_WINDOW_MS);
@@ -122,6 +124,7 @@ class NotificationService {
     notification.type = type;
     notification.calendarId = calendarId;
     notification.eventId = eventId;
+    notification.reportId = reportId;
     notification.actorName = sanitizedName;
     notification.actorUrl = actorUrl;
     notification.seen = false;

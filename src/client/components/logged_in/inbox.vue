@@ -132,9 +132,11 @@ const getUnshareRemotePhrase = (notification: Notification): string => {
 /**
  * Returns the translated phrase for a moderation-report notification.
  * Reporter identity is never surfaced (DEC-004, moderation-privacy) —
- * the phrase is generic across all reporter types. When the calendar
- * cannot be resolved (deleted or store not loaded), falls back to a
- * generic phrase that omits the calendar name.
+ * the phrase is generic across all reporter types. The calendar-name
+ * placement is left as the `{1}` slot marker for the `<i18next>` component
+ * to substitute a RouterLink to the calendar's reports tab. When the
+ * calendar cannot be resolved (deleted or store not loaded), falls back to
+ * a generic phrase that omits the calendar name and renders as plain text.
  *
  * Supported types: report_received, report_verified, report_escalated.
  */
@@ -143,9 +145,22 @@ const getReportPhrase = (notification: Notification): string => {
   const key = `notifications.${notification.type}`;
   const fallbackKey = `${key}_no_calendar`;
   if (calendarName) {
-    return t(key, { calendarName });
+    return t(key);
   }
   return t(fallbackKey);
+};
+
+/**
+ * Resolves the calendar's urlName for routing report notifications to the
+ * calendar-management view. Returns null when the calendar is not in the
+ * store, in which case the report row renders without a link.
+ */
+const resolveCalendarUrlName = (notification: Notification): string | null => {
+  if (!notification.calendarId) {
+    return null;
+  }
+  const calendar = calendarStore.getCalendarById(notification.calendarId);
+  return calendar?.urlName ?? null;
 };
 
 /**
@@ -255,7 +270,25 @@ onUnmounted(() => {
           v-else-if="isReportNotification(notification)"
           class="notification-text"
         >
-          {{ getReportPhrase(notification) }}
+          <i18next :translation="getReportPhrase(notification)">
+            <template #1>
+              <router-link
+                v-if="resolveCalendarUrlName(notification) && resolveCalendarName(notification)"
+                :to="{
+                  name: 'calendar_management',
+                  params: { calendar: resolveCalendarUrlName(notification) },
+                  query: notification.reportId
+                    ? { tab: 'reports', report: notification.reportId }
+                    : { tab: 'reports' },
+                }"
+                class="report-link"
+              >{{ resolveCalendarName(notification) }}</router-link>
+              <span
+                v-else
+                class="calendar-name"
+              >{{ resolveCalendarName(notification) }}</span>
+            </template>
+          </i18next>
         </p>
         <p
           v-else-if="notification.type === 'unshare' && notification.actorUrl"

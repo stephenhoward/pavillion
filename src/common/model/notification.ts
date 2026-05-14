@@ -13,6 +13,7 @@ class Notification extends PrimaryModel {
   type: string = '';
   calendarId: string = '';
   eventId: string | null = null;
+  reportId: string | null = null;
   actorName: string = '';
   actorUrl: string | null = null;
   seen: boolean = false;
@@ -39,6 +40,7 @@ class Notification extends PrimaryModel {
       type: this.type,
       calendarId: this.calendarId,
       eventId: this.eventId,
+      reportId: this.reportId,
       actorName: this.actorName,
       actorUrl: this.actorUrl,
       seen: this.seen,
@@ -57,6 +59,7 @@ class Notification extends PrimaryModel {
     notification.type = obj.type ?? '';
     notification.calendarId = obj.calendarId ?? '';
     notification.eventId = obj.eventId ?? null;
+    notification.reportId = obj.reportId ?? null;
     notification.actorName = obj.actorName ?? '';
     notification.actorUrl = obj.actorUrl ?? null;
     notification.seen = obj.seen ?? false;

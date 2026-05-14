@@ -1,5 +1,5 @@
 {
-    "_comment": "Seed inbox notifications for MultiCalendarTestUser (multicalendar@example.com / id 6e87d5ca-...-2222). They own multicalendar_calendar and are co-editor on testuser_calendar, so every notification carries meaningful calendar attribution. Covers all 6 notification types: follow, repost, report_received, report_verified, report_escalated, unshare. Actor names for follow/repost are remote *calendar* display names (matches the AP model — calendars are the actors for federation actions; see inbox.ts emit sites for activitypub:calendar:followed and activitypub:event:reposted). Unshare rows span BOTH flows (pv-cou0): the LOCAL flow row carries the local editor's display name with actor_url null and renders as plain text; the INBOUND flow row carries a remote calendar's display name with actor_url set to its https profile and renders with an <a class='actor-link'> anchor. Dates shift relative to today (2026-01-08 → today, 2026-01-01 → today-7).",
+    "_comment": "Seed inbox notifications for MultiCalendarTestUser (multicalendar@example.com / id 6e87d5ca-...-2222). They own multicalendar_calendar and are co-editor on testuser_calendar, so every notification carries meaningful calendar attribution. Covers all 6 notification types: follow, repost, report_received, report_verified, report_escalated, unshare. Actor names for follow/repost are remote *calendar* display names (matches the AP model — calendars are the actors for federation actions; see inbox.ts emit sites for activitypub:calendar:followed and activitypub:event:reposted). Unshare rows span BOTH flows (pv-cou0): the LOCAL flow row carries the local editor's display name with actor_url null and renders as plain text; the INBOUND flow row carries a remote calendar's display name with actor_url set to its https profile and renders with an <a class='actor-link'> anchor. report_id is populated on report_received/report_verified/report_escalated rows so the inbox can deep-link to the matching ReportEntity in zzy_report.json (pv-kwys). Dates shift relative to today (2026-01-08 → today, 2026-01-01 → today-7).",
     "NotificationEntity": [
         {
             "id": "9ec1f00d-0000-4000-8000-000000000001",
@@ -7,6 +7,7 @@
             "type": "report_escalated",
             "calendar_id": "cbe74815-939e-48b3-af44-1cd4eb3671bb",
             "event_id": "34ca7066-322c-4b66-ad78-00360f71e698",
+            "report_id": "9ec1f00d-0000-4000-8000-100000000001",
             "actor_name": "",
             "actor_url": null,
             "seen": false,
@@ -40,6 +41,7 @@
             "type": "report_received",
             "calendar_id": "c8569a35-dccb-4f97-a214-a4dec6c84262",
             "event_id": "6ec0637c-9dae-4489-ae74-f6b4301f318d",
+            "report_id": "9ec1f00d-0000-4000-8000-100000000004",
             "actor_name": "",
             "actor_url": null,
             "seen": false,
@@ -62,6 +64,7 @@
             "type": "report_verified",
             "calendar_id": "c8569a35-dccb-4f97-a214-a4dec6c84262",
             "event_id": "5b41c6b3-1335-4bc5-aaee-ae44db2a114e",
+            "report_id": "9ec1f00d-0000-4000-8000-100000000006",
             "actor_name": "",
             "actor_url": null,
             "seen": true,
@@ -95,6 +98,7 @@
             "type": "report_received",
             "calendar_id": "c8569a35-dccb-4f97-a214-a4dec6c84262",
             "event_id": "4a9f09c3-8ab1-45e0-a14b-ee3b1bfb1c76",
+            "report_id": "9ec1f00d-0000-4000-8000-100000000009",
             "actor_name": "",
             "actor_url": null,
             "seen": true,

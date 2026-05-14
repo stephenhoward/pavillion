@@ -87,11 +87,11 @@ describe('InboxView', () => {
               unshare_description_no_calendar: '{{actorName}} unposted a reposted event from your calendar',
               unshare_description_remote: '{1} unposted your event {2}',
               unshare_description_remote_no_event: '{1} unposted one of your events',
-              report_received: 'A report was filed against an event on {{calendarName}}',
+              report_received: 'A report was filed against an event on {1}',
               report_received_no_calendar: 'A report was filed against an event on your calendar',
-              report_verified: 'A reporter completed verification for a report on {{calendarName}}',
+              report_verified: 'A reporter completed verification for a report on {1}',
               report_verified_no_calendar: 'A reporter completed verification for a report on your calendar',
-              report_escalated: 'A report on {{calendarName}} was escalated for admin review',
+              report_escalated: 'A report on {1} was escalated for admin review',
               report_escalated_no_calendar: 'A report on your calendar was escalated for admin review',
               empty_state: 'No notifications yet',
               loading_more: 'Loading more notifications...',
@@ -681,6 +681,111 @@ describe('InboxView', () => {
       expect(wrapper.text()).toContain('A report was filed against an event on your calendar');
       expect(wrapper.find('a.actor-link').exists()).toBe(false);
       expect(wrapper.find('span.actor-name').exists()).toBe(false);
+    });
+
+    it('renders calendar name as a RouterLink to the calendar reports tab with the report id', async () => {
+      const calendarStore = useCalendarStore();
+      calendarStore.setCalendars([makeCalendar('cal-1', 'my-cal', 'Community Garden Events')]);
+
+      const store = useNotificationStore();
+      vi.spyOn(store, 'fetchNotifications').mockResolvedValue(undefined);
+      vi.spyOn(store, 'markAllSeen').mockResolvedValue(undefined);
+      store.notifications = [
+        makeNotification({
+          type: 'report_received',
+          calendarId: 'cal-1',
+          reportId: 'rep-42',
+          actorName: '',
+          actorUrl: null,
+        }),
+      ];
+
+      const wrapper = mount(InboxView, {
+        global: {
+          plugins: [pinia, [I18NextVue, { i18next }]],
+          stubs: { RouterLink: RouterLinkStub },
+        },
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await wrapper.vm.$nextTick();
+
+      const link = wrapper.findComponent(RouterLinkStub);
+      expect(link.exists()).toBe(true);
+      expect(link.props('to')).toEqual({
+        name: 'calendar_management',
+        params: { calendar: 'my-cal' },
+        query: { tab: 'reports', report: 'rep-42' },
+      });
+      expect(link.text()).toContain('Community Garden Events');
+    });
+
+    it('renders calendar name as a RouterLink without report query when reportId is null', async () => {
+      const calendarStore = useCalendarStore();
+      calendarStore.setCalendars([makeCalendar('cal-1', 'my-cal', 'Community Garden Events')]);
+
+      const store = useNotificationStore();
+      vi.spyOn(store, 'fetchNotifications').mockResolvedValue(undefined);
+      vi.spyOn(store, 'markAllSeen').mockResolvedValue(undefined);
+      store.notifications = [
+        makeNotification({
+          type: 'report_escalated',
+          calendarId: 'cal-1',
+          reportId: null,
+          actorName: '',
+          actorUrl: null,
+        }),
+      ];
+
+      const wrapper = mount(InboxView, {
+        global: {
+          plugins: [pinia, [I18NextVue, { i18next }]],
+          stubs: { RouterLink: RouterLinkStub },
+        },
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await wrapper.vm.$nextTick();
+
+      const link = wrapper.findComponent(RouterLinkStub);
+      expect(link.exists()).toBe(true);
+      expect(link.props('to')).toEqual({
+        name: 'calendar_management',
+        params: { calendar: 'my-cal' },
+        query: { tab: 'reports' },
+      });
+    });
+
+    it('renders plain text without a RouterLink when the calendar is missing from the store', async () => {
+      const calendarStore = useCalendarStore();
+      calendarStore.setCalendars([]);
+
+      const store = useNotificationStore();
+      vi.spyOn(store, 'fetchNotifications').mockResolvedValue(undefined);
+      vi.spyOn(store, 'markAllSeen').mockResolvedValue(undefined);
+      store.notifications = [
+        makeNotification({
+          type: 'report_received',
+          calendarId: 'unknown-cal',
+          reportId: 'rep-1',
+          actorName: '',
+          actorUrl: null,
+        }),
+      ];
+
+      const wrapper = mount(InboxView, {
+        global: {
+          plugins: [pinia, [I18NextVue, { i18next }]],
+          stubs: { RouterLink: RouterLinkStub },
+        },
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await wrapper.vm.$nextTick();
+
+      // Fallback phrase has no slot, so no router-link should be rendered.
+      expect(wrapper.findComponent(RouterLinkStub).exists()).toBe(false);
+      expect(wrapper.text()).toContain('A report was filed against an event on your calendar');
     });
 
     it('never renders actor info even if a report row has non-empty actorName (defense in depth)', async () => {

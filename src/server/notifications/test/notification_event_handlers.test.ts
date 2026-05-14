@@ -355,13 +355,14 @@ describe('NotificationEventHandlers', () => {
 
       await new Promise(resolve => setImmediate(resolve));
 
-      const [type, calId, evtId, actorName, actorUrl, acctId] = createNotificationStub.firstCall.args;
+      const [type, calId, evtId, actorName, actorUrl, acctId, reportId] = createNotificationStub.firstCall.args;
       expect(type).toBe('report_received');
       expect(calId).toBe(report.calendarId);
       expect(evtId).toBe(report.eventId);
       expect(actorName).toBe('');
       expect(actorUrl).toBeNull();
       expect(acctId).toBe(accountId);
+      expect(reportId).toBe(report.id);
     });
 
     it('should create report_received notifications with empty actor fields for administrator reporter', async () => {
@@ -530,13 +531,14 @@ describe('NotificationEventHandlers', () => {
 
       await new Promise(resolve => setImmediate(resolve));
 
-      const [type, calId, evtId, actorName, actorUrl, acctId] = createNotificationStub.firstCall.args;
+      const [type, calId, evtId, actorName, actorUrl, acctId, reportId] = createNotificationStub.firstCall.args;
       expect(type).toBe('report_verified');
       expect(calId).toBe(report.calendarId);
       expect(evtId).toBe(report.eventId);
       expect(actorName).toBe('');
       expect(actorUrl).toBeNull();
       expect(acctId).toBe(accountId);
+      expect(reportId).toBe(report.id);
     });
 
     it('should not call createNotification when calendar has no editors', async () => {
@@ -612,13 +614,14 @@ describe('NotificationEventHandlers', () => {
 
       await new Promise(resolve => setImmediate(resolve));
 
-      const [type, calId, evtId, actorName, actorUrl, acctId] = createNotificationStub.firstCall.args;
+      const [type, calId, evtId, actorName, actorUrl, acctId, reportId] = createNotificationStub.firstCall.args;
       expect(type).toBe('report_escalated');
       expect(calId).toBe(report.calendarId);
       expect(evtId).toBe(report.eventId);
       expect(actorName).toBe('');
       expect(actorUrl).toBeNull();
       expect(acctId).toBe(accountId);
+      expect(reportId).toBe(report.id);
     });
 
     it('should create report_escalated notifications on auto-escalation event', async () => {

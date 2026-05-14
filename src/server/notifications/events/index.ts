@@ -217,7 +217,8 @@ export default class NotificationEventHandlers implements DomainEventHandlers {
    * Fans out a report-related notification to every editor of the report's
    * calendar. Reporter identity is never surfaced — actorName is always
    * the empty string and actorUrl is always null, regardless of
-   * reporterType (DEC-004, moderation-privacy).
+   * reporterType (DEC-004, moderation-privacy). report.id is forwarded so
+   * the inbox can deep-link to the report detail surface.
    */
   private async fanOutReportNotification(type: string, report: Report): Promise<void> {
     if (!report.calendarId) {
@@ -233,6 +234,7 @@ export default class NotificationEventHandlers implements DomainEventHandlers {
           '',
           null,
           account.id,
+          report.id,
         );
       }
     }
