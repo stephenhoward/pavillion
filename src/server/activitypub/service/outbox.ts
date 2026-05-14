@@ -13,6 +13,7 @@ import { CalendarActorEntity } from "@/server/activitypub/entity/calendar_actor"
 import UpdateActivity from "@/server/activitypub/model/action/update";
 import DeleteActivity from "@/server/activitypub/model/action/delete";
 import AddActivity from "@/server/activitypub/model/action/add";
+import RemoveActivity from "@/server/activitypub/model/action/remove";
 import FollowActivity from "@/server/activitypub/model/action/follow";
 import AcceptActivity from "@/server/activitypub/model/action/accept";
 import AnnounceActivity from "@/server/activitypub/model/action/announce";
@@ -280,6 +281,22 @@ class ProcessOutboxService {
         }
         else {
           logger.warn({ activityId: activity.id }, 'Add activity has no explicit to field; skipping delivery (no follower fan-out for Add)');
+        }
+        break;
+      case 'Remove':
+        activity = RemoveActivity.fromObject(message.message);
+        if (!activity) {
+          throw new Error('Failed to parse Remove activity');
+        }
+        // Remove activities are inherently single-recipient (editor-revoke
+        // to a remote actor) — mirror Add. No follower fan-out fallback:
+        // broadcasting an editor-revoke is never the intent.
+        if (activity.to && activity.to.length > 0) {
+          recipients = activity.to;
+          logger.info({ recipientCount: recipients.length }, 'Using explicit recipients from to field for Remove activity');
+        }
+        else {
+          logger.warn({ activityId: activity.id }, 'Remove activity has no explicit to field; skipping delivery (no follower fan-out for Remove)');
         }
         break;
       case 'Follow':

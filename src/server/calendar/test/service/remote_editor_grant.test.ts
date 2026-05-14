@@ -27,12 +27,16 @@ import { EventEmitter } from 'events';
  * to the real UserActorEntity database. This allows integration-style tests
  * to create DB rows directly while the service uses interface-based calls.
  *
- * `sendEditorInvite` is a sinon stub so editor-invite tests can assert that
- * the calendar service hands off the typed (calendar, remoteUserActor) pair
- * to the AP domain. Activity construction itself lives in the AP domain
+ * `sendEditorInvite` and `sendEditorRevoke` are sinon stubs so editor
+ * grant/revoke tests can assert that the calendar service hands off the
+ * typed (calendar, remoteUserActor) / (calendar, actorUri) pairs to the AP
+ * domain. Activity construction itself lives in the AP domain
  * (FederationPublisher) and is exercised by federation-side tests.
  */
-function createMockActivityPubInterface(sendEditorInviteStub: sinon.SinonStub): Partial<ActivityPubInterface> {
+function createMockActivityPubInterface(
+  sendEditorInviteStub: sinon.SinonStub,
+  sendEditorRevokeStub: sinon.SinonStub,
+): Partial<ActivityPubInterface> {
   return {
     async findUserActorByUri(actorUri: string) {
       const entity = await UserActorEntity.findOne({ where: { actor_uri: actorUri } });
@@ -56,6 +60,7 @@ function createMockActivityPubInterface(sendEditorInviteStub: sinon.SinonStub): 
       return { id: entity.id };
     },
     sendEditorInvite: sendEditorInviteStub as unknown as ActivityPubInterface['sendEditorInvite'],
+    sendEditorRevoke: sendEditorRevokeStub as unknown as ActivityPubInterface['sendEditorRevoke'],
   };
 }
 
@@ -71,6 +76,7 @@ describe('CalendarService.grantEditAccessByEmail - Remote Editors', () => {
   let service: CalendarService;
   let mockAccountsInterface: Partial<AccountsInterface>;
   let sendEditorInviteStub: sinon.SinonStub;
+  let sendEditorRevokeStub: sinon.SinonStub;
   let testAccountId: string;
   let testCalendarId: string;
   let testAccount: Account;
@@ -78,6 +84,7 @@ describe('CalendarService.grantEditAccessByEmail - Remote Editors', () => {
   beforeEach(async () => {
     sandbox = sinon.createSandbox();
     sendEditorInviteStub = sandbox.stub().resolves();
+    sendEditorRevokeStub = sandbox.stub().resolves();
     await db.sync({ force: true });
 
     // Create test account
@@ -119,7 +126,9 @@ describe('CalendarService.grantEditAccessByEmail - Remote Editors', () => {
     );
 
     // Wire up mock ActivityPub interface for user actor lookups
-    service.setActivityPubInterface(createMockActivityPubInterface(sendEditorInviteStub) as ActivityPubInterface);
+    service.setActivityPubInterface(
+      createMockActivityPubInterface(sendEditorInviteStub, sendEditorRevokeStub) as ActivityPubInterface,
+    );
   });
 
   afterEach(async () => {
@@ -502,6 +511,56 @@ describe('CalendarService.grantEditAccessByEmail - Remote Editors', () => {
       // UserActorEntity should still exist (we don't delete actors)
       const userActor = await UserActorEntity.findByPk(userActorId);
       expect(userActor).not.toBeNull();
+
+      // Verify the calendar service handed off to the typed AP method with
+      // the calendar and the remote editor's actor URI. Activity construction
+      // (Remove wire shape, signing-actor selection, outbox enqueue) lives in
+      // the AP domain and is exercised by federation_publisher tests.
+      expect(sendEditorRevokeStub.calledOnce).toBe(true);
+      const [calendarArg, actorUriArg] = sendEditorRevokeStub.firstCall.args;
+      expect(calendarArg.id).toBe(testCalendarId);
+      expect(actorUriArg).toBe('https://beta.federation.local/users/Editor');
+    });
+
+    it('should not fail the revoke if the outbox enqueue throws (best-effort delivery)', async () => {
+      const userActorId = uuidv4();
+      await UserActorEntity.create({
+        id: userActorId,
+        actor_type: 'remote',
+        account_id: null,
+        actor_uri: 'https://beta.federation.local/users/Editor',
+        remote_username: 'Editor',
+        remote_domain: 'beta.federation.local',
+        public_key: null,
+        private_key: null,
+      });
+
+      await CalendarMemberEntity.create({
+        id: uuidv4(),
+        calendar_id: testCalendarId,
+        user_actor_id: userActorId,
+        role: 'editor',
+        granted_by: testAccountId,
+      });
+
+      // Simulate a failure dispatching the Remove activity via the typed AP
+      // method (e.g. transient DB error on the ap_outbox insert). The local
+      // membership row should still be destroyed — local revoke must not be
+      // contingent on remote delivery success.
+      sendEditorRevokeStub.rejects(new Error('outbox insert failed'));
+
+      const result = await service.removeRemoteEditor(
+        testAccount,
+        testCalendarId,
+        'https://beta.federation.local/users/Editor',
+      );
+
+      expect(result).toBe(true);
+
+      const membership = await CalendarMemberEntity.findOne({
+        where: { calendar_id: testCalendarId, user_actor_id: userActorId },
+      });
+      expect(membership).toBeNull();
     });
 
     it('should throw EditorNotFoundError if remote editor does not exist', async () => {

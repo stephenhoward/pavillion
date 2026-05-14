@@ -6,6 +6,7 @@ import { Account } from '@/common/model/account';
 import UserActorService from '@/server/activitypub/service/user_actor';
 import { UserActorEntity } from '@/server/activitypub/entity/user_actor';
 import { AccountEntity } from '@/server/common/entity/account';
+import RemoteCalendarService from '@/server/activitypub/service/remote_calendar';
 import CalendarInterface from '@/server/calendar/interface';
 
 describe('UserActorService', () => {
@@ -279,6 +280,124 @@ describe('UserActorService', () => {
       // Verify digest is NOT in the headers list
       expect(signature.headers).toBe('(request-target) host date');
       expect(signature.headers).not.toContain('digest');
+    });
+  });
+
+  describe('processRemoveActivity', () => {
+    const LOCAL_USERNAME = 'alice';
+    const LOCAL_ACCOUNT_ID = 'account-id-alice';
+    const LOCAL_ACTOR_URI = 'https://events.example/users/alice';
+    const REMOTE_CALENDAR_URI = 'https://remote.example/calendars/test';
+    const REMOTE_CALENDAR_ACTOR_ID = 'remote-calendar-actor-id';
+
+    let calendarInterfaceStub: { removeRemoteEditorAccess: sinon.SinonStub };
+
+    beforeEach(() => {
+      calendarInterfaceStub = {
+        removeRemoteEditorAccess: sinon.stub().resolves(true),
+      };
+      service = new UserActorService(calendarInterfaceStub as unknown as CalendarInterface);
+    });
+
+    function stubLookups(overrides: {
+      userActor?: any;
+      account?: any;
+      remoteCalendarActor?: any;
+    } = {}): void {
+      // getActorByUsername queries AccountEntity then UserActorEntity
+      sandbox.stub(AccountEntity, 'findOne').callsFake(async (options: any) => {
+        // First call: from getActorByUsername({ where: { username } })
+        // Second call: from processRemoveActivity({ where: { username } })
+        // Both return the same account row.
+        if (options?.where?.username === LOCAL_USERNAME) {
+          return overrides.account === undefined
+            ? ({ id: LOCAL_ACCOUNT_ID, username: LOCAL_USERNAME } as any)
+            : overrides.account;
+        }
+        return null;
+      });
+
+      const userActorEntity = overrides.userActor === undefined
+        ? {
+          toModel: () => ({
+            id: 'user-actor-id',
+            accountId: LOCAL_ACCOUNT_ID,
+            actorUri: LOCAL_ACTOR_URI,
+            publicKey: 'pk',
+            privateKey: 'sk',
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          }),
+        }
+        : overrides.userActor;
+      sandbox.stub(UserActorEntity, 'findOne').resolves(userActorEntity as any);
+
+      const remoteCalendarActor = overrides.remoteCalendarActor === undefined
+        ? { id: REMOTE_CALENDAR_ACTOR_ID, actorUri: REMOTE_CALENDAR_URI }
+        : overrides.remoteCalendarActor;
+      sandbox.stub(RemoteCalendarService.prototype, 'getByActorUri').resolves(remoteCalendarActor as any);
+    }
+
+    it('prunes the remote-calendar membership via CalendarInterface', async () => {
+      stubLookups();
+
+      const activity = {
+        type: 'Remove',
+        actor: REMOTE_CALENDAR_URI,
+        object: LOCAL_ACTOR_URI,
+        target: `${REMOTE_CALENDAR_URI}/editors`,
+      };
+
+      const result = await service.processRemoveActivity(LOCAL_USERNAME, activity);
+
+      expect(result).toBe(true);
+      expect(calendarInterfaceStub.removeRemoteEditorAccess.calledOnce).toBe(true);
+      const [accountIdArg, calendarActorIdArg] = calendarInterfaceStub.removeRemoteEditorAccess.firstCall.args;
+      expect(accountIdArg).toBe(LOCAL_ACCOUNT_ID);
+      expect(calendarActorIdArg).toBe(REMOTE_CALENDAR_ACTOR_ID);
+    });
+
+    it('returns false and does not prune when activity type is not Remove', async () => {
+      const activity = {
+        type: 'Delete',
+        actor: REMOTE_CALENDAR_URI,
+        object: LOCAL_ACTOR_URI,
+      };
+
+      const result = await service.processRemoveActivity(LOCAL_USERNAME, activity);
+
+      expect(result).toBe(false);
+      expect(calendarInterfaceStub.removeRemoteEditorAccess.called).toBe(false);
+    });
+
+    it('returns false and does not prune when actor URI is missing', async () => {
+      stubLookups();
+
+      const activity = {
+        type: 'Remove',
+        actor: undefined,
+        object: LOCAL_ACTOR_URI,
+      };
+
+      const result = await service.processRemoveActivity(LOCAL_USERNAME, activity);
+
+      expect(result).toBe(false);
+      expect(calendarInterfaceStub.removeRemoteEditorAccess.called).toBe(false);
+    });
+
+    it('returns false when no remote calendar actor is known for the activity actor URI', async () => {
+      stubLookups({ remoteCalendarActor: null });
+
+      const activity = {
+        type: 'Remove',
+        actor: REMOTE_CALENDAR_URI,
+        object: LOCAL_ACTOR_URI,
+      };
+
+      const result = await service.processRemoveActivity(LOCAL_USERNAME, activity);
+
+      expect(result).toBe(false);
+      expect(calendarInterfaceStub.removeRemoteEditorAccess.called).toBe(false);
     });
   });
 });

@@ -235,6 +235,25 @@ export default class ActivityPubInterface {
     return this.federationPublisher.sendEditorInvite(calendar, remoteUserActor);
   }
 
+  /**
+   * Sends a Remove(remoteUserActor) editor-revoke activity from a local
+   * calendar to a remote user actor via the outbox (fire-and-forget). The
+   * activity is signed by the calendar actor (per pv-dyyw signing table)
+   * and anchored on the calendar's own outbox. Symmetric with
+   * `sendEditorInvite`: Add/Remove is the AS2 §8.13 pair for
+   * collection-membership management.
+   *
+   * @param calendar The local calendar revoking the editor.
+   * @param remoteUserActorUri The remote user actor URI whose editor
+   *   access is being revoked.
+   */
+  async sendEditorRevoke(
+    calendar: Calendar,
+    remoteUserActorUri: string,
+  ): Promise<void> {
+    return this.federationPublisher.sendEditorRevoke(calendar, remoteUserActorUri);
+  }
+
   async addToInbox(calendar: Calendar, message: ActivityPubActivity): Promise<null> {
     return this.serverService.addToInbox(calendar, message);
   }

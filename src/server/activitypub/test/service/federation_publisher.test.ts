@@ -543,4 +543,54 @@ describe('FederationPublisher', () => {
     });
   });
 
+  describe('sendEditorRevoke', () => {
+    let publisher: FederationPublisher;
+    let sandbox: sinon.SinonSandbox;
+    let calendarInterface: CalendarInterface;
+    let mockOutbox: ReturnType<typeof buildMockOutboxService>;
+    let addToOutboxStub: sinon.SinonStub;
+
+    beforeEach(() => {
+      sandbox = sinon.createSandbox();
+      const eventBus = new EventEmitter();
+      calendarInterface = new CalendarInterface(eventBus);
+      mockOutbox = buildMockOutboxService();
+      publisher = new FederationPublisher(eventBus, calendarInterface, mockOutbox as any);
+
+      addToOutboxStub = sandbox.stub(publisher, 'addToOutbox');
+      addToOutboxStub.resolves();
+    });
+
+    afterEach(() => {
+      sandbox.restore();
+    });
+
+    it('enqueues a Remove activity signed by the calendar actor (mirrors Add wire shape)', async () => {
+      const calendar = Calendar.fromObject({ id: 'local-cal-id', urlName: 'mycal' });
+      const remoteUserActorUri = 'https://remote.example.com/users/alice';
+
+      await publisher.sendEditorRevoke(calendar, remoteUserActorUri);
+
+      expect(addToOutboxStub.calledOnce).toBe(true);
+      const [calendarArg, activityArg] = addToOutboxStub.firstCall.args;
+      // Anchor calendar = the calendar argument directly (calendar actor's
+      // own outbox), matching the Add path.
+      expect(calendarArg).toBe(calendar);
+      expect(activityArg.type).toBe('Remove');
+      // Signing actor: calendar actor URI (same as Add per pv-dyyw signing table).
+      expect(activityArg.actor).toMatch(/^https:\/\/.+\/calendars\/mycal$/);
+      // Activity id is calendar-actor-rooted, matching Add.
+      expect(activityArg.id).toMatch(/^https:\/\/.+\/calendars\/mycal\/activities\/[a-f0-9-]+$/);
+      expect(activityArg.to).toEqual([remoteUserActorUri]);
+      expect(activityArg.object).toBe(remoteUserActorUri);
+      // Target collection is the calendar's editors collection (same as Add).
+      expect(activityArg.target).toMatch(/^https:\/\/.+\/calendars\/mycal\/editors$/);
+      // Remove does NOT carry the calendarId / calendarInboxUrl extension
+      // fields Add uses — the receive-side derives the calendar from
+      // activity.actor.
+      expect(activityArg.calendarId).toBeUndefined();
+      expect(activityArg.calendarInboxUrl).toBeUndefined();
+    });
+  });
+
 });

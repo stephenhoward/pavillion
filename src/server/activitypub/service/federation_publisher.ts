@@ -14,6 +14,7 @@ import { ActivityPubActivity } from '@/server/activitypub/model/base';
 import UpdateActivity from '@/server/activitypub/model/action/update';
 import DeleteActivity from '@/server/activitypub/model/action/delete';
 import AddActivity from '@/server/activitypub/model/action/add';
+import RemoveActivity from '@/server/activitypub/model/action/remove';
 import { addToOutbox as addToOutboxHelper } from '@/server/activitypub/helper/outbox';
 import { logError } from '@/server/common/helper/error-logger';
 import { createLogger } from '@/server/common/helper/logger';
@@ -436,6 +437,45 @@ class FederationPublisher {
       'Enqueuing Add activity for remote user',
     );
     await this.addToOutbox(calendar, addActivity);
+  }
+
+  /**
+   * Sends a Remove(remoteUserActor) editor-revoke activity from a local
+   * calendar to a remote user actor. Mirrors {@link sendEditorInvite}
+   * byte-for-byte except the activity type and the absence of the
+   * Pavillion-specific `calendarId` / `calendarInboxUrl` extension fields
+   * — the receive-side handler derives the calendar from `activity.actor`,
+   * not from extension fields.
+   *
+   * The activity is signed by the calendar actor (per pv-dyyw signing
+   * table) and anchored on the calendar's own outbox. Delivery is routed
+   * by the outbox worker from the activity's explicit `to` field; no
+   * caller-supplied inbox URL is required.
+   *
+   * @param calendar - The local calendar revoking the editor.
+   * @param remoteUserActorUri - The remote user actor URI whose editor
+   *   access is being revoked.
+   */
+  async sendEditorRevoke(
+    calendar: Calendar,
+    remoteUserActorUri: string,
+  ): Promise<void> {
+    const localDomain = config.get<string>('domain');
+    const calendarActorUri = `https://${localDomain}/calendars/${calendar.urlName}`;
+
+    const removeActivity = new RemoveActivity(
+      calendarActorUri,
+      remoteUserActorUri,
+      `${calendarActorUri}/editors`,
+    );
+    removeActivity.id = `${calendarActorUri}/activities/${uuidv4()}`;
+    removeActivity.to = [remoteUserActorUri];
+
+    logger.info(
+      { remoteUserActorUri, calendarId: calendar.id },
+      'Enqueuing Remove activity for remote user',
+    );
+    await this.addToOutbox(calendar, removeActivity);
   }
 
   /**

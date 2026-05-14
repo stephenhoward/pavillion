@@ -318,7 +318,7 @@ test.describe.serial('Cross-Instance Editor Collaboration', () => {
     expect(betaEditor).toBeDefined();
 
     // Anchor beta's log line count before the revoke so the log-poll below
-    // only considers Undo activities emitted by this action.
+    // only considers Remove activities emitted by this action.
     const undoAnchor = getBetaLogLineCount();
 
     // Revoke editor access
@@ -340,11 +340,14 @@ test.describe.serial('Cross-Instance Editor Collaboration', () => {
 
     expect(revokeResponse.status).toBe(204);
 
-    // Verify the Undo(Add) packet actually reached beta's inbox. The
+    // Verify the Remove(editor) packet actually reached beta's inbox. The
     // beta editor actor URI is used as the needle to distinguish this
-    // Undo from any other Undo activities in beta's log.
+    // Remove from any other Remove activities in beta's log. Per pv-o3ay.6:
+    // Remove is the AS2 §8.13 verb for collection-membership revocation
+    // (symmetric with Add); Undo is reserved for relationship/intent
+    // activities like Follow / Accept / Block / Announce.
     expect(
-      await waitForBetaInboxActivity('Undo', betaEditor.actorUri, undoAnchor),
+      await waitForBetaInboxActivity('Remove', betaEditor.actorUri, undoAnchor),
     ).toBe(true);
 
     // Verify editor can no longer create events
