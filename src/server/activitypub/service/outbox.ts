@@ -41,7 +41,9 @@ class ProcessOutboxService {
 
   /**
    * @param eventBus - Shared event bus
-   * @param inboxService - In-process inbox service used for local Announce dispatch.
+   * @param inboxService - In-process inbox service used for local in-process
+   *   dispatch of all activity types (Create, Update, Delete, Follow, Accept,
+   *   Flag, Announce, Undo) when the recipient resolves to a local calendar.
    */
   constructor(eventBus: EventEmitter, inboxService: ProcessInboxService) {
     this.calendarService = new CalendarInterface(eventBus);
@@ -339,22 +341,23 @@ class ProcessOutboxService {
 
       let deliveryErrors: string[] = [];
 
-      // Decide whether this activity type can be served in-process (local) or
-      // must be HTTP-delivered (remote). Only Announce activities are eligible
-      // for in-process dispatch; Create/Update/Delete fall through to HTTP
-      // regardless of actor type, pending pv-fs02 (HTTP signatures) and a
-      // decision about whether to extend local dispatch to all activity types.
-      const canDispatchLocally = message.type === 'Announce';
+      // In-process dispatch covers all currently-handled activity types
+      // (Create, Update, Delete, Follow, Accept, Flag, Announce, Undo) —
+      // the trust contract is rooted at the outbox row itself, not at the
+      // activity type. See ProcessInboxService.handleLocalActivityDispatch
+      // for the full trust-contract documentation. `this.inboxService` is
+      // non-nullable and always assigned in the constructor, so local
+      // dispatch is available unconditionally for any recipient whose
+      // actor URI resolves to a local calendar via
+      // getLocalCalendarByActorUri.
 
       for (const recipient of recipients) {
-        const localCalendar = canDispatchLocally
-          ? await this.calendarActorService.getLocalCalendarByActorUri(recipient)
-          : null;
+        const localCalendar = await this.calendarActorService.getLocalCalendarByActorUri(recipient);
 
         if (localCalendar) {
           // Local in-process path: skip HTTP entirely.
           try {
-            await this.inboxService.handleLocalAnnounceDispatch(localCalendar, activity as AnnounceActivity);
+            await this.inboxService.handleLocalActivityDispatch(localCalendar, activity);
             logger.info({ recipient }, '[OUTBOX-LOCAL] Dispatched in-process');
           }
           catch (error: any) {
@@ -365,17 +368,17 @@ class ProcessOutboxService {
           continue;
         }
 
-        // Defensive null-local-calendar guard: when in-process dispatch is
-        // available and the recipient URL shares a hostname with this
-        // outbox message's origin actor (i.e., the recipient looks like it
-        // belongs to a local calendar on this instance), a null result from
-        // getLocalCalendarByActorUri means the CalendarActorEntity row is
-        // missing or stale. HTTP-delivering to such a URL would loop back
-        // to ourselves and almost certainly fail with 404, so skip it.
+        // Defensive null-local-calendar guard: when the recipient URL shares
+        // a hostname with this outbox message's origin actor (i.e., the
+        // recipient looks like it belongs to a local calendar on this
+        // instance), a null result from getLocalCalendarByActorUri means the
+        // CalendarActorEntity row is missing or stale. HTTP-delivering to
+        // such a URL would loop back to ourselves and almost certainly fail
+        // with 404, so skip it.
         //
         // Remote recipients (different hostname) and WebFinger handles
         // continue through deliverViaHttp unchanged.
-        if (canDispatchLocally && this.isSameHostAsActor(recipient, activity.actor)) {
+        if (this.isSameHostAsActor(recipient, activity.actor)) {
           logger.warn(
             { recipient, actor: activity.actor },
             '[OUTBOX-LOCAL] Skip: recipient looks local but has no CalendarActorEntity row',
@@ -383,8 +386,10 @@ class ProcessOutboxService {
           continue;
         }
 
-        // Remote HTTP path (covers: remote actors on other hosts, WebFinger
-        // handles, local non-Announce activities).
+        // Remote HTTP path (covers: remote actors on other hosts and
+        // WebFinger handles). All activity types are eligible for local
+        // in-process dispatch above; anything reaching this branch has a
+        // recipient that did not resolve to a local CalendarActor.
         await this.deliverViaHttp(recipient, message, activity, deliveryErrors);
       }
 

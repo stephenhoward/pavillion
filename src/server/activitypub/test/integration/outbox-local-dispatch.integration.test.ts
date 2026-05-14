@@ -14,7 +14,7 @@
  * The fix (pv-6evr Phase 3/4) routes local dispatch through the unified outbox
  * pipeline: A's outbox Announce is processed, its recipient list (from
  * FollowerCalendarEntity) is walked, and each local recipient is handed to
- * ProcessInboxService.handleLocalAnnounceDispatch which runs the same
+ * ProcessInboxService.handleLocalActivityDispatch which runs the same
  * checkAndPerformAutoRepost path used for remote-originated shares. That path
  * both creates the SharedEventEntity AND queues an Announce in B's outbox,
  * which in turn cascades to D via HTTP delivery.
