@@ -187,7 +187,9 @@
         "languages_count_other": "{{count}} idiomas",
         "places_tab": "Lugares",
         "breadcrumb_label": "Ruta de navegación",
-        "breadcrumb_settings": "configuración"
+        "breadcrumb_settings": "configuración",
+        "unauthorized_title": "No tienes acceso a esta página",
+        "unauthorized_body": "Esta página requiere permisos que no tienes en este calendario. Es posible que el enlace que seguiste estuviera destinado a un propietario o moderador."
     },
     "funding": {
         "title": "Financiación del calendario",

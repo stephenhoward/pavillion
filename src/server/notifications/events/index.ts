@@ -214,18 +214,23 @@ export default class NotificationEventHandlers implements DomainEventHandlers {
   }
 
   /**
-   * Fans out a report-related notification to every editor of the report's
-   * calendar. Reporter identity is never surfaced — actorName is always
-   * the empty string and actorUrl is always null, regardless of
-   * reporterType (DEC-004, moderation-privacy). report.id is forwarded so
-   * the inbox can deep-link to the report detail surface.
+   * Fans out a report-related notification to every account that can review
+   * reports on the report's calendar — admins, the owner, and editors with
+   * can_review_reports=true. The recipient list is strictly the set of
+   * accounts that can act on the report; editors without report-review
+   * permission do not receive a deep-link they cannot use (pv-2ppm).
+   *
+   * Reporter identity is never surfaced — actorName is always the empty
+   * string and actorUrl is always null, regardless of reporterType (DEC-004,
+   * moderation-privacy). report.id is forwarded so the inbox can deep-link
+   * to the report detail surface.
    */
   private async fanOutReportNotification(type: string, report: Report): Promise<void> {
     if (!report.calendarId) {
       return;
     }
     try {
-      const accounts = await this.calendarInterface.getEditorsForCalendar(report.calendarId);
+      const accounts = await this.calendarInterface.getReportReviewersForCalendar(report.calendarId);
       for (const account of accounts) {
         await this.service.createNotification(
           type,

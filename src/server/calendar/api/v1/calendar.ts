@@ -40,6 +40,7 @@ class CalendarRoutes {
     res.json(calendarsWithRelationship.map((calendarInfo) => ({
       ...calendarInfo.calendar.toObject(),
       userRelationship: calendarInfo.role, // 'owner' or 'editor'
+      canReviewReports: calendarInfo.canReviewReports,
     })));
   }
 

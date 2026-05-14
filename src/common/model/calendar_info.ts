@@ -6,6 +6,7 @@ import { Calendar } from './calendar';
 export interface CalendarWithRelationship {
   calendar: any; // Calendar object data
   userRelationship: 'owner' | 'editor';
+  canReviewReports?: boolean;
 }
 
 /**
@@ -14,10 +15,17 @@ export interface CalendarWithRelationship {
 export class CalendarInfo {
   public calendar: Calendar;
   public userRelationship: 'owner' | 'editor';
+  // Mirrors CalendarService.userCanReviewReports for this account+calendar:
+  // true for owners, true for editors with can_review_reports, false otherwise
+  // (admin-only access is decided server-side and is not part of this DTO).
+  public canReviewReports: boolean;
 
-  constructor(calendar: Calendar, userRelationship: 'owner' | 'editor') {
+  constructor(calendar: Calendar, userRelationship: 'owner' | 'editor', canReviewReports: boolean = false) {
     this.calendar = calendar;
     this.userRelationship = userRelationship;
+    // Owners always have report-review access; the constructor mirrors the
+    // server rule so callers that omit the flag for owners still get true.
+    this.canReviewReports = userRelationship === 'owner' ? true : canReviewReports;
   }
 
   /**
@@ -46,8 +54,8 @@ export class CalendarInfo {
    * Create CalendarInfo from API response object
    */
   static fromObject(obj: any): CalendarInfo {
-    const { userRelationship, ...calendarData } = obj;
+    const { userRelationship, canReviewReports, ...calendarData } = obj;
     const calendar = Calendar.fromObject(calendarData);
-    return new CalendarInfo(calendar, userRelationship);
+    return new CalendarInfo(calendar, userRelationship, Boolean(canReviewReports));
   }
 }

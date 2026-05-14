@@ -13,7 +13,7 @@ import { MediaEntity } from '@/server/media/entity/media';
 import { CalendarMemberEntity } from '@/server/calendar/entity/calendar_member';
 import { CalendarEditor } from '@/common/model/calendar_editor';
 import { CalendarMember } from '@/common/model/calendar_member';
-import { AccountEntity } from '@/server/common/entity/account';
+import { AccountEntity, AccountRoleEntity } from '@/server/common/entity/account';
 import AccountInvitation from '@/common/model/invitation';
 import { UrlNameAlreadyExistsError, InvalidUrlNameError, CalendarNotFoundError } from '@/common/exceptions/calendar';
 import { isValidCalendarUrlName } from '@/common/validation/calendarUrlName';
@@ -166,7 +166,7 @@ class CalendarService {
    * @param account - The account to find editable calendars for
    * @returns Array of calendars with role information
    */
-  async editableCalendarsWithRoleForUser(account: Account): Promise<Array<{calendar: Calendar, role: 'owner' | 'editor'}>> {
+  async editableCalendarsWithRoleForUser(account: Account): Promise<Array<{calendar: Calendar, role: 'owner' | 'editor', canReviewReports: boolean}>> {
     if (!account.id) {
       return [];
     }
@@ -182,6 +182,10 @@ class CalendarService {
       .map(m => ({
         calendar: this.withPublicUrl(m.calendar.toModel()),
         role: m.role as 'owner' | 'editor',
+        // Owners always have report-review access; editors gate on the flag.
+        // Surfacing this lets the client mirror the userCanReviewReports rule
+        // when deciding which tabs to render (pv-2ppm).
+        canReviewReports: m.role === 'owner' || (m.role === 'editor' && m.can_review_reports),
       }));
   }
 
@@ -373,6 +377,66 @@ class CalendarService {
     return memberships
       .filter(m => m.account)
       .map(m => m.account.toModel());
+  }
+
+  /**
+   * Returns all accounts authorized to review reports on a calendar: the owner,
+   * editors with `can_review_reports=true`, and instance admins. Used for
+   * notification fan-out of report_received / report_verified / report_escalated
+   * events so we only notify accounts that can actually act on the report.
+   *
+   * Mirrors the access rule in {@link userCanReviewReports}: admin OR owner OR
+   * editor with `can_review_reports=true`. Admins are returned even if they are
+   * not calendar members. The returned list is de-duplicated by account id.
+   *
+   * @param calendarId - The calendar UUID to get reviewers for
+   * @returns Array of Account models for all accounts who can review reports;
+   *   empty array if calendar has no reviewers
+   */
+  async getReportReviewersForCalendar(calendarId: string): Promise<Account[]> {
+    // Load owner + editors with can_review_reports from CalendarMemberEntity.
+    const memberships = await CalendarMemberEntity.findAll({
+      where: {
+        calendar_id: calendarId,
+        account_id: { [Op.ne]: null },
+      },
+      include: [
+        {
+          model: AccountEntity,
+          as: 'account',
+          attributes: ['id', 'username', 'email', 'language', 'display_name'],
+        },
+      ],
+    });
+
+    const memberAccounts = memberships
+      .filter(m => m.account)
+      .filter(m => m.role === 'owner' || (m.role === 'editor' && m.can_review_reports))
+      .map(m => m.account.toModel());
+
+    // Load all admin accounts (global role, independent of calendar membership).
+    const adminRoleRows = await AccountRoleEntity.findAll({
+      where: { role: 'admin' },
+      include: [
+        {
+          model: AccountEntity,
+          as: 'account',
+          attributes: ['id', 'username', 'email', 'language', 'display_name'],
+        },
+      ],
+    });
+
+    const adminAccounts = adminRoleRows
+      .filter(r => r.account)
+      .map(r => r.account.toModel());
+
+    // De-duplicate by account id (an admin may also be the owner).
+    const byId = new Map<string, Account>();
+    for (const account of [...memberAccounts, ...adminAccounts]) {
+      byId.set(account.id, account);
+    }
+
+    return Array.from(byId.values());
   }
 
   /**

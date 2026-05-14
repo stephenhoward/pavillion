@@ -38,9 +38,13 @@ const mountRootComponent = async (calendarUrlName: string = 'my-calendar', query
   return { wrapper, router };
 };
 
-const makeCalendarInfo = (urlName: string, role: 'owner' | 'editor'): CalendarInfo => {
+const makeCalendarInfo = (
+  urlName: string,
+  role: 'owner' | 'editor',
+  canReviewReports: boolean = false,
+): CalendarInfo => {
   const calendar = new Calendar('cal-uuid-1', urlName);
-  return new CalendarInfo(calendar, role);
+  return new CalendarInfo(calendar, role, canReviewReports);
 };
 
 describe('CalendarManagementRoot', () => {
@@ -110,7 +114,9 @@ describe('CalendarManagementRoot', () => {
       expect((wrapper.vm as any).state.activeTab).toBe('reports');
     });
 
-    it('ignores settings tab query param for non-owners', async () => {
+    it('renders unauthorized panel when a non-owner deep-links to ?tab=settings', async () => {
+      // pv-2ppm: previously fell back silently to editors and 403'd; now
+      // surfaces a graceful unauthorized landing.
       const info = makeCalendarInfo('my-calendar', 'editor');
       vi.spyOn(CalendarService.prototype, 'loadCalendarsWithRelationship').mockResolvedValue([info]);
 
@@ -119,11 +125,34 @@ describe('CalendarManagementRoot', () => {
 
       await flushPromises();
 
-      expect((wrapper.vm as any).state.activeTab).toBe('editors');
+      expect((wrapper.vm as any).state.activeTab).toBe('unauthorized');
+      expect(wrapper.find('#unauthorized-panel').exists()).toBe(true);
     });
 
-    it('ignores reports tab query param for non-owners', async () => {
-      const info = makeCalendarInfo('my-calendar', 'editor');
+    it('renders unauthorized panel (not editors) when an editor without report-review access deep-links to reports', async () => {
+      // pv-2ppm: silent fallback to the editors tab landed the user on
+      // EditorsTab.onMounted -> 403. Render an unauthorized panel instead
+      // and do NOT mount EditorsTab.
+      const info = makeCalendarInfo('my-calendar', 'editor', false);
+      vi.spyOn(CalendarService.prototype, 'loadCalendarsWithRelationship').mockResolvedValue([info]);
+      const listEditorsSpy = vi.spyOn(CalendarService.prototype, 'listCalendarEditors').mockResolvedValue([]);
+
+      const { wrapper } = await mountRootComponent('my-calendar', { tab: 'reports', report: 'some-report-id' });
+      currentWrapper = wrapper;
+
+      await flushPromises();
+
+      expect((wrapper.vm as any).state.activeTab).toBe('unauthorized');
+      expect(wrapper.find('#unauthorized-panel').exists()).toBe(true);
+      // EditorsTab must not be rendered (its onMounted would otherwise 403).
+      expect(wrapper.findComponent({ name: 'EditorsTab' }).exists()).toBe(false);
+      expect(listEditorsSpy).not.toHaveBeenCalled();
+    });
+
+    it('restores reports tab from ?tab=reports for editors with can_review_reports', async () => {
+      // pv-2ppm: editors with report-review access see the reports tab and
+      // can deep-link to it.
+      const info = makeCalendarInfo('my-calendar', 'editor', true);
       vi.spyOn(CalendarService.prototype, 'loadCalendarsWithRelationship').mockResolvedValue([info]);
 
       const { wrapper } = await mountRootComponent('my-calendar', { tab: 'reports' });
@@ -131,10 +160,13 @@ describe('CalendarManagementRoot', () => {
 
       await flushPromises();
 
-      expect((wrapper.vm as any).state.activeTab).toBe('editors');
+      expect((wrapper.vm as any).state.activeTab).toBe('reports');
     });
 
-    it('ignores invalid tab query param values', async () => {
+    it('falls back silently to the default tab for unknown tab query param values', async () => {
+      // pv-2ppm: an unknown tab name (?tab=foobar) is a malformed URL, not a
+      // permissions mismatch — fall back silently to the default tab rather
+      // than parking the user on the unauthorized landing.
       const info = makeCalendarInfo('my-calendar', 'owner');
       vi.spyOn(CalendarService.prototype, 'loadCalendarsWithRelationship').mockResolvedValue([info]);
 
@@ -144,6 +176,7 @@ describe('CalendarManagementRoot', () => {
       await flushPromises();
 
       expect((wrapper.vm as any).state.activeTab).toBe('editors');
+      expect(wrapper.find('#unauthorized-panel').exists()).toBe(false);
     });
 
     it('defaults to editors when no tab query param is present', async () => {
@@ -371,7 +404,7 @@ describe('CalendarManagementRoot', () => {
     });
   });
 
-  describe('activateTab guard for non-owners', () => {
+  describe('activateTab guards', () => {
     it('does not switch to settings tab when user is not an owner', async () => {
       const info = makeCalendarInfo('my-calendar', 'editor');
       vi.spyOn(CalendarService.prototype, 'loadCalendarsWithRelationship').mockResolvedValue([info]);
@@ -389,8 +422,10 @@ describe('CalendarManagementRoot', () => {
       expect((wrapper.vm as any).state.activeTab).toBe('editors');
     });
 
-    it('does not switch to reports tab when user is not an owner', async () => {
-      const info = makeCalendarInfo('my-calendar', 'editor');
+    it('does not switch to reports tab when editor lacks can_review_reports', async () => {
+      // The reports gate is can_review_reports, not ownership: an editor
+      // without the flag must not be able to programmatically open the tab.
+      const info = makeCalendarInfo('my-calendar', 'editor', false);
       vi.spyOn(CalendarService.prototype, 'loadCalendarsWithRelationship').mockResolvedValue([info]);
 
       const { wrapper } = await mountRootComponent('my-calendar');
@@ -404,6 +439,23 @@ describe('CalendarManagementRoot', () => {
 
       // Active tab should remain on the default 'editors'
       expect((wrapper.vm as any).state.activeTab).toBe('editors');
+    });
+
+    it('allows activateTab(reports) for editor with can_review_reports=true', async () => {
+      // Companion to the gate test above: an editor with the flag granted
+      // can open the reports tab via the same programmatic path.
+      const info = makeCalendarInfo('my-calendar', 'editor', true);
+      vi.spyOn(CalendarService.prototype, 'loadCalendarsWithRelationship').mockResolvedValue([info]);
+
+      const { wrapper } = await mountRootComponent('my-calendar');
+      currentWrapper = wrapper;
+
+      await flushPromises();
+
+      await (wrapper.vm as any).activateTab('reports');
+      await wrapper.vm.$nextTick();
+
+      expect((wrapper.vm as any).state.activeTab).toBe('reports');
     });
 
   });

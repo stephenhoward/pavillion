@@ -18,6 +18,7 @@ describe('NotificationEventHandlers', () => {
   let calendarInterface: CalendarInterface;
   let createNotificationStub: sinon.SinonStub;
   let getEditorsStub: sinon.SinonStub;
+  let getReportReviewersStub: sinon.SinonStub;
   let handlers: NotificationEventHandlers;
 
   beforeEach(() => {
@@ -26,10 +27,18 @@ describe('NotificationEventHandlers', () => {
 
     // Stub the service and calendarInterface with minimal fakes
     service = { createNotification: async () => null } as unknown as NotificationService;
-    calendarInterface = { getEditorsForCalendar: async () => [] } as unknown as CalendarInterface;
+    calendarInterface = {
+      getEditorsForCalendar: async () => [],
+      getReportReviewersForCalendar: async () => [],
+    } as unknown as CalendarInterface;
 
     createNotificationStub = sandbox.stub(service, 'createNotification');
     getEditorsStub = sandbox.stub(calendarInterface, 'getEditorsForCalendar');
+    // Report-related fan-outs (report_received / report_verified /
+    // report_escalated) use the report-reviewers source, not the editors
+    // source — only admins / owner / editors with can_review_reports
+    // receive the deep-link they can actually act on (pv-2ppm).
+    getReportReviewersStub = sandbox.stub(calendarInterface, 'getReportReviewersForCalendar');
 
     handlers = new NotificationEventHandlers(service, calendarInterface);
     handlers.install(eventBus);
@@ -327,19 +336,40 @@ describe('NotificationEventHandlers', () => {
   // ---------------------------------------------------------------------------
 
   describe('report_received', () => {
-    it('should create report_received notifications for each editor on reportCreated', async () => {
+    it('should source recipients from getReportReviewersForCalendar, not getEditorsForCalendar', async () => {
+      // pv-2ppm: report fan-out must only notify accounts that can act on the
+      // report (admins / owner / editors with can_review_reports). Sourcing
+      // from getEditorsForCalendar would deep-link editors who 403 on mount.
       const report = makeReport();
-      const accountA = new Account(uuidv4(), 'alice', 'alice@example.com');
-      const accountB = new Account(uuidv4(), 'bob', 'bob@example.com');
+      const account = new Account(uuidv4(), 'reviewer', 'reviewer@example.com');
 
-      getEditorsStub.resolves([accountA, accountB]);
+      getReportReviewersStub.resolves([account]);
+      getEditorsStub.resolves([new Account(uuidv4(), 'plain-editor', 'editor@example.com')]);
       createNotificationStub.resolves(null);
 
       eventBus.emit('reportCreated', { report });
 
       await new Promise(resolve => setImmediate(resolve));
 
-      expect(getEditorsStub.calledOnceWith(report.calendarId!)).toBe(true);
+      expect(getReportReviewersStub.calledOnceWith(report.calendarId!)).toBe(true);
+      expect(getEditorsStub.called).toBe(false);
+      expect(createNotificationStub.callCount).toBe(1);
+      expect(createNotificationStub.firstCall.args[5]).toBe(account.id);
+    });
+
+    it('should create report_received notifications for each reviewer on reportCreated', async () => {
+      const report = makeReport();
+      const accountA = new Account(uuidv4(), 'alice', 'alice@example.com');
+      const accountB = new Account(uuidv4(), 'bob', 'bob@example.com');
+
+      getReportReviewersStub.resolves([accountA, accountB]);
+      createNotificationStub.resolves(null);
+
+      eventBus.emit('reportCreated', { report });
+
+      await new Promise(resolve => setImmediate(resolve));
+
+      expect(getReportReviewersStub.calledOnceWith(report.calendarId!)).toBe(true);
       expect(createNotificationStub.callCount).toBe(2);
     });
 
@@ -348,7 +378,7 @@ describe('NotificationEventHandlers', () => {
       const accountId = uuidv4();
       const account = new Account(accountId, 'alice', 'alice@example.com');
 
-      getEditorsStub.resolves([account]);
+      getReportReviewersStub.resolves([account]);
       createNotificationStub.resolves(null);
 
       eventBus.emit('reportCreated', { report });
@@ -369,7 +399,7 @@ describe('NotificationEventHandlers', () => {
       const report = makeReport({ reporterType: 'administrator' });
       const account = new Account(uuidv4(), 'alice', 'alice@example.com');
 
-      getEditorsStub.resolves([account]);
+      getReportReviewersStub.resolves([account]);
       createNotificationStub.resolves(null);
 
       eventBus.emit('reportCreated', { report });
@@ -389,14 +419,14 @@ describe('NotificationEventHandlers', () => {
       });
       const account = new Account(uuidv4(), 'alice', 'alice@example.com');
 
-      getEditorsStub.resolves([account]);
+      getReportReviewersStub.resolves([account]);
       createNotificationStub.resolves(null);
 
       eventBus.emit('reportCreated', { report });
 
       await new Promise(resolve => setImmediate(resolve));
 
-      expect(getEditorsStub.called).toBe(false);
+      expect(getReportReviewersStub.called).toBe(false);
       expect(createNotificationStub.called).toBe(false);
     });
 
@@ -404,7 +434,7 @@ describe('NotificationEventHandlers', () => {
       const report = makeReport({ reporterType: 'federation' });
       const account = new Account(uuidv4(), 'alice', 'alice@example.com');
 
-      getEditorsStub.resolves([account]);
+      getReportReviewersStub.resolves([account]);
       createNotificationStub.resolves(null);
 
       eventBus.emit('reportReceived', { report });
@@ -417,8 +447,8 @@ describe('NotificationEventHandlers', () => {
       expect(actorUrl).toBeNull();
     });
 
-    it('should not call createNotification when calendar has no editors (reportCreated)', async () => {
-      getEditorsStub.resolves([]);
+    it('should not call createNotification when calendar has no reviewers (reportCreated)', async () => {
+      getReportReviewersStub.resolves([]);
       createNotificationStub.resolves(null);
 
       eventBus.emit('reportCreated', { report: makeReport() });
@@ -428,8 +458,8 @@ describe('NotificationEventHandlers', () => {
       expect(createNotificationStub.called).toBe(false);
     });
 
-    it('should not call createNotification when calendar has no editors (reportReceived)', async () => {
-      getEditorsStub.resolves([]);
+    it('should not call createNotification when calendar has no reviewers (reportReceived)', async () => {
+      getReportReviewersStub.resolves([]);
       createNotificationStub.resolves(null);
 
       eventBus.emit('reportReceived', { report: makeReport({ reporterType: 'federation' }) });
@@ -442,7 +472,7 @@ describe('NotificationEventHandlers', () => {
     it('should rely on service dedup when receiving the same report twice', async () => {
       const report = makeReport();
       const account = new Account(uuidv4(), 'alice', 'alice@example.com');
-      getEditorsStub.resolves([account]);
+      getReportReviewersStub.resolves([account]);
       // Dedup is the service's responsibility: it returns null on a duplicate.
       // The handler does not need to second-guess; it simply forwards.
       createNotificationStub.onFirstCall().resolves(new Notification(uuidv4()));
@@ -465,8 +495,8 @@ describe('NotificationEventHandlers', () => {
       expect(secondArgs[4]).toBeNull();
     });
 
-    it('should not rethrow errors from getEditorsForCalendar', async () => {
-      getEditorsStub.rejects(new Error('DB error'));
+    it('should not rethrow errors from getReportReviewersForCalendar', async () => {
+      getReportReviewersStub.rejects(new Error('DB error'));
 
       eventBus.emit('reportCreated', { report: makeReport() });
 
@@ -477,7 +507,7 @@ describe('NotificationEventHandlers', () => {
 
     it('should not rethrow errors from createNotification', async () => {
       const account = new Account(uuidv4(), 'alice', 'alice@example.com');
-      getEditorsStub.resolves([account]);
+      getReportReviewersStub.resolves([account]);
       createNotificationStub.rejects(new Error('insert error'));
 
       eventBus.emit('reportCreated', { report: makeReport() });
@@ -493,7 +523,7 @@ describe('NotificationEventHandlers', () => {
 
       await new Promise(resolve => setImmediate(resolve));
 
-      expect(getEditorsStub.called).toBe(false);
+      expect(getReportReviewersStub.called).toBe(false);
       expect(createNotificationStub.called).toBe(false);
     });
   });
@@ -503,19 +533,37 @@ describe('NotificationEventHandlers', () => {
   // ---------------------------------------------------------------------------
 
   describe('report_verified', () => {
-    it('should create report_verified notifications for each editor', async () => {
+    it('should source recipients from getReportReviewersForCalendar', async () => {
+      // pv-2ppm: same scoping rule as report_received.
       const report = makeReport({ reporterType: 'anonymous', status: ReportStatus.SUBMITTED });
-      const accountA = new Account(uuidv4(), 'alice', 'alice@example.com');
-      const accountB = new Account(uuidv4(), 'bob', 'bob@example.com');
+      const account = new Account(uuidv4(), 'reviewer', 'reviewer@example.com');
 
-      getEditorsStub.resolves([accountA, accountB]);
+      getReportReviewersStub.resolves([account]);
+      getEditorsStub.resolves([new Account(uuidv4(), 'plain-editor', 'editor@example.com')]);
       createNotificationStub.resolves(null);
 
       eventBus.emit('reportVerified', { report });
 
       await new Promise(resolve => setImmediate(resolve));
 
-      expect(getEditorsStub.calledOnceWith(report.calendarId!)).toBe(true);
+      expect(getReportReviewersStub.calledOnceWith(report.calendarId!)).toBe(true);
+      expect(getEditorsStub.called).toBe(false);
+      expect(createNotificationStub.callCount).toBe(1);
+    });
+
+    it('should create report_verified notifications for each reviewer', async () => {
+      const report = makeReport({ reporterType: 'anonymous', status: ReportStatus.SUBMITTED });
+      const accountA = new Account(uuidv4(), 'alice', 'alice@example.com');
+      const accountB = new Account(uuidv4(), 'bob', 'bob@example.com');
+
+      getReportReviewersStub.resolves([accountA, accountB]);
+      createNotificationStub.resolves(null);
+
+      eventBus.emit('reportVerified', { report });
+
+      await new Promise(resolve => setImmediate(resolve));
+
+      expect(getReportReviewersStub.calledOnceWith(report.calendarId!)).toBe(true);
       expect(createNotificationStub.callCount).toBe(2);
     });
 
@@ -524,7 +572,7 @@ describe('NotificationEventHandlers', () => {
       const accountId = uuidv4();
       const account = new Account(accountId, 'alice', 'alice@example.com');
 
-      getEditorsStub.resolves([account]);
+      getReportReviewersStub.resolves([account]);
       createNotificationStub.resolves(null);
 
       eventBus.emit('reportVerified', { report });
@@ -541,8 +589,8 @@ describe('NotificationEventHandlers', () => {
       expect(reportId).toBe(report.id);
     });
 
-    it('should not call createNotification when calendar has no editors', async () => {
-      getEditorsStub.resolves([]);
+    it('should not call createNotification when calendar has no reviewers', async () => {
+      getReportReviewersStub.resolves([]);
       createNotificationStub.resolves(null);
 
       eventBus.emit('reportVerified', { report: makeReport() });
@@ -555,7 +603,7 @@ describe('NotificationEventHandlers', () => {
     it('should rely on service dedup when receiving the same verification twice', async () => {
       const report = makeReport({ reporterType: 'anonymous' });
       const account = new Account(uuidv4(), 'alice', 'alice@example.com');
-      getEditorsStub.resolves([account]);
+      getReportReviewersStub.resolves([account]);
       createNotificationStub.onFirstCall().resolves(new Notification(uuidv4()));
       createNotificationStub.onSecondCall().resolves(null);
 
@@ -570,8 +618,8 @@ describe('NotificationEventHandlers', () => {
       expect(createNotificationStub.firstCall.args[4]).toBeNull();
     });
 
-    it('should not rethrow errors from getEditorsForCalendar', async () => {
-      getEditorsStub.rejects(new Error('DB error'));
+    it('should not rethrow errors from getReportReviewersForCalendar', async () => {
+      getReportReviewersStub.rejects(new Error('DB error'));
 
       eventBus.emit('reportVerified', { report: makeReport() });
 
@@ -586,19 +634,38 @@ describe('NotificationEventHandlers', () => {
   // ---------------------------------------------------------------------------
 
   describe('report_escalated', () => {
-    it('should create report_escalated notifications for each editor on manual escalation', async () => {
+    it('should source recipients from getReportReviewersForCalendar', async () => {
+      // pv-2ppm: escalation notifications must skip editors who lack
+      // can_review_reports — otherwise they get a deep-link that 403s.
+      const report = makeReport({ status: ReportStatus.ESCALATED });
+      const account = new Account(uuidv4(), 'reviewer', 'reviewer@example.com');
+
+      getReportReviewersStub.resolves([account]);
+      getEditorsStub.resolves([new Account(uuidv4(), 'plain-editor', 'editor@example.com')]);
+      createNotificationStub.resolves(null);
+
+      eventBus.emit('reportEscalated', { report, reason: '' });
+
+      await new Promise(resolve => setImmediate(resolve));
+
+      expect(getReportReviewersStub.calledOnceWith(report.calendarId!)).toBe(true);
+      expect(getEditorsStub.called).toBe(false);
+      expect(createNotificationStub.callCount).toBe(1);
+    });
+
+    it('should create report_escalated notifications for each reviewer on manual escalation', async () => {
       const report = makeReport({ status: ReportStatus.ESCALATED });
       const accountA = new Account(uuidv4(), 'alice', 'alice@example.com');
       const accountB = new Account(uuidv4(), 'bob', 'bob@example.com');
 
-      getEditorsStub.resolves([accountA, accountB]);
+      getReportReviewersStub.resolves([accountA, accountB]);
       createNotificationStub.resolves(null);
 
       eventBus.emit('reportEscalated', { report, reason: 'admin-authored note that must not leak' });
 
       await new Promise(resolve => setImmediate(resolve));
 
-      expect(getEditorsStub.calledOnceWith(report.calendarId!)).toBe(true);
+      expect(getReportReviewersStub.calledOnceWith(report.calendarId!)).toBe(true);
       expect(createNotificationStub.callCount).toBe(2);
     });
 
@@ -607,7 +674,7 @@ describe('NotificationEventHandlers', () => {
       const accountId = uuidv4();
       const account = new Account(accountId, 'alice', 'alice@example.com');
 
-      getEditorsStub.resolves([account]);
+      getReportReviewersStub.resolves([account]);
       createNotificationStub.resolves(null);
 
       eventBus.emit('reportEscalated', { report, reason: 'sensitive admin note' });
@@ -628,7 +695,7 @@ describe('NotificationEventHandlers', () => {
       const report = makeReport({ status: ReportStatus.ESCALATED });
       const account = new Account(uuidv4(), 'alice', 'alice@example.com');
 
-      getEditorsStub.resolves([account]);
+      getReportReviewersStub.resolves([account]);
       createNotificationStub.resolves(null);
 
       eventBus.emit('reportAutoEscalated', {
@@ -649,7 +716,7 @@ describe('NotificationEventHandlers', () => {
       const account = new Account(uuidv4(), 'alice', 'alice@example.com');
       const sensitiveReason = 'CONFIDENTIAL: admin note about reporter';
 
-      getEditorsStub.resolves([account]);
+      getReportReviewersStub.resolves([account]);
       createNotificationStub.resolves(null);
 
       eventBus.emit('reportEscalated', { report, reason: sensitiveReason });
@@ -665,8 +732,8 @@ describe('NotificationEventHandlers', () => {
       }
     });
 
-    it('should not call createNotification when calendar has no editors', async () => {
-      getEditorsStub.resolves([]);
+    it('should not call createNotification when calendar has no reviewers', async () => {
+      getReportReviewersStub.resolves([]);
       createNotificationStub.resolves(null);
 
       eventBus.emit('reportEscalated', { report: makeReport(), reason: '' });
@@ -679,7 +746,7 @@ describe('NotificationEventHandlers', () => {
     it('should rely on service dedup when receiving the same escalation twice', async () => {
       const report = makeReport({ status: ReportStatus.ESCALATED });
       const account = new Account(uuidv4(), 'alice', 'alice@example.com');
-      getEditorsStub.resolves([account]);
+      getReportReviewersStub.resolves([account]);
       createNotificationStub.onFirstCall().resolves(new Notification(uuidv4()));
       createNotificationStub.onSecondCall().resolves(null);
 
@@ -694,8 +761,8 @@ describe('NotificationEventHandlers', () => {
       expect(createNotificationStub.firstCall.args[4]).toBeNull();
     });
 
-    it('should not rethrow errors from getEditorsForCalendar', async () => {
-      getEditorsStub.rejects(new Error('DB error'));
+    it('should not rethrow errors from getReportReviewersForCalendar', async () => {
+      getReportReviewersStub.rejects(new Error('DB error'));
 
       eventBus.emit('reportEscalated', { report: makeReport(), reason: 'reason' });
 

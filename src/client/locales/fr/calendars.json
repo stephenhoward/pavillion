@@ -187,7 +187,9 @@
         "languages_count_other": "{{count}} langues",
         "places_tab": "Lieux",
         "breadcrumb_label": "Fil d'Ariane",
-        "breadcrumb_settings": "paramètres"
+        "breadcrumb_settings": "paramètres",
+        "unauthorized_title": "Vous n'avez pas accès à cette page",
+        "unauthorized_body": "Cette page nécessite des autorisations que vous n'avez pas sur ce calendrier. Le lien que vous avez suivi était peut-être destiné à un propriétaire ou à un modérateur."
     },
     "funding": {
         "title": "Financement du calendrier",

@@ -36,6 +36,7 @@ import { CalendarEditorPermissionError } from '@/common/exceptions/editor';
 export interface CalendarWithRole {
   calendar: Calendar;
   role: 'owner' | 'editor';
+  canReviewReports: boolean;
 }
 
 export interface CalendarEditorsResponse {
@@ -249,6 +250,19 @@ export default class CalendarInterface {
    */
   async getEditorsForCalendar(calendarId: string): Promise<Account[]> {
     return this.calendarService.getEditorsForCalendar(calendarId);
+  }
+
+  /**
+   * Returns all accounts authorized to review reports on a calendar: the owner,
+   * editors with can_review_reports=true, and instance admins. Used for
+   * notification fan-out of report-related events so we only notify accounts
+   * that can actually act on the report.
+   *
+   * @param calendarId - The calendar UUID to get reviewers for
+   * @returns Array of Account models; empty array if no reviewers
+   */
+  async getReportReviewersForCalendar(calendarId: string): Promise<Account[]> {
+    return this.calendarService.getReportReviewersForCalendar(calendarId);
   }
 
   /**

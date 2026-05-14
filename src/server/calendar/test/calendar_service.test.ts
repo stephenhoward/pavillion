@@ -8,7 +8,7 @@ import { CalendarEditor } from '@/common/model/calendar_editor';
 import AccountInvitation from '@/common/model/invitation';
 import { CalendarEntity, CalendarContentEntity } from '@/server/calendar/entity/calendar';
 import { CalendarMemberEntity } from '@/server/calendar/entity/calendar_member';
-import { AccountEntity } from '@/server/common/entity/account';
+import { AccountEntity, AccountRoleEntity } from '@/server/common/entity/account';
 import CalendarService from '@/server/calendar/service/calendar';
 import { UrlNameAlreadyExistsError, InvalidUrlNameError, CalendarNotFoundError } from '@/common/exceptions/calendar';
 import { ValidationError } from '@/common/exceptions/base';
@@ -1150,6 +1150,143 @@ describe('getEditorsForCalendar', () => {
 
     expect(result).toHaveLength(1);
     expect(result[0].id).toBe('owner-id');
+  });
+});
+
+describe('getReportReviewersForCalendar', () => {
+  let sandbox: sinon.SinonSandbox;
+  let service: CalendarService;
+
+  beforeEach(() => {
+    sandbox = sinon.createSandbox();
+    service = new CalendarService();
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+  });
+
+  it('should return admin accounts even when they are not calendar members', async () => {
+    const adminAccountEntity = AccountEntity.fromModel(new Account('admin-id', 'adminuser', 'admin@example.com'));
+
+    sandbox.stub(CalendarMemberEntity, 'findAll').resolves([]);
+    sandbox.stub(AccountRoleEntity, 'findAll').resolves([
+      { role: 'admin', account: adminAccountEntity } as any,
+    ]);
+
+    const result = await service.getReportReviewersForCalendar('cal-id');
+
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe('admin-id');
+  });
+
+  it('should return the owner', async () => {
+    const ownerAccountEntity = AccountEntity.fromModel(new Account('owner-id', 'owneruser', 'owner@example.com'));
+
+    sandbox.stub(CalendarMemberEntity, 'findAll').resolves([
+      {
+        calendar_id: 'cal-id',
+        account_id: 'owner-id',
+        role: 'owner',
+        can_review_reports: false,
+        account: ownerAccountEntity,
+      } as any,
+    ]);
+    sandbox.stub(AccountRoleEntity, 'findAll').resolves([]);
+
+    const result = await service.getReportReviewersForCalendar('cal-id');
+
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe('owner-id');
+  });
+
+  it('should include editors with can_review_reports=true', async () => {
+    const ownerAccountEntity = AccountEntity.fromModel(new Account('owner-id', 'owneruser', 'owner@example.com'));
+    const editorAccountEntity = AccountEntity.fromModel(new Account('editor-id', 'editor', 'editor@example.com'));
+
+    sandbox.stub(CalendarMemberEntity, 'findAll').resolves([
+      {
+        calendar_id: 'cal-id',
+        account_id: 'owner-id',
+        role: 'owner',
+        can_review_reports: false,
+        account: ownerAccountEntity,
+      } as any,
+      {
+        calendar_id: 'cal-id',
+        account_id: 'editor-id',
+        role: 'editor',
+        can_review_reports: true,
+        account: editorAccountEntity,
+      } as any,
+    ]);
+    sandbox.stub(AccountRoleEntity, 'findAll').resolves([]);
+
+    const result = await service.getReportReviewersForCalendar('cal-id');
+
+    expect(result).toHaveLength(2);
+    const ids = result.map(a => a.id);
+    expect(ids).toContain('owner-id');
+    expect(ids).toContain('editor-id');
+  });
+
+  it('should exclude editors without can_review_reports', async () => {
+    const ownerAccountEntity = AccountEntity.fromModel(new Account('owner-id', 'owneruser', 'owner@example.com'));
+    const editorAccountEntity = AccountEntity.fromModel(new Account('editor-id', 'editor', 'editor@example.com'));
+
+    sandbox.stub(CalendarMemberEntity, 'findAll').resolves([
+      {
+        calendar_id: 'cal-id',
+        account_id: 'owner-id',
+        role: 'owner',
+        can_review_reports: false,
+        account: ownerAccountEntity,
+      } as any,
+      {
+        calendar_id: 'cal-id',
+        account_id: 'editor-id',
+        role: 'editor',
+        can_review_reports: false,
+        account: editorAccountEntity,
+      } as any,
+    ]);
+    sandbox.stub(AccountRoleEntity, 'findAll').resolves([]);
+
+    const result = await service.getReportReviewersForCalendar('cal-id');
+
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe('owner-id');
+  });
+
+  it('should de-duplicate an admin who is also the owner', async () => {
+    const sharedAccountEntity = AccountEntity.fromModel(new Account('shared-id', 'shared', 'shared@example.com'));
+
+    sandbox.stub(CalendarMemberEntity, 'findAll').resolves([
+      {
+        calendar_id: 'cal-id',
+        account_id: 'shared-id',
+        role: 'owner',
+        can_review_reports: false,
+        account: sharedAccountEntity,
+      } as any,
+    ]);
+    sandbox.stub(AccountRoleEntity, 'findAll').resolves([
+      { role: 'admin', account: sharedAccountEntity } as any,
+    ]);
+
+    const result = await service.getReportReviewersForCalendar('cal-id');
+
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe('shared-id');
+  });
+
+  it('should return empty for a non-existent calendar with no admins', async () => {
+    sandbox.stub(CalendarMemberEntity, 'findAll').resolves([]);
+    sandbox.stub(AccountRoleEntity, 'findAll').resolves([]);
+
+    const result = await service.getReportReviewersForCalendar('nonexistent-cal-id');
+
+    expect(result).toHaveLength(0);
   });
 });
 

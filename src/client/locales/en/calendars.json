@@ -187,7 +187,9 @@
         "languages_count_other": "{{count}} languages",
         "places_tab": "Places",
         "breadcrumb_label": "Breadcrumb",
-        "breadcrumb_settings": "settings"
+        "breadcrumb_settings": "settings",
+        "unauthorized_title": "You don't have access to this page",
+        "unauthorized_body": "This page requires permissions you don't have on this calendar. The link you followed may have been intended for an owner or a moderator."
     },
     "funding": {
         "title": "Calendar Funding",
