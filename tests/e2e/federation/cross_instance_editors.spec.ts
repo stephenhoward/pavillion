@@ -350,7 +350,17 @@ test.describe.serial('Cross-Instance Editor Collaboration', () => {
       await waitForBetaInboxActivity('Remove', betaEditor.actorUri, undoAnchor),
     ).toBe(true);
 
-    // Verify editor can no longer create events
+    // Verify the revoked editor can no longer create events on the remote
+    // calendar. Beta's processRemoveActivity (above) destroyed the local
+    // CalendarMemberEntity linking betaAdmin to alphaCalendar, so beta's
+    // events endpoint no longer finds any remote-membership record for
+    // this (account, calendarId) pair and surfaces it as 404 — the
+    // federation-correct local view. (Prior to the Remove emission
+    // landing, beta still believed the editor relationship held and
+    // forwarded the create to alpha, whose authoritative refusal came
+    // back as 403; with the federation handshake now complete the local
+    // 404 short-circuits the roundtrip.) The behavioural invariant —
+    // the revoked editor cannot create events — is preserved.
     const eventData = {
       calendarId: alphaCalendarId,
       content: {
@@ -376,6 +386,6 @@ test.describe.serial('Cross-Instance Editor Collaboration', () => {
       agent: httpsAgent,
     });
 
-    expect(createResponse.status).toBe(403);
+    expect(createResponse.status).toBe(404);
   });
 });
