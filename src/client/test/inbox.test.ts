@@ -83,14 +83,14 @@ describe('InboxView', () => {
               follow_description_no_calendar: '{1} followed your calendar',
               repost_description: '{1} reposted {2}',
               repost_description_no_event: '{1} reposted one of your events',
-              unshare_description: '{{actorName}} unposted a reposted event from {{calendarName}}',
+              unshare_description: '{{actorName}} unposted a reposted event from {1}',
               unshare_description_no_calendar: '{{actorName}} unposted a reposted event from your calendar',
               unshare_description_remote: '{1} unposted your event {2}',
               unshare_description_remote_no_event: '{1} unposted one of your events',
               report_received: 'A report was filed against an event on {1}',
               report_received_no_calendar: 'A report was filed against an event on your calendar',
-              report_verified: 'A reporter completed verification for a report on {1}',
-              report_verified_no_calendar: 'A reporter completed verification for a report on your calendar',
+              report_verified: 'A reporter verified a report on {1}',
+              report_verified_no_calendar: 'A reporter verified a report on your calendar',
               report_escalated: 'A report on {1} was escalated for admin review',
               report_escalated_no_calendar: 'A report on your calendar was escalated for admin review',
               empty_state: 'No notifications yet',
@@ -448,7 +448,7 @@ describe('InboxView', () => {
     expect(link.attributes('target')).toBe('_blank');
   });
 
-  it('renders unshare notification with actor name as plain text and calendar name when calendar is in the store', async () => {
+  it('renders unshare notification with actor name as plain text and calendar name as router link when calendar is in the store', async () => {
     const calendarStore = useCalendarStore();
     calendarStore.setCalendars([makeCalendar('cal-1', 'my-cal', 'Community Garden Events')]);
 
@@ -469,6 +469,7 @@ describe('InboxView', () => {
     const wrapper = mount(InboxView, {
       global: {
         plugins: [pinia, [I18NextVue, { i18next }]],
+        stubs: { RouterLink: RouterLinkStub },
       },
     });
 
@@ -480,6 +481,12 @@ describe('InboxView', () => {
     expect(wrapper.find('a.actor-link').exists()).toBe(false);
     expect(wrapper.text()).toContain('Alice');
     expect(wrapper.text()).toContain('unposted a reposted event from Community Garden Events');
+    const calendarLink = wrapper.findComponent(RouterLinkStub);
+    expect(calendarLink.exists()).toBe(true);
+    expect(calendarLink.props('to')).toEqual({
+      name: 'calendar_management',
+      params: { calendar: 'my-cal' },
+    });
   });
 
   it('falls back to generic unshare phrasing when calendarId is not in the store', async () => {
@@ -618,7 +625,7 @@ describe('InboxView', () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
       await wrapper.vm.$nextTick();
 
-      expect(wrapper.text()).toContain('A reporter completed verification for a report on Community Garden Events');
+      expect(wrapper.text()).toContain('A reporter verified a report on Community Garden Events');
       expect(wrapper.find('a.actor-link').exists()).toBe(false);
       expect(wrapper.find('span.actor-name').exists()).toBe(false);
     });

@@ -316,7 +316,19 @@ onUnmounted(() => {
           v-else-if="notification.type === 'unshare'"
           class="notification-text"
         >
-          {{ getUnsharePhrase(notification) }}
+          <i18next :translation="getUnsharePhrase(notification)">
+            <template #1>
+              <router-link
+                v-if="resolveCalendarUrlName(notification) && resolveCalendarName(notification)"
+                :to="{ name: 'calendar_management', params: { calendar: resolveCalendarUrlName(notification) } }"
+                class="calendar-link"
+              >{{ resolveCalendarName(notification) }}</router-link>
+              <span
+                v-else
+                class="calendar-name"
+              >{{ resolveCalendarName(notification) }}</span>
+            </template>
+          </i18next>
         </p>
         <p
           v-else
@@ -420,7 +432,8 @@ div.inbox-container {
       }
 
       a.actor-link,
-      a.event-link {
+      a.event-link,
+      a.calendar-link {
         color: var(--pav-color-text-link);
         text-decoration: underline;
 
