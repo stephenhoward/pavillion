@@ -109,8 +109,8 @@ test.describe('Follow Backfill', () => {
     const feed = await getFeed(INSTANCE_BETA, bobToken, bobCalendar.id);
 
     for (const title of eventTitles) {
-      const eventInFeed = feed.events.find(e => e.content?.en?.title === title);
-      expect(eventInFeed, `expected backfilled event "${title}" in follower feed`).toBeDefined();
+      const count = feed.events.filter(e => e.content?.en?.title === title).length;
+      expect(count, `expected exactly one feed row for "${title}" after initial backfill`).toBe(1);
     }
   });
 
@@ -166,11 +166,11 @@ test.describe('Follow Backfill', () => {
     const followsBeforeUnfollow = await getFollows(INSTANCE_BETA, bobToken, bobCalendar.id);
     const aliceFollow = followsBeforeUnfollow.find(
       f => f.calendarActorId === aliceCalendarRemoteId ||
-           f.calendarActorId?.includes(aliceCalendar.urlName),
+           f.calendarActorId.includes(aliceCalendar.urlName),
     );
     expect(aliceFollow, 'expected follow row before unfollow').toBeDefined();
 
-    await unfollowCalendar(INSTANCE_BETA, bobToken, aliceFollow!.id, bobCalendar.id);
+    await unfollowCalendar(INSTANCE_BETA, bobToken, aliceFollow!.id, bobCalendar.id, aliceCalendarRemoteId);
     await new Promise(resolve => setTimeout(resolve, FOLLOW_PROCESS_MS));
 
     await followCalendar(INSTANCE_BETA, bobToken, bobCalendar.id, aliceCalendarRemoteId);
