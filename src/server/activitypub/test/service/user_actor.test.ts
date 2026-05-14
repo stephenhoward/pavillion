@@ -399,5 +399,104 @@ describe('UserActorService', () => {
       expect(result).toBe(false);
       expect(calendarInterfaceStub.removeRemoteEditorAccess.called).toBe(false);
     });
+
+    it('returns false and does not prune when the local user actor cannot be found', async () => {
+      // Covers the `if (!actor)` guard after getActorByUsername — mirrors
+      // the same defensive branch in processAddActivity.
+      stubLookups({ userActor: null });
+
+      const activity = {
+        type: 'Remove',
+        actor: REMOTE_CALENDAR_URI,
+        object: LOCAL_ACTOR_URI,
+        target: `${REMOTE_CALENDAR_URI}/editors`,
+      };
+
+      const result = await service.processRemoveActivity(LOCAL_USERNAME, activity);
+
+      expect(result).toBe(false);
+      expect(calendarInterfaceStub.removeRemoteEditorAccess.called).toBe(false);
+    });
+
+    it('returns false and does not prune when the local account cannot be found', async () => {
+      // Covers the `if (!account)` guard after AccountEntity.findOne. The
+      // AccountEntity stub returns the row for getActorByUsername's first
+      // lookup but null for the second lookup (the one inside
+      // processRemoveActivity itself), exercising the branch in isolation.
+      const remoteCalendarActor = { id: REMOTE_CALENDAR_ACTOR_ID, actorUri: REMOTE_CALENDAR_URI };
+      sandbox.stub(RemoteCalendarService.prototype, 'getByActorUri').resolves(remoteCalendarActor as any);
+      sandbox.stub(UserActorEntity, 'findOne').resolves({
+        toModel: () => ({
+          id: 'user-actor-id',
+          accountId: LOCAL_ACCOUNT_ID,
+          actorUri: LOCAL_ACTOR_URI,
+          publicKey: 'pk',
+          privateKey: 'sk',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        }),
+      } as any);
+
+      let accountCallCount = 0;
+      sandbox.stub(AccountEntity, 'findOne').callsFake(async () => {
+        accountCallCount += 1;
+        // First call from getActorByUsername succeeds; second call from
+        // processRemoveActivity returns null to drive the missing-account branch.
+        if (accountCallCount === 1) {
+          return { id: LOCAL_ACCOUNT_ID, username: LOCAL_USERNAME } as any;
+        }
+        return null;
+      });
+
+      const activity = {
+        type: 'Remove',
+        actor: REMOTE_CALENDAR_URI,
+        object: LOCAL_ACTOR_URI,
+        target: `${REMOTE_CALENDAR_URI}/editors`,
+      };
+
+      const result = await service.processRemoveActivity(LOCAL_USERNAME, activity);
+
+      expect(result).toBe(false);
+      expect(calendarInterfaceStub.removeRemoteEditorAccess.called).toBe(false);
+    });
+
+    it('returns false and does not prune when activity object does not match our actor URI', async () => {
+      // Symmetric to processAddActivity's object check: the username in the
+      // URL path must match the activity's `object`.
+      stubLookups();
+
+      const activity = {
+        type: 'Remove',
+        actor: REMOTE_CALENDAR_URI,
+        object: 'https://events.example/users/someone-else',
+        target: `${REMOTE_CALENDAR_URI}/editors`,
+      };
+
+      const result = await service.processRemoveActivity(LOCAL_USERNAME, activity);
+
+      expect(result).toBe(false);
+      expect(calendarInterfaceStub.removeRemoteEditorAccess.called).toBe(false);
+    });
+
+    it('returns false and does not prune when activity target is not the editors collection', async () => {
+      // Symmetric guard for the target field. sendEditorRevoke always sets
+      // target to `${calendarActorUri}/editors`; anything else (e.g. a
+      // hypothetical /followers URI) must not route through the editor
+      // prune path.
+      stubLookups();
+
+      const activity = {
+        type: 'Remove',
+        actor: REMOTE_CALENDAR_URI,
+        object: LOCAL_ACTOR_URI,
+        target: `${REMOTE_CALENDAR_URI}/followers`,
+      };
+
+      const result = await service.processRemoveActivity(LOCAL_USERNAME, activity);
+
+      expect(result).toBe(false);
+      expect(calendarInterfaceStub.removeRemoteEditorAccess.called).toBe(false);
+    });
   });
 });
