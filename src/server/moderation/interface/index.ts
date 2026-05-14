@@ -43,7 +43,13 @@ export default class ModerationInterface {
     this.emailInterface = emailInterface;
     this.configurationInterface = configurationInterface;
     this.activityPubInterface = activityPubInterface;
-    this.moderationService = new ModerationService(eventBus, calendarInterface, configurationInterface, activityPubInterface);
+    this.moderationService = new ModerationService(
+      eventBus,
+      calendarInterface,
+      configurationInterface,
+      activityPubInterface,
+      accountsInterface,
+    );
     this.analyticsService = new AnalyticsService();
   }
 

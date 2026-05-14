@@ -16,6 +16,7 @@ import { ReportEscalationEntity } from '@/server/moderation/entity/report_escala
 import { BlockedInstanceEntity } from '@/server/moderation/entity/blocked_instance';
 import {
   InvalidVerificationTokenError,
+  NoSigningCalendarError,
   ReportNotFoundError,
   ReportAlreadyResolvedError,
   EmailRateLimitError,
@@ -23,6 +24,7 @@ import {
   ReporterBlockedError,
 } from '@/server/moderation/exceptions';
 import CalendarInterface from '@/server/calendar/interface';
+import AccountsInterface from '@/server/accounts/interface';
 import ConfigurationInterface from '@/server/configuration/interface';
 import ActivityPubInterface from '@/server/activitypub/interface';
 import { validateActorUriProtocol } from '@/server/common/helper/uri-validation';
@@ -103,7 +105,7 @@ const MODERATION_SETTING_DEFAULTS: Record<string, number> = {
  */
 interface CreateReportData {
   eventId: string;
-  calendarId: string;
+  calendarId: string | null;
   category: ReportCategory;
   description: string;
   reporterEmail?: string;
@@ -233,14 +235,22 @@ class ModerationService {
   private eventBus?: EventEmitter;
   private patternDetectionService: PatternDetectionService;
   private calendarInterface?: CalendarInterface;
+  private accountsInterface?: AccountsInterface;
   private emailBlockingService: EmailBlockingService;
   private configurationInterface?: ConfigurationInterface;
   private activityPubInterface?: ActivityPubInterface;
 
-  constructor(eventBus?: EventEmitter, calendarInterface?: CalendarInterface, configurationInterface?: ConfigurationInterface, activityPubInterface?: ActivityPubInterface) {
+  constructor(
+    eventBus?: EventEmitter,
+    calendarInterface?: CalendarInterface,
+    configurationInterface?: ConfigurationInterface,
+    activityPubInterface?: ActivityPubInterface,
+    accountsInterface?: AccountsInterface,
+  ) {
     this.eventBus = eventBus;
     this.patternDetectionService = new PatternDetectionService();
     this.calendarInterface = calendarInterface;
+    this.accountsInterface = accountsInterface;
     this.configurationInterface = configurationInterface;
     this.emailBlockingService = new EmailBlockingService();
     this.activityPubInterface = activityPubInterface;
@@ -440,9 +450,17 @@ class ModerationService {
   /**
    * Creates an admin-initiated report for an event.
    * Validates admin-specific fields (priority, deadline) in addition
-   * to standard report fields. Delegates to createReportForEvent with
-   * reporterType set to 'administrator'. Admin reports skip verification
-   * and go directly to submitted status.
+   * to standard report fields. Admin reports skip verification and go
+   * directly to submitted status.
+   *
+   * Single dispatch point: branches on `event.isRemote()`.
+   * - For local events, delegates to `createReportForEvent` (which still
+   *   rejects events with no calendarId, preserving the gate for the
+   *   anonymous/authenticated public report paths).
+   * - For remote events, calls `createReport` directly with
+   *   `calendarId: null`. Remote events have no owning local calendar,
+   *   so the public report paths (which require a calendar context)
+   *   continue to reject them; only the admin path supports them.
    *
    * @param data - Admin report creation data
    * @returns The created Report domain model
@@ -451,6 +469,10 @@ class ModerationService {
    * @throws DuplicateReportError if admin has already reported this event
    */
   async createAdminReport(data: CreateAdminReportData): Promise<Report> {
+    if (!this.calendarInterface) {
+      throw new Error('CalendarInterface is required for createAdminReport');
+    }
+
     // Validate standard report fields + admin-specific fields in one pass
     const errors: string[] = [
       ...this.validateReportFields(data.eventId, data.category, data.description),
@@ -459,6 +481,32 @@ class ModerationService {
 
     if (errors.length > 0) {
       throw new ReportValidationError(errors);
+    }
+
+    // Look up the event once to decide which path to take.
+    const event = await this.calendarInterface.getEventById(data.eventId);
+    if (!event) {
+      throw new EventNotFoundError();
+    }
+
+    if (event.isRemote()) {
+      // Remote-event admin report: skip createReportForEvent's calendar
+      // resolution and persist with calendarId = null.
+      return this.createReport({
+        eventId: data.eventId,
+        calendarId: null,
+        category: data.category,
+        description: data.description,
+        reporterType: 'administrator',
+        reporterAccountId: data.adminId,
+        adminId: data.adminId,
+        adminPriority: data.priority,
+        adminDeadline: data.deadline,
+        adminNotes: data.adminNotes,
+        reporterIp: data.reporterIp,
+        reporterIpSubnet: data.reporterIpSubnet,
+        reporterIpRegion: data.reporterIpRegion,
+      });
     }
 
     return this.createReportForEvent({
@@ -1699,27 +1747,77 @@ class ModerationService {
     // Build Flag activity using FlagActivityBuilder
     const domain = config.get<string>('server.domain');
     const flagBuilder = new FlagActivityBuilder(domain);
-    // Get calendar to determine actor URI
-    const calendar = await this.calendarInterface.getCalendar(report.calendarId);
-    if (!calendar) {
-      throw new Error('Calendar not found for report');
+
+    // Resolve the signing calendar.
+    //
+    // Two paths share this method:
+    //
+    // 1. Legacy local-event report: `report.calendarId` is set, signing
+    //    happens via the calendar that owns the reported event.
+    //
+    // 2. Admin report against a remote event (pv-o3ay.7):
+    //    `report.calendarId` is null because the event is remote on this
+    //    instance. There is no owning local calendar to sign as. Instead,
+    //    we resolve the admin's primary owned calendar and use it as the
+    //    federation courier — both as the Flag's `actor` field and as the
+    //    HTTP-signing identity. This preserves the actor/signer match
+    //    invariant required by ActivityPub HTTP signatures: the activity
+    //    `actor` and the Signature `keyId` resolve to the same calendar
+    //    actor key.
+    let signingCalendar;
+    if (report.calendarId !== null) {
+      signingCalendar = await this.calendarInterface.getCalendar(report.calendarId);
+      if (!signingCalendar) {
+        throw new Error('Calendar not found for report');
+      }
     }
-    const calendarActorUri = await this.activityPubInterface.actorUrl(calendar);
-    // Build appropriate Flag activity based on reporter type
+    else {
+      if (!this.accountsInterface) {
+        throw new Error('AccountsInterface is required to forward remote-event reports');
+      }
+      if (!report.adminId) {
+        throw new NoSigningCalendarError();
+      }
+      const adminAccount = await this.accountsInterface.getAccountById(report.adminId);
+      if (!adminAccount) {
+        throw new NoSigningCalendarError();
+      }
+      const primaryCalendar = await this.calendarInterface.getPrimaryCalendarForUser(adminAccount);
+      if (!primaryCalendar) {
+        throw new NoSigningCalendarError();
+      }
+      signingCalendar = primaryCalendar;
+    }
+
+    const signingCalendarActorUri = await this.activityPubInterface.actorUrl(signingCalendar);
+
+    // Build appropriate Flag activity based on reporter type and report scope.
+    //
+    // For admin-initiated reports against *local* events we keep the
+    // legacy `buildAdminFlagActivity` path (signed by `<domain>/admin`).
+    // That path has a pre-existing signing mismatch — `<domain>/admin`
+    // has no key entry in any actor table — that is intentionally not
+    // fixed here; see Interim Debt #2 on the bead (pv-o3ay.7).
+    //
+    // For admin-initiated reports against *remote* events the new path
+    // uses `buildFlagActivity` with the signing calendar's actor URI so
+    // the activity `actor` matches the HTTP-Signature `keyId`.
     let flagActivity;
-    if (report.reporterType === 'administrator' && report.adminId) {
-      // Build admin flag with priority
+    if (report.reporterType === 'administrator' && report.adminId && report.calendarId !== null) {
+      // Legacy admin flag for local-event admin reports
       const adminActorUri = `https://${domain}/admin`;
       flagActivity = flagBuilder.buildAdminFlagActivity(report, event, adminActorUri);
     }
     else {
-      // Build standard owner-level flag
-      flagActivity = flagBuilder.buildFlagActivity(report, event, calendarActorUri);
+      // Calendar-actor flag. Used for owner-level reports and for
+      // admin reports against remote events (signing calendar acts as
+      // federation courier).
+      flagActivity = flagBuilder.buildFlagActivity(report, event, signingCalendarActorUri);
     }
     // Set explicit recipient in 'to' field
     flagActivity.to = [targetActorUri];
     // Send via ActivityPub outbox
-    await this.activityPubInterface.addToOutbox(calendar, flagActivity);
+    await this.activityPubInterface.addToOutbox(signingCalendar, flagActivity);
     // Update the report entity with forwarding metadata
     const reportEntity = await ReportEntity.findByPk(reportId);
     if (reportEntity) {

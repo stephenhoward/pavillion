@@ -16,6 +16,7 @@ import EmailInterface from '@/server/email/interface';
 import ConfigurationInterface from '@/server/configuration/interface';
 import ActivityPubInterface from '@/server/activitypub/interface';
 import {
+  NoSigningCalendarError,
   ReportNotFoundError,
 } from '@/server/moderation/exceptions';
 import { ReportEscalationEntity } from '@/server/moderation/entity/report_escalation';
@@ -251,6 +252,32 @@ describe('Admin Report Forward API', () => {
 
         expect(response.status).toBe(404);
         expect(response.body.errorName).toBe('ReportNotFoundError');
+      });
+    });
+
+    describe('unprocessable - 422', () => {
+      it('should return 422 when the admin has no signing calendar', async () => {
+        // pv-o3ay.7: a remote-event report cannot be forwarded if the
+        // admin has no primary calendar to act as the federation courier.
+        const report = createTestReport();
+        const remoteEvent = createTestEvent({
+          calendarId: null,
+          eventSourceUrl: 'https://remote.instance.com/events/event-uuid',
+        });
+
+        sandbox.stub(moderationInterface, 'getAdminReport').resolves(report);
+        sandbox.stub(moderationInterface, 'getEventById').resolves(remoteEvent);
+        sandbox.stub(moderationInterface, 'forwardReport').rejects(new NoSigningCalendarError());
+
+        router.post('/admin/reports/:reportId/forward-to-admin', addAdminUser, (req, res) => {
+          routes.forwardToAdmin(req, res);
+        });
+
+        const response = await request(testApp(router))
+          .post(`/admin/reports/${TEST_REPORT_ID}/forward-to-admin`);
+
+        expect(response.status).toBe(422);
+        expect(response.body.errorName).toBe('NoSigningCalendarError');
       });
     });
 

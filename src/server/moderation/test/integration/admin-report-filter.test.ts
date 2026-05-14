@@ -66,6 +66,27 @@ describe('Admin Report List - calendar_id filter (integration)', () => {
     return id;
   }
 
+  /**
+   * Seeds an admin-initiated report against a remote event so it appears
+   * in the admin list with `calendar_id === null`. Represents the
+   * pv-o3ay.7 dispatch path.
+   */
+  async function seedRemoteAdminReport(description: string): Promise<string> {
+    const id = uuidv4();
+    await ReportEntity.create({
+      id,
+      event_id: uuidv4(),
+      calendar_id: null,
+      category: ReportCategory.SPAM,
+      description,
+      reporter_type: 'administrator',
+      admin_id: uuidv4(),
+      admin_priority: 'medium',
+      status: ReportStatus.SUBMITTED,
+    });
+    return id;
+  }
+
   it('returns only reports for the requested calendar_id', async () => {
     const reportA1 = await seedEscalatedReport(calendarAId, 'Calendar A report 1');
     const reportA2 = await seedEscalatedReport(calendarAId, 'Calendar A report 2');
@@ -119,5 +140,40 @@ describe('Admin Report List - calendar_id filter (integration)', () => {
 
     expect(response.status).toBe(200);
     expect(response.body.reports).toHaveLength(0);
+  });
+
+  it('includes null-calendarId admin reports when no calendar_id filter is provided', async () => {
+    // Admin reports against remote events have calendar_id === null
+    // (pv-o3ay.7). They should appear in the unfiltered admin list since
+    // they satisfy the `reporter_type === 'administrator'` half of the
+    // base OR clause.
+    const remoteAdminReportId = await seedRemoteAdminReport('Remote event spam');
+    await seedEscalatedReport(calendarAId, 'Local escalated report');
+
+    const response = await env.authGet(authToken, '/api/v1/admin/reports');
+
+    expect(response.status).toBe(200);
+    expect(response.body.reports).toHaveLength(2);
+
+    const returnedIds = response.body.reports.map((r: any) => r.id);
+    expect(returnedIds).toContain(remoteAdminReportId);
+
+    const remoteReport = response.body.reports.find((r: any) => r.id === remoteAdminReportId);
+    expect(remoteReport.calendarId).toBeNull();
+    expect(remoteReport.reporterType).toBe('administrator');
+  });
+
+  it('excludes null-calendarId admin reports when a calendar_id filter is provided', async () => {
+    // A calendar-scoped admin query must not surface remote-event admin
+    // reports, since those reports do not belong to any local calendar.
+    await seedRemoteAdminReport('Remote event spam');
+    const calendarAReportId = await seedEscalatedReport(calendarAId, 'Local A report');
+
+    const response = await env.authGet(authToken, `/api/v1/admin/reports?calendar_id=${calendarAId}`);
+
+    expect(response.status).toBe(200);
+    expect(response.body.reports).toHaveLength(1);
+    expect(response.body.reports[0].id).toBe(calendarAReportId);
+    expect(response.body.reports[0].calendarId).toBe(calendarAId);
   });
 });

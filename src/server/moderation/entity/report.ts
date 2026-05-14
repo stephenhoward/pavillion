@@ -32,8 +32,17 @@ class ReportEntity extends Model {
   @Column({ type: DataType.UUID, allowNull: false })
   declare event_id: string;
 
-  @Column({ type: DataType.UUID, allowNull: false })
-  declare calendar_id: string;
+  /**
+   * Calendar that owns the reported event on this instance.
+   *
+   * Invariant: `calendar_id === null` iff the reported event is remote
+   * (`event.calendarId === null` on this instance). Local reports against
+   * locally-hosted events always carry a calendar_id; admin-initiated
+   * reports against remote events have calendar_id === null because the
+   * remote event has no owning calendar here.
+   */
+  @Column({ type: DataType.UUID, allowNull: true })
+  declare calendar_id: string | null;
 
   @Column({ type: DataType.STRING, allowNull: false })
   declare category: string;

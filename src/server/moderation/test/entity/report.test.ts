@@ -249,5 +249,32 @@ describe('ReportEntity', () => {
       expect(roundTripModel.hasEventTargetingPattern).toBe(false);
       expect(roundTripModel.hasInstancePattern).toBe(false);
     });
+
+    it('should round-trip a remote-event admin report with calendarId === null', () => {
+      // Invariant: `calendar_id === null` iff the reported event is remote.
+      // Admin reports against remote events take this path (pv-o3ay.7).
+      const id = uuidv4();
+      const eventId = uuidv4();
+      const adminId = uuidv4();
+
+      const originalModel = new Report(id);
+      originalModel.eventId = eventId;
+      originalModel.calendarId = null;
+      originalModel.category = ReportCategory.SPAM;
+      originalModel.description = 'Remote event report';
+      originalModel.reporterType = 'administrator';
+      originalModel.adminId = adminId;
+      originalModel.adminPriority = 'medium';
+      originalModel.status = ReportStatus.SUBMITTED;
+
+      const entity = ReportEntity.fromModel(originalModel);
+      expect(entity.calendar_id).toBeNull();
+
+      const roundTripModel = entity.toModel();
+      expect(roundTripModel.calendarId).toBeNull();
+      expect(roundTripModel.eventId).toBe(eventId);
+      expect(roundTripModel.reporterType).toBe('administrator');
+      expect(roundTripModel.adminId).toBe(adminId);
+    });
   });
 });

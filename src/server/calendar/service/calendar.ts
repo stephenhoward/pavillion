@@ -1148,6 +1148,11 @@ class CalendarService {
     if (!account.id) {
       return null;
     }
+    // Stable sort: when an account owns multiple owner memberships,
+    // return the oldest one so callers that need a deterministic
+    // signing identity (e.g. the federation Flag courier in
+    // ModerationService.forwardReport) get the same calendar every
+    // run rather than DB-ordering-dependent results.
     const membership = await CalendarMemberEntity.findOne({
       where: { account_id: account.id, role: 'owner' },
       include: [{
@@ -1155,6 +1160,7 @@ class CalendarService {
         as: 'calendar',
         include: [CalendarContentEntity, { model: MediaEntity, as: 'defaultEventImage', required: false, where: { status: 'approved' } }],
       }],
+      order: [['created_at', 'ASC']],
     });
     return membership?.calendar ? this.withPublicUrl(membership.calendar.toModel()) : null;
   }

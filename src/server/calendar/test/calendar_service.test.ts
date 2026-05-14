@@ -395,7 +395,10 @@ describe('getPrimaryCalendarForUser', () => {
   it('should return primary calendar for user if found', async () => {
     const cal = new Calendar('testCalendarId', 'testme');
 
-    // Stub CalendarMemberEntity.findOne to return an owner membership with included calendar
+    // The `order: [['created_at', 'ASC']]` assertion below guarantees a
+    // deterministic pick when an account owns multiple owner memberships,
+    // which the federation Flag courier in ModerationService.forwardReport
+    // depends on for stable signing identity.
     const memberFindOneStub = sandbox.stub(CalendarMemberEntity, 'findOne');
     memberFindOneStub.resolves({
       calendar_id: 'testCalendarId',
@@ -415,6 +418,7 @@ describe('getPrimaryCalendarForUser', () => {
         as: 'calendar',
         include: [CalendarContentEntity, { model: MediaEntity, as: 'defaultEventImage', required: false, where: { status: 'approved' } }],
       }],
+      order: [['created_at', 'ASC']],
     })).toBe(true);
   });
 
@@ -432,8 +436,10 @@ describe('getPrimaryCalendarForUser', () => {
         as: 'calendar',
         include: [CalendarContentEntity, { model: MediaEntity, as: 'defaultEventImage', required: false, where: { status: 'approved' } }],
       }],
+      order: [['created_at', 'ASC']],
     })).toBe(true);
   });
+
 });
 
 describe('createCalendar', () => {

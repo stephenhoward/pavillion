@@ -54,6 +54,15 @@ enum ForwardStatus {
  */
 class Report extends PrimaryModel {
   eventId: string = '';
+  /**
+   * Calendar that owns the reported event on this instance.
+   *
+   * Invariant: `calendarId === null` iff the reported event is remote on
+   * this instance (i.e. `event.calendarId === null`). Local reports against
+   * locally-hosted events always carry a calendarId; admin-initiated
+   * reports against remote events have calendarId === null because the
+   * remote event has no owning calendar here.
+   */
   calendarId: string | null = null;
   category: ReportCategory = ReportCategory.OTHER;
   description: string = '';

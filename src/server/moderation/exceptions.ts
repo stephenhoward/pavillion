@@ -78,6 +78,26 @@ export class InvalidDomainError extends Error {
 }
 
 /**
+ * Custom error class for missing signing calendar when forwarding a remote-event report.
+ *
+ * Thrown by `ModerationService.forwardReport` when the report being forwarded
+ * has `calendarId === null` (admin-initiated report against a remote event)
+ * but no suitable local calendar can be resolved to sign the outbound Flag
+ * activity. This happens when the admin account is missing or has no
+ * primary (owned) calendar to act as the federation courier. Mapped to 422
+ * by the forward-to-admin route, consistent with other moderation
+ * unprocessable-entity errors.
+ */
+export class NoSigningCalendarError extends Error {
+  constructor(message: string = 'No signing calendar available for this admin') {
+    super(message);
+    this.name = 'NoSigningCalendarError';
+    // Maintaining proper prototype chain in ES5+
+    Object.setPrototypeOf(this, NoSigningCalendarError.prototype);
+  }
+}
+
+/**
  * Custom error class for blocked reporter attempting to submit a report.
  * Thrown when a reporter's email hash is in the blocked reporters list.
  */
