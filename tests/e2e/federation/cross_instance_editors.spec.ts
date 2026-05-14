@@ -5,7 +5,12 @@ import {
   grantEditorAccessByEmail,
   getCalendarEvents,
 } from './helpers/api';
-import { INSTANCE_ALPHA, INSTANCE_BETA } from './helpers/instances';
+import {
+  INSTANCE_ALPHA,
+  INSTANCE_BETA,
+  getBetaLogLineCount,
+  waitForBetaInboxActivity,
+} from './helpers/instances';
 import https from 'https';
 
 // Create an HTTPS agent that accepts self-signed certificates for local testing
@@ -312,6 +317,10 @@ test.describe.serial('Cross-Instance Editor Collaboration', () => {
 
     expect(betaEditor).toBeDefined();
 
+    // Anchor beta's log line count before the revoke so the log-poll below
+    // only considers Undo activities emitted by this action.
+    const undoAnchor = getBetaLogLineCount();
+
     // Revoke editor access
     const revokeResponse = await fetch(
       `${INSTANCE_ALPHA.baseUrl}/api/v1/calendars/${alphaCalendarId}/editors/remote`,
@@ -330,6 +339,13 @@ test.describe.serial('Cross-Instance Editor Collaboration', () => {
     );
 
     expect(revokeResponse.status).toBe(204);
+
+    // Verify the Undo(Add) packet actually reached beta's inbox. The
+    // beta editor actor URI is used as the needle to distinguish this
+    // Undo from any other Undo activities in beta's log.
+    expect(
+      await waitForBetaInboxActivity('Undo', betaEditor.actorUri, undoAnchor),
+    ).toBe(true);
 
     // Verify editor can no longer create events
     const eventData = {

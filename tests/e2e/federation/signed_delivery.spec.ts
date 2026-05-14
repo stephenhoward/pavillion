@@ -43,12 +43,13 @@
 
 import { test, expect } from '@playwright/test';
 import https from 'https';
-import { execSync } from 'child_process';
 import {
   INSTANCE_ALPHA,
   INSTANCE_BETA,
   formatRemoteCalendarId,
   generateCalendarName,
+  getBetaLogLineCount,
+  waitForBetaInboxActivity,
 } from './helpers/instances';
 import {
   getToken,
@@ -85,88 +86,6 @@ async function waitForFeedEvent(
     await new Promise(resolve => setTimeout(resolve, intervalMs));
   }
   return undefined;
-}
-
-/**
- * Capture the current Beta container log line count so we can later inspect
- * only log entries emitted AFTER an action under test. Without this anchor,
- * a stale entry from a prior run (or a prior test in the same run) could
- * satisfy a substring assertion and produce a false positive.
- */
-function getBetaLogLineCount(): number {
-  try {
-    const out = execSync(
-      'docker logs pavillion-federation-beta 2>&1 | wc -l',
-      { encoding: 'utf8' },
-    );
-    return parseInt(out.trim(), 10) || 0;
-  }
-  catch {
-    return 0;
-  }
-}
-
-/**
- * Poll Beta's container logs (only entries emitted AFTER `sinceLine`) for
- * evidence that an inbox activity of the given type, mentioning the given
- * needle, was processed.
- *
- * The inbox processing pipeline runs only AFTER verifyHttpSignature accepts
- * the request. So any log entry from inbox.ts that mentions the activity
- * type and the needle is positive evidence that signed delivery reached the
- * inbox handler. Downstream business-logic outcomes (accept, reject,
- * ownership failure) are out of scope here -- we are proving that the
- * activity arrived, not that it was semantically valid.
- *
- * Used for Delete(Tombstone) where the side-effect ("event gone from feed")
- * is masked by ownership-verification rules that fetch the now-deleted
- * source object and fail with 404/500, rejecting the activity at a layer
- * far below the inbox handler.
- *
- * @param activityType - ActivityPub activity type to look for (e.g. 'Delete')
- * @param needle - Substring that must appear in the post-anchor log slice
- *                 (typically the event id under test)
- * @param sinceLine - Log line count captured BEFORE the action; only lines
- *                    after this offset are considered
- */
-function waitForBetaInboxActivity(
-  activityType: string,
-  needle: string,
-  sinceLine: number,
-  timeoutMs = 20000,
-  intervalMs = 1000,
-): Promise<boolean> {
-  return new Promise((resolve) => {
-    const deadline = Date.now() + timeoutMs;
-    const tick = () => {
-      try {
-        // Slice the log to only entries emitted AFTER the action under test.
-        // tail -n +N starts at line N (1-indexed), so sinceLine + 1 yields
-        // strictly the new entries.
-        const logs = execSync(
-          `docker logs pavillion-federation-beta 2>&1 | tail -n +${sinceLine + 1}`,
-          { encoding: 'utf8' },
-        );
-        // The activityType is logged as a structured field; tolerate ANSI
-        // color codes around the JSON-ish key by checking substrings.
-        if (
-          logs.includes(needle)
-          && logs.includes('activityType')
-          && logs.includes(`"${activityType}"`)
-        ) {
-          resolve(true);
-          return;
-        }
-      }
-      catch { /* container may briefly be unavailable */ }
-      if (Date.now() >= deadline) {
-        resolve(false);
-        return;
-      }
-      setTimeout(tick, intervalMs);
-    };
-    tick();
-  });
 }
 
 /**

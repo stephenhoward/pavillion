@@ -1,9 +1,10 @@
 /**
- * Federation Test Instance Configuration
+ * Federation Test Instance Configuration and Container Log Helpers
  *
  * This file defines the configuration for the two Pavillion instances
- * used in federation testing. These instances are started via Docker
- * Compose (see docker-compose.federation.yml).
+ * used in federation testing, plus helpers for inspecting their Docker
+ * container logs. These instances are started via Docker Compose (see
+ * docker-compose.federation.yml).
  *
  * Instance Naming Convention:
  * - INSTANCE_ALPHA: The "local" instance, typically used as the source of federation actions
@@ -19,6 +20,8 @@
  *    127.0.0.1 beta.federation.local
  * 2. Start the federation environment: npm run federation:start
  */
+
+import { execSync } from 'child_process';
 
 /**
  * Configuration for a test instance
@@ -149,4 +152,144 @@ export function generateCalendarName(prefix: string): string {
   }
 
   return name;
+}
+
+/**
+ * Docker container names for the two federation instances. Mirrors the
+ * `container_name` entries in `docker-compose.federation.yml`.
+ */
+const ALPHA_CONTAINER = 'pavillion-federation-alpha';
+const BETA_CONTAINER = 'pavillion-federation-beta';
+
+/**
+ * Capture the current container log line count so subsequent log inspections
+ * can be restricted to entries emitted AFTER an action under test. Without
+ * this anchor, a stale entry from a prior run (or a prior test in the same
+ * run) could satisfy a substring assertion and produce a false positive.
+ *
+ * Returns 0 if the container is unavailable; callers using the return value
+ * as a `sinceLine` anchor degrade to inspecting the full log in that case,
+ * which is acceptable for federation e2e (container is expected to be up).
+ */
+function getInboxLogLineCount(containerName: string): number {
+  try {
+    const out = execSync(
+      `docker logs ${containerName} 2>&1 | wc -l`,
+      { encoding: 'utf8' },
+    );
+    return parseInt(out.trim(), 10) || 0;
+  }
+  catch {
+    return 0;
+  }
+}
+
+/**
+ * Poll a container's logs (only entries emitted AFTER `sinceLine`) for
+ * evidence that an inbox activity of the given type, mentioning the given
+ * needle, was processed.
+ *
+ * The inbox processing pipeline runs only AFTER verifyHttpSignature accepts
+ * the request. Any log entry from inbox.ts that mentions the activity type
+ * and the needle is positive evidence that signed delivery reached the inbox
+ * handler. Downstream business-logic outcomes (accept, reject, ownership
+ * failure) are out of scope here -- we are proving that the activity
+ * arrived, not that it was semantically valid.
+ *
+ * Useful when the user-facing side effect ("event gone from feed",
+ * "calendar removed") is masked by ownership-verification rules or other
+ * downstream rejection layers that fire below the inbox handler.
+ *
+ * @param containerName - Docker container name whose logs to poll
+ * @param activityType - ActivityPub activity type to look for (e.g. 'Delete')
+ * @param needle - Substring that must appear in the post-anchor log slice
+ *                 (typically the event id under test)
+ * @param sinceLine - Log line count captured BEFORE the action; only lines
+ *                    after this offset are considered
+ * @param timeoutMs - Maximum time to wait before resolving false
+ * @param intervalMs - Polling interval between log inspections
+ */
+function waitForInboxActivity(
+  containerName: string,
+  activityType: string,
+  needle: string,
+  sinceLine: number,
+  timeoutMs = 20000,
+  intervalMs = 1000,
+): Promise<boolean> {
+  return new Promise((resolve) => {
+    const deadline = Date.now() + timeoutMs;
+    const tick = () => {
+      try {
+        // Slice the log to only entries emitted AFTER the action under test.
+        // tail -n +N starts at line N (1-indexed), so sinceLine + 1 yields
+        // strictly the new entries.
+        const logs = execSync(
+          `docker logs ${containerName} 2>&1 | tail -n +${sinceLine + 1}`,
+          { encoding: 'utf8' },
+        );
+        // The activityType is logged as a structured field; tolerate ANSI
+        // color codes around the JSON-ish key by checking substrings.
+        if (
+          logs.includes(needle)
+          && logs.includes('activityType')
+          && logs.includes(`"${activityType}"`)
+        ) {
+          resolve(true);
+          return;
+        }
+      }
+      catch { /* container may briefly be unavailable */ }
+      if (Date.now() >= deadline) {
+        resolve(false);
+        return;
+      }
+      setTimeout(tick, intervalMs);
+    };
+    tick();
+  });
+}
+
+/**
+ * Capture the current Beta container log line count. See
+ * {@link getInboxLogLineCount} for semantics.
+ */
+export function getBetaLogLineCount(): number {
+  return getInboxLogLineCount(BETA_CONTAINER);
+}
+
+/**
+ * Capture the current Alpha container log line count. See
+ * {@link getInboxLogLineCount} for semantics.
+ */
+export function getAlphaLogLineCount(): number {
+  return getInboxLogLineCount(ALPHA_CONTAINER);
+}
+
+/**
+ * Beta-side wrapper around {@link waitForInboxActivity}. Polls Beta's
+ * container logs for a matching inbox activity.
+ */
+export function waitForBetaInboxActivity(
+  activityType: string,
+  needle: string,
+  sinceLine: number,
+  timeoutMs?: number,
+  intervalMs?: number,
+): Promise<boolean> {
+  return waitForInboxActivity(BETA_CONTAINER, activityType, needle, sinceLine, timeoutMs, intervalMs);
+}
+
+/**
+ * Alpha-side wrapper around {@link waitForInboxActivity}. Polls Alpha's
+ * container logs for a matching inbox activity.
+ */
+export function waitForAlphaInboxActivity(
+  activityType: string,
+  needle: string,
+  sinceLine: number,
+  timeoutMs?: number,
+  intervalMs?: number,
+): Promise<boolean> {
+  return waitForInboxActivity(ALPHA_CONTAINER, activityType, needle, sinceLine, timeoutMs, intervalMs);
 }
