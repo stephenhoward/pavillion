@@ -147,14 +147,22 @@ export class FollowBackfillService {
    * surfaces them in logs and the job retries.
    */
   async runBackfill(payload: ActivityPubFollowAcceptedPayload): Promise<void> {
-    const { followingCalendarId, sourceActorUri } = payload;
+    const { followingCalendarId, calendarActorId, sourceActorUri } = payload;
 
     // 1. Verify the follow row still exists at job start. The Accept that
     // triggered this job could be racing an unfollow; if the user is no
     // longer following, dropping their backfill is the right answer.
-    const followRow = await FollowingCalendarEntity.findByPk(followingCalendarId);
+    // The payload's `followingCalendarId` is the local Calendar's id
+    // (FollowingCalendarEntity.calendar_id, not the row PK); combined with
+    // calendarActorId it uniquely identifies the follow relationship.
+    const followRow = await FollowingCalendarEntity.findOne({
+      where: {
+        calendar_id: followingCalendarId,
+        calendar_actor_id: calendarActorId,
+      },
+    });
     if (!followRow) {
-      logger.info({ followingCalendarId }, 'follow row missing at job start; skipping backfill');
+      logger.info({ followingCalendarId, calendarActorId }, 'follow row missing at job start; skipping backfill');
       return;
     }
 
@@ -237,9 +245,14 @@ export class FollowBackfillService {
       // Re-verify the follow row at every page boundary. A user unfollowing
       // mid-backfill should stop us from continuing to drag down their
       // event history.
-      const stillFollowing = await FollowingCalendarEntity.findByPk(followingCalendarId);
+      const stillFollowing = await FollowingCalendarEntity.findOne({
+        where: {
+          calendar_id: followingCalendarId,
+          calendar_actor_id: calendarActorId,
+        },
+      });
       if (!stillFollowing) {
-        logger.info({ followingCalendarId }, 'follow row removed during backfill; stopping pagination');
+        logger.info({ followingCalendarId, calendarActorId }, 'follow row removed during backfill; stopping pagination');
         return;
       }
 

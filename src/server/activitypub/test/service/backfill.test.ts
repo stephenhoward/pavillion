@@ -126,6 +126,7 @@ function makeFetcher(responses: Map<string, Record<string, unknown> | null>) {
 describe('FollowBackfillService.runBackfill', () => {
   let sandbox: sinon.SinonSandbox;
   let calendarId: string;
+  let calendarActorId: string;
   let followingId: string;
   let followerCalendar: Calendar;
   let processInboxStub: sinon.SinonStub;
@@ -154,6 +155,7 @@ describe('FollowBackfillService.runBackfill', () => {
       remote_domain: REMOTE_HOST,
       private_key: null,
     });
+    calendarActorId = calendarActor.id;
     followingId = uuidv4();
     await FollowingCalendarEntity.create({
       id: followingId,
@@ -219,8 +221,8 @@ describe('FollowBackfillService.runBackfill', () => {
     const { service } = buildService({ responses });
 
     await service.runBackfill({
-      followingCalendarId: followingId,
-      calendarActorId: 'unused',
+      followingCalendarId: calendarId,
+      calendarActorId,
       sourceActorUri: SOURCE_ACTOR_URI,
     });
 
@@ -242,8 +244,8 @@ describe('FollowBackfillService.runBackfill', () => {
 
     const { service } = buildService({ responses });
     await service.runBackfill({
-      followingCalendarId: followingId,
-      calendarActorId: 'unused',
+      followingCalendarId: calendarId,
+      calendarActorId,
       sourceActorUri: SOURCE_ACTOR_URI,
     });
 
@@ -265,8 +267,8 @@ describe('FollowBackfillService.runBackfill', () => {
 
     const { service } = buildService({ responses });
     await service.runBackfill({
-      followingCalendarId: followingId,
-      calendarActorId: 'unused',
+      followingCalendarId: calendarId,
+      calendarActorId,
       sourceActorUri: SOURCE_ACTOR_URI,
     });
 
@@ -299,8 +301,8 @@ describe('FollowBackfillService.runBackfill', () => {
 
     const { service } = buildService({ responses });
     await service.runBackfill({
-      followingCalendarId: followingId,
-      calendarActorId: 'unused',
+      followingCalendarId: calendarId,
+      calendarActorId,
       sourceActorUri: SOURCE_ACTOR_URI,
     });
 
@@ -322,8 +324,8 @@ describe('FollowBackfillService.runBackfill', () => {
 
     const { service } = buildService({ responses });
     await service.runBackfill({
-      followingCalendarId: followingId,
-      calendarActorId: 'unused',
+      followingCalendarId: calendarId,
+      calendarActorId,
       sourceActorUri: SOURCE_ACTOR_URI,
     });
 
@@ -345,8 +347,8 @@ describe('FollowBackfillService.runBackfill', () => {
 
     const { service } = buildService({ responses });
     await service.runBackfill({
-      followingCalendarId: followingId,
-      calendarActorId: 'unused',
+      followingCalendarId: calendarId,
+      calendarActorId,
       sourceActorUri: SOURCE_ACTOR_URI,
     });
 
@@ -368,8 +370,8 @@ describe('FollowBackfillService.runBackfill', () => {
 
     const { service } = buildService({ responses });
     await service.runBackfill({
-      followingCalendarId: followingId,
-      calendarActorId: 'unused',
+      followingCalendarId: calendarId,
+      calendarActorId,
       sourceActorUri: SOURCE_ACTOR_URI,
     });
 
@@ -417,13 +419,13 @@ describe('FollowBackfillService.runBackfill', () => {
 
     const { service } = buildService({ responses });
     await service.runBackfill({
-      followingCalendarId: followingId,
-      calendarActorId: 'unused',
+      followingCalendarId: calendarId,
+      calendarActorId,
       sourceActorUri: SOURCE_ACTOR_URI,
     });
     await service.runBackfill({
-      followingCalendarId: followingId,
-      calendarActorId: 'unused',
+      followingCalendarId: calendarId,
+      calendarActorId,
       sourceActorUri: SOURCE_ACTOR_URI,
     });
 
@@ -456,8 +458,8 @@ describe('FollowBackfillService.runBackfill', () => {
 
     const { service, calls } = buildService({ responses });
     await service.runBackfill({
-      followingCalendarId: followingId,
-      calendarActorId: 'unused',
+      followingCalendarId: calendarId,
+      calendarActorId,
       sourceActorUri: SOURCE_ACTOR_URI,
     });
 
@@ -480,7 +482,7 @@ describe('FollowBackfillService.runBackfill', () => {
     expect(capWarnCalls[0][0]).toMatchObject({
       pagesWalked: MAX_OUTBOX_PAGES,
       cap: MAX_OUTBOX_PAGES,
-      followingCalendarId: followingId,
+      followingCalendarId: calendarId,
     });
   });
 
@@ -513,8 +515,8 @@ describe('FollowBackfillService.runBackfill', () => {
     });
 
     await service.runBackfill({
-      followingCalendarId: followingId,
-      calendarActorId: 'unused',
+      followingCalendarId: calendarId,
+      calendarActorId,
       sourceActorUri: SOURCE_ACTOR_URI,
     });
 
@@ -539,8 +541,8 @@ describe('FollowBackfillService.runBackfill', () => {
 
     const { service, calls } = buildService({ responses });
     await service.runBackfill({
-      followingCalendarId: followingId,
-      calendarActorId: 'unused',
+      followingCalendarId: calendarId,
+      calendarActorId,
       sourceActorUri: SOURCE_ACTOR_URI,
     });
 
@@ -575,8 +577,8 @@ describe('FollowBackfillService.runBackfill', () => {
 
     const { service, calls } = buildService({ responses });
     await service.runBackfill({
-      followingCalendarId: followingId,
-      calendarActorId: 'unused',
+      followingCalendarId: calendarId,
+      calendarActorId,
       sourceActorUri: SOURCE_ACTOR_URI,
     });
 
@@ -595,8 +597,8 @@ describe('FollowBackfillService.runBackfill', () => {
 
     const { service, fetcher } = buildService({ responses });
     await service.runBackfill({
-      followingCalendarId: followingId,
-      calendarActorId: 'unused',
+      followingCalendarId: calendarId,
+      calendarActorId,
       sourceActorUri: SOURCE_ACTOR_URI,
     });
 
@@ -625,8 +627,8 @@ describe('FollowBackfillService.runBackfill', () => {
     const { service, calls } = buildService({ responses, rateLimiter: tight });
 
     await service.runBackfill({
-      followingCalendarId: followingId,
-      calendarActorId: 'unused',
+      followingCalendarId: calendarId,
+      calendarActorId,
       sourceActorUri: SOURCE_ACTOR_URI,
     });
 
@@ -642,8 +644,8 @@ describe('FollowBackfillService.runBackfill', () => {
     const { service, calls } = buildService({ responses });
 
     await service.runBackfill({
-      followingCalendarId: followingId,
-      calendarActorId: 'unused',
+      followingCalendarId: calendarId,
+      calendarActorId,
       sourceActorUri: SOURCE_ACTOR_URI,
     });
 

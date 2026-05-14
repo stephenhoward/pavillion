@@ -93,7 +93,7 @@ describe('Follow backfill integration', () => {
 
   let followerAccount: Account;
   let followerCalendar: Calendar;
-  let followingId: string;
+  let calendarActorId: string;
 
   beforeAll(async () => {
     env = new TestEnvironment();
@@ -144,9 +144,9 @@ describe('Follow backfill integration', () => {
       remote_domain: REMOTE_HOST,
       private_key: null,
     });
-    followingId = uuidv4();
+    calendarActorId = calendarActor.id;
     await FollowingCalendarEntity.create({
-      id: followingId,
+      id: uuidv4(),
       calendar_actor_id: calendarActor.id,
       calendar_id: followerCalendar.id,
       auto_repost_originals: false,
@@ -203,8 +203,8 @@ describe('Follow backfill integration', () => {
     });
 
     await backfillService.runBackfill({
-      followingCalendarId: followingId,
-      calendarActorId: 'irrelevant-for-worker',
+      followingCalendarId: followerCalendar.id,
+      calendarActorId,
       sourceActorUri: REMOTE_ACTOR_URI,
     });
 
@@ -262,8 +262,8 @@ describe('Follow backfill integration', () => {
     });
 
     await backfillService.runBackfill({
-      followingCalendarId: followingId,
-      calendarActorId: 'irrelevant',
+      followingCalendarId: followerCalendar.id,
+      calendarActorId,
       sourceActorUri: REMOTE_ACTOR_URI,
     });
 

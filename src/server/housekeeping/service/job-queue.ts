@@ -242,7 +242,14 @@ export default class JobQueueService {
     // Ensure queue exists before subscribing
     await this.ensureQueue(jobName);
 
-    await this.boss.work(jobName, { includeMetadata: true }, async (job: any) => {
+    // pg-boss v10+ delivers jobs as an array regardless of batchSize. The
+    // default fetch size is 1, so we unwrap the first element here and keep
+    // each handler invocation single-job.
+    await this.boss.work(jobName, { includeMetadata: true }, async (jobs: any) => {
+      const job = Array.isArray(jobs) ? jobs[0] : jobs;
+      if (!job) {
+        return;
+      }
       try {
         logger.info({ jobName, jobId: job.id }, 'Processing job');
         await handler(job.data, { retryCount: job.retryCount, retryLimit: job.retryLimit });
