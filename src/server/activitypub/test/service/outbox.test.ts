@@ -82,7 +82,10 @@ describe('resolveInbox', () => {
 
   beforeEach(() => {
     const eventBus = new EventEmitter();
-    service = new ProcessOutboxService(eventBus);
+    const mockInbox = {
+      handleLocalAnnounceDispatch: sandbox.stub().resolves(),
+    } as unknown as ProcessInboxService;
+    service = new ProcessOutboxService(eventBus, mockInbox);
     vi.mocked(validateUrlNotPrivate).mockResolvedValue(true);
   });
 
@@ -152,7 +155,10 @@ describe('fetchProfileUrl', () => {
 
   beforeEach(() => {
     const eventBus = new EventEmitter();
-    service = new ProcessOutboxService(eventBus);
+    const mockInbox = {
+      handleLocalAnnounceDispatch: sandbox.stub().resolves(),
+    } as unknown as ProcessInboxService;
+    service = new ProcessOutboxService(eventBus, mockInbox);
     vi.mocked(validateUrlNotPrivate).mockResolvedValue(true);
   });
 
@@ -216,7 +222,10 @@ describe('getRecipients', () => {
 
   beforeEach(() => {
     const eventBus = new EventEmitter();
-    service = new ProcessOutboxService(eventBus);
+    const mockInbox = {
+      handleLocalAnnounceDispatch: sandbox.stub().resolves(),
+    } as unknown as ProcessInboxService;
+    service = new ProcessOutboxService(eventBus, mockInbox);
   });
 
   afterEach(() => {
@@ -271,7 +280,10 @@ describe('processOutboxMessage', () => {
 
   beforeEach(() => {
     const eventBus = new EventEmitter();
-    service = new ProcessOutboxService(eventBus);
+    const mockInbox = {
+      handleLocalAnnounceDispatch: sandbox.stub().resolves(),
+    } as unknown as ProcessInboxService;
+    service = new ProcessOutboxService(eventBus, mockInbox);
     vi.mocked(validateUrlNotPrivate).mockResolvedValue(true);
   });
 
@@ -593,7 +605,10 @@ describe('processOutboxMessage — explicit `to` honoring for Update/Delete/Add'
 
   beforeEach(() => {
     const eventBus = new EventEmitter();
-    service = new ProcessOutboxService(eventBus);
+    const mockInbox = {
+      handleLocalAnnounceDispatch: sandbox.stub().resolves(),
+    } as unknown as ProcessInboxService;
+    service = new ProcessOutboxService(eventBus, mockInbox);
     vi.mocked(validateUrlNotPrivate).mockResolvedValue(true);
   });
 
@@ -1109,7 +1124,10 @@ describe('deliverActivitySigned', () => {
 
   beforeEach(() => {
     const eventBus = new EventEmitter();
-    service = new ProcessOutboxService(eventBus);
+    const mockInbox = {
+      handleLocalAnnounceDispatch: sandbox.stub().resolves(),
+    } as unknown as ProcessInboxService;
+    service = new ProcessOutboxService(eventBus, mockInbox);
     vi.mocked(validateUrlNotPrivate).mockResolvedValue(true);
   });
 

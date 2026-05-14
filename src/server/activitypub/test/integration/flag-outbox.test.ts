@@ -13,6 +13,7 @@ import { EventEmitter } from 'events';
 
 import { Calendar } from '@/common/model/calendar';
 import ProcessOutboxService from '@/server/activitypub/service/outbox';
+import ProcessInboxService from '@/server/activitypub/service/inbox';
 import { ActivityPubOutboxMessageEntity } from '@/server/activitypub/entity/activitypub';
 
 // Test constants
@@ -39,7 +40,10 @@ describe('Flag activity outbox processing', () => {
 
   beforeEach(() => {
     eventBus = new EventEmitter();
-    service = new ProcessOutboxService(eventBus);
+    const mockInbox = {
+      handleLocalAnnounceDispatch: sandbox.stub().resolves(),
+    } as unknown as ProcessInboxService;
+    service = new ProcessOutboxService(eventBus, mockInbox);
     stubSigning(service, sandbox);
   });
 
