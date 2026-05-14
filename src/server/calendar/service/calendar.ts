@@ -1769,14 +1769,14 @@ class CalendarService {
           'last_event_activity',
         ],
       ],
-      order: [
-        // NULLS LAST: calendars with no events sort after calendars that have
-        // published activity. SQLite emits NULLs first by default; PostgreSQL
-        // emits NULLs last on DESC by default but is order-stable with the
-        // explicit clause. Using literal here keeps the ORDER BY portable.
-        [literal('last_event_activity IS NULL'), 'ASC'],
-        [literal('last_event_activity'), 'DESC'],
-      ],
+      // NULLS LAST: calendars with no events sort after calendars that have
+      // published activity. Both PostgreSQL (native, since 8.3) and SQLite
+      // (since 3.30) accept `NULLS LAST`. The previous two-clause form used
+      // `last_event_activity IS NULL` in the ORDER BY, which PostgreSQL rejects
+      // because output-column aliases are not visible inside expression contexts
+      // — only as bare ORDER BY terms. SQLite accepts the same SQL, so the
+      // SQLite-only integration tests masked the regression.
+      order: literal('last_event_activity DESC NULLS LAST'),
       limit: PUBLIC_DISCOVERY_LIMIT,
     } as any);
 
