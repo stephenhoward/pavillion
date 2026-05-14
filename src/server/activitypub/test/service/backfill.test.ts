@@ -36,6 +36,27 @@ vi.mock('@/server/common/helper/ip-validation', () => ({
   resolvesToPrivateIP: vi.fn(),
 }));
 
+// Mock the logger helper so the cap test can assert on a single warn-level
+// emission when MAX_OUTBOX_PAGES is reached. createLogger returns a stable
+// fake logger whose methods are vi.fn spies; tests reset them in beforeEach.
+// vi.hoisted is required because vi.mock factories are hoisted above
+// top-level statements and would otherwise see an undefined reference.
+const { loggerSpies } = vi.hoisted(() => {
+  const spies = {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+    child: vi.fn(),
+  };
+  spies.child.mockReturnValue(spies);
+  return { loggerSpies: spies };
+});
+vi.mock('@/server/common/helper/logger', () => ({
+  createLogger: () => loggerSpies,
+  default: loggerSpies,
+}));
+
 import { validateUrlNotPrivate } from '@/server/common/helper/ip-validation';
 import {
   FollowBackfillService,
@@ -446,6 +467,21 @@ describe('FollowBackfillService.runBackfill', () => {
     expect(calls.length).toBeLessThanOrEqual(3 + MAX_OUTBOX_PAGES);
     // No activities to route in this synthetic stream.
     expect(processInboxStub.callCount).toBe(0);
+
+    // Acceptance criterion: reaching MAX_OUTBOX_PAGES emits exactly one
+    // warn-level log line carrying the structured fields the operator
+    // would need to triage a runaway outbox (pages walked, the cap).
+    const capWarnCalls = loggerSpies.warn.mock.calls.filter(
+      ([fields, message]) =>
+        typeof message === 'string'
+        && message.includes('backfill truncated at page cap'),
+    );
+    expect(capWarnCalls).toHaveLength(1);
+    expect(capWarnCalls[0][0]).toMatchObject({
+      pagesWalked: MAX_OUTBOX_PAGES,
+      cap: MAX_OUTBOX_PAGES,
+      followingCalendarId: followingId,
+    });
   });
 
   it('mid-pagination unfollow: removes FollowingCalendarEntity between pages and exits cleanly', async () => {

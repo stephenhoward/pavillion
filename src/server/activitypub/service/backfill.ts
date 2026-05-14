@@ -50,12 +50,9 @@
  * same host share one budget.
  */
 
-import { EventEmitter } from 'events';
-
 import { ActivityPubFollowAcceptedPayload } from '@/server/activitypub/events/types';
 import { ActivityPubInboxMessageEntity, FollowingCalendarEntity } from '@/server/activitypub/entity/activitypub';
 import ActivityPubInterface from '@/server/activitypub/interface';
-import AccountsInterface from '@/server/accounts/interface';
 import CalendarInterface from '@/server/calendar/interface';
 import { ActivityPubActor } from '@/server/activitypub/model/base';
 import { fetchRemoteObject } from '@/server/activitypub/helper/remote-fetch';
@@ -157,7 +154,7 @@ export class FollowBackfillService {
     // longer following, dropping their backfill is the right answer.
     const followRow = await FollowingCalendarEntity.findByPk(followingCalendarId);
     if (!followRow) {
-      logger.info({ followingCalendarId, sourceActorUri }, 'follow row missing at job start; skipping backfill');
+      logger.info({ followingCalendarId }, 'follow row missing at job start; skipping backfill');
       return;
     }
 
@@ -181,13 +178,13 @@ export class FollowBackfillService {
     }
     const actorProfile = await this.fetcher(sourceActorUri, calendar, { maxContentLength: MAX_PAGE_BYTES });
     if (!actorProfile) {
-      logger.info({ sourceActorUri, followingCalendarId }, 'source actor profile fetch returned null; aborting backfill');
+      logger.info({ followingCalendarId }, 'source actor profile fetch returned null; aborting backfill');
       return;
     }
 
     const outboxUrl = typeof actorProfile.outbox === 'string' ? actorProfile.outbox : null;
     if (!outboxUrl) {
-      logger.info({ sourceActorUri, followingCalendarId }, 'source actor profile has no outbox URL; aborting backfill');
+      logger.info({ followingCalendarId }, 'source actor profile has no outbox URL; aborting backfill');
       return;
     }
 
@@ -242,7 +239,7 @@ export class FollowBackfillService {
       // event history.
       const stillFollowing = await FollowingCalendarEntity.findByPk(followingCalendarId);
       if (!stillFollowing) {
-        logger.info({ followingCalendarId, sourceActorUri }, 'follow row removed during backfill; stopping pagination');
+        logger.info({ followingCalendarId }, 'follow row removed during backfill; stopping pagination');
         return;
       }
 
@@ -460,7 +457,7 @@ export function passesTrustGates(
 
   // Gate 1: actor origin matches outbox origin.
   if (actorOrigin !== outboxOrigin) {
-    logger.info({ actor, outboxUrl: ctx.outboxUrl }, 'backfill drop: actor origin mismatch');
+    logger.debug({ actor, outboxUrl: ctx.outboxUrl }, 'backfill drop: actor origin mismatch');
     return false;
   }
 
@@ -470,7 +467,7 @@ export function passesTrustGates(
     // since the federation contract is that the source is announcing its
     // own activity; a strict equality would reject legitimate alternates
     // (alias actor URIs, capitalisation) that share an origin.
-    logger.info({ actor, sourceActorUri: ctx.sourceActorUri }, 'backfill drop: Announce actor not from source origin');
+    logger.debug({ actor, sourceActorUri: ctx.sourceActorUri }, 'backfill drop: Announce actor not from source origin');
     return false;
   }
 
@@ -481,12 +478,12 @@ export function passesTrustGates(
     const attributedTo = typeof objRecord.attributedTo === 'string' ? objRecord.attributedTo : null;
 
     if (type === 'Create' && attributedTo && attributedTo !== actor) {
-      logger.info({ actor, attributedTo }, 'backfill drop: Create attributedTo does not match actor');
+      logger.debug({ actor, attributedTo }, 'backfill drop: Create attributedTo does not match actor');
       return false;
     }
 
     if (attributedTo && attributedTo === ctx.localActorUri) {
-      logger.info({ attributedTo, localActorUri: ctx.localActorUri }, 'backfill drop: loop guard tripped (object attributedTo == local actor)');
+      logger.debug({ attributedTo, localActorUri: ctx.localActorUri }, 'backfill drop: loop guard tripped (object attributedTo == local actor)');
       return false;
     }
   }
@@ -494,23 +491,3 @@ export function passesTrustGates(
   return true;
 }
 
-// ---------------------------------------------------------------------------
-// Worker registration helper
-// ---------------------------------------------------------------------------
-
-/**
- * Builds a FollowBackfillService instance suitable for the worker process.
- * Used by `worker.ts`'s job subscription so the wiring lives in the
- * service module rather than leaking into the worker entry point.
- */
-export function createFollowBackfillService(
-  eventBus: EventEmitter,
-  calendarInterface: CalendarInterface,
-  accountsInterface: AccountsInterface,
-): FollowBackfillService {
-  const activityPubInterface = new ActivityPubInterface(eventBus, calendarInterface, accountsInterface);
-  return new FollowBackfillService({
-    activityPubInterface,
-    calendarInterface,
-  });
-}

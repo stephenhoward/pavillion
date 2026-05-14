@@ -235,7 +235,7 @@ async function registerJobHandlers(queue: JobQueueService): Promise<void> {
     'activitypub:follow:backfill',
     async (data: ActivityPubFollowAcceptedPayload) => {
       logger.info(
-        { followingCalendarId: data?.followingCalendarId, sourceActorUri: data?.sourceActorUri },
+        { followingCalendarId: data?.followingCalendarId },
         'Executing activitypub:follow:backfill job',
       );
       try {

@@ -83,6 +83,32 @@ describe('fetchRemoteObject', () => {
     expect(callArgs.maxRedirects).toBe(0);
   });
 
+  it('should forward maxContentLength to axios when the option is provided', async () => {
+    axiosGetStub.resolves({
+      status: 200,
+      data: { type: 'Note' },
+    });
+
+    await fetchRemoteObject(
+      'https://remote.example/notes/456',
+      undefined,
+      { maxContentLength: 512_000 },
+    );
+
+    expect(axiosGetStub.firstCall.args[1].maxContentLength).toBe(512_000);
+  });
+
+  it('should omit maxContentLength from axios config when the option is not provided', async () => {
+    axiosGetStub.resolves({
+      status: 200,
+      data: { type: 'Note' },
+    });
+
+    await fetchRemoteObject('https://remote.example/notes/456');
+
+    expect(axiosGetStub.firstCall.args[1].maxContentLength).toBeUndefined();
+  });
+
   it('should return null when HTTP response is not 200', async () => {
     axiosGetStub.resolves({
       status: 404,
