@@ -79,24 +79,44 @@ const backLink = computed<{ name: string; label: string }>(() => {
 </script>
 
 <template>
-  <div class="welcome-card">
-    <div class="welcome-card-main">
+  <article class="policy-page">
+    <header class="policy-page__header">
       <h2>{{ t('heading') }}</h2>
+    </header>
 
-      <article class="policy-content"
-               v-html="policyHtml" />
+    <div class="policy-page__body"
+         v-html="policyHtml" />
 
-      <router-link class="forgot"
-                   :to="{ name: backLink.name }">
-        {{ backLink.label }}
-      </router-link>
-    </div>
-  </div>
+    <router-link class="policy-page__back"
+                 :to="{ name: backLink.name }">
+      {{ backLink.label }}
+    </router-link>
+  </article>
 </template>
 
 <style scoped lang="scss">
-.policy-content {
-  margin-block-start: var(--pav-space-4);
+.policy-page {
+  width: 100%;
+  max-width: var(--pav-container-md);
+  margin-inline: auto;
+  padding-block: var(--pav-space-8);
+  color: var(--pav-text-primary);
+}
+
+.policy-page__header {
+  margin-block-end: var(--pav-space-8);
+  text-align: start;
+
+  h2 {
+    font-size: var(--pav-font-size-h2);
+    font-weight: var(--pav-font-weight-semibold);
+    color: var(--pav-text-primary);
+    line-height: 1.2;
+    margin: 0;
+  }
+}
+
+.policy-page__body {
   line-height: 1.6;
 
   :deep(h1),
@@ -105,6 +125,38 @@ const backLink = computed<{ name: string; label: string }>(() => {
   :deep(h4),
   :deep(h5),
   :deep(h6) {
+    font-weight: var(--pav-font-weight-semibold);
+    color: var(--pav-text-primary);
+    line-height: 1.3;
+    margin-block-start: var(--pav-space-8);
+    margin-block-end: var(--pav-space-3);
+  }
+
+  :deep(h1) {
+    font-size: var(--pav-font-size-h3);
+  }
+
+  :deep(h2) {
+    font-size: var(--pav-font-size-h4);
+  }
+
+  :deep(h3) {
+    font-size: var(--pav-font-size-h5);
+    margin-block-start: var(--pav-space-6);
+    margin-block-end: var(--pav-space-2);
+  }
+
+  :deep(h4) {
+    font-size: var(--pav-font-size-h6);
+    margin-block-start: var(--pav-space-6);
+    margin-block-end: var(--pav-space-2);
+  }
+
+  :deep(h5),
+  :deep(h6) {
+    font-size: var(--pav-font-size-base);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
     margin-block-start: var(--pav-space-6);
     margin-block-end: var(--pav-space-2);
   }
@@ -130,5 +182,31 @@ const backLink = computed<{ name: string; label: string }>(() => {
   :deep(li) {
     margin-block-end: var(--pav-space-2);
   }
+
+  :deep(a) {
+    color: var(--pav-color-brand-primary);
+    text-decoration: underline;
+  }
+
+  :deep(blockquote) {
+    border-inline-start: var(--pav-border-width-1) solid var(--pav-border-primary);
+    padding-inline-start: var(--pav-space-4);
+    margin-block-end: var(--pav-space-4);
+    color: var(--pav-color-text-secondary);
+  }
+
+  :deep(code) {
+    font-family: var(--pav-font-family-mono, monospace);
+    font-size: 0.9em;
+    background: var(--pav-surface-muted, var(--pav-surface-card));
+    padding: 0.125em 0.375em;
+    border-radius: var(--pav-border-radius-sm);
+  }
+}
+
+.policy-page__back {
+  display: inline-block;
+  margin-block-start: var(--pav-space-8);
+  color: var(--pav-color-brand-primary);
 }
 </style>
