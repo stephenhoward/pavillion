@@ -67,7 +67,7 @@ describe('InstancePolicy fallback chain', () => {
       defaultLanguage: 'en',
     } });
 
-    const article = wrapper.find('article.policy-content');
+    const article = wrapper.find('.policy-page__body');
     expect(article.exists()).toBe(true);
 
     const heading = article.find('h2');
@@ -101,7 +101,7 @@ describe('InstancePolicy fallback chain', () => {
       defaultLanguage: 'en',
     } });
 
-    const article = wrapper.find('article.policy-content');
+    const article = wrapper.find('.policy-page__body');
     expect(article.exists()).toBe(true);
 
     const heading = article.find('h2');
@@ -117,7 +117,7 @@ describe('InstancePolicy fallback chain', () => {
       defaultLanguage: 'en',
     } });
 
-    const article = wrapper.find('article.policy-content');
+    const article = wrapper.find('.policy-page__body');
     expect(article.exists()).toBe(true);
     const emptyFallback = i18next.t('policy:empty_fallback');
     expect(article.text()).toContain(emptyFallback);
@@ -132,7 +132,7 @@ describe('InstancePolicy fallback chain', () => {
       defaultLanguage: 'en',
     } });
 
-    const article = wrapper.find('article.policy-content');
+    const article = wrapper.find('.policy-page__body');
     expect(article.exists()).toBe(true);
 
     // Safe content survives.
@@ -157,42 +157,42 @@ describe('InstancePolicy back link', () => {
 
   it('routes back to login when from=login', async () => {
     const { wrapper } = await mountInstancePolicy({ settings, policyPath: '/policy?from=login' });
-    const link = wrapper.find('a.forgot');
+    const link = wrapper.find('a.policy-page__back');
     expect(link.attributes('href')).toBe('/login');
     expect(link.text()).toContain('sign in');
   });
 
   it('routes back to register when from=register', async () => {
     const { wrapper } = await mountInstancePolicy({ settings, policyPath: '/policy?from=register' });
-    const link = wrapper.find('a.forgot');
+    const link = wrapper.find('a.policy-page__back');
     expect(link.attributes('href')).toBe('/auth/register');
     expect(link.text()).toContain('registration');
   });
 
   it('routes back to the application page when from=register-apply', async () => {
     const { wrapper } = await mountInstancePolicy({ settings, policyPath: '/policy?from=register-apply' });
-    const link = wrapper.find('a.forgot');
+    const link = wrapper.find('a.policy-page__back');
     expect(link.attributes('href')).toBe('/auth/apply');
     expect(link.text()).toContain('application');
   });
 
   it('routes back to settings when from=settings', async () => {
     const { wrapper } = await mountInstancePolicy({ settings, policyPath: '/policy?from=settings' });
-    const link = wrapper.find('a.forgot');
+    const link = wrapper.find('a.policy-page__back');
     expect(link.attributes('href')).toBe('/profile');
     expect(link.text()).toContain('settings');
   });
 
   it('falls back to settings when no source is given but the visitor is logged in', async () => {
     const { wrapper } = await mountInstancePolicy({ settings, isLoggedIn: true });
-    const link = wrapper.find('a.forgot');
+    const link = wrapper.find('a.policy-page__back');
     expect(link.attributes('href')).toBe('/profile');
     expect(link.text()).toContain('settings');
   });
 
   it('falls back to login when no source is given and the visitor is anonymous', async () => {
     const { wrapper } = await mountInstancePolicy({ settings });
-    const link = wrapper.find('a.forgot');
+    const link = wrapper.find('a.policy-page__back');
     expect(link.attributes('href')).toBe('/login');
     expect(link.text()).toContain('sign in');
   });
