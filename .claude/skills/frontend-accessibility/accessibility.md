@@ -170,3 +170,24 @@ Use `role="alert"` and `aria-live="polite"` for error messages:
 
 - Add `required` attribute for native validation
 - Consider visual indicator (e.g., asterisk or border) for sighted users
+
+## Expected Screen Reader Announcements
+
+The patterns above produce specific announcement contracts when a real (or virtual) screen reader walks the page. The test helper at [`src/common/test-utils/screen-reader.ts`](../../../src/common/test-utils/screen-reader.ts) drives `@guidepup/virtual-screen-reader` against either a Vitest-mounted component (`screenReader(element)`) or a Playwright page (`pageScreenReader(page)`) and returns the same spoken-phrase log a real SR user would hear. The `accessibility-auditor` agent uses this helper during its per-PR walk-through and surfaces deviations as evidence in its severity reporting.
+
+The contracts below describe what each pattern should announce. Deviations indicate a problem in the underlying HTML/ARIA, not in the test.
+
+| Pattern | Expected announcement |
+|---|---|
+| `<button>Save</button>` | `Save, button` |
+| `<button role="switch" aria-checked="true">…` | `…, switch, on` (and `switch, off` when `aria-checked="false"`) |
+| `<button aria-expanded="true">…` | `…, expanded` (and `…, collapsed` when `aria-expanded="false"`) |
+| `<label for="id">Name</label><input id="id">` | `Name, edit` |
+| `<div role="alert" aria-live="polite">{{ error }}</div>` | The error text announces after the alert is rendered (live region update) |
+| `aria-hidden="true"` decorative icon | No announcement (the icon does not appear in the spoken log) |
+| `sr-only` label | Announced as part of the associated control's accessible name, never as a standalone phrase |
+
+### When to verify announcements
+
+- The auditor verifies announcements automatically during per-PR review (see `.claude/agents/accessibility-auditor.md` Step 5).
+- For load-bearing components, Phase 2 of the screen-reader testing rollout adds a small set of Vitest and Playwright tests using the same helper; see [`docs/superpowers/specs/2026-05-13-screen-reader-testing-design.md`](../../../docs/superpowers/specs/2026-05-13-screen-reader-testing-design.md) for the planned scope.
