@@ -17,6 +17,7 @@ import ApplicationAcceptedEmail from '@/server/accounts/model/application_accept
 import ApplicationRejectedEmail from '@/server/accounts/model/application_rejected_email';
 import ApplicationAcknowledgmentEmail from '@/server/accounts/model/application_acknowledgment_email';
 import ApplicationConfirmationEmail from '@/server/accounts/model/application_confirmation_email';
+import AdminApplicationNotificationEmail from '@/server/accounts/model/admin_application_notification_email';
 import AccountAlreadyExistsEmail from '@/server/accounts/model/account_already_exists_email';
 import ConfigurationInterface from '@/server/configuration/interface';
 import SetupInterface from '@/server/setup/interface';
@@ -397,6 +398,32 @@ export default class AccountService {
     // reflect pre-update values but are not surfaced to the recipient.
     const ackMessage = new ApplicationAcknowledgmentEmail(application.toModel());
     await this.emailInterface.sendEmail(ackMessage.buildMessage('en'));
+
+    // Notify instance administrators that an application has reached the
+    // `pending` review queue. The status flip already committed above, so any
+    // mail failure here cannot roll it back — wrap the whole loop in a
+    // best-effort try/catch (one swallow site, one log call). A failure on
+    // admin N means admins N+1..end miss this notification; the queue UI
+    // remains the source of truth and per-iteration isolation can be added
+    // later if observed-needed. The asymmetry with the applicant ack send
+    // above is intentional: the applicant ack is the primary user-facing
+    // signal of confirm success and should surface failures, whereas the
+    // admin notify is a side-effect that must not fail the confirm.
+    try {
+      const admins = await this.getAdmins();
+      for (const admin of admins) {
+        if (!admin.email) {
+          continue;
+        }
+        const adminEmail = new AdminApplicationNotificationEmail(admin.email, application.toModel());
+        await this.emailInterface.sendEmail(adminEmail.buildMessage(admin.language || 'en'));
+      }
+    }
+    catch (error) {
+      // Log application.id only — never the applicant email or message
+      // (privacy playbook: PII stays out of error logs).
+      logError(error, `[Accounts] Failed to notify admins of pending application ${application.id}`);
+    }
 
     return true;
   }
