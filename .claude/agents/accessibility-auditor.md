@@ -116,7 +116,7 @@ for i in $(seq 1 30); do curl -s -o /dev/null -w "%{http_code}" http://localhost
 ```
 Note that you DID start it so you can stop it in Step 7.
 
-### Step 5: Keyboard Navigation Test
+### Step 5: Keyboard Navigation Test and Screen Reader Walk
 
 1. Navigate to the page containing the changed component
 2. Tab through all interactive elements — verify:
@@ -128,6 +128,48 @@ Note that you DID start it so you can stop it in Step 7.
    - Enter/Space activates buttons
    - Escape closes modals/dropdowns
    - Arrow keys navigate within composite widgets (tabs, menus)
+4. Screen Reader Walk-Through (VSR):
+
+   Inject `@guidepup/virtual-screen-reader` into the page and walk it. The Node-side helper at [`src/common/test-utils/screen-reader.ts`](../../src/common/test-utils/screen-reader.ts) is the contract definition (announcement shapes, locale lock at `'en'`, primitive API). Tests in `src/client/test/` and `tests/e2e/a11y/` use the helper directly via `screenReader(element)` / `pageScreenReader(page)`. From this agent, drive the same VSR runtime through `browser_evaluate` — if the helper grows setup/teardown invariants beyond the inline snippet below, mirror them here:
+
+   ```
+   browser_evaluate
+     function: |
+       async () => {
+         // VSR exposes a singleton on window.virtual when injected. If it's
+         // not present, the page wasn't started with addInitScript — the
+         // auditor runs against the live dev server where the helper isn't
+         // pre-injected, so fall back to importing it via dynamic import
+         // from the dev server's module graph.
+         if (!window.virtual) {
+           const mod = await import('@guidepup/virtual-screen-reader');
+           window.virtual = new mod.Virtual();
+         }
+         await window.virtual.start({ container: document.body });
+         const phrases = [];
+         while (!(await window.virtual.lastSpokenPhrase()).includes('end of document')) {
+           phrases.push(await window.virtual.lastSpokenPhrase());
+           await window.virtual.next();
+         }
+         return phrases;
+       }
+   ```
+
+   Capture the returned spoken-phrase log. For interactive checks (form submit, modal open, etc.) drive the page with `browser_click` / `browser_press_key`, then `browser_evaluate` `await window.virtual.lastSpokenPhrase()` to grab the new announcement.
+
+   Evaluate the log against these judgment-based check categories. **The log is evidence for your severity calls, not a pass/fail rule set** — flag deviations as Violations or Warnings, do not mechanize this into a check list.
+
+   | Check | What to look for |
+   |---|---|
+   | Role announcement | `<button>` announces as `button`; `role="switch"` announces as `switch, on/off`; `aria-expanded` announces as `expanded/collapsed` |
+   | Name presence | Every interactive element has a non-empty accessible name (no bare `button` with no label) |
+   | Order coherence | Walk-through matches visual reading order; heading levels are sequential (no skipping h2→h4) |
+   | Live region behavior | After activating a form submit or other live-region trigger, the alert/status text announces |
+   | Hidden noise | `aria-hidden` decorative content does not appear in the spoken log |
+
+   The expected announcement shapes for the project's common patterns are documented in `.claude/skills/frontend-accessibility/accessibility.md` § Expected Screen Reader Announcements. Compare your captured log against that table to surface deviations.
+
+   Locale is locked to `'en'` for the duration of the walk; do not attempt to verify announcements in other locales from this agent (that is out of scope for the auditor and belongs to dedicated tests).
 
 ### Step 6: Screen Reader Snapshot
 
@@ -173,6 +215,15 @@ For small changes (1-2 files), use a concise format. For larger changes (3+ file
 ### Warnings (should fix — degraded experience)
 - **Missing aria-expanded** — dropdown toggle doesn't announce state
 - **Hardcoded aria-label** — should use `t('key')` for i18n
+
+### Screen Reader Walk
+- Captured phrases (excerpt):
+  - "Page heading, heading level 1"
+  - "Save changes, button"
+  - "Email, edit"
+- Flagged deviations:
+  - **Role announcement** — toggle announces as `button` but template has `role="switch"`; check that `aria-checked` is bound
+  - **Hidden noise** — decorative icon announces "icon" — needs `aria-hidden="true"`
 
 ### Passed
 - Heading hierarchy: correct
