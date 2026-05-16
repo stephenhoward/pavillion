@@ -14,6 +14,28 @@ import CalendarActorService from "@/server/activitypub/service/calendar_actor";
 
 const logger = createLogger('activitypub');
 
+/**
+ * Context describing how an inbound activity was authenticated before it was
+ * admitted to a calendar's inbox (DEC-011).
+ *
+ * - `source`: open string enum identifying the auth mechanism. Known values
+ *   are `'http_signature'` (live inbox POST verified by HTTP Signatures) and
+ *   `'outbox_pull'` (follow-backfill signed-GET outbox crawl).
+ * - `origin`: the cryptographically-verified origin (scheme + host) of the
+ *   authenticating party — keyId origin for HTTP signatures, outbox host for
+ *   `outbox_pull`. `null` when the origin cannot be determined (e.g., the
+ *   live HTTP path could not parse keyId even though the middleware already
+ *   verified the signature).
+ *
+ * This is an internal AP-domain trust signal. It MUST NOT appear in any API
+ * response — leaking it discloses how the instance authenticates inbound
+ * federation traffic.
+ */
+export interface InboxAuthContext {
+  source: string;
+  origin: string | null;
+}
+
 export default class ActivityPubService {
   private eventBus: EventEmitter;
   public calendarService: CalendarInterface;
@@ -179,11 +201,21 @@ export default class ActivityPubService {
    * Rate limiting, HTTP signature auth, and blocked-instance checks are handled
    * upstream: see inbox POST middleware in api/v1/server.ts and
    * InboxService.processInboxMessage() for block-list filtering.
+   *
+   * The `auth` context records how this row was admitted (DEC-011). Callers
+   * must always supply it — there is no default — so future callers
+   * (backfill, ICS, etc.) cannot accidentally elide the trust signal.
+   *
    * @param calendar
    * @param message
+   * @param auth Authentication context (auth_source + verified origin).
    * @returns null
    */
-  async addToInbox(calendar: Calendar, message: ActivityPubActivity ): Promise<null> {
+  async addToInbox(
+    calendar: Calendar,
+    message: ActivityPubActivity,
+    auth: InboxAuthContext,
+  ): Promise<null> {
     let foundCalendar = await this.calendarService.getCalendar(calendar.id);
 
     if ( foundCalendar === null ) {
@@ -198,6 +230,8 @@ export default class ActivityPubService {
         type: message.type,
         message_time: message.published,
         message: message,
+        auth_source: auth.source,
+        auth_origin: auth.origin,
       });
       await messageEntity.save();
     }

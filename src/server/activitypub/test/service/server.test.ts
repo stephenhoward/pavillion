@@ -182,13 +182,43 @@ describe("addToInbox", () => {
     let findMessageStub = sandbox.stub(ActivityPubInboxMessageEntity, 'findByPk');
     findMessageStub.resolves(null);
 
+    let buildSpy = sandbox.spy(ActivityPubInboxMessageEntity, 'build');
     let saveMessageStub = sandbox.stub(ActivityPubInboxMessageEntity.prototype, 'save');
     saveMessageStub.resolves(undefined);
 
-    let response = await service.addToInbox(calendar, message);
+    let response = await service.addToInbox(calendar, message, {
+      source: 'http_signature',
+      origin: 'https://remote.example.com',
+    });
 
     expect(response).toBe(null);
     expect(saveMessageStub.called).toBe(true);
+    expect(buildSpy.calledOnce).toBe(true);
+    const buildArgs = buildSpy.firstCall.args[0] as any;
+    expect(buildArgs.auth_source).toBe('http_signature');
+    expect(buildArgs.auth_origin).toBe('https://remote.example.com');
+  });
+
+  it('should persist null auth_origin when origin is unknown', async () => {
+    let message = ActivityPubActivity.fromObject({ type: 'Create', id: 'testid' });
+    let calendar = Calendar.fromObject({ id: 'testid' });
+
+    let getCalendarStub = sandbox.stub(service.calendarService, 'getCalendar');
+    getCalendarStub.resolves(calendar);
+
+    let findMessageStub = sandbox.stub(ActivityPubInboxMessageEntity, 'findByPk');
+    findMessageStub.resolves(null);
+
+    let buildSpy = sandbox.spy(ActivityPubInboxMessageEntity, 'build');
+    let saveMessageStub = sandbox.stub(ActivityPubInboxMessageEntity.prototype, 'save');
+    saveMessageStub.resolves(undefined);
+
+    await service.addToInbox(calendar, message, { source: 'http_signature', origin: null });
+
+    expect(buildSpy.calledOnce).toBe(true);
+    const buildArgs = buildSpy.firstCall.args[0] as any;
+    expect(buildArgs.auth_source).toBe('http_signature');
+    expect(buildArgs.auth_origin).toBe(null);
   });
 
   it('should throw an error if calendar not found', async () => {
@@ -198,6 +228,8 @@ describe("addToInbox", () => {
     let getCalendarStub = sandbox.stub(service.calendarService, 'getCalendar');
     getCalendarStub.resolves(null);
 
-    await expect( service.addToInbox(calendar, message) ).rejects.toThrow('Account not found');
+    await expect(
+      service.addToInbox(calendar, message, { source: 'http_signature', origin: null }),
+    ).rejects.toThrow('Account not found');
   });
 });
