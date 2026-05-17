@@ -15,7 +15,14 @@ storage
 .agent-os
 .cursor/rules
 .serena
-agent-os
+# Agent OS workspace is local-only EXCEPT for the product decisions log,
+# which is tracked so contributors share one authoritative decision history.
+agent-os/*
+!agent-os/product/
+agent-os/product/*
+!agent-os/product/decisions.md
+!agent-os/product/decisions/
+!agent-os/product/decisions/**
 .beads/
 .claude/worktrees/
 
