@@ -9,7 +9,7 @@
 # ==============================================================================
 # Stage: Development (for docker-compose.dev.yml)
 # ==============================================================================
-FROM node:22-bookworm AS development
+FROM node:24-trixie AS development
 
 WORKDIR /app
 
@@ -20,7 +20,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     gnupg \
     && curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | gpg --dearmor -o /usr/share/keyrings/postgresql-archive-keyring.gpg \
-    && echo "deb [signed-by=/usr/share/keyrings/postgresql-archive-keyring.gpg] http://apt.postgresql.org/pub/repos/apt bookworm-pgdg main" > /etc/apt/sources.list.d/pgdg.list \
+    && echo "deb [signed-by=/usr/share/keyrings/postgresql-archive-keyring.gpg] http://apt.postgresql.org/pub/repos/apt trixie-pgdg main" > /etc/apt/sources.list.d/pgdg.list \
     && apt-get update && apt-get install -y --no-install-recommends \
     dumb-init \
     postgresql-client-17 \
@@ -48,7 +48,7 @@ ENTRYPOINT ["dumb-init", "--", "/app/entrypoint.sh"]
 # ==============================================================================
 # Stage 1: Build stage
 # ==============================================================================
-FROM node:22-bookworm AS builder
+FROM node:24-trixie AS builder
 
 WORKDIR /app
 
@@ -73,7 +73,7 @@ RUN npm run build
 # ==============================================================================
 # Stage 2: Production runtime
 # ==============================================================================
-FROM node:22-slim AS production
+FROM node:24-trixie-slim AS production
 
 # Install required system packages
 # - dumb-init: proper signal handling for Node.js in containers
@@ -84,7 +84,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     gnupg \
     && curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | gpg --dearmor -o /usr/share/keyrings/postgresql-archive-keyring.gpg \
-    && echo "deb [signed-by=/usr/share/keyrings/postgresql-archive-keyring.gpg] http://apt.postgresql.org/pub/repos/apt bookworm-pgdg main" > /etc/apt/sources.list.d/pgdg.list \
+    && echo "deb [signed-by=/usr/share/keyrings/postgresql-archive-keyring.gpg] http://apt.postgresql.org/pub/repos/apt trixie-pgdg main" > /etc/apt/sources.list.d/pgdg.list \
     && apt-get update && apt-get install -y --no-install-recommends \
     dumb-init \
     postgresql-client-17 \
