@@ -35,8 +35,8 @@ class AdminApplicationNotificationEmail extends EmailMessage {
    * @returns Complete mail data ready for sending
    */
   buildMessage(language: string): MailData {
-    const appUrl = config.get<string>('domain');
-    const reviewUrl = appUrl + '/admin/applications';
+    const appUrl = 'https://' + config.get<string>('domain');
+    const reviewUrl = appUrl + '/admin/accounts';
 
     const templateData = {
       applicantEmail: this.application.email,

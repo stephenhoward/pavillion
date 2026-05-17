@@ -69,7 +69,7 @@ describe('AdminApplicationNotificationEmail', () => {
     const email = new AdminApplicationNotificationEmail('admin@example.com', makeApplication());
 
     const mailData = email.buildMessage('en');
-    const expectedReviewUrl = config.get<string>('domain') + '/admin/applications';
+    const expectedReviewUrl = 'https://' + config.get<string>('domain') + '/admin/accounts';
 
     expect(mailData.textMessage).toContain(applicantEmail);
     expect(mailData.htmlMessage).toContain(applicantEmail);
