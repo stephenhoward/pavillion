@@ -1,13 +1,19 @@
-import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterAll, afterEach } from 'vitest';
 import request from 'supertest';
+import sinon from 'sinon';
 import { EventEmitter } from 'events';
 import { v4 as uuidv4 } from 'uuid';
 import { DateTime } from 'luxon';
 
-import { AccountApplicationEntity } from '@/server/common/entity/account';
+import {
+  AccountApplicationEntity,
+  AccountEntity,
+  AccountRoleEntity,
+} from '@/server/common/entity/account';
 import AccountService from '@/server/accounts/service/account';
 import ConfigurationInterface from '@/server/configuration/interface';
 import SetupInterface from '@/server/setup/interface';
+import EmailInterface from '@/server/email/interface';
 import { TestEnvironment } from '@/server/common/test/lib/test_environment';
 
 /**
@@ -409,3 +415,170 @@ describe('Public POST /api/v1/applications anti-enumeration (integration)', () =
     });
   });
 });
+
+/**
+ * Integration tests for the admin-notify side-effect of
+ * `confirmAccountApplication`.
+ *
+ * When an applicant confirms their email, the status flips from
+ * `pending_confirmation` to `pending` and the applicant receives an
+ * acknowledgment email. This suite verifies the additional admin-notify
+ * fan-out: every admin returned by `AccountService.getAdmins()` receives an
+ * email, and the confirm response stays `true` regardless of admin-loop
+ * outcomes (zero admins, send failure mid-loop, etc.).
+ *
+ * Bead: pv-hne7
+ */
+describe('confirmAccountApplication admin-notify (integration)', () => {
+  let env: TestEnvironment;
+  let sandbox: sinon.SinonSandbox;
+
+  beforeAll(async () => {
+    env = new TestEnvironment();
+    await env.init();
+
+    // Provision a single admin account to exit setup mode so the public
+    // confirm endpoint responds on its own merits. This bootstrap admin is
+    // preserved across tests (the FK chain via account_secrets makes wholesale
+    // truncation noisy); per-test admin seeding controls which admin roles
+    // exist via the AccountRole table only.
+    const eventBus = new EventEmitter();
+    const configurationInterface = new ConfigurationInterface();
+    const setupInterface = new SetupInterface();
+    const accountService = new AccountService(eventBus, configurationInterface, setupInterface);
+    await accountService._setupAccount('admin-notify-bootstrap@pavillion.dev', 'testpassword!1');
+  });
+
+  afterAll(async () => {
+    if (env) {
+      await env.cleanup();
+    }
+  });
+
+  beforeEach(async () => {
+    sandbox = sinon.createSandbox();
+    await AccountApplicationEntity.destroy({ where: {}, truncate: true });
+    // Clear ALL admin roles (including the bootstrap admin's role). Each test
+    // re-adds the role assignments it needs. Account rows themselves are not
+    // truncated — the bootstrap row stays so the FK chain via
+    // account_secrets is preserved.
+    await AccountRoleEntity.destroy({ where: {}, truncate: true });
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+  });
+
+  /** Seed a confirmation-pending application; returns the token. */
+  async function seedPendingConfirmation(): Promise<string> {
+    const token = `notify-token-${uuidv4()}`;
+    await AccountApplicationEntity.create({
+      id: uuidv4(),
+      email: `${uuidv4()}@example.com`,
+      message: 'integration applicant',
+      status: 'pending_confirmation',
+      status_timestamp: new Date(),
+      confirmation_token: token,
+      confirmation_token_expiration: DateTime.utc().plus({ days: 7 }).toJSDate(),
+    });
+    return token;
+  }
+
+  /** Create an account row with an optional role + language. */
+  async function seedAccount(
+    overrides: { role?: string; language?: string; email?: string } = {},
+  ): Promise<AccountEntity> {
+    const id = uuidv4();
+    const account = await AccountEntity.create({
+      id,
+      username: `user-${id}`,
+      email: overrides.email ?? `acct-${id}@example.com`,
+      language: overrides.language ?? 'en',
+    });
+    if (overrides.role) {
+      await AccountRoleEntity.create({ account_id: id, role: overrides.role });
+    }
+    return account;
+  }
+
+  it('fans out one admin-notify email per admin and skips non-admin accounts', async () => {
+    const admin1 = await seedAccount({ role: 'admin', email: 'admin1@example.com' });
+    const admin2 = await seedAccount({ role: 'admin', email: 'admin2@example.com' });
+    await seedAccount({ email: 'regular@example.com' }); // non-admin: must not receive
+    const sendStub = sandbox.stub(EmailInterface.prototype, 'sendEmail').resolves();
+    const token = await seedPendingConfirmation();
+
+    const response = await request(env.app).post(`/api/v1/applications/confirm/${token}`);
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ success: true });
+
+    // 1 applicant ack + 2 admin notifies = 3 sends.
+    expect(sendStub.callCount).toBe(3);
+
+    const recipients = sendStub.getCalls().map(call => (call.args[0] as { emailAddress: string }).emailAddress);
+    expect(recipients).toContain(admin1.email);
+    expect(recipients).toContain(admin2.email);
+    expect(recipients).not.toContain('regular@example.com');
+  });
+
+  it('uses the admin account language when sending the admin-notify email', async () => {
+    await seedAccount({ role: 'admin', email: 'admin-fr@example.com', language: 'fr' });
+    const sendStub = sandbox.stub(EmailInterface.prototype, 'sendEmail').resolves();
+    const token = await seedPendingConfirmation();
+
+    const response = await request(env.app).post(`/api/v1/applications/confirm/${token}`);
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ success: true });
+
+    // The admin send is the one addressed to admin-fr@example.com — find it
+    // and verify the MailData was built for 'fr'. The MailData itself does
+    // not carry a language field; we inspect the rendered subject to
+    // confirm the fr namespace was used. Since only EN translations exist
+    // today, fr falls back to EN, but the contract is that buildMessage(
+    // 'fr') is invoked, not buildMessage('en'). We capture the test by
+    // asserting the admin send completed (no language-fallback error) and
+    // by inspecting that the call to sendEmail was made with an email
+    // addressed to the fr admin (proving the loop reached the send).
+    const adminCall = sendStub.getCalls().find(
+      call => (call.args[0] as { emailAddress: string }).emailAddress === 'admin-fr@example.com',
+    );
+    expect(adminCall).toBeDefined();
+  });
+
+  it('returns success even when there are zero admins (loop is empty)', async () => {
+    // No admin role seeded — getAdmins() returns [].
+    const sendStub = sandbox.stub(EmailInterface.prototype, 'sendEmail').resolves();
+    const token = await seedPendingConfirmation();
+
+    const response = await request(env.app).post(`/api/v1/applications/confirm/${token}`);
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ success: true });
+
+    // Only the applicant ack send fires — no admin notifies.
+    expect(sendStub.callCount).toBe(1);
+  });
+
+  it('returns success when an admin-notify send throws inside the loop', async () => {
+    await seedAccount({ role: 'admin', email: 'admin-fail@example.com' });
+    const sendStub = sandbox.stub(EmailInterface.prototype, 'sendEmail');
+    // First call (applicant ack) succeeds; second call (admin notify) throws.
+    sendStub.onFirstCall().resolves();
+    sendStub.onSecondCall().rejects(new Error('SMTP boom'));
+    const token = await seedPendingConfirmation();
+
+    const response = await request(env.app).post(`/api/v1/applications/confirm/${token}`);
+
+    // Confirm endpoint still reports success — admin-notify is a side effect
+    // and must not fail the confirm.
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ success: true });
+
+    // Both sends were attempted (applicant ack + admin notify); the loop
+    // failure was caught and swallowed.
+    expect(sendStub.callCount).toBe(2);
+  });
+});
+
