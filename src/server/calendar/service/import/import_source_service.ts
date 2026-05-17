@@ -1032,9 +1032,12 @@ class DefaultHtmlFetcher implements HtmlFetcher {
         const agent = createPinnedAgent(pinnedIp);
         agents.push(agent);
 
-        // 4. Issue the request. Manual redirect handling — `maxRedirections: 0`
-        //    forces undici to surface 3xx responses to us so we can revalidate
-        //    the next hop before any further connection is made.
+        // 4. Issue the request. Manual redirect handling — undici v7+ no
+        //    longer auto-follows redirects from `request()` (the option was
+        //    removed; redirect-following now requires composing a redirect
+        //    interceptor onto the dispatcher). The for-loop revalidates each
+        //    next hop's URL + DNS before issuing the next request, which is
+        //    the SSRF-isolation invariant.
         let response;
         try {
           response = await undiciRequest(currentUrl, {
@@ -1044,7 +1047,6 @@ class DefaultHtmlFetcher implements HtmlFetcher {
               'accept': 'text/html, application/xhtml+xml;q=0.9, */*;q=0.1',
             },
             dispatcher: agent,
-            maxRedirections: 0,
             headersTimeout: RELME_HEADERS_TIMEOUT_MS,
             bodyTimeout: RELME_BODY_TIMEOUT_MS,
           });

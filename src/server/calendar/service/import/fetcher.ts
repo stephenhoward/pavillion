@@ -133,13 +133,18 @@ export type FetcherResult = FetcherOk | FetcherNotModified;
 /**
  * Minimal `undici.request` signature used by the fetcher. Kept narrow so
  * unit tests can stub it without pulling in real undici internals.
+ *
+ * Note: `maxRedirections` is not part of this contract. undici v7+ removed
+ * it from `request()` options and no longer auto-follows redirects unless a
+ * redirect interceptor is composed onto the dispatcher. The fetcher handles
+ * the redirect chain manually so it can revalidate each hop's URL and DNS
+ * before issuing the next request — the SSRF-isolation invariant.
  */
 export interface RequestInit {
   method: 'GET';
   headers: Record<string, string>;
   dispatcher: Agent;
   signal?: AbortSignal;
-  maxRedirections?: number;
   headersTimeout?: number;
   bodyTimeout?: number;
 }
@@ -226,12 +231,16 @@ function defaultCreateAgent(pinnedIp: string): Agent {
 }
 
 const defaultRequest: RequestFn = async (url, init) => {
+  // undici v7+ removed `maxRedirections` from request() options — the default
+  // behavior is no automatic redirect following (a redirect interceptor would
+  // have to be composed onto the dispatcher to enable it). Manual redirect
+  // handling below is the same SSRF-isolation invariant that `maxRedirections:0`
+  // enforced on v5.
   const res = await undiciRequest(url, {
     method: init.method,
     headers: init.headers,
     dispatcher: init.dispatcher,
     signal: init.signal,
-    maxRedirections: 0,
     headersTimeout: init.headersTimeout ?? HEADERS_TIMEOUT_MS,
     bodyTimeout: init.bodyTimeout ?? BODY_TIMEOUT_MS,
   });
@@ -344,7 +353,6 @@ export class Fetcher {
             method: 'GET',
             headers,
             dispatcher: agent,
-            maxRedirections: 0,
             headersTimeout: HEADERS_TIMEOUT_MS,
             bodyTimeout: BODY_TIMEOUT_MS,
           });
