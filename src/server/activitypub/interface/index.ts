@@ -336,6 +336,17 @@ export default class ActivityPubInterface {
   }
 
   /**
+   * Drains the inbox by processing all unprocessed messages in chronological
+   * order (`messageTime ASC` over `processedAt: null`). Used by the follow
+   * backfill worker to flush inserted messages after pagination completes.
+   *
+   * @returns {Promise<void>}
+   */
+  async processInboxMessages(): Promise<void> {
+    return this.inboxSerivce.processInboxMessages();
+  }
+
+  /**
    * Deletes processed inbox messages older than the configured retention period.
    * Delegates to the inbox service cleanup method.
    *

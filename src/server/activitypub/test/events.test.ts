@@ -25,7 +25,7 @@ describe('inbox event listener', () => {
   beforeEach (() => {
     eventBus = new EventEmitter();
     service = new ActivityPubInterface(eventBus);
-    eventHandler = new ActivityPubEventHandlers(service, new CalendarInterface(eventBus));
+    eventHandler = new ActivityPubEventHandlers(service, new CalendarInterface(eventBus), { publishJob: async () => {} } as any);
     eventHandler.install(eventBus);
   });
 
@@ -75,7 +75,7 @@ describe('outbox event listener', () => {
   beforeEach (() => {
     eventBus = new EventEmitter();
     service = new ActivityPubInterface(eventBus);
-    eventHandler = new ActivityPubEventHandlers(service, new CalendarInterface(eventBus));
+    eventHandler = new ActivityPubEventHandlers(service, new CalendarInterface(eventBus), { publishJob: async () => {} } as any);
     eventHandler.install(eventBus);
   });
 
@@ -133,7 +133,7 @@ describe('handleEventUpdated guard', () => {
   beforeEach (() => {
     eventBus = new EventEmitter();
     service = new ActivityPubInterface(eventBus);
-    eventHandler = new ActivityPubEventHandlers(service, new CalendarInterface(eventBus));
+    eventHandler = new ActivityPubEventHandlers(service, new CalendarInterface(eventBus), { publishJob: async () => {} } as any);
     eventHandler.install(eventBus);
   });
 
@@ -230,7 +230,7 @@ describe('handleEventCreated', () => {
     sandbox = sinon.createSandbox();
     eventBus = new EventEmitter();
     service = new ActivityPubInterface(eventBus);
-    handlers = new ActivityPubEventHandlers(service, new CalendarInterface(eventBus));
+    handlers = new ActivityPubEventHandlers(service, new CalendarInterface(eventBus), { publishJob: async () => {} } as any);
     handlers.install(eventBus);
   });
 
@@ -370,7 +370,7 @@ describe('handleEventDeleted', () => {
   beforeEach(() => {
     eventBus = new EventEmitter();
     service = new ActivityPubInterface(eventBus);
-    handlers = new ActivityPubEventHandlers(service, new CalendarInterface(eventBus));
+    handlers = new ActivityPubEventHandlers(service, new CalendarInterface(eventBus), { publishJob: async () => {} } as any);
     handlers.install(eventBus);
   });
 

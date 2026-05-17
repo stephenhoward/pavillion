@@ -214,7 +214,7 @@ describe('Outbox Local Dispatch (cross-hop remote follower regression)', () => {
     // Now install the ActivityPub event handlers so that a subsequent
     // calendarInterface.createEvent triggers handleEventCreated, which in turn
     // runs the unified outbox dispatch path against the fixtures we just built.
-    new ActivityPubEventHandlers(apInterface, calendarInterface).install(eventBus);
+    new ActivityPubEventHandlers(apInterface, calendarInterface, { publishJob: async () => {} } as any).install(eventBus);
   });
 
   afterAll(async () => {

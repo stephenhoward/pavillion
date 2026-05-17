@@ -46,7 +46,7 @@ describe('Place+Spaces atomic save: federation regression', () => {
     sandbox = sinon.createSandbox();
     eventBus = new EventEmitter();
     service = new ActivityPubInterface(eventBus);
-    handlers = new ActivityPubEventHandlers(service, new CalendarInterface(eventBus));
+    handlers = new ActivityPubEventHandlers(service, new CalendarInterface(eventBus), { publishJob: async () => {} } as any);
     handlers.install(eventBus);
   });
 
