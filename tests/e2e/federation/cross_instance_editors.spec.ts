@@ -5,7 +5,12 @@ import {
   grantEditorAccessByEmail,
   getCalendarEvents,
 } from './helpers/api';
-import { INSTANCE_ALPHA, INSTANCE_BETA } from './helpers/instances';
+import {
+  INSTANCE_ALPHA,
+  INSTANCE_BETA,
+  getBetaLogLineCount,
+  waitForBetaInboxActivity,
+} from './helpers/instances';
 import https from 'https';
 
 // Create an HTTPS agent that accepts self-signed certificates for local testing
@@ -312,6 +317,10 @@ test.describe.serial('Cross-Instance Editor Collaboration', () => {
 
     expect(betaEditor).toBeDefined();
 
+    // Anchor beta's log line count before the revoke so the log-poll below
+    // only considers Remove activities emitted by this action.
+    const undoAnchor = getBetaLogLineCount();
+
     // Revoke editor access
     const revokeResponse = await fetch(
       `${INSTANCE_ALPHA.baseUrl}/api/v1/calendars/${alphaCalendarId}/editors/remote`,
@@ -331,7 +340,27 @@ test.describe.serial('Cross-Instance Editor Collaboration', () => {
 
     expect(revokeResponse.status).toBe(204);
 
-    // Verify editor can no longer create events
+    // Verify the Remove(editor) packet actually reached beta's inbox. The
+    // beta editor actor URI is used as the needle to distinguish this
+    // Remove from any other Remove activities in beta's log. Per pv-o3ay.6:
+    // Remove is the AS2 §8.13 verb for collection-membership revocation
+    // (symmetric with Add); Undo is reserved for relationship/intent
+    // activities like Follow / Accept / Block / Announce.
+    expect(
+      await waitForBetaInboxActivity('Remove', betaEditor.actorUri, undoAnchor),
+    ).toBe(true);
+
+    // Verify the revoked editor can no longer create events on the remote
+    // calendar. Beta's processRemoveActivity (above) destroyed the local
+    // CalendarMemberEntity linking betaAdmin to alphaCalendar, so beta's
+    // events endpoint no longer finds any remote-membership record for
+    // this (account, calendarId) pair and surfaces it as 404 — the
+    // federation-correct local view. (Prior to the Remove emission
+    // landing, beta still believed the editor relationship held and
+    // forwarded the create to alpha, whose authoritative refusal came
+    // back as 403; with the federation handshake now complete the local
+    // 404 short-circuits the roundtrip.) The behavioural invariant —
+    // the revoked editor cannot create events — is preserved.
     const eventData = {
       calendarId: alphaCalendarId,
       content: {
@@ -357,6 +386,6 @@ test.describe.serial('Cross-Instance Editor Collaboration', () => {
       agent: httpsAgent,
     });
 
-    expect(createResponse.status).toBe(403);
+    expect(createResponse.status).toBe(404);
   });
 });

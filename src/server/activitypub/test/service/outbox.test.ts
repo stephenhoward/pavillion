@@ -901,6 +901,84 @@ describe('processOutboxMessage — explicit `to` honoring and per-type local dis
     expect(updateStub.getCalls()[0].args[0]['processed_status']).toBe('ok');
   });
 
+  // ---------- Remove ----------
+  //
+  // Remove mirrors Add: single-recipient editor-revoke delivery with no
+  // follower fan-out fallback. The no-`to` skip path is the load-bearing
+  // case — it prevents a regression where editor-revoke activities
+  // accidentally broadcast to all followers.
+
+  it('Remove: honors explicit `to` and delivers only to that recipient', async () => {
+    const removeMsg = {
+      '@context': 'https://www.w3.org/ns/activitystreams',
+      type: 'Remove',
+      actor: LOCAL_ACTOR_URL,
+      object: TARGETED_ACTOR_URI,
+      target: `${LOCAL_ACTOR_URL}/editors`,
+      id: `${LOCAL_ACTOR_URL}/removes/remove-1`,
+      to: [TARGETED_ACTOR_URI],
+    };
+
+    const message = ActivityPubOutboxMessageEntity.build({
+      calendar_id: TEST_CALENDAR_ID,
+      type: 'Remove',
+      message: removeMsg,
+    });
+
+    const getCalendarStub = sandbox.stub(service.calendarService, 'getCalendar');
+    const postStub = sandbox.stub(axios, 'post').resolves();
+    const updateStub = sandbox.stub(ActivityPubOutboxMessageEntity.prototype, 'update');
+    const getRecipientsStub = sandbox.stub(service, 'getRecipients');
+    const resolveStub = sandbox.stub(service, 'resolveInboxUrl');
+    stubSigning(service, sandbox);
+
+    getCalendarStub.resolves(Calendar.fromObject({ id: TEST_CALENDAR_ID }));
+    resolveStub.resolves(TARGETED_INBOX_URL);
+
+    await service.processOutboxMessage(message);
+
+    expect(getRecipientsStub.called, 'getRecipients must NOT be called for Remove').toBe(false);
+    expect(resolveStub.calledOnceWith(TARGETED_ACTOR_URI)).toBe(true);
+    expect(postStub.calledOnce).toBe(true);
+    expect(updateStub.getCalls()[0].args[0]['processed_status']).toBe('ok');
+  });
+
+  it('Remove: skips delivery (no fan-out) when `to` is absent', async () => {
+    const removeMsg = {
+      '@context': 'https://www.w3.org/ns/activitystreams',
+      type: 'Remove',
+      actor: LOCAL_ACTOR_URL,
+      object: TARGETED_ACTOR_URI,
+      target: `${LOCAL_ACTOR_URL}/editors`,
+      id: `${LOCAL_ACTOR_URL}/removes/remove-2`,
+      // no `to` field
+    };
+
+    const message = ActivityPubOutboxMessageEntity.build({
+      calendar_id: TEST_CALENDAR_ID,
+      type: 'Remove',
+      message: removeMsg,
+    });
+
+    const getCalendarStub = sandbox.stub(service.calendarService, 'getCalendar');
+    const postStub = sandbox.stub(axios, 'post').resolves();
+    const updateStub = sandbox.stub(ActivityPubOutboxMessageEntity.prototype, 'update');
+    const getRecipientsStub = sandbox.stub(service, 'getRecipients');
+    const resolveStub = sandbox.stub(service, 'resolveInboxUrl');
+
+    getCalendarStub.resolves(Calendar.fromObject({ id: TEST_CALENDAR_ID }));
+
+    await service.processOutboxMessage(message);
+
+    // No follower fan-out for Remove — getRecipients must NOT be called and
+    // no HTTP delivery should happen. The message is still marked processed.
+    expect(getRecipientsStub.called, 'getRecipients must NOT be called for Remove fan-out').toBe(false);
+    expect(resolveStub.called, 'resolveInboxUrl must NOT be called when no recipients').toBe(false);
+    expect(postStub.called, 'No HTTP POST when Remove has no recipients').toBe(false);
+    expect(updateStub.calledOnce).toBe(true);
+    expect(updateStub.getCalls()[0].args[0]['processed_status']).toBe('ok');
+  });
+
   // ---------- Per-type local-recipient dispatch ----------
   //
   // For each of the 8 currently-handled activity types, when the resolved

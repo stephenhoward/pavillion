@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { Sequelize, DataTypes } from 'sequelize';
 import {
   addIndexIfNotExists,
+  changeColumnNullability,
   columnExists,
   removeIndexIfExists,
   tableExists,
@@ -143,6 +144,53 @@ describe('Migration Helpers', () => {
         (ix) => ix.name === 'uniq_widget_owner_name',
       ).length;
       expect(count).toBe(1);
+    });
+  });
+
+  describe('changeColumnNullability', () => {
+    it('flips a NOT NULL column to nullable when called once', async () => {
+      const qi = sequelize.getQueryInterface();
+
+      await changeColumnNullability(qi, 'widget', 'owner_id', {
+        type: DataTypes.STRING,
+        allowNull: true,
+      });
+
+      const desc = await qi.describeTable('widget');
+      expect(desc.owner_id.allowNull).toBe(true);
+    });
+
+    it('is a no-op when the column already has the desired nullability', async () => {
+      const qi = sequelize.getQueryInterface();
+
+      // First run flips owner_id to nullable.
+      await changeColumnNullability(qi, 'widget', 'owner_id', {
+        type: DataTypes.STRING,
+        allowNull: true,
+      });
+
+      // Second run with the same desired value should not throw and should
+      // leave the column nullable.
+      await expect(
+        changeColumnNullability(qi, 'widget', 'owner_id', {
+          type: DataTypes.STRING,
+          allowNull: true,
+        }),
+      ).resolves.toBeUndefined();
+
+      const desc = await qi.describeTable('widget');
+      expect(desc.owner_id.allowNull).toBe(true);
+    });
+
+    it('skips silently when the column does not exist', async () => {
+      const qi = sequelize.getQueryInterface();
+
+      await expect(
+        changeColumnNullability(qi, 'widget', 'missing_column', {
+          type: DataTypes.STRING,
+          allowNull: true,
+        }),
+      ).resolves.toBeUndefined();
     });
   });
 

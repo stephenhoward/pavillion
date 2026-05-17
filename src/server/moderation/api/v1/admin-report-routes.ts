@@ -8,6 +8,7 @@ import { EventNotFoundError } from '@/common/exceptions/calendar';
 import ExpressHelper from '@/server/common/helper/express';
 import ModerationInterface from '@/server/moderation/interface';
 import {
+  NoSigningCalendarError,
   ReportNotFoundError,
   ReportAlreadyResolvedError,
 } from '@/server/moderation/exceptions';
@@ -474,6 +475,14 @@ export default class AdminReportRoutes {
         res.status(404).json({
           error: 'Report not found',
           errorName: 'ReportNotFoundError',
+        });
+        return;
+      }
+
+      if (error instanceof NoSigningCalendarError) {
+        res.status(422).json({
+          error: error.message,
+          errorName: 'NoSigningCalendarError',
         });
         return;
       }

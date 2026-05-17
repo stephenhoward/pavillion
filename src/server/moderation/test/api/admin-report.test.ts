@@ -638,6 +638,40 @@ describe('Admin Report API', () => {
         expect(callArgs.deadline).toBeUndefined();
         expect(callArgs.adminNotes).toBeUndefined();
       });
+
+      it('should return 201 with a null calendarId report when the event is remote', async () => {
+        // pv-o3ay.7: admin POST against a remote-event id succeeds with
+        // calendarId === null on the returned report.
+        const remoteReport = new Report(TEST_REPORT_ID);
+        remoteReport.eventId = TEST_EVENT_ID;
+        remoteReport.calendarId = null;
+        remoteReport.category = ReportCategory.SPAM;
+        remoteReport.description = 'Remote event spam';
+        remoteReport.reporterType = 'administrator';
+        remoteReport.adminId = 'admin-id';
+        remoteReport.adminPriority = 'high';
+        remoteReport.status = ReportStatus.SUBMITTED;
+
+        sandbox.stub(moderationInterface, 'createAdminReport').resolves(remoteReport);
+
+        router.post('/admin/reports', addAdminUser, (req, res) => {
+          routes.createReport(req, res);
+        });
+
+        const response = await request(testApp(router))
+          .post('/admin/reports')
+          .send({
+            eventId: TEST_EVENT_ID,
+            category: 'spam',
+            description: 'Remote event spam',
+            priority: 'high',
+          });
+
+        expect(response.status).toBe(201);
+        expect(response.body.report.calendarId).toBeNull();
+        expect(response.body.report.reporterType).toBe('administrator');
+        expect(response.body.report.adminId).toBe('admin-id');
+      });
     });
 
     describe('validation errors - 400', () => {

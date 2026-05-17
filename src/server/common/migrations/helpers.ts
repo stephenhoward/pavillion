@@ -95,6 +95,41 @@ export async function createTableIfNotExists(
 }
 
 /**
+ * Change a column's nullability only if it differs from the current schema.
+ *
+ * Idempotency helper for `queryInterface.changeColumn` when the only delta is
+ * `allowNull`. Reads the live column description via `describeTable` and skips
+ * the DDL if `attributes.allowNull` already matches. This keeps re-runs safe
+ * against both SQLite (dev/test) and PostgreSQL (prod), consistent with the
+ * pattern of `addColumnIfNotExists` and friends.
+ */
+export async function changeColumnNullability(
+  queryInterface: QueryInterface,
+  tableName: string,
+  columnName: string,
+  attributes: Parameters<QueryInterface['changeColumn']>[2],
+): Promise<void> {
+  const description = await queryInterface.describeTable(tableName);
+  const current = description[columnName];
+  if (!current) {
+    logger.info(
+      { table: tableName, column: columnName },
+      'Column does not exist, skipping nullability change',
+    );
+    return;
+  }
+  const desiredAllowNull = (attributes as { allowNull?: boolean }).allowNull;
+  if (desiredAllowNull !== undefined && current.allowNull === desiredAllowNull) {
+    logger.info(
+      { table: tableName, column: columnName, allowNull: desiredAllowNull },
+      'Column nullability already matches, skipping change',
+    );
+    return;
+  }
+  await queryInterface.changeColumn(tableName, columnName, attributes);
+}
+
+/**
  * Add an index only if an index with the given name does not already exist on
  * the table. Mirrors the pattern of createTableIfNotExists and
  * addColumnIfNotExists so migrations remain safe to re-run against both SQLite

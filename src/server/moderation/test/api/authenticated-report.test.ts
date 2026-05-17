@@ -283,6 +283,29 @@ describe('Authenticated Report API - POST /reports', () => {
       expect(response.body.error).toBeDefined();
       expect(response.body.errorName).toBe('EventNotFoundError');
     });
+
+    it('should return 404 when the event is remote (regression guard for pv-o3ay.7)', async () => {
+      // pv-o3ay.7 widened admin reports to remote events. Authenticated
+      // public reports must continue to reject remote events: only the
+      // admin dispatch path supports them. `createReportForEvent` still
+      // rejects events with no calendarId, surfacing EventNotFoundError.
+      sandbox.stub(moderationInterface, 'createReportForEvent').rejects(new EventNotFoundError());
+
+      router.post('/reports', addRequestUser, (req, res) => {
+        routes.submitReport(req, res);
+      });
+
+      const response = await request(testApp(router))
+        .post('/reports')
+        .send({
+          eventId: 'remote-event-id',
+          category: 'spam',
+          description: 'Trying to report a remote event',
+        });
+
+      expect(response.status).toBe(404);
+      expect(response.body.errorName).toBe('EventNotFoundError');
+    });
   });
 
   describe('duplicate report - 409', () => {

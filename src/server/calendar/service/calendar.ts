@@ -900,6 +900,20 @@ class CalendarService {
       throw new EditorNotFoundError();
     }
 
+    // Send ActivityPub Remove activity to notify the remote user via the
+    // signed outbox path. Mirrors the Add emission in grantRemoteEditorAccess
+    // — the calendar actor signs the Remove (pv-dyyw signing table), and the
+    // local membership row is already destroyed above regardless of remote
+    // delivery outcome. Best-effort semantics: a transient enqueue failure
+    // must not roll back the local revoke.
+    try {
+      await this.activityPubInterface!.sendEditorRevoke(calendar, actorUri);
+      logger.info({ actorUri, calendarId: calendar.id }, 'Enqueued Remove activity for remote editor');
+    }
+    catch (error: any) {
+      logError(error, `[Calendar] Failed to enqueue Remove activity to ${actorUri}`);
+    }
+
     if (this.eventBus) {
       this.eventBus.emit('remoteEditorRevoked', {
         calendarId: calendar.id,
@@ -1134,6 +1148,11 @@ class CalendarService {
     if (!account.id) {
       return null;
     }
+    // Stable sort: when an account owns multiple owner memberships,
+    // return the oldest one so callers that need a deterministic
+    // signing identity (e.g. the federation Flag courier in
+    // ModerationService.forwardReport) get the same calendar every
+    // run rather than DB-ordering-dependent results.
     const membership = await CalendarMemberEntity.findOne({
       where: { account_id: account.id, role: 'owner' },
       include: [{
@@ -1141,6 +1160,7 @@ class CalendarService {
         as: 'calendar',
         include: [CalendarContentEntity, { model: MediaEntity, as: 'defaultEventImage', required: false, where: { status: 'approved' } }],
       }],
+      order: [['created_at', 'ASC']],
     });
     return membership?.calendar ? this.withPublicUrl(membership.calendar.toModel()) : null;
   }

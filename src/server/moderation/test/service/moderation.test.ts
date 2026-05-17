@@ -17,10 +17,13 @@ import {
   EmailRateLimitError,
 } from '@/server/moderation/exceptions';
 import CalendarInterface from '@/server/calendar/interface';
+import AccountsInterface from '@/server/accounts/interface';
 import ConfigurationInterface from '@/server/configuration/interface';
 import ActivityPubInterface from '@/server/activitypub/interface';
 import { CalendarEvent } from '@/common/model/events';
 import { Calendar } from '@/common/model/calendar';
+import { Account } from '@/common/model/account';
+import { NoSigningCalendarError } from '@/server/moderation/exceptions';
 import config from 'config';
 
 /** A valid UUID v4 for use in tests. */
@@ -1754,6 +1757,337 @@ describe('ModerationService', () => {
         expect(updateArgs.forwarded_report_id).toBe(flagActivity.id);
         expect(updateArgs.forward_status).toBe('pending');
         expect(updateArgs.forwarded_to_actor_uri).toBe('https://remote.instance/admin');
+      });
+    });
+
+    // =========================================================================
+    // pv-o3ay.7: admin reports against remote events
+    // =========================================================================
+    describe('createAdminReport (remote event branch)', () => {
+      let service: ModerationService;
+      let sandbox: sinon.SinonSandbox;
+      let mockEventBus: EventEmitter;
+      let mockCalendarInterface: CalendarInterface;
+
+      beforeEach(() => {
+        sandbox = sinon.createSandbox();
+        mockEventBus = new EventEmitter();
+        mockCalendarInterface = new CalendarInterface(mockEventBus);
+        service = new ModerationService(mockEventBus, mockCalendarInterface);
+      });
+
+      afterEach(() => {
+        sandbox.restore();
+      });
+
+      it('persists calendarId === null and reporterType === administrator for a remote event', async () => {
+        // Branch contract: when the reported event is remote (calendarId
+        // is null on this instance), createAdminReport persists the report
+        // with calendar_id null, bypassing createReportForEvent's gate.
+        const remoteEvent = CalendarEvent.fromObject({
+          id: '11111111-1111-4111-8111-111111111111',
+          calendarId: null,
+          name: 'Remote Event',
+        });
+        sandbox.stub(mockCalendarInterface, 'getEventById').resolves(remoteEvent);
+
+        const createReportSpy = sandbox.stub(service, 'createReport').callsFake(async (data) => {
+          const r = new Report('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa');
+          r.eventId = data.eventId;
+          r.calendarId = data.calendarId;
+          r.reporterType = data.reporterType;
+          r.adminId = data.adminId ?? null;
+          r.status = ReportStatus.SUBMITTED;
+          return r;
+        });
+
+        const created = await service.createAdminReport({
+          eventId: '11111111-1111-4111-8111-111111111111',
+          adminId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+          category: ReportCategory.SPAM,
+          description: 'Reporting a remote event',
+          priority: 'high',
+        });
+
+        expect(created.calendarId).toBeNull();
+        expect(created.reporterType).toBe('administrator');
+        expect(created.adminId).toBe('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb');
+
+        expect(createReportSpy.calledOnce).toBe(true);
+        const passed = createReportSpy.firstCall.args[0];
+        expect(passed.calendarId).toBeNull();
+        expect(passed.reporterType).toBe('administrator');
+      });
+
+      it('delegates to createReportForEvent for a local event', async () => {
+        // Regression guard: local events must continue to flow through
+        // createReportForEvent so the existing calendarId-resolution path
+        // is preserved.
+        const localEvent = CalendarEvent.fromObject({
+          id: '22222222-2222-4222-8222-222222222222',
+          calendarId: '33333333-3333-4333-8333-333333333333',
+          name: 'Local Event',
+        });
+        sandbox.stub(mockCalendarInterface, 'getEventById').resolves(localEvent);
+
+        const localCreateSpy = sandbox.stub(service, 'createReportForEvent').resolves(
+          new Report('cccccccc-cccc-4ccc-8ccc-cccccccccccc'),
+        );
+        const directCreateSpy = sandbox.stub(service, 'createReport').resolves(
+          new Report('dddddddd-dddd-4ddd-8ddd-dddddddddddd'),
+        );
+
+        await service.createAdminReport({
+          eventId: '22222222-2222-4222-8222-222222222222',
+          adminId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+          category: ReportCategory.SPAM,
+          description: 'Local admin report',
+          priority: 'medium',
+        });
+
+        expect(localCreateSpy.calledOnce).toBe(true);
+        // Direct createReport is reserved for the remote branch; local
+        // events delegate to createReportForEvent which then calls
+        // createReport internally — but our spy here is on the service
+        // method, so we expect 0 direct calls.
+        expect(directCreateSpy.called).toBe(false);
+      });
+
+      it('throws EventNotFoundError when the event does not exist', async () => {
+        sandbox.stub(mockCalendarInterface, 'getEventById').resolves(undefined as any);
+
+        await expect(service.createAdminReport({
+          eventId: '99999999-9999-4999-8999-999999999999',
+          adminId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+          category: ReportCategory.SPAM,
+          description: 'Nonexistent event',
+          priority: 'low',
+        })).rejects.toThrow(EventNotFoundError);
+      });
+
+      it('throws ReportValidationError before looking up the event when fields are invalid', async () => {
+        // The validation pass must run before any I/O so callers get a
+        // 400 (validation) instead of a 404 (event not found) for bad
+        // request bodies.
+        const lookupSpy = sandbox.stub(mockCalendarInterface, 'getEventById');
+
+        await expect(service.createAdminReport({
+          eventId: 'not-a-uuid',
+          adminId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+          category: ReportCategory.SPAM,
+          description: 'Bad request',
+          priority: 'medium',
+        })).rejects.toThrow(ReportValidationError);
+
+        expect(lookupSpy.called).toBe(false);
+      });
+    });
+
+    describe('forwardReport (null-calendarId branch)', () => {
+      const SIGNING_CALENDAR_ACTOR_URI = 'https://beta.local/calendars/admin-cal/actor';
+      const REMOTE_TARGET_ACTOR_URI = 'https://alpha.remote/admin';
+
+      let service: ModerationService;
+      let sandbox: sinon.SinonSandbox;
+      let mockEventBus: EventEmitter;
+      let mockCalendarInterface: CalendarInterface;
+      let mockAccountsInterface: AccountsInterface;
+      let mockConfigInterface: ConfigurationInterface;
+      let mockActivityPubInterface: ActivityPubInterface;
+      let mockUpdateStub: sinon.SinonStub;
+
+      beforeEach(() => {
+        sandbox = sinon.createSandbox();
+        mockEventBus = new EventEmitter();
+        mockCalendarInterface = new CalendarInterface(mockEventBus);
+        mockAccountsInterface = new AccountsInterface(mockEventBus);
+        mockConfigInterface = new ConfigurationInterface(mockEventBus);
+        mockActivityPubInterface = {} as ActivityPubInterface;
+
+        service = new ModerationService(
+          mockEventBus,
+          mockCalendarInterface,
+          mockConfigInterface,
+          mockActivityPubInterface,
+          mockAccountsInterface,
+        );
+
+        mockUpdateStub = sandbox.stub().resolves();
+        sandbox.stub(ReportEntity, 'findByPk').resolves({ update: mockUpdateStub } as any);
+
+        const configStub = sandbox.stub(config, 'get');
+        configStub.withArgs('server.domain').returns('beta.local');
+      });
+
+      afterEach(() => {
+        sandbox.restore();
+      });
+
+      function buildRemoteAdminReport(): Report {
+        return Report.fromObject({
+          id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+          eventId: 'event-id',
+          calendarId: null,
+          category: ReportCategory.SPAM,
+          description: 'Remote event report',
+          reporterType: 'administrator',
+          status: ReportStatus.SUBMITTED,
+          adminId: 'admin-id',
+          adminPriority: 'medium',
+          createdAt: new Date('2026-05-14T12:00:00Z'),
+        });
+      }
+
+      function buildAdminAccount(): Account {
+        const account = new Account('admin-id', 'admin', 'admin@beta.example');
+        account.roles = ['admin'];
+        return account;
+      }
+
+      function buildSigningCalendar(): Calendar {
+        return Calendar.fromObject({
+          id: 'admin-cal',
+          urlName: 'admin-cal',
+        });
+      }
+
+      it('signs the Flag with the admin primary calendar actor and uses buildFlagActivity', async () => {
+        const report = buildRemoteAdminReport();
+        const remoteEvent = CalendarEvent.fromObject({
+          id: 'event-id',
+          calendarId: null,
+          name: 'Remote Event',
+        });
+        const adminAccount = buildAdminAccount();
+        const signingCalendar = buildSigningCalendar();
+
+        sandbox.stub(service, 'getReportById').resolves(report);
+        sandbox.stub(mockCalendarInterface, 'getEventById').resolves(remoteEvent);
+        sandbox.stub(mockAccountsInterface, 'getAccountById').resolves(adminAccount);
+        sandbox.stub(mockCalendarInterface, 'getPrimaryCalendarForUser').resolves(signingCalendar);
+        const actorUrlStub = sandbox.stub().resolves(SIGNING_CALENDAR_ACTOR_URI);
+        const addToOutboxStub = sandbox.stub().resolves();
+        mockActivityPubInterface.actorUrl = actorUrlStub;
+        mockActivityPubInterface.addToOutbox = addToOutboxStub;
+
+        await service.forwardReport('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', REMOTE_TARGET_ACTOR_URI);
+
+        // The Flag's actor must equal the signing calendar's actor URI
+        // so HTTP signature keyId matches the activity actor (security
+        // invariant).
+        expect(addToOutboxStub.calledOnce).toBe(true);
+        const [calendarArg, activityArg] = addToOutboxStub.firstCall.args;
+        expect(activityArg.type).toBe('Flag');
+        expect(activityArg.actor).toBe(SIGNING_CALENDAR_ACTOR_URI);
+        // actorUrl must be called with the resolved signing calendar so a
+        // regression that derived the actor URI from a different calendar
+        // (and therefore a mismatched signing key) would fail here.
+        expect(actorUrlStub.calledWith(signingCalendar)).toBe(true);
+        // Must NOT have admin-flag/priority tags from buildAdminFlagActivity
+        const hasAdminFlagTag = (activityArg.tag || []).some(
+          (t: any) => t.name === '#admin-flag',
+        );
+        expect(hasAdminFlagTag).toBe(false);
+        // Must include the category hashtag emitted by buildFlagActivity
+        const hasCategoryTag = (activityArg.tag || []).some(
+          (t: any) => t.name === '#spam',
+        );
+        expect(hasCategoryTag).toBe(true);
+        // Recipient is the remote admin actor URI
+        expect(activityArg.to).toEqual([REMOTE_TARGET_ACTOR_URI]);
+        // Outbox is invoked with the signing calendar (the federation courier)
+        expect(calendarArg).toBe(signingCalendar);
+      });
+
+      it('throws NoSigningCalendarError when the admin account cannot be resolved', async () => {
+        const report = buildRemoteAdminReport();
+        const remoteEvent = CalendarEvent.fromObject({
+          id: 'event-id',
+          calendarId: null,
+          name: 'Remote Event',
+        });
+
+        sandbox.stub(service, 'getReportById').resolves(report);
+        sandbox.stub(mockCalendarInterface, 'getEventById').resolves(remoteEvent);
+        sandbox.stub(mockAccountsInterface, 'getAccountById').resolves(undefined);
+
+        mockActivityPubInterface.actorUrl = sandbox.stub();
+        mockActivityPubInterface.addToOutbox = sandbox.stub();
+
+        await expect(
+          service.forwardReport('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', REMOTE_TARGET_ACTOR_URI),
+        ).rejects.toThrow(NoSigningCalendarError);
+      });
+
+      it('throws NoSigningCalendarError when the admin has no primary calendar', async () => {
+        const report = buildRemoteAdminReport();
+        const remoteEvent = CalendarEvent.fromObject({
+          id: 'event-id',
+          calendarId: null,
+          name: 'Remote Event',
+        });
+        const adminAccount = buildAdminAccount();
+
+        sandbox.stub(service, 'getReportById').resolves(report);
+        sandbox.stub(mockCalendarInterface, 'getEventById').resolves(remoteEvent);
+        sandbox.stub(mockAccountsInterface, 'getAccountById').resolves(adminAccount);
+        sandbox.stub(mockCalendarInterface, 'getPrimaryCalendarForUser').resolves(null);
+
+        mockActivityPubInterface.actorUrl = sandbox.stub();
+        mockActivityPubInterface.addToOutbox = sandbox.stub();
+
+        await expect(
+          service.forwardReport('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', REMOTE_TARGET_ACTOR_URI),
+        ).rejects.toThrow(NoSigningCalendarError);
+      });
+
+      it('throws NoSigningCalendarError when adminId is missing on the report', async () => {
+        const report = buildRemoteAdminReport();
+        report.adminId = null;
+        const remoteEvent = CalendarEvent.fromObject({
+          id: 'event-id',
+          calendarId: null,
+          name: 'Remote Event',
+        });
+
+        sandbox.stub(service, 'getReportById').resolves(report);
+        sandbox.stub(mockCalendarInterface, 'getEventById').resolves(remoteEvent);
+
+        mockActivityPubInterface.actorUrl = sandbox.stub();
+        mockActivityPubInterface.addToOutbox = sandbox.stub();
+
+        await expect(
+          service.forwardReport('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', REMOTE_TARGET_ACTOR_URI),
+        ).rejects.toThrow(NoSigningCalendarError);
+      });
+
+      it('persists forwarding metadata with the Flag activity id', async () => {
+        const report = buildRemoteAdminReport();
+        const remoteEvent = CalendarEvent.fromObject({
+          id: 'event-id',
+          calendarId: null,
+          name: 'Remote Event',
+        });
+        const adminAccount = buildAdminAccount();
+        const signingCalendar = buildSigningCalendar();
+
+        sandbox.stub(service, 'getReportById').resolves(report);
+        sandbox.stub(mockCalendarInterface, 'getEventById').resolves(remoteEvent);
+        sandbox.stub(mockAccountsInterface, 'getAccountById').resolves(adminAccount);
+        sandbox.stub(mockCalendarInterface, 'getPrimaryCalendarForUser').resolves(signingCalendar);
+        mockActivityPubInterface.actorUrl = sandbox.stub().resolves(SIGNING_CALENDAR_ACTOR_URI);
+
+        const addToOutboxStub = sandbox.stub().resolves();
+        mockActivityPubInterface.addToOutbox = addToOutboxStub;
+
+        await service.forwardReport('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', REMOTE_TARGET_ACTOR_URI);
+
+        expect(mockUpdateStub.calledOnce).toBe(true);
+        const updateArgs = mockUpdateStub.firstCall.args[0];
+        const flagActivity = addToOutboxStub.firstCall.args[1];
+        expect(updateArgs.forwarded_report_id).toBe(flagActivity.id);
+        expect(updateArgs.forward_status).toBe('pending');
+        expect(updateArgs.forwarded_to_actor_uri).toBe(REMOTE_TARGET_ACTOR_URI);
       });
     });
   });

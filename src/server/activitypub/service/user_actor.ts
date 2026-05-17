@@ -317,6 +317,13 @@ export default class UserActorService {
       return false;
     }
 
+    // Verify the object is us (mirrors processAddActivity; the username in
+    // the URL path must match the activity's `object`).
+    if (activity.object !== actor.actorUri) {
+      logger.error({ object: activity.object, actorUri: actor.actorUri }, 'Remove activity object does not match our actor');
+      return false;
+    }
+
     // Extract the calendar actor URI from the activity
     const calendarActorUri = activity.actor;
 
@@ -341,6 +348,16 @@ export default class UserActorService {
 
     if (!remoteCalendarActor) {
       logger.info({ calendarActorUri }, 'Remote calendar actor not found for URI');
+      return false;
+    }
+
+    // Verify the target is the editors collection of the calendar actor.
+    // This guards against future feature additions (other collections on a
+    // calendar actor — followers, moderators) accidentally routing Remove
+    // activities through the editor prune path.
+    const expectedTarget = `${remoteCalendarActor.actorUri}/editors`;
+    if (activity.target !== expectedTarget) {
+      logger.error({ target: activity.target, expected: expectedTarget }, 'Remove activity target is not the editors collection');
       return false;
     }
 
