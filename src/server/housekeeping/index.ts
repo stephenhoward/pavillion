@@ -1,9 +1,12 @@
 import { Application } from 'express';
 import { EventEmitter } from 'events';
+import config from 'config';
 import HousekeepingInterface from './interface';
 import HousekeepingStatusRoutes from './api/v1/status';
+import JobQueueService from './service/job-queue';
 import EmailInterface from '@/server/email/interface';
 import AccountsInterface from '@/server/accounts/interface';
+import { logError } from '@/server/common/helper/error-logger';
 import { createLogger } from '@/server/common/helper/logger';
 
 const logger = createLogger('housekeeping');
@@ -31,13 +34,47 @@ export default class HousekeepingDomain {
 
   /**
    * Initializes the housekeeping domain.
-   * Sets up API routes and event handlers.
+   * Sets up API routes, event handlers, and wires the pg-boss-backed
+   * JobQueueService into the interface so other domains can publish
+   * background jobs via `publishJob`. The worker process owns its own
+   * JobQueueService and does not go through this path.
+   *
+   * SQLite (e2e/unit test) installs skip the pg-boss wiring — the test
+   * configs use an in-memory SQLite database that pg-boss cannot drive,
+   * and tests that depend on `publishJob` stub the interface directly.
    *
    * @param app - Express application instance
    */
-  public initialize(app: Application): void {
+  public async initialize(app: Application): Promise<void> {
     this.installAPI(app);
     this.installEventHandlers();
+    await this.wireJobQueue();
+  }
+
+  /**
+   * Starts a JobQueueService and binds it into the interface. Logs and
+   * rethrows on failure — startup-time queue connectivity is a hard
+   * dependency for federation follow-backfill and other publishers, so a
+   * silent boot with a missing queue would leave AP handlers throwing on
+   * every Accept.
+   */
+  private async wireJobQueue(): Promise<void> {
+    const dialect = config.get<string>('database.dialect');
+    if (dialect === 'sqlite') {
+      logger.info('Skipping JobQueueService wiring for sqlite dialect');
+      return;
+    }
+
+    try {
+      const queue = new JobQueueService();
+      await queue.start();
+      this.interface.setJobQueueService(queue);
+      logger.info('JobQueueService wired into HousekeepingInterface');
+    }
+    catch (error) {
+      logError(error, '[Housekeeping] Failed to wire JobQueueService');
+      throw error;
+    }
   }
 
   /**

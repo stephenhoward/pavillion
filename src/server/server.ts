@@ -320,8 +320,11 @@ const initPavillionServer = async (app: express.Application, port: number): Prom
 
   // Initialize housekeeping domain first so its interface can be wired into
   // other domains that publish background jobs (e.g. ActivityPub follow-backfill).
+  // Awaiting here ensures the JobQueueService is started and bound to the
+  // interface before any consumer (notably ActivityPub) installs handlers
+  // that may publish jobs on the first inbound request.
   const housekeepingDomain = new HousekeepingDomain(eventBus, emailDomain.interface, accountsDomain.interface);
-  housekeepingDomain.initialize(app);
+  await housekeepingDomain.initialize(app);
 
   // Initialize ActivityPub domain with ModerationInterface for instance blocking
   const activityPubDomain = new ActivityPubDomain(eventBus, calendarDomain.interface, accountsDomain.interface, housekeepingDomain.interface, moderationDomain.interface);
