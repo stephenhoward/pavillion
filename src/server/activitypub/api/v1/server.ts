@@ -500,7 +500,7 @@ export default class ActivityPubServerRoutes {
       }
 
       const domain: string = config.get('domain');
-      const outboxUrl = `https://${domain}/api/ap/v1/calendars/${calendar.urlName}/outbox`;
+      const outboxUrl = `https://${domain}/calendars/${calendar.urlName}/outbox`;
 
       // If no page param, return the collection summary
       if (req.query.page !== 'true') {

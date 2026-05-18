@@ -410,6 +410,15 @@ describe('GET /calendars/:urlname/outbox', () => {
     expect(result.totalItems).toBe(5);
     expect(result.first).toContain('?page=true');
     expect(result.orderedItems).toBeUndefined();
+    // The outbox collection's `id` and `first` URL must match the path the
+    // actor JSON advertises (`/calendars/:urlname/outbox`). A mismatch
+    // (e.g. an /api/ap/v1/ prefix) sends federation peers to a 404 when
+    // they walk the collection — exactly how follow-backfill silently
+    // failed against PR #322's federation harness.
+    expect(result.id).toContain('/calendars/mycal/outbox');
+    expect(result.id).not.toContain('/api/ap/v1/');
+    expect(result.first).toContain('/calendars/mycal/outbox?page=true');
+    expect(result.first).not.toContain('/api/ap/v1/');
   });
 
   it('should return OrderedCollectionPage with page=true', async () => {
