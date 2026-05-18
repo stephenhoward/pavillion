@@ -1856,6 +1856,11 @@ class ProcessInboxService {
 
           if (followingRecord) {
             logger.info(`Follow relationship confirmed for calendar ${calendar.id} via string URI Accept from ${message.actor}`);
+            this.eventBus.emit('activitypub:follow:accepted', {
+              followingCalendarId: calendar.id,
+              calendarActorId: remoteCalendar.id,
+              sourceActorUri: message.actor,
+            });
             return;
           }
         }
@@ -1896,6 +1901,11 @@ class ProcessInboxService {
         // In the future, we could add a "confirmed" status field
         // For now, the existence of the record means it's active
         logger.info(`Follow relationship confirmed for calendar ${calendar.id} following ${followActivity.object}`);
+        this.eventBus.emit('activitypub:follow:accepted', {
+          followingCalendarId: calendar.id,
+          calendarActorId: remoteCalendar.id,
+          sourceActorUri: followActivity.object as string,
+        });
       }
       else {
         logger.warn(`No FollowingCalendarEntity found for ${followActivity.object}, Accept may be for unknown follow`);
