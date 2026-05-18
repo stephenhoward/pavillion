@@ -176,7 +176,7 @@ export async function verifyHttpSignature(req: Request, res: Response, next: Nex
 
 /**
  * Extracts the verified keyId origin (scheme + host) from an inbound request
- * for DEC-011 inbox auth-source tracking.
+ * for DEC-012 inbox auth-source tracking.
  *
  * This is called from the live inbox POST handler **after** `verifyHttpSignature`
  * has already accepted the request, so the signature itself is known-good.

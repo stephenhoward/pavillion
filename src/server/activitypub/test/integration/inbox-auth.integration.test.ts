@@ -1,5 +1,5 @@
 /**
- * Integration test for DEC-011 inbox auth-source tracking on the live HTTP path.
+ * Integration test for DEC-012 inbox auth-source tracking on the live HTTP path.
  *
  * Verifies that an HTTP-signed POST to the inbox endpoint persists a row in
  * `ap_inbox` with the correct `auth_source` and `auth_origin` columns:
@@ -33,7 +33,7 @@ import AccountService from '@/server/accounts/service/account';
 import { TestEnvironment } from '@/server/common/test/lib/test_environment';
 import { ActivityPubInboxMessageEntity } from '@/server/activitypub/entity/activitypub';
 
-describe('ActivityPub Inbox Auth Columns (DEC-011)', () => {
+describe('ActivityPub Inbox Auth Columns (DEC-012)', () => {
   let env: TestEnvironment;
   let ownerAccount: Account;
   let testCalendar: Calendar;
