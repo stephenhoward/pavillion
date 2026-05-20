@@ -56,14 +56,14 @@ describe('RetentionService', () => {
       // Verify that 3 oldest backups were deleted (indices 7, 8, 9)
       expect(fs.unlinkSync).toHaveBeenCalledTimes(3);
 
-      // Verify the update method was called for deleted backups
-      expect(dailyBackups[7].update).toHaveBeenCalled();
-      expect(dailyBackups[8].update).toHaveBeenCalled();
-      expect(dailyBackups[9].update).toHaveBeenCalled();
+      // Verify the metadata row was hard-deleted for each pruned backup
+      expect(dailyBackups[7].destroy).toHaveBeenCalled();
+      expect(dailyBackups[8].destroy).toHaveBeenCalled();
+      expect(dailyBackups[9].destroy).toHaveBeenCalled();
 
       // Verify newest 7 were not deleted (indices 0-6)
-      expect(dailyBackups[0].update).not.toHaveBeenCalled();
-      expect(dailyBackups[6].update).not.toHaveBeenCalled();
+      expect(dailyBackups[0].destroy).not.toHaveBeenCalled();
+      expect(dailyBackups[6].destroy).not.toHaveBeenCalled();
     });
 
     it('should keep only 4 most recent weekly backups', async () => {
@@ -108,12 +108,12 @@ describe('RetentionService', () => {
 
       // Verify that 2 oldest weekly backups were deleted (indices 4, 5)
       expect(fs.unlinkSync).toHaveBeenCalledTimes(2);
-      expect(weeklyBackups[4].update).toHaveBeenCalled();
-      expect(weeklyBackups[5].update).toHaveBeenCalled();
+      expect(weeklyBackups[4].destroy).toHaveBeenCalled();
+      expect(weeklyBackups[5].destroy).toHaveBeenCalled();
 
       // Verify newest 4 were not deleted (indices 0-3)
-      expect(weeklyBackups[0].update).not.toHaveBeenCalled();
-      expect(weeklyBackups[3].update).not.toHaveBeenCalled();
+      expect(weeklyBackups[0].destroy).not.toHaveBeenCalled();
+      expect(weeklyBackups[3].destroy).not.toHaveBeenCalled();
     });
 
     it('should keep only 6 most recent monthly backups', async () => {
@@ -148,12 +148,12 @@ describe('RetentionService', () => {
 
       // Verify that 2 oldest monthly backups were deleted (indices 6, 7)
       expect(fs.unlinkSync).toHaveBeenCalledTimes(2);
-      expect(monthlyBackups[6].update).toHaveBeenCalled();
-      expect(monthlyBackups[7].update).toHaveBeenCalled();
+      expect(monthlyBackups[6].destroy).toHaveBeenCalled();
+      expect(monthlyBackups[7].destroy).toHaveBeenCalled();
 
       // Verify newest 6 were not deleted (indices 0-5)
-      expect(monthlyBackups[0].update).not.toHaveBeenCalled();
-      expect(monthlyBackups[5].update).not.toHaveBeenCalled();
+      expect(monthlyBackups[0].destroy).not.toHaveBeenCalled();
+      expect(monthlyBackups[5].destroy).not.toHaveBeenCalled();
     });
 
     it('should delete correct files from filesystem', async () => {
@@ -223,8 +223,8 @@ describe('RetentionService', () => {
       // Should not throw even if file is missing
       await expect(service.enforceRetention()).resolves.not.toThrow();
 
-      // Should still update metadata for deleted backups (oldest one)
-      expect(backups[7].update).toHaveBeenCalled();
+      // Should still hard-delete metadata for pruned backups (oldest one)
+      expect(backups[7].destroy).toHaveBeenCalled();
     });
   });
 });
