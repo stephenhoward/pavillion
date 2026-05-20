@@ -83,7 +83,7 @@ export default class RetentionService {
   }
 
   /**
-   * Deletes a backup file from filesystem and updates metadata.
+   * Deletes a backup file from filesystem and removes its metadata row.
    *
    * @param backup - BackupEntity to delete
    */
@@ -91,21 +91,20 @@ export default class RetentionService {
     const fullPath = path.join(backup.storage_location, backup.filename);
 
     try {
-      // Delete file from filesystem
       if (fs.existsSync(fullPath)) {
         fs.unlinkSync(fullPath);
         logger.info({ filename: backup.filename }, 'Deleted backup file');
       }
       else {
-        logger.warn({ filename: backup.filename }, 'Backup file not found, skipping deletion');
+        logger.warn({ filename: backup.filename }, 'Backup file not found, skipping file deletion');
       }
 
-      // Update metadata to mark as deleted
-      await backup.update({
-        verified: false, // Mark as no longer verified since file is gone
-      });
+      // Hard-delete the metadata row. A backup whose file is gone has nothing
+      // left to represent; leaving a soft-deleted row behind inflates the
+      // dashboard's retention count, which queries every row in the category.
+      await backup.destroy();
 
-      logger.info({ backupId: backup.id }, 'Updated metadata for deleted backup');
+      logger.info({ backupId: backup.id }, 'Removed metadata for deleted backup');
     }
     catch (error) {
       logError(error, `[Housekeeping] Failed to delete backup ${backup.filename}`);
