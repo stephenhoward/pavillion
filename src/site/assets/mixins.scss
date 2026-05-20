@@ -1038,6 +1038,12 @@ $public-link-color: $public-accent-light;
 // ================================================================
 
 // ===== EVENT CARD STACKED (image + content adaptive layout) =====
+//
+// Stacked on mobile (image on top, content below). On desktop the same
+// element switches to a row, placing `.card-image` next to `.card-content`.
+// The image fills its parent's height (no aspect-ratio on EventImage's
+// `.context-card`) so the two columns can never misalign and leave a gap
+// below the image.
 
 @mixin public-event-card-stacked {
   display: flex;

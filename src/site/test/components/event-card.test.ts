@@ -524,8 +524,11 @@ describe('EventCard', () => {
     });
   });
 
-  describe('source calendar pill', () => {
-    it('should show source calendar pill when event has sourceCalendar', async () => {
+  describe('source calendar attribution', () => {
+    it('should not render the source-calendar pill on event cards, even when sourceCalendar is set', async () => {
+      // Attribution lives on the event detail surface, not on cards. The card view
+      // omits the pill to keep the visual layout clean; attribution is shown when
+      // the user opens the event.
       const event = makeEvent({
         sourceCalendar: {
           urlName: 'community-events',
@@ -536,82 +539,7 @@ describe('EventCard', () => {
       const instance = makeInstance(event, '2026-07-15T19:00:00');
       const wrapper = await mountEventCard(instance);
 
-      const pill = wrapper.find('.source-calendar-pill');
-      expect(pill.exists()).toBe(true);
-      wrapper.unmount();
-    });
-
-    it('should not show source calendar pill when sourceCalendar is null', async () => {
-      const event = makeEvent({ sourceCalendar: null });
-      const instance = makeInstance(event, '2026-07-15T19:00:00');
-      const wrapper = await mountEventCard(instance);
-
       expect(wrapper.find('.source-calendar-pill').exists()).toBe(false);
-      wrapper.unmount();
-    });
-
-    it('should display urlName@host format in the pill text', async () => {
-      const event = makeEvent({
-        sourceCalendar: {
-          urlName: 'downtown-cal',
-          host: 'events.city.gov',
-          url: 'https://events.city.gov/view/downtown-cal',
-        },
-      });
-      const instance = makeInstance(event, '2026-07-15T19:00:00');
-      const wrapper = await mountEventCard(instance);
-
-      const pill = wrapper.find('.source-calendar-pill');
-      expect(pill.text()).toContain('downtown-cal@events.city.gov');
-      wrapper.unmount();
-    });
-
-    it('should link to the source calendar URL', async () => {
-      const event = makeEvent({
-        sourceCalendar: {
-          urlName: 'my-cal',
-          host: 'example.com',
-          url: 'https://example.com/view/my-cal',
-        },
-      });
-      const instance = makeInstance(event, '2026-07-15T19:00:00');
-      const wrapper = await mountEventCard(instance);
-
-      const pill = wrapper.find('.source-calendar-pill');
-      expect(pill.attributes('href')).toBe('https://example.com/view/my-cal');
-      wrapper.unmount();
-    });
-
-    it('should open remote links in a new tab with noopener noreferrer', async () => {
-      const event = makeEvent({
-        sourceCalendar: {
-          urlName: 'remote-cal',
-          host: 'remote.org',
-          url: 'https://remote.org/view/remote-cal',
-        },
-      });
-      const instance = makeInstance(event, '2026-07-15T19:00:00');
-      const wrapper = await mountEventCard(instance);
-
-      const pill = wrapper.find('.source-calendar-pill');
-      expect(pill.attributes('target')).toBe('_blank');
-      expect(pill.attributes('rel')).toBe('noopener noreferrer');
-      wrapper.unmount();
-    });
-
-    it('should have an aria-label with the source calendar name', async () => {
-      const event = makeEvent({
-        sourceCalendar: {
-          urlName: 'arts-cal',
-          host: 'arts.org',
-          url: 'https://arts.org/view/arts-cal',
-        },
-      });
-      const instance = makeInstance(event, '2026-07-15T19:00:00');
-      const wrapper = await mountEventCard(instance);
-
-      const pill = wrapper.find('.source-calendar-pill');
-      expect(pill.attributes('aria-label')).toContain('arts-cal@arts.org');
       wrapper.unmount();
     });
   });
