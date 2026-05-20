@@ -49,8 +49,80 @@ export default defineConfig({
     nav: [
       { text: 'Home', link: '/' },
       { text: 'Calendar owners', link: '/guides/calendar-owners/' },
+      { text: 'Instance administrators', link: '/guides/instance-administrators/' },
     ],
     sidebar: {
+      '/guides/instance-administrators/': [
+        {
+          text: 'For instance administrators',
+          link: '/guides/instance-administrators/',
+        },
+        {
+          text: 'Quickstart',
+          items: [
+            { text: 'From clean server to federating instance', link: '/guides/instance-administrators/quickstart' },
+          ],
+        },
+        {
+          text: 'Get an instance running',
+          items: [
+            { text: 'Install a Pavillion instance', link: '/guides/instance-administrators/installation' },
+            { text: 'Configure your instance', link: '/guides/instance-administrators/configuration' },
+            { text: 'Reverse proxy and TLS', link: '/guides/instance-administrators/reverse-proxy-and-tls' },
+            { text: 'Email', link: '/guides/instance-administrators/email' },
+            { text: 'Media storage', link: '/guides/instance-administrators/media-storage' },
+          ],
+        },
+        {
+          text: 'Shape your instance',
+          items: [
+            { text: 'What your instance is for', link: '/guides/instance-administrators/what-your-instance-is-for' },
+            { text: 'Who gets a calendar', link: '/guides/instance-administrators/who-gets-a-calendar' },
+            { text: 'A code of conduct for your instance', link: '/guides/instance-administrators/code-of-conduct' },
+          ],
+        },
+        {
+          text: 'Operate your instance',
+          items: [
+            { text: 'Monitoring and logs', link: '/guides/instance-administrators/monitoring-and-logs' },
+            { text: 'Backups', link: '/guides/instance-administrators/backups' },
+            { text: 'Upgrading', link: '/guides/instance-administrators/upgrading' },
+            { text: 'Rotating secrets', link: '/guides/instance-administrators/secret-rotation' },
+            { text: 'Troubleshooting', link: '/guides/instance-administrators/troubleshooting' },
+          ],
+        },
+        {
+          text: 'Federate with the network',
+          items: [
+            { text: 'How federation works, for admins', link: '/guides/instance-administrators/how-federation-works-for-admins' },
+            { text: 'Testing federation', link: '/guides/instance-administrators/testing-federation' },
+            { text: 'Federation policy', link: '/guides/instance-administrators/federation-policy' },
+            { text: 'Federation incidents', link: '/guides/instance-administrators/federation-incidents' },
+          ],
+        },
+        {
+          text: 'Moderate at the instance level',
+          items: [
+            { text: 'Moderation boundaries', link: '/guides/instance-administrators/moderation-boundaries' },
+            { text: 'Removing a calendar', link: '/guides/instance-administrators/removing-a-calendar' },
+            { text: 'Account operations', link: '/guides/instance-administrators/accounts' },
+          ],
+        },
+        {
+          text: 'Fund your instance',
+          items: [
+            { text: 'Setting up funding plans', link: '/guides/instance-administrators/funding-plans-setup' },
+            { text: 'Asking your community for money', link: '/guides/instance-administrators/asking-your-community-for-money' },
+          ],
+        },
+        {
+          text: 'Relationship with your community',
+          items: [
+            { text: 'Communicating with your calendar owners', link: '/guides/instance-administrators/communicating-with-calendar-owners' },
+            { text: 'Being a good admin', link: '/guides/instance-administrators/being-a-good-admin' },
+          ],
+        },
+      ],
       '/guides/calendar-owners/': [
         {
           text: 'For calendar owners',
