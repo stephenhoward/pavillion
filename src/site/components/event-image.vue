@@ -229,10 +229,12 @@ onUnmounted(() => {
 // CONTEXT: CARD THUMBNAIL
 // ================================================================
 // Compact display for event list cards.
-// Slightly shorter aspect ratio to leave room for text below.
+// No aspect-ratio: the image fills its parent's height so the card
+// layout (image column vs content column) cannot misalign. The parent
+// `.card-image` wrapper in event-card.vue controls the dimensions.
 
 .context-card {
-  aspect-ratio: 16 / 10;
+  height: 100%;
   border-radius: $public-radius-sm;
   box-shadow: $public-shadow-xs-light;
 

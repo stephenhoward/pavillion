@@ -2,7 +2,7 @@
 import { computed } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import { DateTime } from 'luxon';
-import { Calendar, CalendarX, MapPin, Repeat } from 'lucide-vue-next';
+import { CalendarX, MapPin, Repeat } from 'lucide-vue-next';
 import EventImage from './event-image.vue';
 import { useLocalizedContent } from '@/site/composables/useLocalizedContent';
 import { useLocale } from '@/site/composables/useLocale';
@@ -108,29 +108,6 @@ const media = computed(() => {
 });
 
 /**
- * Returns the source calendar metadata for reposted events, or null.
- */
-const sourceCalendar = computed(() => {
-  return props.instance.event.sourceCalendar ?? null;
-});
-
-/**
- * Returns the display label for the source calendar pill (urlName@host).
- */
-const sourceCalendarLabel = computed(() => {
-  if (!sourceCalendar.value) return '';
-  return `${sourceCalendar.value.urlName}@${sourceCalendar.value.host}`;
-});
-
-/**
- * Returns true when the source calendar URL is a remote (external) link.
- */
-const isRemoteSourceCalendar = computed(() => {
-  if (!sourceCalendar.value) return false;
-  return sourceCalendar.value.url.startsWith('http');
-});
-
-/**
  * Returns the href for the event detail link.
  *
  * When `detailHref` is provided (e.g. by the widget host), it is returned
@@ -229,7 +206,7 @@ const detailPath = computed(() => {
       </span>
     </div>
 
-    <div class="event-card-content">
+    <div class="card-content">
       <p class="event-time">{{ timeRange }}</p>
       <h3>
         <a
@@ -261,20 +238,6 @@ const detailPath = computed(() => {
           class="category-badge"
         >{{ localizedContent(cat).name }}</span>
       </div>
-      <a
-        v-if="sourceCalendar"
-        :href="sourceCalendar.url"
-        class="source-calendar-pill"
-        :aria-label="t('event_source_calendar_label', { name: sourceCalendarLabel })"
-        :target="isRemoteSourceCalendar ? '_blank' : undefined"
-        :rel="isRemoteSourceCalendar ? 'noopener noreferrer' : undefined"
-      >
-        <Calendar
-          :size="14"
-          aria-hidden="true"
-        />
-        <span>{{ sourceCalendarLabel }}</span>
-      </a>
     </div>
   </article>
 </template>
@@ -431,7 +394,7 @@ const detailPath = computed(() => {
     filter: grayscale(0.6);
   }
 
-  .event-card-content {
+  .card-content {
     opacity: 0.7;
   }
 
@@ -445,7 +408,7 @@ const detailPath = computed(() => {
 // CONTENT AREA
 // ================================================================
 
-.event-card-content {
+.card-content {
   flex: 1;
   padding: $public-space-lg;
   display: flex;
@@ -568,14 +531,5 @@ h3 {
 
 .category-badge {
   @include public-category-badge;
-}
-
-// ================================================================
-// SOURCE CALENDAR PILL
-// ================================================================
-
-.source-calendar-pill {
-  @include public-source-calendar-pill;
-  align-self: flex-start;
 }
 </style>
