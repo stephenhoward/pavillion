@@ -15,6 +15,8 @@
 #
 # Flags:
 #   --staging              Enable staging mode (webhook listener, auto-deploy)
+#   --standalone           Enable the bundled standalone Caddy reverse proxy
+#                          (writes COMPOSE_PROFILES=standalone to .env)
 #   --domain=<value>       Domain name for the instance (required when piped)
 #   --repo=<url>           Git repository URL (default: GitHub repo)
 #
@@ -51,6 +53,7 @@ DEPLOY_USER="pavillion"
 APP_DIR="/opt/pavillion"
 SSH_PORT=22
 STAGING_MODE=false
+STANDALONE_MODE=false
 DOMAIN=""
 REPO_URL="https://github.com/stephenhoward/pavillion.git"
 
@@ -435,12 +438,31 @@ clone_repo() {
 run_deploy() {
   print_step "Running bin/deploy.sh"
 
-  if [ -f "${APP_DIR}/bin/deploy.sh" ]; then
-    su - "${DEPLOY_USER}" -c "cd ${APP_DIR} && ./bin/deploy.sh --non-interactive --domain=${DOMAIN}"
-    print_success "Deploy script completed"
-  else
+  if [ ! -f "${APP_DIR}/bin/deploy.sh" ]; then
     print_error "bin/deploy.sh not found in ${APP_DIR}. Run deploy manually after cloning."
     return 1
+  fi
+
+  # Prepend COMPOSE_PROFILES so the docker compose calls inside deploy.sh pick
+  # up the bundled standalone Caddy. su - strips most env vars (login shell),
+  # so the prefix has to live on the command line itself, not the parent env.
+  local compose_profiles=""
+  if [ "$STANDALONE_MODE" = true ]; then
+    compose_profiles="COMPOSE_PROFILES=standalone "
+  fi
+
+  su - "${DEPLOY_USER}" -c "cd ${APP_DIR} && ${compose_profiles}./bin/deploy.sh --non-interactive --domain=${DOMAIN}"
+  print_success "Deploy script completed"
+
+  # Persist COMPOSE_PROFILES to .env so future docker compose calls (operator
+  # running 'docker compose ps', subsequent deploy.sh runs) also see it. .env
+  # is created during the install path above, so this append is safe to do
+  # after run_deploy succeeds.
+  if [ "$STANDALONE_MODE" = true ]; then
+    if ! grep -qE '^COMPOSE_PROFILES=' "${APP_DIR}/.env" 2>/dev/null; then
+      echo "COMPOSE_PROFILES=standalone" >> "${APP_DIR}/.env"
+      print_success "Persisted COMPOSE_PROFILES=standalone to ${APP_DIR}/.env"
+    fi
   fi
 }
 
@@ -555,6 +577,7 @@ main() {
   for arg in "$@"; do
     case "$arg" in
       --staging) STAGING_MODE=true ;;
+      --standalone) STANDALONE_MODE=true ;;
       --domain=*) DOMAIN="${arg#--domain=}" ;;
       --repo=*) REPO_URL="${arg#--repo=}" ;;
     esac
