@@ -7,6 +7,7 @@ import { DateTime } from 'luxon';
 import { useCalendarAdminStore } from '@/client/stores/calendarAdminStore';
 import type { AdminCalendarRow } from '@/client/service/admin-calendar';
 import LoadingMessage from '@/client/components/common/loading_message.vue';
+import HelpButton from '@/client/components/common/help-button.vue';
 
 const { t } = useTranslation('admin', {
   keyPrefix: 'calendars',
@@ -149,6 +150,7 @@ const hasActiveFilters = computed(() => {
         <h1>{{ t('page_title') }}</h1>
         <p class="page-subtitle">{{ t('page_subtitle') }}</p>
       </div>
+      <HelpButton />
     </div>
 
     <!-- Filters Section -->

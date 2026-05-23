@@ -29,8 +29,8 @@ import { guidesForRoute, audienceForRoute } from '@/client/service/docs';
 const { t } = useTranslation('system', { keyPrefix: 'help' });
 const route = useRoute();
 
-const guides = computed(() => guidesForRoute(route.name));
-const audience = computed(() => audienceForRoute(route.name));
+const guides = computed(() => guidesForRoute(route?.name));
+const audience = computed(() => audienceForRoute(route?.name));
 
 const showPanel = ref(false);
 </script>

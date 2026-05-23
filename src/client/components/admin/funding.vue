@@ -10,6 +10,7 @@ import ConfirmDisconnectModal from './confirm-disconnect-modal.vue';
 import AddProviderWizard from './add-provider-wizard.vue';
 import GrantForm from './grant-form.vue';
 import { ComplimentaryGrant } from '@/common/model/complimentary_grant';
+import HelpButton from '@/client/components/common/help-button.vue';
 
 const { t } = useTranslation('admin', {
   keyPrefix: 'funding',
@@ -510,6 +511,7 @@ onMounted(async () => {
         <h1 id="funding-heading">{{ t("title") }}</h1>
         <p class="page-subtitle">{{ t("settings_section_title") }}</p>
       </div>
+      <HelpButton />
       <button
         v-if="activeSubTab === 'grants'"
         type="button"

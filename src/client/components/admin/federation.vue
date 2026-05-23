@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useTranslation } from 'i18next-vue';
+import HelpButton from '@/client/components/common/help-button.vue';
 
 const { t } = useTranslation('admin', {
   keyPrefix: 'federation',
@@ -14,6 +15,7 @@ const { t } = useTranslation('admin', {
         <h1>{{ t("title") }}</h1>
         <p class="federation-subtitle">{{ t("subtitle") }}</p>
       </div>
+      <HelpButton />
     </div>
 
     <!-- Info Panel -->
