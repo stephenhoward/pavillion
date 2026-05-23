@@ -683,6 +683,7 @@ button {
       </button>
       <h1>{{ translatedPageTitle }}</h1>
       <div class="header-actions">
+        <HelpButton />
         <button
           type="button"
           class="btn-cancel"
@@ -1137,6 +1138,7 @@ import SeriesSelector from './series-selector.vue';
 import ModalLayout from '@/client/components/common/modal.vue';
 import PillButton from '@/client/components/common/pill-button.vue';
 import LanguageTabSelector from '@/client/components/common/language-tab-selector.vue';
+import HelpButton from '@/client/components/common/help-button.vue';
 import LocationDisplayCard from '@/client/components/common/location-display-card.vue';
 import LocationPickerModal from '@/client/components/common/location-picker-modal.vue';
 import CreateLocationForm from '@/client/components/common/create-location-form.vue';
