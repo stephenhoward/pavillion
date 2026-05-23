@@ -7,6 +7,7 @@ import CalendarService from '@/client/service/calendar';
 import { CalendarInfo } from '@/common/model/calendar_info';
 import EmptyLayout from '@/client/components/common/empty_state.vue';
 import PillButton from '@/client/components/common/pill-button.vue';
+import HelpButton from '@/client/components/common/help-button.vue';
 import CreateCalendarForm from './CreateCalendarForm.vue';
 import CreateCalendarSheet from './CreateCalendarSheet.vue';
 
@@ -93,12 +94,15 @@ async function loadCalendars() {
               {{ t('calendar_count', { count: state.calendars.length }) }}
             </p>
           </div>
-          <PillButton
-            variant="primary"
-            @click="openCreateSheet"
-          >
-            {{ t('create_new_calendar_button') }}
-          </PillButton>
+          <div class="calendars-header__actions">
+            <HelpButton />
+            <PillButton
+              variant="primary"
+              @click="openCreateSheet"
+            >
+              {{ t('create_new_calendar_button') }}
+            </PillButton>
+          </div>
         </div>
         <ul class="calendar-cards" role="list">
           <li
@@ -187,6 +191,12 @@ async function loadCalendars() {
     font-size: var(--pav-font-size-body-small);
     color: var(--pav-color-text-secondary);
     margin: 0;
+  }
+
+  &__actions {
+    display: flex;
+    align-items: center;
+    gap: var(--pav-space-2);
   }
 }
 

@@ -12,6 +12,7 @@ import ReportDetail from '@/client/components/moderation/report-detail.vue';
 import CalendarService from '../../../service/calendar';
 import Config from '@/client/service/config';
 import { CalendarInfo } from '@/common/model/calendar_info';
+import HelpButton from '@/client/components/common/help-button.vue';
 
 const route = useRoute();
 const calendarUrlName = Array.isArray(route.params.calendar)
@@ -129,7 +130,10 @@ const backToReports = () => {
               <span class="calendar-management-root__breadcrumb-separator">/</span>
               <span class="calendar-management-root__breadcrumb-item">{{ t('breadcrumb_settings') }}</span>
             </nav>
-            <h1 class="calendar-management-root__title">{{ t('page_title') }}</h1>
+            <div class="calendar-management-root__title-row">
+              <h1 class="calendar-management-root__title">{{ t('page_title') }}</h1>
+              <HelpButton />
+            </div>
           </div>
 
           <nav
@@ -361,6 +365,12 @@ const backToReports = () => {
   &__breadcrumb-separator {
     color: var(--pav-color-stone-400);
     flex-shrink: 0;
+  }
+
+  &__title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
   }
 
   &__title {
