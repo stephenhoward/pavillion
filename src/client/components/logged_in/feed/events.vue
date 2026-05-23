@@ -402,6 +402,7 @@ onUnmounted(() => {
     <EmptyLayout
       v-else
       :title="t('no_events')"
+      :guide="{ slug: 'guides/calendar-owners/follow-and-repost', key: 'follow_repost' }"
     >
       <button
         type="button"

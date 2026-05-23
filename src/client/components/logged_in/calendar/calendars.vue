@@ -162,7 +162,11 @@ async function loadCalendars() {
         </ul>
       </section>
     </nav>
-    <EmptyLayout v-else :title="t('create_first_calendar_header')">
+    <EmptyLayout
+      v-else
+      :title="t('create_first_calendar_header')"
+      :guide="{ slug: 'guides/calendar-owners/quickstart', key: 'quickstart' }"
+    >
       <CreateCalendarForm />
     </EmptyLayout>
 
