@@ -4,6 +4,7 @@ import { useTranslation } from 'i18next-vue';
 import EmptyLayout from '@/client/components/common/empty_state.vue';
 import { useNotificationStore } from '@/client/stores/notificationStore';
 import type { Notification } from '@/common/model/notification';
+import HelpButton from '@/client/components/common/help-button.vue';
 
 const { t } = useTranslation('inbox');
 const store = useNotificationStore();
@@ -75,9 +76,12 @@ onUnmounted(() => {
 
 <template>
   <div class="inbox-container">
-    <h1 class="inbox-heading">
-      {{ t('title') }}
-    </h1>
+    <div class="inbox-heading-row">
+      <h1 class="inbox-heading">
+        {{ t('title') }}
+      </h1>
+      <HelpButton />
+    </div>
 
     <ul
       v-if="notifications.length"
@@ -140,12 +144,19 @@ div.inbox-container {
   height: 100%;
   overflow-y: auto;
 
+  .inbox-heading-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--pav-space-6) var(--pav-space-4) var(--pav-space-4);
+  }
+
   h1.inbox-heading {
     font-size: 1.5rem;
     font-weight: 700;
     color: var(--pav-color-stone-900);
     margin: 0;
-    padding: var(--pav-space-6) var(--pav-space-4) var(--pav-space-4);
+    padding: 0;
 
     @media (prefers-color-scheme: dark) {
       color: var(--pav-color-stone-100);

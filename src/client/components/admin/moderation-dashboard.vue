@@ -7,6 +7,7 @@ import { ReportStatus, ReportCategory, type EscalationType } from '@/common/mode
 import LoadingMessage from '@/client/components/common/loading_message.vue';
 import CreateReportModal from '@/client/components/admin/create-report.vue';
 import { DateTime } from 'luxon';
+import HelpButton from '@/client/components/common/help-button.vue';
 
 const { t } = useTranslation('admin', {
   keyPrefix: 'moderation',
@@ -187,6 +188,7 @@ function goToSettings() {
         <h1>{{ t('title') }}</h1>
         <p class="page-subtitle">{{ t('subtitle') }}</p>
       </div>
+      <HelpButton />
       <div class="page-header-actions">
         <button type="button" class="action-button action-create" @click="openCreateModal">
           <svg width="16"

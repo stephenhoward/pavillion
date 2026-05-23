@@ -5,6 +5,7 @@ import { ref, computed, onMounted } from 'vue';
 import FundingService from '@/client/service/funding';
 import type { FundedCalendarInfo } from '@/client/service/funding';
 import { useCalendarStore } from '@/client/stores/calendarStore';
+import HelpButton from '@/client/components/common/help-button.vue';
 
 const { t } = useTranslation('funding');
 
@@ -153,7 +154,10 @@ onMounted(async () => {
   <section class="settings funding-plan-management" aria-labelledby="funding-plan-heading">
     <div class="settings-header">
       <router-link to="/profile" class="back-button">{{ t("back_to_settings") }}</router-link>
-      <h1 id="funding-plan-heading">{{ t("title") }}</h1>
+      <div class="settings-header__title-row">
+        <h1 id="funding-plan-heading">{{ t("title") }}</h1>
+        <HelpButton />
+      </div>
     </div>
 
     <div role="status" aria-live="polite">
@@ -281,6 +285,12 @@ onMounted(async () => {
     &:hover {
       text-decoration: underline;
     }
+  }
+
+  &__title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
   }
 
   h1 {

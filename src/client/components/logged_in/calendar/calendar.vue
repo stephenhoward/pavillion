@@ -7,6 +7,7 @@ import CalendarService from '@/client/service/calendar';
 import EventService from '@/client/service/event';
 import { ExternalLink } from 'lucide-vue-next';
 import PillButton from '@/client/components/common/pill-button.vue';
+import HelpButton from '@/client/components/common/help-button.vue';
 import EventsTab from '@/client/components/logged_in/calendar-content/events-tab.vue';
 import CategoriesTab from '@/client/components/logged_in/calendar-content/categories.vue';
 import SeriesTab from '@/client/components/logged_in/calendar-content/series.vue';
@@ -191,6 +192,7 @@ const handleLoadEvents = async (filters) => {
               </a>
             </div>
             <div class="header-actions">
+              <HelpButton />
               <PillButton
                 variant="ghost"
                 @click="openCreateCalendarSheet"

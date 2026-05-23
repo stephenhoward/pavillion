@@ -8,6 +8,7 @@ import { DEFAULT_LANGUAGE_CODE } from '@/common/i18n/languages';
 import HousekeepingStatus from './housekeeping-status.vue';
 import LanguageSettings from './language-settings.vue';
 import LanguageTabSelector from '../common/language-tab-selector.vue';
+import HelpButton from '@/client/components/common/help-button.vue';
 
 const site_config = inject('site_config');
 const { t } = useTranslation('admin', {
@@ -112,7 +113,10 @@ async function updateSettings() {
   <div class="settings-page">
     <!-- Page Header -->
     <div class="page-header">
-      <h1>{{ t("general_settings") }}</h1>
+      <div class="page-header__title-row">
+        <h1>{{ t("general_settings") }}</h1>
+        <HelpButton />
+      </div>
       <p class="page-subtitle">{{ t("settings_subtitle", "Monitor system health and configure instance settings") }}</p>
     </div>
 
@@ -282,6 +286,12 @@ async function updateSettings() {
   max-width: 800px;
 
   .page-header {
+    &__title-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
     h1 {
       margin: 0 0 var(--pav-space-1) 0;
       font-size: var(--pav-font-size-2xl);

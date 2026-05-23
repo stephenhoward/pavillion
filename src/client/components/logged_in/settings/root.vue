@@ -9,6 +9,7 @@ import FundingService from '@/client/service/funding';
 import AccountService from '@/client/service/account';
 import { AVAILABLE_LANGUAGES } from '@/common/i18n/languages';
 import { changeLanguage, applyAccountLanguage } from '@/client/service/locale';
+import HelpButton from '@/client/components/common/help-button.vue';
 
 const router = useRouter();
 const authn = inject('authn');
@@ -173,7 +174,10 @@ onMounted(async () => {
     <div class="settings-container">
       <!-- Page Header -->
       <div class="page-header">
-        <h1>{{ t("title") }}</h1>
+        <div class="page-header__title-row">
+          <h1>{{ t("title") }}</h1>
+          <HelpButton />
+        </div>
         <p class="subtitle">{{ t("subtitle", { defaultValue: "Manage your account preferences" }) }}</p>
       </div>
 
@@ -414,6 +418,12 @@ onMounted(async () => {
 
 .page-header {
   margin-bottom: var(--pav-space-8);
+
+  &__title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
 
   h1 {
     font-size: 1.5rem;

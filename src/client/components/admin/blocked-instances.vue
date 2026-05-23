@@ -6,6 +6,7 @@ import { useModerationStore } from '@/client/stores/moderation-store';
 import LoadingMessage from '@/client/components/common/loading_message.vue';
 import Modal from '@/client/components/common/modal.vue';
 import type { BlockedInstance } from '@/common/model/blocked_instance';
+import HelpButton from '@/client/components/common/help-button.vue';
 
 const { t } = useTranslation('admin', {
   keyPrefix: 'blocked_instances',
@@ -148,6 +149,7 @@ function formatDate(dateString: string): string {
         <h1>{{ t('title') }}</h1>
         <p class="page-subtitle">{{ t('subtitle') }}</p>
       </div>
+      <HelpButton />
     </div>
 
     <!-- Loading State -->

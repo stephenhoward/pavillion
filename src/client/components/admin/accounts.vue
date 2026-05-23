@@ -10,6 +10,7 @@ import { useApplicationStore } from '@/client/stores/applicationStore';
 import { useInvitationStore } from '@/client/stores/invitationStore';
 import { DateTime } from 'luxon';
 import { useTabScroll } from '@/client/composables/useTabScroll';
+import HelpButton from '@/client/components/common/help-button.vue';
 
 const { t } = useTranslation('admin', {
   keyPrefix: 'accounts',
@@ -97,6 +98,7 @@ const subTabs = computed(() => [
         <h1 id="accounts-heading">{{ t('page_title') }}</h1>
         <p class="page-subtitle">{{ t('page_subtitle') }}</p>
       </div>
+      <HelpButton />
       <button
         v-if="state.activeTab === 'invitations'"
         type="button"

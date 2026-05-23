@@ -6,6 +6,7 @@ import { ArrowLeft } from 'lucide-vue-next';
 import CategoryMappingEditor from '@/client/components/logged_in/category-mapping-editor.vue';
 import { ADD_CATEGORY_VALUE } from '@/client/components/logged_in/category-mapping-constants';
 import FeedService, { type CategoryEntry, type CategoryMappingEntry } from '@/client/service/feed';
+import HelpButton from '@/client/components/common/help-button.vue';
 
 const props = defineProps<{
   calendarId: string;
@@ -105,7 +106,10 @@ async function save() {
     </button>
 
     <div class="page-header">
-      <h1>{{ t('page_title') }}</h1>
+      <div class="page-header__title-row">
+        <h1>{{ t('page_title') }}</h1>
+        <HelpButton />
+      </div>
       <p class="subtitle">{{ t('page_subtitle') }}</p>
     </div>
 
@@ -214,6 +218,12 @@ async function save() {
 
 .page-header {
   margin-bottom: var(--pav-space-6);
+
+  &__title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
 
   h1 {
     font-size: 1.5rem;

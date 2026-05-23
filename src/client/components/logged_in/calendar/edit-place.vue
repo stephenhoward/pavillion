@@ -453,6 +453,7 @@ form {
       </button>
       <h1>{{ isEditMode ? t('editor_title_edit') : t('editor_title_new') }}</h1>
       <div class="header-actions">
+        <HelpButton />
         <button
           type="button"
           class="btn-cancel"
@@ -747,6 +748,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { useTranslation } from 'i18next-vue';
 import i18next from 'i18next';
 import { ArrowLeft } from 'lucide-vue-next';
+import HelpButton from '@/client/components/common/help-button.vue';
 import LanguageTabSelector from '@/client/components/common/language-tab-selector.vue';
 import languagePicker from '@/client/components/common/language-picker.vue';
 import ConfirmDeleteDialog from '@/client/components/common/confirm-delete-dialog.vue';
