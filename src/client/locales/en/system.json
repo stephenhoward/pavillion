@@ -35,6 +35,140 @@
     "copy": "Copy",
     "copied": "Copied"
   },
+  "help": {
+    "button_label": "Help with this page",
+    "panel_title": "Help with this page",
+    "panel_intro": "Guides on docs.pavillion.social related to what you're doing here.",
+    "open_in_docs": "Read on docs.pavillion.social",
+    "browse_all_calendar-owners": "Browse all calendar-owner guides",
+    "browse_all_instance-administrators": "Browse all administrator guides",
+    "guides": {
+      "quickstart": {
+        "label": "Quickstart",
+        "description": "Go from a fresh login to a published calendar with one event in about ten minutes."
+      },
+      "when_to_create": {
+        "label": "When to create a calendar",
+        "description": "Decide when to create a new calendar versus follow an existing one."
+      },
+      "public_url": {
+        "label": "Share your public URL",
+        "description": "Share your calendar's public URL and federation handle on the web or in a chat."
+      },
+      "embed": {
+        "label": "Embed your calendar",
+        "description": "Embed your calendar on your own website with a configurable widget."
+      },
+      "editors": {
+        "label": "Editors and access",
+        "description": "Invite editors, manage their access, and understand what they can and can't do."
+      },
+      "identity": {
+        "label": "Calendar identity",
+        "description": "Set your calendar's name, description, languages, URL handle, and default image."
+      },
+      "federation_etiquette": {
+        "label": "Federation etiquette",
+        "description": "Be a good neighbor across federated calendars — attribution, reposting, and when not to."
+      },
+      "recurring": {
+        "label": "Recurring events",
+        "description": "Set up an event that repeats weekly, monthly, or on a custom rule, with exceptions handled."
+      },
+      "categories": {
+        "label": "Categories",
+        "description": "Design a small, durable vocabulary that filters your page and matches across federated calendars."
+      },
+      "multilingual": {
+        "label": "Multilingual events",
+        "description": "Publish events in multiple languages and choose fallback behavior for visitors."
+      },
+      "cancel": {
+        "label": "Cancel an event",
+        "description": "Cancel an event the right way, and understand how it propagates to calendars reposting yours."
+      },
+      "series": {
+        "label": "Event series",
+        "description": "Group related events — like a concert season or lecture run — under one program name."
+      },
+      "places": {
+        "label": "Places",
+        "description": "Save event venues once and reuse them across many events."
+      },
+      "follow_repost": {
+        "label": "Follow and repost",
+        "description": "Follow other calendars, review their events in a private feed, and repost what fits."
+      },
+      "category_matching": {
+        "label": "Category matching",
+        "description": "Map categories from other calendars onto your own when reposting federated events."
+      },
+      "funding_owner": {
+        "label": "Community funding",
+        "description": "Enable a voluntary community funding plan — closer to public radio than a subscription."
+      },
+      "moderation_owner": {
+        "label": "Handle reports",
+        "description": "Review visitor reports on your calendar and take action, with admin escalation when needed."
+      },
+      "account": {
+        "label": "Your account",
+        "description": "Manage your password, email, and account-level settings that aren't tied to a calendar."
+      },
+      "admin_config": {
+        "label": "Configure your instance",
+        "description": "Configure your instance with local.yaml, environment variables, and the layered config priority."
+      },
+      "good_admin": {
+        "label": "Being a good admin",
+        "description": "Be the kind of admin calendar owners want to host with — stewardship without paternalism."
+      },
+      "admin_accounts": {
+        "label": "Account operations",
+        "description": "Suspend, reinstate, delete, and recover accounts on your instance."
+      },
+      "who_gets": {
+        "label": "Who gets a calendar",
+        "description": "Choose how new calendars are created — open signup, invite-only, or admin-provisioned."
+      },
+      "removing": {
+        "label": "Removing a calendar",
+        "description": "Remove a calendar from your instance, including how federated copies are affected."
+      },
+      "communicating": {
+        "label": "Talking to owners",
+        "description": "Reach calendar owners about downtime, upgrades, and policy changes."
+      },
+      "mod_boundaries": {
+        "label": "Moderation boundaries",
+        "description": "Know when to act, when to escalate, and when to stay out of owner-level moderation."
+      },
+      "coc": {
+        "label": "Code of conduct",
+        "description": "Write an enforceable code of conduct, separating software rules from policy and culture."
+      },
+      "fed_incidents": {
+        "label": "Federation incidents",
+        "description": "Handle reports from and about other instances without overreacting or under-reacting."
+      },
+      "how_fed_works": {
+        "label": "How federation works",
+        "description": "Understand what your instance signs, sends, and accepts — protocol versus policy."
+      },
+      "fed_policy": {
+        "label": "Federation policy",
+        "description": "Decide which instances to federate with, and how to handle defederation requests."
+      },
+      "funding_setup": {
+        "label": "Set up funding plans",
+        "description": "Set up Stripe so calendar owners on your instance can offer community funding plans."
+      },
+      "asking": {
+        "label": "Asking for money",
+        "description": "Ask the community that uses your instance for money — when, how often, and how transparent."
+      }
+    }
+  },
   "report": {
     "form_title": "Report Event",
     "close_dialog": "Close report dialog",

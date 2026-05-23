@@ -35,6 +35,14 @@
     "copy": "Copier",
     "copied": "Copié"
   },
+  "help": {
+    "button_label": "Aide sur cette page",
+    "panel_title": "Aide sur cette page",
+    "panel_intro": "Guides sur docs.pavillion.social en lien avec ce que vous faites ici.",
+    "open_in_docs": "Lire sur docs.pavillion.social",
+    "browse_all_calendar-owners": "Parcourir tous les guides pour propriétaires de calendrier",
+    "browse_all_instance-administrators": "Parcourir tous les guides pour administrateurs"
+  },
   "report": {
     "form_title": "Signaler l'événement",
     "close_dialog": "Fermer la boîte de dialogue de signalement",
