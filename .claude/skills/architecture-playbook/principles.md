@@ -60,7 +60,7 @@ Are documented architectural decisions being respected? If overridden, is it ack
 - For each relevant decision, verify the spec or code follows its stated direction
 - Key decisions to watch:
   - **DEC-001**: Federated, privacy-first, community-controlled — not centralized or commercial
-  - **DEC-002**: Vue.js 3 + Express.js + Sequelize + activitypub-express stack
+  - **DEC-002 / DEC-012**: Vue.js 3 + Express.js + Sequelize stack; ActivityPub federation is hand-rolled in `src/server/activitypub/` (the originally planned `activitypub-express` library was deselected during implementation — see DEC-012)
   - **DEC-003**: Domain-driven design with strict boundaries and interface-based communication
   - **DEC-004**: Anonymous public access — no accounts required for viewing
   - **DEC-005**: Category identification by UUID, not urlName
