@@ -176,12 +176,20 @@ class ReportEntity extends Model {
   /**
    * Creates a ReportEntity from a Report domain model.
    *
+   * When `report.id` is empty (a fresh model that hasn't been persisted yet —
+   * `PrimaryModel`'s constructor defaults `id` to `''`), the `id` field is
+   * omitted from the build payload so Sequelize applies the column's
+   * `defaultValue: DataType.UUIDV4`. Passing `id: ''` explicitly would
+   * override the default and persist an empty string, breaking every
+   * downstream consumer that uses the id as a lookup key
+   * (e.g. /api/v1/calendars/:cid/reports/:reportId/resolve, the moderation
+   * bus REPORT_FLAGGED payload, and the reports dashboard row click).
+   *
    * @param report - Report domain model to convert
    * @returns ReportEntity instance
    */
   static fromModel(report: Report): ReportEntity {
-    return ReportEntity.build({
-      id: report.id,
+    const payload: Record<string, unknown> = {
       event_id: report.eventId,
       calendar_id: report.calendarId,
       category: report.category,
@@ -210,7 +218,13 @@ class ReportEntity extends Model {
       has_instance_pattern: report.hasInstancePattern,
       created_at: report.createdAt,
       updated_at: report.updatedAt,
-    });
+    };
+
+    if (report.id !== '') {
+      payload.id = report.id;
+    }
+
+    return ReportEntity.build(payload);
   }
 }
 
