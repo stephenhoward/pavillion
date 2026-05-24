@@ -46,36 +46,8 @@ bd show <bead-id> --children
 
 ```
 IF bead has child beads:
-  COUNT the number of children
-  ASK user:
-    "This bead already has [count] child beads:
-
-    [list first 5 bead titles with IDs]
-
-    Would you like to:
-    1. **Enrich existing beads** - Add implementation context to existing beads (recommended)
-    2. **Delete and recreate** - Delete existing beads and create new decomposition
-    3. **Cancel** - Stop analysis
-
-    Choose option (1/2/3):"
-
-  WAIT for user response
-
-  IF user chooses 1 (Enrich):
-    SET analysis_mode = "hierarchy"
-    PROCEED to Phase 2 with existing beads
-
-  ELSE IF user chooses 2 (Delete and recreate):
-    ASK for confirmation:
-      "This will permanently delete [count] beads. Are you sure? (yes/no)"
-    IF confirmed:
-      DELETE all child beads: `bd delete <child-ids>`
-      SET analysis_mode = "needs_decomposition"
-      PROCEED to decomposition assessment below
-
-  ELSE IF user chooses 3 (Cancel):
-    STOP analysis
-    MESSAGE: "Analysis cancelled."
+  SET analysis_mode = "hierarchy"
+  PROCEED to Phase 2 with existing beads
 
 ELSE (no children):
   PROCEED to decomposition assessment below
