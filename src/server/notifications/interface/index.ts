@@ -1,6 +1,23 @@
-import { Notification } from '@/common/model/notification';
-import NotificationService from '@/server/notifications/service/notification';
+import { type NotificationResponse } from '@/common/model/notification';
+import NotificationService, {
+  type DismissForObjectInput,
+  type RecordActivityInput,
+} from '@/server/notifications/service/notification';
 
+/**
+ * Notifications domain interface.
+ *
+ * This interface is the
+ * single externally-visible surface of the notifications domain. The write
+ * path (`recordActivity`, `dismissForObject`) is called only by
+ * `NotificationEventHandlers` (inside the notifications domain itself);
+ * emitting domains route through the event bus and never obtain a reference
+ * to this object directly. The read path (`getNotifications`) is exposed
+ * to the API layer
+ * the recipient+activity query and projection to the service rather than
+ * touching entities directly, matching the convention used by every other
+ * domain API in the codebase.
+ */
 export default class NotificationsInterface {
   private service: NotificationService;
 
@@ -9,35 +26,61 @@ export default class NotificationsInterface {
   }
 
   /**
-   * Returns notifications for the given account, ordered by creation date
-   * descending (most recent first).
+   * Records a notification activity and fans it out to its audience.
    *
-   * @param {string} accountId - The account whose notifications to fetch
-   * @param {number} [limit] - Number of records to return (default 50, max 100)
-   * @param {number} [offset] - Number of records to skip (default 0, max 10000)
-   * @returns {Promise<Notification[]>} Array of Notification domain models
+   * Inside the notifications domain this is the single insert path: it
+   * handles per-verb dedup, Flag actor anonymization, snapshot
+   * sanitization, audience resolution, and recipient fan-out in one DB
+   * transaction. Callers should consult `RecordActivityInput` for field-
+   * level docs.
+   *
+   * Returns `void`: no caller consumes activity-id, recipient-count, or
+   * dedup-status today. Dedup hits are logged inside the service for ops
+   * visibility; reintroduce a typed result when a real caller needs to
+   * branch on the outcome.
+   *
+   * @param input - Activity payload (verb, actor, object, audience).
    */
-  async getNotificationsForAccount(accountId: string, limit?: number, offset?: number): Promise<Notification[]> {
-    return this.service.getNotificationsForAccount(accountId, limit, offset);
+  async recordActivity(input: RecordActivityInput): Promise<void> {
+    return this.service.recordActivity(input);
   }
 
   /**
-   * Marks all unseen notifications for the specified account as seen.
+   * Dismisses open recipient rows for activities matching the supplied
+   * object reference and optional filters. Two intended call shapes:
    *
-   * @param {string} accountId - The account whose notifications to mark seen
-   * @returns {Promise<void>}
+   *   - Object-state transitions (no actor filter) — every recipient of
+   *     every matching activity for the object is dismissed.
+   *   - Actor-scoped reversals (actorAccountId OR actorUri set) — only
+   *     recipients of the matching actor's activity are dismissed.
+   *
+   * Idempotent: the underlying UPDATE filters on
+   * `WHERE dismissed_at IS NULL`, so re-running the same call is a no-op
+   * against rows already dismissed.
+   *
+   * @throws If both `actorAccountId` and `actorUri` are set.
    */
-  async markAllSeenForAccount(accountId: string): Promise<void> {
-    return this.service.markAllSeenForAccount(accountId);
+  async dismissForObject(input: DismissForObjectInput): Promise<void> {
+    return this.service.dismissForObject(input);
   }
 
   /**
-   * Deletes old notifications per retention policy.
-   * Called by the scheduled cleanup job.
+   * Returns paginated notifications for the supplied account, ordered most
+   * recent first. The query is scoped strictly to recipient rows owned by
+   * `accountId`; there is no admin override. See `NotificationResponse` for
+   * the wire shape — identity columns are intentionally absent and Flag
+   * rows surface with `actor.kind='anonymous'` regardless of the underlying
+   * reporter identity.
    *
-   * @returns {Promise<void>}
+   * @param accountId - Authenticated account id; the scope filter.
+   * @param limit - Page size (the route handler clamps to [1, 100]).
+   * @param offset - Pagination offset (the route handler clamps to [0, 10000]).
    */
-  async deleteOldNotifications(): Promise<void> {
-    return this.service.deleteOldNotifications();
+  async getNotifications(
+    accountId: string,
+    limit: number,
+    offset: number,
+  ): Promise<NotificationResponse[]> {
+    return this.service.getNotifications(accountId, limit, offset);
   }
 }

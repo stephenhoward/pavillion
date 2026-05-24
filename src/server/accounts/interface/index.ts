@@ -152,6 +152,17 @@ export default class AccountsInterface {
     return this.accountService.getAdmins();
   }
 
+  /**
+   * Returns the account IDs of all instance admins.
+   * Used by the notifications role resolver for `instance-admins` audiences
+   * (a global role that takes no object).
+   *
+   * @returns Array of admin account IDs; empty array if no admins exist
+   */
+  async getInstanceAdmins(): Promise<string[]> {
+    return this.accountService.getInstanceAdmins();
+  }
+
   async generatePasswordResetCodeForAccount(account: Account): Promise<string> {
     return this.accountService.generatePasswordResetCodeForAccount(account);
   }

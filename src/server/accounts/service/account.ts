@@ -1003,6 +1003,25 @@ export default class AccountService {
   }
 
   /**
+   * Returns the account IDs of all instance admins.
+   *
+   * Used by the notifications role resolver to fan out activities with
+   * audience `{ kind: 'role', role: 'instance-admins' }` (e.g. `Flag`,
+   * `ReportEscalated`). Queries the AccountRole table directly — no account
+   * row load — so callers that only need IDs avoid an extra fetch.
+   *
+   * @returns {Promise<string[]>} a promise that resolves to an array of admin
+   *   account IDs; empty array if no admins exist
+   */
+  async getInstanceAdmins(): Promise<string[]> {
+    const adminRoles = await AccountRoleEntity.findAll({
+      where: { role: 'admin' },
+    });
+
+    return adminRoles.map(role => role.account_id);
+  }
+
+  /**
    * Checks credentials against an account, and returns the corresponding Account if successful
    * @param email
    * @param password

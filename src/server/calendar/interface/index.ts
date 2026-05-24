@@ -252,6 +252,18 @@ export default class CalendarInterface {
   }
 
   /**
+   * Returns the local owner accounts of a calendar.
+   * Used by the notifications role resolver to fan out
+   * `calendar-owners`-targeted verbs (e.g. `Flag`).
+   *
+   * @param calendarId - The calendar UUID to get owners for
+   * @returns Array of Account models for local owners; empty array if none
+   */
+  async getOwnersForCalendar(calendarId: string): Promise<Account[]> {
+    return this.calendarService.getOwnersForCalendar(calendarId);
+  }
+
+  /**
    * List all local calendars for admin visibility with pagination and filtering.
    * Delegates to CalendarService; see service docs for full filter/sort semantics.
    *

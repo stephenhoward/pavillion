@@ -5,6 +5,7 @@ import type { ModerationSettings } from './moderation';
 import { ReportEntity } from '@/server/moderation/entity/report';
 import { ReportEscalationEntity } from '@/server/moderation/entity/report_escalation';
 import { ReportStatus } from '@/common/model/report';
+import { MODERATION_BUS_EVENTS } from '@/server/moderation/events/types';
 import { Op } from 'sequelize';
 
 /** Default check interval: 15 minutes in milliseconds. */
@@ -295,8 +296,10 @@ class EscalationScheduler {
 
     const report = reportEntity.toModel();
 
-    this.emit('report.auto_escalated', {
-      report,
+    this.emit(MODERATION_BUS_EVENTS.REPORT_ESCALATED, {
+      reportId: report.id,
+      eventId: report.eventId,
+      calendarId: report.calendarId,
       reason: notes,
     });
   }
@@ -321,7 +324,10 @@ class EscalationScheduler {
 
     const report = reportEntity.toModel();
 
-    this.emit('report.escalation_reminder', {
+    // Listener registers for `reportEscalationReminder` in events/index.ts;
+    // the dot-style `report.escalation_reminder` name was a silent
+    // mismatch that broke the reminder email pipeline.
+    this.emit('reportEscalationReminder', {
       report,
     });
   }

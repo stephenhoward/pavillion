@@ -15,8 +15,9 @@ import type {
   ReportCreatedPayload,
   ReportVerifiedPayload,
   ReportEscalationReminderPayload,
-  ReportAutoEscalatedPayload,
+  ReportEscalatedBusPayload,
 } from './types';
+import { MODERATION_BUS_EVENTS } from './types';
 
 /**
  * Event handlers for the moderation domain.
@@ -49,7 +50,15 @@ export default class ModerationEventHandlers implements DomainEventHandlers {
     eventBus.on('reportCreated', this.handleReportCreated.bind(this));
     eventBus.on('reportVerified', this.handleReportVerified.bind(this));
     eventBus.on('reportEscalationReminder', this.handleEscalationReminder.bind(this));
-    eventBus.on('reportAutoEscalated', this.handleAutoEscalated.bind(this));
+    // Auto-escalation email pipeline. The scheduler now emits the
+    // cross-domain bus event `moderation:report:escalated` (replacing the
+    // pre-existing `report.auto_escalated` dot-style name), but admin-
+    // action escalations (manual escalate, owner-dismiss auto-escalate)
+    // also emit that event. To preserve the existing email scope —
+    // which only sends the auto-escalation-to-admins notification for
+    // scheduler-driven escalations — the handler checks the reason
+    // payload before sending.
+    eventBus.on(MODERATION_BUS_EVENTS.REPORT_ESCALATED, this.handleEscalated.bind(this));
   }
 
   /**
@@ -75,16 +84,7 @@ export default class ModerationEventHandlers implements DomainEventHandlers {
       }
 
       // Look up the event to get its name for the email
-      let eventName = 'Unknown Event';
-      try {
-        const event = await this.calendarInterface.getEventById(report.eventId);
-        const languages = event.getLanguages();
-        const language = languages.length > 0 ? languages[0] : 'en';
-        eventName = event.content(language).name || eventName;
-      }
-      catch {
-        // If event lookup fails, proceed with default name
-      }
+      const eventName = await this.getEventName(report.eventId);
 
       const email = new ReportVerificationEmail(
         reporterEmail,
@@ -170,15 +170,46 @@ export default class ModerationEventHandlers implements DomainEventHandlers {
   }
 
   /**
-   * Handles the reportAutoEscalated event by sending a notification
-   * email to all instance administrators that a report has been
-   * automatically escalated due to calendar owner inaction.
+   * Handles the moderation:report:escalated bus event.
    *
-   * @param payload - Event payload containing the auto-escalated report and reason
+   * Filters to scheduler-driven auto-escalation only; admin-action
+   * escalations (manual escalate, owner-dismiss, threshold-based) do
+   * not trigger the admin-notification email pipeline. The
+   * discriminator is the reportEntity.escalation_type field — but the
+   * bus payload only carries `reportId`, so we filter on the
+   * well-known notes prefix used by the scheduler (`Auto-escalated` or
+   * `Admin-initiated report auto-escalated`).
+   *
+   * The bus payload deliberately omits reporter PII (see types.ts),
+   * so this handler re-fetches the full Report by id from the
+   * moderation service in order to populate the admin email.
+   *
+   * @param payload - Bus event payload
    */
-  private async handleAutoEscalated(payload: ReportAutoEscalatedPayload): Promise<void> {
-    const { report } = payload;
+  private async handleEscalated(payload: ReportEscalatedBusPayload): Promise<void> {
+    const isSchedulerDriven = payload.reason.startsWith('Auto-escalated')
+      || payload.reason.startsWith('Admin-initiated report auto-escalated');
+    if (!isSchedulerDriven) {
+      return;
+    }
 
+    const report = await this.service.getReportById(payload.reportId);
+    if (!report) {
+      return;
+    }
+
+    await this.handleAutoEscalated(report);
+  }
+
+  /**
+   * Sends a notification email to all instance administrators that a
+   * report has been automatically escalated due to calendar owner
+   * inaction. Invoked by handleEscalated() after filtering to scheduler-
+   * driven escalations only and re-fetching the Report.
+   *
+   * @param report - The auto-escalated Report (refetched within the moderation domain)
+   */
+  private async handleAutoEscalated(report: import('@/common/model/report').Report): Promise<void> {
     try {
       // Look up the calendar owner email for the notification
       let ownerEmail = 'Unknown';
@@ -302,16 +333,7 @@ export default class ModerationEventHandlers implements DomainEventHandlers {
       }
 
       // Look up the event name
-      let eventName = 'Unknown Event';
-      try {
-        const event = await this.calendarInterface.getEventById(eventId);
-        const languages = event.getLanguages();
-        const language = languages.length > 0 ? languages[0] : 'en';
-        eventName = event.content(language).name || eventName;
-      }
-      catch {
-        // If event lookup fails, proceed with default name
-      }
+      const eventName = await this.getEventName(eventId);
 
       // Count total reports for this event
       const reports = await this.service.getReportsForEvent(eventId);
@@ -342,39 +364,39 @@ export default class ModerationEventHandlers implements DomainEventHandlers {
    * @returns The event name, or 'Unknown Event' if lookup fails
    */
   private async getEventName(eventId: string): Promise<string> {
-    let eventName = 'Unknown Event';
     try {
       const event = await this.calendarInterface.getEventById(eventId);
-      const languages = event.getLanguages();
-      const language = languages.length > 0 ? languages[0] : 'en';
-      eventName = event.content(language).name || eventName;
+      return event.displayName('Unknown Event');
     }
     catch {
       // If event lookup fails, proceed with default name
+      return 'Unknown Event';
     }
-    return eventName;
   }
 
   /**
-   * Looks up the name of a calendar by its ID.
+   * Looks up the name of a calendar by its ID. Falls back to the calendar's
+   * `urlName` slug when no translated name is populated; falls back to
+   * `'Unknown Calendar'` only when the calendar is missing entirely or
+   * the lookup throws.
    *
    * @param calendarId - The calendar UUID
    * @returns The calendar name, or 'Unknown Calendar' if lookup fails
    */
   private async getCalendarName(calendarId: string): Promise<string> {
-    let calendarName = 'Unknown Calendar';
     try {
       const calendar = await this.calendarInterface.getCalendar(calendarId);
-      if (calendar) {
-        const languages = calendar.getLanguages();
-        const language = languages.length > 0 ? languages[0] : 'en';
-        calendarName = calendar.content(language).name || calendar.urlName || calendarName;
+      if (!calendar) {
+        return 'Unknown Calendar';
       }
+      // urlName takes precedence over the generic fallback so calendars
+      // with a slug but no translated name still render their slug.
+      return calendar.displayName(calendar.urlName || 'Unknown Calendar');
     }
     catch {
       // If calendar lookup fails, proceed with default name
+      return 'Unknown Calendar';
     }
-    return calendarName;
   }
 
   /**

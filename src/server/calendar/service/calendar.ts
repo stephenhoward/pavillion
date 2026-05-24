@@ -33,6 +33,7 @@ import EditorNotificationEmail from '@/server/calendar/model/editor_notification
 import db from '@/server/common/entity/db';
 import type ActivityPubInterface from '@/server/activitypub/interface';
 import type ModerationInterface from '@/server/moderation/interface';
+import { CALENDAR_BUS_EVENTS } from '@/server/calendar/events/types';
 
 // Import the interface type (this avoids circular dependency)
 type CalendarEditorsResponse = {
@@ -359,6 +360,38 @@ class CalendarService {
     const memberships = await CalendarMemberEntity.findAll({
       where: {
         calendar_id: calendarId,
+        account_id: { [Op.ne]: null },
+      },
+      include: [
+        {
+          model: AccountEntity,
+          as: 'account',
+          attributes: ['id', 'username', 'email', 'language', 'display_name'],
+        },
+      ],
+    });
+
+    return memberships
+      .filter(m => m.account)
+      .map(m => m.account.toModel());
+  }
+
+  /**
+   * Returns the local owner accounts of a calendar.
+   *
+   * Filters CalendarMemberEntity to rows with `role='owner'` and an
+   * associated local account. Remote-only memberships (no local account)
+   * are excluded. Used by the notifications role resolver to fan out
+   * verbs like `Flag` to calendar-owners.
+   *
+   * @param calendarId - The calendar UUID to get owners for
+   * @returns Array of Account models for local owners; empty array if none
+   */
+  async getOwnersForCalendar(calendarId: string): Promise<Account[]> {
+    const memberships = await CalendarMemberEntity.findAll({
+      where: {
+        calendar_id: calendarId,
+        role: 'owner',
         account_id: { [Op.ne]: null },
       },
       include: [
@@ -853,6 +886,17 @@ class CalendarService {
 
     if (deleted === 0) {
       throw new EditorNotFoundError();
+    }
+
+    // Emit cross-domain bus event for notifications. Notifications uses
+    // the revoked editor's account_id to address an explicit single-
+    // recipient audience.
+    if (this.eventBus) {
+      this.eventBus.emit(CALENDAR_BUS_EVENTS.EDITOR_REVOKED, {
+        calendarId: calendar.id,
+        accountId: editorAccount.id,
+        revokedBy: revokingAccount.id,
+      });
     }
 
     return true;
@@ -1447,6 +1491,17 @@ class CalendarService {
       }
       throw error;
     }
+
+    // Emit cross-domain bus event for notifications. Notifications uses
+    // the invitee account_id to address an explicit single-recipient
+    // audience; no role resolution is required.
+    if (this.eventBus) {
+      this.eventBus.emit(CALENDAR_BUS_EVENTS.EDITOR_INVITED, {
+        calendarId,
+        accountId: editorAccountId,
+        grantedBy: owner.id,
+      });
+    }
   }
 
   /**
@@ -1482,6 +1537,17 @@ class CalendarService {
 
     if (deleted === 0) {
       throw new EditorNotFoundError('Editor relationship not found');
+    }
+
+    // Emit cross-domain bus event for notifications. Notifications uses
+    // the revoked editor's account_id to address an explicit single-
+    // recipient audience.
+    if (this.eventBus) {
+      this.eventBus.emit(CALENDAR_BUS_EVENTS.EDITOR_REVOKED, {
+        calendarId,
+        accountId: editorAccountId,
+        revokedBy: owner.id,
+      });
     }
   }
 

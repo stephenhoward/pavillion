@@ -1128,6 +1128,7 @@ describe('ModerationService', () => {
       expect(updateOptions.where.status).toBe(ReportStatus.PENDING_VERIFICATION);
       expect(updateOptions.where.verification_expiration).toBeDefined();
 
+      // Legacy email-pipeline event must still fire alongside the new bus event.
       expect(emitSpy.calledWith('reportVerified')).toBe(true);
     });
 
@@ -1571,6 +1572,455 @@ describe('ModerationService', () => {
       await service.verifyReport('valid-token');
 
       expect(emitSpy.calledWith('reportVerified', sinon.match({ report }))).toBe(true);
+    });
+
+    describe('moderation bus events', () => {
+
+      /**
+       * Retrieves the payload of the first emit() call for a given event name.
+       * Returns null if no such call was made.
+       */
+      function getEmittedPayload(emitSpy: sinon.SinonSpy, eventName: string): any {
+        const call = emitSpy.getCalls().find(c => c.args[0] === eventName);
+        return call ? call.args[1] : null;
+      }
+
+      /**
+       * Asserts that a payload object does NOT contain any reporter PII
+       * fields. Reporter identity must never cross the moderation domain
+       * boundary via the new colon-delimited bus events.
+       */
+      function expectNoReporterPii(payload: any): void {
+        expect(payload).not.toHaveProperty('reporterEmailHash');
+        expect(payload).not.toHaveProperty('reporterAccountId');
+        expect(payload).not.toHaveProperty('reporterIpHash');
+        expect(payload).not.toHaveProperty('reporterIpSubnet');
+        expect(payload).not.toHaveProperty('reporterIpRegion');
+        expect(payload).not.toHaveProperty('verificationToken');
+        // Also guard against the full Report ever leaking
+        expect(payload).not.toHaveProperty('report');
+      }
+
+      it('should emit moderation:report:flagged after authenticated createReport', async () => {
+        sandbox.stub(service, 'hasReporterAlreadyReported').resolves(false);
+
+        const report = new Report('report-bus-1');
+        report.eventId = 'event-bus-1';
+        report.calendarId = 'calendar-bus-1';
+        report.status = ReportStatus.SUBMITTED;
+
+        sandbox.stub(ReportEntity, 'fromModel').returns({
+          save: sandbox.stub().resolves({ toModel: () => report }),
+        } as any);
+        sandbox.stub(EventReporterEntity, 'fromModel').returns({
+          save: sandbox.stub().resolves({}),
+        } as any);
+
+        const emitSpy = sandbox.spy(eventBus, 'emit');
+
+        await service.createReport({
+          eventId: 'event-bus-1',
+          calendarId: 'calendar-bus-1',
+          category: ReportCategory.OTHER,
+          description: 'Test',
+          reporterAccountId: 'account-1',
+          reporterType: 'authenticated',
+        });
+
+        // Both the old email-pipeline event and the new bus event fire.
+        expect(emitSpy.calledWith('reportCreated')).toBe(true);
+        expect(emitSpy.calledWith(
+          'moderation:report:flagged',
+          sinon.match({
+            reportId: 'report-bus-1',
+            eventId: 'event-bus-1',
+            calendarId: 'calendar-bus-1',
+            origin: 'local',
+          }),
+        )).toBe(true);
+
+        const payload = getEmittedPayload(emitSpy, 'moderation:report:flagged');
+        expectNoReporterPii(payload);
+      });
+
+      it('should NOT emit moderation:report:flagged for anonymous pending-verification report', async () => {
+        sandbox.stub(service, 'hasReporterAlreadyReported').resolves(false);
+        sandbox.stub(service, 'isEmailBlocked').resolves(false);
+        sandbox.stub(service, 'hasExceededEmailRateLimit').resolves(false);
+
+        const pendingReport = new Report('report-pending-1');
+        pendingReport.eventId = 'event-pending-1';
+        pendingReport.calendarId = 'calendar-pending-1';
+        pendingReport.status = ReportStatus.PENDING_VERIFICATION;
+
+        sandbox.stub(ReportEntity, 'fromModel').returns({
+          save: sandbox.stub().resolves({ toModel: () => pendingReport }),
+        } as any);
+        sandbox.stub(EventReporterEntity, 'fromModel').returns({
+          save: sandbox.stub().resolves({}),
+        } as any);
+
+        const emitSpy = sandbox.spy(eventBus, 'emit');
+
+        await service.createReport({
+          eventId: 'event-pending-1',
+          calendarId: 'calendar-pending-1',
+          category: ReportCategory.SPAM,
+          description: 'Spam',
+          reporterEmail: 'anon@example.com',
+          reporterType: 'anonymous',
+        });
+
+        expect(emitSpy.calledWith('moderation:report:flagged')).toBe(false);
+      });
+
+      it('should emit moderation:report:flagged when anonymous report is verified', async () => {
+        const report = new Report('report-verified-1');
+        report.eventId = 'event-verified-1';
+        report.calendarId = 'calendar-verified-1';
+        report.status = ReportStatus.SUBMITTED;
+
+        sandbox.stub(ReportEntity, 'update').resolves([1]);
+        sandbox.stub(ReportEntity, 'findOne').resolves({
+          toModel: () => report,
+        } as any);
+
+        const emitSpy = sandbox.spy(eventBus, 'emit');
+
+        await service.verifyReport('valid-token');
+
+        // Legacy email-pipeline event must continue to fire alongside the new bus event.
+        expect(emitSpy.calledWith('reportVerified')).toBe(true);
+        expect(emitSpy.calledWith(
+          'moderation:report:flagged',
+          sinon.match({
+            reportId: 'report-verified-1',
+            eventId: 'event-verified-1',
+            calendarId: 'calendar-verified-1',
+            origin: 'local',
+          }),
+        )).toBe(true);
+
+        const payload = getEmittedPayload(emitSpy, 'moderation:report:flagged');
+        expectNoReporterPii(payload);
+      });
+
+      it('should emit moderation:report:flagged with origin federated after receiveRemoteReport', async () => {
+        const event = {
+          calendarId: 'calendar-fed-1',
+        };
+        const mockCalendarInterface = {
+          getEventById: sandbox.stub().resolves(event),
+        } as any;
+        const fedEventBus = new EventEmitter();
+        const fedService = new ModerationService(
+          fedEventBus,
+          mockCalendarInterface,
+        );
+
+        const fedReport = new Report('report-fed-1');
+        fedReport.eventId = 'event-fed-1';
+        fedReport.calendarId = 'calendar-fed-1';
+        fedReport.status = ReportStatus.SUBMITTED;
+
+        sandbox.stub(ReportEntity, 'fromModel').returns({
+          save: sandbox.stub().resolves({ toModel: () => fedReport }),
+        } as any);
+
+        const emitSpy = sandbox.spy(fedEventBus, 'emit');
+
+        await fedService.receiveRemoteReport({
+          eventId: 'event-fed-1',
+          category: ReportCategory.OTHER,
+          description: 'Federated',
+          forwardedFromInstance: 'remote.example',
+          forwardedReportId: 'remote-1',
+          actorUri: 'https://remote.example/calendars/reporter',
+        });
+
+        // Legacy intra-domain event must continue to fire alongside the new bus event.
+        // The federated path forwards `actorUri` onto the bus payload so the
+        // notifications domain can derive the reporting instance's display URL
+        // (https://<host>).
+        expect(emitSpy.calledWith('reportReceived')).toBe(true);
+        expect(emitSpy.calledWith(
+          'moderation:report:flagged',
+          sinon.match({
+            reportId: 'report-fed-1',
+            eventId: 'event-fed-1',
+            calendarId: 'calendar-fed-1',
+            origin: 'federated',
+            actorUri: 'https://remote.example/calendars/reporter',
+          }),
+        )).toBe(true);
+
+        const payload = getEmittedPayload(emitSpy, 'moderation:report:flagged');
+        expectNoReporterPii(payload);
+      });
+
+      it('should emit moderation:report:escalated on owner-dismiss auto-escalation', async () => {
+        const report = new Report('report-esc-1');
+        report.eventId = 'event-esc-1';
+        report.calendarId = 'calendar-esc-1';
+        report.status = ReportStatus.ESCALATED;
+
+        sandbox.stub(ReportEntity, 'findByPk').resolves({
+          status: ReportStatus.SUBMITTED,
+          update: sandbox.stub().resolves(),
+          toModel: () => report,
+        } as any);
+        sandbox.stub(ReportEscalationEntity, 'fromModel').returns({
+          save: sandbox.stub().resolves({}),
+        } as any);
+
+        const emitSpy = sandbox.spy(eventBus, 'emit');
+
+        await service.dismissReport('report-esc-1', 'owner-1', 'Owner reason');
+
+        // Legacy email-pipeline event must continue to fire alongside the new bus event.
+        expect(emitSpy.calledWith('reportEscalated')).toBe(true);
+        expect(emitSpy.calledWith(
+          'moderation:report:escalated',
+          sinon.match({
+            reportId: 'report-esc-1',
+            eventId: 'event-esc-1',
+            calendarId: 'calendar-esc-1',
+            reason: 'Owner reason',
+          }),
+        )).toBe(true);
+
+        const payload = getEmittedPayload(emitSpy, 'moderation:report:escalated');
+        expectNoReporterPii(payload);
+      });
+
+      it('should emit moderation:report:escalated on manual escalateReport', async () => {
+        const report = new Report('report-esc-2');
+        report.eventId = 'event-esc-2';
+        report.calendarId = 'calendar-esc-2';
+        report.status = ReportStatus.ESCALATED;
+
+        sandbox.stub(ReportEntity, 'findByPk').resolves({
+          status: ReportStatus.SUBMITTED,
+          update: sandbox.stub().resolves(),
+          toModel: () => report,
+        } as any);
+        sandbox.stub(ReportEscalationEntity, 'fromModel').returns({
+          save: sandbox.stub().resolves({}),
+        } as any);
+
+        const emitSpy = sandbox.spy(eventBus, 'emit');
+
+        await service.escalateReport('report-esc-2', 'Manual reason');
+
+        // Legacy email-pipeline event must continue to fire alongside the new bus event.
+        expect(emitSpy.calledWith('reportEscalated')).toBe(true);
+        expect(emitSpy.calledWith(
+          'moderation:report:escalated',
+          sinon.match({
+            reportId: 'report-esc-2',
+            eventId: 'event-esc-2',
+            calendarId: 'calendar-esc-2',
+            reason: 'Manual reason',
+          }),
+        )).toBe(true);
+
+        const payload = getEmittedPayload(emitSpy, 'moderation:report:escalated');
+        expectNoReporterPii(payload);
+      });
+
+      it('should emit moderation:report:escalated on threshold-based checkAutoEscalation', async () => {
+        const mockConfigInterface = {
+          getSetting: sandbox.stub().resolves('2'),
+        } as any;
+        const thresholdEventBus = new EventEmitter();
+        const thresholdService = new ModerationService(
+          thresholdEventBus,
+          undefined,
+          mockConfigInterface,
+        );
+
+        const report = new Report('report-thresh-1');
+        report.eventId = 'event-thresh-1';
+        report.calendarId = 'calendar-thresh-1';
+        report.status = ReportStatus.ESCALATED;
+
+        const mockEntity = {
+          id: 'report-thresh-1',
+          status: ReportStatus.SUBMITTED,
+          update: sandbox.stub().resolves(),
+          toModel: () => report,
+        };
+
+        sandbox.stub(ReportEntity, 'count').resolves(3);
+        sandbox.stub(ReportEntity, 'findAll').resolves([mockEntity] as any);
+        sandbox.stub(ReportEscalationEntity, 'fromModel').returns({
+          save: sandbox.stub().resolves({}),
+        } as any);
+
+        const emitSpy = sandbox.spy(thresholdEventBus, 'emit');
+
+        const escalatedCount = await thresholdService.checkAutoEscalation('event-thresh-1');
+
+        expect(escalatedCount).toBe(1);
+        // Legacy event still fires for the email pipeline (carries the full Report).
+        expect(emitSpy.calledWith('reportEscalated')).toBe(true);
+        // New bus event also fires with the trimmed payload.
+        expect(emitSpy.calledWith(
+          'moderation:report:escalated',
+          sinon.match({
+            reportId: 'report-thresh-1',
+            eventId: 'event-thresh-1',
+            calendarId: 'calendar-thresh-1',
+            reason: 'Auto-escalated: event exceeded report threshold of 2',
+          }),
+        )).toBe(true);
+
+        const payload = getEmittedPayload(emitSpy, 'moderation:report:escalated');
+        expectNoReporterPii(payload);
+      });
+
+      it('should emit moderation:report:resolved on resolveReport', async () => {
+        const report = new Report('report-res-1');
+        report.eventId = 'event-res-1';
+        report.calendarId = 'calendar-res-1';
+        report.status = ReportStatus.RESOLVED;
+
+        sandbox.stub(ReportEntity, 'findByPk').resolves({
+          status: ReportStatus.SUBMITTED,
+          update: sandbox.stub().resolves(),
+          toModel: () => report,
+        } as any);
+        sandbox.stub(ReportEscalationEntity, 'fromModel').returns({
+          save: sandbox.stub().resolves({}),
+        } as any);
+
+        const emitSpy = sandbox.spy(eventBus, 'emit');
+
+        await service.resolveReport('report-res-1', 'reviewer-1', 'Done');
+
+        // Legacy email-pipeline event must continue to fire alongside the new bus event.
+        expect(emitSpy.calledWith('reportResolved')).toBe(true);
+        expect(emitSpy.calledWith(
+          'moderation:report:resolved',
+          sinon.match({
+            reportId: 'report-res-1',
+            eventId: 'event-res-1',
+            calendarId: 'calendar-res-1',
+            reviewerId: 'reviewer-1',
+          }),
+        )).toBe(true);
+
+        const payload = getEmittedPayload(emitSpy, 'moderation:report:resolved');
+        expectNoReporterPii(payload);
+      });
+
+      it('should emit moderation:report:resolved on adminResolveReport', async () => {
+        const report = new Report('report-res-2');
+        report.eventId = 'event-res-2';
+        report.calendarId = 'calendar-res-2';
+        report.status = ReportStatus.RESOLVED;
+
+        sandbox.stub(ReportEntity, 'findByPk').resolves({
+          status: ReportStatus.ESCALATED,
+          update: sandbox.stub().resolves(),
+          toModel: () => report,
+        } as any);
+        sandbox.stub(ReportEscalationEntity, 'fromModel').returns({
+          save: sandbox.stub().resolves({}),
+        } as any);
+
+        const emitSpy = sandbox.spy(eventBus, 'emit');
+
+        await service.adminResolveReport('report-res-2', 'admin-1', 'Resolved');
+
+        // Legacy email-pipeline event must continue to fire alongside the new bus event.
+        expect(emitSpy.calledWith('reportResolved')).toBe(true);
+        expect(emitSpy.calledWith(
+          'moderation:report:resolved',
+          sinon.match({
+            reportId: 'report-res-2',
+            eventId: 'event-res-2',
+            calendarId: 'calendar-res-2',
+            reviewerId: 'admin-1',
+          }),
+        )).toBe(true);
+
+        const payload = getEmittedPayload(emitSpy, 'moderation:report:resolved');
+        expectNoReporterPii(payload);
+      });
+
+      it('should emit moderation:report:resolved on adminDismissReport', async () => {
+        // DISMISSED is semantically equivalent to RESOLVED for inbox-cleanup
+        // purposes — the notifications handler treats both as terminal and
+        // closes prior Flag/ReportEscalated recipient rows.
+        const report = new Report('report-res-3');
+        report.eventId = 'event-res-3';
+        report.calendarId = 'calendar-res-3';
+        report.status = ReportStatus.DISMISSED;
+
+        sandbox.stub(ReportEntity, 'findByPk').resolves({
+          status: ReportStatus.ESCALATED,
+          update: sandbox.stub().resolves(),
+          toModel: () => report,
+        } as any);
+        sandbox.stub(ReportEscalationEntity, 'fromModel').returns({
+          save: sandbox.stub().resolves({}),
+        } as any);
+
+        const emitSpy = sandbox.spy(eventBus, 'emit');
+
+        await service.adminDismissReport('report-res-3', 'admin-1', 'Not actionable');
+
+        // Legacy email-pipeline event must continue to fire alongside the new bus event.
+        expect(emitSpy.calledWith('reportDismissed')).toBe(true);
+        expect(emitSpy.calledWith(
+          'moderation:report:resolved',
+          sinon.match({
+            reportId: 'report-res-3',
+            eventId: 'event-res-3',
+            calendarId: 'calendar-res-3',
+            reviewerId: 'admin-1',
+          }),
+        )).toBe(true);
+
+        const payload = getEmittedPayload(emitSpy, 'moderation:report:resolved');
+        expectNoReporterPii(payload);
+      });
+
+      it('should emit moderation:report:resolved on adminOverrideReport', async () => {
+        const report = new Report('report-res-4');
+        report.eventId = 'event-res-4';
+        report.calendarId = 'calendar-res-4';
+        report.status = ReportStatus.RESOLVED;
+
+        sandbox.stub(ReportEntity, 'findByPk').resolves({
+          status: ReportStatus.SUBMITTED,
+          update: sandbox.stub().resolves(),
+          toModel: () => report,
+        } as any);
+        sandbox.stub(ReportEscalationEntity, 'fromModel').returns({
+          save: sandbox.stub().resolves({}),
+        } as any);
+
+        const emitSpy = sandbox.spy(eventBus, 'emit');
+
+        await service.adminOverrideReport('report-res-4', 'admin-1', 'Reversed owner decision');
+
+        // Legacy email-pipeline event must continue to fire alongside the new bus event.
+        expect(emitSpy.calledWith('reportOverridden')).toBe(true);
+        expect(emitSpy.calledWith(
+          'moderation:report:resolved',
+          sinon.match({
+            reportId: 'report-res-4',
+            eventId: 'event-res-4',
+            calendarId: 'calendar-res-4',
+            reviewerId: 'admin-1',
+          }),
+        )).toBe(true);
+
+        const payload = getEmittedPayload(emitSpy, 'moderation:report:resolved');
+        expectNoReporterPii(payload);
+      });
     });
 
     describe('forwardReport', () => {

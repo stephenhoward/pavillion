@@ -3,10 +3,12 @@ import { computed, ref, onMounted, onUnmounted } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import EmptyLayout from '@/client/components/common/empty_state.vue';
 import { useNotificationStore } from '@/client/stores/notificationStore';
-import type { Notification } from '@/common/model/notification';
+import { useNotificationDisplay } from '@/client/composables/useNotificationDisplay';
+import type { NotificationResponse } from '@/client/service/notification';
 import HelpButton from '@/client/components/common/help-button.vue';
 
 const { t } = useTranslation('inbox');
+const { resolveActorDisplayName } = useNotificationDisplay();
 const store = useNotificationStore();
 
 const notifications = computed(() => store.notifications);
@@ -17,18 +19,55 @@ const sentinelRef = ref<HTMLElement | null>(null);
 let observer: IntersectionObserver | null = null;
 
 /**
- * Returns the translated description text for a notification, excluding actor name.
+ * Returns the translated suffix describing the verb's effect on the object,
+ * substituting the object's snapshot label where relevant. Falls back to a
+ * generic suffix for verbs that have not yet been localized.
+ *
+ * `object.label` is treated as plain text everywhere — the inbox template
+ * uses `{{ }}` interpolation, never `v-html`, so the server-side snapshot
+ * sanitization is defense-in-depth, not the only escape layer.
  */
-const getNotificationSuffix = (notification: Notification): string => {
-  if (notification.type === 'follow') {
-    return t('notifications.follow_suffix');
+const getNotificationSuffix = (notification: NotificationResponse): string => {
+  switch (notification.verb) {
+    case 'Follow':
+      return t('notifications.follow_suffix');
+    case 'Announce':
+      return t('notifications.repost_suffix', { eventId: notification.object.id });
+    case 'Flag':
+      return t('notifications.flag_suffix', { eventTitle: notification.object.label });
+    case 'ReportEscalated':
+      return t('notifications.report_escalated_sentence', { eventTitle: notification.object.label });
+    case 'ReportResolved':
+      return t('notifications.report_resolved_sentence', { eventTitle: notification.object.label });
+    case 'EditorInvited':
+      return t('notifications.editor_invited_suffix', { calendarName: notification.object.label });
+    case 'EditorRevoked':
+      return t('notifications.editor_revoked_suffix', { calendarName: notification.object.label });
+    default:
+      return '';
   }
-  if (notification.type === 'repost') {
-    return t('notifications.repost_suffix', { eventId: notification.eventId ?? '' });
-  }
-  return '';
 };
 
+/**
+ * Returns `notification.actor.displayUrl` only when it is a safe `https://`
+ * URL. Anything else (`javascript:`, `data:`, `http://`, missing scheme)
+ * returns `null` so the template hides the anchor and falls back to the
+ * plain-text actor name.
+ *
+ * Defense-in-depth — the server-side Flag anonymization already filters
+ * `actor.displayUrl` for Flag rows, but Follow / Announce rows carry
+ * remote-supplied URLs through unchanged. A federated peer cannot inject a
+ * `javascript:` URL today (`actor_display_url` is populated from the
+ * actor's AP profile URL), but a future code path that copies a less
+ * trusted field would silently become an XSS sink without this guard.
+ */
+const safeActorUrl = (notification: NotificationResponse): string | null => {
+  const url = notification.actor.displayUrl;
+  if (!url) {
+    return null;
+  }
+  return url.startsWith('https://') ? url : null;
+};
 /**
  * Load more notifications when scroll sentinel becomes visible.
  */
@@ -40,7 +79,7 @@ const loadMore = () => {
 
 /**
  * Setup Intersection Observer for infinite scroll, then load initial
- * notifications and clear the unread badge.
+ * notifications.
  */
 onMounted(async () => {
   if (sentinelRef.value) {
@@ -60,7 +99,6 @@ onMounted(async () => {
   }
 
   await store.fetchNotifications();
-  await store.markAllSeen();
 });
 
 /**
@@ -95,17 +133,17 @@ onUnmounted(() => {
       >
         <p class="notification-text">
           <a
-            v-if="notification.actorUrl"
-            :href="notification.actorUrl"
+            v-if="safeActorUrl(notification)"
+            :href="safeActorUrl(notification) ?? undefined"
             rel="noopener noreferrer"
             target="_blank"
             class="actor-link"
-          >{{ notification.actorName }}<span class="sr-only">{{ t('notifications.opens_in_new_tab') }}</span></a>
+          >{{ resolveActorDisplayName(notification.actor.displayName) }}<span class="sr-only">{{ t('notifications.opens_in_new_tab') }}</span></a>
           <span
-            v-else
+            v-else-if="resolveActorDisplayName(notification.actor.displayName)"
             class="actor-name"
-          >{{ notification.actorName }}</span>
-          {{ ' ' + getNotificationSuffix(notification) }}
+          >{{ resolveActorDisplayName(notification.actor.displayName) }}</span>
+          {{ getNotificationSuffix(notification) }}
         </p>
       </li>
 

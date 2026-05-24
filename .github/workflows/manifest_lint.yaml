@@ -11,3 +11,7 @@ jobs:
         run: bash bin/test/run.sh
       - name: Check manifest wiring
         run: bash bin/check-manifest.sh
+      - name: Check notifications orphan refs
+        # Guards the post-migration cleanup of the notifications domain — see
+        # scripts/check-notification-orphan-refs.sh for what it catches.
+        run: bash scripts/check-notification-orphan-refs.sh

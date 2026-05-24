@@ -412,7 +412,7 @@ describe('EscalationScheduler', () => {
       expect(escalationData.notes).toBe('Auto-escalated due to inactivity');
     });
 
-    it('should emit report.auto_escalated event', async () => {
+    it('should emit moderation:report:escalated event', async () => {
       const mockEntity = createMockReportEntity({
         id: 'report-event',
         status: ReportStatus.SUBMITTED,
@@ -439,10 +439,28 @@ describe('EscalationScheduler', () => {
 
       await scheduler.checkAndEscalate();
 
-      expect(emitSpy.calledWith('report.auto_escalated')).toBe(true);
-      const payload = emitSpy.getCall(emitSpy.callCount - 1).args[1];
-      expect(payload.report).toBeDefined();
+      expect(emitSpy.calledWith('moderation:report:escalated')).toBe(true);
+      const escalatedCall = emitSpy.getCalls().find(
+        c => c.args[0] === 'moderation:report:escalated',
+      );
+      expect(escalatedCall).toBeDefined();
+      const payload = escalatedCall!.args[1];
+      // Trimmed payload: reportId, eventId, calendarId, reason — no
+      // full Report and no reporter PII.
+      expect(payload.reportId).toBeDefined();
       expect(payload.reason).toBe('Auto-escalated due to inactivity');
+      // Audience hint: scheduler exposes the flagged event's calendarId
+      // so the notifications role resolver can address calendar-owners
+      // without re-traversing the event.
+      expect(payload).toHaveProperty('calendarId');
+      // Label hint: the eventId lets the notifications snapshot-label
+      // resolver prefer the event title
+      // with a calendar-name fallback.
+      expect(payload).toHaveProperty('eventId');
+      expect(payload).not.toHaveProperty('report');
+      expect(payload).not.toHaveProperty('reporterEmailHash');
+      expect(payload).not.toHaveProperty('reporterAccountId');
+      expect(payload).not.toHaveProperty('reporterIpHash');
     });
   });
 
@@ -549,7 +567,7 @@ describe('EscalationScheduler', () => {
       expect(data.reviewerRole).toBe('system');
     });
 
-    it('should emit report.escalation_reminder event', async () => {
+    it('should emit reportEscalationReminder event', async () => {
       const mockEntity = createMockReportEntity({
         id: 'report-reminder-event',
         status: ReportStatus.SUBMITTED,
@@ -576,8 +594,15 @@ describe('EscalationScheduler', () => {
 
       await scheduler.checkAndEscalate();
 
-      expect(emitSpy.calledWith('report.escalation_reminder')).toBe(true);
-      const payload = emitSpy.getCall(emitSpy.callCount - 1).args[1];
+      // Event name must match the listener registered in events/index.ts
+      // (`reportEscalationReminder`). The previous dot-style name
+      // `report.escalation_reminder` was a silent mismatch.
+      expect(emitSpy.calledWith('reportEscalationReminder')).toBe(true);
+      const reminderCall = emitSpy.getCalls().find(
+        c => c.args[0] === 'reportEscalationReminder',
+      );
+      expect(reminderCall).toBeDefined();
+      const payload = reminderCall!.args[1];
       expect(payload.report).toBeDefined();
     });
 
@@ -608,7 +633,7 @@ describe('EscalationScheduler', () => {
 
       // No escalation record should be created (since the reminder candidate is filtered out)
       expect(fromModelStub.called).toBe(false);
-      expect(emitSpy.calledWith('report.escalation_reminder')).toBe(false);
+      expect(emitSpy.calledWith('reportEscalationReminder')).toBe(false);
     });
   });
 
@@ -780,8 +805,8 @@ describe('EscalationScheduler', () => {
       expect(report2.update.calledOnce).toBe(true);
       expect(report3.update.calledOnce).toBe(true);
 
-      // Three auto_escalated events should be emitted
-      const autoEscalatedCalls = emitSpy.getCalls().filter(c => c.args[0] === 'report.auto_escalated');
+      // Three moderation:report:escalated events should be emitted
+      const autoEscalatedCalls = emitSpy.getCalls().filter(c => c.args[0] === 'moderation:report:escalated');
       expect(autoEscalatedCalls).toHaveLength(3);
     });
   });

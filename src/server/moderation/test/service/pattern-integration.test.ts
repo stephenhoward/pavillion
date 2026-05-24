@@ -226,10 +226,13 @@ describe('ModerationService - Pattern Detection Integration', () => {
 
       const receiveRemoteStub = sandbox.stub(service, 'receiveRemoteReport');
       receiveRemoteStub.callsFake(async (data) => {
+        // calendarId is no longer part of ReceiveRemoteReportData; the
+        // real implementation derives it from the local event lookup.
+        // Use the test-local calendarId captured in the enclosing scope.
         const report = {
           id: reportId,
           eventId: data.eventId,
-          calendarId: data.calendarId,
+          calendarId,
           category: data.category,
           description: data.description,
           reporterType: 'federation',
@@ -256,7 +259,6 @@ describe('ModerationService - Pattern Detection Integration', () => {
 
       const report = await service.receiveRemoteReport({
         eventId,
-        calendarId,
         category: ReportCategory.SPAM,
         description: 'Federated spam report',
         forwardedFromInstance: instanceUrl,

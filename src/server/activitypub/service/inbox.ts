@@ -581,7 +581,16 @@ class ProcessInboxService {
     const actorUri = message.actor;
     const domain = this.extractDomainFromActorUri(actorUri);
 
-    // Create report via ModerationInterface
+    // Create report via ModerationInterface. The actor URI is forwarded
+    // so moderation can carry it on the `moderation:report:flagged`
+    // bus payload — the notifications domain extracts the reporting
+    // instance host from it for Flag attribution (https://<host>).
+    // Notifications never stores the URI itself; the anonymizer
+    // discards everything but the derived host. The AP inbox does NOT
+    // call the notifications domain directly: trust is established
+    // upstream (HTTP signature verification, rate-limiting), the Report
+    // is created here, and moderation emits the bus event that the
+    // notifications domain subscribes to.
     try {
       const report = await this.moderationInterface.receiveRemoteReport({
         eventId: event.id,
@@ -589,6 +598,7 @@ class ProcessInboxService {
         description: message.content || '',
         forwardedFromInstance: domain,
         forwardedReportId: message.id,
+        actorUri,
       });
 
       logger.info({ reportId: report.id, eventId, domain }, '[INBOX] Created federation report');

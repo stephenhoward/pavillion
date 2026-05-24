@@ -1,13 +1,12 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
 import { useNotificationStore } from '@/client/stores/notificationStore';
-import { Notification } from '@/common/model/notification';
+import type { NotificationResponse } from '@/common/model/notification';
 
 // Use vi.hoisted() so the mock object is available when vi.mock() factory runs
 const { mockNotificationService } = vi.hoisted(() => ({
   mockNotificationService: {
     getNotifications: vi.fn(),
-    markAllSeen: vi.fn(),
   },
 }));
 
@@ -20,18 +19,27 @@ vi.mock('@/client/service/notification', async () => {
   };
 });
 
-function makeNotification(overrides: Partial<Record<string, any>> = {}): Notification {
-  return Notification.fromObject({
+function makeNotification(overrides: Partial<NotificationResponse> = {}): NotificationResponse {
+  return {
     id: 'notif-1',
-    type: 'follow',
-    calendarId: 'cal-1',
-    eventId: null,
-    actorName: 'Alice',
-    actorUrl: 'https://example.com/alice',
+    activityId: 'activity-1',
+    verb: 'Follow',
+    origin: 'federated',
+    actor: {
+      kind: 'remote_actor',
+      displayName: 'Alice',
+      displayUrl: 'https://example.com/alice',
+    },
+    object: {
+      type: 'calendar',
+      id: 'cal-1',
+      label: 'My Calendar',
+    },
     seen: false,
+    dismissed: false,
     createdAt: '2026-02-28T00:00:00.000Z',
     ...overrides,
-  });
+  };
 }
 
 describe('NotificationStore', () => {
@@ -193,7 +201,7 @@ describe('NotificationStore', () => {
       expect(mockNotificationService.getNotifications).toHaveBeenNthCalledWith(1, PAGE_SIZE, PAGE_SIZE);
 
       // After first loadMore, notifications.length is now 2 * PAGE_SIZE
-      const thirdPage: Notification[] = [];
+      const thirdPage: NotificationResponse[] = [];
       mockNotificationService.getNotifications.mockResolvedValue(thirdPage);
 
       await store.loadMore();
@@ -225,41 +233,6 @@ describe('NotificationStore', () => {
       await store.loadMore();
 
       expect(store.isLoading).toBe(false);
-    });
-  });
-
-  describe('markAllSeen action', () => {
-    it('calls service markAllSeen', async () => {
-      mockNotificationService.markAllSeen.mockResolvedValue(undefined);
-
-      await store.markAllSeen();
-
-      expect(mockNotificationService.markAllSeen).toHaveBeenCalled();
-    });
-
-    it('sets all local notifications to seen=true', async () => {
-      store.notifications = [
-        makeNotification({ id: 'notif-1', seen: false }),
-        makeNotification({ id: 'notif-2', seen: false }),
-        makeNotification({ id: 'notif-3', seen: true }),
-      ];
-      mockNotificationService.markAllSeen.mockResolvedValue(undefined);
-
-      await store.markAllSeen();
-
-      expect(store.notifications.every((n) => n.seen)).toBe(true);
-    });
-
-    it('updates unreadCount to 0 after markAllSeen', async () => {
-      store.notifications = [
-        makeNotification({ id: 'notif-1', seen: false }),
-        makeNotification({ id: 'notif-2', seen: false }),
-      ];
-      mockNotificationService.markAllSeen.mockResolvedValue(undefined);
-
-      await store.markAllSeen();
-
-      expect(store.unreadCount).toBe(0);
     });
   });
 });

@@ -12,7 +12,7 @@ const MAX_LIMIT = 100;
 const MAX_OFFSET = 10000;
 
 /**
- * Rate limiter for the GET /notifications endpoint.
+ * Rate limiter for the GET /notification endpoint.
  * Allows 10 requests per minute per authenticated user.
  * Respects the rateLimit.enabled config flag (disabled in test/e2e environments).
  */
@@ -29,16 +29,26 @@ export default class NotificationRoutes {
 
   installHandlers(app: Application, routePrefix: string): void {
     const router = express.Router();
-    router.get('/notifications', ExpressHelper.loggedInOnly, notificationsRateLimiter, this.getNotifications.bind(this));
-    router.post('/notifications/mark-all-seen', ExpressHelper.loggedInOnly, this.markAllSeen.bind(this));
+    router.get(
+      '/notification',
+      ExpressHelper.loggedInOnly,
+      notificationsRateLimiter,
+      this.getNotifications.bind(this),
+    );
     app.use(routePrefix, router);
   }
 
   /**
-   * GET /api/v1/notifications
+   * GET /api/v1/notification
    *
    * Returns paginated notifications for the authenticated user, ordered by
-   * creation date descending (most recent first).
+   * creation date descending (most recent first). The route handler clamps
+   * `limit` to `[1, MAX_LIMIT]` and `offset` to `[0, MAX_OFFSET]`, then
+   * delegates the recipient+activity query and wire-shape projection to
+   * the notifications service through the domain interface. The route
+   * handler does not import entity classes directly — that responsibility
+   * lives on the service, matching the convention used by every other
+   * domain API in the codebase.
    *
    * Query params:
    *   limit (optional): number of notifications to return (default 50, max 100)
@@ -48,10 +58,13 @@ export default class NotificationRoutes {
    *   Cache-Control: private, max-age=25
    */
   async getNotifications(req: Request, res: Response): Promise<void> {
-    const account = req.user as Account;
+    const account = req.user as Account | undefined;
 
+    // Defense-in-depth — `loggedInOnly` middleware already 401s/403s on a
+    // missing user, but explicit guard here prevents a crash if the route
+    // is ever installed without the middleware (e.g. test misconfiguration).
     if (!account) {
-      res.status(403).json({ message: 'forbidden' });
+      res.status(401).json({ error: 'not authenticated' });
       return;
     }
 
@@ -72,38 +85,13 @@ export default class NotificationRoutes {
     }
 
     try {
-      const notifications = await this.service.getNotificationsForAccount(account.id, limit, offset);
+      const notifications = await this.service.getNotifications(account.id, limit, offset);
       res.set('Cache-Control', 'private, max-age=25');
-      res.json(notifications.map(n => n.toObject()));
+      res.json(notifications);
     }
     catch (error) {
       logError(error, 'Error fetching notifications');
       res.status(500).json({ error: 'An error occurred while fetching notifications' });
-    }
-  }
-
-  /**
-   * POST /api/v1/notifications/mark-all-seen
-   *
-   * Marks all unseen notifications for the authenticated user as seen.
-   * Bodyless operation — scoped strictly by the authenticated account ID
-   * to prevent IDOR.
-   */
-  async markAllSeen(req: Request, res: Response): Promise<void> {
-    const account = req.user as Account;
-
-    if (!account) {
-      res.status(403).json({ message: 'forbidden' });
-      return;
-    }
-
-    try {
-      await this.service.markAllSeenForAccount(account.id);
-      res.json({ success: true });
-    }
-    catch (error) {
-      logError(error, 'Error marking notifications as seen');
-      res.status(500).json({ error: 'An error occurred while marking notifications as seen' });
     }
   }
 }
