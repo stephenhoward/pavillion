@@ -47,6 +47,7 @@ describe('NotificationEventHandlers', () => {
   let getInstanceAdminsStub: sinon.SinonStub;
   let getCalendarStub: sinon.SinonStub;
   let getEventByIdStub: sinon.SinonStub;
+  let getAccountByIdStub: sinon.SinonStub;
 
   beforeAll(async () => {
     await db.sync({ force: true });
@@ -81,6 +82,7 @@ describe('NotificationEventHandlers', () => {
     } as unknown as CalendarInterface;
     accountsInterface = {
       getInstanceAdmins: async (): Promise<string[]> => [],
+      getAccountById: async (_id: string): Promise<Account | undefined> => undefined,
     } as unknown as AccountsInterface;
 
     getEditorsStub = sandbox.stub(calendarInterface, 'getEditorsForCalendar');
@@ -88,6 +90,7 @@ describe('NotificationEventHandlers', () => {
     getInstanceAdminsStub = sandbox.stub(accountsInterface, 'getInstanceAdmins');
     getCalendarStub = sandbox.stub(calendarInterface, 'getCalendar');
     getEventByIdStub = sandbox.stub(calendarInterface, 'getEventById');
+    getAccountByIdStub = sandbox.stub(accountsInterface, 'getAccountById');
     // Default empty resolutions; individual tests override.
     getEditorsStub.resolves([]);
     getOwnersStub.resolves([]);
@@ -97,6 +100,9 @@ describe('NotificationEventHandlers', () => {
     // Tests that want a named label override these.
     getCalendarStub.resolves(null);
     getEventByIdStub.resolves(new CalendarEvent());
+    // Default account lookup: undefined (lookup miss). Tests that need
+    // the granting/revoking actor's display name override this.
+    getAccountByIdStub.resolves(undefined);
 
     // The notification service runs against the real DB. Inject a role
     // resolver that consults the same stubbed interfaces the handler
@@ -182,6 +188,17 @@ describe('NotificationEventHandlers', () => {
     const event = new CalendarEvent(id);
     event.addContent(new CalendarEventContent(language, name));
     return event;
+  }
+
+  /**
+   * Build an {@link Account} model with a populated displayName. Used by
+   * EditorInvited / EditorRevoked snapshot tests where the
+   * granting/revoking account's display name must reach the persisted row.
+   */
+  function makeAccount(id: string, displayName: string | null): Account {
+    const account = new Account(id, `user-${id.slice(0, 6)}`, `user-${id.slice(0, 6)}@pavillion.dev`);
+    account.displayName = displayName;
+    return account;
   }
 
   // ---------------------------------------------------------------------------
@@ -796,6 +813,74 @@ describe('NotificationEventHandlers', () => {
       });
       expect(recipients.map(r => r.account_id)).toEqual([invitee]);
     });
+
+    it('snapshots the granting account display name into actor_display_name (pv-02kb.1)', async () => {
+      // Regression coverage for pv-02kb.1: the handler must resolve the
+      // granting account via the injected AccountsInterface and pass its
+      // display_name as `actorDisplayName` to recordActivity. Without
+      // this, the persisted row carries an empty actor name and the inbox
+      // renders a grammatically broken row (" invited you to edit ...").
+      const [granter, invitee] = await seedAccounts(2, 'inv-name');
+      const calendarId = uuidv4();
+      getAccountByIdStub.withArgs(granter).resolves(makeAccount(granter, 'Test Q. User'));
+
+      await emit('calendar:editor:invited', {
+        calendarId,
+        accountId: invitee,
+        grantedBy: granter,
+      });
+
+      const activity = await NotificationActivityEntity.findOne({
+        where: { verb: 'EditorInvited', object_id: calendarId },
+      });
+      expect(activity).not.toBeNull();
+      expect(activity!.actor_display_name).toBe('Test Q. User');
+      // The handler must have looked up the granter — not the invitee or
+      // some other identifier.
+      expect(getAccountByIdStub.calledWith(granter)).toBe(true);
+    });
+
+    it('falls back to empty actor_display_name when the granting account lookup returns undefined', async () => {
+      // Deleted/missing account: the snapshot stays non-fatal. The empty
+      // string keeps the column non-null (matches the existing
+      // scrubReservedI18nPrefix fallback) and the client hides the actor
+      // span when displayName is empty.
+      const [granter, invitee] = await seedAccounts(2, 'inv-missing');
+      const calendarId = uuidv4();
+      getAccountByIdStub.withArgs(granter).resolves(undefined);
+
+      await emit('calendar:editor:invited', {
+        calendarId,
+        accountId: invitee,
+        grantedBy: granter,
+      });
+
+      const activity = await NotificationActivityEntity.findOne({
+        where: { verb: 'EditorInvited', object_id: calendarId },
+      });
+      expect(activity).not.toBeNull();
+      expect(activity!.actor_display_name).toBe('');
+    });
+
+    it('does not throw when the account interface rejects; falls back to empty actor_display_name', async () => {
+      const [granter, invitee] = await seedAccounts(2, 'inv-throw');
+      const calendarId = uuidv4();
+      getAccountByIdStub.withArgs(granter).rejects(new Error('boom'));
+
+      await emit('calendar:editor:invited', {
+        calendarId,
+        accountId: invitee,
+        grantedBy: granter,
+      });
+
+      const activity = await NotificationActivityEntity.findOne({
+        where: { verb: 'EditorInvited', object_id: calendarId },
+      });
+      // Activity is still recorded even when actor identity resolution
+      // fails. The fallback keeps notifications a true side-effect domain.
+      expect(activity).not.toBeNull();
+      expect(activity!.actor_display_name).toBe('');
+    });
   });
 
   describe('calendar:editor:revoked', () => {
@@ -821,6 +906,43 @@ describe('NotificationEventHandlers', () => {
         where: { notification_activity_id: activity!.id },
       });
       expect(recipients.map(r => r.account_id)).toEqual([revoked]);
+    });
+
+    it('snapshots the revoking account display name into actor_display_name (pv-02kb.1)', async () => {
+      const [revoker, revoked] = await seedAccounts(2, 'rev-name');
+      const calendarId = uuidv4();
+      getAccountByIdStub.withArgs(revoker).resolves(makeAccount(revoker, 'Test Q. User'));
+
+      await emit('calendar:editor:revoked', {
+        calendarId,
+        accountId: revoked,
+        revokedBy: revoker,
+      });
+
+      const activity = await NotificationActivityEntity.findOne({
+        where: { verb: 'EditorRevoked', object_id: calendarId },
+      });
+      expect(activity).not.toBeNull();
+      expect(activity!.actor_display_name).toBe('Test Q. User');
+      expect(getAccountByIdStub.calledWith(revoker)).toBe(true);
+    });
+
+    it('falls back to empty actor_display_name when the revoking account lookup returns undefined', async () => {
+      const [revoker, revoked] = await seedAccounts(2, 'rev-missing');
+      const calendarId = uuidv4();
+      getAccountByIdStub.withArgs(revoker).resolves(undefined);
+
+      await emit('calendar:editor:revoked', {
+        calendarId,
+        accountId: revoked,
+        revokedBy: revoker,
+      });
+
+      const activity = await NotificationActivityEntity.findOne({
+        where: { verb: 'EditorRevoked', object_id: calendarId },
+      });
+      expect(activity).not.toBeNull();
+      expect(activity!.actor_display_name).toBe('');
     });
   });
 

@@ -376,6 +376,47 @@ describe('Notification API — GET /api/v1/notification', () => {
       expect(row.actor.displayName).not.toBe(followerActorUri);
     });
 
+    it('surfaces actor.displayName for account-kind activities (pv-02kb.1)', async () => {
+      // Regression coverage for pv-02kb.1: an EditorInvited row produced
+      // by the handler must reach the API with a populated actor.displayName.
+      // The handler is responsible for resolving the granting account's
+      // display name; this test seeds the row directly to assert the
+      // serialization path also returns it intact (no projection drops
+      // the field for actor.kind='account').
+      const accountId = await seedAccount();
+      const granterId = uuidv4();
+      const calendarId = uuidv4();
+      const activity = await seedActivity({
+        verb: 'EditorInvited',
+        origin: 'local',
+        actor_kind: 'account',
+        actor_account_id: granterId,
+        actor_uri: null,
+        actor_display_name: 'Test Q. User',
+        actor_display_url: null,
+        object_type: 'calendar',
+        object_id: calendarId,
+        object_label: "TestUser's Calendar",
+      });
+      await seedRecipient(activity.id, accountId);
+
+      router.get('/notification', withAccount(accountId), (req, res) => {
+        routes.getNotifications(req, res);
+      });
+
+      const response = await request(testApp(router)).get('/notification');
+
+      expect(response.status).toBe(200);
+      expect(response.body).toHaveLength(1);
+      const row = response.body[0];
+      expect(row.verb).toBe('EditorInvited');
+      expect(row.actor.kind).toBe('account');
+      expect(row.actor.displayName).toBe('Test Q. User');
+      // Non-empty assertion makes the regression explicit — pv-02kb.1 was
+      // an empty-string bug, not a missing-field bug.
+      expect(row.actor.displayName.length).toBeGreaterThan(0);
+    });
+
     it('returns Cache-Control: private, max-age=25', async () => {
       const accountId = await seedAccount();
 

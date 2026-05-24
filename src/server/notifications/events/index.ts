@@ -184,6 +184,32 @@ export default class NotificationEventHandlers implements DomainEventHandlers {
   }
 
   /**
+   * Looks up an account by id and returns its display name. Returns an
+   * empty string when the account is missing, the lookup throws, or the
+   * account has no display name set.
+   *
+   * The empty fallback is intentional: the notifications service treats
+   * `actorDisplayName=''` as "no actor name" and persists it as the empty
+   * string. The render path (client `useNotificationDisplay`) hides the
+   * actor span when display name is empty, which is the same behaviour we
+   * want when the granting/revoking account has been deleted.
+   *
+   * Lookup failures are intentionally silent — notifications is a side-
+   * effect consumer and actor identity is best-effort, matching the
+   * label-resolver pattern above.
+   */
+  private async resolveAccountDisplayName(accountId: string): Promise<string> {
+    try {
+      const account = await this.accountsInterface.getAccountById(accountId);
+      return account?.displayName ?? '';
+    }
+    catch (error) {
+      logger.debug({ err: error, accountId }, 'resolveAccountDisplayName lookup failed');
+      return '';
+    }
+  }
+
+  /**
    * Resolves the snapshot label for the Flag / ReportEscalated /
    * ReportResolved family., the most
    * useful display string for a recipient is the **event title** — that's
@@ -467,14 +493,23 @@ export default class NotificationEventHandlers implements DomainEventHandlers {
    * `calendar:editor:invited` → `EditorInvited` activity addressed
    * explicitly to the invitee. The grant-issuing actor is supplied via
    * `payload.grantedBy` and recorded as `account`-kind on the activity.
+   *
+   * The granting account's display name is resolved via the injected
+   * AccountsInterface at emit time and passed as `actorDisplayName` —
+   * without it the persisted row carries an empty actor name and the
+   * inbox renders a grammatically broken sentence (pv-02kb.1).
    */
   private async handleEditorInvited(payload: EditorInvitedPayload): Promise<void> {
     try {
-      const label = await this.resolveCalendarLabel(payload.calendarId);
+      const [label, actorDisplayName] = await Promise.all([
+        this.resolveCalendarLabel(payload.calendarId),
+        this.resolveAccountDisplayName(payload.grantedBy),
+      ]);
       await this.service.recordActivity({
         verb: 'EditorInvited',
         origin: 'local',
         actor: { kind: 'account', accountId: payload.grantedBy },
+        actorDisplayName,
         object: {
           type: 'calendar',
           id: payload.calendarId,
@@ -495,14 +530,23 @@ export default class NotificationEventHandlers implements DomainEventHandlers {
    * `calendar:editor:revoked` → `EditorRevoked` activity addressed
    * explicitly to the revoked editor. The revoking actor is supplied via
    * `payload.revokedBy` and recorded as `account`-kind on the activity.
+   *
+   * The revoking account's display name is resolved via the injected
+   * AccountsInterface at emit time and passed as `actorDisplayName` —
+   * without it the persisted row carries an empty actor name and the
+   * inbox renders a grammatically broken sentence (pv-02kb.1).
    */
   private async handleEditorRevoked(payload: EditorRevokedPayload): Promise<void> {
     try {
-      const label = await this.resolveCalendarLabel(payload.calendarId);
+      const [label, actorDisplayName] = await Promise.all([
+        this.resolveCalendarLabel(payload.calendarId),
+        this.resolveAccountDisplayName(payload.revokedBy),
+      ]);
       await this.service.recordActivity({
         verb: 'EditorRevoked',
         origin: 'local',
         actor: { kind: 'account', accountId: payload.revokedBy },
+        actorDisplayName,
         object: {
           type: 'calendar',
           id: payload.calendarId,
