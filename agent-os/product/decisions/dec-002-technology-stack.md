@@ -1,7 +1,7 @@
 # DEC-002: Technology Stack Selection
 
 > Date: 2025-07-29
-> Status: Accepted
+> Status: Partially superseded by [DEC-012](dec-012-hand-rolled-activitypub-implementation.md) (2026-05-23)
 > Category: Technical
 > Stakeholders: Tech Lead, Development Team
 
@@ -44,3 +44,7 @@ Vue.js 3 provides excellent developer experience with composition API and strong
 - Runtime language performance compared to compiled alternatives
 - More complex build process with multiple compilation targets
 - Dependency management complexity in JavaScript ecosystem
+
+## Partially superseded by [DEC-012](dec-012-hand-rolled-activitypub-implementation.md) (2026-05-23)
+
+The `activitypub-express` federation library selection in the Decision section is retracted. The library was never imported by runtime code; the federation surface was built hand-rolled in `src/server/activitypub/` and the dead dependency was removed by pv-8fif.1 (PR #320). All other library selections in DEC-002 — Vue.js 3, Express.js, TypeScript, Sequelize + PostgreSQL, Vitest — remain in force.

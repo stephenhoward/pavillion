@@ -22,8 +22,9 @@ All incoming federation requests must have verified HTTP signatures:
 
 ```typescript
 // Safe: signature verified before processing
-// The activitypub-express library handles this, but verify it's configured
-// Signature verification should happen in middleware before inbox processing
+// Pavillion's federation is hand-rolled — signature verification middleware
+// lives in src/server/activitypub/middleware/ and runs before inbox handlers.
+// Verify configuration: the middleware must be wired ahead of any inbox route.
 ```
 
 ### Actor/Signer Match
@@ -155,7 +156,7 @@ if (config.get('federation.skipSignatureVerification')) {
 
 ## Known Codebase Patterns
 
-- `activitypub-express` library handles core federation protocol in `src/server/activitypub/`
+- Federation protocol is hand-rolled in `src/server/activitypub/` (no external ActivityPub library — see DEC-012)
 - HTTP signatures use `http-signature` package
 - Federation trust levels and auto-repost policies are configurable per instance
 - Blocked instance management exists in the moderation domain
