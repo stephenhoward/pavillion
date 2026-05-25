@@ -53,3 +53,34 @@ export async function emitAndSettle(
   emitter.emit(event, payload);
   await settleAsyncHandlers(opts);
 }
+
+export interface WaitForOptions {
+  /** Total time budget before giving up. Default: 2000ms. */
+  timeoutMs?: number;
+  /** Poll interval between attempts. Default: 10ms. */
+  intervalMs?: number;
+}
+
+/**
+ * Poll an async predicate until it returns truthy, or throw on timeout.
+ *
+ * Prefer this over {@link settleAsyncHandlers} when the test can express
+ * exactly what end-state it's waiting for (e.g. "the notification row
+ * exists"). Fixed-budget drains race the chain length; condition polling
+ * races the actual invariant and stays fast in the happy path.
+ */
+export async function waitFor<T>(
+  predicate: () => Promise<T> | T,
+  opts: WaitForOptions = {},
+): Promise<T> {
+  const timeoutMs = opts.timeoutMs ?? 2000;
+  const intervalMs = opts.intervalMs ?? 10;
+  const deadline = Date.now() + timeoutMs;
+  let lastResult: T | undefined;
+  while (Date.now() < deadline) {
+    lastResult = await predicate();
+    if (lastResult) return lastResult;
+    await new Promise(resolve => setTimeout(resolve, intervalMs));
+  }
+  throw new Error(`waitFor: condition not met within ${timeoutMs}ms`);
+}

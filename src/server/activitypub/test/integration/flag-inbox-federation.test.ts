@@ -47,7 +47,7 @@ import SetupInterface from '@/server/setup/interface';
 import { AccountRoleEntity } from '@/server/common/entity/account';
 import { EventEntity, EventContentEntity } from '@/server/calendar/entity/event';
 import { TestEnvironment } from '@/server/common/test/lib/test_environment';
-import { settleAsyncHandlers } from '@/server/common/test/helpers/emit-and-settle';
+import { waitFor } from '@/server/common/test/helpers/emit-and-settle';
 
 import { ActivityPubOutboxMessageEntity } from '@/server/activitypub/entity/activitypub';
 import ProcessInboxService from '@/server/activitypub/service/inbox';
@@ -200,10 +200,12 @@ describe('Federation Flag inbox — anonymization + no outbound side effect (int
 
   // The bus emit fires inside `receiveRemoteReport`, deep inside
   // `processFlagActivity`, so the handler's promise can't be awaited
-  // directly. Each `processFlagActivity` call is followed by
-  // `settleAsyncHandlers()` to drain the microtask + macrotask queues so
-  // async listeners (NotificationEventHandlers.handleReportFlagged)
-  // complete their DB writes before assertions run.
+  // directly. Each `processFlagActivity` call is followed by `waitFor`
+  // polling the actual DB row the assertions read, rather than a fixed-
+  // budget microtask/macrotask drain. Fixed drains race the chain length;
+  // condition polling races the invariant and stays fast in the happy path
+  // while surviving slow CI runners (x86 had observed flakes where the
+  // notification row appeared just after a 25ms fixed drain returned).
 
   it('inbound Flag from a remote instance records anonymized notification rows for owners + admins', async () => {
     const flagActivity = {
@@ -219,10 +221,12 @@ describe('Federation Flag inbox — anonymization + no outbound side effect (int
     };
 
     await inboxService.processFlagActivity(calendar, flagActivity);
-    await settleAsyncHandlers();
 
     // Exactly one Flag activity row should exist for this event's report.
-    const activities = await NotificationActivityEntity.findAll({ where: { verb: 'Flag' } });
+    const activities = await waitFor(async () => {
+      const rows = await NotificationActivityEntity.findAll({ where: { verb: 'Flag' } });
+      return rows.length === 1 ? rows : null;
+    });
     expect(activities, 'one Flag activity row inserted').toHaveLength(1);
 
     const activity = activities[0];
@@ -269,11 +273,13 @@ describe('Federation Flag inbox — anonymization + no outbound side effect (int
     };
 
     await inboxService.processFlagActivity(calendar, flagActivity);
-    await settleAsyncHandlers();
 
     // The notification row should have been written — proves the chain
     // executed end-to-end and the negative outbox check is not meaningless.
-    const activities = await NotificationActivityEntity.findAll({ where: { verb: 'Flag' } });
+    const activities = await waitFor(async () => {
+      const rows = await NotificationActivityEntity.findAll({ where: { verb: 'Flag' } });
+      return rows.length === 1 ? rows : null;
+    });
     expect(activities, 'notification row was written').toHaveLength(1);
 
     // Critical invariant: notifications domain must NOT side-effect outbound
