@@ -657,7 +657,7 @@ describe('NotificationService.recordActivity', () => {
       expect(recipientBulkCreateStub.firstCall.args[1].transaction).toEqual({ id: 'tx-stub' });
     });
 
-    it('opens the transaction at SERIALIZABLE isolation, async () => {
+    it('opens the transaction at SERIALIZABLE isolation', async () => {
       findOneStub.resolves(null);
       resolveRoleAudienceStub.resolves([]);
       activityCreateStub.resolves(buildActivityEntity({ id: 'new-activity' }));
