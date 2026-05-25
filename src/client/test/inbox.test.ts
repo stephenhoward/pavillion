@@ -63,6 +63,9 @@ describe('InboxView', () => {
               empty_state: 'No notifications yet',
               loading_more: 'Loading more notifications...',
               opens_in_new_tab: '(opens in new tab)',
+              dismiss_aria_label: 'Dismiss notification',
+              mark_seen_aria_label: 'Mark notification as read',
+              unread_badge: 'Unread',
             },
           },
         },
@@ -496,5 +499,122 @@ describe('InboxView', () => {
     expect(wrapper.find('a.actor-link').exists()).toBe(false);
     expect(wrapper.find('span.actor-name').exists()).toBe(false);
     expect(wrapper.find('p.notification-text').text()).toBe('A report on "Yoga in the Park" was resolved');
+  });
+
+  it('applies the unread modifier class to unseen rows and removes it for seen rows', async () => {
+    const store = useNotificationStore();
+    vi.spyOn(store, 'fetchNotifications').mockResolvedValue(undefined);
+    store.notifications = [
+      makeNotification({ id: 'n1', seen: false }),
+      makeNotification({ id: 'n2', seen: true }),
+    ];
+
+    const wrapper = mount(InboxView, {
+      global: {
+        plugins: [pinia, [I18NextVue, { i18next }]],
+      },
+    });
+
+    await wrapper.vm.$nextTick();
+    const items = wrapper.findAll('[data-testid="notification-item"]');
+    expect(items[0].classes()).toContain('notification-item--unread');
+    expect(items[1].classes()).not.toContain('notification-item--unread');
+  });
+
+  it('calls store.markSeen when an unread row is clicked', async () => {
+    const store = useNotificationStore();
+    vi.spyOn(store, 'fetchNotifications').mockResolvedValue(undefined);
+    const markSeenSpy = vi.spyOn(store, 'markSeen').mockResolvedValue(undefined);
+    store.notifications = [makeNotification({ id: 'n1', seen: false })];
+
+    const wrapper = mount(InboxView, {
+      global: {
+        plugins: [pinia, [I18NextVue, { i18next }]],
+      },
+    });
+
+    await wrapper.vm.$nextTick();
+    await wrapper.find('[data-testid="notification-item"]').trigger('click');
+
+    expect(markSeenSpy).toHaveBeenCalledWith('n1');
+  });
+
+  it('does NOT call store.markSeen when an already-seen row is clicked', async () => {
+    const store = useNotificationStore();
+    vi.spyOn(store, 'fetchNotifications').mockResolvedValue(undefined);
+    const markSeenSpy = vi.spyOn(store, 'markSeen').mockResolvedValue(undefined);
+    store.notifications = [makeNotification({ id: 'n1', seen: true })];
+
+    const wrapper = mount(InboxView, {
+      global: {
+        plugins: [pinia, [I18NextVue, { i18next }]],
+      },
+    });
+
+    await wrapper.vm.$nextTick();
+    await wrapper.find('[data-testid="notification-item"]').trigger('click');
+
+    expect(markSeenSpy).not.toHaveBeenCalled();
+  });
+
+  it('renders a dismiss button on every row with an accessible label', async () => {
+    const store = useNotificationStore();
+    vi.spyOn(store, 'fetchNotifications').mockResolvedValue(undefined);
+    store.notifications = [
+      makeNotification({ id: 'n1' }),
+      makeNotification({ id: 'n2' }),
+    ];
+
+    const wrapper = mount(InboxView, {
+      global: {
+        plugins: [pinia, [I18NextVue, { i18next }]],
+      },
+    });
+
+    await wrapper.vm.$nextTick();
+    const buttons = wrapper.findAll('[data-testid="notification-dismiss"]');
+    expect(buttons).toHaveLength(2);
+    expect(buttons[0].attributes('aria-label')).toBe('Dismiss notification');
+  });
+
+  it('calls store.markDismissed when the dismiss button is clicked', async () => {
+    const store = useNotificationStore();
+    vi.spyOn(store, 'fetchNotifications').mockResolvedValue(undefined);
+    const markDismissedSpy = vi.spyOn(store, 'markDismissed').mockResolvedValue(undefined);
+    store.notifications = [makeNotification({ id: 'n1', seen: false })];
+
+    const wrapper = mount(InboxView, {
+      global: {
+        plugins: [pinia, [I18NextVue, { i18next }]],
+      },
+    });
+
+    await wrapper.vm.$nextTick();
+    await wrapper.find('[data-testid="notification-dismiss"]').trigger('click');
+
+    expect(markDismissedSpy).toHaveBeenCalledWith('n1');
+  });
+
+  it('does NOT also trigger markSeen when the dismiss button is clicked (click.stop on the button)', async () => {
+    // Defense: the row's click handler marks seen, and the button sits
+    // inside the row. The button must call .stop so a dismiss click does
+    // not also flip the seen flag (the dismissed row is being removed
+    // anyway — the duplicate PATCH would be wasted work).
+    const store = useNotificationStore();
+    vi.spyOn(store, 'fetchNotifications').mockResolvedValue(undefined);
+    const markSeenSpy = vi.spyOn(store, 'markSeen').mockResolvedValue(undefined);
+    vi.spyOn(store, 'markDismissed').mockResolvedValue(undefined);
+    store.notifications = [makeNotification({ id: 'n1', seen: false })];
+
+    const wrapper = mount(InboxView, {
+      global: {
+        plugins: [pinia, [I18NextVue, { i18next }]],
+      },
+    });
+
+    await wrapper.vm.$nextTick();
+    await wrapper.find('[data-testid="notification-dismiss"]').trigger('click');
+
+    expect(markSeenSpy).not.toHaveBeenCalled();
   });
 });

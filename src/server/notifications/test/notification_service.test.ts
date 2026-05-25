@@ -10,6 +10,7 @@ import {
   NotificationRecipientEntity,
 } from '@/server/notifications/entity/notification_activity';
 import NotificationService from '@/server/notifications/service/notification';
+import { NotificationRecipientNotFoundError } from '@/common/exceptions/notifications';
 import type CalendarInterface from '@/server/calendar/interface';
 import type AccountsInterface from '@/server/accounts/interface';
 
@@ -939,6 +940,202 @@ describe('NotificationService.dismissForObject', () => {
         verbs: ['Flag', 'ReportEscalated'],
       }),
     ).resolves.toBeUndefined();
+  });
+});
+
+/**
+ * Unit tests for the updateRecipientState surface (pv-jehu).
+ *
+ * Asserts the per-row PATCH semantics that back the inbox seen/dismissed
+ * write path:
+ *   - Account scoping: the WHERE clause carries both `id` and `account_id`
+ *     so a recipient belonging to another account collapses into the
+ *     "no row found" branch (NotificationRecipientNotFoundError, mapped
+ *     to 404 by the route handler — no existence leak).
+ *   - Flip semantics: false→true stamps the timestamp, true→false clears it.
+ *   - Idempotency: applying the same boolean twice writes nothing.
+ *   - Body validation: rejecting an empty patch throws before any DB access.
+ */
+describe('NotificationService.updateRecipientState', () => {
+  let sandbox: sinon.SinonSandbox;
+  let service: NotificationService;
+  let recipientFindOneStub: sinon.SinonStub;
+
+  beforeEach(() => {
+    sandbox = sinon.createSandbox();
+    recipientFindOneStub = sandbox.stub(NotificationRecipientEntity, 'findOne');
+
+    service = new NotificationService(
+      {
+        calendarInterface: {} as CalendarInterface,
+        accountsInterface: {} as AccountsInterface,
+      },
+    );
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+  });
+
+  it('throws synchronously when neither seen nor dismissed is supplied', async () => {
+    await expect(
+      service.updateRecipientState(uuidv4(), uuidv4(), {}),
+    ).rejects.toThrow(/at least one of/);
+
+    // Body validation runs before any DB access.
+    expect(recipientFindOneStub.called).toBe(false);
+  });
+
+  it('throws NotificationRecipientNotFoundError when no row matches (id, accountId)', async () => {
+    recipientFindOneStub.resolves(null);
+
+    await expect(
+      service.updateRecipientState(uuidv4(), uuidv4(), { seen: true }),
+    ).rejects.toBeInstanceOf(NotificationRecipientNotFoundError);
+  });
+
+  it('scopes the lookup to BOTH id AND account_id (cross-account 404 invariant)', async () => {
+    recipientFindOneStub.resolves(null);
+
+    const accountId = uuidv4();
+    const recipientId = uuidv4();
+
+    await expect(
+      service.updateRecipientState(accountId, recipientId, { seen: true }),
+    ).rejects.toBeInstanceOf(NotificationRecipientNotFoundError);
+
+    // Critical: the account_id filter is part of the WHERE clause so the
+    // service cannot distinguish "row exists but belongs to another
+    // account" from "row does not exist". The route handler returns 404
+    // for both — this is the no-existence-leak invariant.
+    const where = recipientFindOneStub.firstCall.args[0].where;
+    expect(where.id).toBe(recipientId);
+    expect(where.account_id).toBe(accountId);
+  });
+
+  it('stamps seen_at = new Date() when flipping false → true', async () => {
+    const updateStub = sandbox.stub().resolves();
+    recipientFindOneStub.resolves({
+      seen_at: null,
+      dismissed_at: null,
+      update: updateStub,
+    });
+
+    await service.updateRecipientState(uuidv4(), uuidv4(), { seen: true });
+
+    expect(updateStub.calledOnce).toBe(true);
+    const updates = updateStub.firstCall.args[0];
+    expect(updates.seen_at).toBeInstanceOf(Date);
+    expect(updates.dismissed_at).toBeUndefined();
+  });
+
+  it('clears seen_at to null when flipping true → false', async () => {
+    const updateStub = sandbox.stub().resolves();
+    recipientFindOneStub.resolves({
+      seen_at: new Date(),
+      dismissed_at: null,
+      update: updateStub,
+    });
+
+    await service.updateRecipientState(uuidv4(), uuidv4(), { seen: false });
+
+    expect(updateStub.calledOnce).toBe(true);
+    expect(updateStub.firstCall.args[0].seen_at).toBeNull();
+  });
+
+  it('stamps dismissed_at when flipping false → true', async () => {
+    const updateStub = sandbox.stub().resolves();
+    recipientFindOneStub.resolves({
+      seen_at: null,
+      dismissed_at: null,
+      update: updateStub,
+    });
+
+    await service.updateRecipientState(uuidv4(), uuidv4(), { dismissed: true });
+
+    expect(updateStub.calledOnce).toBe(true);
+    expect(updateStub.firstCall.args[0].dismissed_at).toBeInstanceOf(Date);
+  });
+
+  it('clears dismissed_at to null when flipping true → false', async () => {
+    const updateStub = sandbox.stub().resolves();
+    recipientFindOneStub.resolves({
+      seen_at: null,
+      dismissed_at: new Date(),
+      update: updateStub,
+    });
+
+    await service.updateRecipientState(uuidv4(), uuidv4(), { dismissed: false });
+
+    expect(updateStub.calledOnce).toBe(true);
+    expect(updateStub.firstCall.args[0].dismissed_at).toBeNull();
+  });
+
+  it('is idempotent on seen: true when already seen (no UPDATE issued)', async () => {
+    const updateStub = sandbox.stub().resolves();
+    recipientFindOneStub.resolves({
+      seen_at: new Date(),
+      dismissed_at: null,
+      update: updateStub,
+    });
+
+    await service.updateRecipientState(uuidv4(), uuidv4(), { seen: true });
+
+    // No-op: derived boolean already matches the requested state.
+    expect(updateStub.called).toBe(false);
+  });
+
+  it('is idempotent on seen: false when already unseen (no UPDATE issued)', async () => {
+    const updateStub = sandbox.stub().resolves();
+    recipientFindOneStub.resolves({
+      seen_at: null,
+      dismissed_at: null,
+      update: updateStub,
+    });
+
+    await service.updateRecipientState(uuidv4(), uuidv4(), { seen: false });
+
+    expect(updateStub.called).toBe(false);
+  });
+
+  it('flips both seen and dismissed in a single UPDATE when both supplied', async () => {
+    const updateStub = sandbox.stub().resolves();
+    recipientFindOneStub.resolves({
+      seen_at: null,
+      dismissed_at: null,
+      update: updateStub,
+    });
+
+    await service.updateRecipientState(uuidv4(), uuidv4(), {
+      seen: true,
+      dismissed: true,
+    });
+
+    expect(updateStub.calledOnce).toBe(true);
+    const updates = updateStub.firstCall.args[0];
+    expect(updates.seen_at).toBeInstanceOf(Date);
+    expect(updates.dismissed_at).toBeInstanceOf(Date);
+  });
+
+  it('skips no-op fields while still applying changed ones', async () => {
+    // seen is already true (no change requested), dismissed flips false → true.
+    // Only dismissed_at lands on the UPDATE payload.
+    const updateStub = sandbox.stub().resolves();
+    recipientFindOneStub.resolves({
+      seen_at: new Date(),
+      dismissed_at: null,
+      update: updateStub,
+    });
+
+    await service.updateRecipientState(uuidv4(), uuidv4(), {
+      seen: true,
+      dismissed: true,
+    });
+
+    expect(updateStub.calledOnce).toBe(true);
+    const updates = updateStub.firstCall.args[0];
+    expect(updates.seen_at).toBeUndefined();
+    expect(updates.dismissed_at).toBeInstanceOf(Date);
   });
 });
 

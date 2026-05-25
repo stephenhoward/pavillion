@@ -17,6 +17,9 @@
         "empty_state": "",
         "mark_all_seen": "",
         "loading_more": "",
-        "opens_in_new_tab": ""
+        "opens_in_new_tab": "",
+        "dismiss_aria_label": "",
+        "mark_seen_aria_label": "",
+        "unread_badge": ""
     }
 }

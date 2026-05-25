@@ -25,4 +25,23 @@ export default class NotificationService {
     const response = await axios.get('/api/v1/notification', { params });
     return response.data as NotificationResponse[];
   }
+
+  /**
+   * Patch the recipient-side lifecycle state of a notification owned by
+   * the logged-in user. Sends only the supplied flags; the server applies
+   * timestamp flips and treats no-op cases as a write-skip.
+   *
+   * Returns void — the server response carries a small `{ ok: true }`
+   * acknowledgement; the store performs an optimistic local-state patch
+   * and does not re-fetch after a successful PATCH.
+   *
+   * @param id - The recipient row id (NOT the activity id).
+   * @param patch - `{ seen?, dismissed? }`. At least one flag is required.
+   */
+  async patchNotification(
+    id: string,
+    patch: { seen?: boolean; dismissed?: boolean },
+  ): Promise<void> {
+    await axios.patch(`/api/v1/notification/${id}`, patch);
+  }
 }

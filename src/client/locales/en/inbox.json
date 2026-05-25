@@ -17,6 +17,9 @@
         "empty_state": "No notifications yet",
         "mark_all_seen": "Mark all as read",
         "loading_more": "Loading more notifications...",
-        "opens_in_new_tab": "(opens in new tab)"
+        "opens_in_new_tab": "(opens in new tab)",
+        "dismiss_aria_label": "Dismiss notification",
+        "mark_seen_aria_label": "Mark notification as read",
+        "unread_badge": "Unread"
     }
 }

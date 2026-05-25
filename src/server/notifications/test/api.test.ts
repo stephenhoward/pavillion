@@ -934,7 +934,7 @@ describe('Notification API — GET /api/v1/notification', () => {
     });
 
     it('stamps both seen_at and dismissed_at when both flags flip in one body', async () => {
-      // . The
+      // Lifecycle allows combining flag flips in a single PATCH. The
       // service must stamp both timestamps in one save rather than serialising
       // two writes, and the route must return 200. Matches the pv-jehu
       // acceptance criterion that a dismiss can imply a seen.

@@ -7,6 +7,7 @@ import type { NotificationResponse } from '@/common/model/notification';
 const { mockNotificationService } = vi.hoisted(() => ({
   mockNotificationService: {
     getNotifications: vi.fn(),
+    patchNotification: vi.fn(),
   },
 }));
 
@@ -233,6 +234,97 @@ describe('NotificationStore', () => {
       await store.loadMore();
 
       expect(store.isLoading).toBe(false);
+    });
+  });
+
+  describe('markSeen action', () => {
+    it('PATCHes the server with seen: true and updates local state', async () => {
+      const target = makeNotification({ id: 'notif-1', seen: false });
+      store.notifications = [target];
+      mockNotificationService.patchNotification.mockResolvedValue(undefined);
+
+      await store.markSeen('notif-1');
+
+      expect(mockNotificationService.patchNotification).toHaveBeenCalledWith(
+        'notif-1',
+        { seen: true },
+      );
+      // Local state patched so unreadCount recomputes without a round-trip.
+      expect(store.notifications[0].seen).toBe(true);
+      expect(store.unreadCount).toBe(0);
+    });
+
+    it('is a no-op when the notification is already seen (no PATCH issued)', async () => {
+      store.notifications = [makeNotification({ id: 'notif-1', seen: true })];
+
+      await store.markSeen('notif-1');
+
+      expect(mockNotificationService.patchNotification).not.toHaveBeenCalled();
+    });
+
+    it('is a no-op when the notification id is unknown', async () => {
+      store.notifications = [makeNotification({ id: 'notif-1', seen: false })];
+
+      await store.markSeen('not-in-store');
+
+      expect(mockNotificationService.patchNotification).not.toHaveBeenCalled();
+    });
+
+    it('does not mutate local state when the PATCH fails', async () => {
+      store.notifications = [makeNotification({ id: 'notif-1', seen: false })];
+      mockNotificationService.patchNotification.mockRejectedValue(new Error('boom'));
+
+      await expect(store.markSeen('notif-1')).rejects.toThrow('boom');
+      // Optimistic update is NOT applied until the server confirms.
+      expect(store.notifications[0].seen).toBe(false);
+    });
+  });
+
+  describe('markDismissed action', () => {
+    it('PATCHes the server with dismissed: true and splices the row out of the list', async () => {
+      store.notifications = [
+        makeNotification({ id: 'notif-1', seen: false }),
+        makeNotification({ id: 'notif-2', seen: false }),
+      ];
+      mockNotificationService.patchNotification.mockResolvedValue(undefined);
+
+      await store.markDismissed('notif-1');
+
+      expect(mockNotificationService.patchNotification).toHaveBeenCalledWith(
+        'notif-1',
+        { dismissed: true },
+      );
+      expect(store.notifications).toHaveLength(1);
+      expect(store.notifications[0].id).toBe('notif-2');
+    });
+
+    it('updates unreadCount when an unread row is dismissed', async () => {
+      store.notifications = [
+        makeNotification({ id: 'notif-1', seen: false }),
+        makeNotification({ id: 'notif-2', seen: true }),
+      ];
+      mockNotificationService.patchNotification.mockResolvedValue(undefined);
+
+      expect(store.unreadCount).toBe(1);
+      await store.markDismissed('notif-1');
+      expect(store.unreadCount).toBe(0);
+    });
+
+    it('is a no-op when the notification id is unknown', async () => {
+      store.notifications = [makeNotification({ id: 'notif-1', seen: false })];
+
+      await store.markDismissed('not-in-store');
+
+      expect(mockNotificationService.patchNotification).not.toHaveBeenCalled();
+      expect(store.notifications).toHaveLength(1);
+    });
+
+    it('does not splice the row when the PATCH fails', async () => {
+      store.notifications = [makeNotification({ id: 'notif-1', seen: false })];
+      mockNotificationService.patchNotification.mockRejectedValue(new Error('boom'));
+
+      await expect(store.markDismissed('notif-1')).rejects.toThrow('boom');
+      expect(store.notifications).toHaveLength(1);
     });
   });
 });

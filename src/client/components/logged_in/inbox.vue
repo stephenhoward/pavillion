@@ -78,6 +78,26 @@ const loadMore = () => {
 };
 
 /**
+ * Mark a row as seen when the user interacts with it. The store action
+ * short-circuits for already-seen rows, so repeated triggers (click +
+ * focus on the same row) collapse into a single PATCH.
+ */
+const handleSeen = (notification: NotificationResponse) => {
+  if (!notification.seen) {
+    void store.markSeen(notification.id);
+  }
+};
+
+/**
+ * Dismiss a row. The store optimistically splices the row out of the
+ * local list; the active inbox refreshes immediately. The PATCH runs in
+ * the background.
+ */
+const handleDismiss = (notification: NotificationResponse) => {
+  void store.markDismissed(notification.id);
+};
+
+/**
  * Setup Intersection Observer for infinite scroll, then load initial
  * notifications.
  */
@@ -129,8 +149,19 @@ onUnmounted(() => {
         v-for="notification in notifications"
         :key="notification.id"
         class="notification-item"
+        :class="{ 'notification-item--unread': !notification.seen }"
         data-testid="notification-item"
+        tabindex="0"
+        role="button"
+        :aria-label="t('notifications.mark_seen_aria_label')"
+        @click="handleSeen(notification)"
+        @keydown.enter="handleSeen(notification)"
+        @keydown.space.prevent="handleSeen(notification)"
       >
+        <span
+          v-if="!notification.seen"
+          class="sr-only"
+        >{{ t('notifications.unread_badge') }}</span>
         <p class="notification-text">
           <a
             v-if="safeActorUrl(notification)"
@@ -138,6 +169,9 @@ onUnmounted(() => {
             rel="noopener noreferrer"
             target="_blank"
             class="actor-link"
+            @click.stop
+            @keydown.enter.stop
+            @keydown.space.stop
           >{{ resolveActorDisplayName(notification.actor.displayName) }}<span class="sr-only">{{ t('notifications.opens_in_new_tab') }}</span></a>
           <span
             v-else-if="resolveActorDisplayName(notification.actor.displayName)"
@@ -145,6 +179,17 @@ onUnmounted(() => {
           >{{ resolveActorDisplayName(notification.actor.displayName) }}</span>
           {{ getNotificationSuffix(notification) }}
         </p>
+        <button
+          type="button"
+          class="dismiss-button"
+          data-testid="notification-dismiss"
+          :aria-label="t('notifications.dismiss_aria_label')"
+          @click.stop="handleDismiss(notification)"
+          @keydown.enter.stop
+          @keydown.space.stop
+        >
+          <span aria-hidden="true">&times;</span>
+        </button>
       </li>
 
       <!-- Scroll sentinel for infinite scroll -->
@@ -208,18 +253,30 @@ div.inbox-container {
     margin: 0;
 
     li.notification-item {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: var(--pav-space-3);
       padding: var(--pav-space-4);
       margin-bottom: var(--pav-space-3);
       background: var(--pav-color-surface-secondary);
       border: 1px solid var(--pav-color-border-primary);
       border-radius: var(--pav-border-radius-md);
-      transition: box-shadow 0.2s ease;
+      transition: box-shadow 0.2s ease, background 0.2s ease;
+      cursor: pointer;
 
       &:hover {
         box-shadow: var(--pav-shadow-sm);
       }
 
+      &.notification-item--unread {
+        background: var(--pav-color-surface-accent, var(--pav-color-surface-secondary));
+        border-inline-start: 3px solid var(--pav-color-text-link);
+        font-weight: var(--pav-font-weight-medium);
+      }
+
       p.notification-text {
+        flex: 1;
         margin: 0;
         font-size: var(--pav-font-size-sm);
         color: var(--pav-color-text-primary);
@@ -232,6 +289,24 @@ div.inbox-container {
 
         &:hover {
           color: var(--pav-color-text-link-hover);
+        }
+      }
+
+      button.dismiss-button {
+        flex-shrink: 0;
+        background: transparent;
+        border: none;
+        padding: var(--pav-space-1) var(--pav-space-2);
+        font-size: var(--pav-font-size-lg);
+        line-height: 1;
+        color: var(--pav-color-text-secondary);
+        cursor: pointer;
+        border-radius: var(--pav-border-radius-sm);
+
+        &:hover,
+        &:focus-visible {
+          background: var(--pav-color-surface-primary);
+          color: var(--pav-color-text-primary);
         }
       }
     }

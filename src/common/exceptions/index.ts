@@ -9,3 +9,4 @@ export * from './series';
 export * from './funding';
 export * from './housekeeping';
 export * from './import';
+export * from './notifications';

@@ -2,6 +2,7 @@ import { type NotificationResponse } from '@/common/model/notification';
 import NotificationService, {
   type DismissForObjectInput,
   type RecordActivityInput,
+  type UpdateRecipientStateInput,
 } from '@/server/notifications/service/notification';
 
 /**
@@ -82,5 +83,24 @@ export default class NotificationsInterface {
     offset: number,
   ): Promise<NotificationResponse[]> {
     return this.service.getNotifications(accountId, limit, offset);
+  }
+
+  /**
+   * Updates the recipient-side lifecycle flags (`seen` / `dismissed`) on a
+   * single notification row owned by `accountId`. Scoped strictly to the
+   * calling account; a row belonging to another account throws
+   * `NotificationRecipientNotFoundError` (the route handler maps to 404,
+   * deliberately matching the missing-row response so the API cannot be
+   * used to probe whether a recipient id exists on the server).
+   *
+   * See `UpdateRecipientStateInput` for field semantics and the service
+   * method's docstring for flip behavior.
+   */
+  async updateRecipientState(
+    accountId: string,
+    recipientId: string,
+    input: UpdateRecipientStateInput,
+  ): Promise<void> {
+    return this.service.updateRecipientState(accountId, recipientId, input);
   }
 }

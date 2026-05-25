@@ -80,5 +80,45 @@ export const useNotificationStore = defineStore('notifications', {
         this.isLoading = false;
       }
     },
+
+    /**
+     * Mark a notification as seen on the server and patch local state so
+     * `unreadCount` recomputes. No-op when the row is already seen — the
+     * server treats the duplicate flip as a write-skip too.
+     */
+    async markSeen(id: string): Promise<void> {
+      const target = this.notifications.find((n) => n.id === id);
+      if (!target || target.seen) {
+        return;
+      }
+      try {
+        await notificationService.patchNotification(id, { seen: true });
+        target.seen = true;
+      }
+      catch (error) {
+        console.error('Error marking notification as seen:', error);
+        throw error;
+      }
+    },
+
+    /**
+     * Dismiss a notification on the server and remove it from the local
+     * list so the active inbox reflects the same active-only filter the
+     * server applies (pv-d84j.4). On error the row stays put.
+     */
+    async markDismissed(id: string): Promise<void> {
+      const index = this.notifications.findIndex((n) => n.id === id);
+      if (index === -1) {
+        return;
+      }
+      try {
+        await notificationService.patchNotification(id, { dismissed: true });
+        this.notifications.splice(index, 1);
+      }
+      catch (error) {
+        console.error('Error dismissing notification:', error);
+        throw error;
+      }
+    },
   },
 });
