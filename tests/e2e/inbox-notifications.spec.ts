@@ -136,7 +136,7 @@ test.describe('Inbox notification PATCH endpoint', () => {
 
     await page.goto(env.baseURL + '/inbox');
     // The heading is always rendered, regardless of whether any rows exist.
-    await expect(page.getByRole('heading', { name: 'Notifications' })).toBeVisible({
+    await expect(page.getByRole('heading', { name: 'Notifications', exact: true })).toBeVisible({
       timeout: 5000,
     });
   });
@@ -240,7 +240,7 @@ test.describe('Inbox notification happy path (Follow → seen → dismiss)', () 
     // carries the unread modifier class. The data-testid is stable across
     // rows; we narrow with hasText against the localized follow suffix.
     await page.goto(env.baseURL + '/inbox');
-    await expect(page.getByRole('heading', { name: 'Notifications' })).toBeVisible({
+    await expect(page.getByRole('heading', { name: 'Notifications', exact: true })).toBeVisible({
       timeout: 5000,
     });
 
