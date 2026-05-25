@@ -613,8 +613,8 @@ class NotificationService {
    * dismissals; the active inbox should not surface them. The seven-day
    * retention sweep eventually deletes dismissed rows
    * (`retention-cleanup.ts`); until then, this filter keeps them out of the
-   * default list. Per
-   * non-dismissed) no longer returns the Flag."
+   * default list — the admin inbox query (filtered to
+   * non-dismissed) no longer returns the Flag.
    *
    * Returns the wire shape directly (no entity-to-model projection in
    * between) because the read path's natural domain model IS the per-

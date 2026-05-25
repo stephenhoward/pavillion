@@ -46,6 +46,7 @@ describe('NotificationEventHandlers', () => {
   let getOwnersStub: sinon.SinonStub;
   let getInstanceAdminsStub: sinon.SinonStub;
   let getCalendarStub: sinon.SinonStub;
+  let getCalendarByNameStub: sinon.SinonStub;
   let getEventByIdStub: sinon.SinonStub;
   let getAccountByIdStub: sinon.SinonStub;
 
@@ -78,6 +79,7 @@ describe('NotificationEventHandlers', () => {
       getEditorsForCalendar: async (_calendarId: string): Promise<Account[]> => [],
       getOwnersForCalendar: async (_calendarId: string): Promise<Account[]> => [],
       getCalendar: async (_id: string): Promise<Calendar | null> => null,
+      getCalendarByName: async (_name: string): Promise<Calendar | null> => null,
       getEventById: async (_id: string): Promise<CalendarEvent> => new CalendarEvent(),
     } as unknown as CalendarInterface;
     accountsInterface = {
@@ -89,6 +91,7 @@ describe('NotificationEventHandlers', () => {
     getOwnersStub = sandbox.stub(calendarInterface, 'getOwnersForCalendar');
     getInstanceAdminsStub = sandbox.stub(accountsInterface, 'getInstanceAdmins');
     getCalendarStub = sandbox.stub(calendarInterface, 'getCalendar');
+    getCalendarByNameStub = sandbox.stub(calendarInterface, 'getCalendarByName');
     getEventByIdStub = sandbox.stub(calendarInterface, 'getEventById');
     getAccountByIdStub = sandbox.stub(accountsInterface, 'getAccountById');
     // Default empty resolutions; individual tests override.
@@ -99,6 +102,7 @@ describe('NotificationEventHandlers', () => {
     // so the handler falls back to the generic LABEL_FALLBACK_* string.
     // Tests that want a named label override these.
     getCalendarStub.resolves(null);
+    getCalendarByNameStub.resolves(null);
     getEventByIdStub.resolves(new CalendarEvent());
     // Default account lookup: undefined (lookup miss). Tests that need
     // the granting/revoking actor's display name override this.
@@ -290,6 +294,208 @@ describe('NotificationEventHandlers', () => {
         followerUrl: 'https://remote.example.com/users/alice',
       });
     });
+
+    // -------------------------------------------------------------------------
+    // Local-follow display-name resolution (pv-d84j.1)
+    //
+    // Local follows round-trip through the same instance's AP inbox, so the
+    // bus payload's `followerName` arrives as the calendar-actor URI. The
+    // handler must detect that URI shape, look up the local calendar by
+    // its urlName, and override `actor_display_name` with the calendar's
+    // display name so the inbox does not render a raw URL.
+    // -------------------------------------------------------------------------
+
+    it('resolves a local calendar-actor URL to the followed calendar display name (pv-d84j.1)', async () => {
+      const calendarId = uuidv4();
+      const followerCalendarId = uuidv4();
+      const followerUrl = 'https://pavillion.dev/calendars/community-org';
+      // The local-follow case: AP emitter pushes the calendar-actor URI as
+      // both followerName and followerUrl. The handler resolves the urlName
+      // via getCalendarByName and overrides actor_display_name.
+      getCalendarByNameStub.withArgs('community-org').resolves(
+        makeCalendar(followerCalendarId, 'en', 'Community Org'),
+      );
+
+      await emit('activitypub:calendar:followed', {
+        calendarId,
+        followerName: followerUrl,
+        followerUrl,
+      });
+
+      const activity = await NotificationActivityEntity.findOne({
+        where: { verb: 'Follow', object_id: calendarId },
+      });
+      expect(activity).not.toBeNull();
+      expect(activity!.actor_display_name).toBe('Community Org');
+      // Identity columns are unchanged — the actor is still the AP URI.
+      expect(activity!.actor_kind).toBe('remote_actor');
+      expect(activity!.actor_uri).toBe(followerUrl);
+      expect(activity!.actor_display_url).toBe(followerUrl);
+      expect(getCalendarByNameStub.calledWith('community-org')).toBe(true);
+    });
+
+    it('leaves remote-actor follows untouched (no urlName match attempts beyond pattern check)', async () => {
+      // A remote `/users/<name>` actor URI does not match the local
+      // calendar-actor pattern; the handler must not call
+      // getCalendarByName at all and the payload-supplied followerName
+      // is persisted as-is.
+      const calendarId = uuidv4();
+      await emit('activitypub:calendar:followed', {
+        calendarId,
+        followerName: 'Alice',
+        followerUrl: 'https://remote.example.com/users/alice',
+      });
+
+      const activity = await NotificationActivityEntity.findOne({
+        where: { verb: 'Follow', object_id: calendarId },
+      });
+      expect(activity).not.toBeNull();
+      expect(activity!.actor_display_name).toBe('Alice');
+      expect(getCalendarByNameStub.called).toBe(false);
+    });
+
+    it('falls back to followerName when the local calendar-actor URL does not resolve', async () => {
+      // The URI matches the local pattern but getCalendarByName misses
+      // (deleted calendar, race window, or actor URI from another
+      // instance that happens to share the path layout). The handler
+      // must not blow up; the original followerName (the URI itself,
+      // for the local-follow case) is persisted.
+      const calendarId = uuidv4();
+      const followerUrl = 'https://pavillion.dev/calendars/unknown-cal';
+      getCalendarByNameStub.withArgs('unknown-cal').resolves(null);
+
+      await emit('activitypub:calendar:followed', {
+        calendarId,
+        followerName: followerUrl,
+        followerUrl,
+      });
+
+      const activity = await NotificationActivityEntity.findOne({
+        where: { verb: 'Follow', object_id: calendarId },
+      });
+      expect(activity).not.toBeNull();
+      expect(activity!.actor_display_name).toBe(followerUrl);
+    });
+
+    it('falls back to followerName when the local calendar has no populated display name', async () => {
+      // A Calendar with only `urlName` populated and no content rows
+      // resolves to an empty displayName(); the handler treats this as
+      // a miss and keeps the original payload-supplied followerName.
+      const calendarId = uuidv4();
+      const followerUrl = 'https://pavillion.dev/calendars/nameless-cal';
+      getCalendarByNameStub.withArgs('nameless-cal').resolves(new Calendar(uuidv4()));
+
+      await emit('activitypub:calendar:followed', {
+        calendarId,
+        followerName: followerUrl,
+        followerUrl,
+      });
+
+      const activity = await NotificationActivityEntity.findOne({
+        where: { verb: 'Follow', object_id: calendarId },
+      });
+      expect(activity).not.toBeNull();
+      expect(activity!.actor_display_name).toBe(followerUrl);
+    });
+
+    it('falls back to followerName when the local calendar lookup throws', async () => {
+      // Lookup failures must never surface to the bus emitter, and the
+      // snapshot must still persist with whatever the payload supplied.
+      const calendarId = uuidv4();
+      const followerUrl = 'https://pavillion.dev/calendars/throws';
+      getCalendarByNameStub.withArgs('throws').rejects(new Error('db down'));
+
+      await emit('activitypub:calendar:followed', {
+        calendarId,
+        followerName: followerUrl,
+        followerUrl,
+      });
+
+      const activity = await NotificationActivityEntity.findOne({
+        where: { verb: 'Follow', object_id: calendarId },
+      });
+      expect(activity).not.toBeNull();
+      expect(activity!.actor_display_name).toBe(followerUrl);
+    });
+
+    it('rejects a remote-host URI whose path collides with a local urlName (impersonation guard)', async () => {
+      // Security regression: a remote actor URI
+      // `https://attacker.example/calendars/<localUrlName>` matches the
+      // path shape but the host is NOT the local instance domain. The
+      // resolver must reject the URI before any lookup runs — otherwise
+      // the snapshot's actor_display_name would be overwritten with the
+      // local calendar's display name while actor_display_url still
+      // points at the attacker's host, creating a misattribution vector.
+      const calendarId = uuidv4();
+      const followerUrl = 'https://attacker.example/calendars/community-org';
+      // If the host check is missing, the resolver would call this and
+      // overwrite the display name to 'Community Org'. The assertion
+      // below proves the lookup is never reached.
+      getCalendarByNameStub.withArgs('community-org').resolves(
+        makeCalendar(uuidv4(), 'en', 'Community Org'),
+      );
+
+      await emit('activitypub:calendar:followed', {
+        calendarId,
+        followerName: followerUrl,
+        followerUrl,
+      });
+
+      const activity = await NotificationActivityEntity.findOne({
+        where: { verb: 'Follow', object_id: calendarId },
+      });
+      expect(activity).not.toBeNull();
+      // Display name remains the raw URI — no impersonation by a remote
+      // host that happens to expose a `/calendars/<x>` path.
+      expect(activity!.actor_display_name).toBe(followerUrl);
+      expect(getCalendarByNameStub.called).toBe(false);
+    });
+
+    it('rejects an http:// URI on the local host (local actors are minted as https)', async () => {
+      // `CalendarActorService.createActor` always mints
+      // `https://${domain}/calendars/${urlName}`. An `http://` URI is
+      // therefore never a legitimate local actor — treat it as remote.
+      const calendarId = uuidv4();
+      const followerUrl = 'http://pavillion.dev/calendars/community-org';
+      getCalendarByNameStub.withArgs('community-org').resolves(
+        makeCalendar(uuidv4(), 'en', 'Community Org'),
+      );
+
+      await emit('activitypub:calendar:followed', {
+        calendarId,
+        followerName: followerUrl,
+        followerUrl,
+      });
+
+      const activity = await NotificationActivityEntity.findOne({
+        where: { verb: 'Follow', object_id: calendarId },
+      });
+      expect(activity).not.toBeNull();
+      expect(activity!.actor_display_name).toBe(followerUrl);
+      expect(getCalendarByNameStub.called).toBe(false);
+    });
+
+    it('does not throw when the actor URI is malformed', async () => {
+      // A non-parseable URI must be rejected silently — the handler
+      // wraps the bus event in a try/catch, but the resolver itself
+      // also needs to swallow `new URL()` parse failures so unrelated
+      // emission paths are not affected.
+      const calendarId = uuidv4();
+      const followerUrl = 'not a url';
+
+      await emit('activitypub:calendar:followed', {
+        calendarId,
+        followerName: followerUrl,
+        followerUrl,
+      });
+
+      const activity = await NotificationActivityEntity.findOne({
+        where: { verb: 'Follow', object_id: calendarId },
+      });
+      expect(activity).not.toBeNull();
+      expect(activity!.actor_display_name).toBe(followerUrl);
+      expect(getCalendarByNameStub.called).toBe(false);
+    });
   });
 
   // ---------------------------------------------------------------------------
@@ -333,6 +539,163 @@ describe('NotificationEventHandlers', () => {
       // The handler should ask for editors of the announced event's
       // calendar — not the event itself.
       expect(getEditorsStub.calledWith(calendarId)).toBe(true);
+    });
+
+    // -------------------------------------------------------------------------
+    // Local-repost paths (pv-d84j.2)
+    //
+    // When the reposter is a local calendar (manual share or auto-repost),
+    // the emitter passes `reposterCalendarId` and the calendar-actor URI as
+    // both reposterName and reposterUrl. The handler must:
+    //   1. Resolve the URI to the reposter's calendar display name (parallels
+    //      pv-d84j.1).
+    //   2. Subtract the reposter's editors from the source-calendar editors
+    //      so the reposter does not receive their own Announce.
+    // -------------------------------------------------------------------------
+
+    it('records an Announce for a local repost with reposter calendar display name (pv-d84j.2)', async () => {
+      const [editorA] = await seedAccounts(1, 'localrepost-editor');
+      const sourceCalendarId = uuidv4();
+      const reposterCalendarId = uuidv4();
+      const reposterUrl = 'https://pavillion.dev/calendars/reposter-cal';
+
+      // Source-calendar editors include editorA; reposter-calendar editors
+      // empty so no exclusion fires.
+      getEditorsStub.withArgs(sourceCalendarId).resolves([
+        new Account(editorA, 'editorA', 'editorA@pavillion.dev'),
+      ]);
+      getEditorsStub.withArgs(reposterCalendarId).resolves([]);
+      getCalendarByNameStub.withArgs('reposter-cal').resolves(
+        makeCalendar(reposterCalendarId, 'en', 'Reposter Calendar'),
+      );
+
+      const eventId = uuidv4();
+      await emit('activitypub:event:reposted', {
+        eventId,
+        calendarId: sourceCalendarId,
+        reposterName: reposterUrl,
+        reposterUrl,
+        reposterCalendarId,
+      });
+
+      const activity = await NotificationActivityEntity.findOne({
+        where: { verb: 'Announce', object_id: eventId },
+      });
+      expect(activity).not.toBeNull();
+      // Display name was resolved from the calendar-actor URI rather than
+      // persisted as the raw URI.
+      expect(activity!.actor_display_name).toBe('Reposter Calendar');
+      expect(activity!.actor_uri).toBe(reposterUrl);
+
+      const recipients = await NotificationRecipientEntity.findAll({
+        where: { notification_activity_id: activity!.id },
+      });
+      expect(recipients.map(r => r.account_id)).toEqual([editorA]);
+    });
+
+    it('excludes the reposting calendar editors from the source-calendar audience on local repost (pv-d84j.2)', async () => {
+      // The acceptance scenario: the reposter is an editor of the source
+      // calendar (e.g. MultiCalendarTestUser editing both calendars). The
+      // shared editor must NOT receive their own Announce notification.
+      const [sharedEditor, sourceOnlyEditor] = await seedAccounts(2, 'localrepost-overlap');
+      const sourceCalendarId = uuidv4();
+      const reposterCalendarId = uuidv4();
+      const reposterUrl = 'https://pavillion.dev/calendars/reposter-cal';
+
+      const sharedEditorAccount = new Account(sharedEditor, 'shared', 'shared@pavillion.dev');
+      const sourceOnlyAccount = new Account(sourceOnlyEditor, 'sourceonly', 'sourceonly@pavillion.dev');
+
+      // Source has both editors; reposter has only the shared editor.
+      getEditorsStub.withArgs(sourceCalendarId).resolves([sharedEditorAccount, sourceOnlyAccount]);
+      getEditorsStub.withArgs(reposterCalendarId).resolves([sharedEditorAccount]);
+
+      const eventId = uuidv4();
+      await emit('activitypub:event:reposted', {
+        eventId,
+        calendarId: sourceCalendarId,
+        reposterName: reposterUrl,
+        reposterUrl,
+        reposterCalendarId,
+      });
+
+      const activity = await NotificationActivityEntity.findOne({
+        where: { verb: 'Announce', object_id: eventId },
+      });
+      expect(activity).not.toBeNull();
+
+      const recipients = await NotificationRecipientEntity.findAll({
+        where: { notification_activity_id: activity!.id },
+      });
+      // Only the source-only editor receives the row; the shared editor
+      // (the reposter) is filtered out.
+      expect(recipients.map(r => r.account_id)).toEqual([sourceOnlyEditor]);
+    });
+
+    it('leaves federated Announces unchanged when reposterCalendarId is omitted (pv-d84j.2 regression guard)', async () => {
+      // The federated inbound path (inbox.ts:2179) does not pass
+      // reposterCalendarId — the handler must fall through to the
+      // role-based audience and never call getEditorsForCalendar twice.
+      const [editorA] = await seedAccounts(1, 'fed-repost-regression');
+      const calendarId = uuidv4();
+      const editorAccount = new Account(editorA, 'editorA', 'editorA@pavillion.dev');
+      getEditorsStub.withArgs(calendarId).resolves([editorAccount]);
+
+      const eventId = uuidv4();
+      await emit('activitypub:event:reposted', {
+        eventId,
+        calendarId,
+        reposterName: 'Bob',
+        reposterUrl: 'https://remote.example.com/users/bob',
+      });
+
+      const activity = await NotificationActivityEntity.findOne({
+        where: { verb: 'Announce', object_id: eventId },
+      });
+      expect(activity).not.toBeNull();
+      const recipients = await NotificationRecipientEntity.findAll({
+        where: { notification_activity_id: activity!.id },
+      });
+      expect(recipients.map(r => r.account_id)).toEqual([editorA]);
+      // Remote actor URI should not match the local pattern, so the
+      // payload-supplied reposterName persists unchanged.
+      expect(activity!.actor_display_name).toBe('Bob');
+      expect(getCalendarByNameStub.called).toBe(false);
+    });
+
+    it('rejects a federated Announce whose reposterUrl host is not the local instance (impersonation guard)', async () => {
+      // Security regression: an inbound federated Announce arrives with
+      // reposterUrl = `https://attacker.example/calendars/<localUrlName>`.
+      // Without the host check, the resolver would look up
+      // `localUrlName` and overwrite the snapshot's actor_display_name
+      // with the local calendar's display name — a misattribution
+      // vector identical to the Follow case.
+      const [editorA] = await seedAccounts(1, 'fed-repost-impersonation');
+      const calendarId = uuidv4();
+      const editorAccount = new Account(editorA, 'editorA', 'editorA@pavillion.dev');
+      getEditorsStub.withArgs(calendarId).resolves([editorAccount]);
+      // If the host check is missing the resolver would call this and
+      // overwrite the display name to 'Reposter Calendar'.
+      getCalendarByNameStub.withArgs('reposter-cal').resolves(
+        makeCalendar(uuidv4(), 'en', 'Reposter Calendar'),
+      );
+
+      const eventId = uuidv4();
+      const reposterUrl = 'https://attacker.example/calendars/reposter-cal';
+      await emit('activitypub:event:reposted', {
+        eventId,
+        calendarId,
+        reposterName: reposterUrl,
+        reposterUrl,
+      });
+
+      const activity = await NotificationActivityEntity.findOne({
+        where: { verb: 'Announce', object_id: eventId },
+      });
+      expect(activity).not.toBeNull();
+      // Display name must NOT be overridden to the local calendar's
+      // name — the snapshot keeps whatever the federated payload sent.
+      expect(activity!.actor_display_name).toBe(reposterUrl);
+      expect(getCalendarByNameStub.called).toBe(false);
     });
   });
 

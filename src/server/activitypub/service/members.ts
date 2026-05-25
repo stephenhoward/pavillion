@@ -439,6 +439,34 @@ class ActivityPubService {
     const event = await this.calendarService.getEventById(localEventId);
     if (event) {
       this.eventBus.emit('eventReposted', { event, calendar });
+
+      // Dual-emit for the notifications domain (pv-d84j.2). The
+      // calendar-domain event-instance pipeline subscribes to
+      // `eventReposted` with a `{event, calendar}` payload; the
+      // notifications handler subscribes to `activitypub:event:reposted`
+      // with the flat `{eventId, calendarId, reposter*}` shape used by
+      // the federated-inbound path (inbox.ts:2179). Local reposts must
+      // produce notifications on the same channel so the source-calendar
+      // editors learn about them; emitting both names keeps both
+      // subscribers happy without renaming the calendar-domain event.
+      // Gate on event.calendarId so a remote-origin event copied locally
+      // does not address a non-existent source calendar.
+      if (event.calendarId !== null) {
+        this.eventBus.emit('activitypub:event:reposted', {
+          eventId: event.id,
+          calendarId: event.calendarId,
+          // Pass the reposter's calendar-actor URI as both name and url
+          // so the notifications handler's local-actor resolver overrides
+          // the display name with the calendar's displayName (same
+          // pattern as the Follow fix in pv-d84j.1).
+          reposterName: actor,
+          reposterUrl: actor,
+          // Local-repost discriminator: the handler subtracts the
+          // reposting calendar's editors from the source-calendar
+          // editors so the reposter does not receive their own row.
+          reposterCalendarId: calendar.id,
+        });
+      }
     }
   }
 

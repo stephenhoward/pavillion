@@ -534,6 +534,115 @@ describe('ProcessInboxService - checkAndPerformAutoRepost eventReposted emission
     expect(emittedEvents[0].calendar).toBe(testCalendar);
   });
 
+  it('should dual-emit activitypub:event:reposted for auto-repost of a locally-owned event (pv-d84j.2)', async () => {
+    // Auto-repost path: a remote calendar's Announce of a locally-owned
+    // event triggers our calendar to auto-repost. The notifications
+    // emission must fire so source-calendar editors learn about the
+    // repost. Gated on event.calendarId !== null because a remote-origin
+    // event has no local source calendar to address.
+    const sourceActorUri = 'https://remote.instance/calendars/source-calendar';
+    const eventId = uuidv4();
+    const eventApId = `https://remote.instance/events/${eventId}`;
+    const sourceCalendarId = uuidv4();
+
+    const remoteCalendarActorId = uuidv4();
+    await CalendarActorEntity.create({
+      id: remoteCalendarActorId,
+      actor_type: 'remote',
+      actor_uri: sourceActorUri,
+      remote_display_name: null,
+      remote_domain: 'remote.instance',
+      calendar_id: null,
+      private_key: null,
+    });
+    await FollowingCalendarEntity.create({
+      id: uuidv4(),
+      calendar_actor_id: remoteCalendarActorId,
+      calendar_id: testCalendar.id,
+      auto_repost_originals: true,
+      auto_repost_reposts: false,
+    });
+    await EventObjectEntity.create({
+      event_id: eventId,
+      ap_id: eventApId,
+      attributed_to: sourceActorUri,
+    });
+
+    // Locally-owned event — has a real calendarId.
+    const event = new CalendarEvent(eventId, sourceCalendarId);
+    sandbox.stub(calendarInterface, 'getEventById').resolves(event);
+    sandbox.stub(calendarInterface.categoryMappingService, 'assignAutoRepostCategories').resolves();
+
+    const repostedPayloads: any[] = [];
+    eventBus.on('activitypub:event:reposted', (payload) => repostedPayloads.push(payload));
+
+    await (inboxService as any).checkAndPerformAutoRepost(
+      testCalendar, sourceActorUri, eventApId, true,
+    );
+
+    expect(repostedPayloads).toHaveLength(1);
+    const payload = repostedPayloads[0];
+    expect(payload.eventId).toBe(eventId);
+    expect(payload.calendarId).toBe(sourceCalendarId);
+    expect(payload.reposterCalendarId).toBe(testCalendar.id);
+    // Reposter URL is the local actor URL for the reposting calendar; both
+    // name and url carry it so the notifications handler's local-actor
+    // resolver overrides the display name with the calendar's displayName.
+    expect(payload.reposterUrl).toBe(payload.reposterName);
+    expect(payload.reposterUrl).toMatch(/\/calendars\//);
+  });
+
+  it('should not dual-emit activitypub:event:reposted when the auto-reposted event is remote-origin (pv-d84j.2)', async () => {
+    // Mirrors the inbox.ts:2179 gate: only fire the notifications emission
+    // for locally-owned events. Remote-origin events have no local source
+    // calendar editors to notify.
+    const sourceActorUri = 'https://remote.instance/calendars/source-calendar';
+    const eventId = uuidv4();
+    const eventApId = `https://remote.instance/events/${eventId}`;
+
+    const remoteCalendarActorId = uuidv4();
+    await CalendarActorEntity.create({
+      id: remoteCalendarActorId,
+      actor_type: 'remote',
+      actor_uri: sourceActorUri,
+      remote_display_name: null,
+      remote_domain: 'remote.instance',
+      calendar_id: null,
+      private_key: null,
+    });
+    await FollowingCalendarEntity.create({
+      id: uuidv4(),
+      calendar_actor_id: remoteCalendarActorId,
+      calendar_id: testCalendar.id,
+      auto_repost_originals: true,
+      auto_repost_reposts: false,
+    });
+    await EventObjectEntity.create({
+      event_id: eventId,
+      ap_id: eventApId,
+      attributed_to: sourceActorUri,
+    });
+
+    // Remote-origin event: calendarId is null.
+    const event = new CalendarEvent(eventId, null);
+    sandbox.stub(calendarInterface, 'getEventById').resolves(event);
+    sandbox.stub(calendarInterface.categoryMappingService, 'assignAutoRepostCategories').resolves();
+
+    const repostedPayloads: any[] = [];
+    const eventRepostedPayloads: any[] = [];
+    eventBus.on('activitypub:event:reposted', (payload) => repostedPayloads.push(payload));
+    eventBus.on('eventReposted', (payload) => eventRepostedPayloads.push(payload));
+
+    await (inboxService as any).checkAndPerformAutoRepost(
+      testCalendar, sourceActorUri, eventApId, true,
+    );
+
+    // Calendar-domain emission still fires (event-instance pipeline owns it).
+    expect(eventRepostedPayloads).toHaveLength(1);
+    // Notifications-domain emission suppressed for remote-origin events.
+    expect(repostedPayloads).toHaveLength(0);
+  });
+
   it('should not emit eventReposted when getEventById returns null', async () => {
     // Arrange
     const sourceActorUri = 'https://remote.instance/calendars/source-calendar';

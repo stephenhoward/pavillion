@@ -1,4 +1,5 @@
 import { EventEmitter } from 'events';
+import config from 'config';
 
 import { DomainEventHandlers } from '@/server/common/types/domain';
 import NotificationService, { type RecordActivityActor } from '@/server/notifications/service/notification';
@@ -43,15 +44,25 @@ export interface CalendarFollowedPayload {
 }
 
 /**
- * Payload for the existing `activitypub:event:reposted` event emitted by the
- * AP inbox after a remote actor announces a local event. `reposterUrl` is
- * the AP actor URI; nullable purely for defensive payload-construction.
+ * Payload for the `activitypub:event:reposted` event emitted on every
+ * repost path (local manual share, local auto-repost following federation,
+ * federated inbound Announce). `reposterUrl` is the AP actor URI;
+ * nullable purely for defensive payload-construction.
+ *
+ * `reposterCalendarId` is set when the repost originated from a local
+ * calendar (manual or auto). When present, the handler subtracts the
+ * reposting calendar's editors from the source calendar's editors so the
+ * reposter does not receive their own Announce notification. For purely
+ * federated reposts (a remote calendar announces our local event), this
+ * field is omitted — the source-calendar editors are addressed as a
+ * role with no exclusion.
  */
 export interface EventRepostedPayload {
   eventId: string;
   calendarId: string;
   reposterName: string;
   reposterUrl: string | null;
+  reposterCalendarId?: string;
 }
 
 /**
@@ -184,6 +195,64 @@ export default class NotificationEventHandlers implements DomainEventHandlers {
   }
 
   /**
+   * Resolves an ActivityPub actor URI to a local calendar's display name.
+   * Returns the resolved name when the URI is parseable AND the host
+   * matches the local instance's configured `domain` AND the protocol is
+   * `https:` AND the path matches `/calendars/<urlName>` AND the lookup
+   * by `urlName` finds a calendar with a populated display name; returns
+   * `null` in every other case (remote actor, wrong scheme, malformed
+   * URI, path mismatch, unknown urlName, calendar without a populated
+   * name, lookup failure).
+   *
+   * The host check is the security boundary: matching the pattern alone
+   * (`/calendars/<x>` on any host) would let a remote actor URI like
+   * `https://attacker.example/calendars/<localUrlName>` overwrite the
+   * snapshot display name with a local calendar's name while
+   * `actor_display_url` correctly stays pointing at the attacker's host
+   * — a misattribution / impersonation vector. Host comparison uses
+   * `url.host` so a configured domain that includes a port matches the
+   * way `CalendarActorService.createActor` mints local actor URIs
+   * (`https://${domain}/calendars/${urlName}`).
+   *
+   * Lookup failures are intentionally silent — notifications is a side-
+   * effect consumer and actor identity is best-effort, matching the
+   * other resolver helpers above.
+   */
+  private async resolveLocalCalendarActorDisplayName(actorUri: string): Promise<string | null> {
+    let url: URL;
+    try {
+      url = new URL(actorUri);
+    }
+    catch {
+      return null;
+    }
+    if (url.protocol !== 'https:') {
+      return null;
+    }
+    const localDomain = config.get<string>('domain');
+    if (url.host !== localDomain) {
+      return null;
+    }
+    const pathMatch = url.pathname.match(/^\/calendars\/([^/?#]+)\/?$/);
+    if (!pathMatch) {
+      return null;
+    }
+    const urlName = pathMatch[1];
+    try {
+      const calendar = await this.calendarInterface.getCalendarByName(urlName);
+      if (!calendar) {
+        return null;
+      }
+      const name = calendar.displayName('');
+      return name === '' ? null : name;
+    }
+    catch (error) {
+      logger.debug({ err: error, actorUri }, 'resolveLocalCalendarActorDisplayName lookup failed');
+      return null;
+    }
+  }
+
+  /**
    * Looks up an account by id and returns its display name. Returns an
    * empty string when the account is missing, the lookup throws, or the
    * account has no display name set.
@@ -266,20 +335,37 @@ export default class NotificationEventHandlers implements DomainEventHandlers {
 
   /**
    * `activitypub:calendar:followed` → `Follow` activity addressed to the
-   * calendar's editors. Origin is always `federated` because the AP inbox
-   * is the only emitter. The actor identity is the remote AP actor URI
-   * carried on `payload.followerUrl`.
+   * calendar's editors. The AP inbox is the only emitter and always
+   * supplies an AP actor URI on `payload.followerUrl`.
+   *
+   * Local follows round-trip through the same instance's AP inbox, so
+   * the bus payload carries the follower's calendar-actor URI verbatim
+   * (e.g. `https://<host>/calendars/<name>`). Without the local-actor
+   * resolution step below, `followerName` arrives as that raw URI and
+   * the inbox renders the URI in place of a display name (pv-d84j.1).
+   *
+   * When the URI resolves to a local calendar, the handler overrides
+   * `actorDisplayName` with the calendar's display name. `actor.kind`
+   * stays `remote_actor` because the inbox emits it that way and the
+   * notification row's actor identity remains the AP URI — only the
+   * snapshot display name is corrected. The `origin` stays `federated`
+   * for the same reason: the activity originated from the AP inbox,
+   * even when both ends live on the same instance.
    */
   private async handleCalendarFollowed(payload: CalendarFollowedPayload): Promise<void> {
     try {
       const label = await this.resolveCalendarLabel(payload.calendarId);
+      const localDisplayName = payload.followerUrl
+        ? await this.resolveLocalCalendarActorDisplayName(payload.followerUrl)
+        : null;
+      const actorDisplayName = localDisplayName ?? payload.followerName;
       await this.service.recordActivity({
         verb: 'Follow',
         origin: 'federated',
         actor: payload.followerUrl
           ? { kind: 'remote_actor', uri: payload.followerUrl }
           : { kind: 'anonymous' },
-        actorDisplayName: payload.followerName,
+        actorDisplayName,
         actorDisplayUrl: payload.followerUrl,
         object: {
           type: 'calendar',
@@ -303,28 +389,73 @@ export default class NotificationEventHandlers implements DomainEventHandlers {
    * editors of the announced event's calendar. The emitter has already
    * resolved event→calendar before emitting, so the role resolver maps
    * `calendar-editors` to the calendar editors directly.
+   *
+   * Local-repost display-name resolution (pv-d84j.2): when the reposter
+   * is a local calendar, the bus payload carries the calendar-actor URI
+   * on `reposterUrl`. Without the local-actor resolution step below the
+   * inbox renders the URI in place of a display name (same regression
+   * class as the Follow bug fixed in pv-d84j.1). When the URI resolves,
+   * the handler overrides `actorDisplayName` with the calendar's display
+   * name; `actor.kind` stays `remote_actor` because the activity still
+   * routed through the AP layer, and the snapshot's identity URI is the
+   * AP actor URL.
+   *
+   * Self-actor exclusion (pv-d84j.2): when `reposterCalendarId` is
+   * present (local repost), the handler resolves both the source-calendar
+   * editors and the reposting-calendar editors and subtracts the latter
+   * from the former before passing the audience as explicit. This avoids
+   * notifying an editor that their own calendar reposted an event they
+   * also edit on the source calendar. For federated inbound Announces
+   * (remote actor reposts our local event), `reposterCalendarId` is
+   * omitted and the role-based addressing applies unchanged.
    */
   private async handleEventReposted(payload: EventRepostedPayload): Promise<void> {
     try {
       const label = await this.resolveEventLabel(payload.eventId);
+      const localDisplayName = payload.reposterUrl
+        ? await this.resolveLocalCalendarActorDisplayName(payload.reposterUrl)
+        : null;
+      const actorDisplayName = localDisplayName ?? payload.reposterName;
+
+      // Self-actor exclusion: for local reposts subtract the reposter's
+      // editors from the source-calendar editors. Explicit audience is the
+      // only single-call shape that lets us deliver the filtered set —
+      // `audience.kind='role'` would re-resolve from scratch in the service
+      // with no exclusion hook.
+      let audience: Parameters<typeof this.service.recordActivity>[0]['audience'];
+      if (payload.reposterCalendarId) {
+        const [sourceEditors, reposterEditors] = await Promise.all([
+          this.calendarInterface.getEditorsForCalendar(payload.calendarId),
+          this.calendarInterface.getEditorsForCalendar(payload.reposterCalendarId),
+        ]);
+        const exclude = new Set(reposterEditors.map(a => a.id));
+        const recipientIds = sourceEditors
+          .map(a => a.id)
+          .filter(id => !exclude.has(id));
+        audience = { kind: 'explicit', accountIds: recipientIds };
+      }
+      else {
+        audience = {
+          kind: 'role',
+          role: 'calendar-editors',
+          objectRef: { type: 'calendar', id: payload.calendarId },
+        };
+      }
+
       await this.service.recordActivity({
         verb: 'Announce',
         origin: 'federated',
         actor: payload.reposterUrl
           ? { kind: 'remote_actor', uri: payload.reposterUrl }
           : { kind: 'anonymous' },
-        actorDisplayName: payload.reposterName,
+        actorDisplayName,
         actorDisplayUrl: payload.reposterUrl,
         object: {
           type: 'event',
           id: payload.eventId,
           label,
         },
-        audience: {
-          kind: 'role',
-          role: 'calendar-editors',
-          objectRef: { type: 'calendar', id: payload.calendarId },
-        },
+        audience,
       });
     }
     catch (error) {

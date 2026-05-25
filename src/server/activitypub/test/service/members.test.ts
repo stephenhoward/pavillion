@@ -863,6 +863,89 @@ describe("shareEvent - eventReposted emission", () => {
     expect(emittedPayloads[0].calendar).toBe(calendar);
   });
 
+  it('should dual-emit activitypub:event:reposted with the notification payload after creating a shared event (pv-d84j.2)', async () => {
+    // Local repost path must produce a notification — the calendar-domain
+    // `eventReposted` event drives event-instance pipelines, and the new
+    // `activitypub:event:reposted` event drives the notifications domain.
+    // Before pv-d84j.2 only `eventReposted` was emitted here, so source-
+    // calendar editors never learned about local reposts.
+    const account = Account.fromObject({ id: 'test-account-id' });
+    const calendar = Calendar.fromObject({ id: 'reposter-calendar-id', urlName: 'reposter-cal' });
+    const eventUrl = 'https://remote.example.com/events/event-d84j-2';
+    const localEventUuid = 'ddddeeee-ffff-0000-1111-222222222222';
+    const sourceCalendarId = 'source-calendar-id';
+    const mockEvent = CalendarEvent.fromObject({ id: localEventUuid, calendarId: sourceCalendarId });
+    const reposterActorUrl = 'https://local.example.com/calendars/reposter-cal';
+
+    sandbox.stub(service.calendarService, 'userCanModifyCalendar').resolves(true);
+    sandbox.stub(EventObjectEntity, 'findOne').resolves({
+      event_id: localEventUuid,
+      ap_id: eventUrl,
+    } as any);
+    sandbox.stub(SharedEventEntity, 'findOne').resolves(null);
+    sandbox.stub(SharedEventEntity, 'create').resolves({} as any);
+    sandbox.stub(service, 'actorUrl').resolves(reposterActorUrl);
+    sandbox.stub(service, 'addToOutbox').resolves();
+    sandbox.stub(service.calendarService, 'getEventById').resolves(mockEvent);
+
+    const repostedPayloads: any[] = [];
+    eventBus.on('activitypub:event:reposted', (payload) => {
+      repostedPayloads.push(payload);
+    });
+
+    await service.shareEvent(account, calendar, eventUrl);
+
+    expect(repostedPayloads).toHaveLength(1);
+    const payload = repostedPayloads[0];
+    expect(payload.eventId).toBe(localEventUuid);
+    expect(payload.calendarId).toBe(sourceCalendarId);
+    // Reposter's calendar-actor URL is supplied on both name and url so the
+    // notifications handler's local-actor resolver overrides the display
+    // name with the calendar's displayName (parallel to pv-d84j.1).
+    expect(payload.reposterUrl).toBe(reposterActorUrl);
+    expect(payload.reposterName).toBe(reposterActorUrl);
+    // Self-actor exclusion discriminator: present for local reposts so the
+    // notifications handler subtracts the reposting calendar's editors from
+    // the source-calendar editors.
+    expect(payload.reposterCalendarId).toBe(calendar.id);
+  });
+
+  it('should not dual-emit activitypub:event:reposted when the event has no local calendar id (remote-origin event)', async () => {
+    // A remote-origin event copied locally has calendarId === null. There
+    // is no source calendar on this instance to address, so the notification
+    // emission must be suppressed even when the event is found. The
+    // calendar-domain `eventReposted` still fires unconditionally because
+    // the event-instance pipeline operates on the reposting calendar.
+    const account = Account.fromObject({ id: 'test-account-id' });
+    const calendar = Calendar.fromObject({ id: 'reposter-calendar-id', urlName: 'reposter-cal' });
+    const eventUrl = 'https://remote.example.com/events/event-remote-origin';
+    const localEventUuid = 'eeeeffff-0000-1111-2222-333333333333';
+    const mockEvent = CalendarEvent.fromObject({ id: localEventUuid, calendarId: null });
+
+    sandbox.stub(service.calendarService, 'userCanModifyCalendar').resolves(true);
+    sandbox.stub(EventObjectEntity, 'findOne').resolves({
+      event_id: localEventUuid,
+      ap_id: eventUrl,
+    } as any);
+    sandbox.stub(SharedEventEntity, 'findOne').resolves(null);
+    sandbox.stub(SharedEventEntity, 'create').resolves({} as any);
+    sandbox.stub(service, 'actorUrl').resolves('https://local.example.com/calendars/reposter-cal');
+    sandbox.stub(service, 'addToOutbox').resolves();
+    sandbox.stub(service.calendarService, 'getEventById').resolves(mockEvent);
+
+    const repostedPayloads: any[] = [];
+    const eventRepostedPayloads: any[] = [];
+    eventBus.on('activitypub:event:reposted', (payload) => repostedPayloads.push(payload));
+    eventBus.on('eventReposted', (payload) => eventRepostedPayloads.push(payload));
+
+    await service.shareEvent(account, calendar, eventUrl);
+
+    // Calendar-domain emission still fires (event-instance pipeline needs it).
+    expect(eventRepostedPayloads).toHaveLength(1);
+    // Notifications-domain emission suppressed for remote-origin events.
+    expect(repostedPayloads).toHaveLength(0);
+  });
+
   it('should not emit eventReposted when getEventById returns null', async () => {
     const account = Account.fromObject({ id: 'test-account-id' });
     const calendar = Calendar.fromObject({ id: 'test-calendar-id', urlName: 'test-calendar' });

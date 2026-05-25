@@ -1069,6 +1069,25 @@ class ProcessInboxService {
     // is covered by sibling pv-l35p.2.
     if (event) {
       this.eventBus.emit('eventReposted', { event, calendar });
+
+      // Dual-emit for the notifications domain (pv-d84j.2). See
+      // members.ts:441 for the full rationale: the calendar-domain
+      // event-instance pipeline subscribes to `eventReposted`; the
+      // notifications handler subscribes to `activitypub:event:reposted`
+      // with a different payload shape. Only fire the notifications
+      // emission when the auto-reposted event is locally owned —
+      // `event.calendarId !== null` — because the notifications audience
+      // is the source-calendar editors. Remote-origin events have no
+      // local source calendar so no local notification is owed.
+      if (event.calendarId !== null) {
+        this.eventBus.emit('activitypub:event:reposted', {
+          eventId: event.id,
+          calendarId: event.calendarId,
+          reposterName: localActorUrl,
+          reposterUrl: localActorUrl,
+          reposterCalendarId: calendar.id,
+        });
+      }
     }
 
     logger.info({ eventApId, sourceActorUri, isOriginal }, 'Auto-reposted event');
