@@ -12,7 +12,7 @@ import EmailInterface from '@/server/email/interface';
 import AccountsInterface from '@/server/accounts/interface';
 import CalendarInterface from '@/server/calendar/interface';
 import IpCleanupService from '@/server/moderation/service/ip-cleanup';
-import NotificationService from '@/server/notifications/service/notification';
+import NotificationRetentionCleanupService from '@/server/notifications/service/retention-cleanup';
 import ActivityPubInterface from '@/server/activitypub/interface';
 import { BackupCreateError } from '@/common/exceptions/housekeeping';
 import { createLogger } from '@/server/common/helper/logger';
@@ -189,13 +189,19 @@ async function registerJobHandlers(queue: JobQueueService): Promise<void> {
     }
   });
 
-  // Notification cleanup job handler (runs daily at 4 AM)
+  // Notification retention cleanup job (runs daily at 4 AM). Two-pass
+  // delete: drop seen/dismissed recipients older than 7 days, then drop
+  // activity rows older than 90 days (FK cascade removes any remaining
+  // recipients).
+  const notificationRetentionCleanupService = new NotificationRetentionCleanupService();
   await queue.schedule('notifications:cleanup', '0 4 * * *', async () => {
     logger.info('Executing notifications:cleanup job');
     try {
-      const service = new NotificationService();
-      await service.deleteOldNotifications();
-      logger.info('Notification cleanup completed');
+      const result = await notificationRetentionCleanupService.cleanupExpiredNotifications();
+      logger.info(
+        { recipientsDeleted: result.recipientsDeleted, activitiesDeleted: result.activitiesDeleted },
+        'Notification retention cleanup completed',
+      );
     }
     catch (error) {
       logger.error({ err: error }, 'Notification cleanup failed');

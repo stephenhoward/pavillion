@@ -192,9 +192,24 @@ describe('ModerationService - Auto-Escalation', () => {
       const result = await service.checkAutoEscalation(VALID_UUID);
 
       expect(result).toBe(2);
-      expect(emitSpy.callCount).toBe(2);
-      expect(emitSpy.firstCall.args[0]).toBe('reportEscalated');
-      expect(emitSpy.secondCall.args[0]).toBe('reportEscalated');
+      // Each escalation emits both the legacy event (for the email pipeline)
+      // and the new colon-delimited bus event. Two reports => 4 total emits.
+      expect(emitSpy.callCount).toBe(4);
+      expect(emitSpy.withArgs('reportEscalated').callCount).toBe(2);
+      expect(emitSpy.withArgs('moderation:report:escalated').callCount).toBe(2);
+
+      // New bus event payload must not contain reporter PII or the full Report.
+      const busCalls = emitSpy.getCalls().filter(c => c.args[0] === 'moderation:report:escalated');
+      for (const call of busCalls) {
+        const payload = call.args[1];
+        expect(payload).not.toHaveProperty('reporterEmailHash');
+        expect(payload).not.toHaveProperty('reporterAccountId');
+        expect(payload).not.toHaveProperty('reporterIpHash');
+        expect(payload).not.toHaveProperty('reporterIpSubnet');
+        expect(payload).not.toHaveProperty('reporterIpRegion');
+        expect(payload).not.toHaveProperty('verificationToken');
+        expect(payload).not.toHaveProperty('report');
+      }
     });
 
     it('should create escalation records with correct metadata', async () => {

@@ -73,13 +73,20 @@ describe('ProcessInboxService - Flag Activity Processing', () => {
 
       await inboxService.processFlagActivity(testCalendar, flagActivity);
 
-      // Verify report was created
+      // Verify report was created. The actorUri MUST be forwarded so
+      // moderation can include it on the `moderation:report:flagged`
+      // bus payload — this is the link that lets the notifications
+      // domain stamp `https://<host>` attribution on federated Flag
+      // rows. The notifications
+      // domain itself is never called from this code path; the
+      // moderation bus event is the sole bridge.
       expect(moderationInterface.receiveRemoteReport).toHaveBeenCalledWith({
         eventId: testEvent.id,
         category: 'spam',
         description: 'This event contains spam',
         forwardedFromInstance: 'remote.instance',
         forwardedReportId: 'https://remote.instance/flags/test-flag-uuid',
+        actorUri: 'https://remote.instance/calendars/reporter-calendar',
       });
     });
 

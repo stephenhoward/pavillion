@@ -1,12 +1,12 @@
 import { defineStore } from 'pinia';
-import { Notification } from '@/common/model/notification';
 import NotificationService from '@/client/service/notification';
+import type { NotificationResponse } from '@/common/model/notification';
 
 /**
  * State interface for the notification store.
  */
 interface NotificationState {
-  notifications: Notification[];
+  notifications: NotificationResponse[];
   hasMore: boolean;
   isLoading: boolean;
 }
@@ -18,6 +18,12 @@ const notificationService = new NotificationService();
 
 /**
  * Pinia store for managing notification state and operations.
+ *
+ * The store holds the response objects from `GET /api/v1/notification`
+ * (per-recipient projections —). It does not
+ * own any write-side operations; `markAllSeen` is not part of the
+ * current API surface, so the store does not expose it. The inbox
+ * reflects unread state via the `seen` boolean on each row.
  */
 export const useNotificationStore = defineStore('notifications', {
   state: (): NotificationState => ({
@@ -76,14 +82,43 @@ export const useNotificationStore = defineStore('notifications', {
     },
 
     /**
-     * Mark all notifications as seen on the server and update local state.
+     * Mark a notification as seen on the server and patch local state so
+     * `unreadCount` recomputes. No-op when the row is already seen — the
+     * server treats the duplicate flip as a write-skip too.
      */
-    async markAllSeen(): Promise<void> {
-      await notificationService.markAllSeen();
-      this.notifications = this.notifications.map((n) => {
-        n.seen = true;
-        return n;
-      });
+    async markSeen(id: string): Promise<void> {
+      const target = this.notifications.find((n) => n.id === id);
+      if (!target || target.seen) {
+        return;
+      }
+      try {
+        await notificationService.patchNotification(id, { seen: true });
+        target.seen = true;
+      }
+      catch (error) {
+        console.error('Error marking notification as seen:', error);
+        throw error;
+      }
+    },
+
+    /**
+     * Dismiss a notification on the server and remove it from the local
+     * list so the active inbox reflects the same active-only filter the
+     * server applies (pv-d84j.4). On error the row stays put.
+     */
+    async markDismissed(id: string): Promise<void> {
+      const index = this.notifications.findIndex((n) => n.id === id);
+      if (index === -1) {
+        return;
+      }
+      try {
+        await notificationService.patchNotification(id, { dismissed: true });
+        this.notifications.splice(index, 1);
+      }
+      catch (error) {
+        console.error('Error dismissing notification:', error);
+        throw error;
+      }
     },
   },
 });

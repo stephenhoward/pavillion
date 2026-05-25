@@ -2,14 +2,24 @@
     "title": "Notifications",
     "description": "Notifications of follows and reposts",
     "noNotifications": "You have no notifications.",
+    "flag_actor_anonymous": "Anonymous reporter",
+    "flag_actor_remote": "Reporter from {{host}}",
     "notifications": {
         "follow_suffix": "followed your calendar",
         "repost_suffix": "reposted one of your events",
+        "flag_suffix": "flagged \"{{eventTitle}}\"",
+        "editor_invited_suffix": "invited you to edit \"{{calendarName}}\"",
+        "editor_revoked_suffix": "removed your editor access to \"{{calendarName}}\"",
+        "report_escalated_sentence": "A report on \"{{eventTitle}}\" was escalated",
+        "report_resolved_sentence": "A report on \"{{eventTitle}}\" was resolved",
         "follow_description": "{{actorName}} followed {{calendarName}}",
         "repost_description": "{{actorName}} reposted {{eventTitle}}",
         "empty_state": "No notifications yet",
         "mark_all_seen": "Mark all as read",
         "loading_more": "Loading more notifications...",
-        "opens_in_new_tab": "(opens in new tab)"
+        "opens_in_new_tab": "(opens in new tab)",
+        "dismiss_aria_label": "Dismiss notification",
+        "mark_seen_aria_label": "Mark notification as read",
+        "unread_badge": "Unread"
     }
 }

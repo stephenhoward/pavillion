@@ -83,6 +83,52 @@ describe('ReportEntity', () => {
       expect(entity.has_event_targeting_pattern).toBe(false);
       expect(entity.has_instance_pattern).toBe(false);
     });
+
+    it('should let Sequelize generate a UUID when the model id is empty', () => {
+      // Regression: PrimaryModel's constructor defaults `id` to '' for fresh
+      // models. fromModel must omit the id key so Sequelize applies the
+      // column's `defaultValue: DataType.UUIDV4` rather than overriding
+      // the default with an explicit empty string (pv-02kb.2).
+      const eventId = uuidv4();
+      const calendarId = uuidv4();
+
+      const model = new Report();
+      model.eventId = eventId;
+      model.calendarId = calendarId;
+      model.category = ReportCategory.SPAM;
+      model.description = 'Fresh anonymous report';
+      model.reporterEmailHash = 'hashedEmail';
+      model.reporterType = 'anonymous';
+      model.status = ReportStatus.PENDING_VERIFICATION;
+
+      expect(model.id).toBe('');
+
+      const entity = ReportEntity.fromModel(model);
+
+      // UUID v4 regex — same pattern used by ModerationService.isValidUUID
+      const UUID_V4_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+      expect(entity.id).toMatch(UUID_V4_REGEX);
+    });
+
+    it('should preserve the model id when it is already populated', () => {
+      // The defaultValue fallback path must not regress the happy path
+      // where an id is supplied (e.g. on subsequent saves or migration paths).
+      const id = uuidv4();
+      const eventId = uuidv4();
+      const calendarId = uuidv4();
+
+      const model = new Report(id);
+      model.eventId = eventId;
+      model.calendarId = calendarId;
+      model.category = ReportCategory.SPAM;
+      model.description = 'Has explicit id';
+      model.reporterType = 'authenticated';
+      model.status = ReportStatus.SUBMITTED;
+
+      const entity = ReportEntity.fromModel(model);
+
+      expect(entity.id).toBe(id);
+    });
   });
 
   describe('toModel', () => {

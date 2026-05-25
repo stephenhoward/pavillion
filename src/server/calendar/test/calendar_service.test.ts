@@ -1153,6 +1153,87 @@ describe('getEditorsForCalendar', () => {
   });
 });
 
+describe('getOwnersForCalendar', () => {
+  let sandbox: sinon.SinonSandbox;
+  let service: CalendarService;
+
+  beforeEach(() => {
+    sandbox = sinon.createSandbox();
+    service = new CalendarService();
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+  });
+
+  it('should query CalendarMemberEntity with a role="owner" filter', async () => {
+    const ownerAccountEntity = AccountEntity.fromModel(new Account('owner-id', 'owneruser', 'owner@example.com'));
+
+    const memberFindAllStub = sandbox.stub(CalendarMemberEntity, 'findAll');
+    // The DB-level role filter is the contract: only owner rows come back.
+    // The stub simulates what Sequelize would return given the documented
+    // where clause — only the owner row, not the editor row that exists in
+    // the (hypothetical) underlying table.
+    memberFindAllStub.resolves([
+      {
+        calendar_id: 'cal-id',
+        account_id: 'owner-id',
+        role: 'owner',
+        account: ownerAccountEntity,
+      } as any,
+    ]);
+
+    const result = await service.getOwnersForCalendar('cal-id');
+
+    // Argument-level assertion: query must filter to role='owner'
+    expect(memberFindAllStub.calledOnce).toBe(true);
+    const whereClause = memberFindAllStub.firstCall.args[0]?.where as Record<string, any>;
+    expect(whereClause.calendar_id).toBe('cal-id');
+    expect(whereClause.role).toBe('owner');
+
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe('owner-id');
+  });
+
+  it('should return an empty array for a calendar with no owner', async () => {
+    const memberFindAllStub = sandbox.stub(CalendarMemberEntity, 'findAll');
+    memberFindAllStub.resolves([]);
+
+    const result = await service.getOwnersForCalendar('nonexistent-cal-id');
+
+    expect(result).toHaveLength(0);
+  });
+
+  it('should exclude memberships without a local account (remote-only)', async () => {
+    const ownerAccountEntity = AccountEntity.fromModel(new Account('owner-id', 'owneruser', 'owner@example.com'));
+
+    const memberFindAllStub = sandbox.stub(CalendarMemberEntity, 'findAll');
+    // The DB-level filter `account_id != null` should keep remote-only rows
+    // out, but the post-filter guard exists for defense-in-depth. Simulate a
+    // row that slipped through with no associated account (e.g. include
+    // returned null) — the service should still drop it from the result.
+    memberFindAllStub.resolves([
+      {
+        calendar_id: 'cal-id',
+        account_id: 'owner-id',
+        role: 'owner',
+        account: ownerAccountEntity,
+      } as any,
+      {
+        calendar_id: 'cal-id',
+        account_id: null,
+        role: 'owner',
+        account: null,
+      } as any,
+    ]);
+
+    const result = await service.getOwnersForCalendar('cal-id');
+
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe('owner-id');
+  });
+});
+
 // --- updateCalendarSettings: defaultEventImageId tests ---
 describe('updateCalendarSettings - defaultEventImageId', () => {
   let sandbox: sinon.SinonSandbox;

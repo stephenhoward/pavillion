@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { EventEmitter } from 'events';
 import sinon from 'sinon';
 
 import { Account } from '@/common/model/account';
@@ -7,6 +8,7 @@ import CalendarService from '@/server/calendar/service/calendar';
 import { CalendarMemberEntity } from '@/server/calendar/entity/calendar_member';
 import { CalendarEntity } from '@/server/calendar/entity/calendar';
 import { AccountEntity } from '@/server/common/entity/account';
+import { CALENDAR_BUS_EVENTS } from '@/server/calendar/events/types';
 
 describe('CalendarService - Editor Permissions', () => {
   let sandbox: sinon.SinonSandbox = sinon.createSandbox();
@@ -255,6 +257,141 @@ describe('CalendarService - Editor Permissions', () => {
       await expect(
         service.listCalendarEditors('nonexistent-calendar'),
       ).rejects.toThrow();
+    });
+  });
+
+  describe('calendar bus events', () => {
+    let eventBus: EventEmitter;
+    let busService: CalendarService;
+
+    beforeEach(() => {
+      eventBus = new EventEmitter();
+      busService = new CalendarService(undefined, undefined, eventBus);
+    });
+
+    it('should emit calendar:editor:invited when grantEditorAccess succeeds', async () => {
+      sandbox.stub(busService, 'getCalendar').resolves(calendar);
+      sandbox.stub(busService, 'isCalendarOwner').resolves(true);
+      sandbox.stub(CalendarMemberEntity, 'create').resolves({} as any);
+
+      const emitSpy = sandbox.spy(eventBus, 'emit');
+
+      await busService.grantEditorAccess(ownerAccount, calendar.id, editorAccount.id);
+
+      expect(emitSpy.calledWith(
+        CALENDAR_BUS_EVENTS.EDITOR_INVITED,
+        sinon.match({
+          calendarId: calendar.id,
+          accountId: editorAccount.id,
+          grantedBy: ownerAccount.id,
+        }),
+      )).toBe(true);
+    });
+
+    it('should NOT emit calendar:editor:invited when grantEditorAccess fails permission check', async () => {
+      sandbox.stub(busService, 'getCalendar').resolves(calendar);
+      sandbox.stub(busService, 'isCalendarOwner').resolves(false);
+
+      const emitSpy = sandbox.spy(eventBus, 'emit');
+
+      await expect(
+        busService.grantEditorAccess(editorAccount, calendar.id, 'some-other-id'),
+      ).rejects.toThrow();
+
+      expect(emitSpy.calledWith(CALENDAR_BUS_EVENTS.EDITOR_INVITED)).toBe(false);
+    });
+
+    it('should emit calendar:editor:revoked when revokeEditorAccess succeeds', async () => {
+      sandbox.stub(busService, 'getCalendar').resolves(calendar);
+      sandbox.stub(busService, 'isCalendarOwner').resolves(true);
+      sandbox.stub(CalendarMemberEntity, 'destroy').resolves(1);
+
+      const emitSpy = sandbox.spy(eventBus, 'emit');
+
+      await busService.revokeEditorAccess(ownerAccount, calendar.id, editorAccount.id);
+
+      expect(emitSpy.calledWith(
+        CALENDAR_BUS_EVENTS.EDITOR_REVOKED,
+        sinon.match({
+          calendarId: calendar.id,
+          accountId: editorAccount.id,
+          revokedBy: ownerAccount.id,
+        }),
+      )).toBe(true);
+    });
+
+    it('should NOT emit calendar:editor:revoked when revokeEditorAccess deletes zero rows', async () => {
+      sandbox.stub(busService, 'getCalendar').resolves(calendar);
+      sandbox.stub(busService, 'isCalendarOwner').resolves(true);
+      sandbox.stub(CalendarMemberEntity, 'destroy').resolves(0);
+
+      const emitSpy = sandbox.spy(eventBus, 'emit');
+
+      await expect(
+        busService.revokeEditorAccess(ownerAccount, calendar.id, editorAccount.id),
+      ).rejects.toThrow();
+
+      expect(emitSpy.calledWith(CALENDAR_BUS_EVENTS.EDITOR_REVOKED)).toBe(false);
+    });
+
+    it('should emit calendar:editor:revoked when removeEditAccess succeeds', async () => {
+      sandbox.stub(busService, 'getCalendar').resolves(calendar);
+      // First isCalendarOwner call is for revokingAccount (owner), second for editorAccount (not owner)
+      const isOwnerStub = sandbox.stub(busService, 'isCalendarOwner');
+      isOwnerStub.withArgs(ownerAccount, calendar).resolves(true);
+      isOwnerStub.withArgs(editorAccount, calendar).resolves(false);
+      sandbox.stub(CalendarMemberEntity, 'destroy').resolves(1);
+
+      // removeEditAccess uses accountsInterface to look up the editor account.
+      // Stub it on the service via assignment to the private field.
+      (busService as any).accountsInterface = {
+        getAccountById: sandbox.stub().resolves(editorAccount),
+      };
+
+      const emitSpy = sandbox.spy(eventBus, 'emit');
+
+      await busService.removeEditAccess(ownerAccount, calendar.id, editorAccount.id);
+
+      expect(emitSpy.calledWith(
+        CALENDAR_BUS_EVENTS.EDITOR_REVOKED,
+        sinon.match({
+          calendarId: calendar.id,
+          accountId: editorAccount.id,
+          revokedBy: ownerAccount.id,
+        }),
+      )).toBe(true);
+    });
+
+    it('should NOT emit calendar:editor:revoked when removeEditAccess deletes zero rows', async () => {
+      sandbox.stub(busService, 'getCalendar').resolves(calendar);
+      const isOwnerStub = sandbox.stub(busService, 'isCalendarOwner');
+      isOwnerStub.withArgs(ownerAccount, calendar).resolves(true);
+      isOwnerStub.withArgs(editorAccount, calendar).resolves(false);
+      sandbox.stub(CalendarMemberEntity, 'destroy').resolves(0);
+
+      (busService as any).accountsInterface = {
+        getAccountById: sandbox.stub().resolves(editorAccount),
+      };
+
+      const emitSpy = sandbox.spy(eventBus, 'emit');
+
+      await expect(
+        busService.removeEditAccess(ownerAccount, calendar.id, editorAccount.id),
+      ).rejects.toThrow();
+
+      expect(emitSpy.calledWith(CALENDAR_BUS_EVENTS.EDITOR_REVOKED)).toBe(false);
+    });
+
+    it('should not throw when grantEditorAccess is called without an eventBus', async () => {
+      // Use the default service (no eventBus) — emit must be guarded so the
+      // production path doesn't depend on a configured bus.
+      sandbox.stub(service, 'getCalendar').resolves(calendar);
+      sandbox.stub(service, 'isCalendarOwner').resolves(true);
+      sandbox.stub(CalendarMemberEntity, 'create').resolves({} as any);
+
+      await expect(
+        service.grantEditorAccess(ownerAccount, calendar.id, editorAccount.id),
+      ).resolves.toBeUndefined();
     });
   });
 });

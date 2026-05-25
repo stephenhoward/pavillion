@@ -581,7 +581,16 @@ class ProcessInboxService {
     const actorUri = message.actor;
     const domain = this.extractDomainFromActorUri(actorUri);
 
-    // Create report via ModerationInterface
+    // Create report via ModerationInterface. The actor URI is forwarded
+    // so moderation can carry it on the `moderation:report:flagged`
+    // bus payload — the notifications domain extracts the reporting
+    // instance host from it for Flag attribution (https://<host>).
+    // Notifications never stores the URI itself; the anonymizer
+    // discards everything but the derived host. The AP inbox does NOT
+    // call the notifications domain directly: trust is established
+    // upstream (HTTP signature verification, rate-limiting), the Report
+    // is created here, and moderation emits the bus event that the
+    // notifications domain subscribes to.
     try {
       const report = await this.moderationInterface.receiveRemoteReport({
         eventId: event.id,
@@ -589,6 +598,7 @@ class ProcessInboxService {
         description: message.content || '',
         forwardedFromInstance: domain,
         forwardedReportId: message.id,
+        actorUri,
       });
 
       logger.info({ reportId: report.id, eventId, domain }, '[INBOX] Created federation report');
@@ -1059,6 +1069,25 @@ class ProcessInboxService {
     // is covered by sibling pv-l35p.2.
     if (event) {
       this.eventBus.emit('eventReposted', { event, calendar });
+
+      // Dual-emit for the notifications domain (pv-d84j.2). See
+      // members.ts:441 for the full rationale: the calendar-domain
+      // event-instance pipeline subscribes to `eventReposted`; the
+      // notifications handler subscribes to `activitypub:event:reposted`
+      // with a different payload shape. Only fire the notifications
+      // emission when the auto-reposted event is locally owned —
+      // `event.calendarId !== null` — because the notifications audience
+      // is the source-calendar editors. Remote-origin events have no
+      // local source calendar so no local notification is owed.
+      if (event.calendarId !== null) {
+        this.eventBus.emit('activitypub:event:reposted', {
+          eventId: event.id,
+          calendarId: event.calendarId,
+          reposterName: localActorUrl,
+          reposterUrl: localActorUrl,
+          reposterCalendarId: calendar.id,
+        });
+      }
     }
 
     logger.info({ eventApId, sourceActorUri, isOriginal }, 'Auto-reposted event');

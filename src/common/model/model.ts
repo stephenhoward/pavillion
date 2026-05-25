@@ -49,6 +49,17 @@ interface TranslatedContentModel {
   language: string;
 
   /**
+   * Optional display name for this content. Translated content that carries
+   * a human-readable label (Calendar, CalendarEvent, EventLocationSpace, …)
+   * exposes `name` here so {@link TranslatedModel.displayName} can resolve
+   * snapshot labels at emit time across the notifications and moderation
+   * domains. Content models without a name (e.g. EventLocationContent,
+   * which only translates accessibility info) omit it; displayName() then
+   * resolves through to the fallback.
+   */
+  name?: string;
+
+  /**
    * Determines if the content is empty.
    *
    * @returns {boolean} True if the content is empty
@@ -124,6 +135,33 @@ abstract class TranslatedModel<T extends TranslatedContentModel> extends Primary
    */
   getLanguages(): string[] {
     return Object.keys(this._content);
+  }
+
+  /**
+   * Resolves a single display name from the model's translated content
+   * using a deterministic language-selection convention: the first language
+   * present on the model wins; when no languages are present, the lookup
+   * falls back to `'en'`. The resolved content's `name` is returned, or
+   * the supplied `fallback` (default `''`) when the name is empty or
+   * absent.
+   *
+   * This is the snapshot-on-write helper used by the notifications and
+   * moderation domains to produce a stable, recipient-independent label
+   * for an inbox row or notification email. Per-recipient localization
+   * is intentionally not done here — the first available language wins
+   * so the snapshot is deterministic.
+   *
+   * Whitespace-only names are treated as empty so a blank-but-non-empty
+   * label can never reach an inbox snapshot row; the resolution falls
+   * through to `fallback` in that case.
+   *
+   * @param {string} [fallback] - Value to return when no populated name is found
+   * @returns {string} The resolved display name, or the fallback
+   */
+  displayName(fallback: string = ''): string {
+    const languages = this.getLanguages();
+    const language = languages.length > 0 ? languages[0] : 'en';
+    return this.content(language).name?.trim() || fallback;
   }
 };
 

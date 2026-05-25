@@ -4,7 +4,7 @@ import BackupService from '@/server/housekeeping/service/backup';
 import RetentionService from '@/server/housekeeping/service/retention';
 import AlertsService from '@/server/housekeeping/service/alerts';
 import IpCleanupService from '@/server/moderation/service/ip-cleanup';
-import NotificationService from '@/server/notifications/service/notification';
+import NotificationRetentionCleanupService from '@/server/notifications/service/retention-cleanup';
 import DiskMonitorService from '@/server/housekeeping/service/disk-monitor';
 import { BackupCreateError } from '@/common/exceptions/housekeeping';
 import { JobHandler, JobMeta } from '@/server/housekeeping/service/job-queue';
@@ -50,7 +50,13 @@ describe('Worker backup-job retry-storm alerting', () => {
 
     // Stub other handlers so registerJobHandlers can run without side effects
     sandbox.stub(IpCleanupService.prototype, 'cleanupExpiredIpData').resolves({ hashCleared: 0, subnetCleared: 0 });
-    sandbox.stub(NotificationService.prototype, 'deleteOldNotifications').resolves();
+    // The worker's notifications:cleanup handler calls
+    // NotificationRetentionCleanupService.cleanupExpiredNotifications — stub
+    // it so registerJobHandlers can register handlers without hitting the DB.
+    sandbox.stub(NotificationRetentionCleanupService.prototype, 'cleanupExpiredNotifications').resolves({
+      recipientsDeleted: 0,
+      activitiesDeleted: 0,
+    });
     sandbox.stub(DiskMonitorService.prototype, 'checkDiskUsage').resolves({
       totalBytes: 1,
       usedBytes: 0,

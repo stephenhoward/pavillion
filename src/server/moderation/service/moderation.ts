@@ -29,6 +29,7 @@ import ConfigurationInterface from '@/server/configuration/interface';
 import ActivityPubInterface from '@/server/activitypub/interface';
 import { validateActorUriProtocol } from '@/server/common/helper/uri-validation';
 import FlagActivityBuilder from '@/server/moderation/service/flag-activity-builder';
+import { MODERATION_BUS_EVENTS } from '@/server/moderation/events/types';
 import EmailBlockingService from '@/server/moderation/service/email-blocking';
 import { PatternDetectionService } from '@/server/moderation/service/pattern-detection';
 import { hashIp } from '@/server/moderation/service/ip-utils';
@@ -161,14 +162,29 @@ interface CreateAdminReportData {
 /**
  * Input data for receiving a remote report forwarded from another federated instance.
  * Federation reports bypass email verification and go directly to submitted status.
+ *
+ * `calendarId` is intentionally NOT part of this interface: the receiver
+ * derives it from the local event lookup (`event.calendarId`) inside
+ * `receiveRemoteReport`. Callers (e.g. the AP-inbox handler) must not
+ * pass a calendarId — it would be ignored anyway and conflicts with the
+ * authoritative server-side resolution.
  */
 interface ReceiveRemoteReportData {
   eventId: string;
-  calendarId: string;
   category: ReportCategory;
   description: string;
   forwardedFromInstance: string;
   forwardedReportId: string;
+  /**
+   * The federated reporter's ActivityPub actor URI from the inbound
+   * `Flag` activity. Forwarded onto the `moderation:report:flagged`
+   * bus event so the notifications domain can attribute the Flag to
+   * the reporting instance (`https://<host>`)
+   * anonymization. Optional for callers that have no actor context
+   * (e.g. legacy paths); when present it must be the raw URI string
+   * supplied on the AP activity.
+   */
+  actorUri?: string;
 }
 
 /**
@@ -667,6 +683,19 @@ class ModerationService {
       report: createdReport,
       reporterEmail: data.reporterEmail,
     });
+    // Emit cross-domain bus event for notifications.
+    // Anonymous reports in PENDING_VERIFICATION should NOT trigger a Flag
+    // activity record yet — they have not been confirmed by the reporter.
+    // verifyReport() will emit moderation:report:flagged when the user
+    // clicks the verification link.
+    if (createdReport.status === ReportStatus.SUBMITTED) {
+      this.emit(MODERATION_BUS_EVENTS.REPORT_FLAGGED, {
+        reportId: createdReport.id,
+        eventId: createdReport.eventId,
+        calendarId: createdReport.calendarId,
+        origin: 'local',
+      });
+    }
 
     return createdReport;
   }
@@ -1098,6 +1127,15 @@ class ModerationService {
     const report = entity.toModel();
 
     this.emit('reportVerified', { report });
+    // Emit cross-domain bus event for notifications. The verification
+    // step is when an anonymous report becomes "real" — that is the
+    // moment to record a Flag activity for notification recipients.
+    this.emit(MODERATION_BUS_EVENTS.REPORT_FLAGGED, {
+      reportId: report.id,
+      eventId: report.eventId,
+      calendarId: report.calendarId,
+      origin: 'local',
+    });
 
     return report;
   }
@@ -1146,6 +1184,12 @@ class ModerationService {
     const report = entity.toModel();
 
     this.emit('reportResolved', { report, reviewerId });
+    this.emit(MODERATION_BUS_EVENTS.REPORT_RESOLVED, {
+      reportId: report.id,
+      eventId: report.eventId,
+      calendarId: report.calendarId,
+      reviewerId,
+    });
 
     return report;
   }
@@ -1196,6 +1240,12 @@ class ModerationService {
     const report = entity.toModel();
 
     this.emit('reportEscalated', { report, reason: notes });
+    this.emit(MODERATION_BUS_EVENTS.REPORT_ESCALATED, {
+      reportId: report.id,
+      eventId: report.eventId,
+      calendarId: report.calendarId,
+      reason: notes,
+    });
 
     return report;
   }
@@ -1239,6 +1289,12 @@ class ModerationService {
     const report = entity.toModel();
 
     this.emit('reportEscalated', { report, reason });
+    this.emit(MODERATION_BUS_EVENTS.REPORT_ESCALATED, {
+      reportId: report.id,
+      eventId: report.eventId,
+      calendarId: report.calendarId,
+      reason,
+    });
 
     return report;
   }
@@ -1286,6 +1342,12 @@ class ModerationService {
     const report = entity.toModel();
 
     this.emit('reportResolved', { report, reviewerId: adminId });
+    this.emit(MODERATION_BUS_EVENTS.REPORT_RESOLVED, {
+      reportId: report.id,
+      eventId: report.eventId,
+      calendarId: report.calendarId,
+      reviewerId: adminId,
+    });
 
     return report;
   }
@@ -1335,6 +1397,17 @@ class ModerationService {
     const report = entity.toModel();
 
     this.emit('reportDismissed', { report, reviewerId: adminId });
+    // DISMISSED is semantically equivalent to RESOLVED for inbox-cleanup
+    // purposes — emit REPORT_RESOLVED so the notifications handler closes
+    // prior Flag / ReportEscalated recipient rows. dismissForObject is
+    // idempotent on `WHERE dismissed_at IS NULL`, so any future over-
+    // emission of REPORT_RESOLVED from another terminal path is harmless.
+    this.emit(MODERATION_BUS_EVENTS.REPORT_RESOLVED, {
+      reportId: report.id,
+      eventId: report.eventId,
+      calendarId: report.calendarId,
+      reviewerId: adminId,
+    });
 
     return report;
   }
@@ -1381,6 +1454,16 @@ class ModerationService {
     const report = entity.toModel();
 
     this.emit('reportOverridden', { report, reviewerId: adminId });
+    // Admin override always terminates with status=RESOLVED — emit the
+    // bus event so the notifications handler closes prior Flag /
+    // ReportEscalated recipient rows. See `adminDismissReport` for the
+    // idempotency note covering future over-emission.
+    this.emit(MODERATION_BUS_EVENTS.REPORT_RESOLVED, {
+      reportId: report.id,
+      eventId: report.eventId,
+      calendarId: report.calendarId,
+      reviewerId: adminId,
+    });
 
     return report;
   }
@@ -1593,9 +1676,16 @@ class ModerationService {
 
       // Emit domain event
       const report = entity.toModel();
+      const reason = `Auto-escalated: event exceeded report threshold of ${threshold}`;
       this.emit('reportEscalated', {
         report,
-        reason: `Auto-escalated: event exceeded report threshold of ${threshold}`,
+        reason,
+      });
+      this.emit(MODERATION_BUS_EVENTS.REPORT_ESCALATED, {
+        reportId: report.id,
+        eventId: report.eventId,
+        calendarId: report.calendarId,
+        reason,
       });
 
       escalatedCount++;
@@ -1869,6 +1959,19 @@ class ModerationService {
     await this.detectAndSetPatternFlagsForFederation(createdReport);
     // Emit domain event for notification
     this.emit('reportReceived', { report: createdReport });
+    // Emit cross-domain bus event for notifications. Federated reports
+    // share the same recordActivity verb (`Flag`) as local reports; the
+    // `origin` field discriminates downstream.
+    // The federated actor URI is forwarded so the Flag anonymizer can
+    // derive the reporting instance's `https://<host>` display URL.
+    // The URI itself is never stored on the notification activity row.
+    this.emit(MODERATION_BUS_EVENTS.REPORT_FLAGGED, {
+      reportId: createdReport.id,
+      eventId: createdReport.eventId,
+      calendarId: createdReport.calendarId,
+      origin: 'federated',
+      actorUri: data.actorUri,
+    });
     return createdReport;
   }
 

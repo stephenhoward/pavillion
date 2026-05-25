@@ -1,5 +1,6 @@
 import axios from 'axios';
-import { Notification } from '@/common/model/notification';
+
+import { type NotificationResponse } from '@/common/model/notification';
 
 /**
  * Client service for notification API endpoints.
@@ -11,9 +12,9 @@ export default class NotificationService {
    *
    * @param limit - Maximum number of notifications to return (default 50, max 100)
    * @param offset - Number of notifications to skip (default 0)
-   * @returns Promise resolving to an array of Notification instances
+   * @returns Promise resolving to an array of `NotificationResponse`.
    */
-  async getNotifications(limit?: number, offset?: number): Promise<Notification[]> {
+  async getNotifications(limit?: number, offset?: number): Promise<NotificationResponse[]> {
     const params: Record<string, number> = {};
     if (limit !== undefined) {
       params.limit = limit;
@@ -21,16 +22,26 @@ export default class NotificationService {
     if (offset !== undefined) {
       params.offset = offset;
     }
-    const response = await axios.get('/api/v1/notifications', { params });
-    return response.data.map((item: Record<string, any>) => Notification.fromObject(item));
+    const response = await axios.get('/api/v1/notification', { params });
+    return response.data as NotificationResponse[];
   }
 
   /**
-   * Mark all notifications for the logged-in user as seen.
+   * Patch the recipient-side lifecycle state of a notification owned by
+   * the logged-in user. Sends only the supplied flags; the server applies
+   * timestamp flips and treats no-op cases as a write-skip.
    *
-   * @returns Promise that resolves when the operation is complete
+   * Returns void — the server response carries a small `{ ok: true }`
+   * acknowledgement; the store performs an optimistic local-state patch
+   * and does not re-fetch after a successful PATCH.
+   *
+   * @param id - The recipient row id (NOT the activity id).
+   * @param patch - `{ seen?, dismissed? }`. At least one flag is required.
    */
-  async markAllSeen(): Promise<void> {
-    await axios.post('/api/v1/notifications/mark-all-seen');
+  async patchNotification(
+    id: string,
+    patch: { seen?: boolean; dismissed?: boolean },
+  ): Promise<void> {
+    await axios.patch(`/api/v1/notification/${id}`, patch);
   }
 }

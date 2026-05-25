@@ -325,8 +325,8 @@ const initPavillionServer = async (app: express.Application, port: number): Prom
   // Wire AP interface into calendar domain for cross-domain queries
   calendarDomain.interface.setActivityPubInterface(activityPubDomain.interface);
 
-  // Initialize Notifications domain after ActivityPub (depends on CalendarInterface)
-  new NotificationsDomain(eventBus, calendarDomain.interface).initialize(app);
+  // Initialize Notifications domain after ActivityPub (depends on CalendarInterface and AccountsInterface for role resolution)
+  new NotificationsDomain(eventBus, calendarDomain.interface, accountsDomain.interface).initialize(app);
 
   // Set up CalendarInterface on AccountsInterface to enable calendar editor invitation acceptance
   // TODO: move invites into a separate domain to avoid circular dependency
