@@ -27,7 +27,9 @@
         "role_editor": "Editor",
         "aria_navigate_calendar": "Navigate to calendar: {{calendarName}}, role: {{role}}",
         "aria_view_public_calendar": "View public calendar: {{name}} (opens in new tab)",
-        "error_loading_calendars": "Failed to load calendars"
+        "error_loading_calendars": "Failed to load calendars",
+        "menu_label": "Calendar list actions",
+        "documentation": "Documentation"
     },
     "selector": {
         "select_calendar_title": "Select Calendar",
@@ -51,6 +53,8 @@
         "view_public_calendar_label": "View public calendar: {{name}} (opens in new tab)",
         "manage_calendar": "Manage Calendar",
         "manage_calendar_label": "Manage calendar: {{name}}",
+        "menu_label": "Calendar actions",
+        "documentation": "Documentation",
         "events_section_label": "Calendar Events",
         "events_heading": "Calendar Events",
         "loading_events": "Loading events...",
