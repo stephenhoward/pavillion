@@ -5,7 +5,7 @@ description: Dynamically pick the right advisor, auditor, or verifier agent for 
 
 # Agent Discovery
 
-This skill governs how the orchestrator commands (`/process-backlog`, `/spawn-bead-workers`, `/shape-spec`, `/shape-bead`, and any future review runner) find the right advisor, auditor, or verifier for a given context. It converts two inputs — a **role** (`advisor` / `auditor`) and a **work context** (bead content or git diff) — into a list of subagents to invoke, using LLM judgment rather than a mechanical tag table.
+This skill governs how the orchestrator commands (`/process-backlog`, `/spawn-bead-workers`, `/plan`, and any future review runner) find the right advisor, auditor, or verifier for a given context. It converts two inputs — a **role** (`advisor` / `auditor`) and a **work context** (bead content or git diff) — into a list of subagents to invoke, using LLM judgment rather than a mechanical tag table.
 
 ## Two-stage process
 
@@ -116,7 +116,7 @@ No code changes required — the selector reads the description at dispatch time
 
 - `/process-backlog` — invokes `selectAdvisors` at planning checkpoints (Phase 3.5 post-shape, Phase 5.5 post-analyze) and `selectAuditors` at the per-bead review stage (Phase 7).
 - `/spawn-bead-workers` — invokes `selectAuditors` after each bead's implementer reports complete.
-- `/shape-spec`, `/shape-bead` — invoke `selectAdvisors` after the bead is shaped, before handing back to the user.
+- `/plan` — invokes `selectAdvisors` in its ADVISE phase, after fields are drafted and before the bead-write gate.
 
 ## Tests
 

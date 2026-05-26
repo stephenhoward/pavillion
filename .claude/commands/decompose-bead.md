@@ -4,7 +4,7 @@ Break a shaped bead into an epic/bead hierarchy with proper sizing and dependenc
 
 ## Overview
 
-This command takes a bead with populated fields (from `/shape-bead`) and creates a hierarchy:
+This command takes a bead with populated fields (from `/plan`'s DRAFT phase) and creates a hierarchy:
 - **Epic** — The original bead, promoted to epic type
 - **Children** — Major work areas or features
 - **Leaves** — Agent-sized tasks (30-60 min work, no compaction risk)
@@ -51,7 +51,7 @@ Bead <bead-id> is missing structured content needed for decomposition:
 - [x] Design: [present/missing]
 - [x] Acceptance: [present/missing]
 
-Run `/shape-bead <bead-id>` first to fill these fields, then come back to decompose.
+Run `/plan <bead-id>` first to fill these fields, then come back to decompose.
 ```
 
 **If the bead has the `shaped` label**, proceed with confidence.
@@ -59,10 +59,10 @@ Run `/shape-bead <bead-id>` first to fill these fields, then come back to decomp
 **If the bead lacks the `shaped` label but has content**, ask the user:
 
 ```
-This bead hasn't been through /shape-bead but has some content. Should I:
+This bead hasn't been through /plan but has some content. Should I:
 
 1. Proceed with decomposition using existing content
-2. Run /shape-bead first to fill any gaps
+2. Run /plan first to fill any gaps
 ```
 
 ### PHASE 2: Analyze Content
@@ -225,7 +225,7 @@ Output summary to user:
 ## Bead Decomposition Complete
 
 **Epic:** <bead-id> - [Title]
-**Source:** Bead fields (shaped via /shape-bead)
+**Source:** Bead fields (shaped via /plan)
 
 ### Hierarchy
 
@@ -266,7 +266,7 @@ Which approach fits?
 
 For beads with many work areas:
 - Create one epic with multiple children
-- Or suggest splitting into separate beads first, each getting their own `/shape-bead` + `/decompose-bead` cycle
+- Or suggest splitting into separate beads first, each getting their own `/plan` + `/decompose-bead` cycle
 
 ### Handling Unclear Scope
 
@@ -276,16 +276,6 @@ If a task's scope is unclear, create it as a child (not leaf) with a note:
 
 ⚠️ SCOPE TBD: This bead may need further decomposition once implementation begins. If it proves too large, split into leaves before starting work."
 ```
-
-## Comparison with /decompose-spec
-
-| Aspect | /decompose-spec | /decompose-bead |
-|--------|----------------|-----------------|
-| **Input** | spec.md + requirements files | Bead description, design, acceptance fields |
-| **Epic creation** | Creates new epic, links to spec | Promotes existing bead to epic |
-| **Content source** | Reads agent-os/specs/ folder | Reads bead structured fields |
-| **Downstream** | Same: /analyze-bead -> /spawn-bead-workers | Same: /analyze-bead -> /spawn-bead-workers |
-| **Best for** | Large features needing full spec documentation | Medium features that started as a bead |
 
 ## Example Decomposition
 

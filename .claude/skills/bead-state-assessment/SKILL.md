@@ -5,11 +5,11 @@ description: Classify a bead's lifecycle state and decide the next phase. Use th
 
 # Bead State Assessment
 
-This skill classifies any bead into one of six lifecycle states and recommends
+This skill classifies any bead into one of seven lifecycle states and recommends
 the next phase. Its prose documents the state machine for humans; its scripts
 deliver deterministic JSON verdicts for orchestrators.
 
-Consumers: `/process-backlog`, `/shape-bead`, `/spawn-bead-workers`,
+Consumers: `/process-backlog`, `/plan`, `/spawn-bead-workers`,
 `/analyze-bead`.
 
 ## The state machine
@@ -17,7 +17,7 @@ Consumers: `/process-backlog`, `/shape-bead`, `/spawn-bead-workers`,
 A bead moves through these states, in order:
 
 ```
-unshaped -> shaped -> decomposed -> analyzed -> executing -> complete
+unshaped -> shaped -> advised -> decomposed -> analyzed -> executing -> complete
 ```
 
 Each state is a milestone — a durable property of the bead — not a status
@@ -32,6 +32,7 @@ not document-structure signals.
 |---|---|
 | `unshaped` | DESCRIPTION is missing, empty, or the bead lacks one of DESIGN / ACCEPTANCE CRITERIA sections. This is a raw idea, not yet ready for any review. |
 | `shaped` | DESCRIPTION is present and non-empty, AND the bead has both DESIGN and ACCEPTANCE CRITERIA sections. Advisors can meaningfully review it. |
+| `advised` | The bead's notes contain "Advisory Review". `/plan`'s ADVISE phase has run advisors over the shaped fields and recorded a verdict line per advisor. The bead has cleared the pre-code review bar. |
 | `decomposed` | The bead has a CHILDREN section listing at least one child bead. Epics live here once they have leaves. |
 | `analyzed` | The bead's notes contain "Implementation Context". `/analyze-bead` has enriched the notes with files to modify, relevant tests, skills to apply, standards to follow, and acceptance criteria. An implementer can now be dispatched. |
 | `executing` | Bead's status is IN_PROGRESS. Work is underway. |
@@ -42,7 +43,9 @@ not document-structure signals.
 The signals come from the artifacts each phase produces, not from labels or
 metadata. A bead is "shaped" because a human (or an auto-shape subagent)
 wrote a design and acceptance criteria — those are the visible output of
-shaping. A bead is "analyzed" because `/analyze-bead` wrote an Implementation
+shaping. A bead is "advised" because `/plan`'s ADVISE phase wrote an
+Advisory Review block to notes — that is the visible output of advisory
+review. A bead is "analyzed" because `/analyze-bead` wrote an Implementation
 Context block — that is the visible output of analysis. Classification by
 artifact means state cannot drift out of sync with reality.
 
@@ -51,10 +54,12 @@ artifact means state cannot drift out of sync with reality.
 Given a bead's state, the orchestrator picks the next phase:
 
 ```
-state == unshaped     -> run /shape-bead (or auto-shape subagent)
-state == shaped       -> run advisors on the shaped bead; if sizing check
-                         recommends decomposition, run /decompose-bead next;
-                         otherwise run /analyze-bead
+state == unshaped     -> run /plan (or auto-shape subagent) to populate
+                         DESCRIPTION, DESIGN, ACCEPTANCE
+state == shaped       -> run advisors on the shaped bead (ADVISE phase);
+                         on clean verdict, state advances to advised
+state == advised      -> if sizing check recommends decomposition, run
+                         /decompose-bead next; otherwise run /analyze-bead
 state == decomposed   -> walk to each leaf child; apply this decision tree
                          to every leaf whose state is < analyzed. When every
                          leaf is analyzed, the epic is ready to spawn workers
@@ -67,7 +72,8 @@ state == complete     -> skip; nothing to do
 The `missing_phases` array returned by `bd-state.sh` is the direct input
 to this tree. If `analyzed` appears in `missing_phases`, the next phase is
 `/analyze-bead`. If `decomposed` appears, sizing dictates whether
-decomposition is needed.
+decomposition is needed. If `advised` appears, advisors have not yet
+reviewed the bead.
 
 ## Sizing heuristic: when should a bead be decomposed?
 
@@ -101,8 +107,13 @@ milestones the bead has not yet reached (its content drives the next-phase
 decision tree). `reasons` documents which signals triggered, so the
 orchestrator and human reviewers can see the justification.
 
-Example: a decomposed epic produces
-`{"state":"decomposed","missing_phases":["analyzed"],"reasons":["has non-empty DESCRIPTION","has DESIGN section","has ACCEPTANCE CRITERIA section","has CHILDREN with at least one child bead"]}`.
+Example: a decomposed epic that has been through advisory review produces
+`{"state":"decomposed","missing_phases":["analyzed"],"reasons":["has non-empty DESCRIPTION","has DESIGN section","has ACCEPTANCE CRITERIA section","notes contain Advisory Review","has CHILDREN with at least one child bead"]}`.
+
+Note: a bead can be classified as `decomposed` without ever entering
+`advised` if children were added before advisors ran. State is the highest
+milestone reached, not a strict sequence — but the natural `/plan` flow
+progresses shaped → advised → decomposed for each cohort.
 
 ### `bdEnrichmentCheck(beadId, deps)`
 

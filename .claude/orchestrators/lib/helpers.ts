@@ -82,7 +82,7 @@ export interface TopReadyResult {
 }
 
 export interface StateVerdict {
-  state: 'unshaped' | 'shaped' | 'decomposed' | 'analyzed' | 'executing' | 'complete';
+  state: 'unshaped' | 'shaped' | 'advised' | 'decomposed' | 'analyzed' | 'executing' | 'complete';
   missing_phases: string[];
   reasons: string[];
 }
@@ -503,6 +503,10 @@ export function classifyBeadState(content: string): StateVerdict {
   const hasImplContext = (): boolean =>
     content.includes('Implementation Context');
 
+  // Notes contain "Advisory Review" — written by /plan's ADVISE phase
+  const hasAdvisoryReview = (): boolean =>
+    content.includes('Advisory Review');
+
   const reasons: string[] = [];
 
   const hasDesc = hasSection('DESCRIPTION') && descriptionNonEmpty();
@@ -510,6 +514,7 @@ export function classifyBeadState(content: string): StateVerdict {
   const hasAccept = hasSection('ACCEPTANCE CRITERIA');
   const hasChildren = hasSection('CHILDREN') && hasChildBead();
   const hasImplCtx = hasImplContext();
+  const hasAdvised = hasAdvisoryReview();
 
   if (hasDesc) reasons.push('has non-empty DESCRIPTION');
   else reasons.push('missing or empty DESCRIPTION');
@@ -520,16 +525,19 @@ export function classifyBeadState(content: string): StateVerdict {
   if (hasAccept) reasons.push('has ACCEPTANCE CRITERIA section');
   else reasons.push('missing ACCEPTANCE CRITERIA section');
 
+  if (hasAdvised) reasons.push('notes contain Advisory Review');
   if (hasChildren) reasons.push('has CHILDREN with at least one child bead');
   if (hasImplCtx) reasons.push('notes contain Implementation Context');
 
   // Build missing_phases
   const missing: string[] = [];
   if (!hasDesc || !hasDesign || !hasAccept) missing.push('shaped');
+  if (!hasAdvised) missing.push('advised');
   if (!hasChildren) missing.push('decomposed');
   if (!hasImplCtx) missing.push('analyzed');
 
-  // Determine state — status overrides section-based detection
+  // Determine state — status overrides section-based detection.
+  // Otherwise, state is the highest milestone reached.
   let state: StateVerdict['state'] = 'unshaped';
 
   if (status === 'closed') {
@@ -545,6 +553,9 @@ export function classifyBeadState(content: string): StateVerdict {
   }
   else if (hasChildren) {
     state = 'decomposed';
+  }
+  else if (hasAdvised && hasDesc && hasDesign && hasAccept) {
+    state = 'advised';
   }
   else if (hasDesc && hasDesign && hasAccept) {
     state = 'shaped';
@@ -568,7 +579,7 @@ export function bdState(beadId: string, deps: SpawnDeps = {}): StateVerdict {
     // Return unshaped with empty fields as a safe default
     return {
       state: 'unshaped',
-      missing_phases: ['shaped', 'decomposed', 'analyzed'],
+      missing_phases: ['shaped', 'advised', 'decomposed', 'analyzed'],
       reasons: [`bd show ${beadId} failed with exit code ${result.exitCode}`],
     };
   }

@@ -24,17 +24,17 @@ Directly injects specified standards without suggestions.
 
 ### Step 1: Detect Context Scenario
 
-Before injecting standards, determine which scenario we're in. Read the current conversation and check if we're in plan mode.
+Before injecting standards, determine which scenario we're in. Read the current conversation.
 
 **Three scenarios:**
 
 1. **Conversation** — Regular chat, implementing code, answering questions
 2. **Creating a Skill** — Building a `.claude/skills/` file
-3. **Shaping/Planning** — In plan mode, building a spec, running `/shape-spec`
+3. **Shaping/Planning** — Building a plan, running `/plan`, or working in plan mode on a spec
 
 **Detection logic:**
 
-- If currently in plan mode OR conversation clearly mentions "spec", "plan", "shape" → **Shaping/Planning**
+- If `/plan` is active, OR the conversation clearly mentions "spec", "plan", "shape", OR we're in plan mode on a spec → **Shaping/Planning**
 - If conversation clearly mentions creating a skill, editing `.claude/skills/`, or building a reusable procedure → **Creating a Skill**
 - Otherwise → **Ask to confirm** (do not assume)
 
@@ -280,4 +280,4 @@ Same formatting as auto-suggest mode, based on detected scenario.
 
 ## Integration
 
-This command is called internally by `/shape-spec` to inject relevant standards during planning. You can also invoke it directly anytime you need standards in context.
+This command is called internally by `/plan` to inject relevant standards during planning. You can also invoke it directly anytime you need standards in context.

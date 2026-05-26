@@ -167,8 +167,9 @@ function preflightPassingSpawns(beadId = 'pv-abc-1'): SpawnSyncReturns<Buffer>[]
 
 describe('routeByState', () => {
   const cases: [StateVerdict['state'], string[], PhaseName | 'halt'][] = [
-    ['unshaped', ['shaped', 'decomposed', 'analyzed'], PhaseName.Shape],
-    ['shaped', ['decomposed', 'analyzed'], PhaseName.ShapeAdvisors],
+    ['unshaped', ['shaped', 'advised', 'decomposed', 'analyzed'], PhaseName.Shape],
+    ['shaped', ['advised', 'decomposed', 'analyzed'], PhaseName.ShapeAdvisors],
+    ['advised', ['decomposed', 'analyzed'], PhaseName.Decompose],
     ['decomposed', ['analyzed'], PhaseName.Analyze],
     ['analyzed', ['decomposed'], PhaseName.Branch],        // leaf
     ['analyzed', [], PhaseName.AnalyzeAdvisors],            // epic
