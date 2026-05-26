@@ -5,9 +5,11 @@ import { useTranslation } from 'i18next-vue';
 import { useTabNavigation } from '@/client/composables/useTabNavigation';
 import CalendarService from '@/client/service/calendar';
 import EventService from '@/client/service/event';
-import { ExternalLink } from 'lucide-vue-next';
-import PillButton from '@/client/components/common/pill-button.vue';
-import HelpButton from '@/client/components/common/help-button.vue';
+import { ExternalLink, BookOpenText, CalendarPlus, Settings } from 'lucide-vue-next';
+import ActionsMenu from '@/client/components/common/actions-menu.vue';
+import ActionsMenuItem from '@/client/components/common/actions-menu-item.vue';
+import HelpPanel from '@/client/components/common/help-panel.vue';
+import { guidesForRoute, audienceForRoute } from '@/client/service/docs';
 import EventsTab from '@/client/components/logged_in/calendar-content/events-tab.vue';
 import CategoriesTab from '@/client/components/logged_in/calendar-content/categories.vue';
 import SeriesTab from '@/client/components/logged_in/calendar-content/series.vue';
@@ -93,6 +95,11 @@ async function closeCreateCalendarSheet() {
   await nextTick();
   createCalendarSheetTriggerEl.value?.focus();
 }
+
+// Help panel state — hosted directly on this page so the actions menu can open it
+const showHelpPanel = ref(false);
+const guides = computed(() => guidesForRoute(route?.name));
+const audience = computed(() => audienceForRoute(route?.name));
 
 onBeforeMount(async () => {
   await loadCalendarData();
@@ -192,27 +199,22 @@ const handleLoadEvents = async (filters) => {
               </a>
             </div>
             <div class="header-actions">
-              <HelpButton />
-              <PillButton
-                variant="ghost"
-                @click="openCreateCalendarSheet"
-              >
-                {{ tList('create_new_calendar_button') }}
-              </PillButton>
-              <RouterLink
-                v-if="state.calendar"
-                :to="{ name: 'calendar_management', params: { calendar: state.calendar.urlName } }"
-                custom
-                v-slot="{ navigate }"
-              >
-                <PillButton
-                  variant="ghost"
-                  @click="navigate"
+              <ActionsMenu :trigger-label="t('menu_label')">
+                <ActionsMenuItem :icon="BookOpenText" @click="showHelpPanel = true">
+                  {{ t('documentation') }}
+                </ActionsMenuItem>
+                <ActionsMenuItem :icon="CalendarPlus" @click="openCreateCalendarSheet">
+                  {{ tList('create_new_calendar_button') }}
+                </ActionsMenuItem>
+                <ActionsMenuItem
+                  v-if="state.calendar"
+                  :icon="Settings"
+                  :to="{ name: 'calendar_management', params: { calendar: state.calendar.urlName } }"
                   :aria-label="t('manage_calendar_label', { name: state.calendar.urlName })"
                 >
                   {{ t('manage_calendar') }}
-                </PillButton>
-              </RouterLink>
+                </ActionsMenuItem>
+              </ActionsMenu>
             </div>
           </div>
 
@@ -351,6 +353,14 @@ const handleLoadEvents = async (filters) => {
       v-if="showCreateCalendarSheet"
       @close="closeCreateCalendarSheet"
     />
+
+    <!-- Help Panel (triggered from the actions menu's Documentation item) -->
+    <HelpPanel
+      v-if="showHelpPanel"
+      :guides="guides"
+      :audience="audience"
+      @close="showHelpPanel = false"
+    />
   </div>
 </template>
 
@@ -447,19 +457,14 @@ const handleLoadEvents = async (filters) => {
 
   @media (max-width: 768px) {
     .header-title-section {
-      flex-direction: column;
-      align-items: stretch;
+      align-items: flex-start;
 
       h1 {
         font-size: 1.5rem;
       }
 
       .header-title-group {
-        width: 100%;
-      }
-
-      .header-actions {
-        width: 100%;
+        min-width: 0;
       }
     }
   }

@@ -1,13 +1,15 @@
 <script setup lang="ts">
-import { onBeforeMount, reactive, ref, nextTick } from 'vue';
+import { onBeforeMount, reactive, ref, nextTick, computed } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useTranslation } from 'i18next-vue';
-import { Calendar, ChevronRight, Crown, ExternalLink } from 'lucide-vue-next';
+import { Calendar, ChevronRight, Crown, ExternalLink, BookOpenText, CalendarPlus } from 'lucide-vue-next';
 import CalendarService from '@/client/service/calendar';
 import { CalendarInfo } from '@/common/model/calendar_info';
 import EmptyLayout from '@/client/components/common/empty_state.vue';
-import PillButton from '@/client/components/common/pill-button.vue';
-import HelpButton from '@/client/components/common/help-button.vue';
+import ActionsMenu from '@/client/components/common/actions-menu.vue';
+import ActionsMenuItem from '@/client/components/common/actions-menu-item.vue';
+import HelpPanel from '@/client/components/common/help-panel.vue';
+import { guidesForRoute, audienceForRoute } from '@/client/service/docs';
 import CreateCalendarForm from './CreateCalendarForm.vue';
 import CreateCalendarSheet from './CreateCalendarSheet.vue';
 
@@ -39,6 +41,10 @@ async function closeCreateSheet() {
   await nextTick();
   createSheetTriggerEl.value?.focus();
 }
+
+const showHelpPanel = ref(false);
+const guides = computed(() => guidesForRoute(route?.name));
+const audience = computed(() => audienceForRoute(route?.name));
 
 /**
  * Returns the display description for a calendar card.
@@ -95,13 +101,14 @@ async function loadCalendars() {
             </p>
           </div>
           <div class="calendars-header__actions">
-            <HelpButton />
-            <PillButton
-              variant="primary"
-              @click="openCreateSheet"
-            >
-              {{ t('create_new_calendar_button') }}
-            </PillButton>
+            <ActionsMenu :trigger-label="t('menu_label')">
+              <ActionsMenuItem :icon="BookOpenText" @click="showHelpPanel = true">
+                {{ t('documentation') }}
+              </ActionsMenuItem>
+              <ActionsMenuItem :icon="CalendarPlus" @click="openCreateSheet">
+                {{ t('create_new_calendar_button') }}
+              </ActionsMenuItem>
+            </ActionsMenu>
           </div>
         </div>
         <ul class="calendar-cards" role="list">
@@ -173,6 +180,13 @@ async function loadCalendars() {
     <CreateCalendarSheet
       v-if="showCreateSheet"
       @close="closeCreateSheet"
+    />
+
+    <HelpPanel
+      v-if="showHelpPanel"
+      :guides="guides"
+      :audience="audience"
+      @close="showHelpPanel = false"
     />
   </main>
 </template>

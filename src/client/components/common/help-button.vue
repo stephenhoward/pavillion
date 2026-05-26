@@ -7,7 +7,7 @@
     aria-haspopup="dialog"
     @click="showPanel = true"
   >
-    <CircleHelp :size="20" :stroke-width="1.5" aria-hidden="true" />
+    <BookOpenText :size="20" :stroke-width="1.5" aria-hidden="true" />
   </button>
 
   <HelpPanel
@@ -22,7 +22,7 @@
 import { ref, computed } from 'vue';
 import { useRoute } from 'vue-router';
 import { useTranslation } from 'i18next-vue';
-import { CircleHelp } from 'lucide-vue-next';
+import { BookOpenText } from 'lucide-vue-next';
 import HelpPanel from './help-panel.vue';
 import { guidesForRoute, audienceForRoute } from '@/client/service/docs';
 
