@@ -16,7 +16,7 @@ const logger = createLogger('activitypub');
 
 /**
  * Context describing how an inbound activity was authenticated before it was
- * admitted to a calendar's inbox (DEC-012).
+ * admitted to a calendar's inbox (DEC-013).
  *
  * - `source`: open string enum identifying the auth mechanism. Known values
  *   are `'http_signature'` (live inbox POST verified by HTTP Signatures) and
@@ -202,7 +202,7 @@ export default class ActivityPubService {
    * upstream: see inbox POST middleware in api/v1/server.ts and
    * InboxService.processInboxMessage() for block-list filtering.
    *
-   * The `auth` context records how this row was admitted (DEC-012). Callers
+   * The `auth` context records how this row was admitted (DEC-013). Callers
    * must always supply it — there is no default — so future callers
    * (backfill, ICS, etc.) cannot accidentally elide the trust signal.
    *
