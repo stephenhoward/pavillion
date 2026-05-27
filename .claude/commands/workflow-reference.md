@@ -1,18 +1,20 @@
 # Agent OS + Beads Workflow Reference
 
-Quick reference for the complete shape-to-implementation workflow.
+Quick reference for the complete plan-to-implementation workflow.
 
 ## The Pipeline
 
 ```
 ┌──────────────────────────────────────────────────────┐
-│  /shape-spec  or  /shape-bead                        │
+│  /plan                                               │
 │                                                      │
-│  Interactive shaping (plan mode)                     │
-│  → writes to bead fields                             │
-│  → asks: continue to decompose + analyze?            │
-│  → spawns subagents for decompose + analyze          │
-│  Output: enriched epic with ready-to-work leaves     │
+│  State-routed: DRAFT → ADVISE → CONFIRM-AND-WRITE    │
+│  → optional DECOMPOSE → optional ANALYZE             │
+│                                                      │
+│  Spec scratchpad under docs/.scratch/                │
+│  (gitignored, deleted after bead is written)         │
+│  Output: bead populated, advised, optionally an      │
+│  enriched epic with ready-to-work leaves             │
 └────────────────────────┬─────────────────────────────┘
                          │
                          ▼
@@ -23,89 +25,97 @@ Quick reference for the complete shape-to-implementation workflow.
 └──────────────────────────────────────────────────────┘
 ```
 
-### Two Entry Points
+### Single Entry Point
 
-- **/shape-spec** — For larger features starting from scratch. Deeper exploration (visuals, references, standards, advisory review). Creates a new bead.
-- **/shape-bead `<id>`** — For medium features. Shapes an existing bead. Skips what's already filled. Faster.
+`/plan` is the unified planning command. It detects the current state of the bead (if any) and runs only the phases needed.
 
-Both converge to the same output: a shaped bead → decomposed epic → analyzed leaves → ready for workers.
+| Invocation | Behavior |
+|---|---|
+| `/plan` | Blank slate: DRAFT → ADVISE → ask about DECOMPOSE |
+| `/plan pv-xxxx` | Resume bead at its current state |
+| `/plan --until shaped` | Stop after fields written (skip advisors) |
+| `/plan --until advised` | Advisors then stop |
+| `/plan --until decomposed` | Advise → decompose, stop before analyze |
+| `/plan --until analyzed` | Full pipeline to ready-for-spawn |
+| `/plan pv-xxxx --reshape` | Force re-run of DRAFT |
+| `/plan pv-xxxx --readvise` | Force re-run of ADVISE |
 
 ## Command Quick Reference
 
 | Command | Purpose | When to Use |
 |---------|---------|-------------|
-| `/shape-spec` | Gather requirements, create shaped bead | Starting a new feature from scratch |
-| `/shape-bead` | Fill bead structured fields interactively | Shaping an existing bead |
-| `/decompose-bead` | Break shaped bead into epic/hierarchy | Manual decomposition (shape commands auto-decompose) |
-| `/analyze-bead` | Map dependencies, enrich bead notes | Manual analysis (shape commands auto-analyze) |
+| `/plan` | Take work from idea → ready-to-implement | Any planning need — blank slate or resuming a drafted bead |
+| `/decompose-bead` | Break shaped bead into epic/hierarchy | Manual decomposition (`/plan` invokes this internally) |
+| `/analyze-bead` | Map dependencies, enrich bead notes | Manual analysis (`/plan` invokes this internally) |
 | `/spawn-bead-workers` | Orchestrate parallel execution | Ready to implement |
+| `/process-backlog` | Autonomous bead processing | Background work selection + execution |
 
-### Legacy Commands (for existing specs)
+## State Machine
 
-| Command | Status | Notes |
-|---------|--------|-------|
-| `/write-spec` | Deprecated | shape-spec now writes to bead fields |
-| `/decompose-spec` | Deprecated | shape commands auto-decompose via subagent |
+```
+unshaped → shaped → advised → decomposed → analyzed → executing → complete
+```
 
-These still work for specs already in `agent-os/specs/`.
+See the `bead-state-assessment` skill for full details on how each state is detected.
 
 ## Common Workflows
 
-### New Feature (Recommended)
+### New Feature
 
 ```
-1. /shape-spec
+1. /plan
    - Answer questions about scope, visuals, references
-   - Review technical design and acceptance criteria
+   - Review technical design and acceptance criteria in scratchpad
    - Advisory review runs automatically
+   - Approve and write to bead
 
-2. Choose "Continue to decompose + analyze"
+2. When prompted, choose to decompose
    - Subagents handle decomposition and analysis
    - Produces enriched epic with ready leaves
 
 3. /spawn-bead-workers <epic-id>
-   - Parallel subagents execute leaves
-   - Watch parallel execution, handle failures
 ```
 
-### Shape an Existing Bead
+### Resume an Existing Bead
 
 ```
-1. /shape-bead <bead-id>
-   - Assess existing fields, fill gaps
-   - Design and acceptance criteria drafted
-   - Advisory review runs automatically
+1. /plan pv-xxxx
+   - Detects current state, picks up where left off
+   - Runs only the phases the bead hasn't been through
 
-2. Choose "Continue to decompose + analyze"
-   - Same subagent-based pipeline as /shape-spec
-
-3. /spawn-bead-workers <epic-id>
-   - Parallel execution
+2. Continue or stop based on what the bead needs
 ```
 
 ### Small Feature (Skip Decomposition)
 
 ```
-1. /shape-spec  or  /shape-bead <id>
-   - Shape as normal
+1. /plan --until advised
+   - DRAFT + ADVISE only, stop before decompose prompt
 
-2. Choose "Stop here"
-   - Bead is small enough to implement directly
-
-3. bd update <id> --status=in_progress
+2. bd update <id> --status=in_progress
    - Work directly on the shaped bead
 ```
 
-### Already Have Beads
+### Verify a Hand-Drafted Bead
 
-If beads already exist (manually created and decomposed):
+```
+1. /plan pv-xxxx
+   - If bead is `shaped` but not `advised`, runs ADVISE only
+   - Advisors flag any concerns
+```
+
+### Already Decomposed
+
 ```
 /analyze-bead <epic-id> → /spawn-bead-workers
 ```
 
+(or `/plan <epic-id>` — it will detect `decomposed` state and offer to run analyze)
+
 ### Quick Single Feature
 
-For tiny features that don't need shaping:
+For tiny features that don't need planning at all:
+
 ```
 bd create --title="[Feature]" --type=task
 bd update <id> --status=in_progress
@@ -127,7 +137,6 @@ bd close <id>
 During implementation, if you find more work needed:
 
 ```bash
-# Create new bead
 bd create --title="Fix edge case in filter" --type=task
 
 # Link to epic if appropriate

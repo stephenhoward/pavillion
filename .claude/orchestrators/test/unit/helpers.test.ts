@@ -395,8 +395,34 @@ describe('classifyBeadState', () => {
     ].join('\n');
     const result = classifyBeadState(content);
     expect(result.state).toBe('shaped');
+    expect(result.missing_phases).toContain('advised');
     expect(result.missing_phases).toContain('decomposed');
     expect(result.missing_phases).not.toContain('shaped');
+  });
+
+  it('returns advised when shaped + Advisory Review notes present', () => {
+    const content = [
+      '[● P1 · OPEN] pv-abc1 · My Bead',
+      '',
+      'DESCRIPTION',
+      'This is a description.',
+      '',
+      'DESIGN',
+      'This is a design.',
+      '',
+      'ACCEPTANCE CRITERIA',
+      '- AC1',
+      '',
+      'NOTES',
+      '## Advisory Review',
+      '- **complexity-advisor:** APPROVE — no concerns',
+    ].join('\n');
+    const result = classifyBeadState(content);
+    expect(result.state).toBe('advised');
+    expect(result.missing_phases).toContain('decomposed');
+    expect(result.missing_phases).not.toContain('advised');
+    expect(result.missing_phases).not.toContain('shaped');
+    expect(result.reasons).toContain('notes contain Advisory Review');
   });
 
   it('returns decomposed when shaped + has children', () => {

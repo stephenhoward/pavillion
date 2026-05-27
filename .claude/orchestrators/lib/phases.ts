@@ -803,6 +803,7 @@ async function runAdvisorPass(
  * Routing table:
  *   unshaped   -> Shape
  *   shaped     -> ShapeAdvisors
+ *   advised    -> Decompose
  *   decomposed -> Analyze
  *   analyzed   -> AnalyzeAdvisors (epic) or Branch (leaf)
  *   executing  -> halt
@@ -814,6 +815,8 @@ export function routeByState(verdict: StateVerdict): PhaseName | 'halt' {
       return PhaseName.Shape;
     case 'shaped':
       return PhaseName.ShapeAdvisors;
+    case 'advised':
+      return PhaseName.Decompose;
     case 'decomposed':
       return PhaseName.Analyze;
     case 'analyzed': {
@@ -876,12 +879,22 @@ export function buildShapePrompt(beadId: string, refinementReport?: RefinementRe
   return [
     `# Shape bead: ${beadId}`,
     '',
-    'Read `.claude/commands/shape-bead.md` and run Steps 2-8',
-    '(scope / references / standards / technical design / acceptance)',
-    `for bead \`${beadId}\`.`,
+    `Read \`bd show ${beadId}\` to see what's already populated.`,
     '',
-    'Populate DESCRIPTION, DESIGN, ACCEPTANCE, and NOTES via separate',
-    '`bd update` calls, then add the `shaped` label.',
+    'Your job is to populate any missing bead fields so it can be reviewed by',
+    'advisors and decomposed. Apply the project\'s `/plan` DRAFT phase:',
+    '',
+    '- **DESCRIPTION** — overview, scope (in/out), success criteria',
+    '- **DESIGN** — technical approach, key files, patterns to follow',
+    '- **ACCEPTANCE** — testable checklist',
+    '- **NOTES** — references, applicable standards, visuals (if any)',
+    '',
+    'Use separate `bd update` calls per field (--description, --design,',
+    '--acceptance, --append-notes). When all four are populated, add the',
+    '`shaped` label.',
+    '',
+    'Surface relevant standards via `.claude/skills/standards-routing/index.yml`',
+    'and applicable patterns from neighboring code before drafting DESIGN.',
     '',
     '## Autonomous-mode rules',
     '',

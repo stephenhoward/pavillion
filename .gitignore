@@ -26,6 +26,9 @@ agent-os/product/*
 .beads/
 .claude/worktrees/
 
+# /plan scratchpad — ephemeral working drafts deleted when their bead is written
+docs/.scratch/
+
 # Test artifacts
 .playwright-mcp
 playwright-report
