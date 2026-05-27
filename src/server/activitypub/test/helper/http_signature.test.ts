@@ -4,7 +4,7 @@ import httpSignature from 'http-signature';
 import axios from 'axios';
 import sinon from 'sinon';
 import { Cache } from '@/server/activitypub/helper/cache';
-import { verifyHttpSignature } from '@/server/activitypub/helper/http_signature';
+import { verifyHttpSignature, extractKeyIdOrigin } from '@/server/activitypub/helper/http_signature';
 import { MAX_REQUEST_AGE_MS } from '@/server/common/constants';
 import crypto from 'crypto';
 
@@ -1019,5 +1019,72 @@ describe('HTTP Signature Cryptographic Round-Trip', () => {
     ).toBe(true);
     expect(res.json.calledWith({ error: 'Invalid digest' })).toBe(true);
     expect(next.called, 'next() must NOT be invoked when the digest fails').toBe(false);
+  });
+});
+
+describe('extractKeyIdOrigin', () => {
+  let sandbox: sinon.SinonSandbox;
+  let parseRequestStub: sinon.SinonStub;
+
+  beforeEach(() => {
+    sandbox = sinon.createSandbox();
+    parseRequestStub = sandbox.stub(httpSignature, 'parseRequest');
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+  });
+
+  it('returns the scheme+host origin for a valid keyId URL', () => {
+    parseRequestStub.returns({
+      params: { keyId: 'https://remote.example.com/users/alice#main-key' },
+    } as any);
+
+    const req = { headers: { signature: 'placeholder' } } as unknown as Request;
+    const result = extractKeyIdOrigin(req);
+
+    expect(result).toBe('https://remote.example.com');
+  });
+
+  it('strips fragments and paths from the keyId origin', () => {
+    parseRequestStub.returns({
+      params: { keyId: 'https://remote.example.com:8443/path/to/key#fragment' },
+    } as any);
+
+    const req = { headers: { signature: 'placeholder' } } as unknown as Request;
+    const result = extractKeyIdOrigin(req);
+
+    expect(result).toBe('https://remote.example.com:8443');
+  });
+
+  it('returns null when the Signature header is missing (parseRequest throws)', () => {
+    parseRequestStub.throws(new Error('no Signature header'));
+
+    const req = { headers: {} } as unknown as Request;
+    const result = extractKeyIdOrigin(req);
+
+    expect(result).toBeNull();
+  });
+
+  it('returns null when keyId is present but not a valid URL', () => {
+    parseRequestStub.returns({
+      params: { keyId: 'not-a-valid-url' },
+    } as any);
+
+    const req = { headers: { signature: 'placeholder' } } as unknown as Request;
+    const result = extractKeyIdOrigin(req);
+
+    expect(result).toBeNull();
+  });
+
+  it('returns null when keyId is missing from parsed params', () => {
+    parseRequestStub.returns({
+      params: { signature: 'sig', headers: [] },
+    } as any);
+
+    const req = { headers: { signature: 'placeholder' } } as unknown as Request;
+    const result = extractKeyIdOrigin(req);
+
+    expect(result).toBeNull();
   });
 });

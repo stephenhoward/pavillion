@@ -203,6 +203,36 @@ describe('JobQueueService', () => {
       expect(legacyHandler).toHaveBeenCalled();
     });
 
+    it('should unwrap pg-boss v10+ job-array input and pass data to the handler', async () => {
+      // Regression: pg-boss v10+ delivers an array of jobs (batchSize 1 by
+      // default) to the work() handler instead of a single job. Reading
+      // `.data` off the array yields undefined and downstream destructuring
+      // throws — which is exactly how follow-backfill silently failed in
+      // production until this iteration was added.
+      await service.start();
+      let jobHandler: ((jobs: any) => Promise<void>) | undefined;
+
+      (PgBoss.prototype.work as any).mockImplementation(
+        async (_name: string, _options: any, fn: any) => {
+          jobHandler = fn;
+          return 'worker-id';
+        },
+      );
+
+      const handler = vi.fn().mockResolvedValue(undefined);
+      await service.subscribe('activitypub:follow:backfill', handler);
+
+      const arrayInput = [{ id: 'job-1', data: { followingCalendarId: 'cal-1' }, retryCount: 0, retryLimit: 2 }];
+      if (jobHandler) {
+        await jobHandler(arrayInput);
+      }
+
+      expect(handler).toHaveBeenCalledWith(
+        { followingCalendarId: 'cal-1' },
+        { retryCount: 0, retryLimit: 2 },
+      );
+    });
+
     it('should throw error when subscribing before start', async () => {
       const handler = vi.fn();
       await expect(

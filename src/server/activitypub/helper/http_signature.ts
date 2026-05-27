@@ -175,6 +175,37 @@ export async function verifyHttpSignature(req: Request, res: Response, next: Nex
 }
 
 /**
+ * Extracts the verified keyId origin (scheme + host) from an inbound request
+ * for DEC-013 inbox auth-source tracking.
+ *
+ * This is called from the live inbox POST handler **after** `verifyHttpSignature`
+ * has already accepted the request, so the signature itself is known-good.
+ * The function re-parses the Signature header solely to recover the keyId
+ * value, since the middleware does not surface the parsed signature on `req`.
+ *
+ * Returns `null` if the header is missing, unparseable, or the keyId is not
+ * a valid URL — the inbox row still writes because the signature was verified
+ * upstream; we just lose the verified-origin breadcrumb for that row.
+ *
+ * @param req Express request object whose Signature header should be parsed.
+ * @returns The keyId origin (e.g. `https://example.com`), or `null` on failure.
+ */
+export function extractKeyIdOrigin(req: Request): string | null {
+  try {
+    const parsed = httpSignature.parseRequest(req as unknown as ClientRequest);
+    const keyId = parsed?.params?.keyId;
+    if (!keyId) {
+      return null;
+    }
+    const url = new URL(keyId);
+    return `${url.protocol}//${url.host}`;
+  }
+  catch {
+    return null;
+  }
+}
+
+/**
  * Gets a public key with caching support to reduce network requests.
  *
  * @param {string} keyId - The key identifier URL

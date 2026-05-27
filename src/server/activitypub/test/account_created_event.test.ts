@@ -21,7 +21,7 @@ describe('ActivityPub account.created event handler', () => {
     sandbox = sinon.createSandbox();
     eventBus = new EventEmitter();
     activityPubInterface = new ActivityPubInterface(eventBus);
-    eventHandlers = new ActivityPubEventHandlers(activityPubInterface, new CalendarInterface(eventBus));
+    eventHandlers = new ActivityPubEventHandlers(activityPubInterface, new CalendarInterface(eventBus), { publishJob: async () => {} } as any);
     eventHandlers.install(eventBus);
 
     // Sync database for test

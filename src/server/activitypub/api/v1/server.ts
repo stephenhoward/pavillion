@@ -16,7 +16,8 @@ import { EventNotFoundError } from '@/common/exceptions/calendar';
 import { createLogger } from '@/server/common/helper/logger';
 
 const logger = createLogger('activitypub');
-import { verifyHttpSignature } from '@/server/activitypub/helper/http_signature';
+import { verifyHttpSignature, extractKeyIdOrigin } from '@/server/activitypub/helper/http_signature';
+import type { InboxAuthContext } from '@/server/activitypub/interface';
 import {
   createActorRateLimiter,
   createCalendarRateLimiter,
@@ -458,7 +459,11 @@ export default class ActivityPubServerRoutes {
     }
 
     if ( message ) {
-      await this.service.addToInbox(calendar, message);
+      const auth: InboxAuthContext = {
+        source: 'http_signature',
+        origin: extractKeyIdOrigin(req),
+      };
+      await this.service.addToInbox(calendar, message, auth);
       res.status(200).send('Message received');
     }
     else {
@@ -495,7 +500,7 @@ export default class ActivityPubServerRoutes {
       }
 
       const domain: string = config.get('domain');
-      const outboxUrl = `https://${domain}/api/ap/v1/calendars/${calendar.urlName}/outbox`;
+      const outboxUrl = `https://${domain}/calendars/${calendar.urlName}/outbox`;
 
       // If no page param, return the collection summary
       if (req.query.page !== 'true') {

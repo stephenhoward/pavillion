@@ -223,11 +223,18 @@ run_migrations() {
 # Function to start the application
 start_app() {
   if is_federation; then
-    # Federation testing mode - backend only with hot-reload
-    log_info "Starting federation instance..."
-    log_info "  Backend:  http://localhost:3000"
-    log_info "========================================"
-    exec npx tsx watch src/server/app.ts
+    # Federation testing mode - hot-reload backend, with optional worker mode
+    if is_worker_mode "$@"; then
+      log_info "Starting federation worker with hot-reload..."
+      log_info "  Processing jobs from pg-boss queue"
+      log_info "========================================"
+      exec npx tsx watch src/server/app.ts -- --worker
+    else
+      log_info "Starting federation instance..."
+      log_info "  Backend:  http://localhost:3000"
+      log_info "========================================"
+      exec npx tsx watch src/server/app.ts
+    fi
   elif is_development; then
     # Development mode
     if is_worker_mode "$@"; then

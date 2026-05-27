@@ -6,6 +6,7 @@ import { EventEmitter } from 'stream';
 import CalendarInterface from '../calendar/interface';
 import AccountsInterface from '../accounts/interface';
 import ModerationInterface from '../moderation/interface';
+import HousekeepingInterface from '../housekeeping/interface';
 
 /**
  * ActivityPub domain entry point
@@ -16,18 +17,21 @@ export default class ActivityPubDomain {
   private readonly calendarInterface: CalendarInterface;
   private readonly accountsInterface: AccountsInterface;
   private readonly moderationInterface?: ModerationInterface;
+  private readonly housekeepingInterface: HousekeepingInterface;
   private readonly eventBus: EventEmitter;
 
   constructor(
     eventBus: EventEmitter,
     calendarInterface: CalendarInterface,
     accountsInterface: AccountsInterface,
+    housekeepingInterface: HousekeepingInterface,
     moderationInterface?: ModerationInterface,
   ) {
     this.eventBus = eventBus;
     this.calendarInterface = calendarInterface;
     this.accountsInterface = accountsInterface;
     this.moderationInterface = moderationInterface;
+    this.housekeepingInterface = housekeepingInterface;
     this.interface = new ActivityPubInterface(eventBus, calendarInterface, accountsInterface, moderationInterface);
   }
 
@@ -41,7 +45,7 @@ export default class ActivityPubDomain {
   }
 
   public installEventHandlers() {
-    new ActivityPubEventHandlers(this.interface, this.calendarInterface).install(this.eventBus);
+    new ActivityPubEventHandlers(this.interface, this.calendarInterface, this.housekeepingInterface).install(this.eventBus);
   }
 
 }

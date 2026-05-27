@@ -223,8 +223,8 @@ class ProcessInboxService {
 
     do {
       messages = await ActivityPubInboxMessageEntity.findAll({
-        where: { processedAt: null },
-        order: [ ['messageTime', 'ASC'] ],
+        where: { processed_time: null },
+        order: [ ['message_time', 'ASC'] ],
         limit: 1000,
       });
 
@@ -496,6 +496,7 @@ class ProcessInboxService {
           }
 
           const undoTargetId = (message.message as any).object;
+          const undoActor = (message.message as any).actor as string | undefined;
           const targetEntity = await ActivityPubInboxMessageEntity.findOne({
             where: { calendar_id: message.calendar_id, id: undoTargetId },
           });
@@ -506,7 +507,7 @@ class ProcessInboxService {
                 await this.processUnfollowAccount(calendar, targetEntity);
                 break;
               case 'Announce':
-                await this.processUnshareEvent(calendar, targetEntity);
+                await this.processUnshareEvent(calendar, targetEntity, undoActor, options);
                 break;
             }
           }
@@ -1444,8 +1445,13 @@ class ProcessInboxService {
     }
 
     if (!existingEvent) {
-      // Event not found - can't update
-      logger.warn(`Update activity for unknown event: ${apObjectId}`);
+      // SECURITY: No-op when the `ap_event_object → EventEntity` lookup
+      // returns null (pv-wy2u.3.1). This prevents Update-after-Delete
+      // resurrection via backdated `published`: an attacker cannot bring
+      // back a Deleted event by sending an Update for it. Logged at debug
+      // because missing target is expected after a legitimate Delete and
+      // should not be noisy.
+      logger.debug({ apObjectId, actorUri }, '[INBOX] Update activity for unknown event — no-op');
       return null;
     }
 
@@ -1850,6 +1856,11 @@ class ProcessInboxService {
 
           if (followingRecord) {
             logger.info(`Follow relationship confirmed for calendar ${calendar.id} via string URI Accept from ${message.actor}`);
+            this.eventBus.emit('activitypub:follow:accepted', {
+              followingCalendarId: calendar.id,
+              calendarActorId: remoteCalendar.id,
+              sourceActorUri: message.actor,
+            });
             return;
           }
         }
@@ -1890,6 +1901,11 @@ class ProcessInboxService {
         // In the future, we could add a "confirmed" status field
         // For now, the existence of the record means it's active
         logger.info(`Follow relationship confirmed for calendar ${calendar.id} following ${followActivity.object}`);
+        this.eventBus.emit('activitypub:follow:accepted', {
+          followingCalendarId: calendar.id,
+          calendarActorId: remoteCalendar.id,
+          sourceActorUri: followActivity.object as string,
+        });
       }
       else {
         logger.warn(`No FollowingCalendarEntity found for ${followActivity.object}, Accept may be for unknown follow`);
@@ -2218,11 +2234,30 @@ class ProcessInboxService {
   /**
    * Processes an Unshare action (via Undo) for an event.
    *
+   * Strict cross-check (pv-wy2u.3.1): the referenced Announce row in `ap_inbox`
+   * must have a non-null `auth_origin`, and its host must equal the host of
+   * the Undo's own actor. This is the dispatch-time federation-correctness
+   * gate that prevents a third-party actor from forging an Undo against
+   * someone else's Announce. `auth_origin` is the cryptographic signal
+   * (HTTP-signature keyId origin or outbox-pull host); actor claims alone
+   * are not sufficient. The cross-check is skipped when `trustLocalOrigin`
+   * is true (local in-process dispatch path) because row provenance
+   * establishes authenticity for that path.
+   *
    * @param {Calendar} calendar - The calendar context for the unshare
    * @param {ActivityPubInboxMessageEntity} message - The original Announce inbox message entity
+   * @param {string | undefined} undoActor - Actor URI of the incoming Undo activity
+   * @param {{ trustLocalOrigin?: boolean }} [options] - When `trustLocalOrigin`
+   *   is true, the dispatch-time cross-check is skipped because the row is
+   *   already trusted by local provenance.
    * @returns {Promise<void>}
    */
-  async processUnshareEvent(calendar: Calendar, message: ActivityPubInboxMessageEntity) {
+  async processUnshareEvent(
+    calendar: Calendar,
+    message: ActivityPubInboxMessageEntity,
+    undoActor?: string,
+    options: { trustLocalOrigin?: boolean } = {},
+  ) {
     // Extract event ID and actor from the original Announce activity's stored JSON
     const activityJson = message.message as Record<string, unknown> | undefined;
     if (!activityJson) {
@@ -2246,6 +2281,49 @@ class ProcessInboxService {
     if (!actor) {
       logger.warn(`Unshare message actor is null or undefined`);
       return;
+    }
+
+    // SECURITY: Strict Undo cross-check (pv-wy2u.3.1).
+    // The Announce row's verified `auth_origin` must match the Undo actor's
+    // host. A missing `auth_origin` is a hard fail (we cannot establish
+    // origin → cannot grant Undo authority over this Announce). A missing
+    // `undoActor` is also a hard fail — the gate fails closed for any
+    // federation-path dispatch that does not supply an actor to verify.
+    // Skipped only for local in-process dispatch where row provenance
+    // establishes trust.
+    if (!options.trustLocalOrigin) {
+      if (!undoActor) {
+        logger.debug(
+          { announceId: message.id },
+          '[INBOX] Undo cross-check failed: dispatch did not supply undoActor',
+        );
+        return;
+      }
+      if (!message.auth_origin) {
+        logger.debug(
+          { announceId: message.id, undoActor },
+          '[INBOX] Undo cross-check failed: referenced Announce has null auth_origin',
+        );
+        return;
+      }
+      try {
+        const announceHost = new URL(message.auth_origin).host;
+        const undoHost = new URL(undoActor).host;
+        if (announceHost !== undoHost) {
+          logger.debug(
+            { announceId: message.id, announceHost, undoHost },
+            '[INBOX] Undo cross-check failed: auth_origin host mismatch',
+          );
+          return;
+        }
+      }
+      catch {
+        logger.debug(
+          { announceId: message.id, authOrigin: message.auth_origin, undoActor },
+          '[INBOX] Undo cross-check failed: could not parse auth_origin or undo actor as URL',
+        );
+        return;
+      }
     }
 
     // Find the CalendarActorEntity for this actor

@@ -138,15 +138,31 @@ export default class CalendarActorService {
   }
 
   /**
-   * Signs an ActivityPub activity with HTTP signatures
+   * Signs an ActivityPub HTTP request with HTTP signatures.
+   *
+   * Supports both POST (outbound activity delivery, body + digest) and GET
+   * (outbound fetch of a remote object, no body). The `method` parameter
+   * controls the `(request-target)` pseudo-header verb in the signing
+   * string; it defaults to `'post'` to preserve existing caller behavior.
+   * For GET requests, callers must omit `digest` (there is no body to
+   * digest).
    *
    * @param actorUri - The actor URI performing the activity
-   * @param activity - The ActivityPub activity object
-   * @param targetUrl - The target URL (inbox) the activity is being sent to
+   * @param activity - The ActivityPub activity object (unused for GETs but
+   *   kept in the signature for parity with the POST signing path)
+   * @param targetUrl - The target URL the request will be sent to
    * @param digest - Optional Digest header value to include in the signature
+   * @param method - HTTP method for the request-target pseudo-header
+   *   (default `'post'`)
    * @returns Promise resolving to HttpSignature object
    */
-  async signActivity(actorUri: string, activity: any, targetUrl: string, digest?: string): Promise<HttpSignature> {
+  async signActivity(
+    actorUri: string,
+    activity: any,
+    targetUrl: string,
+    digest?: string,
+    method: 'get' | 'post' = 'post',
+  ): Promise<HttpSignature> {
     // Retrieve actor with private key
     const actor = await this.getActorByUri(actorUri);
     if (!actor) {
@@ -165,8 +181,10 @@ export default class CalendarActorService {
     // Generate date header
     const date = new Date().toUTCString();
 
-    // Create signing string
-    const requestTarget = `post ${path}`;
+    // Create signing string. The (request-target) verb must match the actual
+    // HTTP method; receivers reconstruct the signing string from the live
+    // request and a mismatch makes the signature invalid.
+    const requestTarget = `${method} ${path}`;
     const signingStringParts = [
       `(request-target): ${requestTarget}`,
       `host: ${host}`,

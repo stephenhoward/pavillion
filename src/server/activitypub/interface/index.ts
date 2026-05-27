@@ -9,7 +9,7 @@ import { WebFingerResponse } from '@/server/activitypub/model/webfinger';
 import { UserProfileResponse } from '@/server/activitypub/model/userprofile';
 import { FollowingCalendar, FollowerCalendar } from '@/common/model/follow';
 import ActivityPubMemberService from '@/server/activitypub/service/members';
-import ActivityPubServerService from '@/server/activitypub/service/server';
+import ActivityPubServerService, { InboxAuthContext } from '@/server/activitypub/service/server';
 import ProcessInboxService from '../service/inbox';
 import ProcessOutboxService from '../service/outbox';
 import FederationPublisher, {
@@ -22,6 +22,8 @@ import { CalendarActorEntity, CalendarActor } from '@/server/activitypub/entity/
 import { UserActorEntity } from '@/server/activitypub/entity/user_actor';
 import CalendarInterface from '@/server/calendar/interface';
 import AccountsInterface from '@/server/accounts/interface';
+
+export type { InboxAuthContext } from '@/server/activitypub/service/server';
 import ModerationInterface from '@/server/moderation/interface';
 import CreateActivity from '@/server/activitypub/model/action/create';
 import UpdateActivity from '@/server/activitypub/model/action/update';
@@ -254,8 +256,8 @@ export default class ActivityPubInterface {
     return this.federationPublisher.sendEditorRevoke(calendar, remoteUserActorUri);
   }
 
-  async addToInbox(calendar: Calendar, message: ActivityPubActivity): Promise<null> {
-    return this.serverService.addToInbox(calendar, message);
+  async addToInbox(calendar: Calendar, message: ActivityPubActivity, auth: InboxAuthContext): Promise<null> {
+    return this.serverService.addToInbox(calendar, message, auth);
   }
 
   async readOutbox(calendarId: string, cursor?: Date, limit?: number): Promise<{ items: ActivityPubOutboxMessageEntity[], totalItems: number }> {
@@ -331,6 +333,17 @@ export default class ActivityPubInterface {
 
   async processInboxMessage(message: ActivityPubInboxMessageEntity): Promise<void> {
     await this.inboxSerivce.processInboxMessage(message);
+  }
+
+  /**
+   * Drains the inbox by processing all unprocessed messages in chronological
+   * order (`messageTime ASC` over `processedAt: null`). Used by the follow
+   * backfill worker to flush inserted messages after pagination completes.
+   *
+   * @returns {Promise<void>}
+   */
+  async processInboxMessages(): Promise<void> {
+    return this.inboxSerivce.processInboxMessages();
   }
 
   /**

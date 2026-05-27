@@ -217,15 +217,23 @@ export default class JobQueueService {
     // Ensure queue exists before subscribing
     await this.ensureQueue(jobName);
 
-    await this.boss.work(jobName, { includeMetadata: true }, async (job: any) => {
-      try {
-        logger.info({ jobName, jobId: job.id }, 'Processing job');
-        await handler(job.data, { retryCount: job.retryCount, retryLimit: job.retryLimit });
-        logger.info({ jobName, jobId: job.id }, 'Completed job');
-      }
-      catch (error) {
-        logError(error, `[Housekeeping] Error processing job ${jobName} (ID: ${job.id})`);
-        throw error;
+    // pg-boss v10+ delivers an array of jobs to the work handler (batchSize
+    // defaults to 1, so the array typically has one entry). Iterate so a
+    // future batchSize bump doesn't silently drop work, and so payloads
+    // reach the handler — earlier code read `job.data` off the array
+    // itself, which is undefined.
+    await this.boss.work(jobName, { includeMetadata: true }, async (jobs: any) => {
+      const jobArray = Array.isArray(jobs) ? jobs : [jobs];
+      for (const job of jobArray) {
+        try {
+          logger.info({ jobName, jobId: job.id }, 'Processing job');
+          await handler(job.data, { retryCount: job.retryCount, retryLimit: job.retryLimit });
+          logger.info({ jobName, jobId: job.id }, 'Completed job');
+        }
+        catch (error) {
+          logError(error, `[Housekeeping] Error processing job ${jobName} (ID: ${job.id})`);
+          throw error;
+        }
       }
     });
 

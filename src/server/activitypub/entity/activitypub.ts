@@ -89,6 +89,39 @@ class ActivityPubMessageEntity extends Model {
 // messages from calendars from across the web
 @Table({ tableName: 'ap_inbox'})
 class ActivityPubInboxMessageEntity extends ActivityPubMessageEntity {
+
+  /**
+   * Authentication mechanism that admitted this row to the inbox (DEC-013).
+   * Open string enum; known values: `'http_signature'` (live inbox POST
+   * verified by HTTP Signatures) and `'outbox_pull'` (follow-backfill
+   * signed-GET outbox crawl). NOT NULL with a `'http_signature'` default
+   * so pre-DEC-013 rows backfill on migration.
+   *
+   * Internal field. NOT serialized via `toModel()` and MUST NOT appear in
+   * any API response — privacy: leaks how an instance authenticates inbound
+   * federation traffic.
+   */
+  @Column({
+    type: DataType.STRING(64),
+    allowNull: false,
+    defaultValue: 'http_signature',
+  })
+  declare auth_source: string;
+
+  /**
+   * Verified origin (scheme + host) of the authenticating party — keyId
+   * origin for HTTP signatures, outbox host for `outbox_pull`. Nullable
+   * because the live HTTP path may fail to parse keyId.
+   *
+   * Internal field. NOT serialized via `toModel()` and MUST NOT appear in
+   * any API response — privacy: leaks the verified remote-server identity
+   * tied to each inbound activity.
+   */
+  @Column({
+    type: DataType.STRING(2048),
+    allowNull: true,
+  })
+  declare auth_origin: string | null;
 }
 
 // messages from the calendar holder to their followers/ the public
