@@ -3,6 +3,8 @@ import axios from 'axios';
 import sinon from 'sinon';
 import { fetchRemoteObject } from '@/server/activitypub/helper/remote-fetch';
 import { REMOTE_OBJECT_FETCH_TIMEOUT_MS } from '@/server/common/constants';
+import { Calendar } from '@/common/model/calendar';
+import CalendarActorService from '@/server/activitypub/service/calendar_actor';
 
 describe('fetchRemoteObject', () => {
   let sandbox: sinon.SinonSandbox = sinon.createSandbox();
@@ -79,6 +81,32 @@ describe('fetchRemoteObject', () => {
 
     const callArgs = axiosGetStub.firstCall.args[1];
     expect(callArgs.maxRedirects).toBe(0);
+  });
+
+  it('should forward maxContentLength to axios when the option is provided', async () => {
+    axiosGetStub.resolves({
+      status: 200,
+      data: { type: 'Note' },
+    });
+
+    await fetchRemoteObject(
+      'https://remote.example/notes/456',
+      undefined,
+      { maxContentLength: 512_000 },
+    );
+
+    expect(axiosGetStub.firstCall.args[1].maxContentLength).toBe(512_000);
+  });
+
+  it('should omit maxContentLength from axios config when the option is not provided', async () => {
+    axiosGetStub.resolves({
+      status: 200,
+      data: { type: 'Note' },
+    });
+
+    await fetchRemoteObject('https://remote.example/notes/456');
+
+    expect(axiosGetStub.firstCall.args[1].maxContentLength).toBeUndefined();
   });
 
   it('should return null when HTTP response is not 200', async () => {
@@ -245,6 +273,130 @@ describe('fetchRemoteObject', () => {
 
       expect(result).not.toBeNull();
       expect(axiosGetStub.called).toBe(true);
+    });
+  });
+
+  describe('Signed GET path', () => {
+    const SIGNING_CALENDAR_ID = 'signing-calendar-id';
+    const SIGNING_CALENDAR_URLNAME = 'community-events';
+    const SIGNING_ACTOR_URI = 'https://local.test/calendars/community-events';
+    const TARGET_URI = 'https://remote.example/users/alice/outbox';
+    const MOCK_SIGNATURE = 'mock-signature-base64-value';
+    const MOCK_DATE = 'Wed, 13 May 2026 12:00:00 GMT';
+
+    function makeSigningCalendar(): Calendar {
+      return new Calendar(SIGNING_CALENDAR_ID, SIGNING_CALENDAR_URLNAME);
+    }
+
+    function stubActorLookupAndSigning() {
+      sandbox.stub(CalendarActorService.prototype, 'getActorByCalendarId').resolves({
+        id: 'actor-id-123',
+        calendarId: SIGNING_CALENDAR_ID,
+        actorUri: SIGNING_ACTOR_URI,
+        publicKey: 'PUBLIC_KEY_PEM',
+        privateKey: 'PRIVATE_KEY_PEM',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      } as any);
+      const signStub = sandbox.stub(CalendarActorService.prototype, 'signActivity').resolves({
+        keyId: `${SIGNING_ACTOR_URI}#main-key`,
+        signature: MOCK_SIGNATURE,
+        algorithm: 'rsa-sha256',
+        headers: '(request-target) host date',
+        date: MOCK_DATE,
+      });
+      return signStub;
+    }
+
+    it('attaches an HTTP Signature header when a signing calendar is provided', async () => {
+      const signStub = stubActorLookupAndSigning();
+      axiosGetStub.resolves({ status: 200, data: { type: 'OrderedCollection' } });
+
+      const result = await fetchRemoteObject(TARGET_URI, makeSigningCalendar());
+
+      expect(result).toEqual({ type: 'OrderedCollection' });
+      expect(axiosGetStub.calledOnce).toBe(true);
+      const callArgs = axiosGetStub.firstCall.args[1];
+      const signatureHeader = callArgs.headers.Signature as string;
+      expect(signatureHeader).toBeDefined();
+      // Signature header must reference the calendar actor's keyId, the
+      // signing algorithm, the headers list including (request-target), and
+      // the base64 signature value.
+      expect(signatureHeader).toContain(`keyId="${SIGNING_ACTOR_URI}#main-key"`);
+      expect(signatureHeader).toContain('algorithm="rsa-sha256"');
+      expect(signatureHeader).toContain('headers="(request-target) host date"');
+      expect(signatureHeader).toContain(`signature="${MOCK_SIGNATURE}"`);
+      expect(callArgs.headers.Date).toBe(MOCK_DATE);
+
+      // signActivity must be invoked with method='get' and no digest so the
+      // (request-target) pseudo-header reflects the actual HTTP verb.
+      expect(signStub.calledOnce).toBe(true);
+      const signCallArgs = signStub.firstCall.args;
+      expect(signCallArgs[0]).toBe(SIGNING_ACTOR_URI); // actorUri
+      expect(signCallArgs[2]).toBe(TARGET_URI);        // targetUrl
+      expect(signCallArgs[3]).toBeUndefined();          // digest omitted for GET
+      expect(signCallArgs[4]).toBe('get');              // method
+    });
+
+    it('preserves Accept and User-Agent headers alongside signature headers', async () => {
+      stubActorLookupAndSigning();
+      axiosGetStub.resolves({ status: 200, data: { type: 'OrderedCollection' } });
+
+      await fetchRemoteObject(TARGET_URI, makeSigningCalendar());
+
+      const callArgs = axiosGetStub.firstCall.args[1];
+      expect(callArgs.headers['Accept']).toBe('application/activity+json');
+      expect(callArgs.headers['User-Agent']).toBe('Pavillion ActivityPub Server');
+    });
+
+    it('returns null and skips the HTTP request when the calendar has no actor', async () => {
+      sandbox.stub(CalendarActorService.prototype, 'getActorByCalendarId').resolves(null);
+
+      const result = await fetchRemoteObject(TARGET_URI, makeSigningCalendar());
+
+      // Fail-closed: when signing was requested but cannot be performed, we
+      // must not send an unsigned GET (which signature-requiring peers
+      // would reject anyway).
+      expect(result).toBeNull();
+      expect(axiosGetStub.called).toBe(false);
+    });
+
+    it('returns null and skips the HTTP request when signing throws', async () => {
+      sandbox.stub(CalendarActorService.prototype, 'getActorByCalendarId').resolves({
+        id: 'actor-id-123',
+        calendarId: SIGNING_CALENDAR_ID,
+        actorUri: SIGNING_ACTOR_URI,
+        publicKey: 'PUBLIC_KEY_PEM',
+        privateKey: 'PRIVATE_KEY_PEM',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      } as any);
+      sandbox.stub(CalendarActorService.prototype, 'signActivity').rejects(new Error('no private key'));
+
+      const result = await fetchRemoteObject(TARGET_URI, makeSigningCalendar());
+
+      expect(result).toBeNull();
+      expect(axiosGetStub.called).toBe(false);
+    });
+
+    it('does NOT attach signature headers when no signing calendar is provided', async () => {
+      // Stub signing primitives so a leak through to them would still be
+      // observable; assert they are never called.
+      const actorStub = sandbox.stub(CalendarActorService.prototype, 'getActorByCalendarId');
+      const signStub = sandbox.stub(CalendarActorService.prototype, 'signActivity');
+      axiosGetStub.resolves({ status: 200, data: { type: 'Event' } });
+
+      await fetchRemoteObject(TARGET_URI);
+
+      const callArgs = axiosGetStub.firstCall.args[1];
+      expect(callArgs.headers.Signature).toBeUndefined();
+      expect(callArgs.headers.Date).toBeUndefined();
+      // Existing Accept/User-Agent headers are still present.
+      expect(callArgs.headers['Accept']).toBe('application/activity+json');
+      expect(callArgs.headers['User-Agent']).toBe('Pavillion ActivityPub Server');
+      // Signing primitives must not be invoked in the unsigned path.
+      expect(actorStub.called).toBe(false);
+      expect(signStub.called).toBe(false);
     });
   });
 });

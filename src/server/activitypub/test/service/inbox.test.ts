@@ -36,7 +36,9 @@ import {
   createMockDeleteActivity,
   createMockAnnounceActivity,
   createMockUndoActivity,
+  createMockAcceptActivity,
 } from '@/server/activitypub/test/helpers/fedify-mock';
+import AcceptActivity from '@/server/activitypub/model/action/accept';
 
 
 // Mock the remote-fetch module at the top level for vitest
@@ -1886,5 +1888,158 @@ describe('AP Object ID URI Scheme Validation', () => {
 
     expect(result).toBeNull();
     expect(mockLogActivityRejection).toHaveBeenCalledOnce();
+  });
+});
+
+describe('processAcceptActivity — activitypub:follow:accepted emission', () => {
+  let service: ProcessInboxService;
+  let eventBus: EventEmitter;
+  let sandbox: sinon.SinonSandbox;
+
+  const TEST_CALENDAR_ID = 'test-calendar-id';
+  const TEST_CALENDAR_URL_NAME = 'testcalendar';
+  const REMOTE_CALENDAR_ACTOR_URL = 'https://remote.federation.test/calendars/events';
+  const REMOTE_CALENDAR_ACTOR_ID = 'remote-actor-uuid';
+  const FOLLOWING_ROW_ID = 'following-row-uuid';
+
+  // A mock CalendarActor returned by remoteCalendarService.getByActorUri.
+  // actorType: 'remote' mirrors what getByActorUri can return — it filters
+  // by actor_type='remote' so this is the realistic shape.
+  const mockRemoteCalendarActor = {
+    id: REMOTE_CALENDAR_ACTOR_ID,
+    actorUri: REMOTE_CALENDAR_ACTOR_URL,
+    actorType: 'remote' as const,
+    calendarId: null,
+    remoteCalendarId: null,
+    remoteDisplayName: null,
+    remoteDomain: 'remote.federation.test',
+    inboxUrl: null,
+    sharedInboxUrl: null,
+    lastFetched: null,
+    publicKey: null,
+    privateKey: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
+  const mockFollowingRecord = {
+    id: FOLLOWING_ROW_ID,
+    calendar_actor_id: REMOTE_CALENDAR_ACTOR_ID,
+    calendar_id: TEST_CALENDAR_ID,
+  };
+
+  beforeEach(() => {
+    sandbox = sinon.createSandbox();
+    eventBus = new EventEmitter();
+    const calendarInterface = new CalendarInterface(eventBus);
+    service = new ProcessInboxService(eventBus, calendarInterface);
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+  });
+
+  /**
+   * Builds an AcceptActivity wrapping an inline Follow whose `object` is the
+   * remote actor URL we follow. This mirrors a remote instance confirming a
+   * Follow we sent.
+   */
+  function buildInlineFollowAccept(): AcceptActivity {
+    const followObject = {
+      type: 'Follow',
+      actor: `https://local.federation.test/calendars/${TEST_CALENDAR_URL_NAME}`,
+      object: REMOTE_CALENDAR_ACTOR_URL,
+    };
+    const raw = createMockAcceptActivity(REMOTE_CALENDAR_ACTOR_URL, followObject);
+    return AcceptActivity.fromObject(raw as Record<string, any>) as AcceptActivity;
+  }
+
+  it('emits activitypub:follow:accepted with the expected payload when a remote-target FollowingCalendarEntity matches', async () => {
+    sandbox.stub(service.remoteCalendarService, 'getByActorUri').resolves(mockRemoteCalendarActor as any);
+    sandbox.stub(FollowingCalendarEntity, 'findOne').resolves(mockFollowingRecord as any);
+
+    const emitted: any[] = [];
+    eventBus.on('activitypub:follow:accepted', (payload) => emitted.push(payload));
+
+    const calendar = Calendar.fromObject({ id: TEST_CALENDAR_ID, urlName: TEST_CALENDAR_URL_NAME });
+    await service.processAcceptActivity(calendar, buildInlineFollowAccept());
+
+    expect(emitted).toHaveLength(1);
+    expect(emitted[0]).toEqual({
+      followingCalendarId: TEST_CALENDAR_ID,
+      calendarActorId: REMOTE_CALENDAR_ACTOR_ID,
+      sourceActorUri: REMOTE_CALENDAR_ACTOR_URL,
+    });
+  });
+
+  it('does NOT emit when no FollowingCalendarEntity matches the Accept(Follow)', async () => {
+    sandbox.stub(service.remoteCalendarService, 'getByActorUri').resolves(mockRemoteCalendarActor as any);
+    // No following row exists for this calendar/actor pair.
+    sandbox.stub(FollowingCalendarEntity, 'findOne').resolves(null);
+
+    const emitted: any[] = [];
+    eventBus.on('activitypub:follow:accepted', (payload) => emitted.push(payload));
+
+    const calendar = Calendar.fromObject({ id: TEST_CALENDAR_ID, urlName: TEST_CALENDAR_URL_NAME });
+    await service.processAcceptActivity(calendar, buildInlineFollowAccept());
+
+    expect(emitted).toHaveLength(0);
+  });
+
+  it('does NOT emit when the matched CalendarActor is local-typed (backfill is only meaningful for remote sources)', async () => {
+    // Defensive guard: even if a FollowingCalendarEntity were somehow keyed
+    // to a local CalendarActor, emitFollowAccepted's actorType check should
+    // suppress emission. Today getByActorUri only returns remote actors, so
+    // this codepath is reached only when the contract is violated upstream;
+    // the test pins that behaviour.
+    const localCalendarActor = {
+      ...mockRemoteCalendarActor,
+      actorType: 'local' as const,
+      calendarId: 'local-calendar-id',
+      remoteDomain: null,
+    };
+
+    sandbox.stub(service.remoteCalendarService, 'getByActorUri').resolves(localCalendarActor as any);
+    sandbox.stub(FollowingCalendarEntity, 'findOne').resolves(mockFollowingRecord as any);
+
+    const emitted: any[] = [];
+    eventBus.on('activitypub:follow:accepted', (payload) => emitted.push(payload));
+
+    const calendar = Calendar.fromObject({ id: TEST_CALENDAR_ID, urlName: TEST_CALENDAR_URL_NAME });
+    await service.processAcceptActivity(calendar, buildInlineFollowAccept());
+
+    expect(emitted).toHaveLength(0);
+  });
+
+  it('emits activitypub:follow:accepted on the string-URI Accept branch when hostnames match and a FollowingCalendarEntity is matched', async () => {
+    // The string-URI Accept branch fires when a peer sends `Accept` whose
+    // `object` is the IRI of our outbound Follow rather than an inline Follow
+    // object. The branch matches the FollowingCalendarEntity via
+    // remoteCalendarService.getByActorUri(message.actor) — by symmetry the
+    // emission must fire here too so backfill can run regardless of which
+    // peer shape we received.
+    sandbox.stub(service.remoteCalendarService, 'getByActorUri').resolves(mockRemoteCalendarActor as any);
+    sandbox.stub(FollowingCalendarEntity, 'findOne').resolves(mockFollowingRecord as any);
+
+    const emitted: any[] = [];
+    eventBus.on('activitypub:follow:accepted', (payload) => emitted.push(payload));
+
+    // Object is a URI on the SAME host as message.actor — required for the
+    // branch's hostname-match guard, mirroring the production wire shape
+    // where a remote instance echoes our follow IRI back inside the Accept.
+    const localFollowIri = 'https://remote.federation.test/activities/follow-123';
+    const raw = createMockAcceptActivity(REMOTE_CALENDAR_ACTOR_URL, { __unused: true });
+    raw.object = localFollowIri;
+    const stringUriAccept = AcceptActivity.fromObject(raw as Record<string, any>) as AcceptActivity;
+
+    const calendar = Calendar.fromObject({ id: TEST_CALENDAR_ID, urlName: TEST_CALENDAR_URL_NAME });
+    await service.processAcceptActivity(calendar, stringUriAccept);
+
+    expect(emitted).toHaveLength(1);
+    expect(emitted[0]).toEqual({
+      followingCalendarId: TEST_CALENDAR_ID,
+      calendarActorId: REMOTE_CALENDAR_ACTOR_ID,
+      sourceActorUri: REMOTE_CALENDAR_ACTOR_URL,
+    });
   });
 });

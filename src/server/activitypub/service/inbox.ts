@@ -16,7 +16,8 @@ import AcceptActivity from "@/server/activitypub/model/action/accept";
 import AnnounceActivity from "@/server/activitypub/model/action/announce";
 import { ActivityPubInboxMessageEntity, EventActivityEntity, FollowerCalendarEntity, FollowingCalendarEntity, RepostDismissalEntity, SharedEventEntity } from "@/server/activitypub/entity/activitypub";
 import { EventObjectEntity } from "@/server/activitypub/entity/event_object";
-import { CalendarActorEntity } from "@/server/activitypub/entity/calendar_actor";
+import { CalendarActor, CalendarActorEntity } from "@/server/activitypub/entity/calendar_actor";
+import { ActivityPubFollowAcceptedPayload } from "@/server/activitypub/events/types";
 import RemoteCalendarService from "@/server/activitypub/service/remote_calendar";
 import { EventObject } from "@/server/activitypub/model/object/event";
 import { NoteObject } from "@/server/activitypub/model/object/note";
@@ -1762,6 +1763,35 @@ class ProcessInboxService {
     }
   }
   /**
+   * Emit `activitypub:follow:accepted` for a confirmed follow whose target
+   * is a remote CalendarActor. The AP-domain handler picks this up and
+   * enqueues a `activitypub:follow:backfill` job so the worker can pull
+   * the remote calendar's event history.
+   *
+   * This is a defensive guard: the only callers reach this with a
+   * `remoteCalendar` retrieved via `remoteCalendarService.getByActorUri`,
+   * which only returns CalendarActors with `actor_type === 'remote'`.
+   * Checking actorType here keeps the contract explicit and protects
+   * future callers from accidentally emitting for local-target follows
+   * (where no backfill is needed).
+   *
+   * @param followingRecord - The matched FollowingCalendarEntity row.
+   * @param remoteCalendar - The CalendarActor we are following (target).
+   */
+  private emitFollowAccepted(followingRecord: FollowingCalendarEntity, remoteCalendar: CalendarActor): void {
+    if (remoteCalendar.actorType !== 'remote') {
+      return;
+    }
+
+    const payload: ActivityPubFollowAcceptedPayload = {
+      followingCalendarId: followingRecord.calendar_id,
+      calendarActorId: followingRecord.calendar_actor_id,
+      sourceActorUri: remoteCalendar.actorUri,
+    };
+    this.eventBus.emit('activitypub:follow:accepted', payload);
+  }
+
+  /**
    * Processes an Accept activity received in response to a Follow or Flag request.
    * For Follow: Confirms the follow relationship on the initiating side.
    * For Flag: Updates the forward_status to 'acknowledged' on the forwarded report.
@@ -1850,6 +1880,12 @@ class ProcessInboxService {
 
           if (followingRecord) {
             logger.info(`Follow relationship confirmed for calendar ${calendar.id} via string URI Accept from ${message.actor}`);
+            // Emit follow-accepted event so the AP-domain handler can enqueue
+            // a backfill job for this remote source. Only fires when the
+            // target is remote-typed; getByActorUri returns only remote
+            // CalendarActorEntities, so reaching this point already implies
+            // a remote target.
+            this.emitFollowAccepted(followingRecord, remoteCalendar);
             return;
           }
         }
@@ -1890,6 +1926,12 @@ class ProcessInboxService {
         // In the future, we could add a "confirmed" status field
         // For now, the existence of the record means it's active
         logger.info(`Follow relationship confirmed for calendar ${calendar.id} following ${followActivity.object}`);
+        // Emit follow-accepted event so the AP-domain handler can enqueue
+        // a backfill job for the remote source. remoteCalendar comes from
+        // remoteCalendarService.getByActorUri, which only returns
+        // remote-typed CalendarActorEntities — local-target follows would
+        // not match here and therefore never reach this emit.
+        this.emitFollowAccepted(followingRecord, remoteCalendar);
       }
       else {
         logger.warn(`No FollowingCalendarEntity found for ${followActivity.object}, Accept may be for unknown follow`);

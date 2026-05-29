@@ -318,8 +318,17 @@ const initPavillionServer = async (app: express.Application, port: number): Prom
   // Wire moderation interface into calendar domain for admin-scoped cross-domain decoration
   calendarDomain.interface.setModerationInterface(moderationDomain.interface);
 
-  // Initialize ActivityPub domain with ModerationInterface for instance blocking
-  const activityPubDomain = new ActivityPubDomain(eventBus, calendarDomain.interface, accountsDomain.interface, moderationDomain.interface);
+  // Initialize housekeeping domain before ActivityPub. AP event handlers
+  // publish background jobs (e.g. activitypub:follow:backfill) through the
+  // housekeeping-owned pg-boss queue; this construction order ensures the
+  // queue is wired in before any AP handler can fire. `initialize` is async
+  // because it starts a pg-boss connection (sqlite test mode no-ops).
+  const housekeepingDomain = new HousekeepingDomain(eventBus, emailDomain.interface, accountsDomain.interface);
+  await housekeepingDomain.initialize(app);
+
+  // Initialize ActivityPub domain with HousekeepingInterface (job publishing)
+  // and ModerationInterface (instance blocking).
+  const activityPubDomain = new ActivityPubDomain(eventBus, calendarDomain.interface, accountsDomain.interface, housekeepingDomain.interface, moderationDomain.interface);
   activityPubDomain.initialize(app);
 
   // Wire AP interface into calendar domain for cross-domain queries
@@ -346,10 +355,6 @@ const initPavillionServer = async (app: express.Application, port: number): Prom
   // to resolve the circular dependency (MediaDomain needs CalendarInterface,
   // CalendarInterface needs MediaInterface for media ownership checks).
   calendarDomain.interface.setMediaInterface(mediaDomain.interface);
-
-  // Initialize housekeeping domain (for automated server maintenance)
-  const housekeepingDomain = new HousekeepingDomain(eventBus, emailDomain.interface, accountsDomain.interface);
-  housekeepingDomain.initialize(app);
 
   // Register global error handler (MUST be after all routes and middleware)
   app.use(globalErrorHandler);

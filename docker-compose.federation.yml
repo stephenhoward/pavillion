@@ -177,6 +177,88 @@ services:
       retries: 5
     restart: unless-stopped
 
+  # Worker for instance Alpha - processes pg-boss background jobs (e.g.
+  # activitypub:follow:backfill). The web instance is publish-only and never
+  # subscribes to the queue, so without a paired worker, follow-backfill jobs
+  # accumulate and are never executed.
+  worker_alpha:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    container_name: pavillion-federation-worker-alpha
+    depends_on:
+      db_alpha:
+        condition: service_healthy
+    environment:
+      - NODE_ENV=federation
+      - LOCAL_DOMAIN=alpha.federation.local
+      - DB_HOST=db_alpha
+      - DB_PORT=5432
+      - DB_NAME=alpha_db
+      - DB_USER=pavillion
+      - DB_PASSWORD=devpassword
+      # Web instance owns DB reset/seed; worker only subscribes to pg-boss
+      - DB_RESET=false
+      - SKIP_SIGNATURES=true
+      - ALLOW_PRIVATE_FEDERATION=true
+      - NODE_TLS_REJECT_UNAUTHORIZED=0
+      - CHOKIDAR_USEPOLLING=true
+    volumes:
+      - ./src:/app/src:cached
+      - ./config:/app/config:cached
+      - ./migrations:/app/migrations:cached
+      - ./layouts:/app/layouts:cached
+      - ./docker/federation/ssl:/app/docker/federation/ssl:ro
+      - ./tsconfig.json:/app/tsconfig.json:cached
+      - ./vite.config.ts:/app/vite.config.ts:cached
+      - /app/node_modules
+    command: ["--worker"]
+    networks:
+      federation_net:
+        aliases:
+          - worker_alpha
+    restart: unless-stopped
+
+  # Worker for instance Beta - see worker_alpha for rationale
+  worker_beta:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    container_name: pavillion-federation-worker-beta
+    depends_on:
+      db_beta:
+        condition: service_healthy
+    environment:
+      - NODE_ENV=federation
+      - LOCAL_DOMAIN=beta.federation.local
+      - DB_HOST=db_beta
+      - DB_PORT=5432
+      - DB_NAME=beta_db
+      - DB_USER=pavillion
+      - DB_PASSWORD=devpassword
+      - DB_RESET=false
+      - SKIP_SIGNATURES=true
+      - ALLOW_PRIVATE_FEDERATION=true
+      - NODE_TLS_REJECT_UNAUTHORIZED=0
+      - CHOKIDAR_USEPOLLING=true
+    volumes:
+      - ./src:/app/src:cached
+      - ./config:/app/config:cached
+      - ./migrations:/app/migrations:cached
+      - ./layouts:/app/layouts:cached
+      - ./docker/federation/ssl:/app/docker/federation/ssl:ro
+      - ./tsconfig.json:/app/tsconfig.json:cached
+      - ./vite.config.ts:/app/vite.config.ts:cached
+      - /app/node_modules
+    command: ["--worker"]
+    networks:
+      federation_net:
+        aliases:
+          - worker_beta
+    restart: unless-stopped
+
   # PostgreSQL database for alpha instance
   db_alpha:
     image: postgres:17
