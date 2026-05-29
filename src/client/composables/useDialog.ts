@@ -76,13 +76,24 @@ export function useDialog(
   // stale references across open/close cycles or when the trigger is unmounted.
   let previouslyFocused: HTMLElement | null = null;
 
-  const trapFocus = () => {
-    // Fallback only: <dialog>.showModal() already focuses the first [autofocus]
-    // or focusable descendant per spec. Only focus the dialog element itself
-    // when the native behavior did not land focus inside the dialog.
+  const setInitialFocus = () => {
+    // Initial focus policy:
+    //   1. If a descendant has [autofocus], the native <dialog>.showModal()
+    //      already placed focus there per spec — leave it alone.
+    //   2. Otherwise, focus the dialog's heading (matched by titleId) so the
+    //      close button (the first focusable in DOM order) does not steal the
+    //      visible focus ring on open. The heading must carry tabindex="-1"
+    //      to be programmatically focusable.
+    //   3. Final fallback: focus the dialog element itself.
     setTimeout(() => {
       const el = dialogRef.value;
       if (!el) return;
+      if (el.querySelector('[autofocus]')) return;
+      const heading = el.querySelector<HTMLElement>(`#${CSS.escape(titleId.value)}`);
+      if (heading) {
+        heading.focus();
+        return;
+      }
       const active = document.activeElement;
       if (active && active !== el && el.contains(active)) return;
       el.focus();
@@ -153,7 +164,7 @@ export function useDialog(
       : null;
     el.showModal();
     el.addEventListener('keydown', handleKeydown);
-    trapFocus();
+    setInitialFocus();
     if (typeof document !== 'undefined') {
       document.body.classList.add('modal-open');
     }

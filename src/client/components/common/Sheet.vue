@@ -9,7 +9,7 @@
   >
     <div class="sheet-content">
       <header class="sheet-header">
-        <h2 :id="titleId">{{ props.title }}</h2>
+        <h2 :id="titleId" tabindex="-1">{{ props.title }}</h2>
         <button
           type="button"
           @click="close"
@@ -122,6 +122,14 @@ defineExpose({ open, close });
     font-size: var(--pav-font-size-h4);
     margin: 0;
     color: var(--pav-text-primary);
+
+    /* The heading is the initial focus target (tabindex="-1") so the close
+       button doesn't claim the focus ring on open. Suppress the ring when
+       focus is not keyboard-driven; keyboard navigation still triggers
+       :focus-visible elsewhere. */
+    &:focus:not(:focus-visible) {
+      outline: none;
+    }
   }
 
   button {

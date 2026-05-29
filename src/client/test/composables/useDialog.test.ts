@@ -76,7 +76,54 @@ describe('useDialog', () => {
       expect(document.body.classList.contains('modal-open')).toBe(true);
     });
 
-    it('focuses the dialog element when no descendant holds focus (fallback)', () => {
+    it('focuses the heading (matched by titleId) so the close button does not steal the focus ring', () => {
+      const { el, focusSpy } = makeDialogStub();
+      dialogRef.value = el;
+      const { open, titleId } = useDialog(dialogRef, emit, { idPrefix: 'modal' });
+      const heading = document.createElement('h2');
+      heading.id = titleId.value;
+      heading.setAttribute('tabindex', '-1');
+      const headingFocus = vi.fn();
+      heading.focus = headingFocus;
+      el.appendChild(heading);
+      const closeBtn = document.createElement('button');
+      const closeFocus = vi.fn();
+      closeBtn.focus = closeFocus;
+      el.appendChild(closeBtn);
+
+      open();
+      vi.runAllTimers();
+
+      expect(headingFocus).toHaveBeenCalledTimes(1);
+      expect(closeFocus).not.toHaveBeenCalled();
+      expect(focusSpy).not.toHaveBeenCalled();
+    });
+
+    it('does not redirect focus when a descendant carries [autofocus]', () => {
+      const { el, focusSpy } = makeDialogStub();
+      dialogRef.value = el;
+      const { open, titleId } = useDialog(dialogRef, emit, { idPrefix: 'modal' });
+      const heading = document.createElement('h2');
+      heading.id = titleId.value;
+      heading.setAttribute('tabindex', '-1');
+      const headingFocus = vi.fn();
+      heading.focus = headingFocus;
+      el.appendChild(heading);
+      const input = document.createElement('input');
+      input.setAttribute('autofocus', '');
+      const inputFocus = vi.fn();
+      input.focus = inputFocus;
+      el.appendChild(input);
+
+      open();
+      vi.runAllTimers();
+
+      expect(headingFocus).not.toHaveBeenCalled();
+      expect(inputFocus).not.toHaveBeenCalled();
+      expect(focusSpy).not.toHaveBeenCalled();
+    });
+
+    it('focuses the dialog element as last-resort fallback when no heading is present', () => {
       const { el, focusSpy } = makeDialogStub();
       dialogRef.value = el;
       const { open } = useDialog(dialogRef, emit);
@@ -85,25 +132,6 @@ describe('useDialog', () => {
       expect(focusSpy).not.toHaveBeenCalled();
       vi.runAllTimers();
       expect(focusSpy).toHaveBeenCalledTimes(1);
-    });
-
-    it('does not steal focus from a descendant that already holds it (autofocus)', () => {
-      const { el, focusSpy } = makeDialogStub();
-      const input = document.createElement('input');
-      el.appendChild(input);
-      // Simulate the native <dialog>.showModal() having focused an autofocus
-      // descendant before our setTimeout callback runs.
-      Object.defineProperty(document, 'activeElement', {
-        configurable: true,
-        get: () => input,
-      });
-      dialogRef.value = el;
-      const { open } = useDialog(dialogRef, emit);
-
-      open();
-      vi.runAllTimers();
-
-      expect(focusSpy).not.toHaveBeenCalled();
     });
 
     it('is a no-op when already open (concurrent open)', () => {
