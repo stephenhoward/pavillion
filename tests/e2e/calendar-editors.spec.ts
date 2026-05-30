@@ -70,7 +70,7 @@ test.describe('Calendar Editor Collaboration', () => {
       await page.waitForTimeout(1000);
 
       // Click the Add Editor button
-      const addEditorButton = page.locator('button.pill-button--primary').filter({ hasText: /Add Editor/i });
+      const addEditorButton = page.locator('button.btn--cta').filter({ hasText: /Add Editor/i });
       await expect(addEditorButton).toBeVisible({ timeout: 5000 });
       await addEditorButton.click();
 

@@ -61,7 +61,7 @@ test.describe('Calendar Name Validation UX', () => {
     await calendarInput.fill('ab');
     await calendarInput.blur();
 
-    const submitButton = page.locator('button[type="submit"].btn--primary');
+    const submitButton = page.locator('button[type="submit"].btn--cta');
     await submitButton.click();
     await page.waitForTimeout(1000);
 
