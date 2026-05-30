@@ -406,7 +406,7 @@ onUnmounted(() => {
     >
       <button
         type="button"
-        class="btn btn--primary"
+        class="btn btn--cta btn--lg"
         @click="handleFollowCalendar($event)"
       >
         {{ t("follow_button") }}

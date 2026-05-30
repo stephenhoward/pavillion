@@ -281,7 +281,7 @@ describe('Editors Component', () => {
       await flushPromises();
 
       // Empty state PillButton should be present for owners.
-      const pillButtons = wrapper.findAll('.pill-button--primary');
+      const pillButtons = wrapper.findAll('.btn--cta');
       expect(pillButtons.length).toBeGreaterThan(0);
     });
 
@@ -290,7 +290,7 @@ describe('Editors Component', () => {
       await flushPromises();
 
       // No primary pill button should appear for non-owners in empty state.
-      const pillButtons = wrapper.findAll('.pill-button--primary');
+      const pillButtons = wrapper.findAll('.btn--cta');
       expect(pillButtons.length).toBe(0);
     });
 
@@ -334,7 +334,7 @@ describe('Editors Component', () => {
 
       await flushPromises();
 
-      const pillButtons = wrapper.findAll('.pill-button--primary');
+      const pillButtons = wrapper.findAll('.btn--cta');
       expect(pillButtons.length).toBe(0);
     });
   });
@@ -352,7 +352,7 @@ describe('Editors Component', () => {
       await flushPromises();
       await nextTick();
 
-      const addButton = wrapper.find('.pill-button--primary');
+      const addButton = wrapper.find('.btn--cta');
       expect(addButton.exists()).toBe(true);
 
       await addButton.trigger('click');
@@ -381,7 +381,7 @@ describe('Editors Component', () => {
       await flushPromises();
       await nextTick();
 
-      await wrapper.find('.pill-button--primary').trigger('click');
+      await wrapper.find('.btn--cta').trigger('click');
       await nextTick();
 
       const input = wrapper.find('#email').element as HTMLInputElement;
@@ -419,7 +419,7 @@ describe('Editors Component', () => {
       await nextTick();
 
       // Open add form via the visible primary pill button.
-      await wrapper.find('.pill-button--primary').trigger('click');
+      await wrapper.find('.btn--cta').trigger('click');
       await nextTick();
 
       // Fill in the email field via real DOM interaction.
@@ -465,7 +465,7 @@ describe('Editors Component', () => {
       await nextTick();
 
       // Open add form via the visible primary pill button.
-      await wrapper.find('.pill-button--primary').trigger('click');
+      await wrapper.find('.btn--cta').trigger('click');
       await nextTick();
 
       await wrapper.find('#email').setValue('existing@example.com');
@@ -488,7 +488,7 @@ describe('Editors Component', () => {
       await flushPromises();
       await nextTick();
 
-      await wrapper.find('.pill-button--primary').trigger('click');
+      await wrapper.find('.btn--cta').trigger('click');
       await nextTick();
 
       await wrapper.find('#email').setValue('invited@example.com');

@@ -210,7 +210,7 @@ const subTabs = computed(() => [
         </div>
       </div>
       <EmptyLayout v-else :title="t('noAccounts')" :description="t('noAccountsDescription')">
-        <button type="button" class="invite-button" @click="activateTab('invitations')">
+        <button type="button" class="btn btn--cta btn--lg" @click="activateTab('invitations')">
           {{ t('inviteNewAccount') }}
         </button>
       </EmptyLayout>

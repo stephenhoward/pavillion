@@ -7,8 +7,16 @@
  * - Context-specific overrides (e.g., `.welcome-card`) adjust shape/size only.
  */
 
-/* Base button reset — structural properties only, no color opinions */
-button:not([role="tab"]) {
+/* Base button reset — structural defaults only, no color opinions.
+   Deliberately wrapped in :where() so the whole reset sits at ZERO specificity.
+   The selector `button:not([role="tab"])` is (0,1,1) because of the `:not([attr])`,
+   which silently outranked every `.btn` variant (0,1,0) and forced the reset's
+   background/color/border AND its padding/font/border-radius onto them — so fills
+   were suppressed, borders never painted, size modifiers (--sm/--lg/--xl) were
+   no-ops, and radius modifiers (--icon/--cta/--pill) couldn't go fully round.
+   At zero specificity these values still apply to bare <button>s but any `.btn`
+   class wins cleanly. */
+:where(button:not([role="tab"])) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -229,15 +237,20 @@ button:not([role="tab"]) {
     }
   }
 
-  /* Ghost variant */
+  /* Ghost variant — the quietest button: no fill or border at rest, a subtle
+     neutral tint on hover (not a loud brand fill). */
   &--ghost {
     background-color: transparent;
     color: var(--pav-text-secondary);
     border-color: transparent;
 
     &:hover:not(:disabled) {
-      background-color: var(--pav-color-interactive-primary-hover);
-      color: var(--pav-text-inverse);
+      background-color: var(--pav-interactive-hover);
+      color: var(--pav-text-primary);
+    }
+
+    &:active:not(:disabled) {
+      background-color: var(--pav-interactive-active);
     }
   }
 
@@ -253,10 +266,76 @@ button:not([role="tab"]) {
     }
   }
 
-  /* Icon button variant */
+  /* Call-to-action variant — for a LONE, standalone button (not part of a
+     primary/secondary group). Calm outlined pill at rest that commits to a
+     solid brand fill on hover. Use primary/secondary/ghost for button GROUPS
+     where a hierarchy is needed; reach for --cta when a single action stands
+     on its own and primary is too loud, secondary is semantically wrong, and
+     ghost is too quiet. */
+  &--cta {
+    background-color: transparent;
+    color: var(--pav-text-primary);
+    border-color: var(--pav-border-primary);
+    border-radius: var(--pav-border-radius-full);
+
+    &:hover:not(:disabled) {
+      background-color: var(--pav-color-brand-primary);
+      color: var(--pav-text-inverse);
+      border-color: var(--pav-color-brand-primary);
+    }
+
+    &:active:not(:disabled) {
+      background-color: var(--pav-color-brand-primary-dark);
+      border-color: var(--pav-color-brand-primary-dark);
+      transform: translateY(1px);
+    }
+  }
+
+  /* Icon-only button variants — square hit area, the icon carries the color.
+     Two context-driven treatments:
+       .btn--icon             → standalone affordance: quiet at rest, lifts into a
+                                shadowed circle with a brand-colored icon on hover.
+       .btn--icon.btn--subtle → dense in-row actions: subtle gray fill, no elevation. */
   &--icon {
     padding: var(--pav-space-2);
     aspect-ratio: 1;
+    border-radius: var(--pav-border-radius-full);
+    background-color: transparent;
+    border-color: transparent;
+    color: var(--pav-text-primary);
+
+    &:hover:not(:disabled) {
+      background-color: var(--pav-surface-card);
+      color: var(--pav-color-brand-primary);
+      box-shadow: var(--pav-shadow-md);
+    }
+
+    &:active:not(:disabled) {
+      transform: translateY(1px);
+    }
+
+    /* Selected / toggled / current — persistent brand-colored icon */
+    &[aria-pressed="true"],
+    &[aria-expanded="true"],
+    &[aria-current]:not([aria-current="false"]) {
+      color: var(--pav-color-brand-primary);
+    }
+
+    &:disabled {
+      color: var(--pav-text-muted);
+    }
+
+    /* Dense treatment — gray fill, rounded rect, no shadow (e.g. event row actions) */
+    &.btn--subtle {
+      border-radius: var(--pav-border-radius-md);
+      color: var(--pav-text-secondary);
+
+      &:hover:not(:disabled) {
+        background-color: var(--pav-interactive-hover);
+        color: var(--pav-color-brand-primary);
+        box-shadow: none;
+      }
+    }
 
     &.btn--xs { padding: var(--pav-space-1); }
     &.btn--sm { padding: var(--pav-space-1_5); }
@@ -310,22 +389,8 @@ button:not([role="tab"]) {
     }
   }
 
-  /* Ghost pill variant (transparent) */
-  &.btn--ghost {
-    background-color: transparent;
-    color: var(--pav-color-stone-700);
-    border-color: transparent;
-
-    &:hover:not(:disabled) {
-      background-color: var(--pav-color-stone-100);
-    }
-
-    @media (prefers-color-scheme: dark) {
-      color: var(--pav-color-stone-200);
-
-      &:hover:not(:disabled) {
-        background-color: var(--pav-color-stone-800);
-      }
-    }
-  }
+  /* No ghost override here: `.btn--pill` contributes only the pill shape, and the
+     base `.btn--ghost` variant supplies the (semantic-token, theme-adaptive) color
+     + subtle hover. A hardcoded pill-ghost block used to live here and duplicated
+     that styling with raw stone values and a prefers-color-scheme block. */
 }

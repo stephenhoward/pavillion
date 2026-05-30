@@ -75,14 +75,15 @@
 
     <!-- Empty State -->
     <EmptyLayout v-else :title="t('no_categories')" :description="t('no_categories_description')">
-      <PillButton
-        variant="primary"
+      <button
+        type="button"
+        class="btn btn--cta btn--lg"
         @click="openCreateEditor"
         :disabled="state.isLoading"
       >
         <Plus :size="20" :stroke-width="2" />
         {{ t('add_category_button') }}
-      </PillButton>
+      </button>
     </EmptyLayout>
 
     <!-- Category Editor Modal -->

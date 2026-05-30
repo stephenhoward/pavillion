@@ -599,7 +599,7 @@ initializeFiltersFromURL();
           <div class="event-actions">
             <button
               type="button"
-              class="edit-btn icon-btn"
+              class="edit-btn btn btn--icon btn--subtle"
               @click.stop="handleEditButtonClick(event, $event)"
               :aria-label="t('event.edit_label', { name: event.content('en').name })"
               :title="t('event.edit_title')"
@@ -608,7 +608,7 @@ initializeFiltersFromURL();
             </button>
             <button
               type="button"
-              class="duplicate-btn icon-btn"
+              class="duplicate-btn btn btn--icon btn--subtle"
               @click.stop="handleDuplicateEvent(event)"
               :aria-label="t('event.duplicate_label', { name: event.content('en').name })"
               :title="t('event.duplicate_label', { name: event.content('en').name })"
@@ -618,7 +618,7 @@ initializeFiltersFromURL();
             <button
               v-if="event.isRepost"
               type="button"
-              class="unpost-btn icon-btn"
+              class="unpost-btn btn btn--icon btn--subtle"
               @click.stop="handleUnpostButtonClick(event, $event)"
               :aria-label="t('event.unpost_aria_label', { name: event.content('en').name })"
               :title="t('event.unpost_button_label')"
@@ -627,7 +627,7 @@ initializeFiltersFromURL();
             </button>
             <button
               type="button"
-              class="report-btn icon-btn"
+              class="report-btn btn btn--icon btn--subtle"
               @click.stop="handleReportEvent(event)"
               :aria-label="tReport('report_event_label')"
               :title="tReport('report_button')"
@@ -649,10 +649,10 @@ initializeFiltersFromURL();
                  :title="t('noEvents')"
                  :description="t('noEventsDescription')"
                  :guide="{ slug: 'guides/calendar-owners/recurring-events', key: 'recurring' }">
-      <PillButton variant="primary" @click="newEvent()">
+      <button type="button" class="btn btn--cta btn--lg" @click="newEvent()">
         <Plus :size="20" :stroke-width="2" />
         {{ t('createEvent') }}
-      </PillButton>
+      </button>
     </EmptyLayout>
 
     <!-- Bulk Operations Menu -->
@@ -886,29 +886,6 @@ initializeFiltersFromURL();
         gap: 0.5rem;
         opacity: 0;
         transition: opacity 0.2s ease;
-
-        .icon-btn {
-          background: transparent;
-          border: none;
-          border-radius: 0.5rem;
-          padding: 0.5rem;
-          cursor: pointer;
-          color: var(--pav-text-secondary);
-          transition: all 0.15s ease;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-
-          &:hover {
-            background: var(--pav-interactive-hover);
-            color: var(--pav-color-orange-500);
-          }
-
-          &:focus-visible {
-            outline: 2px solid var(--pav-color-focus-ring, var(--pav-color-orange-500));
-            outline-offset: 2px;
-          }
-        }
 
         @media (max-width: 768px) {
           opacity: 1;

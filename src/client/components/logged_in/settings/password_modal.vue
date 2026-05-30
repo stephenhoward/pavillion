@@ -83,7 +83,7 @@ const sendPasswordReset = async () => {
       <div class="modal-footer">
         <button
           type="button"
-          class="btn-cancel"
+          class="btn btn--ghost btn--pill"
           @click="$emit('close')"
         >
           {{ t('cancel_button', { defaultValue: 'Cancel' }) }}
@@ -197,30 +197,10 @@ const sendPasswordReset = async () => {
   gap: var(--pav-space-3);
 }
 
-.btn-cancel {
+/* Both footer buttons stretch to split the row evenly. The Cancel button is now
+   the design-system .btn ghost pill; .btn-submit keeps its own flex below. */
+.modal-footer .btn {
   flex: 1;
-  padding: 0.75rem 1rem;
-  font-size: 0.875rem;
-  font-weight: 500;
-  color: var(--pav-color-stone-700);
-  background: var(--pav-color-stone-100);
-  border: none;
-  border-radius: 9999px;
-  cursor: pointer;
-  transition: background-color 0.2s;
-
-  &:hover {
-    background: var(--pav-color-stone-200);
-
-    @media (prefers-color-scheme: dark) {
-      background: var(--pav-color-stone-700);
-    }
-  }
-
-  @media (prefers-color-scheme: dark) {
-    color: var(--pav-color-stone-300);
-    background: var(--pav-color-stone-800);
-  }
 }
 
 .btn-submit {

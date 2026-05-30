@@ -251,15 +251,16 @@ onMounted(async () => {
 
     <!-- Empty State -->
     <EmptyLayout v-else :title="t('no_places')" :description="t('no_places_description')">
-      <PillButton
+      <button
         ref="emptyAddPlaceButtonRef"
-        variant="primary"
+        type="button"
+        class="btn btn--cta btn--lg"
         @click="navigateToCreate"
         :disabled="state.isLoading"
       >
         <Plus :size="20" :stroke-width="2" />
         {{ t('add_place_button') }}
-      </PillButton>
+      </button>
     </EmptyLayout>
 
     <!-- Delete Confirmation Modal -->

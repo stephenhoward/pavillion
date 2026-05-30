@@ -36,10 +36,10 @@
       :title="t('empty_title')"
       :description="t('empty_description')"
     >
-      <PillButton variant="primary" @click="openAddForm">
+      <button type="button" class="btn btn--cta btn--lg" @click="openAddForm">
         <Plus :size="20" :stroke-width="2" aria-hidden="true" />
         {{ t('add_button') }}
-      </PillButton>
+      </button>
     </EmptyLayout>
 
     <!-- Add import source modal -->

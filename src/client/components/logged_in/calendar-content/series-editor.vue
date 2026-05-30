@@ -210,7 +210,7 @@ onMounted(() => {
       <div class="header-actions">
         <button
           type="button"
-          class="btn-cancel"
+          class="btn btn--ghost btn--pill"
           @click="$emit('close')"
           :disabled="state.isSaving"
         >
@@ -443,34 +443,6 @@ onMounted(() => {
 
     &:hover {
       background-color: var(--pav-color-stone-800);
-      color: var(--pav-color-stone-200);
-    }
-  }
-}
-
-.btn-cancel {
-  padding: 0;
-  border: none;
-  background: none;
-  color: var(--pav-color-stone-600);
-  font-size: 0.9375rem;
-  font-weight: 400;
-  cursor: pointer;
-  transition: color 0.15s ease;
-
-  &:hover {
-    color: var(--pav-color-stone-900);
-  }
-
-  &:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  @media (prefers-color-scheme: dark) {
-    color: var(--pav-color-stone-400);
-
-    &:hover {
       color: var(--pav-color-stone-200);
     }
   }

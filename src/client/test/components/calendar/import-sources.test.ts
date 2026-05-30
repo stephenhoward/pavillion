@@ -116,7 +116,7 @@ describe('ImportSourcesSection', () => {
       await flushPromises();
 
       // Trigger empty-state add button
-      const addBtn = wrapper.find('.empty-state .pill-button--primary');
+      const addBtn = wrapper.find('.empty-state .btn--cta');
       expect(addBtn.exists()).toBe(true);
       await addBtn.trigger('click');
       await flushPromises();
@@ -144,7 +144,7 @@ describe('ImportSourcesSection', () => {
       const { wrapper } = mountSection();
       await flushPromises();
 
-      await wrapper.find('.empty-state .pill-button--primary').trigger('click');
+      await wrapper.find('.empty-state .btn--cta').trigger('click');
       await flushPromises();
 
       // Whitespace-only value — disabled submit button still won't fire, but
@@ -166,7 +166,7 @@ describe('ImportSourcesSection', () => {
       const { wrapper } = mountSection();
       await flushPromises();
 
-      await wrapper.find('.empty-state .pill-button--primary').trigger('click');
+      await wrapper.find('.empty-state .btn--cta').trigger('click');
       await flushPromises();
 
       const form = wrapper.find('form.add-import-source-form');
@@ -506,7 +506,7 @@ describe('ImportSourcesSection', () => {
       const { wrapper } = mountSection();
       await flushPromises();
 
-      await wrapper.find('.empty-state .pill-button--primary').trigger('click');
+      await wrapper.find('.empty-state .btn--cta').trigger('click');
       await flushPromises();
 
       const form = wrapper.find('form.add-import-source-form');
