@@ -279,14 +279,15 @@ onMounted(async () => {
 
     <!-- Empty State -->
     <EmptyLayout v-else :title="t('no_series')" :description="t('no_series_description')">
-      <PillButton
-        variant="primary"
+      <button
+        type="button"
+        class="btn btn--cta btn--lg"
         @click="openCreateEditor"
         :disabled="state.isLoading"
       >
         <Plus :size="20" :stroke-width="2" />
         {{ t('add_series_button') }}
-      </PillButton>
+      </button>
     </EmptyLayout>
 
     <!-- Series Editor Modal -->

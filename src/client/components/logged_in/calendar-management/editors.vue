@@ -107,10 +107,15 @@
 
     <!-- Empty State — only shown when there is no error -->
     <EmptyLayout v-else-if="!state.error" :title="t('no_editors')" :description="t('no_editors_description')">
-      <PillButton v-if="props.isOwner" variant="primary" @click="openAddForm">
+      <button
+        v-if="props.isOwner"
+        type="button"
+        class="btn btn--cta btn--lg"
+        @click="openAddForm"
+      >
         <Plus :size="20" :stroke-width="2" />
         {{ t('add_editor_button') }}
-      </PillButton>
+      </button>
     </EmptyLayout>
 
     <!-- Add Editor Form -->

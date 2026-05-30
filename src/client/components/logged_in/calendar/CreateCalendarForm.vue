@@ -196,7 +196,7 @@ async function createCalendar() {
       </div>
       <div v-if="!state.errorMessage" id="calendar-help" class="help-text">{{ t('calendar_name_help') }}</div>
       <button type="submit"
-              class="btn btn--primary"
+              class="btn btn--cta btn--lg"
               :disabled="state.isLoading"
               :aria-label="state.isLoading ? t('creating_calendar') : t('create_calendar_button')">
         {{ state.isLoading ? t('creating_calendar') : t('create_calendar_button') }}

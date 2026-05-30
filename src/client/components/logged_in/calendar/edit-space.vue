@@ -263,7 +263,7 @@ onBeforeMount(() => {
       <footer class="space-editor-actions">
         <button
           type="button"
-          class="btn-cancel"
+          class="btn btn--ghost btn--pill"
           @click="handleCancel"
         >
           {{ t('cancel') }}
@@ -363,30 +363,6 @@ onBeforeMount(() => {
   align-items: center;
   justify-content: flex-end;
   gap: var(--pav-space-md);
-}
-
-.btn-cancel {
-  padding: 0;
-  border: none;
-  background: none;
-  color: var(--pav-text-secondary);
-  font-size: var(--pav-font-size-sm);
-  cursor: pointer;
-  transition: color 0.15s ease;
-
-  &:hover:not(:disabled) {
-    color: var(--pav-text-primary);
-  }
-
-  &:focus-visible {
-    outline: 2px solid var(--pav-color-interactive-active);
-    outline-offset: 2px;
-  }
-
-  &:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
 }
 
 .remove-translation-link {

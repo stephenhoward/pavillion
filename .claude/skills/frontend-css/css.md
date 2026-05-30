@@ -32,11 +32,22 @@ Check `src/client/assets/style/components/` first. Search for: buttons, modals, 
 
 | Need | Use | Never |
 |------|-----|-------|
-| Buttons | `.btn`, `.btn--primary`, `.btn--danger` | Custom button CSS |
+| Button group (hierarchy) | `.btn--primary` + `.btn--secondary`/`.btn--ghost` | Custom button CSS |
+| Single / call-to-action | `.btn--cta` | `.btn--primary` for a lone action |
+| Icon-only button | `.btn--icon` (elevated) / `.btn--icon.btn--subtle` (dense rows) | Custom icon-button CSS |
 | Modals/Dialogs | `<Modal>` / `<Sheet>` components | Custom overlays |
 | Spacing | `var(--pav-space-*)` tokens | Hardcoded px values |
 | Colors | `var(--pav-color-*)`, `var(--pav-surface-*)` | Hex values |
 | New patterns | Extract to `components/` if used 2+ times | One-off duplicates |
+
+## Button Hierarchy
+
+Pick the variant by **how many actions share the context**, not by how important the action feels:
+
+- **A group of actions** (modal footer, wizard step, toolbar with Cancel/Save, Back/Continue) → establish a hierarchy: one `.btn--primary` plus `.btn--secondary` or `.btn--ghost` peers.
+- **A single, standalone action** (empty-state CTA, a lone "Add"/"Follow" button with no peer action) → `.btn--cta`. It's a calm outlined pill at rest that commits to a solid brand fill on hover. Reach for it when `.btn--primary` is too loud at rest, `.btn--secondary` is semantically wrong, and `.btn--ghost` is too quiet.
+
+Do **not** use `.btn--primary` for a button that stands alone — that's what `.btn--cta` is for.
 
 ## Rule of Thumb
 

@@ -337,7 +337,7 @@ describe('EditPlaceView', () => {
     it('should navigate back on cancel click when not dirty', async () => {
       const wrapper = await createWrapper();
 
-      await wrapper.find('.btn-cancel').trigger('click');
+      await wrapper.find('.btn--ghost').trigger('click');
 
       expect(routerPushSpy).toHaveBeenCalledWith('/calendar/test-calendar?tab=places');
     });
@@ -976,7 +976,7 @@ describe('EditPlaceView', () => {
       window.confirm = confirmSpy;
       const wrapper = await createWrapper();
 
-      await wrapper.find('.btn-cancel').trigger('click');
+      await wrapper.find('.btn--ghost').trigger('click');
       await flushPromises();
 
       // Pristine state: no prompt; navigation proceeds.
@@ -990,7 +990,7 @@ describe('EditPlaceView', () => {
       const wrapper = await createWrapper();
 
       await wrapper.find('#place-name').setValue('Dirty');
-      await wrapper.find('.btn-cancel').trigger('click');
+      await wrapper.find('.btn--ghost').trigger('click');
       await flushPromises();
 
       expect(confirmSpy).toHaveBeenCalled();
@@ -1003,7 +1003,7 @@ describe('EditPlaceView', () => {
       const wrapper = await createWrapper();
 
       await wrapper.find('#place-name').setValue('Dirty');
-      await wrapper.find('.btn-cancel').trigger('click');
+      await wrapper.find('.btn--ghost').trigger('click');
       await flushPromises();
 
       expect(confirmSpy).toHaveBeenCalled();

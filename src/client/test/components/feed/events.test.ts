@@ -109,7 +109,7 @@ describe('FollowedEventsView', () => {
     });
 
     expect(wrapper.text()).toContain('No events');
-    const button = wrapper.find('button.btn--primary');
+    const button = wrapper.find('button.btn--cta');
     expect(button.exists()).toBe(true);
     expect(button.text()).toContain('Follow a Calendar');
   });

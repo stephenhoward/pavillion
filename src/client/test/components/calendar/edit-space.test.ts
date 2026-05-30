@@ -222,7 +222,7 @@ describe('EditSpaceView', () => {
     it('emits cancel when the cancel button is clicked', async () => {
       const wrapper = await createWrapper();
 
-      await wrapper.find('.btn-cancel').trigger('click');
+      await wrapper.find('.btn--ghost').trigger('click');
 
       expect(wrapper.emitted('cancel')).toBeTruthy();
       expect(wrapper.emitted('cancel')).toHaveLength(1);
@@ -231,7 +231,7 @@ describe('EditSpaceView', () => {
     it('does not emit save when cancelled without changes', async () => {
       const wrapper = await createWrapper();
 
-      await wrapper.find('.btn-cancel').trigger('click');
+      await wrapper.find('.btn--ghost').trigger('click');
       await flushPromises();
 
       expect(wrapper.emitted('save')).toBeFalsy();
@@ -241,7 +241,7 @@ describe('EditSpaceView', () => {
       const wrapper = await createWrapper();
 
       await wrapper.find('[id^="space-name-"]').setValue('Typed but cancelled');
-      await wrapper.find('.btn-cancel').trigger('click');
+      await wrapper.find('.btn--ghost').trigger('click');
       await flushPromises();
 
       expect(wrapper.emitted('save')).toBeFalsy();

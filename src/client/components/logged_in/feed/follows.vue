@@ -93,7 +93,7 @@ const handleFollowSuccess = async () => {
   >
     <button
       type="button"
-      class="btn btn--primary"
+      class="btn btn--cta btn--lg"
       @click="handleOpenAddModal"
     >
       {{ t('follow_button') }}

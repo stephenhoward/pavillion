@@ -19,7 +19,7 @@
       </div>
 
       <div class="form-actions">
-        <button type="button" class="btn-cancel" @click="$emit('close')">
+        <button type="button" class="btn btn--ghost btn--pill" @click="$emit('close')">
           {{ t('close_button') }}
         </button>
         <button
@@ -137,23 +137,6 @@ const sendInvitation = async () => {
     padding-top: var(--pav-space-4);
     border-top: 1px solid var(--pav-border-color-light);
 
-    .btn-cancel {
-      padding: var(--pav-space-2) var(--pav-space-5);
-      background: none;
-      border: 1px solid var(--pav-border-color-medium);
-      border-radius: var(--pav-border-radius-full);
-      color: var(--pav-color-text-secondary);
-      font-weight: var(--pav-font-weight-medium);
-      font-size: var(--pav-font-size-xs);
-      font-family: inherit;
-      cursor: pointer;
-      transition: background-color 0.2s ease;
-
-      &:hover {
-        background: var(--pav-color-stone-50);
-      }
-    }
-
     .btn-submit {
       padding: var(--pav-space-2) var(--pav-space-6);
       background: var(--pav-color-brand-primary);
@@ -193,14 +176,6 @@ const sendInvitation = async () => {
         background: rgba(239, 68, 68, 0.1);
         border-color: rgba(239, 68, 68, 0.3);
         color: var(--pav-color-red-300);
-      }
-    }
-
-    .form-actions {
-      .btn-cancel {
-        &:hover {
-          background: var(--pav-color-stone-800);
-        }
       }
     }
   }

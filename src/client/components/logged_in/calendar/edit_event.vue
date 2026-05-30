@@ -156,29 +156,6 @@ form {
   gap: 0;
 }
 
-.btn-cancel {
-  padding: 0;
-  border: none;
-  background: none;
-  color: var(--pav-color-stone-600);
-  font-size: 0.9375rem;
-  font-weight: 400;
-  cursor: pointer;
-  transition: color 0.15s ease;
-
-  &:hover {
-    color: var(--pav-color-stone-900);
-  }
-
-  @media (prefers-color-scheme: dark) {
-    color: var(--pav-color-stone-400);
-
-    &:hover {
-      color: var(--pav-color-stone-200);
-    }
-  }
-}
-
 .btn-save {
   padding: 0.625rem 1.5rem;
   border: none;
@@ -594,8 +571,14 @@ form {
   }
 }
 
-/* Button styling that follows semantic system */
-button {
+/* Local base for this component's bespoke buttons. Two guards work together:
+   - :where() keeps the rule at low specificity so the component's own
+     `.btn-save`/`.primary`/`.danger` classes still override it; and
+   - :not(.btn) excludes design-system buttons entirely, so the global `.btn`
+     system styles them (e.g. the ghost Cancel) instead of this legacy base.
+   Plain `button` here (0,1,1 once Vue adds [data-v]) used to outrank global
+   `.btn--ghost` (0,1,0); a bare :not(.btn) would instead out-specify `.btn-save`. */
+:where(button:not(.btn)) {
   font-size: 14px;
   border: 1px solid var(--pav-color-border-primary);
   border-radius: var(--pav-border-radius-sm);
@@ -686,7 +669,7 @@ button {
         <HelpButton />
         <button
           type="button"
-          class="btn-cancel"
+          class="btn btn--ghost btn--pill"
           @click="handleBackClick"
         >
           Cancel

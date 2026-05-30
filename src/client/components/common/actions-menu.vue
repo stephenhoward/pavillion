@@ -3,7 +3,7 @@
     <button
       ref="triggerEl"
       type="button"
-      class="btn btn--icon btn--ghost actions-menu__trigger"
+      class="btn btn--icon actions-menu__trigger"
       :aria-label="triggerLabel"
       aria-haspopup="menu"
       :aria-expanded="isOpen"

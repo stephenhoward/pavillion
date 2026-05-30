@@ -2,7 +2,7 @@
   <button
     v-if="guides.length > 0"
     type="button"
-    class="btn btn--icon btn--ghost"
+    class="btn btn--icon"
     :aria-label="t('button_label')"
     aria-haspopup="dialog"
     @click="showPanel = true"
