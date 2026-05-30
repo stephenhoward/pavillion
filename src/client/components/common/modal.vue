@@ -9,7 +9,7 @@
   >
     <div>
       <header>
-        <h2 :id="titleId">{{ props.title }}</h2>
+        <h2 :id="titleId" tabindex="-1">{{ props.title }}</h2>
         <button
           type="button"
           @click="close"
@@ -127,6 +127,19 @@ dialog.modal-dialog {
       font-size: var(--pav-font-size-h4);
       margin: 0;
       color: var(--pav-text-primary);
+
+      /* The heading is the initial focus target (tabindex="-1") so the close
+         button doesn't claim the focus ring on open. Suppress the ring
+         unconditionally — tabindex="-1" excludes it from sequential keyboard
+         navigation, so it is only ever focused programmatically and a visual
+         ring on a non-interactive heading adds no useful affordance.
+         :focus-visible alone is unreliable here: WebKit treats programmatic
+         focus on a tabindex="-1" element as :focus-visible-matching even
+         after a pointer-initiated trigger, so the conditional form leaks
+         the outline in Safari. */
+      &:focus {
+        outline: none;
+      }
     }
 
     /* Close button - transparent by default, round highlight on hover */
