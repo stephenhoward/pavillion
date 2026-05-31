@@ -25,15 +25,15 @@ The functions live in `.claude/orchestrators/lib/helpers.ts` and are pure (no I/
 
 ### `branchName(title, issueType)`
 
-Returns `<type>/<kebab-title>`, capped at 60 characters total. The type prefix maps from the bead's `issue_type`:
+Returns `<type>.<kebab-title>`, capped at 60 characters total. The type prefix maps from the bead's `issue_type`:
 
 | `issue_type` | Branch prefix |
 |--------------|---------------|
-| `bug`        | `fix/`        |
-| `feature`    | `feat/`       |
-| `epic`       | `feat/`       |
-| `task`       | `chore/`      |
-| (anything else) | `chore/`   |
+| `bug`        | `fix.`        |
+| `feature`    | `feat.`       |
+| `epic`       | `feat.`       |
+| `task`       | `chore.`      |
+| (anything else) | `chore.`   |
 
 Bead IDs are not embedded in the output. The orchestrator's bookkeeping of which bead a branch belongs to is tracked in its run-context, not in the branch name.
 

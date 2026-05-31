@@ -870,7 +870,7 @@ const BRANCH_PREFIX_MAP: Record<string, string> = {
 /**
  * Derive a branch name from bead metadata. Pure function.
  *
- * Format: <prefix>/<kebab-title>
+ * Format: <prefix>.<kebab-title>
  * Max length: 60 chars total.
  *
  * Bead IDs do not appear in branch names — see git-workflow skill's
@@ -891,7 +891,7 @@ export function branchName(
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '');
 
-  // Reserve space: prefix + "/"
+  // Reserve space: prefix + "."
   const reserved = prefix.length + 1;
   const budget = Math.max(8, MAX_LEN - reserved);
 
@@ -899,7 +899,7 @@ export function branchName(
     ? kebabFull.slice(0, budget).replace(/-+$/, '')
     : kebabFull;
 
-  return `${prefix}/${kebab}`;
+  return `${prefix}.${kebab}`;
 }
 
 // =============================================================================

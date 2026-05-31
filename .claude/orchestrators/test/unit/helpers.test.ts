@@ -548,22 +548,22 @@ describe('bdEnrichmentCheck', () => {
 describe('branchName', () => {
   it('derives chore prefix for task type', () => {
     const result = branchName('Fix the broken widget', 'task');
-    expect(result).toBe('chore/fix-the-broken-widget');
+    expect(result).toBe('chore.fix-the-broken-widget');
   });
 
   it('uses feat prefix for feature type', () => {
     const result = branchName('Add calendar discovery', 'feature');
-    expect(result).toMatch(/^feat\//);
+    expect(result).toMatch(/^feat\./);
   });
 
   it('uses feat prefix for epic type', () => {
     const result = branchName('Build search', 'epic');
-    expect(result).toMatch(/^feat\//);
+    expect(result).toMatch(/^feat\./);
   });
 
   it('uses fix prefix for bug type', () => {
     const result = branchName('Fix broken links', 'bug');
-    expect(result).toMatch(/^fix\//);
+    expect(result).toMatch(/^fix\./);
   });
 
   it('does not embed bead IDs in output', () => {
@@ -576,18 +576,18 @@ describe('branchName', () => {
     const longTitle = 'This is a very long title that would exceed the maximum length limit easily and should be truncated cleanly';
     const result = branchName(longTitle, 'task');
     expect(result.length).toBeLessThanOrEqual(60);
-    expect(result).toMatch(/^chore\//);
+    expect(result).toMatch(/^chore\./);
     expect(result.endsWith('-')).toBe(false);
   });
 
   it('defaults to chore for unknown issue type', () => {
     const result = branchName('Some work', 'unknown');
-    expect(result).toMatch(/^chore\//);
+    expect(result).toMatch(/^chore\./);
   });
 
   it('strips leading and trailing non-alphanumerics from the title', () => {
     const result = branchName('  --Add Search-- ', 'feature');
-    expect(result).toBe('feat/add-search');
+    expect(result).toBe('feat.add-search');
   });
 });
 

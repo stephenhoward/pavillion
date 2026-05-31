@@ -3,14 +3,14 @@
 ## Pattern
 
 ```
-<type>/<kebab-title>
+<type>.<kebab-title>
 ```
 
 Examples:
 
-- `feat/widget-powered-by-footer`
-- `fix/widget-config-accent-light-mode`
-- `refactor/client-shadow-focus-brand`
+- `feat.widget-powered-by-footer`
+- `fix.widget-config-accent-light-mode`
+- `refactor.client-shadow-focus-brand`
 
 ## Allowed types
 
@@ -30,8 +30,8 @@ The full conventional-commit set:
 ## Casing and characters
 
 - Lowercase only.
-- Alphanumerics and hyphens. The only slash is the one separating the type prefix from the title.
-- Words separated by single hyphens. No underscores or dots.
+- Alphanumerics, hyphens, and a single dot. The only dot is the one separating the type prefix from the title. No slashes anywhere.
+- Words within the title separated by single hyphens. No underscores.
 
 ## Length
 
@@ -48,12 +48,12 @@ The convention above applies to the **remote (`origin`) branch name** — the na
 Some tooling (e.g. `superset.sh`) creates worktrees with auto-generated nonsense local branch names like `apple-father` or `abrupt-grapple`. Leave those local names alone — but when pushing, push to a properly-named remote ref:
 
 ```bash
-git push -u origin HEAD:feat/widget-powered-by-footer
+git push -u origin HEAD:feat.widget-powered-by-footer
 ```
 
-This sets the upstream so subsequent `git push` calls go to the same remote name. Verify with `git branch -vv` after the first push: the local branch should show `[origin/feat/widget-powered-by-footer]` as its upstream.
+This sets the upstream so subsequent `git push` calls go to the same remote name. Verify with `git branch -vv` after the first push: the local branch should show `[origin/feat.widget-powered-by-footer]` as its upstream.
 
-If the local branch name already conforms (e.g. you created it manually with `git checkout -b feat/...`), `git push -u origin HEAD` is fine — no rename needed.
+If the local branch name already conforms (e.g. you created it manually with `git checkout -b feat.<title>`), `git push -u origin HEAD` is fine — no rename needed.
 
 ## Disallowed
 
@@ -61,4 +61,5 @@ If the local branch name already conforms (e.g. you created it manually with `gi
 - Suffix-style ID encoding (no `<title>-<id>`, no trailing identifiers).
 - Mixed case in the remote name.
 - Underscores in the remote name.
+- Slashes anywhere in the remote name. The type and title are joined with a single dot, not a slash.
 - Pushing a nonsense auto-generated branch name (from `superset.sh` or similar) straight to `origin` without renaming on push.
