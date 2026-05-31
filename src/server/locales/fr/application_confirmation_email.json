@@ -1,12 +1,12 @@
 {
-    "subject": "Confirmez votre adresse e-mail",
-    "title": "Confirmez votre e-mail",
-    "greeting": "Bonjour,",
-    "body_intro": "Veuillez confirmer votre adresse e-mail pour poursuivre votre demande de compte. Cliquez sur le bouton ci-dessous ou copiez le lien dans votre navigateur.",
-    "cta_label": "Confirmer mon e-mail",
-    "copy_link_text": "Si le bouton ne fonctionne pas, copiez-collez ce lien dans votre navigateur :",
-    "expiration_notice": "Ce lien expire dans 7 jours.",
-    "signature": "Merci,",
-    "team_name": "L'équipe",
-    "footer_text": "Ceci est un message automatique, veuillez ne pas répondre à cet e-mail."
+  "subject": "Confirmez votre adresse e-mail",
+  "title": "Confirmez votre e-mail",
+  "greeting": "Bonjour,",
+  "body_intro": "Veuillez confirmer votre adresse e-mail pour poursuivre votre demande de compte. Cliquez sur le bouton ci-dessous ou copiez le lien dans votre navigateur.",
+  "cta_label": "Confirmer mon e-mail",
+  "copy_link_text": "Si le bouton ne fonctionne pas, copiez-collez ce lien dans votre navigateur :",
+  "expiration_notice": "Ce lien expire dans 7 jours.",
+  "signature": "Merci,",
+  "team_name": "L'équipe",
+  "footer_text": "Ceci est un message automatique, veuillez ne pas répondre à cet e-mail."
 }

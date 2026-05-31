@@ -2,6 +2,7 @@ import typescript from '@typescript-eslint/eslint-plugin';
 import typescriptParser from '@typescript-eslint/parser';
 import stylistic from '@stylistic/eslint-plugin';
 import vuePlugin from 'eslint-plugin-vue';
+import jsoncPlugin from 'eslint-plugin-jsonc';
 import eslintJs from '@eslint/js';
 import * as vueParser from 'vue-eslint-parser';
 
@@ -76,6 +77,30 @@ export default [
       }],
       'vue/multi-word-component-names': 'off',
       'vue/valid-template-root': 'error',
+    },
+  },
+  // JSON config (locale files and other JSON)
+  // flat/base wires up the jsonc parser for .json files.
+  ...jsoncPlugin.configs['flat/base'],
+  {
+    files: ['**/*.json'],
+    plugins: {
+      '@stylistic': stylistic,
+    },
+    rules: {
+      // JS-only stylistic rules from the base block don't apply to JSON.
+      '@stylistic/semi': 'off',
+      '@stylistic/indent': 'off',
+      '@stylistic/comma-dangle': 'off',
+      '@stylistic/brace-style': 'off',
+      // (@stylistic/eol-last and @stylistic/no-trailing-spaces still apply:
+      // eol-last enforces the trailing newline required below.)
+
+      // JSON policies (GH #1)
+      'jsonc/indent': ['error', 2],                 // 2-space indentation
+      'jsonc/quotes': ['error', 'double'],          // double-quote values
+      'jsonc/quote-props': ['error', 'always'],     // double-quote keys
+      'jsonc/comma-dangle': ['error', 'never'],     // no trailing comma
     },
   },
 ];

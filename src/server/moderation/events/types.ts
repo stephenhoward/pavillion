@@ -51,7 +51,7 @@ export const MODERATION_BUS_EVENTS = {
  * `reportId` populates the activity row's `object_id`; `calendarId`
  * lets the role resolver address calendar-owners and instance-admins
  * without traversing `event.calendarId` itself; `eventId` lets the
- * snapshot label resolver prefer the flagged event's title ( * 
+ * snapshot label resolver prefer the flagged event's title ( *
  * title") with a calendar-name fallback when the event lookup fails;
  * `origin` discriminates local from federated reports for activity
  * recording.
