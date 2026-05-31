@@ -51,7 +51,7 @@ In the PR body, place the reference wherever it reads naturally — top of Motiv
 Before the first push, verify the local branch name conforms to [branches.md](branches.md). If it does **not** (for example, an auto-generated name from `superset.sh` like `apple-father` or `abrupt-grapple`), push with an explicit remote ref so the GitHub branch follows the convention:
 
 ```bash
-git push -u origin HEAD:<type>/<kebab-title>
+git push -u origin HEAD:<type>.<kebab-title>
 ```
 
 The `-u` flag wires the local branch's upstream to the renamed remote, so future pushes (`git push`) go to the same ref without re-specifying it.

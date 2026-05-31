@@ -59,8 +59,8 @@ function enrichedBeadText(): string {
 // ---------------------------------------------------------------------------
 // branchName('Implement widget feature', 'task')
 // → prefix='chore', kebab='implement-widget-feature'
-// → 'chore/implement-widget-feature'
-const EXPECTED_BRANCH = 'chore/implement-widget-feature';
+// → 'chore.implement-widget-feature'
+const EXPECTED_BRANCH = 'chore.implement-widget-feature';
 
 describe('Integration: leaf happy path', () => {
   let scripts: ScriptRouter;
