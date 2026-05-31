@@ -21,23 +21,23 @@
   "admin_section": "Administration de l'instance",
   "admin_description": "Gérez les paramètres du serveur, les comptes utilisateurs, les politiques de fédération et la configuration du financement de cette instance Pavillion.",
   "change_email_form": {
-      "title": "Modifier votre adresse e-mail",
-      "email_placeholder": "nouvelle adresse e-mail",
-      "email_help_text": "Saisissez votre nouvelle adresse e-mail",
-      "password_placeholder": "votre mot de passe",
-      "password_help_text": "Saisissez votre mot de passe actuel pour confirmer ce changement",
-      "change_email_button": "Modifier l'e-mail",
-      "close_button": "Annuler",
-      "change_email_failed_message": "Impossible de modifier l'adresse e-mail"
+    "title": "Modifier votre adresse e-mail",
+    "email_placeholder": "nouvelle adresse e-mail",
+    "email_help_text": "Saisissez votre nouvelle adresse e-mail",
+    "password_placeholder": "votre mot de passe",
+    "password_help_text": "Saisissez votre mot de passe actuel pour confirmer ce changement",
+    "change_email_button": "Modifier l'e-mail",
+    "close_button": "Annuler",
+    "change_email_failed_message": "Impossible de modifier l'adresse e-mail"
   },
   "change_password_form": {
-      "title": "Modifier votre mot de passe",
-      "send_password_link_button": "Envoyer le lien de mot de passe",
-      "send_link_description": "Envoyer un lien à {{email}} pour réinitialiser mon mot de passe",
-      "cancel_button": "Annuler",
-      "close_button": "Fermer",
-      "link_sent_message": "Lien de réinitialisation du mot de passe envoyé à {{email}}",
-      "change_email_failed_message": "Impossible de modifier l'adresse e-mail"
+    "title": "Modifier votre mot de passe",
+    "send_password_link_button": "Envoyer le lien de mot de passe",
+    "send_link_description": "Envoyer un lien à {{email}} pour réinitialiser mon mot de passe",
+    "cancel_button": "Annuler",
+    "close_button": "Fermer",
+    "link_sent_message": "Lien de réinitialisation du mot de passe envoyé à {{email}}",
+    "change_email_failed_message": "Impossible de modifier l'adresse e-mail"
   },
   "funding_section": "FINANCEMENT",
   "funding_card_title": "Plan de financement",

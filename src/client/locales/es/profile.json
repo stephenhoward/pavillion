@@ -21,23 +21,23 @@
   "admin_section": "Administración de la Instancia",
   "admin_description": "Administra la configuración del servidor, las cuentas de usuario, las políticas de federación y la configuración de financiamiento de esta instancia de Pavillion.",
   "change_email_form": {
-      "title": "Cambia tu dirección de correo electrónico",
-      "email_placeholder": "nueva dirección de correo electrónico",
-      "email_help_text": "Ingresa tu nueva dirección de correo electrónico",
-      "password_placeholder": "tu contraseña",
-      "password_help_text": "Ingresa tu contraseña actual para confirmar este cambio",
-      "change_email_button": "Cambiar Correo",
-      "close_button": "Cancelar",
-      "change_email_failed_message": "No se pudo cambiar la dirección de correo electrónico"
+    "title": "Cambia tu dirección de correo electrónico",
+    "email_placeholder": "nueva dirección de correo electrónico",
+    "email_help_text": "Ingresa tu nueva dirección de correo electrónico",
+    "password_placeholder": "tu contraseña",
+    "password_help_text": "Ingresa tu contraseña actual para confirmar este cambio",
+    "change_email_button": "Cambiar Correo",
+    "close_button": "Cancelar",
+    "change_email_failed_message": "No se pudo cambiar la dirección de correo electrónico"
   },
   "change_password_form": {
-      "title": "Cambia tu contraseña",
-      "send_password_link_button": "Enviar Enlace de Contraseña",
-      "send_link_description": "Enviar un enlace a {{email}} para restablecer mi contraseña",
-      "cancel_button": "Cancelar",
-      "close_button": "Cerrar",
-      "link_sent_message": "Enlace de restablecimiento de contraseña enviado a {{email}}",
-      "change_email_failed_message": "No se pudo cambiar la dirección de correo electrónico"
+    "title": "Cambia tu contraseña",
+    "send_password_link_button": "Enviar Enlace de Contraseña",
+    "send_link_description": "Enviar un enlace a {{email}} para restablecer mi contraseña",
+    "cancel_button": "Cancelar",
+    "close_button": "Cerrar",
+    "link_sent_message": "Enlace de restablecimiento de contraseña enviado a {{email}}",
+    "change_email_failed_message": "No se pudo cambiar la dirección de correo electrónico"
   },
   "funding_section": "FINANCIAMIENTO",
   "funding_card_title": "Plan de Financiamiento",

@@ -21,23 +21,23 @@
   "admin_section": "Instance Administration",
   "admin_description": "Manage server settings, user accounts, federation policies, and funding configuration for this Pavillion instance.",
   "change_email_form": {
-      "title": "Change your email address",
-      "email_placeholder": "new email address",
-      "email_help_text": "Enter your new email address",
-      "password_placeholder": "your password",
-      "password_help_text": "Enter your current password to confirm this change",
-      "change_email_button": "Change Email",
-      "close_button": "Cancel",
-      "change_email_failed_message": "Failed to change email address"
+    "title": "Change your email address",
+    "email_placeholder": "new email address",
+    "email_help_text": "Enter your new email address",
+    "password_placeholder": "your password",
+    "password_help_text": "Enter your current password to confirm this change",
+    "change_email_button": "Change Email",
+    "close_button": "Cancel",
+    "change_email_failed_message": "Failed to change email address"
   },
   "change_password_form": {
-      "title": "Change your password",
-      "send_password_link_button": "Send Password Link",
-      "send_link_description": "Send a link to {{email}} to reset my password",
-      "cancel_button": "Cancel",
-      "close_button": "Close",
-      "link_sent_message": "Password reset link sent to {{email}}",
-      "change_email_failed_message": "Failed to change email address"
+    "title": "Change your password",
+    "send_password_link_button": "Send Password Link",
+    "send_link_description": "Send a link to {{email}} to reset my password",
+    "cancel_button": "Cancel",
+    "close_button": "Close",
+    "link_sent_message": "Password reset link sent to {{email}}",
+    "change_email_failed_message": "Failed to change email address"
   },
   "funding_section": "FUNDING",
   "funding_card_title": "Funding Plan",

@@ -1,12 +1,12 @@
 {
-    "subject": "Confirm your email address",
-    "title": "Confirm your email",
-    "greeting": "Hello,",
-    "body_intro": "Please confirm your email address to continue with your account application. Click the button below or copy the link into your browser.",
-    "cta_label": "Confirm my email",
-    "copy_link_text": "If the button doesn't work, copy and paste this link into your browser:",
-    "expiration_notice": "This link expires in 7 days.",
-    "signature": "Thank you,",
-    "team_name": "The Team",
-    "footer_text": "This is an automated message, please do not reply to this email."
+  "subject": "Confirm your email address",
+  "title": "Confirm your email",
+  "greeting": "Hello,",
+  "body_intro": "Please confirm your email address to continue with your account application. Click the button below or copy the link into your browser.",
+  "cta_label": "Confirm my email",
+  "copy_link_text": "If the button doesn't work, copy and paste this link into your browser:",
+  "expiration_notice": "This link expires in 7 days.",
+  "signature": "Thank you,",
+  "team_name": "The Team",
+  "footer_text": "This is an automated message, please do not reply to this email."
 }
