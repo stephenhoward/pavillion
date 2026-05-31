@@ -78,6 +78,7 @@
       "pagination_label": "Paginación de reportes",
       "empty": "No se encontraron reportes",
       "empty_description": "No hay reportes para los eventos de este calendario.",
+      "guide_link": "Revisa y gestiona los reportes",
       "filter_status": "Filtrar por estado",
       "filter_category": "Filtrar por categoría",
       "all_statuses": "Todos los estados",

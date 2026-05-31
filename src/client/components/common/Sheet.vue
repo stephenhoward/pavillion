@@ -93,6 +93,11 @@ defineExpose({ open, close });
     border: var(--pav-border-width-1) solid var(--pav-border-primary);
     box-shadow: var(--pav-shadow-modal);
 
+    /* Reset alignment so the modal is context-independent: the native
+       <dialog> renders inline in the DOM, so a triggering ancestor like
+       .empty-state (text-align: center) would otherwise leak into it. */
+    text-align: start;
+
     /* Mobile: rounded top corners */
     border-radius: var(--pav-border-radius-modal) var(--pav-border-radius-modal) 0 0;
   }

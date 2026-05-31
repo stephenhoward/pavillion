@@ -35,6 +35,8 @@
       v-else
       :title="t('empty_title')"
       :description="t('empty_description')"
+      :guide="{ slug: 'guides/calendar-owners/ics-import', key: 'ics_import' }"
+      :guide-label="t('guide_link')"
     >
       <button type="button" class="btn btn--cta btn--lg" @click="openAddForm">
         <Plus :size="20" :stroke-width="2" aria-hidden="true" />

@@ -5,6 +5,7 @@
     "loading": "Loading series...",
     "no_series": "No series found",
     "no_series_description": "Create series to group related events.",
+    "guide_link": "Group related events into a series",
     "error_loading": "Error loading series",
     "create_button": "Create Series",
     "cancel_button": "Cancel",

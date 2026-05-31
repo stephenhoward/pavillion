@@ -250,7 +250,11 @@ onMounted(async () => {
     </div>
 
     <!-- Empty State -->
-    <EmptyLayout v-else :title="t('no_places')" :description="t('no_places_description')">
+    <EmptyLayout v-else
+                 :title="t('no_places')"
+                 :description="t('no_places_description')"
+                 :guide="{ slug: 'guides/calendar-owners/places', key: 'places' }"
+                 :guide-label="t('guide_link')">
       <button
         ref="emptyAddPlaceButtonRef"
         type="button"

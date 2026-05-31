@@ -173,6 +173,7 @@ async function loadCalendars() {
       v-else
       :title="t('create_first_calendar_header')"
       :guide="{ slug: 'guides/calendar-owners/quickstart', key: 'quickstart' }"
+      :guide-label="t('guide_link')"
     >
       <CreateCalendarForm />
     </EmptyLayout>

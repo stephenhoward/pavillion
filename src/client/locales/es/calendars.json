@@ -27,7 +27,8 @@
         "role_editor": "Editor",
         "aria_navigate_calendar": "Ir al calendario: {{calendarName}}, rol: {{role}}",
         "aria_view_public_calendar": "Ver calendario público: {{name}} (se abre en una pestaña nueva)",
-        "error_loading_calendars": "Error al cargar los calendarios"
+        "error_loading_calendars": "Error al cargar los calendarios",
+        "guide_link": "Cómo crear un calendario"
     },
     "selector": {
         "select_calendar_title": "Seleccionar calendario",
@@ -81,7 +82,8 @@
         "recurrence_monthly": "Se repite cada mes",
         "recurrence_yearly": "Se repite cada año",
         "recurrence_generic": "Evento recurrente",
-        "language_count": "{{count}} idiomas"
+        "language_count": "{{count}} idiomas",
+        "guide_link": "Crea tu primer evento"
     },
     "editors": {
         "title": "Editores del calendario",
@@ -89,6 +91,7 @@
         "loading": "Cargando editores...",
         "no_editors": "No se ha concedido acceso a ningún editor en este calendario.",
         "no_editors_description": "Añade editores para permitir que otros gestionen este calendario contigo.",
+        "guide_link": "Invita a editores y gestiona el acceso",
         "remove_button": "Eliminar",
         "removing": "Eliminando...",
         "add_editor_title": "Añadir editor",
@@ -143,6 +146,7 @@
         "add_category_button": "Añadir categoría",
         "no_categories": "Sin categorías",
         "no_categories_description": "Aún no has creado ninguna categoría de evento.",
+        "guide_link": "Organiza los eventos con categorías",
         "loading": "Cargando categorías...",
         "add_category_title": "Añadir nueva categoría",
         "edit_category_title": "Editar categoría",
@@ -259,6 +263,7 @@
         "loading": "Cargando fuentes de importación...",
         "empty_title": "Sin fuentes de importación",
         "empty_description": "Añade una fuente de importación para reflejar eventos desde un feed de calendario externo (ICS).",
+        "guide_link": "Importa eventos desde otro calendario",
         "error_loading": "Error al cargar las fuentes de importación.",
         "error_creating": "Error al añadir la fuente de importación.",
         "error_removing": "Error al eliminar la fuente de importación.",
@@ -350,6 +355,7 @@
         "add_place_button": "Añadir lugar",
         "no_places": "Sin lugares",
         "no_places_description": "Aún no has añadido ningún lugar. Crea lugares para reutilizar ubicaciones en distintos eventos.",
+        "guide_link": "Gestiona los lugares de eventos",
         "loading": "Cargando lugares...",
         "unnamed_place": "Lugar sin nombre",
         "edit_button": "Editar",

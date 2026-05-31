@@ -278,7 +278,11 @@ onMounted(async () => {
     </div>
 
     <!-- Empty State -->
-    <EmptyLayout v-else :title="t('no_series')" :description="t('no_series_description')">
+    <EmptyLayout v-else
+                 :title="t('no_series')"
+                 :description="t('no_series_description')"
+                 :guide="{ slug: 'guides/calendar-owners/series', key: 'series' }"
+                 :guide-label="t('guide_link')">
       <button
         type="button"
         class="btn btn--cta btn--lg"

@@ -29,7 +29,8 @@
         "aria_view_public_calendar": "View public calendar: {{name}} (opens in new tab)",
         "error_loading_calendars": "Failed to load calendars",
         "menu_label": "Calendar list actions",
-        "documentation": "Documentation"
+        "documentation": "Documentation",
+        "guide_link": "How to create a calendar"
     },
     "selector": {
         "select_calendar_title": "Select Calendar",
@@ -85,7 +86,8 @@
         "recurrence_monthly": "Repeats monthly",
         "recurrence_yearly": "Repeats yearly",
         "recurrence_generic": "Recurring event",
-        "language_count": "{{count}} languages"
+        "language_count": "{{count}} languages",
+        "guide_link": "Create your first event"
     },
     "editors": {
         "title": "Calendar Editors",
@@ -93,6 +95,7 @@
         "loading": "Loading editors...",
         "no_editors": "No editors have been granted access to this calendar.",
         "no_editors_description": "Add editors to allow others to manage this calendar with you.",
+        "guide_link": "Invite editors and manage access",
         "remove_button": "Remove",
         "removing": "Removing...",
         "add_editor_title": "Add Editor",
@@ -147,6 +150,7 @@
         "add_category_button": "Add Category",
         "no_categories": "No categories",
         "no_categories_description": "You haven't created any event categories yet.",
+        "guide_link": "Organize events with categories",
         "loading": "Loading categories...",
         "add_category_title": "Add New Category",
         "edit_category_title": "Edit Category",
@@ -263,6 +267,7 @@
         "loading": "Loading import sources...",
         "empty_title": "No import sources",
         "empty_description": "Add an import source to mirror events from an external calendar (ICS) feed.",
+        "guide_link": "Import events from another calendar",
         "error_loading": "Failed to load import sources.",
         "error_creating": "Failed to add import source.",
         "error_removing": "Failed to remove import source.",
@@ -354,6 +359,7 @@
         "add_place_button": "Add Place",
         "no_places": "No places",
         "no_places_description": "You haven't added any places yet. Create places to reuse locations across events.",
+        "guide_link": "Manage event locations",
         "loading": "Loading places...",
         "unnamed_place": "Unnamed Place",
         "edit_button": "Edit",

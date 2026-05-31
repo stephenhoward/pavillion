@@ -106,7 +106,11 @@
     </div>
 
     <!-- Empty State — only shown when there is no error -->
-    <EmptyLayout v-else-if="!state.error" :title="t('no_editors')" :description="t('no_editors_description')">
+    <EmptyLayout v-else-if="!state.error"
+                 :title="t('no_editors')"
+                 :description="t('no_editors_description')"
+                 :guide="{ slug: 'guides/calendar-owners/editors', key: 'editors' }"
+                 :guide-label="t('guide_link')">
       <button
         v-if="props.isOwner"
         type="button"

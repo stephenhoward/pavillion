@@ -27,7 +27,8 @@
         "auto_repost_reposts": "Also auto-repost shared events",
         "auto_repost_reposts_help": "Also share events this calendar has reposted from others",
         "unfollow_button": "Unfollow",
-        "local_calendar_label": "Posting to: {{name}}"
+        "local_calendar_label": "Posting to: {{name}}",
+        "guide_link": "How following and reposting work"
     },
     "events": {
         "title": "Events",
@@ -51,7 +52,8 @@
         "report_aria_label": "Report event: {{eventTitle}}",
         "details_button": "Details",
         "details_aria_label": "View details for: {{eventTitle}}",
-        "close_aria_label": "Close details"
+        "close_aria_label": "Close details",
+        "guide_link": "How following and reposting work"
     },
     "categoryMapping": {
         "repostDialogTitle": "Repost with categories",

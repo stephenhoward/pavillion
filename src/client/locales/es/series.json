@@ -5,6 +5,7 @@
     "loading": "Cargando series...",
     "no_series": "No se encontraron series",
     "no_series_description": "Crea series para agrupar eventos relacionados.",
+    "guide_link": "Agrupa eventos relacionados en una serie",
     "error_loading": "Error al cargar las series",
     "create_button": "Crear Serie",
     "cancel_button": "Cancelar",

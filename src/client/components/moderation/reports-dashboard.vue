@@ -207,6 +207,8 @@ onMounted(async () => {
       v-else-if="!store.hasReports"
       :title="t('dashboard.empty')"
       :description="t('dashboard.empty_description')"
+      :guide="{ slug: 'guides/calendar-owners/moderation', key: 'moderation_owner' }"
+      :guide-label="t('dashboard.guide_link')"
     />
 
     <!-- Reports Table -->

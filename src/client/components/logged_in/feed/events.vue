@@ -403,6 +403,7 @@ onUnmounted(() => {
       v-else
       :title="t('no_events')"
       :guide="{ slug: 'guides/calendar-owners/follow-and-repost', key: 'follow_repost' }"
+      :guide-label="t('guide_link')"
     >
       <button
         type="button"
