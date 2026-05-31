@@ -27,7 +27,8 @@
         "role_editor": "Éditeur",
         "aria_navigate_calendar": "Aller au calendrier : {{calendarName}}, rôle : {{role}}",
         "aria_view_public_calendar": "Voir le calendrier public : {{name}} (s'ouvre dans un nouvel onglet)",
-        "error_loading_calendars": "Échec du chargement des calendriers"
+        "error_loading_calendars": "Échec du chargement des calendriers",
+        "guide_link": "Comment créer un calendrier"
     },
     "selector": {
         "select_calendar_title": "Sélectionner un calendrier",
@@ -81,7 +82,8 @@
         "recurrence_monthly": "Se répète chaque mois",
         "recurrence_yearly": "Se répète chaque année",
         "recurrence_generic": "Événement récurrent",
-        "language_count": "{{count}} langues"
+        "language_count": "{{count}} langues",
+        "guide_link": "Créez votre premier événement"
     },
     "editors": {
         "title": "Éditeurs du calendrier",
@@ -89,6 +91,7 @@
         "loading": "Chargement des éditeurs...",
         "no_editors": "Aucun éditeur n'a reçu d'accès à ce calendrier.",
         "no_editors_description": "Ajoutez des éditeurs pour permettre à d'autres personnes de gérer ce calendrier avec vous.",
+        "guide_link": "Invitez des éditeurs et gérez les accès",
         "remove_button": "Supprimer",
         "removing": "Suppression...",
         "add_editor_title": "Ajouter un éditeur",
@@ -143,6 +146,7 @@
         "add_category_button": "Ajouter une catégorie",
         "no_categories": "Aucune catégorie",
         "no_categories_description": "Vous n'avez pas encore créé de catégorie d'événement.",
+        "guide_link": "Organisez les événements avec des catégories",
         "loading": "Chargement des catégories...",
         "add_category_title": "Ajouter une nouvelle catégorie",
         "edit_category_title": "Modifier la catégorie",
@@ -259,6 +263,7 @@
         "loading": "Chargement des sources d'importation...",
         "empty_title": "Aucune source d'importation",
         "empty_description": "Ajoutez une source d'importation pour refléter les événements d'un flux de calendrier externe (ICS).",
+        "guide_link": "Importez des événements depuis un autre calendrier",
         "error_loading": "Échec du chargement des sources d'importation.",
         "error_creating": "Échec de l'ajout de la source d'importation.",
         "error_removing": "Échec de la suppression de la source d'importation.",
@@ -350,6 +355,7 @@
         "add_place_button": "Ajouter un lieu",
         "no_places": "Aucun lieu",
         "no_places_description": "Vous n'avez pas encore ajouté de lieu. Créez des lieux pour réutiliser des emplacements dans plusieurs événements.",
+        "guide_link": "Gérez les lieux des événements",
         "loading": "Chargement des lieux...",
         "unnamed_place": "Lieu sans nom",
         "edit_button": "Modifier",

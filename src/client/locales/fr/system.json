@@ -78,6 +78,7 @@
       "pagination_label": "Pagination des signalements",
       "empty": "Aucun signalement trouvé",
       "empty_description": "Il n'y a aucun signalement pour les événements de ce calendrier.",
+      "guide_link": "Examinez et traitez les signalements",
       "filter_status": "Filtrer par statut",
       "filter_category": "Filtrer par catégorie",
       "all_statuses": "Tous les statuts",

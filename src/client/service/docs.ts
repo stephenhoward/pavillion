@@ -48,6 +48,7 @@ export const ROUTE_GUIDES: Record<string, GuideRef[]> = {
     { slug: 'guides/calendar-owners/editors', key: 'editors' },
     { slug: 'guides/calendar-owners/identity', key: 'identity' },
     { slug: 'guides/calendar-owners/federation-etiquette', key: 'federation_etiquette' },
+    { slug: 'guides/calendar-owners/ics-import', key: 'ics_import' },
   ],
   event_new: [
     { slug: 'guides/calendar-owners/recurring-events', key: 'recurring' },

@@ -27,7 +27,8 @@
         "auto_repost_reposts": "Repartager aussi les événements partagés",
         "auto_repost_reposts_help": "Partager aussi les événements que ce calendrier a repartagés depuis d'autres",
         "unfollow_button": "Ne plus suivre",
-        "local_calendar_label": "Publication sur : {{name}}"
+        "local_calendar_label": "Publication sur : {{name}}",
+        "guide_link": "Comment fonctionnent le suivi et le repartage"
     },
     "events": {
         "title": "Événements",
@@ -51,7 +52,8 @@
         "report_aria_label": "Signaler l'événement : {{eventTitle}}",
         "details_button": "Détails",
         "details_aria_label": "Voir les détails de : {{eventTitle}}",
-        "close_aria_label": "Fermer les détails"
+        "close_aria_label": "Fermer les détails",
+        "guide_link": "Comment fonctionnent le suivi et le repartage"
     },
     "categoryMapping": {
         "repostDialogTitle": "Repartager avec des catégories",

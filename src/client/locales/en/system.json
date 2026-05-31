@@ -166,6 +166,10 @@
       "asking": {
         "label": "Asking for money",
         "description": "Ask the community that uses your instance for money — when, how often, and how transparent."
+      },
+      "ics_import": {
+        "label": "Import events via ICS",
+        "description": "Migrate events from another calendar into this one with a one-time ICS file import."
       }
     }
   },
@@ -204,6 +208,7 @@
       "pagination_label": "Reports pagination",
       "empty": "No reports found",
       "empty_description": "There are no reports for events in this calendar.",
+      "guide_link": "Review and handle reports",
       "filter_status": "Filter by status",
       "filter_category": "Filter by category",
       "all_statuses": "All statuses",

@@ -648,7 +648,8 @@ initializeFiltersFromURL();
     <EmptyLayout v-else-if="!isLoading && !hasActiveFilters && (!calendarEvents || calendarEvents.length === 0)"
                  :title="t('noEvents')"
                  :description="t('noEventsDescription')"
-                 :guide="{ slug: 'guides/calendar-owners/recurring-events', key: 'recurring' }">
+                 :guide="{ slug: 'guides/calendar-owners/quickstart', key: 'quickstart' }"
+                 :guide-label="t('guide_link')">
       <button type="button" class="btn btn--cta btn--lg" @click="newEvent()">
         <Plus :size="20" :stroke-width="2" />
         {{ t('createEvent') }}

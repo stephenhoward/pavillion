@@ -74,7 +74,11 @@
     </div>
 
     <!-- Empty State -->
-    <EmptyLayout v-else :title="t('no_categories')" :description="t('no_categories_description')">
+    <EmptyLayout v-else
+                 :title="t('no_categories')"
+                 :description="t('no_categories_description')"
+                 :guide="{ slug: 'guides/calendar-owners/categories', key: 'categories' }"
+                 :guide-label="t('guide_link')">
       <button
         type="button"
         class="btn btn--cta btn--lg"
