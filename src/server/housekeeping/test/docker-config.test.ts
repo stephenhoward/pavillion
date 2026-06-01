@@ -88,12 +88,16 @@ describe('Docker Configuration', () => {
   });
 
   describe('docker-compose.yml autoheal service', () => {
-    it('should include autoheal service with pinned image version', () => {
+    it('should pin the autoheal image by digest', () => {
       const composeContent = readFileSync('docker-compose.yml', 'utf-8');
       const config = parseYaml(composeContent);
 
       expect(config.services.autoheal).toBeDefined();
-      expect(config.services.autoheal.image).toBe('willfarrell/autoheal:1.2.0');
+      // Pinned by digest so a tag re-push of the third-party image cannot
+      // silently change the binary running with Docker API access.
+      expect(config.services.autoheal.image).toMatch(
+        /^willfarrell\/autoheal:1\.2\.0@sha256:[0-9a-f]{64}$/,
+      );
     });
 
     it('should configure autoheal environment variables', () => {
@@ -107,17 +111,26 @@ describe('Docker Configuration', () => {
       expect(env).toContain('AUTOHEAL_START_PERIOD=120');
     });
 
-    it('should mount Docker socket for autoheal', () => {
+    it('should not mount the Docker socket into autoheal', () => {
       const composeContent = readFileSync('docker-compose.yml', 'utf-8');
       const config = parseYaml(composeContent);
 
-      const volumes = config.services.autoheal.volumes;
-      expect(volumes).toBeDefined();
-
+      // The third-party autoheal image must never touch the raw socket; it
+      // reaches the Docker API through the locked-down socket-proxy instead.
+      const volumes = config.services.autoheal.volumes ?? [];
       const hasDockerSocket = volumes.some((volume: string) =>
         volume.includes('/var/run/docker.sock'),
       );
-      expect(hasDockerSocket).toBe(true);
+      expect(hasDockerSocket).toBe(false);
+    });
+
+    it('should reach the Docker API through the socket-proxy', () => {
+      const composeContent = readFileSync('docker-compose.yml', 'utf-8');
+      const config = parseYaml(composeContent);
+
+      const env = config.services.autoheal.environment;
+      expect(env).toContain('DOCKER_SOCK=tcp://socket-proxy:2375');
+      expect(config.services.autoheal.depends_on).toContain('socket-proxy');
     });
 
     it('should set autoheal restart policy', () => {
@@ -125,6 +138,54 @@ describe('Docker Configuration', () => {
       const config = parseYaml(composeContent);
 
       expect(config.services.autoheal.restart).toBe('unless-stopped');
+    });
+  });
+
+  describe('docker-compose.yml socket-proxy service', () => {
+    it('should pin the proxy image by digest', () => {
+      const composeContent = readFileSync('docker-compose.yml', 'utf-8');
+      const config = parseYaml(composeContent);
+
+      expect(config.services['socket-proxy']).toBeDefined();
+      expect(config.services['socket-proxy'].image).toMatch(
+        /^haproxy:[^@]+@sha256:[0-9a-f]{64}$/,
+      );
+    });
+
+    it('should mount the Docker socket read-only', () => {
+      const composeContent = readFileSync('docker-compose.yml', 'utf-8');
+      const config = parseYaml(composeContent);
+
+      const volumes = config.services['socket-proxy'].volumes ?? [];
+      const socketMount = volumes.find((volume: string) =>
+        volume.includes('/var/run/docker.sock'),
+      );
+      expect(socketMount).toBeDefined();
+      // Read-only: a write-capable socket mount would defeat the proxy.
+      expect(socketMount).toMatch(/:ro$/);
+    });
+
+    it('should be the only service that mounts the Docker socket', () => {
+      const composeContent = readFileSync('docker-compose.yml', 'utf-8');
+      const config = parseYaml(composeContent);
+
+      const mounters = Object.entries(config.services)
+        .filter(([, svc]: [string, any]) =>
+          (svc.volumes ?? []).some((volume: string) =>
+            volume.includes('/var/run/docker.sock'),
+          ),
+        )
+        .map(([name]) => name);
+
+      expect(mounters).toEqual(['socket-proxy']);
+    });
+
+    it('should not publish a host port', () => {
+      const composeContent = readFileSync('docker-compose.yml', 'utf-8');
+      const config = parseYaml(composeContent);
+
+      // Reachable only on the internal compose network, never from the host.
+      expect(config.services['socket-proxy'].ports).toBeUndefined();
     });
   });
 
