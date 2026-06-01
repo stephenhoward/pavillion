@@ -1541,6 +1541,43 @@ class ProcessInboxService {
     // and the AP handler (skip re-broadcast to federation) that this originated remotely.
     if (updatedEvent) {
       this.eventBus.emit('eventUpdated', { calendar: null, event: updatedEvent });
+
+      // Paired Update(Note) cascade for inbox-originated updates of a remote
+      // event THIS calendar has re-shared. The `eventUpdated { calendar: null }`
+      // emission above is the remote loop guard — the outbox handler early-returns
+      // on the null calendar, so it emits no Note. We mirror the Create(Note)
+      // cascade in checkAndPerformAutoRepost here so Mastodon-class followers of
+      // a reposting calendar see edits replace the post.
+      //
+      // Gate on CURRENT sharing state — does this calendar have a
+      // SharedEventEntity row for this event? — NOT on RepostDismissalEntity
+      // (DEC-008): the dismissal record governs the separate re-share-creation
+      // path; an unposted calendar already has its SharedEventEntity row
+      // destroyed (members.ts unshareEvent), so it is naturally skipped here.
+      //
+      // A locally-owned event is excluded here by the SharedEventEntity lookup
+      // returning null: a calendar never re-shares its own event (the loop guard
+      // in checkAndPerformAutoRepost), so no share row exists for it. `apObject`
+      // is non-null on every path that reaches this point — the eventParams
+      // build above already dereferences `apObject.event_id` — so the lookup
+      // below is safe.
+      const share = await SharedEventEntity.findOne({
+        where: { event_id: apObject.event_id, calendar_id: calendar.id },
+      });
+      if (share) {
+        const actorUrl = ActivityPubActor.actorUrl(calendar);
+        // Reconstruct the Note identically to the Create(Note) cascade so the
+        // Update(Note) IRI byte-matches the original — a mismatch makes
+        // Mastodon silently no-op the edit.
+        await addToOutbox(
+          this.eventBus,
+          calendar,
+          new UpdateActivity(
+            actorUrl,
+            new NoteObject(calendar, updatedEvent, { urlOverride: apObjectId }),
+          ).addressPublic(`${actorUrl}/followers`),
+        );
+      }
     }
 
     // Update source_series on the AP object record (strict allowlist validation)
@@ -1697,11 +1734,44 @@ class ProcessInboxService {
       }
     }
 
+    // Capture the SharedEventEntity row BEFORE the delete so we know whether
+    // this calendar had re-shared the event (existingEvent is guaranteed
+    // non-null by the `if (!existingEvent || !eventIdToDelete) return` guard
+    // above). Gate on current sharing state, NOT RepostDismissalEntity — see
+    // the rationale in processUpdateEvent. A source-initiated delete is not an
+    // owner unpost, so no RepostDismissalEntity is written.
+    const share = await SharedEventEntity.findOne({
+      where: { event_id: eventIdToDelete, calendar_id: calendar.id },
+    });
+
     await this.calendarInterface.deleteRemoteEvent(eventIdToDelete);
 
     // Also delete the EventObjectEntity record if it exists
     if (apObject) {
       await apObject.destroy();
+    }
+
+    // Paired Delete(Note) cascade for inbox-originated deletes of a remote
+    // event THIS calendar has re-shared. Mirrors handleEventDeleted's Note IRI
+    // string form so the Delete(Note) IRI byte-matches the Create(Note) the
+    // cascade originally minted — a mismatch makes Mastodon silently no-op.
+    if (share) {
+      const actorUrl = ActivityPubActor.actorUrl(calendar);
+      try {
+        await addToOutbox(
+          this.eventBus,
+          calendar,
+          new DeleteActivity(
+            actorUrl,
+            NoteObject.noteUrl(calendar, existingEvent),
+          ).addressPublic(`${actorUrl}/followers`),
+        );
+      }
+      finally {
+        // Clean up the now-orphaned SharedEventEntity row even if addToOutbox
+        // throws — the event no longer exists, so the share row must not linger.
+        await share.destroy();
+      }
     }
 
     logger.info(`Deleted event ${eventIdToDelete} from ${isPersonActor ? 'Person' : 'Calendar'} actor ${actorUri}`);
