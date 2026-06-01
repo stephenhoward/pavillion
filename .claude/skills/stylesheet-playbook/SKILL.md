@@ -7,6 +7,12 @@ description: Pavillion SCSS/CSS quality standards. Use this skill when evaluatin
 
 This Skill provides stylesheet quality standards specific to the Pavillion codebase. Use it when reviewing specs for styling approach, auditing code for stylesheet issues, or checking that implementations follow established design system patterns.
 
+## Automated formatting (stylelint)
+
+Mechanical formatting — 2-space indentation and a final newline in `.scss` files and Vue `<style>` blocks — is enforced automatically by **stylelint** and is **not** something this playbook needs to flag. Run `npm run lint:style` to check and `npm run lint:style:fix` to auto-fix; both are folded into `npm run lint` / `npm run lint:fix`. Config lives in `.stylelintrc.json` (`@stylistic/stylelint-plugin`, with `postcss-scss` for `.scss` and `postcss-html` for `.vue`).
+
+This playbook covers the judgment-level concerns stylelint cannot check: token misuse, duplication, misplacement, dark mode gaps, and design-system drift.
+
 ## Topic Files
 
 | If the spec or code involves... | Read this file |
