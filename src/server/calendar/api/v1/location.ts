@@ -57,9 +57,9 @@ export default class LocationRoutes {
   installHandlers(app: Application, routePrefix: string): void {
     const router = express.Router();
 
-    router.get('/calendars/:calendarId/locations', this.listLocations.bind(this));
+    router.get('/calendars/:calendarId/locations', ExpressHelper.loggedInOnly, this.listLocations.bind(this));
     router.post('/calendars/:calendarId/locations', ExpressHelper.loggedInOnly, this.createLocation.bind(this));
-    router.get('/calendars/:calendarId/locations/:locationId', this.getLocation.bind(this));
+    router.get('/calendars/:calendarId/locations/:locationId', ExpressHelper.loggedInOnly, this.getLocation.bind(this));
     router.put('/calendars/:calendarId/locations/:locationId', ExpressHelper.loggedInOnly, this.updateLocation.bind(this));
     router.delete('/calendars/:calendarId/locations/:locationId', ExpressHelper.loggedInOnly, this.deleteLocation.bind(this));
     router.post(

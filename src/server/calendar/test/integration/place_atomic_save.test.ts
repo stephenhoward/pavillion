@@ -196,6 +196,7 @@ describe('Place + Spaces atomic-save - Integration', () => {
 
       const verify = await request(env.app)
         .get(`/api/v1/calendars/${testCalendar.id}/locations/${encodeURIComponent(placeId)}`)
+        .set('Authorization', 'Bearer ' + ownerAuthKey)
         .expect(200);
       expect(verify.body.spaces).toHaveLength(2);
       expect(verify.body.spaces.map((s: any) => s.id).sort()).toEqual(
@@ -235,6 +236,7 @@ describe('Place + Spaces atomic-save - Integration', () => {
       // before any diff write runs). Verify by re-reading.
       const verify = await request(env.app)
         .get(`/api/v1/calendars/${testCalendar.id}/locations/${encodeURIComponent(placeA.body.id)}`)
+        .set('Authorization', 'Bearer ' + ownerAuthKey)
         .expect(200);
       expect(verify.body.spaces).toHaveLength(placeASpaces.length);
       // Place B's Space row also still exists.
