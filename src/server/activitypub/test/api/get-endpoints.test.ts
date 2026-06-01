@@ -43,7 +43,8 @@ describe('GET /calendars/:urlname/events/:eventid', () => {
 
   it('should return 404 when event not found', async () => {
     sandbox.stub(calendarAPI, 'getCalendarByName').resolves(new Calendar('cal-id', 'mycal'));
-    sandbox.stub(calendarAPI, 'getEventById').resolves(null as any);
+    // Regression: getEventById throws EventNotFoundError, not null — stub must reject (pv-ttak)
+    sandbox.stub(calendarAPI, 'getEventById').rejects(new EventNotFoundError('nonexistent'));
 
     const req = { params: { urlname: 'mycal', eventid: 'nonexistent' } };
     const res = { status: sinon.stub(), send: sinon.stub(), setHeader: sinon.stub(), json: sinon.stub() };

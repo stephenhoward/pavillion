@@ -169,7 +169,17 @@ export default class ActivityPubServerRoutes {
       }
 
       // Get the event by ID
-      const event = await this.calendarService.getEventById(eventid);
+      let event;
+      try {
+        event = await this.calendarService.getEventById(eventid);
+      }
+      catch (error) {
+        if (error instanceof EventNotFoundError) {
+          res.status(404).send('Event not found');
+          return;
+        }
+        throw error;
+      }
       if (!event) {
         res.status(404).send('Event not found');
         return;
