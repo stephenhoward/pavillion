@@ -18,4 +18,4 @@ Define your technical stack below. This serves as a reference for all team membe
 
 ### Testing & Quality
 - **Test Framework:** Vitest
-- **Linting/Formatting:** ESLint
+- **Linting/Formatting:** ESLint (JS/TS/Vue/JSON) and stylelint (SCSS files and Vue `<style>` blocks); both run via `npm run lint` / `npm run lint:fix`
