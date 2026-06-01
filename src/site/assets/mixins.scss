@@ -1049,7 +1049,7 @@ $public-link-color: $public-accent-light;
   display: flex;
   flex-direction: column;
   transition: box-shadow $public-duration-slow $public-ease-out,
-              transform $public-duration-slow $public-ease-out;
+    transform $public-duration-slow $public-ease-out;
 
   .card-image {
     width: 100%;
