@@ -12,6 +12,7 @@ import AnnounceActivity from '@/server/activitypub/model/action/announce';
 import CreateActivity from '@/server/activitypub/model/action/create';
 import UpdateActivity from '@/server/activitypub/model/action/update';
 import DeleteActivity from '@/server/activitypub/model/action/delete';
+import { NoteObject } from '@/server/activitypub/model/object/note';
 import { Calendar, CalendarContent } from '@/common/model/calendar';
 import { CalendarEvent, CalendarEventContent } from '@/common/model/events';
 import { CalendarEntity } from '@/server/calendar/entity/calendar';
@@ -1196,14 +1197,375 @@ describe('ProcessInboxService - checkAndPerformAutoRepost paired Note emission',
     expect(apForm.url).toBeUndefined();
   });
 
-  // GAP DOCUMENTATION: Update(Event) and Delete(Event) cascades for
-  // SharedEventEntity-bound events do not exist as distinct inbox emission
-  // sites. `processUpdateEvent` emits `eventUpdated` with calendar: null
-  // (which the outbox handler returns from early — loop prevention) and
-  // `processDeleteEvent` makes no bus emission at all. Paired Note Update /
-  // Delete propagation for locally-owned events lives in the outbox event
-  // handlers (handleEventUpdated / handleEventDeleted) and is covered by
-  // sibling pv-l35p.2.
+});
+
+describe('ProcessInboxService - inbox-originated lifecycle Note cascade (pv-taf2)', () => {
+  let sandbox: sinon.SinonSandbox;
+  let inboxService: ProcessInboxService;
+  let eventBus: EventEmitter;
+  let testCalendar: Calendar;
+  let calendarInterface: CalendarInterface;
+
+  const sourceActorUri = 'https://remote.instance/calendars/source-calendar';
+
+  beforeEach(async () => {
+    await setupActivityPubSchema();
+    sandbox = sinon.createSandbox();
+    eventBus = new EventEmitter();
+    calendarInterface = new CalendarInterface(eventBus);
+    inboxService = new ProcessInboxService(eventBus, calendarInterface);
+
+    testCalendar = new Calendar('test-calendar-id', 'test-calendar');
+    testCalendar.addContent('en', new CalendarContent('en'));
+    testCalendar.content('en').title = 'Test Calendar';
+
+    await CalendarEntity.create({
+      id: testCalendar.id,
+      url_name: testCalendar.urlName,
+      account_id: uuidv4(),
+      languages: 'en',
+    });
+
+    // Other test files may leave `PRAGMA foreign_keys = ON` on the shared
+    // SQLite connection; share/dismissal rows reference EventEntity, which
+    // setupActivityPubSchema() does not sync.
+    const db = (await import('@/server/common/entity/db')).default;
+    await db.query('PRAGMA foreign_keys = OFF');
+
+    sandbox.stub(console, 'log');
+    sandbox.stub(console, 'warn');
+  });
+
+  afterEach(async () => {
+    sandbox.restore();
+    await teardownActivityPubSchema();
+    const db = (await import('@/server/common/entity/db')).default;
+    await db.query('PRAGMA foreign_keys = ON');
+  });
+
+  function buildReconstitutedEvent(eventId: string): CalendarEvent {
+    const event = new CalendarEvent(eventId, null);
+    event.addContent(new CalendarEventContent('en', 'Reposted Event', ''));
+    return event;
+  }
+
+  async function seedEventObject(eventId: string, eventApId: string) {
+    await EventObjectEntity.create({
+      event_id: eventId,
+      ap_id: eventApId,
+      attributed_to: sourceActorUri,
+    });
+  }
+
+  async function seedShare(eventId: string) {
+    await SharedEventEntity.create({
+      id: uuidv4(),
+      event_id: eventId,
+      calendar_id: testCalendar.id,
+      auto_posted: true,
+    });
+  }
+
+  // AC1: re-shared event Update → paired Update(Note) to the reposting calendar.
+  it('emits a paired Update(Note) when an Update(Event) lands on a re-shared event', async () => {
+    const eventId = uuidv4();
+    const eventApId = `https://remote.instance/events/${eventId}`;
+    await seedEventObject(eventId, eventApId);
+    await seedShare(eventId);
+
+    sandbox.stub(inboxService as any, 'isPersonActorUri').resolves(false);
+    sandbox.stub(calendarInterface, 'getEventById').resolves(buildReconstitutedEvent(eventId));
+    sandbox.stub(calendarInterface, 'updateRemoteEvent').resolves(buildReconstitutedEvent(eventId));
+
+    const enqueued: any[] = [];
+    eventBus.on('outboxMessageAdded', (activity) => enqueued.push(activity));
+
+    const updateMessage = UpdateActivity.fromObject({
+      type: 'Update',
+      actor: sourceActorUri,
+      object: { id: eventApId, type: 'Event', name: 'Updated Event' },
+    });
+
+    await inboxService.processUpdateEvent(testCalendar, updateMessage!);
+
+    const updates = enqueued.filter(a => a.type === 'Update');
+    expect(updates.length).toBe(1);
+    const noteUpdate = updates[0];
+    expect(noteUpdate.object.type).toBe('Note');
+    expect(noteUpdate.object.attributedTo).toContain('/calendars/test-calendar');
+    expect(noteUpdate.to).toContain('https://www.w3.org/ns/activitystreams#Public');
+    expect(noteUpdate.cc[0]).toContain('/calendars/test-calendar/followers');
+    // Serialized Note `url` equals the remote canonical IRI (urlOverride).
+    expect(noteUpdate.object.toActivityPubObject().url).toBe(eventApId);
+  });
+
+  // AC2: no share row → no Update(Note); failed update → no Update(Note).
+  it('emits no Update(Note) when the event is not re-shared', async () => {
+    const eventId = uuidv4();
+    const eventApId = `https://remote.instance/events/${eventId}`;
+    await seedEventObject(eventId, eventApId);
+    // No SharedEventEntity row.
+
+    sandbox.stub(inboxService as any, 'isPersonActorUri').resolves(false);
+    sandbox.stub(calendarInterface, 'getEventById').resolves(buildReconstitutedEvent(eventId));
+    sandbox.stub(calendarInterface, 'updateRemoteEvent').resolves(buildReconstitutedEvent(eventId));
+
+    const enqueued: any[] = [];
+    eventBus.on('outboxMessageAdded', (activity) => enqueued.push(activity));
+
+    const updateMessage = UpdateActivity.fromObject({
+      type: 'Update',
+      actor: sourceActorUri,
+      object: { id: eventApId, type: 'Event', name: 'Updated Event' },
+    });
+
+    await inboxService.processUpdateEvent(testCalendar, updateMessage!);
+
+    expect(enqueued.filter(a => a.type === 'Update').length).toBe(0);
+  });
+
+  it('emits no Update(Note) when updateRemoteEvent returns null even with a share row', async () => {
+    const eventId = uuidv4();
+    const eventApId = `https://remote.instance/events/${eventId}`;
+    await seedEventObject(eventId, eventApId);
+    await seedShare(eventId);
+
+    sandbox.stub(inboxService as any, 'isPersonActorUri').resolves(false);
+    sandbox.stub(calendarInterface, 'getEventById').resolves(buildReconstitutedEvent(eventId));
+    sandbox.stub(calendarInterface, 'updateRemoteEvent').resolves(null);
+
+    const enqueued: any[] = [];
+    eventBus.on('outboxMessageAdded', (activity) => enqueued.push(activity));
+
+    const updateMessage = UpdateActivity.fromObject({
+      type: 'Update',
+      actor: sourceActorUri,
+      object: { id: eventApId, type: 'Event', name: 'Updated Event' },
+    });
+
+    await inboxService.processUpdateEvent(testCalendar, updateMessage!);
+
+    expect(enqueued.filter(a => a.type === 'Update').length).toBe(0);
+  });
+
+  // AC3: re-shared event Delete → paired Delete(Note), IRI string === noteUrl.
+  it('emits a paired Delete(Note) when a Delete(Event) lands on a re-shared event', async () => {
+    const eventId = uuidv4();
+    const eventApId = `https://remote.instance/events/${eventId}`;
+    await seedEventObject(eventId, eventApId);
+    await seedShare(eventId);
+
+    const existingEvent = buildReconstitutedEvent(eventId);
+    sandbox.stub(inboxService as any, 'isPersonActorUri').resolves(false);
+    sandbox.stub(calendarInterface, 'getEventById').resolves(existingEvent);
+    sandbox.stub(calendarInterface, 'deleteRemoteEvent').resolves();
+    sandbox.stub(inboxService as any, 'actorOwnsObject').resolves(true);
+
+    const enqueued: any[] = [];
+    eventBus.on('outboxMessageAdded', (activity) => enqueued.push(activity));
+
+    const deleteMessage = DeleteActivity.fromObject({
+      type: 'Delete',
+      actor: sourceActorUri,
+      object: eventApId,
+    });
+
+    await inboxService.processDeleteEvent(testCalendar, deleteMessage!);
+
+    const deletes = enqueued.filter(a => a.type === 'Delete');
+    expect(deletes.length).toBe(1);
+    const noteDelete = deletes[0];
+    // object is the Note IRI string, equal to noteUrl(calendar, event).
+    expect(noteDelete.object).toBe(NoteObject.noteUrl(testCalendar, existingEvent));
+    expect(noteDelete.to).toContain('https://www.w3.org/ns/activitystreams#Public');
+    expect(noteDelete.cc[0]).toContain('/calendars/test-calendar/followers');
+  });
+
+  // AC4: Delete(Note) IRI equals the IRI the Create(Note) cascade minted for the
+  // same (calendar, event) pair — executable cross-path parity (not a tautology).
+  it('Delete(Note) IRI byte-matches the Create(Note) cascade IRI for the same (calendar, event)', async () => {
+    const eventId = uuidv4();
+    const eventApId = `https://remote.instance/events/${eventId}`;
+
+    // Seed full auto-repost prerequisites so the real Create(Note) cascade runs.
+    const remoteCalendarActorId = uuidv4();
+    await CalendarActorEntity.create({
+      id: remoteCalendarActorId,
+      actor_type: 'remote',
+      actor_uri: sourceActorUri,
+      remote_display_name: null,
+      remote_domain: 'remote.instance',
+      calendar_id: null,
+      private_key: null,
+    });
+    await FollowingCalendarEntity.create({
+      id: uuidv4(),
+      calendar_actor_id: remoteCalendarActorId,
+      calendar_id: testCalendar.id,
+      auto_repost_originals: true,
+      auto_repost_reposts: false,
+    });
+    await seedEventObject(eventId, eventApId);
+
+    const event = buildReconstitutedEvent(eventId);
+    sandbox.stub(calendarInterface.categoryMappingService, 'assignAutoRepostCategories').resolves();
+    sandbox.stub(calendarInterface, 'getEventById').resolves(event);
+
+    const cascadeEnqueued: any[] = [];
+    eventBus.on('outboxMessageAdded', (activity) => cascadeEnqueued.push(activity));
+
+    // Run the real Create(Note) cascade.
+    await (inboxService as any).checkAndPerformAutoRepost(
+      testCalendar, sourceActorUri, eventApId, true,
+    );
+    const createNote = cascadeEnqueued.find(a => a.type === 'Create' && a.object?.type === 'Note');
+    expect(createNote).toBeDefined();
+    const createNoteIri = createNote.object.toActivityPubObject().id;
+
+    // Now run the Delete(Event) for the same (calendar, event). The cascade
+    // already created the SharedEventEntity row, so this is a true re-shared
+    // event delete.
+    sandbox.stub(inboxService as any, 'isPersonActorUri').resolves(false);
+    sandbox.stub(calendarInterface, 'deleteRemoteEvent').resolves();
+    sandbox.stub(inboxService as any, 'actorOwnsObject').resolves(true);
+
+    const deleteEnqueued: any[] = [];
+    eventBus.on('outboxMessageAdded', (activity) => deleteEnqueued.push(activity));
+
+    const deleteMessage = DeleteActivity.fromObject({
+      type: 'Delete',
+      actor: sourceActorUri,
+      object: eventApId,
+    });
+    await inboxService.processDeleteEvent(testCalendar, deleteMessage!);
+
+    const deleteNote = deleteEnqueued.find(a => a.type === 'Delete');
+    expect(deleteNote).toBeDefined();
+    expect(deleteNote.object).toBe(createNoteIri);
+  });
+
+  // AC5: non-reshared event Delete → no Delete(Note).
+  it('emits no Delete(Note) when the deleted event is not re-shared', async () => {
+    const eventId = uuidv4();
+    const eventApId = `https://remote.instance/events/${eventId}`;
+    await seedEventObject(eventId, eventApId);
+    // No SharedEventEntity row.
+
+    sandbox.stub(inboxService as any, 'isPersonActorUri').resolves(false);
+    sandbox.stub(calendarInterface, 'getEventById').resolves(buildReconstitutedEvent(eventId));
+    sandbox.stub(calendarInterface, 'deleteRemoteEvent').resolves();
+    sandbox.stub(inboxService as any, 'actorOwnsObject').resolves(true);
+
+    const enqueued: any[] = [];
+    eventBus.on('outboxMessageAdded', (activity) => enqueued.push(activity));
+
+    const deleteMessage = DeleteActivity.fromObject({
+      type: 'Delete',
+      actor: sourceActorUri,
+      object: eventApId,
+    });
+
+    await inboxService.processDeleteEvent(testCalendar, deleteMessage!);
+
+    expect(enqueued.filter(a => a.type === 'Delete').length).toBe(0);
+  });
+
+  // AC6: orphaned SharedEventEntity row removed on delete; no RepostDismissalEntity written.
+  it('removes the orphaned SharedEventEntity row and writes no RepostDismissalEntity on delete', async () => {
+    const eventId = uuidv4();
+    const eventApId = `https://remote.instance/events/${eventId}`;
+    await seedEventObject(eventId, eventApId);
+    await seedShare(eventId);
+
+    sandbox.stub(inboxService as any, 'isPersonActorUri').resolves(false);
+    sandbox.stub(calendarInterface, 'getEventById').resolves(buildReconstitutedEvent(eventId));
+    sandbox.stub(calendarInterface, 'deleteRemoteEvent').resolves();
+    sandbox.stub(inboxService as any, 'actorOwnsObject').resolves(true);
+
+    const deleteMessage = DeleteActivity.fromObject({
+      type: 'Delete',
+      actor: sourceActorUri,
+      object: eventApId,
+    });
+
+    await inboxService.processDeleteEvent(testCalendar, deleteMessage!);
+
+    const remainingShares = await SharedEventEntity.count({
+      where: { event_id: eventId, calendar_id: testCalendar.id },
+    });
+    expect(remainingShares).toBe(0);
+
+    const dismissals = await RepostDismissalEntity.count({
+      where: { event_id: eventId, calendar_id: testCalendar.id },
+    });
+    expect(dismissals).toBe(0);
+  });
+
+  // AC7: Person-actor update/delete of a locally-owned (non-reshared) event emits no Note.
+  it('emits no Note on a Person-actor update of a locally-owned event with no share row', async () => {
+    const personActorUri = 'https://user.instance/users/editor';
+    const eventApId = 'https://remote.instance/events/owned-event';
+    const eventId = uuidv4();
+    await EventObjectEntity.create({
+      event_id: eventId,
+      ap_id: eventApId,
+      attributed_to: 'https://remote.instance/calendars/source',
+    });
+    // No SharedEventEntity row — locally-owned events are never re-shared.
+
+    sandbox.stub(inboxService as any, 'isPersonActorUri').resolves(true);
+    sandbox.stub(inboxService as any, 'isAuthorizedRemoteEditor').resolves(true);
+    sandbox.stub(calendarInterface, 'getEventById').resolves(buildReconstitutedEvent(eventId));
+    sandbox.stub(calendarInterface, 'updateRemoteEvent').resolves(buildReconstitutedEvent(eventId));
+
+    const enqueued: any[] = [];
+    eventBus.on('outboxMessageAdded', (activity) => enqueued.push(activity));
+
+    const updateMessage = UpdateActivity.fromObject({
+      type: 'Update',
+      actor: personActorUri,
+      object: {
+        id: eventApId,
+        type: 'Event',
+        name: 'Editor Updated Event',
+        eventParams: { id: eventId, name: 'Editor Updated Event' },
+      },
+    });
+
+    await inboxService.processUpdateEvent(testCalendar, updateMessage!);
+
+    expect(enqueued.filter(a => a.type === 'Update').length).toBe(0);
+  });
+
+  it('emits no Note on a Person-actor delete of a locally-owned event with no share row', async () => {
+    const personActorUri = 'https://user.instance/users/editor';
+    const eventApId = 'https://remote.instance/events/owned-event-2';
+    const eventId = uuidv4();
+    await EventObjectEntity.create({
+      event_id: eventId,
+      ap_id: eventApId,
+      attributed_to: 'https://remote.instance/calendars/source',
+    });
+    // No SharedEventEntity row.
+
+    sandbox.stub(inboxService as any, 'isPersonActorUri').resolves(true);
+    sandbox.stub(inboxService as any, 'isAuthorizedRemoteEditor').resolves(true);
+    sandbox.stub(calendarInterface, 'getEventById').resolves(buildReconstitutedEvent(eventId));
+    sandbox.stub(calendarInterface, 'deleteRemoteEvent').resolves();
+
+    const enqueued: any[] = [];
+    eventBus.on('outboxMessageAdded', (activity) => enqueued.push(activity));
+
+    const deleteMessage = DeleteActivity.fromObject({
+      type: 'Delete',
+      actor: personActorUri,
+      object: { id: eventApId, type: 'Tombstone', eventId },
+    });
+
+    await inboxService.processDeleteEvent(testCalendar, deleteMessage!);
+
+    expect(enqueued.filter(a => a.type === 'Delete').length).toBe(0);
+  });
 });
 
 describe('ProcessInboxService - processUpdateEvent', () => {

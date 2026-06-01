@@ -21,6 +21,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 import ProcessInboxService from '@/server/activitypub/service/inbox';
 import { EventObjectEntity } from '@/server/activitypub/entity/event_object';
+import { SharedEventEntity } from '@/server/activitypub/entity/activitypub';
 import CreateActivity from '@/server/activitypub/model/action/create';
 import UpdateActivity from '@/server/activitypub/model/action/update';
 import { Calendar, CalendarContent } from '@/common/model/calendar';
@@ -61,6 +62,12 @@ describe('ProcessInboxService - source_series parsing', () => {
 
     // Stub checkAndPerformAutoRepost to avoid follow-up processing
     sandbox.stub(inboxService as any, 'checkAndPerformAutoRepost').resolves();
+
+    // These tests exercise source_series parsing, not re-shared events, so the
+    // lifecycle Note cascade must not fire. Stub the SharedEventEntity lookup to
+    // return null (no share row) — this file stubs entities rather than syncing
+    // a real schema, so without this the new findOne would hit a missing table.
+    sandbox.stub(SharedEventEntity, 'findOne').resolves(null);
 
   });
 
