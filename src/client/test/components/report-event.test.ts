@@ -31,7 +31,6 @@ const TEST_EVENT_TITLE = 'Summer Festival';
  */
 const reportTranslations: Record<string, string> = {
   'report.form_title': 'report.form_title',
-  'report.close_dialog': 'report.close_dialog',
   'report.category_label': 'report.category_label',
   'report.category_spam': 'report.category_spam',
   'report.category_inappropriate': 'report.category_inappropriate',
@@ -51,6 +50,9 @@ const reportTranslations: Record<string, string> = {
   'report.error_generic': 'report.error_generic',
   'report.error_validation': 'report.error_validation',
   'report.event_subtitle': 'Reporting: {{title}}',
+  // Modal renders its close button with useTranslation('system') (no keyPrefix),
+  // so the aria-label key is 'modal.close'.
+  'modal.close': 'modal.close',
 };
 
 /** Helper to get the mocked submitReport from the most recent ReportService instance. */
@@ -253,7 +255,8 @@ describe('ReportEvent Component (Client)', () => {
       const wrapper = mountReportEvent();
       await flushPromises();
 
-      const closeButton = wrapper.find('.report-dialog__close');
+      // The Modal renders its own close button labelled with the 'modal.close' key.
+      const closeButton = wrapper.find('button[aria-label="modal.close"]');
       expect(closeButton.exists()).toBe(true);
       wrapper.unmount();
     });
@@ -570,7 +573,7 @@ describe('ReportEvent Component (Client)', () => {
       const wrapper = mountReportEvent();
       await flushPromises();
 
-      await wrapper.find('.report-dialog__close').trigger('click');
+      await wrapper.find('button[aria-label="modal.close"]').trigger('click');
       await flushPromises();
 
       expect(wrapper.emitted('close')).toBeTruthy();
@@ -604,7 +607,7 @@ describe('ReportEvent Component (Client)', () => {
       wrapper.unmount();
     });
 
-    it('should reset form fields after closing and reopening', async () => {
+    it('should reset form fields when the modal is closed', async () => {
       const wrapper = mountReportEvent();
       await flushPromises();
 
@@ -612,16 +615,15 @@ describe('ReportEvent Component (Client)', () => {
       await wrapper.find('select').setValue(ReportCategory.SPAM);
       await wrapper.find('textarea').setValue('Some description');
 
-      // Close the modal
-      await wrapper.find('.report-dialog__close').trigger('click');
+      // Close the modal via the Modal close button. handleClose() resets the
+      // form before emitting close (the production pattern unmounts on close,
+      // but the reset must still run on every close path).
+      await wrapper.find('button[aria-label="modal.close"]').trigger('click');
       await flushPromises();
 
-      // Re-open by calling exposed open method
-      const vm = wrapper.vm as any;
-      vm.open();
-      await flushPromises();
+      expect(wrapper.emitted('close')).toBeTruthy();
 
-      // Fields should be reset
+      // Fields are reset back to their initial empty values.
       expect((wrapper.find('select').element as HTMLSelectElement).value).toBe('');
       expect((wrapper.find('textarea').element as HTMLTextAreaElement).value).toBe('');
       wrapper.unmount();
@@ -631,7 +633,9 @@ describe('ReportEvent Component (Client)', () => {
       const wrapper = mountReportEvent();
       await flushPromises();
 
-      await wrapper.find('.report-dialog__close').trigger('click');
+      expect(document.body.classList.contains('modal-open')).toBe(true);
+
+      await wrapper.find('button[aria-label="modal.close"]').trigger('click');
       await flushPromises();
 
       expect(document.body.classList.contains('modal-open')).toBe(false);
