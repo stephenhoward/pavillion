@@ -252,6 +252,9 @@ describe('Location API Tests', () => {
         'OR',
         '97221',
       );
+      // Federated Place — originUri is a server-internal AP-origin hint.
+      // Authenticated callers receive the unchanged full shape (pv-if96).
+      location.originUri = 'https://remote.example/locations/abc';
 
       (calendarInterface.getCalendar as sinon.SinonStub).resolves(testCalendar);
       (calendarInterface.getLocationById as sinon.SinonStub).resolves(location);
@@ -262,6 +265,9 @@ describe('Location API Tests', () => {
 
       expect(response.body.name).toBe('Washington Park');
       expect(response.body.address).toBe('4033 SW Canyon Rd');
+      // Positive-contract guard: authenticated GET still includes originUri
+      // for federated Places (gating, not stripping — pv-if96).
+      expect(response.body.originUri).toBe('https://remote.example/locations/abc');
     });
 
     it('should return location with content', async () => {
@@ -777,6 +783,67 @@ describe('Location API Tests', () => {
       expect(response.body.errorName).toBe('InsufficientCalendarPermissionsError');
       // Auth check fails before the service call
       expect((calendarInterface.reassignEvents as sinon.SinonStub).called).toBe(false);
+    });
+  });
+
+  // Anonymous-rejection contract (pv-if96): both GET endpoints are gated by
+  // ExpressHelper.loggedInOnly, so anonymous callers are rejected (403) before
+  // any location data — including the server-internal originUri AP-origin hint
+  // — is serialized. Uses its own sandbox/app because the shared sandbox
+  // already stubs loggedInOnly to inject a user; re-stubbing the same property
+  // throws.
+  describe('GET endpoints reject anonymous requests', () => {
+    let anonSandbox: sinon.SinonSandbox;
+    let anonApp: Application;
+    let anonInterface: CalendarInterface;
+
+    beforeEach(() => {
+      anonSandbox = sinon.createSandbox();
+      anonApp = express();
+      anonApp.use(express.json());
+
+      // Stub loggedInOnly to a reject middleware standing in for the real
+      // passport-jwt 403 on a missing/invalid token.
+      anonSandbox.stub(ExpressHelper, 'loggedInOnly').value([
+        (req: Request, res: Response) => {
+          res.status(403).json({ message: 'forbidden' });
+        },
+      ]);
+
+      anonInterface = {
+        getCalendar: anonSandbox.stub(),
+        getLocationsForCalendar: anonSandbox.stub(),
+        getLocationById: anonSandbox.stub(),
+      } as unknown as CalendarInterface;
+
+      const anonRoutes = new LocationRoutes(anonInterface);
+      anonRoutes.installHandlers(anonApp, '/api/v1');
+    });
+
+    afterEach(() => {
+      anonSandbox.restore();
+    });
+
+    it('listLocations returns 403 and never invokes the location service', async () => {
+      await request(anonApp)
+        .get('/api/v1/calendars/cal-123/locations')
+        .expect(403);
+
+      // 403 alone proves the handler did not run; the service-not-called
+      // assertion documents that no location data was serialized.
+      expect((anonInterface.getCalendar as sinon.SinonStub).called).toBe(false);
+      expect((anonInterface.getLocationsForCalendar as sinon.SinonStub).called).toBe(false);
+    });
+
+    it('getLocation returns 403 and never invokes the location service', async () => {
+      const locationId = 'c3d4e5f6-0001-4000-8000-000000000001';
+
+      await request(anonApp)
+        .get(`/api/v1/calendars/cal-123/locations/${encodeURIComponent(locationId)}`)
+        .expect(403);
+
+      expect((anonInterface.getCalendar as sinon.SinonStub).called).toBe(false);
+      expect((anonInterface.getLocationById as sinon.SinonStub).called).toBe(false);
     });
   });
 });
