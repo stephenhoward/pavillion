@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { mount } from '@vue/test-utils';
+import { mount, flushPromises } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import { ref } from 'vue';
 import sinon from 'sinon';
@@ -60,9 +60,17 @@ describe('FollowedEventsView', () => {
     mockUnrepostEvent.mockReset();
     mockConfirmRepost.mockReset();
 
-    // Mock native dialog methods not implemented in happy-dom
-    vi.spyOn(HTMLDialogElement.prototype, 'showModal').mockImplementation(() => {});
-    vi.spyOn(HTMLDialogElement.prototype, 'close').mockImplementation(() => {});
+    // Mock native dialog methods not implemented in happy-dom. The shared
+    // <Modal> component (via useDialog) guards close() on dialog.open, so the
+    // mocks must toggle the `open` property to keep that lifecycle faithful —
+    // a pure no-op would leave open=false and make close() a no-op, breaking
+    // the close-cascade assertion.
+    vi.spyOn(HTMLDialogElement.prototype, 'showModal').mockImplementation(function (this: HTMLDialogElement) {
+      this.open = true;
+    });
+    vi.spyOn(HTMLDialogElement.prototype, 'close').mockImplementation(function (this: HTMLDialogElement) {
+      this.open = false;
+    });
 
     // Setup calendar store with a test calendar
     const calendarStore = useCalendarStore();
@@ -280,14 +288,15 @@ describe('FollowedEventsView', () => {
       },
     });
 
-    // Modal is not rendered initially
-    expect(wrapper.find('.report-dialog').exists()).toBe(false);
+    // Modal is not rendered initially (report-event modal is v-if-gated and
+    // renders its <dialog> via the shared <Modal> component)
+    expect(wrapper.find('dialog').exists()).toBe(false);
 
     // Install local spy before triggering so we can assert on this specific call
     const showModalSpy = vi.spyOn(HTMLDialogElement.prototype, 'showModal').mockImplementation(() => {});
     await wrapper.find('button[data-testid="report-button"]').trigger('click');
 
-    expect(wrapper.find('.report-dialog').exists()).toBe(true);
+    expect(wrapper.find('dialog').exists()).toBe(true);
     expect(showModalSpy).toHaveBeenCalled();
   });
 
@@ -317,12 +326,16 @@ describe('FollowedEventsView', () => {
 
     // Open the modal
     await wrapper.find('button[data-testid="report-button"]').trigger('click');
-    expect(wrapper.find('.report-dialog').exists()).toBe(true);
+    expect(wrapper.find('dialog').exists()).toBe(true);
 
-    // Close via the modal's close button
-    await wrapper.find('.report-dialog__close').trigger('click');
+    // Close via the Modal's close button (labelled with the 'modal.close' key).
+    // The close cascade runs through useDialog.close() -> Modal @close ->
+    // report-event handleClose -> emit('close') -> parent clears reportingEventId,
+    // so flush the reactive queue before asserting the v-if removed the dialog.
+    await wrapper.find('button[aria-label="modal.close"]').trigger('click');
+    await flushPromises();
 
-    expect(wrapper.find('.report-dialog').exists()).toBe(false);
+    expect(wrapper.find('dialog').exists()).toBe(false);
   });
 
   it('loads more events on scroll when intersection observer triggers', async () => {
