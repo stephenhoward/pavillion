@@ -1,5 +1,5 @@
 /**
- * Integration tests for FollowBackfillService (Shape B).
+ * Integration tests for FollowBackfillService.
  *
  * These tests verify the public `runBackfill` contract end-to-end:
  *   - persistence shape (auth_source, auth_origin, clamped message_time)
@@ -521,7 +521,7 @@ describe('FollowBackfillService.runBackfill (integration)', () => {
     });
 
     // Backfill then encounters the same activity id with a *different*
-    // published timestamp. Shape B uses `findOrCreate` with no upgrade on
+    // published timestamp. Backfill uses `findOrCreate` with no upgrade on
     // conflict, so the existing row must remain.
     const backfillPublished = '2026-05-16T11:00:00Z';
     const fetcher = makeFetcher({

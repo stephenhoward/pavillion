@@ -42,8 +42,12 @@ async function buildSignedGetHeaders(
   calendar: Calendar,
 ): Promise<{ Signature: string; Date: string } | null> {
   try {
-    // The outbox uses an EventEmitter-wired CalendarInterface; for read-only
-    // actor lookup we don't need a live event bus, so a fresh emitter is fine.
+    // CalendarActorService requires a CalendarInterface to construct, but the
+    // methods used on this path (getActorByCalendarId, signActivity) read
+    // CalendarActorEntity directly — they never emit, register listeners, or
+    // otherwise touch the bus. CalendarInterface itself registers no listeners
+    // in its constructor, so wiring the global bus here would change nothing:
+    // the emitter is inert on this path, and a throwaway is correct.
     const calendarService = new CalendarInterface(new EventEmitter());
     const calendarActorService = new CalendarActorService(calendarService);
 

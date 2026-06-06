@@ -1,5 +1,5 @@
 /**
- * ActivityPub follow-backfill worker service — Shape B.
+ * ActivityPub follow-backfill worker service.
  *
  * Pulls a remote calendar's outbox after a confirmed Accept(Follow), runs
  * pre-write trust gates against each Create/Update/Announce/Undo/Delete
@@ -10,16 +10,11 @@
  * inbox in chronological order — the same code path the live HTTP inbox
  * runs after a signed POST.
  *
- * Shape B vs Shape A
- * ------------------
- * The previous (pv-cug3) implementation routed each activity through an
- * in-memory synthetic `ActivityPubInboxMessageEntity` plus a direct
- * `processInboxMessage` call, with a two-pass in-page Delete suppression
- * and explicit Update/Undo exclusions. Shape B drops all of that: every
- * surviving activity is persisted via `findOrCreate` (first writer wins,
- * no upgrade on conflict) and the standard inbox drain handles ordering
- * and idempotency. The trust gates that the live HTTP path gets for free
- * from signature middleware are run here pre-write, before any DB insert.
+ * Every surviving activity is persisted via `findOrCreate` (first writer
+ * wins, no upgrade on conflict) and the standard inbox drain handles
+ * ordering and idempotency. The trust gates that the live HTTP path gets
+ * for free from signature middleware are run here pre-write, before any DB
+ * insert.
  *
  * Trust posture (pre-write, per activity)
  * ---------------------------------------
@@ -28,9 +23,8 @@
  *      if `object` is a bare URI, the URI's hostname matches the actor's.
  *   3. Announce: actor equals the source actor URI OR shares its origin
  *      (allows alias actors on the same instance).
- *   4. Undo: actor-origin check only; strict cross-check against the
- *      referenced Announce in `ap_inbox` happens at dispatch time
- *      (pv-wy2u.3.1), NOT here.
+ *   4. Undo: actor-origin check only; the strict cross-check against the
+ *      referenced Announce in `ap_inbox` happens at dispatch time, NOT here.
  *   5. Delete: actor-origin check only; the inbox Delete handler is
  *      idempotent so per-page cross-checks are unnecessary.
  *   6. Loop guard (all): drop the activity if an embedded `object.attributedTo`
@@ -531,7 +525,7 @@ export function extractObjectId(objectField: unknown): string | null {
  *     patch); the actor-origin gate on the wrapping activity still applies.
  *   - **Announce:** actor equals `sourceActorUri` or shares its origin.
  *     The strict cross-check against the referenced original Announce in
- *     `ap_inbox` is a dispatch-time concern (pv-wy2u.3.1).
+ *     `ap_inbox` is a dispatch-time concern.
  *   - **Undo:** actor-origin only (covered by the universal actor-origin
  *     gate). The Undo handler at dispatch time cross-checks against the
  *     stored Announce.
