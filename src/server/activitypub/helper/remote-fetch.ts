@@ -6,9 +6,24 @@ import { createLogger } from '@/server/common/helper/logger';
 import { Calendar } from '@/common/model/calendar';
 import CalendarActorService from '@/server/activitypub/service/calendar_actor';
 import CalendarInterface from '@/server/calendar/interface';
-import { EventEmitter } from 'events';
 
 const logger = createLogger('activitypub');
+
+/**
+ * Everything {@link fetchRemoteObject} needs to HTTP-sign an outbound GET on
+ * behalf of a local calendar. The caller supplies its own bus-wired
+ * `CalendarInterface` rather than letting the signer fabricate one: the actor
+ * lookup on the signing path emits nothing today, but bundling the live
+ * interface keeps the path attached to the host process's real event bus, so
+ * any future emit reaches real subscribers instead of being silently dropped
+ * on a throwaway emitter.
+ */
+export interface SigningContext {
+  /** Local calendar whose actor keypair signs the request. */
+  calendar: Calendar;
+  /** The host process's bus-wired calendar interface, used to read the actor. */
+  calendarInterface: CalendarInterface;
+}
 
 /**
  * User agent string for ActivityPub federation requests.
@@ -35,25 +50,24 @@ const ACTIVITYPUB_ACCEPT_HEADER = 'application/activity+json';
  * second caller appears, promote this to a shared helper.
  *
  * @param uri - The full target URI being fetched
- * @param calendar - The local calendar whose actor keypair signs the request
+ * @param signing - The calendar to sign as and the bus-wired interface to
+ *   read its actor through
  */
 async function buildSignedGetHeaders(
   uri: string,
-  calendar: Calendar,
+  signing: SigningContext,
 ): Promise<{ Signature: string; Date: string } | null> {
   try {
-    // CalendarActorService requires a CalendarInterface to construct, but the
-    // methods used on this path (getActorByCalendarId, signActivity) read
-    // CalendarActorEntity directly — they never emit, register listeners, or
-    // otherwise touch the bus. CalendarInterface itself registers no listeners
-    // in its constructor, so wiring the global bus here would change nothing:
-    // the emitter is inert on this path, and a throwaway is correct.
-    const calendarService = new CalendarInterface(new EventEmitter());
-    const calendarActorService = new CalendarActorService(calendarService);
+    // Read the actor through the caller's bus-wired CalendarInterface. The
+    // lookup and signing methods used here query CalendarActorEntity directly
+    // and emit nothing today, but reusing the host's real interface — rather
+    // than fabricating one on a throwaway emitter — keeps the signing path on
+    // the live event bus if that ever changes.
+    const calendarActorService = new CalendarActorService(signing.calendarInterface);
 
-    const actor = await calendarActorService.getActorByCalendarId(calendar.id);
+    const actor = await calendarActorService.getActorByCalendarId(signing.calendar.id);
     if (!actor) {
-      logger.warn({ calendarId: calendar.id }, 'No calendar actor found for signing GET');
+      logger.warn({ calendarId: signing.calendar.id }, 'No calendar actor found for signing GET');
       return null;
     }
 
@@ -103,7 +117,7 @@ export interface FetchRemoteObjectOptions {
  * from a remote server. It uses proper headers for ActivityPub content negotiation
  * and handles errors gracefully by returning null on failure.
  *
- * When a `signingCalendar` is provided, the outbound GET is HTTP-signed using
+ * When a `signingContext` is provided, the outbound GET is HTTP-signed using
  * that calendar's actor keypair. This is required by Mastodon 4+ and other AP
  * servers that demand signed GETs on the outbox endpoint; without it those
  * peers silently return zero results. When omitted, behavior is unchanged
@@ -122,8 +136,8 @@ export interface FetchRemoteObjectOptions {
  * validation has passed.
  *
  * @param uri - The URI of the remote ActivityPub object to fetch
- * @param signingCalendar - Optional local calendar whose actor keypair signs
- *   the outbound GET. When omitted, the request is sent unsigned.
+ * @param signingContext - Optional calendar + bus-wired interface whose actor
+ *   keypair signs the outbound GET. When omitted, the request is sent unsigned.
  * @param options - Optional fetch tuning (currently a response-body byte cap).
  * @returns The parsed JSON object, or null if the fetch fails
  *
@@ -135,14 +149,14 @@ export interface FetchRemoteObjectOptions {
  * // Signed (Mastodon-compatible outbox pulls) with a 1 MiB body cap
  * const page = await fetchRemoteObject(
  *   'https://remote.example/users/alice/outbox?page=true',
- *   followingCalendar,
+ *   { calendar: followingCalendar, calendarInterface },
  *   { maxContentLength: 1_048_576 },
  * );
  * ```
  */
 export async function fetchRemoteObject(
   uri: string,
-  signingCalendar?: Calendar,
+  signingContext?: SigningContext,
   options?: FetchRemoteObjectOptions,
 ): Promise<Record<string, unknown> | null> {
   try {
@@ -163,12 +177,12 @@ export async function fetchRemoteObject(
       'User-Agent': USER_AGENT,
     };
 
-    // When a signing calendar is provided, attach HTTP Signature headers. Fail
+    // When a signing context is provided, attach HTTP Signature headers. Fail
     // closed on any signing error — see buildSignedGetHeaders docstring.
-    if (signingCalendar) {
-      const signedHeaders = await buildSignedGetHeaders(uri, signingCalendar);
+    if (signingContext) {
+      const signedHeaders = await buildSignedGetHeaders(uri, signingContext);
       if (!signedHeaders) {
-        logger.error({ uri, calendarId: signingCalendar.id }, 'Signed GET requested but signing failed');
+        logger.error({ uri, calendarId: signingContext.calendar.id }, 'Signed GET requested but signing failed');
         return null;
       }
       headers.Signature = signedHeaders.Signature;

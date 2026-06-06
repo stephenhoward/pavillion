@@ -250,7 +250,7 @@ export class FollowBackfillService {
     if (!(await this.acquireRateBudget(ctx.sourceActorUri))) {
       return 0;
     }
-    const actorProfile = await this.fetcher(ctx.sourceActorUri, ctx.calendar, { maxContentLength: MAX_PAGE_BYTES });
+    const actorProfile = await this.fetcher(ctx.sourceActorUri, { calendar: ctx.calendar, calendarInterface: this.calendarInterface }, { maxContentLength: MAX_PAGE_BYTES });
     if (!actorProfile) {
       logger.info({ followingCalendarId: ctx.followingCalendarId }, 'source actor profile fetch returned null; aborting backfill');
       return 0;
@@ -271,7 +271,7 @@ export class FollowBackfillService {
     if (!(await this.acquireRateBudget(outboxUrl))) {
       return 0;
     }
-    const outbox = await this.fetcher(outboxUrl, ctx.calendar, { maxContentLength: MAX_PAGE_BYTES });
+    const outbox = await this.fetcher(outboxUrl, { calendar: ctx.calendar, calendarInterface: this.calendarInterface }, { maxContentLength: MAX_PAGE_BYTES });
     if (!outbox) {
       logger.info({ outboxUrl, followingCalendarId: ctx.followingCalendarId }, 'outbox fetch returned null; aborting backfill');
       return 0;
@@ -288,7 +288,7 @@ export class FollowBackfillService {
       if (!(await this.acquireRateBudget(outbox.first))) {
         return 0;
       }
-      currentPage = await this.fetcher(outbox.first, ctx.calendar, { maxContentLength: MAX_PAGE_BYTES });
+      currentPage = await this.fetcher(outbox.first, { calendar: ctx.calendar, calendarInterface: this.calendarInterface }, { maxContentLength: MAX_PAGE_BYTES });
     }
     else {
       logger.info({ outboxUrl, followingCalendarId: ctx.followingCalendarId }, 'outbox has no first page link; nothing to backfill');
@@ -327,7 +327,7 @@ export class FollowBackfillService {
       if (!(await this.acquireRateBudget(nextUrl))) {
         return persistedRows;
       }
-      currentPage = await this.fetcher(nextUrl, ctx.calendar, { maxContentLength: MAX_PAGE_BYTES });
+      currentPage = await this.fetcher(nextUrl, { calendar: ctx.calendar, calendarInterface: this.calendarInterface }, { maxContentLength: MAX_PAGE_BYTES });
     }
 
     if (pagesWalked >= MAX_OUTBOX_PAGES) {
