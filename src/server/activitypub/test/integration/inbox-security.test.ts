@@ -29,11 +29,12 @@ import AccountService from '@/server/accounts/service/account';
 import { TestEnvironment } from '@/server/common/test/lib/test_environment';
 import ProcessInboxService from '@/server/activitypub/service/inbox';
 import { EventObjectEntity } from '@/server/activitypub/entity/event_object';
-import { EventActivityEntity } from '@/server/activitypub/entity/activitypub';
+import { EventActivityEntity, ActivityPubInboxMessageEntity } from '@/server/activitypub/entity/activitypub';
 import AnnounceActivity from '@/server/activitypub/model/action/announce';
 import * as remoteFetch from '@/server/activitypub/helper/remote-fetch';
 import { CalendarEntity } from '@/server/calendar/entity/calendar';
 import { setupActivityPubSchema, teardownActivityPubSchema } from '@/server/common/test/helpers/database';
+import { waitForStableCount } from '@/server/common/test/lib/test_polling';
 
 describe('ActivityPub Inbox Security Pipeline', () => {
   let env: TestEnvironment;
@@ -84,6 +85,44 @@ describe('ActivityPub Inbox Security Pipeline', () => {
 
   afterAll(async () => {
     await env.cleanup();
+  });
+
+  /**
+   * Wait for the inbox to stop draining, then return.
+   *
+   * Every accepted inbox POST runs `addToInbox`, which persists the row via a
+   * `findOrCreate` (a Sequelize *managed transaction*) and then emits
+   * `inboxMessageAdded`. That emit kicks off `processInboxMessage` as
+   * fire-and-forget background work — it keeps touching the DB after the HTTP
+   * response has been sent.
+   *
+   * In production each of those operations runs on its own PostgreSQL pool
+   * connection, so the background drain and the next request never share a
+   * transaction. The integration suite, however, runs on a single shared
+   * in-memory SQLite connection: if a previous request's drain is still
+   * mid-transaction when the next request's `findOrCreate` issues its
+   * BEGIN/COMMIT, the two managed transactions interleave on the one
+   * connection and SQLite reports "cannot commit - no transaction is active",
+   * killing the connection and hanging the request until the test times out.
+   *
+   * Draining to quiescence between requests keeps each request's transaction
+   * alone on the connection. This mirrors the `afterEach` drain in
+   * outbox-local-dispatch.integration.test.ts, which guards the same race on
+   * the outbox side. The wait is keyed on `processed_time`: the drain stamps
+   * it on every row it finishes, so a stable count of unprocessed rows means
+   * no drain is in flight. The timeout is swallowed — a row that never drains
+   * is a separate concern that should surface as its own assertion, not as a
+   * teardown failure.
+   */
+  async function settleInbox(): Promise<void> {
+    await waitForStableCount(
+      async () => ActivityPubInboxMessageEntity.count({ where: { processed_time: null } }),
+      { maxWaitMs: 5000, stableForMs: 150, label: 'inbox drain' },
+    ).catch(() => { /* see doc comment: drained-or-not, proceed */ });
+  }
+
+  afterEach(async () => {
+    await settleInbox();
   });
 
   describe('1. Schema Validation - Invalid Activity Rejection', () => {
@@ -532,6 +571,11 @@ describe('ActivityPub Inbox Security Pipeline', () => {
           .send(activity);
 
         expect(response.status).toBe(200);
+
+        // Let this activity's background drain finish before POSTing the next
+        // one: two overlapping inbox writes would interleave their managed
+        // transactions on the shared SQLite connection. See settleInbox().
+        await settleInbox();
       }
     });
 
