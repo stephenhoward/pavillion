@@ -29,6 +29,25 @@ export interface JobMeta {
 }
 
 /**
+ * Domain-neutral per-job publish options. Lets a publishing domain set the
+ * retry/expiry policy for one job without depending on pg-boss types directly
+ * (the mapping to pg-boss `SendOptions` stays inside this adapter, preserving
+ * the DEC-003 boundary that keeps queue machinery encapsulated in
+ * housekeeping). Any field left unset inherits the queue default established
+ * by {@link JobQueueService.ensureQueue}.
+ */
+export interface JobPublishOptions {
+  /** Maximum number of automatic retries after the first failed attempt. */
+  retryLimit?: number;
+  /** Delay before the first retry, in seconds (grows when retryBackoff is on). */
+  retryDelaySeconds?: number;
+  /** Exponentially grow the retry delay across successive attempts. */
+  retryBackoff?: boolean;
+  /** How long a single attempt may run before pg-boss considers it expired. */
+  expireInSeconds?: number;
+}
+
+/**
  * Job handler function type.
  *
  * Handlers may declare an optional second parameter to receive pg-boss retry
@@ -126,17 +145,44 @@ export default class JobQueueService {
    *
    * @param jobName - Name of the job queue
    * @param data - Job data to pass to the handler
+   * @param options - Optional per-job retry/expiry policy. When omitted the
+   *   queue defaults apply.
    * @returns Job ID
    * @throws Error if service not started
    */
-  async publish<T = any>(jobName: string, data: T): Promise<string | null> {
+  async publish<T = any>(jobName: string, data: T, options?: JobPublishOptions): Promise<string | null> {
     if (!this.started || !this.boss) {
       throw new Error('JobQueueService not started. Call start() first.');
     }
 
-    const jobId = await this.boss.send(jobName, data);
+    const jobId = options
+      ? await this.boss.send(jobName, data as object, this.toSendOptions(options))
+      : await this.boss.send(jobName, data as object);
     logger.info({ jobName, jobId }, 'Published job');
     return jobId;
+  }
+
+  /**
+   * Maps the domain-neutral {@link JobPublishOptions} onto pg-boss
+   * `SendOptions`. Only explicitly-set fields are forwarded so unset options
+   * continue to inherit the queue defaults rather than being overridden with
+   * undefined.
+   */
+  private toSendOptions(options: JobPublishOptions): PgBoss.SendOptions {
+    const sendOptions: PgBoss.SendOptions = {};
+    if (options.retryLimit !== undefined) {
+      sendOptions.retryLimit = options.retryLimit;
+    }
+    if (options.retryDelaySeconds !== undefined) {
+      sendOptions.retryDelay = options.retryDelaySeconds;
+    }
+    if (options.retryBackoff !== undefined) {
+      sendOptions.retryBackoff = options.retryBackoff;
+    }
+    if (options.expireInSeconds !== undefined) {
+      sendOptions.expireInSeconds = options.expireInSeconds;
+    }
+    return sendOptions;
   }
 
   /**
@@ -217,15 +263,23 @@ export default class JobQueueService {
     // Ensure queue exists before subscribing
     await this.ensureQueue(jobName);
 
-    await this.boss.work(jobName, { includeMetadata: true }, async (job: any) => {
-      try {
-        logger.info({ jobName, jobId: job.id }, 'Processing job');
-        await handler(job.data, { retryCount: job.retryCount, retryLimit: job.retryLimit });
-        logger.info({ jobName, jobId: job.id }, 'Completed job');
-      }
-      catch (error) {
-        logError(error, `[Housekeeping] Error processing job ${jobName} (ID: ${job.id})`);
-        throw error;
+    // pg-boss v10+ delivers an array of jobs to the work handler (batchSize
+    // defaults to 1, so the array typically has one entry). Iterate so a
+    // future batchSize bump doesn't silently drop work, and so payloads
+    // reach the handler — earlier code read `job.data` off the array
+    // itself, which is undefined.
+    await this.boss.work(jobName, { includeMetadata: true }, async (jobs: any) => {
+      const jobArray = Array.isArray(jobs) ? jobs : [jobs];
+      for (const job of jobArray) {
+        try {
+          logger.info({ jobName, jobId: job.id }, 'Processing job');
+          await handler(job.data, { retryCount: job.retryCount, retryLimit: job.retryLimit });
+          logger.info({ jobName, jobId: job.id }, 'Completed job');
+        }
+        catch (error) {
+          logError(error, `[Housekeeping] Error processing job ${jobName} (ID: ${job.id})`);
+          throw error;
+        }
       }
     });
 

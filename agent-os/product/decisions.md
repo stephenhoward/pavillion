@@ -75,6 +75,12 @@ Supersession is tracked inline: superseded sections are noted at the bottom of t
 - **Decision:** Pavillion's ActivityPub federation is implemented hand-rolled in `src/server/activitypub/`, not via the `activitypub-express` library named in DEC-002. The library was never imported by runtime code and was removed from the dependency tree by pv-8fif.1.
 - **Consult when:** Working on federation code; questions about why we don't use activitypub-express; evaluating whether to adopt an external ActivityPub library; auditing federation security against library-specific assumptions.
 
+### DEC-013: Inbox is the Authenticated-Activity Log
+- **File:** [decisions/dec-013-inbox-authenticated-activity-log.md](decisions/dec-013-inbox-authenticated-activity-log.md)
+- **Date:** 2026-05-16 · **Status:** Accepted
+- **Decision:** Every `ap_inbox` row is authenticated by a recorded mechanism, captured in `auth_source` (open string enum: `'http_signature'`, `'outbox_pull'`, ...) with an audit-only `auth_origin`. Authentication runs at the ingest boundary; the table's invariant is "authenticated by *some* recorded mechanism," not "arrived via signed POST." `auth_source` is diagnostic — never a policy surface. Backfill and live ingest share one storage model and one chronological dispatch pipeline.
+- **Consult when:** Adding a new ingest path (ICS pull, hosted-provider OAuth, Facebook import); reading from or writing to `ap_inbox`; designing or modifying the inbox dispatch pipeline; deciding how to gate trust on inbound activities; questions about why `auth_source` is not consulted by handlers, or why backfill writes real rows instead of dispatching synthetically.
+
 ---
 
 ## Federation Behavior

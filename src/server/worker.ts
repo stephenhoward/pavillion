@@ -14,6 +14,8 @@ import CalendarInterface from '@/server/calendar/interface';
 import IpCleanupService from '@/server/moderation/service/ip-cleanup';
 import NotificationRetentionCleanupService from '@/server/notifications/service/retention-cleanup';
 import ActivityPubInterface from '@/server/activitypub/interface';
+import { FollowBackfillService, BackfillRateLimitError } from '@/server/activitypub/service/backfill';
+import { ActivityPubFollowAcceptedPayload } from '@/server/activitypub/events/types';
 import { BackupCreateError } from '@/common/exceptions/housekeeping';
 import { createLogger } from '@/server/common/helper/logger';
 
@@ -72,6 +74,10 @@ async function registerJobHandlers(queue: JobQueueService): Promise<void> {
   const eventBus = new EventEmitter();
   const calendarInterface = new CalendarInterface(eventBus);
   const activityPubInterface = new ActivityPubInterface(eventBus, calendarInterface, accountsInterface);
+  const followBackfillService = new FollowBackfillService({
+    activityPubInterface,
+    calendarInterface,
+  });
 
   // Manual backup job handler (triggered via API/CLI)
   await queue.subscribe('backup:create', async (data: any, meta) => {
@@ -227,6 +233,35 @@ async function registerJobHandlers(queue: JobQueueService): Promise<void> {
       }
     },
   );
+
+  // ActivityPub follow-backfill job handler. Published by
+  // ActivityPubEventHandlers#handleFollowAccepted whenever a remote
+  // Accept(Follow) confirms a follow the local instance initiated.
+  await queue.subscribe(
+    'activitypub:follow:backfill',
+    async (data: ActivityPubFollowAcceptedPayload) => {
+      logger.info(
+        { followingCalendarId: data?.followingCalendarId },
+        'Executing activitypub:follow:backfill job',
+      );
+      try {
+        await followBackfillService.runBackfill(data);
+        logger.info({ followingCalendarId: data?.followingCalendarId }, 'activitypub:follow:backfill job completed');
+      }
+      catch (error) {
+        // A rate-limit pause is expected back-pressure, not a failure: rows
+        // persisted before the pause were already drained, and re-throwing
+        // lets pg-boss re-queue the job (after the configured retry delay) to
+        // walk the remaining outbox pages. Log it at warn, not error.
+        if (error instanceof BackfillRateLimitError) {
+          logger.warn({ followingCalendarId: data?.followingCalendarId }, 'activitypub:follow:backfill paused on rate limit; will retry');
+          throw error;
+        }
+        logger.error({ err: error, followingCalendarId: data?.followingCalendarId }, 'activitypub:follow:backfill job failed');
+        throw error;
+      }
+    },
+  );
 }
 
 /**
@@ -274,6 +309,7 @@ function logStartupMessages(): void {
       'notifications:cleanup': `next: ${getNextRunTime('0 4 * * *')}`,
       'inbox:cleanup': `next: ${getNextRunTime('0 5 * * *')}`,
       'backup:create': 'manual',
+      'activitypub:follow:backfill': 'on-demand',
     },
   }, 'Scheduled jobs registered');
   logger.info('Worker ready, processing jobs...');

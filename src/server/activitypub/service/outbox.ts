@@ -187,8 +187,8 @@ class ProcessOutboxService {
 
     do {
       messages = await ActivityPubOutboxMessageEntity.findAll({
-        where: { processedAt: null },
-        order: [ ['messageTime', 'ASC'] ],
+        where: { processed_time: null },
+        order: [ ['message_time', 'ASC'] ],
         limit: 1000,
       });
 

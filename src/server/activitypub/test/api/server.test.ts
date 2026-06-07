@@ -134,6 +134,46 @@ describe('addToInbox', () => {
 
     expect(res.status.calledWith(200)).toBe(true);
     expect(res.send.calledWith('Message received')).toBe(true);
+    expect(inboxMock.calledOnce).toBe(true);
+    const auth = inboxMock.firstCall.args[2] as any;
+    expect(auth).toBeDefined();
+    expect(auth.source).toBe('http_signature');
+    // No Signature header on the request, so origin must be null but the row still writes.
+    expect(auth.origin).toBe(null);
+  });
+
+  it('should pass keyId origin from Signature header as auth_origin', async () => {
+    let req = {
+      params: { orgname: 'testuser' },
+      method: 'POST',
+      url: '/api/ap/v1/calendars/testuser/inbox',
+      headers: {
+        host: 'local.example.com',
+        date: new Date().toUTCString(),
+        signature: 'keyId="https://remote.example.com/calendars/foo#main-key",algorithm="rsa-sha256",headers="(request-target) host date",signature="dGVzdA=="',
+      },
+      body: {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        type: 'Create',
+        id: 'https://example.com/activities/124',
+        actor: 'https://remote.example.com/calendars/foo',
+        object: { id: 'https://example.com/objects/789', type: 'Event' },
+      },
+    };
+    let res = { status: sinon.stub(), send: sinon.stub() };
+    let userFindMock = sandbox.stub(calendarAPI, 'getCalendarByName');
+    let inboxMock = sandbox.stub(activityPubInterface, 'addToInbox');
+
+    res.status.returns(res);
+    userFindMock.resolves(new Calendar('testId', 'testuser'));
+    inboxMock.resolves();
+
+    await routes.addToInbox(req as any, res as any);
+
+    expect(inboxMock.calledOnce).toBe(true);
+    const auth = inboxMock.firstCall.args[2] as any;
+    expect(auth.source).toBe('http_signature');
+    expect(auth.origin).toBe('https://remote.example.com');
   });
 
   it('should fail with missing actor URI', async () => {

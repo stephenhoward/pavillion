@@ -9,6 +9,7 @@ import {
   AccountCreatedPayload,
   CalendarCreatedPayload,
   RemoteEditorRevokedPayload,
+  ActivityPubFollowAcceptedPayload,
 } from './types';
 import ActivityPubInterface from '../interface';
 import CreateActivity from '../model/action/create';
@@ -22,6 +23,13 @@ import { EventObjectEntity } from '@/server/activitypub/entity/event_object';
 import UserActorService from '../service/user_actor';
 import CalendarActorService from '../service/calendar_actor';
 import CalendarInterface from '@/server/calendar/interface';
+import HousekeepingInterface from '@/server/housekeeping/interface';
+import {
+  BACKFILL_RETRY_LIMIT,
+  BACKFILL_RETRY_DELAY_SECONDS,
+  BACKFILL_RETRY_BACKOFF,
+  BACKFILL_EXPIRE_SECONDS,
+} from '@/server/activitypub/service/backfill';
 import { Account } from '@/common/model/account';
 import { logError } from '@/server/common/helper/error-logger';
 import { Calendar } from '@/common/model/calendar';
@@ -33,11 +41,22 @@ export default class ActivityPubEventHandlers implements DomainEventHandlers {
   private service: ActivityPubInterface;
   private userActorService: UserActorService;
   private calendarActorService: CalendarActorService;
+  private housekeepingInterface: HousekeepingInterface;
 
-  constructor(service: ActivityPubInterface, calendarInterface: CalendarInterface) {
+  /**
+   * @param housekeepingInterface Cross-domain handle used to publish
+   *   background jobs (e.g. `activitypub:follow:backfill`) through the
+   *   housekeeping-owned pg-boss queue.
+   */
+  constructor(
+    service: ActivityPubInterface,
+    calendarInterface: CalendarInterface,
+    housekeepingInterface: HousekeepingInterface,
+  ) {
     this.service = service;
     this.userActorService = new UserActorService(calendarInterface);
     this.calendarActorService = new CalendarActorService(calendarInterface);
+    this.housekeepingInterface = housekeepingInterface;
   }
 
   install(eventBus: EventEmitter): void {
@@ -49,6 +68,7 @@ export default class ActivityPubEventHandlers implements DomainEventHandlers {
     eventBus.on('account.created', this.handleAccountCreated.bind(this));
     eventBus.on('calendar.created', this.handleCalendarCreated.bind(this));
     eventBus.on('remoteEditorRevoked', this.handleRemoteEditorRevoked.bind(this));
+    eventBus.on('activitypub:follow:accepted', this.handleFollowAccepted.bind(this));
   }
 
   /**
@@ -228,6 +248,38 @@ export default class ActivityPubEventHandlers implements DomainEventHandlers {
   private handleRemoteEditorRevoked(payload: RemoteEditorRevokedPayload): void {
     this.service.invalidateAuthorizationCache(payload.calendarId, payload.actorUri);
     logger.info({ actorUri: payload.actorUri, calendarId: payload.calendarId }, 'Invalidated authorization cache for actor');
+  }
+
+  /**
+   * Publish a follow-backfill job in response to a remote Accept(Follow) that
+   * confirmed a follow we initiated. The actual outbox pull is performed by
+   * the worker (pv-wy2u.2.4); this handler only enqueues the job and returns
+   * synchronously — no HTTP work happens on this code path.
+   *
+   * The retry policy is set here at publish time: a backfill that pauses on an
+   * exhausted per-host rate budget throws `BackfillRateLimitError`, and the
+   * BACKFILL_RETRY_DELAY_SECONDS delay (≥ the rate window) lets pg-boss re-run
+   * the job once the sliding window has reset so the remaining outbox pages get
+   * walked. The re-walk is idempotent via findOrCreate.
+   *
+   * Errors from the publish call are logged but not re-thrown. EventEmitter
+   * surfaces unhandled async errors as `error` events with no listeners,
+   * which terminates the Node process; swallowing here keeps a transient
+   * pg-boss outage from crashing the server, at the cost of a missed
+   * backfill that the next Accept (or manual trigger) will re-enqueue.
+   */
+  private async handleFollowAccepted(payload: ActivityPubFollowAcceptedPayload): Promise<void> {
+    try {
+      await this.housekeepingInterface.publishJob('activitypub:follow:backfill', payload, {
+        retryLimit: BACKFILL_RETRY_LIMIT,
+        retryDelaySeconds: BACKFILL_RETRY_DELAY_SECONDS,
+        retryBackoff: BACKFILL_RETRY_BACKOFF,
+        expireInSeconds: BACKFILL_EXPIRE_SECONDS,
+      });
+    }
+    catch (error) {
+      logError(error, '[ActivityPub] Failed to publish activitypub:follow:backfill job');
+    }
   }
 
   private async handleCalendarCreated(payload: CalendarCreatedPayload): Promise<void> {

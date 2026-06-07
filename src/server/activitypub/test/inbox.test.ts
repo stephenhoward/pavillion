@@ -323,6 +323,86 @@ describe('ProcessInboxService - Follow Activity Processing', () => {
       });
     });
 
+    it('should emit activitypub:follow:accepted when inline-Follow Accept confirms a known follow', async () => {
+      // Arrange: inline-Follow Accept path. The emit is what triggers the
+      // backfill worker downstream — without it, follow-backfill never runs.
+      const remoteCalendarUrl = 'https://remote.instance/calendars/remote-calendar';
+      const followActivity = new FollowActivity(testCalendar.id, remoteCalendarUrl);
+      followActivity.id = 'https://local.instance/calendars/test-calendar/follows/789';
+
+      const acceptActivity = {
+        type: 'Accept',
+        actor: remoteCalendarUrl,
+        object: followActivity,
+      };
+
+      const mockCalendarActor = {
+        id: 'mock-calendar-actor-uuid',
+        actor_uri: remoteCalendarUrl,
+      };
+      const existingFollowing = {
+        id: uuidv4(),
+        calendar_actor_id: mockCalendarActor.id,
+        calendar_id: testCalendar.id,
+      };
+
+      sandbox.stub(inboxService.remoteCalendarService, 'getByActorUri').resolves(mockCalendarActor as any);
+      sandbox.stub(FollowingCalendarEntity, 'findOne').resolves(existingFollowing as any);
+
+      const emittedEvents: any[] = [];
+      eventBus.on('activitypub:follow:accepted', (payload) => emittedEvents.push(payload));
+
+      // Act
+      await inboxService.processAcceptActivity(testCalendar, acceptActivity as any);
+
+      // Assert
+      expect(emittedEvents).toHaveLength(1);
+      expect(emittedEvents[0]).toEqual({
+        followingCalendarId: testCalendar.id,
+        calendarActorId: mockCalendarActor.id,
+        sourceActorUri: remoteCalendarUrl,
+      });
+    });
+
+    it('should emit activitypub:follow:accepted when string-URI Accept confirms a known follow', async () => {
+      // Arrange: string-URI Accept path with matching hostnames (Follow Accept).
+      const remoteCalendarUrl = 'https://remote.instance/calendars/remote-calendar';
+      const followActivityUri = 'https://remote.instance/follows/follow-activity-id';
+
+      const acceptActivity = {
+        type: 'Accept',
+        actor: remoteCalendarUrl,
+        object: followActivityUri,
+      };
+
+      const mockCalendarActor = {
+        id: 'mock-calendar-actor-uuid',
+        actor_uri: remoteCalendarUrl,
+      };
+      const existingFollowing = {
+        id: uuidv4(),
+        calendar_actor_id: mockCalendarActor.id,
+        calendar_id: testCalendar.id,
+      };
+
+      sandbox.stub(inboxService.remoteCalendarService, 'getByActorUri').resolves(mockCalendarActor as any);
+      sandbox.stub(FollowingCalendarEntity, 'findOne').resolves(existingFollowing as any);
+
+      const emittedEvents: any[] = [];
+      eventBus.on('activitypub:follow:accepted', (payload) => emittedEvents.push(payload));
+
+      // Act
+      await inboxService.processAcceptActivity(testCalendar, acceptActivity as any);
+
+      // Assert
+      expect(emittedEvents).toHaveLength(1);
+      expect(emittedEvents[0]).toEqual({
+        followingCalendarId: testCalendar.id,
+        calendarActorId: mockCalendarActor.id,
+        sourceActorUri: remoteCalendarUrl,
+      });
+    });
+
   });
 
   describe('processShareEvent', () => {
