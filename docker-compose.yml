@@ -161,16 +161,51 @@ services:
       start_period: 120s
       retries: 3
 
-  # Autoheal monitors container health and restarts unhealthy containers
+  # Docker socket proxy — the ONLY container that touches /var/run/docker.sock.
+  # autoheal talks to this instead of the raw socket, so a compromise of the
+  # third-party autoheal image cannot reach the full Docker control plane / host
+  # root. The proxy is a Docker Official HAProxy image (better supply-chain
+  # posture than a community proxy) running our own ruleset in
+  # docker/socket-proxy.cfg, which allows only list + restart and denies
+  # container create/start/exec and every other API section. Runs as root
+  # because reading the root-owned socket requires it; the security boundary is
+  # the HAProxy ruleset, not the proxy's uid. Pinned by digest so a tag re-push
+  # cannot silently change the binary.
+  socket-proxy:
+    image: haproxy:3.2-alpine@sha256:4293e7e02c70e143778c86b4916f1b89e04f7a9221534b9abf6cace218c6b95f
+    container_name: pavillion-socket-proxy
+    user: "0:0"
+    volumes:
+      - ./docker/socket-proxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+      # Read-only mount: the HAProxy ruleset enforces the API allowlist.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    # No host port published — reachable only on the internal compose network.
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  # Autoheal monitors container health and restarts unhealthy containers.
+  # It reaches the Docker API through socket-proxy over the internal network
+  # rather than mounting /var/run/docker.sock directly. Pinned by digest; this
+  # is the 1.2.0 image already running in production (the amd64 variant is
+  # healthy — note the arm64 variant of this tag has a broken entrypoint).
   autoheal:
-    image: willfarrell/autoheal:1.2.0
+    image: willfarrell/autoheal:1.2.0@sha256:31f580ef0279eaced5b38d631b08c474d70d8403c1c2fdd6ddcf2e879d5f3f7c
     container_name: pavillion-autoheal
+    depends_on:
+      - socket-proxy
     environment:
       - AUTOHEAL_CONTAINER_LABEL=autoheal
       - AUTOHEAL_INTERVAL=30
       - AUTOHEAL_START_PERIOD=120
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
+      # Talk to the locked-down proxy instead of the raw socket. autoheal
+      # converts a tcp:// DOCKER_SOCK into an HTTP endpoint internally.
+      - DOCKER_SOCK=tcp://socket-proxy:2375
     restart: unless-stopped
     logging:
       driver: "json-file"
