@@ -9,7 +9,7 @@ import { WebFingerResponse } from '@/server/activitypub/model/webfinger';
 import { UserProfileResponse } from '@/server/activitypub/model/userprofile';
 import { FollowingCalendar, FollowerCalendar } from '@/common/model/follow';
 import ActivityPubMemberService from '@/server/activitypub/service/members';
-import ActivityPubServerService, { InboxAuthContext } from '@/server/activitypub/service/server';
+import ActivityPubServerService, { InboxAuthContext, InboxRowInput } from '@/server/activitypub/service/server';
 import ProcessInboxService from '../service/inbox';
 import ProcessOutboxService from '../service/outbox';
 import FederationPublisher, {
@@ -23,7 +23,7 @@ import { UserActorEntity } from '@/server/activitypub/entity/user_actor';
 import CalendarInterface from '@/server/calendar/interface';
 import AccountsInterface from '@/server/accounts/interface';
 
-export type { InboxAuthContext } from '@/server/activitypub/service/server';
+export type { InboxAuthContext, InboxRowInput } from '@/server/activitypub/service/server';
 import ModerationInterface from '@/server/moderation/interface';
 import CreateActivity from '@/server/activitypub/model/action/create';
 import UpdateActivity from '@/server/activitypub/model/action/update';
@@ -258,6 +258,15 @@ export default class ActivityPubInterface {
 
   async addToInbox(calendar: Calendar, message: ActivityPubActivity, auth: InboxAuthContext): Promise<null> {
     return this.serverService.addToInbox(calendar, message, auth);
+  }
+
+  /**
+   * Deferred inbox write that does NOT emit `inboxMessageAdded`. The caller
+   * must drain the inbox afterwards via {@link processInboxMessages}. See
+   * {@link ActivityPubServerService.enqueueInboxRow}.
+   */
+  async enqueueInboxRow(input: InboxRowInput): Promise<{ created: boolean }> {
+    return this.serverService.enqueueInboxRow(input);
   }
 
   async readOutbox(calendarId: string, cursor?: Date, limit?: number): Promise<{ items: ActivityPubOutboxMessageEntity[], totalItems: number }> {

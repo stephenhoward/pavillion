@@ -159,10 +159,11 @@ describe('lookupUserProfile', () => {
 
 describe("addToInbox", () => {
   let service: ActivityPubService;
+  let eventBus: EventEmitter;
   let sandbox: sinon.SinonSandbox = sinon.createSandbox();
 
   beforeEach(() => {
-    const eventBus = new EventEmitter();
+    eventBus = new EventEmitter();
     const calendarInterface = new CalendarInterface(eventBus);
     const accountsInterface = new AccountsInterface(eventBus);
     service = new ActivityPubService(eventBus, calendarInterface, accountsInterface);
@@ -172,19 +173,22 @@ describe("addToInbox", () => {
     sandbox.restore();
   });
 
-  it('should save the message', async () => {
+  it('should persist the message with auth context and emit inboxMessageAdded', async () => {
+    // fromObject only copies actor/object, so set id/type explicitly to
+    // verify addToInbox forwards them into the shared writer.
     let message = ActivityPubActivity.fromObject({ type: 'Create', id: 'testid' });
+    message.id = 'testid';
+    message.type = 'Create';
     let calendar = Calendar.fromObject({ id: 'testid' });
 
     let getCalendarStub = sandbox.stub(service.calendarService, 'getCalendar');
     getCalendarStub.resolves(calendar);
 
-    let findMessageStub = sandbox.stub(ActivityPubInboxMessageEntity, 'findByPk');
-    findMessageStub.resolves(null);
+    // The shared inbox writer persists via findOrCreate (first writer wins).
+    let findOrCreateStub = sandbox.stub(ActivityPubInboxMessageEntity, 'findOrCreate');
+    findOrCreateStub.resolves([{ id: 'testid' } as any, true]);
 
-    let buildSpy = sandbox.spy(ActivityPubInboxMessageEntity, 'build');
-    let saveMessageStub = sandbox.stub(ActivityPubInboxMessageEntity.prototype, 'save');
-    saveMessageStub.resolves(undefined);
+    let emitSpy = sandbox.spy(eventBus, 'emit');
 
     let response = await service.addToInbox(calendar, message, {
       source: 'http_signature',
@@ -192,11 +196,15 @@ describe("addToInbox", () => {
     });
 
     expect(response).toBe(null);
-    expect(saveMessageStub.called).toBe(true);
-    expect(buildSpy.calledOnce).toBe(true);
-    const buildArgs = buildSpy.firstCall.args[0] as any;
-    expect(buildArgs.auth_source).toBe('http_signature');
-    expect(buildArgs.auth_origin).toBe('https://remote.example.com');
+    expect(findOrCreateStub.calledOnce).toBe(true);
+    const findOrCreateArgs = findOrCreateStub.firstCall.args[0] as any;
+    expect(findOrCreateArgs.where.id).toBe('testid');
+    expect(findOrCreateArgs.defaults.type).toBe('Create');
+    expect(findOrCreateArgs.defaults.auth_source).toBe('http_signature');
+    expect(findOrCreateArgs.defaults.auth_origin).toBe('https://remote.example.com');
+
+    // The live entry point emits so the inbox subscription drains immediately.
+    expect(emitSpy.calledWith('inboxMessageAdded', { calendar_id: 'testid', id: 'testid' })).toBe(true);
   });
 
   it('should persist null auth_origin when origin is unknown', async () => {
@@ -206,19 +214,15 @@ describe("addToInbox", () => {
     let getCalendarStub = sandbox.stub(service.calendarService, 'getCalendar');
     getCalendarStub.resolves(calendar);
 
-    let findMessageStub = sandbox.stub(ActivityPubInboxMessageEntity, 'findByPk');
-    findMessageStub.resolves(null);
-
-    let buildSpy = sandbox.spy(ActivityPubInboxMessageEntity, 'build');
-    let saveMessageStub = sandbox.stub(ActivityPubInboxMessageEntity.prototype, 'save');
-    saveMessageStub.resolves(undefined);
+    let findOrCreateStub = sandbox.stub(ActivityPubInboxMessageEntity, 'findOrCreate');
+    findOrCreateStub.resolves([{ id: 'testid' } as any, true]);
 
     await service.addToInbox(calendar, message, { source: 'http_signature', origin: null });
 
-    expect(buildSpy.calledOnce).toBe(true);
-    const buildArgs = buildSpy.firstCall.args[0] as any;
-    expect(buildArgs.auth_source).toBe('http_signature');
-    expect(buildArgs.auth_origin).toBe(null);
+    expect(findOrCreateStub.calledOnce).toBe(true);
+    const findOrCreateArgs = findOrCreateStub.firstCall.args[0] as any;
+    expect(findOrCreateArgs.defaults.auth_source).toBe('http_signature');
+    expect(findOrCreateArgs.defaults.auth_origin).toBe(null);
   });
 
   it('should throw an error if calendar not found', async () => {
@@ -231,5 +235,67 @@ describe("addToInbox", () => {
     await expect(
       service.addToInbox(calendar, message, { source: 'http_signature', origin: null }),
     ).rejects.toThrow('Account not found');
+  });
+});
+
+describe("enqueueInboxRow", () => {
+  let service: ActivityPubService;
+  let eventBus: EventEmitter;
+  let sandbox: sinon.SinonSandbox = sinon.createSandbox();
+
+  beforeEach(() => {
+    eventBus = new EventEmitter();
+    const calendarInterface = new CalendarInterface(eventBus);
+    const accountsInterface = new AccountsInterface(eventBus);
+    service = new ActivityPubService(eventBus, calendarInterface, accountsInterface);
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+  });
+
+  it('should persist the row via findOrCreate without emitting inboxMessageAdded', async () => {
+    let findOrCreateStub = sandbox.stub(ActivityPubInboxMessageEntity, 'findOrCreate');
+    findOrCreateStub.resolves([{ id: 'testid' } as any, true]);
+
+    let emitSpy = sandbox.spy(eventBus, 'emit');
+
+    const messageTime = new Date('2026-05-15T00:00:00Z');
+    let result = await service.enqueueInboxRow({
+      calendarId: 'cal-1',
+      id: 'testid',
+      type: 'Create',
+      messageTime,
+      message: { type: 'Create', id: 'testid' },
+      auth: { source: 'outbox_pull', origin: 'https://remote.example.com' },
+    });
+
+    expect(result).toEqual({ created: true });
+    expect(findOrCreateStub.calledOnce).toBe(true);
+    const findOrCreateArgs = findOrCreateStub.firstCall.args[0] as any;
+    expect(findOrCreateArgs.where.id).toBe('testid');
+    expect(findOrCreateArgs.defaults.calendar_id).toBe('cal-1');
+    expect(findOrCreateArgs.defaults.message_time).toBe(messageTime);
+    expect(findOrCreateArgs.defaults.auth_source).toBe('outbox_pull');
+    expect(findOrCreateArgs.defaults.auth_origin).toBe('https://remote.example.com');
+
+    // The deferred entry point never emits — the caller drains explicitly.
+    expect(emitSpy.calledWith('inboxMessageAdded')).toBe(false);
+  });
+
+  it('should return created=false on an idempotent no-op against an existing id', async () => {
+    let findOrCreateStub = sandbox.stub(ActivityPubInboxMessageEntity, 'findOrCreate');
+    findOrCreateStub.resolves([{ id: 'testid' } as any, false]);
+
+    let result = await service.enqueueInboxRow({
+      calendarId: 'cal-1',
+      id: 'testid',
+      type: 'Create',
+      messageTime: new Date('2026-05-15T00:00:00Z'),
+      message: { type: 'Create', id: 'testid' },
+      auth: { source: 'outbox_pull', origin: null },
+    });
+
+    expect(result).toEqual({ created: false });
   });
 });

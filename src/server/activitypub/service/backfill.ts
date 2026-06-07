@@ -10,11 +10,13 @@
  * inbox in chronological order — the same code path the live HTTP inbox
  * runs after a signed POST.
  *
- * Every surviving activity is persisted via `findOrCreate` (first writer
- * wins, no upgrade on conflict) and the standard inbox drain handles
- * ordering and idempotency. The trust gates that the live HTTP path gets
- * for free from signature middleware are run here pre-write, before any DB
- * insert.
+ * Every surviving activity is persisted via the deferred inbox entry point
+ * `activityPubInterface.enqueueInboxRow()` — which writes through the same
+ * `findOrCreate` (first writer wins, no upgrade on conflict) as the live
+ * path but emits no `inboxMessageAdded` event — and the standard inbox drain
+ * handles ordering and idempotency. The trust gates that the live HTTP path
+ * gets for free from signature middleware are run here pre-write, before any
+ * DB insert.
  *
  * Trust posture (pre-write, per activity)
  * ---------------------------------------
@@ -52,20 +54,24 @@
  * retry delay gives the sliding window time to reset before the re-walk, which
  * is idempotent via `findOrCreate`.
  *
- * Why `findOrCreate` and not `addToInbox`
- * ---------------------------------------
- * `addToInbox` emits an `inboxMessageAdded` event per row, which would
+ * Why `enqueueInboxRow` and not `addToInbox`
+ * ------------------------------------------
+ * The two share one writer (`writeInboxRow`) but differ on emission and time
+ * policy. `addToInbox` emits an `inboxMessageAdded` event per row, which would
  * cause the live inbox subscription to drain backfill rows one-by-one in
- * arrival order rather than in chronological `message_time` order. It also
- * uses `message.published` verbatim, while backfill needs the
- * {@link clampMessageTime} sanity window so a misconfigured peer cannot
- * inject far-future or year-2003 rows that re-order the inbox queue.
- * Pre-write trust gates plus the unique-id `findOrCreate` give the same
- * security invariants without the event emission.
+ * arrival order rather than in chronological `message_time` order; it also
+ * uses `message.published` verbatim. `enqueueInboxRow` emits nothing — the
+ * worker drains once after pagination — and accepts an already-resolved
+ * `messageTime`, so backfill applies the {@link clampMessageTime} sanity
+ * window (using its injected clock) before calling, preventing a
+ * misconfigured peer from injecting far-future or year-2003 rows that
+ * re-order the inbox queue. Pre-write trust gates plus the unique-id
+ * `findOrCreate` underneath give the same security invariants as the live
+ * path without the event emission.
  */
 
 import { ActivityPubFollowAcceptedPayload } from '@/server/activitypub/events/types';
-import { ActivityPubInboxMessageEntity, FollowingCalendarEntity } from '@/server/activitypub/entity/activitypub';
+import { FollowingCalendarEntity } from '@/server/activitypub/entity/activitypub';
 import ActivityPubInterface from '@/server/activitypub/interface';
 import CalendarInterface from '@/server/calendar/interface';
 import { ActivityPubActor } from '@/server/activitypub/model/base';
@@ -478,9 +484,11 @@ export class FollowBackfillService {
   }
 
   /**
-   * Writes one inbox row via `findOrCreate` (first writer wins, no upgrade
-   * on conflict). Returns true when a new row was inserted, false when an
-   * existing row with the same activity id was already present.
+   * Writes one inbox row through the deferred entry point
+   * `enqueueInboxRow` (which persists via `findOrCreate` — first writer wins,
+   * no upgrade on conflict — without emitting `inboxMessageAdded`). Returns
+   * true when a new row was inserted, false when an existing row with the
+   * same activity id was already present.
    */
   private async persistActivity(
     activity: Record<string, unknown>,
@@ -505,22 +513,18 @@ export class FollowBackfillService {
     const messageTime = clampMessageTime(published, this.now());
 
     try {
-      const [, wasCreated] = await ActivityPubInboxMessageEntity.findOrCreate({
-        where: { id: activityId },
-        defaults: {
-          id: activityId,
-          calendar_id: ctx.calendar.id,
-          type,
-          message_time: messageTime,
-          message: activity as object,
-          auth_source: 'outbox_pull',
-          auth_origin: ctx.authOrigin,
-        },
+      const { created } = await this.activityPubInterface.enqueueInboxRow({
+        calendarId: ctx.calendar.id,
+        id: activityId,
+        type,
+        messageTime,
+        message: activity as object,
+        auth: { source: 'outbox_pull', origin: ctx.authOrigin },
       });
-      return wasCreated;
+      return created;
     }
     catch (error) {
-      logError(error, `[ActivityPub backfill] findOrCreate failed for ${type} ${activityId}`);
+      logError(error, `[ActivityPub backfill] enqueueInboxRow failed for ${type} ${activityId}`);
       return false;
     }
   }

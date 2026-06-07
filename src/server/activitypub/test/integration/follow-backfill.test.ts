@@ -573,8 +573,9 @@ describe('FollowBackfillService.runBackfill (integration)', () => {
       sourceActorUri: SOURCE_ACTOR_URI,
     });
 
-    // The row landed but no event fired — proving the worker bypasses
-    // `addToInbox` and uses `findOrCreate` instead.
+    // The row landed but no event fired — proving the worker uses the
+    // deferred `enqueueInboxRow` entry point rather than the emitting
+    // `addToInbox`.
     expect(await ActivityPubInboxMessageEntity.count({
       where: { id: `${SOURCE_ORIGIN}/activities/silent` },
     })).toBe(1);
