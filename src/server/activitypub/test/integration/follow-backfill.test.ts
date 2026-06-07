@@ -35,7 +35,7 @@ import CalendarInterface from '@/server/calendar/interface';
 import AccountsInterface from '@/server/accounts/interface';
 import ActivityPubInterface from '@/server/activitypub/interface';
 import ProcessInboxService from '@/server/activitypub/service/inbox';
-import { FollowBackfillService } from '@/server/activitypub/service/backfill';
+import { FollowBackfillService, BackfillRateLimitError } from '@/server/activitypub/service/backfill';
 import { fetchRemoteObject } from '@/server/activitypub/helper/remote-fetch';
 import {
   ActivityPubInboxMessageEntity,
@@ -816,6 +816,109 @@ describe('FollowBackfillService.runBackfill (integration)', () => {
       where: { event_id: eventId, calendar_id: followerCalendarId },
     });
     expect(remainingDismissals).toBe(1);
+  });
+
+  // -------------------------------------------------------------------------
+  // 10. Rate-limit pause + retryable resume
+  // -------------------------------------------------------------------------
+  //
+  // A single job needs only ~53 requests, so it never self-exhausts the
+  // 60/min budget — exhaustion comes from contention with other jobs against
+  // the same host. These tests model that by pre-consuming all but three of
+  // the host's slots before the walk starts: the walk spends those three on
+  // the actor profile, the outbox collection, and the first page, then the
+  // page-2 fetch is denied and the run pauses.
+
+  it('drains partial progress and throws BackfillRateLimitError when the per-host budget is exhausted mid-walk', async () => {
+    const host = new URL(SOURCE_ACTOR_URI).hostname;
+    rateLimiter = new SyncRateLimiter({ limit: 60, windowMs: 60_000 });
+    for (let i = 0; i < 57; i++) {
+      rateLimiter.tryAcquire(host);
+    }
+
+    const fetcher = makeFetcher({
+      [SOURCE_ACTOR_URI]: { type: 'Person', outbox: SOURCE_OUTBOX_URI },
+      [SOURCE_OUTBOX_URI]: { type: 'OrderedCollection', first: SOURCE_PAGE_1_URI },
+      [SOURCE_PAGE_1_URI]: buildPage(
+        [buildCreate(`${SOURCE_ORIGIN}/activities/p1`, '2026-04-01T00:00:00Z')],
+        SOURCE_PAGE_2_URI,
+      ),
+      [SOURCE_PAGE_2_URI]: buildPage([
+        buildCreate(`${SOURCE_ORIGIN}/activities/p2`, '2026-04-02T00:00:00Z'),
+      ]),
+    });
+
+    const service = runService({ fetcher });
+    await expect(service.runBackfill({
+      followingCalendarId: followerCalendarId,
+      calendarActorId: sourceCalendarActorId,
+      sourceActorUri: SOURCE_ACTOR_URI,
+    })).rejects.toBeInstanceOf(BackfillRateLimitError);
+
+    // Page 1 persisted before the pause; page 2 was never fetched.
+    expect(await ActivityPubInboxMessageEntity.count({
+      where: { id: `${SOURCE_ORIGIN}/activities/p1` },
+    })).toBe(1);
+    expect(await ActivityPubInboxMessageEntity.count({
+      where: { id: `${SOURCE_ORIGIN}/activities/p2` },
+    })).toBe(0);
+    expect(fetcher.calledWith(SOURCE_PAGE_2_URI)).toBe(false);
+
+    // Drain still ran exactly once despite the throw (the finally guarantee),
+    // so the page-1 row is dispatched now rather than waiting for the retry.
+    expect(drainSpy.callCount).toBe(1);
+  });
+
+  it('walks the remaining pages on a subsequent run after the rate window resets (pg-boss retry)', async () => {
+    const host = new URL(SOURCE_ACTOR_URI).hostname;
+    rateLimiter = new SyncRateLimiter({ limit: 60, windowMs: 60_000 });
+    for (let i = 0; i < 57; i++) {
+      rateLimiter.tryAcquire(host);
+    }
+
+    const fetcher = makeFetcher({
+      [SOURCE_ACTOR_URI]: { type: 'Person', outbox: SOURCE_OUTBOX_URI },
+      [SOURCE_OUTBOX_URI]: { type: 'OrderedCollection', first: SOURCE_PAGE_1_URI },
+      [SOURCE_PAGE_1_URI]: buildPage(
+        [buildCreate(`${SOURCE_ORIGIN}/activities/p1`, '2026-04-01T00:00:00Z')],
+        SOURCE_PAGE_2_URI,
+      ),
+      [SOURCE_PAGE_2_URI]: buildPage([
+        buildCreate(`${SOURCE_ORIGIN}/activities/p2`, '2026-04-02T00:00:00Z'),
+      ]),
+    });
+
+    const payload = {
+      followingCalendarId: followerCalendarId,
+      calendarActorId: sourceCalendarActorId,
+      sourceActorUri: SOURCE_ACTOR_URI,
+    };
+    const service = runService({ fetcher });
+
+    // First attempt pauses after page 1.
+    await expect(service.runBackfill(payload)).rejects.toBeInstanceOf(BackfillRateLimitError);
+    expect(await ActivityPubInboxMessageEntity.count({
+      where: { id: `${SOURCE_ORIGIN}/activities/p2` },
+    })).toBe(0);
+
+    // The pg-boss retry runs after the sliding window has reset, modelled here
+    // by clearing the limiter. The re-walk starts from page 1 again; findOrCreate
+    // makes the already-persisted page-1 row a no-op, and page 2 now succeeds.
+    rateLimiter.reset();
+    await service.runBackfill(payload);
+
+    expect(await ActivityPubInboxMessageEntity.count({
+      where: { id: `${SOURCE_ORIGIN}/activities/p1` },
+    })).toBe(1);
+    expect(await ActivityPubInboxMessageEntity.count({
+      where: { id: `${SOURCE_ORIGIN}/activities/p2` },
+    })).toBe(1);
+    expect(await ActivityPubInboxMessageEntity.count({
+      where: { calendar_id: followerCalendarId },
+    })).toBe(2);
+
+    // One drain per attempt: the paused run drained page 1, the retry drained both.
+    expect(drainSpy.callCount).toBe(2);
   });
 });
 

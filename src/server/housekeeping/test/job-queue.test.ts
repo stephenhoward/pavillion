@@ -105,6 +105,32 @@ describe('JobQueueService', () => {
         service.publish('test:job', { data: 'test' }),
       ).rejects.toThrow('JobQueueService not started');
     });
+
+    it('maps domain-neutral publish options onto pg-boss send options', async () => {
+      await service.start();
+      await service.publish(
+        'activitypub:follow:backfill',
+        { followingCalendarId: 'cal-1' },
+        { retryLimit: 5, retryDelaySeconds: 60, retryBackoff: true, expireInSeconds: 600 },
+      );
+
+      expect(PgBoss.prototype.send).toHaveBeenCalledWith(
+        'activitypub:follow:backfill',
+        { followingCalendarId: 'cal-1' },
+        { retryLimit: 5, retryDelay: 60, retryBackoff: true, expireInSeconds: 600 },
+      );
+    });
+
+    it('forwards only the options that are set, leaving the rest to queue defaults', async () => {
+      await service.start();
+      await service.publish('some:job', { x: 1 }, { retryDelaySeconds: 30 });
+
+      expect(PgBoss.prototype.send).toHaveBeenCalledWith(
+        'some:job',
+        { x: 1 },
+        { retryDelay: 30 },
+      );
+    });
   });
 
   describe('Job Processing (subscribe)', () => {

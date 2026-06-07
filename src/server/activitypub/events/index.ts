@@ -24,6 +24,12 @@ import UserActorService from '../service/user_actor';
 import CalendarActorService from '../service/calendar_actor';
 import CalendarInterface from '@/server/calendar/interface';
 import HousekeepingInterface from '@/server/housekeeping/interface';
+import {
+  BACKFILL_RETRY_LIMIT,
+  BACKFILL_RETRY_DELAY_SECONDS,
+  BACKFILL_RETRY_BACKOFF,
+  BACKFILL_EXPIRE_SECONDS,
+} from '@/server/activitypub/service/backfill';
 import { Account } from '@/common/model/account';
 import { logError } from '@/server/common/helper/error-logger';
 import { Calendar } from '@/common/model/calendar';
@@ -250,6 +256,12 @@ export default class ActivityPubEventHandlers implements DomainEventHandlers {
    * the worker (pv-wy2u.2.4); this handler only enqueues the job and returns
    * synchronously — no HTTP work happens on this code path.
    *
+   * The retry policy is set here at publish time: a backfill that pauses on an
+   * exhausted per-host rate budget throws `BackfillRateLimitError`, and the
+   * BACKFILL_RETRY_DELAY_SECONDS delay (≥ the rate window) lets pg-boss re-run
+   * the job once the sliding window has reset so the remaining outbox pages get
+   * walked. The re-walk is idempotent via findOrCreate.
+   *
    * Errors from the publish call are logged but not re-thrown. EventEmitter
    * surfaces unhandled async errors as `error` events with no listeners,
    * which terminates the Node process; swallowing here keeps a transient
@@ -258,7 +270,12 @@ export default class ActivityPubEventHandlers implements DomainEventHandlers {
    */
   private async handleFollowAccepted(payload: ActivityPubFollowAcceptedPayload): Promise<void> {
     try {
-      await this.housekeepingInterface.publishJob('activitypub:follow:backfill', payload);
+      await this.housekeepingInterface.publishJob('activitypub:follow:backfill', payload, {
+        retryLimit: BACKFILL_RETRY_LIMIT,
+        retryDelaySeconds: BACKFILL_RETRY_DELAY_SECONDS,
+        retryBackoff: BACKFILL_RETRY_BACKOFF,
+        expireInSeconds: BACKFILL_EXPIRE_SECONDS,
+      });
     }
     catch (error) {
       logError(error, '[ActivityPub] Failed to publish activitypub:follow:backfill job');

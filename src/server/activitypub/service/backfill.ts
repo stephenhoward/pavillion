@@ -43,7 +43,14 @@
  * A shared {@link SyncRateLimiter} (60 acquisitions per minute, keyed by
  * source hostname) gates the outbound requests. The limiter is a
  * module-scope singleton so multiple concurrent backfill jobs against the
- * same host share one budget.
+ * same host share one budget. A single job needs at most ~53 requests
+ * (profile + outbox + first page + {@link MAX_OUTBOX_PAGES}) so it cannot
+ * self-exhaust the budget; exhaustion happens under contention, when several
+ * jobs target the same host at once. When the budget is exhausted mid-walk,
+ * the run drains whatever it persisted and throws {@link BackfillRateLimitError}
+ * so pg-boss re-queues the job; the {@link BACKFILL_RETRY_DELAY_SECONDS}
+ * retry delay gives the sliding window time to reset before the re-walk, which
+ * is idempotent via `findOrCreate`.
  *
  * Why `findOrCreate` and not `addToInbox`
  * ---------------------------------------
@@ -85,6 +92,23 @@ export const MAX_PAGE_BYTES = 1_048_576;
 const RATE_LIMIT_PER_MINUTE = 60;
 const RATE_LIMIT_WINDOW_MS = 60_000;
 
+/**
+ * pg-boss retry policy for the `activitypub:follow:backfill` job, applied at
+ * publish time (see `ActivityPubEventHandlers.handleFollowAccepted`). The
+ * delay must be at least the rate-limit window so a job that paused on an
+ * exhausted budget finds the sliding window reset on its next attempt;
+ * shorter delays would just burn retries against a still-full budget.
+ */
+export const BACKFILL_RETRY_LIMIT = 5;
+export const BACKFILL_RETRY_DELAY_SECONDS = RATE_LIMIT_WINDOW_MS / 1000;
+export const BACKFILL_RETRY_BACKOFF = true;
+/**
+ * Job-expiry ceiling. Generous relative to the rate window so a legitimately
+ * slow multi-page walk is not declared expired and re-run concurrently with
+ * itself (the writes are idempotent, but a concurrent re-run wastes budget).
+ */
+export const BACKFILL_EXPIRE_SECONDS = 600;
+
 /** Activity types this worker accepts from the outbox. Anything else is skipped silently. */
 const SUPPORTED_TYPES = new Set(['Create', 'Update', 'Announce', 'Undo', 'Delete']);
 
@@ -105,6 +129,25 @@ export const backfillRateLimiter = new SyncRateLimiter({
   limit: RATE_LIMIT_PER_MINUTE,
   windowMs: RATE_LIMIT_WINDOW_MS,
 });
+
+// ---------------------------------------------------------------------------
+// Errors
+// ---------------------------------------------------------------------------
+
+/**
+ * Signals that a backfill run paused because the per-host outbound request
+ * budget was exhausted before the outbox was fully walked. Thrown by
+ * {@link FollowBackfillService.runBackfill} *after* the partial-progress inbox
+ * drain, so pg-boss re-queues the job and the remaining pages are walked on a
+ * later attempt once the rate window has reset. Distinct from a catastrophic
+ * failure: the peer is healthy, we simply hit our own throttle.
+ */
+export class BackfillRateLimitError extends Error {
+  constructor(host: string) {
+    super(`backfill paused: per-host rate limit exhausted for ${host}`);
+    this.name = 'BackfillRateLimitError';
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Service
@@ -150,17 +193,19 @@ export class FollowBackfillService {
   }
 
   /**
-   * Run a single backfill job to completion. Never throws for "expected"
+   * Run a single backfill job to completion. Never throws for "done"
    * conditions (follow removed, source unreachable, malformed page, cap
    * reached) — those exit cleanly so pg-boss does not loop on a
-   * permanently-broken peer. Catastrophic infrastructure failures (DB
-   * unavailable while loading the follow row) propagate so the worker
-   * surfaces them in logs and the job retries.
+   * permanently-broken peer. Two cases DO throw: catastrophic infrastructure
+   * failures (DB unavailable while loading the follow row) propagate so the
+   * job retries, and rate-limit exhaustion throws {@link BackfillRateLimitError}
+   * so the unfinished remainder is walked on a later, delayed retry.
    *
    * Calls `activityPubInterface.processInboxMessages()` exactly once at
-   * the end — on the happy path (all pages walked) AND on terminal aborts
-   * (cap reached, unfollow detected, rate-limit exhaustion) — so any rows
-   * persisted before the abort still get drained.
+   * the end — on the happy path (all pages walked) AND on every early exit
+   * (cap reached, unfollow detected, rate-limit pause) — so any rows
+   * persisted before the exit still get drained. The rate-limit throw happens
+   * only after that drain has run.
    */
   async runBackfill(payload: ActivityPubFollowAcceptedPayload): Promise<void> {
     const { followingCalendarId, calendarActorId, sourceActorUri } = payload;
@@ -205,9 +250,9 @@ export class FollowBackfillService {
     // call has a no-op signal in logs. The drain itself is always invoked
     // (single call site, finally block) so callers downstream can rely on
     // it firing exactly once per job.
-    let persistedRows = 0;
+    let walkResult: WalkResult = { persistedRows: 0, rateLimited: false };
     try {
-      persistedRows = await this.walkOutbox({
+      walkResult = await this.walkOutbox({
         followingCalendarId,
         calendarActorId,
         sourceActorUri,
@@ -217,8 +262,8 @@ export class FollowBackfillService {
       });
     }
     finally {
-      // Always drain — even on early aborts, any rows we did persist
-      // before the abort should still be processed in chronological order.
+      // Always drain — even on early exits, any rows we did persist
+      // before the exit should still be processed in chronological order.
       try {
         await this.activityPubInterface.processInboxMessages();
       }
@@ -226,55 +271,67 @@ export class FollowBackfillService {
         logError(error, '[ActivityPub backfill] inbox drain after backfill failed');
       }
       logger.info(
-        { followingCalendarId, sourceActorUri, persistedRows },
+        { followingCalendarId, sourceActorUri, persistedRows: walkResult.persistedRows, rateLimited: walkResult.rateLimited },
         'backfill run finished; inbox drain invoked',
       );
+    }
+
+    // Rate-limit exhaustion is the one non-catastrophic early exit that must
+    // NOT be treated as "done": the remaining outbox pages still need walking.
+    // Throw *after* the drain above so the rows we persisted before the pause
+    // are dispatched now, and pg-boss re-queues the job. The publish-time
+    // BACKFILL_RETRY_* options give the sliding window time to reset before the
+    // retry; the re-walk is idempotent via findOrCreate.
+    if (walkResult.rateLimited) {
+      throw new BackfillRateLimitError(authOrigin);
     }
   }
 
   /**
-   * Walks the source outbox page-by-page. Returns the number of rows
-   * actually persisted (useful for end-of-run telemetry and tests).
+   * Walks the source outbox page-by-page. Returns a {@link WalkResult}: the
+   * number of rows actually persisted plus a `rateLimited` flag.
    *
-   * Terminal aborts (cap reached, unfollow detected, rate-limit exhaustion)
-   * return cleanly so the caller's `finally` block runs the drain.
+   * Every early exit returns cleanly so the caller's `finally` block runs the
+   * drain. The `rateLimited` flag distinguishes the one exit that the caller
+   * must turn into a retryable throw (budget exhausted, work remains) from the
+   * "done" exits (cap reached, unfollow detected, source unreachable).
    */
-  private async walkOutbox(ctx: WalkContext): Promise<number> {
+  private async walkOutbox(ctx: WalkContext): Promise<WalkResult> {
     // 2. Fetch the source actor profile so we read the *current* outbox URL
     // rather than whatever URL the federation handshake cached. Validate
     // first because the source URI is attacker-influenced (came in via
     // Accept(Follow)).
     if (!(await this.assertUrlPublic(ctx.sourceActorUri))) {
-      return 0;
+      return { persistedRows: 0, rateLimited: false };
     }
     if (!(await this.acquireRateBudget(ctx.sourceActorUri))) {
-      return 0;
+      return { persistedRows: 0, rateLimited: true };
     }
     const actorProfile = await this.fetcher(ctx.sourceActorUri, { calendar: ctx.calendar, calendarInterface: this.calendarInterface }, { maxContentLength: MAX_PAGE_BYTES });
     if (!actorProfile) {
       logger.info({ followingCalendarId: ctx.followingCalendarId }, 'source actor profile fetch returned null; aborting backfill');
-      return 0;
+      return { persistedRows: 0, rateLimited: false };
     }
 
     const outboxUrl = typeof actorProfile.outbox === 'string' ? actorProfile.outbox : null;
     if (!outboxUrl) {
       logger.info({ followingCalendarId: ctx.followingCalendarId }, 'source actor profile has no outbox URL; aborting backfill');
-      return 0;
+      return { persistedRows: 0, rateLimited: false };
     }
 
     // 3. Walk the outbox. Most servers return an OrderedCollection whose
     // `first` link points at the first page; a few hand back an
     // OrderedCollectionPage directly. Handle both shapes.
     if (!(await this.assertUrlPublic(outboxUrl))) {
-      return 0;
+      return { persistedRows: 0, rateLimited: false };
     }
     if (!(await this.acquireRateBudget(outboxUrl))) {
-      return 0;
+      return { persistedRows: 0, rateLimited: true };
     }
     const outbox = await this.fetcher(outboxUrl, { calendar: ctx.calendar, calendarInterface: this.calendarInterface }, { maxContentLength: MAX_PAGE_BYTES });
     if (!outbox) {
       logger.info({ outboxUrl, followingCalendarId: ctx.followingCalendarId }, 'outbox fetch returned null; aborting backfill');
-      return 0;
+      return { persistedRows: 0, rateLimited: false };
     }
 
     let currentPage: Record<string, unknown> | null;
@@ -283,16 +340,16 @@ export class FollowBackfillService {
     }
     else if (typeof outbox.first === 'string') {
       if (!(await this.assertUrlPublic(outbox.first))) {
-        return 0;
+        return { persistedRows: 0, rateLimited: false };
       }
       if (!(await this.acquireRateBudget(outbox.first))) {
-        return 0;
+        return { persistedRows: 0, rateLimited: true };
       }
       currentPage = await this.fetcher(outbox.first, { calendar: ctx.calendar, calendarInterface: this.calendarInterface }, { maxContentLength: MAX_PAGE_BYTES });
     }
     else {
       logger.info({ outboxUrl, followingCalendarId: ctx.followingCalendarId }, 'outbox has no first page link; nothing to backfill');
-      return 0;
+      return { persistedRows: 0, rateLimited: false };
     }
 
     let pagesWalked = 0;
@@ -314,18 +371,19 @@ export class FollowBackfillService {
       });
       if (!stillFollowing) {
         logger.info({ followingCalendarId: ctx.followingCalendarId, calendarActorId: ctx.calendarActorId }, 'follow row removed during backfill; stopping pagination');
-        return persistedRows;
+        return { persistedRows, rateLimited: false };
       }
 
       const nextUrl = typeof currentPage.next === 'string' ? currentPage.next : null;
       if (!nextUrl) {
-        return persistedRows;
+        return { persistedRows, rateLimited: false };
       }
       if (!(await this.assertUrlPublic(nextUrl))) {
-        return persistedRows;
+        return { persistedRows, rateLimited: false };
       }
       if (!(await this.acquireRateBudget(nextUrl))) {
-        return persistedRows;
+        // Budget exhausted with pages still to walk: signal a retryable pause.
+        return { persistedRows, rateLimited: true };
       }
       currentPage = await this.fetcher(nextUrl, { calendar: ctx.calendar, calendarInterface: this.calendarInterface }, { maxContentLength: MAX_PAGE_BYTES });
     }
@@ -336,7 +394,7 @@ export class FollowBackfillService {
         'backfill truncated at page cap',
       );
     }
-    return persistedRows;
+    return { persistedRows, rateLimited: false };
   }
 
   // ---------------------------------------------------------------------
@@ -487,6 +545,21 @@ interface WalkContext {
   calendar: import('@/common/model/calendar').Calendar;
   /** Local calendar's actor URI; used by the loop guard. */
   localActorUri: string;
+}
+
+/**
+ * Outcome of a single {@link FollowBackfillService.walkOutbox} run.
+ */
+interface WalkResult {
+  /** Number of `ap_inbox` rows actually inserted before the walk ended. */
+  persistedRows: number;
+  /**
+   * True when the walk ended early because the per-host rate budget was
+   * exhausted while pages remained. The caller drains, then re-throws as
+   * {@link BackfillRateLimitError} so pg-boss retries. Every other exit
+   * (done, unreachable, unfollowed, capped) leaves this false.
+   */
+  rateLimited: boolean;
 }
 
 // ---------------------------------------------------------------------------

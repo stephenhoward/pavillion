@@ -5,9 +5,13 @@ import AccountsInterface from '@/server/accounts/interface';
 import BackupService from '@/server/housekeeping/service/backup';
 import StorageService from '@/server/housekeeping/service/storage';
 import DiskMonitorService from '@/server/housekeeping/service/disk-monitor';
-import JobQueueService from '@/server/housekeeping/service/job-queue';
+import JobQueueService, { JobPublishOptions } from '@/server/housekeeping/service/job-queue';
 import { BackupEntity } from '@/server/housekeeping/entity/backup';
 import { createLogger } from '@/server/common/helper/logger';
+
+// Re-exported so other domains set a job's retry/expiry policy via the
+// housekeeping boundary without reaching into the pg-boss adapter directly.
+export type { JobPublishOptions } from '@/server/housekeeping/service/job-queue';
 
 const logger = createLogger('housekeeping');
 
@@ -74,19 +78,21 @@ export default class HousekeepingInterface {
    *
    * @param jobName - pg-boss queue name (e.g. `activitypub:follow:backfill`)
    * @param data - JSON-serialisable job payload
+   * @param options - Optional per-job retry/expiry policy (domain-neutral;
+   *   see {@link JobPublishOptions}). Omit to inherit the queue defaults.
    * @throws Error if the queue has not been wired in via setJobQueueService.
    *   In production this should never happen — `HousekeepingDomain.initialize`
    *   wires the queue before AP handlers can fire. The throw exists so
    *   miswiring fails loudly rather than silently dropping jobs.
    */
-  async publishJob<T = any>(jobName: string, data: T): Promise<void> {
+  async publishJob<T = any>(jobName: string, data: T, options?: JobPublishOptions): Promise<void> {
     if (!this.jobQueueService) {
       throw new Error(
         `HousekeepingInterface.publishJob('${jobName}') called before a JobQueueService was wired in. ` +
         'This indicates a server-startup ordering bug — housekeeping must initialize before any domain that publishes jobs.',
       );
     }
-    await this.jobQueueService.publish(jobName, data);
+    await this.jobQueueService.publish(jobName, data, options);
   }
 
   /**
