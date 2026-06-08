@@ -124,13 +124,34 @@ describe('Docker Configuration', () => {
       expect(hasDockerSocket).toBe(false);
     });
 
-    it('should reach the Docker API through the socket-proxy', () => {
+    it('should reach the Docker API through the socket-proxy unix socket', () => {
       const composeContent = readFileSync('docker-compose.yml', 'utf-8');
       const config = parseYaml(composeContent);
 
+      // autoheal 1.2.0 has no plain-HTTP-over-TCP mode and guards its monitor
+      // loop with `[ -e "$DOCKER_SOCK" ]`, so it must be pointed at a real
+      // socket file, not a tcp:// URL. It reaches the proxied API over a unix
+      // socket shared with socket-proxy via the autoheal-proxy-sock volume.
       const env = config.services.autoheal.environment;
-      expect(env).toContain('DOCKER_SOCK=tcp://socket-proxy:2375');
-      expect(config.services.autoheal.depends_on).toContain('socket-proxy');
+      expect(env).toContain('DOCKER_SOCK=/run/proxy/docker.sock');
+      expect(env).not.toContain('DOCKER_SOCK=tcp://socket-proxy:2375');
+
+      const volumes = config.services.autoheal.volumes ?? [];
+      expect(volumes).toContain('autoheal-proxy-sock:/run/proxy');
+      expect(config.volumes['autoheal-proxy-sock']).toBeDefined();
+    });
+
+    it('should wait for socket-proxy to be healthy before starting', () => {
+      const composeContent = readFileSync('docker-compose.yml', 'utf-8');
+      const config = parseYaml(composeContent);
+
+      // The proxied socket must exist before autoheal's `[ -e "$DOCKER_SOCK" ]`
+      // guard runs, otherwise it exits 127 in a crash loop. Gate on the proxy's
+      // healthcheck rather than plain ordering.
+      expect(config.services.autoheal.depends_on['socket-proxy'].condition).toBe(
+        'service_healthy',
+      );
+      expect(config.services['socket-proxy'].healthcheck).toBeDefined();
     });
 
     it('should set autoheal restart policy', () => {
