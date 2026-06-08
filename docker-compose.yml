@@ -179,10 +179,21 @@ services:
       - ./docker/socket-proxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
       # Read-only mount: the HAProxy ruleset enforces the API allowlist.
       - /var/run/docker.sock:/var/run/docker.sock:ro
-    # No host port published — reachable only on the internal compose network.
+      # HAProxy publishes the locked-down API as a unix socket here; autoheal
+      # mounts the same volume to reach it. No TCP port is exposed.
+      - autoheal-proxy-sock:/run/proxy
+    # No host port published — reachable only via the shared socket volume.
     security_opt:
       - no-new-privileges:true
     restart: unless-stopped
+    # autoheal's entrypoint checks `[ -e "$DOCKER_SOCK" ]` at startup, so it must
+    # not start until HAProxy has created the proxied socket. Gate it on this.
+    healthcheck:
+      test: ["CMD-SHELL", "test -S /run/proxy/docker.sock"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
     logging:
       driver: "json-file"
       options:
@@ -190,22 +201,30 @@ services:
         max-file: "5"
 
   # Autoheal monitors container health and restarts unhealthy containers.
-  # It reaches the Docker API through socket-proxy over the internal network
-  # rather than mounting /var/run/docker.sock directly. Pinned by digest; this
-  # is the 1.2.0 image already running in production (the amd64 variant is
-  # healthy — note the arm64 variant of this tag has a broken entrypoint).
+  # It reaches the Docker API through socket-proxy via a shared unix socket
+  # rather than mounting /var/run/docker.sock directly. The socket path is a
+  # real file, which satisfies autoheal's `[ -e "$DOCKER_SOCK" ]` startup guard
+  # and selects its plain-HTTP unix-socket mode (its tcp:// mode would demand
+  # client TLS certs the proxy does not serve). Pinned by digest so a tag
+  # re-push of the third-party image cannot silently change the binary.
   autoheal:
     image: willfarrell/autoheal:1.2.0@sha256:31f580ef0279eaced5b38d631b08c474d70d8403c1c2fdd6ddcf2e879d5f3f7c
     container_name: pavillion-autoheal
     depends_on:
-      - socket-proxy
+      # Wait for HAProxy to create the proxied socket before starting, or the
+      # `[ -e "$DOCKER_SOCK" ]` guard fails and autoheal exits 127.
+      socket-proxy:
+        condition: service_healthy
     environment:
       - AUTOHEAL_CONTAINER_LABEL=autoheal
       - AUTOHEAL_INTERVAL=30
       - AUTOHEAL_START_PERIOD=120
-      # Talk to the locked-down proxy instead of the raw socket. autoheal
-      # converts a tcp:// DOCKER_SOCK into an HTTP endpoint internally.
-      - DOCKER_SOCK=tcp://socket-proxy:2375
+      # Plain-HTTP unix socket served by the locked-down proxy.
+      - DOCKER_SOCK=/run/proxy/docker.sock
+    volumes:
+      # Shared with socket-proxy; carries only the proxied API socket, never the
+      # raw /var/run/docker.sock.
+      - autoheal-proxy-sock:/run/proxy
     restart: unless-stopped
     logging:
       driver: "json-file"
@@ -275,6 +294,11 @@ volumes:
     name: pavillion-caddy-data
   caddy-config:
     name: pavillion-caddy-config
+  # Carries only the proxied Docker API socket that HAProxy publishes for
+  # autoheal. The raw /var/run/docker.sock is never placed here.
+  autoheal-proxy-sock:
+    name: pavillion-autoheal-proxy-sock
+
   pavillion-backups:
     name: pavillion-backups
     # Operators can configure this volume to use different backing storage:
