@@ -3,6 +3,7 @@ import sinon from 'sinon';
 import { EventEmitter } from 'events';
 
 import ActivityPubService from '@/server/activitypub/service/server';
+import { WebFingerResponse } from '@/server/activitypub/model/webfinger';
 import CalendarInterface from '@/server/calendar/interface';
 import AccountsInterface from '@/server/accounts/interface';
 import config from 'config';
@@ -79,6 +80,86 @@ describe('ActivityPubService.parseWebFingerResource', () => {
       type: 'calendar',
       name: 'community',
       domain: 'example.com',
+    });
+  });
+
+  describe('URL-form resource (RFC 7033 §4.5)', () => {
+    beforeEach(() => {
+      sandbox.stub(config, 'get').withArgs('domain').returns('events.example');
+    });
+
+    it('should resolve a calendar actor URL on our domain', () => {
+      const result = service.parseWebFingerResource('https://events.example/calendars/community');
+
+      expect(result).toEqual({
+        type: 'calendar',
+        name: 'community',
+        domain: 'events.example',
+      });
+    });
+
+    it('should resolve a user actor URL on our domain', () => {
+      const result = service.parseWebFingerResource('https://events.example/users/alice');
+
+      expect(result).toEqual({
+        type: 'user',
+        name: 'alice',
+        domain: 'events.example',
+      });
+    });
+
+    it('should not resolve a URL on a different host', () => {
+      const result = service.parseWebFingerResource('https://evil.example/calendars/community');
+
+      expect(result).toEqual({
+        type: 'unknown',
+        name: '',
+        domain: '',
+      });
+    });
+
+    it('should not resolve a URL on our host with an unrecognized path', () => {
+      const result = service.parseWebFingerResource('https://events.example/o/foo');
+
+      expect(result).toEqual({
+        type: 'unknown',
+        name: '',
+        domain: '',
+      });
+    });
+
+    it('should not throw on a malformed URL', () => {
+      const result = service.parseWebFingerResource('https://');
+
+      expect(result).toEqual({
+        type: 'unknown',
+        name: '',
+        domain: '',
+      });
+    });
+
+    it('should parse a user actor href emitted by WebFingerLink back to its actor', () => {
+      const href = new WebFingerResponse('alice', config.get('domain') as string, 'user').links[0].href;
+
+      const result = service.parseWebFingerResource(href);
+
+      expect(result).toEqual({
+        type: 'user',
+        name: 'alice',
+        domain: 'events.example',
+      });
+    });
+
+    it('should parse a calendar actor href emitted by WebFingerLink back to its actor', () => {
+      const href = new WebFingerResponse('community', config.get('domain') as string, 'calendar').links[0].href;
+
+      const result = service.parseWebFingerResource(href);
+
+      expect(result).toEqual({
+        type: 'calendar',
+        name: 'community',
+        domain: 'events.example',
+      });
     });
   });
 });
