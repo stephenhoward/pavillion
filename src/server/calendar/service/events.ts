@@ -2024,11 +2024,35 @@ class EventService {
         }
       }
 
-      // 5. Destroy all existing assignments for this event
-      await EventCategoryAssignmentEntity.destroy({
-        where: { event_id: eventId },
+      // 5. Destroy this event's assignments owned by the acting calendar only.
+      //
+      // A reposted event is shared across multiple calendars, each of which may
+      // have attached its own categories. Destroying every assignment for the
+      // event (the prior behavior) silently wiped other sharing calendars' rows.
+      // EventCategoryAssignmentEntity carries no calendar_id and deliberately has
+      // no association to join through (see event_category_assignment.ts), so we
+      // scope the destroy through category ownership: each EventCategoryEntity is
+      // owned by exactly one calendar (calendar_id, never reparented), so the set
+      // of categories owned by effectiveCalendarId fully determines which
+      // assignments belong to the acting calendar.
+      const ownedCategories = await EventCategoryEntity.findAll({
+        where: { calendar_id: effectiveCalendarId },
+        attributes: ['id'],
         transaction,
       });
+      const ownedCategoryIds = ownedCategories.map(c => c.id);
+
+      // Explicit empty-set guard. Do NOT rely on IN([]) no-op behavior: its
+      // codegen diverges by driver (PostgreSQL -> WHERE 1=0; SQLite has
+      // historically dropped the clause entirely, yielding an UNSCOPED destroy
+      // that reintroduces the cross-calendar wipe). When the acting calendar
+      // owns no categories there is nothing of its own to remove.
+      if (ownedCategoryIds.length > 0) {
+        await EventCategoryAssignmentEntity.destroy({
+          where: { event_id: eventId, category_id: { [Op.in]: ownedCategoryIds } },
+          transaction,
+        });
+      }
 
       // 6. Bulk create new assignments (skip if empty)
       if (uniqueCategoryIds.length > 0) {
