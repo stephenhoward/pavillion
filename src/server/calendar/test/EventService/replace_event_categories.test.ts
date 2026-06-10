@@ -63,6 +63,7 @@ describe('EventService.replaceEventCategories', () => {
   function stubCommonDependencies(options: {
     eventEntity?: any;
     categories?: any[];
+    ownedCategories?: any[];
     userCalendars?: Calendar[];
     calendar?: Calendar | null;
     repostEntity?: any[];
@@ -85,9 +86,34 @@ describe('EventService.replaceEventCategories', () => {
         .resolves(options.calendar);
     }
 
-    if (options.categories) {
-      sandbox.stub(EventCategoryEntity, 'findAll').resolves(options.categories);
-    }
+    // EventCategoryEntity.findAll is consulted in two places in
+    // replaceEventCategories: step 4 (validate incoming categories belong to
+    // the effective calendar — keys on `id` + `calendar_id`, skipped when
+    // categoryIds is empty) and step 5 (the owned-category lookup that scopes
+    // the destroy, pv-bv78 — keys on `calendar_id` only, with attributes:['id']).
+    // We dispatch on the where-clause shape so the owned lookup resolves
+    // `ownedCategories` regardless of call order (the validation call may be
+    // skipped). Defaults: validation -> `categories`; owned -> `ownedCategories`
+    // ?? `categories` ?? [] (empty = acting calendar owns no categories).
+    //
+    // FRAGILE: this dispatch keys on the owned lookup having `calendar_id` and
+    // NO `id` in its where-clause. If step 5's query in replaceEventCategories
+    // changes shape — e.g. it gains an `id` constraint, adds another filter
+    // field, or switches `calendar_id` to an `Op.ne`/`literal()` form — the
+    // `isOwnedLookup` guard below silently misroutes both calls to the default
+    // branch, returning `categories` instead of `ownedCategories`. The
+    // zero-owned and scoping smoke checks would then pass against wrong stub
+    // data without surfacing the regression. Update this guard if that query
+    // shape changes. (Behavioral proof lives in the real-DB integration test.)
+    const findAllStub = sandbox.stub(EventCategoryEntity, 'findAll');
+    findAllStub.callsFake(async (opts: any) => {
+      const where = opts?.where ?? {};
+      const isOwnedLookup = where.id === undefined && where.calendar_id !== undefined;
+      if (isOwnedLookup) {
+        return options.ownedCategories ?? options.categories ?? [];
+      }
+      return options.categories ?? [];
+    });
 
     if (options.repostEntity) {
       sandbox.stub(EventRepostEntity, 'findAll').resolves(options.repostEntity);
@@ -145,6 +171,74 @@ describe('EventService.replaceEventCategories', () => {
     expect((mockTransaction.commit as sinon.SinonStub).calledOnce).toBe(true);
   });
 
+  it('should look up the acting calendar owned categories before destroying (pv-bv78)', async () => {
+    // Smoke check that the scoping lookup runs: the owned-category findAll is
+    // queried and the destroy + bulkCreate fire. Cross-calendar row survival is
+    // proven by the real-DB integration test, not here — this asserts only that
+    // the lookup is wired in, NOT the internal shape of the destroy where-clause.
+    const mockEvent = EventEntity.build({
+      id: validEventId,
+      calendar_id: calendarId,
+      account_id: 'test-account-id',
+    });
+
+    const mockCategories = [validCategoryId1].map(id =>
+      EventCategoryEntity.build({ id, calendar_id: calendarId }),
+    );
+
+    stubCommonDependencies({
+      eventEntity: mockEvent,
+      categories: mockCategories,
+      ownedCategories: [EventCategoryEntity.build({ id: validCategoryId1, calendar_id: calendarId })],
+      userCalendars: [new Calendar(calendarId, 'test-calendar')],
+      repostEntity: [],
+    });
+
+    const destroyStub = sandbox.stub(EventCategoryAssignmentEntity, 'destroy').resolves(0);
+    const bulkCreateStub = sandbox.stub(EventCategoryAssignmentEntity, 'bulkCreate').resolves([]);
+
+    const returnedEvent = new CalendarEvent(validEventId, calendarId);
+    sandbox.stub(service, 'getEventById').resolves(returnedEvent);
+
+    await service.replaceEventCategories(mockAccount, validEventId, [validCategoryId1]);
+
+    // The owned-category lookup runs (step 4 validation + step 5 owned lookup).
+    expect((EventCategoryEntity.findAll as sinon.SinonStub).callCount).toBeGreaterThanOrEqual(2);
+    expect(destroyStub.calledOnce).toBe(true);
+    expect(bulkCreateStub.calledOnce).toBe(true);
+  });
+
+  it('should skip the destroy when the acting calendar owns zero categories (pv-bv78)', async () => {
+    // When the owned-category lookup returns empty, the length guard skips the
+    // destroy entirely (no reliance on driver-specific IN([]) behavior). Distinct
+    // from the caller passing an empty categoryIds array — here categoryIds is
+    // empty AND the calendar owns nothing.
+    const mockEvent = EventEntity.build({
+      id: validEventId,
+      calendar_id: calendarId,
+      account_id: 'test-account-id',
+    });
+
+    stubCommonDependencies({
+      eventEntity: mockEvent,
+      userCalendars: [new Calendar(calendarId, 'test-calendar')],
+      // Acting calendar owns no categories.
+      ownedCategories: [],
+      repostEntity: [],
+    });
+
+    const destroyStub = sandbox.stub(EventCategoryAssignmentEntity, 'destroy').resolves(0);
+
+    const returnedEvent = new CalendarEvent(validEventId, calendarId);
+    returnedEvent.categories = [];
+    sandbox.stub(service, 'getEventById').resolves(returnedEvent);
+
+    await service.replaceEventCategories(mockAccount, validEventId, []);
+
+    // Length guard short-circuits — destroy must not run.
+    expect(destroyStub.called).toBe(false);
+  });
+
   it('should clear all categories when categoryIds is empty', async () => {
     const mockEvent = EventEntity.build({
       id: validEventId,
@@ -155,6 +249,9 @@ describe('EventService.replaceEventCategories', () => {
     const mockTransaction = stubCommonDependencies({
       eventEntity: mockEvent,
       userCalendars: [new Calendar(calendarId, 'test-calendar')],
+      // Acting calendar owns one category, so the scoped destroy runs even
+      // though the caller passed an empty categoryIds array (pv-bv78).
+      ownedCategories: [EventCategoryEntity.build({ id: validCategoryId1, calendar_id: calendarId })],
       // Owned event: no repost rows for the post-commit lookup.
       repostEntity: [],
     });
@@ -349,6 +446,9 @@ describe('EventService.replaceEventCategories', () => {
     const mockTransaction = stubCommonDependencies({
       eventEntity: mockEvent,
       userCalendars: [new Calendar(calendarId, 'test-calendar')],
+      // Acting calendar owns a category so the scoped destroy actually runs
+      // (and throws) even with an empty categoryIds array (pv-bv78).
+      ownedCategories: [EventCategoryEntity.build({ id: validCategoryId1, calendar_id: calendarId })],
     });
 
     // Destroy throws an error
