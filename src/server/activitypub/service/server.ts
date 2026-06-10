@@ -69,19 +69,55 @@ export default class ActivityPubService {
   /**
    * Parse WebFinger resource format into type, name, and domain
    *
-   * Supports two formats:
+   * Supports three formats:
    * - @user@domain - Person actor (user)
    * - calendar@domain - Group actor (calendar)
+   * - https://{our-domain}/users/{name} or /calendars/{name} - the actor's own
+   *   URL form (RFC 7033 §4.5), the inverse of the hrefs WebFingerLink emits.
    *
-   * @param resource - WebFinger resource string (e.g., "acct:@alice@example.com" or "community@example.com")
+   * @param resource - WebFinger resource string (e.g., "acct:@alice@example.com", "community@example.com", or "https://events.example/users/alice")
    * @returns { type: 'user' | 'calendar' | 'unknown', name: string, domain: string }
    */
   parseWebFingerResource(resource: string): { type: 'user' | 'calendar' | 'unknown', name: string, domain: string } {
-    // Remove acct: prefix if present
+    // Remove acct: prefix if present (no-op on an https:// URL)
     resource = resource.replace('acct:', '');
 
     // Check if empty
     if (!resource || resource.length === 0) {
+      return { type: 'unknown', name: '', domain: '' };
+    }
+
+    // URL form (RFC 7033 §4.5): the actor's own self-link URL, the inverse of
+    // the href WebFingerLink emits (model/webfinger.ts). A peer that read our
+    // WebFinger response and re-probes by actor URL gets a resolvable answer.
+    if (resource.startsWith('https://')) {
+      let url: URL;
+      try {
+        url = new URL(resource);
+      }
+      catch {
+        return { type: 'unknown', name: '', domain: '' };
+      }
+
+      // Only resolve actors on our own domain — no cross-host resolution, no
+      // outbound fetch. Compare url.host (not url.hostname) so the port in
+      // config.get('domain') (e.g. 'localhost:3000') matches. This enforces the
+      // same locality rule lookupWebFinger applies to the extracted domain,
+      // here applied to the raw URL as defense in depth.
+      if (url.host !== config.get('domain')) {
+        return { type: 'unknown', name: '', domain: '' };
+      }
+
+      const userMatch = url.pathname.match(/^\/users\/([^/]+)$/);
+      if (userMatch) {
+        return { type: 'user', name: userMatch[1], domain: url.host };
+      }
+
+      const calendarMatch = url.pathname.match(/^\/calendars\/([^/]+)$/);
+      if (calendarMatch) {
+        return { type: 'calendar', name: calendarMatch[1], domain: url.host };
+      }
+
       return { type: 'unknown', name: '', domain: '' };
     }
 
