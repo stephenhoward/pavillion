@@ -75,7 +75,10 @@ export default class ModerationDomain {
   }
 
   public installAPI(app: Application): void {
-    app.use(express.json());
+    // Scoped to this domain's prefixes (not a global parser): a bare
+    // app.use(express.json()) would consume raw-body routes like the Stripe
+    // webhook (/api/funding/webhooks) and break signature verification (pv-ufag).
+    app.use(['/api/public/v1', '/api/v1'], express.json());
 
     const publicReportRoutes = new PublicReportRoutes(this.interface);
     publicReportRoutes.installHandlers(app, '/api/public/v1');

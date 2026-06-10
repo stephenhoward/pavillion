@@ -46,7 +46,10 @@ export default class AuthenticationAPI {
       return done(null, account);
     }));
 
-    app.use(express.json());
+    // Scoped, not global: a bare app.use(express.json()) would also consume
+    // raw-body routes like the Stripe webhook (/api/funding/webhooks) and break
+    // signature verification (pv-ufag).
+    app.use('/api/auth/v1', express.json());
 
     const authenticationRoutes = new AuthenticationRoutes(internalAPI, accountAPI);
     authenticationRoutes.installHandlers(app, '/api/auth/v1');

@@ -16,7 +16,10 @@ import CalendarInterface from '../interface';
 export default class CalendarAPI {
 
   static install(app: Application, internalAPI: CalendarInterface): void {
-    app.use(express.json());
+    // Scoped to this domain's prefixes (not a global parser): a bare
+    // app.use(express.json()) would consume raw-body routes like the Stripe
+    // webhook (/api/funding/webhooks) and break signature verification (pv-ufag).
+    app.use(['/api/v1', '/api/widget/v1'], express.json());
 
     let eventsRoutes = new EventRoutes(internalAPI);
     eventsRoutes.installHandlers(app, '/api/v1');

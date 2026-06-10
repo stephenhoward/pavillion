@@ -8,7 +8,11 @@ import AccountsInterface from '@/server/accounts/interface';
 export default class AccountApiV1 {
 
   static install(app: Application, internalAPI: AccountsInterface) {
-    app.use(express.json());
+    // Scope JSON parsing to this domain's routes. A global app.use(express.json())
+    // is a cross-cutting side effect that also consumes the body of raw-body routes
+    // (e.g. the Stripe webhook at /api/funding/webhooks), breaking signature
+    // verification (pv-ufag). Keep parsers scoped to the prefixes they serve.
+    app.use('/api/v1', express.json());
 
     const accountRouteHandlers = new AccountRoutes(internalAPI);
     accountRouteHandlers.installHandlers(app, '/api/v1');

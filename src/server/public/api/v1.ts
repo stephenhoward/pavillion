@@ -4,7 +4,9 @@ import PublicCalendarInterface from '../interface';
 
 export default class PublicCalendarAPI {
   static install(app: Application, internalAPI: PublicCalendarInterface): void {
-    app.use(express.json());
+    // Scoped, not global: a bare app.use(express.json()) would also consume
+    // raw-body routes like the Stripe webhook (/api/funding/webhooks) (pv-ufag).
+    app.use('/api/public/v1', express.json());
 
     let eventsRoutes = new CalendarRoutes(internalAPI);
     eventsRoutes.installHandlers(app, '/api/public/v1');

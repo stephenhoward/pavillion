@@ -7,6 +7,8 @@ import { v4 as uuidv4 } from 'uuid';
 import db from '@/server/common/entity/db';
 import FundingService from '@/server/funding/service/funding';
 import WebhookRoutes from '@/server/funding/api/v1/webhooks';
+import FundingApiV1 from '@/server/funding/api/v1';
+import AccountApiV1 from '@/server/accounts/api/v1';
 import { FundingPlanEntity } from '@/server/funding/entity/funding_plan';
 import { FundingEventEntity } from '@/server/funding/entity/funding_event';
 import { CalendarFundingPlanEntity } from '@/server/funding/entity/calendar_funding_plan';
@@ -154,6 +156,84 @@ describe('Webhook Handling', () => {
         expect(response.status).toBe(500);
         expect(response.body.error).toBe('Internal server error');
       });
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Full-wiring tests — mounts through FundingApiV1.install, exactly as the
+  // running app does. Regression guard for pv-ufag: a global express.json()
+  // registered before the raw webhook route consumes the body, so the handler
+  // receives the parsed object ("[object Object]") instead of the raw bytes
+  // Stripe signed — making signature verification fail for every real event.
+  // -------------------------------------------------------------------------
+  describe('Full FundingApiV1 wiring (raw body preservation)', () => {
+    let app: Application;
+    let sandbox: sinon.SinonSandbox;
+    let handleStripeWebhook: sinon.SinonStub;
+
+    beforeEach(() => {
+      sandbox = sinon.createSandbox();
+      handleStripeWebhook = sandbox.stub().resolves();
+      const mockInterface = {
+        handleStripeWebhook,
+        providerConnectionService: {},
+      };
+
+      app = express();
+      FundingApiV1.install(app, mockInterface as any);
+    });
+
+    afterEach(() => {
+      sandbox.restore();
+      vi.clearAllMocks();
+    });
+
+    it('delivers the exact raw JSON body to the service for signature verification', async () => {
+      const webhookPayload = JSON.stringify({ id: 'evt_raw_body', type: 'invoice.paid' });
+
+      const response = await request(app)
+        .post('/api/funding/webhooks/stripe')
+        .set('stripe-signature', 'valid_signature')
+        .set('Content-Type', 'application/json')
+        .send(webhookPayload);
+
+      expect(response.status).toBe(200);
+      expect(handleStripeWebhook.calledOnce).toBe(true);
+
+      // The raw body must reach the service byte-for-byte. If a global json
+      // parser ran first, this would be "[object Object]" and Stripe signature
+      // verification would fail.
+      const [rawBody, signature] = handleStripeWebhook.firstCall.args;
+      expect(rawBody).toBe(webhookPayload);
+      expect(signature).toBe('valid_signature');
+    });
+
+    it('preserves the raw body when an earlier domain has already registered a parser (boot-order regression)', async () => {
+      // The production bug was cross-domain: accounts (and authentication)
+      // initialize before funding in server.ts and used to register a GLOBAL
+      // express.json() that consumed the webhook body before funding's raw route
+      // ran. A funding-only test cannot catch that — this composes the real
+      // accounts installer first, exactly as the app boots. Every domain parser
+      // must be scoped so /api/funding/webhooks stays raw (pv-ufag).
+      const bootApp = express();
+      AccountApiV1.install(bootApp, {} as any);
+      FundingApiV1.install(bootApp, {
+        handleStripeWebhook,
+        providerConnectionService: {},
+      } as any);
+
+      const webhookPayload = JSON.stringify({ id: 'evt_boot_order', type: 'invoice.paid' });
+
+      const response = await request(bootApp)
+        .post('/api/funding/webhooks/stripe')
+        .set('stripe-signature', 'valid_signature')
+        .set('Content-Type', 'application/json')
+        .send(webhookPayload);
+
+      expect(response.status).toBe(200);
+      expect(handleStripeWebhook.calledOnce).toBe(true);
+      const [rawBody] = handleStripeWebhook.firstCall.args;
+      expect(rawBody).toBe(webhookPayload);
     });
   });
 

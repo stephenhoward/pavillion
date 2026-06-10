@@ -14,7 +14,12 @@ import FundingInterface from '@/server/funding/interface';
  */
 export default class FundingApiV1 {
   static install(app: Application, internalAPI: FundingInterface): void {
-    app.use(express.json());
+    // Scope JSON body parsing to the /v1 API only. The Stripe webhook route
+    // (mounted below at /api/funding/webhooks) needs the raw request body for
+    // signature verification — a global app.use(express.json()) would consume
+    // and parse the body first, leaving the webhook handler with "[object
+    // Object]" and breaking every signature check (pv-ufag).
+    app.use('/api/funding/v1', express.json());
 
     // Install admin routes
     const adminRoutes = new AdminRoutes(internalAPI, internalAPI.providerConnectionService);
