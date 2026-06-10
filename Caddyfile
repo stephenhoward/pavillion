@@ -1,6 +1,24 @@
 {$DOMAIN} {
 	encode gzip zstd
 
+	# Strip any client-supplied forwarding headers before Caddy appends its
+	# own. Express runs with `trust proxy: 1`, so it trusts exactly one hop's
+	# X-Forwarded-For — that hop must be Caddy, never the client. Header
+	# matching is case-insensitive (Caddy normalises on ingest). Caddy executes
+	# `request_header` (an alias of `header`) before `reverse_proxy` in its
+	# canonical directive order, so these strips apply to every request — and to
+	# every imported snippet's proxying — regardless of textual position. They
+	# are placed at the top of the block for readability. The operator invariant:
+	# a snippet must not re-add a client-supplied forwarding value (e.g. via
+	# `request_header +` or `header_up` sourced from a client header).
+	request_header -X-Forwarded-For
+	request_header -X-Forwarded-Proto
+	request_header -X-Forwarded-Host
+	request_header -X-Real-IP
+	request_header -Forwarded
+	request_header -CF-Connecting-IP
+	request_header -True-Client-IP
+
 	# Operator extension point. Drop *.caddyfile snippets into ./caddy-extras.d/
 	# to add per-instance handlers (e.g., a webhook listener on a staging
 	# server). The directory is gitignored, so production deploys ship with no
