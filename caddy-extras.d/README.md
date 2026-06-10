@@ -57,3 +57,37 @@ will receive forwarded `/hooks/*` requests.
   ```bash
   docker compose --profile standalone exec caddy caddy validate --config /etc/caddy/Caddyfile
   ```
+
+## Trust-proxy constraint
+
+The tracked `Caddyfile` strips all client-supplied forwarding headers
+(`X-Forwarded-For`, `X-Forwarded-Proto`, `X-Forwarded-Host`, `X-Real-IP`,
+`Forwarded`, `CF-Connecting-IP`, `True-Client-IP`) at the top of the site
+block. Caddy executes `request_header` before `reverse_proxy` in its canonical
+directive order, so the strips apply to every request — and to any proxying an
+imported snippet performs — regardless of where the directives sit in the file.
+Express runs with `trust proxy: 1` — it trusts exactly one upstream hop's
+`X-Forwarded-For`, and that hop must be Caddy. This is what makes `req.ip` (used
+for rate limiting and moderation IP records) trustworthy. Two cases are easy to
+confuse:
+
+- **A snippet that proxies to its own backend — NOT a concern.** A snippet that
+  `reverse_proxy`s to its own upstream (e.g. the `/hooks/*` example above)
+  receives headers Caddy has already sanitised and regenerated. There is
+  nothing to do; this is safe by default. Snippets must not re-add a
+  client-supplied forwarding header (e.g. via `request_header +` or `header_up`
+  sourced from a client header) — that would undo the site-level strip.
+
+- **A proxy or CDN placed *upstream* of Caddy — the real footgun.** Caddy must
+  remain the **outermost trusted hop**. If you front this stack with a CDN or
+  load balancer (Cloudflare, an external LB, etc.), the trust boundary moves
+  one hop out and the header-strip protection no longer covers it. To keep
+  `req.ip` trustworthy you must BOTH:
+  1. Bump Express `trust proxy` (in `src/server/server.ts`) to match the new
+     total hop count, AND
+  2. Ensure the new outermost hop strips client-supplied forwarding headers
+     before forwarding inward.
+
+  Doing only one re-opens the spoofing hole one hop up. Changing the hop count
+  is an operator decision, not a default — the shipped single-Caddy topology
+  uses `1`.

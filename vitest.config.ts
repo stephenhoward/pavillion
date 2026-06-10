@@ -58,6 +58,9 @@ export default defineConfig({
             ...sharedExclude,
             'src/common/test/utils/render-markdown.test.ts',
             'src/server/configuration/test/service_settings.test.ts',
+            // Imports the full @/server/server entry module, whose graph reaches
+            // renderPolicyMarkdown → isomorphic-dompurify.
+            'src/server/test/configure-proxy.test.ts',
             // Tests that transitively import ServiceSettings (which depends on renderPolicyMarkdown)
             'src/server/accounts/test/account_service.test.ts',
             'src/server/accounts/test/admin_pagination.test.ts',
@@ -91,6 +94,9 @@ export default defineConfig({
           include: [
             'src/common/test/utils/render-markdown.test.ts',
             'src/server/configuration/test/service_settings.test.ts',
+            // Imports the full @/server/server entry module, whose graph reaches
+            // renderPolicyMarkdown → isomorphic-dompurify.
+            'src/server/test/configure-proxy.test.ts',
             // Tests that transitively import ServiceSettings (which depends on renderPolicyMarkdown)
             'src/server/accounts/test/account_service.test.ts',
             'src/server/accounts/test/admin_pagination.test.ts',

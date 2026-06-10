@@ -177,6 +177,20 @@ function setupHealthCheck(app: express.Application): void {
 }
 
 /**
+ * Configure Express reverse-proxy trust and log the hop count at boot so a
+ * topology/config mismatch is visible. The fronting proxy (Caddy) must strip
+ * client-supplied X-Forwarded-* headers; adding hops requires bumping this
+ * value (see caddy-extras.d/README.md). Logs only the configured integer — no
+ * headers, no request, no IP.
+ *
+ * @param app - Express application instance
+ */
+function configureProxy(app: express.Application): void {
+  app.set('trust proxy', 1);
+  logger.info(`Express trust proxy hops configured: ${app.get('trust proxy')}`);
+}
+
+/**
  * Initializes the Pavillion server with express application configuration.
  * Sets up view templates, internationalization, API routes and starts the server listener.
  *
@@ -189,9 +203,7 @@ const initPavillionServer = async (app: express.Application, port: number): Prom
   // Validate production environment configuration before starting
   validateProductionEnvironment();
 
-  // Configure Express to trust proxy headers for accurate client IP detection
-  // This is essential for rate limiting behind reverse proxies like nginx
-  app.set('trust proxy', 1);
+  configureProxy(app);
 
   // Set up health check endpoint first (before other routes and middleware)
   setupHealthCheck(app);
@@ -428,4 +440,4 @@ const initPavillionServer = async (app: express.Application, port: number): Prom
 };
 
 export default initPavillionServer;
-export { checkDatabaseHealth, setupHealthCheck, validateProductionEnvironment };
+export { checkDatabaseHealth, setupHealthCheck, validateProductionEnvironment, configureProxy };
