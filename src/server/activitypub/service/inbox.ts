@@ -2141,6 +2141,12 @@ class ProcessInboxService {
           type: activity.type,
           message_time: publishedDate,
           message: messagePayload,
+          // Provenance for in-process outbox→inbox dispatch to a same-instance
+          // recipient. These rows are NOT produced by a signed HTTP POST, so
+          // they must not inherit the column default 'http_signature' (DEC-013).
+          // auth_origin is null because there is no remote authenticating party.
+          auth_source: 'local_dispatch',
+          auth_origin: null,
         });
       }
       catch (createError: any) {
