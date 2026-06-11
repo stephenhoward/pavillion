@@ -49,6 +49,76 @@ const xssVectors: Array<{ name: string; input: string }> = [
     name: 'raw <style> block',
     input: '<style>body{background:url(javascript:alert(1))}</style>',
   },
+  // --- pv-dzy3 corpus expansion: bypass classes the original 9 vectors miss ---
+  {
+    // MathML mutation-XSS: <math>/<mglyph> are absent from ALLOWED_TAGS. In
+    // foreign-content parsing contexts mglyph can be a mutation gadget; this
+    // fixture locks the closed allowlist so math/mglyph can never re-enter it.
+    name: 'MathML mglyph mXSS wrapper',
+    input: '<math><mglyph><img src=x onerror=alert(1)></mglyph></math>',
+  },
+  {
+    // SVG <animate> driving an href to a javascript: value — the URI is in a
+    // values= attribute, not directly in href=, so URI-scheme allowlisting on
+    // href alone would miss it. svg/animate are forbidden tags; the whole
+    // subtree must drop.
+    name: 'SVG animate xlink:href values=javascript:',
+    input: '<svg><a><animate xlink:href="#x" attributeName="href" values="javascript:alert(1)"/></a></svg>',
+  },
+  {
+    // formaction on a button overrides the form action with a javascript: URI.
+    // form is a forbidden tag and formaction is not in ALLOWED_ATTR.
+    name: 'form button formaction=javascript:',
+    input: '<form><button formaction="javascript:alert(1)">click</button></form>',
+  },
+  {
+    // noscript mutation XSS: the title attribute closes </noscript> early in
+    // parsers that switch tokenizer state on noscript, re-materializing the
+    // <img onerror> as live markup. noscript is not in ALLOWED_TAGS.
+    name: 'noscript mutation XSS via title',
+    input: '<noscript><p title="</noscript><img src=x onerror=alert(1)>"></p>',
+  },
+  {
+    // Raw <a href="javascript:..."> reaching DOMPurify directly — the
+    // raw-HTML form, distinct from the marked-minted markdown-link form at
+    // index 2. Exercises ALLOWED_URI_REGEXP on a literal anchor token.
+    name: 'raw anchor javascript: scheme',
+    input: '<a href="javascript:alert(1)">click</a>',
+  },
+  {
+    // data:text/html in markdown-link form — a navigable HTML document URI.
+    name: 'markdown link data:text/html',
+    input: '[click](data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==)',
+  },
+  {
+    // data:text/html in raw-anchor form — the same scheme reaching DOMPurify
+    // through a literal <a href> rather than through marked.
+    name: 'raw anchor data:text/html href',
+    input: '<a href="data:text/html,&lt;script&gt;alert(1)&lt;/script&gt;">click</a>',
+  },
+  // --- cure53-derived allowlist-bypass vectors (tag/attribute smuggling) ---
+  {
+    // <template> holds inert DOM that some sanitizers fail to traverse;
+    // template is not in ALLOWED_TAGS and must be stripped with its contents.
+    name: 'cure53 template content smuggling',
+    input: '<template><img src=x onerror=alert(1)></template>',
+  },
+  {
+    // CSS @import pulling a javascript: stylesheet — style is a forbidden tag.
+    name: 'cure53 style @import javascript:',
+    input: '<style>@import "javascript:alert(1)";</style>',
+  },
+  {
+    // <details ontoggle> — event handler on a non-allowlisted interactive tag.
+    name: 'cure53 details ontoggle handler',
+    input: '<details open ontoggle=alert(1)>x</details>',
+  },
+  {
+    // <marquee onstart> — legacy element with an event handler; marquee is not
+    // in ALLOWED_TAGS.
+    name: 'cure53 marquee onstart handler',
+    input: '<marquee onstart=alert(1)>x</marquee>',
+  },
 ];
 
 /**
@@ -56,12 +126,20 @@ const xssVectors: Array<{ name: string; input: string }> = [
  * matches a `<tag` token boundary so that allowed content (e.g. an
  * inline `<a>` link) is never mistaken for a forbidden tag.
  */
-const FORBIDDEN_TAGS = ['script', 'iframe', 'object', 'base', 'style', 'svg', 'animate', 'embed', 'form'];
+const FORBIDDEN_TAGS = [
+  'script', 'iframe', 'object', 'base', 'style', 'svg', 'animate', 'embed', 'form',
+  // pv-dzy3 additions — closed-allowlist drift guards
+  'math', 'mglyph', 'template', 'noscript', 'marquee', 'details', 'button',
+];
 
 /**
  * Forbidden attributes — inline event handlers and identity/styling vectors.
  */
-const FORBIDDEN_ATTRS = ['onerror', 'onload', 'onbegin', 'onclick', 'onmouseover', 'onfocus'];
+const FORBIDDEN_ATTRS = [
+  'onerror', 'onload', 'onbegin', 'onclick', 'onmouseover', 'onfocus',
+  // pv-dzy3 additions — formaction (action-override) and ontoggle/onstart handlers
+  'formaction', 'ontoggle', 'onstart', 'xlink:href',
+];
 
 /**
  * Forbidden URI schemes that must never appear in attribute-position
@@ -86,7 +164,15 @@ describe('renderPolicyMarkdown', () => {
           expect(output.toLowerCase()).not.toMatch(new RegExp(`<${tag}\\b`, 'i'));
         }
 
-        // No inline event-handler attributes.
+        // No LIVE inline event-handler attribute. Anchored to a live tag run
+        // (`<...on*=`) the way the AP expectInert helper does, so a payload that
+        // renders as escaped, inert TEXT (e.g. a code-fenced `&lt;img onerror=`)
+        // does not false-fail merely because the substring survives as content.
+        expect(output).not.toMatch(/<[^>]*\son\w+\s*=/i);
+
+        // Belt-and-suspenders substring check for the specific handler/attribute
+        // tokens. Safe for current fixtures (none render the token as inert
+        // text); kept alongside the live-tag-run regex above for defense in depth.
         for (const attr of FORBIDDEN_ATTRS) {
           expect(output.toLowerCase()).not.toContain(attr);
         }
@@ -210,28 +296,46 @@ describe('isPolicySourceSafe', () => {
   });
 
   describe('returns false for XSS vectors', () => {
-    it('rejects raw <script> tags', () => {
-      expect(isPolicySourceSafe('<script>alert(1)</script>')).toBe(false);
-    });
-
-    it('rejects <iframe> tags', () => {
-      expect(isPolicySourceSafe('<iframe src="https://evil.example"></iframe>')).toBe(false);
-    });
-
-    it('rejects <img> with onerror handler', () => {
-      expect(isPolicySourceSafe('<img onerror=alert(1) src=x>')).toBe(false);
-    });
-
-    it('rejects markdown link with javascript: scheme', () => {
-      expect(isPolicySourceSafe('[click](javascript:alert(1))')).toBe(false);
-    });
-
     it('rejects raw <a> with javascript: href', () => {
       expect(isPolicySourceSafe('<a href="javascript:alert(1)">click</a>')).toBe(false);
     });
 
-    it('rejects markdown image with data: URI', () => {
-      expect(isPolicySourceSafe('![img](data:image/svg+xml,<svg onload=alert(1)>)')).toBe(false);
+    // Note: the individual data:-URI and other per-vector cases are covered by
+    // the for-loop below, which asserts isPolicySourceSafe(input) === false for
+    // every entry in the shared xssVectors corpus (including the data:image/svg
+    // markdown-image vector at index 3). No standalone duplicates needed.
+
+    // Every vector in the shared corpus must also be REJECTED by the save-time
+    // predicate, not merely stripped at render time. isPolicySourceSafe is a
+    // plain boolean (string-equality on the normalized parsed-vs-purified
+    // output, render-markdown.ts:155-159) — it never throws, so each dangerous
+    // vector asserts `toBe(false)`. This locks the save-time refusal contract
+    // alongside the render-time strip contract above.
+    for (const { name, input } of xssVectors) {
+      it(`rejects: ${name}`, () => {
+        expect(isPolicySourceSafe(input)).toBe(false);
+      });
+    }
+  });
+
+  describe('normalization-boundary safe content (numeric/named entities)', () => {
+    // normalizeEntitiesForComparison (render-markdown.ts:118-126) decodes only
+    // the apostrophe/quote entity family on BOTH sides of the equality check,
+    // because marked emits &#39;/&quot; for ASCII ' and " while DOMPurify
+    // normalizes them back to literal characters. These fixtures assert the
+    // boundary holds: content carrying those numeric entities is accepted
+    // (no false-positive strip). &#x3C; (a literal '<') is intentionally NOT
+    // in this set — it decodes to a structural char and is correctly rejected.
+    it('accepts &#39; numeric apostrophe entity', () => {
+      expect(isPolicySourceSafe('it&#39;s here')).toBe(true);
+    });
+
+    it('accepts &#x27; hex apostrophe entity', () => {
+      expect(isPolicySourceSafe('don&#x27;t stop')).toBe(true);
+    });
+
+    it('accepts &#34; numeric double-quote entity', () => {
+      expect(isPolicySourceSafe('a &#34;quoted&#34; phrase')).toBe(true);
     });
   });
 
