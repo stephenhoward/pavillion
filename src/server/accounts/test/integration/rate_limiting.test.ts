@@ -7,6 +7,9 @@ import {
   applicationByIp,
   applicationByEmail,
   confirmApplicationByIp,
+  registerByIp,
+  registerByEmail,
+  acceptInvitationByIp,
 } from '@/server/common/middleware/rate-limiters';
 
 /**
@@ -55,6 +58,15 @@ describeOrSkip('Account Application Rate Limiting Integration Tests', () => {
     });
     app.post('/confirm-ip-only', confirmApplicationByIp, (req, res) => {
       res.json({ route: 'confirm' });
+    });
+    app.post('/register-ip-only', registerByIp, (req, res) => {
+      res.json({ route: 'register-ip' });
+    });
+    app.post('/register-email-only', registerByEmail, (req, res) => {
+      res.json({ route: 'register-email' });
+    });
+    app.post('/accept-invitation-ip-only', acceptInvitationByIp, (req, res) => {
+      res.json({ route: 'accept-invitation-ip' });
     });
   });
 
@@ -251,6 +263,200 @@ describeOrSkip('Account Application Rate Limiting Integration Tests', () => {
       );
       expect(realPost.status).toBe(429);
       expect(realPost.body.errorName).toBe('RateLimitError');
+
+      await realEnv.cleanup();
+    });
+  });
+
+  describe('registerByEmail', () => {
+    it('should return 429 once the per-email limit is exhausted, incrementing uniformly regardless of account existence', async () => {
+      const maxRequests = config.get<number>('rateLimit.register.byEmail.max');
+
+      // Unique email so this test owns its own credential bucket. This email
+      // maps to no account, yet it still exhausts the limiter — and the
+      // key-isolation test below uses an equally non-existent email — proving
+      // the limiter increments uniformly and cannot be used to enumerate which
+      // emails are registered (DEC-004).
+      const sameEmail = `register-email-${Date.now()}@example.com`;
+      const responses = [];
+      for (let i = 0; i < maxRequests + 1; i++) {
+        responses.push(
+          await request(app)
+            .post('/register-email-only')
+            .send({ email: sameEmail }),
+        );
+      }
+
+      for (let i = 0; i < maxRequests; i++) {
+        expect(responses[i].status).toBe(200);
+      }
+
+      const blocked = responses[maxRequests];
+      expect(blocked.status).toBe(429);
+      expect(blocked.body.errorName).toBe('RateLimitError');
+      expect(blocked.body.error).toBe(
+        'Too many register requests for this email, please try again later.',
+      );
+      // Generic 429 body never echoes the email or IP that was throttled.
+      expect(JSON.stringify(blocked.body)).not.toContain(sameEmail);
+
+      expect(blocked.headers['ratelimit-limit']).toBe(String(maxRequests));
+      expect(blocked.headers['ratelimit-remaining']).toBe('0');
+      expect(blocked.headers['retry-after']).toBeDefined();
+    });
+
+    it('should isolate buckets per email: exhausting email A leaves email B unthrottled', async () => {
+      const maxRequests = config.get<number>('rateLimit.register.byEmail.max');
+
+      const emailA = `register-isolation-a-${Date.now()}@example.com`;
+      const emailB = `register-isolation-b-${Date.now()}@example.com`;
+
+      // Exhaust email A to 429.
+      let lastA;
+      for (let i = 0; i < maxRequests + 1; i++) {
+        lastA = await request(app)
+          .post('/register-email-only')
+          .send({ email: emailA });
+      }
+      expect(lastA!.status).toBe(429);
+
+      // Email B has its own bucket and must still be accepted.
+      const responseB = await request(app)
+        .post('/register-email-only')
+        .send({ email: emailB });
+      expect(responseB.status).toBe(200);
+    });
+  });
+
+  describe('registerByIp', () => {
+    it('should return 429 once the per-IP limit is exhausted, and the same singleton limiter is wired on POST /api/v1/register', async () => {
+      const ipMax = config.get<number>('rateLimit.register.byIp.max');
+
+      // Vary the email so the email-keyed limiter (mounted on a separate route
+      // in this file) cannot be the cause of any blocking here.
+      const responses = [];
+      for (let i = 0; i < ipMax + 1; i++) {
+        responses.push(
+          await request(app)
+            .post('/register-ip-only')
+            .send({ email: `register-ip-${i}@example.com` }),
+        );
+      }
+
+      for (let i = 0; i < ipMax; i++) {
+        expect(responses[i].status).toBe(200);
+      }
+
+      const blocked = responses[ipMax];
+      expect(blocked.status).toBe(429);
+      expect(blocked.body.errorName).toBe('RateLimitError');
+      expect(blocked.body.error).toBe(
+        'Too many register requests from this IP, please try again later.',
+      );
+      expect(blocked.headers['ratelimit-limit']).toBe(String(ipMax));
+      expect(blocked.headers['ratelimit-remaining']).toBe('0');
+      expect(blocked.headers['retry-after']).toBeDefined();
+
+      // Phase 2: prove the same `registerByIp` singleton is wired onto the
+      // real POST /api/v1/register route. The IP limiter store is module-global
+      // and already exhausted above, so a fresh request to the real route
+      // (still on localhost) must short-circuit at 429 before the handler runs.
+      // Imports are deferred so full-server init cost is only paid when this
+      // test actually runs.
+      const { TestEnvironment } = await import('@/server/common/test/lib/test_environment');
+      const { EventEmitter } = await import('events');
+      const { default: AccountService } = await import('@/server/accounts/service/account');
+      const { default: ConfigurationInterface } = await import('@/server/configuration/interface');
+      const { default: SetupInterface } = await import('@/server/setup/interface');
+
+      const realEnv = new TestEnvironment();
+      await realEnv.init();
+
+      // Setup-mode middleware returns 503 for unauthenticated API calls until
+      // an admin exists; provision one so the rate limiter is what blocks.
+      const accountService = new AccountService(
+        new EventEmitter(),
+        new ConfigurationInterface(),
+        new SetupInterface(),
+      );
+      await accountService._setupAccount('rate-limit-register-admin@pavillion.dev', 'testpassword!1');
+
+      const realPost = await request(realEnv.app)
+        .post('/api/v1/register')
+        .send({ email: `real-route-register-${Date.now()}@example.com` });
+      expect(realPost.status).toBe(429);
+      expect(realPost.body.errorName).toBe('RateLimitError');
+      expect(realPost.body.error).toBe(
+        'Too many register requests from this IP, please try again later.',
+      );
+
+      await realEnv.cleanup();
+    });
+  });
+
+  describe('acceptInvitationByIp', () => {
+    it('should return 429 once the per-IP limit is exhausted, and the same singleton limiter is wired on POST /api/v1/invitations/:code', async () => {
+      const ipMax = config.get<number>('rateLimit.invitation.accept.byIp.max');
+
+      // Vary the path code so nothing else can be the cause of any blocking;
+      // this limiter is IP-keyed and shares localhost across the suite.
+      const responses = [];
+      for (let i = 0; i < ipMax + 1; i++) {
+        responses.push(
+          await request(app)
+            .post('/accept-invitation-ip-only')
+            .send({ password: `testpassword!1-${i}` }),
+        );
+      }
+
+      for (let i = 0; i < ipMax; i++) {
+        expect(responses[i].status).toBe(200);
+      }
+
+      const blocked = responses[ipMax];
+      expect(blocked.status).toBe(429);
+      expect(blocked.body.errorName).toBe('RateLimitError');
+      expect(blocked.body.error).toBe(
+        'Too many invitation-accept requests from this IP, please try again later.',
+      );
+      // Generic 429 body never echoes the throttled key.
+      expect(JSON.stringify(blocked.body)).not.toContain('127.0.0.1');
+      expect(blocked.headers['ratelimit-limit']).toBe(String(ipMax));
+      expect(blocked.headers['ratelimit-remaining']).toBe('0');
+      expect(blocked.headers['retry-after']).toBeDefined();
+
+      // Phase 2: prove the same `acceptInvitationByIp` singleton is wired onto
+      // the real POST /api/v1/invitations/:code route. The IP limiter store is
+      // module-global and already exhausted above, so a fresh request to the
+      // real route (still on localhost) must short-circuit at 429 before the
+      // handler runs. Imports are deferred so full-server init cost is only
+      // paid when this test actually runs.
+      const { TestEnvironment } = await import('@/server/common/test/lib/test_environment');
+      const { EventEmitter } = await import('events');
+      const { default: AccountService } = await import('@/server/accounts/service/account');
+      const { default: ConfigurationInterface } = await import('@/server/configuration/interface');
+      const { default: SetupInterface } = await import('@/server/setup/interface');
+
+      const realEnv = new TestEnvironment();
+      await realEnv.init();
+
+      // Setup-mode middleware returns 503 for unauthenticated API calls until
+      // an admin exists; provision one so the rate limiter is what blocks.
+      const accountService = new AccountService(
+        new EventEmitter(),
+        new ConfigurationInterface(),
+        new SetupInterface(),
+      );
+      await accountService._setupAccount('rate-limit-invitation-admin@pavillion.dev', 'testpassword!1');
+
+      const realPost = await request(realEnv.app)
+        .post('/api/v1/invitations/any-code-here')
+        .send({ password: 'testpassword!1' });
+      expect(realPost.status).toBe(429);
+      expect(realPost.body.errorName).toBe('RateLimitError');
+      expect(realPost.body.error).toBe(
+        'Too many invitation-accept requests from this IP, please try again later.',
+      );
 
       await realEnv.cleanup();
     });

@@ -6,6 +6,7 @@ import { TestEnvironment } from '@/server/common/test/lib/test_environment';
 import AccountService from '@/server/accounts/service/account';
 import ConfigurationInterface from '@/server/configuration/interface';
 import SetupInterface from '@/server/setup/interface';
+import ExpressHelper from '@/server/common/helper/express';
 import { EventEmitter } from 'events';
 
 /**
@@ -139,6 +140,42 @@ describeOrSkip('Authentication Rate Limiting Integration Tests', () => {
     });
   });
 
+  describe('Password Reset Confirm Rate Limiting', () => {
+    it('should enforce IP-based rate limit on password reset confirm (token brute-force defense)', async () => {
+      const maxAttempts = 20; // From config: rateLimit.passwordReset.confirm.byIp.max
+      const responses = [];
+
+      // Each request uses a distinct (invalid) code so the limiter, not the
+      // handler, is what stops us — the IP-keyed confirm limiter increments
+      // uniformly regardless of whether the token is valid.
+      for (let i = 0; i < maxAttempts + 5; i++) {
+        const response = await request(env.app)
+          .post(`/api/auth/v1/reset-password/invalid-code-${i}`)
+          .send({ password: 'newpassword123' });
+
+        responses.push(response);
+
+        if (response.status === 429) {
+          break;
+        }
+      }
+
+      // Should have at least one 429 response
+      const rateLimitedResponses = responses.filter(r => r.status === 429);
+      expect(rateLimitedResponses.length).toBeGreaterThan(0);
+
+      // Verify the rate limited response has the generic IP error message
+      const rateLimitedResponse = rateLimitedResponses[0];
+      expect(rateLimitedResponse.body.error).toBe('Too many password-reset-confirm requests from this IP, please try again later.');
+      expect(rateLimitedResponse.body.errorName).toBe('RateLimitError');
+
+      // Verify rate limit headers
+      expect(rateLimitedResponse.headers['ratelimit-limit']).toBe(String(maxAttempts));
+      expect(rateLimitedResponse.headers['ratelimit-remaining']).toBe('0');
+      expect(rateLimitedResponse.headers['retry-after']).toBeDefined();
+    });
+  });
+
   describe('Login Rate Limiting', () => {
     it('should include rate limit headers in login response', async () => {
       const response = await request(env.app)
@@ -223,6 +260,87 @@ describeOrSkip('Authentication Rate Limiting Integration Tests', () => {
     });
   });
 
+  describe('Email Change Rate Limiting', () => {
+    // The email-change limiter is account-keyed (createAccountRateLimiter), not
+    // IP-keyed, so each authenticated account gets its own independent window.
+    // changeEmail increments the limiter uniformly on every attempt
+    // (skipFailedRequests: false), so a deliberately-wrong password drives the
+    // counter to the threshold without mutating the account's email — and lets
+    // us assert the limiter, not the handler, is what produces the 429.
+    const emailChangeMax = 10; // From config: rateLimit.emailChange.byAccount.max
+
+    // Mint the JWT directly from the account model rather than via env.login():
+    // the login route is throttled by the shared IP login limiter (10/15m),
+    // which earlier tests in this file may have already exhausted. The
+    // email-change limiter is what we are exercising here, so we bypass login.
+    it('should enforce account-based rate limit on email change (429 at threshold)', async () => {
+      const email = `emailchange-a-${Date.now()}@pavillion.dev`;
+      const { account } = await accountService._setupAccount(email, testPassword);
+      const token = ExpressHelper.generateJWT(account);
+
+      const responses = [];
+      for (let i = 0; i < emailChangeMax + 5; i++) {
+        const response = await env.authPost(token, '/api/auth/v1/email', {
+          email: `new-${Date.now()}-${i}@example.com`,
+          password: 'wrongpassword', // fails the handler but still increments the limiter
+        });
+        responses.push(response);
+
+        if (response.status === 429) {
+          break;
+        }
+      }
+
+      // Should have at least one 429 once the account exhausts its window.
+      const rateLimitedResponses = responses.filter(r => r.status === 429);
+      expect(rateLimitedResponses.length).toBeGreaterThan(0);
+
+      // Verify the generic account-keyed error body (DEC-004: never echoes the
+      // account id).
+      const rateLimitedResponse = rateLimitedResponses[0];
+      expect(rateLimitedResponse.body.error).toBe('Too many email-change requests for this account, please try again later.');
+      expect(rateLimitedResponse.body.errorName).toBe('RateLimitError');
+      expect(rateLimitedResponse.body).not.toHaveProperty('accountId');
+
+      // Verify rate limit headers.
+      expect(rateLimitedResponse.headers['ratelimit-limit']).toBe(String(emailChangeMax));
+      expect(rateLimitedResponse.headers['ratelimit-remaining']).toBe('0');
+      expect(rateLimitedResponse.headers['retry-after']).toBeDefined();
+    });
+
+    it('should isolate the email-change limit per account (account A exhausted, account B unaffected)', async () => {
+      const emailA = `emailchange-isoA-${Date.now()}@pavillion.dev`;
+      const emailB = `emailchange-isoB-${Date.now()}@pavillion.dev`;
+      const { account: accountA } = await accountService._setupAccount(emailA, testPassword);
+      const { account: accountB } = await accountService._setupAccount(emailB, testPassword);
+      const tokenA = ExpressHelper.generateJWT(accountA);
+      const tokenB = ExpressHelper.generateJWT(accountB);
+
+      // Exhaust account A's window.
+      let accountARateLimited = false;
+      for (let i = 0; i < emailChangeMax + 5; i++) {
+        const response = await env.authPost(tokenA, '/api/auth/v1/email', {
+          email: `iso-a-${Date.now()}-${i}@example.com`,
+          password: 'wrongpassword',
+        });
+        if (response.status === 429) {
+          accountARateLimited = true;
+          break;
+        }
+      }
+      expect(accountARateLimited).toBe(true);
+
+      // Account B is a distinct key and must NOT be rate limited by A's
+      // exhaustion. Since this is account-keyed (not IP-keyed) and both requests
+      // share localhost, a non-429 response here proves the key isolation.
+      const responseB = await env.authPost(tokenB, '/api/auth/v1/email', {
+        email: `iso-b-${Date.now()}@example.com`,
+        password: 'wrongpassword',
+      });
+      expect(responseB.status).not.toBe(429);
+    });
+  });
+
   describe('Rate Limit Header Format', () => {
     it('should return standard rate limit headers format', async () => {
       const response = await request(env.app)
@@ -276,3 +394,4 @@ describeOrSkip('Authentication Rate Limiting Integration Tests', () => {
     });
   });
 });
+

@@ -32,7 +32,10 @@ export function createIpRateLimiter(
     handler: (req: Request, res: Response) => {
       const ip = req.ip || req.socket.remoteAddress || 'unknown';
 
-      logger.warn({ ip, endpoint: endpointName }, 'Rate limit exceeded');
+      // DEC-004: raw visitor IP is logged only at debug level for rate-limit
+      // enforcement on anonymous/public endpoints, never at warn/info (which would
+      // build a browsing-history trail tied to IP in standard log output).
+      logger.debug({ ip, endpoint: endpointName }, 'Rate limit exceeded');
 
       // Generate endpoint-specific error message
       const errorMessage = endpointName === 'password-reset'

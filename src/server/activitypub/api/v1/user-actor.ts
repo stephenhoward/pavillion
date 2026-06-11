@@ -2,6 +2,10 @@ import express, { Request, Response, Application, RequestHandler } from 'express
 
 import UserActorService from '@/server/activitypub/service/user_actor';
 import { verifyHttpSignature } from '@/server/activitypub/helper/http_signature';
+import {
+  createActorRateLimiter,
+  createUserRateLimiter,
+} from '@/server/activitypub/middleware/rate-limit';
 import { createLogger } from '@/server/common/helper/logger';
 
 const logger = createLogger('activitypub');
@@ -34,8 +38,15 @@ export default class UserActorRoutes {
     // Public endpoint - Person actor discovery
     router.get('/users/:username', this.getUserActor.bind(this));
 
-    // Secure endpoint - User inbox requires HTTP signature
-    router.post('/users/:username/inbox', verifyHttpSignature as RequestHandler, this.postToInbox.bind(this));
+    // Secure endpoint - User inbox requires HTTP signature.
+    // Rate limiters run BEFORE signature verification, mirroring the calendar
+    // inbox chain (activitypub/api/v1/server.ts), so abusive senders are shed
+    // at the ingest boundary before any signature work (DEC-013).
+    router.post('/users/:username/inbox',
+      createActorRateLimiter(),
+      createUserRateLimiter(),
+      verifyHttpSignature as RequestHandler,
+      this.postToInbox.bind(this));
 
     // Outbox endpoint - basic implementation (no auth for now, as it returns empty collection)
     router.get('/users/:username/outbox', this.getUserOutbox.bind(this));

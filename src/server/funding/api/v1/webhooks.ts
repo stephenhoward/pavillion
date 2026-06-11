@@ -2,6 +2,7 @@ import express, { Request, Response, Application, Router } from 'express';
 import FundingInterface from '@/server/funding/interface';
 import { ProviderNotConfiguredError, WebhookSignatureError } from '@/common/exceptions/funding';
 import { logError } from '@/server/common/helper/error-logger';
+import { fundingWebhookByIp } from '@/server/common/middleware/rate-limiters';
 
 /**
  * Webhook route handlers for payment provider events
@@ -25,9 +26,14 @@ export default class WebhookRoutes {
   installHandlers(app: Application, routePrefix: string): void {
     const router = Router();
 
-    // Stripe webhook endpoint - needs raw body for signature verification
+    // Stripe webhook endpoint - needs raw body for signature verification.
+    // The per-IP limiter runs before the raw-body parser so it cannot disturb
+    // body handling; it is belt-and-braces behind signature verification
+    // (DEC-007) and is tuned generously so it never gates legitimate Stripe
+    // delivery or retries.
     router.post(
       '/webhooks/stripe',
+      fundingWebhookByIp,
       express.raw({ type: 'application/json' }),
       this.handleStripeWebhook.bind(this),
     );

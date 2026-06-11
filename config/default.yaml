@@ -86,6 +86,16 @@ rateLimit:
     byEmail:
       windowMs: 3600000  # 1 hour in milliseconds
       max: 3  # 3 requests per email per hour
+    confirm:
+      byIp:
+        windowMs: 900000  # 15 minutes in milliseconds
+        # Token brute-force defense for POST /api/auth/v1/reset-password/:code.
+        # Threshold matches application.confirm.byIp (20/15m): the audit
+        # (pv-qqno.1, OQ3 verdict) found reset codes are randomBytes(16) =
+        # 128-bit CSPRNG (account.ts:528) with 1-hour expiry, exceeding UUIDv4
+        # entropy. The keyspace is far too large to brute-force, so this is an
+        # abuse cap rather than a guessing wall and does not need a tighter limit.
+        max: 20  # 20 confirmation attempts per IP per 15 minutes
   login:
     byIp:
       windowMs: 900000  # 15 minutes in milliseconds
@@ -100,6 +110,9 @@ rateLimit:
     calendar:
       windowMs: 60000  # 1 minute in milliseconds
       max: 120  # 120 requests per calendar per minute
+    user:
+      windowMs: 60000  # 1 minute in milliseconds
+      max: 120  # 120 requests per user inbox per minute
   moderation:
     reportByIp:
       windowMs: 900000  # 15 minutes in milliseconds
@@ -133,6 +146,16 @@ rateLimit:
     byAccount:
       windowMs: 900000  # 15 minutes in milliseconds
       max: 10  # 10 requests per account per 15 minutes
+  fundingWebhook:
+    byIp:
+      windowMs: 60000  # 1 minute in milliseconds
+      # Deliberately generous. Stripe signature verification (DEC-007) is the
+      # primary defense for POST /api/funding/webhooks/stripe; this limiter is
+      # belt-and-braces only and must never gate legitimate Stripe delivery,
+      # which can burst many events per minute and aggressively retries failed
+      # (non-2xx) deliveries for up to 72 hours. 300/min sits well above any
+      # realistic legitimate burst from a single Stripe source IP.
+      max: 300  # 300 requests per IP per minute
   importSource:
     verifyBySource:
       windowMs: 3600000  # 1 hour in milliseconds
@@ -159,6 +182,30 @@ rateLimit:
       byIp:
         windowMs: 900000  # 15 minutes in milliseconds
         max: 20  # 20 confirmation attempts per IP per 15 minutes
+  register:
+    byIp:
+      windowMs: 900000  # 15 minutes in milliseconds
+      max: 5  # 5 registration submissions per IP per 15 minutes
+    byEmail:
+      windowMs: 3600000  # 1 hour in milliseconds
+      max: 3  # 3 registration submissions per email per hour
+  invitation:
+    accept:
+      byIp:
+        windowMs: 900000  # 15 minutes in milliseconds
+        max: 20  # 20 invitation acceptance attempts per IP per 15 minutes
+  emailChange:
+    byAccount:
+      windowMs: 3600000  # 1 hour in milliseconds
+      # Probe/enumeration defense-in-depth for POST /api/auth/v1/email. The
+      # audit (pv-qqno.1, OQ2 verdict) found that changeEmail verifies the
+      # password then writes the new email directly to the DB: there is NO
+      # outbound email and NO confirm route, so the original outbound-email
+      # amplifier rationale does not apply. The residual risk is password-oracle
+      # probing (InvalidPasswordError) and email-existence enumeration
+      # (EmailAlreadyExistsError). This account-keyed cap bounds that probe rate;
+      # it does not close the differential-response enumeration oracle itself.
+      max: 10  # 10 email-change attempts per account per hour
 
 # Housekeeping configuration for automated server maintenance
 housekeeping:

@@ -44,7 +44,11 @@ export function createAccountRateLimiter(
       const account = req.user as Account;
       const accountId = account?.id || 'unknown';
 
-      logger.warn({ accountId, endpoint: endpointName }, 'Rate limit exceeded');
+      // DEC-004: the account id is account-identifying; log rate-limit
+      // enforcement only at debug level, never at warn/info (which would build
+      // a per-account activity trail in standard log output). Mirrors the
+      // debug-level posture of the IP and credential limiters.
+      logger.debug({ accountId, endpoint: endpointName }, 'Rate limit exceeded');
 
       res.status(429).json({
         error: `Too many ${endpointName} requests for this account, please try again later.`,

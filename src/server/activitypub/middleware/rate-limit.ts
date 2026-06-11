@@ -156,6 +156,11 @@ type ActorRateLimitStore = RateLimitStore<string>;
 type CalendarRateLimitStore = RateLimitStore<string>;
 
 /**
+ * Type alias for user-based rate limiting
+ */
+type UserRateLimitStore = RateLimitStore<string>;
+
+/**
  * Get ActivityPub actor rate limit configuration
  */
 function getActorRateLimitConfig() {
@@ -175,9 +180,20 @@ function getCalendarRateLimitConfig() {
   };
 }
 
+/**
+ * Get ActivityPub user rate limit configuration
+ */
+function getUserRateLimitConfig() {
+  return {
+    max: config.get<number>('rateLimit.activitypub.user.max'),
+    windowMs: config.get<number>('rateLimit.activitypub.user.windowMs'),
+  };
+}
+
 // Shared store instances
 let sharedActorStore: ActorRateLimitStore | null = null;
 let sharedCalendarStore: CalendarRateLimitStore | null = null;
+let sharedUserStore: UserRateLimitStore | null = null;
 
 /**
  * Gets or creates the shared actor rate limit store
@@ -203,6 +219,19 @@ function getCalendarStore(windowMs: number): CalendarRateLimitStore {
     sharedCalendarStore = new RateLimitStore<string>(windowMs);
   }
   return sharedCalendarStore;
+}
+
+/**
+ * Gets or creates the shared user rate limit store
+ *
+ * @param windowMs - Time window in milliseconds
+ * @returns The shared store instance
+ */
+function getUserStore(windowMs: number): UserRateLimitStore {
+  if (!sharedUserStore) {
+    sharedUserStore = new RateLimitStore<string>(windowMs);
+  }
+  return sharedUserStore;
 }
 
 /**
@@ -249,6 +278,49 @@ function extractCalendarFromRequest(req: Request): string | null {
 }
 
 /**
+ * Extracts the username from the request parameters.
+ *
+ * @param req - Express request object
+ * @returns The username or null if not found
+ */
+function extractUserFromRequest(req: Request): string | null {
+  // Route parameter is :username in user-actor.ts
+  const username = req.params?.username;
+
+  if (typeof username === 'string' && username.length > 0) {
+    return username;
+  }
+
+  return null;
+}
+
+/**
+ * Marker property attached to every ActivityPub rate-limit middleware returned by the
+ * factories below. The common express-rate-limit limiters are self-identifying (they
+ * expose `getKey`/`resetKey` methods), but these AP limiters are plain closures over an
+ * in-memory LRU store and carry no such signature. The rate-limit coverage guard test
+ * (`src/server/common/test/rate-limit-coverage.test.ts`) walks the real router stack and
+ * uses this marker to recognize AP inbox limiters by presence rather than by fragile
+ * function-name matching. The property is non-enumerable so it never leaks into
+ * serialization or middleware introspection elsewhere.
+ */
+export const AP_RATE_LIMITER_MARKER = '__pavillionApRateLimiter';
+
+/**
+ * Tags a middleware closure as an ActivityPub rate limiter so the coverage guard test can
+ * detect it by presence. Returns the same function for fluent use in the factories.
+ */
+function markAsApRateLimiter(handler: RequestHandler): RequestHandler {
+  Object.defineProperty(handler, AP_RATE_LIMITER_MARKER, {
+    value: true,
+    enumerable: false,
+    writable: false,
+    configurable: false,
+  });
+  return handler;
+}
+
+/**
  * Creates an Express middleware for per-actor rate limiting on ActivityPub inbox endpoints.
  *
  * This middleware limits the number of requests from each unique actor (identified by
@@ -278,7 +350,7 @@ export function createActorRateLimiter(
   const finalWindowMs = windowMs ?? actorConfig.windowMs;
   const store = getActorStore(finalWindowMs);
 
-  return (req: Request, res: Response, next: NextFunction) => {
+  return markAsApRateLimiter((req: Request, res: Response, next: NextFunction) => {
     const actorId = extractActorFromRequest(req);
 
     // If no actor can be identified, allow the request but log a warning
@@ -305,7 +377,7 @@ export function createActorRateLimiter(
     }
 
     next();
-  };
+  });
 }
 
 /**
@@ -338,7 +410,7 @@ export function createCalendarRateLimiter(
   const finalWindowMs = windowMs ?? calendarConfig.windowMs;
   const store = getCalendarStore(finalWindowMs);
 
-  return (req: Request, res: Response, next: NextFunction) => {
+  return markAsApRateLimiter((req: Request, res: Response, next: NextFunction) => {
     const calendarUrlName = extractCalendarFromRequest(req);
 
     // If no calendar can be identified, allow the request but log a warning
@@ -365,7 +437,71 @@ export function createCalendarRateLimiter(
     }
 
     next();
-  };
+  });
+}
+
+/**
+ * Creates an Express middleware for per-user rate limiting on the user (Person)
+ * ActivityPub inbox endpoint.
+ *
+ * This middleware limits the total number of requests to each user's inbox endpoint
+ * within a sliding time window, keyed on the username path parameter, regardless of
+ * which actor is making the request.
+ *
+ * Default values are loaded from config (rateLimit.activitypub.user.*). The global
+ * rateLimit.enabled flag should be checked before installing this middleware on routes.
+ *
+ * @param maxRequests - Maximum number of requests allowed per user in the time window (default from config)
+ * @param windowMs - Time window in milliseconds (default from config)
+ * @returns Express middleware function that enforces rate limiting
+ *
+ * @example
+ * // Use defaults from config
+ * router.post('/users/:username/inbox', createUserRateLimiter(), inboxHandler);
+ *
+ * @example
+ * // Custom limits: 60 requests per 30 seconds
+ * router.post('/users/:username/inbox', createUserRateLimiter(60, 30000), inboxHandler);
+ */
+export function createUserRateLimiter(
+  maxRequests?: number,
+  windowMs?: number,
+): RequestHandler {
+  const userConfig = getUserRateLimitConfig();
+  const finalMaxRequests = maxRequests ?? userConfig.max;
+  const finalWindowMs = windowMs ?? userConfig.windowMs;
+  const store = getUserStore(finalWindowMs);
+
+  return markAsApRateLimiter((req: Request, res: Response, next: NextFunction) => {
+    const username = extractUserFromRequest(req);
+
+    // If no user can be identified, allow the request but log a warning
+    // The downstream handler should validate the request anyway
+    if (!username) {
+      logger.warn('Could not extract user from request, allowing request');
+      return next();
+    }
+
+    const result = store.check(username, finalMaxRequests);
+
+    if (!result.allowed) {
+      const retryAfterMs = store.getRetryAfter(username);
+      const retryAfterSeconds = Math.ceil(retryAfterMs / 1000);
+
+      // DEC-004: do not log the local-account username (it is account-identifying PII).
+      // count/max are sufficient for ops diagnostics without tying the event to a named account.
+      logger.warn({ count: result.count, max: finalMaxRequests }, 'Rate limit exceeded for user inbox');
+
+      res.setHeader('Retry-After', String(retryAfterSeconds));
+      res.status(429).json({
+        error: 'Too many requests to this user, please try again later.',
+        retryAfter: retryAfterSeconds,
+      });
+      return;
+    }
+
+    next();
+  });
 }
 
 /**
@@ -412,4 +548,27 @@ export function getCalendarRateLimitStore(windowMs?: number): CalendarRateLimitS
   const calendarConfig = getCalendarRateLimitConfig();
   const finalWindowMs = windowMs ?? calendarConfig.windowMs;
   return getCalendarStore(finalWindowMs);
+}
+
+/**
+ * Resets the user rate limit store. Useful for testing.
+ */
+export function resetUserRateLimitStore(): void {
+  if (sharedUserStore) {
+    sharedUserStore.destroy();
+    sharedUserStore = null;
+  }
+}
+
+/**
+ * Gets the current user store for testing purposes.
+ * Creates a new store if one doesn't exist.
+ *
+ * @param windowMs - Time window in milliseconds (default from config)
+ * @returns The store instance
+ */
+export function getUserRateLimitStore(windowMs?: number): UserRateLimitStore {
+  const userConfig = getUserRateLimitConfig();
+  const finalWindowMs = windowMs ?? userConfig.windowMs;
+  return getUserStore(finalWindowMs);
 }

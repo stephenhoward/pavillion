@@ -202,6 +202,23 @@ export const checkoutSessionByAccount: RequestHandler = isRateLimitEnabled()
   : noOpMiddleware;
 
 /**
+ * Stripe funding webhook rate limiter by IP address.
+ * Limits: 300 requests per IP per minute (default config).
+ *
+ * Belt-and-braces behind Stripe signature verification (DEC-007), which is the
+ * primary defense for POST /api/funding/webhooks/stripe. Deliberately generous:
+ * Stripe can deliver many events per minute and retries failed deliveries for
+ * up to 72 hours, so this limiter must never gate legitimate provider traffic.
+ */
+export const fundingWebhookByIp: RequestHandler = isRateLimitEnabled()
+  ? createIpRateLimiter(
+    config.get<number>('rateLimit.fundingWebhook.byIp.max'),
+    config.get<number>('rateLimit.fundingWebhook.byIp.windowMs'),
+    'funding-webhook',
+  )
+  : noOpMiddleware;
+
+/**
  * Import source DNS verification rate limiter, keyed by the source's route
  * param (`id`). Each import source maps to a single hostname, so capping
  * per-source throttles DNS-verification load against the source's hostname
@@ -298,6 +315,35 @@ export const applicationByEmail: RequestHandler = isRateLimitEnabled()
   : noOpMiddleware;
 
 /**
+ * Public account registration rate limiter by IP address.
+ * Limits: 5 requests per IP per 15 minutes (default config).
+ */
+export const registerByIp: RequestHandler = isRateLimitEnabled()
+  ? createIpRateLimiter(
+    config.get<number>('rateLimit.register.byIp.max'),
+    config.get<number>('rateLimit.register.byIp.windowMs'),
+    'register',
+  )
+  : noOpMiddleware;
+
+/**
+ * Public account registration rate limiter by email address.
+ *
+ * Limits: 3 requests per email per 1 hour (default config). The limiter
+ * increments uniformly on every attempt regardless of whether the email
+ * already maps to an account, so the rate-limit signal cannot be used to
+ * enumerate registered accounts (DEC-004).
+ */
+export const registerByEmail: RequestHandler = isRateLimitEnabled()
+  ? createCredentialRateLimiter(
+    config.get<number>('rateLimit.register.byEmail.max'),
+    config.get<number>('rateLimit.register.byEmail.windowMs'),
+    'register',
+    'email',
+  )
+  : noOpMiddleware;
+
+/**
  * Application email-confirmation rate limiter by IP address.
  * Limits: 20 requests per IP per 15 minutes (default config).
  */
@@ -306,5 +352,60 @@ export const confirmApplicationByIp: RequestHandler = isRateLimitEnabled()
     config.get<number>('rateLimit.application.confirm.byIp.max'),
     config.get<number>('rateLimit.application.confirm.byIp.windowMs'),
     'application-confirm',
+  )
+  : noOpMiddleware;
+
+/**
+ * Password-reset confirmation rate limiter by IP address.
+ *
+ * Caps token-redemption attempts against POST /api/auth/v1/reset-password/:code
+ * to defend against brute-force guessing of reset codes.
+ *
+ * Limits: 20 requests per IP per 15 minutes (default config).
+ */
+export const confirmPasswordResetByIp: RequestHandler = isRateLimitEnabled()
+  ? createIpRateLimiter(
+    config.get<number>('rateLimit.passwordReset.confirm.byIp.max'),
+    config.get<number>('rateLimit.passwordReset.confirm.byIp.windowMs'),
+    'password-reset-confirm',
+  )
+  : noOpMiddleware;
+
+/**
+ * Invitation-acceptance rate limiter by IP address.
+ *
+ * Caps token-redemption attempts against POST /api/v1/invitations/:code to
+ * defend against brute-force guessing of invitation codes.
+ *
+ * Limits: 20 requests per IP per 15 minutes (default config).
+ */
+export const acceptInvitationByIp: RequestHandler = isRateLimitEnabled()
+  ? createIpRateLimiter(
+    config.get<number>('rateLimit.invitation.accept.byIp.max'),
+    config.get<number>('rateLimit.invitation.accept.byIp.windowMs'),
+    'invitation-accept',
+  )
+  : noOpMiddleware;
+
+/**
+ * Email-change rate limiter by authenticated account.
+ *
+ * Caps POST /api/auth/v1/email per account. Per the audit (pv-qqno.1, OQ2
+ * verdict), changeEmail verifies the password then writes the new email
+ * directly to the DB — there is no outbound email and no confirm route, so the
+ * original outbound-email amplifier rationale does not apply. This account-keyed
+ * limiter is probe/enumeration defense-in-depth: it bounds password-oracle
+ * probing (InvalidPasswordError) and email-existence enumeration
+ * (EmailAlreadyExistsError) attempt rate. It does NOT close the differential-
+ * response enumeration oracle itself. Keyed on the authenticated account, so it
+ * must be wired after loggedInOnly.
+ *
+ * Limits: 10 requests per account per 1 hour (default config).
+ */
+export const emailChangeByAccount: RequestHandler = isRateLimitEnabled()
+  ? createAccountRateLimiter(
+    config.get<number>('rateLimit.emailChange.byAccount.max'),
+    config.get<number>('rateLimit.emailChange.byAccount.windowMs'),
+    'email-change',
   )
   : noOpMiddleware;
