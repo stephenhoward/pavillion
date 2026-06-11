@@ -339,6 +339,11 @@ describe('ProcessInboxService.handleLocalActivityDispatch (integration)', () => 
     expect(inboxRow, 'local dispatch must write an inbox row for the Create').not.toBeNull();
     expect(inboxRow!.type).toBe('Create');
     expect(inboxRow!.processed_status).toBe('ok');
+    // Provenance (DEC-013): in-process dispatch rows must record
+    // 'local_dispatch', not inherit the column default 'http_signature'.
+    // auth_origin is null because there is no remote authenticating party.
+    expect(inboxRow!.auth_source).toBe('local_dispatch');
+    expect(inboxRow!.auth_origin).toBeNull();
 
     const apObject = await EventObjectEntity.findOne({ where: { ap_id: apEventId } });
     expect(apObject, 'processCreateEvent must create an EventObjectEntity mapping').not.toBeNull();

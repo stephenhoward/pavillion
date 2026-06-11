@@ -93,8 +93,10 @@ class ActivityPubInboxMessageEntity extends ActivityPubMessageEntity {
   /**
    * Authentication mechanism that admitted this row to the inbox (DEC-013).
    * Open string enum; known values: `'http_signature'` (live inbox POST
-   * verified by HTTP Signatures) and `'outbox_pull'` (follow-backfill
-   * signed-GET outbox crawl). NOT NULL with a `'http_signature'` default
+   * verified by HTTP Signatures), `'outbox_pull'` (follow-backfill
+   * signed-GET outbox crawl), and `'local_dispatch'` (in-process
+   * outbox→inbox dispatch to same-instance recipients; structural trust,
+   * `auth_origin` null). NOT NULL with a `'http_signature'` default
    * so pre-DEC-013 rows backfill on migration.
    *
    * Internal field. NOT serialized via `toModel()` and MUST NOT appear in

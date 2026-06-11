@@ -64,3 +64,11 @@ The choice to make `auth_source` diagnostic rather than access-controlling is de
 - User-perceptible feed latency for follow-backfill is pagination time plus a single end-of-pagination drain, not per-page dispatch. At the 60 req/min per-host rate limit, a 50-page outbox takes ~50 seconds minimum before the user sees any backfilled history. Per-page drain is not an option — it would dispatch Undos before their target Announces on reverse-chronological outboxes, breaking the strict cross-check.
 - Schema migration adds two columns to `ap_inbox`. PostgreSQL ≥11 makes `ADD COLUMN ... DEFAULT` a metadata-only operation; older versions backfill synchronously. Production version must be verified before deploying.
 - `auth_source` is an open string enum, not a closed union. Application-layer code must treat unknown values as opaque diagnostic data rather than branching on them.
+
+## Amendment 2026-06-10: `'local_dispatch'` provenance value
+
+A third known `auth_source` value is added: `'local_dispatch'`. It tags `ap_inbox` rows produced by the in-process outbox→inbox dispatch path (`ProcessInboxService.handleLocalActivityDispatch`) for same-instance recipients — the case where a local calendar's outbox activity is delivered to another local calendar's inbox without ever leaving the process.
+
+This is a **provenance** value recording structural trust, not remote authentication. Trust for these rows is structural: the activity never left the process, so there is no signed HTTP POST and no remote party to verify it against. `'local_dispatch'` must not be read to imply that any remote server was authenticated. Accordingly, `auth_origin` is `null` for these rows — there is no remote authenticating party to record.
+
+This amendment is additive and consistent with the original decision: the column was always an open string enum, and adding a value requires no schema or migration change (the `NOT NULL DEFAULT 'http_signature'` default is unchanged). `auth_source` remains diagnostic-only; no handler branches on `'local_dispatch'`. `Status: Accepted` is unchanged — this clarifies an ingest path the original decision already anticipated ("future ingest paths add new values without schema changes"), it does not supersede anything.
