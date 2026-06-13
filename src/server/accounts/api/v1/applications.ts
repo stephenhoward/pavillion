@@ -10,9 +10,9 @@ import { ValidationError } from '@/common/exceptions/base';
 import { logError } from '@/server/common/helper/error-logger';
 import { createLogger } from '@/server/common/helper/logger';
 import {
-  applicationByEmail,
-  applicationByIp,
-  confirmApplicationByIp,
+  limitApplicationByEmail,
+  limitApplicationByIp,
+  limitConfirmApplicationByIp,
 } from '@/server/common/middleware/rate-limiters';
 
 const logger = createLogger('accounts');
@@ -32,8 +32,8 @@ export default class AccountApplicationRouteHandlers {
     // when rate limiting is disabled in config.
     router.post(
       '/applications',
-      applicationByIp,
-      applicationByEmail,
+      limitApplicationByIp,
+      limitApplicationByEmail,
       ...ExpressHelper.noUserOnly,
       this.applyToRegister.bind(this),
     );
@@ -44,7 +44,7 @@ export default class AccountApplicationRouteHandlers {
     // so no session middleware and no CSRF token are applied — either would
     // break the email-link flow. The SPA fires it automatically on mount so
     // the user-facing flow is single-click (the email link itself).
-    router.post('/applications/confirm/:token', confirmApplicationByIp, this.consumeConfirmationToken.bind(this));
+    router.post('/applications/confirm/:token', limitConfirmApplicationByIp, this.consumeConfirmationToken.bind(this));
     router.get('/applications', ...ExpressHelper.adminOnly, this.listApplications.bind(this));
     router.post('/applications/:id', ...ExpressHelper.adminOnly, this.processApplication.bind(this));
     app.use(routePrefix, router);

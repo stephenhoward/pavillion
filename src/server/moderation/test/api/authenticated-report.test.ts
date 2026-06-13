@@ -426,7 +426,7 @@ describe('Authenticated Report API - POST /reports', () => {
       }
 
       // Route should have multiple handlers: loggedInOnly middleware(s),
-      // reportSubmissionByIp, reportSubmissionByAccount, and submitReport handler
+      // limitReportSubmissionByIp, limitReportSubmissionByAccount, and submitReport handler
       // With rate limiting disabled (test env), no-op middleware still counts
       expect(routeHandlerCount).toBeGreaterThanOrEqual(4);
     });

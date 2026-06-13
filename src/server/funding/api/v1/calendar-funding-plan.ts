@@ -9,7 +9,7 @@ import {
   DuplicateCalendarFundingPlanError,
 } from '@/common/exceptions/funding';
 import { CalendarNotFoundError } from '@/common/exceptions/calendar';
-import { calendarFundingPlanByAccount } from '@/server/common/middleware/rate-limiters';
+import { limitCalendarFundingPlanByAccount } from '@/server/common/middleware/rate-limiters';
 import { logError } from '@/server/common/helper/error-logger';
 
 /**
@@ -38,7 +38,7 @@ export default class CalendarFundingPlanRoutes {
     router.post(
       '/calendars',
       ...ExpressHelper.loggedInOnly,
-      calendarFundingPlanByAccount,
+      limitCalendarFundingPlanByAccount,
       this.addCalendar.bind(this),
     );
 
@@ -51,7 +51,7 @@ export default class CalendarFundingPlanRoutes {
     router.delete(
       '/calendars/:calendarId',
       ...ExpressHelper.loggedInOnly,
-      calendarFundingPlanByAccount,
+      limitCalendarFundingPlanByAccount,
       this.removeCalendar.bind(this),
     );
 

@@ -9,7 +9,7 @@ import {
   InvalidSessionIdError,
   FundingPlanNotFoundError,
 } from '@/common/exceptions/funding';
-import { checkoutSessionByAccount } from '@/server/common/middleware/rate-limiters';
+import { limitCheckoutSessionByAccount } from '@/server/common/middleware/rate-limiters';
 import { logError } from '@/server/common/helper/error-logger';
 import { MAX_CALENDAR_IDS } from '@/server/funding/service/funding';
 
@@ -38,7 +38,7 @@ export default class CheckoutSessionRoutes {
     router.post(
       '/checkout-sessions',
       ...ExpressHelper.loggedInOnly,
-      checkoutSessionByAccount,
+      limitCheckoutSessionByAccount,
       this.createSession.bind(this),
     );
 

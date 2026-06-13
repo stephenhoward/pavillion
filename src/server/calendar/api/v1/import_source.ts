@@ -18,9 +18,9 @@ import {
 import ExpressHelper from '@/server/common/helper/express';
 import { logError } from '@/server/common/helper/error-logger';
 import {
-  widgetConfigByAccount,
-  importSourceVerifyBySource,
-  importSourceSyncBySource,
+  limitWidgetConfigByAccount,
+  limitImportSourceVerifyBySource,
+  limitImportSourceSyncBySource,
 } from '@/server/common/middleware/rate-limiters';
 import CalendarInterface from '../../interface';
 import type { SyncResult } from '../../service/import/sync';
@@ -39,10 +39,10 @@ import type { SyncResult } from '../../service/import/sync';
  *
  * Rate limiting:
  *  - list/create/get/delete/verify-issue: account-scoped limiter
- *    (`widgetConfigByAccount`) as a conservative default.
- *  - /verify: per-source limiter (`importSourceVerifyBySource`)
+ *    (`limitWidgetConfigByAccount`) as a conservative default.
+ *  - /verify: per-source limiter (`limitImportSourceVerifyBySource`)
  *    configured to 3 requests per source per hour.
- *  - /sync:   per-source limiter (`importSourceSyncBySource`)
+ *  - /sync:   per-source limiter (`limitImportSourceSyncBySource`)
  *    configured to 4 requests per source per hour, in addition to the
  *    service-level sliding window enforced by SyncService.
  *
@@ -61,43 +61,43 @@ class ImportSourceRoutes {
     router.get(
       '/calendars/:calendarId/import-sources',
       ExpressHelper.loggedInOnly,
-      widgetConfigByAccount,
+      limitWidgetConfigByAccount,
       this.listSources.bind(this),
     );
     router.post(
       '/calendars/:calendarId/import-sources',
       ExpressHelper.loggedInOnly,
-      widgetConfigByAccount,
+      limitWidgetConfigByAccount,
       this.createSource.bind(this),
     );
     router.get(
       '/calendars/:calendarId/import-sources/:id',
       ExpressHelper.loggedInOnly,
-      widgetConfigByAccount,
+      limitWidgetConfigByAccount,
       this.getSource.bind(this),
     );
     router.delete(
       '/calendars/:calendarId/import-sources/:id',
       ExpressHelper.loggedInOnly,
-      widgetConfigByAccount,
+      limitWidgetConfigByAccount,
       this.deleteSource.bind(this),
     );
     router.post(
       '/calendars/:calendarId/import-sources/:id/verify-issue',
       ExpressHelper.loggedInOnly,
-      widgetConfigByAccount,
+      limitWidgetConfigByAccount,
       this.issueChallenge.bind(this),
     );
     router.post(
       '/calendars/:calendarId/import-sources/:id/verify',
       ExpressHelper.loggedInOnly,
-      importSourceVerifyBySource,
+      limitImportSourceVerifyBySource,
       this.verifySource.bind(this),
     );
     router.post(
       '/calendars/:calendarId/import-sources/:id/sync',
       ExpressHelper.loggedInOnly,
-      importSourceSyncBySource,
+      limitImportSourceSyncBySource,
       this.syncSource.bind(this),
     );
 

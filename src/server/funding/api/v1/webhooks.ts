@@ -2,7 +2,7 @@ import express, { Request, Response, Application, Router } from 'express';
 import FundingInterface from '@/server/funding/interface';
 import { ProviderNotConfiguredError, WebhookSignatureError } from '@/common/exceptions/funding';
 import { logError } from '@/server/common/helper/error-logger';
-import { fundingWebhookByIp } from '@/server/common/middleware/rate-limiters';
+import { limitFundingWebhookByIp } from '@/server/common/middleware/rate-limiters';
 
 /**
  * Webhook route handlers for payment provider events
@@ -33,7 +33,7 @@ export default class WebhookRoutes {
     // delivery or retries.
     router.post(
       '/webhooks/stripe',
-      fundingWebhookByIp,
+      limitFundingWebhookByIp,
       express.raw({ type: 'application/json' }),
       this.handleStripeWebhook.bind(this),
     );

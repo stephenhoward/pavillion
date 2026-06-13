@@ -4,19 +4,19 @@ import express, { Express } from 'express';
 import request from 'supertest';
 import { addRequestUser } from '@/server/common/test/lib/express';
 import {
-  passwordResetByIp,
-  passwordResetByEmail,
-  loginByIp,
-  loginByEmail,
-  reportSubmissionByIp,
-  reportSubmissionByEmail,
-  reportVerificationByIp,
-  reportSubmissionByAccount,
-  publicEventInstanceByIp,
-  publicCalendarListByIp,
-  applicationByIp,
-  applicationByEmail,
-  confirmApplicationByIp,
+  limitPasswordResetByIp,
+  limitPasswordResetByEmail,
+  limitLoginByIp,
+  limitLoginByEmail,
+  limitReportSubmissionByIp,
+  limitReportSubmissionByEmail,
+  limitReportVerificationByIp,
+  limitReportSubmissionByAccount,
+  limitPublicEventInstanceByIp,
+  limitPublicCalendarListByIp,
+  limitApplicationByIp,
+  limitApplicationByEmail,
+  limitConfirmApplicationByIp,
 } from '@/server/common/middleware/rate-limiters';
 
 describe('rate-limiters', () => {
@@ -133,69 +133,69 @@ describe('rate-limiters', () => {
   });
 
   describe('limiter exports', () => {
-    it('should export passwordResetByIp limiter', () => {
-      expect(passwordResetByIp).toBeDefined();
-      expect(typeof passwordResetByIp).toBe('function');
+    it('should export limitPasswordResetByIp limiter', () => {
+      expect(limitPasswordResetByIp).toBeDefined();
+      expect(typeof limitPasswordResetByIp).toBe('function');
     });
 
-    it('should export passwordResetByEmail limiter', () => {
-      expect(passwordResetByEmail).toBeDefined();
-      expect(typeof passwordResetByEmail).toBe('function');
+    it('should export limitPasswordResetByEmail limiter', () => {
+      expect(limitPasswordResetByEmail).toBeDefined();
+      expect(typeof limitPasswordResetByEmail).toBe('function');
     });
 
-    it('should export loginByIp limiter', () => {
-      expect(loginByIp).toBeDefined();
-      expect(typeof loginByIp).toBe('function');
+    it('should export limitLoginByIp limiter', () => {
+      expect(limitLoginByIp).toBeDefined();
+      expect(typeof limitLoginByIp).toBe('function');
     });
 
-    it('should export loginByEmail limiter', () => {
-      expect(loginByEmail).toBeDefined();
-      expect(typeof loginByEmail).toBe('function');
+    it('should export limitLoginByEmail limiter', () => {
+      expect(limitLoginByEmail).toBeDefined();
+      expect(typeof limitLoginByEmail).toBe('function');
     });
 
-    it('should export reportSubmissionByIp limiter', () => {
-      expect(reportSubmissionByIp).toBeDefined();
-      expect(typeof reportSubmissionByIp).toBe('function');
+    it('should export limitReportSubmissionByIp limiter', () => {
+      expect(limitReportSubmissionByIp).toBeDefined();
+      expect(typeof limitReportSubmissionByIp).toBe('function');
     });
 
-    it('should export reportSubmissionByEmail limiter', () => {
-      expect(reportSubmissionByEmail).toBeDefined();
-      expect(typeof reportSubmissionByEmail).toBe('function');
+    it('should export limitReportSubmissionByEmail limiter', () => {
+      expect(limitReportSubmissionByEmail).toBeDefined();
+      expect(typeof limitReportSubmissionByEmail).toBe('function');
     });
 
-    it('should export reportVerificationByIp limiter', () => {
-      expect(reportVerificationByIp).toBeDefined();
-      expect(typeof reportVerificationByIp).toBe('function');
+    it('should export limitReportVerificationByIp limiter', () => {
+      expect(limitReportVerificationByIp).toBeDefined();
+      expect(typeof limitReportVerificationByIp).toBe('function');
     });
 
-    it('should export reportSubmissionByAccount limiter', () => {
-      expect(reportSubmissionByAccount).toBeDefined();
-      expect(typeof reportSubmissionByAccount).toBe('function');
+    it('should export limitReportSubmissionByAccount limiter', () => {
+      expect(limitReportSubmissionByAccount).toBeDefined();
+      expect(typeof limitReportSubmissionByAccount).toBe('function');
     });
 
-    it('should export publicEventInstanceByIp limiter', () => {
-      expect(publicEventInstanceByIp).toBeDefined();
-      expect(typeof publicEventInstanceByIp).toBe('function');
+    it('should export limitPublicEventInstanceByIp limiter', () => {
+      expect(limitPublicEventInstanceByIp).toBeDefined();
+      expect(typeof limitPublicEventInstanceByIp).toBe('function');
     });
 
-    it('should export publicCalendarListByIp limiter', () => {
-      expect(publicCalendarListByIp).toBeDefined();
-      expect(typeof publicCalendarListByIp).toBe('function');
+    it('should export limitPublicCalendarListByIp limiter', () => {
+      expect(limitPublicCalendarListByIp).toBeDefined();
+      expect(typeof limitPublicCalendarListByIp).toBe('function');
     });
 
-    it('should export applicationByIp limiter', () => {
-      expect(applicationByIp).toBeDefined();
-      expect(typeof applicationByIp).toBe('function');
+    it('should export limitApplicationByIp limiter', () => {
+      expect(limitApplicationByIp).toBeDefined();
+      expect(typeof limitApplicationByIp).toBe('function');
     });
 
-    it('should export applicationByEmail limiter', () => {
-      expect(applicationByEmail).toBeDefined();
-      expect(typeof applicationByEmail).toBe('function');
+    it('should export limitApplicationByEmail limiter', () => {
+      expect(limitApplicationByEmail).toBeDefined();
+      expect(typeof limitApplicationByEmail).toBe('function');
     });
 
-    it('should export confirmApplicationByIp limiter', () => {
-      expect(confirmApplicationByIp).toBeDefined();
-      expect(typeof confirmApplicationByIp).toBe('function');
+    it('should export limitConfirmApplicationByIp limiter', () => {
+      expect(limitConfirmApplicationByIp).toBeDefined();
+      expect(typeof limitConfirmApplicationByIp).toBe('function');
     });
   });
 
@@ -213,7 +213,7 @@ describe('rate-limiters', () => {
 
       // When disabled, limiters should act as no-op middleware
       // Multiple requests should all succeed without rate limiting
-      app.post('/test', passwordResetByIp, (req, res) => {
+      app.post('/test', limitPasswordResetByIp, (req, res) => {
         res.json({ success: true });
       });
 
@@ -235,7 +235,7 @@ describe('rate-limiters', () => {
 
     it('should not add rate limit headers when disabled', async () => {
       // When rate limiting is disabled, no rate limit headers should be added
-      app.post('/test', passwordResetByIp, (req, res) => {
+      app.post('/test', limitPasswordResetByIp, (req, res) => {
         res.json({ success: true });
       });
 
@@ -250,10 +250,10 @@ describe('rate-limiters', () => {
     it('should allow all limiter types to pass through when disabled', async () => {
       // Apply all four limiters - should all be no-ops
       app.post('/test',
-        passwordResetByIp,
-        passwordResetByEmail,
-        loginByIp,
-        loginByEmail,
+        limitPasswordResetByIp,
+        limitPasswordResetByEmail,
+        limitLoginByIp,
+        limitLoginByEmail,
         (req, res) => {
           res.json({ success: true });
         },
@@ -269,8 +269,8 @@ describe('rate-limiters', () => {
 
     it('should allow moderation limiters to pass through when disabled', async () => {
       app.post('/test',
-        reportSubmissionByIp,
-        reportSubmissionByEmail,
+        limitReportSubmissionByIp,
+        limitReportSubmissionByEmail,
         (req, res) => {
           res.json({ success: true });
         },
@@ -291,7 +291,7 @@ describe('rate-limiters', () => {
     it('should allow account limiter to pass through when disabled', async () => {
       app.post('/test',
         addRequestUser,
-        reportSubmissionByAccount,
+        limitReportSubmissionByAccount,
         (req, res) => {
           res.json({ success: true });
         },
@@ -310,7 +310,7 @@ describe('rate-limiters', () => {
     });
 
     it('should allow verification limiter to pass through when disabled', async () => {
-      app.get('/test', reportVerificationByIp, (req, res) => {
+      app.get('/test', limitReportVerificationByIp, (req, res) => {
         res.json({ success: true });
       });
 
@@ -335,8 +335,8 @@ describe('rate-limiters', () => {
       app.use(express.json());
     });
 
-    it('should apply passwordResetByIp limiter to endpoint', async () => {
-      app.post('/reset', passwordResetByIp, (req, res) => {
+    it('should apply limitPasswordResetByIp limiter to endpoint', async () => {
+      app.post('/reset', limitPasswordResetByIp, (req, res) => {
         res.json({ success: true });
       });
 
@@ -353,8 +353,8 @@ describe('rate-limiters', () => {
       }
     });
 
-    it('should apply passwordResetByEmail limiter to endpoint', async () => {
-      app.post('/reset', passwordResetByEmail, (req, res) => {
+    it('should apply limitPasswordResetByEmail limiter to endpoint', async () => {
+      app.post('/reset', limitPasswordResetByEmail, (req, res) => {
         res.json({ success: true });
       });
 
@@ -374,8 +374,8 @@ describe('rate-limiters', () => {
       }
     });
 
-    it('should apply loginByIp limiter to endpoint', async () => {
-      app.post('/login', loginByIp, (req, res) => {
+    it('should apply limitLoginByIp limiter to endpoint', async () => {
+      app.post('/login', limitLoginByIp, (req, res) => {
         res.json({ success: true });
       });
 
@@ -392,8 +392,8 @@ describe('rate-limiters', () => {
       }
     });
 
-    it('should apply loginByEmail limiter to endpoint', async () => {
-      app.post('/login', loginByEmail, (req, res) => {
+    it('should apply limitLoginByEmail limiter to endpoint', async () => {
+      app.post('/login', limitLoginByEmail, (req, res) => {
         res.json({ success: true });
       });
 
@@ -413,8 +413,8 @@ describe('rate-limiters', () => {
       }
     });
 
-    it('should apply reportSubmissionByIp limiter to endpoint', async () => {
-      app.post('/report', reportSubmissionByIp, (req, res) => {
+    it('should apply limitReportSubmissionByIp limiter to endpoint', async () => {
+      app.post('/report', limitReportSubmissionByIp, (req, res) => {
         res.json({ success: true });
       });
 
@@ -430,8 +430,8 @@ describe('rate-limiters', () => {
       }
     });
 
-    it('should apply reportVerificationByIp limiter to endpoint', async () => {
-      app.get('/verify', reportVerificationByIp, (req, res) => {
+    it('should apply limitReportVerificationByIp limiter to endpoint', async () => {
+      app.get('/verify', limitReportVerificationByIp, (req, res) => {
         res.json({ success: true });
       });
 
@@ -447,8 +447,8 @@ describe('rate-limiters', () => {
       }
     });
 
-    it('should apply reportSubmissionByEmail limiter to endpoint', async () => {
-      app.post('/report', reportSubmissionByEmail, (req, res) => {
+    it('should apply limitReportSubmissionByEmail limiter to endpoint', async () => {
+      app.post('/report', limitReportSubmissionByEmail, (req, res) => {
         res.json({ success: true });
       });
 
@@ -467,8 +467,8 @@ describe('rate-limiters', () => {
       }
     });
 
-    it('should apply reportSubmissionByAccount limiter to endpoint', async () => {
-      app.post('/report', addRequestUser, reportSubmissionByAccount, (req, res) => {
+    it('should apply limitReportSubmissionByAccount limiter to endpoint', async () => {
+      app.post('/report', addRequestUser, limitReportSubmissionByAccount, (req, res) => {
         res.json({ success: true });
       });
 
@@ -488,7 +488,7 @@ describe('rate-limiters', () => {
     });
 
     it('should allow combining IP and credential limiters', async () => {
-      app.post('/reset', passwordResetByIp, passwordResetByEmail, (req, res) => {
+      app.post('/reset', limitPasswordResetByIp, limitPasswordResetByEmail, (req, res) => {
         res.json({ success: true });
       });
 
@@ -509,7 +509,7 @@ describe('rate-limiters', () => {
     });
 
     it('should allow combining report submission IP and email limiters', async () => {
-      app.post('/report', reportSubmissionByIp, reportSubmissionByEmail, (req, res) => {
+      app.post('/report', limitReportSubmissionByIp, limitReportSubmissionByEmail, (req, res) => {
         res.json({ success: true });
       });
 
@@ -528,8 +528,8 @@ describe('rate-limiters', () => {
       }
     });
 
-    it('should apply publicEventInstanceByIp limiter to endpoint', async () => {
-      app.get('/instance', publicEventInstanceByIp, (req, res) => {
+    it('should apply limitPublicEventInstanceByIp limiter to endpoint', async () => {
+      app.get('/instance', limitPublicEventInstanceByIp, (req, res) => {
         res.json({ success: true });
       });
 
@@ -545,8 +545,8 @@ describe('rate-limiters', () => {
       }
     });
 
-    it('should apply publicCalendarListByIp limiter to endpoint', async () => {
-      app.get('/calendars', publicCalendarListByIp, (req, res) => {
+    it('should apply limitPublicCalendarListByIp limiter to endpoint', async () => {
+      app.get('/calendars', limitPublicCalendarListByIp, (req, res) => {
         res.json({ success: true });
       });
 
@@ -563,7 +563,7 @@ describe('rate-limiters', () => {
     });
 
     it('should allow combining report submission IP and account limiters', async () => {
-      app.post('/report', addRequestUser, reportSubmissionByIp, reportSubmissionByAccount, (req, res) => {
+      app.post('/report', addRequestUser, limitReportSubmissionByIp, limitReportSubmissionByAccount, (req, res) => {
         res.json({ success: true });
       });
 
@@ -582,8 +582,8 @@ describe('rate-limiters', () => {
       }
     });
 
-    it('should apply applicationByIp limiter to endpoint', async () => {
-      app.post('/apply', applicationByIp, (req, res) => {
+    it('should apply limitApplicationByIp limiter to endpoint', async () => {
+      app.post('/apply', limitApplicationByIp, (req, res) => {
         res.json({ success: true });
       });
 
@@ -599,8 +599,8 @@ describe('rate-limiters', () => {
       }
     });
 
-    it('should apply applicationByEmail limiter to endpoint', async () => {
-      app.post('/apply', applicationByEmail, (req, res) => {
+    it('should apply limitApplicationByEmail limiter to endpoint', async () => {
+      app.post('/apply', limitApplicationByEmail, (req, res) => {
         res.json({ success: true });
       });
 
@@ -619,8 +619,8 @@ describe('rate-limiters', () => {
       }
     });
 
-    it('should apply confirmApplicationByIp limiter to endpoint', async () => {
-      app.get('/confirm', confirmApplicationByIp, (req, res) => {
+    it('should apply limitConfirmApplicationByIp limiter to endpoint', async () => {
+      app.get('/confirm', limitConfirmApplicationByIp, (req, res) => {
         res.json({ success: true });
       });
 
@@ -637,7 +637,7 @@ describe('rate-limiters', () => {
     });
 
     it('should allow combining application IP and email limiters', async () => {
-      app.post('/apply', applicationByIp, applicationByEmail, (req, res) => {
+      app.post('/apply', limitApplicationByIp, limitApplicationByEmail, (req, res) => {
         res.json({ success: true });
       });
 

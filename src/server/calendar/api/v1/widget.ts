@@ -6,7 +6,7 @@ const logger = createLogger('calendar');
 import CalendarInterface from '../../interface';
 import WidgetDomainService from '../../service/widget_domain';
 import { SubscriptionRequiredError } from '@/common/exceptions/subscription';
-import { publicWidgetByIp } from '@/server/common/middleware/rate-limiters';
+import { limitPublicWidgetByIp } from '@/server/common/middleware/rate-limiters';
 
 /**
  * Widget-specific API routes with Origin validation and dynamic CSP headers.
@@ -28,7 +28,7 @@ class WidgetRoutes {
     router.use(this.validateOrigin.bind(this));
 
     // Widget calendar metadata endpoint with rate limiting
-    router.get('/calendars/:urlName', publicWidgetByIp, this.getCalendar.bind(this));
+    router.get('/calendars/:urlName', limitPublicWidgetByIp, this.getCalendar.bind(this));
 
     app.use(routePrefix, router);
   }

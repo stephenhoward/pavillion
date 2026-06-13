@@ -2,7 +2,7 @@ import express, { Request, Response, Application } from 'express';
 
 import ModerationInterface from '@/server/moderation/interface';
 import { InvalidVerificationTokenError } from '@/server/moderation/exceptions';
-import { reportVerificationByIp } from '@/server/common/middleware/rate-limiters';
+import { limitReportVerificationByIp } from '@/server/common/middleware/rate-limiters';
 import { logError } from '@/server/common/helper/error-logger';
 
 /**
@@ -28,7 +28,7 @@ export default class VerifyRoutes {
     const router = express.Router();
     router.get(
       '/reports/verify/:token',
-      reportVerificationByIp,
+      limitReportVerificationByIp,
       this.verifyToken.bind(this),
     );
     app.use(routePrefix, router);

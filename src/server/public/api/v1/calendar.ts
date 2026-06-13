@@ -10,7 +10,7 @@ import { EventSeries } from '@/common/model/event_series';
 import { EventCategory } from '@/common/model/event_category';
 import { getRecurrenceSummary } from '@/common/utils/recurrence-text';
 import { parseInstanceSlug } from '@/common/utils/instance-slug';
-import { publicEventInstanceByIp, publicCalendarListByIp } from '@/server/common/middleware/rate-limiters';
+import { limitPublicEventInstanceByIp, limitPublicCalendarListByIp } from '@/server/common/middleware/rate-limiters';
 import ExpressHelper from '@/server/common/helper/express';
 
 /**
@@ -242,7 +242,7 @@ export default class CalendarRoutes {
 
   installHandlers(app: Application, routePrefix: string): void {
     const router = express.Router();
-    router.get('/calendars', publicCalendarListByIp, this.listPublicCalendars.bind(this));
+    router.get('/calendars', limitPublicCalendarListByIp, this.listPublicCalendars.bind(this));
     router.get('/calendar/:urlName', this.getCalendar.bind(this));
     router.get('/calendar/:urlName/categories', this.listCategories.bind(this));
     router.get('/calendar/:urlName/series', this.listSeries.bind(this));
@@ -251,7 +251,7 @@ export default class CalendarRoutes {
     router.get('/events/:id', this.getEvent.bind(this));
     router.get(
       '/events/:eventId/instances/:startTime',
-      publicEventInstanceByIp,
+      limitPublicEventInstanceByIp,
       this.getEventInstance.bind(this),
     );
     app.use(routePrefix, router);

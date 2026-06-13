@@ -13,12 +13,12 @@ import { createLogger } from '@/server/common/helper/logger';
 
 const logger = createLogger('authentication');
 import {
-  passwordResetByIp,
-  passwordResetByEmail,
-  confirmPasswordResetByIp,
-  loginByIp,
-  loginByEmail,
-  emailChangeByAccount,
+  limitPasswordResetByIp,
+  limitPasswordResetByEmail,
+  limitConfirmPasswordResetByIp,
+  limitLoginByIp,
+  limitLoginByEmail,
+  limitEmailChangeByAccount,
 } from '@/server/common/middleware/rate-limiters';
 
 export default class AuthenticationRouteHandlers {
@@ -33,12 +33,12 @@ export default class AuthenticationRouteHandlers {
   installHandlers(app: Application, routePrefix: string): void {
     const router = express.Router();
 
-    router.post('/login', loginByIp, loginByEmail, ...ExpressHelper.noUserOnly, this.login.bind(this) );
+    router.post('/login', limitLoginByIp, limitLoginByEmail, ...ExpressHelper.noUserOnly, this.login.bind(this) );
     router.get('/token', ...ExpressHelper.loggedInOnly, this.getToken.bind(this) );
     router.get('/reset-password/:code', this.checkPasswordResetCode.bind(this) );
-    router.post('/reset-password', passwordResetByIp, passwordResetByEmail, this.generatePasswordResetCode.bind(this) );
-    router.post('/reset-password/:code', confirmPasswordResetByIp, this.setPassword.bind(this) );
-    router.post('/email', ...ExpressHelper.loggedInOnly, emailChangeByAccount, this.changeEmail.bind(this) );
+    router.post('/reset-password', limitPasswordResetByIp, limitPasswordResetByEmail, this.generatePasswordResetCode.bind(this) );
+    router.post('/reset-password/:code', limitConfirmPasswordResetByIp, this.setPassword.bind(this) );
+    router.post('/email', ...ExpressHelper.loggedInOnly, limitEmailChangeByAccount, this.changeEmail.bind(this) );
     app.use(routePrefix, router);
   }
 

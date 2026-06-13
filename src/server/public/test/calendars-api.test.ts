@@ -213,7 +213,7 @@ describe('Public Calendars Discovery API (pv-u4ew.3)', () => {
   describe('GET /api/public/v1/calendars - rate limiter wired', () => {
     it('registers a middleware ahead of the handler on the /calendars route', () => {
       // In the test environment `rateLimit.enabled = false` swaps the
-      // publicCalendarListByIp limiter for a no-op middleware (see
+      // limitPublicCalendarListByIp limiter for a no-op middleware (see
       // config/test.yaml), so we cannot assert on RateLimit-* response
       // headers. Instead, assert the route has TWO handlers: the rate
       // limiter (or its no-op stand-in) wired ahead of the bound
