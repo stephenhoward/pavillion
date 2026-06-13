@@ -4,12 +4,12 @@ import express, { Express } from 'express';
 import request from 'supertest';
 
 import {
-  applicationByIp,
-  applicationByEmail,
-  confirmApplicationByIp,
-  registerByIp,
-  registerByEmail,
-  acceptInvitationByIp,
+  limitApplicationByIp,
+  limitApplicationByEmail,
+  limitConfirmApplicationByIp,
+  limitRegisterByIp,
+  limitRegisterByEmail,
+  limitAcceptInvitationByIp,
 } from '@/server/common/middleware/rate-limiters';
 
 /**
@@ -50,27 +50,27 @@ describeOrSkip('Account Application Rate Limiting Integration Tests', () => {
     app = express();
     app.use(express.json());
 
-    app.post('/apply-ip-only', applicationByIp, (req, res) => {
+    app.post('/apply-ip-only', limitApplicationByIp, (req, res) => {
       res.json({ route: 'ip' });
     });
-    app.post('/apply-email-only', applicationByEmail, (req, res) => {
+    app.post('/apply-email-only', limitApplicationByEmail, (req, res) => {
       res.json({ route: 'email' });
     });
-    app.post('/confirm-ip-only', confirmApplicationByIp, (req, res) => {
+    app.post('/confirm-ip-only', limitConfirmApplicationByIp, (req, res) => {
       res.json({ route: 'confirm' });
     });
-    app.post('/register-ip-only', registerByIp, (req, res) => {
+    app.post('/register-ip-only', limitRegisterByIp, (req, res) => {
       res.json({ route: 'register-ip' });
     });
-    app.post('/register-email-only', registerByEmail, (req, res) => {
+    app.post('/register-email-only', limitRegisterByEmail, (req, res) => {
       res.json({ route: 'register-email' });
     });
-    app.post('/accept-invitation-ip-only', acceptInvitationByIp, (req, res) => {
+    app.post('/accept-invitation-ip-only', limitAcceptInvitationByIp, (req, res) => {
       res.json({ route: 'accept-invitation-ip' });
     });
   });
 
-  describe('applicationByEmail', () => {
+  describe('limitApplicationByEmail', () => {
     it('should return 429 once the per-email limit is exhausted', async () => {
       const maxRequests = config.get<number>('rateLimit.application.byEmail.max');
 
@@ -106,8 +106,8 @@ describeOrSkip('Account Application Rate Limiting Integration Tests', () => {
 
   // The IP-keyed limiters share localhost across this whole file, so each is
   // exercised in a single dedicated test that consumes its full budget.
-  describe('applicationByIp', () => {
-    it('should return 429 once the per-IP limit is exhausted, remain in a distinct bucket from applicationByEmail, and the same singleton limiter is wired on POST /api/v1/applications', async () => {
+  describe('limitApplicationByIp', () => {
+    it('should return 429 once the per-IP limit is exhausted, remain in a distinct bucket from limitApplicationByEmail, and the same singleton limiter is wired on POST /api/v1/applications', async () => {
       const ipMax = config.get<number>('rateLimit.application.byIp.max');
       const emailMax = config.get<number>('rateLimit.application.byEmail.max');
 
@@ -162,7 +162,7 @@ describeOrSkip('Account Application Rate Limiting Integration Tests', () => {
         'Too many application requests for this email, please try again later.',
       );
 
-      // Phase 2: prove the same `applicationByIp` and `applicationByEmail`
+      // Phase 2: prove the same `limitApplicationByIp` and `limitApplicationByEmail`
       // singletons are wired onto POST /api/v1/applications. Both limiters
       // are now exhausted (IP via `/apply-ip-only`; email via
       // `/apply-email-only` on `freshEmail`), so any request to the real
@@ -188,7 +188,7 @@ describeOrSkip('Account Application Rate Limiting Integration Tests', () => {
       await accountService._setupAccount('rate-limit-apply-admin@pavillion.dev', 'testpassword!1');
 
       // Hit the real route with the same IP (localhost). Because
-      // `applicationByIp` runs first in the chain and is already exhausted,
+      // `limitApplicationByIp` runs first in the chain and is already exhausted,
       // we get 429 from it. This proves the IP limiter is mounted.
       const realPostIp = await request(realEnv.app)
         .post('/api/v1/applications')
@@ -203,7 +203,7 @@ describeOrSkip('Account Application Rate Limiting Integration Tests', () => {
     });
   });
 
-  describe('confirmApplicationByIp', () => {
+  describe('limitConfirmApplicationByIp', () => {
     it('should return 429 once the per-IP confirmation limit is exhausted, and route wiring on the real /api/v1/applications/confirm/:token endpoint is verified', async () => {
       const maxRequests = config.get<number>('rateLimit.application.confirm.byIp.max');
 
@@ -233,7 +233,7 @@ describeOrSkip('Account Application Rate Limiting Integration Tests', () => {
       // public confirm endpoint. Because the limiter store is module-global
       // and the budget is already exhausted from Phase 1, a fresh request to
       // the real route (still on localhost) must short-circuit at 429. This
-      // confirms `confirmApplicationByIp` is mounted on the production
+      // confirms `limitConfirmApplicationByIp` is mounted on the production
       // POST /api/v1/applications/confirm/:token route.
       // Imports are deferred so we don't pay full-server init cost when this
       // file is loaded by other suites; Phase 2 only spins up the server when
@@ -268,7 +268,7 @@ describeOrSkip('Account Application Rate Limiting Integration Tests', () => {
     });
   });
 
-  describe('registerByEmail', () => {
+  describe('limitRegisterByEmail', () => {
     it('should return 429 once the per-email limit is exhausted, incrementing uniformly regardless of account existence', async () => {
       const maxRequests = config.get<number>('rateLimit.register.byEmail.max');
 
@@ -328,7 +328,7 @@ describeOrSkip('Account Application Rate Limiting Integration Tests', () => {
     });
   });
 
-  describe('registerByIp', () => {
+  describe('limitRegisterByIp', () => {
     it('should return 429 once the per-IP limit is exhausted, and the same singleton limiter is wired on POST /api/v1/register', async () => {
       const ipMax = config.get<number>('rateLimit.register.byIp.max');
 
@@ -357,7 +357,7 @@ describeOrSkip('Account Application Rate Limiting Integration Tests', () => {
       expect(blocked.headers['ratelimit-remaining']).toBe('0');
       expect(blocked.headers['retry-after']).toBeDefined();
 
-      // Phase 2: prove the same `registerByIp` singleton is wired onto the
+      // Phase 2: prove the same `limitRegisterByIp` singleton is wired onto the
       // real POST /api/v1/register route. The IP limiter store is module-global
       // and already exhausted above, so a fresh request to the real route
       // (still on localhost) must short-circuit at 429 before the handler runs.
@@ -394,7 +394,7 @@ describeOrSkip('Account Application Rate Limiting Integration Tests', () => {
     });
   });
 
-  describe('acceptInvitationByIp', () => {
+  describe('limitAcceptInvitationByIp', () => {
     it('should return 429 once the per-IP limit is exhausted, and the same singleton limiter is wired on POST /api/v1/invitations/:code', async () => {
       const ipMax = config.get<number>('rateLimit.invitation.accept.byIp.max');
 
@@ -425,7 +425,7 @@ describeOrSkip('Account Application Rate Limiting Integration Tests', () => {
       expect(blocked.headers['ratelimit-remaining']).toBe('0');
       expect(blocked.headers['retry-after']).toBeDefined();
 
-      // Phase 2: prove the same `acceptInvitationByIp` singleton is wired onto
+      // Phase 2: prove the same `limitAcceptInvitationByIp` singleton is wired onto
       // the real POST /api/v1/invitations/:code route. The IP limiter store is
       // module-global and already exhausted above, so a fresh request to the
       // real route (still on localhost) must short-circuit at 429 before the

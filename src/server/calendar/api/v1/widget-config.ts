@@ -9,7 +9,7 @@ import { ValidationError } from '@/common/exceptions/base';
 import { CalendarNotFoundError, InvalidDomainFormatError } from '@/common/exceptions/calendar';
 import { CalendarEditorPermissionError } from '@/common/exceptions/editor';
 import { SubscriptionRequiredError } from '@/common/exceptions/subscription';
-import { widgetConfigByAccount } from '@/server/common/middleware/rate-limiters';
+import { limitWidgetConfigByAccount } from '@/server/common/middleware/rate-limiters';
 import CalendarInterface from '../../interface';
 
 /**
@@ -25,11 +25,11 @@ class WidgetConfigRoutes {
 
   installHandlers(app: Application, routePrefix: string): void {
     const router = express.Router();
-    router.get('/calendars/:calendarId/widget/domain', ExpressHelper.loggedInOnly, widgetConfigByAccount, this.getDomain.bind(this));
-    router.put('/calendars/:calendarId/widget/domain', ExpressHelper.loggedInOnly, widgetConfigByAccount, this.setDomain.bind(this));
-    router.delete('/calendars/:calendarId/widget/domain', ExpressHelper.loggedInOnly, widgetConfigByAccount, this.clearDomain.bind(this));
-    router.get('/calendars/:calendarId/widget/config', ExpressHelper.loggedInOnly, widgetConfigByAccount, this.getConfig.bind(this));
-    router.put('/calendars/:calendarId/widget/config', ExpressHelper.loggedInOnly, widgetConfigByAccount, this.setConfig.bind(this));
+    router.get('/calendars/:calendarId/widget/domain', ExpressHelper.loggedInOnly, limitWidgetConfigByAccount, this.getDomain.bind(this));
+    router.put('/calendars/:calendarId/widget/domain', ExpressHelper.loggedInOnly, limitWidgetConfigByAccount, this.setDomain.bind(this));
+    router.delete('/calendars/:calendarId/widget/domain', ExpressHelper.loggedInOnly, limitWidgetConfigByAccount, this.clearDomain.bind(this));
+    router.get('/calendars/:calendarId/widget/config', ExpressHelper.loggedInOnly, limitWidgetConfigByAccount, this.getConfig.bind(this));
+    router.put('/calendars/:calendarId/widget/config', ExpressHelper.loggedInOnly, limitWidgetConfigByAccount, this.setConfig.bind(this));
     app.use(routePrefix, router);
   }
 

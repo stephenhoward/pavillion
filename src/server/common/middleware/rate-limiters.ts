@@ -12,11 +12,11 @@ import { createParamRateLimiter } from './rate-limit-by-param';
  * disabled globally via the rateLimit.enabled flag.
  *
  * @example
- * import { passwordResetByIp, passwordResetByEmail } from '@/server/common/middleware/rate-limiters';
+ * import { limitPasswordResetByIp, limitPasswordResetByEmail } from '@/server/common/middleware/rate-limiters';
  *
  * app.post('/api/auth/password-reset',
- *   passwordResetByIp,
- *   passwordResetByEmail,
+ *   limitPasswordResetByIp,
+ *   limitPasswordResetByEmail,
  *   passwordResetHandler
  * );
  */
@@ -37,7 +37,7 @@ function isRateLimitEnabled(): boolean {
  * Password reset rate limiter by IP address.
  * Limits: 5 requests per IP per 15 minutes (default config).
  */
-export const passwordResetByIp: RequestHandler = isRateLimitEnabled()
+export const limitPasswordResetByIp: RequestHandler = isRateLimitEnabled()
   ? createIpRateLimiter(
     config.get<number>('rateLimit.passwordReset.byIp.max'),
     config.get<number>('rateLimit.passwordReset.byIp.windowMs'),
@@ -49,7 +49,7 @@ export const passwordResetByIp: RequestHandler = isRateLimitEnabled()
  * Password reset rate limiter by email address.
  * Limits: 3 requests per email per 1 hour (default config).
  */
-export const passwordResetByEmail: RequestHandler = isRateLimitEnabled()
+export const limitPasswordResetByEmail: RequestHandler = isRateLimitEnabled()
   ? createCredentialRateLimiter(
     config.get<number>('rateLimit.passwordReset.byEmail.max'),
     config.get<number>('rateLimit.passwordReset.byEmail.windowMs'),
@@ -62,7 +62,7 @@ export const passwordResetByEmail: RequestHandler = isRateLimitEnabled()
  * Login rate limiter by IP address.
  * Limits: 10 requests per IP per 15 minutes (default config).
  */
-export const loginByIp: RequestHandler = isRateLimitEnabled()
+export const limitLoginByIp: RequestHandler = isRateLimitEnabled()
   ? createIpRateLimiter(
     config.get<number>('rateLimit.login.byIp.max'),
     config.get<number>('rateLimit.login.byIp.windowMs'),
@@ -74,7 +74,7 @@ export const loginByIp: RequestHandler = isRateLimitEnabled()
  * Login rate limiter by email address.
  * Limits: 5 requests per email per 1 hour (default config).
  */
-export const loginByEmail: RequestHandler = isRateLimitEnabled()
+export const limitLoginByEmail: RequestHandler = isRateLimitEnabled()
   ? createCredentialRateLimiter(
     config.get<number>('rateLimit.login.byEmail.max'),
     config.get<number>('rateLimit.login.byEmail.windowMs'),
@@ -87,7 +87,7 @@ export const loginByEmail: RequestHandler = isRateLimitEnabled()
  * Moderation report submission rate limiter by IP address.
  * Limits: 10 requests per IP per 15 minutes (default config).
  */
-export const reportSubmissionByIp: RequestHandler = isRateLimitEnabled()
+export const limitReportSubmissionByIp: RequestHandler = isRateLimitEnabled()
   ? createIpRateLimiter(
     config.get<number>('rateLimit.moderation.reportByIp.max'),
     config.get<number>('rateLimit.moderation.reportByIp.windowMs'),
@@ -99,7 +99,7 @@ export const reportSubmissionByIp: RequestHandler = isRateLimitEnabled()
  * Moderation report verification rate limiter by IP address.
  * Limits: 20 requests per IP per 15 minutes (default config).
  */
-export const reportVerificationByIp: RequestHandler = isRateLimitEnabled()
+export const limitReportVerificationByIp: RequestHandler = isRateLimitEnabled()
   ? createIpRateLimiter(
     config.get<number>('rateLimit.moderation.verifyByIp.max'),
     config.get<number>('rateLimit.moderation.verifyByIp.windowMs'),
@@ -111,7 +111,7 @@ export const reportVerificationByIp: RequestHandler = isRateLimitEnabled()
  * Moderation report submission rate limiter by email address.
  * Limits: 3 verification emails per email per 24 hours (default config).
  */
-export const reportSubmissionByEmail: RequestHandler = isRateLimitEnabled()
+export const limitReportSubmissionByEmail: RequestHandler = isRateLimitEnabled()
   ? createCredentialRateLimiter(
     config.get<number>('rateLimit.moderation.byEmail.max'),
     config.get<number>('rateLimit.moderation.byEmail.windowMs'),
@@ -124,7 +124,7 @@ export const reportSubmissionByEmail: RequestHandler = isRateLimitEnabled()
  * Moderation report submission rate limiter by authenticated account.
  * Limits: 20 reports per account per 1 hour (default config).
  */
-export const reportSubmissionByAccount: RequestHandler = isRateLimitEnabled()
+export const limitReportSubmissionByAccount: RequestHandler = isRateLimitEnabled()
   ? createAccountRateLimiter(
     config.get<number>('rateLimit.moderation.byAccount.max'),
     config.get<number>('rateLimit.moderation.byAccount.windowMs'),
@@ -137,7 +137,7 @@ export const reportSubmissionByAccount: RequestHandler = isRateLimitEnabled()
  * Limits: 300 requests per IP per 15 minutes (default config).
  * More permissive than auth endpoints due to legitimate embedded widget traffic.
  */
-export const publicWidgetByIp: RequestHandler = isRateLimitEnabled()
+export const limitPublicWidgetByIp: RequestHandler = isRateLimitEnabled()
   ? createIpRateLimiter(
     config.get<number>('rateLimit.publicWidget.byIp.max'),
     config.get<number>('rateLimit.publicWidget.byIp.windowMs'),
@@ -154,7 +154,7 @@ export const publicWidgetByIp: RequestHandler = isRateLimitEnabled()
  * permissive enough for legitimate share-link traffic from social crawlers
  * and search engines.
  */
-export const publicEventInstanceByIp: RequestHandler = isRateLimitEnabled()
+export const limitPublicEventInstanceByIp: RequestHandler = isRateLimitEnabled()
   ? createIpRateLimiter(
     config.get<number>('rateLimit.publicEventInstance.byIp.max'),
     config.get<number>('rateLimit.publicEventInstance.byIp.windowMs'),
@@ -167,7 +167,7 @@ export const publicEventInstanceByIp: RequestHandler = isRateLimitEnabled()
  * Limits: 100 requests per account per 15 minutes (default config).
  * Prevents abuse of widget configuration endpoints.
  */
-export const widgetConfigByAccount: RequestHandler = isRateLimitEnabled()
+export const limitWidgetConfigByAccount: RequestHandler = isRateLimitEnabled()
   ? createAccountRateLimiter(
     config.get<number>('rateLimit.widgetConfig.byAccount.max'),
     config.get<number>('rateLimit.widgetConfig.byAccount.windowMs'),
@@ -180,7 +180,7 @@ export const widgetConfigByAccount: RequestHandler = isRateLimitEnabled()
  * Limits: 30 requests per account per 15 minutes (default config).
  * Prevents abuse of calendar add/remove funding plan endpoints.
  */
-export const calendarFundingPlanByAccount: RequestHandler = isRateLimitEnabled()
+export const limitCalendarFundingPlanByAccount: RequestHandler = isRateLimitEnabled()
   ? createAccountRateLimiter(
     config.get<number>('rateLimit.calendarFundingPlan.byAccount.max'),
     config.get<number>('rateLimit.calendarFundingPlan.byAccount.windowMs'),
@@ -193,7 +193,7 @@ export const calendarFundingPlanByAccount: RequestHandler = isRateLimitEnabled()
  * Limits: 10 requests per account per 15 minutes (default config).
  * Prevents abuse of Stripe checkout session creation.
  */
-export const checkoutSessionByAccount: RequestHandler = isRateLimitEnabled()
+export const limitCheckoutSessionByAccount: RequestHandler = isRateLimitEnabled()
   ? createAccountRateLimiter(
     config.get<number>('rateLimit.checkoutSession.byAccount.max'),
     config.get<number>('rateLimit.checkoutSession.byAccount.windowMs'),
@@ -210,7 +210,7 @@ export const checkoutSessionByAccount: RequestHandler = isRateLimitEnabled()
  * Stripe can deliver many events per minute and retries failed deliveries for
  * up to 72 hours, so this limiter must never gate legitimate provider traffic.
  */
-export const fundingWebhookByIp: RequestHandler = isRateLimitEnabled()
+export const limitFundingWebhookByIp: RequestHandler = isRateLimitEnabled()
   ? createIpRateLimiter(
     config.get<number>('rateLimit.fundingWebhook.byIp.max'),
     config.get<number>('rateLimit.fundingWebhook.byIp.windowMs'),
@@ -226,7 +226,7 @@ export const fundingWebhookByIp: RequestHandler = isRateLimitEnabled()
  *
  * Limits: 3 verify attempts per source per hour (default config).
  */
-export const importSourceVerifyBySource: RequestHandler = isRateLimitEnabled()
+export const limitImportSourceVerifyBySource: RequestHandler = isRateLimitEnabled()
   ? createParamRateLimiter(
     config.get<number>('rateLimit.importSource.verifyBySource.max'),
     config.get<number>('rateLimit.importSource.verifyBySource.windowMs'),
@@ -245,7 +245,7 @@ export const importSourceVerifyBySource: RequestHandler = isRateLimitEnabled()
  *
  * Limits: 4 sync attempts per source per hour (default config).
  */
-export const importSourceSyncBySource: RequestHandler = isRateLimitEnabled()
+export const limitImportSourceSyncBySource: RequestHandler = isRateLimitEnabled()
   ? createParamRateLimiter(
     config.get<number>('rateLimit.importSource.syncBySource.max'),
     config.get<number>('rateLimit.importSource.syncBySource.windowMs'),
@@ -264,7 +264,7 @@ export const importSourceSyncBySource: RequestHandler = isRateLimitEnabled()
  * settings, and instance metadata. The limit is permissive enough for
  * legitimate page-render traffic while preventing scrape-style abuse.
  */
-export const configSiteByIp: RequestHandler = isRateLimitEnabled()
+export const limitConfigSiteByIp: RequestHandler = isRateLimitEnabled()
   ? createIpRateLimiter(
     config.get<number>('rateLimit.configSite.byIp.max'),
     config.get<number>('rateLimit.configSite.byIp.windowMs'),
@@ -281,7 +281,7 @@ export const configSiteByIp: RequestHandler = isRateLimitEnabled()
  * legitimate page-render and pagination traffic while preventing scrape-style
  * abuse of the listed-calendar enumeration surface.
  */
-export const publicCalendarListByIp: RequestHandler = isRateLimitEnabled()
+export const limitPublicCalendarListByIp: RequestHandler = isRateLimitEnabled()
   ? createIpRateLimiter(
     config.get<number>('rateLimit.publicCalendarList.byIp.max'),
     config.get<number>('rateLimit.publicCalendarList.byIp.windowMs'),
@@ -293,7 +293,7 @@ export const publicCalendarListByIp: RequestHandler = isRateLimitEnabled()
  * Public account application submission rate limiter by IP address.
  * Limits: 5 requests per IP per 15 minutes (default config).
  */
-export const applicationByIp: RequestHandler = isRateLimitEnabled()
+export const limitApplicationByIp: RequestHandler = isRateLimitEnabled()
   ? createIpRateLimiter(
     config.get<number>('rateLimit.application.byIp.max'),
     config.get<number>('rateLimit.application.byIp.windowMs'),
@@ -305,7 +305,7 @@ export const applicationByIp: RequestHandler = isRateLimitEnabled()
  * Public account application submission rate limiter by email address.
  * Limits: 3 requests per email per 1 hour (default config).
  */
-export const applicationByEmail: RequestHandler = isRateLimitEnabled()
+export const limitApplicationByEmail: RequestHandler = isRateLimitEnabled()
   ? createCredentialRateLimiter(
     config.get<number>('rateLimit.application.byEmail.max'),
     config.get<number>('rateLimit.application.byEmail.windowMs'),
@@ -318,7 +318,7 @@ export const applicationByEmail: RequestHandler = isRateLimitEnabled()
  * Public account registration rate limiter by IP address.
  * Limits: 5 requests per IP per 15 minutes (default config).
  */
-export const registerByIp: RequestHandler = isRateLimitEnabled()
+export const limitRegisterByIp: RequestHandler = isRateLimitEnabled()
   ? createIpRateLimiter(
     config.get<number>('rateLimit.register.byIp.max'),
     config.get<number>('rateLimit.register.byIp.windowMs'),
@@ -334,7 +334,7 @@ export const registerByIp: RequestHandler = isRateLimitEnabled()
  * already maps to an account, so the rate-limit signal cannot be used to
  * enumerate registered accounts (DEC-004).
  */
-export const registerByEmail: RequestHandler = isRateLimitEnabled()
+export const limitRegisterByEmail: RequestHandler = isRateLimitEnabled()
   ? createCredentialRateLimiter(
     config.get<number>('rateLimit.register.byEmail.max'),
     config.get<number>('rateLimit.register.byEmail.windowMs'),
@@ -347,7 +347,7 @@ export const registerByEmail: RequestHandler = isRateLimitEnabled()
  * Application email-confirmation rate limiter by IP address.
  * Limits: 20 requests per IP per 15 minutes (default config).
  */
-export const confirmApplicationByIp: RequestHandler = isRateLimitEnabled()
+export const limitConfirmApplicationByIp: RequestHandler = isRateLimitEnabled()
   ? createIpRateLimiter(
     config.get<number>('rateLimit.application.confirm.byIp.max'),
     config.get<number>('rateLimit.application.confirm.byIp.windowMs'),
@@ -363,7 +363,7 @@ export const confirmApplicationByIp: RequestHandler = isRateLimitEnabled()
  *
  * Limits: 20 requests per IP per 15 minutes (default config).
  */
-export const confirmPasswordResetByIp: RequestHandler = isRateLimitEnabled()
+export const limitConfirmPasswordResetByIp: RequestHandler = isRateLimitEnabled()
   ? createIpRateLimiter(
     config.get<number>('rateLimit.passwordReset.confirm.byIp.max'),
     config.get<number>('rateLimit.passwordReset.confirm.byIp.windowMs'),
@@ -379,7 +379,7 @@ export const confirmPasswordResetByIp: RequestHandler = isRateLimitEnabled()
  *
  * Limits: 20 requests per IP per 15 minutes (default config).
  */
-export const acceptInvitationByIp: RequestHandler = isRateLimitEnabled()
+export const limitAcceptInvitationByIp: RequestHandler = isRateLimitEnabled()
   ? createIpRateLimiter(
     config.get<number>('rateLimit.invitation.accept.byIp.max'),
     config.get<number>('rateLimit.invitation.accept.byIp.windowMs'),
@@ -402,7 +402,7 @@ export const acceptInvitationByIp: RequestHandler = isRateLimitEnabled()
  *
  * Limits: 10 requests per account per 1 hour (default config).
  */
-export const emailChangeByAccount: RequestHandler = isRateLimitEnabled()
+export const limitEmailChangeByAccount: RequestHandler = isRateLimitEnabled()
   ? createAccountRateLimiter(
     config.get<number>('rateLimit.emailChange.byAccount.max'),
     config.get<number>('rateLimit.emailChange.byAccount.windowMs'),

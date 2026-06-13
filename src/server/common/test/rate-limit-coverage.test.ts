@@ -187,9 +187,9 @@ const REVIEWED_NO_LIMITER_ROUTES: { method: string; path: string; reason: string
   { method: 'POST', path: '/api/funding/v1/admin/grants', reason: 'admin-only' },
   { method: 'DELETE', path: '/api/funding/v1/admin/grants/:id', reason: 'admin-only' },
   { method: 'POST', path: '/api/funding/v1/cancel', reason: 'authenticated CRUD (own funding plan)' },
-  { method: 'POST', path: '/api/funding/v1/calendars', reason: 'per-account limited (calendarFundingPlanByAccount)' },
-  { method: 'DELETE', path: '/api/funding/v1/calendars/:calendarId', reason: 'per-account limited (calendarFundingPlanByAccount)' },
-  { method: 'POST', path: '/api/funding/v1/checkout-sessions', reason: 'per-account limited (checkoutSessionByAccount)' },
+  { method: 'POST', path: '/api/funding/v1/calendars', reason: 'per-account limited (limitCalendarFundingPlanByAccount)' },
+  { method: 'DELETE', path: '/api/funding/v1/calendars/:calendarId', reason: 'per-account limited (limitCalendarFundingPlanByAccount)' },
+  { method: 'POST', path: '/api/funding/v1/checkout-sessions', reason: 'per-account limited (limitCheckoutSessionByAccount)' },
 
   // --- Calendar (authenticated, ownership-bounded CRUD) ---
   { method: 'POST', path: '/api/v1/calendars', reason: 'authenticated CRUD' },
@@ -224,16 +224,16 @@ const REVIEWED_NO_LIMITER_ROUTES: { method: string; path: string; reason: string
   { method: 'DELETE', path: '/api/v1/events/:eventId/categories/:categoryId', reason: 'authenticated CRUD' },
   { method: 'POST', path: '/api/v1/events/:eventId/series/:seriesId', reason: 'authenticated CRUD' },
   { method: 'DELETE', path: '/api/v1/events/:eventId/series/:seriesId', reason: 'authenticated CRUD' },
-  // Widget config + import-source routes carry widgetConfigByAccount / import limiters
+  // Widget config + import-source routes carry limitWidgetConfigByAccount / import limiters
   // (per-account), classified here rather than as high-risk surfaces.
-  { method: 'PUT', path: '/api/v1/calendars/:calendarId/widget/domain', reason: 'per-account limited (widgetConfigByAccount)' },
-  { method: 'DELETE', path: '/api/v1/calendars/:calendarId/widget/domain', reason: 'per-account limited (widgetConfigByAccount)' },
-  { method: 'PUT', path: '/api/v1/calendars/:calendarId/widget/config', reason: 'per-account limited (widgetConfigByAccount)' },
-  { method: 'POST', path: '/api/v1/calendars/:calendarId/import-sources', reason: 'per-account limited (widgetConfigByAccount)' },
-  { method: 'DELETE', path: '/api/v1/calendars/:calendarId/import-sources/:id', reason: 'per-account limited (widgetConfigByAccount)' },
-  { method: 'POST', path: '/api/v1/calendars/:calendarId/import-sources/:id/verify-issue', reason: 'per-account limited (widgetConfigByAccount)' },
-  { method: 'POST', path: '/api/v1/calendars/:calendarId/import-sources/:id/verify', reason: 'per-source limited (importSourceVerifyBySource)' },
-  { method: 'POST', path: '/api/v1/calendars/:calendarId/import-sources/:id/sync', reason: 'per-source limited (importSourceSyncBySource)' },
+  { method: 'PUT', path: '/api/v1/calendars/:calendarId/widget/domain', reason: 'per-account limited (limitWidgetConfigByAccount)' },
+  { method: 'DELETE', path: '/api/v1/calendars/:calendarId/widget/domain', reason: 'per-account limited (limitWidgetConfigByAccount)' },
+  { method: 'PUT', path: '/api/v1/calendars/:calendarId/widget/config', reason: 'per-account limited (limitWidgetConfigByAccount)' },
+  { method: 'POST', path: '/api/v1/calendars/:calendarId/import-sources', reason: 'per-account limited (limitWidgetConfigByAccount)' },
+  { method: 'DELETE', path: '/api/v1/calendars/:calendarId/import-sources/:id', reason: 'per-account limited (limitWidgetConfigByAccount)' },
+  { method: 'POST', path: '/api/v1/calendars/:calendarId/import-sources/:id/verify-issue', reason: 'per-account limited (limitWidgetConfigByAccount)' },
+  { method: 'POST', path: '/api/v1/calendars/:calendarId/import-sources/:id/verify', reason: 'per-source limited (limitImportSourceVerifyBySource)' },
+  { method: 'POST', path: '/api/v1/calendars/:calendarId/import-sources/:id/sync', reason: 'per-source limited (limitImportSourceSyncBySource)' },
 
   // --- Media ---
   { method: 'POST', path: '/api/v1/media/:calendarId', reason: 'authenticated CRUD (upload-abuse follow-up noted in audit; not high-risk)' },

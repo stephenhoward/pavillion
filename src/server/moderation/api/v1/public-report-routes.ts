@@ -6,8 +6,8 @@ import { DuplicateReportError, ReportValidationError } from '@/common/exceptions
 import ModerationInterface from '@/server/moderation/interface';
 import { EmailRateLimitError, ReporterBlockedError } from '@/server/moderation/exceptions';
 import {
-  reportSubmissionByIp,
-  reportSubmissionByEmail,
+  limitReportSubmissionByIp,
+  limitReportSubmissionByEmail,
 } from '@/server/common/middleware/rate-limiters';
 import { logError } from '@/server/common/helper/error-logger';
 
@@ -34,8 +34,8 @@ export default class PublicReportRoutes {
     const router = express.Router();
     router.post(
       '/events/:eventId/reports',
-      reportSubmissionByIp,
-      reportSubmissionByEmail,
+      limitReportSubmissionByIp,
+      limitReportSubmissionByEmail,
       this.submitReport.bind(this),
     );
     app.use(routePrefix, router);

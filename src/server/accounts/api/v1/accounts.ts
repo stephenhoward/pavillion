@@ -6,7 +6,7 @@ import { Account } from '@/common/model/account';
 import { logError } from '@/server/common/helper/error-logger';
 import { ValidationError } from '@/common/exceptions/base';
 import { createLogger } from '@/server/common/helper/logger';
-import { registerByIp, registerByEmail } from '@/server/common/middleware/rate-limiters';
+import { limitRegisterByIp, limitRegisterByEmail } from '@/server/common/middleware/rate-limiters';
 
 const logger = createLogger('accounts');
 
@@ -25,7 +25,7 @@ export default class AccountRouteHandlers {
     // is disabled in config. The email limiter increments uniformly on every
     // attempt regardless of account existence, so it cannot leak which emails
     // are registered (DEC-004).
-    router.post('/register', registerByIp, registerByEmail, ...ExpressHelper.noUserOnly, this.registerHandler.bind(this));
+    router.post('/register', limitRegisterByIp, limitRegisterByEmail, ...ExpressHelper.noUserOnly, this.registerHandler.bind(this));
     router.get('/accounts/me', ...ExpressHelper.loggedInOnly, this.getCurrentUser.bind(this));
     router.patch('/accounts/me/profile', ...ExpressHelper.loggedInOnly, this.updateProfile.bind(this));
     app.use(routePrefix, router);

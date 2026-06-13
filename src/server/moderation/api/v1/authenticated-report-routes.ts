@@ -7,8 +7,8 @@ import { DuplicateReportError, ReportValidationError } from '@/common/exceptions
 import ExpressHelper from '@/server/common/helper/express';
 import ModerationInterface from '@/server/moderation/interface';
 import {
-  reportSubmissionByIp,
-  reportSubmissionByAccount,
+  limitReportSubmissionByIp,
+  limitReportSubmissionByAccount,
 } from '@/server/common/middleware/rate-limiters';
 import { logError } from '@/server/common/helper/error-logger';
 
@@ -40,8 +40,8 @@ export default class AuthenticatedReportRoutes {
     router.post(
       '/reports',
       ...ExpressHelper.loggedInOnly,
-      reportSubmissionByIp,
-      reportSubmissionByAccount,
+      limitReportSubmissionByIp,
+      limitReportSubmissionByAccount,
       this.submitReport.bind(this),
     );
     app.use(routePrefix, router);

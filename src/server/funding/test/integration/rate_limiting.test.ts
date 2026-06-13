@@ -3,7 +3,7 @@ import config from 'config';
 import express, { Express } from 'express';
 import request from 'supertest';
 
-import { fundingWebhookByIp } from '@/server/common/middleware/rate-limiters';
+import { limitFundingWebhookByIp } from '@/server/common/middleware/rate-limiters';
 
 /**
  * Integration tests for funding (Stripe webhook) rate limiting.
@@ -15,7 +15,7 @@ import { fundingWebhookByIp } from '@/server/common/middleware/rate-limiters';
  *
  * NOTE: requires rate limiting enabled. To run: npm run test:ratelimiting
  *
- * IMPORTANT: fundingWebhookByIp is a module-level singleton with its own
+ * IMPORTANT: limitFundingWebhookByIp is a module-level singleton with its own
  * in-memory store, keyed by IP. The whole suite shares the localhost IP, so the
  * IP budget is exhausted exactly once in a single dedicated test. The webhook
  * limiter is deliberately generous (DEC-007: belt-and-braces behind Stripe
@@ -33,12 +33,12 @@ describeOrSkip('Funding Webhook Rate Limiting Integration Tests', () => {
     app = express();
     app.use(express.json());
 
-    app.post('/webhook-ip-only', fundingWebhookByIp, (req, res) => {
+    app.post('/webhook-ip-only', limitFundingWebhookByIp, (req, res) => {
       res.json({ route: 'funding-webhook-ip' });
     });
   });
 
-  describe('fundingWebhookByIp', () => {
+  describe('limitFundingWebhookByIp', () => {
     it('should return 429 once the per-IP limit is exhausted and wire the same singleton onto POST /api/funding/webhooks/stripe', async () => {
       const ipMax = config.get<number>('rateLimit.fundingWebhook.byIp.max');
 
@@ -68,7 +68,7 @@ describeOrSkip('Funding Webhook Rate Limiting Integration Tests', () => {
       expect(blocked.headers['ratelimit-remaining']).toBe('0');
       expect(blocked.headers['retry-after']).toBeDefined();
 
-      // Prove the same `fundingWebhookByIp` singleton is wired onto the real
+      // Prove the same `limitFundingWebhookByIp` singleton is wired onto the real
       // webhook route. The limiter is now exhausted for localhost, so a request
       // to POST /api/funding/webhooks/stripe must short-circuit at 429 before
       // the raw-body parser and signature-verification handler run.
