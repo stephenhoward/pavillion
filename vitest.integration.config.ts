@@ -29,7 +29,7 @@ export default defineConfig({
       '**/tests/e2e/**',
       '**/*.e2e.test.ts',
       // Exclude rate limiting tests - run separately with test:ratelimiting
-      '**/authentication/test/integration/rate_limiting.test.ts',
+      '**/test/integration/rate_limiting.test.ts',
       // Exclude widget tests - they need DOM and run with unit tests
       '**/widget/test/integration/**',
     ],

@@ -1,3 +1,22 @@
+# Global server options. Request timeouts mitigate slowloris-class DoS
+# against public read endpoints: a client that opens a connection and then
+# dribbles headers/body slower than these limits has its connection closed
+# rather than holding a server slot open indefinitely.
+#   read_header — max time to receive the full request header (5s)
+#   read_body   — max time to receive the full request body (10s)
+#   idle        — max time a keep-alive connection may sit idle (2m)
+# This is timeout-based mitigation only; per-IP rate limiting and
+# connection-count caps are explicitly out of scope here.
+{
+	servers {
+		timeouts {
+			read_body 10s
+			read_header 5s
+			idle 2m
+		}
+	}
+}
+
 {$DOMAIN} {
 	encode gzip zstd
 

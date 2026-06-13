@@ -6,6 +6,7 @@ import { Account } from '@/common/model/account';
 import { logError } from '@/server/common/helper/error-logger';
 import { ValidationError } from '@/common/exceptions/base';
 import { createLogger } from '@/server/common/helper/logger';
+import { registerByIp, registerByEmail } from '@/server/common/middleware/rate-limiters';
 
 const logger = createLogger('accounts');
 
@@ -18,7 +19,13 @@ export default class AccountRouteHandlers {
 
   installHandlers(app: Application, routePrefix: string): void {
     const router = express.Router();
-    router.post('/register', ...ExpressHelper.noUserOnly, this.registerHandler.bind(this));
+    // Rate limit POST /register by IP (anti-spam) and by email (anti-
+    // enumeration probing). Both limiters are pre-configured singletons in
+    // rate-limiters.ts; they fall back to no-op middleware when rate limiting
+    // is disabled in config. The email limiter increments uniformly on every
+    // attempt regardless of account existence, so it cannot leak which emails
+    // are registered (DEC-004).
+    router.post('/register', registerByIp, registerByEmail, ...ExpressHelper.noUserOnly, this.registerHandler.bind(this));
     router.get('/accounts/me', ...ExpressHelper.loggedInOnly, this.getCurrentUser.bind(this));
     router.patch('/accounts/me/profile', ...ExpressHelper.loggedInOnly, this.updateProfile.bind(this));
     app.use(routePrefix, router);

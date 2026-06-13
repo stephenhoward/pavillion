@@ -46,7 +46,10 @@ export function createCredentialRateLimiter(
       const credential = req.body?.[credentialField];
       const redactedCredential = redactEmail(credential);
 
-      logger.warn({ credential: redactedCredential, endpoint: endpointName }, 'Rate limit exceeded');
+      // DEC-004: even redacted, the credential is caller-identifying; log
+      // rate-limit enforcement at debug level only, matching the IP and account
+      // limiter factories, so standard log output carries no per-identity trail.
+      logger.debug({ credential: redactedCredential, endpoint: endpointName }, 'Rate limit exceeded');
 
       // Generate endpoint-specific error message
       const errorMessage = endpointName === 'password-reset'

@@ -4,7 +4,7 @@ import vue from '@vitejs/plugin-vue';
 export default defineConfig({
   plugins: [vue()],
   test: {
-    environment: 'happy-dom',
+    environment: 'node',
     globals: true,
     // Rate limiting tests use forks pool
     fileParallelism: true,
@@ -21,6 +21,9 @@ export default defineConfig({
     include: [
       '**/authentication/test/integration/rate_limiting.test.ts',
       '**/accounts/test/integration/rate_limiting.test.ts',
+      '**/funding/test/integration/rate_limiting.test.ts',
+      '**/activitypub/test/integration/rate_limiting.test.ts',
+      '**/common/test/rate-limit-coverage.test.ts',
     ],
     exclude: [
       '**/node_modules/**',

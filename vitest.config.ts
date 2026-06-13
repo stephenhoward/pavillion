@@ -56,6 +56,12 @@ export default defineConfig({
           include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
           exclude: [
             ...sharedExclude,
+            // Rate-limit coverage guard: transitively imports the full domain
+            // graph (reaching isomorphic-dompurify) AND only detects limiters
+            // when config rateLimit.enabled is true. It must run EXCLUSIVELY via
+            // vitest.ratelimiting.config.ts (NODE_CONFIG rateLimit.enabled=true,
+            // forks pool), exactly like the domain rate_limiting.test.ts files.
+            'src/server/common/test/rate-limit-coverage.test.ts',
             'src/common/test/utils/render-markdown.test.ts',
             'src/server/configuration/test/service_settings.test.ts',
             // Imports the full @/server/server entry module, whose graph reaches
