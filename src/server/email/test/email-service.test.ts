@@ -8,7 +8,49 @@ import sinon from 'sinon';
  * - Transport selection logic (test vs development vs mailpit vs smtp)
  * - EmailService.sendEmail() method with mock transport
  * - MailConfig type validation
+ * - Recipient address never reaches logs (DEC-004, privacy-playbook/logging.md)
  */
+
+// Module-scope mocks so the logger/error-logger seams are stubbed before email.ts
+// captures its module-scoped `logger`/`logError` references. A post-import spy
+// after vi.resetModules() would be disconnected and pass vacuously.
+const mockLoggerInfo = vi.fn();
+const mockLoggerWarn = vi.fn();
+const mockLoggerError = vi.fn();
+const mockLogError = vi.fn();
+
+vi.mock('@/server/common/helper/logger', () => ({
+  createLogger: () => ({
+    info: mockLoggerInfo,
+    warn: mockLoggerWarn,
+    error: mockLoggerError,
+  }),
+}));
+
+vi.mock('@/server/common/helper/error-logger', () => ({
+  logError: mockLogError,
+}));
+
+/**
+ * Collects every argument passed to a mocked function across all calls into a
+ * single string, so a test can assert that a substring appears in (or is absent
+ * from) anything the function was ever handed.
+ */
+function flattenCallArgs(mockFn: ReturnType<typeof vi.fn>): string {
+  return mockFn.mock.calls
+    .flat()
+    .map((arg) => (typeof arg === 'string' ? arg : JSON.stringify(arg)))
+    .join(' || ');
+}
+
+// Clear logger mock call history before every test so accumulated calls from
+// one describe block can't leak into another's assertions.
+beforeEach(() => {
+  mockLoggerInfo.mockClear();
+  mockLoggerWarn.mockClear();
+  mockLoggerError.mockClear();
+  mockLogError.mockClear();
+});
 
 describe('EmailService Transport Selection', () => {
   let sandbox: sinon.SinonSandbox;
@@ -207,6 +249,69 @@ describe('EmailService.sendEmail', () => {
 
     // Cleanup
     delete process.env.MAIL_FROM;
+  });
+});
+
+describe('EmailService.sendEmail recipient-address log safety', () => {
+  let sandbox: sinon.SinonSandbox;
+
+  beforeEach(() => {
+    sandbox = sinon.createSandbox();
+    vi.resetModules();
+    mockLoggerInfo.mockClear();
+    mockLoggerWarn.mockClear();
+    mockLoggerError.mockClear();
+    mockLogError.mockClear();
+    process.env.NODE_ENV = 'test';
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+  });
+
+  it('should not log the full recipient address on the pre-send info log, but should log the domain', async () => {
+    // Arrange
+    const { createEmailService } = await import('../service/email');
+    const { EmailStore } = await import('../transport/testing-transport');
+    const service = createEmailService();
+    EmailStore.getInstance().clear();
+
+    // Act
+    await service.sendEmail({
+      emailAddress: 'recipient@example.com',
+      subject: 'Test Subject',
+      textMessage: 'Test content',
+      htmlMessage: '<p>Test content</p>',
+    });
+
+    // Assert: the full address never appears in any logger.info argument,
+    // but the domain does (so the test can't pass by the log being removed/empty).
+    const infoArgs = flattenCallArgs(mockLoggerInfo);
+    expect(infoArgs).not.toContain('recipient@example.com');
+    expect(infoArgs).toContain('example.com');
+  });
+
+  it('should not log the full recipient address on the failure log, but should keep it diagnosable', async () => {
+    // Arrange
+    const { createEmailService } = await import('../service/email');
+    const service = createEmailService();
+
+    const sendMailStub = sandbox.stub(service.transportInstance, 'sendMail');
+    sendMailStub.rejects(new Error('Sending failed'));
+
+    // Act
+    const result = await service.sendEmail({
+      emailAddress: 'recipient@example.com',
+      subject: 'Test Subject',
+      textMessage: 'Test content',
+    });
+
+    // Assert
+    expect(result).toBeNull();
+    const errorArgs = flattenCallArgs(mockLogError);
+    expect(errorArgs).not.toContain('recipient@example.com');
+    expect(errorArgs).toContain('example.com');
+    expect(errorArgs).toContain('Test Subject');
   });
 });
 
