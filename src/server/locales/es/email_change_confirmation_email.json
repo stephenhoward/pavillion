@@ -1,0 +1,13 @@
+{
+  "subject": "Confirma tu nueva dirección de correo electrónico",
+  "title": "Confirma tu nueva dirección de correo electrónico",
+  "greeting": "Hola,",
+  "instructions": "Hemos recibido una solicitud para cambiar la dirección de correo electrónico de tu cuenta. Para confirmar esta nueva dirección de correo electrónico, haz clic en el enlace que aparece a continuación o cópialo y pégalo en tu navegador:",
+  "button": "Confirmar dirección de correo electrónico",
+  "copy_link_text": "O copia este enlace:",
+  "ignore_message": "Si no solicitaste un cambio de dirección de correo electrónico, puedes ignorar este mensaje de forma segura.",
+  "expiry_notice": "Este enlace de confirmación caducará en 1 hora.",
+  "signature": "Gracias,",
+  "team_name": "El equipo de Pavillion",
+  "footer_text": "Este es un mensaje automático, por favor no respondas a este correo electrónico."
+}

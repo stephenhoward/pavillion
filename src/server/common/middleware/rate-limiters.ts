@@ -409,3 +409,55 @@ export const limitEmailChangeByAccount: RequestHandler = isRateLimitEnabled()
     'email-change',
   )
   : noOpMiddleware;
+
+/**
+ * Email-change rate limiter by destination (candidate) address.
+ *
+ * Sits alongside limitEmailChangeByAccount on POST /api/auth/v1/email. Keyed on
+ * the requester-supplied destination email (req.body.email) across ALL accounts,
+ * it caps how often any single address can be targeted as a pending email-change
+ * recipient — the email-bombing defense (epic pv-91a3): a multi-account attacker
+ * cannot flood a victim address with confirmation emails, because the per-address
+ * window is shared regardless of which account initiates.
+ *
+ * Cannot become an enumeration oracle: the key is the attacker-supplied address,
+ * so a 429 only tells the requester they hit their own cap on an address they
+ * chose — it reveals nothing about whether that address maps to an account.
+ *
+ * Keyed on the NORMALIZED destination (trim + lowercase), mirroring the
+ * normalization initiateEmailChange applies before using the address
+ * (src/server/authentication/service/auth.ts). Without this, an attacker could
+ * split the per-address counter with case/whitespace variants (Victim@x.com vs
+ * victim@x.com) and bomb the same mailbox past the cap. Normalization happens in
+ * createCredentialRateLimiter's keyGenerator, so every credential limiter
+ * (including this one) shares one bucket across case/whitespace variants. Uses
+ * the same credential factory and 'email' field as limitRegisterByEmail.
+ *
+ * Limits: 2 requests per destination address per 24 hours (default config).
+ */
+export const limitEmailChangeByDestination: RequestHandler = isRateLimitEnabled()
+  ? createCredentialRateLimiter(
+    config.get<number>('rateLimit.emailChange.byDestination.max'),
+    config.get<number>('rateLimit.emailChange.byDestination.windowMs'),
+    'email-change',
+    'email',
+  )
+  : noOpMiddleware;
+
+/**
+ * Email-change confirmation rate limiter by IP address.
+ *
+ * Caps token-redemption attempts against POST /api/auth/v1/email/confirm/:token
+ * to defend against brute-force guessing of email-change codes. Mirrors
+ * limitConfirmPasswordResetByIp: the confirmation code is a randomBytes(16)
+ * CSPRNG token, so this is an abuse cap rather than a guessing wall.
+ *
+ * Limits: 20 requests per IP per 15 minutes (default config).
+ */
+export const limitConfirmEmailChangeByIp: RequestHandler = isRateLimitEnabled()
+  ? createIpRateLimiter(
+    config.get<number>('rateLimit.emailChange.confirm.byIp.max'),
+    config.get<number>('rateLimit.emailChange.confirm.byIp.windowMs'),
+    'email-change-confirm',
+  )
+  : noOpMiddleware;

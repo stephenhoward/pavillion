@@ -253,7 +253,7 @@ describe('Token Refresh', () => {
 
     let promise = authentication._refresh_login( Date.now() + 500)
       .then( () => {
-        expect( stub1.notCalled ).toBeFalsy;
+        expect( stub1.notCalled ).toBe(true);
       });
     sandbox.clock.runAll();
 
@@ -454,5 +454,111 @@ describe('lastKnownEmail', () => {
 
     await authentication.login('person@example.com', 'pw');
     expect(authentication.lastKnownEmail).toBeNull();
+  });
+});
+
+describe('changeEmail (initiate)', () => {
+  it('posts to /email and returns true on a 200, without refreshing the session', async () => {
+    let authentication = makeAuth();
+    const refresh = sandbox.stub(authentication, '_refresh_login');
+    const axios_post = sandbox.stub(axios, 'post');
+    axios_post.resolves({ status: 200, data: { success: true } });
+
+    const result = await authentication.changeEmail('new@example.com', 'pw');
+
+    expect(result).toBe(true);
+    expect(axios_post.calledOnceWith('/api/auth/v1/email', { email: 'new@example.com', password: 'pw' })).toBe(true);
+    // The address is not changed yet — no session refresh should occur.
+    expect(refresh.called).toBe(false);
+  });
+
+  it('returns false when the initiate request fails', async () => {
+    let authentication = makeAuth();
+    sandbox.stub(authentication, '_refresh_login');
+    sandbox.stub(axios, 'post').rejects({ response: { status: 401 } });
+
+    const result = await authentication.changeEmail('new@example.com', 'pw');
+
+    expect(result).toBe(false);
+  });
+});
+
+describe('confirmEmailChange', () => {
+  it('posts the token as a path param and returns valid:true on success', async () => {
+    let authentication = makeAuth();
+    const token = 'a'.repeat(32);
+    const axios_post = sandbox.stub(axios, 'post');
+    axios_post.resolves({ status: 200, data: { success: true } });
+
+    const result = await authentication.confirmEmailChange(token);
+
+    expect(result).toEqual({ valid: true });
+    expect(axios_post.calledOnceWith('/api/auth/v1/email/confirm/' + token)).toBe(true);
+  });
+
+  it('returns valid:false when the backend collapses to {valid:false}', async () => {
+    let authentication = makeAuth();
+    sandbox.stub(axios, 'post').resolves({ status: 200, data: { valid: false } });
+
+    const result = await authentication.confirmEmailChange('b'.repeat(32));
+
+    expect(result).toEqual({ valid: false });
+  });
+
+  it('throws when given an empty token', async () => {
+    let authentication = makeAuth();
+
+    await expect(() => authentication.confirmEmailChange('')).rejects.toBe('no_token_provided');
+  });
+
+  it('throws the HTTP status on a non-2xx response', async () => {
+    let authentication = makeAuth();
+    const error = new axios.AxiosError('Too Many Requests', '429', undefined, undefined, {
+      status: 429,
+      data: {},
+      statusText: 'Too Many Requests',
+      headers: {},
+      config: {} as any,
+    } as any);
+    sandbox.stub(axios, 'post').rejects(error);
+
+    await expect(authentication.confirmEmailChange('c'.repeat(32))).rejects.toBe(429);
+  });
+});
+
+describe('refreshToken', () => {
+  it('returns false without hitting the network when no session is present', async () => {
+    let authentication = makeAuth();
+    const axios_get = sandbox.stub(axios, 'get');
+
+    const result = await authentication.refreshToken();
+
+    expect(result).toBe(false);
+    expect(axios_get.called).toBe(false);
+  });
+
+  it('fetches a fresh token and stores it when a session is present', async () => {
+    let authentication = makeAuth();
+    authentication.localStore.setItem('jwt', fake_jwt);
+    const set_token = sandbox.stub(authentication, '_set_token');
+    const axios_get = sandbox.stub(axios, 'get');
+    axios_get.resolves({ status: 200, data: fake_jwt });
+
+    const result = await authentication.refreshToken();
+
+    expect(result).toBe(true);
+    expect(axios_get.calledOnceWith('/api/auth/v1/token')).toBe(true);
+    expect(set_token.calledOnceWith(fake_jwt)).toBe(true);
+  });
+
+  it('returns false (non-fatal) when the refresh request fails', async () => {
+    let authentication = makeAuth();
+    authentication.localStore.setItem('jwt', fake_jwt);
+    sandbox.stub(authentication, '_set_token');
+    sandbox.stub(axios, 'get').rejects({ response: { status: 401 } });
+
+    const result = await authentication.refreshToken();
+
+    expect(result).toBe(false);
   });
 });

@@ -28,7 +28,9 @@
     "password_help_text": "Enter your current password to confirm this change",
     "change_email_button": "Change Email",
     "close_button": "Cancel",
-    "change_email_failed_message": "Failed to change email address"
+    "done_button": "Done",
+    "change_email_failed_message": "Failed to change email address",
+    "confirm_sent_message": "Check your new inbox to confirm the change. Your email address will only update once you click the link we just sent."
   },
   "change_password_form": {
     "title": "Change your password",

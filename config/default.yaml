@@ -206,6 +206,26 @@ rateLimit:
       # (EmailAlreadyExistsError). This account-keyed cap bounds that probe rate;
       # it does not close the differential-response enumeration oracle itself.
       max: 10  # 10 email-change attempts per account per hour
+    byDestination:
+      windowMs: 86400000  # 24 hours in milliseconds
+      # Email-bombing defense (epic pv-91a3) for POST /api/auth/v1/email. Keyed
+      # on the NORMALIZED (trim + lowercase) requester-supplied destination
+      # address across ALL accounts, this caps how often any one address can be
+      # targeted as a pending email-change recipient, so a multi-account attacker
+      # cannot flood a victim address with confirmation emails — nor split the
+      # counter with case/whitespace variants of the same mailbox. Cannot become
+      # an enumeration oracle: the key is the attacker-supplied address, so a 429
+      # only reports the requester's own cap on an address they chose. Mirrors
+      # register.byEmail.
+      max: 2  # 2 email-change requests per destination address per 24 hours
+    confirm:
+      byIp:
+        windowMs: 900000  # 15 minutes in milliseconds
+        # Token brute-force defense for POST /api/auth/v1/email/confirm/:token.
+        # Mirrors passwordReset.confirm.byIp (20/15m): the email-change code is a
+        # randomBytes(16) = 128-bit CSPRNG token, so the keyspace is far too
+        # large to brute-force and this is an abuse cap, not a guessing wall.
+        max: 20  # 20 confirmation attempts per IP per 15 minutes
 
 # Housekeeping configuration for automated server maintenance
 housekeeping:

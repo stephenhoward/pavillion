@@ -28,7 +28,9 @@
     "password_help_text": "Ingresa tu contraseña actual para confirmar este cambio",
     "change_email_button": "Cambiar Correo",
     "close_button": "Cancelar",
-    "change_email_failed_message": "No se pudo cambiar la dirección de correo electrónico"
+    "done_button": "Listo",
+    "change_email_failed_message": "No se pudo cambiar la dirección de correo electrónico",
+    "confirm_sent_message": "Revisa tu nueva bandeja de entrada para confirmar el cambio. Tu dirección de correo electrónico solo se actualizará cuando hagas clic en el enlace que acabamos de enviar."
   },
   "change_password_form": {
     "title": "Cambia tu contraseña",

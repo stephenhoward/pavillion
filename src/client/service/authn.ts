@@ -420,21 +420,87 @@ export default class AuthenticationService {
     }
   }
 
+  /**
+   * Initiates an email change. This no longer changes the address immediately:
+   * the backend sends a confirmation link to the NEW address, and the change is
+   * only committed once confirmEmailChange consumes that token. The session is
+   * therefore NOT refreshed here — the logged-in email is unchanged until the
+   * user confirms from their new inbox.
+   *
+   * @param {string} email - Proposed new email address
+   * @param {string} password - Current password, confirming the request
+   * @returns {Promise<boolean>} true if the confirmation link was sent
+   */
   async changeEmail ( email: string, password: string ): Promise<boolean> {
     try {
       let response = await axios.post(
         this._authUrl('/email'),
         { email, password },
       );
-      if ( response.status === 200 ) {
-        await this._refresh_login( this.userSettings().exp );
-        return true;
-      }
+      return response.status === 200;
     }
     catch {
       // TODO: something more useful here
     }
     return false;
+  }
+
+  /**
+   * Confirms a pending email change by consuming the confirmation token sent to
+   * the new address. Every backend failure (bad format / unknown / expired /
+   * already-consumed / address-now-taken) collapses to { valid: false }.
+   *
+   * @param {string} token - Email-change confirmation token (path param)
+   * @returns {Promise<{valid: boolean}>} { valid: true } on success
+   * @throws Will throw if the token is null or empty, or on a non-2xx HTTP status
+   */
+  async confirmEmailChange( token: string ): Promise<{valid: boolean}> {
+
+    if ( token == null || token == '' ) {
+      throw("no_token_provided");
+    }
+
+    try {
+      let response = await axios.post( this._authUrl('/email/confirm/' + token) );
+      return { valid: response.data.success === true };
+    }
+    catch (error) {
+      if ( axios.isAxiosError(error) ) {
+        const axiosError = error as AxiosError;
+        if ( axiosError.response ) {
+          throw(axiosError.response.status);
+        }
+      }
+      return { valid: false };
+    }
+  }
+
+  /**
+   * Immediately refreshes the JWT from the server, replacing the stored token
+   * and rescheduling the silent refresh timer. Used after a confirmed email
+   * change so the new email propagates into the client session without forcing
+   * the user to log out and back in.
+   *
+   * No-op (returns false) when no session is present — the email-change confirm
+   * page may be opened anonymously or on a different device.
+   *
+   * @returns {Promise<boolean>} true if a fresh token was stored
+   */
+  async refreshToken(): Promise<boolean> {
+    if ( ! this.jwt() ) {
+      return false;
+    }
+    try {
+      let response = await axios.get( this._authUrl('/token'), {} );
+      this._set_token(response.data);
+      return true;
+    }
+    catch {
+      // A failed refresh must not mask a successful confirmation; the caller
+      // treats refresh failure as non-fatal. The next silent-refresh cycle or
+      // the response interceptor will surface session expiry if it occurs.
+      return false;
+    }
   }
 
   /**

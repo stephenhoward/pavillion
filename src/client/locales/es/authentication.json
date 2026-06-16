@@ -67,5 +67,12 @@
   "session_expired": {
     "title": "Sesión expirada",
     "description": "Tu sesión ha expirado. Inicia sesión nuevamente para continuar donde lo dejaste."
+  },
+  "email_confirm": {
+    "title": "Confirma el cambio de tu correo electrónico",
+    "confirming": "Confirmando tu nueva dirección de correo electrónico…",
+    "success_message": "Tu dirección de correo electrónico ha sido actualizada. Ya puedes iniciar sesión con tu nueva dirección.",
+    "go_login": "← volver a iniciar sesión",
+    "invalid_message": "Este enlace de confirmación es inválido o ha expirado. Por favor solicita el cambio de correo electrónico nuevamente."
   }
 }

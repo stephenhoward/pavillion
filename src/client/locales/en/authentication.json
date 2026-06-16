@@ -67,5 +67,12 @@
   "session_expired": {
     "title": "Session expired",
     "description": "Your session has expired. Sign in again to continue where you left off."
+  },
+  "email_confirm": {
+    "title": "Confirm your email change",
+    "confirming": "Confirming your new email address…",
+    "success_message": "Your email address has been updated. You can now sign in with your new address.",
+    "go_login": "← back to sign in",
+    "invalid_message": "This confirmation link is invalid or has expired. Please request the email change again."
   }
 }

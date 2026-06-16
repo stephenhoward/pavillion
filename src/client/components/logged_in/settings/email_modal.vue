@@ -1,5 +1,5 @@
 <script setup>
-import { reactive, inject, ref, onMounted, computed } from 'vue';
+import { reactive, inject, ref, onMounted, computed, nextTick } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import Modal from '@/client/components/common/modal.vue';
 
@@ -14,9 +14,11 @@ const state = reactive({
   email: '',
   password: '',
   err: '',
+  sent: false,
 });
 
 const firstInputRef = ref(null);
+const doneButtonRef = ref(null);
 
 onMounted(() => {
   // Focus first input when modal opens
@@ -30,7 +32,15 @@ onMounted(() => {
 const changeEmail = async () => {
   const ok = await authn.changeEmail(state.email, state.password);
   if (ok) {
-    emit('close', state.email);
+    // The address is NOT changed yet — a confirmation link was sent to the new
+    // inbox. Show the confirmation prompt rather than reporting an immediate
+    // change, and close without signalling a new address to the parent.
+    state.err = '';
+    state.sent = true;
+    // The previously-focused submit button is now removed from the DOM. Move
+    // focus to the Done button so keyboard/AT users aren't dropped to <body>.
+    await nextTick();
+    doneButtonRef.value?.focus();
   }
   else {
     state.err = t('change_email_failed_message');
@@ -46,7 +56,25 @@ const isValid = computed(() => state.email.length > 0 && state.email.includes('@
     @close="$emit('close', null)"
     modal-class="change-email-modal"
   >
-    <form @submit.prevent="changeEmail" class="modal-form">
+    <div v-if="state.sent" class="modal-form">
+      <p class="confirm-sent-text"
+         role="status"
+         aria-live="polite">
+        {{ t('confirm_sent_message', { defaultValue: 'Check your new inbox to confirm the change. Your email address will only update once you click the link we just sent.' }) }}
+      </p>
+      <div class="modal-footer">
+        <button
+          ref="doneButtonRef"
+          type="button"
+          class="btn-submit"
+          @click="$emit('close', null)"
+        >
+          {{ t('done_button', { defaultValue: 'Done' }) }}
+        </button>
+      </div>
+    </div>
+
+    <form v-else @submit.prevent="changeEmail" class="modal-form">
       <p class="current-email-text">
         {{ t('current_email_label', { defaultValue: 'Current email:' }) }}
         <span class="current-email-value">{{ authn.userEmail() }}</span>
@@ -145,6 +173,16 @@ const isValid = computed(() => state.email.length > 0 && state.email.includes('@
   }
 }
 
+.confirm-sent-text {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--pav-color-stone-700);
+
+  @media (prefers-color-scheme: dark) {
+    color: var(--pav-color-stone-300);
+  }
+}
+
 .error-message {
   padding: var(--pav-space-3);
   background: rgba(239, 68, 68, 0.1);
@@ -238,6 +276,12 @@ const isValid = computed(() => state.email.length > 0 && state.email.includes('@
 
   &:hover:not(:disabled) {
     background: var(--pav-color-orange-600);
+  }
+
+  &:focus-visible {
+    outline: var(--pav-border-width-2) solid var(--pav-border-color-focus);
+    outline-offset: var(--pav-space-0_5);
+    box-shadow: var(--pav-shadow-focus);
   }
 
   &:disabled {
