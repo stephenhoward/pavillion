@@ -35,10 +35,14 @@ export function createCredentialRateLimiter(
     standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
     legacyHeaders: false, // Disable the `X-RateLimit-*` headers
 
-    // Use credential from request body as the key
+    // Use credential from request body as the key, normalized so case and
+    // whitespace variants of the same credential share one bucket (prevents
+    // per-credential budget multiplication). String() guards non-string body
+    // values; the 'unknown' fallback covers empty/missing credentials.
     keyGenerator: (req: Request) => {
       const credential = req.body?.[credentialField];
-      return credential || 'unknown';
+      const normalized = String(credential ?? '').trim().toLowerCase();
+      return normalized || 'unknown';
     },
 
     // Custom handler when rate limit is exceeded

@@ -75,7 +75,12 @@ function makeSourceEntity(overrides: Partial<ImportSourceEntity> = {}): ImportSo
     verification_state: 'verified',
     verification_token: null,
     verified_at: new Date('2026-03-01T00:00:00Z'),
-    verification_expires_at: new Date('2026-06-01T00:00:00Z'),
+    // No expiry by default: assertVerifiedForSync treats a verified source with
+    // a null expiry as valid regardless of wall-clock time, so the orchestration
+    // tests below don't trip ImportSourceNotVerifiedError as real time advances.
+    // Verification-expiry/grace-window behavior has dedicated tests that set
+    // verification_expires_at explicitly.
+    verification_expires_at: null,
     etag: null,
     content_hash: null,
     last_fetched_at: null,
