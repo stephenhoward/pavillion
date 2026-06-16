@@ -209,6 +209,49 @@ describe('createCredentialRateLimiter', () => {
       expect(blockedResponse.status).toBe(429);
     });
 
+    it('should share one bucket across case and whitespace variants of the same email', async () => {
+      const limiter = createCredentialRateLimiter(
+        2,
+        60000,
+        'test-endpoint',
+        'email',
+      );
+
+      router.post('/test', limiter, (req, res) => {
+        res.status(200).json({ success: true });
+      });
+
+      const app = testApp(router);
+
+      // First variant: mixed case
+      const firstResponse = await request(app)
+        .post('/test')
+        .send({ email: 'Alice@x.com' });
+
+      expect(firstResponse.status).toBe(200);
+
+      // Second variant: surrounding whitespace
+      const secondResponse = await request(app)
+        .post('/test')
+        .send({ email: ' alice@x.com ' });
+
+      expect(secondResponse.status).toBe(200);
+
+      // Third variant: canonical form — shares the normalized bucket, so blocked
+      const blockedResponse = await request(app)
+        .post('/test')
+        .send({ email: 'alice@x.com' });
+
+      expect(blockedResponse.status).toBe(429);
+
+      // Control: a distinct address still gets its own bucket (no over-collapse)
+      const distinctResponse = await request(app)
+        .post('/test')
+        .send({ email: 'bob@x.com' });
+
+      expect(distinctResponse.status).toBe(200);
+    });
+
     it('should share the unknown key for empty and missing credentials', async () => {
       const limiter = createCredentialRateLimiter(
         2,
@@ -243,6 +286,45 @@ describe('createCredentialRateLimiter', () => {
         .send({ notEmail: 'other-value' });
 
       expect(blockedResponse.status).toBe(429);
+    });
+
+    it('should coerce a non-string credential into its own isolated bucket', async () => {
+      const limiter = createCredentialRateLimiter(
+        1,
+        60000,
+        'test-endpoint',
+        'email',
+      );
+
+      router.post('/test', limiter, (req, res) => {
+        res.status(200).json({ success: true });
+      });
+
+      const app = testApp(router);
+
+      // Exhaust the bucket for a legitimate string email.
+      const firstStringResponse = await request(app)
+        .post('/test')
+        .send({ email: 'alice@x.com' });
+
+      expect(firstStringResponse.status).toBe(200);
+
+      const blockedStringResponse = await request(app)
+        .post('/test')
+        .send({ email: 'alice@x.com' });
+
+      expect(blockedStringResponse.status).toBe(429);
+
+      // A non-string credential is coerced to a deterministic key
+      // (String({...}) === '[object Object]', normalized to '[object object]')
+      // that is distinct from the exhausted string bucket — so it is still
+      // allowed. This proves the String() guard yields an isolated key rather
+      // than collapsing the non-string value into the string email's bucket.
+      const objectResponse = await request(app)
+        .post('/test')
+        .send({ email: { inject: 'x' } });
+
+      expect(objectResponse.status).toBe(200);
     });
   });
 
