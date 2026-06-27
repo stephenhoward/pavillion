@@ -3,7 +3,7 @@ import { flushPromises } from '@vue/test-utils';
 import { createMemoryHistory, createRouter, Router } from 'vue-router';
 import { RouteRecordRaw } from 'vue-router';
 
-import FundingSheet from '@/client/components/logged_in/calendar-management/FundingSheet.vue';
+import FundingSheet from '@/client/components/logged_in/calendar-management/funding-sheet.vue';
 import { mountComponent } from '@/client/test/lib/vue';
 
 const routes: RouteRecordRaw[] = [

@@ -2,7 +2,7 @@
 import { ref, useId } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import PillButton from '@/client/components/common/pill-button.vue';
-import Sheet from '@/client/components/common/Sheet.vue';
+import Sheet from '@/client/components/common/sheet.vue';
 
 /**
  * EventCancelConfirmModal

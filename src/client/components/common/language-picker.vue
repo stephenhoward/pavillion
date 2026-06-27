@@ -176,7 +176,7 @@ import { reactive, computed } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import iso6391 from 'iso-639-1-dir';
 import { DEFAULT_LANGUAGE_CODE } from '@/common/i18n/languages';
-import Sheet from '@/client/components/common/Sheet.vue';
+import Sheet from '@/client/components/common/sheet.vue';
 
 const emit = defineEmits(['close', 'select']);
 

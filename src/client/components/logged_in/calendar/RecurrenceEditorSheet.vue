@@ -2,7 +2,7 @@
 import { reactive, useId } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import { DateTime } from 'luxon';
-import Sheet from '@/client/components/common/Sheet.vue';
+import Sheet from '@/client/components/common/sheet.vue';
 import { CalendarEventSchedule } from '@/common/model/events';
 
 const props = defineProps({
