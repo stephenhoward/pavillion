@@ -77,6 +77,29 @@ describe('redactEmail', () => {
     });
   });
 
+  describe('non-string values', () => {
+    // Forged request bodies can carry non-string credential values. redactEmail
+    // must redact these to 'unknown' rather than throwing on .trim() (which
+    // would degrade an over-limit 429 into a 500) or leaking the forged shape.
+    it('should return "unknown" for an object', () => {
+      expect(redactEmail({ x: 1 })).toBe('unknown');
+    });
+
+    it('should return "unknown" for a number', () => {
+      expect(redactEmail(42)).toBe('unknown');
+    });
+
+    it('should return "unknown" for null', () => {
+      expect(redactEmail(null)).toBe('unknown');
+    });
+
+    it('should return "unknown" for an array (no redaction bypass)', () => {
+      // String(['x@y.com']) coerces to 'x@y.com'; the typeof guard prevents
+      // an array-wrapped address from bypassing redaction.
+      expect(redactEmail(['x@y.com'])).toBe('unknown');
+    });
+  });
+
   describe('edge cases', () => {
     it('should handle email with very long domain', () => {
       const longDomain = 'a'.repeat(50) + '.com';
