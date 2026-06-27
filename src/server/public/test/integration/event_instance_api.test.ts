@@ -329,6 +329,89 @@ describe('GET /api/public/v1/events/:eventId/instances/:startTime', () => {
     expect(response.body.event.space.originUri).toBeUndefined();
   });
 
+  /**
+   * Single-event cancellation (epic pv-ibke): cancelling a non-recurring
+   * event's lone occurrence (show-as-cancelled, hideFromPublic=false) must
+   * surface isCancelled:true on every public surface that carries instance
+   * state. Cancellation is instance-scoped — markShownCancellations() flips
+   * the materialized instance row; the event entity itself has no cancelled
+   * state (epic decision: "do NOT add an event-level cancelled state").
+   *
+   * Uses the existing recurring-occurrence cancel path verbatim — a single
+   * event already materializes exactly one rdate occurrence, so the path is
+   * recurrence-agnostic and needs no code change.
+   */
+  describe('cancelled single event reports isCancelled across public surfaces', () => {
+    /**
+     * Cancel a single event's lone occurrence via the authenticated owner
+     * endpoint with hideFromPublic=false (show-as-cancelled). Returns once the
+     * exclusion schedule row is written (204).
+     */
+    async function cancelSingleOccurrence(eventId: string, startIso: string): Promise<void> {
+      const res = await request(env.app)
+        .post(`/api/v1/events/${eventId}/occurrences/cancel`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .send({ start: startIso, hideFromPublic: false });
+      if (res.status !== 204) {
+        throw new Error(`Failed to cancel occurrence: ${res.status} ${JSON.stringify(res.body)}`);
+      }
+    }
+
+    it('lists the cancelled single event with isCancelled:true', async () => {
+      // Past-dated single event: its lone rdate is materialized 1:1 at creation
+      // (generateInstances always persists past rdates, regardless of the
+      // [now, now+horizon] window), so it appears in the calendar list without
+      // a prior detail hit. Cancelling a past-dated single event is an
+      // explicitly supported epic-pv-ibke scenario. A fixed past date keeps the
+      // test independent of wall-clock drift.
+      const startIso = '2020-03-15T18:00:00Z';
+      const eventId = await createOneShotEvent(startIso, '2020-03-15T19:00:00Z', 'Cancelled Single (List)');
+      await cancelSingleOccurrence(eventId, startIso);
+
+      const response = await request(env.app)
+        .get('/api/public/v1/calendar/instancecal/events');
+
+      expect(response.status).toBe(200);
+      // The list spans the whole calendar; find this event's lone instance and
+      // assert it is flagged cancelled (shown, not hidden).
+      const row = response.body.find((i: any) => i.event?.id === eventId);
+      expect(row).toBeDefined();
+      expect(row.isCancelled).toBe(true);
+    });
+
+    it('reports isCancelled:true on the instance detail endpoint', async () => {
+      const startIso = '2032-06-20T18:00:00Z';
+      const eventId = await createOneShotEvent(startIso, '2032-06-20T19:00:00Z', 'Cancelled Single (Instance)');
+      await cancelSingleOccurrence(eventId, startIso);
+
+      const response = await request(env.app)
+        .get(`/api/public/v1/events/${eventId}/instances/20320620-1800`);
+
+      expect(response.status).toBe(200);
+      expect(response.body.isCancelled).toBe(true);
+      expect(response.body.event.id).toBe(eventId);
+    });
+
+    it('does not surface an event-level isCancelled on the /events/:id detail endpoint', async () => {
+      // Cancellation is instance-scoped: the badge on the public detail page is
+      // driven by the instance endpoint above, not by /events/:id. The event
+      // entity has no cancelled state (epic pv-ibke: "do NOT add an event-level
+      // cancelled state"; serialization needs no change). This test pins that
+      // contract so a future change can't silently start leaking a cancelled
+      // flag onto the event projection.
+      const startIso = '2032-07-20T18:00:00Z';
+      const eventId = await createOneShotEvent(startIso, '2032-07-20T19:00:00Z', 'Cancelled Single (Event)');
+      await cancelSingleOccurrence(eventId, startIso);
+
+      const response = await request(env.app)
+        .get(`/api/public/v1/events/${eventId}`);
+
+      expect(response.status).toBe(200);
+      expect(response.body.id).toBe(eventId);
+      expect(response.body.isCancelled).toBeUndefined();
+    });
+  });
+
   it('returns space with content for a Space-scoped event (cache-miss / materialize path)', async () => {
     // Weekly recurring event; probe a far-future occurrence that has no
     // pre-materialized row — exercises the findByPk (cache-miss) branch.

@@ -994,9 +994,16 @@ form {
                 </p>
               </div>
 
-              <!-- Cancellations Panel Trigger (only for recurring events) -->
+              <!-- Single (non-recurring) event: inline cancel/restore control -->
+              <SingleEventCancelControl
+                v-if="isSingleOccurrenceEvent"
+                :event="editorState.event"
+              />
+
+              <!-- Multi-occurrence event (recurring or multiple one-offs):
+                   cancellations panel trigger -->
               <div
-                v-if="hasRecurringSchedule"
+                v-else-if="hasMultipleOccurrences"
                 class="cancellations-trigger-wrapper"
               >
                 <button
@@ -1113,6 +1120,7 @@ import { useTranslation } from 'i18next-vue';
 import { ArrowLeft, Plus } from 'lucide-vue-next';
 import EventRecurrenceView from './event_recurrence.vue';
 import EventCancellationsPanel from './EventCancellationsPanel.vue';
+import SingleEventCancelControl from './SingleEventCancelControl.vue';
 import languagePicker from '@/client/components/common/language-picker.vue';
 import ImageUpload from '@/client/components/common/media/image-upload.vue';
 import ImageWorkspace from '@/client/components/common/media/image-workspace.vue';
@@ -1254,14 +1262,46 @@ const urlPromptProxy = computed({
 });
 
 /**
- * Whether the event has at least one recurring schedule. A schedule is
- * recurring when its frequency is set. Used to gate the cancellations panel
- * trigger, which is only meaningful for recurring events.
+ * Positive (non-exclusion) schedules. Exclusion rows are cancellation/EXDATE
+ * markers, not occurrence-producing schedules, so the cancel-UI gating reasons
+ * only over positive schedules.
  */
-const hasRecurringSchedule = computed(() => {
-  if (!editorState.event?.schedules) return false;
-  return editorState.event.schedules.some(
-    (schedule) => schedule.frequency !== null && schedule.frequency !== undefined,
+const positiveSchedules = computed(() => {
+  return (editorState.event?.schedules ?? []).filter((schedule) => !schedule.isExclusion);
+});
+
+/**
+ * Whether the event has been persisted (has a server-assigned id). The cancel
+ * and cancellations UI both read occurrence state from the backend by event id,
+ * so they are only meaningful for a saved event. In create mode the event has
+ * no id and neither control should render.
+ */
+const isPersistedEvent = computed(() => Boolean(editorState.event?.id));
+
+/**
+ * A single (non-recurring) event: exactly one positive schedule with no
+ * frequency, which materializes exactly one occurrence. These get the inline
+ * SingleEventCancelControl rather than the multi-occurrence panel.
+ */
+const isSingleOccurrenceEvent = computed(() => {
+  if (!isPersistedEvent.value) return false;
+  const positive = positiveSchedules.value;
+  if (positive.length !== 1) return false;
+  return positive[0].frequency === null || positive[0].frequency === undefined;
+});
+
+/**
+ * A multi-occurrence event: a recurring schedule OR multiple positive
+ * (one-off) schedules. These keep the existing cancellations panel, which
+ * already expands rdates across all occurrences.
+ */
+const hasMultipleOccurrences = computed(() => {
+  if (!isPersistedEvent.value) return false;
+  const positive = positiveSchedules.value;
+  if (positive.length === 0) return false;
+  return (
+    positive.length > 1 ||
+    positive.some((schedule) => schedule.frequency !== null && schedule.frequency !== undefined)
   );
 });
 
