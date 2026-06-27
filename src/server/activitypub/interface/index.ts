@@ -432,20 +432,6 @@ export default class ActivityPubInterface {
   }
 
   /**
-   * Gets the IDs of all events shared (reposted) to a given calendar.
-   *
-   * @param calendarId - The calendar UUID
-   * @returns Array of event ID strings
-   */
-  async getSharedEventIds(calendarId: string): Promise<string[]> {
-    const sharedEvents = await SharedEventEntity.findAll({
-      where: { calendar_id: calendarId },
-      attributes: ['event_id'],
-    });
-    return sharedEvents.map((se) => se.event_id);
-  }
-
-  /**
    * Gets a map of shared event IDs to their repost status ('auto' or 'manual')
    * for a given calendar. Derived from SharedEventEntity.auto_posted.
    *

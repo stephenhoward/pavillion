@@ -54,10 +54,9 @@ describe('replaceEventCategories calendar-scoped destroy (pv-bv78)', () => {
     calendarInterface = new CalendarInterface(eventBus);
     // Minimal AP interface stub. resolveEffectiveCalendarId consults
     // getCalendarIdsForSharedEvent; the post-commit repostStatus lookup uses
-    // getSharedEventIds / getSharedEventStatusMap. The repost link under test
-    // is an EventRepostEntity row (legacy table), so all AP stubs return empty.
+    // getSharedEventStatusMap. The repost link under test is an
+    // EventRepostEntity row (legacy table), so all AP stubs return empty.
     calendarInterface.setActivityPubInterface({
-      getSharedEventIds: async () => [],
       getSharedEventStatusMap: async () => new Map<string, 'auto' | 'manual'>(),
       getCalendarIdsForSharedEvent: async () => [],
       getEventSourceActorUris: async () => new Map<string, string>(),

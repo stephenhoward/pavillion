@@ -25,7 +25,6 @@ import I18NextVue from 'i18next-vue';
 import i18next from 'i18next';
 import { DateTime } from 'luxon';
 
-import { Calendar as CalendarModel, CalendarContent } from '@/common/model/calendar';
 import { EventCategory } from '@/common/model/event_category';
 import { EventCategoryContent } from '@/common/model/event_category_content';
 
@@ -138,14 +137,6 @@ function makeCategory(id: string, name: string): EventCategory {
   return cat;
 }
 
-function makeCalendar(): CalendarModel {
-  const cal = new CalendarModel('cal-1', 'test_calendar');
-  const content = new CalendarContent('en');
-  content.name = 'Test Calendar';
-  cal.addContent(content);
-  return cal;
-}
-
 function makeInstance(overrides: InstanceOverrides = {}): any {
   const start = DateTime.fromISO('2026-05-08T18:00:00.000Z');
   const end = overrides.end === undefined ? null : overrides.end;
@@ -181,7 +172,6 @@ function makeInstance(overrides: InstanceOverrides = {}): any {
 
 function mountBody(props: {
   instance: any;
-  calendar?: CalendarModel;
   categoryHrefBuilder?: (cat: EventCategory) => string;
 }): VueWrapper {
   const pinia = createPinia();
@@ -194,7 +184,6 @@ function mountBody(props: {
     },
     props: {
       instance: props.instance,
-      calendar: props.calendar ?? makeCalendar(),
       categoryHrefBuilder: props.categoryHrefBuilder,
     },
   });

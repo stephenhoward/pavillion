@@ -44,7 +44,6 @@ describe('hideFromPublic federation — origin-actor gate (integration)', () => 
     calendarInterface = new CalendarInterface(eventBus);
 
     calendarInterface.setActivityPubInterface({
-      getSharedEventIds: async () => [],
       getSharedEventStatusMap: async () => new Map(),
       findCalendarActorByCalendarId: async () => null,
     } as any);

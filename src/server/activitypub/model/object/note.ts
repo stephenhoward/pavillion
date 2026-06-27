@@ -7,29 +7,7 @@ import { CalendarEvent } from '@/common/model/events';
 import { ActivityPubObject, ActivityPubActor } from '@/server/activitypub/model/base';
 import { EventObject } from '@/server/activitypub/model/object/event';
 
-/**
- * Sanitizes an untrusted href value from a federated peer. Returns a parsed
- * http(s) URL string or null for any anomaly (non-string, empty/whitespace,
- * too long, malformed, or non-http(s) scheme).
- *
- * Mirrors the helper in `event.ts` — duplicated here rather than re-exported
- * to keep `event.ts`'s helper private to that module. The two implementations
- * MUST stay in sync; both are the authoritative barrier against malicious
- * peers injecting javascript:, data:, ftp:, or other dangerous URL schemes.
- */
-function sanitizeExternalUrlHref(raw: unknown): string | null {
-  if (typeof raw !== 'string') return null;
-  const trimmed = raw.trim();
-  if (trimmed === '' || trimmed.length > 2048) return null;
-  try {
-    const parsed = new URL(trimmed);
-    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
-    return parsed.toString();
-  }
-  catch {
-    return null;
-  }
-}
+import { sanitizeExternalUrlHref } from '@/server/activitypub/helper/url-sanitizer';
 
 /**
  * Wraps a CalendarEvent as an ActivityStreams `Note` for Mastodon-class

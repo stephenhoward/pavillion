@@ -11,12 +11,10 @@ import EventImage from '@/site/components/event-image.vue';
 import AddToCalendar from '@/site/components/add-to-calendar.vue';
 import { URL_PROMPT_VALUES, type UrlPrompt } from '@/common/model/events';
 import type CalendarEventInstance from '@/common/model/event_instance';
-import type { Calendar as CalendarModel } from '@/common/model/calendar';
 import type { EventCategory } from '@/common/model/event_category';
 
 const props = defineProps<{
   instance: CalendarEventInstance;
-  calendar: CalendarModel;
   categoryHrefBuilder?: (category: EventCategory) => string;
 }>();
 

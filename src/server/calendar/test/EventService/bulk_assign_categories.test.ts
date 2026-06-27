@@ -36,7 +36,6 @@ function buildMockApInterface(
     return calendarIdsForEvent[eventId] ?? [];
   });
   return {
-    getSharedEventIds: sinon.stub().resolves(sharedEventIds),
     getSharedEventStatusMap: sinon.stub().resolves(statusMap),
     getCalendarIdsForSharedEvent,
   } as any;

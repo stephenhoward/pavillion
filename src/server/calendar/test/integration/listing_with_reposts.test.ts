@@ -74,13 +74,6 @@ describe('Listing union for reposted events (pv-hr72.4)', () => {
     // can return an empty map because all events here have a non-null
     // calendar_id (no remote-origin events under test).
     calendarInterface.setActivityPubInterface({
-      getSharedEventIds: async (calendarId: string) => {
-        const rows = await SharedEventEntity.findAll({
-          where: { calendar_id: calendarId },
-          attributes: ['event_id'],
-        });
-        return rows.map(r => r.event_id);
-      },
       getSharedEventStatusMap: async (calendarId: string) => {
         const rows = await SharedEventEntity.findAll({
           where: { calendar_id: calendarId },

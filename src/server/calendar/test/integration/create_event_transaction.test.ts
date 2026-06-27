@@ -54,7 +54,6 @@ describe('EventService.createEvent — transaction-aware emit (integration)', ()
     // Minimal AP interface stub: integration tests here do not wire the AP
     // domain, so we return shapes that keep local-only code paths correct.
     calendarInterface.setActivityPubInterface({
-      getSharedEventIds: async () => [],
       getSharedEventStatusMap: async () => new Map(),
       findCalendarActorByCalendarId: async () => null,
     } as never);

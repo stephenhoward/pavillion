@@ -9,8 +9,7 @@ import { EventRepostEntity } from '@/server/calendar/entity/event_repost';
 import EventService from '@/server/calendar/service/events';
 
 /**
- * Creates a mock ActivityPubInterface with getSharedEventIds and
- * getSharedEventStatusMap stubbed.
+ * Creates a mock ActivityPubInterface with getSharedEventStatusMap stubbed.
  *
  * @param sharedEventIds - Array of event IDs reposted to the calendar.
  * @param statusOverrides - Optional map of eventId -> 'auto'|'manual' to
@@ -26,7 +25,6 @@ function buildMockApInterface(
     statusMap.set(id, statusOverrides[id] ?? 'manual');
   }
   return {
-    getSharedEventIds: sinon.stub().resolves(sharedEventIds),
     getSharedEventStatusMap: sinon.stub().resolves(statusMap),
   } as any;
 }

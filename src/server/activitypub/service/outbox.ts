@@ -509,6 +509,13 @@ class ProcessOutboxService {
    * but have no CalendarActorEntity row. WebFinger handles (user@domain) and
    * malformed URIs return false.
    *
+   * Invariant this guard defends: recipients are sourced from
+   * FollowerCalendarEntity rows joined against CalendarActorEntity, so a
+   * local-looking recipient with no CalendarActorEntity row is FK-impossible
+   * under normal DB state. The guard exists only to fail safe against a
+   * missing/stale row (e.g. mid-migration or manual DB surgery) rather than
+   * HTTP-looping a delivery back to this instance.
+   *
    * @private
    */
   private isSameHostAsActor(recipient: string, actorUrl: string): boolean {

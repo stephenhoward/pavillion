@@ -38,7 +38,6 @@ import esSeries from '@/client/locales/es/series.json';
 import esSetup from '@/client/locales/es/setup.json';
 import esFunding from '@/client/locales/es/funding.json';
 import esPolicy from '@/client/locales/es/policy.json';
-import esEditEvent from '@/client/locales/es/event_editor.json';
 
 // Import French translation resources
 import frSystem from '@/client/locales/fr/system.json';
@@ -56,7 +55,6 @@ import frSeries from '@/client/locales/fr/series.json';
 import frSetup from '@/client/locales/fr/setup.json';
 import frFunding from '@/client/locales/fr/funding.json';
 import frPolicy from '@/client/locales/fr/policy.json';
-import frEditEvent from '@/client/locales/fr/event_editor.json';
 
 /**
  * Detects the best language for the client from available signals.
@@ -147,7 +145,6 @@ export const initI18Next = (serverLanguage?: string) => {
         setup: esSetup,
         funding: esFunding,
         policy: esPolicy,
-        event_editor: esEditEvent,
       },
       fr: {
         system: frSystem,
@@ -165,7 +162,6 @@ export const initI18Next = (serverLanguage?: string) => {
         setup: frSetup,
         funding: frFunding,
         policy: frPolicy,
-        event_editor: frEditEvent,
       },
     },
   });

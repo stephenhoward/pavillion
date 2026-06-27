@@ -41,7 +41,6 @@ describe('Event externalUrl + urlPrompt — AP federation round-trip (integratio
     calendarInterface = new CalendarInterface(eventBus);
 
     calendarInterface.setActivityPubInterface({
-      getSharedEventIds: async () => [],
       getSharedEventStatusMap: async () => new Map(),
       findCalendarActorByCalendarId: async () => null,
     } as any);

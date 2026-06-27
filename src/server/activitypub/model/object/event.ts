@@ -9,6 +9,7 @@ import { EventLocation, EventLocationSpace } from '@/common/model/location';
 import { ActivityPubObject } from '@/server/activitypub/model/base';
 import { SeriesObject } from '@/server/activitypub/model/object/series';
 import { createLogger } from '@/server/common/helper/logger';
+import { sanitizeExternalUrlHref } from '@/server/activitypub/helper/url-sanitizer';
 
 const logger = createLogger('activitypub');
 
@@ -30,30 +31,6 @@ const URL_PROMPT_EN_LABELS: Record<UrlPrompt, string> = {
  */
 function stripHtmlTags(html: string): string {
   return striptags(he.decode(html)).trim();
-}
-
-/**
- * Sanitizes an untrusted href value from a federated peer. Returns a parsed
- * http(s) URL string or null for any anomaly (non-string, empty/whitespace,
- * too long, malformed, or non-http(s) scheme).
- *
- * Security-critical: This is the authoritative barrier against malicious peers
- * injecting javascript:, data:, ftp:, or other dangerous URL schemes into
- * stored event data. NEVER throws — a throw would cause the inbox to reject
- * the entire activity, which is not the correct posture for a single bad field.
- */
-function sanitizeExternalUrlHref(raw: unknown): string | null {
-  if (typeof raw !== 'string') return null;
-  const trimmed = raw.trim();
-  if (trimmed === '' || trimmed.length > 2048) return null;
-  try {
-    const parsed = new URL(trimmed);
-    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
-    return parsed.toString();
-  }
-  catch {
-    return null;
-  }
 }
 
 class EventObject extends ActivityPubObject {

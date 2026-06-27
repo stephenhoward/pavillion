@@ -61,7 +61,6 @@ describe('Place + Spaces atomic-save - Integration', () => {
     const eventBus = new EventEmitter();
     calendarInterface = new CalendarInterface(eventBus);
     calendarInterface.setActivityPubInterface({
-      getSharedEventIds: async () => [],
       getSharedEventStatusMap: async () => new Map(),
     } as any);
 
