@@ -14,7 +14,7 @@ import EventsTab from '@/client/components/logged_in/calendar-content/events-tab
 import CategoriesTab from '@/client/components/logged_in/calendar-content/categories.vue';
 import SeriesTab from '@/client/components/logged_in/calendar-content/series.vue';
 import PlacesTab from '@/client/components/logged_in/calendar-content/places-tab.vue';
-import CreateCalendarSheet from './CreateCalendarSheet.vue';
+import CreateCalendarSheet from './create-calendar-sheet.vue';
 
 const { t } = useTranslation('calendars',{
   keyPrefix: 'calendar',

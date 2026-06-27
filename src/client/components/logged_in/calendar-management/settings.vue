@@ -234,7 +234,7 @@ import ImageUpload from '@/client/components/common/media/image-upload.vue';
 import EventImage from '@/client/components/common/media/event-image.vue';
 import LanguageTabSelector from '@/client/components/common/language-tab-selector.vue';
 import LanguagePicker from '@/client/components/common/language-picker.vue';
-import FundingSheet from './FundingSheet.vue';
+import FundingSheet from './funding-sheet.vue';
 
 // Props
 const props = defineProps({

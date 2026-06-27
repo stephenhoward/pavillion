@@ -66,7 +66,7 @@ export function useDialog(
   const idPrefix = options.idPrefix ?? 'dialog';
 
   // Stable per-instance id. Using Math.random() matches the pre-refactor pattern
-  // in modal.vue / Sheet.vue and avoids SSR mismatch concerns in this client-only
+  // in modal.vue / sheet.vue and avoids SSR mismatch concerns in this client-only
   // composable.
   const dialogId = ref(Math.random().toString(36).substring(2, 11));
   const titleId = computed(() => `${idPrefix}-title-${dialogId.value}`);

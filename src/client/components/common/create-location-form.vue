@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, reactive, nextTick, watch } from 'vue';
 import { useTranslation } from 'i18next-vue';
-import Sheet from '@/client/components/common/Sheet.vue';
+import Sheet from '@/client/components/common/sheet.vue';
 import PillButton from '@/client/components/common/pill-button.vue';
 import LanguageTabSelector from '@/client/components/common/language-tab-selector.vue';
 import SpacesEditor from '@/client/components/logged_in/calendar/SpacesEditor.vue';

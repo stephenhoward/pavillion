@@ -14,7 +14,7 @@
  */
 import { ref, nextTick, watch } from 'vue';
 import { useTranslation } from 'i18next-vue';
-import Sheet from '@/client/components/common/Sheet.vue';
+import Sheet from '@/client/components/common/sheet.vue';
 import PillButton from '@/client/components/common/pill-button.vue';
 import SpacesEditor from '@/client/components/logged_in/calendar/SpacesEditor.vue';
 import LocationService from '@/client/service/location';

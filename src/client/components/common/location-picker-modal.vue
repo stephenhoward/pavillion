@@ -4,7 +4,7 @@ import { useTranslation } from 'i18next-vue';
 import { Search, MapPin, DoorOpen, Check } from 'lucide-vue-next';
 import DoorPlus from '@/client/components/common/icons/door-plus.vue';
 import PillButton from '@/client/components/common/pill-button.vue';
-import Sheet from '@/client/components/common/Sheet.vue';
+import Sheet from '@/client/components/common/sheet.vue';
 import { useLocalizedContent } from '@/client/composables/useLocalizedContent';
 import type { EventLocation } from '@/common/model/location';
 

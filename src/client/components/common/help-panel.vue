@@ -37,7 +37,7 @@
 <script setup lang="ts">
 import { useTranslation } from 'i18next-vue';
 import { ExternalLink } from 'lucide-vue-next';
-import Sheet from '@/client/components/common/Sheet.vue';
+import Sheet from '@/client/components/common/sheet.vue';
 import { docsUrl, browseAllUrl } from '@/client/service/docs';
 import type { GuideRef, Audience } from '@/client/service/docs';
 

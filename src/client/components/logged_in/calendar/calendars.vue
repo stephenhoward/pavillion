@@ -11,7 +11,7 @@ import ActionsMenuItem from '@/client/components/common/actions-menu-item.vue';
 import HelpPanel from '@/client/components/common/help-panel.vue';
 import { guidesForRoute, audienceForRoute } from '@/client/service/docs';
 import CreateCalendarForm from './CreateCalendarForm.vue';
-import CreateCalendarSheet from './CreateCalendarSheet.vue';
+import CreateCalendarSheet from './create-calendar-sheet.vue';
 
 const calendarService = new CalendarService();
 

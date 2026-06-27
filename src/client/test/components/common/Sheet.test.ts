@@ -3,7 +3,7 @@ import { flushPromises } from '@vue/test-utils';
 import { createMemoryHistory, createRouter, Router } from 'vue-router';
 import { RouteRecordRaw } from 'vue-router';
 
-import Sheet from '@/client/components/common/Sheet.vue';
+import Sheet from '@/client/components/common/sheet.vue';
 import { mountComponent } from '@/client/test/lib/vue';
 
 const routes: RouteRecordRaw[] = [

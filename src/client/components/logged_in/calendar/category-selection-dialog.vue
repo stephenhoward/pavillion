@@ -6,7 +6,7 @@ import { useEventStore } from '@/client/stores/eventStore';
 import { useCategoryStore } from '@/client/stores/categoryStore';
 import PillButton from '@/client/components/common/pill-button.vue';
 import ToggleChip from '@/client/components/common/toggle-chip.vue';
-import Sheet from '@/client/components/common/Sheet.vue';
+import Sheet from '@/client/components/common/sheet.vue';
 
 const { t } = useTranslation('calendars', {
   keyPrefix: 'bulk_operations',
