@@ -1,5 +1,6 @@
 import { describe, it, expect, afterEach, beforeEach } from 'vitest';
 import sinon from 'sinon';
+import { Op } from 'sequelize';
 
 import { Account } from '@/common/model/account';
 import { AccountEntity, AccountSecretsEntity, AccountApplicationEntity, AccountRoleEntity } from '@/server/common/entity/account';
@@ -1680,5 +1681,48 @@ describe('updateProfile', () => {
     // language should remain unchanged
     expect(mockEntity.language).toBe('en');
     expect(mockEntity.save.called).toBe(true);
+  });
+});
+
+describe('listAccounts', () => {
+
+  let sandbox = sinon.createSandbox();
+  let accountService: AccountService;
+
+  beforeEach(() => {
+    const eventBus = new EventEmitter();
+    const configurationInterface = new ConfigurationInterface();
+    const setupInterface = new SetupInterface();
+    const emailInterface = new EmailInterface();
+    accountService = new AccountService(eventBus, configurationInterface, setupInterface, emailInterface);
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+  });
+
+  it('normalizes a mixed-case search term so it matches lowercased stored emails', async () => {
+    const storedEmail = 'mixed@example.com';
+    const mockEntity = {
+      id: 'user-id',
+      toModel: () => new Account('user-id', 'mixeduser', storedEmail),
+    } as any;
+
+    const countStub = sandbox.stub(AccountEntity, 'count').resolves(1);
+    const findAllStub = sandbox.stub(AccountEntity, 'findAll').resolves([mockEntity]);
+    sandbox.stub(AccountRoleEntity, 'findAll').resolves([]);
+
+    const result = await accountService.listAccounts(1, 50, 'Mixed@Example.COM');
+
+    // The LIKE clause sent to the database is lowercased, so it matches the stored value
+    const countWhere = countStub.firstCall.args[0]?.where as Record<string | symbol, any>;
+    expect(countWhere.email[Op.like]).toBe('%mixed@example.com%');
+
+    const findAllWhere = findAllStub.firstCall.args[0]?.where as Record<string | symbol, any>;
+    expect(findAllWhere.email[Op.like]).toBe('%mixed@example.com%');
+
+    // The matching account is returned with its lowercased stored email
+    expect(result.accounts).toHaveLength(1);
+    expect(result.accounts[0].email).toBe(storedEmail);
   });
 });

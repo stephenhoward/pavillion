@@ -932,7 +932,7 @@ export default class AccountService {
     // Build where clause for search
     const whereClause: any = {};
     if (search) {
-      whereClause.email = { [Op.like]: `%${search}%` };
+      whereClause.email = { [Op.like]: `%${normalizeEmail(search)}%` };
     }
 
     // Get total count for pagination
