@@ -36,7 +36,7 @@ import DeleteActivity from '@/server/activitypub/model/action/delete';
 export default class ActivityPubInterface {
   private memberService: ActivityPubMemberService;
   private serverService: ActivityPubServerService;
-  private inboxSerivce: ProcessInboxService;
+  private inboxService: ProcessInboxService;
   private outboxService: ProcessOutboxService;
   private federationPublisher: FederationPublisher;
   private calendarInterface: CalendarInterface;
@@ -50,8 +50,8 @@ export default class ActivityPubInterface {
     this.calendarInterface = calendarInterface;
     this.memberService = new ActivityPubMemberService(eventBus, calendarInterface);
     this.serverService = new ActivityPubServerService(eventBus, calendarInterface, accountsInterface);
-    this.inboxSerivce = new ProcessInboxService(eventBus, this.calendarInterface, moderationInterface);
-    this.outboxService = new ProcessOutboxService(eventBus, this.inboxSerivce);
+    this.inboxService = new ProcessInboxService(eventBus, this.calendarInterface, moderationInterface);
+    this.outboxService = new ProcessOutboxService(eventBus, this.inboxService);
     this.federationPublisher = new FederationPublisher(eventBus, calendarInterface, this.outboxService);
   }
 
@@ -341,7 +341,7 @@ export default class ActivityPubInterface {
   }
 
   async processInboxMessage(message: ActivityPubInboxMessageEntity): Promise<void> {
-    await this.inboxSerivce.processInboxMessage(message);
+    await this.inboxService.processInboxMessage(message);
   }
 
   /**
@@ -352,7 +352,7 @@ export default class ActivityPubInterface {
    * @returns {Promise<void>}
    */
   async processInboxMessages(): Promise<void> {
-    return this.inboxSerivce.processInboxMessages();
+    return this.inboxService.processInboxMessages();
   }
 
   /**
@@ -364,7 +364,7 @@ export default class ActivityPubInterface {
    * @returns Number of messages deleted
    */
   async cleanupProcessedInboxMessages(retentionDays?: number, batchSize?: number): Promise<number> {
-    return this.inboxSerivce.cleanupProcessedInboxMessages(retentionDays, batchSize);
+    return this.inboxService.cleanupProcessedInboxMessages(retentionDays, batchSize);
   }
 
   /**
@@ -382,7 +382,7 @@ export default class ActivityPubInterface {
     calendar: Calendar,
     activity: CreateActivity | UpdateActivity | DeleteActivity,
   ): Promise<CalendarEvent | null> {
-    return this.inboxSerivce.processPersonActorActivity(calendar, activity);
+    return this.inboxService.processPersonActorActivity(calendar, activity);
   }
 
   /**
@@ -393,7 +393,7 @@ export default class ActivityPubInterface {
    * @param actorUri - The Person actor URI
    */
   invalidateAuthorizationCache(calendarId: string, actorUri: string): void {
-    this.inboxSerivce.invalidateAuthorizationCache(calendarId, actorUri);
+    this.inboxService.invalidateAuthorizationCache(calendarId, actorUri);
   }
 
   /**
