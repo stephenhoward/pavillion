@@ -98,9 +98,7 @@ function onLoginSuccess() {
         </i18next>
       </p>
 
-      <p class="policy-link">
-        <PolicyLink source="login" />
-      </p>
+      <PolicyLink source="login" />
 
       <a href="https://pavillion.social"
          target="_blank"
@@ -119,9 +117,5 @@ function onLoginSuccess() {
   flex-direction: column;
   gap: var(--pav-space-4);
   margin-block-start: var(--pav-space-6);
-}
-
-.policy-link {
-  margin-block-start: var(--pav-space-4);
 }
 </style>

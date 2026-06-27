@@ -530,27 +530,27 @@ onBeforeUnmount(() => {
 <style scoped lang="scss">
 .funding-form {
   .form-group {
-    margin-bottom: 1.5rem;
+    margin-bottom: var(--pav-space-6);
 
     .form-label {
       display: block;
       font-weight: var(--pav-font-weight-medium);
-      margin-bottom: 0.5rem;
+      margin-bottom: var(--pav-space-2);
       color: var(--pav-color-text-primary);
     }
 
     .provider-options, .cycle-options {
       display: flex;
       flex-direction: column;
-      gap: 0.75rem;
+      gap: var(--pav-space-3);
 
       label {
         display: flex;
         align-items: center;
-        gap: 0.5rem;
-        padding: 0.75rem;
+        gap: var(--pav-space-2);
+        padding: var(--pav-space-3);
         border: 1px solid var(--pav-color-border-primary);
-        border-radius: 8px;
+        border-radius: var(--pav-border-radius-md);
         cursor: pointer;
 
         &:hover {
@@ -567,13 +567,13 @@ onBeforeUnmount(() => {
       .currency-input {
         display: flex;
         align-items: center;
-        gap: 0.25rem;
+        gap: var(--pav-space-1);
         max-width: 200px;
 
         .currency-symbol {
           font-weight: 500;
           color: var(--pav-color-text-secondary);
-          font-size: 1rem;
+          font-size: var(--pav-font-size-sm);
         }
 
         input {
@@ -584,9 +584,9 @@ onBeforeUnmount(() => {
       input {
         width: 100%;
         max-width: 200px;
-        padding: 0.5rem;
+        padding: var(--pav-space-2);
         border: 1px solid var(--pav-color-border-primary);
-        border-radius: 8px;
+        border-radius: var(--pav-border-radius-md);
         background: var(--pav-color-surface-secondary);
         color: var(--pav-color-text-primary);
 
@@ -596,8 +596,8 @@ onBeforeUnmount(() => {
       }
 
       .description {
-        margin-top: 0.5rem;
-        font-size: 0.875rem;
+        margin-top: var(--pav-space-2);
+        font-size: var(--pav-font-size-small);
         color: var(--pav-color-text-secondary);
       }
     }
@@ -605,10 +605,10 @@ onBeforeUnmount(() => {
     .yearly-opt-in {
       display: flex;
       align-items: center;
-      gap: 0.5rem;
-      padding: 0.75rem;
+      gap: var(--pav-space-2);
+      padding: var(--pav-space-3);
       border: 1px solid var(--pav-color-border-primary);
-      border-radius: 8px;
+      border-radius: var(--pav-border-radius-md);
       cursor: pointer;
 
       &:hover {
@@ -621,41 +621,41 @@ onBeforeUnmount(() => {
     }
 
     .yearly-discount-note {
-      margin-top: 0.5rem;
-      font-size: 0.875rem;
+      margin-top: var(--pav-space-2);
+      font-size: var(--pav-font-size-small);
       color: var(--pav-color-text-secondary);
     }
   }
 
   .form-actions {
     display: flex;
-    gap: 1rem;
-    margin-top: 2rem;
+    gap: var(--pav-space-4);
+    margin-top: var(--pav-space-8);
   }
 }
 
 .loading {
-  padding: 1rem;
+  padding: var(--pav-space-4);
   text-align: center;
   color: var(--pav-color-text-secondary);
 }
 
 .error-message,
 .success-message {
-  margin-bottom: 1rem;
+  margin-bottom: var(--pav-space-4);
 }
 
 .stripe-checkout-container {
   min-height: 300px;
-  margin-bottom: 1rem;
+  margin-bottom: var(--pav-space-4);
 }
 
 .checkout-state,
 .result-state {
   .form-actions {
     display: flex;
-    gap: 1rem;
-    margin-top: 2rem;
+    gap: var(--pav-space-4);
+    margin-top: var(--pav-space-8);
   }
 }
 </style>

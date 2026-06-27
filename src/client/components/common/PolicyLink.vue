@@ -41,16 +41,25 @@ const target = computed(() => {
 </script>
 
 <template>
-  <router-link v-if="props.label !== undefined"
-               :to="target">
-    {{ props.label }}
-  </router-link>
-  <i18next v-else
-           :translation="phrase">
-    <template #1>
-      <router-link :to="target">
-        {{ t('view_policy_link_text') }}
-      </router-link>
-    </template>
-  </i18next>
+  <p class="policy-link">
+    <router-link v-if="props.label !== undefined"
+                 :to="target">
+      {{ props.label }}
+    </router-link>
+    <i18next v-else
+             :translation="phrase">
+      <template #1>
+        <router-link :to="target">
+          {{ t('view_policy_link_text') }}
+        </router-link>
+      </template>
+    </i18next>
+  </p>
 </template>
+
+<style scoped lang="scss">
+.policy-link {
+  margin-block: var(--pav-space-4) 0;
+  font-size: var(--pav-font-size-small);
+}
+</style>

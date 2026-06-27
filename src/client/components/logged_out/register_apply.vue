@@ -19,9 +19,7 @@
     >
       <h3>{{ t('title') }}</h3>
 
-      <p class="policy-link">
-        <PolicyLink source="register-apply" />
-      </p>
+      <PolicyLink source="register-apply" />
 
       <ErrorAlert id="apply-error" :error="state.err" />
 
@@ -216,10 +214,6 @@ async function doApply() {
 
 h3 {
   margin-block-end: var(--pav-space-4);
-}
-
-.policy-link {
-  margin-block-end: var(--pav-space-8);
 }
 
 </style>

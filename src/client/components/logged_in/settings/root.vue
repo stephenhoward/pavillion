@@ -295,9 +295,7 @@ onMounted(async () => {
 
         <!-- Logout Section -->
         <section class="logout-section">
-          <p class="policy-link">
-            <PolicyLink source="settings" />
-          </p>
+          <PolicyLink source="settings" />
           <button
             type="button"
             class="logout-button"
@@ -722,10 +720,6 @@ onMounted(async () => {
 
 .logout-section {
   padding: var(--pav-space-6);
-}
-
-.policy-link {
-  margin-block-end: var(--pav-space-4);
 }
 
 .logout-button {
