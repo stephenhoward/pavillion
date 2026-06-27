@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { mount, flushPromises, VueWrapper } from '@vue/test-utils';
+import { mount, flushPromises } from '@vue/test-utils';
 import { createRouter, createMemoryHistory, Router } from 'vue-router';
 import { createPinia, setActivePinia } from 'pinia';
 import SearchFilterPublic from '../search-filter-public.vue';
@@ -148,7 +148,7 @@ describe('Public Event Search & Filtering - End-to-End Tests', () => {
     it('should handle array parameters that should be strings', async () => {
       vi.mocked(CalendarService.prototype.getCalendarByUrlName).mockResolvedValue(mockCalendar);
 
-      const store = usePublicCalendarStore();
+      const _store = usePublicCalendarStore();
 
       // Navigate with array where string is expected
       await router.push({
@@ -506,11 +506,11 @@ describe('Public Event Search & Filtering - End-to-End Tests', () => {
       expect(searchInput.attributes('id')).toBe('public-event-search');
 
       // Date inputs should have proper labels
-      const startDateInput = wrapper.find('input#start-date');
+      const _startDateInput = wrapper.find('input#start-date');
       const startLabel = wrapper.find('label[for="start-date"]');
       expect(startLabel.exists()).toBe(true);
 
-      const endDateInput = wrapper.find('input#end-date');
+      const _endDateInput = wrapper.find('input#end-date');
       const endLabel = wrapper.find('label[for="end-date"]');
       expect(endLabel.exists()).toBe(true);
 

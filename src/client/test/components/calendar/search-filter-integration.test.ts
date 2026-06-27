@@ -6,7 +6,6 @@ import { RouteRecordRaw } from 'vue-router';
 import sinon from 'sinon';
 import { mountComponent } from '@/client/test/lib/vue';
 import SearchFilter from '@/client/components/logged_in/calendar/search-filter.vue';
-import EventService from '@/client/service/event';
 import CategoryService from '@/client/service/category';
 
 /**

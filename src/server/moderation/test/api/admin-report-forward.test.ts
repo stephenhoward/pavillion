@@ -132,7 +132,7 @@ describe('Admin Report Forward API', () => {
         sandbox.stub(moderationInterface, 'forwardReport').resolves();
 
         // Mock the entity save to prevent DB operations
-        const saveSpy = sandbox.stub(ReportEscalationEntity.prototype, 'save').resolves({
+        sandbox.stub(ReportEscalationEntity.prototype, 'save').resolves({
           toModel: () => ({
             id: 'esc-id',
             reportId: TEST_REPORT_ID,

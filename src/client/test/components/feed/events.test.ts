@@ -375,7 +375,7 @@ describe('FollowedEventsView', () => {
       }
     } as any;
 
-    const wrapper = mount(FollowedEventsView, {
+    mount(FollowedEventsView, {
       global: {
         plugins: [pinia, [I18NextVue, { i18next }]],
       },

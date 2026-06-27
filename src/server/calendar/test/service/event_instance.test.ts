@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { EventEmitter } from 'events';
-import { DateTime, Duration } from 'luxon';
+import { DateTime } from 'luxon';
 import { v4 as uuidv4 } from 'uuid';
 import sinon from 'sinon';
 import { Op, Utils } from 'sequelize';

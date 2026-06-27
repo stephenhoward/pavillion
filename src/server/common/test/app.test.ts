@@ -1,5 +1,4 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { countRoutes } from '@/server/common/test/lib/express';
 import sinon from 'sinon';
 import express from 'express';
 

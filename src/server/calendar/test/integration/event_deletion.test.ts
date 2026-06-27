@@ -6,7 +6,6 @@ import { v4 as uuidv4 } from 'uuid';
 import { TestEnvironment } from '@/server/common/test/lib/test_environment';
 import { Account } from '@/common/model/account';
 import { Calendar } from '@/common/model/calendar';
-import { CalendarEvent } from '@/common/model/events';
 import AccountService from '@/server/accounts/service/account';
 import CalendarInterface from '@/server/calendar/interface';
 import ConfigurationInterface from '@/server/configuration/interface';

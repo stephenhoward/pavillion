@@ -31,7 +31,7 @@ import { EventCategoryAssignmentEntity } from '@/server/calendar/entity/event_ca
 import { EventInstanceEntity } from '@/server/calendar/entity/event_instance';
 import { EventRepostEntity } from '@/server/calendar/entity/event_repost';
 import db from '@/server/common/entity/db';
-import { Op, literal, where, fn, col, type Transaction } from 'sequelize';
+import { Op, where, fn, col, type Transaction } from 'sequelize';
 
 /**
  * Normalizes an optional external URL attached to an event.
@@ -688,7 +688,6 @@ class EventService {
   async createEvent(
     account: Account,
     eventParams: Record<string, any>,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     _context: EventOriginatorContext = DEFAULT_ORIGINATOR_CONTEXT,
     tx?: Transaction,
   ): Promise<CalendarEvent> {

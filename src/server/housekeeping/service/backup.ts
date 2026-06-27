@@ -161,7 +161,7 @@ export default class BackupService {
         }
       }
     }
-    catch (error) {
+    catch {
       // Config doesn't exist, which is fine - S3 is optional
     }
   }

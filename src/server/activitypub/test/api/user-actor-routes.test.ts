@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import sinon from 'sinon';
-import { EventEmitter } from 'events';
 
 import UserActorRoutes from '@/server/activitypub/api/v1/user-actor';
 import UserActorService from '@/server/activitypub/service/user_actor';
@@ -146,10 +145,6 @@ describe('UserActorRoutes - POST /users/:username/inbox', () => {
   it('should require HTTP signature verification', async () => {
     // This test verifies the middleware is applied - actual signature verification
     // is tested in the middleware test suite
-    const req = {
-      params: { username: 'alice' },
-      body: { type: 'Add' },
-    };
     const res = {
       status: sandbox.stub(),
       json: sandbox.stub(),

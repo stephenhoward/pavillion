@@ -12,16 +12,14 @@ import WidgetTab from '@/client/components/logged_in/calendar-management/widget-
 describe('Widget Admin UI Components', () => {
   let sandbox: sinon.SinonSandbox;
   let axiosGetStub: sinon.SinonStub;
-  let axiosPostStub: sinon.SinonStub;
   let axiosPutStub: sinon.SinonStub;
-  let axiosDeleteStub: sinon.SinonStub;
 
   beforeEach(async () => {
     sandbox = sinon.createSandbox();
     axiosGetStub = sandbox.stub(axios, 'get');
-    axiosPostStub = sandbox.stub(axios, 'post');
+    sandbox.stub(axios, 'post');
     axiosPutStub = sandbox.stub(axios, 'put');
-    axiosDeleteStub = sandbox.stub(axios, 'delete');
+    sandbox.stub(axios, 'delete');
 
     // Initialize i18next for testing
     await i18next.init({

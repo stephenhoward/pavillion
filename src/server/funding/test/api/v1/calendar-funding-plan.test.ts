@@ -1,11 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import express, { Request, Response } from 'express';
+import express from 'express';
 import request from 'supertest';
 import sinon from 'sinon';
 import CalendarFundingPlanRoutes from '@/server/funding/api/v1/calendar-funding-plan';
 import FundingInterface from '@/server/funding/interface';
 import { Account } from '@/common/model/account';
-import { FundingPlan } from '@/common/model/funding-plan';
 import { testApp } from '@/server/common/test/lib/express';
 import {
   FundingPlanNotFoundError,

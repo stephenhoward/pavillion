@@ -1,4 +1,4 @@
-import { expect, describe, it, beforeEach, vi } from 'vitest';
+import { expect, describe, it } from 'vitest';
 import { reactive } from 'vue';
 
 describe('Calendar URL Synchronization Logic', () => {

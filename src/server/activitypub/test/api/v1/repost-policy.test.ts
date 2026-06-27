@@ -64,7 +64,7 @@ describe('ActivityPub Repost Policy API Routes', () => {
       expect(res.status.calledWith(200)).toBe(true);
       expect(res.send.calledWith('Followed')).toBe(true);
       expect(followStub.calledOnce).toBe(true);
-      const [account, calendar, remoteId, autoOriginals, autoReposts] = followStub.firstCall.args;
+      const [_account, _calendar, _remoteId, autoOriginals, autoReposts] = followStub.firstCall.args;
       expect(autoOriginals).toBe(true);
       expect(autoReposts).toBe(false);
     });
@@ -90,7 +90,7 @@ describe('ActivityPub Repost Policy API Routes', () => {
 
       expect(res.status.calledWith(200)).toBe(true);
       expect(followStub.calledOnce).toBe(true);
-      const [account, calendar, remoteId, autoOriginals, autoReposts] = followStub.firstCall.args;
+      const [_account, _calendar, _remoteId, autoOriginals, autoReposts] = followStub.firstCall.args;
       expect(autoOriginals).toBe(false);
       expect(autoReposts).toBe(false);
     });
@@ -233,7 +233,7 @@ describe('ActivityPub Repost Policy API Routes', () => {
       await routes.updateFollowPolicy(req as any, res as any);
 
       expect(updateStub.calledOnce).toBe(true);
-      const [calendar, followId, originals, reposts] = updateStub.firstCall.args;
+      const [_calendar, _followId, originals, reposts] = updateStub.firstCall.args;
       expect(originals).toBe(true);
       expect(reposts).toBe(false);
     });

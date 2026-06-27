@@ -8,7 +8,7 @@
  * - Zoom <= 1 does not apply transform.
  * - Component renders nothing when media is null.
  */
-import { describe, it, expect, vi, beforeAll } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { mount, flushPromises } from '@vue/test-utils';
 
 // Mock fetch globally so the component can load images

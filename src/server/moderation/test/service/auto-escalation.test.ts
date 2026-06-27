@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import sinon from 'sinon';
 import { EventEmitter } from 'events';
 
-import { Report, ReportCategory, ReportStatus } from '@/common/model/report';
+import { Report, ReportStatus } from '@/common/model/report';
 import { ReportEntity } from '@/server/moderation/entity/report';
 import ModerationService from '@/server/moderation/service/moderation';
 import ConfigurationInterface from '@/server/configuration/interface';

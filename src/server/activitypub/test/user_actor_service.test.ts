@@ -3,7 +3,6 @@ import sinon from 'sinon';
 import { v4 as uuidv4 } from 'uuid';
 
 import UserActorService from '@/server/activitypub/service/user_actor';
-import { UserActorEntity } from '@/server/activitypub/entity/user_actor';
 import { AccountEntity } from '@/server/common/entity/account';
 import { Account } from '@/common/model/account';
 import CalendarInterface from '@/server/calendar/interface';
@@ -89,7 +88,7 @@ describe('UserActorService', () => {
       });
 
       const account = accountEntity.toModel();
-      const createdActor = await service.createActor(account, testDomain);
+      const _createdActor = await service.createActor(account, testDomain);
 
       const actor = await service.getActorByUsername(username);
 

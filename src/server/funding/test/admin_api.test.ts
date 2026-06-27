@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import express, { Request, Response } from 'express';
+import express from 'express';
 import request from 'supertest';
 import sinon from 'sinon';
 import FundingService from '@/server/funding/service/funding';

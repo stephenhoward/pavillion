@@ -980,8 +980,8 @@ describe('updateEvent with mediaId', () => {
   const acct = new Account('testAccountId', 'testme', 'testme');
 
   beforeEach(async () => {
-    const { Media } = await import('@/common/model/media');
-    const MediaInterface = (await import('@/server/media/interface')).default;
+    const { Media: _Media } = await import('@/common/model/media');
+    const _MediaInterface = (await import('@/server/media/interface')).default;
 
     service = new EventService(new EventEmitter());
     getCalendarStub = sandbox.stub(service['calendarService'], 'getCalendar');

@@ -23,7 +23,6 @@ import {
   FundingPlanNotFoundError,
 } from '@/common/exceptions/funding';
 import { ValidationError } from '@/common/exceptions/base';
-import { AccountEntity } from '@/server/common/entity/account';
 import { v4 as uuidv4 } from 'uuid';
 import config from 'config';
 

@@ -130,7 +130,7 @@ async function registerJobHandlers(queue: JobQueueService): Promise<void> {
   });
 
   // Disk check job handler (runs hourly)
-  await queue.schedule('disk:check', '0 * * * *', async (data) => {
+  await queue.schedule('disk:check', '0 * * * *', async (_data) => {
     logger.info('Executing disk:check job');
     try {
       // Get configuration
@@ -175,7 +175,7 @@ async function registerJobHandlers(queue: JobQueueService): Promise<void> {
   });
 
   // IP cleanup job handler (runs daily at 3 AM)
-  await queue.schedule('moderation:ip-cleanup', '0 3 * * *', async (data) => {
+  await queue.schedule('moderation:ip-cleanup', '0 3 * * *', async (_data) => {
     logger.info('Executing moderation:ip-cleanup job');
     try {
       // Get retention configuration

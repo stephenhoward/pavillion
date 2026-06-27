@@ -146,7 +146,7 @@ describe("followCalendar", () => {
     let getActorUrlStub = sandbox.stub(service, 'actorUrl');
     getActorUrlStub.resolves('https://testdomain.com/calendars/testcalendar');
 
-    let buildFollowStub = sandbox.spy(FollowingCalendarEntity, 'build');
+    let _buildFollowStub = sandbox.spy(FollowingCalendarEntity, 'build');
 
     let saveFollowStub = sandbox.stub(FollowingCalendarEntity.prototype, 'save');
     saveFollowStub.resolves();
@@ -305,13 +305,13 @@ describe("unfollowCalendar", () => {
 describe("getFeed - Local Calendar Follows", () => {
   let service: ActivityPubService;
   let sandbox: sinon.SinonSandbox;
-  let account: Account;
+  let _account: Account;
 
   beforeEach(() => {
     sandbox = sinon.createSandbox();
     const eventBus = new EventEmitter();
     service = new ActivityPubService(eventBus, new CalendarInterface(eventBus));
-    account = Account.fromObject({ id: 'test-account-id' });
+    _account = Account.fromObject({ id: 'test-account-id' });
   });
 
   afterEach(() => {
@@ -352,7 +352,7 @@ describe("getFeed - Local Calendar Follows", () => {
         createdAt: new Date('2024-01-03'),
         content: [{ language: 'en', title: 'Event 1', description: 'Description 1' }],
         schedules: [],
-        get: function(options: any) {
+        get: function(_options: any) {
           return { ...this };
         },
       },
@@ -363,7 +363,7 @@ describe("getFeed - Local Calendar Follows", () => {
         createdAt: new Date('2024-01-02'),
         content: [{ language: 'en', title: 'Event 2', description: 'Description 2' }],
         schedules: [],
-        get: function(options: any) {
+        get: function(_options: any) {
           return { ...this };
         },
       },
@@ -374,7 +374,7 @@ describe("getFeed - Local Calendar Follows", () => {
         createdAt: new Date('2024-01-01'),
         content: [{ language: 'en', title: 'Event 3', description: 'Description 3' }],
         schedules: [],
-        get: function(options: any) {
+        get: function(_options: any) {
           return { ...this };
         },
       },
@@ -383,7 +383,7 @@ describe("getFeed - Local Calendar Follows", () => {
     // Don't stub EventEntity.findAll - let it use the real query with mocked results
     const findAllStub = sandbox.stub();
     findAllStub.resolves(mockEvents);
-    sandbox.stub(service, 'getFeed').callsFake(async (calendar, page, pageSize) => {
+    sandbox.stub(service, 'getFeed').callsFake(async (_calendar, _page, _pageSize) => {
       // Simulate the actual query logic
       const events = mockEvents;
 
@@ -498,7 +498,7 @@ describe("getFeed - Local Calendar Follows", () => {
       },
     ];
 
-    sandbox.stub(service, 'getFeed').callsFake(async (calendar, page, pageSize) => {
+    sandbox.stub(service, 'getFeed').callsFake(async (_calendar, _page, _pageSize) => {
       return mockEvents.map(event => {
         const contentByLanguage: Record<string, any> = {};
         if (event.content && Array.isArray(event.content)) {
@@ -591,7 +591,7 @@ describe("getFeed - Local Calendar Follows", () => {
       },
     ];
 
-    sandbox.stub(service, 'getFeed').callsFake(async (calendar, page, pageSize) => {
+    sandbox.stub(service, 'getFeed').callsFake(async (_calendar, _page, _pageSize) => {
       return mockEvents.map(event => {
         const contentByLanguage: Record<string, any> = {};
         if (event.content && Array.isArray(event.content)) {
@@ -675,7 +675,7 @@ describe("getFeed - Local Calendar Follows", () => {
       },
     ];
 
-    sandbox.stub(service, 'getFeed').callsFake(async (calendar, page, pageSize) => {
+    sandbox.stub(service, 'getFeed').callsFake(async (_calendar, _page, _pageSize) => {
       return mockEvents.map(event => {
         const contentByLanguage: Record<string, any> = {};
         if (event.content && Array.isArray(event.content)) {
@@ -744,7 +744,7 @@ describe("getFeed - Local Calendar Follows", () => {
     };
 
     // Mock manual repost by Calendar A
-    sandbox.stub(service, 'getFeed').callsFake(async (calendar, page, pageSize) => {
+    sandbox.stub(service, 'getFeed').callsFake(async (_calendar, _page, _pageSize) => {
       const contentByLanguage: Record<string, any> = {};
       if (mockEvent.content && Array.isArray(mockEvent.content)) {
         mockEvent.content.forEach((c: any) => {

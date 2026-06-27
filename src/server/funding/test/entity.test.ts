@@ -1,10 +1,10 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import sinon from 'sinon';
 import { FundingSettingsEntity } from '../entity/funding_settings';
 import { ProviderConfigEntity } from '../entity/provider_config';
 import { FundingPlanEntity } from '../entity/funding_plan';
 import { FundingEventEntity } from '../entity/funding_event';
-import { FundingSettings, ProviderConfig, FundingPlan, FundingEvent } from '@/common/model/funding-plan';
+import { FundingSettings } from '@/common/model/funding-plan';
 import { millicentsToDisplay, displayToMillicents } from '@/common/model/funding-plan';
 
 describe('Subscription Entities', () => {

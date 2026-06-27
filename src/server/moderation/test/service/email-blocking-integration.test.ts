@@ -28,7 +28,6 @@ describe('ModerationService - Email Blocking Integration', () => {
 
     it('should throw ReporterBlockedError when anonymous reporter email is blocked', async () => {
       const blockedEmail = 'blocked@example.com';
-      const emailHash = service.hashEmail(blockedEmail);
 
       // Mock isEmailBlocked to return true
       sandbox.stub(service, 'isEmailBlocked').resolves(true);
@@ -150,7 +149,6 @@ describe('ModerationService - Email Blocking Integration', () => {
 
     it('should include block reason in ReporterBlockedError', async () => {
       const blockedEmail = 'blocked@example.com';
-      const blockReason = 'Abusive behavior';
 
       sandbox.stub(service, 'isEmailBlocked').resolves(true);
       sandbox.stub(service, 'hasExceededEmailRateLimit').resolves(false);

@@ -112,7 +112,7 @@ describe('Worker Startup and Configuration Integration', () => {
     };
 
     // Verify all config values are defined
-    Object.entries(requiredConfig).forEach(([key, value]) => {
+    Object.entries(requiredConfig).forEach(([_key, value]) => {
       expect(value).toBeDefined();
       expect(value).not.toBeNull();
     });

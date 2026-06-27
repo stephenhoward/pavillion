@@ -8,9 +8,8 @@ import { FundingPlanEntity } from '@/server/funding/entity/funding_plan';
 import { CalendarFundingPlanEntity } from '@/server/funding/entity/calendar_funding_plan';
 import { ComplimentaryGrantEntity } from '@/server/funding/entity/complimentary_grant';
 import { ProviderConfigEntity } from '@/server/funding/entity/provider_config';
-import { FundingSettingsEntity } from '@/server/funding/entity/funding_settings';
 import { ProviderFactory } from '@/server/funding/service/provider/factory';
-import { FundingSettings, ProviderConfig, FundingPlan } from '@/common/model/funding-plan';
+import { ProviderConfig, FundingPlan } from '@/common/model/funding-plan';
 import { ValidationError } from '@/common/exceptions/base';
 import {
   FundingPlanNotFoundError,
@@ -442,7 +441,7 @@ describe('FundingService - Calendar Subscription Methods', () => {
       sandbox.stub(AccountRoleEntity, 'findOne').resolves(null);
 
       // No grant - hasActiveGrant returns null for first call, CalendarFundingPlanEntity for second
-      const findOneStub = sandbox.stub(ComplimentaryGrantEntity, 'findOne').resolves(null);
+      sandbox.stub(ComplimentaryGrantEntity, 'findOne').resolves(null);
 
       // Active calendar subscription exists
       sandbox.stub(CalendarFundingPlanEntity, 'findOne').resolves({

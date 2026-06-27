@@ -2,7 +2,6 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { EventEmitter } from 'events';
 
 import { Calendar } from '@/common/model/calendar';
-import { CalendarEvent } from '@/common/model/events';
 import { Account } from '@/common/model/account';
 import EventService from '@/server/calendar/service/events';
 import CalendarService from '@/server/calendar/service/calendar';
@@ -16,7 +15,7 @@ import db from '@/server/common/entity/db';
  */
 describe('Event Search Integration (SQLite)', () => {
   let eventService: EventService;
-  let calendarService: CalendarService;
+  let _calendarService: CalendarService;
   let eventBus: EventEmitter;
   let testCalendar: Calendar;
   let testAccount: Account;
@@ -27,7 +26,7 @@ describe('Event Search Integration (SQLite)', () => {
 
     eventBus = new EventEmitter();
     eventService = new EventService(eventBus);
-    calendarService = new CalendarService();
+    _calendarService = new CalendarService();
 
     // Inject a minimal AP interface stub so listEvents does not crash when
     // no real ActivityPub domain is wired up in this test environment.

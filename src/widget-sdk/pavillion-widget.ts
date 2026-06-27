@@ -57,7 +57,7 @@ class PavillionWidget {
         const url = new URL(scriptSrc, window.location.href);
         this.widgetOrigin = url.origin;
       }
-      catch (e) {
+      catch {
         // Fallback to current origin if script src cannot be parsed
         this.widgetOrigin = window.location.origin;
       }

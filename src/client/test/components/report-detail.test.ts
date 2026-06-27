@@ -44,7 +44,7 @@ describe('ReportDetail', () => {
   /**
    * Helper to create a mock report with event data
    */
-  const createMockReport = (isRemoteEvent: boolean): Report => {
+  const createMockReport = (_isRemoteEvent: boolean): Report => {
     const report = new Report('report-123');
     report.eventId = 'event-456';
     report.calendarId = 'calendar-789';

@@ -73,7 +73,7 @@ export class PayPalAdapter implements PaymentProviderAdapter {
    * @param subscriptionId - Provider's subscription ID
    * @param immediate - If true, cancel immediately; otherwise at period end (PayPal only supports immediate)
    */
-  async cancelSubscription(subscriptionId: string, immediate: boolean): Promise<void> {
+  async cancelSubscription(subscriptionId: string, _immediate: boolean): Promise<void> {
     // Note: PayPal doesn't have native "cancel at period end" functionality
     // We'll cancel immediately and the service layer should handle the timing
     await (this.client as any).subscriptions.subscriptionsCancel({
@@ -105,9 +105,9 @@ export class PayPalAdapter implements PaymentProviderAdapter {
    * @throws Error always, as PayPal does not support this operation
    */
   async updateSubscriptionAmount(
-    providerSubscriptionId: string,
-    newAmount: number,
-    currency: string,
+    _providerSubscriptionId: string,
+    _newAmount: number,
+    _currency: string,
   ): Promise<void> {
     throw new Error('updateSubscriptionAmount is not implemented for PayPal');
   }
@@ -137,7 +137,7 @@ export class PayPalAdapter implements PaymentProviderAdapter {
    * @param returnUrl - URL to return to after management
    * @returns Management portal URL
    */
-  async getBillingPortalUrl(customerId: string, returnUrl: string): Promise<string> {
+  async getBillingPortalUrl(_customerId: string, _returnUrl: string): Promise<string> {
     // PayPal doesn't have a dedicated billing portal like Stripe
     // Direct users to their PayPal account subscription management
     const mode = (this.credentials.mode as string) || 'sandbox';
@@ -237,7 +237,7 @@ export class PayPalAdapter implements PaymentProviderAdapter {
    * @param params - Checkout session parameters
    * @throws Error always, as PayPal does not support embedded checkout sessions
    */
-  async createCheckoutSession(params: CreateCheckoutSessionParams): Promise<CheckoutSessionResult> {
+  async createCheckoutSession(_params: CreateCheckoutSessionParams): Promise<CheckoutSessionResult> {
     throw new Error('createCheckoutSession is not implemented for PayPal');
   }
 
@@ -250,7 +250,7 @@ export class PayPalAdapter implements PaymentProviderAdapter {
    * @param sessionId - The checkout session ID
    * @throws Error always, as PayPal does not support checkout sessions
    */
-  async getCheckoutSessionStatus(sessionId: string): Promise<CheckoutSessionStatus> {
+  async getCheckoutSessionStatus(_sessionId: string): Promise<CheckoutSessionStatus> {
     throw new Error('getCheckoutSessionStatus is not implemented for PayPal');
   }
 
@@ -265,7 +265,7 @@ export class PayPalAdapter implements PaymentProviderAdapter {
    * @param interval - Billing interval
    * @throws Error always, as PayPal uses billing plans instead
    */
-  async createPrice(amount: number, currency: string, interval: 'month' | 'year'): Promise<string> {
+  async createPrice(_amount: number, _currency: string, _interval: 'month' | 'year'): Promise<string> {
     throw new Error('createPrice is not implemented for PayPal');
   }
 

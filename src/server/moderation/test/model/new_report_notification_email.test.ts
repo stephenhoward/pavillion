@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import sinon from 'sinon';
 import i18next from 'i18next';
-import handlebars from 'handlebars';
 import NewReportNotificationEmail from '../../model/new_report_notification_email';
 import { initI18Next } from '@/server/common/test/lib/i18next';
 

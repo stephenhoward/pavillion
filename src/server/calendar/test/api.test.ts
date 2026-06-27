@@ -985,7 +985,6 @@ describe('Editor API', () => {
 // Import CalendarRoutes for settings API tests
 import CalendarRoutes from '@/server/calendar/api/v1/calendar';
 import { Media } from '@/common/model/media';
-import { ValidationError } from '@/common/exceptions/base';
 
 describe('Calendar Settings API', () => {
   let routes: CalendarRoutes;

@@ -1187,7 +1187,7 @@ describe('SearchFilterPublic Component', () => {
         query: { search: 'yoga classes' },
       });
 
-      const wrapper = mount(SearchFilterPublic, {
+      const _wrapper = mount(SearchFilterPublic, {
         global: {
           plugins: [pinia, router, [I18NextVue, { i18next }]],
         },

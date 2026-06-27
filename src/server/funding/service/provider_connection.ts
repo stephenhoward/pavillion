@@ -87,7 +87,7 @@ export class ProviderConnectionService {
    * @param adminUser - Admin user performing the configuration
    * @returns Object with connectionVerified indicating if Stripe API call succeeded
    */
-  async configureStripe(credentials: StripeCredentialInputs, adminUser: AdminUser): Promise<StripeConfigureResult> {
+  async configureStripe(credentials: StripeCredentialInputs, _adminUser: AdminUser): Promise<StripeConfigureResult> {
     // Validate required fields
     if (!credentials.publishable_key || credentials.publishable_key.trim() === '') {
       throw new MissingRequiredFieldError('publishable_key');
@@ -178,7 +178,7 @@ export class ProviderConnectionService {
    * @param adminUser - Admin user performing the configuration
    * @returns True if configuration successful
    */
-  async configurePayPal(credentials: ProviderCredentials, adminUser: AdminUser): Promise<boolean> {
+  async configurePayPal(credentials: ProviderCredentials, _adminUser: AdminUser): Promise<boolean> {
     // Validate required fields (check for both undefined and empty string)
     if (!credentials.client_id || credentials.client_id.trim() === '') {
       throw new MissingRequiredFieldError('client_id');
@@ -279,7 +279,7 @@ export class ProviderConnectionService {
         hasRequiredFields = !!credentials.client_id && !!credentials.client_secret;
       }
     }
-    catch (e) {
+    catch {
       hasRequiredFields = false;
     }
 

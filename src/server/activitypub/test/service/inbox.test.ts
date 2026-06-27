@@ -234,7 +234,7 @@ describe('processInboxMessage', () => {
     sandbox.stub(testService.remoteCalendarService, 'findOrCreateByActorUri').resolves(mockRemoteCalendar);
 
     // Mock FollowerCalendarEntity to simulate no existing follower
-    const findOneStub = sandbox.stub(FollowerCalendarEntity, 'findOne').resolves(null);
+    const _findOneStub = sandbox.stub(FollowerCalendarEntity, 'findOne').resolves(null);
     const createStub = sandbox.stub(FollowerCalendarEntity, 'create').resolves({} as any);
 
     // Mock ActivityPubOutboxMessageEntity save
@@ -1156,7 +1156,7 @@ describe('Structured Logging for Activity Rejections', () => {
       try {
         await service.processCreateEvent(calendar, activityMessage);
       }
-      catch (error: any) {
+      catch (_error: any) {
         // Expected to throw
       }
 
@@ -1196,7 +1196,7 @@ describe('Structured Logging for Activity Rejections', () => {
       try {
         await service.processCreateEvent(calendar, activityMessage);
       }
-      catch (error: any) {
+      catch (_error: any) {
         // Expected to throw
       }
 
@@ -1233,7 +1233,7 @@ describe('Structured Logging for Activity Rejections', () => {
       try {
         await service.processUpdateEvent(calendar, activityMessage);
       }
-      catch (error: any) {
+      catch (_error: any) {
         // Expected to throw
       }
 
@@ -1267,7 +1267,7 @@ describe('Structured Logging for Activity Rejections', () => {
       try {
         await service.processDeleteEvent(calendar, activityMessage);
       }
-      catch (error: any) {
+      catch (_error: any) {
         // Expected to throw
       }
 
@@ -1718,7 +1718,6 @@ describe('Relationship-Based Inbox Filtering', () => {
       });
 
       const processStub = sandbox.stub(service, 'processCreateEvent');
-      const updateStub = (ActivityPubInboxMessageEntity.prototype.update as sinon.SinonStub);
 
       await service.processInboxMessage(message);
 

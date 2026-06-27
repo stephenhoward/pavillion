@@ -13,8 +13,8 @@ import { checkGracePeriodExpiry } from '@/server/funding/service/jobs';
 describe('Subscription Scheduled Jobs', () => {
   let sandbox: sinon.SinonSandbox;
   let eventBus: EventEmitter;
-  let service: FundingService;
-  let clock: sinon.SinonFakeTimers;
+  let _service: FundingService;
+  let _clock: sinon.SinonFakeTimers;
 
   beforeAll(async () => {
     // Sync database schema before running tests
@@ -24,10 +24,10 @@ describe('Subscription Scheduled Jobs', () => {
   beforeEach(() => {
     sandbox = sinon.createSandbox();
     eventBus = new EventEmitter();
-    service = new FundingService(eventBus);
+    _service = new FundingService(eventBus);
 
     // Use fake timers to control date/time
-    clock = sandbox.useFakeTimers({
+    _clock = sandbox.useFakeTimers({
       now: new Date('2026-01-15T12:00:00Z'),
       shouldAdvanceTime: false,
     });

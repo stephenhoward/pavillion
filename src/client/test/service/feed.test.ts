@@ -15,9 +15,7 @@ describe('FeedService', () => {
   let sandbox: sinon.SinonSandbox;
   let service: FeedService;
   let axiosGetStub: sinon.SinonStub;
-  let axiosPostStub: sinon.SinonStub;
   let axiosPatchStub: sinon.SinonStub;
-  let axiosDeleteStub: sinon.SinonStub;
 
   const testCalendarId = 'test-calendar-id';
 
@@ -26,9 +24,9 @@ describe('FeedService', () => {
     service = new FeedService();
 
     axiosGetStub = sandbox.stub(axios, 'get');
-    axiosPostStub = sandbox.stub(axios, 'post');
+    sandbox.stub(axios, 'post');
     axiosPatchStub = sandbox.stub(axios, 'patch');
-    axiosDeleteStub = sandbox.stub(axios, 'delete');
+    sandbox.stub(axios, 'delete');
   });
 
   afterEach(() => {

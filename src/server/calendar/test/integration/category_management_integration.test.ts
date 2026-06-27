@@ -26,7 +26,7 @@ describe('Category Management Integration Tests', () => {
   let testCalendar: Calendar;
   let testCategory1: EventCategory;
   let testCategory2: EventCategory;
-  let testCategory3: EventCategory;
+  let _testCategory3: EventCategory;
   let testEvent1: CalendarEvent;
   let testEvent2: CalendarEvent;
   let authToken: string;
@@ -81,7 +81,7 @@ describe('Category Management Integration Tests', () => {
       language: 'en',
     });
 
-    testCategory3 = await calendarInterface.createCategory(testAccount, testCalendar.id, {
+    _testCategory3 = await calendarInterface.createCategory(testAccount, testCalendar.id, {
       name: 'Arts',
       language: 'en',
     });

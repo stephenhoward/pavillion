@@ -35,13 +35,13 @@ const routes: RouteRecordRaw[] = [
 const mockCalendar = {
   id: 'cal-1',
   urlName: 'test-calendar',
-  content: (lang: string) => ({ name: 'Test Calendar' }),
+  content: (_lang: string) => ({ name: 'Test Calendar' }),
   languages: ['en'],
 };
 
 const mockEvent = {
   id: 'evt-1',
-  content: (lang: string) => ({ name: 'Test Event', description: 'Description' }),
+  content: (_lang: string) => ({ name: 'Test Event', description: 'Description' }),
   schedules: [],
   categories: [],
   languages: ['en'],
@@ -96,7 +96,7 @@ const createWrapper = async (routeQuery = {}, routeParams = { calendar: 'test-ca
  * Simulates a keydown event on the tablist.
  * Uses Vue Test Utils' trigger with KeyboardEvent-specific options.
  */
-const triggerTabKeydown = async (wrapper, key: string) => {
+const _triggerTabKeydown = async (wrapper, key: string) => {
   const tablist = wrapper.find('[role="tablist"]');
   // Vue test utils trigger creates proper KeyboardEvent when event name starts with 'key'
   await tablist.trigger('keydown', { key });

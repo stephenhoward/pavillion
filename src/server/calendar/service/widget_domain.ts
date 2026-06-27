@@ -103,7 +103,7 @@ class WidgetDomainService {
       // Return hostname with port if present
       return url.port ? `${url.hostname}:${url.port}` : url.hostname;
     }
-    catch (error) {
+    catch {
       // If URL parsing fails, return the original string
       return origin;
     }
@@ -126,7 +126,7 @@ class WidgetDomainService {
              hostname === '[::1]' || // IPv6 localhost
              hostname.endsWith('.localhost'); // Subdomains of localhost
     }
-    catch (error) {
+    catch {
       // If URL parsing fails, do a simple string check
       const lowerOrigin = origin.toLowerCase();
       return lowerOrigin.includes('localhost') || lowerOrigin.includes('127.0.0.1');

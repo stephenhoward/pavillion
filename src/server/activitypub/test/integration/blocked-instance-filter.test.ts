@@ -9,7 +9,6 @@ vi.mock('@/server/activitypub/helper/rejection-logger', () => ({
 
 import { logActivityRejection } from '@/server/activitypub/helper/rejection-logger';
 import ProcessInboxService from '@/server/activitypub/service/inbox';
-import ModerationService from '@/server/moderation/service/moderation';
 import ModerationInterface from '@/server/moderation/interface';
 import ActivityPubInterface from '@/server/activitypub/interface';
 import CalendarInterface from '@/server/calendar/interface';
@@ -19,7 +18,6 @@ import ConfigurationInterface from '@/server/configuration/interface';
 import RemoteCalendarService from '@/server/activitypub/service/remote_calendar';
 import { ActivityPubInboxMessageEntity, FollowerCalendarEntity, FollowingCalendarEntity } from '@/server/activitypub/entity/activitypub';
 import { Calendar } from '@/common/model/calendar';
-import { EventObjectEntity } from '@/server/activitypub/entity/event_object';
 import CreateActivity from '@/server/activitypub/model/action/create';
 
 describe('ProcessInboxService - Blocked Instance Filtering', () => {
@@ -187,7 +185,7 @@ describe('ProcessInboxService - Blocked Instance Filtering', () => {
       ];
 
       const moderationService = moderationInterface.getModerationService();
-      const isBlockedStub = sandbox.stub(moderationService, 'isInstanceBlocked');
+      const _isBlockedStub = sandbox.stub(moderationService, 'isInstanceBlocked');
 
       for (const testCase of testCases) {
         // Clear the calendar interface stub before each iteration

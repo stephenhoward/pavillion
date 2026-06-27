@@ -1,4 +1,4 @@
-import { expect, describe, it, afterEach, beforeEach } from 'vitest';
+import { expect, describe, it, afterEach } from 'vitest';
 import { createMemoryHistory, createRouter, Router } from 'vue-router';
 import { RouteRecordRaw } from 'vue-router';
 import sinon from 'sinon';

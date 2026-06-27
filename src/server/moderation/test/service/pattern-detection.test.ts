@@ -38,7 +38,7 @@ describe('PatternDetectionService', () => {
       });
 
       // Mock finding other reports from same source
-      const otherReports = [
+      const _otherReports = [
         ReportEntity.build({
           id: 'report-2',
           event_id: 'event-2',
