@@ -51,9 +51,7 @@
         {{ t("go_login") }}
       </router-link>
 
-      <p class="policy-link">
-        <PolicyLink source="register" />
-      </p>
+      <PolicyLink source="register" />
     </form>
   </div>
 </template>

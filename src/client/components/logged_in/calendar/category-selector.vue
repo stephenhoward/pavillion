@@ -233,35 +233,31 @@ onMounted(async () => {
 @use '@/client/assets/style/components/event-management' as *;
 
 .category-selector {
-  margin-bottom: 1.5rem;
+  margin-bottom: var(--pav-space-6);
 }
 
 .category-label {
   @include section-label;
   display: block;
-  margin-bottom: 1rem;
+  margin-bottom: var(--pav-space-4);
 }
 
 .loading {
   text-align: center;
-  padding: 1rem;
-  color: var(--pav-color-stone-600);
-  font-size: 0.875rem;
+  padding: var(--pav-space-4);
+  color: var(--pav-text-secondary);
+  font-size: var(--pav-font-size-small);
   font-style: italic;
-
-  @media (prefers-color-scheme: dark) {
-    color: var(--pav-color-stone-400);
-  }
 }
 
 .error {
-  padding: 1rem;
-  margin-bottom: 1rem;
+  padding: var(--pav-space-4);
+  margin-bottom: var(--pav-space-4);
   background-color: var(--pav-color-red-50);
   border: 1px solid var(--pav-color-red-200);
-  border-radius: 0.75rem; // rounded-xl
+  border-radius: var(--pav-border-radius-lg);
   color: var(--pav-color-red-700);
-  font-size: 0.875rem;
+  font-size: var(--pav-font-size-small);
 
   @media (prefers-color-scheme: dark) {
     background-color: rgba(239, 68, 68, 0.1);
@@ -273,7 +269,7 @@ onMounted(async () => {
 .categories-list {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  gap: 0.75rem;
+  gap: var(--pav-space-3);
 
   @media (max-width: 768px) {
     grid-template-columns: 1fr;
@@ -282,24 +278,16 @@ onMounted(async () => {
 
 .no-categories {
   text-align: center;
-  padding: 1.5rem 1rem;
-  color: var(--pav-color-stone-500);
-  font-size: 0.875rem;
-
-  @media (prefers-color-scheme: dark) {
-    color: var(--pav-color-stone-400);
-  }
+  padding: var(--pav-space-6) var(--pav-space-4);
+  color: var(--pav-text-muted);
+  font-size: var(--pav-font-size-small);
 
   p {
-    margin: 0 0 0.5rem 0;
+    margin: 0 0 var(--pav-space-2) 0;
 
     &.help-text {
-      font-size: 0.75rem;
-      color: var(--pav-color-stone-400);
-
-      @media (prefers-color-scheme: dark) {
-        color: var(--pav-color-stone-500);
-      }
+      font-size: var(--pav-font-size-caption);
+      color: var(--pav-text-muted);
     }
   }
 }

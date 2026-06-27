@@ -48,7 +48,7 @@
 
       <button
         type="button"
-        class="add-language-button"
+        class="btn btn--ghost add-language-button"
         @click="openLanguagePicker"
       >
         + {{ t('add_language') }}
@@ -57,7 +57,7 @@
       <div class="form-actions">
         <button
           type="button"
-          class="btn-ghost"
+          class="btn btn--ghost"
           @click="$emit('close')"
           :disabled="state.isSaving"
         >
@@ -250,12 +250,8 @@ onMounted(() => {
 
 .form-helper {
   margin: 0;
-  color: var(--pav-color-stone-600);
-  font-size: 0.875rem;
-
-  @media (prefers-color-scheme: dark) {
-    color: var(--pav-color-stone-400);
-  }
+  color: var(--pav-text-secondary);
+  font-size: var(--pav-font-size-small);
 }
 
 .language-fields {
@@ -272,15 +268,11 @@ onMounted(() => {
 }
 
 .language-label {
-  font-weight: 500;
-  font-size: 0.875rem;
-  color: var(--pav-color-stone-700);
+  font-weight: var(--pav-font-weight-medium);
+  font-size: var(--pav-font-size-small);
+  color: var(--pav-text-secondary);
   min-width: 80px;
   flex-shrink: 0;
-
-  @media (prefers-color-scheme: dark) {
-    color: var(--pav-color-stone-300);
-  }
 }
 
 .language-input-wrapper {
@@ -302,40 +294,21 @@ onMounted(() => {
   padding: var(--pav-space-2);
   background: none;
   border: none;
-  border-radius: 0.375rem;
-  color: var(--pav-color-stone-400);
+  border-radius: var(--pav-border-radius-sm);
+  color: var(--pav-text-muted);
   cursor: pointer;
   transition: color 0.2s, background-color 0.2s;
 
   &:hover {
-    color: var(--pav-color-stone-600);
-    background: var(--pav-color-stone-100);
-
-    @media (prefers-color-scheme: dark) {
-      color: var(--pav-color-stone-300);
-      background: var(--pav-color-stone-700);
-    }
+    color: var(--pav-text-secondary);
+    background: var(--pav-interactive-hover);
   }
 }
 
+// Shared ghost-button styling (fill/color/hover) comes from `.btn--ghost`
+// in _buttons.scss; this rule only positions the button within the column.
 .add-language-button {
   align-self: flex-start;
-  padding: var(--pav-space-2) var(--pav-space-3);
-  background: none;
-  border: none;
-  color: var(--pav-color-stone-600);
-  font-size: 0.875rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: color 0.2s;
-
-  &:hover {
-    color: var(--pav-color-orange-600);
-
-    @media (prefers-color-scheme: dark) {
-      color: var(--pav-color-orange-400);
-    }
-  }
 }
 
 .form-actions {
@@ -347,34 +320,11 @@ onMounted(() => {
   border-top: 1px solid var(--pav-border-primary);
 }
 
-.btn-ghost {
-  padding: var(--pav-space-2) var(--pav-space-4);
-  background: none;
-  border: none;
-  color: var(--pav-color-stone-600);
-  font-weight: 500;
-  cursor: pointer;
-  transition: color 0.2s;
-
-  &:hover {
-    color: var(--pav-color-stone-900);
-
-    @media (prefers-color-scheme: dark) {
-      color: var(--pav-color-stone-100);
-    }
-  }
-
-  &:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-}
-
 .alert {
   padding: var(--pav-space-3);
   margin-bottom: var(--pav-space-4);
-  border-radius: 0.75rem;
-  font-size: 0.875rem;
+  border-radius: var(--pav-border-radius-lg);
+  font-size: var(--pav-font-size-small);
 
   &.alert--error {
     background-color: rgba(239, 68, 68, 0.1);
