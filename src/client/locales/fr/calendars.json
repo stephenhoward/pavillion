@@ -62,7 +62,7 @@
       "edit_title": "Modifier cet événement",
       "select_label": "Sélectionner l'événement : {{name}}",
       "duplicate_label": "Dupliquer l'événement : {{name}}",
-      "unpost_button_label": "Dépublier",
+      "unpost_button_label": "Supprimer la republication",
       "unpost_aria_label": "Supprimer la republication de l'événement : {{name}}",
       "unpost_confirm_title": "Supprimer l'événement republié ?",
       "unpost_confirm_body": "Supprimer cet événement republié de votre calendrier ? Il ne sera pas republié automatiquement si le calendrier d'origine le rediffuse.",
