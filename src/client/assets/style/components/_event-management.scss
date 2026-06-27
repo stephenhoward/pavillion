@@ -232,33 +232,6 @@
   }
 }
 
-// Form input with rounded corners and focus state
-@mixin form-input-rounded {
-  border-radius: 0.75rem; // rounded-xl
-  background: var(--pav-color-stone-50);
-  border: 1px solid var(--pav-color-stone-200);
-  padding: 0.75rem 1rem;
-  font-size: 1rem;
-  color: var(--pav-color-stone-900);
-  transition: all 0.15s ease;
-
-  &::placeholder {
-    color: var(--pav-color-stone-400);
-  }
-
-  &:focus {
-    outline: none;
-    border-color: var(--pav-color-orange-500);
-    box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.1);
-  }
-
-  @media (prefers-color-scheme: dark) {
-    background: var(--pav-color-stone-800);
-    border-color: var(--pav-color-stone-700);
-    color: var(--pav-color-stone-100);
-  }
-}
-
 // Hover reveal actions (for edit/duplicate buttons)
 @mixin hover-reveal {
   opacity: 0;
