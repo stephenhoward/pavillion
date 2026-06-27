@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isValidEmail } from '@/common/validation/email';
+import { isValidEmail, normalizeEmail } from '@/common/validation/email';
 
 describe('isValidEmail', () => {
 
@@ -30,4 +30,31 @@ describe('isValidEmail', () => {
       expect(isValidEmail(email)).toBe(false);
     });
   }
+});
+
+describe('normalizeEmail', () => {
+  it('lowercases mixed-case addresses', () => {
+    expect(normalizeEmail('Victim@X.com')).toBe('victim@x.com');
+  });
+
+  it('trims surrounding whitespace', () => {
+    expect(normalizeEmail('  user@example.com  ')).toBe('user@example.com');
+  });
+
+  it('trims and lowercases together', () => {
+    expect(normalizeEmail('  User@Example.COM\t')).toBe('user@example.com');
+  });
+
+  it('leaves an already-normalized address unchanged', () => {
+    expect(normalizeEmail('user@example.com')).toBe('user@example.com');
+  });
+
+  it('returns an empty string for an empty input', () => {
+    expect(normalizeEmail('')).toBe('');
+  });
+
+  it('returns an empty string for nullish input without throwing', () => {
+    expect(normalizeEmail(null as unknown as string)).toBe('');
+    expect(normalizeEmail(undefined as unknown as string)).toBe('');
+  });
 });

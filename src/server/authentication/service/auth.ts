@@ -4,6 +4,7 @@ import { DateTime } from 'luxon';
 import { Account } from "@/common/model/account";
 import { AccountEntity, AccountSecretsEntity } from "@/server/common/entity/account";
 import { noAccountExistsError } from '@/server/accounts/exceptions';
+import { normalizeEmail } from '@/common/validation/email';
 import { EmailAlreadyExistsError, InvalidPasswordError } from '@/server/authentication/exceptions';
 import EmailInterface from '@/server/email/interface';
 import PasswordResetEmail from '@/server/authentication/model/password_reset_email';
@@ -40,10 +41,10 @@ export default class AuthenticationService {
     }
 
     // Normalize the email address for case-insensitive comparison
-    const normalizedNewEmail = newEmail.toLowerCase();
+    const normalizedNewEmail = normalizeEmail(newEmail);
 
     // If the new email is the same as current (case-insensitive), just return the account
-    if (account.email.toLowerCase() === normalizedNewEmail) {
+    if (normalizeEmail(account.email) === normalizedNewEmail) {
       return account;
     }
 

@@ -26,7 +26,7 @@ import { EventEmitter } from 'events';
 import EditorInvitationEmail from '@/server/calendar/model/editor_invitation_email';
 import { isValidLanguageCode } from '@/common/i18n/languages';
 import { ValidationError } from '@/common/exceptions/base';
-import { isValidEmail } from '@/common/validation/email';
+import { isValidEmail, normalizeEmail } from '@/common/validation/email';
 import { logError } from '@/server/common/helper/error-logger';
 import { createLogger } from '@/server/common/helper/logger';
 
@@ -94,13 +94,13 @@ export default class AccountService {
       throw new AccountAlreadyExistsError();
     }
 
-    if ( await AccountInvitationEntity.findOne({ where: { email: email }}) ) {
+    if ( await AccountInvitationEntity.findOne({ where: { email: normalizeEmail(email) }}) ) {
       throw new AccountInviteAlreadyExistsError();
     }
 
     const invitationEntity = AccountInvitationEntity.build({
       id: uuidv4(),
-      email: email,
+      email: normalizeEmail(email),
       invited_by: inviter.id,
       message: message,
       invitation_code: randomBytes(16).toString('hex'),
@@ -240,7 +240,7 @@ export default class AccountService {
 
     const existingAccount = await this.getAccountByEmail(email);
     const existingApplication = await AccountApplicationEntity.findOne({
-      where: { email: email },
+      where: { email: normalizeEmail(email) },
     });
 
     // Branch 5: existing account — silently swallow AccountAlreadyExistsError.
@@ -296,7 +296,7 @@ export default class AccountService {
 
     const applicationEntity = AccountApplicationEntity.build({
       id: uuidv4(),
-      email: email,
+      email: normalizeEmail(email),
       message: message || '',
       status: 'pending_confirmation',
       status_timestamp: new Date(),
@@ -446,7 +446,7 @@ export default class AccountService {
 
     const accountEntity = AccountEntity.build({
       id: uuidv4(),
-      email: email,
+      email: normalizeEmail(email),
       username: '',
     });
 
@@ -842,7 +842,7 @@ export default class AccountService {
     * @returns {Promise<Account | undefined>} a promise that resolves to the account associated with the given email address, or undefined if no such account exists
     */
   async getAccountByEmail(email:string): Promise<Account | undefined> {
-    let account = await AccountEntity.findOne({ where: { email: email }});
+    let account = await AccountEntity.findOne({ where: { email: normalizeEmail(email) }});
     if (!account) { return undefined; }
 
     let roles = await AccountRoleEntity.findAll({ where: { account_id: account.id } });
