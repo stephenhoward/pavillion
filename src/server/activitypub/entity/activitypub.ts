@@ -239,8 +239,13 @@ class SharedEventEntity extends Model {
  * the calendar owner supersedes the dismissal.
  *
  * The unique index on (event_id, calendar_id) enforces the one-row-per-pair
- * invariant. The event_id FK cascades on delete so dismissals are cleaned
- * up automatically when the underlying local event row is deleted.
+ * invariant. Both the event_id and calendar_id FKs cascade on delete so
+ * dismissals are cleaned up automatically when the underlying local event
+ * or calendar row is deleted.
+ *
+ * Internal lookup table: like the adjacent SharedEventEntity and
+ * EventActivityEntity, it has no domain-model counterpart in
+ * src/common/model/ and therefore intentionally omits toModel()/fromModel().
  */
 @Table({ tableName: 'ap_repost_dismissal' })
 class RepostDismissalEntity extends Model {
@@ -273,7 +278,7 @@ class RepostDismissalEntity extends Model {
   @BelongsTo(() => EventEntity, { foreignKey: 'event_id', onDelete: 'CASCADE' })
   declare event: EventEntity;
 
-  @BelongsTo(() => CalendarEntity, { foreignKey: 'calendar_id' })
+  @BelongsTo(() => CalendarEntity, { foreignKey: 'calendar_id', onDelete: 'CASCADE' })
   declare calendar: CalendarEntity;
 }
 

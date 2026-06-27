@@ -156,6 +156,11 @@ describe('EventService transaction propagation', () => {
         fakeTx,
       );
 
+      // The content lookup that decides update-vs-destroy must read inside the
+      // caller's transaction snapshot (pv-i7n3).
+      expect(contentFindStub.calledOnce).toBe(true);
+      expect(contentFindStub.firstCall.args[0]).toMatchObject({ transaction: fakeTx });
+
       expect(contentUpdateStub.calledOnce).toBe(true);
       // .update(values, options) — options is the 2nd positional arg.
       expect(contentUpdateStub.firstCall.args[1]).toEqual({ transaction: fakeTx });
