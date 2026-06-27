@@ -43,7 +43,6 @@ describe('EventService - Location Integration', () => {
     // Inject a minimal AP interface stub so listEvents does not crash when
     // no real ActivityPub domain is wired up in this test environment.
     calendarInterface.setActivityPubInterface({
-      getSharedEventIds: async () => [],
       getSharedEventStatusMap: async () => new Map(),
     } as any);
 
@@ -319,7 +318,6 @@ describe('EventService - Space persistence integration', () => {
     const eventBus = new EventEmitter();
     calendarInterface = new CalendarInterface(eventBus);
     calendarInterface.setActivityPubInterface({
-      getSharedEventIds: async () => [],
       getSharedEventStatusMap: async () => new Map(),
     } as any);
 
@@ -458,7 +456,6 @@ describe('EventInstanceService - Space eager-loading on listing endpoints', () =
     const eventBus = new EventEmitter();
     calendarInterface = new CalendarInterface(eventBus);
     calendarInterface.setActivityPubInterface({
-      getSharedEventIds: async () => [],
       getSharedEventStatusMap: async () => new Map(),
       getEventSourceActorUris: async () => new Map<string, string>(),
       findCalendarActorByCalendarId: async () => null,
@@ -580,7 +577,6 @@ describe('EventEntity - space_id FK ON DELETE SET NULL', () => {
     const eventBus = new EventEmitter();
     calendarInterface = new CalendarInterface(eventBus);
     calendarInterface.setActivityPubInterface({
-      getSharedEventIds: async () => [],
       getSharedEventStatusMap: async () => new Map(),
     } as any);
 

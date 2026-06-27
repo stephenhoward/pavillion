@@ -56,7 +56,6 @@ describe('Event Deletion and Update Authorization - IDOR Prevention', () => {
     // Inject a minimal AP interface stub. No AP domain is wired in this test
     // environment; returning null/[] keeps local-only code paths correct.
     calendarInterface.setActivityPubInterface({
-      getSharedEventIds: async () => [],
       getSharedEventStatusMap: async () => new Map(),
       findCalendarActorByCalendarId: async () => null,
     } as any);

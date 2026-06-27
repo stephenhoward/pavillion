@@ -31,7 +31,6 @@ describe('Event Search Integration (SQLite)', () => {
     // Inject a minimal AP interface stub so listEvents does not crash when
     // no real ActivityPub domain is wired up in this test environment.
     (eventService as any).activityPubInterface = {
-      getSharedEventIds: async () => [],
       getSharedEventStatusMap: async () => new Map(),
     };
 

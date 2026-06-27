@@ -52,7 +52,6 @@ describe('SyncService integration', () => {
     calendarInterface = new CalendarInterface(eventBus);
 
     calendarInterface.setActivityPubInterface({
-      getSharedEventIds: async () => [],
       getSharedEventStatusMap: async () => new Map(),
     } as never);
 

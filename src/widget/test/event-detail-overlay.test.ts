@@ -98,7 +98,7 @@ vi.mock('@/site/components/not-found.vue', () => ({
 vi.mock('@/site/components/EventDetailBody.vue', () => ({
   default: {
     name: 'EventDetailBody',
-    props: ['instance', 'calendar', 'categoryHrefBuilder'],
+    props: ['instance', 'categoryHrefBuilder'],
     template: '<div data-test="event-detail-body" class="event-detail-body-stub"></div>',
   },
 }));
@@ -236,14 +236,13 @@ describe('widget event-detail-overlay shell', () => {
     wrapper.unmount();
   });
 
-  it('passes the loaded instance, calendar, and a category href builder to EventDetailBody', async () => {
+  it('passes the loaded instance and a category href builder to EventDetailBody', async () => {
     const { wrapper } = await mountOverlay('/widget/test_calendar/events/evt-1');
 
     const body = wrapper.findComponent({ name: 'EventDetailBody' });
     expect(body.exists()).toBe(true);
     expect(body.props('instance')).toBeTruthy();
     expect((body.props('instance') as any).id).toBe('inst-1');
-    expect((body.props('calendar') as any).urlName).toBe('test_calendar');
     // Widget shell supplies a categoryHrefBuilder so categories render as
     // clickable <a> badges that filter the widget calendar list.
     const builder = body.props('categoryHrefBuilder') as ((c: { id: string }) => string) | undefined;

@@ -125,7 +125,6 @@ onBeforeMount(async () => {
 
       <EventDetailBody
         :instance="state.instance"
-        :calendar="state.calendar"
         :category-href-builder="categoryHrefBuilder"
       />
     </main>

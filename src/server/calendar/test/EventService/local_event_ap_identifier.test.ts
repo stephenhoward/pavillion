@@ -31,7 +31,6 @@ describe('EventService - Calendar ID Storage', () => {
     // Inject a minimal AP interface stub so listEvents does not crash when
     // no real ActivityPub domain is wired up in these unit tests.
     (eventService as any).activityPubInterface = {
-      getSharedEventIds: async () => [],
       getSharedEventStatusMap: async () => new Map<string, 'auto' | 'manual'>(),
     };
 
