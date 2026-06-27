@@ -4,6 +4,7 @@ import { useTranslation } from 'i18next-vue';
 import i18next from 'i18next';
 import { DateTime } from 'luxon';
 import { type FeedEvent } from '@/client/service/feed';
+import { useDialog } from '@/client/composables/useDialog';
 
 const { t } = useTranslation('feed', { keyPrefix: 'events' });
 
@@ -18,11 +19,13 @@ const emit = defineEmits<{
   (e: 'report', domEvent: MouseEvent): void;
 }>();
 
-/** Unique ID for accessible label association. */
-const dialogId = Math.random().toString(36).substring(2, 11);
-const titleId = computed(() => `feed-detail-modal-title-${dialogId}`);
-
 const dialogRef = ref<HTMLDialogElement | null>(null);
+
+const { titleId, open, close, handleBackdropClick, cleanup } = useDialog(
+  dialogRef,
+  emit,
+  { idPrefix: 'feed-detail-modal' },
+);
 
 /**
  * Format event date and time for display.
@@ -89,42 +92,12 @@ const eventLocation = computed(() => {
   return props.event.location?.name || '';
 });
 
-/**
- * Open the modal dialog.
- */
-function open() {
-  if (dialogRef.value && !dialogRef.value.open) {
-    dialogRef.value.showModal();
-    document.body.classList.add('modal-open');
-  }
-}
-
-/**
- * Close the modal dialog and emit close event.
- */
-function close() {
-  if (dialogRef.value && dialogRef.value.open) {
-    dialogRef.value.close();
-  }
-  document.body.classList.remove('modal-open');
-  emit('close');
-}
-
-/**
- * Handle backdrop clicks to close the modal.
- */
-function handleBackdropClick(event: MouseEvent) {
-  if (event.target === dialogRef.value) {
-    close();
-  }
-}
-
 onMounted(() => {
   open();
 });
 
 onBeforeUnmount(() => {
-  document.body.classList.remove('modal-open');
+  cleanup();
 });
 
 defineExpose({ open, close });
@@ -144,6 +117,7 @@ defineExpose({ open, close });
         <h2
           :id="titleId"
           class="feed-detail-dialog__title"
+          tabindex="-1"
         >
           {{ eventTitle }}
         </h2>
@@ -283,6 +257,13 @@ defineExpose({ open, close });
   color: var(--pav-text-primary);
   flex: 1;
   padding-inline-end: var(--pav-space-md);
+
+  // The heading is the composable's initial focus target (tabindex="-1") so the
+  // close button doesn't claim the focus ring on open. It is only ever focused
+  // programmatically, so suppress the ring unconditionally — mirrors modal.vue.
+  &:focus {
+    outline: none;
+  }
 }
 
 .feed-detail-dialog__close {
