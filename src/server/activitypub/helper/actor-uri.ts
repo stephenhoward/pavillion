@@ -8,8 +8,6 @@
 
 import { validateActorUriProtocol } from '@/server/common/helper/uri-validation';
 
-export { validateActorUriProtocol };
-
 export type ActorType = 'person' | 'calendar';
 
 export interface ParsedActorUri {

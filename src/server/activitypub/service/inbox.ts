@@ -3,7 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { EventEmitter } from "events";
 import { logError } from '@/server/common/helper/error-logger';
 import { logActivityRejection } from '../helper/rejection-logger';
-import { validateActorUriProtocol } from '../helper/actor-uri';
+import { validateActorUriProtocol } from '@/server/common/helper/uri-validation';
 import { createLogger } from '@/server/common/helper/logger';
 
 const logger = createLogger('activitypub');
