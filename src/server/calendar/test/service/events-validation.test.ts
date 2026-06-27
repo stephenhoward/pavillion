@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import EventsService from '@/server/calendar/service/events';
+import EventsService, { validateMediaTransform } from '@/server/calendar/service/events';
 import { ValidationError } from '@/common/exceptions/base';
 import { Account } from '@/common/model/account';
 import { EventEmitter } from 'events';
@@ -120,6 +120,72 @@ describe('EventsService - Validation', () => {
       await expect(
         service.bulkAssignCategories(mockAccount, ['event-1'], [123 as any, 'cat-2']),
       ).rejects.toThrow('all categoryIds must be strings');
+    });
+  });
+
+  describe('validateMediaTransform', () => {
+    it('accepts boundary focal point values 0 and 1 and zoom 1', () => {
+      expect(() => validateMediaTransform({ mediaFocalPointX: 0, mediaFocalPointY: 1, mediaZoom: 1 })).not.toThrow();
+      expect(() => validateMediaTransform({ mediaFocalPointX: 1, mediaFocalPointY: 0 })).not.toThrow();
+      expect(() => validateMediaTransform({ mediaFocalPointX: 0.5, mediaFocalPointY: 0.25, mediaZoom: 2.5 })).not.toThrow();
+    });
+
+    it('skips undefined and null values', () => {
+      expect(() => validateMediaTransform({})).not.toThrow();
+      expect(() => validateMediaTransform({ mediaFocalPointX: undefined, mediaFocalPointY: null, mediaZoom: null })).not.toThrow();
+    });
+
+    it('rejects focal point X below 0', () => {
+      expect(() => validateMediaTransform({ mediaFocalPointX: -0.1 })).toThrow(ValidationError);
+    });
+
+    it('rejects focal point X above 1', () => {
+      expect(() => validateMediaTransform({ mediaFocalPointX: 1.1 })).toThrow(ValidationError);
+    });
+
+    it('rejects focal point Y out of range', () => {
+      expect(() => validateMediaTransform({ mediaFocalPointY: 2 })).toThrow(ValidationError);
+      expect(() => validateMediaTransform({ mediaFocalPointY: -1 })).toThrow(ValidationError);
+    });
+
+    it('rejects zoom below 1', () => {
+      expect(() => validateMediaTransform({ mediaZoom: 0.5 })).toThrow(ValidationError);
+    });
+
+    it('rejects non-numeric and non-finite values', () => {
+      expect(() => validateMediaTransform({ mediaFocalPointX: 'x' })).toThrow(ValidationError);
+      expect(() => validateMediaTransform({ mediaZoom: NaN })).toThrow(ValidationError);
+      expect(() => validateMediaTransform({ mediaZoom: Infinity })).toThrow(ValidationError);
+    });
+  });
+
+  describe('createEvent media transform validation', () => {
+    it('rejects out-of-range focal point before any persistence', async () => {
+      await expect(
+        service.createEvent(mockAccount, { calendarId: 'cal-1', mediaFocalPointX: 5 }),
+      ).rejects.toThrow(ValidationError);
+    });
+
+    it('rejects out-of-range zoom before any persistence', async () => {
+      await expect(
+        service.createEvent(mockAccount, { calendarId: 'cal-1', mediaZoom: 0 }),
+      ).rejects.toThrow(ValidationError);
+    });
+  });
+
+  describe('updateEvent media transform validation', () => {
+    const validUuid = '11111111-1111-4111-8111-111111111111';
+
+    it('rejects out-of-range focal point before any persistence', async () => {
+      await expect(
+        service.updateEvent(mockAccount, validUuid, { mediaFocalPointY: -2 }),
+      ).rejects.toThrow(ValidationError);
+    });
+
+    it('rejects out-of-range zoom before any persistence', async () => {
+      await expect(
+        service.updateEvent(mockAccount, validUuid, { mediaZoom: 0.2 }),
+      ).rejects.toThrow(ValidationError);
     });
   });
 });

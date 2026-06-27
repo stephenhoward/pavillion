@@ -99,6 +99,40 @@ function validateExternalUrlPair(externalUrl: string | null, urlPrompt: UrlPromp
 }
 
 /**
+ * Validates the media-transform parameters (focal point and zoom) before they
+ * are persisted. `mediaFocalPointX` and `mediaFocalPointY` must be finite
+ * numbers in [0,1]; `mediaZoom` must be a finite number >= 1. Values that are
+ * undefined or null are skipped (no transform supplied / cleared). Out-of-range
+ * or non-numeric inputs are rejected with a {@link ValidationError} whose
+ * `fields` map flags the offending input.
+ *
+ * Shared by createEvent and updateEvent so both persistence paths enforce the
+ * same bounds.
+ */
+export function validateMediaTransform(eventParams: Record<string, any>): void {
+  const checkFocal = (key: 'mediaFocalPointX' | 'mediaFocalPointY') => {
+    const value = eventParams[key];
+    if (value === undefined || value === null) return;
+    if (typeof value !== 'number' || !Number.isFinite(value) || value < 0 || value > 1) {
+      throw new ValidationError(`${key} must be a number between 0 and 1`, {
+        [key]: ['must be a number between 0 and 1'],
+      });
+    }
+  };
+  checkFocal('mediaFocalPointX');
+  checkFocal('mediaFocalPointY');
+
+  const zoom = eventParams.mediaZoom;
+  if (zoom !== undefined && zoom !== null) {
+    if (typeof zoom !== 'number' || !Number.isFinite(zoom) || zoom < 1) {
+      throw new ValidationError('mediaZoom must be a number greater than or equal to 1', {
+        mediaZoom: ['must be a number greater than or equal to 1'],
+      });
+    }
+  }
+}
+
+/**
  * Scrubs an external URL for safe inclusion in structured logs.
  *
  * External URLs may contain sensitive material in their query string or
@@ -659,6 +693,9 @@ class EventService {
     tx?: Transaction,
   ): Promise<CalendarEvent> {
 
+    // Bounds-check media transform values before any persistence.
+    validateMediaTransform(eventParams);
+
     const calendar = await this.calendarService.getCalendar(eventParams.calendarId);
     const calendars = await this.calendarService.editableCalendarsForUser(account);
 
@@ -912,6 +949,9 @@ class EventService {
     if (!this.isValidUUID(eventId)) {
       throw new ValidationError('Invalid UUID format in event ID');
     }
+
+    // Bounds-check media transform values before any persistence.
+    validateMediaTransform(eventParams);
 
     const eventEntity = await EventEntity.findByPk(eventId);
 
