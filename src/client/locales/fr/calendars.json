@@ -27,6 +27,7 @@
     "role_editor": "Éditeur",
     "aria_navigate_calendar": "Aller au calendrier : {{calendarName}}, rôle : {{role}}",
     "aria_view_public_calendar": "Voir le calendrier public : {{name}} (s'ouvre dans un nouvel onglet)",
+    "url_path": "/{{urlName}}",
     "error_loading_calendars": "Échec du chargement des calendriers",
     "guide_link": "Comment créer un calendrier"
   },

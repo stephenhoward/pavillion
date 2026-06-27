@@ -52,7 +52,7 @@ const audience = computed(() => audienceForRoute(route?.name));
  */
 function getDescription(info: CalendarInfo): string {
   const desc = info.calendar.content('en').description;
-  return desc || `/${info.calendar.urlName}`;
+  return desc || t('url_path', { urlName: info.calendar.urlName });
 }
 
 onBeforeMount(async () => {

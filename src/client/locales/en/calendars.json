@@ -27,6 +27,7 @@
     "role_editor": "Editor",
     "aria_navigate_calendar": "Navigate to calendar: {{calendarName}}, role: {{role}}",
     "aria_view_public_calendar": "View public calendar: {{name}} (opens in new tab)",
+    "url_path": "/{{urlName}}",
     "error_loading_calendars": "Failed to load calendars",
     "menu_label": "Calendar list actions",
     "documentation": "Documentation",
