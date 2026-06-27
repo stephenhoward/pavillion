@@ -16,7 +16,6 @@ import AccountsInterface from '@/server/accounts/interface';
 import ConfigurationInterface from '@/server/configuration/interface';
 import SetupInterface from '@/server/setup/interface';
 import EmailInterface from '@/server/email/interface';
-import { EmailAlreadyExistsError } from '@/server/authentication/exceptions';
 import { AccountAlreadyExistsError, AccountInviteAlreadyExistsError } from '@/server/accounts/exceptions';
 import { TestEnvironment } from '@/server/common/test/lib/test_environment';
 import { initI18Next } from '@/server/common/test/lib/i18next';
@@ -106,29 +105,48 @@ describe('Email normalization (integration, real SQLite DB)', () => {
     });
   });
 
-  describe('changeEmail', () => {
-    it('treats a change to a case-variant of an existing address as taken', async () => {
+  describe('email change (two-step confirm-by-token)', () => {
+    it('recognizes a case-variant of an existing address as taken and stores no pending change', async () => {
       await accountService._setupAccount('victim@x.com');
       const moverInfo = await accountService._setupAccount('user@x.com');
 
       // Password verification is exercised elsewhere; isolate the taken-check.
       sandbox.stub(authService, 'checkPassword').resolves(true);
 
-      await expect(authService.changeEmail(moverInfo.account, 'VICTIM@x.com', 'pw')).rejects
-        .toThrow(EmailAlreadyExistsError);
+      // The taken path returns the same uniform (void) response as the available
+      // path — it never throws (anti-enumeration). The normalization contract is
+      // what's under test: `VICTIM@x.com` must collapse to the existing
+      // `victim@x.com` row so the taken path is taken and nothing is stored.
+      await expect(authService.initiateEmailChange(moverInfo.account, 'VICTIM@x.com', 'pw'))
+        .resolves.toBeUndefined();
 
-      // The mover's address is unchanged and no row was added.
+      // No pending change was written for the mover, and no row was added.
+      const secret = await AccountSecretsEntity.findByPk(moverInfo.account.id);
+      expect(secret?.email_change_new_email ?? null).toBeNull();
+      expect(secret?.email_change_code ?? null).toBeNull();
+
+      // The mover's address is unchanged.
       const mover = await AccountEntity.findByPk(moverInfo.account.id);
       expect(mover!.email).toBe('user@x.com');
       expect(await countAccounts()).toBe(2);
     });
 
-    it('persists a normalized email on a successful change', async () => {
+    it('persists a normalized email after the change is confirmed', async () => {
       const moverInfo = await accountService._setupAccount('user@x.com');
       sandbox.stub(authService, 'checkPassword').resolves(true);
 
-      const updated = await authService.changeEmail(moverInfo.account, 'New@X.COM', 'pw');
-      expect(updated.email).toBe('new@x.com');
+      // Initiate stores a pending, normalized address plus a confirmation token;
+      // it does not write the new address to the account yet.
+      await authService.initiateEmailChange(moverInfo.account, 'New@X.COM', 'pw');
+
+      const pending = await AccountSecretsEntity.findByPk(moverInfo.account.id);
+      expect(pending!.email_change_new_email).toBe('new@x.com');
+      const beforeConfirm = await AccountEntity.findByPk(moverInfo.account.id);
+      expect(beforeConfirm!.email).toBe('user@x.com');
+
+      // Confirming the token commits the normalized address.
+      const committed = await authService.confirmEmailChange(pending!.email_change_code!);
+      expect(committed).toBe(true);
 
       const stored = await AccountEntity.findByPk(moverInfo.account.id);
       expect(stored!.email).toBe('new@x.com');
