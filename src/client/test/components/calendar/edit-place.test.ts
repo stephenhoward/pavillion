@@ -180,7 +180,7 @@ const ModalLayoutStub = {
   name: 'ModalLayout',
   props: ['title', 'modalClass', 'initiallyOpen', 'size'],
   emits: ['close'],
-  template: '<div role="dialog" aria-modal="true" :class="[\'modal\', modalClass]"><h2>{{ title }}</h2><slot /></div>',
+  template: '<dialog aria-modal="true" :class="[\'modal\', modalClass]"><h2>{{ title }}</h2><slot /></dialog>',
 };
 
 const createWrapper = async (

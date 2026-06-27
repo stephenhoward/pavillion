@@ -224,7 +224,7 @@ button:disabled,
     outline-offset: var(--pav-space-0_5);
   }
   
-  [role="dialog"], [role="complementary"] {
+  [role="complementary"] {
     border-width: var(--pav-border-width-2);
   }
 }
@@ -250,10 +250,6 @@ button:disabled,
     &:hover, &:active {
       transform: none;
     }
-  }
-  
-  [role="dialog"]::before {
-    backdrop-filter: none;
   }
 }
 

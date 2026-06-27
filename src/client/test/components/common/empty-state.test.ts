@@ -12,7 +12,7 @@ const routes: RouteRecordRaw[] = [{ path: '/', component: {}, name: 'calendars' 
 
 const sheetStub = {
   Sheet: {
-    template: '<div role="dialog"><slot /></div>',
+    template: '<dialog aria-modal="true"><slot /></dialog>',
     props: ['title'],
     emits: ['close'],
   },

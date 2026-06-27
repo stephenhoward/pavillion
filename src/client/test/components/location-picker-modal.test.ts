@@ -17,7 +17,7 @@ import enCalendars from '@/client/locales/en/calendars.json';
 const SheetStub = {
   props: ['title'],
   template: `
-    <dialog role="dialog" aria-modal="true">
+    <dialog aria-modal="true">
       <h2>{{ title }}</h2>
       <slot/>
     </dialog>

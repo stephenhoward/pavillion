@@ -22,12 +22,12 @@ const routes = [
 const ModalStub = {
   props: ['title', 'modalClass', 'size', 'initiallyOpen'],
   template: `
-    <div class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <dialog class="modal-overlay" aria-modal="true" aria-labelledby="modal-title">
       <div class="modal">
         <h2 id="modal-title" class="modal-title">{{ title }}</h2>
         <slot/>
       </div>
-    </div>
+    </dialog>
   `,
   emits: ['close'],
 };
@@ -775,8 +775,10 @@ describe('BlockedReporters.vue', () => {
       await wrapper.find('.block-reporter-button').trigger('click');
       await wrapper.vm.$nextTick();
 
-      const modal = wrapper.find('[role="dialog"]');
-      expect(modal.attributes('role')).toBe('dialog');
+      // Native <dialog> provides the dialog role implicitly; existence of the
+      // element is the correct assertion, not an explicit role attribute.
+      const modal = wrapper.find('dialog');
+      expect(modal.exists()).toBe(true);
       expect(modal.attributes('aria-modal')).toBe('true');
       expect(modal.attributes('aria-labelledby')).toBeTruthy();
     });
