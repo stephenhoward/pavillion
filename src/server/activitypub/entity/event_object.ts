@@ -3,7 +3,9 @@ import { Table, Column, Model, DataType, PrimaryKey, CreatedAt, UpdatedAt, Index
 import db from '@/server/common/entity/db';
 
 /**
- * EventObjectEntity - tracks ActivityPub object identity for events.
+ * EventObjectEntity - the canonical ActivityPub identity for EVERY event on
+ * this instance, both local AND federated. There is exactly one row per event;
+ * no event participates in federation without one.
  *
  * This entity stores the ActivityPub identity information for events,
  * linking local EventEntity records to their AP object IDs and
@@ -11,6 +13,14 @@ import db from '@/server/common/entity/db';
  *
  * For local events: ap_id is the local AP URL, attributed_to is the local calendar actor.
  * For remote events: ap_id is the remote AP URL, attributed_to is the remote calendar actor.
+ *
+ * Lifecycle: the row exists before the event is dispatched anywhere. Local
+ * events get their row in the eventCreated handler (see
+ * src/server/activitypub/events/index.ts) before any outbox dispatch; remote
+ * events get theirs at inbox-ingest time. The dispatch path reads
+ * attributed_to for attribution and loop-guard checks, so a missing row is
+ * never a valid state for a dispatched event — do not treat EventObjectEntity
+ * as present only for federated inbox events.
  *
  * This replaces storing AP-specific information directly on EventEntity,
  * keeping the calendar domain focused on event data while the AP domain

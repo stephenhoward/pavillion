@@ -280,6 +280,11 @@ services:
       timeout: 5s
       retries: 5
     restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
     # Uncomment to expose PostgreSQL port for external access (not recommended in production)
     # ports:
     #   - "5432:5432"
