@@ -588,7 +588,7 @@ function handleSuccess() {
           <div class="warning-icon">!</div>
           <h3 class="step-title">{{ t('step3.connection_warning_title') }}</h3>
           <p class="warning-message">
-            {{ t('step3.connection_warning_message') }}
+            {{ t('step3.connection_warning_message', { provider: selectedProviderName }) }}
           </p>
         </div>
       </div>

@@ -523,7 +523,7 @@
         "success_message": "{{provider}} se ha conectado correctamente.",
         "ready_message": "Ya puedes aceptar pagos a través de este proveedor.",
         "connection_warning_title": "Credenciales guardadas",
-        "connection_warning_message": "Stripe se guardó, pero la prueba de conexión falló. Comprueba que tus claves de API son correctas.",
+        "connection_warning_message": "{{provider}} se guardó, pero la prueba de conexión falló. Comprueba que tus claves de API son correctas.",
         "close_button": "Cerrar"
       },
       "errors": {

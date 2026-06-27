@@ -523,7 +523,7 @@
         "success_message": "{{provider}} a été connecté avec succès.",
         "ready_message": "Vous pouvez désormais accepter des paiements via ce prestataire.",
         "connection_warning_title": "Identifiants enregistrés",
-        "connection_warning_message": "Stripe a été enregistré, mais le test de connexion a échoué. Veuillez vérifier que vos clés API sont correctes.",
+        "connection_warning_message": "{{provider}} a été enregistré, mais le test de connexion a échoué. Veuillez vérifier que vos clés API sont correctes.",
         "close_button": "Fermer"
       },
       "errors": {

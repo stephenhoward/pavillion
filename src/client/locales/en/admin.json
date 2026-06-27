@@ -523,7 +523,7 @@
         "success_message": "{{provider}} has been successfully connected.",
         "ready_message": "You can now accept payments through this provider.",
         "connection_warning_title": "Credentials saved",
-        "connection_warning_message": "Stripe was saved, but the connection test failed. Please check that your API keys are correct.",
+        "connection_warning_message": "{{provider}} was saved, but the connection test failed. Please check that your API keys are correct.",
         "close_button": "Close"
       },
       "errors": {
