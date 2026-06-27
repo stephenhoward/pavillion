@@ -113,12 +113,12 @@ describe('Funding Provider UI Components', () => {
   const ModalStub = {
     props: ['title', 'modalClass', 'size', 'initiallyOpen'],
     template: `
-      <div class="modal-overlay" role="dialog" aria-modal="true">
+      <dialog class="modal-overlay" aria-modal="true">
         <div class="modal-container">
           <h2>{{ title }}</h2>
           <slot/>
         </div>
-      </div>
+      </dialog>
     `,
     emits: ['close'],
   };

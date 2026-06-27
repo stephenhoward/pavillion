@@ -54,7 +54,7 @@ const mountModal = (props: Record<string, any> = {}): VueWrapper => {
         // Stub the Modal wrapper to render slot content directly, bypassing
         // native <dialog> showModal() which is not supported in happy-dom.
         Modal: {
-          template: '<div role="dialog" aria-modal="true"><slot /></div>',
+          template: '<dialog aria-modal="true"><slot /></dialog>',
           props: ['title'],
           emits: ['close'],
         },

@@ -46,7 +46,7 @@ describe('BlockedInstances', () => {
           // in happy-dom. Expose the slot content so tests can still
           // assert against dialog body markup.
           Modal: {
-            template: '<div class="modal-overlay" role="dialog" aria-modal="true" :aria-labelledby="titleId"><h2 :id="titleId" class="modal">{{ title }}</h2><slot/></div>',
+            template: '<dialog class="modal-overlay" aria-modal="true" :aria-labelledby="titleId"><h2 :id="titleId" class="modal">{{ title }}</h2><slot/></dialog>',
             props: ['title', 'modalClass', 'size', 'initiallyOpen'],
             data() {
               return { titleId: 'confirm-title' };

@@ -34,7 +34,7 @@ const mountSheet = (schedule: CalendarEventSchedule) => {
         // inside a role=dialog element so ARIA-oriented assertions still
         // work.
         Sheet: {
-          template: '<div role="dialog" aria-modal="true"><slot /></div>',
+          template: '<dialog aria-modal="true"><slot /></dialog>',
           props: ['title'],
           emits: ['close'],
         },
@@ -59,7 +59,7 @@ describe('RecurrenceEditorSheet.vue — smoke tests', () => {
     const schedule = new CalendarEventSchedule();
     const wrapper = mountSheet(schedule);
 
-    const dialog = wrapper.find('[role="dialog"]');
+    const dialog = wrapper.find('dialog');
     expect(dialog.exists()).toBe(true);
     expect(dialog.attributes('aria-modal')).toBe('true');
     wrapper.unmount();

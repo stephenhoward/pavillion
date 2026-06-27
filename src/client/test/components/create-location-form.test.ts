@@ -12,7 +12,7 @@ import enEventEditor from '@/client/locales/en/event_editor.json';
 const SheetStub = {
   props: ['title'],
   template: `
-    <dialog role="dialog" aria-modal="true">
+    <dialog aria-modal="true">
       <h2>{{ title }}</h2>
       <slot/>
     </dialog>
@@ -94,7 +94,7 @@ describe('CreateLocationForm', () => {
         },
       });
 
-      expect(wrapper.find('[role="dialog"]').exists()).toBe(true);
+      expect(wrapper.find('dialog').exists()).toBe(true);
       expect(wrapper.find('h2').text()).toBe('Create Location');
     });
 
