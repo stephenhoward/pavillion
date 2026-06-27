@@ -4,6 +4,7 @@ import axios from 'axios';
 
 import AuthenticationService from '@/client/service/authn';
 import { SessionExpiredError } from '@/common/exceptions/authentication';
+import { EmptyValueError } from '@/common/exceptions/base';
 
 class LocalStore implements Storage {
 
@@ -225,7 +226,7 @@ describe('Invitation Management', () => {
     } as any);
     axios_delete.rejects(error);
 
-    await expect(authentication.revoke_invitation('inv-123')).rejects.toBe(404);
+    await expect(authentication.revoke_invitation('inv-123')).rejects.toThrow('Request failed with status 404');
   });
 });
 
@@ -508,7 +509,7 @@ describe('confirmEmailChange', () => {
   it('throws when given an empty token', async () => {
     let authentication = makeAuth();
 
-    await expect(() => authentication.confirmEmailChange('')).rejects.toBe('no_token_provided');
+    await expect(() => authentication.confirmEmailChange('')).rejects.toBeInstanceOf(EmptyValueError);
   });
 
   it('throws the HTTP status on a non-2xx response', async () => {
@@ -522,7 +523,7 @@ describe('confirmEmailChange', () => {
     } as any);
     sandbox.stub(axios, 'post').rejects(error);
 
-    await expect(authentication.confirmEmailChange('c'.repeat(32))).rejects.toBe(429);
+    await expect(authentication.confirmEmailChange('c'.repeat(32))).rejects.toThrow('Request failed with status 429');
   });
 });
 

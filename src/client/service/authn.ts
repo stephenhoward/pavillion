@@ -2,6 +2,7 @@ import axios, { AxiosError, AxiosRequestConfig, AxiosResponse } from 'axios';
 import { ref, Ref } from 'vue';
 
 import { SessionExpiredError } from '@/common/exceptions/authentication';
+import { EmptyValueError } from '@/common/exceptions/base';
 
 interface JWTClaims {
   exp: number;
@@ -36,7 +37,7 @@ export default class AuthenticationService {
   constructor(localStore: Storage) {
 
     if ( localStore == null ) {
-      throw("Must provide a localStorage object");
+      throw new EmptyValueError('Must provide a localStorage object');
     }
 
     this.localStore = localStore;
@@ -239,7 +240,7 @@ export default class AuthenticationService {
       if (axios.isAxiosError(error)) {
         const axiosError = error as AxiosError;
         if (axiosError.response) {
-          throw(axiosError.response.status);
+          throw new Error(`Request failed with status ${axiosError.response.status}`);
         }
       }
       throw(error);
@@ -262,7 +263,7 @@ export default class AuthenticationService {
       if (axios.isAxiosError(error)) {
         const axiosError = error as AxiosError;
         if (axiosError.response) {
-          throw(axiosError.response.status);
+          throw new Error(`Request failed with status ${axiosError.response.status}`);
         }
       }
       throw(error);
@@ -278,7 +279,7 @@ export default class AuthenticationService {
    */
   async check_invite_token(code: string) {
     if (!code || code === '') {
-      throw("no_invite_code_provided");
+      throw new EmptyValueError('no_invite_code_provided');
     }
 
     try {
@@ -289,7 +290,7 @@ export default class AuthenticationService {
       if (axios.isAxiosError(error)) {
         const axiosError = error as AxiosError;
         if (axiosError.response) {
-          throw(axiosError.response.status);
+          throw new Error(`Request failed with status ${axiosError.response.status}`);
         }
       }
       throw(error);
@@ -402,7 +403,7 @@ export default class AuthenticationService {
   async reset_password( email: string ) {
 
     if ( email == undefined || email == '' ) {
-      throw("no_email_provided");
+      throw new EmptyValueError('no_email_provided');
     }
 
     try {
@@ -457,7 +458,7 @@ export default class AuthenticationService {
   async confirmEmailChange( token: string ): Promise<{valid: boolean}> {
 
     if ( token == null || token == '' ) {
-      throw("no_token_provided");
+      throw new EmptyValueError('no_token_provided');
     }
 
     try {
@@ -468,7 +469,7 @@ export default class AuthenticationService {
       if ( axios.isAxiosError(error) ) {
         const axiosError = error as AxiosError;
         if ( axiosError.response ) {
-          throw(axiosError.response.status);
+          throw new Error(`Request failed with status ${axiosError.response.status}`);
         }
       }
       return { valid: false };
@@ -513,7 +514,7 @@ export default class AuthenticationService {
   async check_password_reset_token( token: string ): Promise<{valid: boolean, isNewAccount?: boolean}> {
 
     if ( token == null || token == '' ) {
-      throw("Must provide a password reset token");
+      throw new EmptyValueError('Must provide a password reset token');
     }
 
     try {
@@ -530,7 +531,7 @@ export default class AuthenticationService {
       if ( axios.isAxiosError(error) ) {
         const axiosError = error as AxiosError;
         if ( axiosError.response ) {
-          throw(axiosError.response.status);
+          throw new Error(`Request failed with status ${axiosError.response.status}`);
         }
       }
       return { valid: false };
@@ -548,11 +549,11 @@ export default class AuthenticationService {
   async use_password_reset_token( token: string, password: string ) {
 
     if ( token == null || token == '' ) {
-      throw("no_token_provided");
+      throw new EmptyValueError('no_token_provided');
     }
 
     if ( password == null || password == '' ) {
-      throw("no_password_provided");
+      throw new EmptyValueError('no_password_provided');
     }
 
     try {
@@ -563,7 +564,7 @@ export default class AuthenticationService {
       if ( axios.isAxiosError(error) ) {
         const axiosError = error as AxiosError;
         if ( axiosError.response ) {
-          throw(axiosError.response.status);
+          throw new Error(`Request failed with status ${axiosError.response.status}`);
         }
       }
     }
@@ -632,7 +633,7 @@ export default class AuthenticationService {
           let response = await axios.get( this._authUrl('/token'), {} );
 
           if ( response.status >= 400 ) {
-            throw(response.statusText);
+            throw new Error(response.statusText);
           }
 
           this._set_token(response.data);
