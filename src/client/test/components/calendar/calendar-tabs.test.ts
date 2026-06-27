@@ -103,7 +103,7 @@ const createWrapper = async (
  * Simulates a keydown event on the tablist.
  * Uses Vue Test Utils' trigger with KeyboardEvent-specific options.
  */
-const _triggerTabKeydown = async (wrapper, key: string) => {
+const triggerTabKeydown = async (wrapper, key: string) => {
   const tablist = wrapper.find('[role="tablist"]');
   // Vue test utils trigger creates proper KeyboardEvent when event name starts with 'key'
   await tablist.trigger('keydown', { key });
