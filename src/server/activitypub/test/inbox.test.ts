@@ -1617,6 +1617,47 @@ describe('ProcessInboxService - inbox-originated lifecycle Note cascade (pv-taf2
     expect(enqueued.filter(a => a.type === 'Update').length).toBe(0);
   });
 
+  // Lock-in (pv-vq8z): a Person-actor Update resolving a locally-owned event via
+  // eventParams.id that has NO EventObjectEntity row leaves apObject null. The
+  // eventParams build dereferenced apObject.event_id, crashing with a TypeError.
+  // The guard must no-op: no crash, no updateRemoteEvent, no eventUpdated, no Note.
+  it('no-ops without crashing on a Person-actor Update when no AP object record exists', async () => {
+    const personActorUri = 'https://user.instance/users/editor';
+    const eventApId = 'https://remote.instance/events/never-federated';
+    const eventId = uuidv4();
+    // Deliberately NO EventObjectEntity row → apObject stays null on the
+    // Person-actor path after both the ap_id and event_id re-lookups miss.
+
+    sandbox.stub(inboxService as any, 'isPersonActorUri').resolves(true);
+    sandbox.stub(inboxService as any, 'isAuthorizedRemoteEditor').resolves(true);
+    // Event resolves only via the eventParams.id local UUID lookup.
+    sandbox.stub(calendarInterface, 'getEventById').resolves(buildReconstitutedEvent(eventId));
+    const updateRemoteEvent = sandbox.stub(calendarInterface, 'updateRemoteEvent').resolves(buildReconstitutedEvent(eventId));
+
+    const enqueued: any[] = [];
+    eventBus.on('outboxMessageAdded', (activity) => enqueued.push(activity));
+    let eventUpdatedEmitted = false;
+    eventBus.on('eventUpdated', () => { eventUpdatedEmitted = true; });
+
+    const updateMessage = UpdateActivity.fromObject({
+      type: 'Update',
+      actor: personActorUri,
+      object: {
+        id: eventApId,
+        type: 'Event',
+        name: 'Editor Updated Event',
+        eventParams: { id: eventId, name: 'Editor Updated Event' },
+      },
+    });
+
+    const result = await inboxService.processUpdateEvent(testCalendar, updateMessage!);
+
+    expect(result).toBeNull();
+    expect(updateRemoteEvent.called).toBe(false);
+    expect(eventUpdatedEmitted).toBe(false);
+    expect(enqueued.length).toBe(0);
+  });
+
   it('emits no Note on a Person-actor delete of a locally-owned event with no share row', async () => {
     const personActorUri = 'https://user.instance/users/editor';
     const eventApId = 'https://remote.instance/events/owned-event-2';
