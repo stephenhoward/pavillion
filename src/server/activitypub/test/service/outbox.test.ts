@@ -41,9 +41,6 @@ import {
   createMockDeleteActivity,
   createMockFollowActivity,
   createMockUpdateActivity,
-  createMockFederation,
-  getSentActivities,
-  type MockFederationContext,
 } from '@/server/activitypub/test/helpers/fedify-mock';
 
 // Mock the ip-validation module so tests can control SSRF validation behaviour
@@ -1433,65 +1430,6 @@ describe('processOutboxMessage — local/remote dispatcher split', () => {
       'HTTP fallback must not run for null-calendar case',
     ).toBe(false);
     expect(updateStub.calledOnce).toBe(true);
-  });
-});
-
-
-/**
- * Additional tests demonstrating Fedify mock federation usage.
- *
- * These tests show how the MockFederationContext can be used to track
- * activities that would be sent, without making actual HTTP requests.
- * This pattern is useful for testing federation logic in isolation.
- */
-describe('MockFederation Activity Tracking', () => {
-  let mockFed: MockFederationContext;
-
-  beforeEach(() => {
-    mockFed = createMockFederation({ domain: 'local.federation.test' });
-  });
-
-  it('should track Create activities sent through mock federation', async () => {
-    const createActivity = createMockCreateActivity(LOCAL_ACTOR_URL, {
-      type: 'Event',
-      id: `${LOCAL_ACTOR_URL}/events/123`,
-      name: 'Community Meetup',
-      startTime: '2025-01-15T18:00:00Z',
-    });
-
-    await mockFed.sendActivity(createActivity, [
-      REMOTE_INBOX_URL,
-      'https://observerdomain.test/inbox',
-    ]);
-
-    const sent = getSentActivities(mockFed);
-    expect(sent).toHaveLength(1);
-    expect(sent[0].type).toBe('Create');
-    expect(sent[0].recipients).toHaveLength(2);
-  });
-
-  it('should track Follow activities sent through mock federation', async () => {
-    const followActivity = createMockFollowActivity(LOCAL_ACTOR_URL, REMOTE_PROFILE_URL);
-
-    await mockFed.sendActivity(followActivity, [REMOTE_INBOX_URL]);
-
-    const sent = getSentActivities(mockFed);
-    expect(sent).toHaveLength(1);
-    expect(sent[0].type).toBe('Follow');
-    expect(sent[0].recipients).toEqual([REMOTE_INBOX_URL]);
-  });
-
-  it('should allow tracking multiple activities in sequence', async () => {
-    const createActivity = createMockCreateActivity(LOCAL_ACTOR_URL, { type: 'Event' });
-    const followActivity = createMockFollowActivity(LOCAL_ACTOR_URL, REMOTE_PROFILE_URL);
-
-    await mockFed.sendActivity(createActivity, [REMOTE_INBOX_URL]);
-    await mockFed.sendActivity(followActivity, [REMOTE_INBOX_URL]);
-
-    const sent = getSentActivities(mockFed);
-    expect(sent).toHaveLength(2);
-    expect(sent[0].type).toBe('Create');
-    expect(sent[1].type).toBe('Follow');
   });
 });
 
