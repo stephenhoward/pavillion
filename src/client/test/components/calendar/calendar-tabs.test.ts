@@ -49,7 +49,11 @@ const mockEvent = {
   isRepost: false,
 };
 
-const createWrapper = async (routeQuery = {}, routeParams = { calendar: 'test-calendar' }) => {
+const createWrapper = async (
+  routeQuery = {},
+  routeParams = { calendar: 'test-calendar' },
+  { attach = false } = {},
+) => {
   const router: Router = createRouter({
     history: createMemoryHistory(),
     routes,
@@ -65,6 +69,9 @@ const createWrapper = async (routeQuery = {}, routeParams = { calendar: 'test-ca
 
   const wrapper = mountComponent(CalendarView, router, {
     pinia,
+    // Keyboard navigation focuses tabs via document.getElementById, which only
+    // resolves when the component is attached to a live document.
+    attachTo: attach ? document.body : undefined,
     stubs: {
       SearchFilter: { template: '<div class="search-filter-stub" />' },
       BulkOperationsMenu: { template: '<div />' },
@@ -202,18 +209,27 @@ describe('Calendar View Tabs', () => {
   });
 
   describe('Arrow Key Navigation', () => {
-    it('should have a keydown handler on the tablist', async () => {
-      const { wrapper } = await createWrapper();
+    it('should activate the next tab when ArrowRight is pressed on the tablist', async () => {
+      // Exercises the real @keydown="handleTabKeydown" binding end-to-end.
+      // The arrow-key semantics themselves (wrapping, Home/End, preventDefault)
+      // are covered exhaustively in useTabNavigation.test.ts; this asserts only
+      // that calendar.vue wires that composable to the tablist with ORDERED_TABS.
+      // Requires a DOM-attached mount because the handler focuses the target tab
+      // via document.getElementById; unmount afterward to detach from body.
+      const { wrapper, router } = await createWrapper({}, { calendar: 'test-calendar' }, { attach: true });
 
-      // Verify the tablist element has the @keydown binding by checking
-      // that it renders properly with the handler attached
-      const tablist = wrapper.find('[role="tablist"]');
-      expect(tablist.exists()).toBe(true);
+      try {
+        expect(wrapper.find('#events-tab').attributes('aria-selected')).toBe('true');
 
-      // The keydown handler is verified by confirming the ORDERED_TABS
-      // constant drives tab ordering, and the activateTab function works
-      // via click. Arrow key behavior is tested functionally via click
-      // equivalents below.
+        await triggerTabKeydown(wrapper, 'ArrowRight');
+
+        expect(wrapper.find('#places-tab').attributes('aria-selected')).toBe('true');
+        expect(wrapper.find('#events-tab').attributes('aria-selected')).toBe('false');
+        expect(router.currentRoute.value.query.tab).toBe('places');
+      }
+      finally {
+        wrapper.unmount();
+      }
     });
 
     it('should navigate through tabs in correct order via sequential clicks', async () => {

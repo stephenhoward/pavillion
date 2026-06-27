@@ -10,6 +10,10 @@ interface MountConfig {
   props?: Record<string, any>;
   stubs?: Record<string, any>;
   pinia?: Pinia;
+  // Attach the component to a live DOM node. Required for behavior that reads
+  // the document (e.g. document.getElementById / element focus); omit it for
+  // the common detached-mount case. Remember to unmount() to detach again.
+  attachTo?: Element | string;
 }
 
 const mountComponent = (component: any, router: Router, config: MountConfig = {}) => {
@@ -43,6 +47,7 @@ const mountComponent = (component: any, router: Router, config: MountConfig = {}
       stubs: config.stubs || {},
     },
     props: config.props,
+    ...(config.attachTo ? { attachTo: config.attachTo } : {}),
   });
 
   return wrapper;
