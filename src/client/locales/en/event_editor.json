@@ -177,6 +177,9 @@
     "no_further_occurrences": "No further occurrences",
     "no_occurrences_after": "No occurrences after {{month}}",
     "start_from_today_button": "Start from today",
-    "loading": "Loading…"
+    "loading": "Loading…",
+    "single_cancel_button": "Cancel this event",
+    "single_cancelled_status": "This event is cancelled",
+    "single_restore_button": "Restore"
   }
 }

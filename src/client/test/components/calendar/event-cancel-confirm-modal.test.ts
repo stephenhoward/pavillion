@@ -15,7 +15,7 @@ const SheetStub = {
   emits: ['close'],
 };
 
-const mountModal = async () => {
+const mountModal = async (props: Record<string, any> = {}) => {
   const router: Router = createRouter({
     history: createMemoryHistory(),
     routes,
@@ -26,6 +26,7 @@ const mountModal = async () => {
 
   return mountComponent(EventCancelConfirmModal, router, {
     stubs: { Sheet: SheetStub },
+    props,
   });
 };
 
@@ -122,6 +123,37 @@ describe('EventCancelConfirmModal', () => {
 
       expect(wrapper.emitted('confirm')).toBeTruthy();
       expect(wrapper.emitted('confirm')?.[0]).toEqual([{ hideFromPublic: true }]);
+    });
+  });
+
+  describe('allowHide=false', () => {
+    it('hides the hide-from-public toggle when allowHide is false', async () => {
+      const wrapper = await mountModal({ allowHide: false });
+      currentWrapper = wrapper;
+      await flushPromises();
+
+      expect(wrapper.find('input[type="checkbox"]').exists()).toBe(false);
+      expect(wrapper.text()).not.toContain('Hide from public');
+    });
+
+    it('emits confirm with hideFromPublic=false when allowHide is false', async () => {
+      const wrapper = await mountModal({ allowHide: false });
+      currentWrapper = wrapper;
+      await flushPromises();
+
+      const submitButton = wrapper.find('[data-testid="confirm-submit"]');
+      await submitButton.trigger('click');
+
+      expect(wrapper.emitted('confirm')).toBeTruthy();
+      expect(wrapper.emitted('confirm')?.[0]).toEqual([{ hideFromPublic: false }]);
+    });
+
+    it('shows the hide-from-public toggle by default (allowHide defaults to true)', async () => {
+      const wrapper = await mountModal();
+      currentWrapper = wrapper;
+      await flushPromises();
+
+      expect(wrapper.find('input[type="checkbox"]').exists()).toBe(true);
     });
   });
 

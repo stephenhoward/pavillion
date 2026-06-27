@@ -1302,17 +1302,64 @@ class EventService {
         // helper is positive-only, and payload rejection above guarantees
         // we never see isException=true here.
         const toStorage = EventScheduleEntity.toStorageDate;
+        // Capture the pre-edit occurrence instant and frequency so a single
+        // (non-recurring) event's exclusion row can follow a date edit below.
+        // The instant is taken from the entity's model projection (not the raw
+        // start_date column) because positive schedules and exclusion rows do
+        // NOT share a storage convention: positive rows store wall-clock digits
+        // reinterpreted in their `timezone` column (keepLocalTime), while the
+        // cancel path writes exclusion rows as true UTC instants with
+        // timezone='UTC'. Comparing raw `start_date` columns therefore only
+        // matched on a UTC server; comparing the resolved UTC instant matches
+        // on any server.
+        const oldStartInstantMs = scheduleEntity.toModel().startDate?.toUTC().toMillis() ?? null;
+        const oldStartDate = scheduleEntity.start_date;
+        const oldFrequency = scheduleEntity.frequency;
+        const newStartDate = toStorage(parsed.startDate) ?? scheduleEntity.start_date;
+        const newFrequency = 'frequency' in schedule ? ((parsed.frequency as string) ?? null) : scheduleEntity.frequency;
         await scheduleEntity.update({
           timezone: parsed.startDate?.zoneName ?? scheduleEntity.timezone,
-          start_date: toStorage(parsed.startDate) ?? scheduleEntity.start_date,
+          start_date: newStartDate,
           end_date: 'end' in schedule ? (toStorage(parsed.endDate) ?? null) : scheduleEntity.end_date,
           event_end_time: 'eventEndTime' in schedule ? (toStorage(parsed.eventEndTime) ?? null) : scheduleEntity.event_end_time,
-          frequency: 'frequency' in schedule ? ((parsed.frequency as string) ?? null) : scheduleEntity.frequency,
+          frequency: newFrequency,
           interval: 'interval' in schedule ? (parsed.interval ?? 0) : scheduleEntity.interval,
           count: 'count' in schedule ? (parsed.count ?? 0) : scheduleEntity.count,
           by_day: byDayValue,
         }, { transaction: tx });
         event.addSchedule(scheduleEntity.toModel());
+
+        // Cancellation-follows-event (single events): when an owner edits the
+        // date/time of a single, non-recurring event that carries a
+        // cancellation, the exclusion row — keyed by start_date — must move
+        // with the event so it stays cancelled. Re-key any matching exclusion
+        // from the old start_date to the new one. Multi-schedule and recurring
+        // events are deliberately excluded: their exclusions are keyed to
+        // individual occurrence dates, not the lone schedule's start_date.
+        const isSingleNonRecurringEdit =
+          existingPositives.length === 1 &&
+          incomingPositiveSchedules.length === 1 &&
+          !oldFrequency && !newFrequency;
+        if (
+          isSingleNonRecurringEdit &&
+          oldStartInstantMs !== null &&
+          parsed.startDate &&
+          oldStartDate && newStartDate &&
+          newStartDate.getTime() !== oldStartDate.getTime()
+        ) {
+          for (const exclusion of existingExclusions) {
+            // Match and re-key by resolved UTC instant (via the model
+            // projection) so the comparison is independent of each row's
+            // storage convention. The new value is written back in the
+            // exclusion's OWN timezone convention via toStorageDate so it
+            // round-trips through toModel() to the new occurrence instant.
+            const exclusionInstantMs = exclusion.toModel().startDate?.toUTC().toMillis() ?? null;
+            if (exclusionInstantMs !== null && exclusionInstantMs === oldStartInstantMs) {
+              const rekeyedStart = toStorage(parsed.startDate.setZone(exclusion.timezone || 'UTC'));
+              await exclusion.update({ start_date: rekeyedStart }, { transaction: tx });
+            }
+          }
+        }
       }
       else {
         event.addSchedule(await this.createEventSchedule(eventId, schedule, tx));

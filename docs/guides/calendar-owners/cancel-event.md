@@ -20,18 +20,18 @@ Deletion does none of these things. A deleted event is gone — from your calend
 
 ## How to cancel an event
 
-The cancellation tool is currently available for recurring events. When you edit a recurring event — a weekly meeting, a monthly meetup, a Tuesday-night open mic — the editor shows a <Btn>Manage cancellations</Btn> button below the schedule. Click it and a panel opens with a card for each upcoming occurrence. Each card has a <Btn>Cancel</Btn> button that marks just that one date as cancelled.
+You cancel an event from its editor. What you see there depends on whether the event recurs.
 
-The confirmation that opens has one decision worth thinking about — a **Hide from public** toggle:
+**A single, non-recurring event.** The editor shows a <Btn>Cancel event</Btn> control. Use it and the event is marked **Cancelled** — it stays on your public calendar, on the same date and time, and the cancellation propagates to any calendar reposting from yours, exactly as the section above describes. The control then changes to <Btn>Restore</Btn>, so reversing the call is one click if plans change again. Single events are show-as-cancelled only: there's no hide-from-public option. A one-off event you'd want to remove from the page entirely is almost always one to delete instead — see below.
+
+**A recurring event** — a weekly meeting, a monthly meetup, a Tuesday-night open mic. The editor shows a <Btn>Manage cancellations</Btn> button below the schedule. Click it and a panel opens with a card for each upcoming occurrence. Each card has a <Btn>Cancel</Btn> button that marks just that one date as cancelled.
+
+For a recurring occurrence, the confirmation that opens has one decision worth thinking about — a **Hide from public** toggle:
 
 - **Off (the default): show as cancelled.** The occurrence stays on the calendar. Visitors and any calendar reposting from yours still see the listing, but it's marked **Cancelled**. Use this when the event *was* announced and people might be planning to attend — cancelling-but-showing tells them the meeting they had on their calendar isn't happening.
 - **On: hide from public.** The occurrence is removed from the public page and from any calendar reposting from yours. Use this when the occurrence hasn't been visible long enough for anyone to be planning around it — for example, a brand-new recurring event where you want to skip a holiday week before the public page has had time to surface those occurrences.
 
 After you confirm, the card shows a **Cancelled** or **Hidden** badge, and its button changes to <Btn>Restore</Btn>. Restoring is immediate and needs no confirmation — useful if you changed your mind, or if a cancellation was made in error.
-
-::: tip <Lightbulb /> A note on single, non-recurring events.
-Pavillion's cancellation tool is built around occurrences of recurring events. A single event that isn't part of a recurrence doesn't get a cancel button in the editor — you have two options instead. If the event was announced and people may be planning to attend, edit the title to mark it cancelled (a prefix like *Cancelled —* on the front of the title is the convention) and update the description to explain. The listing stays where visitors expect to find it, and any calendar reposting from yours picks up the edit. If the event was never made public or only briefly visible, deletion is the cleaner move — see below.
-:::
 
 ## When deletion is the right tool
 

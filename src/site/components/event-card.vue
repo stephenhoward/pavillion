@@ -196,6 +196,7 @@ const detailPath = computed(() => {
       <span
         v-if="isCancelled"
         class="cancelled-badge"
+        data-testid="cancelled-badge"
         role="status"
       >
         <CalendarX

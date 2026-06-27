@@ -14,11 +14,26 @@ import Sheet from '@/client/components/common/Sheet.vue';
  * calls happen here — the consumer wires the `confirm` event to the
  * actual cancellation action.
  *
+ * Props:
+ * @prop {boolean} allowHide - When false, the "Hide from public" toggle is
+ *   suppressed and confirm always emits hideFromPublic:false. Used by the
+ *   single-event cancel control where cancellation is show-as-cancelled only.
+ *   Defaults to true so the recurring-instance flow is unchanged.
+ *
  * Emits:
  * @emits confirm - Fired when the user submits the confirmation
  *   @param {{ hideFromPublic: boolean }} payload
  * @emits close - Fired when the user cancels or dismisses the dialog
  */
+
+const props = withDefaults(
+  defineProps<{
+    allowHide?: boolean;
+  }>(),
+  {
+    allowHide: true,
+  },
+);
 
 const emit = defineEmits<{
   (e: 'confirm', payload: { hideFromPublic: boolean }): void;
@@ -34,7 +49,9 @@ const hideToggleId = useId();
 const hideDescriptionId = useId();
 
 function onSubmit() {
-  emit('confirm', { hideFromPublic: hideFromPublic.value });
+  emit('confirm', {
+    hideFromPublic: props.allowHide ? hideFromPublic.value : false,
+  });
 }
 
 function onCancel() {
@@ -54,7 +71,7 @@ function onSheetClose() {
     <div class="cancel-confirm-body">
       <p class="confirm-message">{{ t('confirm_message') }}</p>
 
-      <label :for="hideToggleId" class="hide-toggle">
+      <label v-if="allowHide" :for="hideToggleId" class="hide-toggle">
         <input
           :id="hideToggleId"
           v-model="hideFromPublic"

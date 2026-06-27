@@ -177,6 +177,9 @@
     "no_further_occurrences": "Aucune autre occurrence",
     "no_occurrences_after": "Aucune occurrence après {{month}}",
     "start_from_today_button": "Commencer à partir d'aujourd'hui",
-    "loading": "Chargement…"
+    "loading": "Chargement…",
+    "single_cancel_button": "Annuler cet événement",
+    "single_cancelled_status": "Cet événement est annulé",
+    "single_restore_button": "Restaurer"
   }
 }

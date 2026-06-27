@@ -934,6 +934,132 @@ describe('updateEvent exclusion preservation (reconcileSchedules)', () => {
     expect(findSchedulesStub.called).toBe(false);
   });
 
+  it('should re-key the exclusion row to the new start_date when a single event date is edited', async () => {
+    // A single (non-recurring) event with one positive schedule and a
+    // cancellation exclusion row keyed to the same occurrence. Editing the
+    // event's date must move the exclusion to the new date so it stays
+    // cancelled (cancellation-follows-event).
+    //
+    // The positive schedule uses a NON-UTC timezone so its resolved instant
+    // diverges from its raw start_date column digits. Positive rows store
+    // wall-clock digits reinterpreted via their `timezone` column
+    // (keepLocalTime): raw 10:00 on 2026-01-01 in America/New_York (EST,
+    // UTC-5) resolves to the instant 2026-01-01T15:00:00Z. The exclusion row
+    // (no timezone → UTC convention) is keyed to that RESOLVED instant
+    // (15:00Z), NOT the positive's raw 10:00 digits, because reconcileSchedules
+    // matches the exclusion to the positive by resolved UTC instant — never by
+    // raw column bytes.
+    //
+    // This divergence is the regression guard. The original bug matched/copied
+    // raw start_date column bytes: here that compares 10:00Z (positive) against
+    // 15:00Z (exclusion), which do NOT match, so a buggy implementation never
+    // re-keys the exclusion at all. The correct implementation matches resolved
+    // instants (15:00Z == 15:00Z) and re-keys. Because the divergence is built
+    // into the fixture (not the runner's timezone), the guard discriminates on
+    // any server timezone, including a UTC runner where the old fixture was
+    // vacuous.
+    const positiveRawStart = new Date('2026-01-01T10:00:00Z');
+    const oldOccurrenceInstantMs = DateTime.fromISO('2026-01-01T15:00:00Z', { zone: 'UTC' }).toMillis();
+    const positiveEntity = EventScheduleEntity.build({
+      id: 'positiveScheduleId',
+      event_id: eventId,
+      start_date: positiveRawStart,
+      timezone: 'America/New_York',
+      is_exclusion: false,
+    });
+    const exclusionEntity = EventScheduleEntity.build({
+      id: 'exclusionScheduleId',
+      event_id: eventId,
+      start_date: new Date('2026-01-01T15:00:00Z'),
+      is_exclusion: true,
+      hide_from_public: false,
+    });
+
+    sandbox.stub(EventEntity, 'findByPk').resolves(
+      EventEntity.build({ account_id: 'testAccountId', id: eventId, calendar_id: 'testCalendarId' }),
+    );
+    sandbox.stub(EventEntity.prototype, 'save');
+    sandbox.stub(EventScheduleEntity, 'findAll').resolves([positiveEntity, exclusionEntity]);
+    const updateScheduleStub = sandbox.stub(EventScheduleEntity.prototype, 'update');
+    updateScheduleStub.callsFake(async function(this: typeof positiveEntity, params: Record<string, unknown>) {
+      for (const key in params) {
+        this.set(key, params[key]);
+      }
+      return this;
+    });
+
+    await service.updateEvent(acct, eventId, {
+      schedules: [
+        { id: 'positiveScheduleId', start: '2026-06-15T14:00:00', end: '2026-06-15T16:00:00' },
+      ],
+    });
+
+    // The positive schedule moved to a new date.
+    const positiveUpdate = updateScheduleStub.getCalls().find(c => c.thisValue === positiveEntity);
+    expect(positiveUpdate).toBeDefined();
+    const newStart = positiveUpdate?.args[0].start_date as Date;
+    expect(newStart.getTime()).not.toBe(positiveRawStart.getTime());
+
+    // The exclusion row was re-keyed onto the new occurrence. Positive
+    // schedules and exclusion rows do NOT share a storage convention — positive
+    // rows store wall-clock digits reinterpreted in their `timezone` column
+    // (keepLocalTime), while exclusion rows are written as true UTC instants.
+    // So the re-key is asserted by the resolved occurrence INSTANT via
+    // toModel(), not by raw start_date column equality (which would only hold
+    // on a UTC server).
+    const exclusionUpdate = updateScheduleStub.getCalls().find(c => c.thisValue === exclusionEntity);
+    expect(exclusionUpdate).toBeDefined();
+    const reKeyedInstantMs = exclusionEntity.toModel().startDate?.toUTC().toMillis();
+    expect(reKeyedInstantMs).toBe(positiveEntity.toModel().startDate?.toUTC().toMillis());
+    // And it is genuinely the NEW occurrence, not the old one (15:00Z).
+    expect(reKeyedInstantMs).not.toBe(oldOccurrenceInstantMs);
+  });
+
+  it('should not re-key exclusions for a recurring single event date edit', async () => {
+    // A recurring event's exclusions are keyed to individual occurrence dates,
+    // not the lone schedule's start_date, so editing the schedule must NOT
+    // re-key them.
+    const oldStart = new Date('2026-01-01T10:00:00Z');
+    const positiveEntity = EventScheduleEntity.build({
+      id: 'positiveScheduleId',
+      event_id: eventId,
+      start_date: oldStart,
+      frequency: EventFrequency.WEEKLY as string,
+      timezone: 'UTC',
+      is_exclusion: false,
+    });
+    const exclusionEntity = EventScheduleEntity.build({
+      id: 'exclusionScheduleId',
+      event_id: eventId,
+      start_date: oldStart,
+      is_exclusion: true,
+      hide_from_public: false,
+    });
+
+    sandbox.stub(EventEntity, 'findByPk').resolves(
+      EventEntity.build({ account_id: 'testAccountId', id: eventId, calendar_id: 'testCalendarId' }),
+    );
+    sandbox.stub(EventEntity.prototype, 'save');
+    sandbox.stub(EventScheduleEntity, 'findAll').resolves([positiveEntity, exclusionEntity]);
+    const updateScheduleStub = sandbox.stub(EventScheduleEntity.prototype, 'update');
+    updateScheduleStub.callsFake(async function(this: typeof positiveEntity, params: Record<string, unknown>) {
+      for (const key in params) {
+        this.set(key, params[key]);
+      }
+      return this;
+    });
+
+    await service.updateEvent(acct, eventId, {
+      schedules: [
+        { id: 'positiveScheduleId', start: '2026-06-15T14:00:00' },
+      ],
+    });
+
+    // The exclusion row's update must not have been invoked.
+    const exclusionUpdate = updateScheduleStub.getCalls().find(c => c.thisValue === exclusionEntity);
+    expect(exclusionUpdate).toBeUndefined();
+  });
+
   it('should leave exclusions deleted after a restore (edit unrelated field post-restore)', async () => {
     // Scenario: a cancellation was restored elsewhere (the exclusion row was
     // deleted). Editing an unrelated field (e.g. content) must not recreate
