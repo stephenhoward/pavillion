@@ -1017,6 +1017,7 @@ class EventService {
       for( let [language,content] of Object.entries(eventParams.content) ) {
         let contentEntity = await EventContentEntity.findOne({
           where: { event_id: eventId, language: language },
+          transaction: tx,
         });
 
         if ( contentEntity ) {
