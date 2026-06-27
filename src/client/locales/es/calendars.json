@@ -62,7 +62,7 @@
       "edit_title": "Editar este evento",
       "select_label": "Seleccionar evento: {{name}}",
       "duplicate_label": "Duplicar evento: {{name}}",
-      "unpost_button_label": "Despublicar",
+      "unpost_button_label": "Eliminar reenvío",
       "unpost_aria_label": "Eliminar reenvío del evento: {{name}}",
       "unpost_confirm_title": "¿Eliminar evento reenviado?",
       "unpost_confirm_body": "¿Eliminar este evento reenviado de tu calendario? No se reenviará automáticamente de nuevo si el calendario original lo vuelve a publicar.",
