@@ -77,6 +77,25 @@ describe('inviteNewAccount', () => {
     expect(saveInviteStub.called).toBe(true);
   });
 
+  it('persists a normalized email when input has mixed case', async () => {
+    let getAccountStub = sandbox.stub(accountService, 'getAccountByEmail');
+    let findInvitationStub = sandbox.stub(AccountInvitationEntity, 'findOne');
+    let buildSpy = sandbox.spy(AccountInvitationEntity, 'build');
+    sandbox.stub(accountService,'sendNewAccountInvite');
+    sandbox.stub(AccountInvitationEntity.prototype, 'save');
+    let getAllSettingsStub = sandbox.stub(ConfigurationInterface.prototype, 'getAllSettings');
+
+    getAllSettingsStub.resolves({ registrationMode: 'invitation' });
+    getAccountStub.resolves(undefined);
+    findInvitationStub.resolves(undefined);
+
+    let invitation = await accountService.inviteNewAccount(adminUser,'Test@Example.COM','test_message');
+
+    const buildArgs = buildSpy.firstCall.args[0] as Record<string, unknown>;
+    expect(buildArgs.email).toBe('test@example.com');
+    expect(invitation.email).toBe('test@example.com');
+  });
+
   it.each([
     { mode: 'closed', shouldAllow: false, description: 'should throw AccountInvitationPermissionError if non-admin user tries to invite in closed mode' },
     { mode: 'apply', shouldAllow: false, description: 'should throw AccountInvitationPermissionError if non-admin user tries to invite in apply mode' },
@@ -291,6 +310,25 @@ describe('applyForNewAccount', () => {
     // The confirmation email must be addressed to the applicant
     const sentMail = emailStub.firstCall.args[0];
     expect(sentMail.emailAddress).toBe('newuser@example.com');
+  });
+
+  // Write-path normalization: a new application persists the normalized email.
+  it('persists a normalized email when input has mixed case', async () => {
+    const getAllSettingsStub = applySandbox.stub(ConfigurationInterface.prototype, 'getAllSettings');
+    const getAccountByEmailStub = applySandbox.stub(accountService, 'getAccountByEmail');
+    const findApplicationStub = applySandbox.stub(AccountApplicationEntity, 'findOne');
+    const buildSpy = applySandbox.spy(AccountApplicationEntity, 'build');
+    applySandbox.stub(AccountApplicationEntity.prototype, 'save').resolves();
+    applySandbox.stub(emailInterface, 'sendEmail').resolves();
+
+    getAllSettingsStub.resolves({ registrationMode: 'apply' });
+    getAccountByEmailStub.resolves(undefined);
+    findApplicationStub.resolves(undefined);
+
+    await accountService.applyForNewAccount('NewUser@Example.COM', 'I would like to apply');
+
+    const buildArgs = buildSpy.firstCall.args[0] as Record<string, unknown>;
+    expect(buildArgs.email).toBe('newuser@example.com');
   });
 
   // Branch 2: re-applying while still pending_confirmation regenerates the
@@ -1172,6 +1210,26 @@ describe('_setupAccount', () => {
     expect(accountSaveStub.called).toBe(true);
     expect(passwordCodeStub.called).toBe(false);
     expect(accountSecretsSaveStub.called).toBe(true);
+  });
+
+  it('persists a normalized email when input has mixed case and whitespace', async () => {
+    let accountServiceStub = setupSandbox.stub(accountService, 'getAccountByEmail');
+    let buildSpy = setupSandbox.spy(AccountEntity, 'build');
+    setupSandbox.stub(AccountEntity.prototype, 'save');
+    setupSandbox.stub(AccountSecretsEntity.prototype, 'save');
+    setupSandbox.stub(AccountRoleEntity.prototype, 'save');
+    let accountRoleFindAllStub = setupSandbox.stub(AccountRoleEntity, 'findAll');
+    let passwordCodeStub = setupSandbox.stub(accountService, 'generatePasswordResetCodeForAccount');
+
+    passwordCodeStub.resolves('test_code');
+    accountServiceStub.resolves(undefined);
+    accountRoleFindAllStub.resolves([]);
+
+    let accountInfo = await accountService._setupAccount('  Test@Example.COM ');
+
+    const buildArgs = buildSpy.firstCall.args[0] as Record<string, unknown>;
+    expect(buildArgs.email).toBe('test@example.com');
+    expect(accountInfo.account.email).toBe('test@example.com');
   });
 
 });
