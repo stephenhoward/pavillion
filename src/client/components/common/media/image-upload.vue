@@ -873,6 +873,8 @@ $transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   color: $error-color;
   font-size: 13px;
   text-align: center;
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 // Validation error
