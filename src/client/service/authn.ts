@@ -492,8 +492,7 @@ export default class AuthenticationService {
       return false;
     }
     try {
-      let response = await axios.get( this._authUrl('/token'), {} );
-      this._set_token(response.data);
+      await this._fetch_and_store_token();
       return true;
     }
     catch {
@@ -630,13 +629,7 @@ export default class AuthenticationService {
       try {
         this._refresh_timer = await this._wait( timer * 1000 );
         if ( this.jwt() ) {
-          let response = await axios.get( this._authUrl('/token'), {} );
-
-          if ( response.status >= 400 ) {
-            throw new Error(response.statusText);
-          }
-
-          this._set_token(response.data);
+          await this._fetch_and_store_token();
         }
       }
       catch (error) {
@@ -650,6 +643,27 @@ export default class AuthenticationService {
     else {
       this._unset_token();
     }
+  }
+
+  /**
+   * Fetches a fresh JWT from the server's /token endpoint and stores it (which
+   * also reschedules the silent-refresh timer via _set_token). This is the only
+   * point of contact with the refresh endpoint: both the scheduled
+   * _refresh_login() and the on-demand refreshToken() funnel through here and
+   * apply their own failure handling around it.
+   *
+   * @returns {Promise<void>}
+   * @throws Will throw on a non-2xx response or a network/axios error
+   * @private
+   */
+  async _fetch_and_store_token(): Promise<void> {
+    let response = await axios.get( this._authUrl('/token'), {} );
+
+    if ( response.status >= 400 ) {
+      throw new Error(response.statusText);
+    }
+
+    this._set_token(response.data);
   }
 
   /**
