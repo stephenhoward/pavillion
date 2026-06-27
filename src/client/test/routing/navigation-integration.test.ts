@@ -1,12 +1,8 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
-import { flushPromises, DOMWrapper } from '@vue/test-utils';
+import { flushPromises } from '@vue/test-utils';
 import { createRouter, createWebHistory, Router } from 'vue-router';
 import { createPinia, setActivePinia, Pinia } from 'pinia';
-import { nextTick } from 'vue';
 import CalendarView from '@/client/components/logged_in/calendar/calendar.vue';
-import RootView from '@/client/components/logged_in/root.vue';
-import CalendarSelector from '@/client/components/logged_in/calendar/calendar_selector.vue';
-import { mountComponent } from '@/client/test/lib/vue';
 import { Calendar } from '@/common/model/calendar';
 import { CalendarEvent } from '@/common/model/events';
 import { EventLocation } from '@/common/model/location';
@@ -242,8 +238,6 @@ describe('Navigation Integration - Task Group 4', () => {
       router = createTestRouter();
       await router.push('/calendar');
       await router.isReady();
-
-      const mockCalendar = createMockCalendar('cal-1', 'test-calendar');
 
       // Mock calendar selection - this would be called when calendar is selected
       mockSetSelectedCalendar('cal-1');

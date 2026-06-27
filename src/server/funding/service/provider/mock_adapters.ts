@@ -77,7 +77,7 @@ export class MockStripeAdapter implements PaymentProviderAdapter {
    * @param subscriptionId - Provider's subscription ID
    * @param immediate - If true, cancel immediately
    */
-  async cancelSubscription(subscriptionId: string, immediate: boolean): Promise<void> {
+  async cancelSubscription(_subscriptionId: string, _immediate: boolean): Promise<void> {
     // Mock cancellation - no actual API call
     return Promise.resolve();
   }
@@ -152,7 +152,7 @@ export class MockStripeAdapter implements PaymentProviderAdapter {
    * @param signature - Signature header from webhook request
    * @returns Always returns true for mock
    */
-  verifyWebhookSignature(payload: string, signature: string): boolean {
+  verifyWebhookSignature(_payload: string, _signature: string): boolean {
     // Mock verification - always returns true
     return true;
   }
@@ -200,7 +200,7 @@ export class MockStripeAdapter implements PaymentProviderAdapter {
    * @param sessionId - The checkout session ID
    * @returns Mock checkout session status
    */
-  async getCheckoutSessionStatus(sessionId: string): Promise<CheckoutSessionStatus> {
+  async getCheckoutSessionStatus(_sessionId: string): Promise<CheckoutSessionStatus> {
     return {
       status: 'complete',
       subscriptionId: 'sub_mock_123',
@@ -258,7 +258,7 @@ export class MockPayPalAdapter implements PaymentProviderAdapter {
    * @param subscriptionId - Provider's subscription ID
    * @param immediate - If true, cancel immediately
    */
-  async cancelSubscription(subscriptionId: string, immediate: boolean): Promise<void> {
+  async cancelSubscription(_subscriptionId: string, _immediate: boolean): Promise<void> {
     // Mock cancellation - no actual API call
     return Promise.resolve();
   }
@@ -333,7 +333,7 @@ export class MockPayPalAdapter implements PaymentProviderAdapter {
    * @param signature - Signature header from webhook request
    * @returns Always returns true for mock
    */
-  verifyWebhookSignature(payload: string, signature: string): boolean {
+  verifyWebhookSignature(_payload: string, _signature: string): boolean {
     // Mock verification - always returns true
     return true;
   }
@@ -365,7 +365,7 @@ export class MockPayPalAdapter implements PaymentProviderAdapter {
    * @param params - Checkout session parameters
    * @throws Error always
    */
-  async createCheckoutSession(params: CreateCheckoutSessionParams): Promise<CheckoutSessionResult> {
+  async createCheckoutSession(_params: CreateCheckoutSessionParams): Promise<CheckoutSessionResult> {
     throw new Error('createCheckoutSession is not implemented for PayPal');
   }
 
@@ -377,7 +377,7 @@ export class MockPayPalAdapter implements PaymentProviderAdapter {
    * @param sessionId - The checkout session ID
    * @throws Error always
    */
-  async getCheckoutSessionStatus(sessionId: string): Promise<CheckoutSessionStatus> {
+  async getCheckoutSessionStatus(_sessionId: string): Promise<CheckoutSessionStatus> {
     throw new Error('getCheckoutSessionStatus is not implemented for PayPal');
   }
 
@@ -391,7 +391,7 @@ export class MockPayPalAdapter implements PaymentProviderAdapter {
    * @param interval - Billing interval
    * @throws Error always
    */
-  async createPrice(amount: number, currency: string, interval: 'month' | 'year'): Promise<string> {
+  async createPrice(_amount: number, _currency: string, _interval: 'month' | 'year'): Promise<string> {
     throw new Error('createPrice is not implemented for PayPal');
   }
 }

@@ -35,13 +35,13 @@ const routes: RouteRecordRaw[] = [
 const mockCalendar = {
   id: 'cal-1',
   urlName: 'test-calendar',
-  content: (lang: string) => ({ name: 'Test Calendar' }),
+  content: (_lang: string) => ({ name: 'Test Calendar' }),
   languages: ['en'],
 };
 
 const mockEvent = {
   id: 'evt-1',
-  content: (lang: string) => ({ name: 'Test Event', description: 'Description' }),
+  content: (_lang: string) => ({ name: 'Test Event', description: 'Description' }),
   schedules: [],
   categories: [],
   languages: ['en'],

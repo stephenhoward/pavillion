@@ -32,7 +32,7 @@ export class ProviderFactory {
     try {
       credentials = JSON.parse(entity.decryptCredentials());
     }
-    catch (err) {
+    catch {
       throw new Error(`Invalid credentials format for provider ${entity.id}`);
     }
 

@@ -41,7 +41,13 @@ export default [
     rules: {
       // TypeScript rules
       '@typescript-eslint/explicit-module-boundary-types': 'off',
-      '@typescript-eslint/no-unused-vars': 'warn',
+      // Honor the repo convention: a leading underscore marks an
+      // intentionally-unused binding (required param, caught error, etc.).
+      '@typescript-eslint/no-unused-vars': ['warn', {
+        argsIgnorePattern: '^_',
+        varsIgnorePattern: '^_',
+        caughtErrorsIgnorePattern: '^_',
+      }],
     },
   },
   // Vue config

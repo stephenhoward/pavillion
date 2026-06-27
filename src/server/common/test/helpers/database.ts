@@ -19,7 +19,6 @@
  * This approach is ephemeral - tables are created fresh for each test.
  */
 
-import db from '@/server/common/entity/db';
 import {
   FollowingCalendarEntity,
   FollowerCalendarEntity,

@@ -15,7 +15,7 @@
  *   controls remain on the wrapper component after the sheet refactor and
  *   this file continues to mount it.
  */
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 
 vi.mock('lucide-vue-next', () => ({
   Trash2: { template: '<span />' },

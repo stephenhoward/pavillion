@@ -312,7 +312,7 @@ describe('ModerationService - Pattern Detection Integration', () => {
             report.hasSourceFloodingPattern = true;
           }
         }
-        catch (error) {
+        catch {
           // Silently handle error - don't fail report creation
         }
 
@@ -322,7 +322,7 @@ describe('ModerationService - Pattern Detection Integration', () => {
             report.hasEventTargetingPattern = true;
           }
         }
-        catch (error) {
+        catch {
           // Silently handle error
         }
 

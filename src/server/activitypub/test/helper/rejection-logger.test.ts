@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 // Use vi.hoisted so mock variables are available when vi.mock factory runs
 const { mockWarn, mockError } = vi.hoisted(() => ({

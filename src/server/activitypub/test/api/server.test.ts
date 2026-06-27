@@ -4,7 +4,6 @@ import { EventEmitter } from 'events';
 
 import { Calendar } from '@/common/model/calendar';
 import { WebFingerResponse } from '@/server/activitypub/model/webfinger';
-import { UserProfileResponse } from '@/server/activitypub/model/userprofile';
 import ActivityPubServerRoutes from '@/server/activitypub/api/v1/server';
 import ActivityPubInterface from '@/server/activitypub/interface';
 import CalendarInterface from '@/server/calendar/interface';

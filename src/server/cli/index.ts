@@ -12,7 +12,6 @@ import { EventEmitter } from 'events';
 import { BackupEntity } from '../housekeeping/entity/backup.js';
 import JobQueueService from '../housekeeping/service/job-queue.js';
 import StorageService from '../housekeeping/service/storage.js';
-import BackupService from '../housekeeping/service/backup.js';
 import * as readline from 'readline';
 import Table from 'cli-table3';
 import { DateTime } from 'luxon';

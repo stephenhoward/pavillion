@@ -68,7 +68,7 @@ describe('Admin API Pagination Limits', () => {
 
       // Verify service was called with enforced limit of 100
       expect(listStub.calledOnce).toBe(true);
-      const [page, limit] = listStub.firstCall.args;
+      const [_page, limit] = listStub.firstCall.args;
       expect(limit).toBe(100);
     });
 
@@ -91,7 +91,7 @@ describe('Admin API Pagination Limits', () => {
         .get('/admin/applications');
 
       expect(listStub.calledOnce).toBe(true);
-      const [page, limit] = listStub.firstCall.args;
+      const [_page, limit] = listStub.firstCall.args;
       expect(limit).toBe(50);
     });
 
@@ -114,7 +114,7 @@ describe('Admin API Pagination Limits', () => {
         .get('/admin/applications?limit=25');
 
       expect(listStub.calledOnce).toBe(true);
-      const [page, limit] = listStub.firstCall.args;
+      const [_page, limit] = listStub.firstCall.args;
       expect(limit).toBe(25);
     });
 
@@ -173,7 +173,7 @@ describe('Admin API Pagination Limits', () => {
         .get('/admin/invitations?limit=1000');
 
       expect(listStub.calledOnce).toBe(true);
-      const [page, limit] = listStub.firstCall.args;
+      const [_page, limit] = listStub.firstCall.args;
       expect(limit).toBe(100);
     });
 
@@ -196,7 +196,7 @@ describe('Admin API Pagination Limits', () => {
         .get('/admin/invitations');
 
       expect(listStub.calledOnce).toBe(true);
-      const [page, limit] = listStub.firstCall.args;
+      const [_page, limit] = listStub.firstCall.args;
       expect(limit).toBe(50);
     });
 
@@ -253,7 +253,7 @@ describe('Admin API Pagination Limits', () => {
         .get('/admin/applications?limit=999999');
 
       // Verify API handler clamped the limit
-      const [page, limit] = listStub.firstCall.args;
+      const [_page, limit] = listStub.firstCall.args;
       expect(limit).toBeLessThanOrEqual(100);
     });
 
@@ -276,7 +276,7 @@ describe('Admin API Pagination Limits', () => {
         .get('/admin/invitations?limit=999999');
 
       // Verify API handler clamped the limit
-      const [page, limit] = listStub.firstCall.args;
+      const [_page, limit] = listStub.firstCall.args;
       expect(limit).toBeLessThanOrEqual(100);
     });
 

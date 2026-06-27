@@ -22,7 +22,7 @@ export default {
     throw new Error('Migration failed after partial change');
   },
 
-  async down({ context: sequelize }: { context: Sequelize }) {
+  async down({ context: _sequelize }: { context: Sequelize }) {
     // Never reached
   },
 };

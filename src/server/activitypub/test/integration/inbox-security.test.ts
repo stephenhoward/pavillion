@@ -16,24 +16,16 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from
 import { EventEmitter } from 'events';
 import request from 'supertest';
 import crypto from 'crypto';
-import sinon from 'sinon';
-import { v4 as uuidv4 } from 'uuid';
 
 import { Account } from '@/common/model/account';
-import { Calendar, CalendarContent } from '@/common/model/calendar';
+import { Calendar } from '@/common/model/calendar';
 import CalendarInterface from '@/server/calendar/interface';
 import AccountsInterface from '@/server/accounts/interface';
 import ConfigurationInterface from '@/server/configuration/interface';
 import SetupInterface from '@/server/setup/interface';
 import AccountService from '@/server/accounts/service/account';
 import { TestEnvironment } from '@/server/common/test/lib/test_environment';
-import ProcessInboxService from '@/server/activitypub/service/inbox';
-import { EventObjectEntity } from '@/server/activitypub/entity/event_object';
-import { EventActivityEntity, ActivityPubInboxMessageEntity } from '@/server/activitypub/entity/activitypub';
-import AnnounceActivity from '@/server/activitypub/model/action/announce';
-import * as remoteFetch from '@/server/activitypub/helper/remote-fetch';
-import { CalendarEntity } from '@/server/calendar/entity/calendar';
-import { setupActivityPubSchema, teardownActivityPubSchema } from '@/server/common/test/helpers/database';
+import { ActivityPubInboxMessageEntity } from '@/server/activitypub/entity/activitypub';
 import { waitForStableCount } from '@/server/common/test/lib/test_polling';
 
 describe('ActivityPub Inbox Security Pipeline', () => {
@@ -45,8 +37,8 @@ describe('ActivityPub Inbox Security Pipeline', () => {
 
   // Test accounts and calendars
   let ownerAccount: Account;
-  let editorAccount: Account;
-  let unauthorizedAccount: Account;
+  let _editorAccount: Account;
+  let _unauthorizedAccount: Account;
   let testCalendar: Calendar;
 
   // Test constants
@@ -71,10 +63,10 @@ describe('ActivityPub Inbox Security Pipeline', () => {
     ownerAccount = ownerInfo.account;
 
     const editorInfo = await accountService._setupAccount('editor@pavillion.dev', 'testpassword');
-    editorAccount = editorInfo.account;
+    _editorAccount = editorInfo.account;
 
     const unauthorizedInfo = await accountService._setupAccount('unauthorized@pavillion.dev', 'testpassword');
-    unauthorizedAccount = unauthorizedInfo.account;
+    _unauthorizedAccount = unauthorizedInfo.account;
 
     // Create test calendar
     testCalendar = await calendarInterface.createCalendar(ownerAccount, 'testcalendar');

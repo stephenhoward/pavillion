@@ -454,7 +454,7 @@ class CalendarService {
       const accountWithRoles = await this.accountsInterface.loadAccountRoles(account);
       return accountWithRoles.hasRole('admin');
     }
-    catch (error) {
+    catch {
       // Fail-secure: if we can't determine admin status, treat as non-admin
       return false;
     }
@@ -1690,7 +1690,6 @@ class CalendarService {
    * @throws CalendarNotFoundError if calendar not found
    * @throws CalendarEditorPermissionError if user lacks permission
    */
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async setWidgetDomain(account: Account, calendarId: string, _domain: string): Promise<void> {
     // Check if subscriptions are enabled
     const settings = await this.fundingInterface?.getSettings();
@@ -2007,7 +2006,6 @@ class CalendarService {
       ],
     };
     if (searchTerm.length > 0) {
-      const pattern = `%${searchTerm.toLowerCase()}%`;
       calendarInclude.where = {
         [Op.or]: [
           // Case-insensitive urlName match using LOWER() for dialect neutrality

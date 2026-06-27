@@ -37,7 +37,7 @@ describe('Event Feed Integration Tests', () => {
   let env: TestEnvironment;
   let calendarInterface: CalendarInterface;
   let accountsInterface: AccountsInterface;
-  let activityPubInterface: ActivityPubInterface;
+  let _activityPubInterface: ActivityPubInterface;
   let accountService: AccountService;
   let eventBus: EventEmitter;
 
@@ -58,7 +58,7 @@ describe('Event Feed Integration Tests', () => {
     const setupInterface = new SetupInterface();
     accountsInterface = new AccountsInterface(eventBus, configurationInterface, setupInterface);
     calendarInterface = new CalendarInterface(eventBus, accountsInterface, configurationInterface);
-    activityPubInterface = new ActivityPubInterface(eventBus, calendarInterface, accountsInterface);
+    _activityPubInterface = new ActivityPubInterface(eventBus, calendarInterface, accountsInterface);
     accountService = new AccountService(eventBus, configurationInterface, setupInterface);
 
     // Create Account A with calendar
@@ -81,7 +81,7 @@ describe('Event Feed Integration Tests', () => {
   describe('Test 1: Full Workflow - Local Calendar Follow', () => {
     it('should allow Account A to follow Account B\'s calendar and see B\'s events in feed', async () => {
       // Step 1: Account B creates multiple events
-      const event1 = await calendarInterface.createEvent(accountB, {
+      const _event1 = await calendarInterface.createEvent(accountB, {
         calendarId: calendarB.id,
         content: {
           en: {
@@ -95,7 +95,7 @@ describe('Event Feed Integration Tests', () => {
         end_time: '11:00',
       });
 
-      const event2 = await calendarInterface.createEvent(accountB, {
+      const _event2 = await calendarInterface.createEvent(accountB, {
         calendarId: calendarB.id,
         content: {
           en: {
@@ -173,11 +173,11 @@ describe('Event Feed Integration Tests', () => {
       // Create Account C for additional local calendar
       const accountCInfo = await accountService._setupAccount('accountc@pavillion.dev', 'testpassword');
       const accountC = accountCInfo.account;
-      const authKeyC = await env.login('accountc@pavillion.dev', 'testpassword');
+      const _authKeyC = await env.login('accountc@pavillion.dev', 'testpassword');
       const calendarC = await calendarInterface.createCalendar(accountC, 'calendarc');
 
       // Account C creates an event
-      const eventC = await calendarInterface.createEvent(accountC, {
+      const _eventC = await calendarInterface.createEvent(accountC, {
         calendarId: calendarC.id,
         content: {
           en: {
@@ -231,7 +231,7 @@ describe('Event Feed Integration Tests', () => {
       const remoteEventUuid = uuidv4();
       const remoteEventApId = 'https://remote.example.com/events/remote-event-1';
 
-      const remoteEvent = await EventEntity.create({
+      const _remoteEvent = await EventEntity.create({
         id: remoteEventUuid,
         calendar_id: null, // Remote events have null calendar_id
         url_name: 'remote-event-1',
@@ -292,11 +292,11 @@ describe('Event Feed Integration Tests', () => {
 
       const accountEInfo = await accountService._setupAccount('accounte@pavillion.dev', 'testpassword');
       const accountE = accountEInfo.account;
-      const authKeyE = await env.login('accounte@pavillion.dev', 'testpassword');
+      const _authKeyE = await env.login('accounte@pavillion.dev', 'testpassword');
       const calendarE = await calendarInterface.createCalendar(accountE, 'calendare');
 
       // Step 1: Account E creates events
-      const eventE1 = await calendarInterface.createEvent(accountE, {
+      const _eventE1 = await calendarInterface.createEvent(accountE, {
         calendarId: calendarE.id,
         content: {
           en: {
@@ -310,7 +310,7 @@ describe('Event Feed Integration Tests', () => {
         end_time: '11:00',
       });
 
-      const eventE2 = await calendarInterface.createEvent(accountE, {
+      const _eventE2 = await calendarInterface.createEvent(accountE, {
         calendarId: calendarE.id,
         content: {
           en: {
@@ -353,7 +353,7 @@ describe('Event Feed Integration Tests', () => {
       );
 
       expect(feedBeforeUnfollow.status).toBe(200);
-      const eventsBeforeUnfollow = feedBeforeUnfollow.body.events;
+      const _eventsBeforeUnfollow = feedBeforeUnfollow.body.events;
 
       // Step 5: Get the follow relationship ID
       const followsResponse = await env.authGet(

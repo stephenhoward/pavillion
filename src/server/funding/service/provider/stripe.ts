@@ -215,7 +215,7 @@ export class StripeAdapter implements PaymentProviderAdapter {
       this.stripe.webhooks.constructEvent(payload, signature, this.webhookSecret);
       return true;
     }
-    catch (err) {
+    catch {
       return false;
     }
   }

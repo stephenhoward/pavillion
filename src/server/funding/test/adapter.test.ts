@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import sinon from 'sinon';
-import { ProviderConfig } from '@/common/model/funding-plan';
 import { StripeAdapter } from '../service/provider/stripe';
 import { PayPalAdapter } from '../service/provider/paypal';
 import { MockStripeAdapter, MockPayPalAdapter } from '../service/provider/mock_adapters';

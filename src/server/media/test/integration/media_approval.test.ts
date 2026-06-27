@@ -1,8 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
 import { EventEmitter } from 'events';
-import path from 'path';
-import fs from 'fs';
 
 import { Account } from '@/common/model/account';
 import { Calendar } from '@/common/model/calendar';

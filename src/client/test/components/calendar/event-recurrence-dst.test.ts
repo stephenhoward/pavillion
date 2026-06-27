@@ -14,9 +14,8 @@
  *   moving into RecurrenceEditorSheet.vue, so these tests keep mounting the
  *   wrapper component.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { mount } from '@vue/test-utils';
-import { reactive } from 'vue';
 import { CalendarEventSchedule } from '@/common/model/events';
 import { DateTime } from 'luxon';
 import I18NextVue from 'i18next-vue';

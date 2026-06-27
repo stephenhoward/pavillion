@@ -1129,7 +1129,7 @@ describe('useEventEditor', () => {
 
       sandbox.stub(CalendarService.prototype, 'loadCalendars').resolves([calendar]);
 
-      const { state, fieldErrors, initializeEvent, saveEvent } = useEventEditor();
+      const { fieldErrors, initializeEvent, saveEvent } = useEventEditor();
 
       await initializeEvent();
 
@@ -1168,7 +1168,7 @@ describe('useEventEditor', () => {
       sandbox.stub(CalendarService.prototype, 'loadCalendars').resolves([calendar]);
       const saveStub = sandbox.stub(EventService.prototype, 'saveEvent');
 
-      const { state, initializeEvent, saveEvent } = useEventEditor();
+      const { initializeEvent, saveEvent } = useEventEditor();
 
       await initializeEvent();
 
@@ -1229,7 +1229,7 @@ describe('useEventEditor', () => {
 
       sandbox.stub(CalendarService.prototype, 'loadCalendars').resolves([calendar]);
 
-      const { state, fieldErrors, clearFieldError, initializeEvent, saveEvent } = useEventEditor();
+      const { fieldErrors, clearFieldError, initializeEvent, saveEvent } = useEventEditor();
 
       await initializeEvent();
 

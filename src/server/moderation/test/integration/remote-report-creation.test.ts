@@ -1,5 +1,4 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
-import { EventEmitter } from 'events';
 import { v4 as uuidv4 } from 'uuid';
 
 import { ReportEntity } from '@/server/moderation/entity/report';

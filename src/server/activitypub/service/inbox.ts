@@ -16,7 +16,6 @@ import AcceptActivity from "@/server/activitypub/model/action/accept";
 import AnnounceActivity from "@/server/activitypub/model/action/announce";
 import { ActivityPubInboxMessageEntity, EventActivityEntity, FollowerCalendarEntity, FollowingCalendarEntity, RepostDismissalEntity, SharedEventEntity } from "@/server/activitypub/entity/activitypub";
 import { EventObjectEntity } from "@/server/activitypub/entity/event_object";
-import { CalendarActorEntity } from "@/server/activitypub/entity/calendar_actor";
 import RemoteCalendarService from "@/server/activitypub/service/remote_calendar";
 import { EventObject } from "@/server/activitypub/model/object/event";
 import { NoteObject } from "@/server/activitypub/model/object/note";

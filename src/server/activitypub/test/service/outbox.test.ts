@@ -460,7 +460,7 @@ describe('processOutboxMessage', () => {
 
     const getCalendarStub = sandbox.stub(service.calendarService, 'getCalendar');
     const postStub = sandbox.stub(axios, 'post');
-    const updateStub = sandbox.stub(ActivityPubOutboxMessageEntity.prototype, 'update');
+    const _updateStub = sandbox.stub(ActivityPubOutboxMessageEntity.prototype, 'update');
     const getRecipientsStub = sandbox.stub(service, 'getRecipients');
     const resolveStub = sandbox.stub(service, 'resolveInboxUrl');
     stubSigning(service, sandbox);

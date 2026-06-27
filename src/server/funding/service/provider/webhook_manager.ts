@@ -46,7 +46,7 @@ export class WebhookManager {
         }
       }
     }
-    catch (e) {
+    catch {
       // Config doesn't have server.domain, continue to fallback
     }
 

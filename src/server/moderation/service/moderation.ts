@@ -2123,7 +2123,7 @@ class ModerationService {
         );
       }
     }
-    catch (error) {
+    catch {
       // Silently handle errors - pattern detection should not fail report creation
     }
   }
@@ -2159,7 +2159,7 @@ class ModerationService {
         }
       }
     }
-    catch (error) {
+    catch {
       // Silently handle errors - pattern detection should not fail report creation
     }
   }

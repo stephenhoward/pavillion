@@ -6,8 +6,6 @@ import { Account } from '@/common/model/account';
 import { Calendar } from '@/common/model/calendar';
 import CalendarService from '@/server/calendar/service/calendar';
 import { CalendarMemberEntity } from '@/server/calendar/entity/calendar_member';
-import { CalendarEntity } from '@/server/calendar/entity/calendar';
-import { AccountEntity } from '@/server/common/entity/account';
 import { CALENDAR_BUS_EVENTS } from '@/server/calendar/events/types';
 
 describe('CalendarService - Editor Permissions', () => {

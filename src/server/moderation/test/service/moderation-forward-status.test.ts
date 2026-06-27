@@ -4,7 +4,7 @@ import { EventEmitter } from 'events';
 
 import ModerationService from '@/server/moderation/service/moderation';
 import { ReportEntity } from '@/server/moderation/entity/report';
-import { Report, ReportStatus, ForwardStatus } from '@/common/model/report';
+import { ForwardStatus } from '@/common/model/report';
 
 describe('ModerationService.checkForwardStatus', () => {
   let sandbox: sinon.SinonSandbox;

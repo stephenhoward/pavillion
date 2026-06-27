@@ -3,7 +3,6 @@ import * as path from 'path';
 import config from 'config';
 import { BackupEntity } from '@/server/housekeeping/entity/backup';
 import { logError } from '@/server/common/helper/error-logger';
-import { Op } from 'sequelize';
 import { createLogger } from '@/server/common/helper/logger';
 
 const logger = createLogger('housekeeping');

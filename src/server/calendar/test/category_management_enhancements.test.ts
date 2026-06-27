@@ -8,7 +8,6 @@ import { EventCategory } from '@/common/model/event_category';
 import { EventCategoryEntity } from '../entity/event_category';
 import { EventCategoryContentEntity } from '../entity/event_category_content';
 import { EventCategoryAssignmentEntity } from '../entity/event_category_assignment';
-import { CalendarNotFoundError, InsufficientCalendarPermissionsError } from '@/common/exceptions/calendar';
 import { CategoryNotFoundError } from '@/common/exceptions/category';
 import db from '@/server/common/entity/db';
 

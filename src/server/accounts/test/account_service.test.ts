@@ -1174,7 +1174,7 @@ describe('_setupAccount', () => {
     let accountServiceStub = setupSandbox.stub(accountService, 'getAccountByEmail');
     let accountSaveStub = setupSandbox.stub(AccountEntity.prototype, 'save');
     let accountSecretsSaveStub = setupSandbox.stub(AccountSecretsEntity.prototype, 'save');
-    let accountRoleSaveStub = setupSandbox.stub(AccountRoleEntity.prototype, 'save');
+    let _accountRoleSaveStub = setupSandbox.stub(AccountRoleEntity.prototype, 'save');
     let accountRoleFindAllStub = setupSandbox.stub(AccountRoleEntity, 'findAll');
     let passwordCodeStub = setupSandbox.stub(accountService, 'generatePasswordResetCodeForAccount');
 
@@ -1196,7 +1196,7 @@ describe('_setupAccount', () => {
     let accountSaveStub = setupSandbox.stub(AccountEntity.prototype, 'save');
     let setPasswordStub = sinon.stub(accountService, 'setPassword');
     let accountSecretsSaveStub = setupSandbox.stub(AccountSecretsEntity.prototype, 'save');
-    let accountRoleSaveStub = setupSandbox.stub(AccountRoleEntity.prototype, 'save');
+    let _accountRoleSaveStub = setupSandbox.stub(AccountRoleEntity.prototype, 'save');
     let accountRoleFindAllStub = setupSandbox.stub(AccountRoleEntity, 'findAll');
     let passwordCodeStub = setupSandbox.stub(accountService, 'generatePasswordResetCodeForAccount');
 

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, beforeAll, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, beforeAll } from 'vitest';
 import sinon from 'sinon';
 import { EventEmitter } from 'events';
 import { v4 as uuidv4 } from 'uuid';
@@ -12,7 +12,7 @@ import { CalendarFundingPlanEntity } from '@/server/funding/entity/calendar_fund
 import { AccountEntity } from '@/server/common/entity/account';
 import { CalendarEntity } from '@/server/calendar/entity/calendar';
 import { ProviderFactory } from '@/server/funding/service/provider/factory';
-import { ProviderConfig, FundingSettings, FundingPlan } from '@/common/model/funding-plan';
+import { ProviderConfig } from '@/common/model/funding-plan';
 import { WebhookEvent } from '@/server/funding/service/provider/adapter';
 import { checkGracePeriodExpiry } from '@/server/funding/service/jobs';
 
@@ -27,7 +27,7 @@ describe('Subscription System Integration Tests', () => {
   let sandbox: sinon.SinonSandbox;
   let eventBus: EventEmitter;
   let service: FundingService;
-  let clock: sinon.SinonFakeTimers;
+  let _clock: sinon.SinonFakeTimers;
 
   beforeAll(async () => {
     // Sync database schema before running tests
@@ -40,7 +40,7 @@ describe('Subscription System Integration Tests', () => {
     service = new FundingService(eventBus);
 
     // Use fake timers for time-based tests
-    clock = sandbox.useFakeTimers({
+    _clock = sandbox.useFakeTimers({
       now: new Date('2026-01-15T12:00:00Z'),
       shouldAdvanceTime: false,
     });

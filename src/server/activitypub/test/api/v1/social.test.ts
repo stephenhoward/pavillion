@@ -323,7 +323,7 @@ describe('ActivityPub Social API Routes', () => {
       await routes.getFeed(req as any, res as any);
 
       expect(getFeedStub.calledOnce).toBe(true);
-      const [calendar, page, pageSize] = getFeedStub.firstCall.args;
+      const [_calendar, page, pageSize] = getFeedStub.firstCall.args;
       expect(page).toBe(2);
       expect(pageSize).toBe(20);
     });
@@ -429,7 +429,7 @@ describe('ActivityPub Social API Routes', () => {
       expect(res.status.calledWith(200)).toBe(true);
       expect(res.send.calledWith('Followed')).toBe(true);
       expect(followStub.calledOnce).toBe(true);
-      const [account, calendar, remoteId, originals, reposts] = followStub.firstCall.args;
+      const [_account, _calendar, _remoteId, originals, reposts] = followStub.firstCall.args;
       expect(originals).toBe(true);
       expect(reposts).toBe(false);
     });
@@ -456,7 +456,7 @@ describe('ActivityPub Social API Routes', () => {
       expect(res.status.calledWith(200)).toBe(true);
       expect(res.send.calledWith('Followed')).toBe(true);
       expect(followStub.calledOnce).toBe(true);
-      const [account, calendar, remoteId, originals, reposts] = followStub.firstCall.args;
+      const [_account, _calendar, _remoteId, originals, reposts] = followStub.firstCall.args;
       expect(originals).toBe(false);
       expect(reposts).toBe(false);
     });

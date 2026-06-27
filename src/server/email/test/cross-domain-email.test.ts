@@ -6,7 +6,6 @@
  */
 import { describe, it, expect, beforeEach } from 'vitest';
 import sinon from 'sinon';
-import { EventEmitter } from 'events';
 
 import EmailService from '@/server/email/service/email';
 import { EmailStore } from '@/server/email/transport/testing-transport';

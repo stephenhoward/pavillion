@@ -1,7 +1,6 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { mount } from '@vue/test-utils';
-import { defineComponent, ref } from 'vue';
-import { createTestingPinia } from '@pinia/testing';
+import { defineComponent } from 'vue';
 
 /**
  * Tests: Category badges use ul/li for semantic list markup

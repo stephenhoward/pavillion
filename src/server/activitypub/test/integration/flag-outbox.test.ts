@@ -146,7 +146,7 @@ describe('Flag activity outbox processing', () => {
     const postStub = sandbox.stub(axios, 'post');
     postStub.resolves({ status: 200 });
 
-    const updateStub = sandbox.stub(ActivityPubOutboxMessageEntity.prototype, 'update');
+    const _updateStub = sandbox.stub(ActivityPubOutboxMessageEntity.prototype, 'update');
 
     const resolveStub = sandbox.stub(service, 'resolveInboxUrl');
     resolveStub.resolves(REMOTE_INBOX_URL);
@@ -235,7 +235,7 @@ describe('Flag activity outbox processing', () => {
     const postStub = sandbox.stub(axios, 'post');
     postStub.resolves({ status: 200 });
 
-    const updateStub = sandbox.stub(ActivityPubOutboxMessageEntity.prototype, 'update');
+    const _updateStub = sandbox.stub(ActivityPubOutboxMessageEntity.prototype, 'update');
 
     const resolveStub = sandbox.stub(service, 'resolveInboxUrl');
     resolveStub.resolves(REMOTE_INBOX_URL);

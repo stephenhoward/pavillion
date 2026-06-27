@@ -5,7 +5,6 @@ import { validateUUID, validateRequired, validateDateRange } from '@/server/comm
 
 // Install a simple error handler that serializes ValidationError into JSON
 function installErrorHandler(app: Express): void {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
     res.status(400).json({ error: err.message, errorName: err.name });
   });

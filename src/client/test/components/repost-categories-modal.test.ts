@@ -39,7 +39,7 @@ const SOURCE_CATEGORIES = [
 
 const MOCK_EVENT = {
   id: 'event-123',
-  content: (lang: string) => ({ name: 'Test Event', description: 'A test event description' }),
+  content: (_lang: string) => ({ name: 'Test Event', description: 'A test event description' }),
   schedules: [],
   categories: [],
   location: null,

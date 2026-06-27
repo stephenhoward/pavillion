@@ -210,7 +210,6 @@ export const seedFollowData = async () => {
   }
 
   // test_calendar (admin) follows testuser_calendar
-  const followingCalendarId = 'cbe74815-939e-48b3-af44-1cd4eb3671bb'; // testuser_calendar
   const localCalendarId = 'c71f5c9e-7a3d-4e5f-8e1a-66c3612a05f3';   // test_calendar (admin)
 
   const existingFollow = await db.models['FollowingCalendarEntity'].findOne({

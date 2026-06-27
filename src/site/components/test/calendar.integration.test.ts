@@ -9,7 +9,6 @@ import CalendarService from '../../service/calendar';
 import ModelService from '@/client/service/models';
 import ListResult from '@/client/service/list-result';
 import { Calendar, CalendarContent } from '@/common/model/calendar';
-import { EventCategory } from '@/common/model/event_category';
 import CalendarEventInstance from '@/common/model/event_instance';
 import { CalendarEvent, CalendarEventContent } from '@/common/model/events';
 import { DateTime } from 'luxon';
@@ -113,7 +112,7 @@ describe('calendar.vue - SearchFilterPublic Integration', () => {
       },
     });
 
-    const wrapper = mount(calendar, {
+    const _wrapper = mount(calendar, {
       global: {
         plugins: [pinia, router],
         stubs: {
@@ -177,7 +176,7 @@ describe('calendar.vue - SearchFilterPublic Integration', () => {
     // Start with no filters
     await router.push('/calendar/test-calendar');
 
-    const wrapper = mount(calendar, {
+    const _wrapper = mount(calendar, {
       global: {
         plugins: [pinia, router],
         stubs: {

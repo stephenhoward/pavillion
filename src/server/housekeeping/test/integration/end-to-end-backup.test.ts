@@ -1,5 +1,4 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import JobQueueService from '@/server/housekeeping/service/job-queue';
 import BackupService from '@/server/housekeeping/service/backup';
 import RetentionService from '@/server/housekeeping/service/retention';
 import { BackupEntity } from '@/server/housekeeping/entity/backup';

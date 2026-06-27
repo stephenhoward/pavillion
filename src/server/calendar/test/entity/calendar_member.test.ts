@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import { v4 as uuidv4 } from 'uuid';
 
 import { CalendarMember } from '@/common/model/calendar_member';

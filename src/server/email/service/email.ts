@@ -88,7 +88,7 @@ class EmailServiceClass {
         mailConfig = config.get('mail');
       }
     }
-    catch (err) {
+    catch {
       logger.warn('Mail configuration not found, using defaults');
     }
 
