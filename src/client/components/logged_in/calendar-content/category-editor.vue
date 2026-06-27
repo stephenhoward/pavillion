@@ -48,7 +48,7 @@
 
       <button
         type="button"
-        class="btn btn--ghost add-language-button"
+        class="add-language-button"
         @click="openLanguagePicker"
       >
         + {{ t('add_language') }}
@@ -236,6 +236,7 @@ onMounted(() => {
 
 <style lang="scss" scoped>
 @use '../../../assets/style/components/calendar-admin' as *;
+@use '../../../assets/style/mixins/buttons' as *;
 
 // Constrain modal width to match reference design
 :global(.category-editor-modal > div) {
@@ -305,9 +306,12 @@ onMounted(() => {
   }
 }
 
-// Shared ghost-button styling (fill/color/hover) comes from `.btn--ghost`
-// in _buttons.scss; this rule only positions the button within the column.
+// Adopts the shared ghost-button styling via mixins rather than stacking
+// `btn btn--ghost` utility classes in the markup; `align-self` positions it
+// within the column.
 .add-language-button {
+  @include btn-base;
+  @include btn-ghost;
   align-self: flex-start;
 }
 

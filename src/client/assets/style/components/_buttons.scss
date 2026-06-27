@@ -7,6 +7,8 @@
  * - Context-specific overrides (e.g., `.welcome-card`) adjust shape/size only.
  */
 
+@use '../mixins/buttons' as *;
+
 /* Base button reset — structural defaults only, no color opinions.
    Deliberately wrapped in :where() so the whole reset sits at ZERO specificity.
    The selector `button:not([role="tab"])` is (0,1,1) because of the `:not([attr])`,
@@ -152,33 +154,8 @@
 
 
 .btn {
-  /* Base button styles */
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: var(--pav-space-2) var(--pav-space-4);
-  font-size: var(--pav-font-size-sm);
-  font-weight: var(--pav-font-weight-medium);
-  line-height: var(--pav-line-height-tight);
-  border: var(--pav-border-width-1) solid transparent;
-  border-radius: var(--pav-border-radius-button);
-  cursor: pointer;
-  transition: all 0.2s ease-in-out;
-  text-decoration: none;
-  white-space: nowrap;
-
-  /* Focus styles for accessibility */
-  &:focus-visible {
-    outline: var(--pav-border-width-2) solid var(--pav-border-color-focus);
-    outline-offset: var(--pav-space-0_5);
-    box-shadow: var(--pav-shadow-focus);
-  }
-
-  /* Disabled state */
-  &:disabled {
-    cursor: not-allowed;
-    opacity: 0.6;
-  }
+  /* Base button styles — shared with semantically-named consumers via mixin */
+  @include btn-base;
 
   /* Size variants */
   &--xs {
@@ -240,18 +217,7 @@
   /* Ghost variant — the quietest button: no fill or border at rest, a subtle
      neutral tint on hover (not a loud brand fill). */
   &--ghost {
-    background-color: transparent;
-    color: var(--pav-text-secondary);
-    border-color: transparent;
-
-    &:hover:not(:disabled) {
-      background-color: var(--pav-interactive-hover);
-      color: var(--pav-text-primary);
-    }
-
-    &:active:not(:disabled) {
-      background-color: var(--pav-interactive-active);
-    }
+    @include btn-ghost;
   }
 
   /* Danger variant */
