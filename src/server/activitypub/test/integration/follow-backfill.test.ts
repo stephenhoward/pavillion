@@ -789,8 +789,8 @@ describe('FollowBackfillService.runBackfill (integration)', () => {
       order: [['message_time', 'ASC']],
     });
     for (const row of pendingRows) {
-      await (activityPubInterface as unknown as { inboxSerivce: ProcessInboxService })
-        .inboxSerivce.processInboxMessage(row);
+      await (activityPubInterface as unknown as { inboxService: ProcessInboxService })
+        .inboxService.processInboxMessage(row);
     }
 
     // -------- F: dismissal must have suppressed share creation --------
