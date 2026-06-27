@@ -256,7 +256,7 @@ export default class FundingService {
       const response = await axios.post('/api/funding/v1/admin/providers/stripe/configure', credentials);
       return {
         success: response.status === 200,
-        connectionVerified: response.data?.connectionVerified ?? false,
+        connectionVerified: response.data?.connectionVerified === true,
       };
     }
     catch (error) {
