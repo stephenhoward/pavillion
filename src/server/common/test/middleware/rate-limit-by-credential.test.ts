@@ -326,6 +326,40 @@ describe('createCredentialRateLimiter', () => {
 
       expect(objectResponse.status).toBe(200);
     });
+
+    it('should return a clean 429 (not 500) when a non-string credential exceeds the limit', async () => {
+      // Regression for pv-43x4: the 429 handler logs redactEmail(credential).
+      // A forged non-string credential body must not crash that handler — the
+      // over-limit response must stay a clean 429, never degrade to a 500.
+      const limiter = createCredentialRateLimiter(
+        1,
+        60000,
+        'test-endpoint',
+        'email',
+      );
+
+      router.post('/test', limiter, (req, res) => {
+        res.status(200).json({ success: true });
+      });
+
+      const app = testApp(router);
+
+      // First request fills the non-string credential's bucket.
+      const firstResponse = await request(app)
+        .post('/test')
+        .send({ email: { x: 1 } });
+
+      expect(firstResponse.status).toBe(200);
+
+      // Second request exceeds the limit and runs the 429 handler, which logs
+      // redactEmail(credential) on the same non-string body.
+      const blockedResponse = await request(app)
+        .post('/test')
+        .send({ email: { x: 1 } });
+
+      expect(blockedResponse.status).toBe(429);
+      expect(blockedResponse.body).toHaveProperty('errorName', 'RateLimitError');
+    });
   });
 
   describe('error response format', () => {
