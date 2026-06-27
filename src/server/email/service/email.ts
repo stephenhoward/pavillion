@@ -169,7 +169,11 @@ class EmailServiceClass {
    * @returns Promise resolving to the message info or null if sending failed
    */
   public async sendEmail(data: MailData): Promise<SentMessageInfo | null> {
-    logger.info({ transport: this.transportType, to: data.emailAddress, subject: data.subject }, 'Sending email');
+    // Log only the recipient domain, never the full address: recipient addresses
+    // are PII (DEC-004, privacy-playbook/logging.md). The domain aids ops
+    // diagnostics (e.g. a whole domain bouncing) without identifying an individual.
+    const recipientDomain = data.emailAddress.split('@')[1] ?? 'unknown';
+    logger.info({ transport: this.transportType, recipientDomain, subject: data.subject }, 'Sending email');
     try {
       const info = await this.transportInstance.sendMail({
         from: process.env.MAIL_FROM || this.mailConfig.from,
@@ -183,7 +187,7 @@ class EmailServiceClass {
       return info;
     }
     catch (error) {
-      logError(error, `[Email] Failed to send via ${this.transportType} to=${data.emailAddress}, subject="${data.subject}"`);
+      logError(error, `[Email] Failed to send via ${this.transportType} to domain=${recipientDomain}, subject="${data.subject}"`);
       return null;
     }
   }
