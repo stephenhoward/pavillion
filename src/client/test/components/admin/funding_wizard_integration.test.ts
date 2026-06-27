@@ -386,8 +386,7 @@ describe('Funding Page Wizard Integration', () => {
       },
     });
 
-    await wrapper.vm.$nextTick();
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await flushPromises();
 
     // Initial load calls getProviders once
     expect(mockService.getProviders).toHaveBeenCalledTimes(1);
@@ -399,8 +398,7 @@ describe('Funding Page Wizard Integration', () => {
     // Close wizard via close event (not provider-connected)
     const wizardComponent = wrapper.findComponent(AddProviderWizard);
     wizardComponent.vm.$emit('close');
-    await wrapper.vm.$nextTick();
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await flushPromises();
 
     // Verify getProviders was called again to refresh the list
     expect(mockService.getProviders).toHaveBeenCalledTimes(2);
@@ -472,9 +470,11 @@ describe('Funding Page Wizard Integration', () => {
 
       expect((wrapper.vm as any).fieldErrors.monthlyPrice).toBeFalsy();
       expect((wrapper.vm as any).fieldErrors.currency).toBeFalsy();
+      // monthlyPrice round-trips: 10000000 millicents -> millicentsToDisplay (÷100000) = 100
+      // -> displayToMillicents (×100000) = 10000000 millicents.
       expect(mockInstance.updateSettings).toHaveBeenCalledWith(expect.objectContaining({
         currency: 'USD',
-        monthlyPrice: expect.any(Number),
+        monthlyPrice: 10000000,
       }));
     });
 
