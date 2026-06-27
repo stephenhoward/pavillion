@@ -1521,6 +1521,20 @@ class ProcessInboxService {
       }
     }
 
+    // SAFETY: apObject can be null on the Person-actor path. An authorized
+    // remote editor may resolve a locally-owned event via
+    // message.object.eventParams.id (local UUID lookup) that was never
+    // federated and therefore has no EventObjectEntity row, leaving apObject
+    // null after the re-lookup. The eventParams build below and the
+    // SharedEventEntity / Note cascade all dereference apObject.event_id, so
+    // without an AP object record there is nothing to update remotely. No-op
+    // rather than crash, and emit no Note and no eventUpdated. The
+    // calendar-actor path already returned above on !apObject (ownership check).
+    if (!apObject) {
+      logger.debug({ apObjectId, actorUri }, '[INBOX] Update activity has no AP object record — no-op');
+      return null;
+    }
+
     // Create event params with local UUID for database.
     // Pass actorUri so fromActivityPubObject can origin-gate privileged fields
     // (hideFromPublic on schedules). For the Person-actor path (remote editor),
