@@ -153,15 +153,13 @@ export default class LocationRoutes {
   async getLocation(req: Request, res: Response): Promise<void> {
     try {
       const { calendarId, locationId } = req.params;
-      // Decode the location ID in case it's URL-encoded
-      const decodedLocationId = decodeURIComponent(locationId);
 
       const calendar = await this.service.getCalendar(calendarId);
       if (!calendar) {
         throw new CalendarNotFoundError();
       }
 
-      const location = await this.service.getLocationById(calendar, decodedLocationId);
+      const location = await this.service.getLocationById(calendar, locationId);
       if (!location) {
         res.status(404).json({ error: 'Location not found', errorName: 'LocationNotFoundError' });
         return;
@@ -189,7 +187,6 @@ export default class LocationRoutes {
     try {
       const account = req.user as Account;
       const { calendarId, locationId } = req.params;
-      const decodedLocationId = decodeURIComponent(locationId);
 
       const calendar = await this.service.getCalendar(calendarId);
       if (!calendar) {
@@ -202,7 +199,7 @@ export default class LocationRoutes {
       }
 
       const locationData = EventLocation.fromObject(req.body);
-      const updatedLocation = await this.service.updateLocation(calendar, decodedLocationId, locationData);
+      const updatedLocation = await this.service.updateLocation(calendar, locationId, locationData);
 
       if (!updatedLocation) {
         res.status(404).json({ error: 'Location not found', errorName: 'LocationNotFoundError' });
@@ -243,7 +240,6 @@ export default class LocationRoutes {
     try {
       const account = req.user as Account;
       const { calendarId, locationId } = req.params;
-      const decodedLocationId = decodeURIComponent(locationId);
 
       const calendar = await this.service.getCalendar(calendarId);
       if (!calendar) {
@@ -255,7 +251,7 @@ export default class LocationRoutes {
         throw new InsufficientCalendarPermissionsError();
       }
 
-      const deleted = await this.service.deleteLocation(calendar, decodedLocationId);
+      const deleted = await this.service.deleteLocation(calendar, locationId);
 
       if (!deleted) {
         res.status(404).json({ error: 'Location not found', errorName: 'LocationNotFoundError' });
