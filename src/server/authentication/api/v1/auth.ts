@@ -6,7 +6,7 @@ import { validatePassword } from '@/common/validation/password';
 import ExpressHelper from '@/server/common/helper/express';
 import { noAccountExistsError } from '@/server/accounts/exceptions';
 import AccountsInterface from '@/server/accounts/interface';
-import { EmailAlreadyExistsError, InvalidPasswordError } from '@/server/authentication/exceptions';
+import { InvalidPasswordError } from '@/server/authentication/exceptions';
 import AuthenticationInterface from '@/server/authentication/interface';
 import { logError } from '@/server/common/helper/error-logger';
 import { createLogger } from '@/server/common/helper/logger';
@@ -19,6 +19,8 @@ import {
   limitLoginByIp,
   limitLoginByEmail,
   limitEmailChangeByAccount,
+  limitEmailChangeByDestination,
+  limitConfirmEmailChangeByIp,
 } from '@/server/common/middleware/rate-limiters';
 
 export default class AuthenticationRouteHandlers {
@@ -38,7 +40,15 @@ export default class AuthenticationRouteHandlers {
     router.get('/reset-password/:code', this.checkPasswordResetCode.bind(this) );
     router.post('/reset-password', limitPasswordResetByIp, limitPasswordResetByEmail, this.generatePasswordResetCode.bind(this) );
     router.post('/reset-password/:code', limitConfirmPasswordResetByIp, this.setPassword.bind(this) );
-    router.post('/email', ...ExpressHelper.loggedInOnly, limitEmailChangeByAccount, this.changeEmail.bind(this) );
+    // CRITICAL: the confirm route is registered BEFORE `/email` so the static
+    // `confirm` segment can never be shadowed by a future `/email/:param` or
+    // `/email/*` wildcard (Express matches in registration order; mirrors the
+    // applications.ts confirm/:token discipline). This endpoint is anonymous:
+    // the URL-path token IS the bearer credential, so no session middleware and
+    // no CSRF token are applied — either would break the email-link flow. Only
+    // an IP limiter guards it (epic pv-91a3).
+    router.post('/email/confirm/:token', limitConfirmEmailChangeByIp, this.confirmEmailChange.bind(this) );
+    router.post('/email', ...ExpressHelper.loggedInOnly, limitEmailChangeByAccount, limitEmailChangeByDestination, this.changeEmail.bind(this) );
     app.use(routePrefix, router);
   }
 
@@ -144,20 +154,49 @@ export default class AuthenticationRouteHandlers {
     }
 
     try {
-      await this.service.changeEmail(req.user as Account, email, password);
+      // initiateEmailChange NEVER throws EmailAlreadyExistsError: the available,
+      // taken, and no-op outcomes all resolve to the same uniform 200
+      // {success:true} below, so the response carries no signal about which
+      // emails are already registered. This closes the 409-vs-200 enumeration
+      // oracle the old synchronous changeEmail exposed (epic pv-91a3, DEC-004).
+      await this.service.initiateEmailChange(req.user as Account, email, password);
       res.json({ success: true });
     }
     catch (error) {
-      if (error instanceof EmailAlreadyExistsError) {
-        res.status(409).json({ error: 'email_exists', errorName: 'EmailAlreadyExistsError' });
-      }
-      else if (error instanceof InvalidPasswordError) {
+      // InvalidPasswordError is the only retained throw: the caller is probing
+      // with their OWN password, so a password-validity signal leaks no email
+      // existence (epic pv-91a3, out-of-scope OQ2).
+      if (error instanceof InvalidPasswordError) {
         res.status(401).json({ error: 'invalid_password', errorName: 'InvalidPasswordError' });
       }
       else {
         logError(error, 'Error changing email');
         res.status(500).json({ error: 'server_error', errorName: 'UnknownError' });
       }
+    }
+  }
+
+  /**
+   * POST /api/auth/v1/email/confirm/:token
+   * Anonymous endpoint that consumes an email-change confirmation token and
+   * commits the pending address. The path token IS the bearer credential, so
+   * the route carries no session and no CSRF guard. Every terminal failure
+   * (bad format / unknown / expired / already-consumed / address-now-taken /
+   * DB error) collapses to a single uniform `{ valid: false }` (HTTP 200) so a
+   * caller cannot distinguish them — the address-now-taken branch is explicitly
+   * indistinguishable from token-expiry (anti-enumeration; epic pv-91a3,
+   * DEC-004). The collapse lives in the service (confirmEmailChange returns a
+   * boolean) to avoid a handler catch block that would enumerate the error set;
+   * tokens are never logged. Mirrors accounts/api/v1/applications.ts
+   * consumeConfirmationToken.
+   */
+  async confirmEmailChange(req: Request, res: Response) {
+    const success = await this.service.confirmEmailChange(req.params.token);
+    if (success) {
+      res.json({ success: true });
+    }
+    else {
+      res.json({ valid: false });
     }
   }
 }

@@ -28,7 +28,9 @@
     "password_help_text": "Saisissez votre mot de passe actuel pour confirmer ce changement",
     "change_email_button": "Modifier l'e-mail",
     "close_button": "Annuler",
-    "change_email_failed_message": "Impossible de modifier l'adresse e-mail"
+    "done_button": "Terminé",
+    "change_email_failed_message": "Impossible de modifier l'adresse e-mail",
+    "confirm_sent_message": "Consultez votre nouvelle boîte de réception pour confirmer le changement. Votre adresse e-mail ne sera mise à jour qu'après avoir cliqué sur le lien que nous venons d'envoyer."
   },
   "change_password_form": {
     "title": "Modifier votre mot de passe",

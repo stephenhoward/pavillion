@@ -40,7 +40,11 @@ export default class AuthenticationInterface {
     return this.authenticationService.resetPassword(code, password);
   }
 
-  async changeEmail(account: Account, newEmail: string, password: string): Promise<Account> {
-    return this.authenticationService.changeEmail(account, newEmail, password);
+  async initiateEmailChange(account: Account, newEmail: string, password: string): Promise<void> {
+    return this.authenticationService.initiateEmailChange(account, newEmail, password);
+  }
+
+  async confirmEmailChange(token: string): Promise<boolean> {
+    return this.authenticationService.confirmEmailChange(token);
   }
 }

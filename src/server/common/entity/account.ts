@@ -138,6 +138,15 @@ class AccountSecretsEntity extends Model {
   @Column({ type: DataType.DATE })
   declare password_reset_expiration: Date | null;
 
+  @Column({ type: DataType.STRING })
+  declare email_change_code: string | null;
+
+  @Column({ type: DataType.DATE })
+  declare email_change_expiration: Date | null;
+
+  @Column({ type: DataType.STRING })
+  declare email_change_new_email: string | null;
+
   @BelongsTo(() => AccountEntity)
   declare account: AccountEntity;
 };

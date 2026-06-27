@@ -3,6 +3,7 @@ import config from 'config';
 import express, { Express } from 'express';
 import request from 'supertest';
 import { addRequestUser } from '@/server/common/test/lib/express';
+import { createCredentialRateLimiter } from '@/server/common/middleware/rate-limit-by-credential';
 import {
   limitPasswordResetByIp,
   limitPasswordResetByEmail,
@@ -17,6 +18,8 @@ import {
   limitApplicationByIp,
   limitApplicationByEmail,
   limitConfirmApplicationByIp,
+  limitEmailChangeByDestination,
+  limitConfirmEmailChangeByIp,
 } from '@/server/common/middleware/rate-limiters';
 
 describe('rate-limiters', () => {
@@ -125,6 +128,22 @@ describe('rate-limiters', () => {
       expect(windowMs).toBe(900000); // 15 minutes
     });
 
+    it('should use correct config values for email change by destination', () => {
+      const maxRequests = config.get<number>('rateLimit.emailChange.byDestination.max');
+      const windowMs = config.get<number>('rateLimit.emailChange.byDestination.windowMs');
+
+      expect(maxRequests).toBe(2);
+      expect(windowMs).toBe(86400000); // 24 hours
+    });
+
+    it('should use correct config values for email change confirm by IP', () => {
+      const maxRequests = config.get<number>('rateLimit.emailChange.confirm.byIp.max');
+      const windowMs = config.get<number>('rateLimit.emailChange.confirm.byIp.windowMs');
+
+      expect(maxRequests).toBe(20);
+      expect(windowMs).toBe(900000); // 15 minutes
+    });
+
     it('should check if rate limiting is enabled in config', () => {
       const enabled = config.get<boolean>('rateLimit.enabled');
       // In test environment, rate limiting is disabled
@@ -196,6 +215,16 @@ describe('rate-limiters', () => {
     it('should export limitConfirmApplicationByIp limiter', () => {
       expect(limitConfirmApplicationByIp).toBeDefined();
       expect(typeof limitConfirmApplicationByIp).toBe('function');
+    });
+
+    it('should export limitEmailChangeByDestination limiter', () => {
+      expect(limitEmailChangeByDestination).toBeDefined();
+      expect(typeof limitEmailChangeByDestination).toBe('function');
+    });
+
+    it('should export limitConfirmEmailChangeByIp limiter', () => {
+      expect(limitConfirmEmailChangeByIp).toBeDefined();
+      expect(typeof limitConfirmEmailChangeByIp).toBe('function');
     });
   });
 
@@ -636,6 +665,43 @@ describe('rate-limiters', () => {
       }
     });
 
+    it('should apply limitEmailChangeByDestination limiter to endpoint', async () => {
+      app.post('/email', limitEmailChangeByDestination, (req, res) => {
+        res.json({ success: true });
+      });
+
+      const response = await request(app)
+        .post('/email')
+        .send({ email: 'new@example.com', password: 'pw' });
+
+      expect(response.status).toBe(200);
+
+      if (config.get<boolean>('rateLimit.enabled')) {
+        expect(response.headers['ratelimit-limit']).toBeDefined();
+        expect(response.headers['ratelimit-remaining']).toBeDefined();
+      }
+      else {
+        expect(response.headers['ratelimit-limit']).toBeUndefined();
+      }
+    });
+
+    it('should apply limitConfirmEmailChangeByIp limiter to endpoint', async () => {
+      app.post('/email/confirm', limitConfirmEmailChangeByIp, (req, res) => {
+        res.json({ success: true });
+      });
+
+      const response = await request(app).post('/email/confirm');
+      expect(response.status).toBe(200);
+
+      if (config.get<boolean>('rateLimit.enabled')) {
+        expect(response.headers['ratelimit-limit']).toBeDefined();
+        expect(response.headers['ratelimit-remaining']).toBeDefined();
+      }
+      else {
+        expect(response.headers['ratelimit-limit']).toBeUndefined();
+      }
+    });
+
     it('should allow combining application IP and email limiters', async () => {
       app.post('/apply', limitApplicationByIp, limitApplicationByEmail, (req, res) => {
         res.json({ success: true });
@@ -654,6 +720,56 @@ describe('rate-limiters', () => {
       else {
         expect(response.headers['ratelimit-limit']).toBeUndefined();
       }
+    });
+  });
+
+  // The pre-configured limitEmailChangeByDestination export is a no-op under the
+  // test config (rateLimit.enabled: false), so real counting cannot be driven
+  // through it. To prove the destination limiter keys on the NORMALIZED address,
+  // build a limiter directly from the factory with the email-change endpoint name
+  // and a small max, then drive real requests through it. The factory's
+  // keyGenerator normalizes (trim + lowercase) unconditionally, and counting is
+  // unconditional too — only the export gate is config-dependent — so requests
+  // here are actually counted.
+  //
+  // This is the email-bombing regression guard for pv-91a3: if the limiter
+  // keyed on the RAW body (the pre-fix defect), case-variant requests would
+  // split into separate counters and both succeed, letting an attacker exceed
+  // the per-mailbox cap. With normalized keying they share one counter, so the
+  // second request is rejected.
+  describe('limitEmailChangeByDestination normalization', () => {
+    function appWithDestinationLimiter(max: number): Express {
+      const app = express();
+      app.use(express.json());
+      const limiter = createCredentialRateLimiter(max, 60000, 'email-change', 'email');
+      app.post('/email', limiter, (req, res) => res.json({ success: true }));
+      return app;
+    }
+
+    it('shares one counter across case/whitespace variants of the same address', async () => {
+      const app = appWithDestinationLimiter(1); // allow a single request per key
+
+      const first = await request(app).post('/email').send({ email: 'Victim@Example.com' });
+      const second = await request(app).post('/email').send({ email: '  victim@example.com  ' });
+
+      // First request consumes the only allowed hit on the canonical key.
+      expect(first.status).toBe(200);
+      // Second request is a case/whitespace variant of the SAME mailbox, so it
+      // hits the same counter and is rejected. Pre-fix (raw keying) it would be
+      // a 200, splitting the counter and defeating the cap.
+      expect(second.status).toBe(429);
+      expect(second.body.errorName).toBe('RateLimitError');
+    });
+
+    it('keeps distinct addresses on separate counters', async () => {
+      const app = appWithDestinationLimiter(1);
+
+      const first = await request(app).post('/email').send({ email: 'victim@example.com' });
+      const other = await request(app).post('/email').send({ email: 'someone-else@example.com' });
+
+      // A genuinely different address must not be throttled by the first.
+      expect(first.status).toBe(200);
+      expect(other.status).toBe(200);
     });
   });
 });

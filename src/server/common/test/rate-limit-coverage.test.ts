@@ -126,6 +126,8 @@ const HIGH_ABUSE_RISK_ROUTES: { method: string; path: string }[] = [
   { method: 'POST', path: '/api/auth/v1/reset-password/:code' },
   // Email change (credential-probe / enumeration hardening) — account limiter.
   { method: 'POST', path: '/api/auth/v1/email' },
+  // Email change confirm (confirmation-token brute-force surface) — IP limiter.
+  { method: 'POST', path: '/api/auth/v1/email/confirm/:token' },
   // Stripe funding webhook — IP limiter (defense in depth; signature is primary).
   { method: 'POST', path: '/api/funding/webhooks/stripe' },
   // Public moderation report submission — IP + email limiters.

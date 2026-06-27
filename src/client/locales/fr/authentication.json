@@ -67,5 +67,12 @@
   "session_expired": {
     "title": "Session expirée",
     "description": "Votre session a expiré. Reconnectez-vous pour reprendre là où vous en étiez."
+  },
+  "email_confirm": {
+    "title": "Confirmez le changement de votre adresse e-mail",
+    "confirming": "Confirmation de votre nouvelle adresse e-mail…",
+    "success_message": "Votre adresse e-mail a été mise à jour. Vous pouvez désormais vous connecter avec votre nouvelle adresse.",
+    "go_login": "← retour à la connexion",
+    "invalid_message": "Ce lien de confirmation est invalide ou a expiré. Veuillez demander à nouveau le changement d'adresse e-mail."
   }
 }

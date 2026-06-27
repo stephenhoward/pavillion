@@ -2,6 +2,7 @@ import axios, { AxiosError, AxiosRequestConfig, AxiosResponse } from 'axios';
 import { ref, Ref } from 'vue';
 
 import { SessionExpiredError } from '@/common/exceptions/authentication';
+import { EmptyValueError } from '@/common/exceptions/base';
 
 interface JWTClaims {
   exp: number;
@@ -36,7 +37,7 @@ export default class AuthenticationService {
   constructor(localStore: Storage) {
 
     if ( localStore == null ) {
-      throw("Must provide a localStorage object");
+      throw new EmptyValueError('Must provide a localStorage object');
     }
 
     this.localStore = localStore;
@@ -239,7 +240,7 @@ export default class AuthenticationService {
       if (axios.isAxiosError(error)) {
         const axiosError = error as AxiosError;
         if (axiosError.response) {
-          throw(axiosError.response.status);
+          throw new Error(`Request failed with status ${axiosError.response.status}`);
         }
       }
       throw(error);
@@ -262,7 +263,7 @@ export default class AuthenticationService {
       if (axios.isAxiosError(error)) {
         const axiosError = error as AxiosError;
         if (axiosError.response) {
-          throw(axiosError.response.status);
+          throw new Error(`Request failed with status ${axiosError.response.status}`);
         }
       }
       throw(error);
@@ -278,7 +279,7 @@ export default class AuthenticationService {
    */
   async check_invite_token(code: string) {
     if (!code || code === '') {
-      throw("no_invite_code_provided");
+      throw new EmptyValueError('no_invite_code_provided');
     }
 
     try {
@@ -289,7 +290,7 @@ export default class AuthenticationService {
       if (axios.isAxiosError(error)) {
         const axiosError = error as AxiosError;
         if (axiosError.response) {
-          throw(axiosError.response.status);
+          throw new Error(`Request failed with status ${axiosError.response.status}`);
         }
       }
       throw(error);
@@ -402,7 +403,7 @@ export default class AuthenticationService {
   async reset_password( email: string ) {
 
     if ( email == undefined || email == '' ) {
-      throw("no_email_provided");
+      throw new EmptyValueError('no_email_provided');
     }
 
     try {
@@ -420,21 +421,86 @@ export default class AuthenticationService {
     }
   }
 
+  /**
+   * Initiates an email change. This no longer changes the address immediately:
+   * the backend sends a confirmation link to the NEW address, and the change is
+   * only committed once confirmEmailChange consumes that token. The session is
+   * therefore NOT refreshed here — the logged-in email is unchanged until the
+   * user confirms from their new inbox.
+   *
+   * @param {string} email - Proposed new email address
+   * @param {string} password - Current password, confirming the request
+   * @returns {Promise<boolean>} true if the confirmation link was sent
+   */
   async changeEmail ( email: string, password: string ): Promise<boolean> {
     try {
       let response = await axios.post(
         this._authUrl('/email'),
         { email, password },
       );
-      if ( response.status === 200 ) {
-        await this._refresh_login( this.userSettings().exp );
-        return true;
-      }
+      return response.status === 200;
     }
     catch {
       // TODO: something more useful here
     }
     return false;
+  }
+
+  /**
+   * Confirms a pending email change by consuming the confirmation token sent to
+   * the new address. Every backend failure (bad format / unknown / expired /
+   * already-consumed / address-now-taken) collapses to { valid: false }.
+   *
+   * @param {string} token - Email-change confirmation token (path param)
+   * @returns {Promise<{valid: boolean}>} { valid: true } on success
+   * @throws Will throw if the token is null or empty, or on a non-2xx HTTP status
+   */
+  async confirmEmailChange( token: string ): Promise<{valid: boolean}> {
+
+    if ( token == null || token == '' ) {
+      throw new EmptyValueError('no_token_provided');
+    }
+
+    try {
+      let response = await axios.post( this._authUrl('/email/confirm/' + token) );
+      return { valid: response.data.success === true };
+    }
+    catch (error) {
+      if ( axios.isAxiosError(error) ) {
+        const axiosError = error as AxiosError;
+        if ( axiosError.response ) {
+          throw new Error(`Request failed with status ${axiosError.response.status}`);
+        }
+      }
+      return { valid: false };
+    }
+  }
+
+  /**
+   * Immediately refreshes the JWT from the server, replacing the stored token
+   * and rescheduling the silent refresh timer. Used after a confirmed email
+   * change so the new email propagates into the client session without forcing
+   * the user to log out and back in.
+   *
+   * No-op (returns false) when no session is present — the email-change confirm
+   * page may be opened anonymously or on a different device.
+   *
+   * @returns {Promise<boolean>} true if a fresh token was stored
+   */
+  async refreshToken(): Promise<boolean> {
+    if ( ! this.jwt() ) {
+      return false;
+    }
+    try {
+      await this._fetch_and_store_token();
+      return true;
+    }
+    catch {
+      // A failed refresh must not mask a successful confirmation; the caller
+      // treats refresh failure as non-fatal. The next silent-refresh cycle or
+      // the response interceptor will surface session expiry if it occurs.
+      return false;
+    }
   }
 
   /**
@@ -447,7 +513,7 @@ export default class AuthenticationService {
   async check_password_reset_token( token: string ): Promise<{valid: boolean, isNewAccount?: boolean}> {
 
     if ( token == null || token == '' ) {
-      throw("Must provide a password reset token");
+      throw new EmptyValueError('Must provide a password reset token');
     }
 
     try {
@@ -464,7 +530,7 @@ export default class AuthenticationService {
       if ( axios.isAxiosError(error) ) {
         const axiosError = error as AxiosError;
         if ( axiosError.response ) {
-          throw(axiosError.response.status);
+          throw new Error(`Request failed with status ${axiosError.response.status}`);
         }
       }
       return { valid: false };
@@ -482,11 +548,11 @@ export default class AuthenticationService {
   async use_password_reset_token( token: string, password: string ) {
 
     if ( token == null || token == '' ) {
-      throw("no_token_provided");
+      throw new EmptyValueError('no_token_provided');
     }
 
     if ( password == null || password == '' ) {
-      throw("no_password_provided");
+      throw new EmptyValueError('no_password_provided');
     }
 
     try {
@@ -497,7 +563,7 @@ export default class AuthenticationService {
       if ( axios.isAxiosError(error) ) {
         const axiosError = error as AxiosError;
         if ( axiosError.response ) {
-          throw(axiosError.response.status);
+          throw new Error(`Request failed with status ${axiosError.response.status}`);
         }
       }
     }
@@ -563,13 +629,7 @@ export default class AuthenticationService {
       try {
         this._refresh_timer = await this._wait( timer * 1000 );
         if ( this.jwt() ) {
-          let response = await axios.get( this._authUrl('/token'), {} );
-
-          if ( response.status >= 400 ) {
-            throw(response.statusText);
-          }
-
-          this._set_token(response.data);
+          await this._fetch_and_store_token();
         }
       }
       catch (error) {
@@ -583,6 +643,27 @@ export default class AuthenticationService {
     else {
       this._unset_token();
     }
+  }
+
+  /**
+   * Fetches a fresh JWT from the server's /token endpoint and stores it (which
+   * also reschedules the silent-refresh timer via _set_token). This is the only
+   * point of contact with the refresh endpoint: both the scheduled
+   * _refresh_login() and the on-demand refreshToken() funnel through here and
+   * apply their own failure handling around it.
+   *
+   * @returns {Promise<void>}
+   * @throws Will throw on a non-2xx response or a network/axios error
+   * @private
+   */
+  async _fetch_and_store_token(): Promise<void> {
+    let response = await axios.get( this._authUrl('/token'), {} );
+
+    if ( response.status >= 400 ) {
+      throw new Error(response.statusText);
+    }
+
+    this._set_token(response.data);
   }
 
   /**
