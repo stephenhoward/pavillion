@@ -980,7 +980,7 @@ class ProcessInboxService {
     // LOOP GUARD: Never repost own events
     const localActorUrl = ActivityPubActor.actorUrl(calendar);
     if (eventObject.attributed_to === localActorUrl) {
-      logger.info('Skip: Loop prevention - event originated from this calendar');
+      logger.info('[AUTO-REPOST] Skip: Loop prevention - event originated from this calendar');
       return;
     }
 
@@ -995,7 +995,7 @@ class ProcessInboxService {
     });
 
     if (dismissal) {
-      logger.info({ event_id: eventObject.event_id, calendar_id: calendar.id }, 'Skip: previously dismissed by calendar owner');
+      logger.info({ event_id: eventObject.event_id, calendar_id: calendar.id }, '[AUTO-REPOST] Skip: previously dismissed by calendar owner');
       return;
     }
 
@@ -1008,7 +1008,7 @@ class ProcessInboxService {
     });
 
     if (existingShare) {
-      logger.info({ existingShareId: existingShare.id, autoPosted: existingShare.auto_posted }, 'Skip: Already shared');
+      logger.info({ existingShareId: existingShare.id, autoPosted: existingShare.auto_posted }, '[AUTO-REPOST] Skip: Already shared');
       // Already shared, skip
       return;
     }
