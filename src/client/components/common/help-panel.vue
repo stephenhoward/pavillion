@@ -105,7 +105,7 @@ const emit = defineEmits<{
   align-items: center;
   gap: var(--pav-space-1);
   font-size: var(--pav-font-size-xs);
-  color: var(--pav-color-brand-primary);
+  color: var(--pav-color-interactive-active-text);
   margin-block-start: var(--pav-space-1);
 }
 
@@ -120,7 +120,7 @@ const emit = defineEmits<{
   align-items: center;
   gap: var(--pav-space-1);
   font-size: var(--pav-font-size-sm);
-  color: var(--pav-color-brand-primary);
+  color: var(--pav-color-interactive-active-text);
   text-decoration: none;
 
   &:hover {
