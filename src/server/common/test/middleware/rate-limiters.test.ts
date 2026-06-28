@@ -13,8 +13,15 @@ import {
   limitReportSubmissionByEmail,
   limitReportVerificationByIp,
   limitReportSubmissionByAccount,
+  limitPublicWidgetByIp,
   limitPublicEventInstanceByIp,
   limitPublicCalendarListByIp,
+  limitWidgetConfigByAccount,
+  limitCalendarFundingPlanByAccount,
+  limitCheckoutSessionByAccount,
+  limitImportSourceVerifyBySource,
+  limitImportSourceSyncBySource,
+  limitConfigSiteByIp,
   limitApplicationByIp,
   limitApplicationByEmail,
   limitConfirmApplicationByIp,
@@ -88,6 +95,14 @@ describe('rate-limiters', () => {
       expect(windowMs).toBe(3600000); // 1 hour
     });
 
+    it('should use correct config values for public widget by IP', () => {
+      const maxRequests = config.get<number>('rateLimit.publicWidget.byIp.max');
+      const windowMs = config.get<number>('rateLimit.publicWidget.byIp.windowMs');
+
+      expect(maxRequests).toBe(300);
+      expect(windowMs).toBe(900000); // 15 minutes
+    });
+
     it('should use correct config values for public event instance by IP', () => {
       const maxRequests = config.get<number>('rateLimit.publicEventInstance.byIp.max');
       const windowMs = config.get<number>('rateLimit.publicEventInstance.byIp.windowMs');
@@ -99,6 +114,54 @@ describe('rate-limiters', () => {
     it('should use correct config values for public calendar list by IP', () => {
       const maxRequests = config.get<number>('rateLimit.publicCalendarList.byIp.max');
       const windowMs = config.get<number>('rateLimit.publicCalendarList.byIp.windowMs');
+
+      expect(maxRequests).toBe(60);
+      expect(windowMs).toBe(60000); // 1 minute
+    });
+
+    it('should use correct config values for widget config by account', () => {
+      const maxRequests = config.get<number>('rateLimit.widgetConfig.byAccount.max');
+      const windowMs = config.get<number>('rateLimit.widgetConfig.byAccount.windowMs');
+
+      expect(maxRequests).toBe(100);
+      expect(windowMs).toBe(900000); // 15 minutes
+    });
+
+    it('should use correct config values for calendar funding plan by account', () => {
+      const maxRequests = config.get<number>('rateLimit.calendarFundingPlan.byAccount.max');
+      const windowMs = config.get<number>('rateLimit.calendarFundingPlan.byAccount.windowMs');
+
+      expect(maxRequests).toBe(30);
+      expect(windowMs).toBe(900000); // 15 minutes
+    });
+
+    it('should use correct config values for checkout session by account', () => {
+      const maxRequests = config.get<number>('rateLimit.checkoutSession.byAccount.max');
+      const windowMs = config.get<number>('rateLimit.checkoutSession.byAccount.windowMs');
+
+      expect(maxRequests).toBe(10);
+      expect(windowMs).toBe(900000); // 15 minutes
+    });
+
+    it('should use correct config values for import source verify by source', () => {
+      const maxRequests = config.get<number>('rateLimit.importSource.verifyBySource.max');
+      const windowMs = config.get<number>('rateLimit.importSource.verifyBySource.windowMs');
+
+      expect(maxRequests).toBe(3);
+      expect(windowMs).toBe(3600000); // 1 hour
+    });
+
+    it('should use correct config values for import source sync by source', () => {
+      const maxRequests = config.get<number>('rateLimit.importSource.syncBySource.max');
+      const windowMs = config.get<number>('rateLimit.importSource.syncBySource.windowMs');
+
+      expect(maxRequests).toBe(4);
+      expect(windowMs).toBe(3600000); // 1 hour
+    });
+
+    it('should use correct config values for config site by IP', () => {
+      const maxRequests = config.get<number>('rateLimit.configSite.byIp.max');
+      const windowMs = config.get<number>('rateLimit.configSite.byIp.windowMs');
 
       expect(maxRequests).toBe(60);
       expect(windowMs).toBe(60000); // 1 minute
@@ -192,6 +255,11 @@ describe('rate-limiters', () => {
       expect(typeof limitReportSubmissionByAccount).toBe('function');
     });
 
+    it('should export limitPublicWidgetByIp limiter', () => {
+      expect(limitPublicWidgetByIp).toBeDefined();
+      expect(typeof limitPublicWidgetByIp).toBe('function');
+    });
+
     it('should export limitPublicEventInstanceByIp limiter', () => {
       expect(limitPublicEventInstanceByIp).toBeDefined();
       expect(typeof limitPublicEventInstanceByIp).toBe('function');
@@ -200,6 +268,36 @@ describe('rate-limiters', () => {
     it('should export limitPublicCalendarListByIp limiter', () => {
       expect(limitPublicCalendarListByIp).toBeDefined();
       expect(typeof limitPublicCalendarListByIp).toBe('function');
+    });
+
+    it('should export limitWidgetConfigByAccount limiter', () => {
+      expect(limitWidgetConfigByAccount).toBeDefined();
+      expect(typeof limitWidgetConfigByAccount).toBe('function');
+    });
+
+    it('should export limitCalendarFundingPlanByAccount limiter', () => {
+      expect(limitCalendarFundingPlanByAccount).toBeDefined();
+      expect(typeof limitCalendarFundingPlanByAccount).toBe('function');
+    });
+
+    it('should export limitCheckoutSessionByAccount limiter', () => {
+      expect(limitCheckoutSessionByAccount).toBeDefined();
+      expect(typeof limitCheckoutSessionByAccount).toBe('function');
+    });
+
+    it('should export limitImportSourceVerifyBySource limiter', () => {
+      expect(limitImportSourceVerifyBySource).toBeDefined();
+      expect(typeof limitImportSourceVerifyBySource).toBe('function');
+    });
+
+    it('should export limitImportSourceSyncBySource limiter', () => {
+      expect(limitImportSourceSyncBySource).toBeDefined();
+      expect(typeof limitImportSourceSyncBySource).toBe('function');
+    });
+
+    it('should export limitConfigSiteByIp limiter', () => {
+      expect(limitConfigSiteByIp).toBeDefined();
+      expect(typeof limitConfigSiteByIp).toBe('function');
     });
 
     it('should export limitApplicationByIp limiter', () => {
@@ -580,6 +678,134 @@ describe('rate-limiters', () => {
       });
 
       const response = await request(app).get('/calendars');
+      expect(response.status).toBe(200);
+
+      if (config.get<boolean>('rateLimit.enabled')) {
+        expect(response.headers['ratelimit-limit']).toBeDefined();
+        expect(response.headers['ratelimit-remaining']).toBeDefined();
+      }
+      else {
+        expect(response.headers['ratelimit-limit']).toBeUndefined();
+      }
+    });
+
+    it('should apply limitPublicWidgetByIp limiter to endpoint', async () => {
+      app.get('/widget', limitPublicWidgetByIp, (req, res) => {
+        res.json({ success: true });
+      });
+
+      const response = await request(app).get('/widget');
+      expect(response.status).toBe(200);
+
+      if (config.get<boolean>('rateLimit.enabled')) {
+        expect(response.headers['ratelimit-limit']).toBeDefined();
+        expect(response.headers['ratelimit-remaining']).toBeDefined();
+      }
+      else {
+        expect(response.headers['ratelimit-limit']).toBeUndefined();
+      }
+    });
+
+    it('should apply limitConfigSiteByIp limiter to endpoint', async () => {
+      app.get('/site', limitConfigSiteByIp, (req, res) => {
+        res.json({ success: true });
+      });
+
+      const response = await request(app).get('/site');
+      expect(response.status).toBe(200);
+
+      if (config.get<boolean>('rateLimit.enabled')) {
+        expect(response.headers['ratelimit-limit']).toBeDefined();
+        expect(response.headers['ratelimit-remaining']).toBeDefined();
+      }
+      else {
+        expect(response.headers['ratelimit-limit']).toBeUndefined();
+      }
+    });
+
+    it('should apply limitWidgetConfigByAccount limiter to endpoint', async () => {
+      app.post('/widget-config', addRequestUser, limitWidgetConfigByAccount, (req, res) => {
+        res.json({ success: true });
+      });
+
+      const response = await request(app)
+        .post('/widget-config')
+        .send({ data: 'test' });
+
+      expect(response.status).toBe(200);
+
+      if (config.get<boolean>('rateLimit.enabled')) {
+        expect(response.headers['ratelimit-limit']).toBeDefined();
+        expect(response.headers['ratelimit-remaining']).toBeDefined();
+      }
+      else {
+        expect(response.headers['ratelimit-limit']).toBeUndefined();
+      }
+    });
+
+    it('should apply limitCalendarFundingPlanByAccount limiter to endpoint', async () => {
+      app.post('/funding-plan', addRequestUser, limitCalendarFundingPlanByAccount, (req, res) => {
+        res.json({ success: true });
+      });
+
+      const response = await request(app)
+        .post('/funding-plan')
+        .send({ data: 'test' });
+
+      expect(response.status).toBe(200);
+
+      if (config.get<boolean>('rateLimit.enabled')) {
+        expect(response.headers['ratelimit-limit']).toBeDefined();
+        expect(response.headers['ratelimit-remaining']).toBeDefined();
+      }
+      else {
+        expect(response.headers['ratelimit-limit']).toBeUndefined();
+      }
+    });
+
+    it('should apply limitCheckoutSessionByAccount limiter to endpoint', async () => {
+      app.post('/checkout', addRequestUser, limitCheckoutSessionByAccount, (req, res) => {
+        res.json({ success: true });
+      });
+
+      const response = await request(app)
+        .post('/checkout')
+        .send({ data: 'test' });
+
+      expect(response.status).toBe(200);
+
+      if (config.get<boolean>('rateLimit.enabled')) {
+        expect(response.headers['ratelimit-limit']).toBeDefined();
+        expect(response.headers['ratelimit-remaining']).toBeDefined();
+      }
+      else {
+        expect(response.headers['ratelimit-limit']).toBeUndefined();
+      }
+    });
+
+    it('should apply limitImportSourceVerifyBySource limiter to endpoint', async () => {
+      app.post('/sources/:id/verify', limitImportSourceVerifyBySource, (req, res) => {
+        res.json({ success: true });
+      });
+
+      const response = await request(app).post('/sources/abc/verify');
+      expect(response.status).toBe(200);
+
+      if (config.get<boolean>('rateLimit.enabled')) {
+        expect(response.headers['ratelimit-limit']).toBeDefined();
+        expect(response.headers['ratelimit-remaining']).toBeDefined();
+      }
+      else {
+        expect(response.headers['ratelimit-limit']).toBeUndefined();
+      }
+    });
+
+    it('should apply limitImportSourceSyncBySource limiter to endpoint', async () => {
+      app.post('/sources/:id/sync', limitImportSourceSyncBySource, (req, res) => {
+        res.json({ success: true });
+      });
+
+      const response = await request(app).post('/sources/abc/sync');
       expect(response.status).toBe(200);
 
       if (config.get<boolean>('rateLimit.enabled')) {
