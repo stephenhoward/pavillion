@@ -172,6 +172,41 @@ describe('listEvents', () => {
 
       const events = await service.listEvents(new Calendar('cal-id', 'testcal'));
       expect(events[0].repostStatus).toBe('auto');
+      // Pin down the derived getter as well: an auto repost is still a repost.
+      expect(events[0].isRepost).toBe(true);
+    });
+
+    it('should resolve owned, manual, and auto repostStatus values in a single listEvents call', async () => {
+      // Mixes all three tri-state values in one result set: an owned event
+      // (no repost), a manually-shared event, and an auto-reposted event.
+      const ownedId = 'owned-mixed-id';
+      const manualId = '550e8400-e29b-41d4-a716-446655440020';
+      const autoId = '550e8400-e29b-41d4-a716-446655440021';
+
+      service.setActivityPubInterface(
+        buildMockApInterface(
+          [manualId, autoId],
+          { [manualId]: 'manual', [autoId]: 'auto' },
+        ),
+      );
+
+      const ownedEntity = EventEntity.build({ id: ownedId, calendar_id: 'cal-id' });
+      const manualEntity = EventEntity.build({ id: manualId });
+      const autoEntity = EventEntity.build({ id: autoId });
+      sandbox.stub(EventEntity, 'findAll').resolves([ownedEntity, manualEntity, autoEntity]);
+
+      const events = await service.listEvents(new Calendar('cal-id', 'testcal'));
+
+      const owned = events.find(e => e.id === ownedId);
+      const manual = events.find(e => e.id === manualId);
+      const auto = events.find(e => e.id === autoId);
+
+      expect(owned?.repostStatus).toBe('none');
+      expect(owned?.isRepost).toBe(false);
+      expect(manual?.repostStatus).toBe('manual');
+      expect(manual?.isRepost).toBe(true);
+      expect(auto?.repostStatus).toBe('auto');
+      expect(auto?.isRepost).toBe(true);
     });
 
     it('should default legacy EventRepostEntity-only events to "manual"', async () => {

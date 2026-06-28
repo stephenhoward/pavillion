@@ -898,9 +898,13 @@ describe('ProcessInboxService - checkAndPerformAutoRepost dismissal gating', () 
       calendar_id: testCalendar.id,
     });
 
-    // Stubs for downstream calls that should NOT be reached
+    // Stubs for downstream calls that should NOT be reached. addToOutbox
+    // persists via ActivityPubOutboxMessageEntity.build(...).save(), NOT
+    // .create(), so the outbox guard must spy on prototype.save — a spy on
+    // .create would pass vacuously even if the early return regressed and
+    // addToOutbox actually ran.
     const sharedCreateSpy = sandbox.spy(SharedEventEntity, 'create');
-    const outboxCreateSpy = sandbox.spy(ActivityPubOutboxMessageEntity, 'create');
+    const outboxSaveSpy = sandbox.spy(ActivityPubOutboxMessageEntity.prototype, 'save');
     const categorySpy = sandbox.stub(calendarInterface.categoryMappingService, 'assignAutoRepostCategories').resolves();
     const getEventByIdSpy = sandbox.stub(calendarInterface, 'getEventById').resolves(new CalendarEvent(eventId, null));
 
@@ -914,7 +918,7 @@ describe('ProcessInboxService - checkAndPerformAutoRepost dismissal gating', () 
 
     // Assert
     expect(sharedCreateSpy.called).toBe(false);
-    expect(outboxCreateSpy.called).toBe(false);
+    expect(outboxSaveSpy.called).toBe(false);
     expect(categorySpy.called).toBe(false);
     expect(getEventByIdSpy.called).toBe(false);
     expect(emittedEvents).toHaveLength(0);
@@ -941,6 +945,11 @@ describe('ProcessInboxService - checkAndPerformAutoRepost dismissal gating', () 
     sandbox.stub(calendarInterface.categoryMappingService, 'assignAutoRepostCategories').resolves();
     sandbox.stub(calendarInterface, 'getEventById').resolves(new CalendarEvent(eventId, null));
 
+    // Counterpart to the skip-path guard: positively assert the outbox WAS
+    // written on the non-dismissed happy path, spying on the same
+    // prototype.save the real addToOutbox uses.
+    const outboxSaveSpy = sandbox.spy(ActivityPubOutboxMessageEntity.prototype, 'save');
+
     const emittedEvents: any[] = [];
     eventBus.on('eventReposted', (payload) => emittedEvents.push(payload));
 
@@ -956,6 +965,9 @@ describe('ProcessInboxService - checkAndPerformAutoRepost dismissal gating', () 
     expect(shares).toBe(1);
 
     expect(emittedEvents).toHaveLength(1);
+
+    // The auto-repost cascade must have enqueued at least one outbox message.
+    expect(outboxSaveSpy.called).toBe(true);
   });
 
   it('isolates dismissals per calendar: a dismissal on calendar A does not affect calendar B', async () => {

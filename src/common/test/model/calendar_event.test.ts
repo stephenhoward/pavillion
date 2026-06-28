@@ -125,6 +125,22 @@ describe('CalendarEvent.repostStatus', () => {
     expect(event.isRepost).toBe(true);
   });
 
+  it('should let an explicit repostStatus="none" win over a conflicting legacy isRepost=true in fromObject()', () => {
+    // Distinct branch: when both an explicit repostStatus and a legacy
+    // isRepost flag are present, the explicit tri-state value takes
+    // precedence over the legacy boolean even when they disagree.
+    const obj = {
+      id: 'evt-1',
+      calendarId: 'cal-1',
+      repostStatus: 'none',
+      isRepost: true,
+    };
+
+    const event = CalendarEvent.fromObject(obj);
+    expect(event.repostStatus).toBe('none');
+    expect(event.isRepost).toBe(false);
+  });
+
   it('should default repostStatus to "none" when neither field is present in fromObject()', () => {
     const obj = {
       id: 'evt-1',
