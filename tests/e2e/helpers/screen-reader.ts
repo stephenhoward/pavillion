@@ -10,4 +10,4 @@
  *   `docs/superpowers/specs/2026-05-13-screen-reader-testing-design.md`
  *   § Phase 2 (helpers/screen-reader.ts).
  */
-export { pageScreenReader, type ScreenReaderHandle } from '../../../src/common/test-utils/screen-reader';
+export { pageScreenReader, type ScreenReaderHandle } from '@/common/test-utils/screen-reader';
