@@ -347,9 +347,9 @@ async function updateSettings() {
         }
 
         &.message-error {
-          background: var(--pav-color-red-50);
-          border: 1px solid var(--pav-color-red-200);
-          color: var(--pav-color-red-700);
+          background: var(--pav-surface-error);
+          border: 1px solid var(--pav-border-error-subtle);
+          color: var(--pav-text-error);
         }
       }
 
@@ -478,12 +478,6 @@ async function updateSettings() {
             background: rgba(16, 185, 129, 0.1);
             border-color: rgba(16, 185, 129, 0.3);
             color: var(--pav-color-emerald-300);
-          }
-
-          &.message-error {
-            background: rgba(239, 68, 68, 0.1);
-            border-color: rgba(239, 68, 68, 0.3);
-            color: var(--pav-color-red-300);
           }
         }
 

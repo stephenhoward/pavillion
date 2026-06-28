@@ -500,10 +500,10 @@ async function submitCreateGrant() {
     }
 
     &--error {
-      border-color: var(--pav-color-red-400);
+      border-color: var(--pav-border-error);
 
       &:focus {
-        box-shadow: 0 0 0 3px var(--pav-color-red-100);
+        box-shadow: var(--pav-focus-ring-error);
       }
     }
 
@@ -538,7 +538,7 @@ async function submitCreateGrant() {
   .form-error {
     margin: var(--pav-space-1) 0 0;
     font-size: var(--pav-font-size-xs);
-    color: var(--pav-color-red-600);
+    color: var(--pav-text-error);
   }
 
   .form-hint {
@@ -634,9 +634,9 @@ async function submitCreateGrant() {
     font-size: var(--pav-font-size-xs);
 
     &.message-error {
-      background: var(--pav-color-red-50);
-      border: 1px solid var(--pav-color-red-200);
-      color: var(--pav-color-red-700);
+      background: var(--pav-surface-error);
+      border: 1px solid var(--pav-border-error-subtle);
+      color: var(--pav-text-error);
     }
   }
 
