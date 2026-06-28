@@ -607,6 +607,11 @@ export default class CalendarRoutes {
       const displayCalendarId = await this.resolveDisplayCalendarId(req.query.calendar);
 
       // getEventById throws EventNotFoundError for unknown ids — catch below.
+      // Caveat: on this single-event path repostStatus / isRepost are
+      // non-authoritative (always 'none' / false) — getEventById does not
+      // consult SharedEventEntity. Authoritative repost status comes only from
+      // the feed / list paths. A future feature needing repost provenance here
+      // must wire SharedEventEntity into getEventById or resolve it here.
       const event = await this.service.getEventById(eventId, displayCalendarId);
       res.json(toPublicEventObject(event.toObject()));
     }

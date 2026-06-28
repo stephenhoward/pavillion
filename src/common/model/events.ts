@@ -92,9 +92,11 @@ class CalendarEvent extends TranslatedModel<CalendarEventContent> {
    * acting (resolved) calendar and assigns the resolved status to each
    * returned event, mirroring the listEvents resolution.
    *
-   * NOT populated by: EventService.getEventById() or EventService.updateEvent().
-   * Events returned by those methods will always have repostStatus='none'
-   * regardless of actual repost state.
+   * NOT populated by: EventService.getEventById(), EventService.updateEvent(),
+   * or EventService.createEvent(). Events returned by those methods will always
+   * have repostStatus='none' regardless of actual repost state. For createEvent
+   * this is the true value (a freshly created event is owned, never a repost),
+   * not a gap; it is named here only so it isn't mistaken for an unflagged one.
    *
    * Default: 'none'. Must be explicitly set after retrieval if needed.
    */
