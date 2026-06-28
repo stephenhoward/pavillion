@@ -1,4 +1,5 @@
 import { CalendarEventSchedule, EventFrequency } from '@/common/model/events';
+import { parseByDayEntry } from '@/common/utils/recurrence-by-day';
 
 /**
  * Structured, locale-agnostic recurrence intent suitable for i18n rendering
@@ -16,27 +17,23 @@ export interface RecurrenceSummary {
 const VALID_DAY_CODES = new Set(['MO', 'TU', 'WE', 'TH', 'FR', 'SA', 'SU']);
 
 /**
- * Pattern matching nth-weekday BYDAY codes such as `1MO`, `3FR`, `-1SA`.
- */
-const NTH_WEEKDAY_PATTERN = /^(-?\d+)([A-Z]{2})$/;
-
-/**
  * Parses a BYDAY entry expected to encode an nth-weekday pattern.
  *
+ * Wraps the shared {@link parseByDayEntry} and applies this helper's policy:
+ * an ordinal is REQUIRED. Plain weekday codes (no ordinal) are rejected here
+ * so they fall through to the generic 'Monthly' rendering, preserving the
+ * original behavior of this display path.
+ *
  * @param entry - A BYDAY token such as `1MO` or `-1SA`
- * @returns `{ ordinal, day }` on success, or `null` if the token does not match
+ * @returns `{ ordinal, day }` on success, or `null` if the token does not
+ *   match or carries no ordinal
  */
 function parseNthWeekday(entry: string): { ordinal: number; day: string } | null {
-  const match = entry.match(NTH_WEEKDAY_PATTERN);
-  if (!match) {
+  const parsed = parseByDayEntry(entry);
+  if (!parsed || parsed.ordinal === null) {
     return null;
   }
-  const ordinal = parseInt(match[1], 10);
-  const day = match[2];
-  if (!VALID_DAY_CODES.has(day) || Number.isNaN(ordinal)) {
-    return null;
-  }
-  return { ordinal, day };
+  return { ordinal: parsed.ordinal, day: parsed.dayCode };
 }
 
 /**
