@@ -157,43 +157,27 @@ const isValid = computed(() => state.email.length > 0 && state.email.includes('@
 .current-email-text {
   margin: 0;
   font-size: 0.875rem;
-  color: var(--pav-color-stone-500);
-
-  @media (prefers-color-scheme: dark) {
-    color: var(--pav-color-stone-400);
-  }
+  color: var(--pav-text-muted);
 
   .current-email-value {
     font-weight: 500;
-    color: var(--pav-color-stone-700);
-
-    @media (prefers-color-scheme: dark) {
-      color: var(--pav-color-stone-300);
-    }
+    color: var(--pav-text-secondary);
   }
 }
 
 .confirm-sent-text {
   margin: 0;
   font-size: 0.875rem;
-  color: var(--pav-color-stone-700);
-
-  @media (prefers-color-scheme: dark) {
-    color: var(--pav-color-stone-300);
-  }
+  color: var(--pav-text-secondary);
 }
 
 .error-message {
   padding: var(--pav-space-3);
-  background: rgba(239, 68, 68, 0.1);
-  border: 1px solid rgba(239, 68, 68, 0.2);
+  background: var(--pav-color-alert-error-bg);
+  border: 1px solid var(--pav-color-error);
   border-radius: 0.5rem;
-  color: var(--pav-color-red-700);
+  color: var(--pav-color-alert-error-text);
   font-size: 0.875rem;
-
-  @media (prefers-color-scheme: dark) {
-    color: var(--pav-color-red-400);
-  }
 }
 
 .form-group {
@@ -206,25 +190,21 @@ const isValid = computed(() => state.email.length > 0 && state.email.includes('@
   display: block;
   font-size: 0.875rem;
   font-weight: 500;
-  color: var(--pav-color-stone-700);
-
-  @media (prefers-color-scheme: dark) {
-    color: var(--pav-color-stone-300);
-  }
+  color: var(--pav-text-secondary);
 }
 
 .form-input {
   width: 100%;
   padding: 0.75rem 1rem;
-  background: var(--pav-color-stone-50);
-  border: 1px solid var(--pav-color-stone-200);
+  background: var(--pav-surface-secondary);
+  border: 1px solid var(--pav-border-subtle);
   border-radius: 9999px;
-  color: var(--pav-color-stone-900);
+  color: var(--pav-text-primary);
   font-size: 1rem;
   transition: box-shadow 0.2s, border-color 0.2s;
 
   &::placeholder {
-    color: var(--pav-color-stone-400);
+    color: var(--pav-text-muted);
   }
 
   &:focus {
@@ -232,22 +212,12 @@ const isValid = computed(() => state.email.length > 0 && state.email.includes('@
     box-shadow: 0 0 0 2px var(--pav-color-orange-500);
     border-color: transparent;
   }
-
-  @media (prefers-color-scheme: dark) {
-    background: var(--pav-color-stone-800);
-    border-color: var(--pav-color-stone-700);
-    color: var(--pav-color-stone-100);
-  }
 }
 
 .help-text {
   margin: 0;
   font-size: 0.75rem;
-  color: var(--pav-color-stone-500);
-
-  @media (prefers-color-scheme: dark) {
-    color: var(--pav-color-stone-400);
-  }
+  color: var(--pav-text-muted);
 }
 
 .modal-footer {
@@ -285,12 +255,8 @@ const isValid = computed(() => state.email.length > 0 && state.email.includes('@
   }
 
   &:disabled {
-    background: var(--pav-color-stone-300);
+    background: var(--pav-interactive-disabled);
     cursor: not-allowed;
-
-    @media (prefers-color-scheme: dark) {
-      background: var(--pav-color-stone-700);
-    }
   }
 }
 </style>
