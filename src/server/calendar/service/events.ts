@@ -237,6 +237,31 @@ class EventService {
   }
 
   /**
+   * Emits a domain event, deferring the emit until after the supplied
+   * transaction commits when one is present.
+   *
+   * When the caller supplies a transaction, the emit is deferred until after
+   * commit. The setImmediate hop is required to escape Sequelize's CLS
+   * context — without it the listener's async body inherits a CLS scope
+   * that still binds the just-committed transaction, and Sequelize's
+   * implicit transaction lookup picks it up, causing
+   * "commit has been called on this transaction" errors.
+   *
+   * Without a transaction, the emit fires synchronously.
+   *
+   * @private
+   */
+  private emitAfterTx<T>(event: string, payload: T, tx?: Transaction): void {
+    const emit = () => this.eventBus.emit(event, payload);
+    if (tx) {
+      tx.afterCommit(() => setImmediate(emit));
+    }
+    else {
+      emit();
+    }
+  }
+
+  /**
    * Cross-entity invariant: when an event references both a Place (locationId)
    * and a Space (spaceId), the Space must belong to that Place.
    *
@@ -851,24 +876,9 @@ class EventService {
     await eventEntity.save({ transaction: tx });
 
     // Notify media domain that media has been attached to an event.
-    // When the caller supplies a transaction, defer the emit until after
-    // commit. The setImmediate hop is required to escape Sequelize's CLS
-    // context — without it the listener's async body inherits a CLS scope
-    // that still binds the just-committed transaction, and Sequelize's
-    // implicit transaction lookup picks it up, causing
-    // "commit has been called on this transaction" errors.
     if (eventEntity.media_id) {
       const mediaId = eventEntity.media_id;
-      const emitMediaAttached = () => this.eventBus.emit('mediaAttachedToEvent', {
-        mediaId,
-        eventId: event.id,
-      });
-      if (tx) {
-        tx.afterCommit(() => setImmediate(emitMediaAttached));
-      }
-      else {
-        emitMediaAttached();
-      }
+      this.emitAfterTx('mediaAttachedToEvent', { mediaId, eventId: event.id }, tx);
     }
 
     if ( eventParams.content ) {
@@ -884,13 +894,7 @@ class EventService {
       }
     }
 
-    const emitEventCreated = () => this.eventBus.emit('eventCreated', { calendar, event });
-    if (tx) {
-      tx.afterCommit(() => setImmediate(emitEventCreated));
-    }
-    else {
-      emitEventCreated();
-    }
+    this.emitAfterTx('eventCreated', { calendar, event }, tx);
     return event;
   }
 
@@ -1239,33 +1243,12 @@ class EventService {
     await eventEntity.save({ transaction: tx });
 
     // Notify media domain that media has been attached to an event.
-    // When the caller supplies a transaction, defer the emit until after
-    // commit. The setImmediate hop is required to escape Sequelize's CLS
-    // context — without it the listener's async body inherits a CLS scope
-    // that still binds the just-committed transaction, and Sequelize's
-    // implicit transaction lookup picks it up, causing
-    // "commit has been called on this transaction" errors.
     if (newMediaAttached && eventEntity.media_id) {
       const mediaId = eventEntity.media_id;
-      const emitMediaAttached = () => this.eventBus.emit('mediaAttachedToEvent', {
-        mediaId,
-        eventId: event.id,
-      });
-      if (tx) {
-        tx.afterCommit(() => setImmediate(emitMediaAttached));
-      }
-      else {
-        emitMediaAttached();
-      }
+      this.emitAfterTx('mediaAttachedToEvent', { mediaId, eventId: event.id }, tx);
     }
 
-    const emitEventUpdated = () => this.eventBus.emit('eventUpdated', { calendar, event });
-    if (tx) {
-      tx.afterCommit(() => setImmediate(emitEventUpdated));
-    }
-    else {
-      emitEventUpdated();
-    }
+    this.emitAfterTx('eventUpdated', { calendar, event }, tx);
     return event;
   }
 
@@ -2273,7 +2256,10 @@ class EventService {
       throw error;
     }
 
-    // Emit event for ActivityPub federation (after successful commit)
+    // Emit event for ActivityPub federation. Safe to emit directly here
+    // because the internally-managed transaction is already committed above;
+    // if deleteEvent ever takes a caller-supplied tx, route this through
+    // emitAfterTx instead to defer past commit (see its CLS rationale).
     this.eventBus.emit('eventDeleted', {
       calendar,
       event,
