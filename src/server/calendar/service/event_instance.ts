@@ -28,10 +28,11 @@ import {
   InvalidOccurrenceDateError,
 } from '@/common/exceptions/calendar';
 import { createLogger } from '@/server/common/helper/logger';
+import { parseByDayEntry } from '@/common/utils/recurrence-by-day';
 
 const logger = createLogger('calendar');
 
-const { RRule, RRuleSet, Weekday, ALL_WEEKDAYS } = rrule;
+const { RRule, RRuleSet, Weekday } = rrule;
 
 /**
  * Forward generation window for recurring event expansion, in months from
@@ -95,21 +96,18 @@ export interface UpcomingOccurrencesResult {
  * express e.g. "first Monday of the month").
  *
  * Returns null for unparseable input so callers can skip malformed entries
- * rather than silently coerce them into the wrong weekday. Note: rrule's
- * Weekday.fromStr silently yields Weekday(-1) for unknown codes rather than
- * throwing, so we explicitly validate the day code against ALL_WEEKDAYS.
+ * rather than silently coerce them into the wrong weekday. The shared
+ * {@link parseByDayEntry} validates the day code against the canonical weekday
+ * set; rrule's Weekday.fromStr would otherwise silently yield Weekday(-1) for
+ * unknown codes rather than throwing.
  */
 function parseByDay(entry: string): InstanceType<typeof Weekday> | null {
-  const match = entry.match(/^(-?\d+)?([A-Z]{2})$/);
-  if (!match) {
+  const parsed = parseByDayEntry(entry);
+  if (!parsed) {
     return null;
   }
-  const [, ordinal, dayCode] = match;
-  if (!ALL_WEEKDAYS.includes(dayCode as any)) {
-    return null;
-  }
-  const weekday = Weekday.fromStr(dayCode as any);
-  return ordinal ? weekday.nth(parseInt(ordinal, 10)) : weekday;
+  const weekday = Weekday.fromStr(parsed.dayCode as any);
+  return parsed.ordinal !== null ? weekday.nth(parsed.ordinal) : weekday;
 }
 
 export default class EventInstanceService {
