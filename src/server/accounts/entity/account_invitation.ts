@@ -2,7 +2,6 @@ import { Model, Column, Table, BelongsTo, ForeignKey, DataType, PrimaryKey, Befo
 
 import AccountInvitation from '@/common/model/invitation';
 import { AccountEntity } from '@/server/common/entity/account';
-import { CalendarEntity } from '@/server/calendar/entity/calendar';
 import db from '@/server/common/entity/db';
 
 
@@ -31,7 +30,14 @@ export default class AccountInvitationEntity extends Model {
   @Column({ type: DataType.DATE })
   declare expiration_time: Date;
 
-  @ForeignKey(() => CalendarEntity)
+  /**
+   * Calendar this invitation grants editor access to, when set.
+   *
+   * Stored as a plain UUID rather than a typed @ForeignKey to CalendarEntity
+   * to keep this accounts-domain entity decoupled from the calendar domain at
+   * the data layer (see DEC-003). Null for admin invitations that grant no
+   * calendar-scoped access.
+   */
   @Index
   @Column({ type: DataType.UUID, allowNull: true })
   declare calendar_id: string;
