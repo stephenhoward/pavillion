@@ -117,15 +117,11 @@ const sendPasswordReset = async () => {
 
 .error-message {
   padding: var(--pav-space-3);
-  background: rgba(239, 68, 68, 0.1);
-  border: 1px solid rgba(239, 68, 68, 0.2);
+  background: var(--pav-color-alert-error-bg);
+  border: 1px solid var(--pav-color-error);
   border-radius: 0.5rem;
-  color: var(--pav-color-red-700);
+  color: var(--pav-color-alert-error-text);
   font-size: 0.875rem;
-
-  @media (prefers-color-scheme: dark) {
-    color: var(--pav-color-red-400);
-  }
 }
 
 .info-box {
@@ -133,14 +129,9 @@ const sendPasswordReset = async () => {
   align-items: flex-start;
   gap: var(--pav-space-4);
   padding: var(--pav-space-4);
-  background: rgba(14, 165, 233, 0.1);
-  border: 1px solid rgba(14, 165, 233, 0.2);
+  background: var(--pav-color-alert-info-bg);
+  border: 1px solid var(--pav-color-info);
   border-radius: 0.75rem;
-
-  @media (prefers-color-scheme: dark) {
-    background: rgba(7, 89, 133, 0.3);
-    border-color: rgba(7, 89, 133, 0.8);
-  }
 }
 
 .info-icon {
@@ -149,21 +140,13 @@ const sendPasswordReset = async () => {
   align-items: center;
   justify-content: center;
   padding: 0.5rem;
-  background: rgba(14, 165, 233, 0.1);
+  background: var(--pav-color-alert-info-bg);
   border-radius: 0.5rem;
-
-  @media (prefers-color-scheme: dark) {
-    background: rgba(3, 105, 161, 0.9);
-  }
 
   .icon-mail {
     width: 1.25rem;
     height: 1.25rem;
-    color: rgb(14, 116, 144);
-
-    @media (prefers-color-scheme: dark) {
-      color: rgb(125, 211, 252);
-    }
+    color: var(--pav-color-info);
   }
 }
 
@@ -175,21 +158,13 @@ const sendPasswordReset = async () => {
   margin: 0;
   font-size: 0.875rem;
   font-weight: 500;
-  color: rgb(12, 74, 110);
-
-  @media (prefers-color-scheme: dark) {
-    color: rgb(224, 242, 254);
-  }
+  color: var(--pav-color-alert-info-text);
 }
 
 .info-description {
   margin: var(--pav-space-1) 0 0 0;
   font-size: 0.875rem;
-  color: rgb(14, 116, 144);
-
-  @media (prefers-color-scheme: dark) {
-    color: rgb(186, 230, 253);
-  }
+  color: var(--pav-color-alert-info-text);
 }
 
 .modal-footer {

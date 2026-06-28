@@ -393,11 +393,7 @@ onMounted(async () => {
 <style scoped lang="scss">
 .settings-page {
   min-height: 100vh;
-  background: var(--pav-color-stone-50);
-
-  @media (prefers-color-scheme: dark) {
-    background: var(--pav-color-stone-950);
-  }
+  background: var(--pav-surface-secondary);
 }
 
 .settings-container {
@@ -426,62 +422,41 @@ onMounted(async () => {
   h1 {
     font-size: 1.5rem;
     font-weight: 700;
-    color: var(--pav-color-stone-900);
+    color: var(--pav-text-primary);
     margin: 0;
-
-    @media (prefers-color-scheme: dark) {
-      color: var(--pav-color-stone-100);
-    }
   }
 
   .subtitle {
     margin-top: var(--pav-space-1);
     font-size: 0.875rem;
-    color: var(--pav-color-stone-500);
-
-    @media (prefers-color-scheme: dark) {
-      color: var(--pav-color-stone-400);
-    }
+    color: var(--pav-text-muted);
   }
 }
 
 .settings-card {
-  background: white;
+  background: var(--pav-surface-primary);
   border-radius: 1rem;
   box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-  border: 1px solid var(--pav-color-stone-200);
+  border: 1px solid var(--pav-border-secondary);
   overflow: hidden;
-
-  @media (prefers-color-scheme: dark) {
-    background: var(--pav-color-stone-900);
-    border-color: var(--pav-color-stone-800);
-  }
 }
 
 .settings-section {
   padding: var(--pav-space-6);
-  border-bottom: 1px solid var(--pav-color-stone-100);
+  border-bottom: 1px solid var(--pav-border-subtle);
 
   &:last-child {
     border-bottom: none;
-  }
-
-  @media (prefers-color-scheme: dark) {
-    border-bottom-color: var(--pav-color-stone-800);
   }
 }
 
 .section-title {
   font-size: 0.875rem;
   font-weight: 600;
-  color: var(--pav-color-stone-400);
+  color: var(--pav-text-muted);
   text-transform: uppercase;
   letter-spacing: 0.05em;
   margin: 0 0 var(--pav-space-4) 0;
-
-  @media (prefers-color-scheme: dark) {
-    color: var(--pav-color-stone-500);
-  }
 }
 
 .settings-fields {
@@ -500,11 +475,7 @@ onMounted(async () => {
   display: block;
   font-size: 0.875rem;
   font-weight: 500;
-  color: var(--pav-color-stone-700);
-
-  @media (prefers-color-scheme: dark) {
-    color: var(--pav-color-stone-300);
-  }
+  color: var(--pav-text-secondary);
 }
 
 .input-with-feedback {
@@ -516,10 +487,10 @@ onMounted(async () => {
 .text-input {
   width: 100%;
   padding: 0.625rem 1rem;
-  background: var(--pav-color-stone-50);
-  border: 1px solid var(--pav-color-stone-200);
+  background: var(--pav-surface-secondary);
+  border: 1px solid var(--pav-border-subtle);
   border-radius: 0.75rem;
-  color: var(--pav-color-stone-900);
+  color: var(--pav-text-primary);
   font-size: 1rem;
   transition: box-shadow 0.2s, border-color 0.2s;
 
@@ -533,17 +504,11 @@ onMounted(async () => {
     opacity: 0.5;
     cursor: not-allowed;
   }
-
-  @media (prefers-color-scheme: dark) {
-    background: var(--pav-color-stone-800);
-    border-color: var(--pav-color-stone-700);
-    color: var(--pav-color-stone-100);
-  }
 }
 
 .save-feedback {
   font-size: 0.875rem;
-  color: var(--pav-color-green-600);
+  color: var(--pav-color-success);
   font-weight: 500;
 
   &:not(.is-visible) {
@@ -551,15 +516,7 @@ onMounted(async () => {
   }
 
   &.is-error {
-    color: var(--pav-color-red-600);
-  }
-
-  @media (prefers-color-scheme: dark) {
-    color: var(--pav-color-green-400);
-
-    &.is-error {
-      color: var(--pav-color-red-400);
-    }
+    color: var(--pav-color-error);
   }
 }
 
@@ -568,57 +525,39 @@ onMounted(async () => {
   align-items: center;
   gap: 0.5rem;
   padding: 0.625rem 1rem;
-  background: var(--pav-color-stone-100);
-  border: 1px solid var(--pav-color-stone-200);
+  background: var(--pav-surface-tertiary);
+  border: 1px solid var(--pav-border-subtle);
   border-radius: 0.75rem;
 
-  @media (prefers-color-scheme: dark) {
-    background: rgba(41, 37, 36, 0.5);
-    border-color: var(--pav-color-stone-700);
-  }
-
   .at-symbol {
-    color: var(--pav-color-stone-400);
-
-    @media (prefers-color-scheme: dark) {
-      color: var(--pav-color-stone-500);
-    }
+    color: var(--pav-text-muted);
   }
 
   .username-text {
-    color: var(--pav-color-stone-600);
-
-    @media (prefers-color-scheme: dark) {
-      color: var(--pav-color-stone-400);
-    }
+    color: var(--pav-text-secondary);
   }
 
   .readonly-badge {
     margin-left: auto;
     font-size: 0.75rem;
-    color: var(--pav-color-stone-400);
-    background: var(--pav-color-stone-200);
+    color: var(--pav-text-muted);
+    background: var(--pav-interactive-disabled);
     padding: 0.125rem 0.5rem;
     border-radius: 9999px;
-
-    @media (prefers-color-scheme: dark) {
-      color: var(--pav-color-stone-500);
-      background: var(--pav-color-stone-700);
-    }
   }
 }
 
 .select-input {
   width: 100%;
   padding: 0.625rem 2.5rem 0.625rem 1rem;
-  background-color: var(--pav-color-stone-50);
+  background-color: var(--pav-surface-secondary);
   background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
   background-position: right 0.75rem center;
   background-repeat: no-repeat;
   background-size: 1.5em 1.5em;
-  border: 1px solid var(--pav-color-stone-200);
+  border: 1px solid var(--pav-border-subtle);
   border-radius: 0.75rem;
-  color: var(--pav-color-stone-900);
+  color: var(--pav-text-primary);
   font-size: 1rem;
   cursor: pointer;
   appearance: none;
@@ -634,12 +573,6 @@ onMounted(async () => {
     opacity: 0.5;
     cursor: not-allowed;
   }
-
-  @media (prefers-color-scheme: dark) {
-    background-color: var(--pav-color-stone-800);
-    border-color: var(--pav-color-stone-700);
-    color: var(--pav-color-stone-100);
-  }
 }
 
 .security-fields {
@@ -653,12 +586,8 @@ onMounted(async () => {
   padding-top: var(--pav-space-2);
 
   &:not(:first-child) {
-    border-top: 1px solid var(--pav-color-stone-100);
+    border-top: 1px solid var(--pav-border-subtle);
     padding-top: var(--pav-space-4);
-
-    @media (prefers-color-scheme: dark) {
-      border-top-color: var(--pav-color-stone-800);
-    }
   }
 }
 
@@ -669,21 +598,13 @@ onMounted(async () => {
     margin: 0;
     font-size: 0.875rem;
     font-weight: 500;
-    color: var(--pav-color-stone-700);
-
-    @media (prefers-color-scheme: dark) {
-      color: var(--pav-color-stone-300);
-    }
+    color: var(--pav-text-secondary);
   }
 
   .security-value {
     margin: var(--pav-space-1) 0 0 0;
     font-size: 0.875rem;
-    color: var(--pav-color-stone-500);
-
-    @media (prefers-color-scheme: dark) {
-      color: var(--pav-color-stone-400);
-    }
+    color: var(--pav-text-muted);
   }
 }
 
@@ -691,7 +612,7 @@ onMounted(async () => {
   padding: 0.5rem 1rem;
   font-size: 0.875rem;
   font-weight: 500;
-  color: var(--pav-color-orange-600);
+  color: var(--pav-color-interactive-active);
   background: transparent;
   border: none;
   border-radius: 0.5rem;
@@ -699,22 +620,13 @@ onMounted(async () => {
   transition: color 0.2s, background-color 0.2s;
 
   &:hover {
-    color: var(--pav-color-orange-700);
-    background: rgba(249, 115, 22, 0.1);
-
-    @media (prefers-color-scheme: dark) {
-      color: var(--pav-color-orange-300);
-      background: rgba(249, 115, 22, 0.1);
-    }
+    color: var(--pav-color-interactive-active-text);
+    background: var(--pav-color-interactive-active-bg);
   }
 
   &:focus-visible {
     outline: 2px solid var(--pav-color-orange-600);
     outline-offset: 2px;
-  }
-
-  @media (prefers-color-scheme: dark) {
-    color: var(--pav-color-orange-400);
   }
 }
 
@@ -738,10 +650,6 @@ onMounted(async () => {
 
   &:hover {
     background: rgba(239, 68, 68, 0.1);
-
-    @media (prefers-color-scheme: dark) {
-      background: rgba(127, 29, 29, 0.3);
-    }
   }
 
   .logout-icon {
@@ -752,18 +660,10 @@ onMounted(async () => {
     background: rgba(239, 68, 68, 0.1);
     border-radius: 0.5rem;
 
-    @media (prefers-color-scheme: dark) {
-      background: rgba(127, 29, 29, 0.5);
-    }
-
     .icon {
       width: 1.25rem;
       height: 1.25rem;
       color: var(--pav-color-red-600);
-
-      @media (prefers-color-scheme: dark) {
-        color: var(--pav-color-red-400);
-      }
     }
   }
 
@@ -775,20 +675,12 @@ onMounted(async () => {
       font-size: 0.875rem;
       font-weight: 500;
       color: var(--pav-color-red-600);
-
-      @media (prefers-color-scheme: dark) {
-        color: var(--pav-color-red-400);
-      }
     }
 
     .logout-subtitle {
       margin: var(--pav-space-1) 0 0 0;
       font-size: 0.75rem;
-      color: var(--pav-color-stone-500);
-
-      @media (prefers-color-scheme: dark) {
-        color: var(--pav-color-stone-400);
-      }
+      color: var(--pav-text-muted);
     }
   }
 
@@ -800,33 +692,20 @@ onMounted(async () => {
 
 .admin-card {
   margin-top: var(--pav-space-8);
-  background: white;
+  background: var(--pav-surface-primary);
   border-radius: 0.75rem;
-  border: 1px solid var(--pav-color-stone-200);
+  border: 1px solid var(--pav-border-secondary);
   overflow: hidden;
-
-  @media (prefers-color-scheme: dark) {
-    background: var(--pav-color-stone-900);
-    border-color: var(--pav-color-stone-800);
-  }
 
   .admin-header {
     padding: var(--pav-space-6) var(--pav-space-6) var(--pav-space-4);
-    border-bottom: 1px solid var(--pav-color-stone-200);
-
-    @media (prefers-color-scheme: dark) {
-      border-bottom-color: var(--pav-color-stone-800);
-    }
+    border-bottom: 1px solid var(--pav-border-secondary);
 
     h2 {
       margin: 0;
       font-size: 1.125rem;
       font-weight: 500;
-      color: var(--pav-color-stone-900);
-
-      @media (prefers-color-scheme: dark) {
-        color: var(--pav-color-stone-100);
-      }
+      color: var(--pav-text-primary);
     }
   }
 
@@ -836,11 +715,7 @@ onMounted(async () => {
     .admin-description {
       margin: 0 0 var(--pav-space-4) 0;
       font-size: 0.875rem;
-      color: var(--pav-color-stone-500);
-
-      @media (prefers-color-scheme: dark) {
-        color: var(--pav-color-stone-400);
-      }
+      color: var(--pav-text-muted);
     }
   }
 }
@@ -877,26 +752,17 @@ onMounted(async () => {
 
 .funding-card {
   margin-top: var(--pav-space-8);
-  background: white;
+  background: var(--pav-surface-primary);
   border-radius: 0.75rem;
-  border: 1px solid var(--pav-color-stone-200);
+  border: 1px solid var(--pav-border-secondary);
   overflow: hidden;
-
-  @media (prefers-color-scheme: dark) {
-    background: var(--pav-color-stone-900);
-    border-color: var(--pav-color-stone-800);
-  }
 
   .funding-card-header {
     display: flex;
     align-items: center;
     gap: var(--pav-space-3);
     padding: var(--pav-space-6) var(--pav-space-6) var(--pav-space-4);
-    border-bottom: 1px solid var(--pav-color-stone-200);
-
-    @media (prefers-color-scheme: dark) {
-      border-bottom-color: var(--pav-color-stone-800);
-    }
+    border-bottom: 1px solid var(--pav-border-secondary);
   }
 
   .funding-card-icon {
@@ -904,21 +770,13 @@ onMounted(async () => {
     align-items: center;
     justify-content: center;
     padding: 0.5rem;
-    background: rgba(249, 115, 22, 0.1);
+    background: var(--pav-color-interactive-active-bg);
     border-radius: 0.5rem;
-
-    @media (prefers-color-scheme: dark) {
-      background: rgba(249, 115, 22, 0.15);
-    }
 
     .icon {
       width: 1.25rem;
       height: 1.25rem;
-      color: var(--pav-color-orange-600);
-
-      @media (prefers-color-scheme: dark) {
-        color: var(--pav-color-orange-400);
-      }
+      color: var(--pav-color-interactive-active);
     }
   }
 
@@ -929,21 +787,13 @@ onMounted(async () => {
       margin: 0;
       font-size: 1.125rem;
       font-weight: 500;
-      color: var(--pav-color-stone-900);
-
-      @media (prefers-color-scheme: dark) {
-        color: var(--pav-color-stone-100);
-      }
+      color: var(--pav-text-primary);
     }
 
     .funding-card-status {
       margin: var(--pav-space-1) 0 0 0;
       font-size: 0.875rem;
-      color: var(--pav-color-stone-500);
-
-      @media (prefers-color-scheme: dark) {
-        color: var(--pav-color-stone-400);
-      }
+      color: var(--pav-text-muted);
     }
   }
 
