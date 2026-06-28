@@ -3,7 +3,7 @@ import express from 'express';
 import request from 'supertest';
 import sinon from 'sinon';
 import { testApp, addRequestUser } from '@/server/common/test/lib/express';
-import { ProviderConnectionService } from '@/server/funding/service/provider_connection';
+import FundingInterface from '@/server/funding/interface';
 import ProviderConnectionRoutes from '@/server/funding/api/v1/provider_connection';
 import { InvalidCredentialsError, MissingRequiredFieldError } from '@/common/exceptions/funding';
 
@@ -15,7 +15,7 @@ import { InvalidCredentialsError, MissingRequiredFieldError } from '@/common/exc
  */
 describe('Provider Connection API Routes', () => {
   let router: express.Router;
-  let service: ProviderConnectionService;
+  let service: FundingInterface;
   let routes: ProviderConnectionRoutes;
   let sandbox: sinon.SinonSandbox;
 
@@ -23,9 +23,9 @@ describe('Provider Connection API Routes', () => {
     sandbox = sinon.createSandbox();
     router = express.Router();
 
-    // Create service with mocked event bus
+    // Create the funding interface with a mocked event bus
     const eventBus = { emit: sandbox.stub() } as any;
-    service = new ProviderConnectionService(eventBus);
+    service = new FundingInterface(eventBus);
 
     // Create route handlers
     routes = new ProviderConnectionRoutes(service);
@@ -264,7 +264,7 @@ describe('Provider Connection API Routes', () => {
 
   describe('DELETE /admin/providers/:providerType', () => {
     it('should return confirmation requirement when active subscriptions exist', async () => {
-      sandbox.stub(service, 'disconnectProvider').resolves({
+      sandbox.stub(service, 'disconnectProviderConnection').resolves({
         requiresConfirmation: true,
         activeFundingPlanCount: 5,
         message: 'This provider has 5 active subscription(s). Disconnecting will cancel all active subscriptions.',
@@ -282,7 +282,7 @@ describe('Provider Connection API Routes', () => {
     });
 
     it('should disconnect provider when confirmation is provided', async () => {
-      sandbox.stub(service, 'disconnectProvider').resolves({});
+      sandbox.stub(service, 'disconnectProviderConnection').resolves({});
 
       router.delete('/:providerType', routes.disconnectProvider.bind(routes));
 

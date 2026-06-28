@@ -22,11 +22,11 @@ export default class FundingApiV1 {
     app.use('/api/funding/v1', express.json());
 
     // Install admin routes
-    const adminRoutes = new AdminRoutes(internalAPI, internalAPI.providerConnectionService);
+    const adminRoutes = new AdminRoutes(internalAPI);
     adminRoutes.installHandlers(app, '/api/funding/v1');
 
     // Install provider connection routes
-    const providerRoutes = new ProviderConnectionRoutes(internalAPI.providerConnectionService);
+    const providerRoutes = new ProviderConnectionRoutes(internalAPI);
     providerRoutes.installHandlers(app, '/api/funding/v1');
 
     // Install user funding plan routes

@@ -1,8 +1,16 @@
 import { EventEmitter } from 'events';
 import FundingService from '@/server/funding/service/funding';
-import { ProviderConnectionService } from '@/server/funding/service/provider_connection';
-import { FundingPlan, FundingSettings, ProviderConfig, FundingStatus, BillingCycle } from '@/common/model/funding-plan';
+import {
+  ProviderConnectionService,
+  type AdminUser,
+  type StripeCredentialInputs,
+  type StripeConfigureResult,
+  type ProviderStatus,
+  type DisconnectionResult,
+} from '@/server/funding/service/provider_connection';
+import { FundingPlan, FundingSettings, ProviderConfig, FundingStatus, BillingCycle, ProviderType } from '@/common/model/funding-plan';
 import type { ProviderInfo } from '@/server/funding/service/funding';
+import type { ProviderCredentials } from '@/server/funding/service/provider/adapter';
 import { ComplimentaryGrant } from '@/common/model/complimentary_grant';
 import { CheckoutSessionResult } from '@/server/funding/service/provider/adapter';
 import type CalendarInterface from '@/server/calendar/interface';
@@ -15,7 +23,7 @@ import type CalendarInterface from '@/server/calendar/interface';
  */
 export default class FundingInterface {
   private fundingService: FundingService;
-  readonly providerConnectionService: ProviderConnectionService;
+  private providerConnectionService: ProviderConnectionService;
 
   constructor(eventBus: EventEmitter) {
     this.fundingService = new FundingService(eventBus);
@@ -95,6 +103,55 @@ export default class FundingInterface {
 
   async disconnectProvider(providerType: 'stripe' | 'paypal'): Promise<void> {
     return this.fundingService.disconnectProvider(providerType);
+  }
+
+  // Provider connection (credential) management
+
+  /**
+   * Get the connection status for a payment provider
+   *
+   * @param providerType - Provider to inspect ('stripe' or 'paypal')
+   * @returns Whether the provider has credentials configured, plus metadata
+   */
+  async getProviderStatus(providerType: ProviderType): Promise<ProviderStatus> {
+    return this.providerConnectionService.getProviderStatus(providerType);
+  }
+
+  /**
+   * Configure Stripe credentials via direct API key entry
+   *
+   * @param credentials - Stripe credentials (publishable_key, secret_key, webhook_secret)
+   * @param adminUser - Admin user performing the configuration
+   * @returns Object with connectionVerified indicating if the Stripe API call succeeded
+   */
+  async configureStripe(credentials: StripeCredentialInputs, adminUser: AdminUser): Promise<StripeConfigureResult> {
+    return this.providerConnectionService.configureStripe(credentials, adminUser);
+  }
+
+  /**
+   * Configure PayPal credentials manually
+   *
+   * @param credentials - PayPal credentials (client_id, client_secret, environment)
+   * @param adminUser - Admin user performing the configuration
+   * @returns True if configuration succeeded
+   */
+  async configurePayPal(credentials: ProviderCredentials, adminUser: AdminUser): Promise<boolean> {
+    return this.providerConnectionService.configurePayPal(credentials, adminUser);
+  }
+
+  /**
+   * Disconnect a payment provider's connection (credentials)
+   *
+   * Named distinctly from {@link disconnectProvider} because this routes to the
+   * provider-connection lifecycle, which supports the confirmation flow and
+   * returns a {@link DisconnectionResult}.
+   *
+   * @param providerType - Provider to disconnect ('stripe' or 'paypal')
+   * @param confirmed - Whether the admin has confirmed disconnection of active plans
+   * @returns Disconnection result, including a confirmation requirement when needed
+   */
+  async disconnectProviderConnection(providerType: ProviderType, confirmed: boolean = false): Promise<DisconnectionResult> {
+    return this.providerConnectionService.disconnectProvider(providerType, confirmed);
   }
 
   // User funding plan operations
