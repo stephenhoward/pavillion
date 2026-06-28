@@ -21,7 +21,7 @@ const logger = createLogger('funding');
 /**
  * User object for admin operations
  */
-interface AdminUser {
+export interface AdminUser {
   id: string;
   email: string;
 }
@@ -29,7 +29,7 @@ interface AdminUser {
 /**
  * Stripe credential inputs for configuration
  */
-interface StripeCredentialInputs {
+export interface StripeCredentialInputs {
   publishable_key: string;
   secret_key: string;
   webhook_secret: string;
@@ -38,14 +38,14 @@ interface StripeCredentialInputs {
 /**
  * Result of Stripe configuration including connection verification status
  */
-interface StripeConfigureResult {
+export interface StripeConfigureResult {
   connectionVerified: boolean;
 }
 
 /**
  * Provider status information
  */
-interface ProviderStatus {
+export interface ProviderStatus {
   configured: boolean;
   providerType?: ProviderType;
   enabled?: boolean;
@@ -55,7 +55,7 @@ interface ProviderStatus {
 /**
  * Disconnection result
  */
-interface DisconnectionResult {
+export interface DisconnectionResult {
   requiresConfirmation?: boolean;
   activeFundingPlanCount?: number;
   message?: string;

@@ -2,16 +2,14 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import express from 'express';
 import request from 'supertest';
 import sinon from 'sinon';
-import FundingService from '@/server/funding/service/funding';
+import FundingInterface from '@/server/funding/interface';
 import AdminRoutes from '@/server/funding/api/v1/admin';
-import { ProviderConnectionService } from '@/server/funding/service/provider_connection';
 import { FundingSettings, ProviderConfig } from '@/common/model/funding-plan';
 import { testApp } from '@/server/common/test/lib/express';
 
 describe('Admin Funding API', () => {
   let router: express.Router;
-  let service: FundingService;
-  let providerConnectionService: ProviderConnectionService;
+  let service: FundingInterface;
   let adminHandlers: AdminRoutes;
   let sandbox: sinon.SinonSandbox;
 
@@ -19,13 +17,12 @@ describe('Admin Funding API', () => {
     sandbox = sinon.createSandbox();
     router = express.Router();
 
-    // Create service with mocked dependencies
+    // Create the funding interface with a mocked event bus
     const eventBus = { emit: sandbox.stub() } as any;
-    service = new FundingService(eventBus);
-    providerConnectionService = new ProviderConnectionService(eventBus);
+    service = new FundingInterface(eventBus);
 
     // Create handlers
-    adminHandlers = new AdminRoutes(service, providerConnectionService);
+    adminHandlers = new AdminRoutes(service);
   });
 
   afterEach(() => {
@@ -209,7 +206,7 @@ describe('Admin Funding API', () => {
       ];
 
       sandbox.stub(service, 'getProviders').resolves(mockProviders);
-      sandbox.stub(providerConnectionService, 'getProviderStatus')
+      sandbox.stub(service, 'getProviderStatus')
         .withArgs('stripe').resolves({ configured: true })
         .withArgs('paypal').resolves({ configured: false });
 
@@ -231,7 +228,7 @@ describe('Admin Funding API', () => {
 
   describe('PUT /admin/providers/:providerType', () => {
     it('should update provider display name and enabled status', async () => {
-      const updateStub = sandbox.stub(service, 'updateProvider').resolves(true);
+      const updateStub = sandbox.stub(service, 'updateProvider').resolves();
 
       router.put('/handler/:providerType', adminHandlers.updateProvider.bind(adminHandlers));
 

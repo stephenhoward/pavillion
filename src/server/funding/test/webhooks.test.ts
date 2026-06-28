@@ -176,7 +176,6 @@ describe('Webhook Handling', () => {
       handleStripeWebhook = sandbox.stub().resolves();
       const mockInterface = {
         handleStripeWebhook,
-        providerConnectionService: {},
       };
 
       app = express();
@@ -219,7 +218,6 @@ describe('Webhook Handling', () => {
       AccountApiV1.install(bootApp, {} as any);
       FundingApiV1.install(bootApp, {
         handleStripeWebhook,
-        providerConnectionService: {},
       } as any);
 
       const webhookPayload = JSON.stringify({ id: 'evt_boot_order', type: 'invoice.paid' });

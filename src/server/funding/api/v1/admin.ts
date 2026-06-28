@@ -1,7 +1,6 @@
 import express, { Request, Response } from 'express';
 import ExpressHelper from '@/server/common/helper/express';
 import FundingInterface from '@/server/funding/interface';
-import { ProviderConnectionService } from '@/server/funding/service/provider_connection';
 import { WebhookManager } from '@/server/funding/service/provider/webhook_manager';
 import { FundingSettings } from '@/common/model/funding-plan';
 import { ValidationError } from '@/common/exceptions/base';
@@ -20,14 +19,9 @@ import { logError } from '@/server/common/helper/error-logger';
  */
 export default class AdminRoutes {
   private service: FundingInterface;
-  private providerConnectionService: ProviderConnectionService;
 
-  constructor(
-    fundingInterface: FundingInterface,
-    providerConnectionService: ProviderConnectionService,
-  ) {
+  constructor(fundingInterface: FundingInterface) {
     this.service = fundingInterface;
-    this.providerConnectionService = providerConnectionService;
   }
 
   /**
@@ -164,7 +158,7 @@ export default class AdminRoutes {
       // Enhance provider data with configured status from ProviderConnectionService
       const sanitizedProviders = await Promise.all(
         providers.map(async (provider) => {
-          const status = await this.providerConnectionService.getProviderStatus(
+          const status = await this.service.getProviderStatus(
             provider.providerType,
           );
 

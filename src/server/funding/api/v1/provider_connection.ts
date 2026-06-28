@@ -1,6 +1,6 @@
 import express, { Request, Response } from 'express';
 import ExpressHelper from '@/server/common/helper/express';
-import { ProviderConnectionService } from '@/server/funding/service/provider_connection';
+import FundingInterface from '@/server/funding/interface';
 import { ProviderType } from '@/common/model/funding-plan';
 import { ValidationError } from '@/common/exceptions/base';
 import { logError } from '@/server/common/helper/error-logger';
@@ -12,9 +12,9 @@ import { logError } from '@/server/common/helper/error-logger';
  * All routes require admin authentication via ExpressHelper.adminOnly.
  */
 export default class ProviderConnectionRoutes {
-  private service: ProviderConnectionService;
+  private service: FundingInterface;
 
-  constructor(service: ProviderConnectionService) {
+  constructor(service: FundingInterface) {
     this.service = service;
   }
 
@@ -147,7 +147,7 @@ export default class ProviderConnectionRoutes {
 
       const confirmed = confirm === 'true';
 
-      const result = await this.service.disconnectProvider(
+      const result = await this.service.disconnectProviderConnection(
         providerType as ProviderType,
         confirmed,
       );
