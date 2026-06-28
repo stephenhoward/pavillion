@@ -57,7 +57,7 @@ onMounted(() => {
   cursor: pointer;
   font-family: inherit;
   font-size: var(--pav-font-size-sm);
-  color: var(--pav-color-brand-primary);
+  color: var(--pav-color-interactive-active-text);
 
   &:hover {
     text-decoration: underline;
