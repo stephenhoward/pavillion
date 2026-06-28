@@ -15,30 +15,7 @@ import { EventNotFoundError, InsufficientCalendarPermissionsError, CategoriesNot
 import { ValidationError } from '@/common/exceptions/base';
 import db from '@/server/common/entity/db';
 import type { Transaction } from 'sequelize';
-
-/**
- * Builds a stub ActivityPubInterface mirroring the helper in
- * event_service.test.ts. getSharedEventStatusMap drives authoritative
- * repostStatus resolution post-commit.
- */
-function buildMockApInterface(
-  sharedEventIds: string[] = [],
-  statusOverrides: Record<string, 'auto' | 'manual'> = {},
-  calendarIdsForEvent: Record<string, string[]> = {},
-) {
-  const statusMap = new Map<string, 'auto' | 'manual'>();
-  for (const id of sharedEventIds) {
-    statusMap.set(id, statusOverrides[id] ?? 'manual');
-  }
-  const getCalendarIdsForSharedEvent = sinon.stub();
-  getCalendarIdsForSharedEvent.callsFake(async (eventId: string) => {
-    return calendarIdsForEvent[eventId] ?? [];
-  });
-  return {
-    getSharedEventStatusMap: sinon.stub().resolves(statusMap),
-    getCalendarIdsForSharedEvent,
-  } as any;
-}
+import { buildMockApInterface } from './helpers/ap-interface';
 
 describe('EventService.replaceEventCategories', () => {
   let service: EventService;
