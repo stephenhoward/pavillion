@@ -120,7 +120,13 @@ describe('InstancePolicy fallback chain', () => {
     const article = wrapper.find('.policy-page__body');
     expect(article.exists()).toBe(true);
     const emptyFallback = i18next.t('policy:empty_fallback');
-    expect(article.text()).toContain(emptyFallback);
+
+    // The fallback is rendered through the same renderPolicyMarkdown /
+    // DOMPurify pipeline as real policy content, so it arrives wrapped in a
+    // sanitized <p> rather than via string-concatenated v-html.
+    const paragraph = article.find('p');
+    expect(paragraph.exists()).toBe(true);
+    expect(paragraph.text()).toContain(emptyFallback);
   });
 
   it('strips dangerous payloads at render time (DOMPurify defense-in-depth)', async () => {

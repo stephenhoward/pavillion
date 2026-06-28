@@ -41,7 +41,7 @@ const settings = computed(() => site_config.settings());
 const policyHtml = computed<string>(() => {
   const policy = settings.value.instancePolicy;
   if (!policy || typeof policy !== 'object') {
-    return `<p>${t('empty_fallback')}</p>`;
+    return renderPolicyMarkdown(t('empty_fallback'));
   }
 
   const currentLang = i18next.language;
@@ -54,7 +54,7 @@ const policyHtml = computed<string>(() => {
     return renderPolicyMarkdown(policy[defaultLang]);
   }
 
-  return `<p>${t('empty_fallback')}</p>`;
+  return renderPolicyMarkdown(t('empty_fallback'));
 });
 
 const backLink = computed<{ name: string; label: string }>(() => {
