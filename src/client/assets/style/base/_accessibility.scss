@@ -223,10 +223,6 @@ button:disabled,
     outline: var(--pav-border-width-2) solid currentcolor;
     outline-offset: var(--pav-space-0_5);
   }
-  
-  [role="complementary"] {
-    border-width: var(--pav-border-width-2);
-  }
 }
 
 /* Reduced motion preferences */

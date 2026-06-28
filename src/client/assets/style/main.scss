@@ -58,7 +58,6 @@
   @include meta.load-css('./components/stacks');
   @include meta.load-css('./components/layout');
   @include meta.load-css('./components/tables');
-  @include meta.load-css('./components/dialogs');
   @include meta.load-css('./components/empty-state');
   @include meta.load-css('./components/settings');
   @include meta.load-css('./components/shell-nav');

@@ -1,11 +1,10 @@
 // Recurrence Form Component Styles
-// Shared styles for the recurrence rule form (frequency, interval, weekday chips,
-// monthly weekday grid, end-type controls). Consumed by both the inline form in
-// event_recurrence.vue and RecurrenceEditorSheet.vue. Light/dark theming is
-// driven by semantic tokens from themes/{light,dark}.scss -- do not add
-// prefers-color-scheme overrides here.
+// Styles for the recurrence rule form (frequency, interval, weekday chips,
+// monthly weekday grid, end-type controls). Consumed by RecurrenceEditorSheet.vue.
+// Light/dark theming is driven by semantic tokens from themes/{light,dark}.scss --
+// do not add prefers-color-scheme overrides here.
 
-@use './event-management' as *;
+@use '../mixins' as *;
 
 form.repeats {
   margin-top: 1.5rem;

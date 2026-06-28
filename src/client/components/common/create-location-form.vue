@@ -266,7 +266,7 @@ const handleSubmit = () => {
 </template>
 
 <style scoped lang="scss">
-@use '../../assets/style/components/event-management' as *;
+@use '../../assets/style/mixins' as *;
 
 .create-location-body {
   display: flex;

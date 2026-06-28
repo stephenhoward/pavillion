@@ -59,9 +59,25 @@
   .responsive-stack {
     flex-direction: row;
   }
-  
+
   .responsive-stack > * + * {
     margin-left: var(--pav-space-3);
     margin-top: 0;
+  }
+}
+
+/* Responsive: tighten page-container padding on narrow viewports */
+@media (width <= 768px) {
+  main {
+    padding: var(--pav-space-md) var(--pav-space-sm);
+  }
+
+  article {
+    padding: var(--pav-space-md);
+  }
+
+  aside {
+    padding: var(--pav-space-md);
+    margin-bottom: var(--pav-space-md);
   }
 }
