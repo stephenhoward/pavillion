@@ -29,14 +29,21 @@ import db from '@/server/common/entity/db';
  * required to escape Sequelize's CLS context — without it the listener's
  * async body still binds the just-committed transaction.
  *
+ * The identical fix is applied to updateEvent (4 emit sites total across
+ * the two methods), so these tests also exercise updateEvent's deferred
+ * eventUpdated emit for parity.
+ *
  * These tests prove:
  *   1. Inside a successful db.transaction, the eventCreated listener
  *      observes a row that is queryable from a fresh connection (i.e. it
  *      ran AFTER the outer transaction committed).
- *   2. Inside a db.transaction that throws and rolls back, the
+ *   2. Inside a successful db.transaction, the eventUpdated listener
+ *      observes the mutated column from a fresh connection (i.e. it ran
+ *      AFTER the outer transaction committed).
+ *   3. Inside a db.transaction that throws and rolls back, the
  *      eventCreated listener is NEVER invoked.
  */
-describe('EventService.createEvent — transaction-aware emit (integration)', () => {
+describe('EventService create/update — transaction-aware emit (integration)', () => {
   let env: TestEnvironment;
   let calendarInterface: CalendarInterface;
   let eventService: EventService;
@@ -131,6 +138,67 @@ describe('EventService.createEvent — transaction-aware emit (integration)', ()
     }
     finally {
       eventBus.off('eventCreated', listener);
+    }
+  });
+
+  it('defers eventUpdated until after commit and the listener observes the updated row', async () => {
+    // The same tx-deferred emit pattern is applied to updateEvent (pv-5cur).
+    // Seed an event outside any transaction, then update it inside a
+    // db.transaction and prove the eventUpdated emit fires only AFTER the
+    // outer transaction commits — verified by re-reading the row's mutated
+    // column from a fresh, non-transactional query inside the listener.
+    const seeded = await eventService.createEvent(
+      testAccount,
+      {
+        calendarId: testCalendar.id,
+        content: { en: { name: 'Pre-update event', description: 'before update' } },
+      },
+    );
+
+    // external_url lives directly on the event row, so its committed value is
+    // a reliable signal that the outer transaction has landed.
+    const NEW_URL = 'https://example.com/tx-deferred-update';
+
+    const observedRows: { eventId: string; externalUrl: string | null }[] = [];
+
+    const listener = async (payload: { event: { id: string } }) => {
+      // Non-transactional read. If the outer db.transaction has truly
+      // committed, this sees the updated external_url. If the emit fired
+      // inside the still-open outer transaction (the bug), this read is
+      // isolated from the uncommitted write and sees the old (null) value.
+      const row = await EventEntity.findOne({ where: { id: payload.event.id } });
+      observedRows.push({ eventId: payload.event.id, externalUrl: row?.external_url ?? null });
+    };
+    eventBus.on('eventUpdated', listener);
+
+    try {
+      await db.transaction(async (tx) => {
+        const updated = await eventService.updateEvent(
+          testAccount,
+          seeded.id,
+          { externalUrl: NEW_URL, urlPrompt: 'more_info' },
+          undefined,
+          tx,
+        );
+        expect(updated.externalUrl).toBe(NEW_URL);
+        // Inside the open transaction the bus must NOT have emitted yet.
+        expect(observedRows).toHaveLength(0);
+      });
+
+      // After commit, drain the microtask + setImmediate queue so the
+      // afterCommit -> setImmediate -> listener chain has a chance to run.
+      await new Promise(resolve => setImmediate(resolve));
+      // Yield once more for the async listener body to settle.
+      await new Promise(resolve => setTimeout(resolve, 10));
+
+      expect(observedRows).toHaveLength(1);
+      expect(observedRows[0].eventId).toBe(seeded.id);
+      // The listener saw the committed external_url, proving the transaction
+      // had committed before the emit reached it.
+      expect(observedRows[0].externalUrl).toBe(NEW_URL);
+    }
+    finally {
+      eventBus.off('eventUpdated', listener);
     }
   });
 
