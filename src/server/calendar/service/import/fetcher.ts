@@ -49,6 +49,7 @@ import {
   createIcsUrlValidator,
   isLocalhostIcsImportAllowed,
 } from '@/server/common/helper/test-ssrf-gate';
+import type { UrlValidatorFn } from '@/server/calendar/service/import/types';
 
 const logger = createLogger('calendar.import.fetcher');
 
@@ -166,9 +167,6 @@ export type AgentFactory = (pinnedIp: string) => Agent;
 
 /** DNS lookup returning the list of resolved IPs. */
 export type DnsLookupFn = (hostname: string) => Promise<string[]>;
-
-/** URL SSRF validator (scheme + IP-literal private check). */
-export type UrlValidatorFn = (url: string) => Promise<boolean>;
 
 /** IP literal SSRF check (true => private / unsafe). */
 export type IpValidatorFn = (ip: string) => boolean;
