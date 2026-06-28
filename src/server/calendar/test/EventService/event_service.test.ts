@@ -7,27 +7,7 @@ import { EventEntity, EventContentEntity } from '@/server/calendar/entity/event'
 import { EventCategoryAssignmentEntity } from '@/server/calendar/entity/event_category_assignment';
 import { EventRepostEntity } from '@/server/calendar/entity/event_repost';
 import EventService from '@/server/calendar/service/events';
-
-/**
- * Creates a mock ActivityPubInterface with getSharedEventStatusMap stubbed.
- *
- * @param sharedEventIds - Array of event IDs reposted to the calendar.
- * @param statusOverrides - Optional map of eventId -> 'auto'|'manual' to
- *   control the repostStatus resolution. Any id in sharedEventIds not in
- *   statusOverrides defaults to 'manual'.
- */
-function buildMockApInterface(
-  sharedEventIds: string[] = [],
-  statusOverrides: Record<string, 'auto' | 'manual'> = {},
-) {
-  const statusMap = new Map<string, 'auto' | 'manual'>();
-  for (const id of sharedEventIds) {
-    statusMap.set(id, statusOverrides[id] ?? 'manual');
-  }
-  return {
-    getSharedEventStatusMap: sinon.stub().resolves(statusMap),
-  } as any;
-}
+import { buildMockApInterface } from './helpers/ap-interface';
 
 describe('listEvents', () => {
   let service: EventService;

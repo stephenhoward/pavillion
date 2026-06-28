@@ -426,6 +426,50 @@ class EventService {
   }
 
   /**
+   * Resolve the repostStatus lookup for a calendar's reposted/shared events.
+   *
+   * Consults both repost sources for the calendar and builds a unified map
+   * keyed by event id, with this precedence:
+   *   - SharedEventEntity (via the AP interface) is authoritative and carries
+   *     the auto/manual distinction (derived from auto_posted). Non-UUID keys
+   *     (legacy AP-URL rows) are filtered out — see module-level UUID_REGEX.
+   *   - EventRepostEntity is a legacy direct-repost link with no auto/manual
+   *     distinction; entries present only there default to 'manual'.
+   * Events absent from the returned map are owned by the calendar; call sites
+   * report them as 'none' via `map.get(id) ?? 'none'`.
+   *
+   * A single pair of queries is issued per call regardless of event count.
+   *
+   * @param calendarId - the acting calendar whose repost status to resolve
+   * @returns map of event id -> 'auto' | 'manual' for reposted/shared events
+   */
+  private async resolveRepostStatusForCalendar(
+    calendarId: string,
+  ): Promise<Map<string, 'auto' | 'manual'>> {
+    const [reposts, sharedStatusMap] = await Promise.all([
+      EventRepostEntity.findAll({
+        where: { calendar_id: calendarId },
+        attributes: ['event_id'],
+      }),
+      this.activityPubInterface!.getSharedEventStatusMap(calendarId),
+    ]);
+
+    const repostStatusByEventId = new Map<string, 'auto' | 'manual'>();
+    for (const [eventId, status] of sharedStatusMap.entries()) {
+      if (UUID_REGEX.test(eventId)) {
+        repostStatusByEventId.set(eventId, status);
+      }
+    }
+    for (const r of reposts) {
+      if (!repostStatusByEventId.has(r.event_id)) {
+        repostStatusByEventId.set(r.event_id, 'manual');
+      }
+    }
+
+    return repostStatusByEventId;
+  }
+
+  /**
    * Retrieves events for the provided calendar.
    * Returns events that are either:
    * - Owned by the calendar (calendar_id matches)
@@ -441,37 +485,10 @@ class EventService {
     categories?: string[];
   }): Promise<CalendarEvent[]> {
 
-    // Get event IDs that are reposted or shared by this calendar.
-    //
-    // repostStatus resolution:
-    //   - SharedEventEntity (via AP interface) is the authoritative source and
-    //     carries auto_posted to distinguish 'auto' vs 'manual' shares.
-    //   - EventRepostEntity is a legacy direct-repost link with no auto/manual
-    //     distinction; when an event appears only there it is treated as 'manual'.
-    //   - Events not in either collection (owned by the calendar) report 'none'.
-    const reposts = await EventRepostEntity.findAll({
-      where: { calendar_id: calendar.id },
-      attributes: ['event_id'],
-    });
-    // Get shared event id -> status map via AP interface (derived from auto_posted).
-    // Filter to valid UUIDs for safety since old records may have AP URLs —
-    // see module-level UUID_REGEX.
-    const sharedStatusMap = await this.activityPubInterface!.getSharedEventStatusMap(calendar.id);
-
-    // Build a unified repostStatus map for O(1) lookup during mapping below.
-    // SharedEventEntity takes precedence (auto|manual); EventRepostEntity-only
-    // entries default to 'manual'.
-    const repostStatusByEventId = new Map<string, 'auto' | 'manual'>();
-    for (const [eventId, status] of sharedStatusMap.entries()) {
-      if (UUID_REGEX.test(eventId)) {
-        repostStatusByEventId.set(eventId, status);
-      }
-    }
-    for (const r of reposts) {
-      if (!repostStatusByEventId.has(r.event_id)) {
-        repostStatusByEventId.set(r.event_id, 'manual');
-      }
-    }
+    // Get the repostStatus lookup for events reposted or shared by this
+    // calendar (SharedEventEntity auto/manual, EventRepostEntity-only as
+    // 'manual', owned events as 'none'). See resolveRepostStatusForCalendar.
+    const repostStatusByEventId = await this.resolveRepostStatusForCalendar(calendar.id);
 
     // Query events owned by calendar OR reposted/shared by calendar.
     // Source set is the union of own events, event_repost links, and
@@ -1996,29 +2013,9 @@ class EventService {
     }
 
     // 8. Build authoritative repostStatus map for the acting calendar.
-    // Mirrors the resolution pattern in listEvents (~lines 285-307): consult
-    // SharedEventEntity (via AP interface) for auto/manual distinction, fall
-    // back to EventRepostEntity-only entries as 'manual'. A single pair of
-    // queries is issued per call regardless of event count.
-    const [reposts, sharedStatusMap] = await Promise.all([
-      EventRepostEntity.findAll({
-        where: { calendar_id: actingCalendarId },
-        attributes: ['event_id'],
-      }),
-      this.activityPubInterface!.getSharedEventStatusMap(actingCalendarId),
-    ]);
-
-    const repostStatusByEventId = new Map<string, 'auto' | 'manual'>();
-    for (const [eventId, status] of sharedStatusMap.entries()) {
-      if (UUID_REGEX.test(eventId)) {
-        repostStatusByEventId.set(eventId, status);
-      }
-    }
-    for (const r of reposts) {
-      if (!repostStatusByEventId.has(r.event_id)) {
-        repostStatusByEventId.set(r.event_id, 'manual');
-      }
-    }
+    // See resolveRepostStatusForCalendar for the SharedEventEntity-first,
+    // EventRepostEntity-fallback precedence.
+    const repostStatusByEventId = await this.resolveRepostStatusForCalendar(actingCalendarId);
 
     // 9. Return updated events with their categories (after successful commit).
     // repostStatus is populated authoritatively from the SharedEventEntity +
@@ -2159,32 +2156,16 @@ class EventService {
       throw error;
     }
 
-    // 7. Build authoritative repostStatus map for the acting calendar.
-    // Mirrors the resolution pattern in listEvents (~lines 285-307): consult
-    // SharedEventEntity (via AP interface) for auto/manual distinction, fall
-    // back to EventRepostEntity-only entries as 'manual'. Owned events default
-    // to 'none'.
-    const [reposts, sharedStatusMap] = await Promise.all([
-      EventRepostEntity.findAll({
-        where: { calendar_id: actingCalendarId },
-        attributes: ['event_id'],
-      }),
-      this.activityPubInterface!.getSharedEventStatusMap(actingCalendarId),
-    ]);
-
-    let resolvedStatus: 'none' | 'manual' | 'auto' = 'none';
-    const sharedEntry = sharedStatusMap.get(eventId);
-    if (sharedEntry && UUID_REGEX.test(eventId)) {
-      resolvedStatus = sharedEntry;
-    }
-    else if (reposts.some(r => r.event_id === eventId)) {
-      resolvedStatus = 'manual';
-    }
+    // 7. Build authoritative repostStatus map for the acting calendar and
+    // resolve this event's status from it. See resolveRepostStatusForCalendar
+    // for the SharedEventEntity-first, EventRepostEntity-fallback precedence;
+    // an event absent from the map is owned by the calendar and reports 'none'.
+    const repostStatusByEventId = await this.resolveRepostStatusForCalendar(actingCalendarId);
 
     // Return updated event (after successful commit) with authoritative
     // repostStatus populated.
     const updatedEvent = await this.getEventById(eventId);
-    updatedEvent.repostStatus = resolvedStatus;
+    updatedEvent.repostStatus = repostStatusByEventId.get(eventId) ?? 'none';
 
     return updatedEvent;
   }

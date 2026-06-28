@@ -14,32 +14,7 @@ import CalendarService from '@/server/calendar/service/calendar';
 import { BulkEventsNotFoundError, MixedCalendarEventsError, CategoriesNotFoundError } from '@/common/exceptions/calendar';
 import db from '@/server/common/entity/db';
 import type { Transaction } from 'sequelize';
-
-/**
- * Builds a stub ActivityPubInterface that returns the supplied SharedEventEntity
- * status map from getSharedEventStatusMap. Mirrors the helper used in
- * event_service.test.ts so authoritative repostStatus resolution can be driven
- * from the test inputs.
- */
-function buildMockApInterface(
-  sharedEventIds: string[] = [],
-  statusOverrides: Record<string, 'auto' | 'manual'> = {},
-  calendarIdsForEvent: Record<string, string[]> = {},
-) {
-  const statusMap = new Map<string, 'auto' | 'manual'>();
-  for (const id of sharedEventIds) {
-    statusMap.set(id, statusOverrides[id] ?? 'manual');
-  }
-  const getCalendarIdsForSharedEvent = sinon.stub();
-  // Default behavior: return [] for any event id not explicitly mapped.
-  getCalendarIdsForSharedEvent.callsFake(async (eventId: string) => {
-    return calendarIdsForEvent[eventId] ?? [];
-  });
-  return {
-    getSharedEventStatusMap: sinon.stub().resolves(statusMap),
-    getCalendarIdsForSharedEvent,
-  } as any;
-}
+import { buildMockApInterface } from './helpers/ap-interface';
 
 describe('EventService.bulkAssignCategories', () => {
   let service: EventService;
