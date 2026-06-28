@@ -26,6 +26,14 @@
   --pav-interactive-active: var(--pav-color-stone-600);
   --pav-interactive-disabled: var(--pav-color-stone-700);
 
+  /* Error / validation states (lighter reds + translucent fills read on the
+     dark stone surface; light values in _light.scss) */
+  --pav-border-error: var(--pav-color-red-300);
+  --pav-border-error-subtle: color-mix(in srgb, var(--pav-color-red-500) 30%, transparent);
+  --pav-surface-error: color-mix(in srgb, var(--pav-color-red-500) 10%, transparent);
+  --pav-text-error: var(--pav-color-red-300);
+  --pav-focus-ring-error: 0 0 0 3px color-mix(in srgb, var(--pav-color-red-400) 30%, transparent);
+
   /* Navigation Active States (Orange accent for dark mode) */
   --pav-nav-active-bg: var(--pav-color-interactive-active-bg);
   --pav-nav-active-text: var(--pav-color-interactive-active-text);
@@ -63,6 +71,14 @@
     --pav-interactive-hover: var(--pav-color-stone-700);
     --pav-interactive-active: var(--pav-color-stone-600);
     --pav-interactive-disabled: var(--pav-color-stone-700);
+
+    /* Error / validation states (lighter reds + translucent fills read on the
+       dark stone surface; light values in _light.scss) */
+    --pav-border-error: var(--pav-color-red-300);
+    --pav-border-error-subtle: color-mix(in srgb, var(--pav-color-red-500) 30%, transparent);
+    --pav-surface-error: color-mix(in srgb, var(--pav-color-red-500) 10%, transparent);
+    --pav-text-error: var(--pav-color-red-300);
+    --pav-focus-ring-error: 0 0 0 3px color-mix(in srgb, var(--pav-color-red-400) 30%, transparent);
 
     /* Navigation Active States (Orange accent for dark mode) */
     --pav-nav-active-bg: var(--pav-color-interactive-active-bg);

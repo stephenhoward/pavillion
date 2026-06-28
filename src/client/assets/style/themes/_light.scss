@@ -27,6 +27,16 @@
   --pav-interactive-active: var(--pav-color-stone-200);
   --pav-interactive-disabled: var(--pav-color-stone-300);
 
+  /* Error / validation states. Conventional red, deliberately distinct from
+     the purple --pav-color-error semantic token (reserved for moderation
+     severity). Used by form-field invalid states and error message boxes;
+     the dark variants live in _dark.scss so error styling adapts to theme. */
+  --pav-border-error: var(--pav-color-red-400);
+  --pav-border-error-subtle: var(--pav-color-red-200);
+  --pav-surface-error: var(--pav-color-red-50);
+  --pav-text-error: var(--pav-color-red-600);
+  --pav-focus-ring-error: 0 0 0 3px var(--pav-color-red-100);
+
   /* Navigation Active States (Orange accent) */
   --pav-nav-active-bg: var(--pav-color-interactive-active-bg);
   --pav-nav-active-text: var(--pav-color-interactive-active-text);

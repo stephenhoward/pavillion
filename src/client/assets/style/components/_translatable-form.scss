@@ -18,10 +18,11 @@
  *
  * Extracted per the stylesheet-playbook duplication threshold (>10 lines OR
  * 2+ uses). Uses semantic design tokens for color, spacing, and typography.
- * The one exception is the `--pav-color-red-*` palette references for the
- * required-indicator and validation states (rationale documented inline);
- * those raw tokens require an explicit dark-mode override at the bottom of
- * this file, matching the red-600/red-400 split used by _calendar-admin.scss.
+ * Validation states resolve through the theme-aware semantic error tokens
+ * (`--pav-border-error`, `--pav-focus-ring-error`, `--pav-text-error`). The
+ * one remaining raw `--pav-color-red-*` reference is the required-field
+ * indicator (rationale documented inline); it keeps an explicit dark-mode
+ * override at the bottom of this file since the raw palette is not theme-aware.
  */
 
 /* Container for the per-language form fields rendered inside a section card. */
@@ -113,24 +114,24 @@
  * Validation states. `--error` modifier paints the input border red and
  * keeps the red ring on focus to signal the invalid state through the
  * focus interaction. `.form-error` styles the message rendered below.
- * Both use the conventional red rather than `--pav-color-error` (purple,
- * reserved for moderation) — same exception documented above for
- * `.required-indicator` / `.form-required`.
+ * These use the semantic error tokens (conventional red, theme-aware) rather
+ * than `--pav-color-error` (purple, reserved for moderation); the tokens
+ * carry their own dark-mode variants, so no `@media` override is needed.
  */
 .translatable-form-fields .field-input--error {
-  border-color: var(--pav-color-red-400);
+  border-color: var(--pav-border-error);
 }
 
 .translatable-form-fields .field-input--error:focus-visible {
-  outline-color: var(--pav-color-red-500);
-  border-color: var(--pav-color-red-500);
-  box-shadow: 0 0 0 3px var(--pav-color-red-100);
+  outline-color: var(--pav-border-error);
+  border-color: var(--pav-border-error);
+  box-shadow: var(--pav-focus-ring-error);
 }
 
 .translatable-form-fields .form-error {
   margin: var(--pav-space-1) 0 0;
   font-size: var(--pav-font-size-xs);
-  color: var(--pav-color-red-600);
+  color: var(--pav-text-error);
 }
 
 /*
@@ -144,27 +145,15 @@
 }
 
 /*
- * Dark-mode override for the raw red palette refs above. The red palette
- * is not a semantic token, so dark adaptation does not happen automatically.
- * Lighter shades preserve readable contrast on the dark stone surface,
- * matching the red-600/red-400 split established by _calendar-admin.scss.
+ * Dark-mode override for the raw red required-indicator above. The red palette
+ * is not a semantic token, so dark adaptation does not happen automatically;
+ * the lighter shade preserves readable contrast on the dark stone surface.
+ * The validation states no longer need an override — they resolve through the
+ * theme-aware semantic error tokens.
  */
 @media (prefers-color-scheme: dark) {
   .translatable-form-fields .required-indicator,
   .translatable-form-fields .form-required {
-    color: var(--pav-color-red-400);
-  }
-
-  .translatable-form-fields .field-input--error {
-    border-color: var(--pav-color-red-300);
-  }
-
-  .translatable-form-fields .field-input--error:focus-visible {
-    outline-color: var(--pav-color-red-400);
-    border-color: var(--pav-color-red-400);
-  }
-
-  .translatable-form-fields .form-error {
     color: var(--pav-color-red-400);
   }
 }
