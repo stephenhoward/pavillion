@@ -11,6 +11,7 @@ import {
 } from '@/common/exceptions/import';
 import { formatVerificationRecord } from '@/server/calendar/service/import/hmac';
 import { hostnameFromUrl, passesPslCheck } from '@/server/calendar/service/import/hostname';
+import type { UrlValidatorFn } from '@/server/calendar/service/import/types';
 import { createLogger } from '@/server/common/helper/logger';
 import { validateUrlNotPrivate } from '@/server/common/helper/ip-validation';
 import { createIcsUrlValidator } from '@/server/common/helper/test-ssrf-gate';
@@ -68,9 +69,6 @@ export type DohFetch = (
   url: string,
   init?: { method?: string; headers?: Record<string, string> },
 ) => Promise<{ ok: boolean; status: number; text(): Promise<string> }>;
-
-/** URL SSRF validator (scheme + IP-literal private check). */
-export type UrlValidatorFn = (url: string) => Promise<boolean>;
 
 export interface DnsVerifierDependencies {
   fetchImpl?: DohFetch;

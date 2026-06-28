@@ -11,9 +11,9 @@ import {
   type RequestResponse,
   type AgentFactory,
   type DnsLookupFn,
-  type UrlValidatorFn,
   type IpValidatorFn,
 } from '@/server/calendar/service/import/fetcher';
+import type { UrlValidatorFn } from '@/server/calendar/service/import/types';
 import {
   ImportSourceFetchError,
   ImportSourceSsrfBlockedError,
