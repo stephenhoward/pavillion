@@ -5,13 +5,13 @@
  */
 
 import { Command } from 'commander';
-import { Sequelize } from 'sequelize-typescript';
 import config from 'config';
 import chalk from 'chalk';
 import { EventEmitter } from 'events';
-import { BackupEntity } from '../housekeeping/entity/backup.js';
-import JobQueueService from '../housekeeping/service/job-queue.js';
-import StorageService from '../housekeeping/service/storage.js';
+import db from '../common/entity/db.js';
+import HousekeepingInterface from '../housekeeping/interface/index.js';
+import EmailInterface from '../email/interface/index.js';
+import AccountsInterface from '../accounts/interface/index.js';
 import * as readline from 'readline';
 import Table from 'cli-table3';
 import { DateTime } from 'luxon';
@@ -21,41 +21,36 @@ import * as path from 'path';
 
 const execAsync = promisify(exec);
 
-// Global resources for cleanup
-let sequelize: Sequelize | null = null;
-let jobQueue: JobQueueService | null = null;
+/**
+ * Lazily-constructed housekeeping interface — the boundary the CLI uses for all
+ * backup and job-queue operations (DEC-003). The CLI does not reach into
+ * housekeeping services or entities directly.
+ */
+let housekeeping: HousekeepingInterface | null = null;
+
+function getHousekeeping(): HousekeepingInterface {
+  if (!housekeeping) {
+    housekeeping = new HousekeepingInterface(new EmailInterface(), new AccountsInterface());
+  }
+  return housekeeping;
+}
 
 /**
- * Initializes database connection for CLI commands.
+ * Initializes the database connection for CLI commands.
+ *
+ * Uses the shared `db` singleton (as the worker and the import:sync command do)
+ * so every entity's `addModels()` self-registration is picked up. SQL logging
+ * is already disabled via the `database.logging` config.
  */
-async function initDatabase(): Promise<Sequelize> {
+async function initDatabase(): Promise<void> {
   try {
-    const dbConfig: any = config.get('database');
-
-    const sequelizeInstance = new Sequelize({
-      ...dbConfig,
-      logging: false, // Disable SQL logging in CLI
-    });
-
-    sequelizeInstance.addModels([BackupEntity]);
-    await sequelizeInstance.authenticate();
+    await db.authenticate();
     console.log(chalk.green('[CLI] Database connected'));
-
-    return sequelizeInstance;
   }
   catch (error) {
     console.error(chalk.red('[CLI] Failed to connect to database:'), error);
     throw error;
   }
-}
-
-/**
- * Initializes job queue service for CLI commands.
- */
-async function initJobQueue(): Promise<JobQueueService> {
-  const jobQueueService = new JobQueueService();
-  await jobQueueService.start();
-  return jobQueueService;
 }
 
 /**
@@ -96,9 +91,8 @@ async function handleBackupCreate() {
     console.log(chalk.blue('[Backup] Queueing manual backup job...'));
 
     await initDatabase();
-    const queue = await initJobQueue();
 
-    const jobId = await queue.publish('backup:create', { type: 'manual' });
+    const jobId = await getHousekeeping().queueManualBackup();
 
     console.log(chalk.green('[Backup] ✓ Backup job queued successfully'));
     console.log(`Job ID: ${jobId}`);
@@ -118,8 +112,7 @@ async function handleBackupList() {
   try {
     await initDatabase();
 
-    const storageService = new StorageService();
-    const backups = await storageService.listBackups();
+    const backups = await getHousekeeping().listBackups();
 
     if (backups.length === 0) {
       console.log(chalk.yellow('No backups found.'));
@@ -139,8 +132,8 @@ async function handleBackupList() {
     });
 
     for (const backup of backups) {
-      const date = DateTime.fromJSDate(backup.created_at).toFormat('yyyy-MM-dd HH:mm:ss');
-      const size = formatBytes(backup.size_bytes);
+      const date = DateTime.fromJSDate(backup.createdAt).toFormat('yyyy-MM-dd HH:mm:ss');
+      const size = formatBytes(backup.sizeBytes);
       const verified = backup.verified ? chalk.green('✓') : chalk.red('✗');
 
       table.push([
@@ -169,14 +162,11 @@ async function handleBackupStatus() {
   try {
     await initDatabase();
 
-    const storageService = new StorageService();
-    const stats = await storageService.getStorageStats();
+    const housekeepingInterface = getHousekeeping();
+    const stats = await housekeepingInterface.getStorageStats();
 
     // Get last successful backup
-    const lastBackup = await BackupEntity.findOne({
-      where: { verified: true },
-      order: [['created_at', 'DESC']],
-    });
+    const lastBackup = await housekeepingInterface.getLastVerifiedBackup();
 
     console.log(chalk.bold('\n📊 Backup System Status\n'));
 
@@ -197,9 +187,9 @@ async function handleBackupStatus() {
     // Last backup
     console.log('\n' + chalk.cyan('Last Backup:'));
     if (lastBackup) {
-      const date = DateTime.fromJSDate(lastBackup.created_at).toFormat('yyyy-MM-dd HH:mm:ss');
+      const date = DateTime.fromJSDate(lastBackup.createdAt).toFormat('yyyy-MM-dd HH:mm:ss');
       console.log(`  Date: ${date}`);
-      console.log(`  Size: ${formatBytes(lastBackup.size_bytes)}`);
+      console.log(`  Size: ${formatBytes(lastBackup.sizeBytes)}`);
       console.log(`  Type: ${lastBackup.type}`);
       console.log(`  Category: ${lastBackup.category}`);
       console.log(`  Verified: ${lastBackup.verified ? chalk.green('✓') : chalk.red('✗')}`);
@@ -236,8 +226,7 @@ async function handleBackupRestore(backupId: string) {
   try {
     await initDatabase();
 
-    const storageService = new StorageService();
-    const backup = await storageService.getBackup(backupId);
+    const backup = await getHousekeeping().getBackup(backupId);
 
     if (!backup) {
       console.error(chalk.red(`[Backup] Backup not found: ${backupId}`));
@@ -249,11 +238,11 @@ async function handleBackupRestore(backupId: string) {
     console.log('This operation will replace the current database with the selected backup.');
     console.log(chalk.red('ALL CURRENT DATA WILL BE LOST!\n'));
 
-    const date = DateTime.fromJSDate(backup.created_at).toFormat('yyyy-MM-dd HH:mm:ss');
+    const date = DateTime.fromJSDate(backup.createdAt).toFormat('yyyy-MM-dd HH:mm:ss');
     console.log(chalk.cyan('Backup Details:'));
     console.log(`  ID: ${backup.id}`);
     console.log(`  Date: ${date}`);
-    console.log(`  Size: ${formatBytes(backup.size_bytes)}`);
+    console.log(`  Size: ${formatBytes(backup.sizeBytes)}`);
     console.log(`  Type: ${backup.type}`);
     console.log(`  Verified: ${backup.verified ? chalk.green('✓') : chalk.red('✗')}\n`);
 
@@ -272,7 +261,7 @@ async function handleBackupRestore(backupId: string) {
     // Perform restore
     console.log(chalk.blue('\n[Restore] Starting database restore...'));
 
-    const backupPath = path.join(backup.storage_location, backup.filename);
+    const backupPath = path.join(backup.storageLocation, backup.filename);
     const dbConfig: any = config.get('database');
 
     // Build pg_restore command
@@ -353,8 +342,9 @@ async function handleHousekeepingStatus() {
 async function handleImportSync(options: { sourceId?: string; calendarId?: string }): Promise<void> {
   try {
     // Use the shared db singleton so every entity's addModels() self-registration
-    // is picked up. The local `sequelize` var tracked here is only used by the
-    // other CLI subcommands; the import:sync path never touches it.
+    // is picked up. Imported dynamically here (rather than reusing the top-level
+    // `db` import) alongside the calendar entity modules below, so the import:sync
+    // path pulls in only what it needs.
     const dbModule = await import('../common/entity/db.js');
     await dbModule.default.authenticate();
     // Touch the import_source / import_run / calendar / event modules so their
@@ -460,13 +450,11 @@ async function main() {
     }
   }
   finally {
-    // Cleanup resources
-    if (jobQueue) {
-      await jobQueue.stop();
-    }
-    if (sequelize) {
-      await sequelize.close();
-    }
+    // Cleanup resources. close() is a no-op if the connection was never
+    // opened (e.g. for --help / --version), so it is safe to call
+    // unconditionally. The job queue used by `backup create` owns its own
+    // lifecycle inside HousekeepingInterface.queueManualBackup.
+    await db.close();
   }
 }
 

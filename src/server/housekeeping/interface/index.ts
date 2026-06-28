@@ -3,7 +3,7 @@ import { DateTime } from 'luxon';
 import EmailInterface from '@/server/email/interface';
 import AccountsInterface from '@/server/accounts/interface';
 import BackupService from '@/server/housekeeping/service/backup';
-import StorageService from '@/server/housekeeping/service/storage';
+import StorageService, { StorageStats } from '@/server/housekeeping/service/storage';
 import DiskMonitorService from '@/server/housekeeping/service/disk-monitor';
 import JobQueueService, { JobPublishOptions } from '@/server/housekeeping/service/job-queue';
 import { BackupEntity } from '@/server/housekeeping/entity/backup';
@@ -13,7 +13,47 @@ import { createLogger } from '@/server/common/helper/logger';
 // housekeeping boundary without reaching into the pg-boss adapter directly.
 export type { JobPublishOptions } from '@/server/housekeeping/service/job-queue';
 
+// Re-exported so callers (e.g. the management CLI) can type backup storage
+// stats without importing the StorageService internal.
+export type { StorageStats } from '@/server/housekeeping/service/storage';
+
 const logger = createLogger('housekeeping');
+
+/**
+ * Backup metadata exposed across the housekeeping domain boundary.
+ *
+ * A plain DTO projection of {@link BackupEntity} so callers (e.g. the
+ * management CLI) can read backup records without importing the Sequelize
+ * entity directly (DEC-003 domain boundary).
+ */
+export interface BackupRecord {
+  id: string;
+  filename: string;
+  sizeBytes: number;
+  createdAt: Date;
+  type: 'manual' | 'scheduled';
+  category: 'daily' | 'weekly' | 'monthly';
+  verified: boolean;
+  storageLocation: string;
+}
+
+/**
+ * Projects a BackupEntity onto the boundary-safe {@link BackupRecord} DTO.
+ * BIGINT `size_bytes` arrives as a string from some drivers, so it is coerced
+ * to a number here once rather than at every call site.
+ */
+function toBackupRecord(entity: BackupEntity): BackupRecord {
+  return {
+    id: entity.id,
+    filename: entity.filename,
+    sizeBytes: Number(entity.size_bytes),
+    createdAt: entity.created_at,
+    type: entity.type,
+    category: entity.category,
+    verified: entity.verified,
+    storageLocation: entity.storage_location,
+  };
+}
 
 /**
  * Status information returned by getStatus method
@@ -275,5 +315,82 @@ export default class HousekeepingInterface {
    */
   getAccountsInterface(): AccountsInterface {
     return this.accountsInterface;
+  }
+
+  /**
+   * Lists all recorded backups, newest first.
+   *
+   * Used by the management CLI's `backup list` command so it can render the
+   * backup inventory without importing the StorageService internal.
+   *
+   * @returns Backup records ordered by creation date descending
+   */
+  async listBackups(): Promise<BackupRecord[]> {
+    const backups = await this.storageService.listBackups();
+    return backups.map(toBackupRecord);
+  }
+
+  /**
+   * Gets a single backup by id.
+   *
+   * Used by the management CLI's `backup restore` command to look up the
+   * backup to restore.
+   *
+   * @param id - Backup id
+   * @returns The backup record, or null if no backup has that id
+   */
+  async getBackup(id: string): Promise<BackupRecord | null> {
+    const backup = await this.storageService.getBackup(id);
+    return backup ? toBackupRecord(backup) : null;
+  }
+
+  /**
+   * Gets the most recent verified backup.
+   *
+   * Used by the management CLI's `backup status` command. Distinct from the
+   * private `getLastBackupInfo` (which returns the trimmed shape the admin
+   * dashboard needs) — the CLI needs the full record.
+   *
+   * @returns The latest verified backup record, or null if none exist
+   */
+  async getLastVerifiedBackup(): Promise<BackupRecord | null> {
+    const lastBackup = await BackupEntity.findOne({
+      where: { verified: true },
+      order: [['created_at', 'DESC']],
+    });
+    return lastBackup ? toBackupRecord(lastBackup) : null;
+  }
+
+  /**
+   * Gets storage statistics for the backup volume.
+   *
+   * Used by the management CLI's `backup status` command.
+   *
+   * @returns Storage statistics including total size, count, and free space
+   */
+  async getStorageStats(): Promise<StorageStats> {
+    return this.storageService.getStorageStats();
+  }
+
+  /**
+   * Queues a one-off manual backup job and returns its id.
+   *
+   * Used by the management CLI's `backup create` command. Self-contained: it
+   * owns a short-lived JobQueueService for the publish rather than the
+   * long-lived queue wired in by `setJobQueueService`, because CLI invocations
+   * are separate processes that don't go through `HousekeepingDomain.initialize`.
+   * The queue is always stopped afterwards so the CLI process can exit cleanly.
+   *
+   * @returns The published job's id, or null if pg-boss returns none
+   */
+  async queueManualBackup(): Promise<string | null> {
+    const queue = new JobQueueService();
+    await queue.start();
+    try {
+      return await queue.publish('backup:create', { type: 'manual' });
+    }
+    finally {
+      await queue.stop();
+    }
   }
 }
