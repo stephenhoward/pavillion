@@ -246,6 +246,10 @@ describe('Token Refresh', () => {
 
     let authentication = makeAuth();
     sandbox.useFakeTimers();
+    // Seed a jwt so _refresh_login's jwt() guard passes and it actually
+    // fetches + stores a fresh token — without this the success path is
+    // never exercised and the assertion below passes trivially.
+    authentication.localStore.setItem('jwt', fake_jwt);
 
     let stub1 = sandbox.stub(authentication,"_set_token");
     const axios_get = sandbox.stub(axios, "get");
@@ -254,7 +258,7 @@ describe('Token Refresh', () => {
 
     let promise = authentication._refresh_login( Date.now() + 500)
       .then( () => {
-        expect( stub1.notCalled ).toBe(true);
+        expect( stub1.calledOnceWith(fake_jwt) ).toBe(true);
       });
     sandbox.clock.runAll();
 

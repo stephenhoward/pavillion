@@ -18,7 +18,7 @@ const { t } = useTranslation('system');
     </section>
     <footer class="logo">
       <a href="https://pavillion.social" target="_blank" rel="noopener noreferrer">
-        <div class="pavillion-logo"/> {{ t('powered_by') }}
+        <div class="pavillion-logo" aria-hidden="true"/> {{ t('powered_by') }}
       </a>
     </footer>
   </main>

@@ -77,9 +77,9 @@ onMounted(async () => {
   <div>
     <!-- Confirming state (initial + while the consume is in flight) -->
     <div v-if="state.render === 'confirming'" class="welcome-card">
-      <h3>{{ t('title') }}</h3>
+      <h2>{{ t('title') }}</h2>
       <p
-        class="status-message"
+        class="status-message confirm-message"
         role="status"
         aria-live="polite"
       >
@@ -89,12 +89,12 @@ onMounted(async () => {
 
     <!-- Success state -->
     <div v-else-if="state.render === 'success'" class="welcome-card">
-      <h3
+      <h2
         ref="resultHeading"
         tabindex="-1"
-      >{{ t('title') }}</h3>
+      >{{ t('title') }}</h2>
       <p
-        class="success-message"
+        class="success-message confirm-message"
         role="status"
         aria-live="polite"
       >{{ t('success_message') }}</p>
@@ -106,12 +106,12 @@ onMounted(async () => {
 
     <!-- Invalid / expired / failed state -->
     <div v-else class="welcome-card">
-      <h3
+      <h2
         ref="resultHeading"
         tabindex="-1"
-      >{{ t('title') }}</h3>
+      >{{ t('title') }}</h2>
       <p
-        class="invalid-message"
+        class="invalid-message confirm-message"
         role="alert"
       >{{ t('invalid_message') }}</p>
       <router-link
@@ -123,15 +123,7 @@ onMounted(async () => {
 </template>
 
 <style scoped lang="scss">
-h3 {
+h2 {
   margin-block-end: var(--pav-space-4);
-}
-
-.status-message,
-.success-message,
-.invalid-message {
-  font-size: var(--pav-font-size-base);
-  color: var(--pav-text-secondary);
-  margin-block-end: var(--pav-space-6);
 }
 </style>
