@@ -1,0 +1,17 @@
+{
+  "subject": "⚠️ Advertencia de espacio en disco: {{usagePercent}}% usado",
+  "title": "Advertencia de espacio en disco",
+  "greeting": "Hola, administrador:",
+  "alert_message": "Tu instancia de Pavillion ha alcanzado el umbral de advertencia de espacio en disco.",
+  "current_usage": "Uso actual del disco: {{usagePercent}}% ({{usedSpace}} de {{totalSpace}})",
+  "threshold": "Umbral de advertencia: {{threshold}}%",
+  "path": "Ruta supervisada: {{path}}",
+  "recommendations": "Acciones recomendadas:",
+  "action_1": "Revisa y elimina los archivos de copia de seguridad antiguos si ya no son necesarios",
+  "action_2": "Comprueba la configuración de la política de retención de copias de seguridad",
+  "action_3": "Considera ampliar la capacidad de almacenamiento",
+  "action_4": "Supervisa de cerca el uso del espacio en disco",
+  "footer_note": "Esta alerta se activó porque el uso del disco superó el {{threshold}}%. Recibirás una alerta crítica cuando el uso alcance el 90%.",
+  "signature": "Sistema de mantenimiento de Pavillion",
+  "footer_text": "Esta es una alerta automática. El espacio en disco se supervisa cada hora."
+}

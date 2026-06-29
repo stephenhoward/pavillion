@@ -1,0 +1,10 @@
+{
+  "subject": "Solicitud de cuenta recibida",
+  "title": "Confirmación de solicitud",
+  "greeting": "Hola,",
+  "acknowledgment_message": "Tu solicitud de cuenta en nuestro servicio ha sido recibida y está siendo revisada. Gracias por confirmar tu dirección de correo electrónico y por tu interés en unirte a nuestra comunidad.",
+  "review_message": "Nuestros administradores revisarán tu solicitud en breve. Se te notificará por correo electrónico cuando se haya tomado una decisión.",
+  "signature": "Gracias,",
+  "team_name": "El equipo",
+  "footer_text": "Este es un mensaje automático, por favor no respondas a este correo electrónico."
+}

@@ -1,0 +1,16 @@
+{
+  "subject": "Recordatorio: informe pendiente de revisión en tu calendario",
+  "title": "Recordatorio de revisión de informe",
+  "greeting": "Hola,",
+  "notification": "Un informe en tu calendario requiere tu atención. Si no se toman medidas, este informe se escalará automáticamente a un administrador de la instancia.",
+  "event_label": "Evento:",
+  "category_label": "Categoría del informe:",
+  "description_label": "Descripción:",
+  "time_remaining_label": "Tiempo restante antes del escalado automático:",
+  "action_message": "Por favor, revisa este informe desde el panel de informes de tu calendario y toma medidas antes de que se escale.",
+  "review_button": "Revisar informe",
+  "copy_link_text": "O copia este enlace:",
+  "signature": "Gracias,",
+  "team_name": "El equipo de Pavillion",
+  "footer_text": "Este es un mensaje automático, por favor no respondas a este correo electrónico."
+}

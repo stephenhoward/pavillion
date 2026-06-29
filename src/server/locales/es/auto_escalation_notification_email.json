@@ -1,0 +1,18 @@
+{
+  "subject": "Informe escalado automáticamente para revisión de administración",
+  "title": "Informe escalado automáticamente",
+  "greeting": "Hola,",
+  "notification": "Un informe ha sido escalado automáticamente a la revisión de administración porque el propietario del calendario no tomó medidas dentro del plazo requerido.",
+  "event_label": "Evento:",
+  "calendar_label": "Calendario:",
+  "category_label": "Categoría del informe:",
+  "description_label": "Descripción:",
+  "owner_label": "Propietario del calendario:",
+  "pending_since_label": "Pendiente desde:",
+  "action_message": "Por favor, revisa este informe y toma las medidas oportunas desde el panel de moderación de administración.",
+  "review_button": "Revisar informe",
+  "copy_link_text": "O copia este enlace:",
+  "signature": "Gracias,",
+  "team_name": "El equipo de Pavillion",
+  "footer_text": "Este es un mensaje automático, por favor no respondas a este correo electrónico."
+}

@@ -1,0 +1,14 @@
+{
+  "subject": "Intento de registro",
+  "title": "La cuenta ya está registrada",
+  "greeting": "Hola,",
+  "instructions": "Alguien intentó registrar una cuenta utilizando tu dirección de correo electrónico. Si fuiste tú, ya tienes una cuenta. Puedes iniciar sesión o restablecer tu contraseña mediante los enlaces que aparecen a continuación.",
+  "login_label": "Inicia sesión en tu cuenta:",
+  "login_button": "Iniciar sesión",
+  "forgot_password_text": "Si has olvidado tu contraseña, puedes restablecerla:",
+  "forgot_password_label": "Restablece tu contraseña:",
+  "forgot_password_button": "Restablecer contraseña",
+  "signature": "Gracias,",
+  "team_name": "El equipo de Pavillion",
+  "footer_text": "Este es un mensaje automático, por favor no respondas a este correo electrónico."
+}

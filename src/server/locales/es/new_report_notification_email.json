@@ -1,0 +1,13 @@
+{
+  "subject": "Nuevo informe sobre tu evento",
+  "title": "Nuevo informe de evento",
+  "greeting": "Hola,",
+  "notification": "Se ha enviado un nuevo informe sobre un evento de tu calendario.",
+  "event_label": "Evento:",
+  "category_label": "Categoría del informe:",
+  "report_count_label": "Total de informes para este evento:",
+  "action_message": "Por favor, revisa este informe y toma las medidas oportunas. Puedes gestionar los informes desde el panel de informes de tu calendario.",
+  "signature": "Gracias,",
+  "team_name": "El equipo de Pavillion",
+  "footer_text": "Este es un mensaje automático, por favor no respondas a este correo electrónico."
+}
