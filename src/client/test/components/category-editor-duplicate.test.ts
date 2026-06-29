@@ -25,6 +25,7 @@ const CATEGORY_TRANSLATIONS = {
   'management.error_update_category': 'Error updating category',
   'management.error_duplicate_name': 'A category with this name already exists',
   'management.add_language': 'Add Language',
+  'management.remove_language': 'Remove language',
 };
 
 /**
@@ -33,6 +34,16 @@ const CATEGORY_TRANSLATIONS = {
 function createNewCategory(name = ''): EventCategory {
   const category = new EventCategory('', 'calendar-123');
   category.addContent(new EventCategoryContent('en', name));
+  return category;
+}
+
+/**
+ * Create a test EventCategory with two languages (English + Spanish)
+ */
+function createBilingualCategory(): EventCategory {
+  const category = new EventCategory('cat-1', 'calendar-123');
+  category.addContent(new EventCategoryContent('en', 'Technology'));
+  category.addContent(new EventCategoryContent('es', 'Tecnología'));
   return category;
 }
 
@@ -149,6 +160,45 @@ describe('CategoryEditor — duplicate name validation', () => {
 
     expect(wrapper.emitted('saved')).toBeTruthy();
     expect(wrapper.emitted('close')).toBeTruthy();
+
+    wrapper.unmount();
+  });
+});
+
+describe('CategoryEditor — language removal wiring', () => {
+  beforeAll(async () => {
+    await i18next.init({
+      lng: 'en',
+      resources: {
+        en: {
+          categories: CATEGORY_TRANSLATIONS,
+        },
+      },
+    });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('drops the removed language from the category when its remove button is clicked', async () => {
+    const category = createBilingualCategory();
+
+    const wrapper = mountEditor(category);
+    await flushPromises();
+
+    // One remove-language button per language field (rendered because the
+    // category has more than one language). Order follows getLanguages():
+    // [en, es]; click the second to remove the non-default language.
+    const removeButtons = wrapper.findAll('.remove-language-button');
+    expect(removeButtons).toHaveLength(2);
+    await removeButtons[1].trigger('click');
+    await flushPromises();
+
+    // The onLanguageRemoved hook should have dropped 'es' content from the
+    // category entity via entity.dropContent.
+    expect(category.getLanguages()).toEqual(['en']);
+    expect(category.getLanguages()).not.toContain('es');
 
     wrapper.unmount();
   });
