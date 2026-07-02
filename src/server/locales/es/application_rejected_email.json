@@ -1,0 +1,9 @@
+{
+  "subject": "Sobre tu solicitud de cuenta",
+  "title": "Estado de la solicitud de cuenta",
+  "greeting": "Hola,",
+  "application_rejected_message": "Gracias por tu interés en unirte a nuestro servicio. Tras una cuidadosa revisión de tu solicitud, lamentamos informarte de que no podemos aprobar tu solicitud de cuenta en este momento.",
+  "signature": "Atentamente,",
+  "team_name": "El equipo",
+  "footer_text": "Este es un mensaje automático, por favor no respondas a este correo electrónico."
+}

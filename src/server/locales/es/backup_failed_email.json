@@ -1,0 +1,18 @@
+{
+  "subject": "❌ Copia de seguridad fallida: copia {{backupType}} de {{filename}}",
+  "title": "Trabajo de copia de seguridad fallido",
+  "greeting": "Hola, administrador:",
+  "alert_message": "Un trabajo de copia de seguridad de Pavillion ha fallado y no se pudo completar.",
+  "backup_type": "Tipo de copia de seguridad: {{backupType}}",
+  "filename": "Nombre de archivo de la copia de seguridad: {{filename}}",
+  "error_message": "Detalles del error: {{errorMessage}}",
+  "occurred_at": "Hora del fallo: {{occurredAt}}",
+  "recommendations": "Acciones recomendadas:",
+  "action_1": "Revisa los detalles del error anteriores para conocer la causa del fallo",
+  "action_2": "Verifica que el destino de la copia de seguridad tenga suficiente espacio en disco y permisos de escritura",
+  "action_3": "Consulta los registros de la aplicación para obtener contexto adicional",
+  "action_4": "Vuelve a ejecutar la copia de seguridad manualmente una vez resuelto el problema subyacente",
+  "footer_note": "Los fallos repetidos pueden indicar un problema de configuración o de infraestructura que requiere atención.",
+  "signature": "Sistema de mantenimiento de Pavillion",
+  "footer_text": "Esta es una alerta automática. Los trabajos de copia de seguridad se supervisan en cada ejecución programada o manual."
+}

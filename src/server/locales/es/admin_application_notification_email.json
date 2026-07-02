@@ -1,0 +1,13 @@
+{
+  "subject": "Nueva solicitud de cuenta pendiente de revisión",
+  "title": "Nueva solicitud de cuenta",
+  "greeting": "Hola,",
+  "notification": "Se ha confirmado una nueva solicitud de cuenta y está pendiente de la revisión de un administrador.",
+  "applicant_email_label": "Correo electrónico del solicitante:",
+  "action_message": "Por favor, revisa esta solicitud desde la cola de solicitudes de administración y toma las medidas oportunas.",
+  "review_button": "Revisar solicitudes",
+  "copy_link_text": "O copia este enlace:",
+  "signature": "Gracias,",
+  "team_name": "El equipo de Pavillion",
+  "footer_text": "Este es un mensaje automático, por favor no respondas a este correo electrónico."
+}

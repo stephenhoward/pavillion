@@ -1,0 +1,13 @@
+{
+  "subject": "Verificación de registro de cuenta",
+  "title": "Verifica tu cuenta",
+  "greeting": "Hola,",
+  "instructions": "Gracias por registrarte. Para verificar tu cuenta, haz clic en el botón que aparece a continuación o copia y pega el enlace en tu navegador:",
+  "button": "Verificar cuenta",
+  "copy_link_text": "O copia este enlace:",
+  "verification_code": "Código de verificación",
+  "expiry_notice": "Este enlace de verificación caducará en 24 horas.",
+  "signature": "Gracias,",
+  "team_name": "El equipo de Pavillion",
+  "footer_text": "Este es un mensaje automático, por favor no respondas a este correo electrónico."
+}

@@ -1,0 +1,17 @@
+{
+  "subject": "🚨 CRÍTICO: espacio en disco al {{usagePercent}}%",
+  "title": "Alerta CRÍTICA de espacio en disco",
+  "greeting": "Hola, administrador:",
+  "alert_message": "URGENTE: tu instancia de Pavillion ha alcanzado el umbral CRÍTICO de espacio en disco. Se requiere actuar de inmediato para evitar fallos del sistema.",
+  "current_usage": "Uso actual del disco: {{usagePercent}}% ({{usedSpace}} de {{totalSpace}})",
+  "threshold": "Umbral crítico: {{threshold}}%",
+  "path": "Ruta supervisada: {{path}}",
+  "urgent_actions": "Acciones INMEDIATAS requeridas:",
+  "action_1": "Elimina los archivos de copia de seguridad antiguos de inmediato",
+  "action_2": "Amplía la capacidad de almacenamiento lo antes posible",
+  "action_3": "Revisa todos los elementos que consumen espacio en disco",
+  "action_4": "Considera deshabilitar temporalmente las copias de seguridad automáticas hasta liberar espacio",
+  "warning_message": "El sistema puede volverse inestable o fallar con capacidades de disco superiores al 95%. Es probable que las operaciones de copia de seguridad fallen sin suficiente espacio libre.",
+  "signature": "Sistema de mantenimiento de Pavillion",
+  "footer_text": "Esta es una alerta automática CRÍTICA. Se requiere la intervención inmediata de un administrador."
+}

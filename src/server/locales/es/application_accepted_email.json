@@ -1,0 +1,13 @@
+{
+  "subject": "Tu solicitud de cuenta ha sido aprobada",
+  "title": "Solicitud aprobada",
+  "greeting": "Hola,",
+  "application_accepted_message": "Nos complace informarte de que tu solicitud de cuenta ha sido aprobada. Estamos encantados de darte la bienvenida a nuestra comunidad.",
+  "complete_registration_instruction": "Para completar tu registro y configurar tu cuenta, haz clic en el botón que aparece a continuación o copia y pega el enlace en tu navegador:",
+  "complete_registration_button": "Completar registro",
+  "copy_link_text": "O copia este enlace:",
+  "link_expiry_notice": "Este enlace caducará en 24 horas. Si no completas tu registro dentro de ese plazo, es posible que tengas que ponerte en contacto con el servicio de asistencia.",
+  "signature": "Gracias,",
+  "team_name": "El equipo",
+  "footer_text": "Este es un mensaje automático, por favor no respondas a este correo electrónico."
+}

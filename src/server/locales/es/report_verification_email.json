@@ -1,0 +1,15 @@
+{
+  "subject": "Verifica tu informe de evento",
+  "title": "Verifica tu informe de evento",
+  "greeting": "Hola,",
+  "instructions": "Recientemente enviaste un informe sobre el evento que se indica a continuación. Para completar tu informe, verifica tu dirección de correo electrónico haciendo clic en el botón que aparece a continuación.",
+  "event_label": "Evento:",
+  "category_label": "Categoría del informe:",
+  "button": "Verificar mi informe",
+  "copy_link_text": "O copia este enlace:",
+  "expiry_notice": "Este enlace de verificación caducará en 24 horas.",
+  "ignore_message": "Si no enviaste este informe, puedes ignorar este mensaje de forma segura.",
+  "signature": "Gracias,",
+  "team_name": "El equipo de Pavillion",
+  "footer_text": "Este es un mensaje automático, por favor no respondas a este correo electrónico."
+}

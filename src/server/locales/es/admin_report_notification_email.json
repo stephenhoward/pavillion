@@ -1,0 +1,18 @@
+{
+  "subject": "[{{priority}}] Informe de administración sobre tu evento",
+  "title": "Notificación de informe de administración",
+  "greeting": "Hola,",
+  "notification": "Un administrador ha creado un informe sobre un evento de tu calendario. Por favor, revísalo y toma medidas con prontitud.",
+  "event_label": "Evento:",
+  "calendar_label": "Calendario:",
+  "category_label": "Categoría del informe:",
+  "description_label": "Descripción:",
+  "priority_label": "Prioridad:",
+  "deadline_label": "Fecha límite:",
+  "action_message": "Por favor, revisa este informe desde el panel de informes de tu calendario y toma las medidas oportunas antes de la fecha límite.",
+  "review_button": "Revisar informe",
+  "copy_link_text": "O copia este enlace:",
+  "signature": "Gracias,",
+  "team_name": "El equipo de Pavillion",
+  "footer_text": "Este es un mensaje automático, por favor no respondas a este correo electrónico."
+}

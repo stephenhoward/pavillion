@@ -1,0 +1,12 @@
+{
+  "subject": "Confirma tu dirección de correo electrónico",
+  "title": "Confirma tu correo electrónico",
+  "greeting": "Hola,",
+  "body_intro": "Por favor, confirma tu dirección de correo electrónico para continuar con tu solicitud de cuenta. Haz clic en el botón que aparece a continuación o copia el enlace en tu navegador.",
+  "cta_label": "Confirmar mi correo electrónico",
+  "copy_link_text": "Si el botón no funciona, copia y pega este enlace en tu navegador:",
+  "expiration_notice": "Este enlace caduca en 7 días.",
+  "signature": "Gracias,",
+  "team_name": "El equipo",
+  "footer_text": "Este es un mensaje automático, por favor no respondas a este correo electrónico."
+}
