@@ -1467,6 +1467,70 @@ describe('NotificationEventHandlers', () => {
       expect(activity!.object_label).toBe('Community Hub');
     });
 
+    it('Flag handler falls back to the owning calendar name when the event exists but has an empty title (Branch C)', async () => {
+      // Branch C of resolveReportLabel: getEventById RESOLVES (no throw) but
+      // the event carries no populated title across any language, so
+      // displayName('') === '' and the event-first path falls through. With
+      // a non-null calendarId the handler then resolves the owning calendar's
+      // name. This is the documented "federated Flag against a remote event
+      // whose title row exists locally but is empty" case — distinct from the
+      // lookup-throws fallback above, which enters the catch block instead.
+      const [adminA] = await seedAccounts(1, 'flag-label-branchc');
+      getInstanceAdminsStub.resolves([adminA]);
+
+      const calendarId = uuidv4();
+      const eventId = uuidv4();
+      const reportId = uuidv4();
+      // Event resolves but has no content rows -> displayName('') === ''.
+      getEventByIdStub.withArgs(eventId).resolves(new CalendarEvent());
+      getCalendarStub.withArgs(calendarId).resolves(makeCalendar(calendarId, 'en', 'Community Hub'));
+
+      await emit('moderation:report:flagged', {
+        reportId,
+        eventId,
+        calendarId,
+        origin: 'local',
+      });
+
+      const activity = await NotificationActivityEntity.findOne({
+        where: { verb: 'Flag', object_id: reportId },
+      });
+      expect(activity!.object_label).toBe('Community Hub');
+      // The calendar fallback was consulted because the event title was
+      // empty — not because the event lookup threw.
+      expect(getCalendarStub.calledWith(calendarId)).toBe(true);
+    });
+
+    it('Flag handler falls back to "Report" when both the event and calendar lookups throw (non-null calendarId)', async () => {
+      // Double-failure path: the event lookup throws AND the calendar
+      // fallback lookup throws, with a non-null calendarId. The handler must
+      // still produce the generic, non-empty Report fallback rather than
+      // surfacing the error or persisting an empty label. The existing
+      // "both lookups fail" test below exercises the calendarId === null
+      // short-circuit; this one exercises the non-null double-throw tail.
+      const [adminA] = await seedAccounts(1, 'flag-label-doublefail');
+      getInstanceAdminsStub.resolves([adminA]);
+
+      const calendarId = uuidv4();
+      const eventId = uuidv4();
+      const reportId = uuidv4();
+      getEventByIdStub.withArgs(eventId).rejects(new Error('event lookup down'));
+      getCalendarStub.withArgs(calendarId).rejects(new Error('calendar lookup down'));
+
+      await emit('moderation:report:flagged', {
+        reportId,
+        eventId,
+        calendarId,
+        origin: 'local',
+      });
+
+      const activity = await NotificationActivityEntity.findOne({
+        where: { verb: 'Flag', object_id: reportId },
+      });
+      expect(activity!.object_label).toBe('Report');
+      expect(getCalendarStub.calledWith(calendarId)).toBe(true);
+    });
+
     it('Flag handler falls back to "Report" when both event and calendar lookups fail (admin report against remote event)', async () => {
       const [adminA] = await seedAccounts(1, 'flag-label-null');
       getInstanceAdminsStub.resolves([adminA]);

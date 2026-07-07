@@ -615,10 +615,15 @@ describe('NotificationService.recordActivity', () => {
         actor: { kind: 'remote_actor', uri: 'https://example.org/users/alice' },
         object: { type: 'report', id: uuidv4(), label: 'Flagged event title' },
         audience: { kind: 'role', role: 'instance-admins' },
-        // A hostile caller cannot pre-load this — Flag discards the
-        // caller-supplied display name entirely. Asserted here to pin the
-        // separation between the two code paths.
-        actorDisplayName: 'attacker-supplied',
+        // Supply an `i18n:`-prefixed value — the exact shape the scrub
+        // blanks on every non-Flag path. The Flag path discards the
+        // caller-supplied display name entirely and computes its own
+        // `i18n:flag_actor_remote{host:...}` token from the actor URI, and
+        // that legitimate token must NOT be routed through the scrub. If a
+        // refactor ever applied `scrubReservedI18nPrefix` to the Flag
+        // anonymizer's output, the assertion below would observe '' instead
+        // of the token — pinning the separation between the two code paths.
+        actorDisplayName: 'i18n:flag_actor_remote{host:victim.example}',
       });
 
       const inserted = activityCreateStub.firstCall.args[0];
