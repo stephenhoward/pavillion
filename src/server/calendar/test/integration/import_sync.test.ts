@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import sinon from 'sinon';
 import { EventEmitter } from 'events';
+import { Op } from 'sequelize';
 import type { VEvent, DateWithTimeZone } from 'node-ical';
 
 import { Account } from '@/common/model/account';
@@ -390,6 +391,27 @@ describe('SyncService integration', () => {
         // rejects. No new EventEntity rows should survive on the test calendar.
         const rowsAfter = await EventEntity.count({ where: { calendar_id: testCalendar.id } });
         expect(rowsAfter).toBe(rowsBefore);
+
+        // Snapshot-delta equality alone could be masked by a coincidental
+        // deletion (rollback fails, leaking 2 rows, while an unrelated 2 rows
+        // vanish). Add a UID-scoped leak assertion targeting the exact events
+        // the failed run would have created. Post-pv-picz, the import UID lives
+        // on the EventImportOriginEntity sibling table, so we detect leaks
+        // there and confirm no EventEntity survives for any leaked origin row.
+        const orphanUids = ['orphan-a@example.test', 'orphan-b@example.test'];
+        const leakedOrigins = await EventImportOriginEntity.findAll({
+          where: {
+            import_source_id: source.id,
+            external_uid: { [Op.in]: orphanUids },
+          },
+        });
+        expect(leakedOrigins).toHaveLength(0);
+
+        const leakedEventIds = leakedOrigins.map(o => o.event_id);
+        const leakedEvents = leakedEventIds.length
+          ? await EventEntity.findAll({ where: { id: { [Op.in]: leakedEventIds } } })
+          : [];
+        expect(leakedEvents).toHaveLength(0);
       }
       finally {
         stub.restore();

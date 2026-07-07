@@ -209,6 +209,50 @@ describe('EventService transaction propagation', () => {
       expect(scheduleSaveStub.firstCall.args[0]).toEqual({ transaction: fakeTx });
     });
 
+    it('threads transaction into reconcileSchedules update of a matching existing schedule', async () => {
+      // reconcileSchedules branch (A): an incoming schedule carrying an id that
+      // matches an existing positive row is updated in place via
+      // scheduleEntity.update(values, { transaction: tx }). The sibling B/C
+      // branches (create new / destroy absent) are covered above; this asserts
+      // the update branch threads the caller's transaction (events.ts:1360).
+      const findStub = sandbox.stub(EventEntity, 'findByPk');
+      sandbox.stub(EventEntity.prototype, 'save').resolves();
+      const entity = EventEntity.build({
+        id: EVENT_ID,
+        calendar_id: CALENDAR_ID,
+      });
+      findStub.resolves(entity);
+
+      // Existing positive schedule whose id is also present in the payload →
+      // update branch (so it is not destroyed and not re-created).
+      const existingSchedule = EventScheduleEntity.build({
+        id: 'existing-schedule-id',
+        event_id: EVENT_ID,
+        is_exclusion: false,
+      });
+      sandbox.stub(EventScheduleEntity, 'findAll').resolves([existingSchedule]);
+      const scheduleUpdateStub = sandbox
+        .stub(existingSchedule, 'update')
+        .resolves(existingSchedule as any);
+
+      await service.updateEvent(
+        account,
+        EVENT_ID,
+        {
+          schedules: [
+            { id: 'existing-schedule-id', start: '2026-05-01T10:00:00Z', end: '2026-05-01T11:00:00Z' },
+          ],
+        },
+        { source: 'user' },
+        fakeTx,
+      );
+
+      // The matched row's in-place update participates in the caller's tx.
+      expect(scheduleUpdateStub.calledOnce).toBe(true);
+      // .update(values, options) — options is the 2nd positional arg.
+      expect(scheduleUpdateStub.firstCall.args[1]).toEqual({ transaction: fakeTx });
+    });
+
     it('omits transaction when no tx is supplied (backwards compatible)', async () => {
       const findStub = sandbox.stub(EventEntity, 'findByPk');
       const eventSaveStub = sandbox.stub(EventEntity.prototype, 'save').resolves();
