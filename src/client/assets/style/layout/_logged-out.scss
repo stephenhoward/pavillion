@@ -95,6 +95,18 @@
       text-align: center;
       margin-block-end: var(--pav-space-10);
     }
+
+    /* Status / result message shared by the logged_out confirm pages
+       (email_confirm, apply_confirm). The dedicated `.confirm-message` hook
+       keeps this scoped to those two pages so the typography (notably the
+       bottom margin) never leaks into the other `.welcome-card` success
+       messages, which carry their own treatment. Semantic theme tokens
+       auto-adapt to light/dark — no manual @media toggle. */
+    .confirm-message {
+      font-size: var(--pav-font-size-base);
+      color: var(--pav-text-secondary);
+      margin-block-end: var(--pav-space-6);
+    }
   }
 
   /* Login info panel (aside within two-column login card) */
