@@ -124,38 +124,58 @@ describe('Cancel / Restore Event Occurrence API (date-based)', () => {
   });
 
   beforeEach(async () => {
-    // Weekly: 2026-05-04..2026-07-13 gives ~10 weekly occurrences.
+    // Fixtures are anchored relative to the current date. The
+    // upcoming-occurrences endpoint returns only occurrences *after now*, so a
+    // hardcoded absolute window silently ages out: once wall-clock time passes
+    // most of the span, the assertions starve for future occurrences and CI
+    // fails on a date, not a code change (see pv-p73e). Deriving the windows
+    // from `now` keeps a healthy count of past *and* future occurrences on
+    // every run.
+    const fmt = (d: DateTime) => d.toFormat("yyyy-MM-dd'T'HH:mm:ss");
+    // Pin the recurrence anchor day to ≤28 so monthly/yearly strides never skip
+    // a short month regardless of which calendar day the suite runs on.
+    const anchorDay = Math.min(DateTime.now().day, 28);
+    const anchor = DateTime.now().set({
+      day: anchorDay, hour: 10, minute: 0, second: 0, millisecond: 0,
+    });
+
+    // Weekly: 4 weeks in the past through 20 weeks ahead → ~20 future weekly
+    // occurrences, well clear of the endpoint's default limit of 10.
+    const weeklyStart = anchor.minus({ weeks: 4 });
     recurringEventId = await createRecurringEventViaApi(
       ownerToken,
       ownerCalendarId,
-      '2026-05-04T10:00:00',
-      '2026-07-13T10:00:00',
-      '2026-05-04T11:00:00',
+      fmt(weeklyStart),
+      fmt(anchor.plus({ weeks: 20 })),
+      fmt(weeklyStart.plus({ hours: 1 })),
       'Weekly Standup',
       'weekly',
     );
 
-    // Monthly: 2026-05-04..2028-05-04 ~25 monthly occurrences. Spans beyond
-    // the ~6-month materialization window so a correctly-implemented
-    // listUpcomingOccurrences must compute from the RRuleSet directly.
+    // Monthly: 1 month in the past through ~24 months ahead → ~23 future
+    // occurrences. Spans beyond the ~6-month materialization window so a
+    // correct listUpcomingOccurrences must compute from the RRuleSet directly.
+    const monthlyStart = anchor.minus({ months: 1 });
     monthlyEventId = await createRecurringEventViaApi(
       ownerToken,
       ownerCalendarId,
-      '2026-05-04T10:00:00',
-      '2028-05-04T10:00:00',
-      '2026-05-04T11:00:00',
+      fmt(monthlyStart),
+      fmt(anchor.plus({ months: 24 })),
+      fmt(monthlyStart.plus({ hours: 1 })),
       'Monthly Review',
       'monthly',
     );
 
-    // Yearly: 2026-05-04..2035-05-04 = 10 yearly occurrences. Well beyond the
-    // materialization horizon — the motivating case for this endpoint.
+    // Yearly: 1 month in the past through ~9 years ahead. The first *upcoming*
+    // occurrence is ~11 months out — beyond the materialization horizon, which
+    // is the motivating case for this endpoint.
+    const yearlyStart = anchor.minus({ months: 1 });
     yearlyEventId = await createRecurringEventViaApi(
       ownerToken,
       ownerCalendarId,
-      '2026-05-04T10:00:00',
-      '2035-05-04T10:00:00',
-      '2026-05-04T11:00:00',
+      fmt(yearlyStart),
+      fmt(yearlyStart.plus({ years: 9 })),
+      fmt(yearlyStart.plus({ hours: 1 })),
       'Yearly Retrospective',
       'yearly',
     );
