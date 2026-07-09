@@ -5,6 +5,7 @@ import {
   IMPORT_SOURCE_VERIFICATION_STATES,
   IMPORT_SOURCE_VERIFICATION_TYPES,
   IMPORT_SOURCE_LAST_STATUSES,
+  IMPORT_SOURCE_TYPES,
 } from '@/common/model/import_source';
 
 describe('ImportSource', () => {
@@ -14,7 +15,10 @@ describe('ImportSource', () => {
 
       expect(model.id).toBe('');
       expect(model.calendarId).toBe('');
+      // A bare source defaults to a url source with no uploaded filename.
+      expect(model.sourceType).toBe('url');
       expect(model.url).toBe('');
+      expect(model.originalFilename).toBeNull();
       expect(model.enabled).toBe(true);
       // verificationType is null until the owner picks a verification method
       // through the verify-ownership wizard.
@@ -63,6 +67,10 @@ describe('ImportSource', () => {
         'rate_limited',
       ]);
     });
+
+    it('exposes source types (discriminator)', () => {
+      expect(IMPORT_SOURCE_TYPES).toEqual(['url', 'file']);
+    });
   });
 
   describe('toObject()', () => {
@@ -84,7 +92,9 @@ describe('ImportSource', () => {
       expect(obj).toEqual({
         id: 'src-1',
         calendarId: 'cal-1',
+        sourceType: 'url',
         url: 'https://example.com/cal.ics',
+        originalFilename: null,
         enabled: false,
         verificationType: null,
         verificationState: 'verified',
@@ -162,6 +172,9 @@ describe('ImportSource', () => {
       const model = ImportSource.fromObject({});
 
       expect(model.enabled).toBe(true);
+      // Absent source discriminator falls back to the url source shape.
+      expect(model.sourceType).toBe('url');
+      expect(model.originalFilename).toBeNull();
       // null is the "no method chosen yet" sentinel; fromObject preserves
       // that rather than falling back to a concrete method.
       expect(model.verificationType).toBeNull();
@@ -204,6 +217,51 @@ describe('ImportSource', () => {
       const roundTripped = ImportSource.fromObject(original.toObject());
 
       expect(roundTripped.toObject()).toEqual(original.toObject());
+    });
+  });
+
+  describe("'file' source variant", () => {
+    // Every other test constructs a default 'url' source with a null
+    // originalFilename. A file-upload source is the non-default case: it
+    // carries source_type='file', a null url, and a non-null originalFilename.
+    function makeFileModel(): ImportSource {
+      const model = new ImportSource('file-1', 'cal-1', null);
+      model.sourceType = 'file';
+      model.originalFilename = 'exported-events.ics';
+      return model;
+    }
+
+    it('toObject serializes the file discriminator and originalFilename', () => {
+      const obj = makeFileModel().toObject();
+
+      expect(obj.sourceType).toBe('file');
+      expect(obj.originalFilename).toBe('exported-events.ics');
+      expect(obj.url).toBeNull();
+    });
+
+    it('fromObject deserializes the file discriminator and originalFilename', () => {
+      const model = ImportSource.fromObject({
+        id: 'file-1',
+        calendarId: 'cal-1',
+        sourceType: 'file',
+        url: null,
+        originalFilename: 'exported-events.ics',
+      });
+
+      expect(model.sourceType).toBe('file');
+      expect(model.originalFilename).toBe('exported-events.ics');
+      expect(model.url).toBeNull();
+    });
+
+    it('round-trips a file source through toObject/fromObject', () => {
+      const original = makeFileModel();
+
+      const roundTripped = ImportSource.fromObject(original.toObject());
+
+      expect(roundTripped.toObject()).toEqual(original.toObject());
+      expect(roundTripped.sourceType).toBe('file');
+      expect(roundTripped.originalFilename).toBe('exported-events.ics');
+      expect(roundTripped.url).toBeNull();
     });
   });
 });

@@ -2,9 +2,10 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { Sequelize } from 'sequelize-typescript';
 import { QueryTypes } from 'sequelize';
 import path from 'path';
+import fs from 'fs';
 import { randomUUID } from 'crypto';
 
-import { runMigrations } from '@/server/common/migrations/runner';
+import { runMigrations, createMigrationRunner } from '@/server/common/migrations/runner';
 
 /**
  * Integration tests for bead pv-1qcp.1.1 (ICS import foundation schema),
@@ -403,6 +404,172 @@ describe('ICS import foundation migrations', () => {
       );
 
       expect(row.verification_type).toBe('rel-me');
+    });
+  });
+
+  describe('file-upload columns (0039)', () => {
+    it('adds source_type and original_filename and drops NOT NULL on url', async () => {
+      const qi = sequelize.getQueryInterface();
+      const desc = await qi.describeTable('import_source') as Record<string, { allowNull: boolean }>;
+
+      expect(desc).toHaveProperty('source_type');
+      expect(desc).toHaveProperty('original_filename');
+      // source_type is required, original_filename is optional.
+      expect(desc.source_type.allowNull).toBe(false);
+      expect(desc.original_filename.allowNull).toBe(true);
+      // url is now nullable so file-backed sources (no live URL) can exist.
+      expect(desc.url.allowNull).toBe(true);
+    });
+
+    it('defaults source_type to url when a new row omits the column', async () => {
+      const calendarId = await seedCalendar();
+      const sourceId = randomUUID();
+      await sequelize.query(
+        `INSERT INTO import_source
+           (id, calendar_id, url, enabled, verification_state, created_at, updated_at)
+         VALUES (?, ?, ?, 1, 'unverified', datetime('now'), datetime('now'))`,
+        { replacements: [sourceId, calendarId, 'https://example.test/default-source-type.ics'] },
+      );
+
+      const [row] = await sequelize.query<{ source_type: string }>(
+        `SELECT source_type FROM import_source WHERE id = ?`,
+        { replacements: [sourceId], type: QueryTypes.SELECT },
+      );
+      expect(row.source_type).toBe('url');
+    });
+
+    it('accepts a file source with a null url and an original_filename', async () => {
+      const calendarId = await seedCalendar();
+      const sourceId = randomUUID();
+      await sequelize.query(
+        `INSERT INTO import_source
+           (id, calendar_id, url, source_type, original_filename, enabled,
+            verification_state, created_at, updated_at)
+         VALUES (?, ?, NULL, 'file', ?, 1, 'verified', datetime('now'), datetime('now'))`,
+        { replacements: [sourceId, calendarId, 'my-events.ics'] },
+      );
+
+      const [row] = await sequelize.query<{
+        url: string | null;
+        source_type: string;
+        original_filename: string | null;
+      }>(
+        `SELECT url, source_type, original_filename FROM import_source WHERE id = ?`,
+        { replacements: [sourceId], type: QueryTypes.SELECT },
+      );
+      expect(row.url).toBeNull();
+      expect(row.source_type).toBe('file');
+      expect(row.original_filename).toBe('my-events.ics');
+    });
+
+    it('preserves the calendar_id ON DELETE CASCADE across the nullability change', async () => {
+      // Relaxing url to nullable rebuilds import_source on SQLite; the
+      // migration must re-assert the calendar cascade so deleting a calendar
+      // still removes its import sources (guards against Sequelize's
+      // describeTable dropping ON DELETE actions during the rebuild).
+      const calendarId = await seedCalendar();
+      const sourceId = await seedImportSource(calendarId);
+
+      await sequelize.query('DELETE FROM calendar WHERE id = ?', { replacements: [calendarId] });
+
+      const [row] = await sequelize.query<{ count: number }>(
+        `SELECT COUNT(*) AS count FROM import_source WHERE id = ?`,
+        { replacements: [sourceId], type: QueryTypes.SELECT },
+      );
+      expect(row.count).toBe(0);
+    });
+  });
+
+  describe('file-upload migration backfill and reversibility (0039)', () => {
+    // A dedicated Sequelize instance that stops one migration short of 0039 so
+    // we can seed a pre-existing url source and observe the backfill/rollback
+    // behaviour of the file-upload migration in isolation.
+    let staged: Sequelize;
+
+    beforeEach(async () => {
+      staged = new Sequelize({ dialect: 'sqlite', storage: ':memory:', logging: false });
+      await staged.query('PRAGMA foreign_keys = ON');
+    });
+
+    afterEach(async () => {
+      await staged.close();
+    });
+
+    async function migrateTo(prefix: string): Promise<void> {
+      // Resolve the umzug migration name by prefix (robust to whether the
+      // runner retains the `.ts` extension in the migration name) and apply
+      // every pending migration up to and including it.
+      const runner = createMigrationRunner(staged, migrationsDir);
+      const pending = await runner.pending();
+      const target = pending.find((m) => m.name.startsWith(prefix));
+      if (!target) {
+        throw new Error(`No pending migration matching prefix ${prefix}`);
+      }
+      await runner.up({ to: target.name });
+    }
+
+    async function migrateAll(): Promise<void> {
+      const runner = createMigrationRunner(staged, migrationsDir);
+      await runner.up();
+    }
+
+    function migrationFile(prefix: string): string {
+      const file = fs
+        .readdirSync(migrationsDir)
+        .find((f) => f.startsWith(prefix) && f.endsWith('.ts'));
+      if (!file) {
+        throw new Error(`No migration file matching prefix ${prefix}`);
+      }
+      return file;
+    }
+
+    it('backfills pre-existing rows with source_type=url', async () => {
+      // Run every migration up to (but not including) the file-upload one.
+      await migrateTo('0038');
+
+      const accountId = randomUUID();
+      const calendarId = randomUUID();
+      const sourceId = randomUUID();
+      await staged.query(
+        `INSERT INTO account (id, username, email, createdAt, updatedAt)
+         VALUES (?, ?, ?, datetime('now'), datetime('now'))`,
+        { replacements: [accountId, `user-${accountId.slice(0, 8)}`, `${accountId.slice(0, 8)}@example.test`] },
+      );
+      await staged.query(
+        `INSERT INTO calendar (id, url_name, languages, createdAt, updatedAt)
+         VALUES (?, ?, ?, datetime('now'), datetime('now'))`,
+        { replacements: [calendarId, `cal-${calendarId.slice(0, 8)}`, 'en'] },
+      );
+      await staged.query(
+        `INSERT INTO import_source
+           (id, calendar_id, url, enabled, verification_state, created_at, updated_at)
+         VALUES (?, ?, ?, 1, 'unverified', datetime('now'), datetime('now'))`,
+        { replacements: [sourceId, calendarId, 'https://legacy.example.test/feed.ics'] },
+      );
+
+      // Now apply the file-upload migration on top of the seeded legacy row.
+      await migrateAll();
+
+      const [row] = await staged.query<{ source_type: string; url: string }>(
+        `SELECT source_type, url FROM import_source WHERE id = ?`,
+        { replacements: [sourceId], type: QueryTypes.SELECT },
+      );
+      expect(row.source_type).toBe('url');
+      // The pre-existing url value survives the column changes.
+      expect(row.url).toBe('https://legacy.example.test/feed.ics');
+    });
+
+    it('rolls back cleanly: down removes new columns and restores NOT NULL on url', async () => {
+      await migrateAll();
+
+      const m0039 = (await import(path.join(migrationsDir, migrationFile('0039')))).default;
+      await m0039.down({ context: staged });
+
+      const qi = staged.getQueryInterface();
+      const desc = await qi.describeTable('import_source') as Record<string, { allowNull: boolean }>;
+      expect(desc).not.toHaveProperty('source_type');
+      expect(desc).not.toHaveProperty('original_filename');
+      expect(desc.url.allowNull).toBe(false);
     });
   });
 

@@ -131,6 +131,32 @@ describe('ImportSourceEntity', () => {
     });
   });
 
+  describe('file-upload fields (sourceType / originalFilename)', () => {
+    it('round-trips sourceType and originalFilename through fromModel -> toModel', () => {
+      const id = uuidv4();
+      const calendarId = uuidv4();
+      const model = new ImportSource(id, calendarId, null);
+      model.sourceType = 'file';
+      model.originalFilename = 'exported-events.ics';
+
+      const entity = ImportSourceEntity.fromModel(model);
+      expect(entity.source_type).toBe('file');
+      expect(entity.original_filename).toBe('exported-events.ics');
+      expect(entity.url ?? null).toBeNull();
+
+      const roundTrip = entity.toModel();
+      expect(roundTrip.sourceType).toBe('file');
+      expect(roundTrip.originalFilename).toBe('exported-events.ics');
+      expect(roundTrip.url ?? null).toBeNull();
+    });
+
+    it('defaults sourceType to url and originalFilename to null on a bare model', () => {
+      const model = new ImportSource();
+      expect(model.sourceType).toBe('url');
+      expect(model.originalFilename).toBeNull();
+    });
+  });
+
   describe('verification_type column defaults', () => {
     it('does not stamp a verification_type when not specified on build', () => {
       // The column is nullable with no DB default. An entity built without

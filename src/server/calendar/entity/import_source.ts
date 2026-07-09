@@ -15,6 +15,7 @@ import {
 import {
   ImportSource,
   ImportSourceLastStatus,
+  ImportSourceType,
   ImportSourceVerificationState,
   ImportSourceVerificationType,
 } from '@/common/model/import_source';
@@ -50,8 +51,15 @@ class ImportSourceEntity extends Model {
   @Column({ type: DataType.UUID, allowNull: false })
   declare calendar_id: string;
 
-  @Column({ type: DataType.STRING(2048), allowNull: false })
-  declare url: string;
+  @Default('url')
+  @Column({ type: DataType.ENUM('url', 'file'), allowNull: false })
+  declare source_type: ImportSourceType;
+
+  @Column({ type: DataType.STRING(2048), allowNull: true })
+  declare url: string | null;
+
+  @Column({ type: DataType.STRING(255), allowNull: true })
+  declare original_filename: string | null;
 
   @Default(true)
   @Column({ type: DataType.BOOLEAN, allowNull: false })
@@ -120,6 +128,8 @@ class ImportSourceEntity extends Model {
    */
   toModel(): ImportSource {
     const model = new ImportSource(this.id, this.calendar_id, this.url);
+    model.sourceType = this.source_type;
+    model.originalFilename = this.original_filename;
     model.enabled = this.enabled;
     model.verificationType = this.verification_type;
     model.verificationState = this.verification_state;
@@ -146,7 +156,9 @@ class ImportSourceEntity extends Model {
     return ImportSourceEntity.build({
       id: model.id,
       calendar_id: model.calendarId,
+      source_type: model.sourceType,
       url: model.url,
+      original_filename: model.originalFilename,
       enabled: model.enabled,
       verification_type: model.verificationType,
       verification_state: model.verificationState,
