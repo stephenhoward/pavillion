@@ -1,4 +1,5 @@
-import express, { Request, Response, Application } from 'express';
+import express, { Request, Response, Application, NextFunction } from 'express';
+import multer from 'multer';
 
 import { Account } from '@/common/model/account';
 import { ImportSourceVerificationType } from '@/common/model/import_source';
@@ -14,6 +15,11 @@ import {
   ImportSourceFetchError,
   ImportSourceSsrfBlockedError,
   ImportSourceParseError,
+  ImportSourceFileEmptyError,
+  ImportSourceFileTooLargeError,
+  ImportSourceFileBadFormatError,
+  ImportSourceFileTooManyEventsError,
+  ImportSourceCapExceededError,
 } from '@/common/exceptions/import';
 import ExpressHelper from '@/server/common/helper/express';
 import { logError } from '@/server/common/helper/error-logger';
@@ -22,8 +28,39 @@ import {
   limitImportSourceVerifyBySource,
   limitImportSourceSyncBySource,
 } from '@/server/common/middleware/rate-limiters';
+import { MAX_BODY_BYTES, ALLOWED_CONTENT_TYPES } from '../../service/import/fetcher';
 import CalendarInterface from '../../interface';
 import type { SyncResult } from '../../service/import/sync';
+
+/**
+ * Hard byte cap for an uploaded .ics file. Reuses the ICS URL fetcher's
+ * {@link MAX_BODY_BYTES} (10 MiB) so the transport, service, and fetch paths
+ * share one ceiling instead of maintaining independent copies.
+ */
+const FILE_MAX_BYTES = MAX_BODY_BYTES;
+
+/**
+ * Content types an .ics upload may declare. Reuses the fetcher's
+ * {@link ALLOWED_CONTENT_TYPES} allowlist. Many exporters mislabel the file as
+ * `application/octet-stream`, so a `.ics` filename extension is accepted as an
+ * alternative (the service still enforces the `BEGIN:VCALENDAR` signature sniff,
+ * so a lie about the type cannot smuggle a non-ICS payload through).
+ */
+const ALLOWED_ICS_MIME_TYPES = ALLOWED_CONTENT_TYPES;
+
+/**
+ * Multer instance for the file-upload route: in-memory storage (the buffer is
+ * handed straight to the ICS pipeline, never written to disk), a single file,
+ * and the 10 MiB transport cap. Mirrors the media-domain upload pattern
+ * (src/server/media/api/v1/media.ts).
+ */
+const icsUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: FILE_MAX_BYTES,
+    files: 1,
+  },
+});
 
 /**
  * API routes for per-calendar ICS import sources.
@@ -69,6 +106,18 @@ class ImportSourceRoutes {
       ExpressHelper.loggedInOnly,
       limitWidgetConfigByAccount,
       this.createSource.bind(this),
+    );
+    router.post(
+      '/calendars/:calendarId/import-sources/file',
+      ExpressHelper.loggedInOnly,
+      limitWidgetConfigByAccount,
+      // Authorize BEFORE multer buffers up to 10 MiB into memory. A non-editor
+      // (or a bad calendar id) is rejected 400/403/404 here so an unauthorized
+      // caller cannot force a large in-memory buffer for a calendar they do
+      // not own. The service layer re-checks access as defense in depth.
+      this.assertFileUploadAccess.bind(this),
+      this.uploadIcsFile.bind(this),
+      this.createSourceFromFile.bind(this),
     );
     router.get(
       '/calendars/:calendarId/import-sources/:id',
@@ -156,6 +205,149 @@ class ImportSourceRoutes {
     catch (error) {
       this.handleError(res, error, 'Error creating import source');
     }
+  }
+
+  /**
+   * Pre-buffer authorization for the file-upload route. Runs BEFORE the multer
+   * intake middleware so an unauthorized caller (bad UUID, missing calendar, or
+   * non-editor) is rejected without multer buffering the up-to-10-MiB body into
+   * memory. HTTP concerns only: validate the UUID shape, then confirm editor
+   * access via the calendar interface. The service layer repeats these checks
+   * as defense in depth (a non-HTTP caller — e.g. a CLI importer — bypasses this
+   * middleware entirely).
+   */
+  async assertFileUploadAccess(req: Request, res: Response, next: NextFunction): Promise<void> {
+    const account = req.user as Account;
+    const { calendarId } = req.params;
+
+    if (!ExpressHelper.isValidUUID(calendarId)) {
+      res.status(400).json({
+        error: 'invalid calendarId format',
+        errorName: 'ValidationError',
+      });
+      return;
+    }
+
+    try {
+      const calendar = await this.service.getCalendar(calendarId);
+      if (!calendar) {
+        res.status(404).json({
+          error: 'Calendar not found',
+          errorName: 'CalendarNotFoundError',
+        });
+        return;
+      }
+
+      const canModify = await this.service.userCanModifyCalendar(account, calendar);
+      if (!canModify) {
+        res.status(403).json({
+          error: 'Permission denied',
+          errorName: 'CalendarEditorPermissionError',
+        });
+        return;
+      }
+
+      next();
+    }
+    catch (error) {
+      this.handleError(res, error, 'Error authorizing import file upload');
+    }
+  }
+
+  /**
+   * Multipart intake middleware for the file-upload route. Wraps multer's
+   * `single('file')` so its own errors (notably the 10 MiB `LIMIT_FILE_SIZE`
+   * transport cap) are translated to the sanitized `{ error, errorName }`
+   * envelope instead of bubbling to the default Express error handler as a 500.
+   * On success it populates `req.file` and continues to the handler.
+   */
+  uploadIcsFile(req: Request, res: Response, next: NextFunction): void {
+    icsUpload.single('file')(req, res, (err: unknown) => {
+      if (err) {
+        if (err instanceof multer.MulterError && err.code === 'LIMIT_FILE_SIZE') {
+          res.status(400).json({
+            error: 'Uploaded file exceeds the size limit',
+            errorName: 'ImportSourceFileTooLargeError',
+          });
+          return;
+        }
+        res.status(400).json({
+          error: 'Invalid file upload',
+          errorName: 'ValidationError',
+        });
+        return;
+      }
+      next();
+    });
+  }
+
+  /**
+   * POST /api/v1/calendars/:calendarId/import-sources/file
+   *
+   * Create a file-backed import source from a multipart .ics upload and run
+   * its events through the shared ICS pipeline. HTTP concerns only — UUID
+   * shape, file presence, and the content-type / extension allowlist. All
+   * business validation (editor access, size, VCALENDAR sniff, per-calendar
+   * cap, parse) lives in the service. On success returns 201 `{ source, run }`.
+   */
+  async createSourceFromFile(req: Request, res: Response): Promise<void> {
+    const account = req.user as Account;
+    const { calendarId } = req.params;
+    const file = req.file;
+
+    if (!ExpressHelper.isValidUUID(calendarId)) {
+      res.status(400).json({
+        error: 'invalid calendarId format',
+        errorName: 'ValidationError',
+      });
+      return;
+    }
+
+    if (!file || !file.buffer || file.buffer.length === 0) {
+      res.status(400).json({
+        error: 'No file uploaded',
+        errorName: 'ImportSourceFileEmptyError',
+      });
+      return;
+    }
+
+    if (!this.isAllowedIcsUpload(file)) {
+      res.status(400).json({
+        error: 'File is not an ICS calendar',
+        errorName: 'ImportSourceFileBadFormatError',
+      });
+      return;
+    }
+
+    try {
+      const { source, run } = await this.service.createImportSourceFromFile(
+        account,
+        calendarId,
+        file.buffer,
+        file.originalname,
+      );
+      res.status(201).json({
+        source: source.toObject(),
+        run: toImportRunSummary(run, source.id),
+      });
+    }
+    catch (error) {
+      this.handleError(res, error, 'Error creating import source from file');
+    }
+  }
+
+  /**
+   * Accept an upload when its declared content type is in the ICS allowlist,
+   * or (defensively) when the filename ends in `.ics`. The service's
+   * `BEGIN:VCALENDAR` signature sniff is the real content gate; this is a
+   * cheap first filter on the transport-declared type.
+   */
+  private isAllowedIcsUpload(file: Express.Multer.File): boolean {
+    const mime = (file.mimetype ?? '').toLowerCase().split(';')[0].trim();
+    if (ALLOWED_ICS_MIME_TYPES.has(mime)) {
+      return true;
+    }
+    return (file.originalname ?? '').toLowerCase().endsWith('.ics');
   }
 
   /**
@@ -399,8 +591,33 @@ class ImportSourceRoutes {
       });
       return;
     }
-    if (error instanceof ImportSourceParseError) {
+    if (
+      error instanceof ImportSourceParseError
+      || error instanceof ImportSourceFileTooManyEventsError
+    ) {
+      // 422: the payload parsed but its event content is not acceptable — no
+      // usable VEVENTs (ParseError) or too many VEVENTs (TooManyEvents, a DoS
+      // bound). Distinct from the 400 malformed-file bucket below.
       res.status(422).json({
+        error: error.message,
+        errorName: error.name,
+      });
+      return;
+    }
+    // File-upload intake failures (pv-84da.1.4).
+    if (
+      error instanceof ImportSourceFileEmptyError
+      || error instanceof ImportSourceFileTooLargeError
+      || error instanceof ImportSourceFileBadFormatError
+    ) {
+      res.status(400).json({
+        error: error.message,
+        errorName: error.name,
+      });
+      return;
+    }
+    if (error instanceof ImportSourceCapExceededError) {
+      res.status(409).json({
         error: error.message,
         errorName: error.name,
       });

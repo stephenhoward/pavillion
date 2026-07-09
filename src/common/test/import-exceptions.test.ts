@@ -6,6 +6,11 @@ import {
   ImportSourceParseError,
   ImportSourceDnsVerificationError,
   ImportSourceVerifyRateLimitError,
+  ImportSourceFileEmptyError,
+  ImportSourceFileTooLargeError,
+  ImportSourceFileBadFormatError,
+  ImportSourceFileTooManyEventsError,
+  ImportSourceCapExceededError,
   IMPORT_DNS_NOT_FOUND,
   IMPORT_DNS_MISMATCH,
   IMPORT_DNS_RESOLVER_DISAGREEMENT,
@@ -16,6 +21,11 @@ import {
   IMPORT_PARSE_ERROR,
   IMPORT_NOT_FOUND,
   IMPORT_VERIFY_RATE_LIMITED,
+  IMPORT_FILE_EMPTY,
+  IMPORT_FILE_TOO_LARGE,
+  IMPORT_FILE_BAD_FORMAT,
+  IMPORT_FILE_TOO_MANY_EVENTS,
+  IMPORT_SOURCE_CAP_EXCEEDED,
 } from '@/common/exceptions/import';
 
 /**
@@ -36,6 +46,11 @@ const errorMap: Record<string, new (...args: never[]) => Error> = {
   ImportSourceParseError: ImportSourceParseError as unknown as new () => Error,
   ImportSourceDnsVerificationError: ImportSourceDnsVerificationError as unknown as new () => Error,
   ImportSourceVerifyRateLimitError: ImportSourceVerifyRateLimitError as unknown as new () => Error,
+  ImportSourceFileEmptyError: ImportSourceFileEmptyError as unknown as new () => Error,
+  ImportSourceFileTooLargeError: ImportSourceFileTooLargeError as unknown as new () => Error,
+  ImportSourceFileBadFormatError: ImportSourceFileBadFormatError as unknown as new () => Error,
+  ImportSourceFileTooManyEventsError: ImportSourceFileTooManyEventsError as unknown as new () => Error,
+  ImportSourceCapExceededError: ImportSourceCapExceededError as unknown as new () => Error,
 };
 
 describe('ICS import exceptions', () => {
@@ -137,6 +152,74 @@ describe('ICS import exceptions', () => {
     });
   });
 
+  describe('ImportSourceFileEmptyError', () => {
+    it('uses a fixed sanitized message and has errorName set', () => {
+      const err = new ImportSourceFileEmptyError();
+      expect(err.name).toBe('ImportSourceFileEmptyError');
+      expect(err.message).toBe(IMPORT_FILE_EMPTY);
+      expect(err).toBeInstanceOf(Error);
+      expect(err).toBeInstanceOf(ImportSourceFileEmptyError);
+    });
+  });
+
+  describe('ImportSourceFileTooLargeError', () => {
+    it('uses a fixed sanitized message', () => {
+      const err = new ImportSourceFileTooLargeError();
+      expect(err.name).toBe('ImportSourceFileTooLargeError');
+      expect(err.message).toBe(IMPORT_FILE_TOO_LARGE);
+    });
+
+    it('keeps the raw byte length in details only, never in the message', () => {
+      const err = new ImportSourceFileTooLargeError({ bytes: 11534336 });
+      expect(err.message).toBe(IMPORT_FILE_TOO_LARGE);
+      expect(err.message).not.toContain('11534336');
+      expect(err.details).toEqual({ bytes: 11534336 });
+    });
+  });
+
+  describe('ImportSourceFileBadFormatError', () => {
+    it('uses a fixed sanitized message', () => {
+      const err = new ImportSourceFileBadFormatError();
+      expect(err.name).toBe('ImportSourceFileBadFormatError');
+      expect(err.message).toBe(IMPORT_FILE_BAD_FORMAT);
+    });
+
+    it('keeps the rejection reason in details only', () => {
+      const err = new ImportSourceFileBadFormatError({ reason: 'missing_vcalendar_signature' });
+      expect(err.message).toBe(IMPORT_FILE_BAD_FORMAT);
+      expect(err.details).toEqual({ reason: 'missing_vcalendar_signature' });
+    });
+  });
+
+  describe('ImportSourceFileTooManyEventsError', () => {
+    it('uses a fixed sanitized message', () => {
+      const err = new ImportSourceFileTooManyEventsError();
+      expect(err.name).toBe('ImportSourceFileTooManyEventsError');
+      expect(err.message).toBe(IMPORT_FILE_TOO_MANY_EVENTS);
+    });
+
+    it('keeps parsed/limit counts in details only, never in the message', () => {
+      const err = new ImportSourceFileTooManyEventsError({ parsedEvents: 20000, maxEvents: 10000 });
+      expect(err.message).toBe(IMPORT_FILE_TOO_MANY_EVENTS);
+      expect(err.message).not.toContain('20000');
+      expect(err.details).toEqual({ parsedEvents: 20000, maxEvents: 10000 });
+    });
+  });
+
+  describe('ImportSourceCapExceededError', () => {
+    it('uses a fixed sanitized message', () => {
+      const err = new ImportSourceCapExceededError();
+      expect(err.name).toBe('ImportSourceCapExceededError');
+      expect(err.message).toBe(IMPORT_SOURCE_CAP_EXCEEDED);
+    });
+
+    it('keeps the cap value in details only', () => {
+      const err = new ImportSourceCapExceededError({ cap: 10 });
+      expect(err.message).toBe(IMPORT_SOURCE_CAP_EXCEEDED);
+      expect(err.details).toEqual({ cap: 10 });
+    });
+  });
+
   describe('cross-HTTP round-trip serialization', () => {
     const cases: Array<{ name: string; err: Error }> = [
       { name: 'ImportSourceNotFoundError', err: new ImportSourceNotFoundError() },
@@ -145,6 +228,11 @@ describe('ICS import exceptions', () => {
       { name: 'ImportSourceParseError', err: new ImportSourceParseError() },
       { name: 'ImportSourceDnsVerificationError', err: new ImportSourceDnsVerificationError(IMPORT_DNS_NOT_FOUND) },
       { name: 'ImportSourceVerifyRateLimitError', err: new ImportSourceVerifyRateLimitError() },
+      { name: 'ImportSourceFileEmptyError', err: new ImportSourceFileEmptyError() },
+      { name: 'ImportSourceFileTooLargeError', err: new ImportSourceFileTooLargeError() },
+      { name: 'ImportSourceFileBadFormatError', err: new ImportSourceFileBadFormatError() },
+      { name: 'ImportSourceFileTooManyEventsError', err: new ImportSourceFileTooManyEventsError() },
+      { name: 'ImportSourceCapExceededError', err: new ImportSourceCapExceededError() },
     ];
 
     for (const { name, err } of cases) {

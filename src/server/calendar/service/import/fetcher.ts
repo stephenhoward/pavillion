@@ -66,11 +66,19 @@ export const MAX_BODY_BYTES = 10 * 1024 * 1024; // 10 MiB
 /** First-bytes sniff window for BEGIN:VCALENDAR signature. */
 export const SIGNATURE_SNIFF_BYTES = 256;
 
-/** Required signature at the start of the body. */
-const VCALENDAR_SIGNATURE = 'BEGIN:VCALENDAR';
+/**
+ * Required signature at the start of the body. Exported so the file-upload
+ * intake path (import_source_service.ts) shares one definition rather than
+ * re-declaring its own copy.
+ */
+export const VCALENDAR_SIGNATURE = 'BEGIN:VCALENDAR';
 
-/** Accepted content types (case-insensitive, parameter-stripped). */
-const ALLOWED_CONTENT_TYPES: ReadonlySet<string> = new Set([
+/**
+ * Accepted content types (case-insensitive, parameter-stripped). Exported so
+ * the multipart upload route (import_source.ts) reuses the same allowlist the
+ * URL fetcher enforces instead of maintaining a parallel copy.
+ */
+export const ALLOWED_CONTENT_TYPES: ReadonlySet<string> = new Set([
   'text/calendar',
   'text/x-calendar',
   'application/calendar',
@@ -81,6 +89,20 @@ const REJECTED_CONTENT_TYPES: ReadonlySet<string> = new Set([
   'text/html',
   'application/xhtml+xml',
 ]);
+
+/**
+ * True when the buffer's leading bytes begin with `BEGIN:VCALENDAR`, allowing a
+ * UTF-8 BOM or leading whitespace. Inspects only the first
+ * {@link SIGNATURE_SNIFF_BYTES} bytes. Shared by the URL fetch path (below) and
+ * the file-upload intake path so a payload that fails the sniff on one intake
+ * route fails it identically on the other.
+ */
+export function hasVcalendarSignature(buffer: Buffer): boolean {
+  const window = buffer
+    .subarray(0, Math.min(buffer.length, SIGNATURE_SNIFF_BYTES))
+    .toString('utf8');
+  return window.replace(/^﻿/, '').trimStart().startsWith(VCALENDAR_SIGNATURE);
+}
 
 /**
  * User-Agent string per privacy-advisor — no instance hostname.
@@ -429,12 +451,8 @@ export class Fetcher {
         //    `Content-Length` is not trusted.
         const body = await readBodyCapped(response.body, MAX_BODY_BYTES);
 
-        // 8. Signature sniff.
-        const signatureWindow = body
-          .subarray(0, Math.min(body.length, SIGNATURE_SNIFF_BYTES))
-          .toString('utf8');
-        // Allow a BOM or leading whitespace before BEGIN:VCALENDAR.
-        if (!signatureWindow.replace(/^﻿/, '').trimStart().startsWith(VCALENDAR_SIGNATURE)) {
+        // 8. Signature sniff (BOM / leading whitespace tolerant).
+        if (!hasVcalendarSignature(body)) {
           throw new ImportSourceFetchError({ reason: 'missing_vcalendar_signature' });
         }
 

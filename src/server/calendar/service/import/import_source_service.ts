@@ -20,6 +20,11 @@ import {
   ImportSourceNotFoundError,
   ImportSourceRelMeVerificationError,
   ImportSourceSsrfBlockedError,
+  ImportSourceParseError,
+  ImportSourceFileEmptyError,
+  ImportSourceFileTooLargeError,
+  ImportSourceFileBadFormatError,
+  ImportSourceCapExceededError,
   IMPORT_DNS_MISMATCH,
   IMPORT_RELME_HOSTNAME_MISMATCH,
   IMPORT_RELME_LINK_NOT_FOUND,
@@ -28,6 +33,7 @@ import {
   IMPORT_RELME_PSL_VIOLATION,
 } from '@/common/exceptions/import';
 import { ImportSourceEntity } from '@/server/calendar/entity/import_source';
+import db from '@/server/common/entity/db';
 import { isPrivateIP, validateUrlNotPrivate } from '@/server/common/helper/ip-validation';
 import { createIcsUrlValidator, isLocalhostIcsImportAllowed } from '@/server/common/helper/test-ssrf-gate';
 import { createLogger } from '@/server/common/helper/logger';
@@ -35,6 +41,7 @@ import CalendarService from '@/server/calendar/service/calendar';
 import { generateVerificationToken } from '@/server/calendar/service/import/hmac';
 import { hostnameFromUrl, passesPslCheck } from '@/server/calendar/service/import/hostname';
 import { DnsVerifier, VERIFICATION_VALIDITY_DAYS } from '@/server/calendar/service/import/dns-verifier';
+import { MAX_BODY_BYTES, hasVcalendarSignature } from '@/server/calendar/service/import/fetcher';
 import type SyncService from '@/server/calendar/service/import/sync';
 import type { SyncResult } from '@/server/calendar/service/import/sync';
 
@@ -58,6 +65,35 @@ const RELME_HEADERS_TIMEOUT_MS = 15_000;
 const RELME_BODY_TIMEOUT_MS = 30_000;
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+/**
+ * Hard byte cap for an uploaded .ics file. Reuses the ICS URL fetcher's
+ * {@link MAX_BODY_BYTES} (10 MiB) so the two intake paths share one ceiling
+ * rather than maintaining independent copies. The multer middleware also
+ * enforces this at the transport layer; the service re-checks the decoded
+ * buffer as defense in depth (callers other than the HTTP route — e.g. a
+ * future CLI importer — bypass multer).
+ */
+const FILE_MAX_BYTES = MAX_BODY_BYTES;
+
+/**
+ * Maximum VEVENTs accepted from a single uploaded file (DoS bound). A 10 MiB
+ * file of minimal VEVENTs can carry ~130k+ events; parsing is synchronous and
+ * CPU-bound and each event is an INSERT in one transaction, so an unbounded
+ * count is a denial-of-service lever. This is a product-tunable ceiling — raise
+ * it if a legitimate migration needs more, but never remove the bound. Applies
+ * to the FILE intake path only; URL sync passes no `maxEvents` and is unchanged.
+ */
+const MAX_EVENTS_PER_FILE_IMPORT = 10000;
+
+/**
+ * Maximum stored length of an uploaded file's original name. The
+ * `original_filename` column is VARCHAR(255); an over-length name would raise a
+ * raw DB error surfaced as a generic 500, so we truncate defensively before
+ * insert. Truncation (not rejection) keeps a cosmetic display field from
+ * failing an otherwise-valid import.
+ */
+const ORIGINAL_FILENAME_MAX_LENGTH = 255;
 
 /**
  * Promisified `dns.lookup` returning every resolved address. Used by the
@@ -211,6 +247,159 @@ class ImportSourceService {
     );
 
     return entity.toModel();
+  }
+
+  /**
+   * Create a file-backed import source from an uploaded .ics buffer and run
+   * its events through the shared ICS pipeline in a single transaction.
+   *
+   * Unlike {@link createSource} (which registers a live URL to be polled and
+   * requires a later DNS/rel-me ownership proof), a file source is created
+   * pre-verified: the uploader is importing into a calendar they already own,
+   * so there is no domain to prove. The row is stamped
+   * `verification_state='verified'` with a null `verification_type` and no
+   * expiry — file trust is permanent (spec field table).
+   *
+   * Intake is security-sensitive, so validation runs in a fixed order and
+   * fails closed on the first problem:
+   *   1. editor access on the calendar (403 CalendarEditorPermissionError /
+   *      404 CalendarNotFoundError)
+   *   2. non-empty buffer (400 {@link ImportSourceFileEmptyError})
+   *   3. 10 MiB size cap (400 {@link ImportSourceFileTooLargeError})
+   *   4. `BEGIN:VCALENDAR` signature sniff (400
+   *      {@link ImportSourceFileBadFormatError})
+   *   5. per-calendar source cap (409 {@link ImportSourceCapExceededError})
+   *
+   * Only after every guard passes is anything written. The source row insert
+   * and the {@link SyncService.processIcsBuffer} run share ONE transaction, so
+   * a malformed payload (or a file with zero usable events) rolls the source
+   * row back — a rejected upload never leaves an orphan source. `processIcsBuffer`
+   * captures parse failures as a run outcome rather than throwing, so we
+   * inspect the returned {@link SyncResult} and throw the mapping exception
+   * ourselves to trigger the rollback:
+   *   - `outcome === 'parse_error'`  → {@link ImportSourceFileBadFormatError} (400)
+   *   - parsed but zero usable events → {@link ImportSourceParseError} (422)
+   *
+   * @param account - The requesting account (must own or edit the calendar)
+   * @param calendarId - The calendar UUID
+   * @param buffer - The raw uploaded .ics bytes
+   * @param originalFilename - The upload's display name (stored for the list UI)
+   * @returns The persisted file source and the import run summary
+   * @throws CalendarNotFoundError, CalendarEditorPermissionError,
+   *   ImportSourceFileEmptyError, ImportSourceFileTooLargeError,
+   *   ImportSourceFileBadFormatError, ImportSourceCapExceededError,
+   *   ImportSourceParseError
+   */
+  async createSourceFromFile(
+    account: Account,
+    calendarId: string,
+    buffer: Buffer,
+    originalFilename: string,
+  ): Promise<{ source: ImportSource; run: SyncResult }> {
+    await this.assertEditorAccess(account, calendarId);
+
+    if (!buffer || buffer.length === 0) {
+      throw new ImportSourceFileEmptyError();
+    }
+
+    if (buffer.length > FILE_MAX_BYTES) {
+      throw new ImportSourceFileTooLargeError({ bytes: buffer.length });
+    }
+
+    if (!hasVcalendarSignature(buffer)) {
+      throw new ImportSourceFileBadFormatError({ reason: 'missing_vcalendar_signature' });
+    }
+
+    await this.assertUnderSourceCapForFile(calendarId);
+
+    if (!this.syncService) {
+      throw new Error('ImportSourceService.createSourceFromFile called without SyncService wiring');
+    }
+    const syncService = this.syncService;
+
+    // The original_filename column is VARCHAR(255); an over-length name would
+    // raise a raw DB error surfaced as a generic 500. Truncate defensively —
+    // the field is a cosmetic display label, so trimming it is preferable to
+    // failing an otherwise-valid import.
+    const storedFilename = (originalFilename ?? '').slice(0, ORIGINAL_FILENAME_MAX_LENGTH);
+
+    const startedAt = new Date();
+    const contentHash = crypto.createHash('sha256').update(buffer).digest('hex');
+    const id = uuidv4();
+
+    // Source insert + event pipeline share one transaction. Throwing inside it
+    // (malformed payload / no usable events) rolls the source row back with the
+    // event writes so a rejected upload leaves nothing behind.
+    const result = await db.transaction(async (tx) => {
+      const entity = await ImportSourceEntity.create(
+        {
+          id,
+          calendar_id: calendarId,
+          source_type: 'file',
+          url: null,
+          original_filename: storedFilename,
+          enabled: true,
+          verification_type: null,
+          verification_state: 'verified',
+          verified_at: startedAt,
+          verification_expires_at: null,
+          etag: null,
+          content_hash: contentHash,
+          last_fetched_at: startedAt,
+          last_status: 'ok',
+        },
+        { transaction: tx },
+      );
+
+      const run = await syncService.processIcsBuffer(
+        buffer,
+        entity,
+        {
+          dedupScope: 'calendar',
+          account,
+          startedAt,
+          // DoS bound for the file path only: reject a file whose VEVENT count
+          // exceeds the ceiling BEFORE the create loop, throwing inside this
+          // transaction so the source row rolls back. URL sync omits maxEvents.
+          maxEvents: MAX_EVENTS_PER_FILE_IMPORT,
+        },
+        tx,
+      );
+
+      if (run.outcome === 'parse_error') {
+        // The parser could not read the payload at all — treat as a bad file
+        // (400) and roll the source row back.
+        throw new ImportSourceFileBadFormatError({ reason: 'parse_error' });
+      }
+
+      const usableEvents =
+        run.eventsCreated
+        + run.eventsUpdated
+        + (run.eventsSkippedSyncManaged ?? 0)
+        + (run.eventsPreservedLocalEdits ?? 0)
+        + run.eventsSkippedLocallyEdited;
+      if (usableEvents === 0) {
+        // Valid VCALENDAR but nothing to import (no VEVENTs). Roll back — a
+        // no-op upload should not create a source row. 422 distinguishes this
+        // from a malformed file.
+        throw new ImportSourceParseError({ reason: 'no_usable_vevents' });
+      }
+
+      return { source: entity.toModel(), run };
+    });
+
+    logger.info(
+      {
+        calendarId,
+        importSourceId: id,
+        outcome: result.run.outcome,
+        eventsCreated: result.run.eventsCreated,
+        eventsUpdated: result.run.eventsUpdated,
+      },
+      'Created file import source and ran ICS pipeline',
+    );
+
+    return result;
   }
 
   /**
@@ -822,6 +1011,15 @@ class ImportSourceService {
   /**
    * Enforce the per-calendar source cap. The cap is config-driven
    * (`calendar.import.maxSourcesPerCalendar`, default 10).
+   *
+   * STATUS DIVERGENCE (intentional): the URL-create path throws a generic
+   * {@link ValidationError} → HTTP 400 here, while the file-upload path throws
+   * {@link ImportSourceCapExceededError} → HTTP 409 in
+   * {@link assertUnderSourceCapForFile}. The file frontend keys an actionable
+   * "too many sources" message off the distinct `errorName`; the URL form
+   * surfaces the cap as a field-level validation message. Kept divergent by
+   * design — see the spec's error-surface table (409 cap is spec-mandated for
+   * the file route).
    */
   private async assertUnderSourceCap(calendarId: string): Promise<void> {
     const cap = this.getMaxSourcesPerCalendar();
@@ -834,6 +1032,28 @@ class ImportSourceService {
         `Calendar has reached the maximum of ${cap} import sources`,
         { url: [`Calendar has reached the maximum of ${cap} import sources`] },
       );
+    }
+  }
+
+  /**
+   * File-upload variant of {@link assertUnderSourceCap}. Same count + cap, but
+   * throws {@link ImportSourceCapExceededError} (→ HTTP 409) instead of the
+   * URL path's {@link ValidationError} (→ HTTP 400 via `sendValidationError`).
+   * A cap hit is a conflict with the calendar's current state, and the
+   * file-upload frontend keys its message off this distinct `errorName`.
+   *
+   * STATUS DIVERGENCE (intentional): see {@link assertUnderSourceCap} for the
+   * paired URL-path 400 rationale. The 409 here is spec-mandated for the file
+   * route (spec error-surface table).
+   */
+  private async assertUnderSourceCapForFile(calendarId: string): Promise<void> {
+    const cap = this.getMaxSourcesPerCalendar();
+    const count = await ImportSourceEntity.count({
+      where: { calendar_id: calendarId },
+    });
+
+    if (count >= cap) {
+      throw new ImportSourceCapExceededError({ cap });
     }
   }
 
