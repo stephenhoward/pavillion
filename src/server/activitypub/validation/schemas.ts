@@ -164,6 +164,12 @@ export const ACTIVITY_TYPES = [
   'Block',
   'Add',
   'Remove',
+  // FEP-8a8e: peers (e.g. Mobilizon) send Join to RSVP/attend an event.
+  // Pavillion does not handle attendance, so it validates and enqueues the
+  // Join only to reply with an Ignore (FEP-8a8e's blessed unhandled-Join
+  // response). Both must be recognized activity types.
+  'Join',
+  'Ignore',
 ] as const;
 
 /**
@@ -415,3 +421,26 @@ export type AnnounceActivity = z.infer<typeof announceActivitySchema>;
  * Type for a validated Undo activity.
  */
 export type UndoActivity = z.infer<typeof undoActivitySchema>;
+
+/**
+ * Schema for ActivityPub Join activity.
+ *
+ * A Join activity indicates the actor wants to join/attend the object (an event
+ * or group). Pavillion does not implement an attendance model, so it never acts
+ * on a Join — it validates the inbound shape only so the activity can be
+ * enqueued and answered with an Ignore per FEP-8a8e.
+ *
+ * The object being joined can be a URI reference or an embedded object.
+ *
+ * @see https://www.w3.org/TR/activitystreams-vocabulary/#dfn-join
+ * @see https://w3id.org/fep/8a8e
+ */
+export const joinActivitySchema = activityBaseSchema.extend({
+  type: z.literal('Join'),
+  object: objectReferenceSchema,
+});
+
+/**
+ * Type for a validated Join activity.
+ */
+export type JoinActivity = z.infer<typeof joinActivitySchema>;

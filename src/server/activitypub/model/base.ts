@@ -3,8 +3,56 @@ import { Calendar } from '@/common/model/calendar';
 
 const AS_PUBLIC = 'https://www.w3.org/ns/activitystreams#Public';
 
+/** The base ActivityStreams 2.0 context IRI. */
+const AS_CONTEXT = 'https://www.w3.org/ns/activitystreams';
+
+/**
+ * Stable, project-level vocabulary IRI for Pavillion's ActivityPub extension
+ * terms (pavillion:content, pavillion:schedules, pavillion:place,
+ * pavillion:space, pavillion:categories, pavillion:series, pavillion:urlPrompt).
+ *
+ * This is deliberately a SINGLE shared IRI across every Pavillion instance —
+ * NOT a per-instance `https://{domain}/ns#` IRI. A per-domain IRI would make
+ * the same term (e.g. `pavillion:content`) expand to a different IRI on each
+ * instance, so cross-instance Pavillion payloads would not be JSON-LD-equivalent
+ * and a strict processor would treat them as different properties. Pinning one
+ * project namespace keeps federated Pavillion↔Pavillion payloads term-stable.
+ */
+const PAVILLION_NAMESPACE_IRI = 'https://pavillion.social/ns/activitypub#';
+
+/**
+ * JSON-LD @context term object mapping the `pavillion` prefix to the Pavillion
+ * vocabulary IRI. Declaring this inside the @context array lets JSON-LD-strict
+ * peers expand the pavillion:* extension terms instead of silently dropping
+ * them.
+ */
+const PAVILLION_CONTEXT_TERM: Record<string, string> = { pavillion: PAVILLION_NAMESPACE_IRI };
+
+/**
+ * FEP-8a8e event-extension context document IRI (https://w3id.org/fep/8a8e).
+ *
+ * FEP-8a8e defines its event terms (displayEndTime, timezone, eventStatus) as
+ * BARE, unprefixed top-level Event properties — unlike Pavillion's prefixed
+ * pavillion:* terms. Per the FEP-8a8e spec examples, the vocabulary is pulled in
+ * by listing its remote context document IRI as a plain string in the @context
+ * array (NOT as a { prefix: IRI } mapping). Declaring it lets JSON-LD-strict
+ * peers expand the bare FEP terms Pavillion emits on federated events instead of
+ * silently dropping them.
+ */
+const FEP_8A8E_CONTEXT = 'https://w3id.org/fep/8a8e';
+
+/**
+ * Full ActivityStreams + FEP-8a8e + Pavillion JSON-LD @context. Used both for
+ * the outbound activity envelope (below) and for standalone object/collection
+ * responses (GET event/series and the series collection) that carry pavillion:*
+ * and FEP-8a8e terms but are not wrapped in an activity envelope.
+ */
+const AP_CONTEXT: (string | Record<string, string>)[] = [AS_CONTEXT, FEP_8A8E_CONTEXT, PAVILLION_CONTEXT_TERM];
+
 class ActivityPubActivity {
-  context: string[] = ['https://www.w3.org/ns/activitystreams'];
+  // Spread AP_CONTEXT (single source of truth) into a fresh per-instance array
+  // so instances never share a mutable reference.
+  context: (string | Record<string, string>)[] = [...AP_CONTEXT];
   id: string = '';
   type: string = '';
   actor: string = '';
@@ -95,4 +143,14 @@ class ActivityPubActor {
   }
 }
 
-export { ActivityPubActivity, ActivityPubActor, ActivityPubObject, AS_PUBLIC };
+export {
+  ActivityPubActivity,
+  ActivityPubActor,
+  ActivityPubObject,
+  AS_PUBLIC,
+  AS_CONTEXT,
+  AP_CONTEXT,
+  FEP_8A8E_CONTEXT,
+  PAVILLION_NAMESPACE_IRI,
+  PAVILLION_CONTEXT_TERM,
+};

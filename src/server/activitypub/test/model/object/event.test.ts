@@ -16,6 +16,7 @@ vi.mock('@/server/common/helper/logger', () => ({
 import { Calendar } from '@/common/model/calendar';
 import { CalendarEvent, CalendarEventContent, CalendarEventSchedule, UrlPrompt } from '@/common/model/events';
 import { EventCategory } from '@/common/model/event_category';
+import { EventCategoryContent } from '@/common/model/event_category_content';
 import { EventSeries } from '@/common/model/event_series';
 import { EventSeriesContent } from '@/common/model/event_series_content';
 import { EventLocation, EventLocationContent, EventLocationSpace, EventLocationSpaceContent } from '@/common/model/location';
@@ -77,6 +78,71 @@ describe('EventObject', () => {
       const obj = new EventObject(calendar, event);
 
       expect(obj.categories[0]).toMatch(new RegExp(`^https://${domain.replace(/\./g, '\\.')}/`));
+    });
+
+  });
+
+  describe('FEP-8a8e category emission', () => {
+
+    function categoryWithName(id: string, name: string): EventCategory {
+      const cat = new EventCategory(id, 'calendar-uuid');
+      cat.addContent(new EventCategoryContent('en', name));
+      return cat;
+    }
+
+    it('emits the FEP category enum alongside pavillion:categories', () => {
+      const calendar = new Calendar('calendar-uuid', 'mycal');
+      const event = new CalendarEvent('event-uuid', 'calendar-uuid');
+      event.addContent(new CalendarEventContent('en', 'Concert', 'A show'));
+      event.categories = [categoryWithName('cat-1', 'Live Music')];
+
+      const obj = new EventObject(calendar, event).toActivityPubObject();
+
+      // Bare FEP category (interop surface)
+      expect(obj.category).toEqual(['MUSIC']);
+      // pavillion:categories URIs still emitted unchanged (full fidelity)
+      expect(obj['pavillion:categories']).toEqual([
+        `https://${domain}/api/public/v1/calendar/mycal/categories/cat-1`,
+      ]);
+    });
+
+    it('dedupes mapped enums and omits unmappable categories', () => {
+      const calendar = new Calendar('calendar-uuid', 'mycal');
+      const event = new CalendarEvent('event-uuid', 'calendar-uuid');
+      event.addContent(new CalendarEventContent('en', 'Event', ''));
+      event.categories = [
+        categoryWithName('cat-1', 'Live Music'),
+        categoryWithName('cat-2', 'Concert Series'), // also MUSIC -> deduped
+        categoryWithName('cat-3', 'Sports Night'),
+        categoryWithName('cat-4', 'Miscellaneous'),   // no match -> omitted
+      ];
+
+      const obj = new EventObject(calendar, event).toActivityPubObject();
+
+      expect(obj.category).toEqual(['MUSIC', 'SPORTS']);
+    });
+
+    it('omits the category property entirely when no category maps', () => {
+      const calendar = new Calendar('calendar-uuid', 'mycal');
+      const event = new CalendarEvent('event-uuid', 'calendar-uuid');
+      event.addContent(new CalendarEventContent('en', 'Event', ''));
+      event.categories = [categoryWithName('cat-1', 'Miscellaneous')];
+
+      const obj = new EventObject(calendar, event).toActivityPubObject();
+
+      expect(obj.category).toBeUndefined();
+      // pavillion:categories still present regardless
+      expect(obj['pavillion:categories']).toHaveLength(1);
+    });
+
+    it('omits the category property when the event has no categories', () => {
+      const calendar = new Calendar('calendar-uuid', 'mycal');
+      const event = new CalendarEvent('event-uuid', 'calendar-uuid');
+      event.addContent(new CalendarEventContent('en', 'Event', ''));
+
+      const obj = new EventObject(calendar, event).toActivityPubObject();
+
+      expect(obj.category).toBeUndefined();
     });
 
   });
@@ -164,6 +230,35 @@ describe('EventObject', () => {
       expect(result['pavillion:categories']).toBeDefined();
       expect(result['pavillion:series']).toBeDefined();
       expect(result['pavillion:schedules']).toBeDefined();
+    });
+
+    it('should emit FEP-8a8e organizers collection mirroring attributedTo', () => {
+      const calendar = new Calendar('calendar-uuid', 'mycal');
+      const event = new CalendarEvent('event-uuid', 'calendar-uuid');
+      event.addContent(new CalendarEventContent('en', 'Test Event', ''));
+
+      const obj = new EventObject(calendar, event);
+      const result = obj.toActivityPubObject();
+
+      // organizers is FEP-8a8e's only additional MUST; present on every Event,
+      // disclosing the owning calendar actor (same URI as attributedTo).
+      expect(result.organizers).toEqual({
+        type: 'Collection',
+        totalItems: 1,
+        items: [`https://${domain}/calendars/mycal`],
+      });
+      expect(result.organizers.items[0]).toBe(result.attributedTo);
+    });
+
+    it('should emit joinMode:none on every event (no RSVP model)', () => {
+      const calendar = new Calendar('calendar-uuid', 'mycal');
+      const event = new CalendarEvent('event-uuid', 'calendar-uuid');
+      event.addContent(new CalendarEventContent('en', 'Test Event', ''));
+
+      const obj = new EventObject(calendar, event);
+      const result = obj.toActivityPubObject();
+
+      expect(result.joinMode).toBe('none');
     });
 
     it('should include nameMap and summaryMap for multilingual events', () => {
@@ -295,6 +390,103 @@ describe('EventObject', () => {
       const result = obj.toActivityPubObject();
 
       expect(result).not.toHaveProperty('location');
+    });
+
+    describe('FEP-8a8e extension terms (displayEndTime, timezone, eventStatus)', () => {
+
+      it('should emit displayEndTime:false when endTime is synthesized (no real eventEndTime)', () => {
+        const calendar = new Calendar('calendar-uuid', 'mycal');
+        const event = new CalendarEvent('event-uuid', 'calendar-uuid');
+        event.addContent(new CalendarEventContent('en', 'No End', ''));
+        // Schedule with a startDate but no eventEndTime → endTime is synthesized.
+        event.schedules = [new CalendarEventSchedule('s1', DateTime.fromISO('2026-04-15T09:00:00.000Z'))];
+
+        const result = new EventObject(calendar, event).toActivityPubObject();
+
+        expect(result).toHaveProperty('endTime');
+        expect(result.displayEndTime).toBe(false);
+      });
+
+      it('should NOT emit displayEndTime when a real eventEndTime exists', () => {
+        const calendar = new Calendar('calendar-uuid', 'mycal');
+        const event = new CalendarEvent('event-uuid', 'calendar-uuid');
+        event.addContent(new CalendarEventContent('en', 'Real End', ''));
+        const startDt = DateTime.fromISO('2026-04-15T09:00:00.000Z');
+        const schedule = new CalendarEventSchedule('s1', startDt);
+        schedule.eventEndTime = DateTime.fromISO('2026-04-15T11:00:00.000Z');
+        event.schedules = [schedule];
+
+        const result = new EventObject(calendar, event).toActivityPubObject();
+
+        expect(result.endTime).toBe(schedule.eventEndTime.toISO());
+        expect(result).not.toHaveProperty('displayEndTime');
+      });
+
+      it('should emit timezone with the IANA identifier of the first schedule start zone', () => {
+        const calendar = new Calendar('calendar-uuid', 'mycal');
+        const event = new CalendarEvent('event-uuid', 'calendar-uuid');
+        event.addContent(new CalendarEventContent('en', 'Zoned Event', ''));
+        event.schedules = [
+          new CalendarEventSchedule('s1', DateTime.fromISO('2026-04-15T09:00:00', { zone: 'America/New_York' })),
+        ];
+
+        const result = new EventObject(calendar, event).toActivityPubObject();
+
+        expect(result.timezone).toBe('America/New_York');
+      });
+
+      it('should emit timezone "UTC" for a UTC-default schedule', () => {
+        const calendar = new Calendar('calendar-uuid', 'mycal');
+        const event = new CalendarEvent('event-uuid', 'calendar-uuid');
+        event.addContent(new CalendarEventContent('en', 'UTC Event', ''));
+        // EventScheduleEntity.toModel builds UTC schedules with an explicit
+        // { zone: 'UTC' } (the default when no timezone column is stored), so the
+        // startDate's zoneName is 'UTC' rather than the server's local zone.
+        event.schedules = [
+          new CalendarEventSchedule('s1', DateTime.fromISO('2026-04-15T09:00:00.000Z', { zone: 'utc' })),
+        ];
+
+        const result = new EventObject(calendar, event).toActivityPubObject();
+
+        expect(result.timezone).toBe('UTC');
+      });
+
+      it('should omit timezone when the schedule zone is a fixed offset (not a named IANA zone)', () => {
+        const calendar = new Calendar('calendar-uuid', 'mycal');
+        const event = new CalendarEvent('event-uuid', 'calendar-uuid');
+        event.addContent(new CalendarEventContent('en', 'Offset Event', ''));
+        // setZone:true preserves the ISO offset as a FixedOffsetZone (zoneName 'UTC-5')
+        event.schedules = [
+          new CalendarEventSchedule('s1', DateTime.fromISO('2026-04-15T09:00:00-05:00', { setZone: true })),
+        ];
+
+        const result = new EventObject(calendar, event).toActivityPubObject();
+
+        expect(result).not.toHaveProperty('timezone');
+      });
+
+      it('should omit timezone when the event has no schedule start date', () => {
+        const calendar = new Calendar('calendar-uuid', 'mycal');
+        const event = new CalendarEvent('event-uuid', 'calendar-uuid');
+        event.date = '2026-04-15';
+        event.addContent(new CalendarEventContent('en', 'No Schedule', ''));
+
+        const result = new EventObject(calendar, event).toActivityPubObject();
+
+        expect(result).not.toHaveProperty('timezone');
+      });
+
+      it('should always emit eventStatus EventScheduled for a live event', () => {
+        const calendar = new Calendar('calendar-uuid', 'mycal');
+        const event = new CalendarEvent('event-uuid', 'calendar-uuid');
+        event.addContent(new CalendarEventContent('en', 'Live Event', ''));
+        event.schedules = [new CalendarEventSchedule('s1', DateTime.fromISO('2026-04-15T09:00:00.000Z'))];
+
+        const result = new EventObject(calendar, event).toActivityPubObject();
+
+        expect(result.eventStatus).toBe('EventScheduled');
+      });
+
     });
 
     it('should use "Untitled Event" when content is empty', () => {
@@ -1458,6 +1650,90 @@ describe('EventObject', () => {
       const result = EventObject.fromActivityPubObject(apObject);
       expect(result.content.de).toBeDefined();
       expect(result.content.de.description).toBe('Deutsch');
+    });
+
+    describe('FEP-8a8e extension terms parsing', () => {
+
+      it('should parse an object carrying all three FEP terms cleanly', () => {
+        const apObject = {
+          type: 'Event',
+          id: 'https://mobilizon.example/events/9',
+          name: 'FEP Event',
+          summary: 'A description',
+          startTime: '2026-04-15T09:00:00Z',
+          endTime: '2026-04-15T10:00:00Z',
+          displayEndTime: false,
+          timezone: 'Europe/Vienna',
+          eventStatus: 'EventCancelled',
+        };
+
+        const result = EventObject.fromActivityPubObject(apObject);
+
+        // Parses without error; core fields still normalize as usual.
+        expect(result.content.en.name).toBe('FEP Event');
+        expect(result.content.en.description).toBe('A description');
+        expect(result.date).toBe('2026-04-15');
+        expect(result.schedules).toHaveLength(1);
+      });
+
+      it('should reinterpret a synthesized schedule into a valid IANA timezone (preserving the instant)', () => {
+        const apObject = {
+          name: 'Zoned',
+          startTime: '2014-12-31T23:00:00Z',
+          endTime: '2015-01-01T01:00:00Z',
+          timezone: 'Europe/Vienna',
+        };
+
+        const result = EventObject.fromActivityPubObject(apObject);
+
+        // Absolute instant is preserved...
+        expect(DateTime.fromISO(result.schedules[0].start).toUTC().toISO())
+          .toBe('2014-12-31T23:00:00.000Z');
+        // ...but the schedule now carries Vienna's +01:00 offset, so the
+        // wall-clock reconstructs as 00:00 local rather than 23:00 UTC.
+        expect(result.schedules[0].start).toContain('+01:00');
+        expect(result.schedules[0].end).toContain('+01:00');
+      });
+
+      it('should ignore a fixed-offset (non-IANA) timezone and leave instants unchanged', () => {
+        const apObject = {
+          name: 'Bad Zone',
+          startTime: '2026-04-15T09:00:00Z',
+          timezone: 'UTC+5',
+        };
+
+        const result = EventObject.fromActivityPubObject(apObject);
+
+        expect(result.schedules[0].start).toBe('2026-04-15T09:00:00Z');
+      });
+
+      it('should ignore a non-string / garbage timezone without error', () => {
+        const apObject = {
+          name: 'Garbage Zone',
+          startTime: '2026-04-15T09:00:00Z',
+          timezone: 'Not/AZone',
+        };
+
+        const result = EventObject.fromActivityPubObject(apObject);
+
+        expect(result.schedules[0].start).toBe('2026-04-15T09:00:00Z');
+      });
+
+      it('should not apply inbound timezone when pavillion:schedules are present (Pavillion peer path)', () => {
+        const apObject = {
+          name: 'Pav Event',
+          startTime: '2026-04-15T09:00:00Z',
+          timezone: 'Europe/Vienna',
+          'pavillion:schedules': [{ id: 's1', start: '2026-04-15T09:00:00Z' }],
+        };
+
+        const result = EventObject.fromActivityPubObject(apObject);
+
+        // pavillion:schedules pass through verbatim; the FEP timezone hint is
+        // only used on the synthesize-from-startTime path.
+        expect(result.schedules).toEqual([{ id: 's1', start: '2026-04-15T09:00:00Z' }]);
+      });
+
     });
 
     describe('externalUrl + urlPrompt parsing', () => {
