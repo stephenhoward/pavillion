@@ -78,8 +78,10 @@ describe('EventService.getEventsFromFollowedSources', () => {
     expect(result[0].calendarId).toBeNull();
   });
 
-  it('uses escaped calendar ID in the SQL query (SQL injection defense)', async () => {
-    // Use a calendar ID that contains a SQL single-quote metacharacter.
+  it('binds the calendar ID as a replacement parameter (SQL injection defense)', async () => {
+    // Use a calendar ID that contains a SQL single-quote metacharacter. The
+    // defense is that this value never enters the SQL text at all — it is bound
+    // as the `:calendarId` replacement parameter and escaped by the driver.
     const maliciousId = "'; DROP TABLE events; --";
     const maliciousCalendar = new Calendar(maliciousId, 'malicious');
 
@@ -99,21 +101,23 @@ describe('EventService.getEventsFromFollowedSources', () => {
     // 5th condition: AP auto-reposts by followed local calendars
     const apSharesLiteral: string = orConditions[4].id[Op.in].val;
 
-    // The unescaped injection pattern must NOT appear in any literal
-    const unescapedPattern = `= '${maliciousId}`;
-    expect(remoteOriginalsLiteral).not.toContain(unescapedPattern);
-    expect(remoteAnnouncementsLiteral).not.toContain(unescapedPattern);
-    expect(localLiteral).not.toContain(unescapedPattern);
-    expect(localRepostsLiteral).not.toContain(unescapedPattern);
-    expect(apSharesLiteral).not.toContain(unescapedPattern);
+    // The value — raw OR escaped — must appear in NONE of the literals. Every
+    // subquery references the bind placeholder `:calendarId` instead.
+    const allLiterals = [
+      remoteOriginalsLiteral,
+      remoteAnnouncementsLiteral,
+      localLiteral,
+      localRepostsLiteral,
+      apSharesLiteral,
+    ];
+    for (const sql of allLiterals) {
+      expect(sql).not.toContain(maliciousId);
+      expect(sql).not.toContain(EventEntity.sequelize!.escape(maliciousId));
+      expect(sql).toContain('WHERE f.calendar_id = :calendarId');
+    }
 
-    // The escaped form must be present (sequelize.escape wraps and escapes the value)
-    const escapedValue = EventEntity.sequelize!.escape(maliciousId);
-    expect(remoteOriginalsLiteral).toContain(`= ${escapedValue}`);
-    expect(remoteAnnouncementsLiteral).toContain(`= ${escapedValue}`);
-    expect(localLiteral).toContain(`= ${escapedValue}`);
-    expect(localRepostsLiteral).toContain(`= ${escapedValue}`);
-    expect(apSharesLiteral).toContain(`= ${escapedValue}`);
+    // The value is passed to the driver as a bound replacement, not interpolated.
+    expect(queryOptions.replacements).toEqual({ calendarId: maliciousId });
   });
 
   // Regression: pv-ru1j — updated from three-condition to four-condition
