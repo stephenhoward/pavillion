@@ -7,8 +7,9 @@ import { mountComponent } from '@/client/test/lib/vue';
 import ImportSourcesSection from '@/client/components/logged_in/calendar-management/import-sources/ImportSourcesSection.vue';
 import ImportSourceList from '@/client/components/logged_in/calendar-management/import-sources/ImportSourceList.vue';
 import VerifyOwnershipWizard from '@/client/components/logged_in/calendar-management/import-sources/VerifyOwnershipWizard.vue';
+import AddImportSourceForm from '@/client/components/logged_in/calendar-management/import-sources/AddImportSourceForm.vue';
 import ImportSourceService from '@/client/service/import_source';
-import { useToast, resetToastState } from '@/client/composables/useToast';
+import { useToast, resetToastState, type Toast } from '@/client/composables/useToast';
 
 const routes: RouteRecordRaw[] = [
   { path: '/test', component: {}, name: 'test' },
@@ -16,7 +17,7 @@ const routes: RouteRecordRaw[] = [
 
 const CALENDAR_ID = 'cal-1';
 
-const buildSource = (id: string, url: string, overrides: Partial<ImportSource> = {}): ImportSource => {
+const buildSource = (id: string, url: string | null, overrides: Partial<ImportSource> = {}): ImportSource => {
   const source = new ImportSource(id, CALENDAR_ID, url);
   Object.assign(source, overrides);
   return source;
@@ -40,6 +41,7 @@ const mountSection = () => {
 describe('ImportSourcesSection', () => {
   let listSourcesMock: ReturnType<typeof vi.fn>;
   let createSourceMock: ReturnType<typeof vi.fn>;
+  let createSourceFromFileMock: ReturnType<typeof vi.fn>;
   let deleteSourceMock: ReturnType<typeof vi.fn>;
   let syncSourceMock: ReturnType<typeof vi.fn>;
   let getSourceMock: ReturnType<typeof vi.fn>;
@@ -48,6 +50,7 @@ describe('ImportSourcesSection', () => {
   beforeEach(() => {
     listSourcesMock = vi.fn();
     createSourceMock = vi.fn();
+    createSourceFromFileMock = vi.fn();
     deleteSourceMock = vi.fn();
     syncSourceMock = vi.fn();
     getSourceMock = vi.fn();
@@ -55,6 +58,7 @@ describe('ImportSourcesSection', () => {
 
     vi.spyOn(ImportSourceService.prototype, 'listSources').mockImplementation(listSourcesMock);
     vi.spyOn(ImportSourceService.prototype, 'createSource').mockImplementation(createSourceMock);
+    vi.spyOn(ImportSourceService.prototype, 'createSourceFromFile').mockImplementation(createSourceFromFileMock);
     vi.spyOn(ImportSourceService.prototype, 'deleteSource').mockImplementation(deleteSourceMock);
     vi.spyOn(ImportSourceService.prototype, 'syncSource').mockImplementation(syncSourceMock);
     vi.spyOn(ImportSourceService.prototype, 'getSource').mockImplementation(getSourceMock);
@@ -131,6 +135,9 @@ describe('ImportSourcesSection', () => {
       await form.trigger('submit.prevent');
       await flushPromises();
 
+      // The form emits a discriminated union { type: 'url', url }; the parent
+      // unwraps the URL variant into a bare-URL createSource call, unchanged
+      // from the pre-tabs contract.
       expect(createSourceMock).toHaveBeenCalledWith(CALENDAR_ID, 'https://new.example.com/cal.ics');
       expect((wrapper.vm as any).state.sources).toHaveLength(1);
       expect((wrapper.vm as any).state.sources[0].id).toBe('new-id');
@@ -176,6 +183,141 @@ describe('ImportSourcesSection', () => {
 
       expect(createSourceMock).toHaveBeenCalled();
       expect(form.find('.alert--error').exists()).toBe(true);
+    });
+  });
+
+  describe('file upload flow', () => {
+    const buildFileRun = (overrides: Record<string, unknown> = {}) => ({
+      id: 'run-file-1',
+      importSourceId: 'file-id',
+      startedAt: new Date().toISOString(),
+      finishedAt: new Date().toISOString(),
+      outcome: 'success',
+      eventsCreated: 3,
+      eventsUpdated: 1,
+      eventsSkippedLocallyEdited: 0,
+      eventsDisappeared: 0,
+      errorMessage: null,
+      ...overrides,
+    });
+
+    it('dispatches a file submit to createSourceFromFile, prepends, and shows a summary toast — no wizard', async () => {
+      listSourcesMock.mockResolvedValue([]);
+      const fileSource = buildSource('file-id', null, {
+        sourceType: 'file',
+        originalFilename: 'events.ics',
+        verificationState: 'verified',
+      });
+      createSourceFromFileMock.mockResolvedValue({
+        source: fileSource,
+        run: buildFileRun(),
+      });
+
+      const { wrapper } = mountSection();
+      await flushPromises();
+
+      // Open the add form via the empty-state CTA.
+      await wrapper.find('.empty-state .btn--cta').trigger('click');
+      await flushPromises();
+
+      // Emit the file variant of the discriminated union directly from the
+      // form child — the parent's dispatch branching is the unit under test.
+      const form = wrapper.findComponent(AddImportSourceForm);
+      const file = new File(['BEGIN:VCALENDAR\nEND:VCALENDAR'], 'events.ics', {
+        type: 'text/calendar',
+      });
+      form.vm.$emit('submit', { type: 'file', file });
+      await flushPromises();
+
+      // File path uses the file-upload service, NOT the URL create.
+      expect(createSourceFromFileMock).toHaveBeenCalledWith(CALENDAR_ID, file);
+      expect(createSourceMock).not.toHaveBeenCalled();
+
+      // New source prepended, form closed.
+      expect((wrapper.vm as any).state.sources).toHaveLength(1);
+      expect((wrapper.vm as any).state.sources[0].id).toBe('file-id');
+      expect((wrapper.vm as any).state.showAddForm).toBe(false);
+
+      // No verify-ownership wizard for file sources.
+      expect((wrapper.vm as any).state.challengeSource).toBeNull();
+      expect(wrapper.findComponent(VerifyOwnershipWizard).exists()).toBe(false);
+
+      // Success summary toast reflects the run counters positionally, so a
+      // swapped created/updated would fail: import_success renders as
+      // "Import complete: 3 added, 1 updated." for eventsCreated=3, updated=1.
+      const { toasts } = useToast();
+      const successToasts = toasts.value.filter((t: Toast) => t.type === 'success');
+      expect(successToasts.length).toBeGreaterThan(0);
+      expect(
+        successToasts.some(
+          (t: Toast) => t.message.includes('3 added') && t.message.includes('1 updated'),
+        ),
+      ).toBe(true);
+    });
+
+    it('surfaces an add error without crashing when the file import fails', async () => {
+      listSourcesMock.mockResolvedValue([]);
+      createSourceFromFileMock.mockRejectedValue(new Error('bad file'));
+
+      const { wrapper } = mountSection();
+      await flushPromises();
+
+      await wrapper.find('.empty-state .btn--cta').trigger('click');
+      await flushPromises();
+
+      const form = wrapper.findComponent(AddImportSourceForm);
+      const file = new File(['x'], 'events.ics', { type: 'text/calendar' });
+      form.vm.$emit('submit', { type: 'file', file });
+      await flushPromises();
+
+      expect((wrapper.vm as any).state.addError).toBeTruthy();
+      expect((wrapper.vm as any).state.sources).toHaveLength(0);
+      expect((wrapper.vm as any).state.isAdding).toBe(false);
+    });
+
+    it('renders the filename and a File badge, hiding Sync Now and Verify', async () => {
+      const fileSource = buildSource('file-1', null, {
+        sourceType: 'file',
+        originalFilename: 'my-events.ics',
+        verificationState: 'verified',
+      });
+      listSourcesMock.mockResolvedValue([fileSource]);
+
+      const { wrapper } = mountSection();
+      await flushPromises();
+
+      const row = wrapper.find('.import-source-row');
+      expect(row.exists()).toBe(true);
+      expect(row.text()).toContain('my-events.ics');
+
+      // 'File' badge instead of a verification badge.
+      expect(row.find('.import-source-row__badge--file').exists()).toBe(true);
+      expect(row.find('.import-source-row__badge--verified').exists()).toBe(false);
+
+      // Sync Now and Verify are hidden for file sources; delete remains.
+      const syncBtn = row.find(
+        '.btn-ghost:not(.btn-ghost--danger):not(.import-source-row__verify-btn)',
+      );
+      expect(syncBtn.exists()).toBe(false);
+      expect(row.find('.import-source-row__verify-btn').exists()).toBe(false);
+      expect(row.find('.btn-ghost--danger').exists()).toBe(true);
+    });
+
+    it('escapes an attacker-controlled filename (no v-html on original_filename)', async () => {
+      const fileSource = buildSource('file-2', null, {
+        sourceType: 'file',
+        originalFilename: '<img src=x onerror=alert(1)>.ics',
+        verificationState: 'verified',
+      });
+      listSourcesMock.mockResolvedValue([fileSource]);
+
+      const { wrapper } = mountSection();
+      await flushPromises();
+
+      const row = wrapper.find('.import-source-row');
+      // The raw markup must appear as text, not as a live element.
+      expect(row.find('img').exists()).toBe(false);
+      expect(row.text()).toContain('<img src=x onerror=alert(1)>.ics');
     });
   });
 
