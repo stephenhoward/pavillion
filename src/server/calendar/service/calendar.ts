@@ -2076,6 +2076,7 @@ class CalendarService {
           attributes: ['id', 'display_name', 'username'],
         },
       ],
+      // sql-check-safe: sortColumn is allowlist-validated (sortColumnMap), never user text
       order: [[literal(resolvedSortColumn), sortDirection]],
       limit: sanitizedLimit,
       offset,

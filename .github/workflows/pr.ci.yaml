@@ -22,6 +22,8 @@ jobs:
       runner: ubuntu-latest
   manifest_lint:
     uses: ./.github/workflows/manifest_lint.yaml
+  check_raw_sql:
+    uses: ./.github/workflows/check_raw_sql.yaml
   arm_e2e:
     needs: arm_tests
     uses: ./.github/workflows/run_e2e_tests.yaml

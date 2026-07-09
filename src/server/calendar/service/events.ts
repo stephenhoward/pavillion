@@ -2281,8 +2281,10 @@ class EventService {
   async getEventsFromFollowedSources(calendar: Calendar, page?: number, pageSize?: number): Promise<CalendarEvent[]> {
     const defaultPageSize = pageSize || 20;
 
-    // Escape the calendar ID to prevent SQL injection in literal subqueries.
-    const escapedCalendarId = EventEntity.sequelize!.escape(calendar.id);
+    // The calendar ID is bound as the `:calendarId` replacement parameter (see
+    // the `replacements` option on findAll below) rather than interpolated into
+    // the literal() subqueries — Sequelize passes it to the driver as a bind
+    // value, so it can never be part of the SQL text.
 
     // Query events from calendars this calendar is following.
     // This includes BOTH:
@@ -2299,7 +2301,7 @@ class EventService {
                 `(SELECT eo.event_id FROM ap_event_object eo
                   JOIN calendar_actor ca ON eo.attributed_to = ca.actor_uri AND ca.actor_type = 'remote'
                   JOIN ap_following f ON f.calendar_actor_id = ca.id
-                  WHERE f.calendar_id = ${escapedCalendarId})`,
+                  WHERE f.calendar_id = :calendarId)`,
               ),
             },
           },
@@ -2317,7 +2319,7 @@ class EventService {
                   JOIN ap_event_activity ea ON eo.ap_id = ea.event_id AND ea.type = 'share'
                   JOIN calendar_actor ca ON ea.calendar_actor_id = ca.id AND ca.actor_type = 'remote'
                   JOIN ap_following f ON f.calendar_actor_id = ca.id
-                  WHERE f.calendar_id = ${escapedCalendarId})`,
+                  WHERE f.calendar_id = :calendarId)`,
               ),
             },
           },
@@ -2327,7 +2329,7 @@ class EventService {
               [Op.in]: EventEntity.sequelize!.literal(
                 `(SELECT ca.calendar_id FROM ap_following f
                   JOIN calendar_actor ca ON f.calendar_actor_id = ca.id
-                  WHERE f.calendar_id = ${escapedCalendarId}
+                  WHERE f.calendar_id = :calendarId
                     AND ca.actor_type = 'local'
                     AND ca.calendar_id IS NOT NULL)`,
               ),
@@ -2344,7 +2346,7 @@ class EventService {
                 `(SELECT er.event_id FROM event_repost er
                   JOIN calendar_actor ca ON er.calendar_id = ca.calendar_id AND ca.actor_type = 'local'
                   JOIN ap_following f ON f.calendar_actor_id = ca.id
-                  WHERE f.calendar_id = ${escapedCalendarId})`,
+                  WHERE f.calendar_id = :calendarId)`,
               ),
             },
           },
@@ -2357,7 +2359,7 @@ class EventService {
                 `(SELECT se.event_id FROM ap_shared_event se
                   JOIN calendar_actor ca ON se.calendar_id = ca.calendar_id AND ca.actor_type = 'local'
                   JOIN ap_following f ON f.calendar_actor_id = ca.id
-                  WHERE f.calendar_id = ${escapedCalendarId})`,
+                  WHERE f.calendar_id = :calendarId)`,
               ),
             },
           },
@@ -2384,6 +2386,7 @@ class EventService {
       limit: defaultPageSize,
       offset: page ? page * defaultPageSize : 0,
       order: [['createdAt', 'DESC']],
+      replacements: { calendarId: calendar.id },
     });
 
     return events.map(entity => {

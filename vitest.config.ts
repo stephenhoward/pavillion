@@ -53,7 +53,7 @@ export default defineConfig({
             },
           },
           teardownTimeout: 15000,
-          include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
+          include: ['src/**/*.test.ts', 'src/**/*.test.tsx', 'scripts/**/*.test.ts'],
           exclude: [
             ...sharedExclude,
             // Rate-limit coverage guard: transitively imports the full domain
