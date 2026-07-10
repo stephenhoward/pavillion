@@ -330,6 +330,23 @@ describe('ImportSourceService', () => {
       ).rejects.toThrow(/maximum of 10 import sources/);
     });
 
+    it('counts only url sync sources toward the cap (ephemeral file uploads excluded)', async () => {
+      const countStub = sandbox.stub(ImportSourceEntity, 'count').resolves(0);
+      sandbox.stub(ImportSourceEntity, 'findOne').resolves(null);
+      sandbox.stub(ImportSourceEntity, 'build').returns({
+        save: sandbox.stub().resolves(),
+        toModel: () => ({ id: 'x', calendarId: CAL_ID } as any),
+      } as unknown as ImportSourceEntity);
+
+      await service.createSource(account, CAL_ID, VALID_URL);
+
+      expect(countStub.calledOnce).toBe(true);
+      expect((countStub.firstCall.args[0] as any).where).toMatchObject({
+        calendar_id: CAL_ID,
+        source_type: 'url',
+      });
+    });
+
     it('rejects duplicate URL on the same calendar', async () => {
       sandbox.stub(ImportSourceEntity, 'count').resolves(2);
       // findOne returns an existing row for the duplicate check
@@ -528,6 +545,21 @@ describe('ImportSourceService', () => {
       await expect(
         wired.createSourceFromFile(account, CAL_ID, VALID_ICS, FILENAME),
       ).rejects.toBeInstanceOf(ImportSourceCapExceededError);
+    });
+
+    it('excludes file sources from the cap count (a file upload does not count itself)', async () => {
+      const { wired } = wireFileService();
+
+      await wired.createSourceFromFile(account, CAL_ID, VALID_ICS, FILENAME);
+
+      const countStub = ImportSourceEntity.count as unknown as sinon.SinonStub;
+      expect(countStub.calledOnce).toBe(true);
+      // Only url sync sources fill the cap; ephemeral file rows must not, or
+      // repeated uploads would lock the calendar out of its own imports.
+      expect((countStub.firstCall.args[0] as any).where).toMatchObject({
+        calendar_id: CAL_ID,
+        source_type: 'url',
+      });
     });
 
     it('rolls back (rejects with ImportSourceFileBadFormatError) when the parser fails', async () => {

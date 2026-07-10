@@ -1012,6 +1012,12 @@ class ImportSourceService {
    * Enforce the per-calendar source cap. The cap is config-driven
    * (`calendar.import.maxSourcesPerCalendar`, default 10).
    *
+   * SCOPE: the cap counts only `source_type: 'url'` sync sources. File-upload
+   * sources are excluded — they are one-shot, ephemeral import records (see the
+   * spec's "older file source can end with zero origins … stays as run history"
+   * note), so re-uploading a file many times must not consume cap slots and
+   * lock a calendar out of adding sync feeds.
+   *
    * STATUS DIVERGENCE (intentional): the URL-create path throws a generic
    * {@link ValidationError} → HTTP 400 here, while the file-upload path throws
    * {@link ImportSourceCapExceededError} → HTTP 409 in
@@ -1024,7 +1030,7 @@ class ImportSourceService {
   private async assertUnderSourceCap(calendarId: string): Promise<void> {
     const cap = this.getMaxSourcesPerCalendar();
     const count = await ImportSourceEntity.count({
-      where: { calendar_id: calendarId },
+      where: { calendar_id: calendarId, source_type: 'url' },
     });
 
     if (count >= cap) {
@@ -1042,6 +1048,11 @@ class ImportSourceService {
    * A cap hit is a conflict with the calendar's current state, and the
    * file-upload frontend keys its message off this distinct `errorName`.
    *
+   * SCOPE: like {@link assertUnderSourceCap}, this counts only `source_type:
+   * 'url'` sync sources — a file upload does not count itself, so repeated
+   * uploads never trip the cap. It fires only when the calendar's *sync* feeds
+   * already fill the cap, keeping ephemeral file imports out of the limit.
+   *
    * STATUS DIVERGENCE (intentional): see {@link assertUnderSourceCap} for the
    * paired URL-path 400 rationale. The 409 here is spec-mandated for the file
    * route (spec error-surface table).
@@ -1049,7 +1060,7 @@ class ImportSourceService {
   private async assertUnderSourceCapForFile(calendarId: string): Promise<void> {
     const cap = this.getMaxSourcesPerCalendar();
     const count = await ImportSourceEntity.count({
-      where: { calendar_id: calendarId },
+      where: { calendar_id: calendarId, source_type: 'url' },
     });
 
     if (count >= cap) {
