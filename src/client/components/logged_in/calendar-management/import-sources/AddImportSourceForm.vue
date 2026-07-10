@@ -393,6 +393,15 @@ onMounted(async () => {
     display: flex;
     flex-direction: column;
     gap: var(--pav-space-4);
+
+    // The inactive tab panel carries the [hidden] attribute, whose UA
+    // `display: none` is overridden by the author `display: flex` above —
+    // without this rule both panels (URL input + file chooser) render at
+    // once and the tabs become cosmetic. Restore the hidden semantics so a
+    // panel is shown only when its tab is active.
+    &[hidden] {
+      display: none;
+    }
   }
 
   &__file-summary {

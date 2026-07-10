@@ -303,6 +303,24 @@ describe('ImportSourcesSection', () => {
       expect(row.find('.btn-ghost--danger').exists()).toBe(true);
     });
 
+    it('labels a file source timestamp "Imported", not "Last synced"', async () => {
+      const fileSource = buildSource('file-ts', null, {
+        sourceType: 'file',
+        originalFilename: 'my-events.ics',
+        verificationState: 'verified',
+        lastFetchedAt: new Date('2026-07-10T12:00:00Z'),
+      });
+      listSourcesMock.mockResolvedValue([fileSource]);
+
+      const { wrapper } = mountSection();
+      await flushPromises();
+
+      // A one-shot upload was imported, not synced from a feed.
+      const lastSync = wrapper.find('.import-source-row__last-sync');
+      expect(lastSync.text()).toContain('Imported');
+      expect(lastSync.text()).not.toContain('synced');
+    });
+
     it('escapes an attacker-controlled filename (no v-html on original_filename)', async () => {
       const fileSource = buildSource('file-2', null, {
         sourceType: 'file',

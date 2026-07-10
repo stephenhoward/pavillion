@@ -146,9 +146,13 @@ const lastSyncLabel = computed(() => {
   if (!props.source.lastFetchedAt) {
     return t('last_sync_never');
   }
-  return t('last_sync_at', {
-    time: props.source.lastFetchedAt.toLocaleString(),
-  });
+  const time = props.source.lastFetchedAt.toLocaleString();
+  // A file source is a one-shot upload, not a polled feed — label its
+  // timestamp "Imported" rather than "Last synced" to match the File badge
+  // and the hidden Sync/Verify actions.
+  return isFileSource.value
+    ? t('imported_at', { time })
+    : t('last_sync_at', { time });
 });
 
 const canSync = computed(() => props.source.verificationState === 'verified');
