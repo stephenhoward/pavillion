@@ -52,6 +52,7 @@ import { CalendarEvent } from '@/common/model/events';
 import {
   ImportSourceFetchError,
   ImportSourceParseError,
+  ImportSourceFileTooManyEventsError,
   ImportSourceNotFoundError,
   ImportSourceNotVerifiedError,
   ImportSourceSsrfBlockedError,
@@ -120,6 +121,30 @@ export interface SyncResult {
    * is left untouched so a later UI can flag them.
    */
   eventsDisappeared: number;
+  /**
+   * Calendar-wide dedup only: uploaded events that matched an origin owned by a
+   * URL-sync source. Skipped untouched — updating a sync-owned event would be
+   * silently reverted at the next sync, and stealing its origin would make the
+   * sync source re-create the event as a duplicate. `recordRun` always populates
+   * this (0 on the per-source path); optional so the field is additive for
+   * existing `SyncResult` literals.
+   */
+  eventsSkippedSyncManaged?: number;
+  /**
+   * Calendar-wide dedup only: uploaded events that matched an origin flagged
+   * `locally_edited`. Skipped to preserve manual edits (mirror sync semantics).
+   * `recordRun` always populates this (0 on the per-source path); optional so
+   * the field is additive for existing `SyncResult` literals.
+   */
+  eventsPreservedLocalEdits?: number;
+  /**
+   * Calendar-wide dedup only: per-event detail for the sync-managed skips,
+   * carrying the owning URL source's `url` so the run summary can name which
+   * sync feed owns each skipped event. `recordRun` always populates this (empty
+   * on the per-source path); optional so the field is additive for existing
+   * `SyncResult` literals.
+   */
+  skippedSyncManagedDetails?: Array<{ externalUid: string; sourceUrl: string | null }>;
   /** Sanitized error message. Only populated on non-success outcomes. */
   errorMessage: string | null;
 }
@@ -149,15 +174,28 @@ export interface SyncInput {
 export interface ProcessIcsOptions {
   /**
    * Dedup strategy. `'source'` dedups by `(import_source_id, external_uid,
-   * external_recurrence_id)` — the URL-sync model implemented here. `'calendar'`
-   * (calendar-wide UID dedup for file uploads) is implemented in pv-84da.1.3;
-   * passing it here throws.
+   * external_recurrence_id)` — the URL-sync model. `'calendar'` dedups
+   * calendar-wide: every `event_import_origin` row on the calendar (joined
+   * through `import_source.calendar_id`), keyed on `(external_uid,
+   * external_recurrence_id)` and tagged with the owning source's `source_type`.
+   * The calendar scope is the file-upload refresh model (pv-84da.1.3): a
+   * re-uploaded export updates matched events in place instead of duplicating.
    */
   dedupScope: 'source' | 'calendar';
   /** Requester identity threaded into EventService create/update writes. */
   account: Account;
   /** Wall-clock time the enclosing run began (preserved on SyncResult.startedAt). */
   startedAt: Date;
+  /**
+   * Optional ceiling on the number of VEVENTs accepted from the parsed file.
+   * When set and the extracted VEVENT count exceeds it, the run throws
+   * {@link ImportSourceFileTooManyEventsError} AFTER extraction but BEFORE the
+   * create loop, so no events are written (and, on the file path, the enclosing
+   * transaction's source row rolls back). A DoS bound for the FILE intake path
+   * only — the URL-sync path omits this so its fetch/parse behavior is
+   * unchanged.
+   */
+  maxEvents?: number;
   /**
    * Fetch-derived source bookkeeping applied inside the successful transaction
    * (step 9). Supplied by the URL-sync fetch path; the file-upload path
@@ -370,14 +408,6 @@ class SyncService {
     opts: ProcessIcsOptions,
     tx?: Transaction,
   ): Promise<SyncResult> {
-    if (opts.dedupScope !== 'source') {
-      // Calendar-wide dedup is implemented in pv-84da.1.3. Until then, refuse
-      // rather than silently falling through to per-source dedup.
-      throw new Error(
-        `processIcsBuffer: dedupScope '${opts.dedupScope}' is not implemented (see pv-84da.1.3)`,
-      );
-    }
-
     const importSourceId = source.id;
     const { account, startedAt } = opts;
 
@@ -387,7 +417,7 @@ class SyncService {
       parsed = this.parseICS(buffer.toString('utf8'));
     }
     catch (err) {
-      await this.updateSourceOnFetchFailure(source, 'parse_error');
+      await this.updateSourceOnFetchFailure(source, 'parse_error', tx);
       return this.recordRun({
         sourceId: importSourceId,
         startedAt,
@@ -398,6 +428,20 @@ class SyncService {
     }
 
     const vevents = this.extractVevents(parsed);
+
+    // --- VEVENT-count DoS bound (file intake path only) ------------------
+    // Enforced after extraction but BEFORE any transaction / event write, so a
+    // file whose event count exceeds the ceiling writes nothing. This throw is
+    // deliberately OUTSIDE the transactional try/catch below (which converts
+    // failures into a recorded run) so it propagates to the caller: on the file
+    // path that unwinds the enclosing db.transaction and rolls the source row
+    // back. The URL-sync path passes no `maxEvents`, so this is a no-op there.
+    if (opts.maxEvents !== undefined && vevents.length > opts.maxEvents) {
+      throw new ImportSourceFileTooManyEventsError({
+        parsedEvents: vevents.length,
+        maxEvents: opts.maxEvents,
+      });
+    }
 
     // --- Derive calendar primary language (for mapper) -------------------
     // We only have calendar_id on the source; load the calendar's configured
@@ -415,7 +459,16 @@ class SyncService {
 
     // --- Transactional body --------------------------------------------------
     // All persistence inside this transaction rolls back together on failure.
-    let counts = { created: 0, updated: 0, skippedLocallyEdited: 0, disappeared: 0 };
+    let counts = {
+      created: 0,
+      updated: 0,
+      skippedLocallyEdited: 0,
+      disappeared: 0,
+      skippedSyncManaged: 0,
+      preservedLocalEdits: 0,
+    };
+    // Calendar-wide dedup only: owning-source detail for each sync-managed skip.
+    const skippedSyncManagedDetails: Array<{ externalUid: string; sourceUrl: string | null }> = [];
     let parseErrorCount = 0;
     let firstErrorMessage: string | null = null;
 
@@ -425,14 +478,56 @@ class SyncService {
         // dedup tuple. The join is resolved via EventImportOriginEntity's
         // @BelongsTo on the child side; EventEntity deliberately has no
         // reciprocal @HasOne (parent stays unaware — see epic DESIGN).
-        const existing = await EventImportOriginEntity.findAll({
-          where: { import_source_id: importSourceId },
-          include: [{ model: EventEntity, required: false }],
-          transaction: txn,
-        });
+        //
+        // Scope selects the breadth of the dedup map:
+        //  - 'source'   → rows owned by this source only (URL-sync model).
+        //  - 'calendar' → every origin row on the calendar, joined through
+        //                 import_source.calendar_id and tagged (via the
+        //                 eager-joined ImportSourceEntity) with the owning
+        //                 source's type + url so the match rules can branch on
+        //                 who owns each event (file upload refresh model).
         const existingByKey = new Map<string, EventImportOriginEntity>();
-        for (const origin of existing) {
-          existingByKey.set(dedupKey(origin.external_uid, origin.external_recurrence_id), origin);
+        if (opts.dedupScope === 'calendar') {
+          const existing = await EventImportOriginEntity.findAll({
+            include: [
+              { model: EventEntity, required: false },
+              {
+                model: ImportSourceEntity,
+                required: true,
+                where: { calendar_id: source.calendar_id },
+              },
+            ],
+            transaction: txn,
+          });
+          for (const origin of existing) {
+            const key = dedupKey(origin.external_uid, origin.external_recurrence_id);
+            const current = existingByKey.get(key);
+            if (!current) {
+              existingByKey.set(key, origin);
+              continue;
+            }
+            // Two origin rows on the calendar share this (uid, recurrence) — the
+            // DB allows it (the unique index is per-source). Prefer the row
+            // already owned by the uploading source. Re-pointing that row to
+            // itself is a no-op, so this sidesteps the
+            // (import_source_id, external_uid, recurrence) unique-index
+            // collision that would fire if we instead re-pointed a foreign
+            // source's row into a slot the uploading source already occupies.
+            if (origin.import_source_id === importSourceId
+              && current.import_source_id !== importSourceId) {
+              existingByKey.set(key, origin);
+            }
+          }
+        }
+        else {
+          const existing = await EventImportOriginEntity.findAll({
+            where: { import_source_id: importSourceId },
+            include: [{ model: EventEntity, required: false }],
+            transaction: txn,
+          });
+          for (const origin of existing) {
+            existingByKey.set(dedupKey(origin.external_uid, origin.external_recurrence_id), origin);
+          }
         }
 
         const seenKeys = new Set<string>();
@@ -465,7 +560,38 @@ class SyncService {
 
           const existingOrigin = existingByKey.get(key);
           try {
-            if (!existingOrigin) {
+            if (opts.dedupScope === 'calendar') {
+              // Calendar-wide match rules (file-upload refresh model):
+              //  - no match          → create event + origin on this source
+              //  - locally_edited    → skip; preserve the manual edit
+              //  - file-owned match  → update event, re-point origin to this
+              //                        source ("most recent importer owns
+              //                        provenance"). stampImportOrigin's
+              //                        upsert on event_id rewrites
+              //                        import_source_id to the uploading source.
+              //  - url-owned match   → skip untouched; a sync would revert any
+              //                        update, and stealing its origin would
+              //                        make the sync re-create a duplicate.
+              if (!existingOrigin) {
+                await this.createEvent(actingAccount, source, mapped, txn);
+                counts.created++;
+              }
+              else if (existingOrigin.locally_edited) {
+                counts.preservedLocalEdits++;
+              }
+              else if (existingOrigin.importSource?.source_type === 'file') {
+                await this.updateEvent(actingAccount, existingOrigin.event_id, source, mapped, txn);
+                counts.updated++;
+              }
+              else {
+                counts.skippedSyncManaged++;
+                skippedSyncManagedDetails.push({
+                  externalUid: mapped.external_uid,
+                  sourceUrl: existingOrigin.importSource?.url ?? null,
+                });
+              }
+            }
+            else if (!existingOrigin) {
               await this.createEvent(actingAccount, source, mapped, txn);
               counts.created++;
             }
@@ -492,10 +618,18 @@ class SyncService {
 
         // Disappeared origin rows: left untouched (keep-on-disappearance).
         // A disappeared origin row indicates a disappeared event.
-        for (const [key, origin] of existingByKey) {
-          if (!seenKeys.has(key)) {
-            counts.disappeared++;
-            void origin; // explicit: no write
+        //
+        // Only meaningful on the per-source path: a URL sync fetches the whole
+        // feed, so an origin absent from this run genuinely disappeared. A file
+        // upload is a one-shot partial snapshot spanning the whole calendar —
+        // every other source's events would count as "disappeared", which is
+        // nonsense — so the calendar scope skips this pass entirely.
+        if (opts.dedupScope !== 'calendar') {
+          for (const [key, origin] of existingByKey) {
+            if (!seenKeys.has(key)) {
+              counts.disappeared++;
+              void origin; // explicit: no write
+            }
           }
         }
 
@@ -525,7 +659,7 @@ class SyncService {
         'ics.sync.transaction_failed',
       );
       const message = firstErrorMessage ?? this.sanitizedErrorMessage(err);
-      await this.updateSourceOnFetchFailure(source, 'parse_error');
+      await this.updateSourceOnFetchFailure(source, 'parse_error', tx);
       return this.recordRun({
         sourceId: importSourceId,
         startedAt,
@@ -542,6 +676,7 @@ class SyncService {
       startedAt,
       outcome: finalOutcome,
       counts,
+      skippedSyncManagedDetails,
       errorMessage: firstErrorMessage,
     });
 
@@ -769,13 +904,28 @@ class SyncService {
    * in a dedicated save, separate from any event writes (which don't exist
    * on this path). We do NOT clobber etag/content_hash on failure — the
    * previous values stay valid for the next conditional GET.
+   *
+   * Transaction handling: the URL-sync path (no `tx`) persists the status with
+   * a standalone `save()`, as before. The file-upload path passes the enclosing
+   * caller-owned transaction; there the source row was `create`d inside that
+   * still-uncommitted transaction, so a standalone `save()` on a fresh
+   * connection would match zero visible rows (and could fail against an
+   * already-aborted transaction). We therefore mutate the in-memory entity for
+   * the returned run's bookkeeping but skip the standalone write — the enclosing
+   * transaction is about to roll the source row back anyway, so persisting a
+   * failure status on a doomed row is both impossible and pointless.
    */
   private async updateSourceOnFetchFailure(
     source: ImportSourceEntity,
     status: ImportSourceEntity['last_status'],
+    tx?: Transaction,
   ): Promise<void> {
     source.last_fetched_at = this.nowFn();
     source.last_status = status;
+    if (tx) {
+      // Caller-owned transaction (file-upload path): skip the standalone write.
+      return;
+    }
     await source.save();
   }
 
@@ -807,7 +957,14 @@ class SyncService {
       updated: number;
       skippedLocallyEdited: number;
       disappeared: number;
+      // Calendar-wide dedup counters. Optional so the URL-sync fetch-failure
+      // call sites keep passing the four-field literal unchanged; they surface
+      // on SyncResult only (no ImportRun columns — persistence is out of scope
+      // for pv-84da.1.3, which touches sync.ts + its test only).
+      skippedSyncManaged?: number;
+      preservedLocalEdits?: number;
     };
+    skippedSyncManagedDetails?: Array<{ externalUid: string; sourceUrl: string | null }>;
     errorMessage: string | null;
   }): Promise<SyncResult> {
     const row = await ImportRunEntity.create({
@@ -840,6 +997,9 @@ class SyncService {
       eventsUpdated: input.counts.updated,
       eventsSkippedLocallyEdited: input.counts.skippedLocallyEdited,
       eventsDisappeared: input.counts.disappeared,
+      eventsSkippedSyncManaged: input.counts.skippedSyncManaged ?? 0,
+      eventsPreservedLocalEdits: input.counts.preservedLocalEdits ?? 0,
+      skippedSyncManagedDetails: input.skippedSyncManagedDetails ?? [],
       errorMessage: input.errorMessage,
     };
   }

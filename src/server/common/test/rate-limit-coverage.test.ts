@@ -138,6 +138,10 @@ const HIGH_ABUSE_RISK_ROUTES: { method: string; path: string }[] = [
   // signature verification per DEC-013 ingest-boundary posture).
   { method: 'POST', path: '/calendars/:urlname/inbox' },
   { method: 'POST', path: '/users/:username/inbox' },
+  // ICS file upload — buffers a 10 MiB body into memory then CPU-parses it and
+  // materializes event rows in one transaction (amplifiable side effect);
+  // per-account limited (limitWidgetConfigByAccount).
+  { method: 'POST', path: '/api/v1/calendars/:calendarId/import-sources/file' },
 ];
 
 // -----------------------------------------------------------------------------

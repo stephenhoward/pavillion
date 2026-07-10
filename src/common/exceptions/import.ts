@@ -27,6 +27,16 @@ export const IMPORT_PARSE_ERROR = 'IMPORT_PARSE_ERROR';
 export const IMPORT_VERIFY_RATE_LIMITED = 'IMPORT_VERIFY_RATE_LIMITED';
 export const IMPORT_SOURCE_NOT_VERIFIED = 'IMPORT_SOURCE_NOT_VERIFIED';
 
+// File-upload intake codes (pv-84da.1.4). These describe failures unique to
+// the multipart file-upload path — an in-memory buffer with no remote URL to
+// fetch. Like every other code here they are opaque, sanitized identifiers
+// safe to surface over the HTTP wire and to key client i18n lookups.
+export const IMPORT_FILE_EMPTY = 'IMPORT_FILE_EMPTY';
+export const IMPORT_FILE_TOO_LARGE = 'IMPORT_FILE_TOO_LARGE';
+export const IMPORT_FILE_BAD_FORMAT = 'IMPORT_FILE_BAD_FORMAT';
+export const IMPORT_FILE_TOO_MANY_EVENTS = 'IMPORT_FILE_TOO_MANY_EVENTS';
+export const IMPORT_SOURCE_CAP_EXCEEDED = 'IMPORT_SOURCE_CAP_EXCEEDED';
+
 // DNS verification reason codes — exactly one of these is used as the
 // user-visible message for ImportSourceDnsVerificationError.
 export const IMPORT_DNS_NOT_FOUND = 'IMPORT_DNS_NOT_FOUND';
@@ -192,5 +202,95 @@ export class ImportSourceNotVerifiedError extends Error {
     this.name = 'ImportSourceNotVerifiedError';
     this.details = details;
     Object.setPrototypeOf(this, ImportSourceNotVerifiedError.prototype);
+  }
+}
+
+/**
+ * Thrown when a file upload carries no bytes (missing multipart field or a
+ * zero-length buffer). Maps to HTTP 400 in the API handler.
+ */
+export class ImportSourceFileEmptyError extends Error {
+  public readonly details?: Record<string, unknown>;
+
+  constructor(details?: Record<string, unknown>) {
+    super(IMPORT_FILE_EMPTY);
+    this.name = 'ImportSourceFileEmptyError';
+    this.details = details;
+    Object.setPrototypeOf(this, ImportSourceFileEmptyError.prototype);
+  }
+}
+
+/**
+ * Thrown when an uploaded file exceeds the 10 MiB intake cap. Maps to HTTP
+ * 400 in the API handler. The raw byte length is kept on `details` only.
+ */
+export class ImportSourceFileTooLargeError extends Error {
+  public readonly details?: Record<string, unknown>;
+
+  constructor(details?: Record<string, unknown>) {
+    super(IMPORT_FILE_TOO_LARGE);
+    this.name = 'ImportSourceFileTooLargeError';
+    this.details = details;
+    Object.setPrototypeOf(this, ImportSourceFileTooLargeError.prototype);
+  }
+}
+
+/**
+ * Thrown when an uploaded file fails the intake format checks before any
+ * events are persisted: a disallowed content type / extension, a payload
+ * that does not begin with `BEGIN:VCALENDAR`, or ICS bytes that the parser
+ * cannot read at all (malformed). Maps to HTTP 400 in the API handler.
+ *
+ * NOTE: a file that parses as a valid VCALENDAR but yields zero usable
+ * VEVENTs is NOT this error — that reuses {@link ImportSourceParseError}
+ * (HTTP 422) to distinguish "the file is broken" from "the file is fine but
+ * empty of events".
+ */
+export class ImportSourceFileBadFormatError extends Error {
+  public readonly details?: Record<string, unknown>;
+
+  constructor(details?: Record<string, unknown>) {
+    super(IMPORT_FILE_BAD_FORMAT);
+    this.name = 'ImportSourceFileBadFormatError';
+    this.details = details;
+    Object.setPrototypeOf(this, ImportSourceFileBadFormatError.prototype);
+  }
+}
+
+/**
+ * Thrown when an uploaded file carries more VEVENTs than the per-file import
+ * ceiling ({@link IMPORT_FILE_TOO_MANY_EVENTS}). The bound is a DoS mitigation:
+ * a 10 MiB file of minimal VEVENTs can hold ~130k+ events, each an INSERT in a
+ * single transaction, and `parseICS` is synchronous/CPU-bound. The check runs
+ * after VEVENT extraction but before the create loop, so no events are written.
+ * Maps to HTTP 422 in the API handler (the file is well-formed but its event
+ * count is not acceptable). The parsed/limit counts are kept on `details` only.
+ */
+export class ImportSourceFileTooManyEventsError extends Error {
+  public readonly details?: Record<string, unknown>;
+
+  constructor(details?: Record<string, unknown>) {
+    super(IMPORT_FILE_TOO_MANY_EVENTS);
+    this.name = 'ImportSourceFileTooManyEventsError';
+    this.details = details;
+    Object.setPrototypeOf(this, ImportSourceFileTooManyEventsError.prototype);
+  }
+}
+
+/**
+ * Thrown when creating another import source would exceed the per-calendar
+ * source cap. Maps to HTTP 409 Conflict in the API handler (the request
+ * conflicts with the current state of the calendar). Distinct from the
+ * URL-create path's generic {@link ValidationError} cap rejection so the
+ * file-upload frontend can key an actionable message off `errorName`.
+ */
+export class ImportSourceCapExceededError extends Error {
+  public readonly details?: Record<string, unknown>;
+
+  constructor(details?: Record<string, unknown>) {
+    super(IMPORT_SOURCE_CAP_EXCEEDED);
+    this.name = 'ImportSourceCapExceededError';
+    this.details = details;
+    Object.setPrototypeOf(this, ImportSourceCapExceededError.prototype);
   }
 }

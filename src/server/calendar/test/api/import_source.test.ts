@@ -18,9 +18,14 @@ import {
   ImportSourceFetchError,
   ImportSourceSsrfBlockedError,
   ImportSourceParseError,
+  ImportSourceFileEmptyError,
+  ImportSourceFileTooManyEventsError,
+  ImportSourceFileBadFormatError,
+  ImportSourceCapExceededError,
   IMPORT_DNS_NOT_FOUND,
   IMPORT_RELME_LINK_NOT_FOUND,
 } from '@/common/exceptions/import';
+import type { SyncResult } from '@/server/calendar/service/import/sync';
 import { testApp } from '@/server/common/test/lib/express';
 import ImportSourceRoutes from '@/server/calendar/api/v1/import_source';
 import CalendarInterface from '@/server/calendar/interface';
@@ -46,6 +51,7 @@ describe('ImportSourceRoutes', () => {
     mockInterface = {
       listImportSources: sandbox.stub(),
       createImportSource: sandbox.stub(),
+      createImportSourceFromFile: sandbox.stub(),
       getImportSource: sandbox.stub(),
       deleteImportSource: sandbox.stub(),
       issueImportSourceChallenge: sandbox.stub(),
@@ -209,6 +215,395 @@ describe('ImportSourceRoutes', () => {
       // No internal details must leak into the response body.
       const body = JSON.stringify(response.body);
       expect(body).not.toContain('database failure');
+    });
+  });
+
+  describe('POST /calendars/:calendarId/import-sources/file', () => {
+    const VALID_ICS = 'BEGIN:VCALENDAR\nVERSION:2.0\nBEGIN:VEVENT\nUID:a@x\nEND:VEVENT\nEND:VCALENDAR\n';
+
+    function makeFileSource(): ImportSource {
+      const source = new ImportSource(SOURCE_ID, CALENDAR_ID, null);
+      source.sourceType = 'file';
+      source.originalFilename = 'calendar.ics';
+      source.verificationState = 'verified';
+      return source;
+    }
+
+    function makeRun(): SyncResult {
+      return {
+        runId: 'run-file',
+        startedAt: new Date('2026-07-08T10:00:00Z'),
+        outcome: 'success',
+        eventsCreated: 3,
+        eventsUpdated: 1,
+        eventsSkippedLocallyEdited: 0,
+        eventsDisappeared: 0,
+        eventsSkippedSyncManaged: 0,
+        eventsPreservedLocalEdits: 0,
+        skippedSyncManagedDetails: [],
+        errorMessage: null,
+      };
+    }
+
+    /**
+     * Register the real route pipeline (pre-middleware that stamps the account
+     * + calendarId, then the multer intake middleware, then the handler) so the
+     * multipart parsing and content-type gating are exercised end-to-end.
+     */
+    function registerFileRoute(calendarId: string = CALENDAR_ID): void {
+      router.post(
+        '/handler',
+        (req, _res, next) => {
+          attachAccount(req);
+          req.params.calendarId = calendarId;
+          next();
+        },
+        routes.uploadIcsFile.bind(routes),
+        (req, res) => routes.createSourceFromFile(req, res),
+      );
+    }
+
+    it('creates a file source and returns 201 with { source, run }', async () => {
+      const stub = mockInterface.createImportSourceFromFile as sinon.SinonStub;
+      stub.resolves({ source: makeFileSource(), run: makeRun() });
+
+      registerFileRoute();
+
+      const response = await request(testApp(router))
+        .post('/handler')
+        .attach('file', Buffer.from(VALID_ICS), {
+          filename: 'calendar.ics',
+          contentType: 'text/calendar',
+        });
+
+      expect(response.status).toBe(201);
+      expect(response.body.source.sourceType).toBe('file');
+      expect(response.body.source.url).toBeNull();
+      expect(response.body.source.originalFilename).toBe('calendar.ics');
+      expect(response.body.run.eventsCreated).toBe(3);
+      expect(response.body.run.eventsUpdated).toBe(1);
+      expect(response.body.run.importSourceId).toBe(SOURCE_ID);
+      expect(stub.calledOnce).toBe(true);
+      // Buffer + filename forwarded to the service.
+      expect(Buffer.isBuffer(stub.firstCall.args[2])).toBe(true);
+      expect(stub.firstCall.args[3]).toBe('calendar.ics');
+    });
+
+    it('accepts an octet-stream MIME when the filename ends in .ics', async () => {
+      const stub = mockInterface.createImportSourceFromFile as sinon.SinonStub;
+      stub.resolves({ source: makeFileSource(), run: makeRun() });
+
+      registerFileRoute();
+
+      const response = await request(testApp(router))
+        .post('/handler')
+        .attach('file', Buffer.from(VALID_ICS), {
+          filename: 'export.ics',
+          contentType: 'application/octet-stream',
+        });
+
+      expect(response.status).toBe(201);
+      expect(stub.calledOnce).toBe(true);
+    });
+
+    it('returns 400 (ImportSourceFileEmptyError) when no file is attached', async () => {
+      const stub = mockInterface.createImportSourceFromFile as sinon.SinonStub;
+      registerFileRoute();
+
+      const response = await request(testApp(router))
+        .post('/handler')
+        .field('note', 'no file here');
+
+      expect(response.status).toBe(400);
+      expect(response.body.errorName).toBe('ImportSourceFileEmptyError');
+      expect(stub.called).toBe(false);
+    });
+
+    it('returns 400 (ImportSourceFileBadFormatError) for a disallowed type and non-.ics name', async () => {
+      const stub = mockInterface.createImportSourceFromFile as sinon.SinonStub;
+      registerFileRoute();
+
+      const response = await request(testApp(router))
+        .post('/handler')
+        .attach('file', Buffer.from('<html></html>'), {
+          filename: 'notacalendar.txt',
+          contentType: 'text/plain',
+        });
+
+      expect(response.status).toBe(400);
+      expect(response.body.errorName).toBe('ImportSourceFileBadFormatError');
+      expect(stub.called).toBe(false);
+    });
+
+    it('returns 400 (ImportSourceFileTooLargeError) when multer rejects an oversized upload', async () => {
+      const stub = mockInterface.createImportSourceFromFile as sinon.SinonStub;
+      registerFileRoute();
+
+      const oversized = Buffer.concat([
+        Buffer.from('BEGIN:VCALENDAR\n'),
+        Buffer.alloc(10 * 1024 * 1024 + 1024),
+      ]);
+
+      const response = await request(testApp(router))
+        .post('/handler')
+        .attach('file', oversized, {
+          filename: 'big.ics',
+          contentType: 'text/calendar',
+        });
+
+      expect(response.status).toBe(400);
+      expect(response.body.errorName).toBe('ImportSourceFileTooLargeError');
+      expect(stub.called).toBe(false);
+    });
+
+    it('returns 400 (ValidationError) when calendarId is not a UUID', async () => {
+      registerFileRoute(INVALID_ID);
+
+      const response = await request(testApp(router))
+        .post('/handler')
+        .attach('file', Buffer.from(VALID_ICS), {
+          filename: 'calendar.ics',
+          contentType: 'text/calendar',
+        });
+
+      expect(response.status).toBe(400);
+      expect(response.body.errorName).toBe('ValidationError');
+    });
+
+    it('maps the per-calendar cap to 409 (ImportSourceCapExceededError)', async () => {
+      const stub = mockInterface.createImportSourceFromFile as sinon.SinonStub;
+      stub.rejects(new ImportSourceCapExceededError());
+      registerFileRoute();
+
+      const response = await request(testApp(router))
+        .post('/handler')
+        .attach('file', Buffer.from(VALID_ICS), {
+          filename: 'calendar.ics',
+          contentType: 'text/calendar',
+        });
+
+      expect(response.status).toBe(409);
+      expect(response.body.errorName).toBe('ImportSourceCapExceededError');
+    });
+
+    it('maps a parsed-but-empty file to 422 (ImportSourceParseError)', async () => {
+      const stub = mockInterface.createImportSourceFromFile as sinon.SinonStub;
+      stub.rejects(new ImportSourceParseError());
+      registerFileRoute();
+
+      const response = await request(testApp(router))
+        .post('/handler')
+        .attach('file', Buffer.from(VALID_ICS), {
+          filename: 'calendar.ics',
+          contentType: 'text/calendar',
+        });
+
+      expect(response.status).toBe(422);
+      expect(response.body.errorName).toBe('ImportSourceParseError');
+    });
+
+    it('maps a malformed payload to 400 (ImportSourceFileBadFormatError)', async () => {
+      const stub = mockInterface.createImportSourceFromFile as sinon.SinonStub;
+      stub.rejects(new ImportSourceFileBadFormatError());
+      registerFileRoute();
+
+      const response = await request(testApp(router))
+        .post('/handler')
+        .attach('file', Buffer.from(VALID_ICS), {
+          filename: 'calendar.ics',
+          contentType: 'text/calendar',
+        });
+
+      expect(response.status).toBe(400);
+      expect(response.body.errorName).toBe('ImportSourceFileBadFormatError');
+    });
+
+    it('maps missing editor access to 403', async () => {
+      const stub = mockInterface.createImportSourceFromFile as sinon.SinonStub;
+      stub.rejects(new CalendarEditorPermissionError());
+      registerFileRoute();
+
+      const response = await request(testApp(router))
+        .post('/handler')
+        .attach('file', Buffer.from(VALID_ICS), {
+          filename: 'calendar.ics',
+          contentType: 'text/calendar',
+        });
+
+      expect(response.status).toBe(403);
+      expect(response.body.errorName).toBe('CalendarEditorPermissionError');
+    });
+
+    it('maps a missing calendar to 404', async () => {
+      const stub = mockInterface.createImportSourceFromFile as sinon.SinonStub;
+      stub.rejects(new CalendarNotFoundError());
+      registerFileRoute();
+
+      const response = await request(testApp(router))
+        .post('/handler')
+        .attach('file', Buffer.from(VALID_ICS), {
+          filename: 'calendar.ics',
+          contentType: 'text/calendar',
+        });
+
+      expect(response.status).toBe(404);
+      expect(response.body.errorName).toBe('CalendarNotFoundError');
+    });
+
+    it('surfaces a service-layer empty-buffer rejection as 400', async () => {
+      const stub = mockInterface.createImportSourceFromFile as sinon.SinonStub;
+      stub.rejects(new ImportSourceFileEmptyError());
+      registerFileRoute();
+
+      const response = await request(testApp(router))
+        .post('/handler')
+        .attach('file', Buffer.from(VALID_ICS), {
+          filename: 'calendar.ics',
+          contentType: 'text/calendar',
+        });
+
+      expect(response.status).toBe(400);
+      expect(response.body.errorName).toBe('ImportSourceFileEmptyError');
+    });
+
+    it('maps a too-many-events rejection to 422 (ImportSourceFileTooManyEventsError)', async () => {
+      const stub = mockInterface.createImportSourceFromFile as sinon.SinonStub;
+      stub.rejects(new ImportSourceFileTooManyEventsError({ parsedEvents: 20000, maxEvents: 10000 }));
+      registerFileRoute();
+
+      const response = await request(testApp(router))
+        .post('/handler')
+        .attach('file', Buffer.from(VALID_ICS), {
+          filename: 'calendar.ics',
+          contentType: 'text/calendar',
+        });
+
+      expect(response.status).toBe(422);
+      expect(response.body.errorName).toBe('ImportSourceFileTooManyEventsError');
+      // details must never travel over the wire.
+      expect(JSON.stringify(response.body)).not.toContain('parsedEvents');
+    });
+  });
+
+  describe('POST /calendars/:calendarId/import-sources/file — pre-buffer authorization', () => {
+    const VALID_ICS = 'BEGIN:VCALENDAR\nVERSION:2.0\nBEGIN:VEVENT\nUID:a@x\nEND:VEVENT\nEND:VCALENDAR\n';
+
+    /**
+     * Register the REAL route pipeline including the pre-buffer authorization
+     * middleware (assertFileUploadAccess) that runs BEFORE multer. This lets us
+     * assert that an unauthorized caller is rejected without the upload ever
+     * reaching the service.
+     */
+    function registerAuthorizedFileRoute(calendarId: string = CALENDAR_ID): void {
+      router.post(
+        '/handler',
+        (req, _res, next) => {
+          attachAccount(req);
+          req.params.calendarId = calendarId;
+          next();
+        },
+        (req, res, next) => routes.assertFileUploadAccess(req, res, next),
+        routes.uploadIcsFile.bind(routes),
+        (req, res) => routes.createSourceFromFile(req, res),
+      );
+    }
+
+    it('rejects a non-editor with 403 and never processes the upload', async () => {
+      (mockInterface as any).getCalendar = sandbox.stub().resolves({ id: CALENDAR_ID });
+      (mockInterface as any).userCanModifyCalendar = sandbox.stub().resolves(false);
+      const createStub = mockInterface.createImportSourceFromFile as sinon.SinonStub;
+
+      registerAuthorizedFileRoute();
+
+      const response = await request(testApp(router))
+        .post('/handler')
+        .attach('file', Buffer.from(VALID_ICS), {
+          filename: 'calendar.ics',
+          contentType: 'text/calendar',
+        });
+
+      expect(response.status).toBe(403);
+      expect(response.body.errorName).toBe('CalendarEditorPermissionError');
+      // The upload was rejected before multer buffered / the service ran.
+      expect(createStub.called).toBe(false);
+    });
+
+    it('returns 404 when the calendar does not exist, without processing the upload', async () => {
+      (mockInterface as any).getCalendar = sandbox.stub().resolves(null);
+      (mockInterface as any).userCanModifyCalendar = sandbox.stub().resolves(true);
+      const createStub = mockInterface.createImportSourceFromFile as sinon.SinonStub;
+
+      registerAuthorizedFileRoute();
+
+      const response = await request(testApp(router))
+        .post('/handler')
+        .attach('file', Buffer.from(VALID_ICS), {
+          filename: 'calendar.ics',
+          contentType: 'text/calendar',
+        });
+
+      expect(response.status).toBe(404);
+      expect(response.body.errorName).toBe('CalendarNotFoundError');
+      expect(createStub.called).toBe(false);
+    });
+
+    it('returns 400 for a non-UUID calendarId, without processing the upload', async () => {
+      (mockInterface as any).getCalendar = sandbox.stub().resolves({ id: CALENDAR_ID });
+      (mockInterface as any).userCanModifyCalendar = sandbox.stub().resolves(true);
+      const getStub = (mockInterface as any).getCalendar as sinon.SinonStub;
+      const createStub = mockInterface.createImportSourceFromFile as sinon.SinonStub;
+
+      registerAuthorizedFileRoute(INVALID_ID);
+
+      const response = await request(testApp(router))
+        .post('/handler')
+        .attach('file', Buffer.from(VALID_ICS), {
+          filename: 'calendar.ics',
+          contentType: 'text/calendar',
+        });
+
+      expect(response.status).toBe(400);
+      expect(response.body.errorName).toBe('ValidationError');
+      // UUID shape is rejected before any interface lookup.
+      expect(getStub.called).toBe(false);
+      expect(createStub.called).toBe(false);
+    });
+
+    it('proceeds to the handler when the caller is an editor', async () => {
+      (mockInterface as any).getCalendar = sandbox.stub().resolves({ id: CALENDAR_ID });
+      (mockInterface as any).userCanModifyCalendar = sandbox.stub().resolves(true);
+      const createStub = mockInterface.createImportSourceFromFile as sinon.SinonStub;
+      const source = new ImportSource(SOURCE_ID, CALENDAR_ID, null);
+      source.sourceType = 'file';
+      source.originalFilename = 'calendar.ics';
+      createStub.resolves({
+        source,
+        run: {
+          runId: 'run-file',
+          startedAt: new Date('2026-07-08T10:00:00Z'),
+          outcome: 'success',
+          eventsCreated: 1,
+          eventsUpdated: 0,
+          eventsSkippedLocallyEdited: 0,
+          eventsDisappeared: 0,
+          eventsSkippedSyncManaged: 0,
+          eventsPreservedLocalEdits: 0,
+          skippedSyncManagedDetails: [],
+          errorMessage: null,
+        },
+      });
+
+      registerAuthorizedFileRoute();
+
+      const response = await request(testApp(router))
+        .post('/handler')
+        .attach('file', Buffer.from(VALID_ICS), {
+          filename: 'calendar.ics',
+          contentType: 'text/calendar',
+        });
+
+      expect(response.status).toBe(201);
+      expect(createStub.calledOnce).toBe(true);
     });
   });
 

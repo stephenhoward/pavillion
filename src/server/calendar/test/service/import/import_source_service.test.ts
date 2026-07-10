@@ -39,6 +39,12 @@ import {
   ImportSourceDnsVerificationError,
   ImportSourceRelMeVerificationError,
   ImportSourceSsrfBlockedError,
+  ImportSourceParseError,
+  ImportSourceFileEmptyError,
+  ImportSourceFileTooLargeError,
+  ImportSourceFileBadFormatError,
+  ImportSourceFileTooManyEventsError,
+  ImportSourceCapExceededError,
   IMPORT_DNS_NOT_FOUND,
   IMPORT_RELME_HOSTNAME_MISMATCH,
   IMPORT_RELME_LINK_NOT_FOUND,
@@ -47,6 +53,7 @@ import {
   IMPORT_RELME_PSL_VIOLATION,
 } from '@/common/exceptions/import';
 import { ImportSourceEntity } from '@/server/calendar/entity/import_source';
+import db from '@/server/common/entity/db';
 import ImportSourceService, {
   HtmlFetcher,
   HtmlFetchResult,
@@ -323,6 +330,23 @@ describe('ImportSourceService', () => {
       ).rejects.toThrow(/maximum of 10 import sources/);
     });
 
+    it('counts only url sync sources toward the cap (ephemeral file uploads excluded)', async () => {
+      const countStub = sandbox.stub(ImportSourceEntity, 'count').resolves(0);
+      sandbox.stub(ImportSourceEntity, 'findOne').resolves(null);
+      sandbox.stub(ImportSourceEntity, 'build').returns({
+        save: sandbox.stub().resolves(),
+        toModel: () => ({ id: 'x', calendarId: CAL_ID } as any),
+      } as unknown as ImportSourceEntity);
+
+      await service.createSource(account, CAL_ID, VALID_URL);
+
+      expect(countStub.calledOnce).toBe(true);
+      expect((countStub.firstCall.args[0] as any).where).toMatchObject({
+        calendar_id: CAL_ID,
+        source_type: 'url',
+      });
+    });
+
     it('rejects duplicate URL on the same calendar', async () => {
       sandbox.stub(ImportSourceEntity, 'count').resolves(2);
       // findOne returns an existing row for the duplicate check
@@ -331,6 +355,269 @@ describe('ImportSourceService', () => {
       await expect(
         service.createSource(account, CAL_ID, VALID_URL),
       ).rejects.toThrow(/already exists/);
+    });
+  });
+
+  // --------------------------------------------------------------------
+  // createSourceFromFile
+  // --------------------------------------------------------------------
+
+  describe('createSourceFromFile', () => {
+    const VALID_ICS = Buffer.from(
+      'BEGIN:VCALENDAR\nVERSION:2.0\nBEGIN:VEVENT\nUID:a@x\nEND:VEVENT\nEND:VCALENDAR\n',
+    );
+    const FILENAME = 'calendar.ics';
+
+    function fileRunResult(overrides: Partial<SyncResult> = {}): SyncResult {
+      return {
+        runId: 'run-file',
+        startedAt: new Date('2026-07-08T10:00:00Z'),
+        outcome: 'success',
+        eventsCreated: 1,
+        eventsUpdated: 0,
+        eventsSkippedLocallyEdited: 0,
+        eventsDisappeared: 0,
+        eventsSkippedSyncManaged: 0,
+        eventsPreservedLocalEdits: 0,
+        skippedSyncManagedDetails: [],
+        errorMessage: null,
+        ...overrides,
+      };
+    }
+
+    /**
+     * Wire a service with a fake SyncService and stub the DB seams:
+     *  - db.transaction passes a sentinel tx straight to the callback (and
+     *    rejects if the callback throws — modeling managed-transaction rollback)
+     *  - ImportSourceEntity.count / create are stubbed
+     * Returns the process stub + create stub so tests can assert on them.
+     */
+    function wireFileService(opts: {
+      count?: number;
+      processResult?: SyncResult;
+      processImpl?: sinon.SinonStub;
+    } = {}) {
+      sandbox.stub(ImportSourceEntity, 'count').resolves(opts.count ?? 0);
+
+      const createStub = sandbox.stub(ImportSourceEntity, 'create').callsFake(async (values: any) => {
+        const model = new ImportSource(values.id, values.calendar_id, values.url);
+        model.sourceType = values.source_type;
+        model.originalFilename = values.original_filename;
+        model.verificationState = values.verification_state;
+        model.verifiedAt = values.verified_at ?? null;
+        model.contentHash = values.content_hash;
+        model.lastStatus = values.last_status;
+        return {
+          id: values.id,
+          calendar_id: values.calendar_id,
+          toModel: () => model,
+        } as unknown as ImportSourceEntity;
+      });
+
+      const processStub = opts.processImpl
+        ?? sandbox.stub().resolves(opts.processResult ?? fileRunResult());
+      const fakeSyncService = { processIcsBuffer: processStub } as unknown as SyncService;
+
+      sandbox.stub(db, 'transaction').callsFake(async (arg: unknown) => {
+        if (typeof arg === 'function') {
+          return (arg as (tx: unknown) => unknown)({ LEVEL: 'test' });
+        }
+        throw new Error('unsupported transaction usage in test');
+      });
+
+      const wired = new ImportSourceService(
+        calendarService as unknown as CalendarService,
+        fakeSyncService,
+      );
+      return { wired, createStub, processStub };
+    }
+
+    it('creates a pre-verified file source and runs the calendar-scoped pipeline', async () => {
+      const { wired, createStub, processStub } = wireFileService();
+
+      const result = await wired.createSourceFromFile(account, CAL_ID, VALID_ICS, FILENAME);
+
+      // Source row is built as a file source per the spec field table.
+      const createArgs = createStub.firstCall.args[0] as any;
+      expect(createArgs.source_type).toBe('file');
+      expect(createArgs.url).toBeNull();
+      expect(createArgs.original_filename).toBe(FILENAME);
+      expect(createArgs.verification_state).toBe('verified');
+      expect(createArgs.verification_type).toBeNull();
+      expect(createArgs.verification_expires_at).toBeNull();
+      expect(createArgs.last_status).toBe('ok');
+      expect(typeof createArgs.content_hash).toBe('string');
+      expect(createArgs.content_hash).toHaveLength(64);
+      // Insert enlists the transaction.
+      expect((createStub.firstCall.args[1] as any).transaction).toMatchObject({ LEVEL: 'test' });
+
+      // Pipeline runs calendar-scoped, in the same transaction.
+      expect(processStub.calledOnce).toBe(true);
+      const [bufArg, sourceArg, optsArg, txArg] = processStub.firstCall.args;
+      expect(bufArg).toBe(VALID_ICS);
+      expect(sourceArg).toBeDefined();
+      expect(optsArg.dedupScope).toBe('calendar');
+      expect(optsArg.account).toBe(account);
+      // The file path passes a VEVENT-count ceiling (DoS bound); the URL path
+      // never does.
+      expect(optsArg.maxEvents).toBe(10000);
+      expect(txArg).toMatchObject({ LEVEL: 'test' });
+
+      // Returns both the model and the run summary.
+      expect(result.source.sourceType).toBe('file');
+      expect(result.source.url).toBeNull();
+      expect(result.run.eventsCreated).toBe(1);
+    });
+
+    it('rejects when the account lacks edit access', async () => {
+      calendarService.userCanModifyCalendar.resolves(false);
+      const wired = new ImportSourceService(
+        calendarService as unknown as CalendarService,
+        { processIcsBuffer: sandbox.stub() } as unknown as SyncService,
+      );
+
+      await expect(
+        wired.createSourceFromFile(account, CAL_ID, VALID_ICS, FILENAME),
+      ).rejects.toBeInstanceOf(CalendarEditorPermissionError);
+    });
+
+    it('rejects an empty buffer with ImportSourceFileEmptyError', async () => {
+      const wired = new ImportSourceService(
+        calendarService as unknown as CalendarService,
+        { processIcsBuffer: sandbox.stub() } as unknown as SyncService,
+      );
+
+      await expect(
+        wired.createSourceFromFile(account, CAL_ID, Buffer.alloc(0), FILENAME),
+      ).rejects.toBeInstanceOf(ImportSourceFileEmptyError);
+    });
+
+    it('rejects an oversized buffer with ImportSourceFileTooLargeError', async () => {
+      const wired = new ImportSourceService(
+        calendarService as unknown as CalendarService,
+        { processIcsBuffer: sandbox.stub() } as unknown as SyncService,
+      );
+      // 10 MiB + 1 byte, still starting with the signature so size is the only failure.
+      const oversized = Buffer.concat([
+        Buffer.from('BEGIN:VCALENDAR\n'),
+        Buffer.alloc(10 * 1024 * 1024 + 1),
+      ]);
+
+      await expect(
+        wired.createSourceFromFile(account, CAL_ID, oversized, FILENAME),
+      ).rejects.toBeInstanceOf(ImportSourceFileTooLargeError);
+    });
+
+    it('rejects a payload without the BEGIN:VCALENDAR signature', async () => {
+      const wired = new ImportSourceService(
+        calendarService as unknown as CalendarService,
+        { processIcsBuffer: sandbox.stub() } as unknown as SyncService,
+      );
+
+      await expect(
+        wired.createSourceFromFile(
+          account,
+          CAL_ID,
+          Buffer.from('<html>not a calendar</html>'),
+          FILENAME,
+        ),
+      ).rejects.toBeInstanceOf(ImportSourceFileBadFormatError);
+    });
+
+    it('accepts a payload with a leading BOM + whitespace before the signature', async () => {
+      const { wired } = wireFileService();
+      const withBom = Buffer.concat([
+        Buffer.from('\uFEFF  \n'),
+        VALID_ICS,
+      ]);
+
+      const result = await wired.createSourceFromFile(account, CAL_ID, withBom, FILENAME);
+      expect(result.source.sourceType).toBe('file');
+    });
+
+    it('rejects with ImportSourceCapExceededError when the per-calendar cap is reached', async () => {
+      const wired = new ImportSourceService(
+        calendarService as unknown as CalendarService,
+        { processIcsBuffer: sandbox.stub() } as unknown as SyncService,
+      );
+      sandbox.stub(ImportSourceEntity, 'count').resolves(10);
+
+      await expect(
+        wired.createSourceFromFile(account, CAL_ID, VALID_ICS, FILENAME),
+      ).rejects.toBeInstanceOf(ImportSourceCapExceededError);
+    });
+
+    it('excludes file sources from the cap count (a file upload does not count itself)', async () => {
+      const { wired } = wireFileService();
+
+      await wired.createSourceFromFile(account, CAL_ID, VALID_ICS, FILENAME);
+
+      const countStub = ImportSourceEntity.count as unknown as sinon.SinonStub;
+      expect(countStub.calledOnce).toBe(true);
+      // Only url sync sources fill the cap; ephemeral file rows must not, or
+      // repeated uploads would lock the calendar out of its own imports.
+      expect((countStub.firstCall.args[0] as any).where).toMatchObject({
+        calendar_id: CAL_ID,
+        source_type: 'url',
+      });
+    });
+
+    it('rolls back (rejects with ImportSourceFileBadFormatError) when the parser fails', async () => {
+      const { wired, processStub } = wireFileService({
+        processResult: fileRunResult({ outcome: 'parse_error', eventsCreated: 0, errorMessage: 'IMPORT_PARSE_ERROR' }),
+      });
+
+      await expect(
+        wired.createSourceFromFile(account, CAL_ID, VALID_ICS, FILENAME),
+      ).rejects.toBeInstanceOf(ImportSourceFileBadFormatError);
+      // The pipeline was invoked inside the (now rolled-back) transaction.
+      expect(processStub.calledOnce).toBe(true);
+    });
+
+    it('rolls back with ImportSourceParseError (422) when no usable VEVENTs are found', async () => {
+      const { wired } = wireFileService({
+        processResult: fileRunResult({ eventsCreated: 0, eventsUpdated: 0 }),
+      });
+
+      await expect(
+        wired.createSourceFromFile(account, CAL_ID, VALID_ICS, FILENAME),
+      ).rejects.toBeInstanceOf(ImportSourceParseError);
+    });
+
+    it('throws a guard error when the SyncService is not wired', async () => {
+      sandbox.stub(ImportSourceEntity, 'count').resolves(0);
+      // Service constructed without a SyncService.
+      await expect(
+        service.createSourceFromFile(account, CAL_ID, VALID_ICS, FILENAME),
+      ).rejects.toThrow(/SyncService wiring/);
+    });
+
+    it('propagates ImportSourceFileTooManyEventsError from the pipeline (rolls back)', async () => {
+      // The DoS bound: when the parsed file exceeds the per-file VEVENT ceiling,
+      // processIcsBuffer throws inside the transaction. The service must let it
+      // propagate (so the source-row insert rolls back) rather than swallowing.
+      const { wired, processStub } = wireFileService({
+        processImpl: sandbox.stub().rejects(
+          new ImportSourceFileTooManyEventsError({ parsedEvents: 20000, maxEvents: 10000 }),
+        ),
+      });
+
+      await expect(
+        wired.createSourceFromFile(account, CAL_ID, VALID_ICS, FILENAME),
+      ).rejects.toBeInstanceOf(ImportSourceFileTooManyEventsError);
+      expect(processStub.calledOnce).toBe(true);
+    });
+
+    it('truncates an over-length original_filename to 255 chars before insert', async () => {
+      const { wired, createStub } = wireFileService();
+      // The column is VARCHAR(255); a longer name would raise a raw DB error.
+      const longName = 'a'.repeat(300) + '.ics';
+
+      await wired.createSourceFromFile(account, CAL_ID, VALID_ICS, longName);
+
+      const createArgs = createStub.firstCall.args[0] as any;
+      expect(createArgs.original_filename).toHaveLength(255);
+      expect(createArgs.original_filename).toBe(longName.slice(0, 255));
     });
   });
 

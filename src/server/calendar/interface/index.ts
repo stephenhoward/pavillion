@@ -965,6 +965,32 @@ export default class CalendarInterface {
   }
 
   /**
+   * Create a file-backed import source from an uploaded .ics buffer and run
+   * its events through the shared ICS pipeline in a single transaction. Unlike
+   * {@link createImportSource}, the source is created pre-verified (no domain
+   * to prove) and never enters the sync/verify flows.
+   *
+   * @param account - The requesting account (must own or edit the calendar)
+   * @param calendarId - The calendar UUID
+   * @param buffer - The raw uploaded .ics bytes
+   * @param originalFilename - The upload's display name (stored for the list UI)
+   * @returns The persisted file source and the import run summary
+   */
+  async createImportSourceFromFile(
+    account: Account,
+    calendarId: string,
+    buffer: Buffer,
+    originalFilename: string,
+  ): Promise<{ source: ImportSource; run: SyncResult }> {
+    return this.importSourceService.createSourceFromFile(
+      account,
+      calendarId,
+      buffer,
+      originalFilename,
+    );
+  }
+
+  /**
    * Get a single import source by id, scoped to the calendar.
    *
    * @param account - The requesting account (must own or edit the calendar)

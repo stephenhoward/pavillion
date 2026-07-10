@@ -6,6 +6,7 @@ import type { VEvent, DateWithTimeZone } from 'node-ical';
 import { Account } from '@/common/model/account';
 import {
   ImportSourceFetchError,
+  ImportSourceFileTooManyEventsError,
   ImportSourceNotFoundError,
   ImportSourceNotVerifiedError,
   ImportSourceSsrfBlockedError,
@@ -1093,19 +1094,305 @@ describe('SyncService', () => {
       expect(saveArgs).toMatchObject({ transaction: callerTx });
     });
 
-    it("throws when dedupScope is 'calendar' (implemented in pv-84da.1.3)", async () => {
+    it('throws ImportSourceFileTooManyEventsError when the VEVENT count exceeds maxEvents, before any write', async () => {
+      // DoS bound (pv-84da fix round item 2): the ceiling is enforced after
+      // extraction but BEFORE the create loop / transaction, so nothing is
+      // written and — on the file path — the caller's transaction rolls back.
       const src = makeSourceEntity();
-      const svc = makeProcessService([makeVEvent()]);
+      const svc = makeProcessService([
+        makeVEvent({ uid: 'cap-a@example.test' }),
+        makeVEvent({ uid: 'cap-b@example.test' }),
+      ]);
 
       await expect(
         svc.processIcsBuffer(
           Buffer.from('BEGIN:VCALENDAR'),
           src,
-          { dedupScope: 'calendar', account, startedAt: new Date() },
+          { dedupScope: 'calendar', account, startedAt: new Date('2026-04-22T10:00:00Z'), maxEvents: 1 },
         ),
-      ).rejects.toThrow(/not implemented/);
-      // Nothing should have been parsed or written.
+      ).rejects.toBeInstanceOf(ImportSourceFileTooManyEventsError);
+
+      // The throw is BEFORE the create loop and the transaction: no event write,
+      // and the orchestrator never opened a transaction.
       expect(eventService.createEvent.called).toBe(false);
+      expect((db.transaction as sinon.SinonStub).called).toBe(false);
+    });
+
+    it('does not enforce maxEvents when the count is within the ceiling', async () => {
+      const src = makeSourceEntity();
+      const svc = makeProcessService([makeVEvent({ uid: 'cap-ok@example.test' })]);
+      eventService.createEvent.callsFake(async () => ({ id: 'evt-cap-ok' } as never));
+
+      const result = await svc.processIcsBuffer(
+        Buffer.from('BEGIN:VCALENDAR'),
+        src,
+        { dedupScope: 'source', account, startedAt: new Date('2026-04-22T10:00:00Z'), maxEvents: 10 },
+      );
+
+      expect(result.outcome).toBe('success');
+      expect(result.eventsCreated).toBe(1);
+    });
+
+    it('skips the standalone status save on a caller-tx parse error (item 4)', async () => {
+      // On the file-upload path the source row is created inside the caller's
+      // still-uncommitted transaction. A standalone save() on a parse failure
+      // would match zero visible rows (silently lost) — so when a tx is
+      // supplied, updateSourceOnFetchFailure mutates the entity but skips the
+      // write. The enclosing transaction rolls the row back anyway.
+      const src = makeSourceEntity({ etag: 'W/"keep"', content_hash: 'KEEP-HASH' });
+      const svc = new SyncService({
+        eventService: eventService as unknown as EventService,
+        calendarService: calendarService as unknown as CalendarService,
+        fetcher: fetcher as unknown as Fetcher,
+        rateLimiter,
+        parseICS: () => { throw new Error('malformed calendar'); },
+      });
+
+      const callerTx = { LEVEL: 'caller-tx' } as unknown as Transaction;
+      const result = await svc.processIcsBuffer(
+        Buffer.from('junk'),
+        src,
+        { dedupScope: 'calendar', account, startedAt: new Date('2026-04-22T10:00:00Z') },
+        callerTx,
+      );
+
+      expect(result.outcome).toBe('parse_error');
+      // In-memory bookkeeping still reflects the failure...
+      expect(src.last_status).toBe('parse_error');
+      // ...but no standalone write was issued against the doomed row.
+      expect((src.save as sinon.SinonStub).called).toBe(false);
+    });
+
+    // ------------------------------------------------------------------------
+    // Calendar-wide dedup (dedupScope: 'calendar') — pv-84da.1.3
+    // ------------------------------------------------------------------------
+    describe('calendar-wide dedup', () => {
+      const UPLOAD_SRC_ID = 'file-upload-src';
+
+      // The uploading source is always a file source on this path.
+      function makeUploadSource(): ImportSourceEntity {
+        return makeSourceEntity({
+          id: UPLOAD_SRC_ID,
+          source_type: 'file',
+          url: null,
+          original_filename: 'export.ics',
+        });
+      }
+
+      // A calendar-wide origin row, tagged with its owning source's type + url
+      // via the eager-joined ImportSourceEntity the orchestrator reads.
+      function makeCalendarOrigin(fields: {
+        event_id: string;
+        external_uid: string;
+        import_source_id: string;
+        ownerType: 'file' | 'url';
+        ownerUrl?: string | null;
+        locally_edited?: boolean;
+      }): EventImportOriginEntity {
+        return makeOriginEntity({
+          event_id: fields.event_id,
+          external_uid: fields.external_uid,
+          import_source_id: fields.import_source_id,
+          locally_edited: fields.locally_edited ?? false,
+          importSource: {
+            id: fields.import_source_id,
+            source_type: fields.ownerType,
+            url: fields.ownerUrl ?? null,
+          },
+        } as unknown as Partial<EventImportOriginEntity>);
+      }
+
+      function runCalendar(svc: SyncService, src: ImportSourceEntity) {
+        return svc.processIcsBuffer(
+          Buffer.from('BEGIN:VCALENDAR'),
+          src,
+          { dedupScope: 'calendar', account, startedAt: new Date('2026-04-22T10:00:00Z') },
+        );
+      }
+
+      it('bulk-loads calendar-wide origins joined through import_source.calendar_id', async () => {
+        const src = makeUploadSource();
+        const svc = makeProcessService([makeVEvent({ uid: 'cal-new@example.test' })]);
+        eventService.createEvent.callsFake(async () => ({ id: 'evt-new' } as never));
+
+        await runCalendar(svc, src);
+
+        const findAllStub = EventImportOriginEntity.findAll as sinon.SinonStub;
+        expect(findAllStub.calledOnce).toBe(true);
+        const args = findAllStub.firstCall.args[0] as Record<string, unknown>;
+        // Calendar scope filters via the required INNER JOIN on the owning
+        // source, NOT a top-level import_source_id where clause.
+        expect(args.where).toBeUndefined();
+        const include = args.include as Array<Record<string, unknown>>;
+        expect(include).toEqual(expect.arrayContaining([
+          expect.objectContaining({ model: EventEntity }),
+          expect.objectContaining({
+            model: ImportSourceEntity,
+            required: true,
+            where: { calendar_id: src.calendar_id },
+          }),
+        ]));
+      });
+
+      it('rule: new UID → creates event + stamps origin on the uploading source', async () => {
+        const src = makeUploadSource();
+        const svc = makeProcessService([makeVEvent({ uid: 'cal-new@example.test' })], []);
+        eventService.createEvent.callsFake(async () => ({ id: 'evt-new' } as never));
+
+        const result = await runCalendar(svc, src);
+
+        expect(result.eventsCreated).toBe(1);
+        expect(result.eventsUpdated).toBe(0);
+        expect(result.eventsSkippedSyncManaged).toBe(0);
+        expect(result.eventsPreservedLocalEdits).toBe(0);
+        expect(eventService.createEvent.calledOnce).toBe(true);
+        // Origin stamped onto the uploading source.
+        expect(originUpsertStub.calledOnce).toBe(true);
+        const values = originUpsertStub.firstCall.args[0] as Record<string, unknown>;
+        expect(values.import_source_id).toBe(UPLOAD_SRC_ID);
+      });
+
+      it('rule: file-source-owned → updates event and re-points origin to the uploading source', async () => {
+        const src = makeUploadSource();
+        // Owned by a DIFFERENT file source on the same calendar.
+        const existing = makeCalendarOrigin({
+          event_id: 'evt-file-owned',
+          external_uid: 'cal-file@example.test',
+          import_source_id: 'other-file-src',
+          ownerType: 'file',
+        });
+        const svc = makeProcessService(
+          [makeVEvent({ uid: 'cal-file@example.test' })],
+          [existing],
+        );
+        eventService.updateEvent.resolves({ id: 'evt-file-owned' } as never);
+
+        const result = await runCalendar(svc, src);
+
+        expect(result.eventsUpdated).toBe(1);
+        expect(result.eventsCreated).toBe(0);
+        expect(eventService.updateEvent.calledOnce).toBe(true);
+        // Update targets the matched event.
+        expect(eventService.updateEvent.firstCall.args[1]).toBe('evt-file-owned');
+        // Re-point: the origin upsert rewrites import_source_id to the uploader.
+        expect(originUpsertStub.calledOnce).toBe(true);
+        const values = originUpsertStub.firstCall.args[0] as Record<string, unknown>;
+        expect(values.event_id).toBe('evt-file-owned');
+        expect(values.import_source_id).toBe(UPLOAD_SRC_ID);
+      });
+
+      it('rule: URL-sync-owned → skips untouched and reports the owning source URL', async () => {
+        const src = makeUploadSource();
+        const existing = makeCalendarOrigin({
+          event_id: 'evt-sync-owned',
+          external_uid: 'cal-sync@example.test',
+          import_source_id: 'url-sync-src',
+          ownerType: 'url',
+          ownerUrl: 'https://feeds.example.test/city.ics',
+        });
+        const svc = makeProcessService(
+          [makeVEvent({ uid: 'cal-sync@example.test' })],
+          [existing],
+        );
+
+        const result = await runCalendar(svc, src);
+
+        expect(result.eventsSkippedSyncManaged).toBe(1);
+        expect(result.eventsCreated).toBe(0);
+        expect(result.eventsUpdated).toBe(0);
+        // The sync-owned event + origin are left completely untouched.
+        expect(eventService.updateEvent.called).toBe(false);
+        expect(eventService.createEvent.called).toBe(false);
+        expect(originUpsertStub.called).toBe(false);
+        expect((existing.save as sinon.SinonStub).called).toBe(false);
+        // Owning source URL surfaced in the run detail.
+        expect(result.skippedSyncManagedDetails).toEqual([
+          { externalUid: 'cal-sync@example.test', sourceUrl: 'https://feeds.example.test/city.ics' },
+        ]);
+      });
+
+      it('rule: locally_edited match → preserves the edit, skips content update', async () => {
+        const src = makeUploadSource();
+        // A file-owned match that would otherwise update — locally_edited wins.
+        const existing = makeCalendarOrigin({
+          event_id: 'evt-edited',
+          external_uid: 'cal-edited@example.test',
+          import_source_id: 'other-file-src',
+          ownerType: 'file',
+          locally_edited: true,
+        });
+        const svc = makeProcessService(
+          [makeVEvent({ uid: 'cal-edited@example.test' })],
+          [existing],
+        );
+
+        const result = await runCalendar(svc, src);
+
+        expect(result.eventsPreservedLocalEdits).toBe(1);
+        expect(result.eventsUpdated).toBe(0);
+        expect(result.eventsSkippedSyncManaged).toBe(0);
+        expect(eventService.updateEvent.called).toBe(false);
+        expect(eventService.createEvent.called).toBe(false);
+        // Preserved means untouched: no origin write at all.
+        expect(originUpsertStub.called).toBe(false);
+        expect((existing.save as sinon.SinonStub).called).toBe(false);
+      });
+
+      it('prefers the uploading source\'s own origin on a key collision (no unique-index clash on re-point)', async () => {
+        const src = makeUploadSource();
+        // Two origins share (uid, recurrence): one already owned by the
+        // uploading source, one owned by another file source. The map must
+        // keep the uploader's own row so the re-point is a self-update and
+        // never collides with the (import_source_id, uid, recurrence) index.
+        const ownRow = makeCalendarOrigin({
+          event_id: 'evt-own',
+          external_uid: 'cal-dup@example.test',
+          import_source_id: UPLOAD_SRC_ID,
+          ownerType: 'file',
+        });
+        const foreignRow = makeCalendarOrigin({
+          event_id: 'evt-foreign',
+          external_uid: 'cal-dup@example.test',
+          import_source_id: 'other-file-src',
+          ownerType: 'file',
+        });
+        // Foreign row listed first so a naive last-write-wins map would pick it.
+        const svc = makeProcessService(
+          [makeVEvent({ uid: 'cal-dup@example.test' })],
+          [foreignRow, ownRow],
+        );
+        eventService.updateEvent.resolves({ id: 'evt-own' } as never);
+
+        const result = await runCalendar(svc, src);
+
+        expect(result.eventsUpdated).toBe(1);
+        // The uploader's own event is the one updated — not the foreign row's.
+        expect(eventService.updateEvent.firstCall.args[1]).toBe('evt-own');
+      });
+
+      it('records a success run without counting disappeared events for other calendar sources', async () => {
+        const src = makeUploadSource();
+        // A calendar origin the upload does NOT mention — must not be flagged
+        // as disappeared (file upload is a partial snapshot).
+        const untouched = makeCalendarOrigin({
+          event_id: 'evt-untouched',
+          external_uid: 'cal-absent@example.test',
+          import_source_id: 'url-sync-src',
+          ownerType: 'url',
+          ownerUrl: 'https://feeds.example.test/other.ics',
+        });
+        const svc = makeProcessService(
+          [makeVEvent({ uid: 'cal-new@example.test' })],
+          [untouched],
+        );
+        eventService.createEvent.callsFake(async () => ({ id: 'evt-new' } as never));
+
+        const result = await runCalendar(svc, src);
+
+        expect(result.outcome).toBe('success');
+        expect(result.eventsCreated).toBe(1);
+        expect(result.eventsDisappeared).toBe(0);
+      });
     });
   });
 
