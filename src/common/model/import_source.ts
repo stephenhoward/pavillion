@@ -66,6 +66,20 @@ export const IMPORT_SOURCE_LAST_STATUSES: readonly ImportSourceLastStatus[] = [
 ];
 
 /**
+ * Allowed values for the `source_type` column on import_source.
+ *
+ * A discriminator that records how the source was intaken:
+ * - `'url'`  — a live ICS feed URL the sync pipeline polls (the original,
+ *              and still the default for every pre-existing row).
+ * - `'file'` — a one-shot uploaded .ics file. File sources have no live URL
+ *              (`url` is null) and carry the uploaded name in
+ *              `originalFilename`.
+ */
+export type ImportSourceType = 'url' | 'file';
+
+export const IMPORT_SOURCE_TYPES: readonly ImportSourceType[] = ['url', 'file'];
+
+/**
  * Plain domain model for an ICS import source.
  *
  * Represents a subscribed ICS feed URL that a calendar owner has registered
@@ -79,7 +93,21 @@ export const IMPORT_SOURCE_LAST_STATUSES: readonly ImportSourceLastStatus[] = [
  */
 export class ImportSource extends PrimaryModel {
   calendarId: string;
-  url: string;
+  /**
+   * How this source was intaken. `'url'` for a polled live feed (default),
+   * `'file'` for a one-shot uploaded .ics file.
+   */
+  sourceType: ImportSourceType;
+  /**
+   * The live ICS feed URL for `'url'` sources, or `null` for `'file'` sources
+   * (an uploaded file has no URL to poll).
+   */
+  url: string | null;
+  /**
+   * The display name of the uploaded file for `'file'` sources, or `null` for
+   * `'url'` sources.
+   */
+  originalFilename: string | null;
   enabled: boolean;
   /**
    * The verification mechanism the owner has committed to for this source,
@@ -104,12 +132,14 @@ export class ImportSource extends PrimaryModel {
    *
    * @param id - Unique identifier (UUID)
    * @param calendarId - UUID of the owning calendar
-   * @param url - The ICS feed URL
+   * @param url - The ICS feed URL, or null for file-backed sources
    */
-  constructor(id: string = '', calendarId: string = '', url: string = '') {
+  constructor(id: string = '', calendarId: string = '', url: string | null = '') {
     super(id);
     this.calendarId = calendarId;
+    this.sourceType = 'url';
     this.url = url;
+    this.originalFilename = null;
     this.enabled = true;
     this.verificationType = null;
     this.verificationState = 'unverified';
@@ -135,7 +165,9 @@ export class ImportSource extends PrimaryModel {
     return {
       id: this.id,
       calendarId: this.calendarId,
+      sourceType: this.sourceType,
       url: this.url,
+      originalFilename: this.originalFilename,
       enabled: this.enabled,
       verificationType: this.verificationType,
       verificationState: this.verificationState,
@@ -162,7 +194,9 @@ export class ImportSource extends PrimaryModel {
    * @returns A new ImportSource instance
    */
   static fromObject(obj: Record<string, any>): ImportSource {
-    const model = new ImportSource(obj.id ?? '', obj.calendarId ?? '', obj.url ?? '');
+    const model = new ImportSource(obj.id ?? '', obj.calendarId ?? '', obj.url ?? null);
+    model.sourceType = (obj.sourceType as ImportSourceType) ?? 'url';
+    model.originalFilename = obj.originalFilename ?? null;
     model.enabled = obj.enabled ?? true;
     model.verificationType =
       (obj.verificationType as ImportSourceVerificationType) ?? null;

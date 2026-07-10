@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import sinon from 'sinon';
+import type { Transaction } from 'sequelize';
 import type { VEvent, DateWithTimeZone } from 'node-ical';
 
 import { Account } from '@/common/model/account';
@@ -70,7 +71,9 @@ function makeSourceEntity(overrides: Partial<ImportSourceEntity> = {}): ImportSo
   return {
     id: 'ssssssss-ssss-ssss-ssss-ssssssssssss',
     calendar_id: 'cccccccc-cccc-cccc-cccc-cccccccccccc',
+    source_type: 'url',
     url: 'https://events.example.test/feed.ics',
+    original_filename: null,
     enabled: true,
     verification_state: 'verified',
     verification_token: null,
@@ -247,6 +250,35 @@ describe('SyncService', () => {
       sandbox.stub(ImportSourceEntity, 'findByPk').resolves(null);
       await expect(service.syncSource({ account, importSourceId: 'missing' }))
         .rejects.toBeInstanceOf(ImportSourceNotFoundError);
+    });
+
+    it('throws for a file source (no syncable url) before any fetch', async () => {
+      // Migration 0039 relaxed import_source.url to nullable for the 'file'
+      // variant. syncSource is a URL-sync path: it must fail loud on a file
+      // source (or a url source with a null url) rather than pass null into
+      // the network fetch.
+      sandbox.stub(ImportSourceEntity, 'findByPk').resolves(
+        makeSourceEntity({
+          source_type: 'file',
+          url: null,
+          original_filename: 'exported-events.ics',
+        }),
+      );
+
+      await expect(service.syncSource({ account, importSourceId: 'src-1' }))
+        .rejects.toThrow(/not a syncable url source/);
+      // The fetch phase must never run for a non-url source.
+      expect(fetcher.fetch.called).toBe(false);
+    });
+
+    it('throws for a url source whose url is unexpectedly null', async () => {
+      sandbox.stub(ImportSourceEntity, 'findByPk').resolves(
+        makeSourceEntity({ source_type: 'url', url: null }),
+      );
+
+      await expect(service.syncSource({ account, importSourceId: 'src-1' }))
+        .rejects.toThrow(/not a syncable url source/);
+      expect(fetcher.fetch.called).toBe(false);
     });
 
     it('refuses sync when verification is unverified', async () => {
@@ -478,8 +510,12 @@ describe('SyncService', () => {
   // --------------------------------------------------------------------------
 
   describe('four-case event dispatch', () => {
-    function setupWith(vevents: VEvent[], existingOrigins: EventImportOriginEntity[] = []) {
-      const src = makeSourceEntity();
+    function setupWith(
+      vevents: VEvent[],
+      existingOrigins: EventImportOriginEntity[] = [],
+      sourceOverrides: Partial<ImportSourceEntity> = {},
+    ) {
+      const src = makeSourceEntity(sourceOverrides);
       sandbox.stub(ImportSourceEntity, 'findByPk').resolves(src);
       fetcher.fetch.resolves({
         outcome: 'ok',
@@ -516,13 +552,14 @@ describe('SyncService', () => {
     it('dedup bulk-load queries EventImportOriginEntity with EventEntity eager-joined', async () => {
       // Use a fresh findAll spy so we can inspect the call args directly.
       const vevent = makeVEvent({ uid: 'new-a@example.test' });
-      const src = setupWith([vevent], []);
+      const src = setupWith([vevent], [], { id: 'src-input-id' });
       void src;
 
       eventService.createEvent.callsFake(async () => ({ id: 'evt-new-a' } as never));
 
-      // The orchestrator's findAll uses the `importSourceId` input it was
-      // given; we pass 'src-input-id' and assert the query carried it.
+      // The pipeline keys the dedup query on the resolved source's id
+      // (findByPk(importSourceId).id === importSourceId in production); we align
+      // the fixture's id with the input and assert the query carried it.
       await service.syncSource({ account, importSourceId: 'src-input-id' });
 
       const findAllStub = EventImportOriginEntity.findAll as sinon.SinonStub;
@@ -914,6 +951,160 @@ describe('SyncService', () => {
 
       const result = await service.syncSource({ account, importSourceId: 'src-1' });
       expect(result.outcome).toBe('no_changes');
+      expect(eventService.createEvent.called).toBe(false);
+    });
+  });
+
+  // --------------------------------------------------------------------------
+  // processIcsBuffer direct entry (pv-84da.1.2)
+  // --------------------------------------------------------------------------
+
+  describe('processIcsBuffer', () => {
+    // The extraction target: pipeline steps 5–12 driven directly from an
+    // in-memory buffer, bypassing the fetch phase. This is the entry point the
+    // file-upload path (pv-84da.1.4) will reuse.
+
+    function makeProcessService(vevents: VEvent[], existingOrigins: EventImportOriginEntity[] = []): SyncService {
+      sandbox.stub(EventImportOriginEntity, 'findAll').resolves(
+        existingOrigins as unknown as EventImportOriginEntity[],
+      );
+      return new SyncService({
+        eventService: eventService as unknown as EventService,
+        calendarService: calendarService as unknown as CalendarService,
+        fetcher: fetcher as unknown as Fetcher,
+        rateLimiter,
+        parseICS: () => {
+          const out: Record<string, VEvent> = {};
+          vevents.forEach((v, i) => { out[`v-${i}`] = v; });
+          return out as never;
+        },
+      });
+    }
+
+    it('parses the buffer and creates events, recording a success run', async () => {
+      const src = makeSourceEntity();
+      const veventA = makeVEvent({ uid: 'buf-a@example.test' });
+      const veventB = makeVEvent({ uid: 'buf-b@example.test' });
+      const svc = makeProcessService([veventA, veventB]);
+      eventService.createEvent.callsFake(async () => ({ id: 'evt-buf' } as never));
+
+      const startedAt = new Date('2026-04-22T10:00:00Z');
+      const result = await svc.processIcsBuffer(
+        Buffer.from('BEGIN:VCALENDAR\r\nEND:VCALENDAR'),
+        src,
+        { dedupScope: 'source', account, startedAt },
+      );
+
+      expect(result.outcome).toBe('success');
+      expect(result.eventsCreated).toBe(2);
+      expect(result.startedAt.getTime()).toBe(startedAt.getTime());
+      expect(eventService.createEvent.callCount).toBe(2);
+      for (const call of eventService.createEvent.getCalls()) {
+        expect(call.args[2]).toEqual({ source: 'import' });
+      }
+    });
+
+    it('applies fetchBookkeeping onto the source only inside the successful transaction', async () => {
+      const src = makeSourceEntity({ etag: 'W/"old"', content_hash: 'OLD-HASH' });
+      const svc = makeProcessService([makeVEvent({ uid: 'buf-c@example.test' })]);
+      eventService.createEvent.callsFake(async () => ({ id: 'evt-buf-c' } as never));
+
+      const result = await svc.processIcsBuffer(
+        Buffer.from('BEGIN:VCALENDAR'),
+        src,
+        {
+          dedupScope: 'source',
+          account,
+          startedAt: new Date('2026-04-22T10:00:00Z'),
+          fetchBookkeeping: { etag: 'W/"new"', contentHash: 'NEW-HASH' },
+        },
+      );
+
+      expect(result.outcome).toBe('success');
+      expect(src.etag).toBe('W/"new"');
+      expect(src.content_hash).toBe('NEW-HASH');
+      expect(src.last_status).toBe('ok');
+      expect((src.save as sinon.SinonStub).called).toBe(true);
+    });
+
+    it('records parse_error without clobbering etag/content_hash when parsing throws', async () => {
+      const src = makeSourceEntity({ etag: 'W/"keep"', content_hash: 'KEEP-HASH' });
+      const svc = new SyncService({
+        eventService: eventService as unknown as EventService,
+        calendarService: calendarService as unknown as CalendarService,
+        fetcher: fetcher as unknown as Fetcher,
+        rateLimiter,
+        parseICS: () => { throw new Error('malformed calendar'); },
+      });
+
+      const result = await svc.processIcsBuffer(
+        Buffer.from('junk'),
+        src,
+        {
+          dedupScope: 'source',
+          account,
+          startedAt: new Date('2026-04-22T10:00:00Z'),
+          fetchBookkeeping: { etag: 'W/"new"', contentHash: 'NEW-HASH' },
+        },
+      );
+
+      expect(result.outcome).toBe('parse_error');
+      expect(src.last_status).toBe('parse_error');
+      // Parse failed before the transaction — the stored etag/content_hash
+      // survive so the next conditional GET stays valid.
+      expect(src.etag).toBe('W/"keep"');
+      expect(src.content_hash).toBe('KEEP-HASH');
+    });
+
+    it('enlists event writes in a caller-supplied transaction and never opens its own', async () => {
+      // runTransactional has two branches: open a dedicated db.transaction
+      // (URL-sync path, no tx) or reuse the caller's tx (file-upload path,
+      // pv-84da.1.4). This exercises the caller-supplied branch: the tx must
+      // thread through to the event write, the origin upsert, and the source
+      // bookkeeping save, while db.transaction is never called.
+      const src = makeSourceEntity();
+      const svc = makeProcessService([makeVEvent({ uid: 'buf-tx@example.test' })]);
+      eventService.createEvent.callsFake(async () => ({ id: 'evt-buf-tx' } as never));
+
+      const callerTx = { LEVEL: 'caller-tx' } as unknown as Transaction;
+      const dbTxStub = db.transaction as sinon.SinonStub;
+
+      const result = await svc.processIcsBuffer(
+        Buffer.from('BEGIN:VCALENDAR'),
+        src,
+        { dedupScope: 'source', account, startedAt: new Date('2026-04-22T10:00:00Z') },
+        callerTx,
+      );
+
+      // Behavior: the run still succeeds and creates the event.
+      expect(result.outcome).toBe('success');
+      expect(result.eventsCreated).toBe(1);
+
+      // The caller owns the transaction — the orchestrator must NOT open one.
+      expect(dbTxStub.called).toBe(false);
+
+      // The caller's tx flows through to every write in the transactional body.
+      expect(eventService.createEvent.calledOnce).toBe(true);
+      // createEvent(account, params, { source: 'import' }, tx) — tx is arg 3.
+      expect(eventService.createEvent.firstCall.args[3]).toBe(callerTx);
+      const upsertOptions = originUpsertStub.firstCall.args[1] as Record<string, unknown>;
+      expect(upsertOptions.transaction).toBe(callerTx);
+      const saveArgs = (src.save as sinon.SinonStub).firstCall.args[0];
+      expect(saveArgs).toMatchObject({ transaction: callerTx });
+    });
+
+    it("throws when dedupScope is 'calendar' (implemented in pv-84da.1.3)", async () => {
+      const src = makeSourceEntity();
+      const svc = makeProcessService([makeVEvent()]);
+
+      await expect(
+        svc.processIcsBuffer(
+          Buffer.from('BEGIN:VCALENDAR'),
+          src,
+          { dedupScope: 'calendar', account, startedAt: new Date() },
+        ),
+      ).rejects.toThrow(/not implemented/);
+      // Nothing should have been parsed or written.
       expect(eventService.createEvent.called).toBe(false);
     });
   });

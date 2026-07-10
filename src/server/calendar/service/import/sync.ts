@@ -136,6 +136,39 @@ export interface SyncInput {
   importSourceId: string;
 }
 
+/**
+ * Input to {@link SyncService.processIcsBuffer}.
+ *
+ * Covers pipeline steps 5–12 (parse → map → dedup → create/update dispatch →
+ * source bookkeeping → record ImportRun → purge). The fetch phase (steps 1–4)
+ * and its fetch-outcome bookkeeping stay in {@link SyncService.syncSource}; any
+ * fetch-derived source updates are handed down via {@link fetchBookkeeping} and
+ * applied only inside the successful transaction (step 9) so a parse failure
+ * never clobbers the stored etag/content-hash.
+ */
+export interface ProcessIcsOptions {
+  /**
+   * Dedup strategy. `'source'` dedups by `(import_source_id, external_uid,
+   * external_recurrence_id)` — the URL-sync model implemented here. `'calendar'`
+   * (calendar-wide UID dedup for file uploads) is implemented in pv-84da.1.3;
+   * passing it here throws.
+   */
+  dedupScope: 'source' | 'calendar';
+  /** Requester identity threaded into EventService create/update writes. */
+  account: Account;
+  /** Wall-clock time the enclosing run began (preserved on SyncResult.startedAt). */
+  startedAt: Date;
+  /**
+   * Fetch-derived source bookkeeping applied inside the successful transaction
+   * (step 9). Supplied by the URL-sync fetch path; the file-upload path
+   * (pv-84da.1.4) omits it or supplies its own.
+   */
+  fetchBookkeeping?: {
+    etag?: string | null;
+    contentHash: string | null;
+  };
+}
+
 // ---------------------------------------------------------------------------
 // SyncService
 // ---------------------------------------------------------------------------
@@ -210,6 +243,23 @@ class SyncService {
 
     this.assertVerifiedForSync(sourceEntity);
 
+    // URL-sync invariant. syncSource fetches the feed over the network, so it
+    // is only meaningful for 'url' sources — which the design guarantees carry
+    // a non-null url at the service layer even though migration 0039 relaxed
+    // the column to nullable for the 'file' variant (0039 doc comment: "URL
+    // sources continue to carry a non-null url (enforced at the service layer,
+    // since the column can no longer enforce it for both variants)"). Enforce
+    // that guarantee here so the fetch phase can rely on a non-null url. A
+    // 'file' source — or a 'url' source with a null url, which must never
+    // happen — fails loud rather than silently fetching an undefined URL.
+    if (sourceEntity.source_type !== 'url' || !sourceEntity.url) {
+      throw new Error(
+        `syncSource: import source ${importSourceId} is not a syncable url source `
+        + `(source_type=${sourceEntity.source_type}, hasUrl=${sourceEntity.url != null})`,
+      );
+    }
+    const sourceUrl = sourceEntity.url;
+
     if (!this.rateLimiter.tryAcquire(importSourceId, this.nowFn().getTime())) {
       throw new ImportSourceVerifyRateLimitError();
     }
@@ -220,7 +270,7 @@ class SyncService {
     let fetchResult: FetcherResult;
     try {
       fetchResult = await this.fetcher.fetch({
-        url: sourceEntity.url,
+        url: sourceUrl,
         importSourceId,
         etag: sourceEntity.etag ?? undefined,
       });
@@ -273,13 +323,71 @@ class SyncService {
       });
     }
 
-    // --- Parse phase -----------------------------------------------------
+    // --- Hand off to the shared ICS processing pipeline (steps 5–12) -----
+    // Fetch-outcome bookkeeping above stays in syncSource. The fetch-derived
+    // etag/content-hash are passed down and applied only inside the successful
+    // transaction (step 9), preserving the "don't clobber on parse failure"
+    // contract.
+    return this.processIcsBuffer(
+      fetchResult.body,
+      sourceEntity,
+      {
+        dedupScope: 'source',
+        account: input.account,
+        startedAt,
+        fetchBookkeeping: {
+          etag: fetchResult.etag,
+          contentHash: fetchResult.contentHash,
+        },
+      },
+    );
+  }
+
+  /**
+   * Run pipeline steps 5–12 over an in-memory ICS buffer: parse the VCALENDAR,
+   * map + dedup + dispatch its VEVENTs, apply source bookkeeping, record the
+   * ImportRun, and purge beyond the retention cap.
+   *
+   * Extracted from {@link syncSource} so file uploads (pv-84da.1.4) can enter
+   * the pipeline after their own intake step instead of a network fetch. Pure
+   * extraction — no behavior change on the URL-sync path.
+   *
+   * Never throws for "expected" failure cases (parse errors, individual write
+   * failures) — the outcome is captured in a persisted ImportRun row and
+   * returned. Only catastrophic infrastructure failures propagate.
+   *
+   * @param buffer Raw ICS bytes (utf8-decoded before parsing).
+   * @param source The import source these events belong to.
+   * @param opts Dedup scope, acting account, run start time, and optional
+   *   fetch-derived source bookkeeping.
+   * @param tx Optional transaction to enlist the event writes in. When omitted,
+   *   a dedicated transaction is opened (the URL-sync path). When supplied, the
+   *   caller owns the transaction (the file-upload path, pv-84da.1.4).
+   */
+  async processIcsBuffer(
+    buffer: Buffer,
+    source: ImportSourceEntity,
+    opts: ProcessIcsOptions,
+    tx?: Transaction,
+  ): Promise<SyncResult> {
+    if (opts.dedupScope !== 'source') {
+      // Calendar-wide dedup is implemented in pv-84da.1.3. Until then, refuse
+      // rather than silently falling through to per-source dedup.
+      throw new Error(
+        `processIcsBuffer: dedupScope '${opts.dedupScope}' is not implemented (see pv-84da.1.3)`,
+      );
+    }
+
+    const importSourceId = source.id;
+    const { account, startedAt } = opts;
+
+    // --- Parse phase (step 5) --------------------------------------------
     let parsed: CalendarResponse;
     try {
-      parsed = this.parseICS(fetchResult.body.toString('utf8'));
+      parsed = this.parseICS(buffer.toString('utf8'));
     }
     catch (err) {
-      await this.updateSourceOnFetchFailure(sourceEntity, 'parse_error');
+      await this.updateSourceOnFetchFailure(source, 'parse_error');
       return this.recordRun({
         sourceId: importSourceId,
         startedAt,
@@ -296,7 +404,7 @@ class SyncService {
     // primary language via the event service's already-wired calendarService
     // helper. If unavailable, default to 'en'. This is a best-effort lookup;
     // the mapper only uses it to stamp a language code on content.
-    const primaryLanguage = await this.resolveCalendarPrimaryLanguage(sourceEntity.calendar_id);
+    const primaryLanguage = await this.resolveCalendarPrimaryLanguage(source.calendar_id);
 
     // --- Extract VCALENDAR-level X-WR-TIMEZONE fallback ------------------
     // node-ical surfaces it on `parsed.vcalendar['WR-TIMEZONE']`. The mapper
@@ -312,7 +420,7 @@ class SyncService {
     let firstErrorMessage: string | null = null;
 
     try {
-      await db.transaction(async (tx) => {
+      await this.runTransactional(tx, async (txn) => {
         // Collect existing origin rows (with eager-joined event) keyed on the
         // dedup tuple. The join is resolved via EventImportOriginEntity's
         // @BelongsTo on the child side; EventEntity deliberately has no
@@ -320,7 +428,7 @@ class SyncService {
         const existing = await EventImportOriginEntity.findAll({
           where: { import_source_id: importSourceId },
           include: [{ model: EventEntity, required: false }],
-          transaction: tx,
+          transaction: txn,
         });
         const existingByKey = new Map<string, EventImportOriginEntity>();
         for (const origin of existing) {
@@ -333,7 +441,7 @@ class SyncService {
         // have a caller-requester identity for writes; we build a synthetic
         // account scoped to the calendar owner so EventService permission
         // checks pass. In practice the calling API layer passes its own.
-        const actingAccount = input.account;
+        const actingAccount = account;
 
         for (const vevent of vevents) {
           let mapped: MapperOutput;
@@ -358,19 +466,19 @@ class SyncService {
           const existingOrigin = existingByKey.get(key);
           try {
             if (!existingOrigin) {
-              await this.createEvent(actingAccount, sourceEntity, mapped, tx);
+              await this.createEvent(actingAccount, source, mapped, txn);
               counts.created++;
             }
             else if (existingOrigin.locally_edited) {
-              await this.touchSourceLastSeen(existingOrigin, tx);
+              await this.touchSourceLastSeen(existingOrigin, txn);
               counts.skippedLocallyEdited++;
             }
             else if (this.sourceIsNewer(mapped.source_last_modified, existingOrigin.source_last_modified)) {
-              await this.updateEvent(actingAccount, existingOrigin.event_id, sourceEntity, mapped, tx);
+              await this.updateEvent(actingAccount, existingOrigin.event_id, source, mapped, txn);
               counts.updated++;
             }
             else {
-              await this.touchSourceLastSeen(existingOrigin, tx);
+              await this.touchSourceLastSeen(existingOrigin, txn);
             }
           }
           catch (err) {
@@ -391,13 +499,17 @@ class SyncService {
           }
         }
 
-        // Source bookkeeping inside the same transaction.
+        // Source bookkeeping inside the same transaction (step 9). Fetch-derived
+        // etag/content-hash are applied here — only on this successful path, so
+        // a parse failure never overwrites the stored values.
         const newStatus: ImportSourceEntity['last_status'] = parseErrorCount > 0 ? 'parse_error' : 'ok';
-        sourceEntity.etag = fetchResult.etag ?? sourceEntity.etag;
-        sourceEntity.content_hash = fetchResult.contentHash;
-        sourceEntity.last_fetched_at = this.nowFn();
-        sourceEntity.last_status = newStatus;
-        await sourceEntity.save({ transaction: tx });
+        if (opts.fetchBookkeeping) {
+          source.etag = opts.fetchBookkeeping.etag ?? source.etag;
+          source.content_hash = opts.fetchBookkeeping.contentHash;
+          source.last_fetched_at = this.nowFn();
+        }
+        source.last_status = newStatus;
+        await source.save({ transaction: txn });
       });
     }
     catch (err) {
@@ -413,7 +525,7 @@ class SyncService {
         'ics.sync.transaction_failed',
       );
       const message = firstErrorMessage ?? this.sanitizedErrorMessage(err);
-      await this.updateSourceOnFetchFailure(sourceEntity, 'parse_error');
+      await this.updateSourceOnFetchFailure(source, 'parse_error');
       return this.recordRun({
         sourceId: importSourceId,
         startedAt,
@@ -436,6 +548,22 @@ class SyncService {
     await this.purgeOldRuns(importSourceId);
 
     return result;
+  }
+
+  /**
+   * Run `fn` inside the caller's transaction when one is supplied, otherwise
+   * open a dedicated transaction. Keeps the URL-sync path (no `tx`) behaving
+   * exactly as before while letting the file-upload path (pv-84da.1.4) enlist
+   * the event writes in a transaction it already owns.
+   */
+  private async runTransactional<T>(
+    tx: Transaction | undefined,
+    fn: (tx: Transaction) => Promise<T>,
+  ): Promise<T> {
+    if (tx) {
+      return fn(tx);
+    }
+    return db.transaction(fn);
   }
 
   // -------------------------------------------------------------------------

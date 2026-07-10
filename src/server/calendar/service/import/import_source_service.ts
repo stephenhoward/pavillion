@@ -16,9 +16,11 @@ import { ValidationError } from '@/common/exceptions/base';
 import { CalendarNotFoundError } from '@/common/exceptions/calendar';
 import { CalendarEditorPermissionError } from '@/common/exceptions/editor';
 import {
+  ImportSourceDnsVerificationError,
   ImportSourceNotFoundError,
   ImportSourceRelMeVerificationError,
   ImportSourceSsrfBlockedError,
+  IMPORT_DNS_MISMATCH,
   IMPORT_RELME_HOSTNAME_MISMATCH,
   IMPORT_RELME_LINK_NOT_FOUND,
   IMPORT_RELME_PAGE_FETCH_ERROR,
@@ -469,6 +471,19 @@ class ImportSourceService {
    * {@link ImportSourceDnsVerificationError} on any non-success.
    */
   private async verifyDnsTxtSource(entity: ImportSourceEntity): Promise<ImportSource> {
+    if (!entity.url) {
+      // Defensive: DNS-TXT verification derives its challenge target from the
+      // source hostname, so a source with no url has no identity to verify.
+      // File sources never receive a verification_type (guarded in
+      // verifySource), and migration 0039 enforces a non-null url for url
+      // sources at the service layer, so this branch is unreachable in
+      // practice — fail closed rather than pass null into the resolver.
+      logger.warn(
+        { importSourceId: entity.id, reason: IMPORT_DNS_MISMATCH },
+        'DNS verification rejected: source URL is null',
+      );
+      throw new ImportSourceDnsVerificationError(IMPORT_DNS_MISMATCH);
+    }
     const result = await this.dnsVerifier.verify({
       sourceId: entity.id,
       calendarId: entity.calendar_id,
@@ -520,6 +535,19 @@ class ImportSourceService {
     entity: ImportSourceEntity,
     verificationPageUrl: string | undefined,
   ): Promise<ImportSource> {
+    if (!entity.url) {
+      // Defensive: rel-me verification matches against the source hostname, so
+      // a source with no url has no identity to verify. File sources never
+      // receive a verification_type (guarded in verifySource), and migration
+      // 0039 enforces a non-null url for url sources at the service layer, so
+      // this branch is unreachable in practice — fail closed rather than pass
+      // null into hostnameFromUrl.
+      logger.warn(
+        { importSourceId: entity.id, reason: IMPORT_RELME_HOSTNAME_MISMATCH },
+        'rel-me verification rejected: source URL is null',
+      );
+      throw new ImportSourceRelMeVerificationError(IMPORT_RELME_HOSTNAME_MISMATCH);
+    }
     const sourceHostname = hostnameFromUrl(entity.url);
     if (!sourceHostname) {
       // Defensive: entity.url passed createSource validation, so this should
