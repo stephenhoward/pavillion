@@ -30,7 +30,9 @@ merges are manual.
      the sync (or `gt restack`) from that worktree.
    - Also note any merged branches gt deleted (visible in `rawOutput`).
 
-3. **Re-submit the stack.** Retarget and update the remaining PRs:
+3. **Re-submit the stack.** Retarget and update the remaining PRs, using the
+   submit pattern defined by stacking.md's merge + restack ritual (quoted
+   here for execution, defined there):
 
    ```bash
    gt submit --stack --no-interactive --publish

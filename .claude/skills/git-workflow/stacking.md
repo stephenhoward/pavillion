@@ -4,6 +4,8 @@ All branch creation and PR submission goes through the Graphite CLI (`gt`), incl
 
 This file is the **sole source of truth** for gt command patterns and stacking rules. Other skills (`bead-branch-and-pr`, `bead-backlog-selection`, `bead-wave-orchestration`, etc.) cross-reference this file; they do not restate its contents. The corresponding gt operations for orchestrators are implemented only in `.claude/orchestrators/lib/helpers.ts` (`stackCreate`, `stackSubmit`, `syncAndRestack`).
 
+**Adoption status (transitional):** interactive sessions follow these conventions now. The autonomous orchestrator's branch/push/PR call sites (`phases.ts`, `execute.ts`) still use raw git/gh and adopt the gt helpers in Stage 2 of the rollout (spec: `agent-os/specs/2026-07-11-graphite-stacked-prs/`). Until then, preflight's gt checks assert readiness one stage ahead of the orchestrator's first gt use. Remove this note when Stage 2 lands.
+
 ## When a stack exists
 
 A stack exists when:
@@ -19,7 +21,7 @@ Independent pieces of work are **not** a stack: they stay as parallel branches o
 |---|---|
 | `git checkout -b <name>` | `gt create <name> -m "<msg>"` (or `gt create <name> --onto <parent>` before work starts) |
 | `git push` + `gh pr create` | `gt submit --no-interactive --publish` |
-| post-merge cleanup + rebase | `gt sync -f` then `gt submit --stack` |
+| post-merge cleanup + rebase | `gt sync -f` then `gt submit --stack --no-interactive --publish` |
 
 Rules:
 
@@ -50,7 +52,7 @@ Merges are manual, bottom-up, in GitHub:
 
 1. **Squash-merge the bottom PR** in the GitHub UI.
 2. **`gt sync -f`** — pulls trunk, detects the merged PR, deletes the merged local branch, restacks children onto `main`. `-f` skips the delete-confirmation prompt.
-3. **`gt submit --stack`** — retargets and updates the remaining PRs. GitHub CI re-validates each retargeted PR.
+3. **`gt submit --stack --no-interactive --publish`** — retargets and updates the remaining PRs (`--publish` per the load-bearing rule above). GitHub CI re-validates each retargeted PR.
 4. Repeat from step 1 for the next-lowest PR.
 
 The `/restack` command wraps steps 2–3 (via the `syncAndRestack` helper) and reports what moved: run it after merging one or more PRs. It is loop-friendly for a bottom-up merge session; there is no standing automation because merges are manual.
