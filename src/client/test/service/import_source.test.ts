@@ -12,12 +12,19 @@ import {
   ImportSourceNotFoundError,
   ImportSourceFetchError,
   ImportSourceSsrfBlockedError,
+  ImportSourceParseError,
   ImportSourceDnsVerificationError,
   ImportSourceVerifyRateLimitError,
+  ImportSourceFileEmptyError,
+  ImportSourceFileTooLargeError,
+  ImportSourceFileBadFormatError,
+  ImportSourceFileTooManyEventsError,
+  ImportSourceCapExceededError,
   IMPORT_DNS_NOT_FOUND,
 } from '@/common/exceptions/import';
 import { CalendarNotFoundError } from '@/common/exceptions/calendar';
 import { CalendarEditorPermissionError } from '@/common/exceptions/editor';
+import { ValidationError } from '@/common/exceptions/base';
 
 // Mock axios so every test starts with fresh stubs
 vi.mock('axios');
@@ -126,6 +133,96 @@ describe('ImportSourceService', () => {
       await expect(
         service.createSource(CALENDAR_ID, 'https://example.com/x.ics'),
       ).rejects.toThrow(CalendarEditorPermissionError);
+    });
+  });
+
+  describe('createSourceFromFile', () => {
+    /** Build the `{ source, run }` wire shape the file endpoint returns on 201. */
+    function fileResultPayload(): Record<string, unknown> {
+      return {
+        source: sourcePayload({
+          sourceType: 'file',
+          url: null,
+          originalFilename: 'calendar.ics',
+          verificationState: 'verified',
+        }),
+        run: {
+          id: '44444444-4444-4444-4444-444444444444',
+          importSourceId: SOURCE_ID,
+          startedAt: '2026-05-17T00:00:00.000Z',
+          finishedAt: '2026-05-17T00:00:01.000Z',
+          outcome: 'success',
+          eventsCreated: 3,
+          eventsUpdated: 0,
+          eventsSkippedLocallyEdited: 0,
+          eventsDisappeared: 0,
+          errorMessage: null,
+        },
+      };
+    }
+
+    function icsFile(): File {
+      return new File(['BEGIN:VCALENDAR\nEND:VCALENDAR'], 'calendar.ics', {
+        type: 'text/calendar',
+      });
+    }
+
+    it('POSTs multipart FormData with the file under field name "file"', async () => {
+      const postStub = sandbox.stub(axios, 'post').resolves({ data: fileResultPayload() });
+      const file = icsFile();
+
+      await service.createSourceFromFile(CALENDAR_ID, file);
+
+      expect(postStub.calledOnce).toBe(true);
+      expect(postStub.firstCall.args[0]).toBe(
+        `/api/v1/calendars/${CALENDAR_ID}/import-sources/file`,
+      );
+      const body = postStub.firstCall.args[1];
+      expect(body).toBeInstanceOf(FormData);
+      expect((body as FormData).get('file')).toBe(file);
+      // The browser must set the multipart Content-Type/boundary itself; the
+      // service must not pass a config that overrides it.
+      expect(postStub.firstCall.args[2]).toBeUndefined();
+    });
+
+    it('decodes the { source, run } envelope', async () => {
+      sandbox.stub(axios, 'post').resolves({ data: fileResultPayload() });
+
+      const result = await service.createSourceFromFile(CALENDAR_ID, icsFile());
+
+      expect(result.source).toBeInstanceOf(ImportSource);
+      expect(result.source.id).toBe(SOURCE_ID);
+      expect(result.run.outcome).toBe('success');
+      expect(result.run.eventsCreated).toBe(3);
+    });
+
+    it('validates the calendarId before issuing a request', async () => {
+      const postStub = sandbox.stub(axios, 'post');
+
+      await expect(service.createSourceFromFile('   ', icsFile())).rejects.toThrow(
+        'Calendar ID cannot be empty',
+      );
+      expect(postStub.called).toBe(false);
+    });
+
+    it.each([
+      ['ImportSourceFileEmptyError', ImportSourceFileEmptyError],
+      ['ImportSourceFileTooLargeError', ImportSourceFileTooLargeError],
+      ['ImportSourceFileBadFormatError', ImportSourceFileBadFormatError],
+      ['ImportSourceFileTooManyEventsError', ImportSourceFileTooManyEventsError],
+      ['ImportSourceParseError', ImportSourceParseError],
+      ['ImportSourceCapExceededError', ImportSourceCapExceededError],
+      ['CalendarEditorPermissionError', CalendarEditorPermissionError],
+      ['CalendarNotFoundError', CalendarNotFoundError],
+      ['ValidationError', ValidationError],
+    ])('maps errorName %s to its typed exception', async (errorName, ctor) => {
+      sandbox.stub(axios, 'post').rejects({
+        response: { data: { errorName } },
+      });
+
+      await expect(
+        service.createSourceFromFile(CALENDAR_ID, icsFile()),
+      ).rejects.toBeInstanceOf(ctor);
     });
   });
 

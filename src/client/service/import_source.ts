@@ -9,6 +9,11 @@ import {
   ImportSourceDnsVerificationError,
   ImportSourceRelMeVerificationError,
   ImportSourceVerifyRateLimitError,
+  ImportSourceFileEmptyError,
+  ImportSourceFileTooLargeError,
+  ImportSourceFileBadFormatError,
+  ImportSourceFileTooManyEventsError,
+  ImportSourceCapExceededError,
 } from '@/common/exceptions/import';
 import { CalendarNotFoundError } from '@/common/exceptions/calendar';
 import { CalendarEditorPermissionError } from '@/common/exceptions/editor';
@@ -63,9 +68,24 @@ const errorMap = {
   ImportSourceDnsVerificationError,
   ImportSourceRelMeVerificationError,
   ImportSourceVerifyRateLimitError,
+  ImportSourceFileEmptyError,
+  ImportSourceFileTooLargeError,
+  ImportSourceFileBadFormatError,
+  ImportSourceFileTooManyEventsError,
+  ImportSourceCapExceededError,
   UnauthenticatedError,
   ValidationError,
   UnknownError,
+};
+
+/**
+ * Success envelope for the file-upload create path
+ * (`POST /import-sources/file`, HTTP 201). Bundles the newly persisted source
+ * with a summary of the synchronous import run the upload triggered.
+ */
+export type ImportSourceFileResult = {
+  source: ImportSource;
+  run: ImportRunSummary;
 };
 
 /**
@@ -122,6 +142,50 @@ export default class ImportSourceService {
         { url },
       );
       return ImportSource.fromObject(response.data);
+    }
+    catch (error: unknown) {
+      handleApiError(error, errorMap);
+    }
+  }
+
+  /**
+   * Create a new import source from an uploaded .ics file.
+   *
+   * Wraps the file in a multipart `FormData` under the `file` field (the
+   * multer field name the endpoint reads) and POSTs it. The multipart
+   * `Content-Type` and boundary are intentionally left to the browser — a
+   * manually-set header would omit the boundary and break parsing on the
+   * server.
+   *
+   * Returns the persisted source together with a summary of the synchronous
+   * import run the upload kicked off.
+   *
+   * @param calendarId - UUID of the owning calendar
+   * @param file - The `.ics` file selected by the user
+   * @returns The newly persisted source and its import-run summary
+   */
+  async createSourceFromFile(
+    calendarId: string,
+    file: File,
+  ): Promise<ImportSourceFileResult> {
+    const encodedCalendarId = validateAndEncodeId(calendarId, 'Calendar ID');
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      const response = await axios.post(
+        `/api/v1/calendars/${encodedCalendarId}/import-sources/file`,
+        formData,
+      );
+      const data = response.data as {
+        source: Record<string, unknown>;
+        run: ImportRunSummary;
+      };
+      return {
+        source: ImportSource.fromObject(data.source),
+        run: data.run,
+      };
     }
     catch (error: unknown) {
       handleApiError(error, errorMap);
