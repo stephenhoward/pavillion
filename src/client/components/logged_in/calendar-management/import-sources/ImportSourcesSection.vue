@@ -77,7 +77,7 @@
     >
       <div class="confirmation-modal">
         <p>
-          {{ t('confirm_remove_message', { url: state.sourceToRemove.url }) }}
+          {{ t('confirm_remove_message', { url: state.sourceToRemove.url ?? state.sourceToRemove.originalFilename ?? '' }) }}
         </p>
         <div class="confirmation-modal__actions">
           <button
@@ -107,7 +107,7 @@ import { useTranslation } from 'i18next-vue';
 import { Plus } from 'lucide-vue-next';
 
 import type { ImportSource } from '@/common/model/import_source';
-import ImportSourceService from '@/client/service/import_source';
+import ImportSourceService, { type ImportRunSummary } from '@/client/service/import_source';
 import { importSourceErrorKey } from '@/client/service/import_source_errors';
 import PillButton from '@/client/components/common/pill-button.vue';
 import ModalLayout from '@/client/components/common/modal.vue';
@@ -117,7 +117,7 @@ import AdminSectionHeader from '@/client/components/common/admin-section-header.
 import { useToast } from '@/client/composables/useToast';
 
 import ImportSourceList from './ImportSourceList.vue';
-import AddImportSourceForm from './AddImportSourceForm.vue';
+import AddImportSourceForm, { type SubmitPayload } from './AddImportSourceForm.vue';
 import VerifyOwnershipWizard from './VerifyOwnershipWizard.vue';
 
 const props = withDefaults(defineProps<{
@@ -199,11 +199,29 @@ const closeAddForm = () => {
 };
 
 /**
- * Create a new import source. On success, prepend to the list, emit
- * `source-added`, and open the DNS-challenge modal so the owner can
+ * Dispatch the form's discriminated submit to the matching create path.
+ * URL sources go through the verify-ownership flow; file sources are imported
+ * synchronously with an inline run summary and no wizard. The payload shape
+ * (`SubmitPayload`) is imported from AddImportSourceForm so the emit contract
+ * stays tied to its source of truth. The `type` field selects between the
+ * live-URL create path (which requires ownership verification) and the
+ * one-shot file-upload path (which imports immediately and needs no
+ * verification).
+ */
+const onAddSubmit = async (payload: SubmitPayload) => {
+  if (payload.type === 'file') {
+    await createFileSource(payload.file);
+    return;
+  }
+  await createUrlSource(payload.url);
+};
+
+/**
+ * Create a new URL-backed import source. On success, prepend to the list,
+ * emit `source-added`, and open the DNS-challenge modal so the owner can
  * publish the TXT record immediately (pv-1qcp.3.4).
  */
-const onAddSubmit = async (url: string) => {
+const createUrlSource = async (url: string) => {
   state.isAdding = true;
   state.addError = null;
   try {
@@ -215,6 +233,47 @@ const onAddSubmit = async (url: string) => {
   }
   catch (err) {
     console.error('Failed to create import source', err);
+    state.addError = (err as Error)?.message || t('error_creating');
+  }
+  finally {
+    state.isAdding = false;
+  }
+};
+
+/**
+ * Build the human-readable summary for a completed file import from the run
+ * counters returned by `createSourceFromFile`.
+ *
+ * NOTE: The API's `run` payload (see `toImportRunSummary`) currently exposes
+ * only `eventsCreated` / `eventsUpdated` (plus the per-source
+ * `eventsSkippedLocallyEdited` / `eventsDisappeared`). The calendar-wide dedup
+ * counters the file path computes — `eventsSkippedSyncManaged` and
+ * `eventsPreservedLocalEdits` — are dropped by the wire DTO, so they cannot be
+ * surfaced here yet. Wiring them through is a backend follow-up.
+ */
+const buildImportSummary = (run: ImportRunSummary): string =>
+  t('import_success', {
+    created: run.eventsCreated,
+    updated: run.eventsUpdated,
+  });
+
+/**
+ * Create a file-backed import source from an uploaded .ics file. The upload
+ * imports events synchronously, so there is no ownership wizard — on success
+ * we prepend the source and surface a run summary toast.
+ */
+const createFileSource = async (file: File) => {
+  state.isAdding = true;
+  state.addError = null;
+  try {
+    const { source, run } = await service.createSourceFromFile(props.calendarId, file);
+    state.sources = [source, ...state.sources];
+    state.showAddForm = false;
+    emit('source-added', source);
+    toast.success(buildImportSummary(run));
+  }
+  catch (err) {
+    console.error('Failed to import calendar file', err);
     state.addError = (err as Error)?.message || t('error_creating');
   }
   finally {

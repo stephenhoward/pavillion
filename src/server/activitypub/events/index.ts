@@ -59,16 +59,60 @@ export default class ActivityPubEventHandlers implements DomainEventHandlers {
     this.housekeepingInterface = housekeepingInterface;
   }
 
+  /**
+   * Whether to run domain-event handlers strictly one at a time.
+   *
+   * Every handler installed below opens its own DB transaction. On SQLite
+   * (dev/test) the process holds a single shared connection that cannot BEGIN
+   * a second transaction while one is open — "cannot start a transaction
+   * within a transaction". A batch operation that emits many events in one
+   * tick (e.g. a multi-VEVENT ICS file import, whose per-event `eventCreated`
+   * emits all fire from one `afterCommit`) fans out to concurrent handlers
+   * whose transactions overlap and take the process down with an unhandled
+   * rejection. Serializing dispatch removes the overlap and matches DEC-013's
+   * single chronological pipeline. PostgreSQL (production) draws a separate
+   * pooled connection per transaction, so its handlers are safe to run
+   * concurrently and we keep them concurrent to preserve throughput.
+   */
+  private readonly serializeDispatch: boolean =
+    config.get<string>('database.dialect') === 'sqlite';
+
+  /** Tail of the serialized-dispatch chain; only advanced when {@link serializeDispatch}. */
+  private dispatchQueue: Promise<void> = Promise.resolve();
+
+  /**
+   * Adapt a domain-event handler for installation on the (never-awaited) bus.
+   *
+   * On every dialect the wrapper catches handler errors so a failed background
+   * dispatch is logged rather than surfacing as a process-killing unhandled
+   * rejection. On SQLite it additionally chains each invocation onto
+   * {@link dispatchQueue} so no two handler transactions overlap; on
+   * PostgreSQL invocations run concurrently as before.
+   */
+  private serialize<T>(handler: (payload: T) => Promise<void>): (payload: T) => void {
+    const run = (payload: T): Promise<void> =>
+      Promise.resolve()
+        .then(() => handler(payload))
+        .catch((error) => logError(error, '[ActivityPub] Domain-event handler failed'));
+
+    if (!this.serializeDispatch) {
+      return (payload: T): void => { void run(payload); };
+    }
+    return (payload: T): void => {
+      this.dispatchQueue = this.dispatchQueue.then(() => run(payload));
+    };
+  }
+
   install(eventBus: EventEmitter): void {
-    eventBus.on('eventCreated', this.handleEventCreated.bind(this));
-    eventBus.on('eventUpdated', this.handleEventUpdated.bind(this));
-    eventBus.on('eventDeleted', this.handleEventDeleted.bind(this));
-    eventBus.on('outboxMessageAdded', this.processOutboxMessage.bind(this));
-    eventBus.on('inboxMessageAdded', this.processInboxMessage.bind(this));
-    eventBus.on('account.created', this.handleAccountCreated.bind(this));
-    eventBus.on('calendar.created', this.handleCalendarCreated.bind(this));
-    eventBus.on('remoteEditorRevoked', this.handleRemoteEditorRevoked.bind(this));
-    eventBus.on('activitypub:follow:accepted', this.handleFollowAccepted.bind(this));
+    eventBus.on('eventCreated', this.serialize(this.handleEventCreated.bind(this)));
+    eventBus.on('eventUpdated', this.serialize(this.handleEventUpdated.bind(this)));
+    eventBus.on('eventDeleted', this.serialize(this.handleEventDeleted.bind(this)));
+    eventBus.on('outboxMessageAdded', this.serialize(this.processOutboxMessage.bind(this)));
+    eventBus.on('inboxMessageAdded', this.serialize(this.processInboxMessage.bind(this)));
+    eventBus.on('account.created', this.serialize(this.handleAccountCreated.bind(this)));
+    eventBus.on('calendar.created', this.serialize(this.handleCalendarCreated.bind(this)));
+    eventBus.on('remoteEditorRevoked', this.serialize(this.handleRemoteEditorRevoked.bind(this)));
+    eventBus.on('activitypub:follow:accepted', this.serialize(this.handleFollowAccepted.bind(this)));
   }
 
   /**
