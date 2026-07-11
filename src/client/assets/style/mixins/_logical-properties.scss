@@ -3,6 +3,8 @@
  * SCSS mixins and functions to support consistent logical property usage
  */
 
+@use 'sass:map';
+
 /* ===== LOGICAL SPACING MIXINS ===== */
 
 /**
@@ -183,8 +185,8 @@
     'text-align: right': 'text-align: end'
   );
   
-  @if map-has-key($logical-map, $property) {
-    @return map-get($logical-map, $property);
+  @if map.has-key($logical-map, $property) {
+    @return map.get($logical-map, $property);
   }
   
   @return $property;
