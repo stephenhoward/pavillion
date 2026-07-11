@@ -344,6 +344,36 @@ export function syncAndRestack(deps: SpawnDeps = {}): SyncAndRestackResult {
  * is at origin/main. This supports worktree workflows where each worktree's
  * branch starts at origin/main.
  */
+function checkGtPreflight(spawn: SpawnFn, mainBranch: string): PreflightFailure[] {
+  const failures: PreflightFailure[] = [];
+
+  const gtVersion = run('gt', ['--version'], spawn);
+  if (gtVersion.exitCode !== 0) {
+    failures.push({
+      kind: 'missing_gt',
+      reason: 'Graphite CLI (gt) not found; install gt and run `gt init` — all branch creation and PR submission goes through gt, with no plain-git fallback',
+    });
+    return failures;
+  }
+
+  const gtAuth = run('gt', ['auth', '--no-interactive'], spawn);
+  if (gtAuth.exitCode !== 0 || !gtAuth.stdout.includes('Authenticated as')) {
+    failures.push({
+      kind: 'gt_unauthenticated',
+      reason: 'gt is not authenticated; run `gt auth` interactively before autonomous work',
+    });
+  }
+  const gtTrunk = run('gt', ['trunk'], spawn);
+  if (gtTrunk.exitCode !== 0 || gtTrunk.stdout !== mainBranch) {
+    failures.push({
+      kind: 'gt_trunk_misconfigured',
+      reason: `gt trunk is not ${mainBranch} (got: ${gtTrunk.stdout || 'nothing'}); run \`gt init --trunk ${mainBranch}\``,
+    });
+  }
+
+  return failures;
+}
+
 export function preflight(deps: SpawnDeps = {}): PreflightResult {
   const spawn = deps.spawnFn ?? nodeSpawnSync;
   const mainBranch = process.env.PREFLIGHT_MAIN_BRANCH ?? 'main';
@@ -385,29 +415,7 @@ export function preflight(deps: SpawnDeps = {}): PreflightResult {
   }
 
   // 3. Graphite CLI present, authenticated, trunk configured
-  const gtVersion = run('gt', ['--version'], spawn);
-  if (gtVersion.exitCode !== 0) {
-    failures.push({
-      kind: 'missing_gt',
-      reason: 'Graphite CLI (gt) not found; install gt and run `gt init` — all branch creation and PR submission goes through gt, with no plain-git fallback',
-    });
-  }
-  else {
-    const gtAuth = run('gt', ['auth', '--no-interactive'], spawn);
-    if (gtAuth.exitCode !== 0 || !gtAuth.stdout.includes('Authenticated as')) {
-      failures.push({
-        kind: 'gt_unauthenticated',
-        reason: 'gt is not authenticated; run `gt auth` interactively before autonomous work',
-      });
-    }
-    const gtTrunk = run('gt', ['trunk'], spawn);
-    if (gtTrunk.exitCode !== 0 || gtTrunk.stdout !== mainBranch) {
-      failures.push({
-        kind: 'gt_trunk_misconfigured',
-        reason: `gt trunk is not ${mainBranch} (got: ${gtTrunk.stdout || 'nothing'}); run \`gt init --trunk ${mainBranch}\``,
-      });
-    }
-  }
+  failures.push(...checkGtPreflight(spawn, mainBranch));
 
   // 4. Backlog non-empty (excluding needs-human)
   const readyResult = run('bd', ['ready', `--limit=${readyLimit}`, '--json'], spawn);
