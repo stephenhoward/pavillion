@@ -41,22 +41,16 @@ In the PR body, place the reference wherever it reads naturally — top of Motiv
 
 ## Workflow
 
-- **No draft PRs.** Open a PR only when ready for merge.
+- **No draft PRs.** Open a PR only when ready for merge. When submitting through gt, this requires the `--publish` flag — see [stacking.md](stacking.md) for why. Stacked PRs are real PRs, individually ready for review; being upstack does not make a PR a draft.
 - **No auto-merge.** The user reviews and merges manually.
 - **Push to origin** only after build-guardian PASS (lint, unit, integration, build, e2e via build-guardian).
 - **Squash merge** on landing.
 
 ## Pushing to origin
 
-Before the first push, verify the local branch name conforms to [branches.md](branches.md). If it does **not** (for example, an auto-generated name from `superset.sh` like `apple-father` or `abrupt-grapple`), push with an explicit remote ref so the GitHub branch follows the convention:
+Pushing and PR creation go through the Graphite CLI: `gt submit` replaces `git push` + `gh pr create`. See [stacking.md](stacking.md) for the command patterns (submit flags, PR-shape follow-up via `gh pr edit`, and the merge/restack ritual).
 
-```bash
-git push -u origin HEAD:<type>.<kebab-title>
-```
-
-The `-u` flag wires the local branch's upstream to the renamed remote, so future pushes (`git push`) go to the same ref without re-specifying it.
-
-If the local branch already conforms, `git push -u origin HEAD` is sufficient.
+Branch-name conformance still applies before the first submit: the branch gt pushes is the name GitHub readers see, so it must follow [branches.md](branches.md). If you are working in a worktree with an auto-generated local branch name (`apple-father`, `abrupt-grapple`), do not submit that branch — create a properly-named branch for the work per the worktree guidance in [stacking.md](stacking.md).
 
 ## Disallowed
 

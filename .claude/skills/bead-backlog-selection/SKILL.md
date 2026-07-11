@@ -36,16 +36,20 @@ The `bdTopReady()` function filters out beads with the `needs-human` label via t
 
 ## Preconditions for autonomous work
 
-Before `/process-backlog` begins, `preflight.sh` must return `{ok: true}`. Every failure carries a `kind` field so the orchestrator can route user-facing messaging:
+Before `/process-backlog` begins, `preflight()` must return `{ok: true}`. Every failure carries a `kind` field so the orchestrator can route user-facing messaging:
 
 | `kind` | Meaning | User action |
 |---|---|---|
 | `dirty_tree` | `git status --porcelain` non-empty | Commit or stash first. |
-| `wrong_branch` | Current branch is not `main` | Return to `main` (or finish the current branch's PR). |
-| `stale_main` | Local `main` differs from `origin/main`, or `git fetch origin main` failed | `git pull` (or fix remote access). |
+| `behind_main` | HEAD is not at `origin/main`, or `git fetch origin main` failed | Pull/rebase onto `origin/main` (or fix remote access). Any branch name is fine as long as HEAD matches. |
+| `missing_gt` | Graphite CLI (`gt`) not installed | Install gt and run `gt init`. Hard stop — no silent fallback to plain git. |
+| `gt_unauthenticated` | gt installed but not authenticated | Run `gt auth` interactively. Hard stop. |
+| `gt_trunk_misconfigured` | gt trunk is not `main` | Run `gt init --trunk main`. Hard stop. |
 | `empty_backlog` | No READY beads exist that aren't `needs-human`-labelled | Shape or enrich more beads, or unlabel one. |
 
-The preflight script NEVER auto-fixes any of these. It reports what's wrong; the human (or the orchestrator's exit message) decides what to do. Auto-fix is an anti-pattern here because the fix depends on intent: a dirty tree could be in-progress work the user forgot about, and silently stashing it would surprise them.
+The three gt kinds exist because all branch creation and PR submission goes through gt — command patterns and stacking rules live in the `git-workflow` skill's `stacking.md` (sole source of truth; not restated here).
+
+The preflight check NEVER auto-fixes any of these. It reports what's wrong; the human (or the orchestrator's exit message) decides what to do. Auto-fix is an anti-pattern here because the fix depends on intent: a dirty tree could be in-progress work the user forgot about, and silently stashing it would surprise them.
 
 The default main branch is `main`. Override via `PREFLIGHT_MAIN_BRANCH=<name>` if you run this in a fork with a differently-named default branch. The default `bd ready` sample size is 50; override via `PREFLIGHT_READY_LIMIT=<n>`.
 
@@ -89,11 +93,11 @@ This fallback is not wired up today because the live bd fully supports labels. L
 
 ## When to refuse to start
 
-The skill refuses autonomous work in these situations, via `preflight.sh` returning `ok: false`:
+The skill refuses autonomous work in these situations, via `preflight()` returning `ok: false`:
 
 - **Dirty working tree** — would conflate user work with automation output.
-- **Wrong branch** — branching off anything other than `main` would produce a PR with unrelated commits.
-- **Stale `main`** — branching off a stale base makes PRs that conflict with recent merges and forces rebases.
+- **HEAD behind `origin/main`** — branching off a stale base makes PRs that conflict with recent merges and forces rebases.
+- **gt missing, unauthenticated, or trunk misconfigured** — branch creation and PR submission require a working Graphite setup; falling back to plain git silently would fork the workflow.
 - **Empty backlog** — nothing to do. Also triggered when every READY bead is `needs-human`-labelled.
 
 The orchestrator surfaces these reasons to the user verbatim and exits. It does NOT prompt, retry, or auto-fix. The human sees the failure and acts, or invokes `/process-backlog` again once the condition clears.
