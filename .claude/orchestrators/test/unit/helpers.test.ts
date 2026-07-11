@@ -25,6 +25,9 @@ import {
   branchName,
   commitMsg,
   prBody,
+  stackCreate,
+  stackSubmit,
+  syncAndRestack,
 } from '../../lib/helpers.js';
 
 // =============================================================================
@@ -66,7 +69,7 @@ describe('gitSafeToStart', () => {
       fakeSpawn('abc1234567890abcdef1234567890abcdef123456'),       // rev-parse origin/main
       fakeSpawn(''),                                                // git status --porcelain (clean)
     );
-    const result = gitSafeToStart({ spawnFn: spawn as never });
+    const result = gitSafeToStart(undefined, { spawnFn: spawn as never });
     expect(result.ok).toBe(true);
     expect(result.reason).toBeUndefined();
   });
@@ -78,7 +81,7 @@ describe('gitSafeToStart', () => {
       fakeSpawn('def4567890abcdef1234567890abcdef12345678'),
       fakeSpawn(''),
     );
-    const result = gitSafeToStart({ spawnFn: spawn as never });
+    const result = gitSafeToStart(undefined, { spawnFn: spawn as never });
     expect(result.ok).toBe(true);
   });
 
@@ -89,7 +92,7 @@ describe('gitSafeToStart', () => {
       fakeSpawn('bbbbbbb1234567890abcdef1234567890abcdef1'),       // origin/main differs
       fakeSpawn(''),
     );
-    const result = gitSafeToStart({ spawnFn: spawn as never });
+    const result = gitSafeToStart(undefined, { spawnFn: spawn as never });
     expect(result.ok).toBe(false);
     expect(result.reason).toContain('origin/main');
   });
@@ -100,7 +103,7 @@ describe('gitSafeToStart', () => {
       fakeSpawn('abc1234'),                                         // HEAD ok
       fakeSpawn('', 'unknown ref', 128),                            // origin/main missing
     );
-    const result = gitSafeToStart({ spawnFn: spawn as never });
+    const result = gitSafeToStart(undefined, { spawnFn: spawn as never });
     expect(result.ok).toBe(false);
     expect(result.reason).toContain('origin/main');
   });
@@ -112,16 +115,71 @@ describe('gitSafeToStart', () => {
       fakeSpawn('abc1234'),
       fakeSpawn(' M src/server/app.ts\n'),                          // dirty
     );
-    const result = gitSafeToStart({ spawnFn: spawn as never });
+    const result = gitSafeToStart(undefined, { spawnFn: spawn as never });
     expect(result.ok).toBe(false);
     expect(result.reason).toContain('dirty');
   });
 
   it('returns ok=false when not inside a git repo', () => {
     const spawn = seqSpawn(fakeSpawn('', 'not a repo', 128));
-    const result = gitSafeToStart({ spawnFn: spawn as never });
+    const result = gitSafeToStart(undefined, { spawnFn: spawn as never });
     expect(result.ok).toBe(false);
     expect(result.reason).toContain('work tree');
+  });
+
+  it('compares HEAD against the LOCAL parent tip when parentBranch is given', () => {
+    // A mid-chain stack parent may not exist on origin yet, so the
+    // comparison must use the local ref, never origin/<parent>.
+    const calls: string[] = [];
+    const results = [
+      fakeSpawn('true'),                                            // rev-parse --is-inside-work-tree
+      fakeSpawn('abc1234567890abcdef1234567890abcdef123456'),       // rev-parse HEAD
+      fakeSpawn('abc1234567890abcdef1234567890abcdef123456'),       // rev-parse chore.parent-branch
+      fakeSpawn(''),                                                // git status --porcelain (clean)
+    ];
+    let i = 0;
+    const spawn = (_cmd: string, args: string[], _opts: unknown) => {
+      calls.push((args as string[]).join(' '));
+      return results[i++] ?? fakeSpawn('', 'unexpected call', 1);
+    };
+    const result = gitSafeToStart('chore.parent-branch', { spawnFn: spawn as never });
+    expect(result.ok).toBe(true);
+    expect(calls.some(c => c.includes('rev-parse chore.parent-branch'))).toBe(true);
+    expect(calls.some(c => c.includes('origin/chore.parent-branch'))).toBe(false);
+  });
+
+  it('returns ok=false when HEAD differs from the local parent tip', () => {
+    const spawn = seqSpawn(
+      fakeSpawn('true'),
+      fakeSpawn('aaaaaaa1234567890abcdef1234567890abcdef1'),       // HEAD
+      fakeSpawn('bbbbbbb1234567890abcdef1234567890abcdef1'),       // parent differs
+    );
+    const result = gitSafeToStart('chore.parent-branch', { spawnFn: spawn as never });
+    expect(result.ok).toBe(false);
+    expect(result.reason).toContain('chore.parent-branch');
+  });
+
+  it('returns ok=false when the local parent branch cannot be resolved', () => {
+    const spawn = seqSpawn(
+      fakeSpawn('true'),
+      fakeSpawn('abc1234'),                                         // HEAD ok
+      fakeSpawn('', 'unknown ref', 128),                            // parent missing locally
+    );
+    const result = gitSafeToStart('chore.parent-branch', { spawnFn: spawn as never });
+    expect(result.ok).toBe(false);
+    expect(result.reason).toContain('chore.parent-branch');
+  });
+
+  it('still checks for a dirty tree in parentBranch mode', () => {
+    const spawn = seqSpawn(
+      fakeSpawn('true'),
+      fakeSpawn('abc1234'),
+      fakeSpawn('abc1234'),
+      fakeSpawn(' M src/server/app.ts\n'),                          // dirty
+    );
+    const result = gitSafeToStart('chore.parent-branch', { spawnFn: spawn as never });
+    expect(result.ok).toBe(false);
+    expect(result.reason).toContain('dirty');
   });
 });
 
@@ -130,9 +188,17 @@ describe('gitSafeToStart', () => {
 // =============================================================================
 
 describe('preflight', () => {
+  // gt probe responses shared by passing cases:
+  //   gt --version, gt auth --no-interactive, gt trunk
+  const gtOk = () => [
+    fakeSpawn('1.8.6'),
+    fakeSpawn('Authenticated as: someone\n✅ Ready to submit PRs.'),
+    fakeSpawn('main'),
+  ];
+
   it('returns ok=true when all checks pass', () => {
     // Calls in order: git status, git fetch, git rev-parse HEAD, git rev-parse origin/main,
-    // bd ready --json, bd label list (per bead)
+    // gt --version, gt auth, gt trunk, bd ready --json, bd label list (per bead)
     const beadsJson = JSON.stringify([
       { id: 'pv-abc1', priority: 1, created_at: '2026-01-01' },
     ]);
@@ -141,6 +207,7 @@ describe('preflight', () => {
       fakeSpawn(''),                  // git fetch origin main (success)
       fakeSpawn('abc1234'),           // git rev-parse HEAD
       fakeSpawn('abc1234'),           // git rev-parse origin/main (matches)
+      ...gtOk(),
       fakeSpawn(beadsJson),           // bd ready --json
       fakeSpawn('  - backlog'),       // bd label list pv-abc1 (no needs-human)
     );
@@ -158,6 +225,7 @@ describe('preflight', () => {
       fakeSpawn(''),                  // fetch ok
       fakeSpawn('def5678'),           // HEAD
       fakeSpawn('def5678'),           // origin/main matches
+      ...gtOk(),
       fakeSpawn(beadsJson),
       fakeSpawn('  - other'),
     );
@@ -169,6 +237,7 @@ describe('preflight', () => {
     const spawn = seqSpawn(
       fakeSpawn(' M src/file.ts'),   // dirty
       fakeSpawn('', '', 1),           // fetch fails → behind_main
+      ...gtOk(),
       fakeSpawn('[]'),                // bd ready (empty → empty_backlog)
     );
     const result = preflight({ spawnFn: spawn as never });
@@ -185,6 +254,7 @@ describe('preflight', () => {
       fakeSpawn(''),                  // fetch ok
       fakeSpawn('aaaaaaa'),           // HEAD
       fakeSpawn('bbbbbbb'),           // origin/main differs
+      ...gtOk(),
       fakeSpawn('[]'),                // bd ready (empty → empty_backlog too)
     );
     const result = preflight({ spawnFn: spawn as never });
@@ -199,11 +269,90 @@ describe('preflight', () => {
       fakeSpawn(''),                  // fetch ok
       fakeSpawn('abc1234'),           // HEAD
       fakeSpawn('abc1234'),           // origin/main matches
+      ...gtOk(),
       fakeSpawn(beadsJson),           // bd ready
       fakeSpawn('  - needs-human'),   // label list: has needs-human
     );
     const result = preflight({ spawnFn: spawn as never });
     expect(result.failures.map(f => f.kind)).toContain('empty_backlog');
+  });
+
+  it('reports missing_gt and skips the auth/trunk probes when gt is absent', () => {
+    const beadsJson = JSON.stringify([{ id: 'pv-x1', priority: 1, created_at: '2026-01-01' }]);
+    const calls: string[] = [];
+    const results = [
+      fakeSpawn(''),                        // clean tree
+      fakeSpawn(''),                        // fetch ok
+      fakeSpawn('abc1234'),                 // HEAD
+      fakeSpawn('abc1234'),                 // origin/main matches
+      fakeSpawn('', 'command not found: gt', 127), // gt --version fails
+      fakeSpawn(beadsJson),                 // bd ready (auth/trunk probes skipped)
+      fakeSpawn('  - backlog'),             // bd label list
+    ];
+    let i = 0;
+    const spawn = (cmd: string, args: string[], _opts: unknown) => {
+      calls.push([cmd, ...(args as string[])].join(' '));
+      return results[i++] ?? fakeSpawn('', 'unexpected call', 1);
+    };
+    const result = preflight({ spawnFn: spawn as never });
+    expect(result.ok).toBe(false);
+    expect(result.failures.map(f => f.kind)).toContain('missing_gt');
+    // Hard stop on the tool itself: auth and trunk are not probed.
+    expect(calls.some(c => c.includes('auth'))).toBe(false);
+    expect(calls.some(c => c.includes('trunk'))).toBe(false);
+  });
+
+  it('reports gt_unauthenticated when the auth probe fails', () => {
+    const beadsJson = JSON.stringify([{ id: 'pv-x1', priority: 1, created_at: '2026-01-01' }]);
+    const spawn = seqSpawn(
+      fakeSpawn(''),                        // clean tree
+      fakeSpawn(''),                        // fetch ok
+      fakeSpawn('abc1234'),                 // HEAD
+      fakeSpawn('abc1234'),                 // origin/main matches
+      fakeSpawn('1.8.6'),                   // gt --version ok
+      fakeSpawn('', 'Please authenticate', 1), // gt auth fails
+      fakeSpawn('main'),                    // gt trunk ok
+      fakeSpawn(beadsJson),
+      fakeSpawn('  - backlog'),
+    );
+    const result = preflight({ spawnFn: spawn as never });
+    expect(result.ok).toBe(false);
+    expect(result.failures.map(f => f.kind)).toContain('gt_unauthenticated');
+  });
+
+  it('reports gt_unauthenticated when the auth probe output lacks an authenticated user', () => {
+    const beadsJson = JSON.stringify([{ id: 'pv-x1', priority: 1, created_at: '2026-01-01' }]);
+    const spawn = seqSpawn(
+      fakeSpawn(''),
+      fakeSpawn(''),
+      fakeSpawn('abc1234'),
+      fakeSpawn('abc1234'),
+      fakeSpawn('1.8.6'),
+      fakeSpawn('Add your auth token to enable Graphite CLI'), // exit 0 but not authenticated
+      fakeSpawn('main'),
+      fakeSpawn(beadsJson),
+      fakeSpawn('  - backlog'),
+    );
+    const result = preflight({ spawnFn: spawn as never });
+    expect(result.failures.map(f => f.kind)).toContain('gt_unauthenticated');
+  });
+
+  it('reports gt_trunk_misconfigured when gt trunk is not the main branch', () => {
+    const beadsJson = JSON.stringify([{ id: 'pv-x1', priority: 1, created_at: '2026-01-01' }]);
+    const spawn = seqSpawn(
+      fakeSpawn(''),
+      fakeSpawn(''),
+      fakeSpawn('abc1234'),
+      fakeSpawn('abc1234'),
+      fakeSpawn('1.8.6'),
+      fakeSpawn('Authenticated as: someone'),
+      fakeSpawn('develop'),                 // gt trunk mismatch
+      fakeSpawn(beadsJson),
+      fakeSpawn('  - backlog'),
+    );
+    const result = preflight({ spawnFn: spawn as never });
+    expect(result.ok).toBe(false);
+    expect(result.failures.map(f => f.kind)).toContain('gt_trunk_misconfigured');
   });
 });
 
@@ -765,5 +914,153 @@ describe('bdSizingCheck', () => {
     const spawn = seqSpawn(fakeSpawn(content));
     const result = bdSizingCheck('pv-abc1', { spawnFn: spawn as never });
     expect(result.needs_decomposition).toBe(true);
+  });
+});
+
+// =============================================================================
+// stackCreate
+// =============================================================================
+
+describe('stackCreate', () => {
+  it('runs gt create with --onto parent and --no-interactive', () => {
+    const calls: string[] = [];
+    const spawn = (cmd: string, args: string[], _opts: unknown) => {
+      calls.push([cmd, ...(args as string[])].join(' '));
+      return fakeSpawn('');
+    };
+    const result = stackCreate('feat.add-search', 'main', { spawnFn: spawn as never });
+    expect(result.ok).toBe(true);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toContain('gt create feat.add-search');
+    expect(calls[0]).toContain('--onto main');
+    expect(calls[0]).toContain('--no-interactive');
+  });
+
+  it('accepts branchName()-produced names verbatim (documented precondition)', () => {
+    // stackCreate does not validate or rewrite branch names at runtime;
+    // callers must pass names produced by branchName(). This test asserts
+    // the precondition holds end to end: a branchName() output goes to gt
+    // unchanged and carries no bead IDs.
+    const name = branchName('Add calendar discovery surface', 'feature');
+    const calls: string[] = [];
+    const spawn = (cmd: string, args: string[], _opts: unknown) => {
+      calls.push([cmd, ...(args as string[])].join(' '));
+      return fakeSpawn('');
+    };
+    stackCreate(name, 'feat.parent-level', { spawnFn: spawn as never });
+    expect(calls[0]).toContain(`gt create ${name}`);
+    expect(calls[0]).not.toMatch(/pv-[a-z0-9]+/);
+  });
+
+  it('returns ok=false with stderr when gt create fails', () => {
+    const spawn = seqSpawn(
+      fakeSpawn('', 'ERROR: Cannot perform this operation on untracked branch xyz.', 1),
+    );
+    const result = stackCreate('feat.add-search', 'main', { spawnFn: spawn as never });
+    expect(result.ok).toBe(false);
+    expect(result.stderr).toContain('untracked branch');
+  });
+});
+
+// =============================================================================
+// stackSubmit
+// =============================================================================
+
+describe('stackSubmit', () => {
+  it('runs gt submit non-interactively with --publish and an explicit --branch', () => {
+    // --publish is load-bearing: on gt 1.8.6, --no-interactive submits new
+    // PRs as drafts unless --publish is passed (verified 2026-07-11), and
+    // the git-workflow skill forbids draft PRs.
+    const calls: string[] = [];
+    const spawn = (cmd: string, args: string[], _opts: unknown) => {
+      calls.push([cmd, ...(args as string[])].join(' '));
+      return fakeSpawn('✅ Submitted.');
+    };
+    const result = stackSubmit('feat.add-search', { spawnFn: spawn as never });
+    expect(result.ok).toBe(true);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toContain('gt submit');
+    expect(calls[0]).toContain('--no-interactive');
+    expect(calls[0]).toContain('--publish');
+    expect(calls[0]).toContain('--branch feat.add-search');
+  });
+
+  it('returns ok=false with output when gt submit fails', () => {
+    const spawn = seqSpawn(
+      fakeSpawn('', 'ERROR: Validation failed; branches need restack.', 1),
+    );
+    const result = stackSubmit('feat.add-search', { spawnFn: spawn as never });
+    expect(result.ok).toBe(false);
+    expect(result.stderr).toContain('restack');
+  });
+});
+
+// =============================================================================
+// syncAndRestack
+// =============================================================================
+
+describe('syncAndRestack', () => {
+  // Output lines below match observed gt 1.8.6 output (verified 2026-07-11).
+  const syncOutput = [
+    '🌲 Fetching branches from remote...',
+    'main is up to date.',
+    '',
+    '🥞 Restacking branches...',
+    'feat.level-one does not need to be restacked on main.',
+    'Restacked feat.level-two on feat.level-one.',
+    'WARNING: feat.level-three could not be restacked cleanly.',
+    'Did not restack branch feat.level-four because it is checked out in worktree /some/worktree/path.',
+    '',
+    'You can resolve conflicts with gt restack.',
+  ].join('\n');
+
+  it('runs gt sync -f --no-interactive', () => {
+    const calls: string[] = [];
+    const spawn = (cmd: string, args: string[], _opts: unknown) => {
+      calls.push([cmd, ...(args as string[])].join(' '));
+      return fakeSpawn('main is up to date.');
+    };
+    syncAndRestack({ spawnFn: spawn as never });
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toContain('gt sync');
+    expect(calls[0]).toContain('-f');
+    expect(calls[0]).toContain('--no-interactive');
+  });
+
+  it('returns structured clean / conflicted / worktree-skipped results', () => {
+    const spawn = seqSpawn(fakeSpawn(syncOutput));
+    const result = syncAndRestack({ spawnFn: spawn as never });
+    expect(result.restacked).toEqual(['feat.level-two']);
+    expect(result.conflicted).toEqual(['feat.level-three']);
+    expect(result.skippedWorktree).toEqual(['feat.level-four']);
+    expect(result.rawOutput).toContain('Restacking branches');
+  });
+
+  it('reports ok=false when any branch conflicted', () => {
+    const spawn = seqSpawn(fakeSpawn(syncOutput));
+    const result = syncAndRestack({ spawnFn: spawn as never });
+    expect(result.ok).toBe(false);
+  });
+
+  it('reports ok=true on a fully clean sync', () => {
+    const clean = [
+      'main is up to date.',
+      '🥞 Restacking branches...',
+      'feat.level-one does not need to be restacked on main.',
+      'Restacked feat.level-two on feat.level-one.',
+    ].join('\n');
+    const spawn = seqSpawn(fakeSpawn(clean));
+    const result = syncAndRestack({ spawnFn: spawn as never });
+    expect(result.ok).toBe(true);
+    expect(result.restacked).toEqual(['feat.level-two']);
+    expect(result.conflicted).toEqual([]);
+    expect(result.skippedWorktree).toEqual([]);
+  });
+
+  it('reports ok=false when gt sync itself exits non-zero', () => {
+    const spawn = seqSpawn(fakeSpawn('', 'ERROR: network failure', 1));
+    const result = syncAndRestack({ spawnFn: spawn as never });
+    expect(result.ok).toBe(false);
+    expect(result.rawOutput).toContain('network failure');
   });
 });

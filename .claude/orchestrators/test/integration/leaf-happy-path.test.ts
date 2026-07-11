@@ -106,6 +106,18 @@ describe('Integration: leaf happy path', () => {
     });
 
     // ---------------------------------------------------------------------------
+    // Unified gt handler
+    // Covers the preflight Graphite probes: gt --version, gt auth, gt trunk.
+    // ---------------------------------------------------------------------------
+    scripts.on('gt', (args) => {
+      const a = args.join(' ');
+      if (a.includes('--version')) return { exitCode: 0, stdout: '1.8.6', stderr: '' };
+      if (a.includes('auth')) return { exitCode: 0, stdout: 'Authenticated as: testuser', stderr: '' };
+      if (a.includes('trunk')) return { exitCode: 0, stdout: 'main', stderr: '' };
+      return { exitCode: 0, stdout: '', stderr: '' };
+    });
+
+    // ---------------------------------------------------------------------------
     // Unified bd handler
     // Covers all bd calls across all phases.
     // ---------------------------------------------------------------------------

@@ -87,6 +87,30 @@ function mountPassingPreflight(scripts: ScriptRouter, beadId = 'pv-test.1'): voi
     }
     return { exitCode: 0, stdout: '', stderr: '' };
   });
+
+  mountPassingGt(scripts);
+}
+
+/**
+ * Mount passing Graphite CLI probes on a ScriptRouter.
+ *
+ * Covers the gt calls made by runPreflightCheck(): gt --version,
+ * gt auth --no-interactive, gt trunk.
+ */
+function mountPassingGt(scripts: ScriptRouter): void {
+  scripts.on('gt', (args) => {
+    const argStr = args.join(' ');
+    if (argStr.includes('--version')) {
+      return { exitCode: 0, stdout: '1.8.6', stderr: '' };
+    }
+    if (argStr.includes('auth')) {
+      return { exitCode: 0, stdout: 'Authenticated as: testuser', stderr: '' };
+    }
+    if (argStr.includes('trunk')) {
+      return { exitCode: 0, stdout: 'main', stderr: '' };
+    }
+    return { exitCode: 0, stdout: '', stderr: '' };
+  });
 }
 
 describe('Integration: safeguards', () => {
@@ -129,6 +153,7 @@ describe('Integration: safeguards', () => {
   it('should halt on empty backlog (exhausted)', async () => {
     // Preflight passes, but bdTopReady returns empty list
     let prefCalls = 0;
+    mountPassingGt(scripts);
     scripts.on('git', (args) => {
       const a = args.join(' ');
       if (a.includes('status --porcelain')) return { exitCode: 0, stdout: '', stderr: '' };

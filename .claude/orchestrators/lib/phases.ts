@@ -146,6 +146,12 @@ export const PREFLIGHT_MESSAGES: Record<string, string> = {
     'HEAD is not at origin/main \u2014 pull, rebase, or check out a fresh branch from origin/main before re-running /process-backlog.',
   empty_backlog:
     'No ready beads available (or every ready bead is labelled `needs-human`) \u2014 shape or unlabel a bead before re-running /process-backlog.',
+  missing_gt:
+    'Graphite CLI (gt) not found \u2014 install gt and run `gt init`; branch creation and PR submission go through gt with no plain-git fallback.',
+  gt_unauthenticated:
+    'gt is not authenticated \u2014 run `gt auth` interactively before re-running /process-backlog.',
+  gt_trunk_misconfigured:
+    'gt trunk is not configured to main \u2014 run `gt init --trunk main` before re-running /process-backlog.',
 };
 
 export const GIT_SAFE_MESSAGES: Record<number, string> = {
@@ -981,7 +987,7 @@ export async function preflight(ctx: PhaseCtx, deps: PhaseDeps = {}): Promise<Ph
   }
 
   // Step 2: Git safety check
-  const gitSafe = gitSafeToStart({ spawnFn: deps.spawnFn });
+  const gitSafe = gitSafeToStart(undefined, { spawnFn: deps.spawnFn });
   if (!gitSafe.ok) {
     const msg = gitSafe.reason ?? 'git safety check failed';
     console.error(msg);
@@ -1351,7 +1357,7 @@ export async function branch(ctx: PhaseCtx, deps: PhaseDeps = {}): Promise<Phase
   });
 
   // Step 1: Safety re-check
-  const gitSafe = gitSafeToStart({ spawnFn: deps.spawnFn });
+  const gitSafe = gitSafeToStart(undefined, { spawnFn: deps.spawnFn });
   if (!gitSafe.ok) {
     const msg = `UNSAFE: git-safe-to-start failed \u2014 ${gitSafe.reason ?? 'working tree is dirty or not on main'}`;
     console.error(msg);

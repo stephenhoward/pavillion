@@ -6,7 +6,8 @@
  * for testing; pure functions have no I/O at all.
  *
  * Exports:
- *   CLI helpers: gitSafeToStart, preflight, bdTopReady, bdEscalate,
+ *   CLI helpers: gitSafeToStart, stackCreate, stackSubmit, syncAndRestack,
+ *                preflight, bdTopReady, bdEscalate,
  *                bdState, bdSizingCheck, bdEnrichmentCheck,
  *                discoverAgents
  *   Pure helpers: branchName, commitMsg, prBody,
@@ -38,6 +39,25 @@ export interface SpawnDeps {
 export interface GitSafeResult {
   ok: boolean;
   reason?: string;
+}
+
+export interface StackOpResult {
+  ok: boolean;
+  stdout: string;
+  stderr: string;
+}
+
+export interface SyncAndRestackResult {
+  /** True when gt sync exited 0 and no branch hit a restack conflict. */
+  ok: boolean;
+  /** Branches gt restacked cleanly ("Restacked X on Y."). */
+  restacked: string[];
+  /** Branches skipped because their restack would conflict; resolve with `gt restack` from the checkout that holds them. */
+  conflicted: string[];
+  /** Branches gt skipped because they are checked out in another worktree; rerun sync/restack from that worktree. */
+  skippedWorktree: string[];
+  /** Combined raw stdout/stderr from gt sync, for diagnostics and reporting. */
+  rawOutput: string;
 }
 
 export interface PreflightFailure {
@@ -138,20 +158,31 @@ function run(
 // =============================================================================
 
 /**
- * Check that the working tree is clean and HEAD is current with origin/main.
+ * Check that the working tree is clean and HEAD is current with the base
+ * the next branch will be cut from.
  *
  *   - must be inside a git work tree
- *   - HEAD commit must equal origin/<mainBranch> (any branch name is fine)
+ *   - HEAD commit must equal the base ref (any branch name is fine)
  *   - working tree must be clean (git status --porcelain is empty)
  *
- * The "current with main" model (rather than "on main") supports worktree-based
+ * Without `parentBranch`, the base ref is `origin/<mainBranch>` — the
+ * "current with main" model (rather than "on main") supports worktree-based
  * workflows where each worktree's branch starts at origin/main and feature
  * branches are cut from there. The env var `GIT_SAFE_MAIN_BRANCH` still
  * configures the upstream branch name (default: `main`).
+ *
+ * With `parentBranch` (stacking case), HEAD is compared against the LOCAL
+ * parent branch tip — a mid-chain stack parent may not have been submitted
+ * yet, so it may not exist on origin at all. `origin/<mainBranch>` remains
+ * the comparison only for the trunk case.
  */
-export function gitSafeToStart(deps: SpawnDeps = {}): GitSafeResult {
+export function gitSafeToStart(
+  parentBranch?: string,
+  deps: SpawnDeps = {},
+): GitSafeResult {
   const spawn = deps.spawnFn ?? nodeSpawnSync;
   const mainBranch = process.env.GIT_SAFE_MAIN_BRANCH ?? 'main';
+  const baseRef = parentBranch ?? `origin/${mainBranch}`;
 
   // Check inside work tree
   const insideRepo = run('git', ['rev-parse', '--is-inside-work-tree'], spawn);
@@ -159,22 +190,24 @@ export function gitSafeToStart(deps: SpawnDeps = {}): GitSafeResult {
     return { ok: false, reason: 'not inside a git work tree' };
   }
 
-  // Check HEAD == origin/<mainBranch>
+  // Check HEAD == base ref
   const headSha = run('git', ['rev-parse', 'HEAD'], spawn);
   if (headSha.exitCode !== 0) {
     return { ok: false, reason: 'git rev-parse HEAD failed unexpectedly' };
   }
-  const baseSha = run('git', ['rev-parse', `origin/${mainBranch}`], spawn);
+  const baseSha = run('git', ['rev-parse', baseRef], spawn);
   if (baseSha.exitCode !== 0) {
     return {
       ok: false,
-      reason: `could not resolve origin/${mainBranch}; check remote access`,
+      reason: parentBranch
+        ? `could not resolve local parent branch ${parentBranch}`
+        : `could not resolve origin/${mainBranch}; check remote access`,
     };
   }
   if (headSha.stdout !== baseSha.stdout) {
     return {
       ok: false,
-      reason: `HEAD is not at origin/${mainBranch} (HEAD=${headSha.stdout.slice(0, 7)}, origin/${mainBranch}=${baseSha.stdout.slice(0, 7)})`,
+      reason: `HEAD is not at ${baseRef} (HEAD=${headSha.stdout.slice(0, 7)}, ${baseRef}=${baseSha.stdout.slice(0, 7)})`,
     };
   }
 
@@ -191,14 +224,121 @@ export function gitSafeToStart(deps: SpawnDeps = {}): GitSafeResult {
 }
 
 // =============================================================================
+// Graphite stack helpers
+// =============================================================================
+//
+// These three wrappers are the ONLY place gt operations are implemented
+// (anti-drift rule; conventions live in git-workflow/stacking.md). Command
+// shapes and output parsing are pinned to behavior observed on gt 1.8.6
+// (verified 2026-07-11).
+
+/**
+ * Create a stacked branch on top of `parent` via
+ * `gt create <branch> --onto <parent> --no-interactive`.
+ *
+ * `--onto` avoids checking out the parent first, which also sidesteps the
+ * untracked auto-generated branch a superset.sh-style worktree starts on.
+ * With a clean tree gt creates an empty branch (no commit), which is the
+ * expected pre-work state.
+ *
+ * PRECONDITION (not validated at runtime, asserted in tests): `branch` must
+ * be a branchName()-produced name. `parent` must be a gt-tracked branch
+ * (`main` or another stack level).
+ */
+export function stackCreate(
+  branch: string,
+  parent: string,
+  deps: SpawnDeps = {},
+): StackOpResult {
+  const spawn = deps.spawnFn ?? nodeSpawnSync;
+  const result = run('gt', ['create', branch, '--onto', parent, '--no-interactive'], spawn);
+  return { ok: result.exitCode === 0, stdout: result.stdout, stderr: result.stderr };
+}
+
+/**
+ * Submit a branch (and its downstack) via
+ * `gt submit --no-interactive --publish --branch <branch>`.
+ *
+ * `--publish` is load-bearing: on gt 1.8.6, `--no-interactive` creates new
+ * PRs in DRAFT mode unless `--publish` is passed, and the git-workflow skill
+ * forbids draft PRs. Title/body are canonicalized afterwards with
+ * `gh pr edit` (see git-workflow/stacking.md), so gt's own metadata prompts
+ * stay disabled.
+ */
+export function stackSubmit(branch: string, deps: SpawnDeps = {}): StackOpResult {
+  const spawn = deps.spawnFn ?? nodeSpawnSync;
+  const result = run(
+    'gt',
+    ['submit', '--no-interactive', '--publish', '--branch', branch],
+    spawn,
+    { timeout: 120_000 },
+  );
+  return { ok: result.exitCode === 0, stdout: result.stdout, stderr: result.stderr };
+}
+
+/**
+ * Run `gt sync -f --no-interactive` and report structured restack results.
+ *
+ * gt sync pulls trunk, deletes local branches whose PRs are merged/closed
+ * (`-f` skips the per-branch confirmation), and restacks every tracked
+ * branch it can. Branches that would conflict are SKIPPED with a warning —
+ * sync never leaves the repo mid-rebase — and branches checked out in
+ * another worktree are skipped with their own message (both observed on
+ * gt 1.8.6). Callers decide what to do with `conflicted` /
+ * `skippedWorktree`; this helper never attempts resolution.
+ */
+export function syncAndRestack(deps: SpawnDeps = {}): SyncAndRestackResult {
+  const spawn = deps.spawnFn ?? nodeSpawnSync;
+  const result = run('gt', ['sync', '-f', '--no-interactive'], spawn, { timeout: 120_000 });
+  const rawOutput = [result.stdout, result.stderr].filter(Boolean).join('\n');
+
+  const restacked: string[] = [];
+  const conflicted: string[] = [];
+  const skippedWorktree: string[] = [];
+
+  for (const line of rawOutput.split('\n')) {
+    const clean = line.match(/^Restacked (\S+) on \S+\.$/);
+    if (clean) {
+      restacked.push(clean[1]);
+      continue;
+    }
+    const conflict = line.match(/^WARNING: (\S+) could not be restacked cleanly\.$/);
+    if (conflict) {
+      conflicted.push(conflict[1]);
+      continue;
+    }
+    const skipped = line.match(/^Did not restack branch (\S+) because it is checked out in worktree /);
+    if (skipped) {
+      skippedWorktree.push(skipped[1]);
+    }
+  }
+
+  return {
+    ok: result.exitCode === 0 && conflicted.length === 0,
+    restacked,
+    conflicted,
+    skippedWorktree,
+    rawOutput,
+  };
+}
+
+// =============================================================================
 // preflight
 // =============================================================================
 
 /**
  * Full preflight gate. Checks:
- *   - dirty_tree:     working tree has uncommitted changes
- *   - behind_main:    HEAD is not at origin/<mainBranch> (or fetch failed)
- *   - empty_backlog:  no ready beads excluding needs-human beads
+ *   - dirty_tree:              working tree has uncommitted changes
+ *   - behind_main:             HEAD is not at origin/<mainBranch> (or fetch failed)
+ *   - missing_gt:              the Graphite CLI (gt) is not installed
+ *   - gt_unauthenticated:      gt is installed but not authenticated
+ *   - gt_trunk_misconfigured:  gt's trunk is not <mainBranch>
+ *   - empty_backlog:           no ready beads excluding needs-human beads
+ *
+ * The gt failures are hard stops: all branch creation and PR submission goes
+ * through gt (git-workflow stacking.md), and there is deliberately no silent
+ * fallback to plain git. When gt itself is missing, the auth and trunk probes
+ * are skipped — they would only produce confusing follow-on noise.
  *
  * The branch name is not enforced: any branch is acceptable as long as HEAD
  * is at origin/main. This supports worktree workflows where each worktree's
@@ -240,6 +380,31 @@ export function preflight(deps: SpawnDeps = {}): PreflightResult {
       failures.push({
         kind: 'behind_main',
         reason: `HEAD is not at origin/${mainBranch} (HEAD=${headSha.stdout.slice(0, 7)}, origin/${mainBranch}=${baseSha.stdout.slice(0, 7)}); pull, rebase, or check out a fresh branch from origin/${mainBranch}`,
+      });
+    }
+  }
+
+  // 3. Graphite CLI present, authenticated, trunk configured
+  const gtVersion = run('gt', ['--version'], spawn);
+  if (gtVersion.exitCode !== 0) {
+    failures.push({
+      kind: 'missing_gt',
+      reason: 'Graphite CLI (gt) not found; install gt and run `gt init` — all branch creation and PR submission goes through gt, with no plain-git fallback',
+    });
+  }
+  else {
+    const gtAuth = run('gt', ['auth', '--no-interactive'], spawn);
+    if (gtAuth.exitCode !== 0 || !gtAuth.stdout.includes('Authenticated as')) {
+      failures.push({
+        kind: 'gt_unauthenticated',
+        reason: 'gt is not authenticated; run `gt auth` interactively before autonomous work',
+      });
+    }
+    const gtTrunk = run('gt', ['trunk'], spawn);
+    if (gtTrunk.exitCode !== 0 || gtTrunk.stdout !== mainBranch) {
+      failures.push({
+        kind: 'gt_trunk_misconfigured',
+        reason: `gt trunk is not ${mainBranch} (got: ${gtTrunk.stdout || 'nothing'}); run \`gt init --trunk ${mainBranch}\``,
       });
     }
   }

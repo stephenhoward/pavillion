@@ -154,6 +154,9 @@ function preflightPassingSpawns(beadId = 'pv-abc-1'): SpawnSyncReturns<Buffer>[]
     fakeSpawn('', '', 0),                                  // git fetch origin main
     fakeSpawn('abc1234', '', 0),                           // git rev-parse HEAD
     fakeSpawn('abc1234', '', 0),                           // git rev-parse origin/main (matches)
+    fakeSpawn('1.8.6', '', 0),                             // gt --version
+    fakeSpawn('Authenticated as: testuser', '', 0),        // gt auth --no-interactive
+    fakeSpawn('main', '', 0),                              // gt trunk
     fakeSpawn(JSON.stringify([{ id: beadId }]), '', 0),    // bd ready --limit=50 --json
     fakeSpawn('- other-label', '', 0),                     // bd label list <id>
     // gitSafeToStart:
@@ -276,6 +279,9 @@ describe('preflight', () => {
       fakeSpawn('', '', 0),        // git fetch origin main
       fakeSpawn('abc1234', '', 0), // git rev-parse HEAD
       fakeSpawn('abc1234', '', 0), // git rev-parse origin/main (matches)
+      fakeSpawn('1.8.6', '', 0),   // gt --version
+      fakeSpawn('Authenticated as: testuser', '', 0), // gt auth --no-interactive
+      fakeSpawn('main', '', 0),    // gt trunk
       fakeSpawn('[]', '', 0),      // bd ready: empty array
       // gitSafeToStart passes:
       ...gitSafeOkSpawns(),
@@ -1151,9 +1157,10 @@ describe('branch', () => {
 // =============================================================================
 
 describe('message constants', () => {
-  it('should have exactly 3 preflight message kinds', () => {
+  it('should have exactly 6 preflight message kinds', () => {
     expect(Object.keys(PREFLIGHT_MESSAGES)).toEqual([
       'dirty_tree', 'behind_main', 'empty_backlog',
+      'missing_gt', 'gt_unauthenticated', 'gt_trunk_misconfigured',
     ]);
   });
 
