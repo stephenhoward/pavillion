@@ -82,6 +82,38 @@ function createMockChild(
   return child;
 }
 
+/**
+ * Like createMockChild, but the child stays "running" for `delayMs` before
+ * closing. Used to observe overlap (or enforced non-overlap) between
+ * concurrently dispatched agents. `onClose` fires just before the close event.
+ */
+function createDelayedMockChild(
+  stdout: string,
+  delayMs: number,
+  onClose?: () => void,
+): ChildProcess & EventEmitter {
+  const child = new EventEmitter() as ChildProcess & EventEmitter;
+
+  const stdoutStream = new Readable({ read() {} });
+  const stderrStream = new Readable({ read() {} });
+
+  child.stdin = { write: vi.fn(), end: vi.fn() } as unknown as ChildProcess['stdin'];
+  child.stdout = stdoutStream;
+  child.stderr = stderrStream;
+  child.pid = 12345;
+  child.kill = vi.fn().mockReturnValue(true);
+
+  setTimeout(() => {
+    if (stdout) stdoutStream.push(stdout);
+    stdoutStream.push(null);
+    stderrStream.push(null);
+    onClose?.();
+    child.emit('close', 0);
+  }, delayMs);
+
+  return child;
+}
+
 function fakeSpawnResult(
   stdout: string,
   stderr: string,
@@ -1117,6 +1149,61 @@ describe('runEpicExecution', () => {
     );
   });
 
+  it('serializes build-guardian dispatches across concurrent chains while implementers interleave', async () => {
+    const { runEpicExecution } = await import('../../lib/execute.js');
+
+    const ctx = makeEpicCtx();
+    const ops: string[] = [];
+    const events: string[] = [];
+
+    const scriptSpawnFn = makeChainScriptSpawn({
+      beads: { 'pv-m.1': 'Mutex one', 'pv-m.2': 'Mutex two' },
+      ops,
+    });
+
+    // Implementers and guardians both stay "running" for a while so any
+    // overlap would be observable in the event sequence.
+    const spawnFn = vi.fn().mockImplementation((_cmd: string, args: string[]) => {
+      const agent = args[args.indexOf('--agent') + 1] ?? 'unknown';
+      if (agent === 'build-guardian') {
+        events.push('guardian-start');
+        return createDelayedMockChild(
+          JSON.stringify({ verdict: 'pass', concerns: [] }), 40,
+          () => events.push('guardian-end'),
+        );
+      }
+      if (agent === 'implementer') {
+        events.push('implementer-start');
+        return createDelayedMockChild('done', 40, () => events.push('implementer-end'));
+      }
+      return createMockChild('done', '', 0);
+    });
+
+    const result = await runEpicExecution(
+      'epic-parent',
+      { chains: [['pv-m.1'], ['pv-m.2']], flat: false, warnings: [] },
+      ctx,
+      { spawnFn, scriptSpawnFn },
+    );
+
+    expect(result.outcome).toBe('complete');
+    expect(result.beadsCompleted.sort()).toEqual(['pv-m.1', 'pv-m.2']);
+
+    // Implementers DID run concurrently: both chains' implementers started
+    // before either finished. This proves the lock scopes to the build gate
+    // only, not to chain execution as a whole.
+    const implEvents = events.filter(e => e.startsWith('implementer'));
+    expect(implEvents.slice(0, 2)).toEqual(['implementer-start', 'implementer-start']);
+
+    // Guardians NEVER overlapped: each dispatch ended before the next began
+    // (never-more-than-one-build-guardian invariant).
+    const guardianEvents = events.filter(e => e.startsWith('guardian'));
+    expect(guardianEvents).toEqual([
+      'guardian-start', 'guardian-end',
+      'guardian-start', 'guardian-end',
+    ]);
+  });
+
   it('halts a chain on persistent build-gate failure and escalates the truncated remainder', async () => {
     const { runEpicExecution } = await import('../../lib/execute.js');
     const helpers = await import('../../lib/helpers.js');
@@ -1165,6 +1252,53 @@ describe('runEpicExecution', () => {
         truncatedBeads: ['pv-h.2'],
       }),
     );
+  });
+});
+
+// =============================================================================
+// withBuildGuardianLock — cross-chain guardian serialization
+// =============================================================================
+
+describe('withBuildGuardianLock', () => {
+  it('runs tasks strictly one at a time in FIFO order', async () => {
+    const { withBuildGuardianLock } = await import('../../lib/execute.js');
+
+    const events: string[] = [];
+    const task = (name: string, delay: number) => () =>
+      new Promise<string>((resolve) => {
+        events.push(`${name}-start`);
+        setTimeout(() => {
+          events.push(`${name}-end`);
+          resolve(name);
+        }, delay);
+      });
+
+    // The slowest task is queued first — with any overlap, b/c would start
+    // (and even finish) before a ends.
+    const results = await Promise.all([
+      withBuildGuardianLock(task('a', 30)),
+      withBuildGuardianLock(task('b', 5)),
+      withBuildGuardianLock(task('c', 1)),
+    ]);
+
+    expect(results).toEqual(['a', 'b', 'c']);
+    expect(events).toEqual([
+      'a-start', 'a-end',
+      'b-start', 'b-end',
+      'c-start', 'c-end',
+    ]);
+  });
+
+  it('does not poison the queue when a task rejects', async () => {
+    const { withBuildGuardianLock } = await import('../../lib/execute.js');
+
+    await expect(
+      withBuildGuardianLock(() => Promise.reject(new Error('guardian boom'))),
+    ).rejects.toThrow('guardian boom');
+
+    await expect(
+      withBuildGuardianLock(async () => 'recovered'),
+    ).resolves.toBe('recovered');
   });
 });
 

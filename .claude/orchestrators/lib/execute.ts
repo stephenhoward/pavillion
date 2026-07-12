@@ -713,6 +713,31 @@ export function extractFinalJsonBlock(text: string): unknown | null {
   return null;
 }
 
+// =============================================================================
+// Build-guardian serialization (cross-chain mutex)
+// =============================================================================
+//
+// NEVER more than one build-guardian at a time (bead-wave-orchestration hard
+// rule): the guardian's `pkill -f vitest` prelude would kill a sibling
+// guardian's in-flight suite, and shared test resources (DB, ports) contend —
+// a cross-killed suite reads as FAIL and truncates a healthy chain. Chains run
+// concurrently, so the build gate — and ONLY the build gate — is serialized
+// through this in-process promise-queue lock; implementers and auditors in
+// other chains stay concurrent.
+
+let buildGuardianQueue: Promise<void> = Promise.resolve();
+
+/**
+ * Run `task` exclusively with respect to every other build-guardian dispatch.
+ * Tasks queue FIFO; a rejected task never poisons the queue (the tail promise
+ * always settles resolved).
+ */
+export function withBuildGuardianLock<T>(task: () => Promise<T>): Promise<T> {
+  const result = buildGuardianQueue.then(() => task());
+  buildGuardianQueue = result.then(() => undefined, () => undefined);
+  return result;
+}
+
 async function dispatchBuildGuardian(
   epicId: string,
   waveNumber: number,
@@ -870,8 +895,9 @@ async function runLevelBuildGate(
   let retries = 0;
 
   for (let attempt = 0; attempt <= MAX_WAVE_RETRIES; attempt++) {
-    const buildResult = await dispatchBuildGuardian(
-      epicId, waveNumber, ctx, deps, { beadId, branch },
+    // Serialized across concurrent chains — see withBuildGuardianLock.
+    const buildResult = await withBuildGuardianLock(() =>
+      dispatchBuildGuardian(epicId, waveNumber, ctx, deps, { beadId, branch }),
     );
 
     if (buildResult.verdict === 'pass') {
@@ -1828,10 +1854,16 @@ async function runChain(
     parentPrNumber = outcome.prNumber ?? null;
   }
 
-  // Per-chain verification pass (advisory, matching prior wave-end behavior:
-  // verdicts are logged, not gated on). Runs from the chain's checkout, where
-  // HEAD sits at the chain top, so `main...HEAD` covers the whole chain delta
-  // — the right base for reviewing cross-bead integration within the chain.
+  // Per-chain verification pass — advisory BY DESIGN, a deliberate departure
+  // from the old wave-end chain (which gated on these verdicts): per-level
+  // submission means the chain's levels are already pushed when a whole-chain
+  // review can first run, so it cannot act as a pre-push gate. Blocking
+  // integration/architecture verification relocates to the epic-completion
+  // sweep (bead-wave-orchestration), and the manual bottom-up merge ritual
+  // (git-workflow/stacking.md) is the human checkpoint before main.
+  // Runs from the chain's checkout, where HEAD sits at the chain top, so
+  // `main...HEAD` covers the whole chain delta — the right base for reviewing
+  // cross-bead integration within the chain.
   if (result.completed.length > 1) {
     await dispatchVerifier(
       'cross-bead-integration-verifier',
