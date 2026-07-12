@@ -215,6 +215,14 @@ that level's submit)**
     the details, re-run the affected per-bead auditors.
   - 🟡 MEDIUM / LOW → note in the wave summary; address if quick.
   - 🟢 Clean / PASS → chain is complete.
+- **This pass is advisory at chain scope — a deliberate change from the
+  old wave-end chain, which gated on these verdicts.** Per-level
+  submission means the chain's levels are already pushed by the time a
+  whole-chain review can run, so it cannot serve as a pre-push gate.
+  Blocking integration/architecture verification lives in the
+  **epic-completion sweep** (below); the manual bottom-up merge ritual
+  (`git-workflow/stacking.md`) is the human checkpoint before anything
+  reaches `main`.
 
 ### 5. Cascade to the next wave
 
