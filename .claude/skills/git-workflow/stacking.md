@@ -4,8 +4,6 @@ All branch creation and PR submission goes through the Graphite CLI (`gt`), incl
 
 This file is the **sole source of truth** for gt command patterns and stacking rules. Other skills (`bead-branch-and-pr`, `bead-backlog-selection`, `bead-wave-orchestration`, etc.) cross-reference this file; they do not restate its contents. The corresponding gt operations for orchestrators are implemented only in `.claude/orchestrators/lib/helpers.ts` (`stackCreate`, `stackSubmit`, `syncAndRestack`).
 
-**Adoption status (transitional):** interactive sessions follow these conventions now. The autonomous orchestrator's branch/push/PR call sites (`phases.ts`, `execute.ts`) still use raw git/gh and adopt the gt helpers in Stage 2 of the rollout (spec: `agent-os/specs/2026-07-11-graphite-stacked-prs/`). Until then, preflight's gt checks assert readiness one stage ahead of the orchestrator's first gt use. Remove this note when Stage 2 lands.
-
 ## When a stack exists
 
 A stack exists when:

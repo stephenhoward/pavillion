@@ -47,6 +47,12 @@ Epic (beads-001)
 - When a bead completes, check what it unblocks
 - Never work on a bead while its blockers are incomplete
 
+**Branches and PRs follow the dependency graph.** In autonomous
+orchestration, a dependency chain among sibling beads becomes a stacked
+branch chain with one PR per bead (scheduling: the `bead-wave-orchestration`
+skill; stacking conventions: `git-workflow/stacking.md`). Independent beads
+stay as parallel branches off `main`.
+
 ### 3. Beads Are Self-Contained Work Packages
 
 Each leaf bead should contain everything a subagent needs to implement it. The `/analyze-bead` command enriches bead notes with implementation context so subagents can work from the bead alone.

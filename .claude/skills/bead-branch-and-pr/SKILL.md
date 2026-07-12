@@ -75,23 +75,24 @@ Without `parentBranch`, HEAD is compared against `origin/<mainBranch>` (the trun
 
 The expected main-branch name defaults to `main` and can be overridden by the `GIT_SAFE_MAIN_BRANCH` env var for test rigs.
 
-### Stack helpers: `stackCreate`, `stackSubmit`, `syncAndRestack`
+### Stack helpers: `stackPlan`, `stackCreate`, `stackSubmit`, `syncAndRestack`
 
-Graphite (gt) wrappers, also in `.claude/orchestrators/lib/helpers.ts` — the only place gt operations are implemented. Conventions and command patterns live in `git-workflow/stacking.md`; the jsdoc on each helper records the gt-1.8.6-verified behavior. Signatures:
+The chain planner and the Graphite (gt) wrappers, also in `.claude/orchestrators/lib/helpers.ts` — the only place gt operations are implemented. Conventions and command patterns live in `git-workflow/stacking.md`; the jsdoc on each helper records the gt-1.8.6-verified behavior. Signatures:
 
+- `stackPlan(beads, dependencyEdges)` — pure; plans dependency-chain stacks from an epic's child beads and the bd "blocks" edges among them. Returns an ordered forest of chains as `{ chains, flat, warnings }`; a cycle or any cross-chain join falls back to a flat no-stack plan with a warning. (The edge parameter is named `dependencyEdges`, never `deps` — `deps` is reserved codebase-wide for `SpawnDeps` injection.)
 - `stackCreate(branch, parent, deps?)` — creates a stacked branch on `parent`. Precondition (asserted in tests, not validated at runtime): `branch` is a `branchName()`-produced name.
 - `stackSubmit(branch, deps?)` — submits a branch and its downstack as published (non-draft) PRs.
 - `syncAndRestack(deps?)` — post-merge sync + restack; returns structured `{ restacked, conflicted, skippedWorktree }` results so callers can decide re-validation.
 
-All three take the trailing `deps: SpawnDeps = {}` used by every CLI-shelling helper in the file.
+The CLI-shelling helpers take the trailing `deps: SpawnDeps = {}` used by every CLI-shelling helper in the file; `stackPlan` is pure and takes no `deps`.
 
 ## Push gate: build-guardian before submit
 
-A branch may not be submitted (pushed / PR opened) until the wave's build-guardian agent has reported PASS. This is enforced by the orchestrator's pipeline, not by these helpers, but it is documented here because it is the rule that closes the loop on safe branch handling:
+A branch may not be submitted (pushed / PR opened) until build-guardian has reported PASS for that branch **at its stack position** — every stack level is independently green (invariant: `git-workflow/stacking.md`). This is enforced by the orchestrator's pipeline, not by these helpers, but it is documented here because it is the rule that closes the loop on safe branch handling:
 
-1. Implementers land commits on the branch.
+1. Implementers land commits on the level's branch.
 2. Per-bead auditors run.
-3. Build-guardian runs once per wave across all committed changes.
+3. Build-guardian runs once per stack level, before that level's submit (lifecycle: `bead-wave-orchestration`).
 4. Only after build-guardian PASS does the orchestrator submit the branch and finalize the PR (command patterns: `git-workflow/stacking.md`).
 
 If build-guardian reports FAIL, do not submit. Fix locally, re-run build-guardian, and submit only once it passes.

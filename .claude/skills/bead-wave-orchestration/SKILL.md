@@ -1,15 +1,15 @@
 ---
 name: bead-wave-orchestration
-description: Wave lifecycle pattern for executing enriched beads in parallel under a hard 3-implementer cap. Use this skill when orchestrating an epic (or a multi-bead run) through spawn → per-bead audits → wave-end verification → build-guardian → cascade, when deciding how many implementers to spawn concurrently, when resolving implementer failures through retry versus escalation, or when running the epic-completion sweep after every wave has closed.
+description: Wave lifecycle pattern for executing enriched beads as dependency chains under a hard 3-chain cap. Use this skill when orchestrating an epic (or a multi-bead run) through chain scheduling → per-bead audits → per-level build gate → submit → cascade, when deciding how many chains to run concurrently, when resolving implementer failures through retry versus chain truncation, or when running the epic-completion sweep after every wave has closed.
 ---
 
 # Bead Wave Orchestration
 
 This skill captures the **wave lifecycle** that drives epic (or multi-bead)
-execution. It is the source of truth for how many implementers may run
+execution. It is the source of truth for how many chains may run
 concurrently, how per-bead audits cascade off each implementer's close, how
-wave-end verification is sequenced, how failures are recovered, and how the
-epic-completion sweep finalizes the run.
+per-level build gates and chain verification are sequenced, how failures
+are recovered, and how the epic-completion sweep finalizes the run.
 
 This is a prose-only skill. There are no scripts. Orchestration logic lives
 in the consuming commands; this skill is what those commands reference so the
@@ -40,10 +40,13 @@ Depends on / cross-references:
 These invariants hold across every wave, every run, every consumer. Breaking
 any of them corrupts the orchestration contract.
 
-1. **Maximum 3 parallel implementers.** Never spawn a 4th implementer while
-   three are still in flight. If more than 3 beads are ready, the extras
-   queue and the orchestrator spawns them into slots as earlier implementers
-   close.
+1. **Maximum 3 parallel implementers — and the cap applies to CHAINS.**
+   Waves are built from dependency chains (`stackPlan` in
+   `.claude/orchestrators/lib/helpers.ts`), not individual beads. Within a
+   chain, beads run strictly sequentially (each level's branch stacks on
+   its predecessor per `git-workflow/stacking.md`), so a chain occupies
+   one implementer slot for its whole duration. Never run a 4th chain
+   while three are still in flight; extras queue for the next free slot.
 2. **Per-bead auditors do NOT count against the 3-slot implementer budget.**
    Auditors are read-only code-analysis agents. They run in parallel with
    each other and in parallel with other waves' implementers as long as
@@ -55,8 +58,10 @@ any of them corrupts the orchestration contract.
    The orchestrator checks this before spawn; the implementer re-checks as
    a belt-and-braces refusal (see `implementer-prompt-template`).
 4. **Never more than one build-guardian at a time.** Test suites must not
-   run concurrently. Exactly one build-guardian runs per wave, and it runs
-   only after all implementers in that wave have closed and all per-bead
+   run concurrently. Build-guardian runs once per STACK LEVEL, on that
+   level's branch at its stack position, BEFORE that level is submitted —
+   the independently-green invariant (`git-workflow/stacking.md`). It runs
+   only after that level's implementer has closed and its per-bead
    auditors have reported.
 5. **Kill stale vitest processes before any test run.** Every agent that
    runs tests — implementers in their pre-close checklist and the
@@ -68,50 +73,60 @@ any of them corrupts the orchestration contract.
    mysterious hangs.
 6. **Never run the full suite outside build-guardian.** Implementers run
    lint + targeted tests only. The full suite (lint → unit → integration →
-   build → e2e) is the build-guardian's job, once per wave. This is how the
-   "no concurrent test suites" invariant is enforced.
-7. **Sequential wave-end verification chain.** The wave-end chain
-   (cross-bead-integration-verifier → architecture-auditor →
-   build-guardian) runs **in order, not in parallel**. Each step waits for
-   the prior to report. Parallelizing this chain would let the
-   build-guardian start while integration issues are still unresolved.
+   build → e2e) is the build-guardian's job, once per stack level. This is
+   how the "no concurrent test suites" invariant is enforced.
+7. **Per-level gate, per-chain verification.** Each stack level runs its
+   own build-guardian gate before submit; the chain-end verification pass
+   (cross-bead-integration-verifier when the chain has >1 bead, then
+   architecture-auditor) runs after a chain's levels complete. Steps run
+   **in order, not in parallel** within a level and within the chain-end
+   pass.
 
 ## Wave lifecycle
 
-A wave is a set of ready, enriched beads that the orchestrator spawns
-together, followed by the verification that proves the wave's combined
-output is safe to build on top of. Each wave proceeds through these
-stages in order.
+A wave is a set of ready, enriched dependency CHAINS that the orchestrator
+runs together. Chains come from the `stackPlan` helper
+(`.claude/orchestrators/lib/helpers.ts`), which turns an epic's full child
+set plus the bd "blocks" edges among them into an ordered forest of chains;
+non-linear graphs (cycles, forks, joins) fall back to a flat plan of
+singleton chains with a warning. Branch/stack conventions the chains
+follow: `git-workflow/stacking.md`.
 
-### 1. Identify ready + enriched beads
+### 1. Identify ready + enriched chains
 
 Before spawning anything, the orchestrator:
 
-1. Reads the ready set (`bd ready` for the epic's children, or the single
-   bead for `/process-backlog` single-leaf Branch B).
-2. For each candidate, runs `bead-state-assessment/bd-enrichment-check.sh`
-   (exit 0 = enriched, exit 1 = missing Implementation Context).
-3. Splits the candidates into **enriched** (ready to dispatch) and
-   **unenriched** (must be enriched before dispatch).
-4. For any unenriched bead, spawns a **general-purpose enrichment
-   subagent** that populates the Implementation Context via the
-   `/analyze-bead` Phase 4 flow, then re-checks. **Enrichment does NOT
-   count against the 3-slot implementer budget** and **does NOT count as
-   a retry against the bead's retry limit.** It is a precondition, not
-   an attempt.
+1. Plans chains once per epic from the FULL child set (not `bd ready`,
+   which omits blocked mid-chain beads).
+2. Each wave, reads the ready set (`bd ready --parent <epic>`) and
+   schedules the remaining chains whose HEAD bead is ready. `bd` stays the
+   source of cross-chain unblocking, but mid-chain beads are owned by
+   their chain runner and are never scheduled directly.
+3. Checks enrichment on chain heads before spawn (mid-chain beads are
+   re-checked at dispatch time). For any unenriched bead, spawns a
+   **general-purpose enrichment subagent** that populates the
+   Implementation Context via the `/analyze-bead` Phase 4 flow, then
+   re-checks. **Enrichment does NOT count against the 3-slot implementer
+   budget** and **does NOT count as a retry against the bead's retry
+   limit.** It is a precondition, not an attempt.
 
-### 2. Spawn implementers (max 3 in parallel)
+### 2. Run chains (max 3 in parallel)
 
-With only enriched beads in hand, the orchestrator dispatches implementers
-using the canonical prompt from
-[`implementer-prompt-template`](../implementer-prompt-template/SKILL.md):
+The orchestrator runs ready chains under the 3-slot cap; independent
+chains run in parallel, and within a chain beads run strictly
+sequentially, each level's branch stacking on its predecessor
+(operations: `stackCreate`/`stackSubmit` in
+`.claude/orchestrators/lib/helpers.ts`; conventions:
+`git-workflow/stacking.md`).
 
-1. If ≤ 3 enriched beads remain: spawn all in one parallel Task batch.
-2. If > 3: spawn the first 3 (typically by bead priority / age), queue the
-   remainder.
-3. As each implementer closes (via `bd close`), pop from the queue and
-   spawn the next, maintaining the 3-in-flight cap.
+Concurrency model (hybrid): the first chain of a wave runs in the main
+checkout; each ADDITIONAL concurrent chain gets its own git worktree,
+with its agents dispatched at that cwd. The orchestrator owns the
+worktree lifecycle (create before the chain starts, remove when it
+finishes).
 
+Implementers receive the canonical prompt from
+[`implementer-prompt-template`](../implementer-prompt-template/SKILL.md).
 Each implementer independently runs its own pre-close checklist
 (`pkill -f "vitest"`, `npm run lint`, `npx vitest run <file1> <file2>
 --maxThreads=2`) and calls `bd close {bead_id}` only when lint and
@@ -150,52 +165,20 @@ Apply [`review-mode-auditor`](../review-mode-auditor/SKILL.md) verdicts:
 | **PASS WITH WARNINGS** | Record warnings in wave summary / PR body; do NOT block. |
 | **FAIL** | Return findings to the implementer for a single retry round. If a second audit still FAILs, escalate per [`bead-backlog-selection`](../bead-backlog-selection/SKILL.md) via `bd-escalate.sh`. |
 
-A wave is not ready for the wave-end chain until **every** bead in the
-wave has closed and **every** matched per-bead auditor for those beads
-has reported a resolved verdict (PASS or PASS WITH WARNINGS after any
-required retry).
+A stack level is not ready for its build gate until its bead has closed
+and **every** matched per-bead auditor for that bead has reported a
+resolved verdict (PASS or PASS WITH WARNINGS after any required retry).
 
-### 4. Wave-end verification chain (sequential, not parallel)
+### 4. Per-level build gate + per-chain verification
 
-After all beads in the wave have closed and all per-bead auditors have
-resolved, the orchestrator runs the following chain **in order**. Each
-step must complete and pass before the next step starts. Never
-parallelize this chain.
-
-**Step A — cross-bead-integration-verifier** (conditional)
-
-- Run **only if the wave size > 1.** A single-bead wave has nothing to
-  cross-verify; skip this step.
-- Spawn exactly one `cross-bead-integration-verifier` subagent.
-- It looks for conflicts, duplications, and inconsistencies that
-  per-bead auditors miss because each bead was verified in isolation.
-- Verdict handling:
-  - 🔴 Conflicts → spawn a follow-up implementer with the conflict
-    details, re-run the affected per-bead auditors, then re-run this
-    step. Do NOT proceed to Step B.
-  - 🟡 Duplications / inconsistencies → address if a quick fix;
-    otherwise note for end-of-epic cleanup and proceed.
-  - 🟢 Clean → proceed to Step B.
-
-**Step B — architecture-auditor (light pass)** (always)
-
-- Spawn exactly one `architecture-auditor`, configured for a light
-  pass (not a deep audit).
-- It reads product docs (mission.md, decisions.md, roadmap.md), diffs
-  the wave's changes, and flags vision drift, decision violations, and
-  conceptual fragmentation.
-- Verdict handling:
-  - 🔴 HIGH (decision violation, vision misalignment) → resolve before
-    proceeding. Spawn a follow-up implementer if needed.
-  - 🟡 MEDIUM / LOW → note in the wave summary; address if quick.
-  - 🟢 PASS → proceed to Step C.
-
-**Step C — build-guardian** (always, exactly once per wave)
+**Per-level build gate — build-guardian (once per stack level, BEFORE
+that level's submit)**
 
 - **NEVER more than one build-guardian at a time.** Test suites must
   not run concurrently.
-- Spawn exactly one `build-guardian` subagent. It runs the full
-  sequential suite internally:
+- Spawn exactly one `build-guardian` subagent per stack level, on that
+  level's branch at its stack position. It runs the full sequential
+  suite internally:
   ```
   pkill -f "vitest" 2>/dev/null || true
   npm run lint
@@ -204,23 +187,45 @@ parallelize this chain.
   npm run build
   (e2e as applicable)
   ```
-- Build-guardian is the single point where the full test suite runs
-  for this wave's combined changes. The implementers' targeted tests
-  proved each bead's local correctness; build-guardian proves the
-  integrated wave still passes.
+- Build-guardian is the single point where the full test suite runs for
+  a level's changes. The implementer's targeted tests proved the bead's
+  local correctness; build-guardian proves the level is independently
+  green at its stack position (`git-workflow/stacking.md`).
 - Verdict handling:
-  - 🟢 Pass → wave is complete; cascade to the next wave.
+  - 🟢 Pass → submit the level and continue to the next level in the
+    chain.
   - 🔴 Fail → see "Build-guardian failure" in failure handling below.
+    The level is NOT submitted while red.
+- After post-merge restacks, GitHub CI is the re-validator;
+  build-guardian re-runs locally only when `syncAndRestack` reports
+  conflicted branches.
+
+**Per-chain verification pass (after a chain's levels complete)**
+
+- **cross-bead-integration-verifier** — run only if the chain has > 1
+  bead. It looks for conflicts, duplications, and inconsistencies
+  between the chain's beads that per-bead auditors miss because each
+  bead was verified in isolation.
+- **architecture-auditor (light pass)** — always. It reads product docs
+  (mission.md, decisions.md, roadmap.md), diffs the chain's combined
+  changes, and flags vision drift, decision violations, and conceptual
+  fragmentation.
+- Verdict handling for both:
+  - 🔴 Conflicts / HIGH findings → spawn a follow-up implementer with
+    the details, re-run the affected per-bead auditors.
+  - 🟡 MEDIUM / LOW → note in the wave summary; address if quick.
+  - 🟢 Clean / PASS → chain is complete.
 
 ### 5. Cascade to the next wave
 
-Once the wave-end chain is green:
+Once every chain in the wave has finished:
 
-1. Run `bd ready` (or equivalent for `/process-backlog`) to find newly
-   unblocked beads.
-2. Return to step 1 of this lifecycle for the next wave.
-3. When no ready beads remain, proceed to the **Epic completion sweep**
-   (see below).
+1. Run `bd ready --parent <epic>` to find newly unblocked chain heads
+   (e.g. a chain that was waiting on a blocker outside its own chain).
+2. Return to step 1 of this lifecycle for the next wave of remaining
+   chains.
+3. When no remaining chain has a ready head, proceed to the **Epic
+   completion sweep** (see below).
 
 ## Failure handling
 
@@ -272,20 +277,22 @@ ambiguous requirement, unexpected codebase state, scope creep beyond
    - Skip the bead and continue the wave without it (only valid if the
      bead does not block other ready beads).
 
-### Build-guardian failure (wave-end)
+### Build-guardian failure (per-level gate)
 
-If build-guardian fails:
+If a level's build-guardian fails, the responsible bead is known by
+construction — it is that level:
 
-1. Spawn `test-failure-investigator` with the build-guardian's report.
-   The report includes `git log` output to help attribute failures to
-   specific beads' commits.
-2. Spawn a follow-up implementer for the responsible bead to fix the
-   issue (counts as a retry for that bead).
-3. Re-run the per-bead auditor cascade for the fixed bead.
-4. Re-run the wave-end chain from the start of Step A (in case the fix
-   introduced new integration issues, the integration verifier must see
-   the updated state).
-5. Only cascade to the next wave once build-guardian reports green.
+1. Spawn `test-failure-investigator` with the build-guardian's report
+   for diagnosis.
+2. Spawn a follow-up implementer for the level's bead to fix the issue
+   (counts as a retry for that bead).
+3. Re-run the per-bead auditor cascade for the fixed bead, then re-run
+   the level's build gate.
+4. The level is submitted only once its build-guardian reports green.
+5. If retries exhaust, the chain HALTS at that level: the failed bead
+   and the chain's un-run remainder are escalated (chain truncation) —
+   never skip past a broken parent level. Other chains in the wave are
+   unaffected.
 
 ### Retry limit
 
@@ -339,8 +346,8 @@ a final comprehensive sweep before declaring the epic done.
 5. **Collect verdicts.** PASS / PASS WITH WARNINGS surface in the final
    report; FAIL blocks closing the epic. For a FAIL at this stage, route
    through the same failure-handling flow as build-guardian failure
-   (investigator → implementer → rerun the wave-end chain for the
-   affected wave, then redo the sweep).
+   (investigator → implementer → rerun the affected level's build gate,
+   then redo the sweep).
 6. **Close the epic** via `bd close <epic-id>` once all comprehensive
    agents report resolved verdicts.
 
@@ -349,12 +356,12 @@ a final comprehensive sweep before declaring the epic done.
 When `/process-backlog` targets a single leaf bead (not an epic), the
 same lifecycle applies in its reduced form:
 
-- One wave. One bead. One implementer.
+- One wave. One singleton chain. One implementer.
 - The per-bead auditor cascade still runs after the implementer closes.
-- The wave-end chain runs with:
-  - `cross-bead-integration-verifier` **skipped** (wave size is 1).
+- The verification pass runs with:
+  - `cross-bead-integration-verifier` **skipped** (chain size is 1).
   - `architecture-auditor` light pass runs (always).
-  - `build-guardian` runs once (always).
+  - `build-guardian` runs once (always — one bead means one level).
 - The epic completion sweep collapses to the same build-guardian pass
   plus the `implementation-verifier` invocation (which is effectively
   the "wave" and "epic" stages merging, since the whole run is one
@@ -373,6 +380,13 @@ Before this skill existed, the wave lifecycle was inlined in
 Consumers should reference this skill by name instead of re-inlining the
 mechanics. Any behavioral change — new verification step, different
 retry semantics, changes to the 3-implementer cap, adjustments to the
-wave-end chain ordering — should be made **here first**, then
+per-level gate or chain scheduling — should be made **here first**, then
 propagated to consumers. Divergence between this skill and a consumer
 is a bug; the skill is authoritative.
+
+The skill is deliberately NOT the source of truth for two adjacent
+layers: stacking conventions live in `git-workflow/stacking.md`, and the
+executable chain/gt operations (`stackPlan`, `stackCreate`,
+`stackSubmit`, `syncAndRestack`, the wave scheduler itself) live in
+`.claude/orchestrators/lib/` — this skill cross-references both and
+restates neither.
