@@ -930,6 +930,52 @@ describe('derivePrTitleFromBead', () => {
 });
 
 // =============================================================================
+// withStackedPrefix / fetchPrInfo
+// =============================================================================
+
+describe('withStackedPrefix', () => {
+  it('inserts "Stacked on #N." as the first Motivation line', async () => {
+    const { withStackedPrefix } = await import('../../lib/execute.js');
+    const body = '## Motivation\n\nWhy this change.\n\n## Approach\n\nHow.';
+    expect(withStackedPrefix(body, 42)).toBe(
+      '## Motivation\n\nStacked on #42.\n\nWhy this change.\n\n## Approach\n\nHow.',
+    );
+  });
+
+  it('prepends the marker when the body has no Motivation heading', async () => {
+    const { withStackedPrefix } = await import('../../lib/execute.js');
+    expect(withStackedPrefix('Free-form body.', 7)).toBe('Stacked on #7.\n\nFree-form body.');
+  });
+});
+
+describe('fetchPrInfo', () => {
+  it('parses url and number from gh pr view JSON', async () => {
+    const { fetchPrInfo } = await import('../../lib/execute.js');
+    const logStub = stubLogger();
+    const spawnFn = vi.fn().mockReturnValue(
+      fakeSpawnResult(JSON.stringify({ number: 12, url: 'https://github.com/o/r/pull/12' }), '', 0),
+    );
+
+    const info = fetchPrInfo('feat.branch', logStub.logger, PhaseName.PR, spawnFn as never);
+    expect(info).toEqual({ url: 'https://github.com/o/r/pull/12', number: 12 });
+    expect(spawnFn).toHaveBeenCalledWith(
+      'gh', ['pr', 'view', 'feat.branch', '--json', 'url,number'], expect.any(Object),
+    );
+  });
+
+  it('returns null when gh fails or output is unparseable', async () => {
+    const { fetchPrInfo } = await import('../../lib/execute.js');
+    const logStub = stubLogger();
+
+    const failSpawn = vi.fn().mockReturnValue(fakeSpawnResult('', 'no pull requests found', 1));
+    expect(fetchPrInfo('feat.x', logStub.logger, PhaseName.PR, failSpawn as never)).toBeNull();
+
+    const garbageSpawn = vi.fn().mockReturnValue(fakeSpawnResult('not json', '', 0));
+    expect(fetchPrInfo('feat.x', logStub.logger, PhaseName.PR, garbageSpawn as never)).toBeNull();
+  });
+});
+
+// =============================================================================
 // runPR
 // =============================================================================
 
@@ -994,18 +1040,19 @@ describe('runPR', () => {
     expect(logStub.logs.some(l => l.kind === 'err' && l.data.includes('UNCLOSED'))).toBe(true);
   });
 
-  it('should create PR and route to Report for a closed leaf bead', async () => {
+  it('should submit via gt, canonicalize via gh pr edit, and route to Report for a closed leaf bead', async () => {
     const { runPR } = await import('../../lib/execute.js');
 
     const branchName = 'chore/fix-widget';
     const prUrl = 'https://github.com/owner/repo/pull/42';
 
-    // Sequence: git branch, bd show, git push, gh pr create
+    // Sequence: git branch, bd show, gt submit, gh pr view, gh pr edit
     const deps = makeDeps([
       fakeSpawnResult(branchName, '', 0),
       fakeSpawnResult(CLOSED_LEAF_JSON, '', 0),
+      fakeSpawnResult('✅ Submitted.', '', 0),
+      fakeSpawnResult(JSON.stringify({ number: 42, url: prUrl }), '', 0),
       fakeSpawnResult('', '', 0),
-      fakeSpawnResult(prUrl, '', 0),
     ]);
     const ctx = makePhaseCtx(logStub);
 
@@ -1016,20 +1063,21 @@ describe('runPR', () => {
     expect(result.ctx.beadsClosed).toEqual(['pv-test-1']);
   });
 
-  it('should create PR for a closed epic with closed children', async () => {
+  it('should submit a closed epic with closed children', async () => {
     const { runPR } = await import('../../lib/execute.js');
 
     const prUrl = 'https://github.com/owner/repo/pull/99';
 
     // Sequence: git branch, bd show (epic), bd show (child1), bd show (child2),
-    //           git push, gh pr create
+    //           gt submit, gh pr view, gh pr edit
     const deps = makeDeps([
       fakeSpawnResult('feat/branch', '', 0),
       fakeSpawnResult(CLOSED_EPIC_JSON, '', 0),
       fakeSpawnResult(CLOSED_CHILD_JSON, '', 0),
       fakeSpawnResult(CLOSED_CHILD_JSON, '', 0),
+      fakeSpawnResult('✅ Submitted.', '', 0),
+      fakeSpawnResult(JSON.stringify({ number: 99, url: prUrl }), '', 0),
       fakeSpawnResult('', '', 0),
-      fakeSpawnResult(prUrl, '', 0),
     ]);
     const ctx = makePhaseCtx(logStub);
 
@@ -1040,6 +1088,21 @@ describe('runPR', () => {
     const complete = logStub.runJsonEntries.find(e => e.event === 'pr_finalize_complete');
     expect(complete!.prTitle).toBe('Redesign dashboard');
     expect(complete!.beadsClosed).toEqual(['pv-test-1', 'pv-test-1.1', 'pv-test-1.2']);
+  });
+
+  it('should halt when gt submit fails', async () => {
+    const { runPR } = await import('../../lib/execute.js');
+
+    const deps = makeDeps([
+      fakeSpawnResult('chore/fix-widget', '', 0),
+      fakeSpawnResult(CLOSED_LEAF_JSON, '', 0),
+      fakeSpawnResult('', 'ERROR: Validation failed; branches need restack.', 1),
+    ]);
+    const ctx = makePhaseCtx(logStub);
+
+    const result = await runPR(ctx, deps);
+    expect(result.next).toBe('halt');
+    expect(logStub.logs.some(l => l.kind === 'err' && l.data.includes('gt submit failed'))).toBe(true);
   });
 
   it('should halt when an epic child is not closed', async () => {
@@ -1076,8 +1139,8 @@ describe('runPR backstop', () => {
       if (cmd === 'git' && args[0] === 'rev-list') {
         return fakeSpawnResult('0\n', '', 0);
       }
-      // Anything else (bd show, git push, gh pr create) must NOT be called.
-      // If it is, return failure so assertions catch the leak.
+      // Anything else (bd show, gt submit, gh pr view/edit) must NOT be
+      // called. If it is, return failure so assertions catch the leak.
       return fakeSpawnResult('', 'unexpected spawn', 1);
     });
 
@@ -1099,7 +1162,7 @@ describe('runPR backstop', () => {
       `${c[0]} ${c[1]?.[0] ?? ''}`);
     expect(cmds).toContain('git branch');
     expect(cmds).toContain('git rev-list');
-    expect(cmds).not.toContain('git push');
+    expect(cmds).not.toContain('gt submit');
     expect(cmds).not.toContain('gh pr');
     expect(cmds).not.toContain('bd show');
   });

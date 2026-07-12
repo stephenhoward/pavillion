@@ -32,6 +32,7 @@ import {
   bdEscalate,
   bdCreateFollowup,
   branchName,
+  stackCreate,
   checkEpicPromotion,
   discoverAgents,
   type StateVerdict,
@@ -1401,12 +1402,23 @@ export async function branch(ctx: PhaseCtx, deps: PhaseDeps = {}): Promise<Phase
     return { next: 'halt', ctx };
   }
 
-  // Step 5: Create branch if not already on it
-  if (currentCmd.stdout !== derivedBranchName) {
-    const checkoutCmd = spawnCmd('git', ['checkout', '-b', derivedBranchName], logger, PhaseName.Branch, spawn);
+  // Step 5: Create branch if not already on it.
+  //
+  // Epics skip branch creation entirely: chain levels create their own
+  // stacked branches inside the wave loop via stackCreate (see
+  // git-workflow/stacking.md and execute.ts runEpicExecution). A single
+  // epic-wide branch would sit empty and untracked by any PR.
+  if (issueType === 'epic') {
+    logger.appendRunJson({
+      event: 'branch_skipped_epic',
+      beadId: ctx.beadId,
+    });
+  }
+  else if (currentCmd.stdout !== derivedBranchName) {
+    const createResult = stackCreate(derivedBranchName, 'main', { spawnFn: spawn });
 
-    if (checkoutCmd.exitCode !== 0) {
-      const msg = `git checkout -b "${derivedBranchName}" failed: ${checkoutCmd.stderr.trim()}`;
+    if (!createResult.ok) {
+      const msg = `gt create "${derivedBranchName}" --onto main failed: ${createResult.stderr.trim()}`;
       console.error(msg);
       logger.writePhaseLog(PhaseName.Branch, 'err', msg + '\n');
       return { next: 'halt', ctx };

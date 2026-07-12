@@ -1085,9 +1085,10 @@ describe('branch', () => {
     expect(result.next).toBe('halt');
   });
 
-  it('should create branch and route epic to Epic phase', async () => {
+  it('should skip branch creation for epics and route to Epic phase', async () => {
     const bdShowJson = JSON.stringify([{ issue_type: 'epic', title: 'My Epic Feature' }]);
-    const spawn = seqSpawn(
+    const calls: string[] = [];
+    const results = [
       // gitSafeToStart (4 calls):
       fakeSpawn('true', '', 0),            // git rev-parse --is-inside-work-tree
       fakeSpawn('abc1234', '', 0),         // git rev-parse HEAD
@@ -1097,18 +1098,25 @@ describe('branch', () => {
       fakeSpawn(bdShowJson, '', 0),
       // git branch --show-current:
       fakeSpawn('main', '', 0),
-      // git checkout -b <branch>:
-      fakeSpawn('', '', 0),
-    );
+      // NO branch creation — chain levels create their own stacked branches.
+    ];
+    let i = 0;
+    const spawn = vi.fn().mockImplementation((cmd: string, args: string[]) => {
+      calls.push([cmd, ...(args ?? [])].join(' '));
+      return results[i++] ?? fakeSpawn('', 'unexpected call', 1);
+    });
 
-    const result = await branch(makeCtx(), { spawnFn: spawn });
+    const result = await branch(makeCtx(), { spawnFn: spawn as never });
 
     expect(result.next).toBe(PhaseName.Epic);
+    expect(spawn).toHaveBeenCalledTimes(6);
+    expect(calls.some(c => c.startsWith('gt create'))).toBe(false);
   });
 
-  it('should route non-epic to Leaf phase', async () => {
+  it('should route non-epic to Leaf phase, creating the branch via gt create', async () => {
     const bdShowJson = JSON.stringify([{ issue_type: 'task', title: 'A Task' }]);
-    const spawn = seqSpawn(
+    const calls: string[] = [];
+    const results = [
       // gitSafeToStart:
       fakeSpawn('true', '', 0),
       fakeSpawn('abc1234', '', 0),
@@ -1118,13 +1126,39 @@ describe('branch', () => {
       fakeSpawn(bdShowJson, '', 0),
       // git branch --show-current:
       fakeSpawn('main', '', 0),
-      // git checkout -b:
+      // gt create <branch> --onto main --no-interactive:
       fakeSpawn('', '', 0),
-    );
+    ];
+    let i = 0;
+    const spawn = vi.fn().mockImplementation((cmd: string, args: string[]) => {
+      calls.push([cmd, ...(args ?? [])].join(' '));
+      return results[i++] ?? fakeSpawn('', 'unexpected call', 1);
+    });
 
-    const result = await branch(makeCtx(), { spawnFn: spawn });
+    const result = await branch(makeCtx(), { spawnFn: spawn as never });
 
     expect(result.next).toBe(PhaseName.Leaf);
+    // branchName('A Task', 'task') = 'chore.a-task'
+    expect(calls).toContain('gt create chore.a-task --onto main --no-interactive');
+  });
+
+  it('should halt when gt create fails', async () => {
+    const bdShowJson = JSON.stringify([{ issue_type: 'task', title: 'A Task' }]);
+    const spawn = seqSpawn(
+      fakeSpawn('true', '', 0),
+      fakeSpawn('abc1234', '', 0),
+      fakeSpawn('abc1234', '', 0),
+      fakeSpawn('', '', 0),
+      fakeSpawn(bdShowJson, '', 0),
+      fakeSpawn('main', '', 0),
+      // gt create fails:
+      fakeSpawn('', 'ERROR: Cannot perform this operation on untracked branch xyz.', 1),
+    );
+
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const result = await branch(makeCtx(), { spawnFn: spawn });
+
+    expect(result.next).toBe('halt');
   });
 
   it('should skip checkout if already on target branch', async () => {

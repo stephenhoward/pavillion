@@ -33,6 +33,7 @@ import {
   discoverAgents,
   commitMsg,
   prBody,
+  stackSubmit,
   type MatchedAgent as HelperMatchedAgent,
 } from './helpers.js';
 import { buildAgentSelectorPrompt, parseAgentSelectorVerdict } from './phases.js';
@@ -102,6 +103,19 @@ export interface ExecuteDeps {
   changedFilesForBead?: (beadId: string) => string[];
   timeoutMs?: number;
   retryContext?: RetryContext;
+  /**
+   * Working directory for spawned agents and git/gt commands. Set by the
+   * chain scheduler when a chain runs in its own git worktree (hybrid
+   * concurrency model — see git-workflow/stacking.md). Undefined means the
+   * main checkout.
+   */
+  cwd?: string;
+  /**
+   * Diff base for audit/verification prompts and probes. Defaults to `main`.
+   * The chain scheduler sets this to the stack level's parent branch so
+   * auditors review only that level's delta.
+   */
+  diffBase?: string;
   /** Override auditor selection (for testing). */
   selectAuditorsFn?: (
     changedFiles: string[],
@@ -139,10 +153,12 @@ export const PR_MESSAGES = {
     `prBody helper failed (exit ${code}): ${stderr.trim()}`,
   commitMsgFailed: (code: number, stderr: string) =>
     `commitMsg helper failed (exit ${code}): ${stderr.trim()}`,
-  pushFailed: (branch: string, stderr: string) =>
-    `git push failed for branch "${branch}": ${stderr.trim()}`,
-  ghPrFailed: (code: number, stderr: string) =>
-    `gh pr create failed (exit ${code}): ${stderr.trim()}`,
+  submitFailed: (branch: string, stderr: string) =>
+    `gt submit failed for branch "${branch}": ${stderr.trim()}`,
+  ghPrViewFailed: (branch: string, code: number, stderr: string) =>
+    `gh pr view failed for branch "${branch}" (exit ${code}): ${stderr.trim()}`,
+  ghPrEditFailed: (code: number, stderr: string) =>
+    `gh pr edit failed (exit ${code}): ${stderr.trim()}`,
   branchDetectFailed: (stderr: string) =>
     `git branch --show-current failed: ${stderr.trim()}`,
 } as const;
@@ -1637,6 +1653,48 @@ export function parseBeadJson(raw: string): BeadJson | null {
 }
 
 /**
+ * Resolve a branch's PR number and URL via `gh pr view <branch> --json url,number`.
+ *
+ * Used after `stackSubmit` — gt creates/updates the PR but the orchestrator
+ * needs the PR number for `gh pr edit` and the URL for reporting. Returns
+ * null when gh fails or its output is unparseable.
+ */
+export function fetchPrInfo(
+  branch: string,
+  logger: RunLogger,
+  logTag: PhaseName,
+  spawnFn: typeof nodeSpawnSync,
+): { url: string; number: number } | null {
+  const result = spawnCmd(
+    'gh', ['pr', 'view', branch, '--json', 'url,number'], logger, logTag, spawnFn,
+  );
+  if (result.exitCode !== 0 || !result.stdout) return null;
+
+  try {
+    const parsed = JSON.parse(result.stdout) as { url?: unknown; number?: unknown };
+    if (typeof parsed.url !== 'string' || typeof parsed.number !== 'number') return null;
+    return { url: parsed.url, number: parsed.number };
+  }
+  catch {
+    return null;
+  }
+}
+
+/**
+ * Insert the stacked-PR marker at the top of a PR body's Motivation section.
+ *
+ * Per git-workflow/stacking.md, stacked PRs open Motivation with a one-line
+ * "Stacked on #N." pointing at the parent PR; bottom-of-stack PRs omit it.
+ */
+export function withStackedPrefix(body: string, parentPrNumber: number): string {
+  const heading = '## Motivation\n\n';
+  if (body.startsWith(heading)) {
+    return `${heading}Stacked on #${parentPrNumber}.\n\n${body.slice(heading.length)}`;
+  }
+  return `Stacked on #${parentPrNumber}.\n\n${body}`;
+}
+
+/**
  * Derive PR title from the bead.
  */
 export function derivePrTitleFromBead(
@@ -1775,32 +1833,41 @@ export async function runPR(
     prTitle = commitMsg(bead.title ?? ctx.beadId, bead.issue_type ?? 'task');
   }
 
-  // Step 4: Push branch
-  const pushResult = spawnCmd(
-    'git', ['push', '-u', 'origin', branchName], logger, PhaseName.PR, spawnFn,
-  );
+  // Step 4: Submit branch via gt (pushes and creates the PR; command
+  // conventions live in git-workflow/stacking.md, operations in helpers.ts).
+  const submitResult = stackSubmit(branchName, { spawnFn: spawnFn as never, cwd: deps.cwd });
 
-  if (pushResult.exitCode !== 0) {
-    const msg = PR_MESSAGES.pushFailed(branchName, pushResult.stderr);
+  if (!submitResult.ok) {
+    const msg = PR_MESSAGES.submitFailed(branchName, submitResult.stderr);
     console.error(msg);
     logger.writePhaseLog(PhaseName.PR, 'err', msg + '\n');
     return { next: 'halt', ctx };
   }
 
-  // Step 5: Create PR via gh
-  const ghResult = spawnCmd(
-    'gh', ['pr', 'create', '--title', prTitle, '--body', generatedPrBody],
+  // Step 5: Resolve the PR number/URL, then canonicalize title + body via
+  // gh pr edit (gt submit does not know the project's PR template).
+  const prInfo = fetchPrInfo(branchName, logger, PhaseName.PR, spawnFn);
+
+  if (!prInfo) {
+    const msg = PR_MESSAGES.ghPrViewFailed(branchName, 1, 'could not resolve PR number/url after gt submit');
+    console.error(msg);
+    logger.writePhaseLog(PhaseName.PR, 'err', msg + '\n');
+    return { next: 'halt', ctx };
+  }
+
+  const editResult = spawnCmd(
+    'gh', ['pr', 'edit', String(prInfo.number), '--title', prTitle, '--body', generatedPrBody],
     logger, PhaseName.PR, spawnFn,
   );
 
-  if (ghResult.exitCode !== 0) {
-    const msg = PR_MESSAGES.ghPrFailed(ghResult.exitCode, ghResult.stderr);
+  if (editResult.exitCode !== 0) {
+    const msg = PR_MESSAGES.ghPrEditFailed(editResult.exitCode, editResult.stderr);
     console.error(msg);
     logger.writePhaseLog(PhaseName.PR, 'err', msg + '\n');
     return { next: 'halt', ctx };
   }
 
-  const prUrl = ghResult.stdout;
+  const prUrl = prInfo.url;
 
   logger.appendRunJson({
     event: 'pr_finalize_complete',

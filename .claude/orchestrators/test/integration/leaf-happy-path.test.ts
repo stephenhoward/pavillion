@@ -97,23 +97,21 @@ describe('Integration: leaf happy path', () => {
       }
       // preflight fetch
       if (a.includes('fetch origin')) return { exitCode: 0, stdout: '', stderr: '' };
-      // branch phase: checkout
-      if (a.includes('checkout')) return { exitCode: 0, stdout: '', stderr: '' };
-      // PR phase: push
-      if (a.includes('push')) return { exitCode: 0, stdout: '', stderr: '' };
-
       return { exitCode: 0, stdout: '', stderr: '' };
     });
 
     // ---------------------------------------------------------------------------
     // Unified gt handler
-    // Covers the preflight Graphite probes: gt --version, gt auth, gt trunk.
+    // Covers the preflight Graphite probes (gt --version, gt auth, gt trunk),
+    // the branch phase's gt create, and the PR phase's gt submit.
     // ---------------------------------------------------------------------------
     scripts.on('gt', (args) => {
       const a = args.join(' ');
       if (a.includes('--version')) return { exitCode: 0, stdout: '1.8.6', stderr: '' };
       if (a.includes('auth')) return { exitCode: 0, stdout: 'Authenticated as: testuser', stderr: '' };
       if (a.includes('trunk')) return { exitCode: 0, stdout: 'main', stderr: '' };
+      if (a.includes('create')) return { exitCode: 0, stdout: '', stderr: '' };
+      if (a.includes('submit')) return { exitCode: 0, stdout: '✅ Submitted.', stderr: '' };
       return { exitCode: 0, stdout: '', stderr: '' };
     });
 
@@ -175,13 +173,19 @@ describe('Integration: leaf happy path', () => {
     });
 
     // ---------------------------------------------------------------------------
-    // gh handler (for PR phase)
+    // gh handler (for PR phase): pr view resolves number/url, pr edit succeeds
     // ---------------------------------------------------------------------------
-    scripts.on('gh', () => ({
-      exitCode: 0,
-      stdout: 'https://github.com/org/repo/pull/42',
-      stderr: '',
-    }));
+    scripts.on('gh', (args) => {
+      const a = args.join(' ');
+      if (a.includes('view')) {
+        return {
+          exitCode: 0,
+          stdout: JSON.stringify({ number: 42, url: 'https://github.com/org/repo/pull/42' }),
+          stderr: '',
+        };
+      }
+      return { exitCode: 0, stdout: '', stderr: '' };
+    });
 
     // --- Dispatch routes ---
     // Implementer returns empty (success = no error thrown)
