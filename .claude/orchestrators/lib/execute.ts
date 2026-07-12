@@ -27,13 +27,21 @@ import {
   DispatchTimeoutError,
   type DispatchOptions,
 } from './dispatch.js';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import {
   bdEscalate,
   bdEnrichmentCheck,
+  bdShowJson,
   discoverAgents,
+  branchName as deriveBranchName,
   commitMsg,
   prBody,
+  stackCreate,
   stackSubmit,
+  stackPlan,
+  type DependencyEdge,
+  type StackPlanResult,
   type MatchedAgent as HelperMatchedAgent,
 } from './helpers.js';
 import { buildAgentSelectorPrompt, parseAgentSelectorVerdict } from './phases.js';
@@ -91,6 +99,20 @@ export interface EpicExecutionResult {
   escalatedBeads: string[];
   totalRetries: number;
   warnings: string[];
+  /** URLs of the per-level PRs submitted during the wave loop, in submit order. */
+  prUrls: string[];
+}
+
+/** Result of running one dependency chain to completion (or truncation). */
+export interface ChainExecutionResult {
+  /** The chain as scheduled (blocker-first bead ids). */
+  chain: string[];
+  completed: string[];
+  failed: string[];
+  escalated: string[];
+  retries: number;
+  warnings: string[];
+  prUrls: string[];
 }
 
 /**
@@ -183,12 +205,6 @@ interface BeadReadyEntry {
   status: string;
 }
 
-interface WaveEndResult {
-  outcome: 'pass' | 'escalated';
-  failedBeads: string[];
-  retries: number;
-}
-
 interface BuildGuardianResult {
   verdict: 'pass' | 'fail';
   concerns: string[];
@@ -274,33 +290,33 @@ Please address each concern listed above and re-run the implementation. This is 
 
 /**
  * Build the context string for auditor selection from git.
- * Combines `git diff --stat` and `git log --oneline` for the branch-vs-main delta.
+ * Combines `git diff --stat` and `git log --oneline` for the branch's delta
+ * against its diff base (`main`, or the parent stack level for chain levels).
  */
 function buildAuditorContext(
   ctx: RunContext,
-  deps: { scriptSpawnFn?: typeof nodeSpawnSync },
+  deps: { scriptSpawnFn?: typeof nodeSpawnSync; diffBase?: string; cwd?: string },
 ): string {
   const spawn = deps.scriptSpawnFn ?? nodeSpawnSync;
-  const stat = spawn('git', ['diff', '--stat', 'main...HEAD'], {
+  const base = deps.diffBase ?? 'main';
+  const spawnOpts = {
     encoding: 'buffer' as never,
     shell: true,
     timeout: 30_000,
-  });
-  const log = spawn('git', ['log', '--oneline', 'main..HEAD'], {
-    encoding: 'buffer' as never,
-    shell: true,
-    timeout: 30_000,
-  });
+    ...(deps.cwd !== undefined ? { cwd: deps.cwd } : {}),
+  };
+  const stat = spawn('git', ['diff', '--stat', `${base}...HEAD`], spawnOpts);
+  const log = spawn('git', ['log', '--oneline', `${base}..HEAD`], spawnOpts);
 
   const statOut = (stat.stdout?.toString('utf-8') ?? '').trim();
   const logOut = (log.stdout?.toString('utf-8') ?? '').trim();
 
   return [
-    'Changed files (`git diff --stat main...HEAD`):',
+    `Changed files (\`git diff --stat ${base}...HEAD\`):`,
     '',
     statOut || '_(no changes)_',
     '',
-    'Commits in this branch (`git log --oneline main..HEAD`):',
+    `Commits in this branch (\`git log --oneline ${base}..HEAD\`):`,
     '',
     logOut || '_(no commits)_',
     '',
@@ -336,6 +352,7 @@ async function selectAuditors(
       ctx,
       logTag: PhaseName.Leaf,
       spawnFn: deps.spawnFn as typeof nodeSpawn,
+      cwd: deps.cwd,
     });
 
     const verdict = parseAgentSelectorVerdict(raw);
@@ -380,15 +397,16 @@ async function dispatchAuditor(
   beadId: string,
   auditor: MatchedAgent,
   ctx: RunContext,
-  deps: { spawnFn?: typeof nodeSpawn },
+  deps: { spawnFn?: typeof nodeSpawn; diffBase?: string; cwd?: string },
 ): Promise<AuditorVerdict> {
+  const base = deps.diffBase ?? 'main';
   const prompt = `# Audit changes for bead: ${beadId}
 
 You are the ${auditor.name} running in post-code mode. Review the
 changes landed on the current branch:
 
 \`\`\`bash
-git diff main...HEAD
+git diff ${base}...HEAD
 \`\`\`
 
 Apply your normal audit process. Emit one of the \`review-mode-auditor\`
@@ -403,6 +421,7 @@ verdicts (PASS / PASS WITH WARNINGS / FAIL) per
       ctx,
       logTag: PhaseName.Leaf,
       spawnFn: deps.spawnFn as typeof nodeSpawn,
+      cwd: deps.cwd,
     });
 
     // dispatch returns raw string when no schemaPath; parse it ourselves
@@ -445,11 +464,21 @@ function filterEnrichedBeads(
   });
 }
 
-function findNextWaveBeads(
+/**
+ * Query the currently-ready descendant beads of an epic via
+ * `bd ready --parent <epic> --json`.
+ *
+ * In chain scheduling this remains the source of CROSS-CHAIN unblocking
+ * (e.g. a chain head that was blocked by a bead outside its own chain), but
+ * scheduling filters the result to chain HEADS only — mid-chain beads are
+ * owned by their chain runner and must never be re-injected as standalone
+ * wave entries.
+ */
+function findReadyBeadIds(
   epicId: string,
   ctx: RunContext,
   deps: ExecuteDeps,
-): string[] {
+): Set<string> {
   const spawnSync = deps.scriptSpawnFn ?? nodeSpawnSync;
 
   // Scope ready-set to descendants of the current epic; without --parent, bd
@@ -465,7 +494,7 @@ function findNextWaveBeads(
   const exitCode = result.status ?? 1;
 
   if (exitCode !== 0 || !stdout.trim()) {
-    return [];
+    return new Set();
   }
 
   try {
@@ -475,13 +504,71 @@ function findNextWaveBeads(
       phase: PhaseName.Epic,
       readyCount: beads.length,
     });
-    return beads.map(b => b.id);
+    return new Set(beads.map(b => b.id));
   }
   catch {
     ctx.logger.writePhaseLog(PhaseName.Epic, 'err',
       `Failed to parse bd ready output: ${stdout}\n`);
-    return [];
+    return new Set();
   }
+}
+
+/**
+ * Gather an epic's full child set and the blocks-edges among them, then plan
+ * dependency-chain stacks via the pure `stackPlan` helper.
+ *
+ * `bd ready --parent` is NOT sufficient here: it returns only UNBLOCKED
+ * children, but chain planning needs the full sibling set including
+ * mid-chain (currently blocked) beads. Children already closed are excluded;
+ * dropping a closed blocker's edge correctly promotes its dependent to a
+ * chain head. Returns null when the epic has no open children (or bd fails).
+ */
+export function gatherStackPlan(
+  epicId: string,
+  ctx: RunContext,
+  deps: ExecuteDeps,
+): StackPlanResult | null {
+  const spawnDeps = { spawnFn: deps.scriptSpawnFn };
+  const epic = bdShowJson(epicId, spawnDeps);
+  if (!epic) return null;
+
+  const childIds = (epic.children ?? [])
+    .map(c => c?.id)
+    .filter((id): id is string => typeof id === 'string');
+
+  const openChildren: string[] = [];
+  const edges: DependencyEdge[] = [];
+
+  for (const childId of childIds) {
+    const child = bdShowJson(childId, spawnDeps);
+    if (!child) continue;
+    const status = (child.status ?? '').toLowerCase();
+    if (status.includes('closed') || status.includes('done')) continue;
+
+    openChildren.push(childId);
+    for (const dep of child.dependencies ?? []) {
+      // Only blocks-edges participate; stackPlan additionally drops edges
+      // pointing outside the sibling set (e.g. cross-epic blockers).
+      if (dep.dependency_type === 'blocks' && typeof dep.id === 'string') {
+        edges.push({ blocker: dep.id, blocked: childId, dependencyType: 'blocks' });
+      }
+    }
+  }
+
+  if (openChildren.length === 0) return null;
+
+  const plan = stackPlan(openChildren, edges);
+
+  ctx.logger.appendRunJson({
+    event: 'stack-plan',
+    phase: PhaseName.Epic,
+    epicId,
+    chains: plan.chains,
+    flat: plan.flat,
+    warnings: plan.warnings,
+  });
+
+  return plan;
 }
 
 function escalateBead(
@@ -507,7 +594,7 @@ function escalateBead(
 }
 
 // =============================================================================
-// Private helpers — wave-end chain (epic)
+// Private helpers — chain verification (epic)
 // =============================================================================
 
 function buildVerifierPrompt(
@@ -515,17 +602,18 @@ function buildVerifierPrompt(
   waveNumber: number,
   beadIds: string[],
   kind: 'integration' | 'architecture',
+  diffBase = 'main',
 ): string {
   if (kind === 'integration') {
     return `# Cross-bead integration verification
 
 Epic: ${epicId}, Wave: ${waveNumber}
-Beads in this wave: ${beadIds.join(', ')}
+Beads in this chain: ${beadIds.join(', ')}
 
-Review the combined changes from all beads in this wave:
+Review the combined changes from all beads in this chain:
 
 \`\`\`bash
-git diff main...HEAD
+git diff ${diffBase}...HEAD
 \`\`\`
 
 Look for conflicts, duplications, and inconsistencies between the beads'
@@ -535,13 +623,13 @@ changes that per-bead auditors miss because each bead was verified in isolation.
   return `# Architecture auditor (light pass)
 
 Epic: ${epicId}, Wave: ${waveNumber}
-Beads in this wave: ${beadIds.join(', ')}
+Beads in this chain: ${beadIds.join(', ')}
 
-Review the wave's combined changes for vision drift, decision violations,
+Review the chain's combined changes for vision drift, decision violations,
 and conceptual fragmentation:
 
 \`\`\`bash
-git diff main...HEAD
+git diff ${diffBase}...HEAD
 \`\`\`
 
 Read product docs (mission.md, decisions.md, roadmap.md) and flag any issues.`;
@@ -561,6 +649,7 @@ async function dispatchVerifier(
       ctx,
       logTag: PhaseName.Epic,
       spawnFn: deps.spawnFn as typeof nodeSpawn,
+      cwd: deps.cwd,
     });
     // dispatch returns raw string when no schemaPath; parse it ourselves
     if (typeof raw === 'string') {
@@ -628,10 +717,14 @@ async function dispatchBuildGuardian(
   waveNumber: number,
   ctx: RunContext,
   deps: ExecuteDeps,
+  level?: { beadId: string; branch: string },
 ): Promise<BuildGuardianResult> {
+  const levelContext = level
+    ? `\nStack level: branch \`${level.branch}\` (bead ${level.beadId}), validated at its stack position.`
+    : '';
   const prompt = `# Build Guardian — Wave ${waveNumber}
 
-Epic: ${epicId}
+Epic: ${epicId}${levelContext}
 
 Run the full sequential verification suite:
 
@@ -668,6 +761,7 @@ introduced the failures (empty if you cannot attribute).`;
       ctx,
       logTag: PhaseName.Epic,
       spawnFn: deps.spawnFn as typeof nodeSpawn,
+      cwd: deps.cwd,
     });
   }
   catch (err) {
@@ -731,8 +825,8 @@ ${concerns.map(c => `- ${c}`).join('\n')}
 Investigate the failures using:
 
 \`\`\`bash
-git log --oneline main...HEAD
-git diff main...HEAD
+git log --oneline ${deps.diffBase ?? 'main'}...HEAD
+git diff ${deps.diffBase ?? 'main'}...HEAD
 \`\`\`
 
 Identify which bead's commit is responsible and suggest a fix.`;
@@ -745,6 +839,7 @@ Identify which bead's commit is responsible and suggest a fix.`;
       ctx,
       logTag: PhaseName.Epic,
       spawnFn: deps.spawnFn as typeof nodeSpawn,
+      cwd: deps.cwd,
     });
     // dispatch returns raw string when no schemaPath; parse it ourselves
     if (typeof raw === 'string') {
@@ -757,89 +852,64 @@ Identify which bead's commit is responsible and suggest a fix.`;
   }
 }
 
-async function runWaveEndChain(
+/**
+ * Per-level build gate: build-guardian runs once per STACK LEVEL, on that
+ * branch at its stack position, BEFORE that level's `gt submit`
+ * (independently-green invariant — see git-workflow/stacking.md).
+ *
+ * On failure the responsible bead is known by construction (it is this
+ * level), so the test-failure-investigator is dispatched for diagnosis and
+ * the level's implementer retries with the concerns, up to MAX_WAVE_RETRIES.
+ * Parse failures are terminal — there is no verdict to retry against.
+ */
+async function runLevelBuildGate(
   epicId: string,
   waveNumber: number,
-  waveState: WaveState,
+  beadId: string,
+  branch: string,
   ctx: RunContext,
   deps: ExecuteDeps,
-): Promise<WaveEndResult> {
-  const completedBeads = waveState.beadsCompleted;
+): Promise<{ ok: boolean; reason?: string; retries: number }> {
   let retries = 0;
 
   for (let attempt = 0; attempt <= MAX_WAVE_RETRIES; attempt++) {
-    // Step A: cross-bead-integration-verifier (conditional)
-    if (completedBeads.length > 1) {
-      await dispatchVerifier(
-        'cross-bead-integration-verifier',
-        buildVerifierPrompt(epicId, waveNumber, completedBeads, 'integration'),
-        ctx,
-        deps,
-      );
-    }
-
-    // Step B: architecture-auditor (light pass)
-    await dispatchVerifier(
-      'architecture-auditor',
-      buildVerifierPrompt(epicId, waveNumber, completedBeads, 'architecture'),
-      ctx,
-      deps,
+    const buildResult = await dispatchBuildGuardian(
+      epicId, waveNumber, ctx, deps, { beadId, branch },
     );
 
-    // Step C: build-guardian
-    const buildResult = await dispatchBuildGuardian(epicId, waveNumber, ctx, deps);
-
     if (buildResult.verdict === 'pass') {
-      return { outcome: 'pass', failedBeads: [], retries };
+      return { ok: true, retries };
     }
 
-    // Build-guardian failed — log and decide whether retry is meaningful.
     ctx.logger.appendRunJson({
       event: 'build-guardian-fail',
       phase: PhaseName.Epic,
       epicId,
       waveNumber,
+      beadId,
+      branch,
       attempt: attempt + 1,
       concerns: buildResult.concerns,
       parseFailed: buildResult.parseFailed ?? false,
     });
 
-    // Parse failures are terminal: there is no signal about which bead is
-    // responsible, so retrying just spawns implementers with no bead id and
-    // loops the orchestrator. Escalate immediately.
+    // Parse failures are terminal: retrying without a verdict just loops.
     if (buildResult.parseFailed) {
-      const failedBeads = buildResult.beadsFailed.length > 0
-        ? buildResult.beadsFailed
-        : completedBeads;
-      for (const beadId of failedBeads) {
-        escalateBead(beadId, 'Build-guardian output unparseable; manual investigation required', ctx, deps);
-      }
-      return { outcome: 'escalated', failedBeads, retries };
+      return {
+        ok: false,
+        reason: 'Build-guardian output unparseable; manual investigation required',
+        retries,
+      };
     }
 
-    // Build-guardian failed — investigate and retry
     if (attempt < MAX_WAVE_RETRIES) {
-      const investigatorResult = await dispatchTestFailureInvestigator(
+      // Diagnosis only — the responsible bead is this level by construction.
+      await dispatchTestFailureInvestigator(
         epicId, waveNumber, buildResult.concerns, ctx, deps,
       );
 
-      const responsibleBead = investigatorResult.responsibleBead ?? completedBeads[0];
-
-      // Without a responsibleBead we cannot dispatch a meaningful retry;
-      // the dispatchImplementer guard would refuse, but we'd still loop
-      // through this branch. Escalate instead.
-      if (!responsibleBead) {
-        const failedBeads = buildResult.beadsFailed.length > 0
-          ? buildResult.beadsFailed
-          : completedBeads;
-        for (const beadId of failedBeads) {
-          escalateBead(beadId, 'Build-guardian failed and no responsible bead could be identified', ctx, deps);
-        }
-        return { outcome: 'escalated', failedBeads, retries };
-      }
-
       retries++;
-      await dispatchImplementer(responsibleBead, ctx, {
+      await dispatchImplementer(beadId, ctx, {
         ...deps,
         retryContext: {
           concerns: buildResult.concerns,
@@ -847,26 +917,21 @@ async function runWaveEndChain(
         },
       });
 
-      const changedFiles = deps.changedFilesForBead?.(responsibleBead) ?? [];
-      await runAudit(responsibleBead, ctx, { ...deps, changedFiles });
+      const changedFiles = deps.changedFilesForBead?.(beadId) ?? [];
+      await runAudit(beadId, ctx, { ...deps, changedFiles });
 
       continue;
     }
 
-    // Exhausted retries — escalate
-    const failedBeads = buildResult.beadsFailed.length > 0
-      ? buildResult.beadsFailed
-      : completedBeads;
-
-    for (const beadId of failedBeads) {
-      escalateBead(beadId, `Build-guardian failed after ${MAX_WAVE_RETRIES} retries`, ctx, deps);
-    }
-
-    return { outcome: 'escalated', failedBeads, retries };
+    return {
+      ok: false,
+      reason: `Build-guardian failed after ${MAX_WAVE_RETRIES} retries`,
+      retries,
+    };
   }
 
   // Defensive fallback
-  return { outcome: 'escalated', failedBeads: completedBeads, retries };
+  return { ok: false, reason: 'build gate exhausted', retries };
 }
 
 // =============================================================================
@@ -944,6 +1009,7 @@ export async function dispatchImplementer(
       ctx,
       logTag: PhaseName.Leaf,
       spawnFn: deps.spawnFn as typeof nodeSpawn,
+      cwd: deps.cwd,
     });
     return { ok: true };
   }
@@ -1047,25 +1113,30 @@ export function extractExpectedFiles(
  * uncommitted edits on a file outside this bead's scope.
  *
  * Base branch defaults to `main`; override via `GIT_SAFE_MAIN_BRANCH` env var
- * (consistent with preflight checks in `helpers.ts`).
+ * (consistent with preflight checks in `helpers.ts`) or the `baseBranch`
+ * parameter — the chain scheduler passes the level's parent branch so the
+ * gate measures only that level's delta.
  */
 export function verifyImplementerCompletion(
   ctx: RunContext,
   deps: ExecuteDeps,
   expectedFiles?: string[],
+  baseBranchOverride?: string,
 ): VerificationResult {
   const spawnFn = deps.scriptSpawnFn ?? nodeSpawnSync;
-  const baseBranch = process.env.GIT_SAFE_MAIN_BRANCH ?? 'main';
+  const baseBranch = baseBranchOverride ?? process.env.GIT_SAFE_MAIN_BRANCH ?? 'main';
+  const spawnOpts = {
+    encoding: 'buffer' as never,
+    shell: false,
+    timeout: 10_000,
+    ...(deps.cwd !== undefined ? { cwd: deps.cwd } : {}),
+  };
 
   const statusArgs = ['status', '--porcelain'];
   if (expectedFiles && expectedFiles.length > 0) {
     statusArgs.push('--', ...expectedFiles);
   }
-  const statusResult = spawnFn('git', statusArgs, {
-    encoding: 'buffer' as never,
-    shell: false,
-    timeout: 10_000,
-  });
+  const statusResult = spawnFn('git', statusArgs, spawnOpts);
   if (statusResult.status !== 0 || statusResult.error) {
     const stderrSnippet = (statusResult.stderr?.toString('utf-8') ?? '').trim()
       || statusResult.error?.message
@@ -1092,11 +1163,7 @@ export function verifyImplementerCompletion(
     return { passed: false, reason };
   }
 
-  const revResult = spawnFn('git', ['rev-list', '--count', `${baseBranch}..HEAD`], {
-    encoding: 'buffer' as never,
-    shell: false,
-    timeout: 10_000,
-  });
+  const revResult = spawnFn('git', ['rev-list', '--count', `${baseBranch}..HEAD`], spawnOpts);
   if (revResult.status !== 0 || revResult.error) {
     const stderrSnippet = (revResult.stderr?.toString('utf-8') ?? '').trim()
       || revResult.error?.message
@@ -1123,11 +1190,7 @@ export function verifyImplementerCompletion(
     return { passed: false, reason };
   }
 
-  const diffResult = spawnFn('git', ['diff', '--name-only', `${baseBranch}...HEAD`], {
-    encoding: 'buffer' as never,
-    shell: false,
-    timeout: 10_000,
-  });
+  const diffResult = spawnFn('git', ['diff', '--name-only', `${baseBranch}...HEAD`], spawnOpts);
   if (diffResult.status !== 0 || diffResult.error) {
     const stderrSnippet = (diffResult.stderr?.toString('utf-8') ?? '').trim()
       || diffResult.error?.message
@@ -1238,7 +1301,7 @@ export async function runAudit(
   }
 
   const verdictPromises = matchedAuditors.map(auditor =>
-    dispatchAuditor(beadId, auditor, ctx, { spawnFn }),
+    dispatchAuditor(beadId, auditor, ctx, { spawnFn, diffBase: deps.diffBase, cwd: deps.cwd }),
   );
 
   const verdicts = await Promise.all(verdictPromises);
@@ -1441,15 +1504,370 @@ export async function runWithConcurrencyCap<T>(
 }
 
 // =============================================================================
+// Private helpers — chain worktree lifecycle (hybrid concurrency model)
+// =============================================================================
+//
+// Per-bead stack branches mean parallel chains can no longer share one
+// checkout (gt create checks out the new branch, yanking HEAD out from under
+// a sibling). Hybrid model: the FIRST chain of a wave runs in the main
+// checkout (the common single-chain case pays no worktree overhead); each
+// ADDITIONAL concurrent chain gets its own git worktree, with agents and
+// git/gt commands dispatched at that cwd (gt-in-worktrees is the permanent
+// mode — see git-workflow/stacking.md). The orchestrator owns the worktree
+// lifecycle: create before the chain starts, remove when it finishes.
+
+interface ChainWorktree {
+  path: string;
+  /** Throwaway checkout branch the worktree starts on; never a stack level. */
+  worktreeBranch: string;
+}
+
+function createChainWorktree(
+  waveNumber: number,
+  chainIndex: number,
+  ctx: RunContext,
+  deps: ExecuteDeps,
+): ChainWorktree | null {
+  const spawnFn = deps.scriptSpawnFn ?? nodeSpawnSync;
+  const base = process.env.GIT_SAFE_MAIN_BRANCH ?? 'main';
+  const slug = `orch-wt-${ctx.runId}-w${waveNumber}-c${chainIndex}`;
+  const path = join(tmpdir(), slug);
+
+  // The auto-created branch is only the worktree's initial checkout; chain
+  // levels are created directly on their parent via `gt create --onto`.
+  const result = spawnCmd(
+    'git', ['worktree', 'add', '-b', slug, path, base],
+    ctx.logger, PhaseName.Epic, spawnFn,
+  );
+
+  const ok = result.exitCode === 0;
+  ctx.logger.appendRunJson({
+    event: ok ? 'chain-worktree-created' : 'chain-worktree-create-failed',
+    phase: PhaseName.Epic,
+    waveNumber,
+    chainIndex,
+    path,
+    ...(ok ? {} : { stderr: result.stderr }),
+  });
+
+  return ok ? { path, worktreeBranch: slug } : null;
+}
+
+function removeChainWorktree(
+  worktree: ChainWorktree,
+  ctx: RunContext,
+  deps: ExecuteDeps,
+): void {
+  const spawnFn = deps.scriptSpawnFn ?? nodeSpawnSync;
+  const removeResult = spawnCmd(
+    'git', ['worktree', 'remove', '--force', worktree.path],
+    ctx.logger, PhaseName.Epic, spawnFn,
+  );
+  // Drop the throwaway checkout branch too (it has no commits of its own).
+  spawnCmd(
+    'git', ['branch', '-D', worktree.worktreeBranch],
+    ctx.logger, PhaseName.Epic, spawnFn,
+  );
+  ctx.logger.appendRunJson({
+    event: 'chain-worktree-removed',
+    phase: PhaseName.Epic,
+    path: worktree.path,
+    success: removeResult.exitCode === 0,
+  });
+}
+
+// =============================================================================
+// Private helpers — chain execution
+// =============================================================================
+
+interface ChainLevelOutcome {
+  ok: boolean;
+  reason?: string;
+  branch?: string;
+  prUrl?: string;
+  prNumber?: number;
+  retries: number;
+  warnings: string[];
+}
+
+/**
+ * Execute one stack level of a chain:
+ *
+ *   stackCreate(branch, parent) → implementer → verification gate (base =
+ *   parent) → per-bead audit (one retry) → per-level build-guardian gate →
+ *   stackSubmit → gh pr edit (canonical title/body, "Stacked on #N." for
+ *   upstack levels).
+ *
+ * The build gate runs BEFORE submit — no level is pushed until it is green
+ * at its own stack position.
+ */
+async function runChainLevel(
+  epicId: string,
+  waveNumber: number,
+  beadId: string,
+  parentBranch: string,
+  parentPrNumber: number | null,
+  ctx: RunContext,
+  deps: ExecuteDeps,
+): Promise<ChainLevelOutcome> {
+  const warnings: string[] = [];
+  let retries = 0;
+  const scriptSpawnFn = deps.scriptSpawnFn ?? nodeSpawnSync;
+  const spawnDeps = { spawnFn: deps.scriptSpawnFn, cwd: deps.cwd };
+  const beadCtx: RunContext = { ...ctx, beadId };
+  // Audits and gates for this level measure the delta against the parent
+  // stack level, not main.
+  const levelDeps: ExecuteDeps = { ...deps, diffBase: parentBranch };
+  const fail = (reason: string): ChainLevelOutcome => {
+    ctx.logger.appendRunJson({
+      event: 'chain-level-failed',
+      phase: PhaseName.Epic,
+      epicId,
+      waveNumber,
+      beadId,
+      reason,
+    });
+    return { ok: false, reason, retries, warnings };
+  };
+
+  // Belt-and-braces enrichment check: wave entry only vets chain heads;
+  // mid-chain beads are checked here at dispatch time.
+  if (!bdEnrichmentCheck(beadId, { spawnFn: deps.scriptSpawnFn })) {
+    return fail('bead is not enriched (no Implementation Context)');
+  }
+
+  const bead = bdShowJson(beadId, { spawnFn: deps.scriptSpawnFn });
+  if (!bead) {
+    return fail('bd show --json failed; cannot derive branch name');
+  }
+
+  const title = typeof bead.title === 'string' ? bead.title : beadId;
+  const issueType = bead.issue_type ?? 'task';
+  const branch = deriveBranchName(title, issueType);
+
+  // 1. Create this level's branch on its parent (main for the chain bottom).
+  const created = stackCreate(branch, parentBranch, spawnDeps);
+  if (!created.ok) {
+    return fail(`gt create ${branch} --onto ${parentBranch} failed: ${created.stderr}`);
+  }
+  ctx.logger.appendRunJson({
+    event: 'chain-level-branch-created',
+    phase: PhaseName.Epic,
+    beadId,
+    branchName: branch,
+    baseBranch: parentBranch,
+  });
+
+  // 2. Implementer + verification gate + per-bead audit (single retry).
+  const implResult = await dispatchImplementer(beadId, ctx, levelDeps);
+  if (!implResult.ok) {
+    return fail(`implementer failure: ${implResult.reason}`);
+  }
+
+  const expectedFiles = extractExpectedFiles(beadId, deps);
+  const gate = verifyImplementerCompletion(beadCtx, levelDeps, expectedFiles, parentBranch);
+  if (!gate.passed) {
+    reopenBead(beadId, beadCtx, deps, 'verification-gate-epic-escalate');
+    return fail(`verification gate failed: ${gate.reason}`);
+  }
+
+  let auditResult = await runAudit(beadId, ctx, {
+    ...levelDeps,
+    changedFiles: gate.changedFiles,
+  });
+  warnings.push(...auditResult.warnings);
+
+  if (!auditResult.passed) {
+    const retryResult = await dispatchImplementer(beadId, ctx, {
+      ...levelDeps,
+      retryContext: { concerns: auditResult.concerns, attempt: 2 },
+    });
+    if (!retryResult.ok) {
+      return fail(`retry implementer failure: ${retryResult.reason}`);
+    }
+
+    const retryGate = verifyImplementerCompletion(beadCtx, levelDeps, expectedFiles, parentBranch);
+    if (!retryGate.passed) {
+      reopenBead(beadId, beadCtx, deps, 'verification-gate-epic-escalate');
+      return fail(`verification gate failed after retry: ${retryGate.reason}`);
+    }
+
+    retries++;
+    auditResult = await runAudit(beadId, ctx, {
+      ...levelDeps,
+      changedFiles: retryGate.changedFiles,
+    });
+    warnings.push(...auditResult.warnings);
+
+    if (!auditResult.passed) {
+      return fail(`audit retry exhausted: ${auditResult.concerns.join('; ')}`);
+    }
+  }
+
+  // 3. Per-level build gate BEFORE submit (independently-green invariant).
+  const buildOutcome = await runLevelBuildGate(epicId, waveNumber, beadId, branch, ctx, levelDeps);
+  retries += buildOutcome.retries;
+  if (!buildOutcome.ok) {
+    return fail(buildOutcome.reason ?? 'build gate failed');
+  }
+
+  // 4. Submit this level, then canonicalize the PR via gh.
+  const submitted = stackSubmit(branch, spawnDeps);
+  if (!submitted.ok) {
+    return fail(`gt submit failed: ${submitted.stderr}`);
+  }
+
+  const prInfo = fetchPrInfo(branch, ctx.logger, PhaseName.Epic, scriptSpawnFn);
+  if (!prInfo) {
+    return fail(`could not resolve PR number/url for branch ${branch} after gt submit`);
+  }
+
+  const prTitle = commitMsg(title, issueType);
+  let generatedBody = prBody(title, typeof bead.description === 'string' ? bead.description : '');
+  if (parentPrNumber !== null) {
+    generatedBody = withStackedPrefix(generatedBody, parentPrNumber);
+  }
+
+  const editResult = spawnCmd(
+    'gh', ['pr', 'edit', String(prInfo.number), '--title', prTitle, '--body', generatedBody],
+    ctx.logger, PhaseName.Epic, scriptSpawnFn,
+  );
+  if (editResult.exitCode !== 0) {
+    return fail(`gh pr edit failed (exit ${editResult.exitCode}): ${editResult.stderr}`);
+  }
+
+  ctx.logger.appendRunJson({
+    event: 'chain-level-complete',
+    phase: PhaseName.Epic,
+    epicId,
+    waveNumber,
+    beadId,
+    branchName: branch,
+    prUrl: prInfo.url,
+    prNumber: prInfo.number,
+  });
+
+  return {
+    ok: true,
+    branch,
+    prUrl: prInfo.url,
+    prNumber: prInfo.number,
+    retries,
+    warnings,
+  };
+}
+
+/**
+ * Run one dependency chain: beads strictly sequentially, each level branching
+ * from its predecessor. A failed level halts the chain — downstream levels
+ * build on the broken branch and cannot proceed past it, so the remainder is
+ * escalated (chain truncation) rather than retried at wave granularity.
+ */
+async function runChain(
+  epicId: string,
+  waveNumber: number,
+  chain: string[],
+  ctx: RunContext,
+  deps: ExecuteDeps,
+): Promise<ChainExecutionResult> {
+  const result: ChainExecutionResult = {
+    chain,
+    completed: [],
+    failed: [],
+    escalated: [],
+    retries: 0,
+    warnings: [],
+    prUrls: [],
+  };
+
+  let parentBranch = process.env.GIT_SAFE_MAIN_BRANCH ?? 'main';
+  let parentPrNumber: number | null = null;
+
+  for (let level = 0; level < chain.length; level++) {
+    const beadId = chain[level];
+    const outcome = await runChainLevel(
+      epicId, waveNumber, beadId, parentBranch, parentPrNumber, ctx, deps,
+    );
+    result.retries += outcome.retries;
+    result.warnings.push(...outcome.warnings);
+
+    if (!outcome.ok) {
+      const reason = outcome.reason ?? 'chain level failed';
+      escalateBead(beadId, reason, ctx, deps);
+      result.failed.push(beadId);
+      result.escalated.push(beadId);
+
+      // Truncate the chain: escalate the un-run remainder instead of
+      // skipping past a broken parent. (bd blocking already prevents these
+      // beads from becoming ready, but the escalation records why.)
+      for (const remainder of chain.slice(level + 1)) {
+        escalateBead(
+          remainder,
+          `chain truncated: upstream level ${beadId} failed (${reason})`,
+          ctx, deps,
+        );
+        result.failed.push(remainder);
+        result.escalated.push(remainder);
+      }
+
+      ctx.logger.appendRunJson({
+        event: 'chain-halted',
+        phase: PhaseName.Epic,
+        epicId,
+        waveNumber,
+        failedBead: beadId,
+        truncatedBeads: chain.slice(level + 1),
+      });
+      return result;
+    }
+
+    result.completed.push(beadId);
+    if (outcome.prUrl) result.prUrls.push(outcome.prUrl);
+    parentBranch = outcome.branch ?? parentBranch;
+    parentPrNumber = outcome.prNumber ?? null;
+  }
+
+  // Per-chain verification pass (advisory, matching prior wave-end behavior:
+  // verdicts are logged, not gated on). Runs from the chain's checkout, where
+  // HEAD sits at the chain top, so `main...HEAD` covers the whole chain delta
+  // — the right base for reviewing cross-bead integration within the chain.
+  if (result.completed.length > 1) {
+    await dispatchVerifier(
+      'cross-bead-integration-verifier',
+      buildVerifierPrompt(epicId, waveNumber, result.completed, 'integration'),
+      ctx,
+      deps,
+    );
+  }
+  if (result.completed.length > 0) {
+    await dispatchVerifier(
+      'architecture-auditor',
+      buildVerifierPrompt(epicId, waveNumber, result.completed, 'architecture'),
+      ctx,
+      deps,
+    );
+  }
+
+  return result;
+}
+
+// =============================================================================
 // Exported: runEpicExecution
 // =============================================================================
 
 /**
- * Execute the full epic wave lifecycle.
+ * Execute the full epic wave lifecycle over a stackPlan chain forest.
+ *
+ * Waves are built from CHAINS, not beads: each wave schedules every
+ * remaining chain whose head bead is currently ready (per
+ * `bd ready --parent`), the 3-implementer cap (MAX_IMPLEMENTER_SLOTS)
+ * applies to chains, and independent chains run in parallel under the
+ * hybrid worktree model. Within a chain, beads run strictly sequentially
+ * with per-level branches, build gates, and PR submission (see runChain).
  */
 export async function runEpicExecution(
   epicId: string,
-  initialBeads: string[],
+  plan: StackPlanResult,
   ctx: RunContext,
   deps: ExecuteDeps = {},
 ): Promise<EpicExecutionResult> {
@@ -1457,151 +1875,118 @@ export async function runEpicExecution(
   const allFailed: string[] = [];
   const escalated: string[] = [];
   const allWarnings: string[] = [];
+  const prUrls: string[] = [];
   let wavesCompleted = 0;
   let totalRetries = 0;
 
-  let readyBeads = [...initialBeads];
+  let remainingChains = plan.chains.map(chain => [...chain]);
 
   ctx.logger.appendRunJson({
     event: 'epic-execution-start',
     phase: PhaseName.Epic,
     epicId,
-    initialBeadCount: initialBeads.length,
+    chainCount: remainingChains.length,
+    flat: plan.flat,
+    planWarnings: plan.warnings,
   });
 
-  while (readyBeads.length > 0) {
-    const waveNumber = wavesCompleted + 1;
+  while (remainingChains.length > 0) {
+    const readyIds = findReadyBeadIds(epicId, ctx, deps);
 
-    ctx.logger.appendRunJson({
-      event: 'wave-start',
-      phase: PhaseName.Epic,
-      epicId,
-      waveNumber,
-      beadCount: readyBeads.length,
-      beadIds: readyBeads,
-    });
+    // Schedule chains whose HEAD is ready. bd remains the cross-chain
+    // unblocking source; mid-chain beads are owned by their chain runner
+    // and are never scheduled directly even when bd reports them ready.
+    const readyChains = remainingChains.filter(chain => readyIds.has(chain[0]));
+    if (readyChains.length === 0) {
+      break;
+    }
 
-    const enrichedBeads = filterEnrichedBeads(readyBeads, ctx, deps);
+    // Enrichment pre-filter on chain heads (mid-chain beads are re-checked
+    // at dispatch time inside runChainLevel).
+    const waveChains = readyChains.filter(
+      chain => filterEnrichedBeads([chain[0]], ctx, deps).length > 0,
+    );
 
-    if (enrichedBeads.length === 0) {
+    if (waveChains.length === 0) {
       ctx.logger.appendRunJson({
         event: 'wave-skip-no-enriched',
         phase: PhaseName.Epic,
-        waveNumber,
+        waveNumber: wavesCompleted + 1,
       });
       break;
     }
 
-    // Spawn implementers (max 3 in parallel)
+    remainingChains = remainingChains.filter(chain => !waveChains.includes(chain));
+    const waveNumber = wavesCompleted + 1;
+
     const waveState: WaveState = {
       epicId,
       waveNumber,
-      beadsInProgress: [...enrichedBeads],
+      chains: waveChains.map(chain => [...chain]),
+      beadsInProgress: waveChains.flat(),
       beadsCompleted: [],
       beadsFailed: [],
       implementerSlots: [],
       cascadeQueue: [],
     };
 
-    const implementerTasks = enrichedBeads.map(beadId => async () => {
-      const result = await dispatchImplementer(beadId, ctx, deps);
-      return { beadId, result };
+    ctx.logger.appendRunJson({
+      event: 'wave-start',
+      phase: PhaseName.Epic,
+      epicId,
+      waveNumber,
+      chainCount: waveChains.length,
+      chains: waveState.chains,
     });
 
-    const implementerResults = await runWithConcurrencyCap(
-      implementerTasks,
-      MAX_IMPLEMENTER_SLOTS,
-    );
+    // Hybrid concurrency: chain 0 runs in the main checkout; each additional
+    // chain gets its own worktree for the duration of the chain.
+    const chainTasks = waveChains.map((chain, chainIndex) => async () => {
+      let worktree: ChainWorktree | null = null;
 
-    // Per-bead auditor cascade
-    for (const { beadId, result } of implementerResults) {
-      if (!result.ok) {
-        waveState.beadsFailed.push(beadId);
-        continue;
-      }
-
-      // Verification gate — mirror leaf-path enforcement. Scope ctx.beadId to
-      // the child bead so gate/reopen log events identify the bead, not the epic.
-      // Pass the bead's expected file set so the dirty-tree check ignores
-      // pending edits from parallel siblings on unrelated files.
-      // Epic wave loop handles retries at the wave level via MAX_WAVE_RETRIES;
-      // here we just mark this bead as failed for this wave and move on.
-      const beadCtx: RunContext = { ...ctx, beadId };
-      const expectedFiles = extractExpectedFiles(beadId, deps);
-      const gate = verifyImplementerCompletion(beadCtx, deps, expectedFiles);
-      if (!gate.passed) {
-        reopenBead(beadId, beadCtx, deps, 'verification-gate-epic-escalate');
-        waveState.beadsFailed.push(beadId);
-        continue;
-      }
-
-      const auditResult = await runAudit(beadId, ctx, {
-        ...deps,
-        changedFiles: gate.changedFiles,
-      });
-      allWarnings.push(...auditResult.warnings);
-
-      if (auditResult.passed) {
-        waveState.beadsCompleted.push(beadId);
-      }
-      else {
-        const retryResult = await dispatchImplementer(beadId, ctx, {
-          ...deps,
-          retryContext: { concerns: auditResult.concerns, attempt: 2 },
-        });
-
-        if (retryResult.ok) {
-          const retryAudit = await runAudit(beadId, ctx, {
-            ...deps,
-            changedFiles: gate.changedFiles,
-          });
-          allWarnings.push(...retryAudit.warnings);
-
-          if (retryAudit.passed) {
-            waveState.beadsCompleted.push(beadId);
-            totalRetries++;
+      if (chainIndex > 0) {
+        worktree = createChainWorktree(waveNumber, chainIndex, ctx, deps);
+        if (!worktree) {
+          const result: ChainExecutionResult = {
+            chain,
+            completed: [],
+            failed: [...chain],
+            escalated: [...chain],
+            retries: 0,
+            warnings: [],
+            prUrls: [],
+          };
+          for (const beadId of chain) {
+            escalateBead(beadId, 'could not create git worktree for parallel chain', ctx, deps);
           }
-          else {
-            waveState.beadsFailed.push(beadId);
-          }
-        }
-        else {
-          waveState.beadsFailed.push(beadId);
+          return result;
         }
       }
+
+      const chainDeps: ExecuteDeps = worktree ? { ...deps, cwd: worktree.path } : deps;
+      try {
+        return await runChain(epicId, waveNumber, chain, ctx, chainDeps);
+      }
+      finally {
+        if (worktree) removeChainWorktree(worktree, ctx, deps);
+      }
+    });
+
+    const chainResults = await runWithConcurrencyCap(chainTasks, MAX_IMPLEMENTER_SLOTS);
+
+    const waveEscalated: string[] = [];
+    for (const chainResult of chainResults) {
+      waveState.beadsCompleted.push(...chainResult.completed);
+      waveState.beadsFailed.push(...chainResult.failed);
+      waveEscalated.push(...chainResult.escalated);
+      totalRetries += chainResult.retries;
+      allWarnings.push(...chainResult.warnings);
+      prUrls.push(...chainResult.prUrls);
     }
 
-    // Wave-end verification chain
-    const waveEndResult = await runWaveEndChain(epicId, waveNumber, waveState, ctx, deps);
-
-    if (waveEndResult.outcome === 'escalated') {
-      escalated.push(...waveEndResult.failedBeads);
-      allFailed.push(...waveEndResult.failedBeads);
-      allCompleted.push(...waveState.beadsCompleted);
-
-      ctx.logger.appendRunJson({
-        event: 'epic-escalated',
-        phase: PhaseName.Epic,
-        epicId,
-        waveNumber,
-        escalatedBeads: waveEndResult.failedBeads,
-      });
-
-      return {
-        outcome: 'escalated',
-        wavesCompleted,
-        beadsCompleted: allCompleted,
-        beadsFailed: allFailed,
-        escalatedBeads: escalated,
-        totalRetries: totalRetries + waveEndResult.retries,
-        warnings: allWarnings,
-      };
-    }
-
-    totalRetries += waveEndResult.retries;
-    wavesCompleted++;
     allCompleted.push(...waveState.beadsCompleted);
     allFailed.push(...waveState.beadsFailed);
+    escalated.push(...waveEscalated);
 
     ctx.logger.appendRunJson({
       event: 'wave-complete',
@@ -1612,8 +1997,28 @@ export async function runEpicExecution(
       beadsFailed: waveState.beadsFailed,
     });
 
-    // Cascade — find newly unblocked beads
-    readyBeads = findNextWaveBeads(epicId, ctx, deps);
+    if (waveEscalated.length > 0) {
+      ctx.logger.appendRunJson({
+        event: 'epic-escalated',
+        phase: PhaseName.Epic,
+        epicId,
+        waveNumber,
+        escalatedBeads: waveEscalated,
+      });
+
+      return {
+        outcome: 'escalated',
+        wavesCompleted,
+        beadsCompleted: allCompleted,
+        beadsFailed: allFailed,
+        escalatedBeads: escalated,
+        totalRetries,
+        warnings: allWarnings,
+        prUrls,
+      };
+    }
+
+    wavesCompleted++;
   }
 
   ctx.logger.appendRunJson({
@@ -1632,6 +2037,7 @@ export async function runEpicExecution(
     escalatedBeads: escalated,
     totalRetries,
     warnings: allWarnings,
+    prUrls,
   };
 }
 
@@ -1901,50 +2307,31 @@ export const leafPhase: PhaseRunner = async (ctx, deps = {}) => {
 };
 
 /**
- * Epic phase runner: discovers initial beads, runs epic execution, routes to PR.
+ * Epic phase runner: gathers the epic's full child set + dependency edges,
+ * plans dependency-chain stacks via stackPlan, and runs the chain-based
+ * wave lifecycle.
+ *
+ * On completion it routes to Report, NOT to the PR phase: chain levels
+ * submit their own per-level PRs inside the wave loop, so a trailing
+ * epic-wide PR would be both redundant and wrong.
  */
 export const epicPhase: PhaseRunner = async (ctx, deps = {}) => {
-  const spawnSync = deps.scriptSpawnFn ?? nodeSpawnSync;
+  const plan = gatherStackPlan(ctx.beadId, ctx, deps);
 
-  // Discover initial ready beads for the epic via `bd ready --parent <epic> --json`.
-  // The --parent filter is essential: without it, bd ready returns the entire
-  // globally-ready set and unrelated beads from other epics get swept into wave 1.
-  const result = spawnSync('bd', ['ready', '--parent', ctx.beadId, '--json'], {
-    encoding: 'buffer' as never,
-    shell: true,
-    timeout: 30_000,
-  });
-
-  const stdout = result.stdout?.toString('utf-8') ?? '';
-  const exitCode = result.status ?? 1;
-
-  if (exitCode !== 0 || !stdout.trim()) {
+  if (!plan) {
     ctx.logger.writePhaseLog(PhaseName.Epic, 'err',
-      'No ready beads found for epic execution\n');
+      'No open child beads found for epic execution\n');
     return { next: 'halt', ctx };
   }
 
-  let initialBeads: string[];
-  try {
-    const beads = JSON.parse(stdout) as BeadReadyEntry[];
-    initialBeads = beads.map(b => b.id);
-  }
-  catch {
-    ctx.logger.writePhaseLog(PhaseName.Epic, 'err',
-      `Failed to parse bd ready output: ${stdout}\n`);
-    return { next: 'halt', ctx };
-  }
-
-  if (initialBeads.length === 0) {
-    ctx.logger.writePhaseLog(PhaseName.Epic, 'err',
-      'No ready beads found for epic execution\n');
-    return { next: 'halt', ctx };
-  }
-
-  const epicResult = await runEpicExecution(ctx.beadId, initialBeads, ctx, deps);
+  const epicResult = await runEpicExecution(ctx.beadId, plan, ctx, deps);
 
   if (epicResult.outcome === 'complete') {
-    return { next: PhaseName.PR, ctx };
+    if (epicResult.prUrls.length > 0) {
+      ctx.prUrl = epicResult.prUrls.join(', ');
+    }
+    ctx.beadsClosed = [ctx.beadId, ...epicResult.beadsCompleted];
+    return { next: PhaseName.Report, ctx };
   }
 
   return { next: 'halt', ctx };
