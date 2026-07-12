@@ -173,6 +173,28 @@ describe('dispatch', () => {
     expect(args).toContain('--fallback-model');
   });
 
+  it('should spawn the agent at opts.cwd when provided, and omit cwd otherwise', async () => {
+    const payload = { ok: true };
+    mockSpawnFn.mockReturnValue(
+      createMockChild(JSON.stringify(payload), '', 0),
+    );
+
+    await dispatch(baseOpts({ cwd: '/tmp/orch-wt-w1-c1' }));
+
+    let spawnOpts = mockSpawnFn.mock.calls[0][2] as Record<string, unknown>;
+    expect(spawnOpts.cwd).toBe('/tmp/orch-wt-w1-c1');
+
+    mockSpawnFn.mockClear();
+    mockSpawnFn.mockReturnValue(
+      createMockChild(JSON.stringify(payload), '', 0),
+    );
+
+    await dispatch(baseOpts());
+
+    spawnOpts = mockSpawnFn.mock.calls[0][2] as Record<string, unknown>;
+    expect('cwd' in spawnOpts).toBe(false);
+  });
+
   it('should not include --fallback-model when not provided', async () => {
     const payload = { ok: true };
     mockSpawnFn.mockReturnValue(

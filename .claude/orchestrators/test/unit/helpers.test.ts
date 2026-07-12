@@ -965,6 +965,47 @@ describe('stackCreate', () => {
 });
 
 // =============================================================================
+// gt helpers — cwd forwarding (gt-in-worktrees)
+// =============================================================================
+
+describe('gt helpers cwd forwarding', () => {
+  function captureOpts() {
+    const optsSeen: Array<Record<string, unknown>> = [];
+    const spawn = (_cmd: string, _args: string[], opts: Record<string, unknown>) => {
+      optsSeen.push(opts);
+      return fakeSpawn('');
+    };
+    return { optsSeen, spawn };
+  }
+
+  it('forwards deps.cwd into the spawn options for stackCreate, stackSubmit, and syncAndRestack', () => {
+    const { optsSeen, spawn } = captureOpts();
+
+    stackCreate('feat.level-two', 'feat.level-one', { spawnFn: spawn as never, cwd: '/tmp/orch-wt-1' });
+    stackSubmit('feat.level-two', { spawnFn: spawn as never, cwd: '/tmp/orch-wt-1' });
+    syncAndRestack({ spawnFn: spawn as never, cwd: '/tmp/orch-wt-1' });
+
+    expect(optsSeen).toHaveLength(3);
+    for (const opts of optsSeen) {
+      expect(opts.cwd).toBe('/tmp/orch-wt-1');
+    }
+  });
+
+  it('omits cwd from the spawn options when deps.cwd is not set (main checkout)', () => {
+    const { optsSeen, spawn } = captureOpts();
+
+    stackCreate('feat.level-one', 'main', { spawnFn: spawn as never });
+    stackSubmit('feat.level-one', { spawnFn: spawn as never });
+    syncAndRestack({ spawnFn: spawn as never });
+
+    expect(optsSeen).toHaveLength(3);
+    for (const opts of optsSeen) {
+      expect('cwd' in opts).toBe(false);
+    }
+  });
+});
+
+// =============================================================================
 // stackSubmit
 // =============================================================================
 
@@ -1068,6 +1109,13 @@ describe('stackPlan', () => {
     );
     expect(result.chains).toEqual([['b1'], ['b2']]);
     expect(result.flat).toBe(false);
+  });
+
+  it('ignores self-edges', () => {
+    const result = stackPlan(['b1', 'b2'], [blocks('b1', 'b1')]);
+    expect(result.chains).toEqual([['b1'], ['b2']]);
+    expect(result.flat).toBe(false);
+    expect(result.warnings).toEqual([]);
   });
 
   it('ignores edges that reference beads outside the sibling set', () => {
