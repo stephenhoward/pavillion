@@ -7,7 +7,7 @@
  * Exports:
  *  - dispatchImplementer, runAudit, runLeafExecution  (from 7b)
  *  - runWithConcurrencyCap, runEpicExecution           (from 7a)
- *  - parseBeadJson, derivePrTitleFromBead, runPR       (from 8)
+ *  - parseBeadJson, fetchPrInfo, withStackedPrefix, runPR (from 8)
  *  - leafPhase, epicPhase, prPhase                     (PhaseRunner wrappers)
  */
 
@@ -196,7 +196,6 @@ interface BeadJson {
   description?: string;
   status?: string;
   issue_type?: string;
-  children?: Array<{ id?: string }>;
 }
 
 interface BeadReadyEntry {
@@ -205,10 +204,12 @@ interface BeadReadyEntry {
   status: string;
 }
 
+// Note: no beadsFailed field — the per-level build gate knows the
+// responsible bead by construction (it is the level under test), so the
+// guardian is not asked to attribute failures.
 interface BuildGuardianResult {
   verdict: 'pass' | 'fail';
   concerns: string[];
-  beadsFailed: string[];
   /** True when the build-guardian response could not be parsed (terminal — do not retry). */
   parseFailed?: boolean;
 }
@@ -742,15 +743,14 @@ this block — without it, the run cannot continue.
 \`\`\`json
 {
   "verdict": "pass" | "fail",
-  "concerns": ["short error description", "..."],
-  "beadsFailed": ["pv-xxxx", "..."]
+  "concerns": ["short error description", "..."]
 }
 \`\`\`
 
 \`verdict\` is "pass" only when lint, tests, and build all succeed. \`concerns\`
 should list each failing check (one entry per failure) with file paths and
-test names where available. \`beadsFailed\` lists bead IDs whose changes
-introduced the failures (empty if you cannot attribute).`;
+test names where available. No failure attribution is needed — the gate runs
+per stack level, so the responsible bead is known by construction.`;
 
   let raw: unknown;
   try {
@@ -770,7 +770,6 @@ introduced the failures (empty if you cannot attribute).`;
     return {
       verdict: 'fail',
       concerns: [`build-guardian dispatch error: ${err instanceof Error ? err.message : String(err)}`],
-      beadsFailed: [],
       parseFailed: true,
     };
   }
@@ -796,7 +795,6 @@ introduced the failures (empty if you cannot attribute).`;
     return {
       verdict: 'fail',
       concerns: [reason],
-      beadsFailed: [],
       parseFailed: true,
     };
   }
@@ -804,7 +802,6 @@ introduced the failures (empty if you cannot attribute).`;
   return {
     verdict: result.verdict === 'pass' ? 'pass' : 'fail',
     concerns: result.concerns ?? [],
-    beadsFailed: result.beadsFailed ?? [],
   };
 }
 
@@ -1661,6 +1658,9 @@ async function runChainLevel(
   // 2. Implementer + verification gate + per-bead audit (single retry).
   const implResult = await dispatchImplementer(beadId, ctx, levelDeps);
   if (!implResult.ok) {
+    // Deliberately stricter than runLeafExecution's retry-once: chain
+    // truncation is the retry-equivalent here — a failed level is cheaper
+    // to reschedule than to retry in place while sibling chains wait.
     return fail(`implementer failure: ${implResult.reason}`);
   }
 
@@ -1668,6 +1668,7 @@ async function runChainLevel(
   const gate = verifyImplementerCompletion(beadCtx, levelDeps, expectedFiles, parentBranch);
   if (!gate.passed) {
     reopenBead(beadId, beadCtx, deps, 'verification-gate-epic-escalate');
+    // Deliberate asymmetry with the leaf path (no gate retry) — see above.
     return fail(`verification gate failed: ${gate.reason}`);
   }
 
@@ -2042,7 +2043,7 @@ export async function runEpicExecution(
 }
 
 // =============================================================================
-// Exported: parseBeadJson, derivePrTitleFromBead
+// Exported: parseBeadJson, fetchPrInfo, withStackedPrefix
 // =============================================================================
 
 /**
@@ -2100,25 +2101,16 @@ export function withStackedPrefix(body: string, parentPrNumber: number): string 
   return `Stacked on #${parentPrNumber}.\n\n${body}`;
 }
 
-/**
- * Derive PR title from the bead.
- */
-export function derivePrTitleFromBead(
-  title: string,
-  issueType: string,
-): string {
-  if (issueType === 'epic') {
-    return title.replace(/^Epic:\s*/i, '').trim();
-  }
-  return title;
-}
-
 // =============================================================================
 // Exported: runPR
 // =============================================================================
 
 /**
- * PR finalization phase: verify beads closed, generate PR body/title, push, create PR.
+ * PR finalization phase for LEAF beads: verify the bead closed, generate PR
+ * body/title, submit via gt, canonicalize via gh pr edit.
+ *
+ * Epics never reach this phase — epicPhase routes to Report because chain
+ * levels submit their own per-level PRs inside the wave loop.
  */
 export async function runPR(
   ctx: PhaseCtx,
@@ -2186,7 +2178,6 @@ export async function runPR(
     return { next: 'halt', ctx };
   }
 
-  const isEpic = bead.issue_type === 'epic';
   const beadsClosed: string[] = [ctx.beadId];
 
   const beadStatus = (bead.status ?? '').toLowerCase();
@@ -2197,47 +2188,11 @@ export async function runPR(
     return { next: 'halt', ctx };
   }
 
-  // For epics: verify all children are also closed
-  if (isEpic && bead.children && bead.children.length > 0) {
-    for (const child of bead.children) {
-      const childId = child.id;
-      if (!childId) continue;
-
-      beadsClosed.push(childId);
-
-      const childResult = spawnCmd(
-        'bd', ['show', '--json', childId], logger, PhaseName.PR, spawnFn,
-      );
-
-      if (childResult.exitCode !== 0) {
-        const msg = PR_MESSAGES.bdShowFailed(childId, childResult.exitCode, childResult.stderr);
-        console.error(msg);
-        return { next: 'halt', ctx };
-      }
-
-      const childBead = parseBeadJson(childResult.stdout);
-      const childStatus = (childBead?.status ?? '').toLowerCase();
-      if (!childStatus.includes('closed') && !childStatus.includes('done')) {
-        const msg = PR_MESSAGES.unclosedBead(childId, childBead?.status ?? 'unknown');
-        console.error(msg);
-        logger.writePhaseLog(PhaseName.PR, 'err', msg + '\n');
-        return { next: 'halt', ctx };
-      }
-    }
-  }
-
   // Step 2: Generate PR body (pure function)
   const generatedPrBody = prBody(bead.title ?? ctx.beadId, bead.description ?? '');
 
   // Step 3: Derive PR title
-  let prTitle: string;
-
-  if (isEpic) {
-    prTitle = derivePrTitleFromBead(bead.title ?? ctx.beadId, 'epic');
-  }
-  else {
-    prTitle = commitMsg(bead.title ?? ctx.beadId, bead.issue_type ?? 'task');
-  }
+  const prTitle = commitMsg(bead.title ?? ctx.beadId, bead.issue_type ?? 'task');
 
   // Step 4: Submit branch via gt (pushes and creates the PR; command
   // conventions live in git-workflow/stacking.md, operations in helpers.ts).

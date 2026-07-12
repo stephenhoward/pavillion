@@ -126,19 +126,6 @@ const CLOSED_LEAF_JSON = JSON.stringify([{
   issue_type: 'task',
 }]);
 
-const CLOSED_EPIC_JSON = JSON.stringify([{
-  title: 'Epic: Redesign dashboard',
-  status: 'closed',
-  issue_type: 'epic',
-  children: [{ id: 'pv-test-1.1' }, { id: 'pv-test-1.2' }],
-}]);
-
-const CLOSED_CHILD_JSON = JSON.stringify([{
-  title: 'Child bead',
-  status: 'closed',
-  issue_type: 'task',
-}]);
-
 const OPEN_BEAD_JSON = JSON.stringify([{
   title: 'Still open',
   status: 'in_progress',
@@ -793,6 +780,10 @@ describe('runEpicExecution', () => {
     readyIds?: string[];
     /** Shared ordered op log (gt/gh/agent events). */
     ops: string[];
+    /** Recorded gt/git-worktree calls with the spawn options' cwd. */
+    cwdCalls?: Array<{ op: string; cwd?: string }>;
+    /** When true, `git worktree add` fails. */
+    failWorktreeAdd?: boolean;
   }
 
   /**
@@ -802,7 +793,7 @@ describe('runEpicExecution', () => {
    */
   function makeChainScriptSpawn(opts: ChainHarnessOpts) {
     let prCounter = 10;
-    return vi.fn().mockImplementation((cmd: string, args: string[]) => {
+    return vi.fn().mockImplementation((cmd: string, args: string[], spawnOpts?: { cwd?: string }) => {
       const a = [cmd, ...(args ?? [])].join(' ');
       if (cmd === 'bd' && args[0] === 'ready') {
         const ids = opts.readyIds ?? Object.keys(opts.beads);
@@ -818,6 +809,7 @@ describe('runEpicExecution', () => {
       }
       if (cmd === 'gt') {
         opts.ops.push(a);
+        opts.cwdCalls?.push({ op: a, cwd: spawnOpts?.cwd });
         return fakeSpawnResult('', '', 0);
       }
       if (cmd === 'gh' && args[1] === 'view') {
@@ -834,6 +826,10 @@ describe('runEpicExecution', () => {
       }
       if (cmd === 'git' && args[0] === 'worktree') {
         opts.ops.push(`git worktree ${args[1]}`);
+        opts.cwdCalls?.push({ op: `git worktree ${args[1]}`, cwd: spawnOpts?.cwd });
+        if (args[1] === 'add' && opts.failWorktreeAdd) {
+          return fakeSpawnResult('', 'fatal: could not create work tree', 1);
+        }
         return fakeSpawnResult('', '', 0);
       }
       if (cmd === 'git' && args[0] === 'status') return fakeSpawnResult('', '', 0);
@@ -843,19 +839,19 @@ describe('runEpicExecution', () => {
     });
   }
 
-  /** Async dispatch spawn: records agent order, passes build-guardian. */
+  /** Async dispatch spawn: records agent order + spawn cwd, passes build-guardian. */
   function makeAgentSpawn(
     ops: string[],
-    children: Array<{ agent: string; child: ReturnType<typeof createMockChild> }>,
-    guardianVerdict: () => string = () => JSON.stringify({ verdict: 'pass', concerns: [], beadsFailed: [] }),
+    children: Array<{ agent: string; cwd?: string; child: ReturnType<typeof createMockChild> }>,
+    guardianVerdict: () => string = () => JSON.stringify({ verdict: 'pass', concerns: [] }),
   ) {
-    return vi.fn().mockImplementation((_cmd: string, args: string[]) => {
+    return vi.fn().mockImplementation((_cmd: string, args: string[], spawnOpts?: { cwd?: string }) => {
       const agent = args[args.indexOf('--agent') + 1] ?? 'unknown';
       ops.push(`agent:${agent}`);
       const child = agent === 'build-guardian'
         ? createMockChild(guardianVerdict(), '', 0)
         : createMockChild('done', '', 0);
-      children.push({ agent, child });
+      children.push({ agent, cwd: spawnOpts?.cwd, child });
       return child;
     });
   }
@@ -924,7 +920,7 @@ describe('runEpicExecution', () => {
 
     const ctx = makeEpicCtx();
     const ops: string[] = [];
-    const children: Array<{ agent: string; child: ReturnType<typeof createMockChild> }> = [];
+    const children: Array<{ agent: string; cwd?: string; child: ReturnType<typeof createMockChild> }> = [];
 
     const scriptSpawnFn = makeChainScriptSpawn({
       beads: { 'pv-c.1': 'First bead', 'pv-c.2': 'Second bead' },
@@ -985,7 +981,7 @@ describe('runEpicExecution', () => {
 
     const ctx = makeEpicCtx();
     const ops: string[] = [];
-    const children: Array<{ agent: string; child: ReturnType<typeof createMockChild> }> = [];
+    const children: Array<{ agent: string; cwd?: string; child: ReturnType<typeof createMockChild> }> = [];
 
     const beads: Record<string, string> = {
       'pv-p.1': 'Alpha work',
@@ -993,7 +989,8 @@ describe('runEpicExecution', () => {
       'pv-p.3': 'Gamma work',
       'pv-p.4': 'Delta work',
     };
-    const scriptSpawnFn = makeChainScriptSpawn({ beads, ops });
+    const cwdCalls: Array<{ op: string; cwd?: string }> = [];
+    const scriptSpawnFn = makeChainScriptSpawn({ beads, ops, cwdCalls });
     const spawnFn = makeAgentSpawn(ops, children);
 
     const result = await runEpicExecution(
@@ -1016,11 +1013,108 @@ describe('runEpicExecution', () => {
     expect(adds).toHaveLength(3);
     expect(removes).toHaveLength(3);
 
+    // cwd threading: chain 0's gt calls run in the main checkout (no cwd);
+    // each additional chain's gt calls carry that chain's worktree path.
+    const gtCwd = (branch: string) =>
+      cwdCalls.filter(c => c.op.includes(`gt create chore.${branch}`)).map(c => c.cwd);
+    expect(gtCwd('alpha-work')).toEqual([undefined]);
+    expect(gtCwd('beta-work')[0]).toContain('orch-wt-test-run-w1-c1');
+    expect(gtCwd('gamma-work')[0]).toContain('orch-wt-test-run-w1-c2');
+    expect(gtCwd('delta-work')[0]).toContain('orch-wt-test-run-w1-c3');
+
+    // Agent dispatches follow the same split: chain 0's implementer spawns
+    // without a cwd; the three worktree chains' implementers spawn at their
+    // worktree paths.
+    const implementerCwds = children
+      .filter(c => c.agent === 'implementer')
+      .map(c => c.cwd);
+    expect(implementerCwds).toHaveLength(4);
+    expect(implementerCwds.filter(c => c === undefined)).toHaveLength(1);
+    expect(
+      implementerCwds.filter(c => c !== undefined && c.includes('orch-wt-test-run-w1-c')),
+    ).toHaveLength(3);
+
     // All four chains ran in a single wave (cap applies to chains, queueing
     // the 4th chain behind the first free slot rather than a new wave).
     const waveStarts = logStub.runJsonEntries.filter(e => e.event === 'wave-start');
     expect(waveStarts).toHaveLength(1);
     expect((waveStarts[0].chains as string[][]).length).toBe(4);
+  });
+
+  it('removes a parallel chain worktree even when the chain fails mid-level', async () => {
+    const { runEpicExecution } = await import('../../lib/execute.js');
+
+    const ctx = makeEpicCtx();
+    const ops: string[] = [];
+    const children: Array<{ agent: string; cwd?: string; child: ReturnType<typeof createMockChild> }> = [];
+
+    // pv-w.2 is scheduled but has no bd show fixture -> its level fails at
+    // bead load, exercising the finally-based worktree cleanup.
+    const scriptSpawnFn = makeChainScriptSpawn({
+      beads: { 'pv-w.1': 'Good chain' },
+      readyIds: ['pv-w.1', 'pv-w.2'],
+      ops,
+    });
+    const spawnFn = makeAgentSpawn(ops, children);
+
+    const result = await runEpicExecution(
+      'epic-parent',
+      { chains: [['pv-w.1'], ['pv-w.2']], flat: false, warnings: [] },
+      ctx,
+      { spawnFn, scriptSpawnFn },
+    );
+
+    expect(result.outcome).toBe('escalated');
+    expect(result.escalatedBeads).toContain('pv-w.2');
+    expect(result.beadsCompleted).toContain('pv-w.1');
+
+    // The worktree was created for chain 1 and removed despite the failure.
+    expect(ops.filter(o => o === 'git worktree add')).toHaveLength(1);
+    expect(ops.filter(o => o === 'git worktree remove')).toHaveLength(1);
+    expect(logStub.runJsonEntries).toContainEqual(
+      expect.objectContaining({ event: 'chain-worktree-removed' }),
+    );
+  });
+
+  it('escalates the whole chain without dispatching implementers when git worktree add fails', async () => {
+    const { runEpicExecution } = await import('../../lib/execute.js');
+    const helpers = await import('../../lib/helpers.js');
+
+    const ctx = makeEpicCtx();
+    const ops: string[] = [];
+    const children: Array<{ agent: string; cwd?: string; child: ReturnType<typeof createMockChild> }> = [];
+
+    const scriptSpawnFn = makeChainScriptSpawn({
+      beads: { 'pv-w.1': 'Good chain', 'pv-w.2': 'Doomed chain' },
+      ops,
+      failWorktreeAdd: true,
+    });
+    const spawnFn = makeAgentSpawn(ops, children);
+
+    const result = await runEpicExecution(
+      'epic-parent',
+      { chains: [['pv-w.1'], ['pv-w.2']], flat: false, warnings: [] },
+      ctx,
+      { spawnFn, scriptSpawnFn },
+    );
+
+    expect(result.outcome).toBe('escalated');
+    expect(result.escalatedBeads).toEqual(['pv-w.2']);
+    expect(result.beadsCompleted).toContain('pv-w.1');
+
+    // No implementer ever ran for the doomed chain, and no worktree removal
+    // fired (nothing was created).
+    const implementerPrompts = children
+      .filter(c => c.agent === 'implementer')
+      .map(c => (c.child.stdin!.write as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as string);
+    expect(implementerPrompts.some(p => p.includes('pv-w.2'))).toBe(false);
+    expect(ops.filter(o => o === 'git worktree remove')).toHaveLength(0);
+
+    const escalatedIds = vi.mocked(helpers.bdEscalate).mock.calls.map(c => c[0]);
+    expect(escalatedIds).toContain('pv-w.2');
+    expect(logStub.runJsonEntries).toContainEqual(
+      expect.objectContaining({ event: 'chain-worktree-create-failed' }),
+    );
   });
 
   it('halts a chain on persistent build-gate failure and escalates the truncated remainder', async () => {
@@ -1029,7 +1123,7 @@ describe('runEpicExecution', () => {
 
     const ctx = makeEpicCtx();
     const ops: string[] = [];
-    const children: Array<{ agent: string; child: ReturnType<typeof createMockChild> }> = [];
+    const children: Array<{ agent: string; cwd?: string; child: ReturnType<typeof createMockChild> }> = [];
 
     const scriptSpawnFn = makeChainScriptSpawn({
       beads: { 'pv-h.1': 'Head bead', 'pv-h.2': 'Tail bead' },
@@ -1037,7 +1131,7 @@ describe('runEpicExecution', () => {
       ops,
     });
     const spawnFn = makeAgentSpawn(ops, children, () =>
-      JSON.stringify({ verdict: 'fail', concerns: ['lint broke'], beadsFailed: ['pv-h.1'] }),
+      JSON.stringify({ verdict: 'fail', concerns: ['lint broke'] }),
     );
 
     const result = await runEpicExecution(
@@ -1142,30 +1236,6 @@ describe('parseBeadJson', () => {
   it('should return null for empty array', async () => {
     const { parseBeadJson } = await import('../../lib/execute.js');
     expect(parseBeadJson('[]')).toBeNull();
-  });
-});
-
-// =============================================================================
-// derivePrTitleFromBead
-// =============================================================================
-
-describe('derivePrTitleFromBead', () => {
-  it('should strip "Epic:" prefix for epic beads', async () => {
-    const { derivePrTitleFromBead } = await import('../../lib/execute.js');
-    expect(derivePrTitleFromBead('Epic: Redesign dashboard', 'epic'))
-      .toBe('Redesign dashboard');
-  });
-
-  it('should pass through title for non-epic beads', async () => {
-    const { derivePrTitleFromBead } = await import('../../lib/execute.js');
-    expect(derivePrTitleFromBead('Fix alignment', 'task'))
-      .toBe('Fix alignment');
-  });
-
-  it('should handle missing "Epic:" prefix for epic beads', async () => {
-    const { derivePrTitleFromBead } = await import('../../lib/execute.js');
-    expect(derivePrTitleFromBead('Redesign dashboard', 'epic'))
-      .toBe('Redesign dashboard');
   });
 });
 
@@ -1303,33 +1373,6 @@ describe('runPR', () => {
     expect(result.ctx.beadsClosed).toEqual(['pv-test-1']);
   });
 
-  it('should submit a closed epic with closed children', async () => {
-    const { runPR } = await import('../../lib/execute.js');
-
-    const prUrl = 'https://github.com/owner/repo/pull/99';
-
-    // Sequence: git branch, bd show (epic), bd show (child1), bd show (child2),
-    //           gt submit, gh pr view, gh pr edit
-    const deps = makeDeps([
-      fakeSpawnResult('feat/branch', '', 0),
-      fakeSpawnResult(CLOSED_EPIC_JSON, '', 0),
-      fakeSpawnResult(CLOSED_CHILD_JSON, '', 0),
-      fakeSpawnResult(CLOSED_CHILD_JSON, '', 0),
-      fakeSpawnResult('✅ Submitted.', '', 0),
-      fakeSpawnResult(JSON.stringify({ number: 99, url: prUrl }), '', 0),
-      fakeSpawnResult('', '', 0),
-    ]);
-    const ctx = makePhaseCtx(logStub);
-
-    const result = await runPR(ctx, deps);
-
-    expect(result.next).toBe(PhaseName.Report);
-
-    const complete = logStub.runJsonEntries.find(e => e.event === 'pr_finalize_complete');
-    expect(complete!.prTitle).toBe('Redesign dashboard');
-    expect(complete!.beadsClosed).toEqual(['pv-test-1', 'pv-test-1.1', 'pv-test-1.2']);
-  });
-
   it('should halt when gt submit fails', async () => {
     const { runPR } = await import('../../lib/execute.js');
 
@@ -1345,19 +1388,59 @@ describe('runPR', () => {
     expect(logStub.logs.some(l => l.kind === 'err' && l.data.includes('gt submit failed'))).toBe(true);
   });
 
-  it('should halt when an epic child is not closed', async () => {
+  it('should halt when gh pr view fails after gt submit', async () => {
     const { runPR } = await import('../../lib/execute.js');
 
+    // Sequence: git branch, bd show, gt submit ok, gh pr view fails
     const deps = makeDeps([
-      fakeSpawnResult('feat/branch', '', 0),
-      fakeSpawnResult(CLOSED_EPIC_JSON, '', 0),
-      fakeSpawnResult(CLOSED_CHILD_JSON, '', 0),
-      fakeSpawnResult(OPEN_BEAD_JSON, '', 0),
+      fakeSpawnResult('chore/fix-widget', '', 0),
+      fakeSpawnResult(CLOSED_LEAF_JSON, '', 0),
+      fakeSpawnResult('✅ Submitted.', '', 0),
+      fakeSpawnResult('', 'no pull requests found for branch', 1),
     ]);
     const ctx = makePhaseCtx(logStub);
 
     const result = await runPR(ctx, deps);
     expect(result.next).toBe('halt');
+    expect(result.ctx.prUrl).toBeUndefined();
+    expect(logStub.logs.some(l => l.kind === 'err' && l.data.includes('gh pr view failed'))).toBe(true);
+  });
+
+  it('should halt when gh pr view returns unparseable output', async () => {
+    const { runPR } = await import('../../lib/execute.js');
+
+    // Sequence: git branch, bd show, gt submit ok, gh pr view garbage
+    const deps = makeDeps([
+      fakeSpawnResult('chore/fix-widget', '', 0),
+      fakeSpawnResult(CLOSED_LEAF_JSON, '', 0),
+      fakeSpawnResult('✅ Submitted.', '', 0),
+      fakeSpawnResult('not json at all', '', 0),
+    ]);
+    const ctx = makePhaseCtx(logStub);
+
+    const result = await runPR(ctx, deps);
+    expect(result.next).toBe('halt');
+    expect(result.ctx.prUrl).toBeUndefined();
+    expect(logStub.logs.some(l => l.kind === 'err' && l.data.includes('gh pr view failed'))).toBe(true);
+  });
+
+  it('should halt when gh pr edit exits non-zero', async () => {
+    const { runPR } = await import('../../lib/execute.js');
+
+    // Sequence: git branch, bd show, gt submit ok, gh pr view ok, gh pr edit fails
+    const deps = makeDeps([
+      fakeSpawnResult('chore/fix-widget', '', 0),
+      fakeSpawnResult(CLOSED_LEAF_JSON, '', 0),
+      fakeSpawnResult('✅ Submitted.', '', 0),
+      fakeSpawnResult(JSON.stringify({ number: 42, url: 'https://github.com/o/r/pull/42' }), '', 0),
+      fakeSpawnResult('', 'GraphQL: Something went wrong', 1),
+    ]);
+    const ctx = makePhaseCtx(logStub);
+
+    const result = await runPR(ctx, deps);
+    expect(result.next).toBe('halt');
+    expect(result.ctx.prUrl).toBeUndefined();
+    expect(logStub.logs.some(l => l.kind === 'err' && l.data.includes('gh pr edit failed'))).toBe(true);
   });
 });
 
@@ -1537,5 +1620,92 @@ describe('epicPhase', () => {
     // routes to Report (per-level PRs happen inside the wave loop, so the
     // epic path never routes to the PR phase).
     expect(result.next).toBe(PhaseName.Report);
+  });
+});
+
+// =============================================================================
+// gatherStackPlan — closed-child exclusion
+// =============================================================================
+
+describe('gatherStackPlan', () => {
+  it('excludes closed children and promotes a closed blocker\'s dependent to chain head', async () => {
+    const { gatherStackPlan } = await import('../../lib/execute.js');
+
+    const logStub = stubLogger();
+    const ctx: RunContext = {
+      runId: 'test-run',
+      beadId: 'pv-epic',
+      logger: logStub.logger,
+      phaseHistory: [],
+    };
+
+    // pv-g.1 (blocker) is CLOSED; pv-g.2 is open and was blocked by it;
+    // pv-g.3 is open and blocked by pv-g.2. Dropping the closed blocker's
+    // edge must promote pv-g.2 to the head of a two-level chain.
+    const scriptSpawnFn = vi.fn().mockImplementation((cmd: string, args: string[]) => {
+      if (cmd === 'bd' && args[0] === 'show') {
+        const beadId = args[1] === '--json' ? args[2] : args[1];
+        if (beadId === 'pv-epic') {
+          return fakeSpawnResult(JSON.stringify([{
+            id: 'pv-epic', issue_type: 'epic', status: 'open',
+            children: [{ id: 'pv-g.1' }, { id: 'pv-g.2' }, { id: 'pv-g.3' }],
+          }]), '', 0);
+        }
+        if (beadId === 'pv-g.1') {
+          return fakeSpawnResult(JSON.stringify([{
+            id: 'pv-g.1', title: 'Done already', issue_type: 'task', status: 'closed',
+          }]), '', 0);
+        }
+        if (beadId === 'pv-g.2') {
+          return fakeSpawnResult(JSON.stringify([{
+            id: 'pv-g.2', title: 'Second', issue_type: 'task', status: 'open',
+            dependencies: [{ id: 'pv-g.1', dependency_type: 'blocks' }],
+          }]), '', 0);
+        }
+        if (beadId === 'pv-g.3') {
+          return fakeSpawnResult(JSON.stringify([{
+            id: 'pv-g.3', title: 'Third', issue_type: 'task', status: 'open',
+            dependencies: [{ id: 'pv-g.2', dependency_type: 'blocks' }],
+          }]), '', 0);
+        }
+      }
+      return fakeSpawnResult('', '', 0);
+    });
+
+    const plan = gatherStackPlan('pv-epic', ctx, { scriptSpawnFn });
+
+    expect(plan).not.toBeNull();
+    expect(plan!.flat).toBe(false);
+    expect(plan!.chains).toEqual([['pv-g.2', 'pv-g.3']]);
+  });
+
+  it('returns null when every child is closed', async () => {
+    const { gatherStackPlan } = await import('../../lib/execute.js');
+
+    const logStub = stubLogger();
+    const ctx: RunContext = {
+      runId: 'test-run',
+      beadId: 'pv-epic',
+      logger: logStub.logger,
+      phaseHistory: [],
+    };
+
+    const scriptSpawnFn = vi.fn().mockImplementation((cmd: string, args: string[]) => {
+      if (cmd === 'bd' && args[0] === 'show') {
+        const beadId = args[1] === '--json' ? args[2] : args[1];
+        if (beadId === 'pv-epic') {
+          return fakeSpawnResult(JSON.stringify([{
+            id: 'pv-epic', issue_type: 'epic', status: 'open',
+            children: [{ id: 'pv-g.1' }],
+          }]), '', 0);
+        }
+        return fakeSpawnResult(JSON.stringify([{
+          id: beadId, title: 'Done', issue_type: 'task', status: 'closed',
+        }]), '', 0);
+      }
+      return fakeSpawnResult('', '', 0);
+    });
+
+    expect(gatherStackPlan('pv-epic', ctx, { scriptSpawnFn })).toBeNull();
   });
 });
