@@ -1142,6 +1142,42 @@ describe('branch', () => {
     expect(calls).toContain('gt create chore.a-task --onto main --no-interactive');
   });
 
+  it('honors GIT_SAFE_MAIN_BRANCH as the gt create base branch', async () => {
+    const prev = process.env.GIT_SAFE_MAIN_BRANCH;
+    process.env.GIT_SAFE_MAIN_BRANCH = 'develop';
+    try {
+      const bdShowJson = JSON.stringify([{ issue_type: 'task', title: 'A Task' }]);
+      const calls: string[] = [];
+      const results = [
+        // gitSafeToStart:
+        fakeSpawn('true', '', 0),
+        fakeSpawn('abc1234', '', 0),
+        fakeSpawn('abc1234', '', 0),
+        fakeSpawn('', '', 0),
+        // bd show --json:
+        fakeSpawn(bdShowJson, '', 0),
+        // git branch --show-current:
+        fakeSpawn('develop', '', 0),
+        // gt create <branch> --onto develop --no-interactive:
+        fakeSpawn('', '', 0),
+      ];
+      let i = 0;
+      const spawn = vi.fn().mockImplementation((cmd: string, args: string[]) => {
+        calls.push([cmd, ...(args ?? [])].join(' '));
+        return results[i++] ?? fakeSpawn('', 'unexpected call', 1);
+      });
+
+      const result = await branch(makeCtx(), { spawnFn: spawn as never });
+
+      expect(result.next).toBe(PhaseName.Leaf);
+      expect(calls).toContain('gt create chore.a-task --onto develop --no-interactive');
+    }
+    finally {
+      if (prev === undefined) delete process.env.GIT_SAFE_MAIN_BRANCH;
+      else process.env.GIT_SAFE_MAIN_BRANCH = prev;
+    }
+  });
+
   it('should halt when gt create fails', async () => {
     const bdShowJson = JSON.stringify([{ issue_type: 'task', title: 'A Task' }]);
     const spawn = seqSpawn(

@@ -1415,10 +1415,13 @@ export async function branch(ctx: PhaseCtx, deps: PhaseDeps = {}): Promise<Phase
     });
   }
   else if (currentCmd.stdout !== derivedBranchName) {
-    const createResult = stackCreate(derivedBranchName, 'main', { spawnFn: spawn });
+    // Same main-branch override the other git probes honor (gitSafeToStart,
+    // verification gate, preflight).
+    const mainBranch = process.env.GIT_SAFE_MAIN_BRANCH ?? 'main';
+    const createResult = stackCreate(derivedBranchName, mainBranch, { spawnFn: spawn });
 
     if (!createResult.ok) {
-      const msg = `gt create "${derivedBranchName}" --onto main failed: ${createResult.stderr.trim()}`;
+      const msg = `gt create "${derivedBranchName}" --onto ${mainBranch} failed: ${createResult.stderr.trim()}`;
       console.error(msg);
       logger.writePhaseLog(PhaseName.Branch, 'err', msg + '\n');
       return { next: 'halt', ctx };
@@ -1427,7 +1430,7 @@ export async function branch(ctx: PhaseCtx, deps: PhaseDeps = {}): Promise<Phase
     logger.appendRunJson({
       event: 'branch_created',
       branchName: derivedBranchName,
-      baseBranch: 'main',
+      baseBranch: mainBranch,
     });
   }
   else {
