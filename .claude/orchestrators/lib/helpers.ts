@@ -1239,7 +1239,7 @@ export function stackPlan(
     if (edge.dependencyType !== undefined && edge.dependencyType !== 'blocks') continue;
     if (!beadSet.has(edge.blocker) || !beadSet.has(edge.blocked)) continue;
     if (edge.blocker === edge.blocked) continue;
-    const key = `${edge.blocker} ${edge.blocked}`;
+    const key = `${edge.blocker}:${edge.blocked}`;
     if (seen.has(key)) continue;
     seen.add(key);
     edges.push({ blocker: edge.blocker, blocked: edge.blocked });
