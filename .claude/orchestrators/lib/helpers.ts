@@ -10,7 +10,7 @@
  *                preflight, bdTopReady, bdEscalate,
  *                bdState, bdSizingCheck, bdEnrichmentCheck,
  *                discoverAgents
- *   Pure helpers: branchName, commitMsg, prBody,
+ *   Pure helpers: branchName, commitMsg, prBody, stackPlan,
  *                 classifyBeadState, classifySizing
  */
 
@@ -30,6 +30,13 @@ export type SpawnFn = typeof nodeSpawnSync;
 
 export interface SpawnDeps {
   spawnFn?: SpawnFn;
+  /**
+   * Working directory for spawned commands. Used by the gt stack helpers when
+   * a chain runs in its own git worktree (see git-workflow/stacking.md,
+   * "gt-in-worktrees"): gt operations must run from the checkout that holds
+   * the branch being operated on.
+   */
+  cwd?: string;
 }
 
 // =============================================================================
@@ -79,6 +86,7 @@ export interface BeadJson {
   parent?: string;
   dependencies?: BeadDependency[];
   dependents?: BeadDependency[];
+  children?: Array<{ id?: string }>;
   [key: string]: unknown;
 }
 
@@ -138,12 +146,13 @@ function run(
   cmd: string,
   args: string[],
   spawnFn: SpawnFn,
-  opts: { input?: string; timeout?: number } = {},
+  opts: { input?: string; timeout?: number; cwd?: string } = {},
 ): { stdout: string; stderr: string; exitCode: number } {
   const result = spawnFn(cmd, args, {
     encoding: 'buffer' as never,
     shell: true,
     timeout: opts.timeout ?? 30_000,
+    ...(opts.cwd !== undefined ? { cwd: opts.cwd } : {}),
     ...(opts.input !== undefined ? { input: Buffer.from(opts.input) } : {}),
   });
   return {
@@ -251,7 +260,7 @@ export function stackCreate(
   deps: SpawnDeps = {},
 ): StackOpResult {
   const spawn = deps.spawnFn ?? nodeSpawnSync;
-  const result = run('gt', ['create', branch, '--onto', parent, '--no-interactive'], spawn);
+  const result = run('gt', ['create', branch, '--onto', parent, '--no-interactive'], spawn, { cwd: deps.cwd });
   return { ok: result.exitCode === 0, stdout: result.stdout, stderr: result.stderr };
 }
 
@@ -271,7 +280,7 @@ export function stackSubmit(branch: string, deps: SpawnDeps = {}): StackOpResult
     'gt',
     ['submit', '--no-interactive', '--publish', '--branch', branch],
     spawn,
-    { timeout: 120_000 },
+    { timeout: 120_000, cwd: deps.cwd },
   );
   return { ok: result.exitCode === 0, stdout: result.stdout, stderr: result.stderr };
 }
@@ -289,7 +298,7 @@ export function stackSubmit(branch: string, deps: SpawnDeps = {}): StackOpResult
  */
 export function syncAndRestack(deps: SpawnDeps = {}): SyncAndRestackResult {
   const spawn = deps.spawnFn ?? nodeSpawnSync;
-  const result = run('gt', ['sync', '-f', '--no-interactive'], spawn, { timeout: 120_000 });
+  const result = run('gt', ['sync', '-f', '--no-interactive'], spawn, { timeout: 120_000, cwd: deps.cwd });
   const rawOutput = [result.stdout, result.stderr].filter(Boolean).join('\n');
 
   const restacked: string[] = [];
@@ -1149,6 +1158,142 @@ export function prBody(
   ];
 
   return lines.join('\n');
+}
+
+// =============================================================================
+// stackPlan (pure)
+// =============================================================================
+
+/**
+ * A directed dependency edge between two sibling beads.
+ *
+ * `blocker` must complete before `blocked` can start (bd's "blocks"
+ * relationship, read from the blocked bead's `dependencies` array).
+ */
+export interface DependencyEdge {
+  /** The bead that must complete first. */
+  blocker: string;
+  /** The bead that is blocked until the blocker closes. */
+  blocked: string;
+  /**
+   * bd `dependency_type` for this edge. Only `'blocks'` edges participate in
+   * chain planning; anything else (e.g. `'parent-child'`) is ignored.
+   * Undefined is treated as `'blocks'`.
+   */
+  dependencyType?: string;
+}
+
+/**
+ * Result of stackPlan: an ordered forest of chains.
+ */
+export interface StackPlanResult {
+  /**
+   * Ordered forest of chains. Each chain is a linear blocker-first path
+   * (`chain[0]` has no in-set blocker; each subsequent bead is blocked by
+   * its predecessor). Independent beads are singleton chains.
+   */
+  chains: string[][];
+  /**
+   * True when the plan fell back to no-stack singletons because the edge
+   * graph was non-linear (cycle, fork, or join). A plan with no edges at
+   * all is NOT flat — it is a real plan that happens to have no stacking.
+   */
+  flat: boolean;
+  /** Human-readable reasons for a flat fallback (empty otherwise). */
+  warnings: string[];
+}
+
+/**
+ * Plan dependency-chain stacks for an epic's child beads. Pure function.
+ *
+ * Takes the sibling bead set and the "blocks" edges among them; returns an
+ * ordered forest of chains — the schedulable unit for wave orchestration
+ * (see git-workflow/stacking.md for the stacking conventions the chains
+ * feed). Edges referencing beads outside the sibling set, self-edges, and
+ * non-'blocks' edge types are ignored.
+ *
+ * Any non-linear structure — a cycle, a fork (one blocker with 2+ in-set
+ * dependents), or a join (one bead with 2+ in-set blockers) — falls back to
+ * a flat no-stack plan (every bead a singleton) with a warning for
+ * agent/human resolution. Output order is deterministic: chains appear in
+ * the input order of their head bead; within a chain, blocker-first.
+ *
+ * The dependency parameter is named `dependencyEdges`, never `deps` —
+ * `deps` is reserved codebase-wide for SpawnDeps injection.
+ */
+export function stackPlan(
+  beads: string[],
+  dependencyEdges: DependencyEdge[],
+): StackPlanResult {
+  const beadSet = new Set(beads);
+  const flatPlan = (warnings: string[]): StackPlanResult => ({
+    chains: beads.map(b => [b]),
+    flat: true,
+    warnings,
+  });
+
+  // Filter to in-set 'blocks' edges, dropping self-edges and duplicates.
+  const seen = new Set<string>();
+  const edges: Array<{ blocker: string; blocked: string }> = [];
+  for (const edge of dependencyEdges) {
+    if (edge.dependencyType !== undefined && edge.dependencyType !== 'blocks') continue;
+    if (!beadSet.has(edge.blocker) || !beadSet.has(edge.blocked)) continue;
+    if (edge.blocker === edge.blocked) continue;
+    const key = `${edge.blocker} ${edge.blocked}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    edges.push({ blocker: edge.blocker, blocked: edge.blocked });
+  }
+
+  // Successor / predecessor maps. Linearity requires at most one of each per bead.
+  const successor = new Map<string, string[]>();
+  const predecessor = new Map<string, string[]>();
+  for (const { blocker, blocked } of edges) {
+    successor.set(blocker, [...(successor.get(blocker) ?? []), blocked]);
+    predecessor.set(blocked, [...(predecessor.get(blocked) ?? []), blocker]);
+  }
+
+  const warnings: string[] = [];
+  for (const [blocker, blockedList] of successor) {
+    if (blockedList.length > 1) {
+      warnings.push(`fork at ${blocker}: blocks ${blockedList.join(', ')} — non-linear dependency graph, falling back to flat no-stack plan`);
+    }
+  }
+  for (const [blocked, blockerList] of predecessor) {
+    if (blockerList.length > 1) {
+      warnings.push(`join at ${blocked}: blocked by ${blockerList.join(', ')} — non-linear dependency graph, falling back to flat no-stack plan`);
+    }
+  }
+  if (warnings.length > 0) {
+    return flatPlan(warnings);
+  }
+
+  // Walk each chain from its head (a bead with no in-set blocker) following
+  // the unique successor. Chains are emitted in input order of their head.
+  const chains: string[][] = [];
+  const visited = new Set<string>();
+  for (const bead of beads) {
+    if (predecessor.has(bead)) continue; // mid-chain or tail — reached via its head
+    const chain: string[] = [];
+    let current: string | undefined = bead;
+    while (current !== undefined && !visited.has(current)) {
+      visited.add(current);
+      chain.push(current);
+      current = successor.get(current)?.[0];
+    }
+    chains.push(chain);
+  }
+
+  // Any edge-participating bead not reached from a head sits on a cycle
+  // (linear in/out degrees but no head to start from).
+  const unreached = beads.filter(b => !visited.has(b));
+  if (unreached.length > 0) {
+    return flatPlan([
+      `dependency cycle involving ${unreached.join(', ')} — falling back to flat no-stack plan`,
+    ]);
+  }
+
+  return { chains, flat: false, warnings: [] };
 }
 
 // =============================================================================

@@ -28,6 +28,8 @@ import {
   stackCreate,
   stackSubmit,
   syncAndRestack,
+  stackPlan,
+  type DependencyEdge,
 } from '../../lib/helpers.js';
 
 // =============================================================================
@@ -992,6 +994,110 @@ describe('stackSubmit', () => {
     const result = stackSubmit('feat.add-search', { spawnFn: spawn as never });
     expect(result.ok).toBe(false);
     expect(result.stderr).toContain('restack');
+  });
+});
+
+// =============================================================================
+// stackPlan
+// =============================================================================
+
+describe('stackPlan', () => {
+  const blocks = (blocker: string, blocked: string): DependencyEdge =>
+    ({ blocker, blocked, dependencyType: 'blocks' });
+
+  it('orders a linear chain blocker-first', () => {
+    const result = stackPlan(['b3', 'b1', 'b2'], [blocks('b1', 'b2'), blocks('b2', 'b3')]);
+    expect(result.flat).toBe(false);
+    expect(result.warnings).toEqual([]);
+    expect(result.chains).toEqual([['b1', 'b2', 'b3']]);
+  });
+
+  it('returns multiple independent chains in input order of their heads', () => {
+    const result = stackPlan(
+      ['b1', 'b4', 'b5', 'b2', 'b6'],
+      [blocks('b1', 'b2'), blocks('b5', 'b6')],
+    );
+    expect(result.flat).toBe(false);
+    expect(result.chains).toEqual([['b1', 'b2'], ['b4'], ['b5', 'b6']]);
+  });
+
+  it('returns all singletons for an empty edge set without flagging flat', () => {
+    const result = stackPlan(['b1', 'b2', 'b3'], []);
+    expect(result.chains).toEqual([['b1'], ['b2'], ['b3']]);
+    expect(result.flat).toBe(false);
+    expect(result.warnings).toEqual([]);
+  });
+
+  it('falls back to a flat plan with a warning on a cycle', () => {
+    const result = stackPlan(
+      ['b1', 'b2', 'b3'],
+      [blocks('b1', 'b2'), blocks('b2', 'b1')],
+    );
+    expect(result.flat).toBe(true);
+    expect(result.chains).toEqual([['b1'], ['b2'], ['b3']]);
+    expect(result.warnings.some(w => /cycle/.test(w))).toBe(true);
+  });
+
+  it('falls back to a flat plan with a warning on a fork (one blocker, two dependents)', () => {
+    const result = stackPlan(
+      ['b1', 'b2', 'b3'],
+      [blocks('b1', 'b2'), blocks('b1', 'b3')],
+    );
+    expect(result.flat).toBe(true);
+    expect(result.chains).toEqual([['b1'], ['b2'], ['b3']]);
+    expect(result.warnings.some(w => /fork at b1/.test(w))).toBe(true);
+  });
+
+  it('falls back to a flat plan with a warning on a join (two blockers, one dependent)', () => {
+    const result = stackPlan(
+      ['b1', 'b2', 'b3'],
+      [blocks('b1', 'b3'), blocks('b2', 'b3')],
+    );
+    expect(result.flat).toBe(true);
+    expect(result.chains).toEqual([['b1'], ['b2'], ['b3']]);
+    expect(result.warnings.some(w => /join at b3/.test(w))).toBe(true);
+  });
+
+  it('ignores parent-child edges', () => {
+    const result = stackPlan(
+      ['b1', 'b2'],
+      [
+        { blocker: 'epic-1', blocked: 'b1', dependencyType: 'parent-child' },
+        { blocker: 'b1', blocked: 'b2', dependencyType: 'parent-child' },
+      ],
+    );
+    expect(result.chains).toEqual([['b1'], ['b2']]);
+    expect(result.flat).toBe(false);
+  });
+
+  it('ignores edges that reference beads outside the sibling set', () => {
+    const result = stackPlan(
+      ['b1', 'b2'],
+      [blocks('pv-external', 'b1'), blocks('b1', 'b2')],
+    );
+    expect(result.chains).toEqual([['b1', 'b2']]);
+    expect(result.flat).toBe(false);
+  });
+
+  it('does not treat duplicate edges as a fork or join', () => {
+    const result = stackPlan(
+      ['b1', 'b2'],
+      [blocks('b1', 'b2'), blocks('b1', 'b2')],
+    );
+    expect(result.flat).toBe(false);
+    expect(result.chains).toEqual([['b1', 'b2']]);
+  });
+
+  it('produces deterministic output for the same input', () => {
+    const beads = ['b2', 'b1', 'b9', 'b5'];
+    const edges = [blocks('b1', 'b2'), blocks('b9', 'b5')];
+    const first = stackPlan(beads, edges);
+    const second = stackPlan(beads, edges);
+    expect(first).toEqual(second);
+    // Head order follows input order: b2's chain head is b1 (first head
+    // encountered in input order is b1 via... b2 is not a head; heads in
+    // input order are b1 then b9).
+    expect(first.chains).toEqual([['b1', 'b2'], ['b9', 'b5']]);
   });
 });
 
