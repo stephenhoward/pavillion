@@ -16,6 +16,7 @@ import AddActivity from "@/server/activitypub/model/action/add";
 import RemoveActivity from "@/server/activitypub/model/action/remove";
 import FollowActivity from "@/server/activitypub/model/action/follow";
 import AcceptActivity from "@/server/activitypub/model/action/accept";
+import IgnoreActivity from "@/server/activitypub/model/action/ignore";
 import AnnounceActivity from "@/server/activitypub/model/action/announce";
 import CreateActivity from "@/server/activitypub/model/action/create";
 import UndoActivity from "@/server/activitypub/model/action/undo";
@@ -315,6 +316,18 @@ class ProcessOutboxService {
           throw new Error('Failed to parse Accept activity');
         }
         // For Accept activities, send to the actor of the original Follow
+        if (activity.object && typeof activity.object === 'object' && activity.object.actor) {
+          recipients = [activity.object.actor];
+        }
+        break;
+      case 'Ignore':
+        activity = IgnoreActivity.fromObject(message.message);
+        if (!activity) {
+          throw new Error('Failed to parse Ignore activity');
+        }
+        // FEP-8a8e Join reply: deliver only to the actor of the embedded Join
+        // (the sender). Mirrors Accept — a direct, single-recipient reply that
+        // is never fanned out to followers or the public timeline.
         if (activity.object && typeof activity.object === 'object' && activity.object.actor) {
           recipients = [activity.object.actor];
         }

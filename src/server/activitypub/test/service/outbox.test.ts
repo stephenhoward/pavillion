@@ -1151,6 +1151,127 @@ describe('processOutboxMessage — explicit `to` honoring and per-type local dis
     expect(postStub.called, 'Accept: HTTP POST must not be used for local recipient').toBe(false);
   });
 
+  it('Ignore: resolves the delivery recipient from the embedded Join actor and POSTs to it', async () => {
+    // FEP-8a8e Join reply. The Ignore embeds the original Join; the Join's
+    // `actor` (the sender) is the sole delivery recipient. This exercises the
+    // `case 'Ignore':` recipient-resolution branch end-to-end over HTTP.
+    const joinSenderUri = 'https://remote.federation.test/users/bob';
+    const ignoreMsg = {
+      '@context': 'https://www.w3.org/ns/activitystreams',
+      type: 'Ignore',
+      actor: LOCAL_ACTOR_URL,
+      id: `${LOCAL_ACTOR_URL}/ignores/ignore-1`,
+      to: [joinSenderUri],
+      object: {
+        type: 'Join',
+        actor: joinSenderUri,
+        object: `${LOCAL_ACTOR_URL}/events/e1`,
+        id: `${joinSenderUri}/activities/join-1`,
+      },
+    };
+
+    const message = ActivityPubOutboxMessageEntity.build({
+      calendar_id: TEST_CALENDAR_ID,
+      type: 'Ignore',
+      message: ignoreMsg,
+    });
+
+    const getCalendarStub = sandbox.stub(service.calendarService, 'getCalendar');
+    const postStub = sandbox.stub(axios, 'post').resolves();
+    const updateStub = sandbox.stub(ActivityPubOutboxMessageEntity.prototype, 'update');
+    const getRecipientsStub = sandbox.stub(service, 'getRecipients');
+    const resolveStub = sandbox.stub(service, 'resolveInboxUrl');
+    stubSigning(service, sandbox);
+
+    getCalendarStub.resolves(Calendar.fromObject({ id: TEST_CALENDAR_ID }));
+    resolveStub.resolves(REMOTE_INBOX_URL);
+
+    await service.processOutboxMessage(message);
+
+    // Recipient is the Join sender (object.actor) — NOT follower fan-out.
+    expect(getRecipientsStub.called, 'Ignore must not fan out to followers').toBe(false);
+    expect(resolveStub.calledOnceWith(joinSenderUri)).toBe(true);
+    expect(postStub.calledOnce).toBe(true);
+    expect(updateStub.getCalls()[0].args[0]['processed_status']).toBe('ok');
+  });
+
+  it('Ignore: local recipient routes to handleLocalActivityDispatch instead of HTTP', async () => {
+    const localCalendar = Calendar.fromObject({ id: 'local-cal-ignore' });
+    const joinSenderUri = 'https://local.federation.test/calendars/localcal-ignore';
+    const ignoreMsg = {
+      '@context': 'https://www.w3.org/ns/activitystreams',
+      type: 'Ignore',
+      actor: LOCAL_ACTOR_URL,
+      id: `${LOCAL_ACTOR_URL}/ignores/ignore-local-1`,
+      to: [joinSenderUri],
+      object: {
+        type: 'Join',
+        actor: joinSenderUri,
+        object: `${LOCAL_ACTOR_URL}/events/e1`,
+        id: `${joinSenderUri}/activities/join-local-1`,
+      },
+    };
+
+    const message = ActivityPubOutboxMessageEntity.build({
+      calendar_id: TEST_CALENDAR_ID,
+      type: 'Ignore',
+      message: ignoreMsg,
+    });
+
+    resolveLocalStub.resolves(localCalendar);
+    const getCalendarStub = sandbox.stub(service.calendarService, 'getCalendar');
+    const postStub = sandbox.stub(axios, 'post').resolves();
+    sandbox.stub(ActivityPubOutboxMessageEntity.prototype, 'update');
+    sandbox.stub(service, 'resolveInboxUrl');
+
+    getCalendarStub.resolves(Calendar.fromObject({ id: TEST_CALENDAR_ID }));
+
+    await service.processOutboxMessage(message);
+
+    expect(resolveLocalStub.calledOnceWith(joinSenderUri)).toBe(true);
+    expect(
+      (mockInbox.handleLocalActivityDispatch as sinon.SinonStub).calledOnce,
+      'Ignore: local dispatch must fire for local recipient',
+    ).toBe(true);
+    expect(postStub.called, 'Ignore: HTTP POST must not be used for local recipient').toBe(false);
+  });
+
+  it('Ignore: a malformed (non-object) embedded object resolves to no recipient without crashing', async () => {
+    // Guard case: if `object` is a bare string rather than an embedded Join,
+    // the `typeof activity.object === 'object'` guard fails, so no recipient is
+    // resolved. The message must complete cleanly (status ok) rather than
+    // delivering an Ignore addressed to nobody or throwing.
+    const ignoreMsg = {
+      '@context': 'https://www.w3.org/ns/activitystreams',
+      type: 'Ignore',
+      actor: LOCAL_ACTOR_URL,
+      id: `${LOCAL_ACTOR_URL}/ignores/ignore-malformed-1`,
+      object: 'https://remote.federation.test/activities/join-1',
+    };
+
+    const message = ActivityPubOutboxMessageEntity.build({
+      calendar_id: TEST_CALENDAR_ID,
+      type: 'Ignore',
+      message: ignoreMsg,
+    });
+
+    const getCalendarStub = sandbox.stub(service.calendarService, 'getCalendar');
+    const postStub = sandbox.stub(axios, 'post').resolves();
+    const updateStub = sandbox.stub(ActivityPubOutboxMessageEntity.prototype, 'update');
+    const resolveStub = sandbox.stub(service, 'resolveInboxUrl');
+    stubSigning(service, sandbox);
+
+    getCalendarStub.resolves(Calendar.fromObject({ id: TEST_CALENDAR_ID }));
+
+    await service.processOutboxMessage(message);
+
+    expect(resolveStub.called, 'no recipient should be resolved for a malformed object').toBe(false);
+    expect(resolveLocalStub.called, 'no local dispatch for a malformed object').toBe(false);
+    expect(postStub.called, 'no HTTP POST for a malformed object').toBe(false);
+    expect(updateStub.calledOnce).toBe(true);
+    expect(updateStub.getCalls()[0].args[0]['processed_status']).toBe('ok');
+  });
+
   it('Flag: local recipient routes to handleLocalActivityDispatch instead of HTTP', async () => {
     const localCalendar = Calendar.fromObject({ id: 'local-cal-flag' });
     const flagMsg = {

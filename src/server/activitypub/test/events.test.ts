@@ -239,10 +239,11 @@ describe('handleEventCreated', () => {
     await teardownActivityPubSchema();
   });
 
-  it('creates an EventObjectEntity for the local event before dispatching paired Announce(Event) + Create(Note)', async () => {
+  it('creates an EventObjectEntity for the local event before dispatching paired Create(Event) + Create(Note)', async () => {
     const calendar = Calendar.fromObject({ id: uuidv4(), urlName: 'my_calendar' });
     const event = CalendarEvent.fromObject({ id: uuidv4() });
     const actorUrl = ActivityPubActor.actorUrl(calendar);
+    const eventUrl = EventObject.eventUrl(calendar, event);
 
     // Stub the service methods that would otherwise hit the database / network
     sandbox.stub(service, 'actorUrl').resolves(actorUrl);
@@ -255,21 +256,40 @@ describe('handleEventCreated', () => {
     const eventObject = await EventObjectEntity.findOne({ where: { event_id: event.id } });
     expect(eventObject, 'EventObjectEntity must exist for local event').not.toBeNull();
     expect(eventObject!.attributed_to).toBe(actorUrl);
-    // Paired emission: Announce(Event) first, Create(Note) second, both with
-    // public addressing so Mastodon-class peers render the Note while
-    // Pavillion-aware peers consume the Event.
+    // Paired emission: Create(Event) first, Create(Note) second, both with
+    // public addressing. New local originals federate as Create(Event) with the
+    // full embedded Event object (Announce is reserved for reposts); the paired
+    // Create(Note) lets Mastodon-class peers render the event on profile
+    // timelines.
     expect(addToOutboxStub.calledTwice).toBe(true);
 
-    // Announce envelope must be addressed publicly with followers in cc and a
-    // populated published timestamp — without these, Mastodon ignores the
-    // activity in profile timelines and HTTP delivery loses audience info.
-    const announceCall = addToOutboxStub.getCall(0);
-    expect(announceCall.args[0]).toBe(calendar);
-    const announce = announceCall.args[1];
-    expect(announce.type).toBe('Announce');
-    expect(announce.to).toEqual(['https://www.w3.org/ns/activitystreams#Public']);
-    expect(announce.cc).toEqual([`${actorUrl}/followers`]);
-    expect(announce.published).toBeInstanceOf(Date);
+    // Create(Event) envelope must embed the full Event object, carry the
+    // deterministic `{eventUrl}/create` id, and be addressed publicly with
+    // followers in cc and a populated published timestamp — without these,
+    // Mastodon/Mobilizon/Gancio ignore the activity or lose audience info.
+    const createEventCall = addToOutboxStub.getCall(0);
+    expect(createEventCall.args[0]).toBe(calendar);
+    const createEvent = createEventCall.args[1];
+    expect(createEvent.type).toBe('Create');
+    expect(createEvent.object.type).toBe('Event');
+    expect(createEvent.id).toBe(`${eventUrl}/create`);
+    expect(createEvent.to).toEqual(['https://www.w3.org/ns/activitystreams#Public']);
+    expect(createEvent.cc).toEqual([`${actorUrl}/followers`]);
+    expect(createEvent.published).toBeInstanceOf(Date);
+
+    // PRIVACY: the embedded Event object is now sent to federation (public +
+    // followers), so its serialized wire form must not leak internal
+    // identifiers. Actors are addressed by public URL (attributedTo), never by
+    // the internal calendar/account UUIDs. This guards against a regression
+    // that serializes internal ids onto the public payload.
+    const embeddedEvent = (createEvent.object as EventObject).toActivityPubObject();
+    expect(embeddedEvent).not.toHaveProperty('calendarId');
+    expect(embeddedEvent).not.toHaveProperty('accountId');
+    expect(embeddedEvent.attributedTo).toBe(actorUrl);
+
+    // No Announce is emitted for originals — Announce is repost-only.
+    const emittedTypes = addToOutboxStub.getCalls().map(c => c.args[1].type);
+    expect(emittedTypes).not.toContain('Announce');
 
     // Paired Create(Note) emission with matching public addressing. The Note
     // wraps the same canonical event so Mastodon-class peers render it on
@@ -334,13 +354,13 @@ describe('handleEventCreated', () => {
     ).toBe(true);
   });
 
-  it('returns early without dispatching Announce when payload.calendar is null (remote-origin event)', async () => {
+  it('returns early without dispatching Create when payload.calendar is null (remote-origin event)', async () => {
     // EventService.addRemoteEvent emits eventCreated with calendar:null so the
     // calendar-domain buildEventInstances handler materializes canonical rows
     // for inbound federated events. The AP handler must early-return on the
     // same payload — without this guard, the handler would call
     // EventObject.eventUrl(null, ...) (crash) and addToOutbox(null, ...)
-    // (re-Announce a remote event back to federation, creating a loop).
+    // (re-Create a remote event back to federation, creating a loop).
     const event = CalendarEvent.fromObject({ id: uuidv4() });
 
     const actorUrlStub = sandbox.stub(service, 'actorUrl');

@@ -20,6 +20,8 @@ import ProcessInboxService from '@/server/activitypub/service/inbox';
 import { EventObjectEntity } from '@/server/activitypub/entity/event_object';
 import CreateActivity from '@/server/activitypub/model/action/create';
 import { Calendar, CalendarContent } from '@/common/model/calendar';
+import { EventCategory } from '@/common/model/event_category';
+import { EventCategoryContent } from '@/common/model/event_category_content';
 import { EventEmitter } from 'events';
 import CalendarInterface from '@/server/calendar/interface';
 
@@ -230,5 +232,201 @@ describe('ProcessInboxService - source_categories parsing', () => {
 
     expect(capturedDefaults).not.toBeNull();
     expect(capturedDefaults.source_categories).toBeNull();
+  });
+
+  describe('FEP-8a8e category fallback (inbound)', () => {
+
+    function localCategory(id: string, name: string): EventCategory {
+      const cat = new EventCategory(id, testCalendar.id);
+      cat.addContent(new EventCategoryContent('en', name));
+      return cat;
+    }
+
+    it('assigns matching local categories from the FEP category when pavillion:categories absent', async () => {
+      const localEventId = uuidv4();
+      const eventApId = `https://mobilizon.example/events/${uuidv4()}`;
+      const eventObject = {
+        id: eventApId,
+        type: 'Event',
+        attributedTo: calendarActorUri,
+        name: 'Mobilizon Concert',
+        // No pavillion:categories / bare categories URIs; only the FEP enum
+        category: 'MUSIC',
+      };
+
+      sandbox.stub(EventObjectEntity, 'findOrCreate').callsFake(async (options: any) => {
+        return [{ event_id: options.defaults.event_id } as any, true];
+      });
+      sandbox.stub(EventObjectEntity, 'findOne').resolves(null);
+      (calendarInterface.addRemoteEvent as any).restore?.();
+      sandbox.stub(calendarInterface, 'addRemoteEvent').resolves({ id: localEventId } as any);
+
+      const getCategoriesStub = sandbox.stub(calendarInterface, 'getCategories').resolves([
+        localCategory('local-music', 'Concerts'),
+        localCategory('local-misc', 'General'),
+      ]);
+      const assignStub = sandbox.stub(calendarInterface, 'assignManualRepostCategories').resolves();
+
+      const createActivity = new CreateActivity(calendarActorUri, eventObject);
+      await inboxService['processCreateEvent'](testCalendar, createActivity);
+
+      expect(getCategoriesStub.calledOnceWith(testCalendar.id)).toBe(true);
+      expect(assignStub.calledOnce).toBe(true);
+      expect(assignStub.firstCall.args[0]).toBe(localEventId);
+      expect(assignStub.firstCall.args[1]).toEqual(['local-music']);
+    });
+
+    it('does not assign when the FEP category has no matching local category', async () => {
+      const eventApId = `https://mobilizon.example/events/${uuidv4()}`;
+      const eventObject = {
+        id: eventApId,
+        type: 'Event',
+        attributedTo: calendarActorUri,
+        name: 'Mobilizon Concert',
+        category: 'MUSIC',
+      };
+
+      sandbox.stub(EventObjectEntity, 'findOrCreate').callsFake(async (options: any) => {
+        return [{ event_id: options.defaults.event_id } as any, true];
+      });
+      sandbox.stub(EventObjectEntity, 'findOne').resolves(null);
+      (calendarInterface.addRemoteEvent as any).restore?.();
+      sandbox.stub(calendarInterface, 'addRemoteEvent').resolves({ id: uuidv4() } as any);
+
+      sandbox.stub(calendarInterface, 'getCategories').resolves([
+        localCategory('local-misc', 'General'),
+      ]);
+      const assignStub = sandbox.stub(calendarInterface, 'assignManualRepostCategories').resolves();
+
+      const createActivity = new CreateActivity(calendarActorUri, eventObject);
+      await inboxService['processCreateEvent'](testCalendar, createActivity);
+
+      expect(assignStub.called).toBe(false);
+    });
+
+    it('never creates categories: only resolves against existing local categories', async () => {
+      const eventApId = `https://mobilizon.example/events/${uuidv4()}`;
+      const eventObject = {
+        id: eventApId,
+        type: 'Event',
+        attributedTo: calendarActorUri,
+        name: 'Mobilizon Event',
+        category: ['MUSIC', 'SPORTS'],
+      };
+
+      sandbox.stub(EventObjectEntity, 'findOrCreate').callsFake(async (options: any) => {
+        return [{ event_id: options.defaults.event_id } as any, true];
+      });
+      sandbox.stub(EventObjectEntity, 'findOne').resolves(null);
+      (calendarInterface.addRemoteEvent as any).restore?.();
+      sandbox.stub(calendarInterface, 'addRemoteEvent').resolves({ id: uuidv4() } as any);
+
+      // Calendar has an empty taxonomy — nothing to match, nothing created.
+      const getCategoriesStub = sandbox.stub(calendarInterface, 'getCategories').resolves([]);
+      const assignStub = sandbox.stub(calendarInterface, 'assignManualRepostCategories').resolves();
+
+      const createActivity = new CreateActivity(calendarActorUri, eventObject);
+      await inboxService['processCreateEvent'](testCalendar, createActivity);
+
+      expect(getCategoriesStub.calledOnce).toBe(true);
+      expect(assignStub.called).toBe(false);
+    });
+
+    it('pavillion:categories take precedence: FEP fallback is skipped when categories present', async () => {
+      const eventApId = `https://remote.example.com/events/${uuidv4()}`;
+      const eventObject = {
+        id: eventApId,
+        type: 'Event',
+        attributedTo: calendarActorUri,
+        name: 'Pavillion Event',
+        categories: [
+          `https://remote.example.com/api/public/v1/calendars/remotecal/categories/${categoryId1}`,
+        ],
+        category: 'MUSIC',
+      };
+
+      sandbox.stub(EventObjectEntity, 'findOrCreate').callsFake(async (options: any) => {
+        return [{ event_id: options.defaults.event_id } as any, true];
+      });
+      sandbox.stub(EventObjectEntity, 'findOne').resolves(null);
+      (calendarInterface.addRemoteEvent as any).restore?.();
+      sandbox.stub(calendarInterface, 'addRemoteEvent').resolves({ id: uuidv4() } as any);
+
+      const getCategoriesStub = sandbox.stub(calendarInterface, 'getCategories').resolves([
+        localCategory('local-music', 'Concerts'),
+      ]);
+      const assignStub = sandbox.stub(calendarInterface, 'assignManualRepostCategories').resolves();
+
+      const createActivity = new CreateActivity(calendarActorUri, eventObject);
+      await inboxService['processCreateEvent'](testCalendar, createActivity);
+
+      // sourceCategories is non-null (bare categories parsed) -> FEP path skipped
+      expect(getCategoriesStub.called).toBe(false);
+      expect(assignStub.called).toBe(false);
+    });
+
+    it('assigns nothing for an unrecognized/garbage remote category value', async () => {
+      const eventApId = `https://mobilizon.example/events/${uuidv4()}`;
+      const eventObject = {
+        id: eventApId,
+        type: 'Event',
+        attributedTo: calendarActorUri,
+        name: 'Mobilizon Event',
+        category: 'TOTALLY_NOT_A_CATEGORY',
+      };
+
+      sandbox.stub(EventObjectEntity, 'findOrCreate').callsFake(async (options: any) => {
+        return [{ event_id: options.defaults.event_id } as any, true];
+      });
+      sandbox.stub(EventObjectEntity, 'findOne').resolves(null);
+      (calendarInterface.addRemoteEvent as any).restore?.();
+      sandbox.stub(calendarInterface, 'addRemoteEvent').resolves({ id: uuidv4() } as any);
+
+      const getCategoriesStub = sandbox.stub(calendarInterface, 'getCategories').resolves([]);
+      const assignStub = sandbox.stub(calendarInterface, 'assignManualRepostCategories').resolves();
+
+      const createActivity = new CreateActivity(calendarActorUri, eventObject);
+      const result = await inboxService['processCreateEvent'](testCalendar, createActivity);
+
+      // Garbage value parses to no FEP enums: no category lookup, no assignment,
+      // and ingest still completes normally.
+      expect(getCategoriesStub.called).toBe(false);
+      expect(assignStub.called).toBe(false);
+      expect(result).toBeDefined();
+    });
+
+    it('is failure-safe: a thrown category assignment does not abort event ingest', async () => {
+      const localEventId = uuidv4();
+      const eventApId = `https://mobilizon.example/events/${uuidv4()}`;
+      const eventObject = {
+        id: eventApId,
+        type: 'Event',
+        attributedTo: calendarActorUri,
+        name: 'Mobilizon Concert',
+        category: 'MUSIC',
+      };
+
+      sandbox.stub(EventObjectEntity, 'findOrCreate').callsFake(async (options: any) => {
+        return [{ event_id: options.defaults.event_id } as any, true];
+      });
+      sandbox.stub(EventObjectEntity, 'findOne').resolves(null);
+      (calendarInterface.addRemoteEvent as any).restore?.();
+      sandbox.stub(calendarInterface, 'addRemoteEvent').resolves({ id: localEventId } as any);
+
+      sandbox.stub(calendarInterface, 'getCategories').resolves([
+        localCategory('local-music', 'Concerts'),
+      ]);
+      // Assignment throws — ingest must still succeed and return the event.
+      const assignStub = sandbox.stub(calendarInterface, 'assignManualRepostCategories')
+        .rejects(new Error('database unavailable'));
+
+      const createActivity = new CreateActivity(calendarActorUri, eventObject);
+
+      const result = await inboxService['processCreateEvent'](testCalendar, createActivity);
+
+      expect(assignStub.calledOnce).toBe(true);
+      expect(result).toBeDefined();
+      expect((result as any).id).toBe(localEventId);
+    });
   });
 });

@@ -97,9 +97,11 @@ describe('Event API', () => {
     let entity = await EventEntity.findOne({ where: { id: response.body.id } });
 
     // Poll for the outbox message to be processed (ARM CI runners need more time).
-    // Event creation now emits paired Announce(Event) + Create(Note) so we
-    // filter by activity type instead of ordering — protects against future
-    // activity additions and removes order-dependence.
+    // Locally-created originals now federate as paired Create(Event) +
+    // Create(Note) (Announce is reserved for reposts), so we filter for the
+    // Create wrapping the full embedded Event object. Filtering by activity +
+    // wrapped-object type protects against future activity additions and
+    // removes order-dependence.
     let message: ActivityPubOutboxMessageEntity | null = null;
     for (let i = 0; i < 20; i++) {
       await new Promise(resolve => setTimeout(resolve, 100));
@@ -107,28 +109,36 @@ describe('Event API', () => {
         where: { calendar_id: calendar.id },
         order: [['message_time', 'ASC']],
       });
-      message = messages.find(m => (m.message as any)?.type === 'Announce') ?? null;
+      message = messages.find(
+        m => (m.message as any)?.type === 'Create' && (m.message as any)?.object?.type === 'Event',
+      ) ?? null;
       if (message?.processed_time) break;
     }
 
     expect(response.status,"api call succeeded").toBe(201);
     expect(response.body.id,"got back an object with an id").toBeDefined();
     expect(response.body.error,"no error in the response").toBeUndefined();
-    expect(entity,"found the event in the database").toBeDefined();
-    expect(message,"activity message was sent to outbox").toBeDefined();
+    // Assert non-null directly (not toBeDefined, which passes on null): if the
+    // Create(Event) emission regressed to Announce or broke entirely, the poll
+    // above leaves `message` null, and this test MUST fail rather than skip the
+    // real assertions. Same for `entity`. This is the integration guard for the
+    // epic's core wire-format change, so the failure signal has to be real.
+    expect(entity,"found the event in the database").not.toBeNull();
+    expect(message,"Create(Event) activity message was sent to outbox").not.toBeNull();
 
-    if (message && entity) {
-      // Use type assertion to access properties
-      const messageObj = message.message as any;
-      // Event propagation uses Announce activity, not Create
-      expect(messageObj.type,"proper message type created").toBe('Announce');
-      // The object field is the event URL string, which should contain the event ID
-      expect(messageObj.object, "has an appropriate event URL").toContain(entity.id);
-      expect(message.processed_time,"message in the outbox was processed").not.toBe(null);
-    }
-    // Paired emission: Announce(Event) + Create(Note) both post to follower
+    // Use type assertion to access properties. Asserted unconditionally (no
+    // `if (message && entity)` guard) so a missing Create row fails the test.
+    const messageObj = message!.message as any;
+    // Originals propagate as Create(Event) with the full embedded Event
+    // object, not Announce (Announce is repost-only).
+    expect(messageObj.type,"proper message type created").toBe('Create');
+    expect(messageObj.object?.type,"Create wraps an Event object").toBe('Event');
+    // The embedded object's id is the event URL, which should contain the event ID
+    expect(messageObj.object?.id, "has an appropriate event URL").toContain(entity!.id);
+    expect(message!.processed_time,"message in the outbox was processed").not.toBe(null);
+    // Paired emission: Create(Event) + Create(Note) both post to follower
     // inboxes. The remote-post contract under test is "the event reached
-    // federation" — assert at least one post (the Announce leg) happened.
+    // federation" — assert at least one post happened.
     expect(postStub.called,"post to remote inbox").toBe(true);
   });
 });

@@ -1,6 +1,6 @@
 import config from 'config';
 import he from 'he';
-import { DateTime } from 'luxon';
+import { DateTime, IANAZone } from 'luxon';
 import striptags from 'striptags';
 
 import { Calendar } from '@/common/model/calendar';
@@ -10,6 +10,7 @@ import { ActivityPubObject } from '@/server/activitypub/model/base';
 import { SeriesObject } from '@/server/activitypub/model/object/series';
 import { createLogger } from '@/server/common/helper/logger';
 import { sanitizeExternalUrlHref } from '@/server/activitypub/helper/url-sanitizer';
+import { mapEventCategoriesToFep } from '@/server/activitypub/helper/fep_category_map';
 
 const logger = createLogger('activitypub');
 
@@ -155,8 +156,77 @@ class EventObject extends ActivityPubObject {
       const synthesizedEnd = DateTime.fromISO(startTime, { setZone: true }).plus({ hours: 1 });
       if (synthesizedEnd.isValid) {
         result.endTime = synthesizedEnd.toISO();
+        // FEP-8a8e displayEndTime (bare term, see AP_CONTEXT in base.ts): the
+        // endTime above is fabricated — the real end time is unknown — so signal
+        // FEP-aware peers (Mobilizon, etc.) NOT to present it as fact. Emitted
+        // `false` ONLY on this synthesized branch; when a real eventEndTime
+        // exists we emit no displayEndTime at all (its FEP default is true).
+        result.displayEndTime = false;
       }
     }
+
+    // --- FEP-8a8e event extension terms (https://w3id.org/fep/8a8e) ---
+    // Emitted as BARE (unprefixed) keys per the FEP-8a8e spec, which defines
+    // displayEndTime / timezone / eventStatus as top-level Event properties.
+    // The FEP context document IRI is declared in AP_CONTEXT (base.ts) so
+    // JSON-LD peers expand them. (displayEndTime is emitted above, inline with
+    // the synthesized-endTime branch it qualifies.)
+
+    // timezone: the IANA identifier of the first schedule's start zone, so peers
+    // can reconstruct the intended wall-clock time instead of relying on the ISO
+    // offset alone. Omitted when the zone is a fixed offset (e.g. 'UTC+2') rather
+    // than a named IANA zone — a bare offset carries no more than startTime
+    // already does. 'UTC' is itself a valid IANA zone and IS emitted.
+    const scheduleZone = firstSchedule?.startDate?.zoneName;
+    if (scheduleZone && IANAZone.isValidZone(scheduleZone)) {
+      result.timezone = scheduleZone;
+    }
+
+    // eventStatus: Pavillion has no event-level cancellation state (whole-event
+    // removal federates as a Delete activity; per-occurrence cancellation lives
+    // in pavillion:schedules). Every live serialized event is therefore
+    // Scheduled — emitted unconditionally so non-Pavillion peers see a status.
+    result.eventStatus = 'EventScheduled';
+
+    // --- FEP-8a8e event extension terms (continued) ---
+    // organizers / joinMode are bare (unprefixed) FEP-8a8e keys; the FEP context
+    // IRI is already declared in AP_CONTEXT (base.ts), so no @context change is
+    // needed here.
+
+    // organizers: FEP-8a8e's only MUST beyond name/startTime/endTime. The
+    // property must be present on every Event; a null value would signal
+    // intentional non-disclosure of the organizer. Pavillion always discloses
+    // the owning calendar actor, so we emit the Collection form mirroring
+    // attributedTo (the calendar actor URI) as its single member.
+    result.organizers = {
+      type: 'Collection',
+      totalItems: 1,
+      items: [this.attributedTo],
+    };
+
+    // joinMode: 'none' states explicitly that Pavillion has no RSVP/attendance
+    // model (DEC-004: no attendee tracking). 'none' is FEP-8a8e's blessed signal
+    // for "this event cannot be joined", so FEP-aware peers suppress any RSVP UI
+    // and never send a Join they expect us to honour.
+    result.joinMode = 'none';
+
+    // --- FEP-8a8e category (pv-2p29.4) ---
+    // category: the bare FEP-8a8e `category` property, a shared controlled
+    // vocabulary (MUSIC, SPORTS, ...) that non-Pavillion peers (Mobilizon,
+    // Gancio) can interpret. Pavillion categories are instance-defined
+    // TranslatedModels, so we map each category NAME onto the closest FEP enum
+    // value via a keyword heuristic (fep_category_map). Emitted ALONGSIDE the
+    // pavillion:categories URIs below — those still carry full Pavillion↔
+    // Pavillion fidelity; this bare enum is the interop surface. Emitted as an
+    // array per the FEP-8a8e `xsd:string (@list)` range. Categories that do not
+    // map confidently contribute nothing, and the property is omitted entirely
+    // when no category maps. The FEP context IRI is already declared in
+    // AP_CONTEXT (base.ts), so no @context change is needed here.
+    const fepCategories = mapEventCategoriesToFep(event.categories ?? []);
+    if (fepCategories.length > 0) {
+      result.category = fepCategories;
+    }
+
     // location: emitted as Place with optional PostalAddress; omitted if no location.
     // When a Space is present, the flat `as:Place.name` is concatenated as
     // `Place — Space` in the primary language so non-Pavillion peers (Mobilizon,
@@ -392,12 +462,36 @@ class EventObject extends ActivityPubObject {
       result.schedules = apObject.schedules;
     }
     else if (apObject.startTime) {
-      // Synthesize a schedule from standard AS startTime/endTime
+      // Synthesize a schedule from standard AS startTime/endTime.
+      //
+      // FEP-8a8e timezone: when a non-Pavillion peer supplies the IANA
+      // `timezone` the event's times are given in, reinterpret the AS instants
+      // into that zone so the reconstructed schedule carries the intended
+      // wall-clock time rather than a raw UTC/offset instant (fixing events that
+      // otherwise render at the wrong local time). Only IANA-valid zone names
+      // are honoured; a bare offset (or garbage) is ignored and the instant
+      // passes through unchanged. displayEndTime / eventStatus are non-mapping
+      // FEP terms — they are tolerated (spread through, ignored downstream)
+      // rather than acted on; a remote EventCancelled is intentionally NOT
+      // applied here (would require an origin-gated hide flow — follow-up).
+      const inboundZone = typeof apObject.timezone === 'string' && IANAZone.isValidZone(apObject.timezone)
+        ? apObject.timezone
+        : null;
+      const applyZone = (iso: string): string => {
+        if (!inboundZone) {
+          return iso;
+        }
+        // `{ zone }` interprets an offset-less string as wall-clock in the zone,
+        // and converts an offset-bearing instant into the zone — both preserve
+        // the absolute instant while attaching the intended local zone.
+        const dt = DateTime.fromISO(iso, { zone: inboundZone });
+        return dt.isValid ? dt.toISO()! : iso;
+      };
       const schedule: Record<string, any> = {
-        start: apObject.startTime,
+        start: applyZone(apObject.startTime),
       };
       if (apObject.endTime) {
-        schedule.end = apObject.endTime;
+        schedule.end = applyZone(apObject.endTime);
       }
       result.schedules = [schedule];
     }

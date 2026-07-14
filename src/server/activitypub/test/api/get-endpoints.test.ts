@@ -81,6 +81,14 @@ describe('GET /calendars/:urlname/events/:eventid', () => {
     expect(result.startTime).toBe(startDt.toISO());
     expect(result.attributedTo).toContain('/calendars/mycal');
     expect(result.id).toContain('/calendars/mycal/events/event-uuid');
+    // Standalone object response must declare a full @context including the
+    // pavillion namespace so the pavillion:* extension terms expand for
+    // JSON-LD-strict peers instead of being silently dropped.
+    expect(result['@context']).toEqual([
+      'https://www.w3.org/ns/activitystreams',
+      'https://w3id.org/fep/8a8e',
+      { pavillion: 'https://pavillion.social/ns/activitypub#' },
+    ]);
     // Verify pavillion extensions are present
     expect(result['pavillion:content']).toBeDefined();
     expect(result['pavillion:schedules']).toBeDefined();
@@ -203,6 +211,12 @@ describe('GET /calendars/:urlname/events/:eventid/note', () => {
     expect(result.id).toMatch(/\/note$/);
     expect(result.id).toContain(`/calendars/mycal/events/${validEventId}/note`);
     expect(result.attributedTo).toContain('/calendars/mycal');
+    // Standalone object response must declare its own JSON-LD @context.
+    expect(result['@context']).toEqual([
+      'https://www.w3.org/ns/activitystreams',
+      'https://w3id.org/fep/8a8e',
+      { pavillion: 'https://pavillion.social/ns/activitypub#' },
+    ]);
   });
 });
 
@@ -269,6 +283,13 @@ describe('GET /calendars/:urlname/series/:seriesid', () => {
     expect(result.name).toBe('Concert Series');
     expect(result.attributedTo).toContain('/calendars/mycal');
     expect(result.id).toContain('/calendars/mycal/series/series-uuid');
+    // Standalone object response must declare a full @context including the
+    // pavillion namespace for the pavillion:content term.
+    expect(result['@context']).toEqual([
+      'https://www.w3.org/ns/activitystreams',
+      'https://w3id.org/fep/8a8e',
+      { pavillion: 'https://pavillion.social/ns/activitypub#' },
+    ]);
     expect(result['pavillion:content']).toBeDefined();
   });
 
@@ -342,6 +363,14 @@ describe('GET /calendars/:urlname/series (collection)', () => {
     expect(result.type).toBe('OrderedCollection');
     expect(result.totalItems).toBe(2);
     expect(result.orderedItems).toHaveLength(2);
+    // The collection is the top-level JSON-LD document; its @context must
+    // declare the pavillion namespace so the pavillion:content term carried by
+    // each nested series item expands for strict processors.
+    expect(result['@context']).toEqual([
+      'https://www.w3.org/ns/activitystreams',
+      'https://w3id.org/fep/8a8e',
+      { pavillion: 'https://pavillion.social/ns/activitypub#' },
+    ]);
 
     // Verify items are serialized via toActivityPubObject, not raw instances
     expect(result.orderedItems[0].name).toBe('First Series');
