@@ -7,7 +7,7 @@ description: Orchestrator-internal helper functions that turn a bead into a bran
 
 This skill documents the deterministic helper functions that orchestrators call when they need to turn a bead into git artifacts. The conventions those artifacts must follow are defined elsewhere — this skill is purely about the helper API.
 
-**Source of truth for git/PR conventions:** the `git-workflow` skill at `.claude/skills/git-workflow/`. That skill defines branch naming, commit format, PR template, stacking rules and gt command patterns (`stacking.md`), and the foundational principle that GitHub artifacts must be self-contained for GitHub readers (no bead IDs in branches, commits, or PR bodies).
+**Source of truth for git/PR conventions:** the `git-workflow` skill at `.claude/skills/git-workflow/`. That skill defines branch naming, commit format, PR template, stacking rules and `gh stack` command patterns (`stacking.md`), and the foundational principle that GitHub artifacts must be self-contained for GitHub readers (no bead IDs in branches, commits, or PR bodies).
 
 ## When to use
 
@@ -21,7 +21,7 @@ Do **not** use this skill to look up git or PR conventions. For those, read `git
 
 ## The helpers
 
-The functions live in `.claude/orchestrators/lib/helpers.ts`. `branchName`, `commitMsg`, and `prBody` are pure (no I/O); `gitSafeToStart` shells out to `git`, and the stack helpers shell out to `gt`.
+The functions live in `.claude/orchestrators/lib/helpers.ts`. `branchName`, `commitMsg`, and `prBody` are pure (no I/O); `gitSafeToStart` shells out to `git`, and the stack helpers shell out to `gh`/`gh stack` (routing singles to plain `git`/`gh` — see `git-workflow/stacking.md`).
 
 ### `branchName(title, issueType)`
 
@@ -77,12 +77,12 @@ The expected main-branch name defaults to `main` and can be overridden by the `G
 
 ### Stack helpers: `stackPlan`, `stackCreate`, `stackSubmit`, `syncAndRestack`
 
-The chain planner and the Graphite (gt) wrappers, also in `.claude/orchestrators/lib/helpers.ts` — the only place gt operations are implemented. Conventions and command patterns live in `git-workflow/stacking.md`; the jsdoc on each helper records the gt-1.8.6-verified behavior. Signatures:
+The chain planner and the `gh stack` wrappers, also in `.claude/orchestrators/lib/helpers.ts` — the only place `gh stack` operations are implemented. Conventions and command patterns live in `git-workflow/stacking.md`; the jsdoc on each helper records the gh-stack-0.0.8-verified behavior. Signatures:
 
 - `stackPlan(beads, dependencyEdges)` — pure; plans dependency-chain stacks from an epic's child beads and the bd "blocks" edges among them. Returns an ordered forest of chains as `{ chains, flat, warnings }`; a cycle or any cross-chain join falls back to a flat no-stack plan with a warning. (The edge parameter is named `dependencyEdges`, never `deps` — `deps` is reserved codebase-wide for `SpawnDeps` injection.)
-- `stackCreate(branch, parent, deps?)` — creates a stacked branch on `parent`. Precondition (asserted in tests, not validated at runtime): `branch` is a `branchName()`-produced name.
-- `stackSubmit(branch, deps?)` — submits a branch and its downstack as published (non-draft) PRs.
-- `syncAndRestack(deps?)` — post-merge sync + restack; returns structured `{ restacked, conflicted, skippedWorktree }` results so callers can decide re-validation.
+- `stackCreate(branch, parent, chained, deps?)` — routes by `chained` (from the caller's `stackPlan` result) and `parent`: chain head off trunk → `gh stack init`; parent is a stack branch → `gh stack add`; single off trunk → plain `git checkout -b`. Precondition (asserted in tests, not validated at runtime): `branch` is a `branchName()`-produced name.
+- `stackSubmit(branch, chained, deps?)` — chains submit as ready-for-review (non-draft) PRs via `gh stack`; singles use the plain `git push` + `gh pr create` path. See `git-workflow/stacking.md` for the exact flags.
+- `syncAndRestack(deps?)` — post-merge sync; runs `gh stack sync --prune` and returns structured `{ ok, exitCode, conflicted, featureDisabled, rawOutput }` results so callers can decide re-validation. `conflicted` is true on exit code 3 (rebase conflict); `featureDisabled` is true on exit code 9 (private-preview feature disabled for this repo).
 
 The CLI-shelling helpers take the trailing `deps: SpawnDeps = {}` used by every CLI-shelling helper in the file; `stackPlan` is pure and takes no `deps`.
 

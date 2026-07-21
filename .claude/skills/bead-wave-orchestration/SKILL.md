@@ -196,8 +196,11 @@ that level's submit)**
     chain.
   - 🔴 Fail → see "Build-guardian failure" in failure handling below.
     The level is NOT submitted while red.
-- After post-merge restacks, GitHub CI is the re-validator;
-  build-guardian re-runs locally only when `syncAndRestack` reports
+- `VERIFY:` whether GitHub CI is the re-validator after a post-merge
+  cascade is unconfirmed (see `git-workflow/stacking.md`) — a human must
+  confirm the server-side cascade-retarget behaves as expected. Until
+  then, build-guardian re-runs locally on the retargeted level after
+  every merge, in addition to whenever `syncAndRestack` reports
   conflicted branches.
 
 **Per-chain verification pass (after a chain's levels complete)**
@@ -394,7 +397,7 @@ is a bug; the skill is authoritative.
 
 The skill is deliberately NOT the source of truth for two adjacent
 layers: stacking conventions live in `git-workflow/stacking.md`, and the
-executable chain/gt operations (`stackPlan`, `stackCreate`,
+executable chain/`gh stack` operations (`stackPlan`, `stackCreate`,
 `stackSubmit`, `syncAndRestack`, the wave scheduler itself) live in
 `.claude/orchestrators/lib/` — this skill cross-references both and
 restates neither.

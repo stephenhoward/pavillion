@@ -1,45 +1,40 @@
 # Restack
 
-Post-merge stack maintenance. Runs after one or more stacked PRs have been
-squash-merged in GitHub: syncs trunk, deletes merged branches, restacks the
-remaining stack, reports what moved, and re-submits the updated stack.
+Post-merge local catch-up. Run after one or more stacked PRs have been merged
+in GitHub: sync local state against the reworked stack and report what moved
+or conflicted. Nothing more — GitHub performs the restack server-side at
+merge time (`VERIFY:` per `git-workflow/stacking.md`; local build-guardian
+re-validation of the retargeted level is the conservative default until that
+cascade behavior is confirmed), so this command does not re-submit the stack
+or drive a merge session.
 
 Conventions and command semantics live in the `git-workflow` skill's
 `stacking.md` — that file is the source of truth; this command is a thin
-wrapper. Loop-friendly: during a bottom-up merge session, run it after each
-merge (may be driven via `/loop`). There is no standing automation because
-merges are manual.
+wrapper over the `syncAndRestack` helper in
+`.claude/orchestrators/lib/helpers.ts`. It does not restate `gh stack` syntax.
 
 ## Steps
 
-1. **Sync and restack.** Run the `syncAndRestack` helper from
-   `.claude/orchestrators/lib/helpers.ts` (wraps `gt sync -f --no-interactive`):
+1. **Sync.** Run the `syncAndRestack` helper:
 
    ```bash
    npx tsx -e "import { syncAndRestack } from './.claude/orchestrators/lib/helpers.js'; console.log(JSON.stringify(syncAndRestack(), null, 2));"
    ```
 
-2. **Report what moved.** From the structured result:
-   - `restacked` — branches restacked cleanly onto their new parent.
-   - `conflicted` — branches gt skipped because restacking would conflict.
-     For each, resolve from the checkout that holds the branch:
-     `gt restack --branch <name>`, fix conflicts, `gt add` + `gt continue`
-     (or `gt abort -f` to back out). Re-run build validation on any branch
-     that had conflicts resolved before re-submitting it.
-   - `skippedWorktree` — branches checked out in another worktree; re-run
-     the sync (or `gt restack`) from that worktree.
-   - Also note any merged branches gt deleted (visible in `rawOutput`).
+2. **Report what moved and what conflicted**, from the structured result:
+   - Branches synced cleanly.
+   - Branches that conflicted and need manual resolution — for each, resolve
+     from the checkout that owns the branch, per the merge/sync ritual in
+     `git-workflow/stacking.md`. Re-run local build-guardian validation on any
+     branch that had conflicts resolved.
+   - Any branches pruned as part of the sync (merged PRs cleaned up locally).
 
-3. **Re-submit the stack.** Retarget and update the remaining PRs, using the
-   submit pattern defined by stacking.md's merge + restack ritual (quoted
-   here for execution, defined there):
+3. **Summarize.** Report: branches synced, branches needing manual conflict
+   resolution, branches pruned. If the cascade-retarget claim in
+   `stacking.md` is still unconfirmed, note that build-guardian re-validation
+   of the retargeted level(s) is recommended before further work on the
+   stack.
 
-   ```bash
-   gt submit --stack --no-interactive --publish
-   ```
-
-   GitHub CI re-validates each retargeted PR. Local build-guardian re-runs
-   are only needed for branches that had conflicts (step 2).
-
-4. **Summarize.** Report: branches deleted (merged), branches restacked,
-   branches needing manual conflict resolution, PRs updated/retargeted.
+There is no re-submit step and no merge-session loop here — see
+`stacking.md` for the merge ritual itself (web-UI-only, bottom-up default,
+whole-stack atomic option).
