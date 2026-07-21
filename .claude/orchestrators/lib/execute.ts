@@ -7,7 +7,7 @@
  * Exports:
  *  - dispatchImplementer, runAudit, runLeafExecution  (from 7b)
  *  - runWithConcurrencyCap, runEpicExecution           (from 7a)
- *  - parseBeadJson, fetchPrInfo, withStackedPrefix, runPR (from 8)
+ *  - parseBeadJson, fetchPrInfo, runPR                 (from 8)
  *  - leafPhase, epicPhase, prPhase                     (PhaseRunner wrappers)
  */
 
@@ -126,10 +126,10 @@ export interface ExecuteDeps {
   timeoutMs?: number;
   retryContext?: RetryContext;
   /**
-   * Working directory for spawned agents and git/gt commands. Set by the
-   * chain scheduler when a chain runs in its own git worktree (hybrid
-   * concurrency model — see git-workflow/stacking.md). Undefined means the
-   * main checkout.
+   * Working directory for spawned agents and git/gh-stack commands. Set by
+   * the chain scheduler when a chain runs in its own git worktree (native
+   * gh-stack-in-worktrees model — see git-workflow/stacking.md). Undefined
+   * means the main checkout.
    */
   cwd?: string;
   /**
@@ -176,7 +176,7 @@ export const PR_MESSAGES = {
   commitMsgFailed: (code: number, stderr: string) =>
     `commitMsg helper failed (exit ${code}): ${stderr.trim()}`,
   submitFailed: (branch: string, stderr: string) =>
-    `gt submit failed for branch "${branch}": ${stderr.trim()}`,
+    `stackSubmit failed for branch "${branch}": ${stderr.trim()}`,
   ghPrViewFailed: (branch: string, code: number, stderr: string) =>
     `gh pr view failed for branch "${branch}" (exit ${code}): ${stderr.trim()}`,
   ghPrEditFailed: (code: number, stderr: string) =>
@@ -876,7 +876,7 @@ Identify which bead's commit is responsible and suggest a fix.`;
 
 /**
  * Per-level build gate: build-guardian runs once per STACK LEVEL, on that
- * branch at its stack position, BEFORE that level's `gt submit`
+ * branch at its stack position, BEFORE that level's `stackSubmit`
  * (independently-green invariant — see git-workflow/stacking.md).
  *
  * On failure the responsible bead is known by construction (it is this
@@ -1531,13 +1531,16 @@ export async function runWithConcurrencyCap<T>(
 // =============================================================================
 //
 // Per-bead stack branches mean parallel chains can no longer share one
-// checkout (gt create checks out the new branch, yanking HEAD out from under
-// a sibling). Hybrid model: the FIRST chain of a wave runs in the main
+// checkout (stackCreate checks out the new branch, yanking HEAD out from
+// under a sibling). Hybrid model: the FIRST chain of a wave runs in the main
 // checkout (the common single-chain case pays no worktree overhead); each
 // ADDITIONAL concurrent chain gets its own git worktree, with agents and
-// git/gt commands dispatched at that cwd (gt-in-worktrees is the permanent
-// mode — see git-workflow/stacking.md). The orchestrator owns the worktree
-// lifecycle: create before the chain starts, remove when it finishes.
+// git/gh-stack commands dispatched at that cwd (native gh-stack-in-worktrees
+// is the permanent mode — decision memo D2, see git-workflow/stacking.md:
+// gh-stack's state is a per-git-dir JSON file, not shared across worktrees,
+// so stack operations must run from the checkout that owns the branch). The
+// orchestrator owns the worktree lifecycle: create before the chain starts,
+// remove when it finishes.
 
 interface ChainWorktree {
   path: string;
@@ -1557,7 +1560,7 @@ function createChainWorktree(
   const path = join(tmpdir(), slug);
 
   // The auto-created branch is only the worktree's initial checkout; chain
-  // levels are created directly on their parent via `gt create --onto`.
+  // levels are created directly on their parent via `stackCreate`.
   const result = spawnCmd(
     'git', ['worktree', 'add', '-b', slug, path, base],
     ctx.logger, PhaseName.Epic, spawnFn,
@@ -1616,10 +1619,12 @@ interface ChainLevelOutcome {
 /**
  * Execute one stack level of a chain:
  *
- *   stackCreate(branch, parent) → implementer → verification gate (base =
- *   parent) → per-bead audit (one retry) → per-level build-guardian gate →
- *   stackSubmit → gh pr edit (canonical title/body, "Stacked on #N." for
- *   upstack levels).
+ *   stackCreate(branch, parent, chained) → implementer → verification gate
+ *   (base = parent) → per-bead audit (one retry) → per-level build-guardian
+ *   gate → stackSubmit(branch, chained) → gh pr edit (canonical title/body).
+ *
+ * The Graphite-era "Stacked on #N" body line is dropped — GitHub's Stack Map
+ * UI shows the stack hierarchy natively (see git-workflow/stacking.md).
  *
  * The build gate runs BEFORE submit — no level is pushed until it is green
  * at its own stack position.
@@ -1629,7 +1634,7 @@ async function runChainLevel(
   waveNumber: number,
   beadId: string,
   parentBranch: string,
-  parentPrNumber: number | null,
+  chained: boolean,
   ctx: RunContext,
   deps: ExecuteDeps,
 ): Promise<ChainLevelOutcome> {
@@ -1669,9 +1674,9 @@ async function runChainLevel(
   const branch = deriveBranchName(title, issueType);
 
   // 1. Create this level's branch on its parent (main for the chain bottom).
-  const created = stackCreate(branch, parentBranch, spawnDeps);
+  const created = stackCreate(branch, parentBranch, chained, spawnDeps);
   if (!created.ok) {
-    return fail(`gt create ${branch} --onto ${parentBranch} failed: ${created.stderr}`);
+    return fail(`stackCreate(${branch}, ${parentBranch}, chained=${chained}) failed: ${created.stderr}`);
   }
   ctx.logger.appendRunJson({
     event: 'chain-level-branch-created',
@@ -1739,21 +1744,18 @@ async function runChainLevel(
   }
 
   // 4. Submit this level, then canonicalize the PR via gh.
-  const submitted = stackSubmit(branch, spawnDeps);
+  const submitted = stackSubmit(branch, chained, spawnDeps);
   if (!submitted.ok) {
-    return fail(`gt submit failed: ${submitted.stderr}`);
+    return fail(`stackSubmit(${branch}, chained=${chained}) failed: ${submitted.stderr}`);
   }
 
   const prInfo = fetchPrInfo(branch, ctx.logger, PhaseName.Epic, scriptSpawnFn);
   if (!prInfo) {
-    return fail(`could not resolve PR number/url for branch ${branch} after gt submit`);
+    return fail(`could not resolve PR number/url for branch ${branch} after stackSubmit`);
   }
 
   const prTitle = commitMsg(title, issueType);
-  let generatedBody = prBody(title, typeof bead.description === 'string' ? bead.description : '');
-  if (parentPrNumber !== null) {
-    generatedBody = withStackedPrefix(generatedBody, parentPrNumber);
-  }
+  const generatedBody = prBody(title, typeof bead.description === 'string' ? bead.description : '');
 
   const editResult = spawnCmd(
     'gh', ['pr', 'edit', String(prInfo.number), '--title', prTitle, '--body', generatedBody],
@@ -1808,12 +1810,16 @@ async function runChain(
   };
 
   let parentBranch = process.env.GIT_SAFE_MAIN_BRANCH ?? 'main';
-  let parentPrNumber: number | null = null;
+  // A chain of length 1 is an independent bead (decision 5: stackPlan never
+  // stacks a singleton) — its level runs entirely outside gh-stack. Every
+  // level of a longer chain is chained=true, including the head (which uses
+  // `gh stack init` rather than a plain branch — see stackCreate).
+  const chained = chain.length > 1;
 
   for (let level = 0; level < chain.length; level++) {
     const beadId = chain[level];
     const outcome = await runChainLevel(
-      epicId, waveNumber, beadId, parentBranch, parentPrNumber, ctx, deps,
+      epicId, waveNumber, beadId, parentBranch, chained, ctx, deps,
     );
     result.retries += outcome.retries;
     result.warnings.push(...outcome.warnings);
@@ -1851,7 +1857,6 @@ async function runChain(
     result.completed.push(beadId);
     if (outcome.prUrl) result.prUrls.push(outcome.prUrl);
     parentBranch = outcome.branch ?? parentBranch;
-    parentPrNumber = outcome.prNumber ?? null;
   }
 
   // Per-chain verification pass — advisory BY DESIGN, a deliberate departure
@@ -2075,7 +2080,7 @@ export async function runEpicExecution(
 }
 
 // =============================================================================
-// Exported: parseBeadJson, fetchPrInfo, withStackedPrefix
+// Exported: parseBeadJson, fetchPrInfo
 // =============================================================================
 
 /**
@@ -2094,9 +2099,10 @@ export function parseBeadJson(raw: string): BeadJson | null {
 /**
  * Resolve a branch's PR number and URL via `gh pr view <branch> --json url,number`.
  *
- * Used after `stackSubmit` — gt creates/updates the PR but the orchestrator
- * needs the PR number for `gh pr edit` and the URL for reporting. Returns
- * null when gh fails or its output is unparseable.
+ * Used after `stackSubmit` — gh-stack (or plain `gh pr create`, for singles)
+ * creates/updates the PR but the orchestrator needs the PR number for
+ * `gh pr edit` and the URL for reporting. Returns null when gh fails or its
+ * output is unparseable.
  */
 export function fetchPrInfo(
   branch: string,
@@ -2119,27 +2125,18 @@ export function fetchPrInfo(
   }
 }
 
-/**
- * Insert the stacked-PR marker at the top of a PR body's Motivation section.
- *
- * Per git-workflow/stacking.md, stacked PRs open Motivation with a one-line
- * "Stacked on #N." pointing at the parent PR; bottom-of-stack PRs omit it.
- */
-export function withStackedPrefix(body: string, parentPrNumber: number): string {
-  const heading = '## Motivation\n\n';
-  if (body.startsWith(heading)) {
-    return `${heading}Stacked on #${parentPrNumber}.\n\n${body.slice(heading.length)}`;
-  }
-  return `Stacked on #${parentPrNumber}.\n\n${body}`;
-}
-
 // =============================================================================
 // Exported: runPR
 // =============================================================================
 
 /**
  * PR finalization phase for LEAF beads: verify the bead closed, generate PR
- * body/title, submit via gt, canonicalize via gh pr edit.
+ * body/title, submit via stackSubmit, canonicalize via gh pr edit.
+ *
+ * Standalone leaf beads are always singles (never part of a gh-stack chain
+ * — chain levels submit their own per-level PRs inside runChainLevel), so
+ * this always calls stackSubmit with chained=false: plain `git push` +
+ * `gh pr create`.
  *
  * Epics never reach this phase — epicPhase routes to Report because chain
  * levels submit their own per-level PRs inside the wave loop.
@@ -2226,9 +2223,11 @@ export async function runPR(
   // Step 3: Derive PR title
   const prTitle = commitMsg(bead.title ?? ctx.beadId, bead.issue_type ?? 'task');
 
-  // Step 4: Submit branch via gt (pushes and creates the PR; command
-  // conventions live in git-workflow/stacking.md, operations in helpers.ts).
-  const submitResult = stackSubmit(branchName, { spawnFn: spawnFn as never, cwd: deps.cwd });
+  // Step 4: Submit branch (pushes and creates the PR; command conventions
+  // live in git-workflow/stacking.md, operations in helpers.ts). Standalone
+  // leaf beads are always singles, so chained=false: plain `git push` +
+  // `gh pr create`.
+  const submitResult = stackSubmit(branchName, false, { spawnFn: spawnFn as never, cwd: deps.cwd });
 
   if (!submitResult.ok) {
     const msg = PR_MESSAGES.submitFailed(branchName, submitResult.stderr);
@@ -2238,11 +2237,11 @@ export async function runPR(
   }
 
   // Step 5: Resolve the PR number/URL, then canonicalize title + body via
-  // gh pr edit (gt submit does not know the project's PR template).
+  // gh pr edit (stackSubmit does not know the project's PR template).
   const prInfo = fetchPrInfo(branchName, logger, PhaseName.PR, spawnFn);
 
   if (!prInfo) {
-    const msg = PR_MESSAGES.ghPrViewFailed(branchName, 1, 'could not resolve PR number/url after gt submit');
+    const msg = PR_MESSAGES.ghPrViewFailed(branchName, 1, 'could not resolve PR number/url after stackSubmit');
     console.error(msg);
     logger.writePhaseLog(PhaseName.PR, 'err', msg + '\n');
     return { next: 'halt', ctx };

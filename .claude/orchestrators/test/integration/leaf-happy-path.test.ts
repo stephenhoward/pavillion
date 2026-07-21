@@ -101,21 +101,6 @@ describe('Integration: leaf happy path', () => {
     });
 
     // ---------------------------------------------------------------------------
-    // Unified gt handler
-    // Covers the preflight Graphite probes (gt --version, gt auth, gt trunk),
-    // the branch phase's gt create, and the PR phase's gt submit.
-    // ---------------------------------------------------------------------------
-    scripts.on('gt', (args) => {
-      const a = args.join(' ');
-      if (a.includes('--version')) return { exitCode: 0, stdout: '1.8.6', stderr: '' };
-      if (a.includes('auth')) return { exitCode: 0, stdout: 'Authenticated as: testuser', stderr: '' };
-      if (a.includes('trunk')) return { exitCode: 0, stdout: 'main', stderr: '' };
-      if (a.includes('create')) return { exitCode: 0, stdout: '', stderr: '' };
-      if (a.includes('submit')) return { exitCode: 0, stdout: '✅ Submitted.', stderr: '' };
-      return { exitCode: 0, stdout: '', stderr: '' };
-    });
-
-    // ---------------------------------------------------------------------------
     // Unified bd handler
     // Covers all bd calls across all phases.
     // ---------------------------------------------------------------------------
@@ -173,10 +158,15 @@ describe('Integration: leaf happy path', () => {
     });
 
     // ---------------------------------------------------------------------------
-    // gh handler (for PR phase): pr view resolves number/url, pr edit succeeds
+    // gh handler: preflight's gh-stack probes (D5: gh stack --version,
+    // gh auth status), and the PR phase's plain `gh pr create --fill` +
+    // `gh pr view` (this leaf bead is a single, chained=false, so PR
+    // submission never touches gh-stack) + `gh pr edit`.
     // ---------------------------------------------------------------------------
     scripts.on('gh', (args) => {
       const a = args.join(' ');
+      if (a.includes('stack --version')) return { exitCode: 0, stdout: 'gh stack version 0.0.8', stderr: '' };
+      if (a.includes('auth status')) return { exitCode: 0, stdout: 'Logged in to github.com as testuser', stderr: '' };
       if (a.includes('view')) {
         return {
           exitCode: 0,

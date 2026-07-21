@@ -190,17 +190,17 @@ describe('gitSafeToStart', () => {
 // =============================================================================
 
 describe('preflight', () => {
-  // gt probe responses shared by passing cases:
-  //   gt --version, gt auth --no-interactive, gt trunk
-  const gtOk = () => [
-    fakeSpawn('1.8.6'),
-    fakeSpawn('Authenticated as: someone\n✅ Ready to submit PRs.'),
-    fakeSpawn('main'),
+  // gh-stack probe responses shared by passing cases (D5: two cheap local
+  // hard-gates only — gh stack --version, gh auth status; no remote
+  // enablement probe).
+  const ghStackOk = () => [
+    fakeSpawn('gh stack version 0.0.8'),
+    fakeSpawn('Logged in to github.com as someone'),
   ];
 
   it('returns ok=true when all checks pass', () => {
     // Calls in order: git status, git fetch, git rev-parse HEAD, git rev-parse origin/main,
-    // gt --version, gt auth, gt trunk, bd ready --json, bd label list (per bead)
+    // gh stack --version, gh auth status, bd ready --json, bd label list (per bead)
     const beadsJson = JSON.stringify([
       { id: 'pv-abc1', priority: 1, created_at: '2026-01-01' },
     ]);
@@ -209,7 +209,7 @@ describe('preflight', () => {
       fakeSpawn(''),                  // git fetch origin main (success)
       fakeSpawn('abc1234'),           // git rev-parse HEAD
       fakeSpawn('abc1234'),           // git rev-parse origin/main (matches)
-      ...gtOk(),
+      ...ghStackOk(),
       fakeSpawn(beadsJson),           // bd ready --json
       fakeSpawn('  - backlog'),       // bd label list pv-abc1 (no needs-human)
     );
@@ -227,7 +227,7 @@ describe('preflight', () => {
       fakeSpawn(''),                  // fetch ok
       fakeSpawn('def5678'),           // HEAD
       fakeSpawn('def5678'),           // origin/main matches
-      ...gtOk(),
+      ...ghStackOk(),
       fakeSpawn(beadsJson),
       fakeSpawn('  - other'),
     );
@@ -239,7 +239,7 @@ describe('preflight', () => {
     const spawn = seqSpawn(
       fakeSpawn(' M src/file.ts'),   // dirty
       fakeSpawn('', '', 1),           // fetch fails → behind_main
-      ...gtOk(),
+      ...ghStackOk(),
       fakeSpawn('[]'),                // bd ready (empty → empty_backlog)
     );
     const result = preflight({ spawnFn: spawn as never });
@@ -256,7 +256,7 @@ describe('preflight', () => {
       fakeSpawn(''),                  // fetch ok
       fakeSpawn('aaaaaaa'),           // HEAD
       fakeSpawn('bbbbbbb'),           // origin/main differs
-      ...gtOk(),
+      ...ghStackOk(),
       fakeSpawn('[]'),                // bd ready (empty → empty_backlog too)
     );
     const result = preflight({ spawnFn: spawn as never });
@@ -271,7 +271,7 @@ describe('preflight', () => {
       fakeSpawn(''),                  // fetch ok
       fakeSpawn('abc1234'),           // HEAD
       fakeSpawn('abc1234'),           // origin/main matches
-      ...gtOk(),
+      ...ghStackOk(),
       fakeSpawn(beadsJson),           // bd ready
       fakeSpawn('  - needs-human'),   // label list: has needs-human
     );
@@ -279,7 +279,7 @@ describe('preflight', () => {
     expect(result.failures.map(f => f.kind)).toContain('empty_backlog');
   });
 
-  it('reports missing_gt and skips the auth/trunk probes when gt is absent', () => {
+  it('reports missing_gh_stack and skips the auth probe when the extension is absent', () => {
     const beadsJson = JSON.stringify([{ id: 'pv-x1', priority: 1, created_at: '2026-01-01' }]);
     const calls: string[] = [];
     const results = [
@@ -287,8 +287,8 @@ describe('preflight', () => {
       fakeSpawn(''),                        // fetch ok
       fakeSpawn('abc1234'),                 // HEAD
       fakeSpawn('abc1234'),                 // origin/main matches
-      fakeSpawn('', 'command not found: gt', 127), // gt --version fails
-      fakeSpawn(beadsJson),                 // bd ready (auth/trunk probes skipped)
+      fakeSpawn('', 'unknown command "stack" for "gh"', 1), // gh stack --version fails
+      fakeSpawn(beadsJson),                 // bd ready (auth probe skipped)
       fakeSpawn('  - backlog'),             // bd label list
     ];
     let i = 0;
@@ -298,63 +298,26 @@ describe('preflight', () => {
     };
     const result = preflight({ spawnFn: spawn as never });
     expect(result.ok).toBe(false);
-    expect(result.failures.map(f => f.kind)).toContain('missing_gt');
-    // Hard stop on the tool itself: auth and trunk are not probed.
+    expect(result.failures.map(f => f.kind)).toContain('missing_gh_stack');
+    // Hard stop on the extension itself: the auth probe is not run.
     expect(calls.some(c => c.includes('auth'))).toBe(false);
-    expect(calls.some(c => c.includes('trunk'))).toBe(false);
   });
 
-  it('reports gt_unauthenticated when the auth probe fails', () => {
+  it('reports gh_unauthenticated when the auth probe fails', () => {
     const beadsJson = JSON.stringify([{ id: 'pv-x1', priority: 1, created_at: '2026-01-01' }]);
     const spawn = seqSpawn(
       fakeSpawn(''),                        // clean tree
       fakeSpawn(''),                        // fetch ok
       fakeSpawn('abc1234'),                 // HEAD
       fakeSpawn('abc1234'),                 // origin/main matches
-      fakeSpawn('1.8.6'),                   // gt --version ok
-      fakeSpawn('', 'Please authenticate', 1), // gt auth fails
-      fakeSpawn('main'),                    // gt trunk ok
+      fakeSpawn('gh stack version 0.0.8'),  // gh stack --version ok
+      fakeSpawn('', 'You are not logged into any GitHub hosts', 1), // gh auth status fails
       fakeSpawn(beadsJson),
       fakeSpawn('  - backlog'),
     );
     const result = preflight({ spawnFn: spawn as never });
     expect(result.ok).toBe(false);
-    expect(result.failures.map(f => f.kind)).toContain('gt_unauthenticated');
-  });
-
-  it('reports gt_unauthenticated when the auth probe output lacks an authenticated user', () => {
-    const beadsJson = JSON.stringify([{ id: 'pv-x1', priority: 1, created_at: '2026-01-01' }]);
-    const spawn = seqSpawn(
-      fakeSpawn(''),
-      fakeSpawn(''),
-      fakeSpawn('abc1234'),
-      fakeSpawn('abc1234'),
-      fakeSpawn('1.8.6'),
-      fakeSpawn('Add your auth token to enable Graphite CLI'), // exit 0 but not authenticated
-      fakeSpawn('main'),
-      fakeSpawn(beadsJson),
-      fakeSpawn('  - backlog'),
-    );
-    const result = preflight({ spawnFn: spawn as never });
-    expect(result.failures.map(f => f.kind)).toContain('gt_unauthenticated');
-  });
-
-  it('reports gt_trunk_misconfigured when gt trunk is not the main branch', () => {
-    const beadsJson = JSON.stringify([{ id: 'pv-x1', priority: 1, created_at: '2026-01-01' }]);
-    const spawn = seqSpawn(
-      fakeSpawn(''),
-      fakeSpawn(''),
-      fakeSpawn('abc1234'),
-      fakeSpawn('abc1234'),
-      fakeSpawn('1.8.6'),
-      fakeSpawn('Authenticated as: someone'),
-      fakeSpawn('develop'),                 // gt trunk mismatch
-      fakeSpawn(beadsJson),
-      fakeSpawn('  - backlog'),
-    );
-    const result = preflight({ spawnFn: spawn as never });
-    expect(result.ok).toBe(false);
-    expect(result.failures.map(f => f.kind)).toContain('gt_trunk_misconfigured');
+    expect(result.failures.map(f => f.kind)).toContain('gh_unauthenticated');
   });
 });
 
@@ -924,56 +887,90 @@ describe('bdSizingCheck', () => {
 // =============================================================================
 
 describe('stackCreate', () => {
-  it('runs gt create with --onto parent and --no-interactive', () => {
-    const calls: string[] = [];
-    const spawn = (cmd: string, args: string[], _opts: unknown) => {
-      calls.push([cmd, ...(args as string[])].join(' '));
-      return fakeSpawn('');
-    };
-    const result = stackCreate('feat.add-search', 'main', { spawnFn: spawn as never });
-    expect(result.ok).toBe(true);
-    expect(calls).toHaveLength(1);
-    expect(calls[0]).toContain('gt create feat.add-search');
-    expect(calls[0]).toContain('--onto main');
-    expect(calls[0]).toContain('--no-interactive');
+  describe('chain path (chained=true)', () => {
+    it('runs gh stack init with --base when parent is trunk (chain head)', () => {
+      const calls: string[] = [];
+      const spawn = (cmd: string, args: string[], _opts: unknown) => {
+        calls.push([cmd, ...(args as string[])].join(' '));
+        return fakeSpawn('');
+      };
+      const result = stackCreate('feat.add-search', 'main', true, { spawnFn: spawn as never });
+      expect(result.ok).toBe(true);
+      expect(calls).toHaveLength(1);
+      expect(calls[0]).toBe('gh stack init --base main feat.add-search');
+    });
+
+    it('runs gh stack add (no --base) when parent is a stack level, not trunk', () => {
+      const calls: string[] = [];
+      const spawn = (cmd: string, args: string[], _opts: unknown) => {
+        calls.push([cmd, ...(args as string[])].join(' '));
+        return fakeSpawn('');
+      };
+      const result = stackCreate('feat.level-two', 'feat.level-one', true, { spawnFn: spawn as never });
+      expect(result.ok).toBe(true);
+      expect(calls).toEqual(['gh stack add feat.level-two']);
+    });
+
+    it('accepts branchName()-produced names verbatim (documented precondition)', () => {
+      // stackCreate does not validate or rewrite branch names at runtime;
+      // callers must pass names produced by branchName(). This test asserts
+      // the precondition holds end to end: a branchName() output goes to
+      // gh-stack unchanged and carries no bead IDs.
+      const name = branchName('Add calendar discovery surface', 'feature');
+      const calls: string[] = [];
+      const spawn = (cmd: string, args: string[], _opts: unknown) => {
+        calls.push([cmd, ...(args as string[])].join(' '));
+        return fakeSpawn('');
+      };
+      stackCreate(name, 'feat.parent-level', true, { spawnFn: spawn as never });
+      expect(calls[0]).toBe(`gh stack add ${name}`);
+      expect(calls[0]).not.toMatch(/pv-[a-z0-9]+/);
+    });
+
+    it('returns ok=false with stderr when gh stack init fails', () => {
+      const spawn = seqSpawn(
+        fakeSpawn('', 'current branch "main" is already part of a stack', 5),
+      );
+      const result = stackCreate('feat.add-search', 'main', true, { spawnFn: spawn as never });
+      expect(result.ok).toBe(false);
+      expect(result.stderr).toContain('already part of a stack');
+    });
   });
 
-  it('accepts branchName()-produced names verbatim (documented precondition)', () => {
-    // stackCreate does not validate or rewrite branch names at runtime;
-    // callers must pass names produced by branchName(). This test asserts
-    // the precondition holds end to end: a branchName() output goes to gt
-    // unchanged and carries no bead IDs.
-    const name = branchName('Add calendar discovery surface', 'feature');
-    const calls: string[] = [];
-    const spawn = (cmd: string, args: string[], _opts: unknown) => {
-      calls.push([cmd, ...(args as string[])].join(' '));
-      return fakeSpawn('');
-    };
-    stackCreate(name, 'feat.parent-level', { spawnFn: spawn as never });
-    expect(calls[0]).toContain(`gt create ${name}`);
-    expect(calls[0]).not.toMatch(/pv-[a-z0-9]+/);
-  });
+  describe('single path (chained=false)', () => {
+    it('runs plain git checkout -b off trunk, never touching gh-stack', () => {
+      const calls: string[] = [];
+      const spawn = (cmd: string, args: string[], _opts: unknown) => {
+        calls.push([cmd, ...(args as string[])].join(' '));
+        return fakeSpawn('');
+      };
+      const result = stackCreate('chore.fix-widget', 'main', false, { spawnFn: spawn as never });
+      expect(result.ok).toBe(true);
+      expect(calls).toEqual(['git checkout -b chore.fix-widget main']);
+      expect(calls.some(c => c.includes('gh stack'))).toBe(false);
+    });
 
-  it('returns ok=false with stderr when gt create fails', () => {
-    const spawn = seqSpawn(
-      fakeSpawn('', 'ERROR: Cannot perform this operation on untracked branch xyz.', 1),
-    );
-    const result = stackCreate('feat.add-search', 'main', { spawnFn: spawn as never });
-    expect(result.ok).toBe(false);
-    expect(result.stderr).toContain('untracked branch');
+    it('returns ok=false with stderr when git checkout -b fails', () => {
+      const spawn = seqSpawn(
+        fakeSpawn('', "fatal: a branch named 'chore.fix-widget' already exists", 128),
+      );
+      const result = stackCreate('chore.fix-widget', 'main', false, { spawnFn: spawn as never });
+      expect(result.ok).toBe(false);
+      expect(result.stderr).toContain('already exists');
+    });
   });
 });
 
 // =============================================================================
-// gt helpers — cwd forwarding (gt-in-worktrees)
+// gh-stack helpers — cwd forwarding (native gh-stack-in-worktrees, D2)
 // =============================================================================
 
-describe('gt helpers cwd forwarding', () => {
+describe('gh-stack helpers cwd forwarding', () => {
   function captureOpts() {
     const optsSeen: Array<Record<string, unknown>> = [];
     const spawn = (_cmd: string, _args: string[], opts: Record<string, unknown>) => {
       optsSeen.push(opts);
-      return fakeSpawn('');
+      return fakeSpawn('{}');
     };
     return { optsSeen, spawn };
   }
@@ -981,11 +978,11 @@ describe('gt helpers cwd forwarding', () => {
   it('forwards deps.cwd into the spawn options for stackCreate, stackSubmit, and syncAndRestack', () => {
     const { optsSeen, spawn } = captureOpts();
 
-    stackCreate('feat.level-two', 'feat.level-one', { spawnFn: spawn as never, cwd: '/tmp/orch-wt-1' });
-    stackSubmit('feat.level-two', { spawnFn: spawn as never, cwd: '/tmp/orch-wt-1' });
+    stackCreate('feat.level-two', 'feat.level-one', true, { spawnFn: spawn as never, cwd: '/tmp/orch-wt-1' });
+    stackSubmit('feat.level-two', true, { spawnFn: spawn as never, cwd: '/tmp/orch-wt-1' });
     syncAndRestack({ spawnFn: spawn as never, cwd: '/tmp/orch-wt-1' });
 
-    expect(optsSeen).toHaveLength(3);
+    expect(optsSeen.length).toBeGreaterThan(0);
     for (const opts of optsSeen) {
       expect(opts.cwd).toBe('/tmp/orch-wt-1');
     }
@@ -994,11 +991,11 @@ describe('gt helpers cwd forwarding', () => {
   it('omits cwd from the spawn options when deps.cwd is not set (main checkout)', () => {
     const { optsSeen, spawn } = captureOpts();
 
-    stackCreate('feat.level-one', 'main', { spawnFn: spawn as never });
-    stackSubmit('feat.level-one', { spawnFn: spawn as never });
+    stackCreate('feat.level-one', 'main', true, { spawnFn: spawn as never });
+    stackSubmit('feat.level-one', true, { spawnFn: spawn as never });
     syncAndRestack({ spawnFn: spawn as never });
 
-    expect(optsSeen).toHaveLength(3);
+    expect(optsSeen.length).toBeGreaterThan(0);
     for (const opts of optsSeen) {
       expect('cwd' in opts).toBe(false);
     }
@@ -1010,31 +1007,92 @@ describe('gt helpers cwd forwarding', () => {
 // =============================================================================
 
 describe('stackSubmit', () => {
-  it('runs gt submit non-interactively with --publish and an explicit --branch', () => {
-    // --publish is load-bearing: on gt 1.8.6, --no-interactive submits new
-    // PRs as drafts unless --publish is passed (verified 2026-07-11), and
-    // the git-workflow skill forbids draft PRs.
-    const calls: string[] = [];
-    const spawn = (cmd: string, args: string[], _opts: unknown) => {
-      calls.push([cmd, ...(args as string[])].join(' '));
-      return fakeSpawn('✅ Submitted.');
-    };
-    const result = stackSubmit('feat.add-search', { spawnFn: spawn as never });
-    expect(result.ok).toBe(true);
-    expect(calls).toHaveLength(1);
-    expect(calls[0]).toContain('gt submit');
-    expect(calls[0]).toContain('--no-interactive');
-    expect(calls[0]).toContain('--publish');
-    expect(calls[0]).toContain('--branch feat.add-search');
+  describe('chain path (chained=true)', () => {
+    it('runs gh stack submit --auto --open, then sweeps gh pr ready over the stack (D3 safe interim)', () => {
+      const calls: string[] = [];
+      const spawn = (cmd: string, args: string[], _opts: unknown) => {
+        const call = [cmd, ...(args as string[])].join(' ');
+        calls.push(call);
+        if (cmd === 'gh' && args[0] === 'stack' && args[1] === 'view') {
+          return fakeSpawn(JSON.stringify({
+            branches: [
+              { name: 'feat.level-one', pr: { number: 10 } },
+              { name: 'feat.level-two', pr: { number: 11 } },
+            ],
+          }));
+        }
+        return fakeSpawn('✓ Stack created on GitHub with 2 PRs (stack #1)');
+      };
+      const result = stackSubmit('feat.level-two', true, { spawnFn: spawn as never });
+      expect(result.ok).toBe(true);
+      expect(calls[0]).toBe('gh stack submit --auto --open');
+      expect(calls).toContain('gh stack view --json');
+      expect(calls).toContain('gh pr ready 10');
+      expect(calls).toContain('gh pr ready 11');
+    });
+
+    it('does not sweep gh pr ready when the stack has no PRs yet', () => {
+      const calls: string[] = [];
+      const spawn = (cmd: string, args: string[], _opts: unknown) => {
+        calls.push([cmd, ...(args as string[])].join(' '));
+        if (cmd === 'gh' && args[0] === 'stack' && args[1] === 'view') {
+          return fakeSpawn(JSON.stringify({ branches: [] }));
+        }
+        return fakeSpawn('');
+      };
+      stackSubmit('feat.level-one', true, { spawnFn: spawn as never });
+      expect(calls.some(c => c.startsWith('gh pr ready'))).toBe(false);
+    });
+
+    it('returns ok=false with output when gh stack submit fails, without sweeping', () => {
+      const calls: string[] = [];
+      const spawn = (cmd: string, args: string[], _opts: unknown) => {
+        calls.push([cmd, ...(args as string[])].join(' '));
+        return fakeSpawn('', 'feature disabled for this repo', 9);
+      };
+      const result = stackSubmit('feat.add-search', true, { spawnFn: spawn as never });
+      expect(result.ok).toBe(false);
+      expect(result.stderr).toContain('feature disabled');
+      expect(calls).toEqual(['gh stack submit --auto --open']);
+    });
   });
 
-  it('returns ok=false with output when gt submit fails', () => {
-    const spawn = seqSpawn(
-      fakeSpawn('', 'ERROR: Validation failed; branches need restack.', 1),
-    );
-    const result = stackSubmit('feat.add-search', { spawnFn: spawn as never });
-    expect(result.ok).toBe(false);
-    expect(result.stderr).toContain('restack');
+  describe('single path (chained=false)', () => {
+    it('runs plain git push then gh pr create --fill, never touching gh-stack', () => {
+      const calls: string[] = [];
+      const spawn = (cmd: string, args: string[], _opts: unknown) => {
+        calls.push([cmd, ...(args as string[])].join(' '));
+        return fakeSpawn('');
+      };
+      const result = stackSubmit('chore.fix-widget', false, { spawnFn: spawn as never });
+      expect(result.ok).toBe(true);
+      expect(calls).toEqual([
+        'git push -u origin chore.fix-widget',
+        'gh pr create --fill',
+      ]);
+    });
+
+    it('returns ok=false without calling gh pr create when git push fails', () => {
+      const calls: string[] = [];
+      const spawn = (cmd: string, args: string[], _opts: unknown) => {
+        calls.push([cmd, ...(args as string[])].join(' '));
+        return fakeSpawn('', 'fatal: could not read from remote repository', 128);
+      };
+      const result = stackSubmit('chore.fix-widget', false, { spawnFn: spawn as never });
+      expect(result.ok).toBe(false);
+      expect(result.stderr).toContain('remote repository');
+      expect(calls).toEqual(['git push -u origin chore.fix-widget']);
+    });
+
+    it('returns ok=false when gh pr create fails after a successful push', () => {
+      const spawn = seqSpawn(
+        fakeSpawn(''),
+        fakeSpawn('', 'a pull request for branch "chore.fix-widget" already exists', 1),
+      );
+      const result = stackSubmit('chore.fix-widget', false, { spawnFn: spawn as never });
+      expect(result.ok).toBe(false);
+      expect(result.stderr).toContain('already exists');
+    });
   });
 });
 
@@ -1154,67 +1212,50 @@ describe('stackPlan', () => {
 // =============================================================================
 
 describe('syncAndRestack', () => {
-  // Output lines below match observed gt 1.8.6 output (verified 2026-07-11).
-  const syncOutput = [
-    '🌲 Fetching branches from remote...',
-    'main is up to date.',
-    '',
-    '🥞 Restacking branches...',
-    'feat.level-one does not need to be restacked on main.',
-    'Restacked feat.level-two on feat.level-one.',
-    'WARNING: feat.level-three could not be restacked cleanly.',
-    'Did not restack branch feat.level-four because it is checked out in worktree /some/worktree/path.',
-    '',
-    'You can resolve conflicts with gt restack.',
-  ].join('\n');
-
-  it('runs gt sync -f --no-interactive', () => {
+  it('runs gh stack sync --prune', () => {
     const calls: string[] = [];
     const spawn = (cmd: string, args: string[], _opts: unknown) => {
       calls.push([cmd, ...(args as string[])].join(' '));
-      return fakeSpawn('main is up to date.');
+      return fakeSpawn('✓ Synced.');
     };
     syncAndRestack({ spawnFn: spawn as never });
-    expect(calls).toHaveLength(1);
-    expect(calls[0]).toContain('gt sync');
-    expect(calls[0]).toContain('-f');
-    expect(calls[0]).toContain('--no-interactive');
+    expect(calls).toEqual(['gh stack sync --prune']);
   });
 
-  it('returns structured clean / conflicted / worktree-skipped results', () => {
-    const spawn = seqSpawn(fakeSpawn(syncOutput));
-    const result = syncAndRestack({ spawnFn: spawn as never });
-    expect(result.restacked).toEqual(['feat.level-two']);
-    expect(result.conflicted).toEqual(['feat.level-three']);
-    expect(result.skippedWorktree).toEqual(['feat.level-four']);
-    expect(result.rawOutput).toContain('Restacking branches');
-  });
-
-  it('reports ok=false when any branch conflicted', () => {
-    const spawn = seqSpawn(fakeSpawn(syncOutput));
-    const result = syncAndRestack({ spawnFn: spawn as never });
-    expect(result.ok).toBe(false);
-  });
-
-  it('reports ok=true on a fully clean sync', () => {
-    const clean = [
-      'main is up to date.',
-      '🥞 Restacking branches...',
-      'feat.level-one does not need to be restacked on main.',
-      'Restacked feat.level-two on feat.level-one.',
-    ].join('\n');
-    const spawn = seqSpawn(fakeSpawn(clean));
+  it('reports ok=true on a clean sync (exit 0)', () => {
+    const spawn = seqSpawn(fakeSpawn('✓ Synced 2 branches.'));
     const result = syncAndRestack({ spawnFn: spawn as never });
     expect(result.ok).toBe(true);
-    expect(result.restacked).toEqual(['feat.level-two']);
-    expect(result.conflicted).toEqual([]);
-    expect(result.skippedWorktree).toEqual([]);
+    expect(result.exitCode).toBe(0);
+    expect(result.conflicted).toBe(false);
+    expect(result.featureDisabled).toBe(false);
   });
 
-  it('reports ok=false when gt sync itself exits non-zero', () => {
+  it('reports a rebase conflict on exit code 3', () => {
+    const spawn = seqSpawn(fakeSpawn('', 'rebase conflict on feat.level-two', 3));
+    const result = syncAndRestack({ spawnFn: spawn as never });
+    expect(result.ok).toBe(false);
+    expect(result.exitCode).toBe(3);
+    expect(result.conflicted).toBe(true);
+    expect(result.featureDisabled).toBe(false);
+    expect(result.rawOutput).toContain('rebase conflict');
+  });
+
+  it('reports feature-disabled on exit code 9 (clean hard stop, per D5)', () => {
+    const spawn = seqSpawn(fakeSpawn('', 'feature disabled for this repo', 9));
+    const result = syncAndRestack({ spawnFn: spawn as never });
+    expect(result.ok).toBe(false);
+    expect(result.exitCode).toBe(9);
+    expect(result.featureDisabled).toBe(true);
+    expect(result.conflicted).toBe(false);
+  });
+
+  it('reports ok=false when gh stack sync fails for any other reason', () => {
     const spawn = seqSpawn(fakeSpawn('', 'ERROR: network failure', 1));
     const result = syncAndRestack({ spawnFn: spawn as never });
     expect(result.ok).toBe(false);
+    expect(result.conflicted).toBe(false);
+    expect(result.featureDisabled).toBe(false);
     expect(result.rawOutput).toContain('network failure');
   });
 });

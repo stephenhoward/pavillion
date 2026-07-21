@@ -147,12 +147,10 @@ export const PREFLIGHT_MESSAGES: Record<string, string> = {
     'HEAD is not at origin/main \u2014 pull, rebase, or check out a fresh branch from origin/main before re-running /process-backlog.',
   empty_backlog:
     'No ready beads available (or every ready bead is labelled `needs-human`) \u2014 shape or unlabel a bead before re-running /process-backlog.',
-  missing_gt:
-    'Graphite CLI (gt) not found \u2014 install gt and run `gt init`; branch creation and PR submission go through gt with no plain-git fallback.',
-  gt_unauthenticated:
-    'gt is not authenticated \u2014 run `gt auth` interactively before re-running /process-backlog.',
-  gt_trunk_misconfigured:
-    'gt trunk is not configured to main \u2014 run `gt init --trunk main` before re-running /process-backlog.',
+  missing_gh_stack:
+    'gh-stack extension not found \u2014 install it (`gh extension install github/gh-stack`); chain branch creation and PR submission go through gh stack with no plain-git fallback for chain work.',
+  gh_unauthenticated:
+    'gh is not authenticated \u2014 run `gh auth login` before re-running /process-backlog.',
 };
 
 export const GIT_SAFE_MESSAGES: Record<number, string> = {
@@ -1418,10 +1416,13 @@ export async function branch(ctx: PhaseCtx, deps: PhaseDeps = {}): Promise<Phase
     // Same main-branch override the other git probes honor (gitSafeToStart,
     // verification gate, preflight).
     const mainBranch = process.env.GIT_SAFE_MAIN_BRANCH ?? 'main';
-    const createResult = stackCreate(derivedBranchName, mainBranch, { spawnFn: spawn });
+    // This phase only ever runs for a single, standalone leaf bead — chain
+    // levels create their own stacked branches inside the wave loop (see the
+    // comment above). `chained` is therefore always false here.
+    const createResult = stackCreate(derivedBranchName, mainBranch, false, { spawnFn: spawn });
 
     if (!createResult.ok) {
-      const msg = `gt create "${derivedBranchName}" --onto ${mainBranch} failed: ${createResult.stderr.trim()}`;
+      const msg = `git checkout -b "${derivedBranchName}" ${mainBranch} failed: ${createResult.stderr.trim()}`;
       console.error(msg);
       logger.writePhaseLog(PhaseName.Branch, 'err', msg + '\n');
       return { next: 'halt', ctx };

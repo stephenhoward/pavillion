@@ -810,9 +810,9 @@ describe('runEpicExecution', () => {
     beads: Record<string, string>;
     /** Ids reported ready by `bd ready --parent`. Defaults to all beads. */
     readyIds?: string[];
-    /** Shared ordered op log (gt/gh/agent events). */
+    /** Shared ordered op log (gh-stack/git/agent events). */
     ops: string[];
-    /** Recorded gt/git-worktree calls with the spawn options' cwd. */
+    /** Recorded gh-stack/git-worktree calls with the spawn options' cwd. */
     cwdCalls?: Array<{ op: string; cwd?: string }>;
     /** When true, `git worktree add` fails. */
     failWorktreeAdd?: boolean;
@@ -820,8 +820,13 @@ describe('runEpicExecution', () => {
 
   /**
    * scriptSpawnFn covering the whole chain pipeline: bd ready/show,
-   * gt create/submit, gh pr view/edit, git gate probes (clean tree, one
+   * stackCreate/stackSubmit (both the `gh stack` chain path and the plain
+   * git/gh single path), gh pr view/edit, git gate probes (clean tree, one
    * commit, empty diff so audits skip), git worktree add/remove.
+   *
+   * `gh stack view --json` (the D3 gh-pr-ready sweep inside stackSubmit)
+   * returns an empty branch list so the sweep is a no-op in these
+   * fixtures — tested in isolation in helpers.test.ts.
    */
   function makeChainScriptSpawn(opts: ChainHarnessOpts) {
     let prCounter = 10;
@@ -839,12 +844,33 @@ describe('runEpicExecution', () => {
           id: beadId, title, issue_type: 'task', status: 'open', notes: '',
         }]), '', 0);
       }
-      if (cmd === 'gt') {
+      // stackCreate / stackSubmit chain path:
+      if (cmd === 'gh' && args[0] === 'stack') {
+        opts.ops.push(a);
+        opts.cwdCalls?.push({ op: a, cwd: spawnOpts?.cwd });
+        if (args[1] === 'view') {
+          return fakeSpawnResult(JSON.stringify({ branches: [] }), '', 0);
+        }
+        return fakeSpawnResult('', '', 0);
+      }
+      // stackCreate single path (chained=false):
+      if (cmd === 'git' && args[0] === 'checkout') {
         opts.ops.push(a);
         opts.cwdCalls?.push({ op: a, cwd: spawnOpts?.cwd });
         return fakeSpawnResult('', '', 0);
       }
-      if (cmd === 'gh' && args[1] === 'view') {
+      // stackSubmit single path (chained=false):
+      if (cmd === 'git' && args[0] === 'push') {
+        opts.ops.push(a);
+        opts.cwdCalls?.push({ op: a, cwd: spawnOpts?.cwd });
+        return fakeSpawnResult('', '', 0);
+      }
+      if (cmd === 'gh' && args[0] === 'pr' && args[1] === 'create') {
+        opts.ops.push(a);
+        opts.cwdCalls?.push({ op: a, cwd: spawnOpts?.cwd });
+        return fakeSpawnResult('', '', 0);
+      }
+      if (cmd === 'gh' && args[0] === 'pr' && args[1] === 'view') {
         prCounter++;
         opts.ops.push(a);
         return fakeSpawnResult(JSON.stringify({
@@ -852,7 +878,7 @@ describe('runEpicExecution', () => {
           url: `https://github.com/o/r/pull/${prCounter}`,
         }), '', 0);
       }
-      if (cmd === 'gh' && args[1] === 'edit') {
+      if (cmd === 'gh' && args[0] === 'pr' && args[1] === 'edit') {
         opts.ops.push(a);
         return fakeSpawnResult('', '', 0);
       }
@@ -972,13 +998,23 @@ describe('runEpicExecution', () => {
     expect(result.beadsCompleted).toEqual(['pv-c.1', 'pv-c.2']);
     expect(result.prUrls).toHaveLength(2);
 
-    // Level branches stack: level 1 on main, level 2 on level 1's branch.
-    expect(ops).toContainEqual(expect.stringContaining('gt create chore.first-bead --onto main'));
-    expect(ops).toContainEqual(expect.stringContaining('gt create chore.second-bead --onto chore.first-bead'));
+    // A chain of length 2 is chained=true at every level: level 1 starts a
+    // new stack off main (`gh stack init`); level 2 adds onto level 1's
+    // branch (`gh stack add`, which has no --base — it always adds on top
+    // of whatever is currently checked out).
+    expect(ops).toContainEqual('gh stack init --base main chore.first-bead');
+    expect(ops).toContainEqual('gh stack add chore.second-bead');
 
-    // Per-level build gate runs BEFORE that level's submit.
-    const submit1 = ops.findIndex(o => o.includes('gt submit') && o.includes('chore.first-bead'));
-    const submit2 = ops.findIndex(o => o.includes('gt submit') && o.includes('chore.second-bead'));
+    // Per-level build gate runs BEFORE that level's submit. `gh stack
+    // submit` carries no branch argument (unlike gt's `--branch`) — it
+    // submits whatever is tracked in the current stack — so submits are
+    // located by order rather than by embedded branch name.
+    const submits = ops
+      .map((o, i) => ({ o, i }))
+      .filter(({ o }) => o === 'gh stack submit --auto --open')
+      .map(({ i }) => i);
+    expect(submits).toHaveLength(2);
+    const [submit1, submit2] = submits;
     const guardians = ops
       .map((o, i) => ({ o, i }))
       .filter(({ o }) => o === 'agent:build-guardian')
@@ -997,15 +1033,16 @@ describe('runEpicExecution', () => {
     expect(implementerIdxs).toHaveLength(2);
     expect(implementerIdxs[1]).toBeGreaterThan(submit1);
 
-    // Stacked PR body: level 2's gh pr edit carries "Stacked on #<level1 PR>".
+    // The Graphite-era "Stacked on #N" body line is dropped (GitHub's Stack
+    // Map UI covers it) — neither level's PR body carries the marker.
     const editCalls = scriptSpawnFn.mock.calls.filter(
-      (c: [string, string[]]) => c[0] === 'gh' && c[1]?.[1] === 'edit',
+      (c: [string, string[]]) => c[0] === 'gh' && c[1]?.[0] === 'pr' && c[1]?.[1] === 'edit',
     );
     expect(editCalls).toHaveLength(2);
-    const level2Body = editCalls[1][1][editCalls[1][1].indexOf('--body') + 1] as string;
-    expect(level2Body).toContain('Stacked on #11.');
-    const level1Body = editCalls[0][1][editCalls[0][1].indexOf('--body') + 1] as string;
-    expect(level1Body).not.toContain('Stacked on');
+    for (const call of editCalls) {
+      const body = call[1][call[1].indexOf('--body') + 1] as string;
+      expect(body).not.toContain('Stacked on');
+    }
   });
 
   it('applies the 3-slot cap to chains and gives additional concurrent chains their own worktrees', async () => {
@@ -1045,14 +1082,17 @@ describe('runEpicExecution', () => {
     expect(adds).toHaveLength(3);
     expect(removes).toHaveLength(3);
 
-    // cwd threading: chain 0's gt calls run in the main checkout (no cwd);
-    // each additional chain's gt calls carry that chain's worktree path.
-    const gtCwd = (branch: string) =>
-      cwdCalls.filter(c => c.op.includes(`gt create chore.${branch}`)).map(c => c.cwd);
-    expect(gtCwd('alpha-work')).toEqual([undefined]);
-    expect(gtCwd('beta-work')[0]).toContain('orch-wt-test-run-w1-c1');
-    expect(gtCwd('gamma-work')[0]).toContain('orch-wt-test-run-w1-c2');
-    expect(gtCwd('delta-work')[0]).toContain('orch-wt-test-run-w1-c3');
+    // cwd threading: chain 0's branch-create call runs in the main checkout
+    // (no cwd); each additional chain's call carries that chain's worktree
+    // path. Every chain here is a singleton (chain.length === 1), so
+    // chained=false and branch creation is plain `git checkout -b`, not
+    // gh-stack.
+    const createCwd = (branch: string) =>
+      cwdCalls.filter(c => c.op === `git checkout -b chore.${branch} main`).map(c => c.cwd);
+    expect(createCwd('alpha-work')).toEqual([undefined]);
+    expect(createCwd('beta-work')[0]).toContain('orch-wt-test-run-w1-c1');
+    expect(createCwd('gamma-work')[0]).toContain('orch-wt-test-run-w1-c2');
+    expect(createCwd('delta-work')[0]).toContain('orch-wt-test-run-w1-c3');
 
     // Agent dispatches follow the same split: chain 0's implementer spawns
     // without a cwd; the three worktree chains' implementers spawn at their
@@ -1233,8 +1273,8 @@ describe('runEpicExecution', () => {
     expect(result.escalatedBeads).toContain('pv-h.2');
 
     // The failed level never submitted, and the truncated tail never ran.
-    expect(ops.some(o => o.includes('gt submit'))).toBe(false);
-    expect(ops.some(o => o.includes('gt create chore.tail-bead'))).toBe(false);
+    expect(ops.some(o => o.startsWith('gh stack submit'))).toBe(false);
+    expect(ops.some(o => o.includes('chore.tail-bead'))).toBe(false);
     const implementerPrompts = children
       .filter(c => c.agent === 'implementer')
       .map(c => (c.child.stdin!.write as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as string);
@@ -1374,23 +1414,8 @@ describe('parseBeadJson', () => {
 });
 
 // =============================================================================
-// withStackedPrefix / fetchPrInfo
+// fetchPrInfo
 // =============================================================================
-
-describe('withStackedPrefix', () => {
-  it('inserts "Stacked on #N." as the first Motivation line', async () => {
-    const { withStackedPrefix } = await import('../../lib/execute.js');
-    const body = '## Motivation\n\nWhy this change.\n\n## Approach\n\nHow.';
-    expect(withStackedPrefix(body, 42)).toBe(
-      '## Motivation\n\nStacked on #42.\n\nWhy this change.\n\n## Approach\n\nHow.',
-    );
-  });
-
-  it('prepends the marker when the body has no Motivation heading', async () => {
-    const { withStackedPrefix } = await import('../../lib/execute.js');
-    expect(withStackedPrefix('Free-form body.', 7)).toBe('Stacked on #7.\n\nFree-form body.');
-  });
-});
 
 describe('fetchPrInfo', () => {
   it('parses url and number from gh pr view JSON', async () => {
@@ -1484,17 +1509,18 @@ describe('runPR', () => {
     expect(logStub.logs.some(l => l.kind === 'err' && l.data.includes('UNCLOSED'))).toBe(true);
   });
 
-  it('should submit via gt, canonicalize via gh pr edit, and route to Report for a closed leaf bead', async () => {
+  it('should submit via plain git push + gh pr create (single, chained=false), canonicalize via gh pr edit, and route to Report for a closed leaf bead', async () => {
     const { runPR } = await import('../../lib/execute.js');
 
     const branchName = 'chore/fix-widget';
     const prUrl = 'https://github.com/owner/repo/pull/42';
 
-    // Sequence: git branch, bd show, gt submit, gh pr view, gh pr edit
+    // Sequence: git branch, bd show, git push, gh pr create, gh pr view, gh pr edit
     const deps = makeDeps([
       fakeSpawnResult(branchName, '', 0),
       fakeSpawnResult(CLOSED_LEAF_JSON, '', 0),
-      fakeSpawnResult('✅ Submitted.', '', 0),
+      fakeSpawnResult('', '', 0),
+      fakeSpawnResult('', '', 0),
       fakeSpawnResult(JSON.stringify({ number: 42, url: prUrl }), '', 0),
       fakeSpawnResult('', '', 0),
     ]);
@@ -1507,29 +1533,30 @@ describe('runPR', () => {
     expect(result.ctx.beadsClosed).toEqual(['pv-test-1']);
   });
 
-  it('should halt when gt submit fails', async () => {
+  it('should halt when git push fails (stackSubmit single path)', async () => {
     const { runPR } = await import('../../lib/execute.js');
 
     const deps = makeDeps([
       fakeSpawnResult('chore/fix-widget', '', 0),
       fakeSpawnResult(CLOSED_LEAF_JSON, '', 0),
-      fakeSpawnResult('', 'ERROR: Validation failed; branches need restack.', 1),
+      fakeSpawnResult('', 'fatal: could not read from remote repository', 128),
     ]);
     const ctx = makePhaseCtx(logStub);
 
     const result = await runPR(ctx, deps);
     expect(result.next).toBe('halt');
-    expect(logStub.logs.some(l => l.kind === 'err' && l.data.includes('gt submit failed'))).toBe(true);
+    expect(logStub.logs.some(l => l.kind === 'err' && l.data.includes('stackSubmit failed'))).toBe(true);
   });
 
-  it('should halt when gh pr view fails after gt submit', async () => {
+  it('should halt when gh pr view fails after stackSubmit', async () => {
     const { runPR } = await import('../../lib/execute.js');
 
-    // Sequence: git branch, bd show, gt submit ok, gh pr view fails
+    // Sequence: git branch, bd show, git push ok, gh pr create ok, gh pr view fails
     const deps = makeDeps([
       fakeSpawnResult('chore/fix-widget', '', 0),
       fakeSpawnResult(CLOSED_LEAF_JSON, '', 0),
-      fakeSpawnResult('✅ Submitted.', '', 0),
+      fakeSpawnResult('', '', 0),
+      fakeSpawnResult('', '', 0),
       fakeSpawnResult('', 'no pull requests found for branch', 1),
     ]);
     const ctx = makePhaseCtx(logStub);
@@ -1543,11 +1570,12 @@ describe('runPR', () => {
   it('should halt when gh pr view returns unparseable output', async () => {
     const { runPR } = await import('../../lib/execute.js');
 
-    // Sequence: git branch, bd show, gt submit ok, gh pr view garbage
+    // Sequence: git branch, bd show, git push ok, gh pr create ok, gh pr view garbage
     const deps = makeDeps([
       fakeSpawnResult('chore/fix-widget', '', 0),
       fakeSpawnResult(CLOSED_LEAF_JSON, '', 0),
-      fakeSpawnResult('✅ Submitted.', '', 0),
+      fakeSpawnResult('', '', 0),
+      fakeSpawnResult('', '', 0),
       fakeSpawnResult('not json at all', '', 0),
     ]);
     const ctx = makePhaseCtx(logStub);
@@ -1561,11 +1589,12 @@ describe('runPR', () => {
   it('should halt when gh pr edit exits non-zero', async () => {
     const { runPR } = await import('../../lib/execute.js');
 
-    // Sequence: git branch, bd show, gt submit ok, gh pr view ok, gh pr edit fails
+    // Sequence: git branch, bd show, git push ok, gh pr create ok, gh pr view ok, gh pr edit fails
     const deps = makeDeps([
       fakeSpawnResult('chore/fix-widget', '', 0),
       fakeSpawnResult(CLOSED_LEAF_JSON, '', 0),
-      fakeSpawnResult('✅ Submitted.', '', 0),
+      fakeSpawnResult('', '', 0),
+      fakeSpawnResult('', '', 0),
       fakeSpawnResult(JSON.stringify({ number: 42, url: 'https://github.com/o/r/pull/42' }), '', 0),
       fakeSpawnResult('', 'GraphQL: Something went wrong', 1),
     ]);
@@ -1596,8 +1625,8 @@ describe('runPR backstop', () => {
       if (cmd === 'git' && args[0] === 'rev-list') {
         return fakeSpawnResult('0\n', '', 0);
       }
-      // Anything else (bd show, gt submit, gh pr view/edit) must NOT be
-      // called. If it is, return failure so assertions catch the leak.
+      // Anything else (bd show, git push, gh pr create/view/edit) must NOT
+      // be called. If it is, return failure so assertions catch the leak.
       return fakeSpawnResult('', 'unexpected spawn', 1);
     });
 
@@ -1619,7 +1648,7 @@ describe('runPR backstop', () => {
       `${c[0]} ${c[1]?.[0] ?? ''}`);
     expect(cmds).toContain('git branch');
     expect(cmds).toContain('git rev-list');
-    expect(cmds).not.toContain('gt submit');
+    expect(cmds).not.toContain('git push');
     expect(cmds).not.toContain('gh pr');
     expect(cmds).not.toContain('bd show');
   });

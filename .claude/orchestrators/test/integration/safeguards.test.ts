@@ -88,26 +88,23 @@ function mountPassingPreflight(scripts: ScriptRouter, beadId = 'pv-test.1'): voi
     return { exitCode: 0, stdout: '', stderr: '' };
   });
 
-  mountPassingGt(scripts);
+  mountPassingGhStack(scripts);
 }
 
 /**
- * Mount passing Graphite CLI probes on a ScriptRouter.
+ * Mount passing gh-stack preflight probes on a ScriptRouter.
  *
- * Covers the gt calls made by runPreflightCheck(): gt --version,
- * gt auth --no-interactive, gt trunk.
+ * Covers the gh calls made by runPreflightCheck() (D5: two cheap local
+ * hard-gates only): gh stack --version, gh auth status.
  */
-function mountPassingGt(scripts: ScriptRouter): void {
-  scripts.on('gt', (args) => {
+function mountPassingGhStack(scripts: ScriptRouter): void {
+  scripts.on('gh', (args) => {
     const argStr = args.join(' ');
-    if (argStr.includes('--version')) {
-      return { exitCode: 0, stdout: '1.8.6', stderr: '' };
+    if (argStr.includes('stack --version')) {
+      return { exitCode: 0, stdout: 'gh stack version 0.0.8', stderr: '' };
     }
-    if (argStr.includes('auth')) {
-      return { exitCode: 0, stdout: 'Authenticated as: testuser', stderr: '' };
-    }
-    if (argStr.includes('trunk')) {
-      return { exitCode: 0, stdout: 'main', stderr: '' };
+    if (argStr.includes('auth status')) {
+      return { exitCode: 0, stdout: 'Logged in to github.com as testuser', stderr: '' };
     }
     return { exitCode: 0, stdout: '', stderr: '' };
   });
@@ -153,7 +150,7 @@ describe('Integration: safeguards', () => {
   it('should halt on empty backlog (exhausted)', async () => {
     // Preflight passes, but bdTopReady returns empty list
     let prefCalls = 0;
-    mountPassingGt(scripts);
+    mountPassingGhStack(scripts);
     scripts.on('git', (args) => {
       const a = args.join(' ');
       if (a.includes('status --porcelain')) return { exitCode: 0, stdout: '', stderr: '' };
