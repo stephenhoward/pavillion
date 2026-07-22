@@ -139,12 +139,12 @@ function gitSafeDirtySpawns(): SpawnSyncReturns<Buffer>[] {
 }
 
 // =============================================================================
-// Canonical seqSpawn sequences for preflight() / runPreflightCheck() (6 calls)
-// then gitSafeToStart() (4 calls) = 10 total for full success
+// Canonical seqSpawn sequences for preflight() / runPreflightCheck() (8 calls)
+// then gitSafeToStart() (4 calls) = 12 total for full success
 // =============================================================================
 
 /**
- * 10 spawn calls for a fully passing preflight() (runPreflightCheck + gitSafeToStart).
+ * 12 spawn calls for a fully passing preflight() (runPreflightCheck + gitSafeToStart).
  * Bead id used for label check is passed in.
  */
 function preflightPassingSpawns(beadId = 'pv-abc-1'): SpawnSyncReturns<Buffer>[] {
@@ -154,9 +154,8 @@ function preflightPassingSpawns(beadId = 'pv-abc-1'): SpawnSyncReturns<Buffer>[]
     fakeSpawn('', '', 0),                                  // git fetch origin main
     fakeSpawn('abc1234', '', 0),                           // git rev-parse HEAD
     fakeSpawn('abc1234', '', 0),                           // git rev-parse origin/main (matches)
-    fakeSpawn('1.8.6', '', 0),                             // gt --version
-    fakeSpawn('Authenticated as: testuser', '', 0),        // gt auth --no-interactive
-    fakeSpawn('main', '', 0),                              // gt trunk
+    fakeSpawn('gh stack version 0.0.8', '', 0),            // gh stack --version
+    fakeSpawn('Logged in to github.com as testuser', '', 0), // gh auth status
     fakeSpawn(JSON.stringify([{ id: beadId }]), '', 0),    // bd ready --limit=50 --json
     fakeSpawn('- other-label', '', 0),                     // bd label list <id>
     // gitSafeToStart:
@@ -279,9 +278,8 @@ describe('preflight', () => {
       fakeSpawn('', '', 0),        // git fetch origin main
       fakeSpawn('abc1234', '', 0), // git rev-parse HEAD
       fakeSpawn('abc1234', '', 0), // git rev-parse origin/main (matches)
-      fakeSpawn('1.8.6', '', 0),   // gt --version
-      fakeSpawn('Authenticated as: testuser', '', 0), // gt auth --no-interactive
-      fakeSpawn('main', '', 0),    // gt trunk
+      fakeSpawn('gh stack version 0.0.8', '', 0),      // gh stack --version
+      fakeSpawn('Logged in to github.com as testuser', '', 0), // gh auth status
       fakeSpawn('[]', '', 0),      // bd ready: empty array
       // gitSafeToStart passes:
       ...gitSafeOkSpawns(),
@@ -1085,9 +1083,10 @@ describe('branch', () => {
     expect(result.next).toBe('halt');
   });
 
-  it('should create branch and route epic to Epic phase', async () => {
+  it('should skip branch creation for epics and route to Epic phase', async () => {
     const bdShowJson = JSON.stringify([{ issue_type: 'epic', title: 'My Epic Feature' }]);
-    const spawn = seqSpawn(
+    const calls: string[] = [];
+    const results = [
       // gitSafeToStart (4 calls):
       fakeSpawn('true', '', 0),            // git rev-parse --is-inside-work-tree
       fakeSpawn('abc1234', '', 0),         // git rev-parse HEAD
@@ -1097,18 +1096,25 @@ describe('branch', () => {
       fakeSpawn(bdShowJson, '', 0),
       // git branch --show-current:
       fakeSpawn('main', '', 0),
-      // git checkout -b <branch>:
-      fakeSpawn('', '', 0),
-    );
+      // NO branch creation — chain levels create their own stacked branches.
+    ];
+    let i = 0;
+    const spawn = vi.fn().mockImplementation((cmd: string, args: string[]) => {
+      calls.push([cmd, ...(args ?? [])].join(' '));
+      return results[i++] ?? fakeSpawn('', 'unexpected call', 1);
+    });
 
-    const result = await branch(makeCtx(), { spawnFn: spawn });
+    const result = await branch(makeCtx(), { spawnFn: spawn as never });
 
     expect(result.next).toBe(PhaseName.Epic);
+    expect(spawn).toHaveBeenCalledTimes(6);
+    expect(calls.some(c => c.startsWith('git checkout -b'))).toBe(false);
   });
 
-  it('should route non-epic to Leaf phase', async () => {
+  it('should route non-epic to Leaf phase, creating the branch via plain git checkout -b (single, chained=false)', async () => {
     const bdShowJson = JSON.stringify([{ issue_type: 'task', title: 'A Task' }]);
-    const spawn = seqSpawn(
+    const calls: string[] = [];
+    const results = [
       // gitSafeToStart:
       fakeSpawn('true', '', 0),
       fakeSpawn('abc1234', '', 0),
@@ -1118,13 +1124,76 @@ describe('branch', () => {
       fakeSpawn(bdShowJson, '', 0),
       // git branch --show-current:
       fakeSpawn('main', '', 0),
-      // git checkout -b:
+      // git checkout -b <branch> main:
       fakeSpawn('', '', 0),
-    );
+    ];
+    let i = 0;
+    const spawn = vi.fn().mockImplementation((cmd: string, args: string[]) => {
+      calls.push([cmd, ...(args ?? [])].join(' '));
+      return results[i++] ?? fakeSpawn('', 'unexpected call', 1);
+    });
 
-    const result = await branch(makeCtx(), { spawnFn: spawn });
+    const result = await branch(makeCtx(), { spawnFn: spawn as never });
 
     expect(result.next).toBe(PhaseName.Leaf);
+    // branchName('A Task', 'task') = 'chore.a-task'
+    expect(calls).toContain('git checkout -b chore.a-task main');
+    expect(calls.some(c => c.includes('gh stack'))).toBe(false);
+  });
+
+  it('honors GIT_SAFE_MAIN_BRANCH as the checkout base branch', async () => {
+    const prev = process.env.GIT_SAFE_MAIN_BRANCH;
+    process.env.GIT_SAFE_MAIN_BRANCH = 'develop';
+    try {
+      const bdShowJson = JSON.stringify([{ issue_type: 'task', title: 'A Task' }]);
+      const calls: string[] = [];
+      const results = [
+        // gitSafeToStart:
+        fakeSpawn('true', '', 0),
+        fakeSpawn('abc1234', '', 0),
+        fakeSpawn('abc1234', '', 0),
+        fakeSpawn('', '', 0),
+        // bd show --json:
+        fakeSpawn(bdShowJson, '', 0),
+        // git branch --show-current:
+        fakeSpawn('develop', '', 0),
+        // git checkout -b <branch> develop:
+        fakeSpawn('', '', 0),
+      ];
+      let i = 0;
+      const spawn = vi.fn().mockImplementation((cmd: string, args: string[]) => {
+        calls.push([cmd, ...(args ?? [])].join(' '));
+        return results[i++] ?? fakeSpawn('', 'unexpected call', 1);
+      });
+
+      const result = await branch(makeCtx(), { spawnFn: spawn as never });
+
+      expect(result.next).toBe(PhaseName.Leaf);
+      expect(calls).toContain('git checkout -b chore.a-task develop');
+    }
+    finally {
+      if (prev === undefined) delete process.env.GIT_SAFE_MAIN_BRANCH;
+      else process.env.GIT_SAFE_MAIN_BRANCH = prev;
+    }
+  });
+
+  it('should halt when git checkout -b fails', async () => {
+    const bdShowJson = JSON.stringify([{ issue_type: 'task', title: 'A Task' }]);
+    const spawn = seqSpawn(
+      fakeSpawn('true', '', 0),
+      fakeSpawn('abc1234', '', 0),
+      fakeSpawn('abc1234', '', 0),
+      fakeSpawn('', '', 0),
+      fakeSpawn(bdShowJson, '', 0),
+      fakeSpawn('main', '', 0),
+      // git checkout -b fails:
+      fakeSpawn('', "fatal: a branch named 'chore.a-task' already exists", 128),
+    );
+
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const result = await branch(makeCtx(), { spawnFn: spawn });
+
+    expect(result.next).toBe('halt');
   });
 
   it('should skip checkout if already on target branch', async () => {
@@ -1157,10 +1226,10 @@ describe('branch', () => {
 // =============================================================================
 
 describe('message constants', () => {
-  it('should have exactly 6 preflight message kinds', () => {
+  it('should have exactly 5 preflight message kinds', () => {
     expect(Object.keys(PREFLIGHT_MESSAGES)).toEqual([
       'dirty_tree', 'behind_main', 'empty_backlog',
-      'missing_gt', 'gt_unauthenticated', 'gt_trunk_misconfigured',
+      'missing_gh_stack', 'gh_unauthenticated',
     ]);
   });
 

@@ -82,6 +82,38 @@ function createMockChild(
   return child;
 }
 
+/**
+ * Like createMockChild, but the child stays "running" for `delayMs` before
+ * closing. Used to observe overlap (or enforced non-overlap) between
+ * concurrently dispatched agents. `onClose` fires just before the close event.
+ */
+function createDelayedMockChild(
+  stdout: string,
+  delayMs: number,
+  onClose?: () => void,
+): ChildProcess & EventEmitter {
+  const child = new EventEmitter() as ChildProcess & EventEmitter;
+
+  const stdoutStream = new Readable({ read() {} });
+  const stderrStream = new Readable({ read() {} });
+
+  child.stdin = { write: vi.fn(), end: vi.fn() } as unknown as ChildProcess['stdin'];
+  child.stdout = stdoutStream;
+  child.stderr = stderrStream;
+  child.pid = 12345;
+  child.kill = vi.fn().mockReturnValue(true);
+
+  setTimeout(() => {
+    if (stdout) stdoutStream.push(stdout);
+    stdoutStream.push(null);
+    stderrStream.push(null);
+    onClose?.();
+    child.emit('close', 0);
+  }, delayMs);
+
+  return child;
+}
+
 function fakeSpawnResult(
   stdout: string,
   stderr: string,
@@ -122,19 +154,6 @@ function makePhaseCtx(logStub: ReturnType<typeof stubLogger>): PhaseCtx {
 
 const CLOSED_LEAF_JSON = JSON.stringify([{
   title: 'Fix widget alignment',
-  status: 'closed',
-  issue_type: 'task',
-}]);
-
-const CLOSED_EPIC_JSON = JSON.stringify([{
-  title: 'Epic: Redesign dashboard',
-  status: 'closed',
-  issue_type: 'epic',
-  children: [{ id: 'pv-test-1.1' }, { id: 'pv-test-1.2' }],
-}]);
-
-const CLOSED_CHILD_JSON = JSON.stringify([{
-  title: 'Child bead',
   status: 'closed',
   issue_type: 'task',
 }]);
@@ -755,7 +774,7 @@ describe('runLeafExecution', () => {
 });
 
 // =============================================================================
-// runEpicExecution
+// runEpicExecution — chain-based wave scheduling
 // =============================================================================
 
 describe('runEpicExecution', () => {
@@ -769,45 +788,166 @@ describe('runEpicExecution', () => {
     vi.mocked(helpers.bdEscalate).mockReturnValue(undefined);
     // Treat beads in this suite as enriched so they enter the implementer wave.
     vi.mocked(helpers.bdEnrichmentCheck).mockReturnValue(true);
+    vi.mocked(helpers.commitMsg).mockImplementation(
+      (summary: string) => `chore: ${summary}`,
+    );
+    vi.mocked(helpers.prBody).mockReturnValue(
+      '## Motivation\n\nWhy.\n\n## Approach\n\ntitle\n\n## Validation\n\n- [ ] checks\n',
+    );
   });
 
-  it('runs verification gate per bead in an epic wave and escalates on gate failure', async () => {
-    const { runEpicExecution } = await import('../../lib/execute.js');
-
-    const ctx: RunContext = {
+  function makeEpicCtx(): RunContext {
+    return {
       runId: 'test-run',
       beadId: 'epic-parent',
       logger: logStub.logger,
       phaseHistory: [],
     };
+  }
 
-    const initialBeads = ['pv-child.1'];
+  interface ChainHarnessOpts {
+    /** Bead id -> title, for bd show --json fixtures. */
+    beads: Record<string, string>;
+    /** Ids reported ready by `bd ready --parent`. Defaults to all beads. */
+    readyIds?: string[];
+    /** Shared ordered op log (gh-stack/git/agent events). */
+    ops: string[];
+    /** Recorded gh-stack/git-worktree calls with the spawn options' cwd. */
+    cwdCalls?: Array<{ op: string; cwd?: string }>;
+    /** When true, `git worktree add` fails. */
+    failWorktreeAdd?: boolean;
+  }
 
-    // Implementer + downstream verifier agents all return success.
-    // Build-guardian needs valid JSON for a pass verdict; return that uniformly
-    // so the wave-end chain passes cleanly and the per-bead gate-failure path
-    // is what drives the outcome.
+  /**
+   * scriptSpawnFn covering the whole chain pipeline: bd ready/show,
+   * stackCreate/stackSubmit (both the `gh stack` chain path and the plain
+   * git/gh single path), gh pr view/edit, git gate probes (clean tree, one
+   * commit, empty diff so audits skip), git worktree add/remove.
+   *
+   * `gh stack view --json` (the D3 gh-pr-ready sweep inside stackSubmit)
+   * returns an empty branch list so the sweep is a no-op in these
+   * fixtures — tested in isolation in helpers.test.ts.
+   */
+  function makeChainScriptSpawn(opts: ChainHarnessOpts) {
+    let prCounter = 10;
+    return vi.fn().mockImplementation((cmd: string, args: string[], spawnOpts?: { cwd?: string }) => {
+      const a = [cmd, ...(args ?? [])].join(' ');
+      if (cmd === 'bd' && args[0] === 'ready') {
+        const ids = opts.readyIds ?? Object.keys(opts.beads);
+        return fakeSpawnResult(JSON.stringify(ids.map(id => ({ id }))), '', 0);
+      }
+      if (cmd === 'bd' && args[0] === 'show') {
+        const beadId = args[1] === '--json' ? args[2] : args[1];
+        const title = opts.beads[beadId];
+        if (!title) return fakeSpawnResult('[]', '', 1);
+        return fakeSpawnResult(JSON.stringify([{
+          id: beadId, title, issue_type: 'task', status: 'open', notes: '',
+        }]), '', 0);
+      }
+      // stackCreate / stackSubmit chain path:
+      if (cmd === 'gh' && args[0] === 'stack') {
+        opts.ops.push(a);
+        opts.cwdCalls?.push({ op: a, cwd: spawnOpts?.cwd });
+        if (args[1] === 'view') {
+          return fakeSpawnResult(JSON.stringify({ branches: [] }), '', 0);
+        }
+        return fakeSpawnResult('', '', 0);
+      }
+      // stackCreate single path (chained=false):
+      if (cmd === 'git' && args[0] === 'checkout') {
+        opts.ops.push(a);
+        opts.cwdCalls?.push({ op: a, cwd: spawnOpts?.cwd });
+        return fakeSpawnResult('', '', 0);
+      }
+      // stackSubmit single path (chained=false):
+      if (cmd === 'git' && args[0] === 'push') {
+        opts.ops.push(a);
+        opts.cwdCalls?.push({ op: a, cwd: spawnOpts?.cwd });
+        return fakeSpawnResult('', '', 0);
+      }
+      if (cmd === 'gh' && args[0] === 'pr' && args[1] === 'create') {
+        opts.ops.push(a);
+        opts.cwdCalls?.push({ op: a, cwd: spawnOpts?.cwd });
+        return fakeSpawnResult('', '', 0);
+      }
+      if (cmd === 'gh' && args[0] === 'pr' && args[1] === 'view') {
+        prCounter++;
+        opts.ops.push(a);
+        return fakeSpawnResult(JSON.stringify({
+          number: prCounter,
+          url: `https://github.com/o/r/pull/${prCounter}`,
+        }), '', 0);
+      }
+      if (cmd === 'gh' && args[0] === 'pr' && args[1] === 'edit') {
+        opts.ops.push(a);
+        return fakeSpawnResult('', '', 0);
+      }
+      if (cmd === 'git' && args[0] === 'worktree') {
+        opts.ops.push(`git worktree ${args[1]}`);
+        opts.cwdCalls?.push({ op: `git worktree ${args[1]}`, cwd: spawnOpts?.cwd });
+        if (args[1] === 'add' && opts.failWorktreeAdd) {
+          return fakeSpawnResult('', 'fatal: could not create work tree', 1);
+        }
+        return fakeSpawnResult('', '', 0);
+      }
+      if (cmd === 'git' && args[0] === 'status') return fakeSpawnResult('', '', 0);
+      if (cmd === 'git' && args[0] === 'rev-list') return fakeSpawnResult('1\n', '', 0);
+      if (cmd === 'git' && args[0] === 'diff') return fakeSpawnResult('', '', 0);
+      return fakeSpawnResult('', '', 0);
+    });
+  }
+
+  /** Async dispatch spawn: records agent order + spawn cwd, passes build-guardian. */
+  function makeAgentSpawn(
+    ops: string[],
+    children: Array<{ agent: string; cwd?: string; child: ReturnType<typeof createMockChild> }>,
+    guardianVerdict: () => string = () => JSON.stringify({ verdict: 'pass', concerns: [] }),
+  ) {
+    return vi.fn().mockImplementation((_cmd: string, args: string[], spawnOpts?: { cwd?: string }) => {
+      const agent = args[args.indexOf('--agent') + 1] ?? 'unknown';
+      ops.push(`agent:${agent}`);
+      const child = agent === 'build-guardian'
+        ? createMockChild(guardianVerdict(), '', 0)
+        : createMockChild('done', '', 0);
+      children.push({ agent, cwd: spawnOpts?.cwd, child });
+      return child;
+    });
+  }
+
+  it('runs verification gate per level and escalates the chain on gate failure', async () => {
+    const { runEpicExecution } = await import('../../lib/execute.js');
+
+    const ctx = makeEpicCtx();
+
+    // Gate fails with zero commits; bd/git calls otherwise cooperate.
     const spawnFn = vi.fn().mockImplementation(() =>
       createMockChild(JSON.stringify({ verdict: 'pass' }), '', 0),
     );
-
-    // Gate fails with zero commits; bd/git calls otherwise cooperate.
     const scriptSpawnFn = vi.fn().mockImplementation((cmd: string, args: string[]) => {
       if (cmd === 'git' && args[0] === 'status')   return fakeSpawnResult('', '', 0);
       if (cmd === 'git' && args[0] === 'rev-list') return fakeSpawnResult('0\n', '', 0);
       if (cmd === 'git' && args[0] === 'diff')     return fakeSpawnResult('', '', 0);
-      // bd ready (cascade) returns no new beads so the while-loop exits.
-      if (cmd === 'bd' && args[0] === 'ready')     return fakeSpawnResult('[]', '', 0);
+      if (cmd === 'bd' && args[0] === 'ready') {
+        return fakeSpawnResult(JSON.stringify([{ id: 'pv-child.1' }]), '', 0);
+      }
+      if (cmd === 'bd' && args[0] === 'show') {
+        return fakeSpawnResult(JSON.stringify([{
+          id: 'pv-child.1', title: 'Child one', issue_type: 'task', status: 'open', notes: '',
+        }]), '', 0);
+      }
       if (cmd === 'bd')                            return fakeSpawnResult('', '', 0);
       return fakeSpawnResult('', '', 0);
     });
 
-    const result = await runEpicExecution('epic-parent', initialBeads, ctx, {
-      spawnFn,
-      scriptSpawnFn,
-    });
+    const result = await runEpicExecution(
+      'epic-parent',
+      { chains: [['pv-child.1']], flat: false, warnings: [] },
+      ctx,
+      { spawnFn, scriptSpawnFn },
+    );
 
-    // Gate fired and reported the zero-commit failure for the child bead.
+    // Gate fired against the level's parent branch (main for the chain
+    // bottom) and reported the zero-commit failure for the child bead.
     expect(logStub.runJsonEntries).toContainEqual(
       expect.objectContaining({
         event: 'implementer-verification-failed',
@@ -825,12 +965,380 @@ describe('runEpicExecution', () => {
       }),
     );
 
-    // The bead ended up flagged as failed/escalated in the epic result.
+    expect(result.outcome).toBe('escalated');
     const failedLike = [
       ...(result.beadsFailed ?? []),
       ...(result.escalatedBeads ?? []),
     ];
     expect(failedLike).toContain('pv-child.1');
+  });
+
+  it('runs chain levels sequentially, stacking each branch on its predecessor with the build gate before submit', async () => {
+    const { runEpicExecution } = await import('../../lib/execute.js');
+
+    const ctx = makeEpicCtx();
+    const ops: string[] = [];
+    const children: Array<{ agent: string; cwd?: string; child: ReturnType<typeof createMockChild> }> = [];
+
+    const scriptSpawnFn = makeChainScriptSpawn({
+      beads: { 'pv-c.1': 'First bead', 'pv-c.2': 'Second bead' },
+      readyIds: ['pv-c.1'],
+      ops,
+    });
+    const spawnFn = makeAgentSpawn(ops, children);
+
+    const result = await runEpicExecution(
+      'epic-parent',
+      { chains: [['pv-c.1', 'pv-c.2']], flat: false, warnings: [] },
+      ctx,
+      { spawnFn, scriptSpawnFn },
+    );
+
+    expect(result.outcome).toBe('complete');
+    expect(result.beadsCompleted).toEqual(['pv-c.1', 'pv-c.2']);
+    expect(result.prUrls).toHaveLength(2);
+
+    // A chain of length 2 is chained=true at every level: level 1 starts a
+    // new stack off main (`gh stack init`); level 2 adds onto level 1's
+    // branch (`gh stack add`, which has no --base — it always adds on top
+    // of whatever is currently checked out).
+    expect(ops).toContainEqual('gh stack init --base main chore.first-bead');
+    expect(ops).toContainEqual('gh stack add chore.second-bead');
+
+    // Per-level build gate runs BEFORE that level's submit. `gh stack
+    // submit` carries no branch argument (unlike gt's `--branch`) — it
+    // submits whatever is tracked in the current stack — so submits are
+    // located by order rather than by embedded branch name.
+    const submits = ops
+      .map((o, i) => ({ o, i }))
+      .filter(({ o }) => o === 'gh stack submit --auto --open')
+      .map(({ i }) => i);
+    expect(submits).toHaveLength(2);
+    const [submit1, submit2] = submits;
+    const guardians = ops
+      .map((o, i) => ({ o, i }))
+      .filter(({ o }) => o === 'agent:build-guardian')
+      .map(({ i }) => i);
+    expect(guardians).toHaveLength(2);
+    expect(guardians[0]).toBeLessThan(submit1);
+    expect(guardians[1]).toBeGreaterThan(submit1);
+    expect(guardians[1]).toBeLessThan(submit2);
+
+    // Sequential levels: the second implementer is dispatched only after the
+    // first level's submit.
+    const implementerIdxs = ops
+      .map((o, i) => ({ o, i }))
+      .filter(({ o }) => o === 'agent:implementer')
+      .map(({ i }) => i);
+    expect(implementerIdxs).toHaveLength(2);
+    expect(implementerIdxs[1]).toBeGreaterThan(submit1);
+
+    // The Graphite-era "Stacked on #N" body line is dropped (GitHub's Stack
+    // Map UI covers it) — neither level's PR body carries the marker.
+    const editCalls = scriptSpawnFn.mock.calls.filter(
+      (c: [string, string[]]) => c[0] === 'gh' && c[1]?.[0] === 'pr' && c[1]?.[1] === 'edit',
+    );
+    expect(editCalls).toHaveLength(2);
+    for (const call of editCalls) {
+      const body = call[1][call[1].indexOf('--body') + 1] as string;
+      expect(body).not.toContain('Stacked on');
+    }
+  });
+
+  it('applies the 3-slot cap to chains and gives additional concurrent chains their own worktrees', async () => {
+    const { runEpicExecution } = await import('../../lib/execute.js');
+
+    const ctx = makeEpicCtx();
+    const ops: string[] = [];
+    const children: Array<{ agent: string; cwd?: string; child: ReturnType<typeof createMockChild> }> = [];
+
+    const beads: Record<string, string> = {
+      'pv-p.1': 'Alpha work',
+      'pv-p.2': 'Beta work',
+      'pv-p.3': 'Gamma work',
+      'pv-p.4': 'Delta work',
+    };
+    const cwdCalls: Array<{ op: string; cwd?: string }> = [];
+    const scriptSpawnFn = makeChainScriptSpawn({ beads, ops, cwdCalls });
+    const spawnFn = makeAgentSpawn(ops, children);
+
+    const result = await runEpicExecution(
+      'epic-parent',
+      {
+        chains: [['pv-p.1'], ['pv-p.2'], ['pv-p.3'], ['pv-p.4']],
+        flat: false,
+        warnings: [],
+      },
+      ctx,
+      { spawnFn, scriptSpawnFn },
+    );
+
+    expect(result.outcome).toBe('complete');
+    expect(result.beadsCompleted.sort()).toEqual(['pv-p.1', 'pv-p.2', 'pv-p.3', 'pv-p.4']);
+
+    // Hybrid model: chain 0 uses the main checkout; chains 1-3 get worktrees.
+    const adds = ops.filter(o => o === 'git worktree add');
+    const removes = ops.filter(o => o === 'git worktree remove');
+    expect(adds).toHaveLength(3);
+    expect(removes).toHaveLength(3);
+
+    // cwd threading: chain 0's branch-create call runs in the main checkout
+    // (no cwd); each additional chain's call carries that chain's worktree
+    // path. Every chain here is a singleton (chain.length === 1), so
+    // chained=false and branch creation is plain `git checkout -b`, not
+    // gh-stack.
+    const createCwd = (branch: string) =>
+      cwdCalls.filter(c => c.op === `git checkout -b chore.${branch} main`).map(c => c.cwd);
+    expect(createCwd('alpha-work')).toEqual([undefined]);
+    expect(createCwd('beta-work')[0]).toContain('orch-wt-test-run-w1-c1');
+    expect(createCwd('gamma-work')[0]).toContain('orch-wt-test-run-w1-c2');
+    expect(createCwd('delta-work')[0]).toContain('orch-wt-test-run-w1-c3');
+
+    // Agent dispatches follow the same split: chain 0's implementer spawns
+    // without a cwd; the three worktree chains' implementers spawn at their
+    // worktree paths.
+    const implementerCwds = children
+      .filter(c => c.agent === 'implementer')
+      .map(c => c.cwd);
+    expect(implementerCwds).toHaveLength(4);
+    expect(implementerCwds.filter(c => c === undefined)).toHaveLength(1);
+    expect(
+      implementerCwds.filter(c => c !== undefined && c.includes('orch-wt-test-run-w1-c')),
+    ).toHaveLength(3);
+
+    // All four chains ran in a single wave (cap applies to chains, queueing
+    // the 4th chain behind the first free slot rather than a new wave).
+    const waveStarts = logStub.runJsonEntries.filter(e => e.event === 'wave-start');
+    expect(waveStarts).toHaveLength(1);
+    expect((waveStarts[0].chains as string[][]).length).toBe(4);
+  });
+
+  it('removes a parallel chain worktree even when the chain fails mid-level', async () => {
+    const { runEpicExecution } = await import('../../lib/execute.js');
+
+    const ctx = makeEpicCtx();
+    const ops: string[] = [];
+    const children: Array<{ agent: string; cwd?: string; child: ReturnType<typeof createMockChild> }> = [];
+
+    // pv-w.2 is scheduled but has no bd show fixture -> its level fails at
+    // bead load, exercising the finally-based worktree cleanup.
+    const scriptSpawnFn = makeChainScriptSpawn({
+      beads: { 'pv-w.1': 'Good chain' },
+      readyIds: ['pv-w.1', 'pv-w.2'],
+      ops,
+    });
+    const spawnFn = makeAgentSpawn(ops, children);
+
+    const result = await runEpicExecution(
+      'epic-parent',
+      { chains: [['pv-w.1'], ['pv-w.2']], flat: false, warnings: [] },
+      ctx,
+      { spawnFn, scriptSpawnFn },
+    );
+
+    expect(result.outcome).toBe('escalated');
+    expect(result.escalatedBeads).toContain('pv-w.2');
+    expect(result.beadsCompleted).toContain('pv-w.1');
+
+    // The worktree was created for chain 1 and removed despite the failure.
+    expect(ops.filter(o => o === 'git worktree add')).toHaveLength(1);
+    expect(ops.filter(o => o === 'git worktree remove')).toHaveLength(1);
+    expect(logStub.runJsonEntries).toContainEqual(
+      expect.objectContaining({ event: 'chain-worktree-removed' }),
+    );
+  });
+
+  it('escalates the whole chain without dispatching implementers when git worktree add fails', async () => {
+    const { runEpicExecution } = await import('../../lib/execute.js');
+    const helpers = await import('../../lib/helpers.js');
+
+    const ctx = makeEpicCtx();
+    const ops: string[] = [];
+    const children: Array<{ agent: string; cwd?: string; child: ReturnType<typeof createMockChild> }> = [];
+
+    const scriptSpawnFn = makeChainScriptSpawn({
+      beads: { 'pv-w.1': 'Good chain', 'pv-w.2': 'Doomed chain' },
+      ops,
+      failWorktreeAdd: true,
+    });
+    const spawnFn = makeAgentSpawn(ops, children);
+
+    const result = await runEpicExecution(
+      'epic-parent',
+      { chains: [['pv-w.1'], ['pv-w.2']], flat: false, warnings: [] },
+      ctx,
+      { spawnFn, scriptSpawnFn },
+    );
+
+    expect(result.outcome).toBe('escalated');
+    expect(result.escalatedBeads).toEqual(['pv-w.2']);
+    expect(result.beadsCompleted).toContain('pv-w.1');
+
+    // No implementer ever ran for the doomed chain, and no worktree removal
+    // fired (nothing was created).
+    const implementerPrompts = children
+      .filter(c => c.agent === 'implementer')
+      .map(c => (c.child.stdin!.write as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as string);
+    expect(implementerPrompts.some(p => p.includes('pv-w.2'))).toBe(false);
+    expect(ops.filter(o => o === 'git worktree remove')).toHaveLength(0);
+
+    const escalatedIds = vi.mocked(helpers.bdEscalate).mock.calls.map(c => c[0]);
+    expect(escalatedIds).toContain('pv-w.2');
+    expect(logStub.runJsonEntries).toContainEqual(
+      expect.objectContaining({ event: 'chain-worktree-create-failed' }),
+    );
+  });
+
+  it('serializes build-guardian dispatches across concurrent chains while implementers interleave', async () => {
+    const { runEpicExecution } = await import('../../lib/execute.js');
+
+    const ctx = makeEpicCtx();
+    const ops: string[] = [];
+    const events: string[] = [];
+
+    const scriptSpawnFn = makeChainScriptSpawn({
+      beads: { 'pv-m.1': 'Mutex one', 'pv-m.2': 'Mutex two' },
+      ops,
+    });
+
+    // Implementers and guardians both stay "running" for a while so any
+    // overlap would be observable in the event sequence.
+    const spawnFn = vi.fn().mockImplementation((_cmd: string, args: string[]) => {
+      const agent = args[args.indexOf('--agent') + 1] ?? 'unknown';
+      if (agent === 'build-guardian') {
+        events.push('guardian-start');
+        return createDelayedMockChild(
+          JSON.stringify({ verdict: 'pass', concerns: [] }), 40,
+          () => events.push('guardian-end'),
+        );
+      }
+      if (agent === 'implementer') {
+        events.push('implementer-start');
+        return createDelayedMockChild('done', 40, () => events.push('implementer-end'));
+      }
+      return createMockChild('done', '', 0);
+    });
+
+    const result = await runEpicExecution(
+      'epic-parent',
+      { chains: [['pv-m.1'], ['pv-m.2']], flat: false, warnings: [] },
+      ctx,
+      { spawnFn, scriptSpawnFn },
+    );
+
+    expect(result.outcome).toBe('complete');
+    expect(result.beadsCompleted.sort()).toEqual(['pv-m.1', 'pv-m.2']);
+
+    // Implementers DID run concurrently: both chains' implementers started
+    // before either finished. This proves the lock scopes to the build gate
+    // only, not to chain execution as a whole.
+    const implEvents = events.filter(e => e.startsWith('implementer'));
+    expect(implEvents.slice(0, 2)).toEqual(['implementer-start', 'implementer-start']);
+
+    // Guardians NEVER overlapped: each dispatch ended before the next began
+    // (never-more-than-one-build-guardian invariant).
+    const guardianEvents = events.filter(e => e.startsWith('guardian'));
+    expect(guardianEvents).toEqual([
+      'guardian-start', 'guardian-end',
+      'guardian-start', 'guardian-end',
+    ]);
+  });
+
+  it('halts a chain on persistent build-gate failure and escalates the truncated remainder', async () => {
+    const { runEpicExecution } = await import('../../lib/execute.js');
+    const helpers = await import('../../lib/helpers.js');
+
+    const ctx = makeEpicCtx();
+    const ops: string[] = [];
+    const children: Array<{ agent: string; cwd?: string; child: ReturnType<typeof createMockChild> }> = [];
+
+    const scriptSpawnFn = makeChainScriptSpawn({
+      beads: { 'pv-h.1': 'Head bead', 'pv-h.2': 'Tail bead' },
+      readyIds: ['pv-h.1'],
+      ops,
+    });
+    const spawnFn = makeAgentSpawn(ops, children, () =>
+      JSON.stringify({ verdict: 'fail', concerns: ['lint broke'] }),
+    );
+
+    const result = await runEpicExecution(
+      'epic-parent',
+      { chains: [['pv-h.1', 'pv-h.2']], flat: false, warnings: [] },
+      ctx,
+      { spawnFn, scriptSpawnFn },
+    );
+
+    expect(result.outcome).toBe('escalated');
+    expect(result.escalatedBeads).toContain('pv-h.1');
+    expect(result.escalatedBeads).toContain('pv-h.2');
+
+    // The failed level never submitted, and the truncated tail never ran.
+    expect(ops.some(o => o.startsWith('gh stack submit'))).toBe(false);
+    expect(ops.some(o => o.includes('chore.tail-bead'))).toBe(false);
+    const implementerPrompts = children
+      .filter(c => c.agent === 'implementer')
+      .map(c => (c.child.stdin!.write as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as string);
+    expect(implementerPrompts.some(p => p.includes('pv-h.2'))).toBe(false);
+
+    // Both the failed level and the truncated remainder were escalated.
+    const escalatedIds = vi.mocked(helpers.bdEscalate).mock.calls.map(c => c[0]);
+    expect(escalatedIds).toContain('pv-h.1');
+    expect(escalatedIds).toContain('pv-h.2');
+
+    expect(logStub.runJsonEntries).toContainEqual(
+      expect.objectContaining({
+        event: 'chain-halted',
+        failedBead: 'pv-h.1',
+        truncatedBeads: ['pv-h.2'],
+      }),
+    );
+  });
+});
+
+// =============================================================================
+// withBuildGuardianLock — cross-chain guardian serialization
+// =============================================================================
+
+describe('withBuildGuardianLock', () => {
+  it('runs tasks strictly one at a time in FIFO order', async () => {
+    const { withBuildGuardianLock } = await import('../../lib/execute.js');
+
+    const events: string[] = [];
+    const task = (name: string, delay: number) => () =>
+      new Promise<string>((resolve) => {
+        events.push(`${name}-start`);
+        setTimeout(() => {
+          events.push(`${name}-end`);
+          resolve(name);
+        }, delay);
+      });
+
+    // The slowest task is queued first — with any overlap, b/c would start
+    // (and even finish) before a ends.
+    const results = await Promise.all([
+      withBuildGuardianLock(task('a', 30)),
+      withBuildGuardianLock(task('b', 5)),
+      withBuildGuardianLock(task('c', 1)),
+    ]);
+
+    expect(results).toEqual(['a', 'b', 'c']);
+    expect(events).toEqual([
+      'a-start', 'a-end',
+      'b-start', 'b-end',
+      'c-start', 'c-end',
+    ]);
+  });
+
+  it('does not poison the queue when a task rejects', async () => {
+    const { withBuildGuardianLock } = await import('../../lib/execute.js');
+
+    await expect(
+      withBuildGuardianLock(() => Promise.reject(new Error('guardian boom'))),
+    ).rejects.toThrow('guardian boom');
+
+    await expect(
+      withBuildGuardianLock(async () => 'recovered'),
+    ).resolves.toBe('recovered');
   });
 });
 
@@ -906,26 +1414,33 @@ describe('parseBeadJson', () => {
 });
 
 // =============================================================================
-// derivePrTitleFromBead
+// fetchPrInfo
 // =============================================================================
 
-describe('derivePrTitleFromBead', () => {
-  it('should strip "Epic:" prefix for epic beads', async () => {
-    const { derivePrTitleFromBead } = await import('../../lib/execute.js');
-    expect(derivePrTitleFromBead('Epic: Redesign dashboard', 'epic'))
-      .toBe('Redesign dashboard');
+describe('fetchPrInfo', () => {
+  it('parses url and number from gh pr view JSON', async () => {
+    const { fetchPrInfo } = await import('../../lib/execute.js');
+    const logStub = stubLogger();
+    const spawnFn = vi.fn().mockReturnValue(
+      fakeSpawnResult(JSON.stringify({ number: 12, url: 'https://github.com/o/r/pull/12' }), '', 0),
+    );
+
+    const info = fetchPrInfo('feat.branch', logStub.logger, PhaseName.PR, spawnFn as never);
+    expect(info).toEqual({ url: 'https://github.com/o/r/pull/12', number: 12 });
+    expect(spawnFn).toHaveBeenCalledWith(
+      'gh', ['pr', 'view', 'feat.branch', '--json', 'url,number'], expect.any(Object),
+    );
   });
 
-  it('should pass through title for non-epic beads', async () => {
-    const { derivePrTitleFromBead } = await import('../../lib/execute.js');
-    expect(derivePrTitleFromBead('Fix alignment', 'task'))
-      .toBe('Fix alignment');
-  });
+  it('returns null when gh fails or output is unparseable', async () => {
+    const { fetchPrInfo } = await import('../../lib/execute.js');
+    const logStub = stubLogger();
 
-  it('should handle missing "Epic:" prefix for epic beads', async () => {
-    const { derivePrTitleFromBead } = await import('../../lib/execute.js');
-    expect(derivePrTitleFromBead('Redesign dashboard', 'epic'))
-      .toBe('Redesign dashboard');
+    const failSpawn = vi.fn().mockReturnValue(fakeSpawnResult('', 'no pull requests found', 1));
+    expect(fetchPrInfo('feat.x', logStub.logger, PhaseName.PR, failSpawn as never)).toBeNull();
+
+    const garbageSpawn = vi.fn().mockReturnValue(fakeSpawnResult('not json', '', 0));
+    expect(fetchPrInfo('feat.x', logStub.logger, PhaseName.PR, garbageSpawn as never)).toBeNull();
   });
 });
 
@@ -994,18 +1509,20 @@ describe('runPR', () => {
     expect(logStub.logs.some(l => l.kind === 'err' && l.data.includes('UNCLOSED'))).toBe(true);
   });
 
-  it('should create PR and route to Report for a closed leaf bead', async () => {
+  it('should submit via plain git push + gh pr create (single, chained=false), canonicalize via gh pr edit, and route to Report for a closed leaf bead', async () => {
     const { runPR } = await import('../../lib/execute.js');
 
     const branchName = 'chore/fix-widget';
     const prUrl = 'https://github.com/owner/repo/pull/42';
 
-    // Sequence: git branch, bd show, git push, gh pr create
+    // Sequence: git branch, bd show, git push, gh pr create, gh pr view, gh pr edit
     const deps = makeDeps([
       fakeSpawnResult(branchName, '', 0),
       fakeSpawnResult(CLOSED_LEAF_JSON, '', 0),
       fakeSpawnResult('', '', 0),
-      fakeSpawnResult(prUrl, '', 0),
+      fakeSpawnResult('', '', 0),
+      fakeSpawnResult(JSON.stringify({ number: 42, url: prUrl }), '', 0),
+      fakeSpawnResult('', '', 0),
     ]);
     const ctx = makePhaseCtx(logStub);
 
@@ -1016,45 +1533,77 @@ describe('runPR', () => {
     expect(result.ctx.beadsClosed).toEqual(['pv-test-1']);
   });
 
-  it('should create PR for a closed epic with closed children', async () => {
-    const { runPR } = await import('../../lib/execute.js');
-
-    const prUrl = 'https://github.com/owner/repo/pull/99';
-
-    // Sequence: git branch, bd show (epic), bd show (child1), bd show (child2),
-    //           git push, gh pr create
-    const deps = makeDeps([
-      fakeSpawnResult('feat/branch', '', 0),
-      fakeSpawnResult(CLOSED_EPIC_JSON, '', 0),
-      fakeSpawnResult(CLOSED_CHILD_JSON, '', 0),
-      fakeSpawnResult(CLOSED_CHILD_JSON, '', 0),
-      fakeSpawnResult('', '', 0),
-      fakeSpawnResult(prUrl, '', 0),
-    ]);
-    const ctx = makePhaseCtx(logStub);
-
-    const result = await runPR(ctx, deps);
-
-    expect(result.next).toBe(PhaseName.Report);
-
-    const complete = logStub.runJsonEntries.find(e => e.event === 'pr_finalize_complete');
-    expect(complete!.prTitle).toBe('Redesign dashboard');
-    expect(complete!.beadsClosed).toEqual(['pv-test-1', 'pv-test-1.1', 'pv-test-1.2']);
-  });
-
-  it('should halt when an epic child is not closed', async () => {
+  it('should halt when git push fails (stackSubmit single path)', async () => {
     const { runPR } = await import('../../lib/execute.js');
 
     const deps = makeDeps([
-      fakeSpawnResult('feat/branch', '', 0),
-      fakeSpawnResult(CLOSED_EPIC_JSON, '', 0),
-      fakeSpawnResult(CLOSED_CHILD_JSON, '', 0),
-      fakeSpawnResult(OPEN_BEAD_JSON, '', 0),
+      fakeSpawnResult('chore/fix-widget', '', 0),
+      fakeSpawnResult(CLOSED_LEAF_JSON, '', 0),
+      fakeSpawnResult('', 'fatal: could not read from remote repository', 128),
     ]);
     const ctx = makePhaseCtx(logStub);
 
     const result = await runPR(ctx, deps);
     expect(result.next).toBe('halt');
+    expect(logStub.logs.some(l => l.kind === 'err' && l.data.includes('stackSubmit failed'))).toBe(true);
+  });
+
+  it('should halt when gh pr view fails after stackSubmit', async () => {
+    const { runPR } = await import('../../lib/execute.js');
+
+    // Sequence: git branch, bd show, git push ok, gh pr create ok, gh pr view fails
+    const deps = makeDeps([
+      fakeSpawnResult('chore/fix-widget', '', 0),
+      fakeSpawnResult(CLOSED_LEAF_JSON, '', 0),
+      fakeSpawnResult('', '', 0),
+      fakeSpawnResult('', '', 0),
+      fakeSpawnResult('', 'no pull requests found for branch', 1),
+    ]);
+    const ctx = makePhaseCtx(logStub);
+
+    const result = await runPR(ctx, deps);
+    expect(result.next).toBe('halt');
+    expect(result.ctx.prUrl).toBeUndefined();
+    expect(logStub.logs.some(l => l.kind === 'err' && l.data.includes('gh pr view failed'))).toBe(true);
+  });
+
+  it('should halt when gh pr view returns unparseable output', async () => {
+    const { runPR } = await import('../../lib/execute.js');
+
+    // Sequence: git branch, bd show, git push ok, gh pr create ok, gh pr view garbage
+    const deps = makeDeps([
+      fakeSpawnResult('chore/fix-widget', '', 0),
+      fakeSpawnResult(CLOSED_LEAF_JSON, '', 0),
+      fakeSpawnResult('', '', 0),
+      fakeSpawnResult('', '', 0),
+      fakeSpawnResult('not json at all', '', 0),
+    ]);
+    const ctx = makePhaseCtx(logStub);
+
+    const result = await runPR(ctx, deps);
+    expect(result.next).toBe('halt');
+    expect(result.ctx.prUrl).toBeUndefined();
+    expect(logStub.logs.some(l => l.kind === 'err' && l.data.includes('gh pr view failed'))).toBe(true);
+  });
+
+  it('should halt when gh pr edit exits non-zero', async () => {
+    const { runPR } = await import('../../lib/execute.js');
+
+    // Sequence: git branch, bd show, git push ok, gh pr create ok, gh pr view ok, gh pr edit fails
+    const deps = makeDeps([
+      fakeSpawnResult('chore/fix-widget', '', 0),
+      fakeSpawnResult(CLOSED_LEAF_JSON, '', 0),
+      fakeSpawnResult('', '', 0),
+      fakeSpawnResult('', '', 0),
+      fakeSpawnResult(JSON.stringify({ number: 42, url: 'https://github.com/o/r/pull/42' }), '', 0),
+      fakeSpawnResult('', 'GraphQL: Something went wrong', 1),
+    ]);
+    const ctx = makePhaseCtx(logStub);
+
+    const result = await runPR(ctx, deps);
+    expect(result.next).toBe('halt');
+    expect(result.ctx.prUrl).toBeUndefined();
+    expect(logStub.logs.some(l => l.kind === 'err' && l.data.includes('gh pr edit failed'))).toBe(true);
   });
 });
 
@@ -1076,8 +1625,8 @@ describe('runPR backstop', () => {
       if (cmd === 'git' && args[0] === 'rev-list') {
         return fakeSpawnResult('0\n', '', 0);
       }
-      // Anything else (bd show, git push, gh pr create) must NOT be called.
-      // If it is, return failure so assertions catch the leak.
+      // Anything else (bd show, git push, gh pr create/view/edit) must NOT
+      // be called. If it is, return failure so assertions catch the leak.
       return fakeSpawnResult('', 'unexpected spawn', 1);
     });
 
@@ -1161,7 +1710,7 @@ describe('epicPhase', () => {
     vi.mocked(helpers.bdEnrichmentCheck).mockReturnValue(false);
   });
 
-  it('should halt when no ready beads found', async () => {
+  it('should halt when the epic has no open children', async () => {
     const { epicPhase } = await import('../../lib/execute.js');
 
     const mockSpawnSync = vi.fn().mockReturnValue({
@@ -1176,24 +1725,150 @@ describe('epicPhase', () => {
     expect(result.next).toBe('halt');
   });
 
-  it('scopes the bd ready query to descendants of the current epic via --parent', async () => {
+  it('gathers the full child set + blocks-edges via bd show --json and logs the stack plan', async () => {
     const { epicPhase } = await import('../../lib/execute.js');
 
-    const mockSpawnSync = vi.fn().mockReturnValue({
-      stdout: Buffer.from('[]'),
-      stderr: Buffer.from(''),
-      status: 0,
+    // Epic with two children where pv-e.2 is blocked by pv-e.1 — the full
+    // child set (NOT bd ready, which omits blocked children) must feed the
+    // plan, producing one two-level chain.
+    const mockSpawnSync = vi.fn().mockImplementation((cmd: string, args: string[]) => {
+      if (cmd === 'bd' && args[0] === 'show') {
+        const beadId = args[1] === '--json' ? args[2] : args[1];
+        if (beadId === 'pv-epic') {
+          return fakeSpawnResult(JSON.stringify([{
+            id: 'pv-epic', issue_type: 'epic', status: 'open',
+            children: [{ id: 'pv-e.1' }, { id: 'pv-e.2' }],
+          }]), '', 0);
+        }
+        if (beadId === 'pv-e.1') {
+          return fakeSpawnResult(JSON.stringify([{
+            id: 'pv-e.1', title: 'First', issue_type: 'task', status: 'open',
+            dependencies: [{ id: 'pv-epic', dependency_type: 'parent-child' }],
+          }]), '', 0);
+        }
+        if (beadId === 'pv-e.2') {
+          return fakeSpawnResult(JSON.stringify([{
+            id: 'pv-e.2', title: 'Second', issue_type: 'task', status: 'open',
+            dependencies: [
+              { id: 'pv-epic', dependency_type: 'parent-child' },
+              { id: 'pv-e.1', dependency_type: 'blocks' },
+            ],
+          }]), '', 0);
+        }
+      }
+      // bd ready returns nothing so the wave loop exits without executing.
+      if (cmd === 'bd' && args[0] === 'ready') return fakeSpawnResult('[]', '', 0);
+      return fakeSpawnResult('', '', 0);
     });
 
     const ctx = makePhaseCtx(logStub);
     ctx.beadId = 'pv-epic';
 
-    await epicPhase(ctx, { scriptSpawnFn: mockSpawnSync });
+    const result = await epicPhase(ctx, { scriptSpawnFn: mockSpawnSync });
 
+    // Full-child-set gathering, never bd ready alone.
     expect(mockSpawnSync).toHaveBeenCalledWith(
-      'bd',
-      ['ready', '--parent', 'pv-epic', '--json'],
-      expect.any(Object),
+      'bd', expect.arrayContaining(['show', 'pv-epic', '--json']), expect.any(Object),
     );
+    expect(logStub.runJsonEntries).toContainEqual(
+      expect.objectContaining({
+        event: 'stack-plan',
+        epicId: 'pv-epic',
+        chains: [['pv-e.1', 'pv-e.2']],
+        flat: false,
+      }),
+    );
+
+    // No chain became ready, so the epic completes with no PR work and
+    // routes to Report (per-level PRs happen inside the wave loop, so the
+    // epic path never routes to the PR phase).
+    expect(result.next).toBe(PhaseName.Report);
+  });
+});
+
+// =============================================================================
+// gatherStackPlan — closed-child exclusion
+// =============================================================================
+
+describe('gatherStackPlan', () => {
+  it('excludes closed children and promotes a closed blocker\'s dependent to chain head', async () => {
+    const { gatherStackPlan } = await import('../../lib/execute.js');
+
+    const logStub = stubLogger();
+    const ctx: RunContext = {
+      runId: 'test-run',
+      beadId: 'pv-epic',
+      logger: logStub.logger,
+      phaseHistory: [],
+    };
+
+    // pv-g.1 (blocker) is CLOSED; pv-g.2 is open and was blocked by it;
+    // pv-g.3 is open and blocked by pv-g.2. Dropping the closed blocker's
+    // edge must promote pv-g.2 to the head of a two-level chain.
+    const scriptSpawnFn = vi.fn().mockImplementation((cmd: string, args: string[]) => {
+      if (cmd === 'bd' && args[0] === 'show') {
+        const beadId = args[1] === '--json' ? args[2] : args[1];
+        if (beadId === 'pv-epic') {
+          return fakeSpawnResult(JSON.stringify([{
+            id: 'pv-epic', issue_type: 'epic', status: 'open',
+            children: [{ id: 'pv-g.1' }, { id: 'pv-g.2' }, { id: 'pv-g.3' }],
+          }]), '', 0);
+        }
+        if (beadId === 'pv-g.1') {
+          return fakeSpawnResult(JSON.stringify([{
+            id: 'pv-g.1', title: 'Done already', issue_type: 'task', status: 'closed',
+          }]), '', 0);
+        }
+        if (beadId === 'pv-g.2') {
+          return fakeSpawnResult(JSON.stringify([{
+            id: 'pv-g.2', title: 'Second', issue_type: 'task', status: 'open',
+            dependencies: [{ id: 'pv-g.1', dependency_type: 'blocks' }],
+          }]), '', 0);
+        }
+        if (beadId === 'pv-g.3') {
+          return fakeSpawnResult(JSON.stringify([{
+            id: 'pv-g.3', title: 'Third', issue_type: 'task', status: 'open',
+            dependencies: [{ id: 'pv-g.2', dependency_type: 'blocks' }],
+          }]), '', 0);
+        }
+      }
+      return fakeSpawnResult('', '', 0);
+    });
+
+    const plan = gatherStackPlan('pv-epic', ctx, { scriptSpawnFn });
+
+    expect(plan).not.toBeNull();
+    expect(plan!.flat).toBe(false);
+    expect(plan!.chains).toEqual([['pv-g.2', 'pv-g.3']]);
+  });
+
+  it('returns null when every child is closed', async () => {
+    const { gatherStackPlan } = await import('../../lib/execute.js');
+
+    const logStub = stubLogger();
+    const ctx: RunContext = {
+      runId: 'test-run',
+      beadId: 'pv-epic',
+      logger: logStub.logger,
+      phaseHistory: [],
+    };
+
+    const scriptSpawnFn = vi.fn().mockImplementation((cmd: string, args: string[]) => {
+      if (cmd === 'bd' && args[0] === 'show') {
+        const beadId = args[1] === '--json' ? args[2] : args[1];
+        if (beadId === 'pv-epic') {
+          return fakeSpawnResult(JSON.stringify([{
+            id: 'pv-epic', issue_type: 'epic', status: 'open',
+            children: [{ id: 'pv-g.1' }],
+          }]), '', 0);
+        }
+        return fakeSpawnResult(JSON.stringify([{
+          id: beadId, title: 'Done', issue_type: 'task', status: 'closed',
+        }]), '', 0);
+      }
+      return fakeSpawnResult('', '', 0);
+    });
+
+    expect(gatherStackPlan('pv-epic', ctx, { scriptSpawnFn })).toBeNull();
   });
 });

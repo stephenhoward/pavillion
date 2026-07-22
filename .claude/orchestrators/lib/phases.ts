@@ -32,6 +32,7 @@ import {
   bdEscalate,
   bdCreateFollowup,
   branchName,
+  stackCreate,
   checkEpicPromotion,
   discoverAgents,
   type StateVerdict,
@@ -146,12 +147,10 @@ export const PREFLIGHT_MESSAGES: Record<string, string> = {
     'HEAD is not at origin/main \u2014 pull, rebase, or check out a fresh branch from origin/main before re-running /process-backlog.',
   empty_backlog:
     'No ready beads available (or every ready bead is labelled `needs-human`) \u2014 shape or unlabel a bead before re-running /process-backlog.',
-  missing_gt:
-    'Graphite CLI (gt) not found \u2014 install gt and run `gt init`; branch creation and PR submission go through gt with no plain-git fallback.',
-  gt_unauthenticated:
-    'gt is not authenticated \u2014 run `gt auth` interactively before re-running /process-backlog.',
-  gt_trunk_misconfigured:
-    'gt trunk is not configured to main \u2014 run `gt init --trunk main` before re-running /process-backlog.',
+  missing_gh_stack:
+    'gh-stack extension not found \u2014 install it (`gh extension install github/gh-stack`); chain branch creation and PR submission go through gh stack with no plain-git fallback for chain work.',
+  gh_unauthenticated:
+    'gh is not authenticated \u2014 run `gh auth login` before re-running /process-backlog.',
 };
 
 export const GIT_SAFE_MESSAGES: Record<number, string> = {
@@ -1401,12 +1400,29 @@ export async function branch(ctx: PhaseCtx, deps: PhaseDeps = {}): Promise<Phase
     return { next: 'halt', ctx };
   }
 
-  // Step 5: Create branch if not already on it
-  if (currentCmd.stdout !== derivedBranchName) {
-    const checkoutCmd = spawnCmd('git', ['checkout', '-b', derivedBranchName], logger, PhaseName.Branch, spawn);
+  // Step 5: Create branch if not already on it.
+  //
+  // Epics skip branch creation entirely: chain levels create their own
+  // stacked branches inside the wave loop via stackCreate (see
+  // git-workflow/stacking.md and execute.ts runEpicExecution). A single
+  // epic-wide branch would sit empty and untracked by any PR.
+  if (issueType === 'epic') {
+    logger.appendRunJson({
+      event: 'branch_skipped_epic',
+      beadId: ctx.beadId,
+    });
+  }
+  else if (currentCmd.stdout !== derivedBranchName) {
+    // Same main-branch override the other git probes honor (gitSafeToStart,
+    // verification gate, preflight).
+    const mainBranch = process.env.GIT_SAFE_MAIN_BRANCH ?? 'main';
+    // This phase only ever runs for a single, standalone leaf bead — chain
+    // levels create their own stacked branches inside the wave loop (see the
+    // comment above). `chained` is therefore always false here.
+    const createResult = stackCreate(derivedBranchName, mainBranch, false, { spawnFn: spawn });
 
-    if (checkoutCmd.exitCode !== 0) {
-      const msg = `git checkout -b "${derivedBranchName}" failed: ${checkoutCmd.stderr.trim()}`;
+    if (!createResult.ok) {
+      const msg = `git checkout -b "${derivedBranchName}" ${mainBranch} failed: ${createResult.stderr.trim()}`;
       console.error(msg);
       logger.writePhaseLog(PhaseName.Branch, 'err', msg + '\n');
       return { next: 'halt', ctx };
@@ -1415,7 +1431,7 @@ export async function branch(ctx: PhaseCtx, deps: PhaseDeps = {}): Promise<Phase
     logger.appendRunJson({
       event: 'branch_created',
       branchName: derivedBranchName,
-      baseBranch: 'main',
+      baseBranch: mainBranch,
     });
   }
   else {

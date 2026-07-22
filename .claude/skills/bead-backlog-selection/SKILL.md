@@ -42,12 +42,11 @@ Before `/process-backlog` begins, `preflight()` must return `{ok: true}`. Every 
 |---|---|---|
 | `dirty_tree` | `git status --porcelain` non-empty | Commit or stash first. |
 | `behind_main` | HEAD is not at `origin/main`, or `git fetch origin main` failed | Pull/rebase onto `origin/main` (or fix remote access). Any branch name is fine as long as HEAD matches. |
-| `missing_gt` | Graphite CLI (`gt`) not installed | Install gt and run `gt init`. Hard stop — no silent fallback to plain git. |
-| `gt_unauthenticated` | gt installed but not authenticated | Run `gt auth` interactively. Hard stop. |
-| `gt_trunk_misconfigured` | gt trunk is not `main` | Run `gt init --trunk main`. Hard stop. |
+| `missing_gh_stack` | `gh stack` extension not installed | See `git-workflow/stacking.md`'s preflight section — remediation is one of the local hard-gates it defines. Hard stop — no silent fallback to plain git for chain work. |
+| `gh_unauthenticated` | `gh` not authenticated | See `git-workflow/stacking.md`'s preflight section. Hard stop. |
 | `empty_backlog` | No READY beads exist that aren't `needs-human`-labelled | Shape or enrich more beads, or unlabel one. |
 
-The three gt kinds exist because all branch creation and PR submission goes through gt — command patterns and stacking rules live in the `git-workflow` skill's `stacking.md` (sole source of truth; not restated here).
+The two `gh_stack`-related kinds exist because chain branch creation and PR submission go through `gh stack` — command patterns and stacking rules live in the `git-workflow` skill's `stacking.md` (sole source of truth; not restated here). These cover only the cheap local hard-gates; repo-level feature enablement is **not** a preflight kind — per `stacking.md`, no confirmed cheap read-only probe for it exists, so it surfaces instead as a hard stop (exit code 9) at the first real chain submit during execution, not at preflight time.
 
 The preflight check NEVER auto-fixes any of these. It reports what's wrong; the human (or the orchestrator's exit message) decides what to do. Auto-fix is an anti-pattern here because the fix depends on intent: a dirty tree could be in-progress work the user forgot about, and silently stashing it would surprise them.
 
@@ -97,7 +96,7 @@ The skill refuses autonomous work in these situations, via `preflight()` returni
 
 - **Dirty working tree** — would conflate user work with automation output.
 - **HEAD behind `origin/main`** — branching off a stale base makes PRs that conflict with recent merges and forces rebases.
-- **gt missing, unauthenticated, or trunk misconfigured** — branch creation and PR submission require a working Graphite setup; falling back to plain git silently would fork the workflow.
+- **`gh stack` missing or `gh` unauthenticated** — chain branch creation and PR submission require a working `gh stack` setup (see `git-workflow/stacking.md`); falling back to plain git silently for chain work would fork the workflow.
 - **Empty backlog** — nothing to do. Also triggered when every READY bead is `needs-human`-labelled.
 
 The orchestrator surfaces these reasons to the user verbatim and exits. It does NOT prompt, retry, or auto-fix. The human sees the failure and acts, or invokes `/process-backlog` again once the condition clears.

@@ -45,7 +45,7 @@ Branch from `main`, or from the parent branch when stacking per [stacking.md](st
 
 The convention above applies to the **remote (`origin`) branch name** — the name GitHub readers see in the branch list, PR list, and merge-commit messages. Local branch names do not have to match.
 
-Some tooling (e.g. `superset.sh`) creates worktrees with auto-generated nonsense local branch names like `apple-father` or `abrupt-grapple`. Leave those local names alone, and never submit them: pushing goes through gt, which pushes the branch under its local name. Create a properly-named branch for the work instead — see the worktree guidance in [stacking.md](stacking.md).
+Some tooling (e.g. `superset.sh`) creates worktrees with auto-generated nonsense local branch names like `apple-father` or `abrupt-grapple`. Leave those local names alone, and never submit them: whatever pushes the branch — plain `git push` for a single, `gh stack submit` for a stack level (see [stacking.md](stacking.md)) — pushes it under its local name. Create a properly-named branch for the work instead — see the worktree guidance in [stacking.md](stacking.md).
 
 ## Disallowed
 

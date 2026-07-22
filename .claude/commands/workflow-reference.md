@@ -163,7 +163,7 @@ bd update <id> --status=in_progress
 bd close <id>
 bd close <id1> <id2> <id3>      # Batch close
 
-# Sync (ephemeral branches)
+# Sync (per-bead branches, including stack levels — see git-workflow/stacking.md)
 bd sync --from-main
 ```
 
@@ -218,9 +218,9 @@ This re-reads all beads and refreshes the notes with updated dependency graph an
 
 ### With Git
 
-- Work happens on ephemeral branch per epic (usually)
+- Work happens on a branch per bead; a dependency chain among sibling beads becomes a stacked branch chain (conventions: `git-workflow/stacking.md`; scheduling: `bead-wave-orchestration` skill)
 - Run `bd sync --from-main` before merging
-- Each completed epic = one PR typically
+- Each completed bead = one PR; an epic lands as its chains' stacked PRs
 
 ### With CI/CD
 

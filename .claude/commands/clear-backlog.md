@@ -203,17 +203,22 @@ Dispatch a **general-purpose** subagent per bead. The prompt MUST include:
   branch/commit/PR; conventional commits; no invented scope) and
   `standards-routing` (find and follow the relevant project standards). Follow
   TDD where it applies.
-- **Branch off `origin/main`**: `git fetch origin && git checkout -b
-  <branchname> origin/main` (name per `git-workflow` `branches.md`).
+- **Branch off `main`**: `git fetch origin`, then create the branch (name per
+  `git-workflow` `branches.md`). This command's beads are independent leaf
+  chores, not a dependency chain, so branching is the plain `git checkout -b`
+  path in `git-workflow` `stacking.md` — no `gh stack` involved.
 - **Pre-close checklist (in order), NEVER the full suite**:
   1. `pkill -f "vitest" 2>/dev/null || true`
   2. `npm run lint`
   3. Targeted tests only: `npx vitest run <files>` — **no `--maxThreads` flag**
      (unsupported in the repo's current vitest). For integration files, run the
      single file rather than the whole `test:integration` suite.
-- **Ship it**: commit (conventional, no bead ID), push, `gh pr create --base
-  main` (concise title/body, no bead ID), then `bd update <id> --notes "PR:
-  <url>"` and `bd close <id>` — **only if lint + targeted tests passed.**
+- **Ship it**: commit (conventional, no bead ID), push, and open the PR per
+  `git-workflow` `pull-requests.md`/`stacking.md` (this command's beads are
+  independent, so the single-branch path applies, not `gh stack`), then
+  `gh pr edit <num> --title --body` (concise title/body, no bead ID), then
+  `bd update <id> --notes "PR: <url>"` and `bd close <id>` — **only if lint +
+  targeted tests passed.**
 - **Refuse-and-report on blockers.** If the bead turns out NOT to be a small
   leaf chore (real ripples, ambiguous scope, premise doesn't match current
   code, a needed dependency is missing), STOP: do not close the bead, leave the

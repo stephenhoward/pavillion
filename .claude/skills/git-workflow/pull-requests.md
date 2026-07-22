@@ -41,16 +41,16 @@ In the PR body, place the reference wherever it reads naturally — top of Motiv
 
 ## Workflow
 
-- **No draft PRs.** Open a PR only when ready for merge. When submitting through gt, this requires the `--publish` flag — see [stacking.md](stacking.md) for why. Stacked PRs are real PRs, individually ready for review; being upstack does not make a PR a draft.
+- **No draft PRs.** Open a PR only when ready for merge. Singles satisfy this by never passing `--draft` to `gh pr create`. Chains satisfy it per [stacking.md](stacking.md) (`gh stack submit` needs an explicit flag to avoid its draft default). Stacked PRs are real PRs, individually ready for review; being upstack does not make a PR a draft.
 - **No auto-merge.** The user reviews and merges manually.
 - **Push to origin** only after build-guardian PASS (lint, unit, integration, build, e2e via build-guardian).
 - **Squash merge** on landing.
 
 ## Pushing to origin
 
-Pushing and PR creation go through the Graphite CLI: `gt submit` replaces `git push` + `gh pr create`. See [stacking.md](stacking.md) for the command patterns (submit flags, PR-shape follow-up via `gh pr edit`, and the merge/restack ritual).
+**Singles** (no stack involved) push and open PRs the plain way: `git push` + `gh pr create`. **Chains** (per [stacking.md](stacking.md)) go through `gh stack submit` instead — see [stacking.md](stacking.md) for the command patterns (submit flags, PR-shape follow-up via `gh pr edit`, and the merge ritual). No doc in this skill asserts that every push goes through `gh stack`; only stack levels do.
 
-Branch-name conformance still applies before the first submit: the branch gt pushes is the name GitHub readers see, so it must follow [branches.md](branches.md). If you are working in a worktree with an auto-generated local branch name (`apple-father`, `abrupt-grapple`), do not submit that branch — create a properly-named branch for the work per the worktree guidance in [stacking.md](stacking.md).
+Branch-name conformance applies before the first push either way: the branch that gets pushed — by `git push` or by `gh stack submit` — is the name GitHub readers see, so it must follow [branches.md](branches.md). If you are working in a worktree with an auto-generated local branch name (`apple-father`, `abrupt-grapple`), do not push that branch — create a properly-named branch for the work per the worktree guidance in [stacking.md](stacking.md).
 
 ## Disallowed
 

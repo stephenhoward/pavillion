@@ -129,6 +129,16 @@ advisors reviewed in Phase 3.5. If a genuinely unavoidable out-of-scope
 change surfaces during implementation, the implementer should stop and
 report it — not silently expand scope.
 
+### 4b. Commit to the branch the orchestrator prepared
+
+The implementer commits to whatever branch (and checkout) the
+orchestrator prepared before dispatch. That branch may be a stack level —
+a per-bead branch stacked on a sibling bead's branch rather than on
+`main` — and may live in a dedicated git worktree. This is invisible to
+the implementer: it never creates, switches, or submits branches itself
+(stacking conventions: `git-workflow/stacking.md`; scheduling:
+[`bead-wave-orchestration`](../bead-wave-orchestration/SKILL.md)).
+
 ### 5. Pre-close checklist (in order)
 
 Before the implementer calls `bd close`, it must run these four steps in
@@ -211,25 +221,28 @@ Used when multiple analyzed leaves are spawned together in a wave (max 3
 parallel per [`bead-wave-orchestration`](../bead-wave-orchestration/SKILL.md)).
 Flow:
 
-1. Orchestrator spawns **up to 3** implementer subagents in parallel,
-   each with the canonical prompt above (substituting each bead's id).
+1. Orchestrator schedules dependency CHAINS (up to 3 in parallel — the
+   cap applies to chains) and spawns one implementer at a time per
+   chain, each with the canonical prompt above (substituting each
+   bead's id). See [`bead-wave-orchestration`](../bead-wave-orchestration/SKILL.md)
+   for the chain lifecycle.
 2. Each implementer independently runs its own pre-close checklist —
    kill vitest, lint, targeted tests on its own file list, close its own
-   bead. No coordination between implementers; they touch disjoint
-   files per the advisor-approved scope.
+   bead. No coordination between implementers; parallel chains run in
+   separate checkouts, and beads within a chain run sequentially.
 3. As each implementer closes, orchestrator spawns that bead's matched
    **per-bead auditors** (via [`agent-discovery`](../agent-discovery/SKILL.md);
    these are lightweight and parallel).
-4. When **all** implementers in the wave have closed and all per-bead
-   auditors have reported, orchestrator spawns **one**
-   cross-bead-integration-verifier (if wave size > 1) and then **one**
-   `build-guardian` for the whole wave. Never more than one
-   build-guardian at a time — test suites must not run concurrently.
-5. If build-guardian passes → orchestrator cascades to the next wave. If
-   it fails → orchestrator spawns `test-failure-investigator`, retries
-   the offending bead once, re-runs the build-guardian.
+4. After a bead's auditors resolve, the orchestrator runs **one**
+   `build-guardian` for that stack level, before the level's branch is
+   submitted. Never more than one build-guardian at a time — test
+   suites must not run concurrently.
+5. If build-guardian passes → the level is submitted and the chain
+   advances. If it fails → orchestrator spawns
+   `test-failure-investigator`, retries the level's bead, re-runs the
+   build-guardian; exhausted retries halt the chain.
 
-Key property: the single build-guardian per wave is what makes the
+Key property: the serialized per-level build-guardian is what makes the
 "never run the full suite" rule safe for implementers. Multiple
 implementers running the full suite in parallel would break the
 no-concurrent-test-suites invariant.
@@ -272,8 +285,8 @@ the consumer is outdated or the skill is.
   orchestrator (not the implementer) to pick the per-bead auditors that
   run after `bd close`.
 - [`bead-wave-orchestration`](../bead-wave-orchestration/SKILL.md) — the
-  wave lifecycle that encodes the "one build-guardian per wave"
-  invariant the epic-wave variant relies on.
+  wave lifecycle that encodes the "one build-guardian at a time, once
+  per stack level" invariant the epic-wave variant relies on.
 - [`bead-backlog-selection`](../bead-backlog-selection/SKILL.md) — the
   escalation contract the orchestrator follows when the implementer
   reports a blocker or a retry exhausts.
