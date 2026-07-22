@@ -26,4 +26,4 @@ Read the relevant reference file for the operation you are doing. Each is self-c
 
 ## Related
 
-The `bead-branch-and-pr` skill provides orchestrator-internal helper scripts (`branch-name.sh`, `commit-msg.sh`, `pr-body.sh`), the `gitSafeToStart` working-tree check, and the build-guardian-before-push gate. It consumes the conventions defined here; it is not a parallel source of truth.
+The `bead-branch-and-pr` skill documents the deterministic stack tooling (`.claude/tools/stack.ts`: `safe-to-start`, `plan`, `create`, `submit`, `sync`) and the build-guardian-before-push gate. It consumes the conventions defined here; it is not a parallel source of truth.

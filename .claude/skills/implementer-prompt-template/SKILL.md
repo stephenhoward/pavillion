@@ -1,6 +1,6 @@
 ---
 name: implementer-prompt-template
-description: Canonical minimal prompt pattern for dispatching a bead implementer subagent. Use this skill when spawning an implementer for a single leaf bead, when spawning implementers inside an epic wave, or when evolving the implementer prompt so every orchestrator (/process-backlog, /spawn-bead-workers, future commands) shares one source of truth.
+description: Canonical minimal prompt pattern for dispatching a bead implementer subagent. Use this skill when spawning an implementer for a single leaf bead, when spawning implementers inside an epic wave, or when evolving the implementer prompt so every orchestrating command (/spawn-bead-workers, /clear-backlog, future commands) shares one source of truth.
 ---
 
 # Implementer Prompt Template
@@ -16,8 +16,9 @@ This is a prose-only skill. There are no scripts. Every orchestrator that
 dispatches an implementer should reference this skill so the rules below
 stay in exactly one place.
 
-Consumers: `/spawn-bead-workers` (epic-wave variant), `/process-backlog`
-(single-leaf variant, plus epic-wave variant via delegated orchestration).
+Consumers: `/spawn-bead-workers` (epic-wave variant), `/clear-backlog`
+(documented lightweight variant), and any future orchestrating command that
+dispatches a single-leaf implementer.
 
 ## Why the prompt is minimal
 
@@ -104,12 +105,11 @@ skips the analysis phase and produces work the advisors never reviewed.
 
 The deterministic check for enrichment is
 [`bead-state-assessment`](../bead-state-assessment/SKILL.md)'s
-`bd-enrichment-check.sh <id>` script: exit 0 means enriched, exit 1 means
-not. The implementer may run it as a first step, but the
-`/process-backlog` pre-spawn gate and the `/spawn-bead-workers` Phase 2
-enrichment check normally guarantee that any bead reaching the
-implementer is already enriched. The refusal protocol exists as a
-defence-in-depth backstop for the case where both gates missed it.
+`npx tsx .claude/tools/bead.ts enrichment-check <id>` command: exit 0 means
+enriched, exit 1 means not. The implementer may run it as a first step, but
+the `/spawn-bead-workers` Phase 2 enrichment check normally guarantees that
+any bead reaching the implementer is already enriched. The refusal protocol
+exists as a defence-in-depth backstop for the case where the gate missed it.
 
 ### 3. TDD is the expected workflow
 
@@ -180,9 +180,9 @@ If the implementer cannot complete the work (missing dependency,
 unexpected codebase state, ambiguous bead, failing test that indicates
 the plan is wrong), it must stop and report the blocker to the
 orchestrator. It must not close the bead, and it must not paper over the
-issue. The orchestrator decides whether to retry, investigate, or
-escalate per its own skill ([`bead-backlog-selection`](../bead-backlog-selection/SKILL.md)
-describes the escalation contract for `/process-backlog`).
+issue. The orchestrating agent decides whether to retry, investigate, or
+escalate (`npx tsx .claude/tools/bead.ts escalate <id> "<reason>"` — the
+needs-human protocol in [`epic-bead-workflow`](../epic-bead-workflow/SKILL.md)).
 
 ## Variants
 
@@ -192,30 +192,29 @@ when the full test suite (build-guardian) runs. Understanding this split
 lets orchestrators document guarantees correctly for their downstream
 verification agents.
 
-### Single-leaf variant (`/process-backlog` on a lone leaf bead)
+### Single-leaf variant (a lone leaf bead)
 
-Used when the bead being processed is a single analyzed leaf and the
-orchestrator chose Branch B in Phase 7 (not an epic). Flow:
+Used when the bead being processed is a single analyzed leaf (not an
+epic). Flow:
 
-1. Orchestrator spawns **one** implementer subagent with the canonical
-   prompt above.
+1. Orchestrating agent spawns **one** implementer subagent with the
+   canonical prompt above.
 2. Implementer runs pre-close checklist (kill vitest, lint, targeted
    tests) and calls `bd close {bead_id}`.
-3. Orchestrator spawns **per-bead auditors** matched to the changed
+3. Orchestrating agent spawns **per-bead auditors** matched to the changed
    files via the [`agent-discovery`](../agent-discovery/SKILL.md) skill.
-4. Orchestrator spawns **one** `build-guardian` for the whole run (there
-   is only one bead, so "per wave" and "per run" collapse to the same
-   thing).
-5. If build-guardian passes → orchestrator proceeds to PR. If it fails
-   → orchestrator retries once, then escalates per
-   [`bead-backlog-selection`](../bead-backlog-selection/SKILL.md).
+4. Orchestrating agent spawns **one** `build-guardian` for the whole run
+   (there is only one bead, so "per wave" and "per run" collapse to the
+   same thing).
+5. If build-guardian passes → proceed to PR. If it fails → retry once,
+   then escalate via `npx tsx .claude/tools/bead.ts escalate`.
 
 Key property: the implementer's pre-close targeted tests prove the
 changed code's correctness locally; the single build-guardian run proves
 the overall suite still passes after the change. The implementer never
 runs the full suite.
 
-### Epic-wave variant (`/spawn-bead-workers` or `/process-backlog` on an epic)
+### Epic-wave variant (`/spawn-bead-workers` on an epic)
 
 Used when multiple analyzed leaves are spawned together in a wave (max 3
 parallel per [`bead-wave-orchestration`](../bead-wave-orchestration/SKILL.md)).
@@ -277,16 +276,16 @@ the consumer is outdated or the skill is.
   the implementer's pre-close discipline (lint + targeted tests) is what
   makes the auditor's read-only analysis reliable.
 - [`bead-state-assessment`](../bead-state-assessment/SKILL.md) — home of
-  the `bd-enrichment-check.sh` script that the implementer may run as a
+  the `bead.ts enrichment-check` command that the implementer may run as a
   pre-flight (belt-and-braces behind the pre-spawn gate) and the
-  `bd-state.sh` classifier the orchestrator uses to decide whether a
-  bead is ready for an implementer at all.
+  `bead.ts state` classifier the orchestrating agent uses to decide whether
+  a bead is ready for an implementer at all.
 - [`agent-discovery`](../agent-discovery/SKILL.md) — used by the
   orchestrator (not the implementer) to pick the per-bead auditors that
   run after `bd close`.
 - [`bead-wave-orchestration`](../bead-wave-orchestration/SKILL.md) — the
   wave lifecycle that encodes the "one build-guardian at a time, once
   per stack level" invariant the epic-wave variant relies on.
-- [`bead-backlog-selection`](../bead-backlog-selection/SKILL.md) — the
-  escalation contract the orchestrator follows when the implementer
+- [`epic-bead-workflow`](../epic-bead-workflow/SKILL.md) — the needs-human
+  escalation protocol the orchestrating agent follows when the implementer
   reports a blocker or a retry exhausts.

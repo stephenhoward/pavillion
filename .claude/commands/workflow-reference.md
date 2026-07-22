@@ -48,7 +48,7 @@ Quick reference for the complete plan-to-implementation workflow.
 | `/decompose-bead` | Break shaped bead into epic/hierarchy | Manual decomposition (`/plan` invokes this internally) |
 | `/analyze-bead` | Map dependencies, enrich bead notes | Manual analysis (`/plan` invokes this internally) |
 | `/spawn-bead-workers` | Orchestrate parallel execution | Ready to implement |
-| `/process-backlog` | Autonomous bead processing | Background work selection + execution |
+| `/clear-backlog` | Easy-win-first backlog sweep | Drain small, well-scoped chores autonomously |
 
 ## State Machine
 

@@ -171,6 +171,30 @@ bd dep add <parent-id> <part1-id>
 bd dep add <parent-id> <part2-id>
 ```
 
+### Escalating a Bead That Can't Be Automated (needs-human protocol)
+
+When autonomous or orchestrated work decides a bead can't proceed without a
+human (premise doesn't match the current code, advisors keep requesting
+changes, retries exhausted, genuine design fork), mark it durably so future
+runs skip it instead of retrying forever:
+
+```bash
+npx tsx .claude/tools/bead.ts escalate <bead-id> "<reason>" [phase]
+```
+
+The tool does two things, idempotently:
+
+1. Adds the `needs-human` label (bd's label store is a set, so re-adding is
+   free). Orchestrating agents filter this label out of their candidate
+   sets.
+2. Appends an `## Escalation (<date>)` section to the bead's notes with the
+   phase and reason — skipped if today's section already exists.
+
+Escalation is reversible: the human reads the Escalation section, fixes the
+underlying issue (reshape, add context, narrow scope), then removes the
+label with `bd label remove <id> needs-human`. The bead is then eligible
+again.
+
 ## Anti-Patterns to Avoid
 
 ### 1. Jumping Into Epic Work Directly

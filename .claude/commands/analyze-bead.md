@@ -55,7 +55,7 @@ ELSE (no children):
 
 **Decomposition Assessment (for beads with no children):**
 
-Delegate the sizing verdict to the `bead-state-assessment` skill (see `.claude/skills/bead-state-assessment/SKILL.md` for the 2-of-3 heuristic). Run `bash .claude/skills/bead-state-assessment/bd-sizing-check.sh <bead-id>`, parse the emitted JSON `{needs_decomposition, reasons}`, and route on the verdict:
+Delegate the sizing verdict to the `bead-state-assessment` skill (see `.claude/skills/bead-state-assessment/SKILL.md` for the 2-of-3 heuristic). Run `npx tsx .claude/tools/bead.ts sizing-check <bead-id>`, parse the emitted JSON `{needs_decomposition, reasons}`, and route on the verdict:
 
 ```
 IF needs_decomposition == true:

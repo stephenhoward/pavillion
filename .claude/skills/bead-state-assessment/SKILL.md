@@ -6,11 +6,11 @@ description: Classify a bead's lifecycle state and decide the next phase. Use th
 # Bead State Assessment
 
 This skill classifies any bead into one of seven lifecycle states and recommends
-the next phase. Its prose documents the state machine for humans; its scripts
-deliver deterministic JSON verdicts for orchestrators.
+the next phase. Its prose documents the state machine for humans; the
+deterministic JSON verdicts come from the `.claude/tools/bead.ts` CLI.
 
-Consumers: `/process-backlog`, `/plan`, `/spawn-bead-workers`,
-`/analyze-bead`.
+Consumers: `/plan`, `/spawn-bead-workers`, `/analyze-bead`,
+`/clear-backlog`.
 
 ## The state machine
 
@@ -69,7 +69,7 @@ state == executing    -> wait; the bead is already being worked on
 state == complete     -> skip; nothing to do
 ```
 
-The `missing_phases` array returned by `bd-state.sh` is the direct input
+The `missing_phases` array returned by `bead.ts state` is the direct input
 to this tree. If `analyzed` appears in `missing_phases`, the next phase is
 `/analyze-bead`. If `decomposed` appears, sizing dictates whether
 decomposition is needed. If `advised` appears, advisors have not yet
@@ -77,7 +77,7 @@ reviewed the bead.
 
 ## Sizing heuristic: when should a bead be decomposed?
 
-The `bd-sizing-check.sh` script applies a **2-of-3** rule over the bead's
+The `bead.ts sizing-check` command applies a **2-of-3** rule over the bead's
 DESCRIPTION + DESIGN text. If at least two of these criteria trigger, the
 bead should be decomposed before analysis:
 
@@ -98,14 +98,21 @@ can complete in a single session without running out of context.
 
 ## Implementation
 
-Functions live in `.claude/orchestrators/lib/helpers.ts`:
+The deterministic checks live in `.claude/tools/lib/bead.ts` and are invoked
+via the CLI:
 
-### `bdState(beadId, deps)`
+```bash
+npx tsx .claude/tools/bead.ts state <bead-id>
+npx tsx .claude/tools/bead.ts sizing-check <bead-id>
+npx tsx .claude/tools/bead.ts enrichment-check <bead-id>
+```
+
+### `bead.ts state <bead-id>`
 
 Returns `{state, missing_phases[], reasons[]}`. `missing_phases` lists the
 milestones the bead has not yet reached (its content drives the next-phase
 decision tree). `reasons` documents which signals triggered, so the
-orchestrator and human reviewers can see the justification.
+orchestrating agent and human reviewers can see the justification.
 
 Example: a decomposed epic that has been through advisory review produces
 `{"state":"decomposed","missing_phases":["analyzed"],"reasons":["has non-empty DESCRIPTION","has DESIGN section","has ACCEPTANCE CRITERIA section","notes contain Advisory Review","has CHILDREN with at least one child bead"]}`.
@@ -115,11 +122,15 @@ Note: a bead can be classified as `decomposed` without ever entering
 milestone reached, not a strict sequence — but the natural `/plan` flow
 progresses shaped → advised → decomposed for each cohort.
 
-### `bdEnrichmentCheck(beadId, deps)`
+### `bead.ts enrichment-check <bead-id>`
 
-Returns `true` if the bead's notes contain "Implementation Context", `false` otherwise. Implementer subagents use this as a pre-flight assertion per the `implementer-prompt-template` skill's refusal protocol. Keeping it separate from `bdState()` means the implementer refusal check is a simple boolean, not a JSON parse.
+Exits 0 (and prints `{"enriched": true}`) if the bead's notes contain
+"Implementation Context", exits 1 otherwise. Implementer subagents use this
+as a pre-flight assertion per the `implementer-prompt-template` skill's
+refusal protocol. Keeping it separate from `state` means the implementer
+refusal check is a simple exit code, not a JSON parse.
 
-### `bdSizingCheck(beadId, deps)`
+### `bead.ts sizing-check <bead-id>`
 
 Returns `{needs_decomposition, reasons[]}` per the 2-of-3 heuristic above.
 The `reasons` array captures which criteria triggered and by how much, so
@@ -128,13 +139,15 @@ recommended.
 
 ## Tests
 
-Tests are co-located with the orchestrator codebase in `.claude/orchestrators/lib/__tests__/`. Fixtures capture `bd show` output for various bead states; the test suite verifies that each function correctly classifies state, identifies missing phases, detects enrichment, and applies the sizing heuristic.
+Tests live at `.claude/tools/test/bead.test.ts` (run with
+`npx vitest run --config .claude/tools/vitest.config.ts`). Fixtures capture
+`bd show` output for various bead states; the suite verifies that each
+function correctly classifies state, identifies missing phases, detects
+enrichment, and applies the sizing heuristic.
 
 ## Cross-references
 
 - `epic-bead-workflow` — bead semantics and the state progression this
   skill classifies against
-- `bead-backlog-selection` — consumes `bd-state.sh` to pick next actions
-  on ready beads
-- `implementer-prompt-template` — uses `bd-enrichment-check.sh` as its
+- `implementer-prompt-template` — uses `bead.ts enrichment-check` as its
   pre-flight refusal gate

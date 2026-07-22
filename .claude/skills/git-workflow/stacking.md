@@ -8,11 +8,11 @@ stacking tool existed. `gh` itself (not `gh stack`) remains the tool for PR
 body edits, merging, and CI queries in both cases.
 
 This file is the **sole source of truth** for `gh stack` command patterns and
-stacking rules. Other skills (`bead-branch-and-pr`, `bead-backlog-selection`,
+stacking rules. Other skills (`bead-branch-and-pr`,
 `bead-wave-orchestration`, etc.) cross-reference this file; they do not
 restate its contents. The corresponding operations for orchestrators are
-implemented only in `.claude/orchestrators/lib/helpers.ts` (`stackCreate`,
-`stackSubmit`, `syncAndRestack`).
+implemented only in `.claude/tools/stack.ts` (`create`,
+`submit`, `sync`).
 
 ## When a stack exists
 
@@ -72,7 +72,7 @@ Rules:
   cannot violate the no-draft invariant, only backstop it. This converges to
   reserve-only (sweep only if a PR surfaces as draft despite `--open`) once
   `--open` is proven reliable on re-submits — see the docstring on
-  `stackSubmit` in `helpers.ts` for the exact trim condition. `submit` is
+  `stackSubmit` in `.claude/tools/lib/stack.ts` for the exact trim condition. `submit` is
   confirmed idempotent on re-submit (no new commits, or new commits pushed)
   and never clobbers a title/body already set via `gh pr edit`.
 - `gh stack view` / `gh stack view --json` / `gh stack view --short` inspect
@@ -189,8 +189,9 @@ Two tiers, both enforced before autonomous work begins:
    confirmed at cutover and re-verified by fail-safe runtime detection: the
    first real `gh stack submit` of a run surfaces **exit code 9** if access
    was ever silently revoked, and that is a hard stop — a clean, pre-merge
-   refusal, never a corrupted or partial state. See `bead-backlog-selection`
-   for how this surfaces to the orchestrator.
+   refusal, never a corrupted or partial state. The `featureDisabled` flag
+   in `stack.ts submit`/`sync` output is how this surfaces to the
+   orchestrating agent.
 
 ## Preview status
 

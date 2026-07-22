@@ -14,7 +14,7 @@ This command orchestrates around three skills that hold the authoritative prose.
 
 - [`bead-wave-orchestration`](../skills/bead-wave-orchestration/SKILL.md) — wave lifecycle: the 3-implementer cap, per-bead auditor cascade, wave-end verification chain (cross-bead-integration-verifier → architecture-auditor → build-guardian), failure handling, retry rules, epic completion sweep.
 - [`implementer-prompt-template`](../skills/implementer-prompt-template/SKILL.md) — canonical implementer subagent prompt: bead-first read, refusal protocol for unenriched beads, TDD, pre-close checklist (kill vitest, lint, targeted tests, `bd close`).
-- [`agent-discovery`](../skills/agent-discovery/SKILL.md) — dynamic discovery and matching of auditor/verifier agents. Primary entry points used here: `match-agents.sh auditor` (per-bead) and `discover-agents.sh {auditor,verifier}` (epic-completion sweep).
+- [`agent-discovery`](../skills/agent-discovery/SKILL.md) — dynamic discovery and selection of auditor/verifier agents. Enumerate candidates with `npx tsx .claude/tools/bead.ts agents {auditor,verifier}`; the orchestrating agent selects the applicable subset per the skill's guidance.
 
 ## Overview
 
@@ -50,7 +50,7 @@ bd show <epic-id>   # hierarchy
 bd ready            # unblocked beads
 ```
 
-For each ready leaf bead, run `bd show <bead-id>` and sort into **enriched** (notes contain `Implementation Context`) vs. **unenriched** (missing). The deterministic check is `bash .claude/skills/bead-state-assessment/bd-enrichment-check.sh <bead-id>` — exit 0 means enriched, exit 1 means not.
+For each ready leaf bead, run `bd show <bead-id>` and sort into **enriched** (notes contain `Implementation Context`) vs. **unenriched** (missing). The deterministic check is `npx tsx .claude/tools/bead.ts enrichment-check <bead-id>` — exit 0 means enriched, exit 1 means not.
 
 **Enrichment gate (REFUSE to start if any targeted bead lacks Implementation Context).** If any ready or user-selected bead is unenriched:
 
@@ -77,7 +77,7 @@ Spawning rules (invariants):
 As each implementer closes (via `bd close`):
 
 1. Collect the bead's changed file list (typically `git diff --name-only` over the implementer's commit, falling back to the bead's `Files to Modify`).
-2. Pipe the list into `bash .claude/skills/agent-discovery/match-agents.sh auditor`. This is the ONLY source for auditor selection — do not maintain a hardcoded list.
+2. Enumerate candidates with `npx tsx .claude/tools/bead.ts agents auditor` and select the applicable subset yourself by matching the changed files against each candidate's description (per [`agent-discovery`](../skills/agent-discovery/SKILL.md); default toward inclusion). The enumeration tool is the ONLY source of candidates — do not maintain a hardcoded list.
 3. Spawn every matched auditor in a single parallel Task batch. If an auditor's description accepts a spec path, pass `Spec: {spec_path}`.
 4. Auditors are read-only and run concurrently with other implementers and each other; they do NOT count against the 3-slot implementer budget.
 5. Apply auditor verdicts per [`review-mode-auditor`](../skills/review-mode-auditor/SKILL.md): PASS proceeds; PASS WITH WARNINGS is recorded in the wave summary; FAIL returns findings to the implementer for a single retry round.
@@ -88,8 +88,8 @@ As each implementer closes (via `bd close`):
 
 - **Unenriched-bead refusal from implementer** — spawn a general-purpose enrichment subagent scoped to just that bead, then re-spawn. Enrichment-then-retry does NOT count toward the retry limit.
 - **Test failure** — spawn `test-failure-investigator` with failure context; route to a follow-up implementer based on its diagnosis (counts as a retry).
-- **Implementation blocker** — surface to user: retry with adjusted approach, spawn research subagent, escalate via `bash .claude/skills/bead-backlog-selection/bd-escalate.sh <id> <reason>`, or skip if it doesn't block other work.
-- **Retry limit: maximum 2 per bead.** Enrichment recovery does NOT count. After 2 retries still fail, escalate via `bd-escalate.sh` and exit.
+- **Implementation blocker** — surface to user: retry with adjusted approach, spawn research subagent, escalate via `npx tsx .claude/tools/bead.ts escalate <id> "<reason>"`, or skip if it doesn't block other work.
+- **Retry limit: maximum 2 per bead.** Enrichment recovery does NOT count. After 2 retries still fail, escalate via the escalate tool and exit.
 
 ### PHASE 6: Wave-End Verification Chain & Cascade
 
@@ -114,8 +114,8 @@ When every wave has closed and every bead is complete:
 1. Verify epic status: `bd show <epic-id>`.
 2. Discover comprehensive agents via `agent-discovery`:
    ```bash
-   bash .claude/skills/agent-discovery/discover-agents.sh auditor
-   bash .claude/skills/agent-discovery/discover-agents.sh verifier
+   npx tsx .claude/tools/bead.ts agents auditor
+   npx tsx .claude/tools/bead.ts agents verifier
    ```
 3. Filter matches against the epic's full changed file set (union across waves: `git diff --name-only main...HEAD`).
 4. Always include `implementation-verifier` if present (full spec verification: lint, full suite, e2e, acceptance criteria). If absent, log the absence; do not substitute a different agent.
@@ -148,7 +148,7 @@ One bead at a time, waiting for user approval between each. Useful for debugging
 /spawn-bead-workers <epic-id> --dry-run
 ```
 
-Report the wave plan, enrichment status of each targeted bead, and the auditors `match-agents.sh auditor` would select per bead. Make zero changes.
+Report the wave plan, enrichment status of each targeted bead, and the auditors you would select per bead (from the `agents auditor` candidate list). Make zero changes.
 
 ### Resume
 
@@ -168,7 +168,7 @@ This command has no automated tests. To verify behavioral equivalence with the p
 
 1. Read the command end-to-end and confirm the 7 behavior-preservation invariants are explicitly stated (or referenced via the three skills):
    - Max 3 parallel implementers (HARD LIMIT).
-   - Per-bead auditor cascade sourced from `agent-discovery/match-agents.sh auditor`.
+   - Per-bead auditor cascade sourced from the `agent-discovery` selection process (candidates from `bead.ts agents auditor`).
    - `cross-bead-integration-verifier` triggered only when wave size > 1.
    - `build-guardian` gate: once per wave, sequential, after all beads + audits resolve.
    - Retry limit: max 2 per bead; enrichment recovery doesn't count.

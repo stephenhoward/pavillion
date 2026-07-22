@@ -10,15 +10,15 @@ or drive a merge session.
 
 Conventions and command semantics live in the `git-workflow` skill's
 `stacking.md` — that file is the source of truth; this command is a thin
-wrapper over the `syncAndRestack` helper in
-`.claude/orchestrators/lib/helpers.ts`. It does not restate `gh stack` syntax.
+wrapper over the stack sync tool in `.claude/tools/stack.ts`. It does not
+restate `gh stack` syntax.
 
 ## Steps
 
-1. **Sync.** Run the `syncAndRestack` helper:
+1. **Sync.** Run the sync tool:
 
    ```bash
-   npx tsx -e "import { syncAndRestack } from './.claude/orchestrators/lib/helpers.js'; console.log(JSON.stringify(syncAndRestack(), null, 2));"
+   npx tsx .claude/tools/stack.ts sync
    ```
 
 2. **Report what moved and what conflicted**, from the structured result:
