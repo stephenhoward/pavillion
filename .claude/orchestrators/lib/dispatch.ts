@@ -77,6 +77,11 @@ export interface DispatchOptions {
   fallbackModel?: boolean;
   /** Override spawn function (for testing). */
   spawnFn?: typeof nodeSpawn;
+  /**
+   * Working directory for the spawned agent. Used when an agent must run
+   * inside a chain's git worktree instead of the main checkout.
+   */
+  cwd?: string;
 }
 
 /**
@@ -204,6 +209,7 @@ function runSingleDispatch<T>(
   const child: ChildProcess = spawnFn(claudeBin, args, {
     stdio: ['pipe', 'pipe', 'pipe'],
     env: { ...process.env },
+    ...(opts.cwd !== undefined ? { cwd: opts.cwd } : {}),
   });
 
   // Write prompt to stdin for initial dispatch

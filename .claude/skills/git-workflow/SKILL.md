@@ -19,6 +19,7 @@ GitHub artifacts must be self-contained for GitHub readers. Local-only reference
 | Writing a commit | [commits.md](commits.md) |
 | Pushing a branch to origin | [pull-requests.md](pull-requests.md) (also see local-vs-remote in [branches.md](branches.md)) |
 | Opening a pull request | [pull-requests.md](pull-requests.md) |
+| Working with a stacked branch / restacking | [stacking.md](stacking.md) |
 | Cutting a release | [releases.md](releases.md) |
 
 Read the relevant reference file for the operation you are doing. Each is self-contained — you do not need to read the others.

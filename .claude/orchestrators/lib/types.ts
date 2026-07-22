@@ -88,6 +88,12 @@ export interface WaveState {
   epicId: string;
   /** 1-indexed wave number. */
   waveNumber: number;
+  /**
+   * Dependency chains scheduled in this wave (see helpers.ts stackPlan).
+   * Each chain is a blocker-first bead-id path; the 3-implementer cap
+   * applies to chains, and within a chain beads run sequentially.
+   */
+  chains: string[][];
   /** Bead IDs currently being implemented (in-flight). */
   beadsInProgress: string[];
   /** Bead IDs that have been closed in this wave. */

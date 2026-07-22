@@ -87,6 +87,27 @@ function mountPassingPreflight(scripts: ScriptRouter, beadId = 'pv-test.1'): voi
     }
     return { exitCode: 0, stdout: '', stderr: '' };
   });
+
+  mountPassingGhStack(scripts);
+}
+
+/**
+ * Mount passing gh-stack preflight probes on a ScriptRouter.
+ *
+ * Covers the gh calls made by runPreflightCheck() (D5: two cheap local
+ * hard-gates only): gh stack --version, gh auth status.
+ */
+function mountPassingGhStack(scripts: ScriptRouter): void {
+  scripts.on('gh', (args) => {
+    const argStr = args.join(' ');
+    if (argStr.includes('stack --version')) {
+      return { exitCode: 0, stdout: 'gh stack version 0.0.8', stderr: '' };
+    }
+    if (argStr.includes('auth status')) {
+      return { exitCode: 0, stdout: 'Logged in to github.com as testuser', stderr: '' };
+    }
+    return { exitCode: 0, stdout: '', stderr: '' };
+  });
 }
 
 describe('Integration: safeguards', () => {
@@ -129,6 +150,7 @@ describe('Integration: safeguards', () => {
   it('should halt on empty backlog (exhausted)', async () => {
     // Preflight passes, but bdTopReady returns empty list
     let prefCalls = 0;
+    mountPassingGhStack(scripts);
     scripts.on('git', (args) => {
       const a = args.join(' ');
       if (a.includes('status --porcelain')) return { exitCode: 0, stdout: '', stderr: '' };

@@ -41,22 +41,16 @@ In the PR body, place the reference wherever it reads naturally — top of Motiv
 
 ## Workflow
 
-- **No draft PRs.** Open a PR only when ready for merge.
+- **No draft PRs.** Open a PR only when ready for merge. Singles satisfy this by never passing `--draft` to `gh pr create`. Chains satisfy it per [stacking.md](stacking.md) (`gh stack submit` needs an explicit flag to avoid its draft default). Stacked PRs are real PRs, individually ready for review; being upstack does not make a PR a draft.
 - **No auto-merge.** The user reviews and merges manually.
 - **Push to origin** only after build-guardian PASS (lint, unit, integration, build, e2e via build-guardian).
 - **Squash merge** on landing.
 
 ## Pushing to origin
 
-Before the first push, verify the local branch name conforms to [branches.md](branches.md). If it does **not** (for example, an auto-generated name from `superset.sh` like `apple-father` or `abrupt-grapple`), push with an explicit remote ref so the GitHub branch follows the convention:
+**Singles** (no stack involved) push and open PRs the plain way: `git push` + `gh pr create`. **Chains** (per [stacking.md](stacking.md)) go through `gh stack submit` instead — see [stacking.md](stacking.md) for the command patterns (submit flags, PR-shape follow-up via `gh pr edit`, and the merge ritual). No doc in this skill asserts that every push goes through `gh stack`; only stack levels do.
 
-```bash
-git push -u origin HEAD:<type>.<kebab-title>
-```
-
-The `-u` flag wires the local branch's upstream to the renamed remote, so future pushes (`git push`) go to the same ref without re-specifying it.
-
-If the local branch already conforms, `git push -u origin HEAD` is sufficient.
+Branch-name conformance applies before the first push either way: the branch that gets pushed — by `git push` or by `gh stack submit` — is the name GitHub readers see, so it must follow [branches.md](branches.md). If you are working in a worktree with an auto-generated local branch name (`apple-father`, `abrupt-grapple`), do not push that branch — create a properly-named branch for the work per the worktree guidance in [stacking.md](stacking.md).
 
 ## Disallowed
 

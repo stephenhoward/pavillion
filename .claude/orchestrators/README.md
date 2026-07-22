@@ -52,6 +52,9 @@ per phase and a `run.jsonl` trace. The logs directory is gitignored.
 
 ## Tests
 
+The root `vitest.config.ts` only includes `src/**` projects, so this suite
+needs its own config. Run from the repo root:
+
 ```bash
-npx vitest run .claude/orchestrators/
+npx vitest run --config .claude/orchestrators/vitest.config.ts
 ```

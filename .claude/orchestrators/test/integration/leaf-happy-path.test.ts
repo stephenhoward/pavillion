@@ -97,11 +97,6 @@ describe('Integration: leaf happy path', () => {
       }
       // preflight fetch
       if (a.includes('fetch origin')) return { exitCode: 0, stdout: '', stderr: '' };
-      // branch phase: checkout
-      if (a.includes('checkout')) return { exitCode: 0, stdout: '', stderr: '' };
-      // PR phase: push
-      if (a.includes('push')) return { exitCode: 0, stdout: '', stderr: '' };
-
       return { exitCode: 0, stdout: '', stderr: '' };
     });
 
@@ -163,13 +158,24 @@ describe('Integration: leaf happy path', () => {
     });
 
     // ---------------------------------------------------------------------------
-    // gh handler (for PR phase)
+    // gh handler: preflight's gh-stack probes (D5: gh stack --version,
+    // gh auth status), and the PR phase's plain `gh pr create --fill` +
+    // `gh pr view` (this leaf bead is a single, chained=false, so PR
+    // submission never touches gh-stack) + `gh pr edit`.
     // ---------------------------------------------------------------------------
-    scripts.on('gh', () => ({
-      exitCode: 0,
-      stdout: 'https://github.com/org/repo/pull/42',
-      stderr: '',
-    }));
+    scripts.on('gh', (args) => {
+      const a = args.join(' ');
+      if (a.includes('stack --version')) return { exitCode: 0, stdout: 'gh stack version 0.0.8', stderr: '' };
+      if (a.includes('auth status')) return { exitCode: 0, stdout: 'Logged in to github.com as testuser', stderr: '' };
+      if (a.includes('view')) {
+        return {
+          exitCode: 0,
+          stdout: JSON.stringify({ number: 42, url: 'https://github.com/org/repo/pull/42' }),
+          stderr: '',
+        };
+      }
+      return { exitCode: 0, stdout: '', stderr: '' };
+    });
 
     // --- Dispatch routes ---
     // Implementer returns empty (success = no error thrown)

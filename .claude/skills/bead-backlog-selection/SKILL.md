@@ -36,16 +36,19 @@ The `bdTopReady()` function filters out beads with the `needs-human` label via t
 
 ## Preconditions for autonomous work
 
-Before `/process-backlog` begins, `preflight.sh` must return `{ok: true}`. Every failure carries a `kind` field so the orchestrator can route user-facing messaging:
+Before `/process-backlog` begins, `preflight()` must return `{ok: true}`. Every failure carries a `kind` field so the orchestrator can route user-facing messaging:
 
 | `kind` | Meaning | User action |
 |---|---|---|
 | `dirty_tree` | `git status --porcelain` non-empty | Commit or stash first. |
-| `wrong_branch` | Current branch is not `main` | Return to `main` (or finish the current branch's PR). |
-| `stale_main` | Local `main` differs from `origin/main`, or `git fetch origin main` failed | `git pull` (or fix remote access). |
+| `behind_main` | HEAD is not at `origin/main`, or `git fetch origin main` failed | Pull/rebase onto `origin/main` (or fix remote access). Any branch name is fine as long as HEAD matches. |
+| `missing_gh_stack` | `gh stack` extension not installed | See `git-workflow/stacking.md`'s preflight section — remediation is one of the local hard-gates it defines. Hard stop — no silent fallback to plain git for chain work. |
+| `gh_unauthenticated` | `gh` not authenticated | See `git-workflow/stacking.md`'s preflight section. Hard stop. |
 | `empty_backlog` | No READY beads exist that aren't `needs-human`-labelled | Shape or enrich more beads, or unlabel one. |
 
-The preflight script NEVER auto-fixes any of these. It reports what's wrong; the human (or the orchestrator's exit message) decides what to do. Auto-fix is an anti-pattern here because the fix depends on intent: a dirty tree could be in-progress work the user forgot about, and silently stashing it would surprise them.
+The two `gh_stack`-related kinds exist because chain branch creation and PR submission go through `gh stack` — command patterns and stacking rules live in the `git-workflow` skill's `stacking.md` (sole source of truth; not restated here). These cover only the cheap local hard-gates; repo-level feature enablement is **not** a preflight kind — per `stacking.md`, no confirmed cheap read-only probe for it exists, so it surfaces instead as a hard stop (exit code 9) at the first real chain submit during execution, not at preflight time.
+
+The preflight check NEVER auto-fixes any of these. It reports what's wrong; the human (or the orchestrator's exit message) decides what to do. Auto-fix is an anti-pattern here because the fix depends on intent: a dirty tree could be in-progress work the user forgot about, and silently stashing it would surprise them.
 
 The default main branch is `main`. Override via `PREFLIGHT_MAIN_BRANCH=<name>` if you run this in a fork with a differently-named default branch. The default `bd ready` sample size is 50; override via `PREFLIGHT_READY_LIMIT=<n>`.
 
@@ -89,11 +92,11 @@ This fallback is not wired up today because the live bd fully supports labels. L
 
 ## When to refuse to start
 
-The skill refuses autonomous work in these situations, via `preflight.sh` returning `ok: false`:
+The skill refuses autonomous work in these situations, via `preflight()` returning `ok: false`:
 
 - **Dirty working tree** — would conflate user work with automation output.
-- **Wrong branch** — branching off anything other than `main` would produce a PR with unrelated commits.
-- **Stale `main`** — branching off a stale base makes PRs that conflict with recent merges and forces rebases.
+- **HEAD behind `origin/main`** — branching off a stale base makes PRs that conflict with recent merges and forces rebases.
+- **`gh stack` missing or `gh` unauthenticated** — chain branch creation and PR submission require a working `gh stack` setup (see `git-workflow/stacking.md`); falling back to plain git silently for chain work would fork the workflow.
 - **Empty backlog** — nothing to do. Also triggered when every READY bead is `needs-human`-labelled.
 
 The orchestrator surfaces these reasons to the user verbatim and exits. It does NOT prompt, retry, or auto-fix. The human sees the failure and acts, or invokes `/process-backlog` again once the condition clears.
