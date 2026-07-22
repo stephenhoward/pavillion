@@ -1,1 +1,0 @@
-{ "epicId": "pv-epic.1", "waveNumber": 1, "verdict": "fail", "buildStatus": "red", "beadsCompleted": ["pv-epic.1.1"], "beadsFailed": ["pv-epic.1.2"], "concerns": ["lint error in CalendarService"], "nextWaveReady": [] }

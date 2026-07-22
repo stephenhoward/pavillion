@@ -15,23 +15,24 @@ This is a prose-only skill. There are no scripts. Orchestration logic lives
 in the consuming commands; this skill is what those commands reference so the
 invariants below stay in exactly one place.
 
-Consumers: `/spawn-bead-workers` (core mechanics), `/process-backlog` (when
-the target is an epic, and for the single-leaf reduction of the same
-pattern).
+Consumers: `/spawn-bead-workers` (core mechanics), plus any future command
+that executes an epic or multi-bead run (the single-leaf reduction of the
+same pattern applies to lone leaf beads).
 
 Depends on / cross-references:
 
 - [`agent-discovery`](../agent-discovery/SKILL.md) — per-bead auditor
-  matching (`match-agents.sh auditor`) and epic-completion discovery
-  (`discover-agents.sh`).
+  selection and epic-completion discovery (candidates enumerated via
+  `npx tsx .claude/tools/bead.ts agents <role>`).
 - [`implementer-prompt-template`](../implementer-prompt-template/SKILL.md) —
   the canonical prompt every implementer in a wave receives, and the
   pre-close discipline (kill stale vitest, lint, targeted tests) the wave
   invariants rely on.
 - [`bead-state-assessment`](../bead-state-assessment/SKILL.md) — the
   enrichment check the orchestrator runs before any implementer is spawned.
-- [`bead-backlog-selection`](../bead-backlog-selection/SKILL.md) —
-  escalation contract (`bd-escalate.sh`) used when retries exhaust.
+- [`epic-bead-workflow`](../epic-bead-workflow/SKILL.md) — the needs-human
+  escalation protocol (`npx tsx .claude/tools/bead.ts escalate`) used when
+  retries exhaust.
 - [`review-mode-auditor`](../review-mode-auditor/SKILL.md) — the PASS /
   PASS WITH WARNINGS / FAIL protocol every per-bead auditor follows.
 
@@ -41,8 +42,8 @@ These invariants hold across every wave, every run, every consumer. Breaking
 any of them corrupts the orchestration contract.
 
 1. **Maximum 3 parallel implementers — and the cap applies to CHAINS.**
-   Waves are built from dependency chains (`stackPlan` in
-   `.claude/orchestrators/lib/helpers.ts`), not individual beads. Within a
+   Waves are built from dependency chains (`npx tsx .claude/tools/stack.ts
+   plan`), not individual beads. Within a
    chain, beads run strictly sequentially (each level's branch stacks on
    its predecessor per `git-workflow/stacking.md`), so a chain occupies
    one implementer slot for its whole duration. Never run a 4th chain
@@ -85,8 +86,8 @@ any of them corrupts the orchestration contract.
 ## Wave lifecycle
 
 A wave is a set of ready, enriched dependency CHAINS that the orchestrator
-runs together. Chains come from the `stackPlan` helper
-(`.claude/orchestrators/lib/helpers.ts`), which turns an epic's full child
+runs together. Chains come from the plan tool
+(`npx tsx .claude/tools/stack.ts plan`), which turns an epic's full child
 set plus the bd "blocks" edges among them into an ordered forest of chains;
 non-linear graphs (cycles, forks, joins) fall back to a flat plan of
 singleton chains with a warning. Branch/stack conventions the chains
@@ -115,9 +116,8 @@ Before spawning anything, the orchestrator:
 The orchestrator runs ready chains under the 3-slot cap; independent
 chains run in parallel, and within a chain beads run strictly
 sequentially, each level's branch stacking on its predecessor
-(operations: `stackCreate`/`stackSubmit` in
-`.claude/orchestrators/lib/helpers.ts`; conventions:
-`git-workflow/stacking.md`).
+(operations: `npx tsx .claude/tools/stack.ts create` / `submit`;
+conventions: `git-workflow/stacking.md`).
 
 Concurrency model (hybrid): the first chain of a wave runs in the main
 checkout; each ADDITIONAL concurrent chain gets its own git worktree,
@@ -143,11 +143,11 @@ spawns that bead's matched auditors:
    `git diff --name-only <merge-base>...HEAD` over that implementer's
    commit, or the bead's `Files to Modify` list if no commit lookup is
    available).
-2. Pipe the file list into
-   [`agent-discovery`](../agent-discovery/SKILL.md)'s
-   `match-agents.sh auditor`. The script returns a JSON array of
-   `{name, path, description, rationale}` for every auditor whose scope
-   overlaps the changed files.
+2. Enumerate auditor candidates with `npx tsx .claude/tools/bead.ts agents
+   auditor` and select the applicable subset yourself per
+   [`agent-discovery`](../agent-discovery/SKILL.md) — match the changed
+   files against each candidate's description, defaulting toward
+   inclusion.
 3. Spawn every matched auditor in a single parallel Task batch. If any
    auditor's description indicates it accepts a spec path, pass
    `Spec: {spec_path}` in the spawn prompt.
@@ -163,7 +163,7 @@ Apply [`review-mode-auditor`](../review-mode-auditor/SKILL.md) verdicts:
 |---|---|
 | **PASS** | Bead is wave-complete; proceed. |
 | **PASS WITH WARNINGS** | Record warnings in wave summary / PR body; do NOT block. |
-| **FAIL** | Return findings to the implementer for a single retry round. If a second audit still FAILs, escalate per [`bead-backlog-selection`](../bead-backlog-selection/SKILL.md) via `bd-escalate.sh`. |
+| **FAIL** | Return findings to the implementer for a single retry round. If a second audit still FAILs, escalate via `npx tsx .claude/tools/bead.ts escalate <id> "<reason>"`. |
 
 A stack level is not ready for its build gate until its bead has closed
 and **every** matched per-bead auditor for that bead has reported a
@@ -254,7 +254,7 @@ pre-spawn enrichment check missed it. Recover:
 1. Spawn a **general-purpose enrichment subagent** scoped to just that
    bead, following the `/analyze-bead` Phase 4 enrichment flow.
 2. Wait for enrichment to complete. Verify via
-   `bead-state-assessment/bd-enrichment-check.sh`.
+   `npx tsx .claude/tools/bead.ts enrichment-check <id>`.
 3. Re-spawn the implementer with the same prompt.
 
 **Enrichment-then-retry does NOT count toward the retry limit.** It is
@@ -282,7 +282,7 @@ ambiguous requirement, unexpected codebase state, scope creep beyond
 2. Surface the blocker to the user with options:
    - Retry with an adjusted approach (counts as a retry).
    - Spawn a research subagent to investigate first.
-   - Escalate via `bead-backlog-selection/bd-escalate.sh <id> <reason>`
+   - Escalate via `npx tsx .claude/tools/bead.ts escalate <id> "<reason>"`
      (adds `needs-human` label, appends Escalation section, bead is
      skipped on future autonomous runs).
    - Skip the bead and continue the wave without it (only valid if the
@@ -313,24 +313,22 @@ construction — it is that level:
   attempt (test failure, blocker fix, build-guardian attribution). Each
   retry should include learnings from the previous attempt in the
   spawning context.
-- After 2 retries still fail, escalate per
-  [`bead-backlog-selection`](../bead-backlog-selection/SKILL.md):
-  call `bd-escalate.sh <id> "<reason>"`, preserve the branch, exit
-  cleanly from `/process-backlog` runs (the bead is labelled
-  `needs-human` and will be skipped on future autonomous runs; a human
-  removes the label to re-queue).
+- After 2 retries still fail, escalate: call
+  `npx tsx .claude/tools/bead.ts escalate <id> "<reason>"`, preserve the
+  branch, and stop work on that chain (the bead is labelled `needs-human`
+  and will be skipped on future autonomous runs; a human removes the
+  label to re-queue).
 
-**Single-leaf exception (`/process-backlog` Branch B):** When
-`/process-backlog` executes a leaf bead directly (not as part of an
-epic wave), the retry ceiling is **1** instead of 2. Rationale:
-Branch B is the autonomous-single-bead path where a failing implementer
-is almost always a signal that the bead itself needs human attention
-(shape issue, missing context, environmental assumption), not something
-a second mechanical retry will fix. The tighter ceiling reaches
-escalation faster and keeps the autonomous loop from burning context
-on beads that cannot self-recover. Epic waves keep the 2-retry ceiling
-because a single bead failure within a multi-bead wave is more often a
-transient integration issue worth one more attempt.
+**Single-leaf exception (autonomous single-bead runs):** When a lone leaf
+bead is executed autonomously (not as part of an epic wave), the retry
+ceiling is **1** instead of 2. Rationale: a failing implementer on a
+solo autonomous bead is almost always a signal that the bead itself needs
+human attention (shape issue, missing context, environmental assumption),
+not something a second mechanical retry will fix. The tighter ceiling
+reaches escalation faster and keeps the autonomous loop from burning
+context on beads that cannot self-recover. Epic waves keep the 2-retry
+ceiling because a single bead failure within a multi-bead wave is more
+often a transient integration issue worth one more attempt.
 
 ## Epic completion sweep
 
@@ -340,9 +338,11 @@ a final comprehensive sweep before declaring the epic done.
 
 1. **Discover applicable comprehensive agents** via
    [`agent-discovery`](../agent-discovery/SKILL.md):
-   - `discover-agents.sh auditor` — all `*-auditor` agents whose
-     descriptions indicate comprehensive / final-pass scope.
-   - `discover-agents.sh verifier` — all `*-verifier` agents.
+   - `npx tsx .claude/tools/bead.ts agents auditor` — all `*-auditor`
+     agents; keep those whose descriptions indicate comprehensive /
+     final-pass scope.
+   - `npx tsx .claude/tools/bead.ts agents verifier` — all `*-verifier`
+     agents.
 2. **Filter matches** against the epic's full changed file set (union of
    all waves' changes: `git diff --name-only main...HEAD`).
 3. **Always include `implementation-verifier`** if present, regardless
@@ -364,7 +364,7 @@ a final comprehensive sweep before declaring the epic done.
 
 ## Single-leaf reduction
 
-When `/process-backlog` targets a single leaf bead (not an epic), the
+When an orchestrating agent targets a single leaf bead (not an epic), the
 same lifecycle applies in its reduced form:
 
 - One wave. One singleton chain. One implementer.
@@ -397,7 +397,6 @@ is a bug; the skill is authoritative.
 
 The skill is deliberately NOT the source of truth for two adjacent
 layers: stacking conventions live in `git-workflow/stacking.md`, and the
-executable chain/`gh stack` operations (`stackPlan`, `stackCreate`,
-`stackSubmit`, `syncAndRestack`, the wave scheduler itself) live in
-`.claude/orchestrators/lib/` — this skill cross-references both and
-restates neither.
+executable chain/`gh stack` operations (`plan`, `create`, `submit`,
+`sync`) live in `.claude/tools/stack.ts` — this skill cross-references
+both and restates neither.

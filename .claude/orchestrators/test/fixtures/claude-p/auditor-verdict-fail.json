@@ -1,1 +1,0 @@
-{ "agent": "testing-playbook", "verdict": "fail", "concerns": ["missing test coverage for service layer"], "recommendations": ["add unit tests for CalendarService"], "beadId": "pv-test.1" }

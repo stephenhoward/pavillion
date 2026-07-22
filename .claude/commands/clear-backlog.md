@@ -5,23 +5,12 @@ preflights the candidates to drop stale/blocked work, and ships the **Tier A
 easy wins** autonomously — one branch/PR per bead — regardless of priority.
 Reports what shipped and surfaces the beads that need a human decision.
 
-This is the **curated, lightweight** counterpart to `/process-backlog`. Use it
-to drain the long tail of small, well-scoped chores quickly.
-
-## Relationship to `/process-backlog`
-
-| | `/process-backlog` | `/clear-backlog` |
-|---|---|---|
-| Selection | top **priority** ready bead | **easy-win first**, any priority |
-| Pipeline | full shape → analyze → advisors → implement → audit → PR | triage → preflight → lightweight implement → PR |
-| Enrichment | requires `Implementation Context` (enforced) | substitutes triage+preflight; implementers self-scope small leaf chores |
-| Scope per run | one bead (or one epic) | a curated batch of leaf chores |
-| Use when | the next-most-important thing should move | you want to clear many small wins cheaply |
+Use it to drain the long tail of small, well-scoped chores quickly.
 
 Beads that are **not** small leaf chores (decision-spikes, features, large
 rippling refactors, structured epics) are explicitly **excluded** here and left
-for `/process-backlog` or human-in-loop work. Do not force them through this
-command.
+for the `/plan` → `/analyze-bead` → `/spawn-bead-workers` pipeline or
+human-in-loop work. Do not force them through this command.
 
 ## Arguments
 
@@ -56,9 +45,10 @@ command.
 - [`standards-routing`](../skills/standards-routing/SKILL.md) — each implementer
   discovers the relevant project standards skills for its change.
 - [`bead-state-assessment`](../skills/bead-state-assessment/SKILL.md) /
-  [`bead-backlog-selection`](../skills/bead-backlog-selection/SKILL.md) — the
-  lifecycle-state and escalation concepts this command's preflight and
-  needs-decision handling are built on.
+  [`epic-bead-workflow`](../skills/epic-bead-workflow/SKILL.md) — the
+  lifecycle-state and needs-human escalation concepts this command's preflight
+  and needs-decision handling are built on. Escalate unworkable beads with
+  `npx tsx .claude/tools/bead.ts escalate <id> "<reason>"`.
 
 ## Process
 

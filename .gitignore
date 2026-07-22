@@ -6,7 +6,6 @@ coverage
 docs/.vitepress/dist
 docs/.vitepress/cache
 docs/public/version.json
-.claude/orchestrators/logs/
 logs
 .vscode
 storage
