@@ -23,6 +23,14 @@ import type { EventCategory } from '@/common/model/event_category';
  *
  * Admin-overridable mappings are intentionally OUT OF SCOPE for v1; if the
  * heuristic proves too weak, an override layer is the documented follow-up.
+ *
+ * MAINTENANCE RULE: the keyword table below is FROZEN. Do not add, remove, or
+ * reorder keywords in response to mis-mapping or missing-mapping reports (the
+ * keywords are English-only, so non-English instances get no matches — that is
+ * a known limitation, not a bug to patch here). Such a report is the trigger to
+ * build the replacement: an explicit optional FEP mapping on EventCategory
+ * (e.g. a nullable enum field with a 36-option select), with this heuristic
+ * demoted to fallback or deleted.
  */
 
 /**
