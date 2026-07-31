@@ -4,6 +4,8 @@
  * Font families, sizes, weights, and line heights
  */
 
+@use 'sass:map';
+
 :root {
   /* Font Families */
   --pav-font-family-primary: 'Creato Display', -apple-system, blinkmacsystemfont, 'Segoe UI', roboto, sans-serif;
@@ -146,9 +148,9 @@ $pav-letter-spacings: (
 
 // Typography mixins for consistent application
 @mixin pav-typography($semantic-level: body, $weight: regular) {
-  $size-key: map-get($pav-typography-semantic, $semantic-level);
-  $font-size: map-get($pav-font-sizes, $size-key);
-  $font-weight: map-get($pav-font-weights, $weight);
+  $size-key: map.get($pav-typography-semantic, $semantic-level);
+  $font-size: map.get($pav-font-sizes, $size-key);
+  $font-weight: map.get($pav-font-weights, $weight);
   
   font-family: $pav-font-family-primary;
   font-size: $font-size;
@@ -156,17 +158,17 @@ $pav-letter-spacings: (
   
   // Apply appropriate line height and letter spacing based on semantic level
   @if $semantic-level == display or $semantic-level == h1 or $semantic-level == h2 {
-    line-height: map-get($pav-line-heights, tight);
-    letter-spacing: map-get($pav-letter-spacings, tighter);
+    line-height: map.get($pav-line-heights, tight);
+    letter-spacing: map.get($pav-letter-spacings, tighter);
   } @else if $semantic-level == h3 or $semantic-level == h4 or $semantic-level == h5 or $semantic-level == h6 {
-    line-height: map-get($pav-line-heights, snug);
-    letter-spacing: map-get($pav-letter-spacings, tight);
+    line-height: map.get($pav-line-heights, snug);
+    letter-spacing: map.get($pav-letter-spacings, tight);
   } @else if $semantic-level == caption or $semantic-level == small {
-    line-height: map-get($pav-line-heights, normal);
-    letter-spacing: map-get($pav-letter-spacings, wide);
+    line-height: map.get($pav-line-heights, normal);
+    letter-spacing: map.get($pav-letter-spacings, wide);
   } @else {
-    line-height: map-get($pav-line-heights, normal);
-    letter-spacing: map-get($pav-letter-spacings, normal);
+    line-height: map.get($pav-line-heights, normal);
+    letter-spacing: map.get($pav-letter-spacings, normal);
   }
 }
 
@@ -176,8 +178,8 @@ $pav-letter-spacings: (
   
   // Scale up typography at larger breakpoints
   @media (width >= 768px) {
-    $size-key: map-get($pav-typography-semantic, $semantic-level);
-    $base-size: map-get($pav-font-sizes, $size-key);
+    $size-key: map.get($pav-typography-semantic, $semantic-level);
+    $base-size: map.get($pav-font-sizes, $size-key);
 
     font-size: calc(#{$base-size} * #{$scale-factor});
   }

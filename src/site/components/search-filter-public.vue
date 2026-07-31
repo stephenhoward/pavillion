@@ -733,6 +733,7 @@ onUnmounted(() => {
 </script>
 
 <style scoped lang="scss">
+@use 'sass:color';
 @use '../assets/mixins' as *;
 
 .search-filter-public {
@@ -960,8 +961,8 @@ onUnmounted(() => {
       box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
 
       &:hover {
-        background-color: darken($light-mode-button-background, 5%);
-        border-color: darken($light-mode-button-background, 5%);
+        background-color: color.adjust($light-mode-button-background, $lightness: -5%);
+        border-color: color.adjust($light-mode-button-background, $lightness: -5%);
       }
 
       @include dark-mode {
@@ -970,8 +971,8 @@ onUnmounted(() => {
         box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
 
         &:hover {
-          background-color: lighten($dark-mode-button-background, 5%);
-          border-color: lighten($dark-mode-button-background, 5%);
+          background-color: color.adjust($dark-mode-button-background, $lightness: 5%);
+          border-color: color.adjust($dark-mode-button-background, $lightness: 5%);
         }
       }
 
@@ -1114,7 +1115,7 @@ onUnmounted(() => {
         box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
 
         &:hover {
-          background-color: darken($light-mode-button-background, 5%);
+          background-color: color.adjust($light-mode-button-background, $lightness: -5%);
         }
 
         @include dark-mode {
@@ -1123,7 +1124,7 @@ onUnmounted(() => {
           box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
 
           &:hover {
-            background-color: lighten($dark-mode-button-background, 5%);
+            background-color: color.adjust($dark-mode-button-background, $lightness: 5%);
           }
         }
       }

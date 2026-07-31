@@ -3,6 +3,8 @@
  * Border widths, radii, styles, and colors
  */
 
+@use 'sass:map';
+
 :root {
   /* Border Widths */
   --pav-border-width-0: 0;
@@ -99,14 +101,14 @@ $pav-border-radius-semantic: (
 
 // Border utility mixin
 @mixin pav-border($width: 1, $style: solid, $color: medium) {
-  $border-width: map-get($pav-border-widths, $width);
+  $border-width: map.get($pav-border-widths, $width);
 
   border: $border-width $style var(--pav-border-color-#{$color});
 }
 
 // Border radius utility mixin
 @mixin pav-border-radius($size: md) {
-  $radius: map-get($pav-border-radii, $size);
+  $radius: map.get($pav-border-radii, $size);
 
   border-radius: $radius;
 }

@@ -15,13 +15,15 @@
 // Created: 2025-12-14
 // ================================================================
 
+@use 'sass:color';
+
 // ===== COLOR TOKENS =====
 
 // Primary brand accent (warmer, more welcoming)
 $public-accent-light: #ff9131;
 $public-accent-dark: #C86002;
-$public-accent-hover-light: darken(#ff9131, 5%);
-$public-accent-hover-dark: lighten(#C86002, 5%);
+$public-accent-hover-light: color.adjust(#ff9131, $lightness: -5%);
+$public-accent-hover-dark: color.adjust(#C86002, $lightness: 5%);
 
 // Emit the four accent CSS custom properties on a root selector so
 // widgets and the public site can override them via inline styles

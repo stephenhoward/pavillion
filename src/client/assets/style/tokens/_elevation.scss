@@ -3,6 +3,8 @@
  * Z-index scale for proper layering and stacking context
  */
 
+@use 'sass:map';
+
 :root {
   /* Z-Index Scale (powers of 10 for easy insertion) */
   --pav-z-index-base: 0;           /* Base layer - normal content */
@@ -63,8 +65,8 @@ $pav-z-index-semantic: (
 
 // Z-index utility mixin
 @mixin pav-z-index($level: base) {
-  @if map-has-key($pav-z-indices, $level) {
-    z-index: map-get($pav-z-indices, $level);
+  @if map.has-key($pav-z-indices, $level) {
+    z-index: map.get($pav-z-indices, $level);
   } @else {
     @error "Z-index level #{$level} not found in $pav-z-indices map.";
   }
@@ -73,13 +75,13 @@ $pav-z-index-semantic: (
 // Layer utility mixin (combines z-index with position)
 @mixin pav-layer($z-level: base, $position: relative) {
   position: $position;
-  z-index: map-get($pav-z-indices, $z-level);
+  z-index: map.get($pav-z-indices, $z-level);
 }
 
 // Stacking context mixin
 @mixin pav-stacking-context($z-level: base) {
   position: relative;
-  z-index: map-get($pav-z-indices, $z-level);
+  z-index: map.get($pav-z-indices, $z-level);
   
   // Create new stacking context
   transform: translateZ(0);

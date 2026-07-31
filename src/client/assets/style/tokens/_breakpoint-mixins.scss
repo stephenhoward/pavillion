@@ -4,14 +4,15 @@
  * Pure @use world — consumers must @use this file directly.
  */
 
+@use 'sass:map';
 @use 'breakpoint-vars' as *;
 
 /* Core Responsive Mixins */
 
 // Media query mixin (mobile-first)
 @mixin pav-media($breakpoint) {
-  @if map-has-key($pav-breakpoints, $breakpoint) {
-    @media (min-width: map-get($pav-breakpoints, $breakpoint)) {
+  @if map.has-key($pav-breakpoints, $breakpoint) {
+    @media (min-width: map.get($pav-breakpoints, $breakpoint)) {
       @content;
     }
   } @else {
@@ -21,8 +22,8 @@
 
 // Media query mixin (desktop-first, max-width)
 @mixin pav-media-down($breakpoint) {
-  @if map-has-key($pav-breakpoints, $breakpoint) {
-    $breakpoint-value: map-get($pav-breakpoints, $breakpoint);
+  @if map.has-key($pav-breakpoints, $breakpoint) {
+    $breakpoint-value: map.get($pav-breakpoints, $breakpoint);
 
     @media (width <= calc(#{$breakpoint-value} - 1px)) {
       @content;

@@ -3,6 +3,8 @@
  * Elevation system with box shadows for depth and layering
  */
 
+@use 'sass:map';
+
 :root {
   /* Elevation Shadow Scale (progressive depth system) */
   --pav-shadow-0: none;
@@ -91,8 +93,8 @@ $pav-shadow-semantic: (
 
 // Shadow utility mixin
 @mixin pav-shadow($level: 2) {
-  @if map-has-key($pav-shadows, $level) {
-    box-shadow: map-get($pav-shadows, $level);
+  @if map.has-key($pav-shadows, $level) {
+    box-shadow: map.get($pav-shadows, $level);
   } @else {
     @error "Shadow level #{$level} not found in $pav-shadows map.";
   }
@@ -100,10 +102,10 @@ $pav-shadow-semantic: (
 
 // Hover shadow transition mixin
 @mixin pav-shadow-transition($base-level: 2, $hover-level: 3) {
-  box-shadow: map-get($pav-shadows, $base-level);
+  box-shadow: map.get($pav-shadows, $base-level);
   transition: box-shadow 0.2s ease-in-out;
   
   &:hover {
-    box-shadow: map-get($pav-shadows, $hover-level);
+    box-shadow: map.get($pav-shadows, $hover-level);
   }
 }
