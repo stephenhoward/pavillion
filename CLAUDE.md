@@ -10,7 +10,7 @@ Pavillion is a federated events calendar built with Vue.js 3 frontend and Expres
 
 ```bash
 # Running the application
-npm run dev              # Start frontend (3000) and backend (3001)
+npm run dev              # Start frontend (Vite, 5173) and backend (Express, 3000)
 npm run dev:frontend     # Frontend only
 npm run dev:backend      # Backend only
 npm start                # Production server
@@ -55,7 +55,8 @@ bd sync               # Sync with git
 - Database resets and re-seeds on restart
 - Frontend hot-reloads without server restart
 - Dev environment login: `admin@pavillion.dev` / `admin`
-- Check ports: `lsof -i :3000`
+- App URL is http://localhost:3000 (the backend serves the HTML, which pulls JS/CSS assets from Vite on 5173) — not 5173, which returns 404 for SPA routes
+- Check ports: `lsof -i :3000` (backend/app) and `lsof -i :5173` (Vite/HMR)
 
 ## Path Aliases
 
