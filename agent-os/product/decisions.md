@@ -91,7 +91,7 @@ Supersession is the exception, because it retires a decision rather than refinin
 - **File:** [decisions/dec-008-unpost-dismissals.md](decisions/dec-008-unpost-dismissals.md)
 - **Date:** 2026-04-11 · **Status:** Accepted
 - **Decision:** Unpost writes a sticky `RepostDismissalEntity` row scoped to `(event_id, calendar_id)`. Auto-repost handler checks this before creating a new `SharedEventEntity`. Per-calendar only — never global. `Update(Event)` activities are NOT blocked; federation sync continues for every other calendar still sharing the event.
-- **Consult when:** Working with unshare/unpost behavior; modifying auto-repost handler logic; designing `Update(Event)` activity handling; questions about how a single calendar's dismissal affects other calendars or cross-instance federation sync.
+- **Consult when:** Working with unshare/unpost behavior; modifying auto-repost handler logic; designing `Update(Event)` activity handling; questions about how a single calendar's dismissal affects other calendars or cross-instance federation sync; deciding whether some other cleared local state should resist an inbound activity that re-sets it.
 
 ### DEC-014: Create Means Original, Announce Means Repost
 - **File:** [decisions/dec-014-create-original-announce-repost.md](decisions/dec-014-create-original-announce-repost.md)

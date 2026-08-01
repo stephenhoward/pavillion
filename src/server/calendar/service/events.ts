@@ -1576,6 +1576,12 @@ class EventService {
       }
       // Update space: explicit resolution wins; if the inbound payload
       // dropped the space (no eventParams.space), clear space_id.
+      //
+      // Federation is source-of-truth on re-pin: an inbound Update that
+      // re-references a Space whose local row was destroyed (FK SET NULL
+      // cleared space_id) re-creates the row and re-pins the event. That null
+      // is not sticky — unlike DEC-008 dismissals it carries no user intent.
+      // Pinned by activitypub/test/place-spaces-atomic-save-federation.test.ts
       if (resolved.space) {
         eventEntity.space_id = resolved.space.id;
       }
