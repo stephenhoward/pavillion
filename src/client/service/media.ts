@@ -316,6 +316,10 @@ export default class MediaService {
 
   /**
    * Performs upload with progress tracking using axios
+   *
+   * The multipart `Content-Type` and boundary are intentionally left to the
+   * browser — a manually-set header would omit the boundary and break parsing
+   * on the server.
    */
   private async uploadWithProgress(
     url: string,
@@ -326,9 +330,6 @@ export default class MediaService {
   ): Promise<Response> {
     try {
       const axiosResponse = await axios.post(url, formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
         onUploadProgress: (progressEvent) => {
           if (onProgress && progressEvent.total) {
             const progress: UploadProgress = {
