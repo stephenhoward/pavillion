@@ -375,6 +375,74 @@ describe('ImportSourcesSection', () => {
       expect(successToasts.every(t => !/\b[1-9]\d*\b/.test(t.message))).toBe(true);
     });
 
+    it('reports skipped sync-managed and preserved locally-edited counts', async () => {
+      const s1 = buildSource('id-1', 'https://example.com/a.ics');
+      s1.verificationState = 'verified';
+      listSourcesMock.mockResolvedValue([s1]);
+
+      syncSourceMock.mockResolvedValue({
+        id: 'run-3',
+        importSourceId: 'id-1',
+        startedAt: new Date().toISOString(),
+        finishedAt: new Date().toISOString(),
+        outcome: 'success',
+        eventsCreated: 4,
+        eventsUpdated: 0,
+        eventsSkippedLocallyEdited: 0,
+        eventsDisappeared: 0,
+        eventsSkippedSyncManaged: 2,
+        eventsPreservedLocalEdits: 1,
+        errorMessage: null,
+      });
+      getSourceMock.mockResolvedValue(s1);
+
+      const { wrapper } = mountSection();
+      await flushPromises();
+
+      const syncBtn = wrapper.find('.import-source-row .btn-ghost:not(.btn-ghost--danger):not(.import-source-row__verify-btn)');
+      await syncBtn.trigger('click');
+      await flushPromises();
+
+      const { toasts } = useToast();
+      const message = toasts.value.filter(t => t.type === 'success')[0]?.message ?? '';
+      expect(message).toMatch(/2 skipped \(managed by sync\)/);
+      expect(message).toMatch(/1 preserved \(edited locally\)/);
+    });
+
+    it('omits the dedup clauses when both counters are zero', async () => {
+      const s1 = buildSource('id-1', 'https://example.com/a.ics');
+      s1.verificationState = 'verified';
+      listSourcesMock.mockResolvedValue([s1]);
+
+      syncSourceMock.mockResolvedValue({
+        id: 'run-4',
+        importSourceId: 'id-1',
+        startedAt: new Date().toISOString(),
+        finishedAt: new Date().toISOString(),
+        outcome: 'success',
+        eventsCreated: 4,
+        eventsUpdated: 0,
+        eventsSkippedLocallyEdited: 0,
+        eventsDisappeared: 0,
+        eventsSkippedSyncManaged: 0,
+        eventsPreservedLocalEdits: 0,
+        errorMessage: null,
+      });
+      getSourceMock.mockResolvedValue(s1);
+
+      const { wrapper } = mountSection();
+      await flushPromises();
+
+      const syncBtn = wrapper.find('.import-source-row .btn-ghost:not(.btn-ghost--danger):not(.import-source-row__verify-btn)');
+      await syncBtn.trigger('click');
+      await flushPromises();
+
+      const { toasts } = useToast();
+      const message = toasts.value.filter(t => t.type === 'success')[0]?.message ?? '';
+      expect(message).not.toMatch(/skipped/);
+      expect(message).not.toMatch(/preserved/);
+    });
+
     it('surfaces error without crashing when syncSource fails', async () => {
       const s1 = buildSource('id-1', 'https://example.com/a.ics');
       s1.verificationState = 'verified';

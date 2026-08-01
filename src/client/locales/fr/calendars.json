@@ -348,6 +348,8 @@
     },
     "sync_success": "Synchronisation terminée : {{created}} ajoutés, {{updated}} mis à jour.",
     "sync_success_no_changes": "Synchronisation terminée : aucun changement.",
+    "sync_skipped_sync_managed": "{{skipped}} ignorés (gérés par la synchronisation).",
+    "sync_preserved_local_edits": "{{preserved}} conservés (modifiés localement).",
     "verify_aria": "Vérifier la propriété de la source d'importation {{url}}"
   },
   "places": {

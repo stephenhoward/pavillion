@@ -107,7 +107,7 @@ import { useTranslation } from 'i18next-vue';
 import { Plus } from 'lucide-vue-next';
 
 import type { ImportSource } from '@/common/model/import_source';
-import ImportSourceService from '@/client/service/import_source';
+import ImportSourceService, { type ImportRunSummary } from '@/client/service/import_source';
 import { importSourceErrorKey } from '@/client/service/import_source_errors';
 import PillButton from '@/client/components/common/pill-button.vue';
 import ModalLayout from '@/client/components/common/modal.vue';
@@ -254,6 +254,44 @@ const executeRemove = async () => {
 };
 
 /**
+ * Compose the success-toast text for a finished import run.
+ *
+ * Leads with the created/updated counts (or the no-changes variant when
+ * neither moved), then appends one clause per calendar-wide dedup counter
+ * that is nonzero. Those counters are the only record that an incoming
+ * event was deliberately left alone — skipped because a URL-sync source
+ * owns it, or preserved because it was edited locally — so a run that
+ * reports zero created and zero updated still explains itself.
+ *
+ * @param summary - The finished run's wire summary
+ * @returns The localized toast message
+ */
+const buildSyncMessage = (summary: ImportRunSummary): string => {
+  const hasChanges = summary.eventsCreated > 0 || summary.eventsUpdated > 0;
+  const clauses = [
+    hasChanges
+      ? t('sync_success', {
+        created: summary.eventsCreated,
+        updated: summary.eventsUpdated,
+      })
+      : t('sync_success_no_changes'),
+  ];
+
+  if (summary.eventsSkippedSyncManaged > 0) {
+    clauses.push(
+      t('sync_skipped_sync_managed', { skipped: summary.eventsSkippedSyncManaged }),
+    );
+  }
+  if (summary.eventsPreservedLocalEdits > 0) {
+    clauses.push(
+      t('sync_preserved_local_edits', { preserved: summary.eventsPreservedLocalEdits }),
+    );
+  }
+
+  return clauses.join(' ');
+};
+
+/**
  * Trigger a manual sync for a verified source. Surfaces results via
  * toast notifications and refreshes the row's timestamp/status on
  * success. Also emits `sync-requested` for parent observability (kept
@@ -280,18 +318,7 @@ const onSync = async (source: ImportSource) => {
       console.warn('Sync refresh failed', refreshErr);
     }
 
-    const hasChanges = summary.eventsCreated > 0 || summary.eventsUpdated > 0;
-    if (hasChanges) {
-      toast.success(
-        t('sync_success', {
-          created: summary.eventsCreated,
-          updated: summary.eventsUpdated,
-        }),
-      );
-    }
-    else {
-      toast.success(t('sync_success_no_changes'));
-    }
+    toast.success(buildSyncMessage(summary));
   }
   catch (err) {
     console.error('Failed to sync import source', err);

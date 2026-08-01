@@ -348,6 +348,8 @@
     },
     "sync_success": "Sincronización completa: {{created}} añadidos, {{updated}} actualizados.",
     "sync_success_no_changes": "Sincronización completa: sin cambios.",
+    "sync_skipped_sync_managed": "{{skipped}} omitidos (gestionados por la sincronización).",
+    "sync_preserved_local_edits": "{{preserved}} conservados (editados localmente).",
     "verify_aria": "Verificar propiedad de la fuente de importación {{url}}"
   },
   "places": {

@@ -289,6 +289,33 @@ describe('ImportSourceRoutes', () => {
       expect(stub.firstCall.args[3]).toBe('calendar.ics');
     });
 
+    it('forwards the calendar-wide dedup counters in the run summary', async () => {
+      const stub = mockInterface.createImportSourceFromFile as sinon.SinonStub;
+      stub.resolves({
+        source: makeFileSource(),
+        run: {
+          ...makeRun(),
+          eventsSkippedSyncManaged: 2,
+          eventsPreservedLocalEdits: 1,
+        },
+      });
+
+      registerFileRoute();
+
+      const response = await request(testApp(router))
+        .post('/handler')
+        .attach('file', Buffer.from(VALID_ICS), {
+          filename: 'calendar.ics',
+          contentType: 'text/calendar',
+        });
+
+      expect(response.status).toBe(201);
+      // Without these the "skip + report sync-managed" outcome of
+      // calendar-wide dedup is invisible to the client.
+      expect(response.body.run.eventsSkippedSyncManaged).toBe(2);
+      expect(response.body.run.eventsPreservedLocalEdits).toBe(1);
+    });
+
     it('accepts an octet-stream MIME when the filename ends in .ics', async () => {
       const stub = mockInterface.createImportSourceFromFile as sinon.SinonStub;
       stub.resolves({ source: makeFileSource(), run: makeRun() });
@@ -1052,6 +1079,10 @@ describe('ImportSourceRoutes', () => {
       expect(response.body.outcome).toBe('success');
       expect(response.body.eventsCreated).toBe(2);
       expect(response.body.eventsUpdated).toBe(1);
+      // The dedup counters are optional on SyncResult (the per-source sync
+      // path leaves them unset) but always numeric on the wire.
+      expect(response.body.eventsSkippedSyncManaged).toBe(0);
+      expect(response.body.eventsPreservedLocalEdits).toBe(0);
       // The API must preserve the real run start time from the service —
       // NOT overwrite it with the current wall clock. See Item 1 of pv-1qcp.15.
       expect(response.body.startedAt).toBe(syncStartedAt.toISOString());
