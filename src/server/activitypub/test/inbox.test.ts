@@ -125,7 +125,14 @@ describe('ProcessInboxService - Follow Activity Processing', () => {
 
       expect(outboxMessage?.message).toBeDefined();
       expect((outboxMessage?.message as any).type).toBe('Accept');
-      expect((outboxMessage?.message as any).object).toEqual(followActivity);
+      // The outbox persists the serialized wire form (activity.toObject()), so
+      // the embedded Follow is its AP representation — not the raw class
+      // instance. Assert the identifying fields survive the round-trip.
+      const acceptObject = (outboxMessage?.message as any).object;
+      expect(acceptObject.type).toBe('Follow');
+      expect(acceptObject.id).toBe(followActivity.id);
+      expect(acceptObject.actor).toBe(remoteActorUrl);
+      expect(acceptObject.object).toBe(testCalendar.id);
     });
 
     it('should not create duplicate follower record if already exists', async () => {

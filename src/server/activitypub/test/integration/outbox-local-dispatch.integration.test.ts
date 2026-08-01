@@ -376,13 +376,14 @@ describe('Outbox Local Dispatch (cross-hop remote follower regression)', () => {
     ).toBe(true);
   });
 
-  it('emits paired Announce(Event) + Create(Note) rows in A outbox with matching public addressing', async () => {
-    // pv-l35p paired-emission contract: handleEventCreated queues an
-    // Announce(Event) (Pavillion-native consumers) AND a Create(Note)
-    // (Mastodon-class peer rendering). Both must address the public
-    // collection with followers in cc, otherwise Mastodon drops them
-    // from profile timelines. We fetch ALL of A's outbox messages and
-    // filter by activity type + wrapped object type in JS so the
+  it('emits paired Create(Event) + Create(Note) rows in A outbox with matching public addressing', async () => {
+    // Paired-emission contract (pv-2p29.5): handleEventCreated queues a
+    // Create(Event) with the full embedded Event object (Pavillion-native and
+    // FEP-8a8e event-platform consumers — Mobilizon/Gancio) AND a Create(Note)
+    // (Mastodon-class peer rendering). Announce is reserved for reposts. Both
+    // must address the public collection with followers in cc, otherwise
+    // Mastodon drops them from profile timelines. We fetch ALL of A's outbox
+    // messages and filter by activity type + wrapped object type in JS so the
     // assertion stays valid as more paired activity types are added.
     const event = await calendarInterface.createEvent(accountA, {
       calendarId: calendarA.id,
@@ -399,7 +400,7 @@ describe('Outbox Local Dispatch (cross-hop remote follower regression)', () => {
     const publicCollection = 'https://www.w3.org/ns/activitystreams#Public';
     const followersCollection = `${actorUrlA}/followers`;
 
-    // Poll until both the Announce(Event) and the Create(Note) are queued.
+    // Poll until both the Create(Event) and the Create(Note) are queued.
     // handleEventCreated awaits the two addToOutbox calls sequentially, so
     // observing the second row guarantees the first is also present. Each
     // filter is scoped to this event's specific Event/Note IRI so prior
@@ -410,35 +411,41 @@ describe('Outbox Local Dispatch (cross-hop remote follower regression)', () => {
         const messages = await ActivityPubOutboxMessageEntity.findAll({
           where: { calendar_id: calendarA.id },
         });
-        const announceEvent = messages.find(
-          m => m.type === 'Announce' && (m.message as any)?.object === eventUrl,
+        const createEvent = messages.find(
+          m => m.type === 'Create' && (m.message as any)?.object?.type === 'Event' && (m.message as any)?.object?.id === eventUrl,
         );
         const createNote = messages.find(
           m => m.type === 'Create' && (m.message as any)?.object?.type === 'Note' && (m.message as any)?.object?.id === noteUrl,
         );
-        return announceEvent && createNote ? { announceEvent, createNote } : null;
+        return createEvent && createNote ? { createEvent, createNote } : null;
       },
-      { maxWaitMs: 2000, label: 'paired Announce(Event) + Create(Note) rows in A outbox' },
+      { maxWaitMs: 2000, label: 'paired Create(Event) + Create(Note) rows in A outbox' },
     );
 
     const aOutboxMessages = await ActivityPubOutboxMessageEntity.findAll({
       where: { calendar_id: calendarA.id },
     });
 
-    // Type-specific filter for the Announce(Event) row. The Announce wraps
-    // an IRI string (not a nested object), so we identify it by the
-    // matching canonical event URL. Filtering in JS (rather than a
-    // SQL `type:` clause) is deliberate: it documents at the call site
-    // that future paired activity additions cannot silently bump this
-    // count, because the assertion is pinned to a single activity type
-    // wrapping a specific object IRI.
+    // Type-specific filter for the Create(Event) row. The Create wraps the
+    // full embedded Event object, so we identify it by the wrapped object's
+    // type AND its canonical Event IRI (event-scoped, so prior tests on A
+    // don't satisfy this assertion).
+    const createEventRows = aOutboxMessages.filter(
+      m => m.type === 'Create' && (m.message as any)?.object?.type === 'Event' && (m.message as any)?.object?.id === eventUrl,
+    );
+    expect(
+      createEventRows.length,
+      'A must queue exactly one Create(Event) for this event',
+    ).toBe(1);
+
+    // No Announce may be queued for an original — Announce is repost-only.
     const announceEventRows = aOutboxMessages.filter(
       m => m.type === 'Announce' && (m.message as any)?.object === eventUrl,
     );
     expect(
       announceEventRows.length,
-      'A must queue exactly one Announce(Event) for this event',
-    ).toBe(1);
+      'A must NOT queue an Announce for an original event (Announce is repost-only)',
+    ).toBe(0);
 
     // Type-specific filter for the Create(Note) row. The Create wraps a
     // full Note object, so we identify it by the wrapped object's type
@@ -449,16 +456,16 @@ describe('Outbox Local Dispatch (cross-hop remote follower regression)', () => {
     );
     expect(
       createNoteRows.length,
-      'A must queue exactly one Create(Note) paired with the Announce(Event)',
+      'A must queue exactly one Create(Note) paired with the Create(Event)',
     ).toBe(1);
 
     // Both rows must be addressed publicly with followers in cc — without
     // this, Mastodon ignores the activities in profile timelines and HTTP
     // delivery loses audience info. This is the addressing invariant the
     // paired-emission contract relies on.
-    const announceMessage = announceEventRows[0].message as any;
-    expect(announceMessage.to).toEqual([publicCollection]);
-    expect(announceMessage.cc).toEqual([followersCollection]);
+    const createEventMessage = createEventRows[0].message as any;
+    expect(createEventMessage.to).toEqual([publicCollection]);
+    expect(createEventMessage.cc).toEqual([followersCollection]);
 
     const createMessage = createNoteRows[0].message as any;
     expect(createMessage.to).toEqual([publicCollection]);

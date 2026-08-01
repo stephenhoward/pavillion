@@ -15,7 +15,6 @@ import ActivityPubInterface from '../interface';
 import CreateActivity from '../model/action/create';
 import UpdateActivity from '../model/action/update';
 import DeleteActivity from '../model/action/delete';
-import AnnounceActivity from '../model/action/announce';
 import { EventObject } from '../model/object/event';
 import { NoteObject } from '../model/object/note';
 import { ActivityPubOutboxMessageEntity, ActivityPubInboxMessageEntity } from '@/server/activitypub/entity/activitypub';
@@ -72,11 +71,11 @@ export default class ActivityPubEventHandlers implements DomainEventHandlers {
   }
 
   /**
-   * Dispatch an outbound Announce for a locally-created event.
+   * Dispatch an outbound Create(Event) for a locally-created event.
    * Returns early when payload.calendar is null/undefined, which indicates
    * the event originated from a remote instance (incoming AP Create routed
    * via EventService.addRemoteEvent). Without this guard, processing a
-   * remote create would trigger an outbound Announce back to federation,
+   * remote create would trigger an outbound Create back to federation,
    * creating a loop. Mirrors the handleEventUpdated guard.
    */
   private async handleEventCreated(payload: ActivityPubEventCreatedPayload): Promise<void> {
@@ -116,9 +115,19 @@ export default class ActivityPubEventHandlers implements DomainEventHandlers {
 
     // The outbox dispatcher fans out to both local and remote followers.
     // Local followers are routed in-process via ProcessInboxService.
+    //
+    // New local events federate as Create with the full embedded Event object
+    // (deterministic id `{eventUrl}/create`), mirroring the Update(Event) shape
+    // emitted by handleEventUpdated. Announce is reserved for reposts (sharing
+    // another calendar's event) — see the auto-repost cascade in inbox.ts. Per
+    // FEP-8a8e, event platforms (Mobilizon, Gancio) ingest events via Create,
+    // so originals must be Create(Event), not a URL-only Announce.
     await this.service.addToOutbox(
       payload.calendar,
-      new AnnounceActivity(actorUrl, eventUrl).addressPublic(`${actorUrl}/followers`),
+      new CreateActivity(
+        actorUrl,
+        new EventObject(payload.calendar, payload.event),
+      ).addressPublic(`${actorUrl}/followers`),
     );
 
     // Paired Create(Note) emission for Mastodon-class peers that ignore

@@ -17,6 +17,7 @@ import {
   deleteActivitySchema,
   announceActivitySchema,
   undoActivitySchema,
+  joinActivitySchema,
 } from '@/server/activitypub/validation/schemas';
 
 describe('ActivityPub Validation Schemas - Activities', () => {
@@ -1644,6 +1645,62 @@ describe('ActivityPub Validation Schemas - Activities', () => {
 
       const result = undoActivitySchema.safeParse(validUndo);
       expect(result.success).toBe(true);
+    });
+  });
+
+  describe('joinActivitySchema', () => {
+    it('should accept a valid Join activity with a URI object', () => {
+      const validJoin = {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        id: 'https://remote.example/activities/join/1',
+        type: 'Join',
+        actor: 'https://remote.example/users/bob',
+        object: 'https://example.com/calendars/mycal/events/e1',
+      };
+
+      const result = joinActivitySchema.safeParse(validJoin);
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.type).toBe('Join');
+      }
+    });
+
+    it('should accept a Join activity with an embedded object', () => {
+      const validJoin = {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        id: 'https://remote.example/activities/join/2',
+        type: 'Join',
+        actor: 'https://remote.example/users/bob',
+        object: {
+          id: 'https://example.com/calendars/mycal/events/e1',
+          type: 'Event',
+        },
+      };
+
+      const result = joinActivitySchema.safeParse(validJoin);
+      expect(result.success).toBe(true);
+    });
+
+    it('should reject a Join activity with the wrong type', () => {
+      const invalidJoin = {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        id: 'https://remote.example/activities/join/3',
+        type: 'Follow',
+        actor: 'https://remote.example/users/bob',
+        object: 'https://example.com/calendars/mycal/events/e1',
+      };
+
+      const result = joinActivitySchema.safeParse(invalidJoin);
+      expect(result.success).toBe(false);
+    });
+
+    it('should reject a Join activity missing required fields', () => {
+      const result = joinActivitySchema.safeParse({
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        type: 'Join',
+        actor: 'https://remote.example/users/bob',
+      });
+      expect(result.success).toBe(false);
     });
   });
 });

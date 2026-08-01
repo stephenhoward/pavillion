@@ -350,8 +350,8 @@ export default class ActivityPubService {
 
   /**
    * Retrieve paginated outbox messages for a calendar.
-   * Returns only public activity types (Announce, Update, Delete) that were
-   * successfully processed.
+   * Returns only public activity types (Create, Announce, Update, Delete) that
+   * were successfully processed.
    *
    * @param calendarId - The calendar ID to query
    * @param cursor - Optional ISO 8601 timestamp cursor for paging (exclusive upper bound)
@@ -359,7 +359,13 @@ export default class ActivityPubService {
    * @returns Object with items array and totalItems count
    */
   async readOutbox(calendarId: string, cursor?: Date, limit: number = 20): Promise<{ items: ActivityPubOutboxMessageEntity[], totalItems: number }> {
-    const publicTypes = ['Announce', 'Update', 'Delete'];
+    // 'Create' MUST be served: local originals now federate as Create(Event)
+    // (Announce is reserved for reposts), so a follower's backfill walk of this
+    // outbox — and FEP-8a8e event consumers (Mobilizon/Gancio) — only see
+    // originals if Create is in the collection. Inbound Create(Note) is
+    // short-circuited by the receiver (ProcessInboxService.processCreateEvent),
+    // so serving the paired Note here cannot create a duplicate feed event.
+    const publicTypes = ['Create', 'Announce', 'Update', 'Delete'];
     const where: Record<string, any> = {
       calendar_id: calendarId,
       type: publicTypes,

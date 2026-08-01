@@ -13,6 +13,7 @@ import UpdateActivity from "@/server/activitypub/model/action/update";
 import DeleteActivity from "@/server/activitypub/model/action/delete";
 import FollowActivity from "@/server/activitypub/model/action/follow";
 import AcceptActivity from "@/server/activitypub/model/action/accept";
+import IgnoreActivity from "@/server/activitypub/model/action/ignore";
 import AnnounceActivity from "@/server/activitypub/model/action/announce";
 import { ActivityPubInboxMessageEntity, EventActivityEntity, FollowerCalendarEntity, FollowingCalendarEntity, RepostDismissalEntity, SharedEventEntity } from "@/server/activitypub/entity/activitypub";
 import { EventObjectEntity } from "@/server/activitypub/entity/event_object";
@@ -27,6 +28,7 @@ import { ReportCategory } from "@/common/model/report";
 import { Calendar } from "@/common/model/calendar";
 import { addToOutbox } from "@/server/activitypub/helper/outbox";
 import { fetchRemoteObject } from "@/server/activitypub/helper/remote-fetch";
+import { parseInboundFepCategories, resolveFepCategoriesToLocalIds } from "@/server/activitypub/helper/fep_category_map";
 import { Op } from "sequelize";
 import config from "config";
 
@@ -472,6 +474,18 @@ class ProcessInboxService {
           await this.processShareEvent(calendar, activity);
         }
         break;
+      case 'Join':
+        {
+          // FEP-8a8e: Pavillion has no attendance model (events are emitted with
+          // joinMode: 'none'), so an inbound Join is never actionable. The FEP
+          // requires we respond with an Ignore rather than silently drop it.
+          // No state is mutated here. The blocked-instance gate in
+          // processInboxMessage already short-circuits Joins from blocked
+          // instances before dispatch, so this handler only runs for allowed
+          // senders.
+          await this.processJoinActivity(calendar, message.message);
+        }
+        break;
       case 'Flag':
         {
           await this.processFlagActivity(calendar, message.message);
@@ -520,6 +534,42 @@ class ProcessInboxService {
     }
   }
 
+
+  /**
+   * Processes an inbound Join activity by replying with an Ignore.
+   *
+   * FEP-8a8e: Pavillion emits every Event with `joinMode: 'none'` and keeps no
+   * attendance/RSVP state (DEC-004), so a Join is never actionable. Rather than
+   * silently drop it, the FEP requires responding with an Ignore. This handler
+   * therefore performs NO state mutation — it only queues an Ignore addressed
+   * directly to the sender (never as:Public).
+   *
+   * The Ignore embeds the original Join as its `object` (mirroring how Accept
+   * embeds the Follow it answers), so the sender can correlate the reply. The
+   * outbox resolves delivery to `object.actor` — the Join sender — and the
+   * explicit single-recipient `to` keeps the reply off the public timeline.
+   *
+   * @param calendar - The calendar that received the Join
+   * @param message - The raw inbound Join activity payload
+   * @returns {Promise<void>}
+   */
+  async processJoinActivity(calendar: Calendar, message: any): Promise<void> {
+    const senderActor = message?.actor;
+    if (!senderActor || typeof senderActor !== 'string') {
+      logger.warn('[INBOX] Join activity missing actor; cannot reply with Ignore');
+      return;
+    }
+
+    logger.info({ senderActor, calendarUrlName: calendar.urlName }, '[INBOX] Ignoring unhandled Join activity');
+
+    const localActorUrl = ActivityPubActor.actorUrl(calendar);
+    const ignoreActivity = new IgnoreActivity(localActorUrl, message);
+    // Address the reply to the sender only — an Ignore is a private courtesy
+    // response, never a public-timeline activity.
+    ignoreActivity.to = [senderActor];
+
+    await addToOutbox(this.eventBus, calendar, ignoreActivity);
+  }
 
   /**
    * Processes a Flag activity by creating a federated report.
@@ -781,7 +831,20 @@ class ProcessInboxService {
     });
 
     if (existingApObject) {
-      // Event already exists, skip
+      // On the local in-process dispatch path (`trustLocalOrigin`), the
+      // EventObjectEntity for this event is written by handleEventCreated
+      // BEFORE the outbox fans the Create out to same-instance followers, so
+      // an existing row is expected — it is NOT a duplicate delivery. Local
+      // originals now federate as Create(Event) (Announce is reserved for
+      // reposts), so the auto-repost cascade for same-instance followers must
+      // be driven here; this is the Create-path equivalent of the
+      // processShareEvent → checkAndPerformAutoRepost cascade that previously
+      // ran when originals were Announced. isOriginal is true because a Create
+      // is always authored by its actor (matches the trailing call below).
+      if (options.trustLocalOrigin) {
+        await this.checkAndPerformAutoRepost(calendar, actorUri, apObjectId, true);
+      }
+      // Remote re-delivery of an already-known event is a genuine duplicate: skip.
       return null;
     }
 
@@ -900,6 +963,35 @@ class ProcessInboxService {
     // Check for auto-repost (skip if Person actor or no event created)
     if (!isPersonActor && createdEvent) {
       await this.checkAndPerformAutoRepost(calendar, actorUri, apObjectId, true);
+    }
+
+    // FEP-8a8e category fallback (pv-2p29.4): when the payload carries NO
+    // pavillion:categories / bare categories URIs (sourceCategories === null,
+    // i.e. a non-Pavillion peer such as Mobilizon/Gancio), fall back to the bare
+    // FEP-8a8e `category` enum. Resolve those enum values onto this calendar's
+    // EXISTING local categories by name heuristic and assign the matches, so the
+    // federated event lands with usable categories. pavillion:categories always
+    // takes precedence — this path only runs when it is absent. Federation input
+    // NEVER creates categories: only pre-existing local categories can match.
+    // Failure-safe: category assignment must never abort event ingest.
+    if (createdEvent && sourceCategories === null) {
+      try {
+        const inboundFep = parseInboundFepCategories((message.object as any)?.category);
+        if (inboundFep.length > 0) {
+          const localCategories = await this.calendarInterface.getCategories(calendar.id);
+          const localIds = resolveFepCategoriesToLocalIds(inboundFep, localCategories);
+          if (localIds.length > 0) {
+            // assignManualRepostCategories assigns the given local category ids
+            // to the event with no permission check; the ids here are resolved
+            // from this calendar's own categories, so they are trusted by
+            // construction.
+            await this.calendarInterface.assignManualRepostCategories(createdEvent.id, localIds);
+          }
+        }
+      }
+      catch (error) {
+        logger.warn({ err: error }, '[INBOX] FEP category fallback mapping failed, proceeding without categories');
+      }
     }
 
     return createdEvent;

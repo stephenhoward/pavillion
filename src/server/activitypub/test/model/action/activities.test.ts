@@ -5,6 +5,8 @@ import UpdateActivity from '@/server/activitypub/model/action/update';
 import AnnounceActivity from '@/server/activitypub/model/action/announce';
 import FollowActivity from '@/server/activitypub/model/action/follow';
 import AcceptActivity from '@/server/activitypub/model/action/accept';
+import IgnoreActivity from '@/server/activitypub/model/action/ignore';
+import JoinActivity from '@/server/activitypub/model/action/join';
 import UndoActivity from '@/server/activitypub/model/action/undo';
 
 const PUBLIC_URI = 'https://www.w3.org/ns/activitystreams#Public';
@@ -434,13 +436,21 @@ describe('Activity Model fromObject Null Checks', () => {
       // Serialize to object
       const serialized = acceptActivity.toObject();
 
-      // Verify Accept has @context
+      // Verify Accept has @context declaring both AS2 and the pavillion namespace
       expect(serialized).toHaveProperty('@context');
-      expect(serialized['@context']).toEqual(['https://www.w3.org/ns/activitystreams']);
+      expect(serialized['@context']).toEqual([
+        'https://www.w3.org/ns/activitystreams',
+        'https://w3id.org/fep/8a8e',
+        { pavillion: 'https://pavillion.social/ns/activitypub#' },
+      ]);
 
       // Verify the nested Follow object also has @context, not context
       expect(serialized.object).toHaveProperty('@context');
-      expect(serialized.object['@context']).toEqual(['https://www.w3.org/ns/activitystreams']);
+      expect(serialized.object['@context']).toEqual([
+        'https://www.w3.org/ns/activitystreams',
+        'https://w3id.org/fep/8a8e',
+        { pavillion: 'https://pavillion.social/ns/activitypub#' },
+      ]);
 
       // Verify context property does NOT exist on nested object
       expect(serialized.object).not.toHaveProperty('context');
@@ -449,6 +459,90 @@ describe('Activity Model fromObject Null Checks', () => {
       expect(serialized.object.type).toBe('Follow');
       expect(serialized.object.actor).toBe('https://beta.example.com/calendars/bx_6ztiy');
       expect(serialized.object.object).toBe('https://alpha.example.com/calendars/ax_5eggn');
+    });
+  });
+
+  describe('IgnoreActivity', () => {
+    it('should return null for null / undefined / non-object input', () => {
+      expect(IgnoreActivity.fromObject(null as any)).toBeNull();
+      expect(IgnoreActivity.fromObject(undefined as any)).toBeNull();
+      expect(IgnoreActivity.fromObject('string' as any)).toBeNull();
+      expect(IgnoreActivity.fromObject(123 as any)).toBeNull();
+    });
+
+    it('should return null when actor is missing or not a string', () => {
+      expect(IgnoreActivity.fromObject({
+        object: { type: 'Join', actor: 'https://example.com/users/2' },
+      })).toBeNull();
+      expect(IgnoreActivity.fromObject({
+        actor: { id: 'https://example.com/users/1' },
+        object: { type: 'Join', actor: 'https://example.com/users/2' },
+      })).toBeNull();
+    });
+
+    it('should return null when object is missing', () => {
+      expect(IgnoreActivity.fromObject({
+        actor: 'https://example.com/calendars/mycal',
+      })).toBeNull();
+    });
+
+    it('constructs an Ignore embedding the object with a deterministic id and Ignore type', () => {
+      const join = { type: 'Join', actor: 'https://remote.example/users/bob', object: 'https://example.com/calendars/mycal/events/e1' };
+      const ignore = new IgnoreActivity('https://example.com/calendars/mycal', join);
+
+      expect(ignore.type).toBe('Ignore');
+      expect(ignore.actor).toBe('https://example.com/calendars/mycal');
+      expect(ignore.object).toBe(join);
+      expect(ignore.id).toMatch(/^https:\/\/example\.com\/calendars\/mycal\/ignores\/[0-9a-f-]+$/);
+    });
+
+    it('is never public: does not address as:Public and preserves direct `to` through fromObject', () => {
+      const result = IgnoreActivity.fromObject({
+        actor: 'https://example.com/calendars/mycal',
+        object: { type: 'Join', actor: 'https://remote.example/users/bob', object: 'https://example.com/calendars/mycal' },
+        id: 'https://example.com/calendars/mycal/ignores/1',
+        to: ['https://remote.example/users/bob'],
+      });
+      expect(result).not.toBeNull();
+      expect(result?.type).toBe('Ignore');
+      expect(result?.id).toBe('https://example.com/calendars/mycal/ignores/1');
+      expect(result?.to).toEqual(['https://remote.example/users/bob']);
+      expect(result?.to).not.toContain(PUBLIC_URI);
+
+      const serialized = result!.toObject();
+      expect(serialized.to).toEqual(['https://remote.example/users/bob']);
+      expect(serialized.cc ?? []).not.toContain(PUBLIC_URI);
+      expect(serialized['@context']).toEqual([
+        'https://www.w3.org/ns/activitystreams',
+        'https://w3id.org/fep/8a8e',
+        { pavillion: 'https://pavillion.social/ns/activitypub#' },
+      ]);
+    });
+  });
+
+  describe('JoinActivity', () => {
+    it('should return null for null / undefined / non-object input', () => {
+      expect(JoinActivity.fromObject(null as any)).toBeNull();
+      expect(JoinActivity.fromObject(undefined as any)).toBeNull();
+      expect(JoinActivity.fromObject('string' as any)).toBeNull();
+    });
+
+    it('should return null when actor is missing or object is missing', () => {
+      expect(JoinActivity.fromObject({ object: 'https://example.com/calendars/mycal' })).toBeNull();
+      expect(JoinActivity.fromObject({ actor: 'https://remote.example/users/bob' })).toBeNull();
+    });
+
+    it('creates a Join with valid input, preserving id and object', () => {
+      const result = JoinActivity.fromObject({
+        actor: 'https://remote.example/users/bob',
+        object: 'https://example.com/calendars/mycal/events/e1',
+        id: 'https://remote.example/activities/join/1',
+      });
+      expect(result).not.toBeNull();
+      expect(result?.type).toBe('Join');
+      expect(result?.actor).toBe('https://remote.example/users/bob');
+      expect(result?.object).toBe('https://example.com/calendars/mycal/events/e1');
+      expect(result?.id).toBe('https://remote.example/activities/join/1');
     });
   });
 

@@ -275,6 +275,62 @@ describe('processInboxMessage', () => {
     expect(createStub.calledOnce).toBe(true);
   });
 
+  it('should reply to an inbound Join with an Ignore addressed to the sender only', async () => {
+    // FEP-8a8e: Pavillion does not handle Join (no attendance model), so an
+    // inbound Join must be answered with an Ignore addressed to the sender —
+    // never publicly — and must not mutate any state.
+    const eventBus = new EventEmitter();
+    const testCalendarInterface = new CalendarInterface(eventBus);
+    const testService = new ProcessInboxService(eventBus, testCalendarInterface);
+
+    sandbox.stub(testService.calendarInterface, 'getCalendar')
+      .resolves(Calendar.fromObject({ id: TEST_CALENDAR_ID, urlName: 'testcalendar' }));
+
+    const outboxSaveStub = sandbox.stub(ActivityPubOutboxMessageEntity.prototype, 'save').resolves();
+    // Guard against any accidental state mutation on the Join path.
+    const addRemoteEventStub = sandbox.stub(testService.calendarInterface, 'addRemoteEvent');
+    const followerCreateStub = sandbox.stub(FollowerCalendarEntity, 'create');
+
+    let emittedActivity: any = null;
+    eventBus.on('outboxMessageAdded', (activity) => {
+      emittedActivity = activity;
+    });
+
+    const joinActivity = {
+      '@context': 'https://www.w3.org/ns/activitystreams',
+      id: `${REMOTE_ACTOR_URL}/activities/join/1`,
+      type: 'Join',
+      actor: REMOTE_ACTOR_URL,
+      object: `${LOCAL_CALENDAR_URL}/events/123`,
+    };
+
+    const message = ActivityPubInboxMessageEntity.build({
+      calendar_id: TEST_CALENDAR_ID,
+      type: 'Join',
+      message: joinActivity,
+    });
+    sandbox.stub(ActivityPubInboxMessageEntity.prototype, 'update').resolves();
+
+    await testService.processInboxMessage(message);
+
+    // An Ignore was queued to the outbox.
+    expect(outboxSaveStub.calledOnce).toBe(true);
+    expect(emittedActivity).not.toBeNull();
+    expect(emittedActivity.type).toBe('Ignore');
+
+    // Addressed to the sender only, never as:Public.
+    expect(emittedActivity.to).toEqual([REMOTE_ACTOR_URL]);
+    expect(emittedActivity.to).not.toContain('https://www.w3.org/ns/activitystreams#Public');
+    expect(emittedActivity.cc).not.toContain('https://www.w3.org/ns/activitystreams#Public');
+
+    // The Ignore embeds the original Join so the sender can correlate it.
+    expect(emittedActivity.object).toEqual(joinActivity);
+
+    // No state was mutated.
+    expect(addRemoteEventStub.called).toBe(false);
+    expect(followerCreateStub.called).toBe(false);
+  });
+
   it('should process an announce activity', async () => {
     // Use Fedify helper to create a proper Announce (share) activity
     const activityMessage = createMockAnnounceActivity(REMOTE_ACTOR_URL, REMOTE_EVENT_URL);
@@ -501,6 +557,20 @@ describe('processInboxMessage', () => {
 
       // Should return gracefully without throwing
       // No assertions needed - just verify it doesn't throw
+    });
+
+    it('should handle processJoinActivity with missing actor (no Ignore queued, no throw)', async () => {
+      const calendar = Calendar.fromObject({ id: TEST_CALENDAR_ID, urlName: 'testcalendar' });
+
+      // A Join with no actor cannot be replied to — the guard must return early
+      // without queuing an Ignore (which would otherwise be addressed to nobody).
+      const outboxSaveStub = sandbox.stub(ActivityPubOutboxMessageEntity.prototype, 'save').resolves();
+
+      // Missing actor (cast to any for defensive edge-case test)
+      await service.processJoinActivity(calendar, { object: `${LOCAL_CALENDAR_URL}/events/123` } as any);
+
+      // No outbox entity created, and it resolves without throwing.
+      expect(outboxSaveStub.called).toBe(false);
     });
   });
 });
@@ -841,6 +911,99 @@ describe('actorOwnsObject', () => {
   });
 });
 
+describe('processCreateEvent existing-object auto-repost trust gate', () => {
+  // Guards the trustLocalOrigin branch added to processCreateEvent's
+  // existingApObject early-return. Local originals now federate as
+  // Create(Event) (Announce is repost-only). handleEventCreated pre-creates the
+  // EventObjectEntity before the outbox fans the Create out to same-instance
+  // followers, so a local-dispatch Create ALWAYS finds an existing row. The
+  // auto-repost cascade for same-instance followers must therefore be driven
+  // from this branch — but ONLY on the trusted local-dispatch path. Remote
+  // re-delivery of a known event must NOT re-trigger auto-repost (the negative
+  // case is the security boundary).
+  //
+  // Both tests stub checkAndPerformAutoRepost itself, so the auto-repost policy
+  // gate (auto_repost_originals) inside it never runs. That makes the
+  // trustLocalOrigin branch guard the ONLY thing that can determine whether the
+  // method is called — the assertions cannot be satisfied incidentally by a
+  // disabled follow policy, which is the discrimination the prior near-miss
+  // coverage lacked.
+  let service: ProcessInboxService;
+  let sandbox: sinon.SinonSandbox = sinon.createSandbox();
+
+  const TEST_CALENDAR_ID = 'trust-gate-calendar-id';
+  const SOURCE_ACTOR_URL = 'https://pavillion.dev/calendars/source';
+  const LOCAL_EVENT_URL = 'https://pavillion.dev/calendars/source/events/evt-1';
+
+  beforeEach(() => {
+    const eventBus = new EventEmitter();
+    const calendarInterface = new CalendarInterface(eventBus);
+    service = new ProcessInboxService(eventBus, calendarInterface);
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+  });
+
+  it('does NOT call checkAndPerformAutoRepost for an existing event without trustLocalOrigin (remote re-delivery)', async () => {
+    // An EventObjectEntity already exists for this ap_id — simulates a remote
+    // Create re-delivering an event this instance already knows about.
+    sandbox.stub(EventObjectEntity, 'findOne').resolves(
+      EventObjectEntity.build({
+        event_id: 'existing-event-id',
+        ap_id: LOCAL_EVENT_URL,
+        attributed_to: SOURCE_ACTOR_URL,
+      }),
+    );
+    const autoRepostSpy = sandbox.stub(service as any, 'checkAndPerformAutoRepost').resolves();
+
+    const activityMessage = createMockCreateActivity(SOURCE_ACTOR_URL, {
+      type: 'Event',
+      id: LOCAL_EVENT_URL,
+      name: 'Already-known Event',
+    });
+    const calendar = Calendar.fromObject({ id: TEST_CALENDAR_ID });
+
+    // No options: this is the untrusted (remote / HTTP inbox) path.
+    const result = await service.processCreateEvent(calendar, activityMessage);
+
+    expect(result, 'existing event is a genuine duplicate: skip').toBeNull();
+    expect(
+      autoRepostSpy.called,
+      'auto-repost must NOT run for remote re-delivery of a known event',
+    ).toBe(false);
+  });
+
+  it('calls checkAndPerformAutoRepost once with isOriginal=true for an existing event with trustLocalOrigin (local dispatch)', async () => {
+    sandbox.stub(EventObjectEntity, 'findOne').resolves(
+      EventObjectEntity.build({
+        event_id: 'existing-event-id',
+        ap_id: LOCAL_EVENT_URL,
+        attributed_to: SOURCE_ACTOR_URL,
+      }),
+    );
+    const autoRepostSpy = sandbox.stub(service as any, 'checkAndPerformAutoRepost').resolves();
+
+    const activityMessage = createMockCreateActivity(SOURCE_ACTOR_URL, {
+      type: 'Event',
+      id: LOCAL_EVENT_URL,
+      name: 'Local Original',
+    });
+    const calendar = Calendar.fromObject({ id: TEST_CALENDAR_ID });
+
+    // trustLocalOrigin: true is set only by handleLocalActivityDispatch.
+    const result = await service.processCreateEvent(calendar, activityMessage, { trustLocalOrigin: true });
+
+    expect(result, 'local dispatch of a same-instance original still returns null (no second event row)').toBeNull();
+    expect(autoRepostSpy.calledOnce, 'auto-repost cascade must run exactly once on the trusted local-dispatch path').toBe(true);
+    // isOriginal must be true — a Create is always authored by its actor.
+    expect(autoRepostSpy.firstCall.args[0]).toBe(calendar);
+    expect(autoRepostSpy.firstCall.args[1]).toBe(SOURCE_ACTOR_URL);
+    expect(autoRepostSpy.firstCall.args[2]).toBe(LOCAL_EVENT_URL);
+    expect(autoRepostSpy.firstCall.args[3]).toBe(true);
+  });
+});
+
 describe('isAuthorizedRemoteEditor caching', () => {
   let service: ProcessInboxService;
   let calendarInterface: CalendarInterface;
@@ -1133,6 +1296,42 @@ describe('Structured Logging for Activity Rejections', () => {
       const updateArgs = updateStub.firstCall.args[0];
       expect(updateArgs.processed_status).toBe('blocked');
       expect(updateArgs.processed_time).toBeDefined();
+    });
+
+    it('should NOT reply with an Ignore to a Join from a blocked instance, but DOES for a non-blocked sender', async () => {
+      // FEP-8a8e Join reply must sit behind the blocklist gate: a blocked
+      // instance's Join is short-circuited before dispatch (no Ignore queued),
+      // while a non-blocked non-follower's Join still reaches the handler and
+      // gets an Ignore (Join is not gated by the follow-relationship filter).
+      sandbox.stub(service.calendarInterface, 'getCalendar')
+        .resolves(Calendar.fromObject({ id: TEST_CALENDAR_ID, urlName: TEST_CALENDAR_URL_NAME }));
+      sandbox.stub(ActivityPubInboxMessageEntity.prototype, 'update').resolves();
+      const outboxSaveStub = sandbox.stub(ActivityPubOutboxMessageEntity.prototype, 'save').resolves();
+
+      const isBlockedStub = sandbox.stub(service.moderationInterface!, 'isInstanceBlocked');
+
+      const buildJoin = (actorUrl: string, id: string) => ActivityPubInboxMessageEntity.build({
+        id,
+        calendar_id: TEST_CALENDAR_ID,
+        type: 'Join',
+        message: {
+          '@context': 'https://www.w3.org/ns/activitystreams',
+          id: `${actorUrl}/activities/${id}`,
+          type: 'Join',
+          actor: actorUrl,
+          object: `https://local.federation.test/calendars/${TEST_CALENDAR_URL_NAME}/events/123`,
+        },
+      });
+
+      // Blocked sender: no Ignore queued.
+      isBlockedStub.resolves(true);
+      await service.processInboxMessage(buildJoin(BLOCKED_ACTOR_URL, 'join-blocked'));
+      expect(outboxSaveStub.called, 'blocked Join must not produce an Ignore').toBe(false);
+
+      // Non-blocked, non-follower sender: Ignore is queued.
+      isBlockedStub.resolves(false);
+      await service.processInboxMessage(buildJoin(REMOTE_ACTOR_URL, 'join-allowed'));
+      expect(outboxSaveStub.calledOnce, 'non-blocked Join must produce exactly one Ignore').toBe(true);
     });
   });
 

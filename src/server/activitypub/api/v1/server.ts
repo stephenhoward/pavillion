@@ -9,11 +9,13 @@ import FollowActivity from '@/server/activitypub/model/action/follow';
 import AcceptActivity from '@/server/activitypub/model/action/accept';
 import AnnounceActivity from '@/server/activitypub/model/action/announce';
 import UndoActivity from '@/server/activitypub/model/action/undo';
+import JoinActivity from '@/server/activitypub/model/action/join';
 import ActivityPubInterface from '@/server/activitypub/interface';
 import { logError } from '@/server/common/helper/error-logger';
 import CalendarInterface from '@/server/calendar/interface';
 import { EventNotFoundError } from '@/common/exceptions/calendar';
 import { createLogger } from '@/server/common/helper/logger';
+import { AP_CONTEXT } from '@/server/activitypub/model/base';
 
 const logger = createLogger('activitypub');
 import { verifyHttpSignature, extractKeyIdOrigin } from '@/server/activitypub/helper/http_signature';
@@ -31,6 +33,7 @@ import {
   acceptActivitySchema,
   announceActivitySchema,
   undoActivitySchema,
+  joinActivitySchema,
 } from '@/server/activitypub/validation/schemas';
 
 /**
@@ -190,8 +193,12 @@ export default class ActivityPubServerRoutes {
       const EventObject = (await import('@/server/activitypub/model/object/event')).EventObject;
       const eventObject = new EventObject(calendar, event);
 
+      // Standalone object responses (unlike activity-wrapped objects) carry no
+      // enclosing envelope, so they must declare their own JSON-LD @context —
+      // including the pavillion namespace so the pavillion:* extension terms
+      // expand for strict processors rather than being dropped.
       res.setHeader('Content-Type', 'application/activity+json');
-      res.json(eventObject.toActivityPubObject());
+      res.json({ '@context': AP_CONTEXT, ...eventObject.toActivityPubObject() });
     }
     catch (error) {
       logError(error, `Error fetching event ${req.params.eventid}`);
@@ -244,8 +251,11 @@ export default class ActivityPubServerRoutes {
       const { NoteObject } = await import('@/server/activitypub/model/object/note');
       const noteObject = new NoteObject(calendar, event);
 
+      // Standalone object response — declare its own JSON-LD @context. The Note
+      // emits no pavillion:* terms today, but it shares the standalone-object
+      // context so the endpoint is AS2-conformant and uniform with getEvent.
       res.setHeader('Content-Type', 'application/activity+json');
-      res.json(noteObject.toActivityPubObject());
+      res.json({ '@context': AP_CONTEXT, ...noteObject.toActivityPubObject() });
     }
     catch (error) {
       logError(error, `Error fetching note for event ${req.params.eventid}`);
@@ -273,8 +283,11 @@ export default class ActivityPubServerRoutes {
       const { SeriesObject } = await import('@/server/activitypub/model/object/series');
 
       const items = seriesList.map(series => new SeriesObject(calendar, series).toActivityPubObject());
+      // The collection is the top-level JSON-LD document; its @context governs
+      // the pavillion:content term carried by each nested series item, so it
+      // must include the pavillion namespace.
       const collection = {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AP_CONTEXT,
         type: 'OrderedCollection',
         totalItems: items.length,
         orderedItems: items,
@@ -315,8 +328,10 @@ export default class ActivityPubServerRoutes {
       const { SeriesObject } = await import('@/server/activitypub/model/object/series');
       const seriesObject = new SeriesObject(calendar, series);
 
+      // Standalone object response — declare its own JSON-LD @context including
+      // the pavillion namespace so the pavillion:content term expands.
       res.setHeader('Content-Type', 'application/activity+json');
-      res.json(seriesObject.toActivityPubObject());
+      res.json({ '@context': AP_CONTEXT, ...seriesObject.toActivityPubObject() });
     }
     catch (error) {
       logError(error, `Error fetching series ${req.params.seriesid}`);
@@ -379,6 +394,11 @@ export default class ActivityPubServerRoutes {
         break;
       case 'Undo':
         activityValidation = undoActivitySchema.safeParse(req.body);
+        break;
+      case 'Join':
+        // FEP-8a8e: validate the inbound Join so it can be enqueued and
+        // answered with an Ignore. Pavillion never acts on the Join itself.
+        activityValidation = joinActivitySchema.safeParse(req.body);
         break;
       default:
         res.status(400).json({
@@ -465,6 +485,9 @@ export default class ActivityPubServerRoutes {
         break;
       case 'Undo':
         message = UndoActivity.fromObject(req.body);
+        break;
+      case 'Join':
+        message = JoinActivity.fromObject(req.body);
         break;
     }
 
