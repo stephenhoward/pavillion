@@ -60,20 +60,26 @@ const OBJECT_LABEL_MAX_LEN = 512;
  * follow a local calendar, causing the recipient to see the Flag
  * attribution string applied to a Follow notification. `scrubReservedI18nPrefix`
  * blanks any such value before it reaches the row.
+ *
+ * The same reasoning covers `object.label`, which snapshots caller-supplied
+ * text (an event title on the report path). A federated peer titling an
+ * event `i18n:flag_actor_remote{host:victim.example}` would otherwise land
+ * that token in `object_label` verbatim, ready for any future client that
+ * resolves labels through the same localizer as display names.
  */
 const I18N_TOKEN_PREFIX = 'i18n:';
 
 /**
- * Returns an empty string if the caller-supplied display name uses the
+ * Returns an empty string if the caller-supplied snapshot text uses the
  * reserved `i18n:` prefix (which is for server-generated Flag tokens only);
  * otherwise returns the value unchanged (or `''` if nullish). The empty
- * fallback keeps `actor_display_name` non-null and falls through to the
- * downstream sanitize step.
+ * fallback keeps the column non-null and falls through to the downstream
+ * sanitize step.
  */
-function scrubReservedI18nPrefix(displayName: string | undefined): string {
-  if (displayName == null) return '';
-  if (displayName.startsWith(I18N_TOKEN_PREFIX)) return '';
-  return displayName;
+function scrubReservedI18nPrefix(text: string | undefined): string {
+  if (text == null) return '';
+  if (text.startsWith(I18N_TOKEN_PREFIX)) return '';
+  return text;
 }
 
 /**
@@ -325,9 +331,16 @@ class NotificationService {
     const actorRow = this.buildActorRow(input);
 
     // Sanitize snapshot text fields (defense-in-depth — clients must still
-    // render these as plain text).
+    // render these as plain text). The label runs through the reserved-prefix
+    // scrub first: unlike `actor_display_name`, no server-generated token
+    // ever legitimately lands in `object_label`, so the scrub is
+    // unconditional across verbs (the Flag path is where a poisoned event
+    // title actually arrives). `sanitize` deliberately stays prefix-agnostic
+    // — it is a generic HTML/bidi guard, and the `i18n:` reservation is a
+    // notifications-domain rule enforced at the call site, symmetric to the
+    // actor-side scrub in `buildActorRow`.
     const actor_display_name = sanitize(actorRow.actor_display_name, ACTOR_DISPLAY_NAME_MAX_LEN);
-    const object_label = sanitize(input.object.label, OBJECT_LABEL_MAX_LEN);
+    const object_label = sanitize(scrubReservedI18nPrefix(input.object.label), OBJECT_LABEL_MAX_LEN);
 
     const verb = input.verb;
     const origin = input.origin ?? 'local';
