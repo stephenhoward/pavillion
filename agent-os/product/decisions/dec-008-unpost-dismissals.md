@@ -10,9 +10,11 @@
 
 When a calendar owner unposts a reposted event, the system writes a sticky `RepostDismissalEntity` row scoped to `(event_id, calendar_id)`. The inbox auto-repost handler checks this row before creating a new `SharedEventEntity`, skipping silently if present. Dismissals are strictly per-calendar: a dismissal on Calendar A never suppresses auto-reposts on Calendar B, even within the same instance. Dismissals only gate re-share creation — `Update(Event)` activities continue to flow through the inbox unmodified so the underlying `EventEntity` stays in sync for every calendar still sharing it.
 
+The check lives inside the shared auto-repost path, so it applies to every way a shareable event arrives: an inbound `Create` carrying an original or an inbound `Announce` carrying a repost (see [DEC-014](dec-014-create-original-announce-repost.md)). A dismissal suppresses the outbound `Announce` and its paired `Create(Note)` together.
+
 ## Context
 
-Before this decision, unposting a reposted event was fragile: if the source calendar re-broadcast or edited the event, the auto-repost handler would silently re-share it on the same calendar. Calendar owners had no durable way to say "no, not this one." The previous `unshareEvent` path destroyed the `SharedEventEntity` row but left no record of the owner's intent, so the next inbound `Announce` recreated it. This undermined the community-control principle ([DEC-001](dec-001-initial-product-planning.md)): followers had policy control over *future* follows but not over *this specific event I already said no to*.
+Before this decision, unposting a reposted event was fragile: if the source calendar re-broadcast or edited the event, the auto-repost handler would silently re-share it on the same calendar. Calendar owners had no durable way to say "no, not this one." The previous `unshareEvent` path destroyed the `SharedEventEntity` row but left no record of the owner's intent, so the next inbound activity re-sharing that event recreated it. This undermined the community-control principle ([DEC-001](dec-001-initial-product-planning.md)): followers had policy control over *future* follows but not over *this specific event I already said no to*.
 
 ## Alternatives Considered
 
@@ -44,3 +46,4 @@ Per-calendar scoping is the only option that keeps DEC-001's community-control p
 **Negative:**
 - `ap_repost_dismissal` rows accumulate over time, bounded by event lifetime via `ON DELETE CASCADE`
 - No UI yet to audit or undo dismissals — deferred to a future bead; data is preserved so the surface can be added later
+
