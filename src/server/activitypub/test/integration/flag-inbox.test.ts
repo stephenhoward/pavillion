@@ -9,6 +9,7 @@ import { Calendar } from '@/common/model/calendar';
 import { CalendarEvent } from '@/common/model/events';
 import { ReportStatus } from '@/common/model/report';
 import type { ReporterType } from '@/common/model/report';
+import { FederatedReportRateLimitError, ReportValidationError } from '@/common/exceptions/report';
 
 describe('ProcessInboxService - Flag Activity Processing', () => {
   let inboxService: ProcessInboxService;
@@ -210,6 +211,71 @@ describe('ProcessInboxService - Flag Activity Processing', () => {
 
       // For now, just verify it processes - admin flag handling can be enhanced later
       expect(moderationInterface.receiveRemoteReport).toHaveBeenCalled();
+    });
+
+    it('should drop a Flag delivered to a calendar that does not own the event', async () => {
+      // A Flag belongs in the inbox of the object's host. Filing it anyway
+      // would let a sender spread reports about one event across enumerable
+      // calendar inboxes, staying under each inbox's rate limiter while
+      // multiplying throughput against a single target.
+      const otherCalendar = new Calendar(uuidv4(), 'unrelated-calendar');
+
+      const flagActivity = {
+        type: 'Flag',
+        id: 'https://remote.instance/flags/misdirected-uuid',
+        actor: 'https://remote.instance/calendars/reporter',
+        object: `https://local.instance/events/${testEvent.id}`,
+        content: 'Report content',
+        tag: [{ type: 'Hashtag', name: '#spam' }],
+        published: '2026-02-07T12:00:00Z',
+      };
+
+      await inboxService.processFlagActivity(otherCalendar, flagActivity);
+
+      expect(moderationInterface.receiveRemoteReport).not.toHaveBeenCalled();
+    });
+
+    it('should not emit reportReceived when the report is suppressed by the per-instance cap', async () => {
+      // Suppression is a policy outcome, not a processing failure: the
+      // handler must settle cleanly so the ap_inbox row is not marked errored.
+      (moderationInterface.receiveRemoteReport as any).mockRejectedValue(new FederatedReportRateLimitError());
+      const reportReceivedSpy = vi.fn();
+      eventBus.on('reportReceived', reportReceivedSpy);
+
+      const flagActivity = {
+        type: 'Flag',
+        id: 'https://remote.instance/flags/throttled-uuid',
+        actor: 'https://remote.instance/calendars/reporter',
+        object: `https://local.instance/events/${testEvent.id}`,
+        content: 'Report content',
+        tag: [{ type: 'Hashtag', name: '#spam' }],
+        published: '2026-02-07T12:00:00Z',
+      };
+
+      await expect(inboxService.processFlagActivity(testCalendar, flagActivity)).resolves.not.toThrow();
+
+      expect(reportReceivedSpy).not.toHaveBeenCalled();
+    });
+
+    it('should propagate a report validation failure', async () => {
+      // Anything the service refuses as malformed is a genuine processing
+      // failure and must surface, so the ap_inbox row records it as an error.
+      (moderationInterface.receiveRemoteReport as any).mockRejectedValue(
+        new ReportValidationError(['Description must be 2000 characters or fewer']),
+      );
+
+      const flagActivity = {
+        type: 'Flag',
+        id: 'https://remote.instance/flags/oversized-uuid',
+        actor: 'https://remote.instance/calendars/reporter',
+        object: `https://local.instance/events/${testEvent.id}`,
+        content: 'x'.repeat(2001),
+        tag: [{ type: 'Hashtag', name: '#spam' }],
+        published: '2026-02-07T12:00:00Z',
+      };
+
+      await expect(inboxService.processFlagActivity(testCalendar, flagActivity))
+        .rejects.toBeInstanceOf(ReportValidationError);
     });
 
     it('should handle missing moderationInterface gracefully', async () => {
