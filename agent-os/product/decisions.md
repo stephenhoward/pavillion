@@ -53,7 +53,7 @@ Supersession is the exception, because it retires a decision rather than refinin
 - **File:** [decisions/dec-011-federated-value-boundary.md](decisions/dec-011-federated-value-boundary.md)
 - **Date:** 2026-05-16 · **Status:** Accepted
 - **Decision:** (1) ICS import is exclusively organizer migration tooling — not a curator aggregation surface. (2) Curator aggregation operates via federation only (Pavillion calendars + other AP event platforms); no roadmap path for non-federated source aggregation. (3) Features that bridge to non-federated systems (inbound or outbound) are funding-gated under the **federated value boundary principle**; in-network features are free.
-- **Consult when:** Classifying any feature as free vs funding-gated; designing aggregation features; ICS import scope work; questions about what curators do in Pavillion's model; deciding whether an inbound/outbound integration is in-network or platform-bridge; any feature touching outbound feeds, third-party APIs, or hosted-provider integrations.
+- **Consult when:** Classifying any feature as free vs funding-gated; adding an entry to the funding-gated feature registry (`FUNDING_GATED_FEATURES`); designing aggregation features; ICS import scope work; questions about what curators do in Pavillion's model; deciding whether an inbound/outbound integration is in-network or platform-bridge; any feature touching outbound feeds, third-party APIs, or hosted-provider integrations.
 
 ---
 

@@ -8,7 +8,7 @@ import {
   type ProviderStatus,
   type DisconnectionResult,
 } from '@/server/funding/service/provider_connection';
-import { FundingPlan, FundingSettings, ProviderConfig, FundingStatus, BillingCycle, ProviderType } from '@/common/model/funding-plan';
+import { FundingPlan, FundingSettings, ProviderConfig, FundingStatus, BillingCycle, ProviderType, FundingGatedFeature } from '@/common/model/funding-plan';
 import type { ProviderInfo } from '@/server/funding/service/funding';
 import type { ProviderCredentials } from '@/server/funding/service/provider/adapter';
 import { ComplimentaryGrant } from '@/common/model/complimentary_grant';
@@ -62,6 +62,22 @@ export default class FundingInterface {
    */
   async hasFundingAccess(calendarId: string): Promise<boolean> {
     return this.fundingService.hasFundingAccess(calendarId);
+  }
+
+  /**
+   * Decide whether a calendar may use a funding-gated feature.
+   *
+   * The single entry point for funding gates: feature domains pass a key from
+   * FUNDING_GATED_FEATURES and act on the answer, holding no funding state of
+   * their own. See FundingService.checkFundingAccess for the four invariants
+   * that produce the decision.
+   *
+   * @param calendarId - Calendar the feature would be used on
+   * @param feature - Key from FUNDING_GATED_FEATURES naming the gated feature
+   * @returns True if the gate is open for this calendar
+   */
+  async checkFundingAccess(calendarId: string, feature: FundingGatedFeature): Promise<boolean> {
+    return this.fundingService.checkFundingAccess(calendarId, feature);
   }
 
   /**
