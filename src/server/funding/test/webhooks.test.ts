@@ -816,6 +816,218 @@ describe('Webhook Handling', () => {
         });
         expect(fundingPlan).toBeNull();
       });
+
+      it('should leave no plan or dedupe row behind when subscription retrieval throws', async () => {
+        // The adapter throws when a Stripe subscription carries no resolvable
+        // billing period. Retrieval happens before the write transaction, so
+        // nothing must be persisted — otherwise the dedupe check would swallow
+        // Stripe's retry and the paid-for plan would never be created.
+        mockAdapter.getSubscription.rejects(
+          new Error('Stripe subscription sub_checkout_throw has no billing period'),
+        );
+
+        const webhookPayload = JSON.stringify({
+          id: 'evt_checkout_throw',
+          type: 'checkout.session.completed',
+          data: {
+            object: {
+              subscription: 'sub_checkout_throw',
+              customer: 'cus_checkout_throw',
+              metadata: {
+                pavillion_account_id: testAccountId,
+              },
+            },
+          },
+        });
+
+        vi.mocked(Stripe.Webhook.constructEvent).mockReturnValue(JSON.parse(webhookPayload) as any);
+
+        const response = await request(app)
+          .post('/api/funding/webhooks/stripe')
+          .set('stripe-signature', 'valid_signature')
+          .set('Content-Type', 'application/json')
+          .send(webhookPayload);
+
+        // 500 asks Stripe to retry rather than silently dropping the payment
+        expect(response.status).toBe(500);
+
+        const fundingPlan = await FundingPlanEntity.findOne({
+          where: { provider_subscription_id: 'sub_checkout_throw' },
+        });
+        expect(fundingPlan).toBeNull();
+
+        const eventCount = await FundingEventEntity.count({
+          where: { provider_event_id: 'evt_checkout_throw' },
+        });
+        expect(eventCount).toBe(0);
+      });
+
+      it('should process a later unrelated event after one delivery fails', async () => {
+        // Stripe delivers one event per request, so a throw can only fail the
+        // delivery that caused it. This guards against state from a failed
+        // delivery leaking into the next one.
+        mockAdapter.getSubscription
+          .withArgs('sub_checkout_broken')
+          .rejects(new Error('Stripe subscription sub_checkout_broken has no billing period'));
+
+        const now = new Date();
+        const periodEnd = new Date(now);
+        periodEnd.setMonth(periodEnd.getMonth() + 1);
+        mockAdapter.getSubscription.withArgs('sub_checkout_healthy').resolves({
+          providerSubscriptionId: 'sub_checkout_healthy',
+          providerCustomerId: 'cus_checkout_healthy',
+          status: 'active',
+          currentPeriodStart: now,
+          currentPeriodEnd: periodEnd,
+          amount: 1000000,
+          currency: 'USD',
+        });
+
+        const buildPayload = (eventId: string, subscriptionId: string) => JSON.stringify({
+          id: eventId,
+          type: 'checkout.session.completed',
+          data: {
+            object: {
+              subscription: subscriptionId,
+              customer: `cus_${subscriptionId}`,
+              metadata: { pavillion_account_id: testAccountId },
+            },
+          },
+        });
+
+        const brokenPayload = buildPayload('evt_checkout_broken', 'sub_checkout_broken');
+        vi.mocked(Stripe.Webhook.constructEvent).mockReturnValue(JSON.parse(brokenPayload) as any);
+        const brokenResponse = await request(app)
+          .post('/api/funding/webhooks/stripe')
+          .set('stripe-signature', 'valid_signature')
+          .set('Content-Type', 'application/json')
+          .send(brokenPayload);
+        expect(brokenResponse.status).toBe(500);
+
+        const healthyPayload = buildPayload('evt_checkout_healthy', 'sub_checkout_healthy');
+        vi.mocked(Stripe.Webhook.constructEvent).mockReturnValue(JSON.parse(healthyPayload) as any);
+        const healthyResponse = await request(app)
+          .post('/api/funding/webhooks/stripe')
+          .set('stripe-signature', 'valid_signature')
+          .set('Content-Type', 'application/json')
+          .send(healthyPayload);
+        expect(healthyResponse.status).toBe(200);
+
+        const fundingPlan = await FundingPlanEntity.findOne({
+          where: { provider_subscription_id: 'sub_checkout_healthy' },
+        });
+        expect(fundingPlan).not.toBeNull();
+      });
+    });
+
+    describe('Funding event data minimization', () => {
+      it('should not persist the raw provider payload for a lifecycle event', async () => {
+        const subscription = new FundingPlanEntity();
+        subscription.id = uuidv4();
+        subscription.account_id = uuidv4();
+        subscription.provider_config_id = stripeConfig.id;
+        subscription.provider_subscription_id = 'sub_minimization';
+        subscription.provider_customer_id = 'cus_minimization';
+        subscription.status = 'active';
+        subscription.billing_cycle = 'monthly';
+        subscription.amount = 1000000;
+        subscription.currency = 'USD';
+        subscription.current_period_start = new Date();
+        subscription.current_period_end = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+        await subscription.save();
+
+        const webhookPayload = JSON.stringify({
+          id: 'evt_minimization',
+          type: 'invoice.payment_failed',
+          data: {
+            object: {
+              subscription: 'sub_minimization',
+              customer: 'cus_minimization',
+              customer_email: 'payer@example.com',
+              customer_name: 'A Payer',
+              payment_method_details: { card: { last4: '4242', brand: 'visa' } },
+            },
+          },
+        });
+
+        vi.mocked(Stripe.Webhook.constructEvent).mockReturnValue(JSON.parse(webhookPayload) as any);
+
+        const response = await request(app)
+          .post('/api/funding/webhooks/stripe')
+          .set('stripe-signature', 'valid_signature')
+          .set('Content-Type', 'application/json')
+          .send(webhookPayload);
+
+        expect(response.status).toBe(200);
+
+        const loggedEvent = await FundingEventEntity.findOne({
+          where: { provider_event_id: 'evt_minimization' },
+        });
+        expect(loggedEvent).not.toBeNull();
+
+        const storedPayload = loggedEvent!.toModel().payload;
+        expect(storedPayload).not.toContain('payer@example.com');
+        expect(storedPayload).not.toContain('A Payer');
+        expect(storedPayload).not.toContain('4242');
+        expect(storedPayload).not.toContain('cus_minimization');
+        expect(JSON.parse(storedPayload)).toEqual({ status: 'past_due' });
+      });
+
+      it('should not persist the raw provider payload on checkout completion', async () => {
+        const accountId = uuidv4();
+        const now = new Date();
+        const periodEnd = new Date(now);
+        periodEnd.setMonth(periodEnd.getMonth() + 1);
+
+        sandbox.stub(ProviderFactory, 'getAdapter').returns({
+          providerType: 'stripe',
+          verifyWebhookSignature: sandbox.stub().returns(true),
+          parseWebhookEvent: createParseWebhookEvent(),
+          getSubscription: sandbox.stub().resolves({
+            providerSubscriptionId: 'sub_min_checkout',
+            providerCustomerId: 'cus_min_checkout',
+            status: 'active',
+            currentPeriodStart: now,
+            currentPeriodEnd: periodEnd,
+            amount: 1000000,
+            currency: 'USD',
+          }),
+        } as any);
+
+        const webhookPayload = JSON.stringify({
+          id: 'evt_min_checkout',
+          type: 'checkout.session.completed',
+          data: {
+            object: {
+              subscription: 'sub_min_checkout',
+              customer: 'cus_min_checkout',
+              customer_details: { email: 'payer@example.com', name: 'A Payer' },
+              metadata: { pavillion_account_id: accountId },
+            },
+          },
+        });
+
+        vi.mocked(Stripe.Webhook.constructEvent).mockReturnValue(JSON.parse(webhookPayload) as any);
+
+        const response = await request(app)
+          .post('/api/funding/webhooks/stripe')
+          .set('stripe-signature', 'valid_signature')
+          .set('Content-Type', 'application/json')
+          .send(webhookPayload);
+
+        expect(response.status).toBe(200);
+
+        const loggedEvent = await FundingEventEntity.findOne({
+          where: { provider_event_id: 'evt_min_checkout' },
+        });
+        expect(loggedEvent).not.toBeNull();
+
+        const storedPayload = loggedEvent!.toModel().payload;
+        expect(storedPayload).not.toContain('payer@example.com');
+        expect(storedPayload).not.toContain('A Payer');
+        expect(storedPayload).not.toContain('cus_min_checkout');
+        expect(JSON.parse(storedPayload)).toEqual({ status: 'active' });
+      });
     });
   });
 });

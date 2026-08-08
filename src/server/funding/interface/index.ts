@@ -97,11 +97,11 @@ export default class FundingInterface {
     return this.fundingService.getProviders();
   }
 
-  async updateProvider(providerType: 'stripe' | 'paypal', displayName: string, enabled: boolean): Promise<void> {
+  async updateProvider(providerType: ProviderType, displayName: string | undefined, enabled: boolean): Promise<boolean> {
     return this.fundingService.updateProvider(providerType, displayName, enabled);
   }
 
-  async disconnectProvider(providerType: 'stripe' | 'paypal'): Promise<void> {
+  async disconnectProvider(providerType: ProviderType): Promise<boolean> {
     return this.fundingService.disconnectProvider(providerType);
   }
 
@@ -168,7 +168,7 @@ export default class FundingInterface {
     return this.fundingService.getOptions();
   }
 
-  async getStatus(accountId: string): Promise<FundingPlan | null> {
+  async getStatus(accountId: string): Promise<FundingPlan | undefined> {
     return this.fundingService.getStatus(accountId);
   }
 

@@ -8,6 +8,7 @@ import {
   AccountNotFoundError,
   DuplicateGrantError,
   GrantNotFoundError,
+  InvalidProviderTypeError,
 } from '@/common/exceptions/funding';
 import { CalendarNotFoundError } from '@/common/exceptions/calendar';
 import { logError } from '@/server/common/helper/error-logger';
@@ -191,6 +192,12 @@ export default class AdminRoutes {
       const { providerType } = req.params;
       const { displayName, enabled } = req.body;
 
+      // Express types route params as string | string[]; narrow to the
+      // provider union before crossing the domain interface.
+      if (providerType !== 'stripe' && providerType !== 'paypal') {
+        throw new InvalidProviderTypeError();
+      }
+
       await this.service.updateProvider(providerType, displayName, enabled);
 
       res.json({ success: true });
@@ -241,6 +248,12 @@ export default class AdminRoutes {
   async forceCancel(req: Request, res: Response): Promise<void> {
     try {
       const { id } = req.params;
+
+      // Validate funding plan ID is a valid UUID
+      if (!ExpressHelper.isValidUUID(id)) {
+        res.status(400).json({ error: 'Invalid funding plan ID: must be a valid UUID', errorName: 'ValidationError' });
+        return;
+      }
 
       await this.service.forceCancel(id);
 
