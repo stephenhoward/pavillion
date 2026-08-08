@@ -92,7 +92,6 @@ describe('Funding Page Wizard Integration', () => {
     wrapper = mountWithI18n({
       global: {
         stubs: {
-          PayPalConfigModal: true,
           ConfirmDisconnectModal: true,
           AddProviderWizard: true,
         },
@@ -139,7 +138,6 @@ describe('Funding Page Wizard Integration', () => {
     wrapper = mountWithI18n({
       global: {
         stubs: {
-          PayPalConfigModal: true,
           ConfirmDisconnectModal: true,
           AddProviderWizard: true,
         },
@@ -185,7 +183,6 @@ describe('Funding Page Wizard Integration', () => {
     wrapper = mountWithI18n({
       global: {
         stubs: {
-          PayPalConfigModal: true,
           ConfirmDisconnectModal: true,
         },
       },
@@ -214,10 +211,10 @@ describe('Funding Page Wizard Integration', () => {
     expect(wizardComponent.exists()).toBe(true);
     expect(wizardComponent.props('show')).toBe(true);
 
+    // PayPal is descoped for v1 (DEC-007), so the wizard only ever offers Stripe.
     const unconfiguredProviders = wizardComponent.props('unconfiguredProviders');
-    expect(unconfiguredProviders).toHaveLength(2);
+    expect(unconfiguredProviders).toHaveLength(1);
     expect(unconfiguredProviders[0].provider_type).toBe('stripe');
-    expect(unconfiguredProviders[1].provider_type).toBe('paypal');
   });
 
   it('updates provider list after successful wizard completion', async () => {
@@ -267,7 +264,6 @@ describe('Funding Page Wizard Integration', () => {
     wrapper = mountWithI18n({
       global: {
         stubs: {
-          PayPalConfigModal: true,
           ConfirmDisconnectModal: true,
         },
       },
@@ -293,7 +289,6 @@ describe('Funding Page Wizard Integration', () => {
     wrapper = mountWithI18n({
       global: {
         stubs: {
-          PayPalConfigModal: true,
           ConfirmDisconnectModal: true,
           AddProviderWizard: true,
         },
@@ -313,7 +308,6 @@ describe('Funding Page Wizard Integration', () => {
     wrapper = mountWithI18n({
       global: {
         stubs: {
-          PayPalConfigModal: true,
           ConfirmDisconnectModal: true,
         },
       },
@@ -380,7 +374,6 @@ describe('Funding Page Wizard Integration', () => {
     wrapper = mountWithI18n({
       global: {
         stubs: {
-          PayPalConfigModal: true,
           ConfirmDisconnectModal: true,
         },
       },
@@ -425,7 +418,6 @@ describe('Funding Page Wizard Integration', () => {
         global: {
           plugins: [[I18NextVue, { i18next }]],
           stubs: {
-            PayPalConfigModal: true,
             ConfirmDisconnectModal: true,
             AddProviderWizard: true,
             GrantForm: true,

@@ -19,7 +19,7 @@ const routes: RouteRecordRaw[] = [
  *
  * Tests cover:
  * - Provider connection status display (connected vs not connected)
- * - PayPal configure button opens credential form modal
+ * - PayPal is never surfaced in the admin UI (descoped for v1 — see DEC-007)
  * - Disconnection warning dialog with confirmation checkbox
  * - Error message display from query parameters
  */
@@ -166,8 +166,10 @@ describe('Funding Provider UI Components', () => {
     await nextTick();
     await new Promise(resolve => setTimeout(resolve, 100)); // Wait for async data loading
 
+    // Only Stripe is supported in v1 (DEC-007), so PayPal is filtered out even
+    // though the API reports it as configured.
     const providerItems = wrapper.findAll('.provider-item');
-    expect(providerItems).toHaveLength(2);
+    expect(providerItems).toHaveLength(1);
 
     // Check Stripe shows "Connected" badge and "Disconnect" button
     const stripeItem = providerItems[0];
@@ -175,12 +177,40 @@ describe('Funding Provider UI Components', () => {
     expect(stripeItem.find('.connected-badge').exists()).toBe(true);
     expect(stripeItem.find('.connected-badge').text()).toBe('Connected');
     expect(stripeItem.findAll('button').some(b => b.text().includes('Disconnect'))).toBe(true);
+  });
 
-    // Check PayPal shows "Connected" badge and "Disconnect" button
-    const paypalItem = providerItems[1];
-    expect(paypalItem.find('.provider-info h3').text()).toContain('PayPal');
-    expect(paypalItem.find('.connected-badge').exists()).toBe(true);
-    expect(paypalItem.findAll('button').some(b => b.text().includes('Disconnect'))).toBe(true);
+  /**
+   * Test 1b: PayPal is descoped for v1 (DEC-007) — it must never reach the UI,
+   * whether the API reports it configured or unconfigured.
+   */
+  it('never renders PayPal as a provider option', async () => {
+    mockService.getProviders.mockResolvedValue([
+      {
+        id: 'provider-1',
+        provider_type: 'stripe',
+        enabled: true,
+        display_name: 'Stripe',
+        configured: true,
+      },
+      {
+        id: 'provider-2',
+        provider_type: 'paypal',
+        enabled: false,
+        display_name: 'PayPal',
+        configured: false,
+      },
+    ]);
+
+    wrapper = mountFunding();
+    await nextTick();
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    expect(wrapper.text()).not.toContain('PayPal');
+
+    // Stripe is the only provider left, so the wizard has nothing to offer.
+    const addProviderButton = wrapper.findAll('button.btn-text-orange')
+      .find(b => b.text().includes('Add Provider'));
+    expect(addProviderButton?.attributes('disabled')).toBeDefined();
   });
 
   /**

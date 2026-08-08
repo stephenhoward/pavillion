@@ -5,7 +5,6 @@ import { ref, computed, reactive, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useToast } from '@/client/composables/useToast';
 import FundingService from '@/client/service/funding';
-import PayPalConfigModal from './paypal-config-modal.vue';
 import ConfirmDisconnectModal from './confirm-disconnect-modal.vue';
 import AddProviderWizard from './add-provider-wizard.vue';
 import GrantForm from './grant-form.vue';
@@ -47,7 +46,6 @@ const fieldErrors = reactive<Record<string, string>>({});
 const providers = ref([]);
 const providersLoading = ref(false);
 const connectingProvider = ref(null); // Track which provider is currently connecting
-const showPayPalModal = ref(false); // Control PayPal configuration modal visibility
 const showDisconnectModal = ref(false); // Control disconnect confirmation modal visibility
 const disconnectModalData = ref({
   providerType: '',
@@ -80,6 +78,18 @@ const currencyOptions = [
   { value: 'CAD', label: 'CAD - Canadian Dollar' },
   { value: 'AUD', label: 'AUD - Australian Dollar' },
 ];
+
+/**
+ * Payment providers offered by this release.
+ *
+ * PayPal is descoped for v1: the backend seeds an unconfigured PayPal provider row
+ * and the adapter/wizard/modal scaffolding remains in the tree, but checkout is
+ * Stripe-only, so PayPal must never be offered or shown as connected. Filtering
+ * here is the single hide site — it keeps PayPal out of both the connected list
+ * and the add-provider wizard. See DEC-007
+ * (agent-os/product/decisions/dec-007-community-funding-model.md).
+ */
+const V1_PROVIDER_TYPES = ['stripe'];
 
 // Computed property to check if any payment provider is configured
 const hasConfiguredProvider = computed(() => {
@@ -130,7 +140,8 @@ async function loadSettings() {
 async function loadProviders() {
   try {
     providersLoading.value = true;
-    providers.value = await fundingService.getProviders();
+    const allProviders = await fundingService.getProviders() ?? [];
+    providers.value = allProviders.filter(provider => V1_PROVIDER_TYPES.includes(provider.provider_type));
   }
   catch (error) {
     console.error('Failed to load providers:', error);
@@ -1132,12 +1143,6 @@ onMounted(async () => {
         </div>
       </section>
     </template>
-
-    <!-- PayPal Configuration Modal -->
-    <PayPalConfigModal
-      :show="showPayPalModal"
-      @close="showPayPalModal = false"
-    />
 
     <!-- Disconnect Confirmation Modal -->
     <ConfirmDisconnectModal
