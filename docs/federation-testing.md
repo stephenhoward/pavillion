@@ -108,25 +108,92 @@ Or run the generation script directly:
 
 ## Federation Test Scenarios
 
-The federation test suite covers the following scenarios:
+Both instances run with `SKIP_SIGNATURES=true` unless a spec opts out, so most specs prove routing, dispatch, and side effects rather than cryptography. `signature_strict_receive.spec.ts` is the exception.
 
-### 1. WebFinger Discovery (`tests/e2e/federation/webfinger.spec.ts`)
-- Instance B discovers Instance A's calendar via WebFinger protocol
-- Verifies WebFinger response format and ActivityPub profile URL
-- Validates that the ActivityPub actor document is correctly formatted
+A spec that claims an activity reached a peer's inbox proves it by polling that instance's container logs for the `Inbox activity accepted` record, which is written only after validation *and* the inbox write have both succeeded. The earlier `Received inbox activity` line is emitted before validation runs, so it fires for activities the boundary then refuses with a 400 — it is evidence of arrival, never of acceptance.
 
-### 2. Follow/Unfollow (`tests/e2e/federation/follow.spec.ts`)
-- Instance B follows a calendar on Instance A
-- Verifies Follow activity is delivered to Instance A's inbox
-- Verifies Instance A sends Accept activity
-- Tests unfollowing (Undo Follow activity)
+Every spec lives in `tests/e2e/federation/`.
 
-### 3. Event Propagation (`tests/e2e/federation/events.spec.ts`)
-- Instance A creates an event on a calendar
-- Instance B follows Instance A's calendar
-- Verifies Create(Event) activity is delivered to Instance B
-- Verifies event appears in Instance B's follower feed
-- Tests event updates (Update activity propagation)
+- **`webfinger.spec.ts`** — a calendar is discoverable across an instance boundary. WebFinger resolves an `acct:` resource to a profile URL, the profile returns a well-formed actor document, and an unknown account 404s rather than returning an empty actor.
+- **`follow.spec.ts`** — a Follow from Beta lands in Alpha's inbox and creates a follower row, and Undo(Follow) removes it. Alpha's Accept is proven only indirectly: the assertion is that Beta's follow row reaches the accepted state, not that an Accept was seen on the wire.
+- **`events.spec.ts`** — Create(Event) and Update(Event) reach a follower and change what that follower's feed shows.
+- **`signed_delivery.spec.ts`** — Create, Update, and Delete(Tombstone) survive real signature generation and are accepted by a remote *calendar* inbox, and an Add editor-invite is accepted by a remote *user* inbox. The only spec that exercises both inbox routes.
+- **`signature_strict_receive.spec.ts`** — with strict receive enabled, a genuine signature verifies, an unsigned POST is refused with 400, and a forged `Signature` header with 401. The negative cases are the point of the spec.
+- **`follow-backfill.spec.ts`** — history pulled from a peer's outbox after Accept(Follow) reaches the follower's feed, and replaying that history applies mid-flight activities in order: a backfilled Create+Update yields the later title, and a backfilled Announce+Undo(Announce) yields no share row at all. The only proof of the `outbox_pull` ingest path ([DEC-013](../agent-os/product/decisions/dec-013-inbox-authenticated-activity-log.md)).
+- **`auto-repost.spec.ts`** — a follow policy decides whether an inbound event also lands on the follower's own calendar. Originals and reposts are covered separately because they arrive as different activities: Create carries an original, Announce carries a repost ([DEC-014](../agent-os/product/decisions/dec-014-create-original-announce-repost.md)). Also covers a policy change taking effect only on subsequent events, self-origin loop prevention, and duplicate suppression across policy toggles.
+- **`unpost-sticky.spec.ts`** — after an owner unposts an auto-reposted event, the origin re-broadcasting that event does not bring it back, while the underlying event still takes the update. Update is deliberately not gated; only re-share creation is ([DEC-008](../agent-os/product/decisions/dec-008-unpost-dismissals.md)).
+- **`cross_instance_editors.spec.ts`** — a user on one instance edits a calendar on another. Covers discovery of the remote Person actor, Add(editor), Create/Update/Delete signed by that Person actor and applied to the remote calendar, and Remove(editor) on revoke.
+- **`note.spec.ts`** — **proof by absence.** The paired Create/Update/Delete(Note) activities Pavillion emits for Mastodon-class peers do reach a Pavillion inbox, and a Pavillion receiver skips every one of them without producing a second feed row or a Note-derived event. Notes are outbound interop only ([DEC-014](../agent-os/product/decisions/dec-014-create-original-announce-repost.md)).
+
+## Inbound Coverage Matrix
+
+The matrix is two-dimensional on purpose. An activity type can be fully handled by a dispatcher and still be unreachable from the network, because the type it is dispatched under and the mechanism that authenticated it are independent. That is exactly how inbound `Flag` stayed broken while looking covered: `processFlagActivity` was reachable via `local_dispatch` and rejected with a 400 via `http_signature`.
+
+[DEC-013](../agent-os/product/decisions/dec-013-inbox-authenticated-activity-log.md) makes the ingest mechanism a first-class concept — every `ap_inbox` row records the mechanism that authenticated it in `auth_source` — so the mechanism is the second axis:
+
+| Mechanism | How an activity arrives |
+|-----------|-------------------------|
+| `http_signature` | A signed POST to `/calendars/:urlname/inbox` or `/users/:username/inbox`, validated by the `addToInbox` switch in `activitypub/api/v1/server.ts`. |
+| `outbox_pull` | The backfill worker GETs a followed calendar's outbox after Accept(Follow) and replays what it finds. Limited to Create, Update, Delete, Announce, and Undo. |
+| `local_dispatch` | In-process outbox→inbox handoff when a recipient resolves to a calendar on the same instance. Never crosses the wire. |
+
+### Types with an `ap_inbox` row
+
+These are the types the calendar inbox accepts and `dispatchByType` handles.
+
+| Activity | `http_signature` | `outbox_pull` | `local_dispatch` | `ap_inbox` row | Federation e2e proof |
+|----------|:----------------:|:-------------:|:----------------:|:--------------:|----------------------|
+| `Create(Event)` | yes | yes | yes | yes | `events`, `signed_delivery`; pulled form by `follow-backfill` |
+| `Update(Event)` | yes | yes | yes | yes | `events`, `signed_delivery`; pulled form by `follow-backfill` |
+| `Delete(Event)` | yes | yes | yes | yes | `signed_delivery`; **pulled form unproven** |
+| `Follow` | yes | — | yes | yes | `follow` |
+| `Accept(Follow)` | yes | — | yes | yes | `follow`, **indirect only** |
+| `Announce(Event)` | yes | yes | yes | yes | `auto-repost`; pulled form by `follow-backfill` |
+| `Undo(Follow)` | yes | — | yes | yes | `follow` |
+| `Undo(Announce)` | yes | yes | yes | yes | `follow-backfill`, **`outbox_pull` only** |
+| `Join` | yes | — | — | yes | **none** |
+| `Ignore` | yes | — | yes | yes | **none** |
+| `Flag` | yes | — | yes | yes | **none** |
+| `Create/Update/Delete(Note)` | yes | yes | yes | yes | `note` — skipped before any side effect |
+
+Rows that need more than a cell:
+
+- **`Accept(Follow)` is indirect.** `follow.spec.ts` asserts that Beta's follow row reaches the accepted state, which could only happen if Alpha's Accept was ingested — but nothing asserts the Accept itself. A regression that accepted follows locally without the round-trip would still pass.
+- **`Undo(Announce)` has no signed-POST proof.** `follow-backfill.spec.ts` proves the `outbox_pull` form. `unpost-sticky.spec.ts` exercises the *emitting* side — the unposting calendar has no followers in that fixture — so no spec puts an inbound Undo(Announce) through the signed POST path.
+- **`Join` mutates nothing, by design.** Pavillion emits every event with `joinMode: 'none'` and keeps no attendance state, so `processJoinActivity` replies with an Ignore addressed to the sender alone and writes nothing. A future spec proves the Ignore reply, not a state change — the absence of state *is* the correct outcome.
+- **`Ignore` is recorded, not acted on.** The persisted `ap_inbox` row is the entire outcome. It is a named case in `dispatchByType` rather than a fall-through, because the `default: throw` is what marks a genuinely unknown type as `processed_status: 'error'`.
+- **`Join` has no `local_dispatch` cell** because Pavillion never emits a Join. `Ignore` and `Flag` do have one — both appear in the outbox routing switch and both can be addressed to a same-instance calendar.
+
+### Paths that authenticate and act without writing a row
+
+Two inbound paths verify the sender, act synchronously, and return 200 without ever touching `ap_inbox`. They are invisible on a type-only axis, and they are the highest-privilege activities Pavillion accepts: one writes calendar content, the other changes who is allowed to write it.
+
+| Path | Route | Types | Handler | Federation e2e proof |
+|------|-------|-------|---------|----------------------|
+| Person-actor content edits | `POST /calendars/:urlname/inbox` | `Create`, `Update`, `Delete` where the actor is a Person | `processPersonActorActivity` | `cross_instance_editors` |
+| Editor membership | `POST /users/:username/inbox` | `Add`, `Remove` | `processAddActivity`, `processRemoveActivity` | `signed_delivery` (Add), `cross_instance_editors` (Add and Remove) |
+
+Both reach `logInboxActivityAccepted`, so a log poll can prove acceptance — but neither leaves a durable record. DEC-013's invariant covers the `ap_inbox` table, not the whole ingest surface, and these two paths are the surface it does not cover.
+
+The user inbox also differs from the calendar inbox in how it treats an unrecognized type: it logs and answers 200 rather than 400. A peer cannot tell from the response whether a `Remove` was applied or silently discarded.
+
+### Types with no inbound path
+
+| Activity | Boundary behavior | Consequence |
+|----------|-------------------|-------------|
+| `Reject` | 400 at the calendar inbox; never emitted | A peer that Rejects our Follow gets a 400, and the local follow row stays pending indefinitely. Nothing clears it. |
+| `Add`, `Remove` at a *calendar* inbox | 400 | Not a gap — both are addressed to Person actors and handled at the user inbox. They also have no `local_dispatch` reachability by construction: `sendEditorInvite` and `sendEditorRevoke` run only for remote user actors. |
+| `Like`, `Move`, anything else | 400 | Neither emitted nor ingested. |
+
+### The rule this matrix exists to enforce
+
+**Any activity type reachable via `local_dispatch` but not via `http_signature` is a bug, not a gap.**
+
+Local dispatch and the HTTP boundary share one dispatcher. A type that a same-instance handoff can reach is by definition a type Pavillion knows how to process — so refusing it from the network is a hole in federation, not an unimplemented feature. Both inbound `Flag` and inbound `Ignore` matched that shape, and both were classified as coverage gaps until the mechanism axis made them visible as defects.
+
+The structural form of the rule: the validation switch in `addToInbox` and the switch in `dispatchByType` must list the same set of types. They agree today. When they diverge, the boundary switch is almost always the one that is wrong.
+
+One thing this matrix cannot tell you: `local_dispatch` never crosses an instance boundary, so no federation e2e can prove it. The column records reachability, and integration tests carry the proof. Marking a `local_dispatch` cell "yes" is a statement about the code, not about the suite.
 
 ## Accessing Instances in Browser
 
