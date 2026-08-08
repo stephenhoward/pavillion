@@ -21,6 +21,40 @@ export type ProviderType = 'stripe' | 'paypal';
 export type FundingStatus = 'admin-exempt' | 'grant' | 'funded' | 'unfunded';
 
 /**
+ * The features whose availability depends on funding access.
+ *
+ * This registry is the implementation surface of the DEC-011 federated value
+ * boundary: in-network features are free, and features that bridge to
+ * non-federated systems — inbound or outbound — are funding-gated. Every entry
+ * records which side of that boundary its feature sits on and why. A feature
+ * that cannot state a boundary rationale does not belong here.
+ *
+ * Ownership (DEC-003): the funding domain owns both the decision to gate a
+ * feature and the vocabulary of keys used to name one. Feature domains declare
+ * nothing, hold no plan state, and read none — they pass a key from this
+ * registry to FundingInterface and act on the answer. Gating a new feature is
+ * therefore an entry here plus a call, never funding logic grown inside the
+ * feature's own domain.
+ */
+export const FUNDING_GATED_FEATURES = {
+  widget_embedding: {
+    boundaryRationale:
+      'Outside the network. A widget publishes calendar content into non-federated '
+      + 'web properties, which is an outbound platform bridge rather than participation '
+      + 'in the federated network. Following, reposting, and curating between Pavillion '
+      + 'and other ActivityPub event platforms stay free because they are in-network.',
+  },
+} as const;
+
+/**
+ * Key identifying a funding-gated feature.
+ *
+ * Derived from the registry so the union cannot drift from the entries that
+ * carry the boundary rationales.
+ */
+export type FundingGatedFeature = keyof typeof FUNDING_GATED_FEATURES;
+
+/**
  * Instance-wide funding settings
  */
 export class FundingSettings extends PrimaryModel {
