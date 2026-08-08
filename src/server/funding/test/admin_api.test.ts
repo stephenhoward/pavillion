@@ -6,6 +6,8 @@ import FundingInterface from '@/server/funding/interface';
 import AdminRoutes from '@/server/funding/api/v1/admin';
 import { FundingSettings, ProviderConfig } from '@/common/model/funding-plan';
 import { testApp } from '@/server/common/test/lib/express';
+import ExpressHelper from '@/server/common/helper/express';
+import { Account } from '@/common/model/account';
 
 describe('Admin Funding API', () => {
   let router: express.Router;
@@ -181,6 +183,70 @@ describe('Admin Funding API', () => {
 
       expect(response.body.error).toContain('payWhatYouCanYearlyDiscount must be a number between 0 and 100');
       expect(response.body.errorName).toBe('ValidationError');
+    });
+  });
+
+  /**
+   * settings.enabled is an instance-level switch: it decides whether funding
+   * gates apply at all (checkFundingAccess invariant 1), so the only path that
+   * may write it is the admin-gated POST /api/funding/v1/admin/settings.
+   *
+   * The passport arm of ExpressHelper.adminOnly is captured at module load and
+   * cannot be restubbed, so authorization is covered in two parts, following
+   * the pattern in src/server/calendar/test/admin.integration.test.ts:
+   * registration wires the whole adminOnly chain, and the role-check arm
+   * rejects a non-admin.
+   */
+  describe('instance settings write authorization', () => {
+    it('registers the settings routes behind the full adminOnly chain', () => {
+      const app = express();
+      adminHandlers.installHandlers(app, '/api/funding/v1');
+
+      const settingsLayers = (app as any)._router.stack
+        .filter((layer: any) => layer.name === 'router')
+        .flatMap((layer: any) => layer.handle.stack)
+        .filter((layer: any) => layer.route?.path === '/admin/settings');
+
+      expect(settingsLayers.length).toBe(2); // GET and POST
+
+      for (const layer of settingsLayers) {
+        const handlers = layer.route.stack.map((l: any) => l.handle);
+        for (const guard of ExpressHelper.adminOnly) {
+          expect(handlers).toContain(guard);
+        }
+      }
+    });
+
+    it('rejects a non-admin attempt to write settings.enabled', async () => {
+      const updateStub = sandbox.stub(service, 'updateSettings').resolves();
+      const nonAdmin = new Account('user-uuid', 'user', 'user@example.com');
+      nonAdmin.roles = [];
+
+      router.use((req, _res, next) => {
+        req.user = nonAdmin;
+        next();
+      });
+      // Reuse the production role-check arm; only the passport arm is skipped.
+      router.post(
+        '/admin/settings',
+        ExpressHelper.adminOnly[1],
+        adminHandlers.updateSettings.bind(adminHandlers),
+      );
+
+      await request(testApp(router))
+        .post('/admin/settings')
+        .send({
+          enabled: true,
+          monthlyPrice: 1000000,
+          yearlyPrice: 10000000,
+          currency: 'USD',
+          payWhatYouCan: false,
+          gracePeriodDays: 7,
+          payWhatYouCanYearlyDiscount: 0,
+        })
+        .expect(403);
+
+      expect(updateStub.called).toBe(false);
     });
   });
 

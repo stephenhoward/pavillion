@@ -10,6 +10,8 @@ import {
   BillingCycle,
   FundingStatus,
   FundingPlanStatus,
+  FUNDING_GATED_FEATURES,
+  FundingGatedFeature,
 } from '@/common/model/funding-plan';
 import { ComplimentaryGrant } from '@/common/model/complimentary_grant';
 import { FundingSettingsEntity } from '@/server/funding/entity/funding_settings';
@@ -46,6 +48,7 @@ import {
 } from '@/common/exceptions/funding';
 import { ValidationError } from '@/common/exceptions/base';
 import { CalendarNotFoundError } from '@/common/exceptions/calendar';
+import { logError } from '@/server/common/helper/error-logger';
 import type CalendarInterface from '@/server/calendar/interface';
 
 // UUID v4 validation regex
@@ -391,6 +394,23 @@ export default class FundingService {
     if (!isOwner) {
       throw new ValidationError(`Account ${accountId} does not own calendar ${calendarId}`);
     }
+  }
+
+  /**
+   * Check whether an account holds the instance admin role.
+   *
+   * @param accountId - Account ID to check
+   * @returns True if the account is an instance admin
+   */
+  private async isAccountAdmin(accountId: string): Promise<boolean> {
+    const adminRole = await AccountRoleEntity.findOne({
+      where: {
+        account_id: accountId,
+        role: 'admin',
+      },
+    });
+
+    return !!adminRole;
   }
 
   /**
@@ -807,14 +827,7 @@ export default class FundingService {
     }
 
     // Check if owner is admin
-    const adminRole = await AccountRoleEntity.findOne({
-      where: {
-        account_id: ownerId,
-        role: 'admin',
-      },
-    });
-
-    if (adminRole) {
+    if (await this.isAccountAdmin(ownerId)) {
       return 'admin-exempt';
     }
 
@@ -1739,6 +1752,146 @@ export default class FundingService {
       // Fail-secure: deny access on funding plan check error
       return false;
     }
+  }
+
+  /**
+   * Decide whether a calendar may use a funding-gated feature.
+   *
+   * This is the single access decision behind every funding gate. It applies
+   * four invariants, in this order:
+   *
+   *  1. Funding is not enabled on this instance -> the gate is OPEN. An
+   *     operator who has not turned funding on runs an instance with no paid
+   *     tier, so no feature may be withheld (DEC-001 instance autonomy).
+   *  2. The calendar's owner is an instance admin -> open.
+   *  3. An active complimentary grant or an active funding plan allocation ->
+   *     open, unless the plan's cancellation boundary has already passed. That
+   *     boundary is read from the plan itself rather than from its
+   *     webhook-driven status, so a missed customer.subscription.deleted
+   *     cannot grant access indefinitely.
+   *  4. Funding is enabled but the answer is indeterminate (database error,
+   *     credential decrypt failure, provider unreachable) -> CLOSED. "Cannot
+   *     tell" is not "entitled".
+   *
+   * Note the deliberate split in invariants 1 and 4: a *known* absence of
+   * funding opens gates, an *unknown* funding state closes them. Neither is
+   * the ambiguous "fail-secure" the earlier hasFundingAccess implemented,
+   * which had no notion of an instance with funding switched off.
+   *
+   * The feature key carries no policy of its own today — every gated feature
+   * is decided the same way — but it is validated against the registry so an
+   * unregistered key can never be answered, and so per-feature policy has a
+   * place to live if it is ever needed.
+   *
+   * @param calendarId - Calendar the feature would be used on
+   * @param feature - Key from FUNDING_GATED_FEATURES naming the gated feature
+   * @returns True if the gate is open for this calendar
+   * @throws ValidationError if calendarId is not a UUID or feature is not a
+   *   registered funding-gated feature
+   */
+  async checkFundingAccess(calendarId: string, feature: FundingGatedFeature): Promise<boolean> {
+    if (!isValidUUID(calendarId)) {
+      throw new ValidationError('Invalid calendarId: must be a valid UUID');
+    }
+
+    if (!Object.prototype.hasOwnProperty.call(FUNDING_GATED_FEATURES, feature)) {
+      throw new ValidationError('Unknown funding-gated feature');
+    }
+
+    // Invariant 1: funding not enabled on this instance -> all gates open.
+    let fundingEnabled: boolean;
+    try {
+      fundingEnabled = (await this.getSettings()).enabled;
+    }
+    catch (error) {
+      // Invariant 4: we cannot establish that funding is switched off, so we
+      // cannot open the gate on that basis either.
+      logError(error, 'checkFundingAccess: instance funding settings unreadable, closing gate');
+      return false;
+    }
+
+    if (!fundingEnabled) {
+      return true;
+    }
+
+    try {
+      // Invariant 2: admin-owned calendars are exempt.
+      const ownerId = this.calendarInterface
+        ? await this.calendarInterface.getCalendarOwnerAccountId(calendarId)
+        : null;
+
+      if (ownerId && await this.isAccountAdmin(ownerId)) {
+        return true;
+      }
+
+      // Invariant 3: an active grant or a still-entitling funding plan.
+      if (await this.hasActiveGrant(calendarId)) {
+        return true;
+      }
+
+      return await this.hasEntitlingFundingPlan(calendarId);
+    }
+    catch (error) {
+      // Invariant 4: indeterminate funding status -> closed.
+      logError(error, 'checkFundingAccess: funding status indeterminate, closing gate');
+      return false;
+    }
+  }
+
+  /**
+   * Check whether the calendar has a funding plan allocation that still
+   * entitles it, i.e. an active allocation on an active plan that has not
+   * passed its cancellation boundary.
+   *
+   * Stricter than hasActiveFundingPlan, which trusts the plan's status alone.
+   *
+   * @param calendarId - Calendar ID to check
+   * @returns True if a funding plan allocation currently entitles the calendar
+   */
+  private async hasEntitlingFundingPlan(calendarId: string): Promise<boolean> {
+    const allocation = await CalendarFundingPlanEntity.findOne({
+      where: {
+        calendar_id: calendarId,
+        [Op.or]: [
+          { end_time: { [Op.is]: null as any } },
+          { end_time: { [Op.gt]: new Date() } },
+        ],
+      },
+      include: [{
+        model: FundingPlanEntity,
+        where: { status: 'active' },
+        required: true,
+      }],
+    });
+
+    if (!allocation?.fundingPlan) {
+      return false;
+    }
+
+    const expiry = this.planEntitlementExpiry(allocation.fundingPlan);
+
+    return expiry === null || Date.now() < expiry.getTime();
+  }
+
+  /**
+   * The instant at which a funding plan stops entitling its calendars, or null
+   * if it has no scheduled end.
+   *
+   * A plan cancelled at period end keeps entitling until its current period
+   * runs out, and then stops on the clock rather than on the webhook that
+   * reports the cancellation. cancelled_at is the cancellation marker the plan
+   * entity carries today; pv-jdot.3.1 introduces an explicit cancel_at for
+   * cancel-at-period-end plans, and this helper is where it gets read.
+   *
+   * @param plan - Funding plan the allocation belongs to
+   * @returns Entitlement expiry instant, or null if the plan has none
+   */
+  private planEntitlementExpiry(plan: FundingPlanEntity): Date | null {
+    if (!plan.cancelled_at) {
+      return null;
+    }
+
+    return plan.current_period_end ?? plan.cancelled_at;
   }
 
   /**

@@ -9,6 +9,7 @@ import { FundingPlanEntity } from '@/server/funding/entity/funding_plan';
 import { FundingEventEntity } from '@/server/funding/entity/funding_event';
 import { ComplimentaryGrantEntity } from '@/server/funding/entity/complimentary_grant';
 import { CalendarFundingPlanEntity } from '@/server/funding/entity/calendar_funding_plan';
+import { AccountRoleEntity } from '@/server/common/entity/account';
 import { ProviderFactory } from '@/server/funding/service/provider/factory';
 import { FundingSettings, ProviderConfig, FundingPlan } from '@/common/model/funding-plan';
 import { ComplimentaryGrant } from '@/common/model/complimentary_grant';
@@ -936,6 +937,349 @@ describe('FundingService', () => {
       await service.hasFundingAccess(calendarId);
 
       expect(subStub.called).toBe(false);
+    });
+  });
+
+  describe('checkFundingAccess', () => {
+    const feature = 'widget_embedding';
+    const HOUR = 60 * 60 * 1000;
+    let calendarId: string;
+    let ownerId: string;
+
+    beforeEach(() => {
+      calendarId = uuidv4();
+      ownerId = uuidv4();
+      mockCalendarInterface.getCalendarOwnerAccountId.resolves(ownerId);
+    });
+
+    /** Stub the single instance funding-settings row. */
+    function stubFundingEnabled(enabled: boolean): sinon.SinonStub {
+      return sandbox.stub(FundingSettingsEntity, 'findOne').resolves({
+        id: uuidv4(),
+        enabled,
+        monthly_price: 1000000,
+        yearly_price: 10000000,
+        currency: 'USD',
+        pay_what_you_can: false,
+        grace_period_days: 7,
+        toModel: function() {
+          const settings = new FundingSettings(this.id);
+          settings.enabled = this.enabled;
+          settings.monthlyPrice = this.monthly_price;
+          settings.yearlyPrice = this.yearly_price;
+          settings.currency = this.currency;
+          settings.payWhatYouCan = this.pay_what_you_can;
+          settings.gracePeriodDays = this.grace_period_days;
+          return settings;
+        },
+      } as any);
+    }
+
+    /** Stub the admin-role lookup for the calendar owner. */
+    function stubOwnerIsAdmin(isAdmin: boolean): sinon.SinonStub {
+      return sandbox.stub(AccountRoleEntity, 'findOne').resolves(
+        isAdmin ? { account_id: ownerId, role: 'admin' } as any : null,
+      );
+    }
+
+    /** Stub the active complimentary grant lookup for the calendar. */
+    function stubGrant(hasGrant: boolean): sinon.SinonStub {
+      return sandbox.stub(ComplimentaryGrantEntity, 'findOne').resolves(
+        hasGrant ? { calendar_id: calendarId, revoked_at: null, expires_at: null } as any : null,
+      );
+    }
+
+    /**
+     * Stub the calendar's funding-plan allocation. Pass null for no allocation,
+     * or plan overrides to shape the funding plan the allocation belongs to.
+     */
+    function stubAllocation(
+      plan: { status?: string; cancelled_at?: Date | null; current_period_end?: Date | null } | null,
+    ): sinon.SinonStub {
+      if (plan === null) {
+        return sandbox.stub(CalendarFundingPlanEntity, 'findOne').resolves(null);
+      }
+
+      return sandbox.stub(CalendarFundingPlanEntity, 'findOne').resolves({
+        calendar_id: calendarId,
+        end_time: null,
+        fundingPlan: {
+          status: 'active',
+          cancelled_at: null,
+          current_period_end: new Date(Date.now() + 30 * 24 * HOUR),
+          ...plan,
+        },
+      } as any);
+    }
+
+    describe('invariant 1: funding not enabled on the instance', () => {
+      it('opens the gate without consulting any plan state', async () => {
+        stubFundingEnabled(false);
+        const grantStub = stubGrant(false);
+        const allocationStub = stubAllocation(null);
+        const adminStub = stubOwnerIsAdmin(false);
+
+        const allowed = await service.checkFundingAccess(calendarId, feature);
+
+        expect(allowed).toBe(true);
+        // Instance autonomy (DEC-001): a calendar's funding state is irrelevant
+        // when the instance operator has not turned funding on at all.
+        expect(grantStub.called).toBe(false);
+        expect(allocationStub.called).toBe(false);
+        expect(adminStub.called).toBe(false);
+      });
+    });
+
+    describe('invariant 2: admin-exempt', () => {
+      it('opens the gate for a calendar owned by an admin', async () => {
+        stubFundingEnabled(true);
+        stubOwnerIsAdmin(true);
+        const grantStub = stubGrant(false);
+        const allocationStub = stubAllocation(null);
+
+        const allowed = await service.checkFundingAccess(calendarId, feature);
+
+        expect(allowed).toBe(true);
+        // Admin exemption is decided before any funding state is read
+        expect(grantStub.called).toBe(false);
+        expect(allocationStub.called).toBe(false);
+      });
+
+      it('falls through to funding state when the owner is not an admin', async () => {
+        stubFundingEnabled(true);
+        stubOwnerIsAdmin(false);
+        stubGrant(false);
+        const allocationStub = stubAllocation(null);
+
+        const allowed = await service.checkFundingAccess(calendarId, feature);
+
+        expect(allowed).toBe(false);
+        expect(allocationStub.called).toBe(true);
+      });
+
+      it('falls through to funding state when the calendar has no resolvable owner', async () => {
+        stubFundingEnabled(true);
+        mockCalendarInterface.getCalendarOwnerAccountId.resolves(null);
+        const adminStub = stubOwnerIsAdmin(true);
+        stubGrant(true);
+
+        const allowed = await service.checkFundingAccess(calendarId, feature);
+
+        expect(allowed).toBe(true);
+        expect(adminStub.called).toBe(false);
+      });
+    });
+
+    describe('invariant 3: active plan or grant', () => {
+      it('opens the gate for an active complimentary grant', async () => {
+        stubFundingEnabled(true);
+        stubOwnerIsAdmin(false);
+        stubGrant(true);
+        const allocationStub = stubAllocation(null);
+
+        const allowed = await service.checkFundingAccess(calendarId, feature);
+
+        expect(allowed).toBe(true);
+        expect(allocationStub.called).toBe(false);
+      });
+
+      it('opens the gate for an active funding plan allocation', async () => {
+        stubFundingEnabled(true);
+        stubOwnerIsAdmin(false);
+        stubGrant(false);
+        stubAllocation({});
+
+        const allowed = await service.checkFundingAccess(calendarId, feature);
+
+        expect(allowed).toBe(true);
+      });
+
+      it('closes the gate with neither a grant nor a funding plan allocation', async () => {
+        stubFundingEnabled(true);
+        stubOwnerIsAdmin(false);
+        stubGrant(false);
+        stubAllocation(null);
+
+        const allowed = await service.checkFundingAccess(calendarId, feature);
+
+        expect(allowed).toBe(false);
+      });
+
+      it('keeps the gate open for a plan cancelled at period end until the period ends', async () => {
+        stubFundingEnabled(true);
+        stubOwnerIsAdmin(false);
+        stubGrant(false);
+        stubAllocation({
+          status: 'active',
+          cancelled_at: new Date(Date.now() - HOUR),
+          current_period_end: new Date(Date.now() + HOUR),
+        });
+
+        const allowed = await service.checkFundingAccess(calendarId, feature);
+
+        expect(allowed).toBe(true);
+      });
+
+      it('closes the gate once the cancellation boundary has passed, regardless of webhook-driven status', async () => {
+        stubFundingEnabled(true);
+        stubOwnerIsAdmin(false);
+        stubGrant(false);
+        // A missed customer.subscription.deleted leaves status 'active' locally;
+        // the clock, not the webhook, decides that entitlement has lapsed.
+        stubAllocation({
+          status: 'active',
+          cancelled_at: new Date(Date.now() - 40 * 24 * HOUR),
+          current_period_end: new Date(Date.now() - HOUR),
+        });
+
+        const allowed = await service.checkFundingAccess(calendarId, feature);
+
+        expect(allowed).toBe(false);
+      });
+    });
+
+    describe('invariant 4: indeterminate status', () => {
+      it('closes the gate when the instance settings cannot be read', async () => {
+        sandbox.stub(FundingSettingsEntity, 'findOne').rejects(new Error('DB error'));
+        stubOwnerIsAdmin(false);
+        stubGrant(true);
+
+        const allowed = await service.checkFundingAccess(calendarId, feature);
+
+        expect(allowed).toBe(false);
+      });
+
+      it('closes the gate when the owner admin-role lookup fails', async () => {
+        stubFundingEnabled(true);
+        sandbox.stub(AccountRoleEntity, 'findOne').rejects(new Error('DB error'));
+        stubGrant(true);
+
+        const allowed = await service.checkFundingAccess(calendarId, feature);
+
+        expect(allowed).toBe(false);
+      });
+
+      it('closes the gate when the owner lookup fails', async () => {
+        stubFundingEnabled(true);
+        mockCalendarInterface.getCalendarOwnerAccountId.rejects(new Error('Calendar domain unavailable'));
+        stubGrant(true);
+
+        const allowed = await service.checkFundingAccess(calendarId, feature);
+
+        expect(allowed).toBe(false);
+      });
+
+      it('closes the gate when the grant lookup fails, without falling through to the plan check', async () => {
+        stubFundingEnabled(true);
+        stubOwnerIsAdmin(false);
+        sandbox.stub(ComplimentaryGrantEntity, 'findOne').rejects(new Error('DB error'));
+        const allocationStub = stubAllocation({});
+
+        const allowed = await service.checkFundingAccess(calendarId, feature);
+
+        expect(allowed).toBe(false);
+        expect(allocationStub.called).toBe(false);
+      });
+
+      it('closes the gate when the funding plan lookup fails', async () => {
+        stubFundingEnabled(true);
+        stubOwnerIsAdmin(false);
+        stubGrant(false);
+        sandbox.stub(CalendarFundingPlanEntity, 'findOne').rejects(new Error('DB error'));
+
+        const allowed = await service.checkFundingAccess(calendarId, feature);
+
+        expect(allowed).toBe(false);
+      });
+    });
+
+    describe('input validation', () => {
+      it('rejects a calendarId that is not a UUID', async () => {
+        await expect(service.checkFundingAccess('not-a-uuid', feature))
+          .rejects.toThrow(ValidationError);
+      });
+
+      it('rejects a feature key that is not in the registry', async () => {
+        await expect(service.checkFundingAccess(calendarId, 'made_up_feature' as any))
+          .rejects.toThrow(ValidationError);
+      });
+    });
+
+    describe('parity with the legacy status vocabularies', () => {
+      /**
+       * Each world is a database state that produces one value of each legacy
+       * vocabulary. checkFundingAccess must reach the same allow/deny outcome
+       * the legacy widget gate reached for that state, where the legacy gate is
+       * the composite: instance enabled -> admin bypass -> hasFundingAccess.
+       */
+      const worlds = [
+        {
+          name: 'admin-owned calendar with no funding state',
+          isAdmin: true,
+          hasGrant: false,
+          hasAllocation: false,
+          legacyCalendarStatus: 'admin-exempt',
+          legacyPlanStatus: undefined,
+          allowed: true,
+        },
+        {
+          name: 'calendar with an active complimentary grant',
+          isAdmin: false,
+          hasGrant: true,
+          hasAllocation: false,
+          legacyCalendarStatus: 'grant',
+          legacyPlanStatus: 'grant',
+          allowed: true,
+        },
+        {
+          name: 'calendar with an active funding plan allocation',
+          isAdmin: false,
+          hasGrant: false,
+          hasAllocation: true,
+          legacyCalendarStatus: 'funded',
+          legacyPlanStatus: 'subscribed',
+          allowed: true,
+        },
+        {
+          name: 'calendar with no funding state at all',
+          isAdmin: false,
+          hasGrant: false,
+          hasAllocation: false,
+          legacyCalendarStatus: 'unfunded',
+          legacyPlanStatus: undefined,
+          allowed: false,
+        },
+      ] as const;
+
+      for (const world of worlds) {
+        it(`decides identically to the legacy vocabularies for a ${world.name}`, async () => {
+          stubFundingEnabled(true);
+          stubOwnerIsAdmin(world.isAdmin);
+          stubGrant(world.hasGrant);
+          stubAllocation(world.hasAllocation ? {} : null);
+          mockCalendarInterface.isCalendarOwnerById.resolves(true);
+          sandbox.stub(ComplimentaryGrantEntity, 'findAll').resolves(
+            world.hasGrant ? [{ calendar_id: calendarId } as any] : [],
+          );
+          sandbox.stub(CalendarFundingPlanEntity, 'findAll').resolves(
+            world.hasAllocation ? [{ calendar_id: calendarId } as any] : [],
+          );
+
+          // Legacy vocabulary 1: single-calendar status
+          expect(await service.getFundingStatusForCalendar(ownerId, calendarId))
+            .toBe(world.legacyCalendarStatus);
+
+          // Legacy vocabulary 2: bulk plan status ('none' is an absent key)
+          const bulk = await service.getPlanStatusForCalendars([calendarId]);
+          expect(bulk.get(calendarId)).toBe(world.legacyPlanStatus);
+
+          // Legacy composite gate decision (calendar.ts widget gate)
+          const legacyDecision = world.isAdmin || await service.hasFundingAccess(calendarId);
+          expect(legacyDecision).toBe(world.allowed);
+
+          expect(await service.checkFundingAccess(calendarId, feature)).toBe(world.allowed);
+        });
+      }
     });
   });
 
