@@ -116,6 +116,11 @@ export default class ModerationInterface {
    * @param data - Remote report data
    * @returns The created Report domain model
    * @throws EventNotFoundError if the event does not exist
+   * @throws ReportValidationError if the report fields are invalid
+   * @throws FederatedReportRateLimitError if the reporting instance has already
+   *   filed the maximum number of reports about this event within the window.
+   *   Callers on the inbound federation path should treat this as a policy
+   *   outcome, not a processing failure.
    */
   async receiveRemoteReport(data: ReceiveRemoteReportData): Promise<Report> {
     return this.moderationService.receiveRemoteReport(data);

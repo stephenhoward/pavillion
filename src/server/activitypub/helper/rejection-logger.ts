@@ -17,7 +17,8 @@ export type RejectionType =
   | 'parse_failure'
   | 'invalid_object'
   | 'invalid_object_uri_scheme'
-  | 'no_relationship';
+  | 'no_relationship'
+  | 'misdirected_activity';
 
 export interface RejectionContext {
   rejection_type: RejectionType;

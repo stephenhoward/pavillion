@@ -126,6 +126,18 @@ rateLimit:
     byAccount:
       windowMs: 3600000  # 1 hour in milliseconds
       max: 20  # 20 report submissions per account per hour
+    federatedReportByInstance:
+      # Cap on inbound federated reports about ONE event from ONE remote
+      # instance. Enforced in the moderation service, not by an HTTP limiter:
+      # the route limiters are keyed on the sender and the receiving calendar,
+      # neither of which bounds throughput against a single target event.
+      # Not set to 1 — a remote instance forwards each of its own users'
+      # reports as a separate Flag, so several reports about the same event
+      # are legitimate corroboration and are what the instance/event pattern
+      # detectors count. 5 per day keeps that signal and still bounds the
+      # moderation queue.
+      windowMs: 86400000  # 24 hours in milliseconds
+      max: 5  # 5 federated reports per event per instance per 24 hours
   publicWidget:
     byIp:
       windowMs: 900000  # 15 minutes in milliseconds

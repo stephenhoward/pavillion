@@ -25,6 +25,7 @@ import CalendarInterface from "@/server/calendar/interface";
 import ModerationInterface from "@/server/moderation/interface";
 import { CalendarEvent } from "@/common/model/events";
 import { ReportCategory } from "@/common/model/report";
+import { FederatedReportRateLimitError } from "@/common/exceptions/report";
 import { Calendar } from "@/common/model/calendar";
 import { addToOutbox } from "@/server/activitypub/helper/outbox";
 import { fetchRemoteObject } from "@/server/activitypub/helper/remote-fetch";
@@ -609,6 +610,14 @@ class ProcessInboxService {
    * Extracts event information from the object URI, parses category from hashtags,
    * and creates a Report with reporterType='federation'.
    *
+   * The Flag must be addressed to the inbox of the calendar that owns the
+   * reported event — the ActivityPub convention that a Flag goes to the
+   * object's host. A Flag about an event owned by some other calendar is
+   * logged and dropped. Without that check the receiving inbox was decorative:
+   * the report was always filed against the event's owning calendar, so a
+   * sender could push reports about one event through any number of enumerable
+   * calendar inboxes and stay under the per-calendar rate limiter each time.
+   *
    * @param calendar - The calendar receiving the flag
    * @param message - The Flag activity message
    * @returns Promise<void>
@@ -646,6 +655,27 @@ class ProcessInboxService {
       return;
     }
 
+    // Extract domain from actor URI. Everything logged about a Flag sender is
+    // reduced to this host: the per-actor URI is never written durably (see
+    // the blocked-instance branch in processInboxMessage).
+    const actorUri = message.actor;
+    const domain = this.extractDomainFromActorUri(actorUri);
+
+    // The Flag must arrive at the inbox of the calendar that owns the event.
+    if (event.calendarId !== calendar.id) {
+      logActivityRejection({
+        rejection_type: 'misdirected_activity',
+        activity_type: 'Flag',
+        actor_uri: `https://${domain}`,
+        actor_domain: domain,
+        calendar_id: calendar.id,
+        calendar_url_name: calendar.urlName,
+        reason: 'Flag delivered to a calendar that does not own the reported event',
+        message_id: message.id,
+      });
+      return;
+    }
+
     // Extract category from hashtags
     let category: ReportCategory = ReportCategory.OTHER;
     if (message.tag && Array.isArray(message.tag)) {
@@ -659,10 +689,6 @@ class ProcessInboxService {
         }
       }
     }
-
-    // Extract domain from actor URI
-    const actorUri = message.actor;
-    const domain = this.extractDomainFromActorUri(actorUri);
 
     // Create report via ModerationInterface. The actor URI is forwarded
     // so moderation can carry it on the `moderation:report:flagged`
@@ -690,6 +716,16 @@ class ProcessInboxService {
       this.eventBus.emit('reportReceived', { report });
     }
     catch (error) {
+      if (error instanceof FederatedReportRateLimitError) {
+        // The reporting instance has hit its cap for this event. The activity
+        // was understood and deliberately not filed, so this is a policy
+        // outcome rather than a processing failure: swallow it so the
+        // ap_inbox row settles as processed. The row itself remains the
+        // durable record that the Flag arrived (DEC-013), and the moderation
+        // service logs the suppression.
+        logger.info({ eventId, domain }, '[INBOX] Federated report suppressed by per-instance cap');
+        return;
+      }
       logError(error, `[INBOX] Failed to create federation report for event ${eventId}`);
       throw error;
     }

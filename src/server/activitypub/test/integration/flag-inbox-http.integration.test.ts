@@ -29,6 +29,7 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from
 import { EventEmitter } from 'events';
 import request from 'supertest';
 import crypto from 'crypto';
+import config from 'config';
 import { v4 as uuidv4 } from 'uuid';
 
 import { Account } from '@/common/model/account';
@@ -54,6 +55,8 @@ const BLOCKED_ACTOR_URI = `https://${BLOCKED_HOST}/calendars/reporter`;
 describe('Inbound Flag over HTTP (integration)', () => {
   let env: TestEnvironment;
   let testCalendar: Calendar;
+  /** A second calendar that owns none of the flagged events. */
+  let bystanderCalendar: Calendar;
   let ownerAccount: Account;
 
   /**
@@ -97,6 +100,7 @@ describe('Inbound Flag over HTTP (integration)', () => {
     ownerAccount = ownerInfo.account;
 
     testCalendar = await calendarInterface.createCalendar(ownerAccount, 'flaghttpcalendar');
+    bystanderCalendar = await calendarInterface.createCalendar(ownerAccount, 'flaghttpbystander');
 
     // Defederate one host up front so the blocked-instance case needs no
     // mid-suite mutation (and therefore no ordering dependency).
@@ -158,13 +162,13 @@ describe('Inbound Flag over HTTP (integration)', () => {
     ...overrides,
   });
 
-  const postFlag = async (activity: Record<string, unknown>) => {
+  const postFlag = async (activity: Record<string, unknown>, inboxCalendarUrlName?: string) => {
     const signature =
       `keyId="${activity.actor}#main-key",algorithm="rsa-sha256",` +
       'headers="(request-target) host date content-type digest",signature="fakeSignature"';
 
     return request(env.app)
-      .post(`/calendars/${testCalendar.urlName}/inbox`)
+      .post(`/calendars/${inboxCalendarUrlName ?? testCalendar.urlName}/inbox`)
       .set('Content-Type', 'application/activity+json')
       .set('Date', new Date().toUTCString())
       .set('Host', 'localhost')
@@ -223,6 +227,76 @@ describe('Inbound Flag over HTTP (integration)', () => {
 
     const row = await ActivityPubInboxMessageEntity.findByPk(activity.id);
     expect(row, 'over-length Flag is not persisted').toBeNull();
+  });
+
+  it('stops filing reports once the reporting instance reaches its per-event cap', async () => {
+    // The route limiters bound how fast one sender may talk to one inbox;
+    // neither bounds how many reports pile up against a single event. The
+    // moderation service enforces that cap, and the surplus Flags must still
+    // settle as processed — suppression is a policy outcome, not a failure.
+    const maxPerInstance = config.get<number>('rateLimit.moderation.federatedReportByInstance.max');
+    const eventId = await seedEvent('flagged-flooded');
+
+    // Backdate nothing: these stand in for reports this instance already
+    // filed about this event inside the window. Seeding them directly keeps
+    // the test to two requests — each POST drives a full async dispatch
+    // pipeline on one shared SQLite connection, and the arithmetic of the
+    // cap is covered by the moderation service unit tests. What this test
+    // proves is that the counting query matches the real schema and that a
+    // suppressed Flag still settles as processed.
+    for (let i = 0; i < maxPerInstance - 1; i++) {
+      await ReportEntity.create({
+        id: uuidv4(),
+        event_id: eventId,
+        calendar_id: testCalendar.id,
+        category: ReportCategory.SPAM,
+        description: `Earlier federated report ${i}`,
+        reporter_type: 'federation',
+        status: 'submitted',
+        forwarded_from_instance: REPORTING_HOST,
+        forwarded_report_id: `https://${REPORTING_HOST}/flags/seeded-${i}`,
+      });
+    }
+
+    const accepted = buildFlag(eventId, { content: 'The last report under the cap.' });
+    expect((await postFlag(accepted)).status).toBe(200);
+    expect((await awaitDispatched(accepted.id)).processed_status).toBe('ok');
+    expect(
+      await ReportEntity.count({ where: { event_id: eventId } }),
+      'reports below the cap are still filed',
+    ).toBe(maxPerInstance);
+
+    // The accepted Flag's notification tail runs past the ap_inbox row's
+    // processed_status stamp. Let it drain before the next request opens its
+    // own transaction on the shared in-memory connection (see afterEach).
+    await settleAsyncHandlers();
+
+    const suppressed = buildFlag(eventId, { content: 'One report too many.' });
+    expect((await postFlag(suppressed)).status).toBe(200);
+    const suppressedRow = await awaitDispatched(suppressed.id);
+    expect(suppressedRow.processed_status, 'a suppressed Flag is processed, not errored').toBe('ok');
+
+    expect(
+      await ReportEntity.count({ where: { event_id: eventId } }),
+      'queue depth for one event from one instance is capped',
+    ).toBe(maxPerInstance);
+  });
+
+  it('creates no report for a Flag delivered to a calendar that does not own the event', async () => {
+    // A Flag belongs in the inbox of the object's host. Accepting misdirected
+    // Flags would let a sender multiply throughput against one event by
+    // spraying it across enumerable calendar inboxes.
+    const eventId = await seedEvent('flagged-misdirected');
+    const activity = buildFlag(eventId);
+
+    const response = await postFlag(activity, bystanderCalendar.urlName);
+    expect(response.status).toBe(200);
+
+    const row = await awaitDispatched(activity.id);
+    expect(row.processed_status).toBe('ok');
+
+    const reports = await ReportEntity.findAll({ where: { event_id: eventId } });
+    expect(reports, 'a misdirected Flag files nothing').toHaveLength(0);
   });
 
   it('creates no report for a Flag from a blocked instance', async () => {
