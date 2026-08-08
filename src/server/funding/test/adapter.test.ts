@@ -1,6 +1,34 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import sinon from 'sinon';
 import Stripe from 'stripe';
+
+// Intercept the shared logger so the webhook-parsing tests can assert the
+// level a diagnostic lands at. The adapter warns only on genuine API-shape
+// drift; ordinary invoices that carry no subscription must stay at debug or
+// the warning stops meaning anything. vi.hoisted lets the stubs be shared
+// between the mock factory and the assertions.
+const { warnStub, debugStub } = vi.hoisted(() => {
+  return {
+    warnStub: vi.fn(),
+    debugStub: vi.fn(),
+  };
+});
+
+vi.mock('@/server/common/helper/logger', () => ({
+  createLogger: () => ({
+    warn: warnStub,
+    debug: debugStub,
+    info: vi.fn(),
+    error: vi.fn(),
+  }),
+  default: {
+    warn: warnStub,
+    debug: debugStub,
+    info: vi.fn(),
+    error: vi.fn(),
+  },
+}));
+
 import { StripeAdapter } from '../service/provider/stripe';
 import { PayPalAdapter } from '../service/provider/paypal';
 import { MockStripeAdapter, MockPayPalAdapter } from '../service/provider/mock_adapters';
@@ -99,6 +127,9 @@ describe('Payment Provider Adapters', () => {
           retrieve: sandbox.stub(),
         },
       };
+
+      warnStub.mockClear();
+      debugStub.mockClear();
 
       // Create adapter
       const credentials = { apiKey: 'sk_test_123' };
@@ -476,6 +507,55 @@ describe('Payment Provider Adapters', () => {
         expect(event.subscriptionId).toBeUndefined();
       });
 
+      it('should not warn for a quote invoice, which carries no subscription by design', () => {
+        // A quote-backed invoice legitimately has no subscription. Warning on
+        // it would drown the warning that exists to surface real shape drift.
+        const payload = JSON.stringify({
+          id: 'evt_inv_quote',
+          type: 'invoice.paid',
+          data: {
+            object: {
+              customer: 'cus_quote',
+              parent: {
+                type: 'quote_details',
+                quote_details: { quote: 'qt_quote_123' },
+                subscription_details: null,
+              },
+            },
+          },
+        });
+
+        const event = stripeAdapter.parseWebhookEvent(payload);
+
+        expect(event.subscriptionId).toBeUndefined();
+        expect(warnStub).not.toHaveBeenCalled();
+        expect(debugStub).toHaveBeenCalled();
+      });
+
+      it('should warn when a subscription parent carries no subscription reference', () => {
+        // The inverse of the quote case: the parent claims a subscription but
+        // has none, which is the drift the warning is reserved for.
+        const payload = JSON.stringify({
+          id: 'evt_inv_empty_parent',
+          type: 'invoice.paid',
+          data: {
+            object: {
+              customer: 'cus_empty_parent',
+              parent: {
+                type: 'subscription_details',
+                quote_details: null,
+                subscription_details: null,
+              },
+            },
+          },
+        });
+
+        const event = stripeAdapter.parseWebhookEvent(payload);
+
+        expect(event.subscriptionId).toBeUndefined();
+        expect(warnStub).toHaveBeenCalled();
+      });
+
       it('should leave subscriptionId undefined for an invoice with no subscription parent', () => {
         const payload = JSON.stringify({
           id: 'evt_inv_one_off',
@@ -492,6 +572,7 @@ describe('Payment Provider Adapters', () => {
 
         expect(event.subscriptionId).toBeUndefined();
         expect(event.customerId).toBe('cus_one_off');
+        expect(warnStub).not.toHaveBeenCalled();
       });
 
       it('should parse customer.subscription.deleted event', () => {
