@@ -8,6 +8,11 @@
  * deletability or protection check.
  */
 
+import { spawnSync as nodeSpawnSync } from 'node:child_process';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import { run, type SpawnDeps, type SpawnFn } from './shared.js';
+
 export type Category = 'merged-ancestor' | 'merged-pr' | 'empty' | 'doubt';
 export type WorktreeFamily = 'superset' | 'agent' | 'chain' | 'other';
 
@@ -216,4 +221,375 @@ export function assessWorktree(checks: WorktreeChecks): { removable: boolean; re
   if (checks.active) return { removable: false, reason: 'live process has cwd inside worktree' };
   if (checks.recentlyModified) return { removable: false, reason: 'modified within the last 30 minutes' };
   return { removable: true, reason: 'clean, inactive, unlocked' };
+}
+
+// =============================================================================
+// Plan assembly, report rendering, and classify() orchestration
+// =============================================================================
+
+export interface BranchPlanItem {
+  branch: string;
+  sha: string;
+  category: Category;
+  reason: string;
+  worktree: string | null;
+}
+
+export interface WorktreePlanItem {
+  path: string;
+  branch: string | null;
+  sha: string;
+  family: WorktreeFamily;
+  removable: boolean;
+  reason: string;
+}
+
+export interface CleanupPlan {
+  createdAt: string;
+  mainSha: string;
+  branches: BranchPlanItem[];
+  worktrees: WorktreePlanItem[];
+  protected: { branch: string; reason: string }[];
+}
+
+const DELETABLE_CATEGORIES: Category[] = ['merged-ancestor', 'merged-pr', 'empty'];
+const ALL_CATEGORIES: Category[] = ['merged-ancestor', 'merged-pr', 'empty', 'doubt'];
+
+function shortSha(sha: string): string {
+  return sha.slice(0, 7);
+}
+
+function mdTable(headers: string[], rows: string[][]): string {
+  if (rows.length === 0) return '_none_\n';
+  const headerLine = `| ${headers.join(' | ')} |`;
+  const dividerLine = `| ${headers.map(() => '---').join(' | ')} |`;
+  const rowLines = rows.map((r) => `| ${r.join(' | ')} |`);
+  return [headerLine, dividerLine, ...rowLines].join('\n') + '\n';
+}
+
+/**
+ * The ONLY Markdown formatter for a CleanupPlan. Never build a second
+ * serialization of the plan elsewhere (spec) — the report is always
+ * `renderReport(plan)`.
+ */
+export function renderReport(plan: CleanupPlan): string {
+  const sections: string[] = [];
+
+  sections.push(`# Git Cleanup Plan — ${plan.createdAt}\n\nmain @ \`${shortSha(plan.mainSha)}\`\n`);
+
+  const summaryRows = ALL_CATEGORIES.map((cat) => [
+    cat,
+    String(plan.branches.filter((b) => b.category === cat).length),
+  ]);
+  sections.push(`## Summary\n\n${mdTable(['Category', 'Count'], summaryRows)}`);
+
+  const deletableSections = DELETABLE_CATEGORIES
+    .map((cat) => {
+      const items = plan.branches.filter((b) => b.category === cat);
+      if (items.length === 0) return '';
+      const rows = items.map((b) => [b.branch, shortSha(b.sha), b.reason, b.worktree ?? '_none_']);
+      return `### ${cat}\n\n${mdTable(['Branch', 'SHA', 'Reason', 'Worktree'], rows)}`;
+    })
+    .filter((s) => s.length > 0)
+    .join('\n');
+  sections.push(`## Deletable branches\n\n${deletableSections || '_none_\n'}`);
+
+  const removableWorktrees = plan.worktrees.filter((w) => w.removable);
+  const worktreeRows = removableWorktrees.map((w) => [
+    w.family, w.path, w.branch ?? '_detached_', shortSha(w.sha), w.reason,
+  ]);
+  sections.push(`## Worktree removals\n\n${mdTable(['Family', 'Path', 'Branch', 'SHA', 'Reason'], worktreeRows)}`);
+
+  const doubtBranches = plan.branches.filter((b) => b.category === 'doubt');
+  const nonRemovableWorktrees = plan.worktrees.filter((w) => !w.removable);
+  const doubtRows = [
+    ...doubtBranches.map((b) => ['branch', b.branch, shortSha(b.sha), b.reason]),
+    ...nonRemovableWorktrees.map((w) => ['worktree', w.path, shortSha(w.sha), w.reason]),
+  ];
+  sections.push(`## Doubts\n\n${mdTable(['Type', 'Item', 'SHA', 'Reason'], doubtRows)}`);
+
+  const protectedRows = plan.protected.map((p) => [p.branch, p.reason]);
+  sections.push(`## Protected\n\n${mdTable(['Branch', 'Reason'], protectedRows)}`);
+
+  return sections.join('\n');
+}
+
+export interface ClassifyDeps extends SpawnDeps {
+  nowMs?: () => number;
+  cwd?: string;
+  statMtimes?: (path: string) => number[];
+  writeFile?: (path: string, content: string) => void;
+  /**
+   * Canonicalize a path through the filesystem (default fs.realpathSync,
+   * falling back to the input path on error). lsof reports kernel-canonical
+   * cwds while `git worktree list` reports creation-time paths — a
+   * symlinked ancestor makes the two disagree unless both sides are
+   * resolved through the same realpath call before comparison.
+   */
+  realpath?: (p: string) => string;
+}
+
+function defaultRealpath(p: string): string {
+  try {
+    return fs.realpathSync(p);
+  }
+  catch {
+    return p;
+  }
+}
+
+function defaultStatMtimes(commonDir: string) {
+  return (worktreePath: string): number[] => {
+    const candidates = [
+      worktreePath,
+      path.join(commonDir, 'worktrees', path.basename(worktreePath), 'index'),
+    ];
+    const mtimes: number[] = [];
+    for (const candidate of candidates) {
+      try {
+        mtimes.push(fs.statSync(candidate).mtimeMs);
+      }
+      catch (err) {
+        if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+      }
+    }
+    return mtimes;
+  };
+}
+
+export interface WorktreeCheckContext {
+  spawn: SpawnFn;
+  cwd?: string;
+  statMtimes: (path: string) => number[];
+  nowMs: number;
+  /** Realpath-resolved lsof cwd list, gathered once per classify/execute call. */
+  cwds: string[];
+  realpath: (p: string) => string;
+}
+
+/**
+ * Gather the WorktreeChecks for a single non-primary worktree. This is the
+ * ONLY place these checks are gathered — classify() and Task 6's execute()
+ * re-verify both call this, so a predicate change only needs to happen here.
+ */
+export function gatherWorktreeChecks(
+  wt: WorktreeInfo,
+  isPrimary: boolean,
+  isCurrentSession: boolean,
+  ctx: WorktreeCheckContext,
+): WorktreeChecks {
+  const statusResult = run('git', ['-C', wt.path, 'status', '--porcelain'], ctx.spawn, { cwd: ctx.cwd });
+  const dirty = isDirty(statusResult.stdout);
+  const recentlyModified = isRecentlyModified(ctx.statMtimes(wt.path), ctx.nowMs);
+  const resolvedPath = ctx.realpath(wt.path);
+  const active = isActiveWorktree(resolvedPath, ctx.cwds);
+  return {
+    locked: wt.locked,
+    dirty,
+    recentlyModified,
+    active,
+    isCurrentSession,
+    isPrimary,
+  };
+}
+
+/** True when `targetPath` is realpath-equal to, or nested inside, `containerPath`. */
+function findContainingWorktree(
+  targetPath: string,
+  worktrees: WorktreeInfo[],
+  realpath: (p: string) => string,
+): WorktreeInfo | undefined {
+  const resolvedTarget = realpath(targetPath);
+  return worktrees.find((wt) => isActiveWorktree(realpath(wt.path), [resolvedTarget]));
+}
+
+/**
+ * Orchestrate the full classify pass: fetch, read branch/worktree state,
+ * classify every branch and worktree, write the plan/report, and return a
+ * summary. See the 13-step sequence in the task-5 brief for the exact call
+ * order — seqSpawn-style tests depend on it.
+ */
+export function classify(deps: ClassifyDeps = {}): {
+  ok: boolean;
+  plan?: CleanupPlan;
+  planPath?: string;
+  reportPath?: string;
+  summary?: Record<Category, number>;
+  error?: string;
+} {
+  const spawn = deps.spawnFn ?? nodeSpawnSync;
+  const cwd = deps.cwd ?? process.cwd();
+  const runGit = (args: string[], opts: { timeout?: number } = {}) =>
+    run('git', args, spawn, { cwd, ...opts });
+
+  // Step 1: file locations + inside-work-tree guard.
+  const commonDirResult = runGit(['rev-parse', '--git-common-dir']);
+  if (commonDirResult.exitCode !== 0) {
+    return { ok: false, error: `git rev-parse --git-common-dir failed: ${commonDirResult.stderr}` };
+  }
+  const commonDir = path.resolve(cwd, commonDirResult.stdout);
+
+  const insideWorkTree = runGit(['rev-parse', '--is-inside-work-tree']);
+  if (insideWorkTree.exitCode !== 0 || insideWorkTree.stdout !== 'true') {
+    return { ok: false, error: 'not inside a git work tree' };
+  }
+
+  // Step 2: fetch. Never assume merged on GitHub failure, but a failed
+  // fetch means we cannot trust local refs against origin at all — hard stop.
+  const fetchResult = runGit(['fetch', '--prune', 'origin'], { timeout: 120_000 });
+  if (fetchResult.exitCode !== 0) {
+    return { ok: false, error: `git fetch --prune origin failed: ${fetchResult.stderr}` };
+  }
+
+  // Step 3: main sha.
+  const mainShaResult = runGit(['rev-parse', 'origin/main']);
+  if (mainShaResult.exitCode !== 0) {
+    return { ok: false, error: `git rev-parse origin/main failed: ${mainShaResult.stderr}` };
+  }
+  const mainSha = mainShaResult.stdout;
+
+  // Step 4: all local branch refs.
+  const refsResult = runGit([
+    'for-each-ref', 'refs/heads',
+    '--format=%(refname:short)%09%(objectname)%09%(upstream:short)%09%(upstream:track)',
+  ]);
+  const branches = parseBranchRefs(refsResult.stdout);
+
+  // Step 5: ancestor set.
+  const mergedResult = runGit(['for-each-ref', 'refs/heads', '--merged', 'origin/main', '--format=%(refname:short)']);
+  const ancestorSet = new Set(
+    mergedResult.stdout.split('\n').map((l) => l.trim()).filter((l) => l.length > 0),
+  );
+
+  // Step 6: worktrees. First entry is the primary checkout.
+  const worktreeResult = runGit(['worktree', 'list', '--porcelain']);
+  const worktrees = parseWorktrees(worktreeResult.stdout);
+  const primaryWt = worktrees[0];
+
+  const realpath = deps.realpath ?? defaultRealpath;
+  const sessionWt = findContainingWorktree(cwd, worktrees, realpath);
+
+  // Step 7: protected set. main, primary checkout's branch, current session
+  // branch. These bypass classifyBranch entirely.
+  const protectedEntries: { branch: string; reason: string }[] = [];
+  const protectedNames = new Set<string>();
+  const addProtected = (branchName: string | null | undefined, reason: string) => {
+    if (!branchName || protectedNames.has(branchName)) return;
+    protectedNames.add(branchName);
+    protectedEntries.push({ branch: branchName, reason });
+  };
+  addProtected('main', 'main branch');
+  addProtected(primaryWt?.branch, "primary checkout's branch");
+  addProtected(sessionWt?.branch, 'current session branch');
+
+  const nonAncestorBranches = branches.filter(
+    (b) => !ancestorSet.has(b.name) && !protectedNames.has(b.name),
+  );
+
+  // Step 8: ahead counts for non-ancestor, non-protected branches.
+  const aheadCounts = new Map<string, number>();
+  for (const b of nonAncestorBranches) {
+    const result = runGit(['rev-list', '--count', `origin/main..${b.name}`]);
+    aheadCounts.set(b.name, result.exitCode === 0 ? (parseInt(result.stdout, 10) || 0) : 0);
+  }
+
+  // Step 9: PR lookup for the same set. gh failure never means "assume
+  // merged" — a failed chunk marks its branches 'lookup-failed' (doubt).
+  // Overall `ok` stays true: PR-dependent branches degrade to doubt, but
+  // git-only classification (ancestors, empties) still succeeds.
+  const prLookup: PrLookup = new Map();
+  if (nonAncestorBranches.length > 0) {
+    const names = nonAncestorBranches.map((b) => b.name);
+    const originUrlResult = runGit(['remote', 'get-url', 'origin']);
+    const parsedOrigin = originUrlResult.exitCode === 0 ? parseOriginUrl(originUrlResult.stdout) : null;
+    if (!parsedOrigin) {
+      for (const name of names) prLookup.set(name, 'lookup-failed');
+    }
+    else {
+      for (const branchChunk of chunk(names, 50)) {
+        const query = buildPrQuery(branchChunk, parsedOrigin.owner, parsedOrigin.repo);
+        const ghResult = run('gh', ['api', 'graphql', '-f', `query=${query}`], spawn, { cwd, timeout: 60_000 });
+        if (ghResult.exitCode !== 0) {
+          for (const name of branchChunk) prLookup.set(name, 'lookup-failed');
+          continue;
+        }
+        let json: unknown;
+        try {
+          json = JSON.parse(ghResult.stdout);
+        }
+        catch {
+          for (const name of branchChunk) prLookup.set(name, 'lookup-failed');
+          continue;
+        }
+        for (const [name, val] of parsePrResponse(json, branchChunk)) prLookup.set(name, val);
+      }
+    }
+  }
+
+  // Step 10: classify every non-protected branch.
+  const branchPlanItems: BranchPlanItem[] = branches
+    .filter((b) => !protectedNames.has(b.name))
+    .map((b) => {
+      const isAncestor = ancestorSet.has(b.name);
+      const aheadCount = isAncestor ? 0 : (aheadCounts.get(b.name) ?? 0);
+      const prs = isAncestor ? null : (prLookup.get(b.name) ?? 'lookup-failed');
+      const classified = classifyBranch(b, isAncestor, aheadCount, prs);
+      const wt = worktrees.find((w) => w.branch === b.name);
+      return {
+        branch: b.name,
+        sha: b.sha,
+        category: classified.category,
+        reason: classified.reason,
+        worktree: wt ? wt.path : null,
+      };
+    });
+
+  // Step 11: per non-primary worktree, gather checks and assess.
+  const nowMs = (deps.nowMs ?? Date.now)();
+  const statMtimes = deps.statMtimes ?? defaultStatMtimes(commonDir);
+  const nonPrimaryWorktrees = worktrees.slice(1);
+
+  let cwds: string[] = [];
+  if (nonPrimaryWorktrees.length > 0) {
+    const lsofResult = run('lsof', ['-a', '-d', 'cwd', '-Fn'], spawn, { timeout: 15_000 });
+    const rawCwds = lsofResult.exitCode === 0 ? parseCwdPaths(lsofResult.stdout) : [];
+    cwds = rawCwds.map((p) => realpath(p));
+  }
+
+  const worktreePlanItems: WorktreePlanItem[] = nonPrimaryWorktrees.map((wt) => {
+    const isCurrentSession = wt === sessionWt;
+    const checks = gatherWorktreeChecks(wt, false, isCurrentSession, {
+      spawn, cwd, statMtimes, nowMs, cwds, realpath,
+    });
+    const assessment = assessWorktree(checks);
+    return {
+      path: wt.path,
+      branch: wt.branch,
+      sha: wt.sha,
+      family: worktreeFamily(wt.path),
+      removable: assessment.removable,
+      reason: assessment.reason,
+    };
+  });
+
+  // Step 12: assemble and write.
+  const plan: CleanupPlan = {
+    createdAt: new Date(nowMs).toISOString(),
+    mainSha,
+    branches: branchPlanItems,
+    worktrees: worktreePlanItems,
+    protected: protectedEntries,
+  };
+
+  const planPath = path.join(commonDir, 'git-cleanup-plan.json');
+  const reportPath = path.join(commonDir, 'git-cleanup-report.md');
+  const writeFile = deps.writeFile ?? ((p: string, content: string) => fs.writeFileSync(p, content));
+  writeFile(planPath, JSON.stringify(plan, null, 2));
+  writeFile(reportPath, renderReport(plan));
+
+  // Step 13: summary.
+  const summary: Record<Category, number> = { 'merged-ancestor': 0, 'merged-pr': 0, empty: 0, doubt: 0 };
+  for (const b of branchPlanItems) summary[b.category]++;
+
+  return { ok: true, plan, planPath, reportPath, summary };
 }

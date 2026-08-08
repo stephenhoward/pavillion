@@ -6,6 +6,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
+import type { SpawnSyncReturns } from 'node:child_process';
 import {
   parseBranchRefs,
   parseWorktrees,
@@ -16,6 +17,34 @@ import {
   chunk,
 } from '../lib/git-cleanup.js';
 import { classifyBranch, type BranchInfo, type PrInfo } from '../lib/git-cleanup.js';
+
+// =============================================================================
+// Test helpers (copied from test/stack.test.ts — canonical fakeSpawn/seqSpawn
+// pattern for CLI-calling functions under test).
+// =============================================================================
+
+function fakeSpawn(
+  stdout: string,
+  stderr = '',
+  status = 0,
+): SpawnSyncReturns<Buffer> {
+  return {
+    stdout: Buffer.from(stdout, 'utf-8'),
+    stderr: Buffer.from(stderr, 'utf-8'),
+    status,
+    signal: null,
+    pid: 1234,
+    output: [null, Buffer.from(stdout), Buffer.from(stderr)],
+  };
+}
+
+/** Build a sequential spawn mock that returns results in order. */
+function seqSpawn(...results: SpawnSyncReturns<Buffer>[]) {
+  let i = 0;
+  return (_cmd: string, _args: string[], _opts: unknown) => {
+    return results[i++] ?? fakeSpawn('', 'unexpected call', 1);
+  };
+}
 
 describe('parseBranchRefs', () => {
   // git for-each-ref refs/heads --format='%(refname:short)%09%(objectname)%09%(upstream:short)%09%(upstream:track)'
@@ -270,5 +299,237 @@ describe('assessWorktree', () => {
     const result = assessWorktree({ ...cleanChecks, ...override });
     expect(result.removable).toBe(false);
     expect(result.reason).toContain(reasonFragment);
+  });
+});
+
+// =============================================================================
+// renderReport
+// =============================================================================
+
+import { renderReport, classify, type CleanupPlan, type ClassifyDeps } from '../lib/git-cleanup.js';
+
+function buildPlan(): CleanupPlan {
+  return {
+    createdAt: '2026-08-08T12:00:00.000Z',
+    mainSha: 'abcdef1234567890abcdef1234567890abcdef12',
+    branches: [
+      {
+        branch: 'feat.done',
+        sha: 'aaaaaaa1111111111111111111111111111111',
+        category: 'merged-ancestor',
+        reason: 'tip is an ancestor of origin/main',
+        worktree: null,
+      },
+      {
+        branch: 'feat.wip',
+        sha: 'bbbbbbb2222222222222222222222222222222',
+        category: 'doubt',
+        reason: 'open PR #42',
+        worktree: '/repo/.superset/worktrees/u/wt1',
+      },
+    ],
+    worktrees: [
+      {
+        path: '/repo/.superset/worktrees/u/wt1',
+        branch: 'feat.wip',
+        sha: 'bbbbbbb2222222222222222222222222222222',
+        family: 'superset',
+        removable: false,
+        reason: 'uncommitted changes present',
+      },
+    ],
+    protected: [
+      { branch: 'main', reason: 'main branch' },
+    ],
+  };
+}
+
+describe('renderReport', () => {
+  it('includes every required section header', () => {
+    const report = renderReport(buildPlan());
+    expect(report).toContain('## Summary');
+    expect(report).toContain('## Deletable branches');
+    expect(report).toContain('### merged-ancestor');
+    expect(report).toContain('## Worktree removals');
+    expect(report).toContain('## Doubts');
+    expect(report).toContain('## Protected');
+  });
+
+  it('renders a deletable branch row with branch, short sha, and reason', () => {
+    const report = renderReport(buildPlan());
+    expect(report).toContain('feat.done');
+    expect(report).toContain('aaaaaaa');
+    expect(report).toContain('tip is an ancestor of origin/main');
+  });
+
+  it('renders doubt reasons for both doubt branches and non-removable worktrees', () => {
+    const report = renderReport(buildPlan());
+    expect(report).toContain('open PR #42');
+    expect(report).toContain('uncommitted changes present');
+  });
+
+  it('renders a protected row with branch and reason', () => {
+    const report = renderReport(buildPlan());
+    expect(report).toContain('main');
+    expect(report).toContain('main branch');
+  });
+
+  it('includes createdAt and mainSha in the title', () => {
+    const report = renderReport(buildPlan());
+    expect(report).toContain('2026-08-08T12:00:00.000Z');
+    expect(report).toContain('abcdef1');
+  });
+});
+
+// =============================================================================
+// classify
+// =============================================================================
+
+const REFS_OUTPUT = [
+  'main\tmainsha1234567890abcdef1234567890abcdef12\torigin/main\t',
+  'ancestor.done\taaaaaaa1111111111111111111111111111111\torigin/ancestor.done\t[gone]',
+  'gone.branch\tbbbbbbb2222222222222222222222222222222\torigin/gone.branch\t[gone]',
+].join('\n');
+
+const MERGED_OUTPUT = ['main', 'ancestor.done'].join('\n');
+
+const WORKTREE_OUTPUT = [
+  'worktree /repo',
+  'HEAD mainsha1234567890abcdef1234567890abcdef12',
+  'branch refs/heads/main',
+  '',
+].join('\n');
+
+function happyPathSpawn(ghResult: SpawnSyncReturns<Buffer>) {
+  return seqSpawn(
+    fakeSpawn('/repo/.git'),                                    // rev-parse --git-common-dir
+    fakeSpawn('true'),                                          // rev-parse --is-inside-work-tree
+    fakeSpawn(''),                                               // fetch --prune origin
+    fakeSpawn('mainsha1234567890abcdef1234567890abcdef12'),     // rev-parse origin/main
+    fakeSpawn(REFS_OUTPUT),                                      // for-each-ref refs/heads
+    fakeSpawn(MERGED_OUTPUT),                                    // for-each-ref refs/heads --merged origin/main
+    fakeSpawn(WORKTREE_OUTPUT),                                  // worktree list --porcelain
+    fakeSpawn('3'),                                              // rev-list --count origin/main..gone.branch
+    fakeSpawn('git@github.com:me/repo.git'),                     // remote get-url origin
+    ghResult,                                                    // gh api graphql
+  );
+}
+
+describe('classify', () => {
+  it('happy path: ancestor branch + gone-with-commits branch, writes plan/report, returns summary', () => {
+    const written: Record<string, string> = {};
+    const ghResult = fakeSpawn(JSON.stringify({ data: { repository: { b0: { nodes: [] } } } }));
+    const deps: ClassifyDeps = {
+      spawnFn: happyPathSpawn(ghResult) as unknown as ClassifyDeps['spawnFn'],
+      cwd: '/repo',
+      nowMs: () => 1_700_000_000_000,
+      statMtimes: () => [],
+      writeFile: (path, content) => { written[path] = content; },
+    };
+
+    const result = classify(deps);
+
+    expect(result.ok).toBe(true);
+    expect(result.plan?.mainSha).toBe('mainsha1234567890abcdef1234567890abcdef12');
+    const branches = result.plan?.branches ?? [];
+    expect(branches.find((b) => b.branch === 'main')).toBeUndefined();
+    expect(branches.find((b) => b.branch === 'ancestor.done')?.category).toBe('merged-ancestor');
+    const gone = branches.find((b) => b.branch === 'gone.branch');
+    expect(gone?.category).toBe('doubt');
+    expect(gone?.reason).toContain('upstream gone');
+    expect(result.summary).toEqual({ 'merged-ancestor': 1, 'merged-pr': 0, empty: 0, doubt: 1 });
+    expect(result.planPath).toBe('/repo/.git/git-cleanup-plan.json');
+    expect(result.reportPath).toBe('/repo/.git/git-cleanup-report.md');
+    expect(written['/repo/.git/git-cleanup-plan.json']).toBeDefined();
+    expect(written['/repo/.git/git-cleanup-report.md']).toBeDefined();
+    expect(JSON.parse(written['/repo/.git/git-cleanup-plan.json']).mainSha).toBe(
+      'mainsha1234567890abcdef1234567890abcdef12',
+    );
+  });
+
+  it('git fetch failure returns ok: false without writing files', () => {
+    const written: Record<string, string> = {};
+    const spawn = seqSpawn(
+      fakeSpawn('/repo/.git'),
+      fakeSpawn('true'),
+      fakeSpawn('', 'network unreachable', 128),
+    );
+    const deps: ClassifyDeps = {
+      spawnFn: spawn as unknown as ClassifyDeps['spawnFn'],
+      cwd: '/repo',
+      writeFile: (path, content) => { written[path] = content; },
+    };
+
+    const result = classify(deps);
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toBeTruthy();
+    expect(Object.keys(written)).toHaveLength(0);
+  });
+
+  it('gh failure classifies non-ancestor branches as doubt with lookup-failed reason, ok: true', () => {
+    const written: Record<string, string> = {};
+    const ghResult = fakeSpawn('', 'gh: authentication required', 1);
+    const deps: ClassifyDeps = {
+      spawnFn: happyPathSpawn(ghResult) as unknown as ClassifyDeps['spawnFn'],
+      cwd: '/repo',
+      nowMs: () => 1_700_000_000_000,
+      statMtimes: () => [],
+      writeFile: (path, content) => { written[path] = content; },
+    };
+
+    const result = classify(deps);
+
+    expect(result.ok).toBe(true);
+    const gone = result.plan?.branches.find((b) => b.branch === 'gone.branch');
+    expect(gone?.category).toBe('doubt');
+    expect(gone?.reason).toContain('lookup failed');
+  });
+
+  it('canonicalizes worktree and lsof cwd paths before comparing (symlinked ancestor)', () => {
+    // git worktree list reports the creation-time path; lsof reports the
+    // kernel-canonical path. A symlinked ancestor makes them differ as raw
+    // strings — classify must resolve both through realpath before
+    // isActiveWorktree compares them (Task 4 review carry-forward).
+    const worktreeOutput = [
+      'worktree /repo',
+      'HEAD mainsha1234567890abcdef1234567890abcdef12',
+      'branch refs/heads/main',
+      '',
+      'worktree /symlink-alias/wt2',
+      'HEAD cccccc3333333333333333333333333333333333',
+      'detached',
+      '',
+    ].join('\n');
+    const refsOutput = 'main\tmainsha1234567890abcdef1234567890abcdef12\torigin/main\t';
+
+    const spawn = seqSpawn(
+      fakeSpawn('/repo/.git'),                                    // rev-parse --git-common-dir
+      fakeSpawn('true'),                                          // rev-parse --is-inside-work-tree
+      fakeSpawn(''),                                               // fetch --prune origin
+      fakeSpawn('mainsha1234567890abcdef1234567890abcdef12'),     // rev-parse origin/main
+      fakeSpawn(refsOutput),                                       // for-each-ref refs/heads
+      fakeSpawn('main'),                                           // for-each-ref --merged origin/main
+      fakeSpawn(worktreeOutput),                                   // worktree list --porcelain
+      fakeSpawn('n/real/wt2\n'),                                   // lsof -a -d cwd -Fn (called once, before the per-worktree loop)
+      fakeSpawn(''),                                                // git -C /symlink-alias/wt2 status --porcelain
+    );
+
+    const written: Record<string, string> = {};
+    const deps: ClassifyDeps = {
+      spawnFn: spawn as unknown as ClassifyDeps['spawnFn'],
+      cwd: '/repo',
+      nowMs: () => 1_700_000_000_000,
+      statMtimes: () => [],
+      writeFile: (path, content) => { written[path] = content; },
+      realpath: (p) => (p === '/symlink-alias/wt2' ? '/real/wt2' : p),
+    };
+
+    const result = classify(deps);
+
+    expect(result.ok).toBe(true);
+    const wt2 = result.plan?.worktrees.find((w) => w.path === '/symlink-alias/wt2');
+    expect(wt2?.removable).toBe(false);
+    expect(wt2?.reason).toContain('live process has cwd inside worktree');
   });
 });
