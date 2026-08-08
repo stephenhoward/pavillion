@@ -15,6 +15,7 @@ import {
   parsePrResponse,
   chunk,
 } from '../lib/git-cleanup.js';
+import { classifyBranch, type BranchInfo, type PrInfo } from '../lib/git-cleanup.js';
 
 describe('parseBranchRefs', () => {
   // git for-each-ref refs/heads --format='%(refname:short)%09%(objectname)%09%(upstream:short)%09%(upstream:track)'
@@ -126,5 +127,73 @@ describe('chunk', () => {
   it('splits into fixed-size chunks', () => {
     expect(chunk([1, 2, 3, 4, 5], 2)).toEqual([[1, 2], [3, 4], [5]]);
     expect(chunk([], 2)).toEqual([]);
+  });
+});
+
+function branch(over: Partial<BranchInfo> = {}): BranchInfo {
+  return { name: 'b', sha: 'aaa', upstream: 'origin/b', upstreamGone: false, ...over };
+}
+function pr(over: Partial<PrInfo> = {}): PrInfo {
+  return { number: 1, state: 'MERGED', headRefOid: 'aaa', ...over };
+}
+
+describe('classifyBranch', () => {
+  it('ancestor with upstream → merged-ancestor', () => {
+    expect(classifyBranch(branch(), true, 0, null).category).toBe('merged-ancestor');
+  });
+
+  it('ancestor with gone upstream → merged-ancestor', () => {
+    expect(classifyBranch(branch({ upstreamGone: true }), true, 0, null).category).toBe('merged-ancestor');
+  });
+
+  it('ancestor with no upstream → empty', () => {
+    expect(classifyBranch(branch({ upstream: null }), true, 0, null).category).toBe('empty');
+  });
+
+  it('non-ancestor with MERGED PR at branch tip → merged-pr', () => {
+    const c = classifyBranch(branch(), false, 3, [pr()]);
+    expect(c.category).toBe('merged-pr');
+    expect(c.reason).toContain('#1');
+  });
+
+  it('non-ancestor MERGED PR but tip moved past it → doubt (ahead of merged PR)', () => {
+    const c = classifyBranch(branch({ sha: 'bbb' }), false, 5, [pr({ headRefOid: 'aaa' })]);
+    expect(c.category).toBe('doubt');
+    expect(c.reason).toContain('ahead of merged PR');
+  });
+
+  it('OPEN PR → doubt', () => {
+    const c = classifyBranch(branch(), false, 2, [pr({ state: 'OPEN' })]);
+    expect(c.category).toBe('doubt');
+    expect(c.reason).toContain('open PR');
+  });
+
+  it('only CLOSED PRs → doubt (closed without merging)', () => {
+    const c = classifyBranch(branch(), false, 2, [pr({ state: 'CLOSED' })]);
+    expect(c.category).toBe('doubt');
+    expect(c.reason).toContain('closed without merging');
+  });
+
+  it('gone upstream, unique commits, no PR → doubt', () => {
+    const c = classifyBranch(branch({ upstreamGone: true }), false, 4, []);
+    expect(c.category).toBe('doubt');
+    expect(c.reason).toContain('4');
+  });
+
+  it('no upstream, unique commits → doubt', () => {
+    const c = classifyBranch(branch({ upstream: null }), false, 2, []);
+    expect(c.category).toBe('doubt');
+    expect(c.reason).toContain('no upstream');
+  });
+
+  it('lookup failure → doubt, never merged', () => {
+    const c = classifyBranch(branch(), false, 1, 'lookup-failed');
+    expect(c.category).toBe('doubt');
+    expect(c.reason).toContain('lookup failed');
+  });
+
+  it('a MERGED PR at tip wins over an older CLOSED PR', () => {
+    const c = classifyBranch(branch(), false, 1, [pr({ state: 'CLOSED', number: 2 }), pr()]);
+    expect(c.category).toBe('merged-pr');
   });
 });

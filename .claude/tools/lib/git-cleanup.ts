@@ -116,3 +116,52 @@ export function parsePrResponse(json: unknown, branches: string[]): PrLookup {
   });
   return map;
 }
+
+export interface Classified {
+  category: Category;
+  reason: string;
+}
+
+/**
+ * Assign one category per branch. `prs` is null for ancestors (no GitHub
+ * lookup needed), 'lookup-failed' when GitHub could not be consulted —
+ * which is always a doubt, never an assumed merge.
+ */
+export function classifyBranch(
+  branch: BranchInfo,
+  isAncestor: boolean,
+  aheadCount: number,
+  prs: PrInfo[] | 'lookup-failed' | null,
+): Classified {
+  if (isAncestor) {
+    return branch.upstream === null
+      ? { category: 'empty', reason: 'no upstream, no commits beyond main' }
+      : { category: 'merged-ancestor', reason: 'tip is an ancestor of origin/main' };
+  }
+  if (prs === 'lookup-failed' || prs === null) {
+    return { category: 'doubt', reason: 'GitHub PR lookup failed — cannot prove merge' };
+  }
+  const mergedAtTip = prs.find((p) => p.state === 'MERGED' && p.headRefOid === branch.sha);
+  if (mergedAtTip) {
+    return { category: 'merged-pr', reason: `PR #${mergedAtTip.number} merged at branch tip` };
+  }
+  const merged = prs.find((p) => p.state === 'MERGED');
+  if (merged) {
+    return { category: 'doubt', reason: `ahead of merged PR #${merged.number} — has commits after the merge` };
+  }
+  const open = prs.find((p) => p.state === 'OPEN');
+  if (open) {
+    return { category: 'doubt', reason: `open PR #${open.number}` };
+  }
+  const closed = prs.find((p) => p.state === 'CLOSED');
+  if (closed) {
+    return { category: 'doubt', reason: `PR #${closed.number} closed without merging` };
+  }
+  if (branch.upstream === null) {
+    return { category: 'doubt', reason: `no upstream, ${aheadCount} unique commit(s)` };
+  }
+  return {
+    category: 'doubt',
+    reason: `${branch.upstreamGone ? 'upstream gone' : 'unmerged'}, ${aheadCount} commit(s) not on main, no PR found`,
+  };
+}
