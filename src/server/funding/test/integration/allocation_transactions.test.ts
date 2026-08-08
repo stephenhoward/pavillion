@@ -162,9 +162,15 @@ describe('FundingService allocation transactions', () => {
    * short of a Postgres-backed test, and the race it prevents — two parallel
    * adds each computing a total blind to the other's insert, leaving a calendar
    * funded that nobody is billed for — is worth guarding.
+   *
+   * Ordering matters as much as the option: a refactor that reintroduced an
+   * unlocked pre-transaction read and locked only a later re-read would still
+   * pass a lock-option assertion, so each path also pins the locked resolve
+   * ahead of the allocation access it is there to protect.
    */
-  it('should resolve the plan under a FOR UPDATE lock inside the allocation transaction', async () => {
-    const findOne = sandbox.spy(FundingPlanEntity, 'findOne');
+  it('should resolve the plan under a FOR UPDATE lock before writing the allocation on add', async () => {
+    const planFindOne = sandbox.spy(FundingPlanEntity, 'findOne');
+    const allocationCreate = sandbox.spy(CalendarFundingPlanEntity, 'create');
     sandbox.stub(ProviderFactory, 'getAdapter').returns({
       supportsAmountUpdates: () => true,
       updateSubscriptionAmount: sandbox.stub().resolves(),
@@ -172,14 +178,37 @@ describe('FundingService allocation transactions', () => {
 
     await service.addCalendarToFundingPlan(accountId, calendarId, 500000);
 
-    const options = findOne.firstCall.args[0] as any;
+    const options = planFindOne.firstCall.args[0] as any;
     expect(options.lock).toBe(Transaction.LOCK.UPDATE);
     expect(options.transaction).toBeDefined();
+    // The very first plan read is the locked one — no unlocked read precedes it
+    expect(planFindOne.firstCall.calledBefore(allocationCreate.firstCall)).toBe(true);
 
     const allocations = await CalendarFundingPlanEntity.findAll({
       where: { funding_plan_id: fundingPlanId },
     });
     expect(allocations).toHaveLength(1);
+  });
+
+  it('should resolve the plan under a FOR UPDATE lock before reading allocations on remove', async () => {
+    await createAllocation(calendarId, 500000);
+    await createAllocation(secondCalendarId, 300000);
+
+    const planFindOne = sandbox.spy(FundingPlanEntity, 'findOne');
+    const allocationFindOne = sandbox.spy(CalendarFundingPlanEntity, 'findOne');
+    sandbox.stub(ProviderFactory, 'getAdapter').returns({
+      supportsAmountUpdates: () => true,
+      updateSubscriptionAmount: sandbox.stub().resolves(),
+    } as any);
+
+    await service.removeCalendarFromFundingPlan(accountId, calendarId);
+
+    const options = planFindOne.firstCall.args[0] as any;
+    expect(options.lock).toBe(Transaction.LOCK.UPDATE);
+    expect(options.transaction).toBeDefined();
+    // The remaining-active count that decides whether to cancel the whole plan
+    // must be taken after the lock, not before it
+    expect(planFindOne.firstCall.calledBefore(allocationFindOne.firstCall)).toBe(true);
   });
 
   it('should roll back the end_time write when the provider amount update fails on remove', async () => {
