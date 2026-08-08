@@ -9,7 +9,33 @@
 
 Pavillion will support optional community funding plans that allow calendar owners to collect contributions from their community to sustain calendar infrastructure. The feature uses Stripe Embedded Checkout for payment processing, with instance administrators entering Stripe API keys directly rather than using Stripe Connect OAuth. The term "funding plan" is used instead of "subscription" throughout the codebase and UI to avoid terminology collision with ActivityPub's use of "subscription" for follow relationships.
 
-**Stripe is the only payment provider in v1.** PayPal is descoped: the scaffolding (adapter, factory branch, admin credential form, config modal, seeded provider row) stays in the tree, inert. The admin funding settings page filters the provider list to Stripe, so PayPal is never offered in the add-provider wizard nor shown as a connected provider, and checkout resolves an enabled Stripe provider only — there is no reachable PayPal payment path. PayPal completion is deferred, not cancelled; when it returns, the descope filter is the single site to change.
+**Stripe is the only payment provider in v1.** PayPal is descoped: the scaffolding stays in the tree, inert. There is no reachable PayPal payment path — checkout resolves an enabled Stripe provider only. PayPal completion is deferred, not cancelled.
+
+### The three sites that encode "Stripe only"
+
+"Stripe only" is **not** enforced in one place. Three independent sites encode it, two of them written before the descope and of opposite polarity (denylist rather than allowlist). Re-enabling PayPal means changing all three; changing only one produces a partially-enabled provider, which is worse than either end state.
+
+| Site | Mechanism | Effect |
+|---|---|---|
+| `src/client/components/admin/funding.vue` — `V1_PROVIDER_TYPES` | Allowlist (`['stripe']`) applied to the provider list on load | Keeps PayPal out of the admin connected-providers list and the add-provider wizard |
+| `src/client/components/account/FundingForm.vue` — `availableProviders` | Denylist (`providerType !== 'paypal'`) applied to `GET /v1/options` | Keeps PayPal out of the purchase form's provider choice. Predates the descope. The file also carries an unreachable `startPayPalCheckout()` stub that only sets a generic error |
+| `src/server/funding/service/funding.ts` — `resolveEnabledStripeProvider()` | Hard-coded query (`provider_type: 'stripe', enabled: true`) | Checkout-session creation can only ever resolve Stripe, whatever the UI offers |
+
+The concrete failure mode of a partial change: flip only the admin allowlist and PayPal becomes connectable and enableable in the admin UI, while `FundingForm.vue`'s denylist still hides it from purchasers — an instance with a configured, enabled, invisible provider. That is precisely the silent-failure mode this descope exists to prevent.
+
+Consolidating these into one shared constant is worthwhile but was deliberately not done here: it touches `src/common/model/funding-plan.ts` and `FundingForm.vue`, both outside the descope's scope and under concurrent change. Until that consolidation lands, this table is the authoritative enumeration.
+
+### Inert scaffolding, and the one reachable piece
+
+Left in place and genuinely unreachable: the PayPal adapter (`service/provider/paypal.ts`), the `paypal` branch of `ProviderFactory.getAdapter`, the admin credential form in `add-provider-wizard.vue`, `paypal-config-modal.vue` (now referenced by nothing), and the unconfigured PayPal row seeded by `ensureDefaultProviders()`.
+
+**Reachable but inert:** `POST /api/funding/v1/admin/providers/paypal/configure` (`api/v1/provider_connection.ts`) and `FundingInterface.configurePayPal` remain live and admin-authenticated. A direct caller — not the UI, which no longer offers the route — can still validate credentials against the PayPal API, encrypt them, and persist them. This is accepted: it is a configuration surface, not a checkout path, it requires instance-admin authority, and the resulting row still cannot produce a checkout session. It is named here so that "inert" is not read as "removed."
+
+### Pre-existing PayPal configurations
+
+An instance that connected PayPal before the descope keeps its row: **pre-existing PayPal configurations are left in place and unmanaged.** The admin allowlist filters the provider list before the connected-providers view derives from it, so those encrypted credentials have no UI to inspect, disable, or disconnect them, and an `enabled` row is still returned by `GET /v1/options` (hidden from purchasers only by `FundingForm.vue`'s unrelated denylist).
+
+No migration is written for this. Completing a PayPal checkout was never possible, so a production instance in this state is unlikely; dev and staging instances that experimented with PayPal are the realistic case. **Operators who did configure PayPal should disconnect it before upgrading**, while the UI can still reach the row. Recovery after upgrade is a direct `DELETE /api/funding/v1/admin/providers/paypal` call or a database change.
 
 ### Terminology
 
@@ -42,6 +68,20 @@ Multi-provider support was designed in early (a provider adapter interface, a fa
    - Pros: Simpler codebase, no payment complexity
    - Cons: No sustainable funding path for community infrastructure, instance operators bear all costs
 
+On the PayPal descope specifically:
+
+5. **Hide PayPal, keep the scaffolding** (Selected)
+   - Pros: No reachable half-finished payment path; the adapter abstraction survives, so finishing PayPal later is additive rather than a rewrite; smallest diff, no migration, nothing to un-delete
+   - Cons: Dead code stays in the tree and must be documented as deliberately unreachable (this decision); "Stripe only" ends up encoded in three sites rather than one; pre-existing PayPal rows become unmanaged
+
+6. **Remove the PayPal scaffolding entirely**
+   - Pros: No dead code, no ambiguity about what is supported, only one place left encoding "Stripe only"
+   - Cons: Discards a working provider-adapter abstraction that cost real effort and whose only defect is unfinished lifecycle handling; reinstating PayPal becomes a rewrite rather than a completion, which makes the deferral read as a cancellation; deleting the seeded row and the admin route needs a migration and a wider blast radius than the descope warrants
+
+7. **Show PayPal with a "not available" badge**
+   - Pros: Honest about the roadmap; reuses the existing status-badge pattern; sets expectations for operators who want PayPal (the acceptance criteria permitted this treatment)
+   - Cons: Adds translated UI copy and a badge state for a provider nobody can use, which has to be maintained and re-translated until PayPal ships; advertises a capability with no committed date; "coming soon" in an admin settings page is a support-question generator. Hiding costs nothing today because no instance has ever been able to complete a PayPal checkout
+
 ## Rationale
 
 The community funding model was chosen because:
@@ -73,4 +113,7 @@ The community funding model was chosen because:
 - Funding plan management adds UI and backend complexity to the calendar domain
 - Per-calendar funding configuration requires calendar owners to understand pricing options
 - Inert PayPal scaffolding remains in the tree, so readers must consult this decision to know it is deliberately unreachable rather than merely unfinished
+- "Stripe only" is enforced at three uncoordinated sites of mixed polarity, so re-enabling PayPal is an all-three change and a partial change produces a configured-but-invisible provider. The enumeration table above is the mitigation; a shared constant is the real fix and remains outstanding
+- The admin PayPal configure route stays live to direct callers, so an instance admin can still persist credentials that nothing will ever use
+- Pre-existing PayPal configurations become unmanageable through the UI after upgrade, with no migration to clean them up
 - `SubscriptionRequiredError` on the wire diverges from the "funding access" vocabulary used everywhere else, which requires the exception to be documented rather than inferred

@@ -85,9 +85,20 @@ const currencyOptions = [
  * PayPal is descoped for v1: the backend seeds an unconfigured PayPal provider row
  * and the adapter/wizard/modal scaffolding remains in the tree, but checkout is
  * Stripe-only, so PayPal must never be offered or shown as connected. Filtering
- * here is the single hide site — it keeps PayPal out of both the connected list
- * and the add-provider wizard. See DEC-007
- * (agent-os/product/decisions/dec-007-community-funding-model.md).
+ * here keeps it out of both the connected-providers list and the add-provider
+ * wizard.
+ *
+ * This is NOT the only place "Stripe only" is encoded. Re-enabling PayPal means
+ * changing all three of these together — changing only one leaves a provider that
+ * is configurable but invisible to purchasers:
+ *   1. this allowlist;
+ *   2. src/client/components/account/FundingForm.vue — availableProviders, a
+ *      pre-existing denylist (providerType !== 'paypal') over GET /v1/options;
+ *   3. src/server/funding/service/funding.ts — resolveEnabledStripeProvider(),
+ *      which hard-codes provider_type: 'stripe' for checkout sessions.
+ *
+ * See DEC-007 (agent-os/product/decisions/dec-007-community-funding-model.md),
+ * which enumerates these sites and the disposition of pre-existing PayPal rows.
  */
 const V1_PROVIDER_TYPES = ['stripe'];
 
