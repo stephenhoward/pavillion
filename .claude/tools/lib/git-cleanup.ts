@@ -630,3 +630,229 @@ export function classify(deps: ClassifyDeps = {}): {
 
   return { ok: true, plan, planPath, reportPath, summary };
 }
+
+// =============================================================================
+// execute() — re-verify, delete, undo log
+// =============================================================================
+
+/**
+ * A plan older than this is refused outright. Per-item re-verify (rev-parse
+ * for branches, gatherWorktreeChecks/assessWorktree for worktrees) already
+ * guards against anything re-verify CAN see changing between classify and
+ * execute. This gate exists for what re-verify cannot see: brand-new
+ * branches/worktrees created since classify, or an approval given by a user
+ * looking at context that's no longer representative of the repo.
+ */
+export const PLAN_MAX_AGE_MS = 60 * 60_000;
+
+export function isPlanStale(createdAt: string, nowMs: number): boolean {
+  return nowMs - new Date(createdAt).getTime() > PLAN_MAX_AGE_MS;
+}
+
+const VALID_EXECUTE_CATEGORIES: Category[] = ['merged-ancestor', 'merged-pr', 'empty'];
+const VALID_WORKTREE_FAMILIES: WorktreeFamily[] = ['superset', 'agent', 'chain'];
+
+export interface ExecuteOptions {
+  categories: Category[];
+  worktreeFamilies: WorktreeFamily[];
+}
+
+export interface ExecuteDeps extends SpawnDeps {
+  nowMs?: () => number;
+  cwd?: string;
+  statMtimes?: (path: string) => number[];
+  readFile?: (path: string) => string;
+  appendFile?: (path: string, line: string) => void;
+  /** See ClassifyDeps.realpath — same canonicalization need on the execute-side re-verify. */
+  realpath?: (p: string) => string;
+}
+
+export interface ExecuteResult {
+  ok: boolean;
+  deletedBranches: string[];
+  removedWorktrees: string[];
+  skipped: { item: string; reason: string }[];
+  undoLogPath: string | null;
+  error?: string;
+}
+
+/**
+ * Parse `execute` CLI args: `--categories=a,b` (required, non-empty) and
+ * `--worktree-families=x,y` (optional, defaults to no families approved).
+ * `doubt` is rejected here so it can never reach `execute` via the CLI —
+ * `execute` itself also filters it defensively for callers that bypass this
+ * parser.
+ */
+export function parseExecuteArgs(argv: string[]): ExecuteOptions | { error: string } {
+  let categoriesRaw: string | undefined;
+  let familiesRaw: string | undefined;
+  for (const arg of argv) {
+    if (arg.startsWith('--categories=')) categoriesRaw = arg.slice('--categories='.length);
+    else if (arg.startsWith('--worktree-families=')) familiesRaw = arg.slice('--worktree-families='.length);
+  }
+
+  const categories = (categoriesRaw ?? '').split(',').map((s) => s.trim()).filter((s) => s.length > 0);
+  if (categories.length === 0) return { error: '--categories is required (comma-separated, non-empty)' };
+  for (const c of categories) {
+    if (c === 'doubt') return { error: 'doubt is never selectable — it is report-only' };
+    if (!VALID_EXECUTE_CATEGORIES.includes(c as Category)) return { error: `unknown category: ${c}` };
+  }
+
+  const families = (familiesRaw ?? '').split(',').map((s) => s.trim()).filter((s) => s.length > 0);
+  for (const f of families) {
+    if (!VALID_WORKTREE_FAMILIES.includes(f as WorktreeFamily)) return { error: `unknown worktree family: ${f}` };
+  }
+
+  return { categories: categories as Category[], worktreeFamilies: families as WorktreeFamily[] };
+}
+
+function formatDateStamp(nowMs: number): string {
+  return new Date(nowMs).toISOString().slice(0, 10);
+}
+
+/**
+ * Re-verify and execute an approved plan: delete branches, remove worktrees,
+ * append an undo log line before each branch deletion. Every safety check
+ * runs through `gatherWorktreeChecks` + `assessWorktree` — the same
+ * functions classify() uses (see file-header invariant). A skipped item is
+ * never fatal; `ok: false` is reserved for "could not even attempt this run"
+ * (no plan, stale plan).
+ */
+export function execute(opts: ExecuteOptions, deps: ExecuteDeps = {}): ExecuteResult {
+  const spawn = deps.spawnFn ?? nodeSpawnSync;
+  const cwd = deps.cwd ?? process.cwd();
+  const runGit = (args: string[], runOpts: { timeout?: number } = {}) =>
+    run('git', args, spawn, { cwd, ...runOpts });
+  const nowMs = (deps.nowMs ?? Date.now)();
+  const realpath = deps.realpath ?? defaultRealpath;
+  const readFile = deps.readFile ?? ((p: string) => fs.readFileSync(p, 'utf-8'));
+  const appendFile = deps.appendFile ?? ((p: string, line: string) => fs.appendFileSync(p, line));
+
+  const fail = (error: string): ExecuteResult => ({
+    ok: false, deletedBranches: [], removedWorktrees: [], skipped: [], undoLogPath: null, error,
+  });
+
+  // Step 1: locate and load the plan.
+  const commonDirResult = runGit(['rev-parse', '--git-common-dir']);
+  if (commonDirResult.exitCode !== 0) {
+    return fail(`git rev-parse --git-common-dir failed: ${commonDirResult.stderr}`);
+  }
+  const commonDir = path.resolve(cwd, commonDirResult.stdout);
+  // Matches classify's default: mtime is checked on the worktree root AND
+  // <common-dir>/worktrees/<basename>/index, so this must be keyed off
+  // commonDir, not cwd (deps.statMtimes ignores this entirely — tests always
+  // inject their own).
+  const statMtimes = deps.statMtimes ?? defaultStatMtimes(commonDir);
+  const planPath = path.join(commonDir, 'git-cleanup-plan.json');
+
+  let planText: string;
+  try {
+    planText = readFile(planPath);
+  }
+  catch {
+    return fail('no plan file — run classify first');
+  }
+  const plan = JSON.parse(planText) as CleanupPlan;
+
+  // Step 2: staleness gate.
+  if (isPlanStale(plan.createdAt, nowMs)) {
+    return fail('plan is older than 60 minutes — re-run classify');
+  }
+
+  const undoLogPath = path.join(commonDir, `git-cleanup-undo-${formatDateStamp(nowMs)}.log`);
+
+  // Step 3: select approved, non-doubt branch items. doubt is never
+  // selectable — parseExecuteArgs already rejects it, but execute()
+  // defends independently for callers that bypass the CLI parser.
+  const approvedCategories = opts.categories.filter((c) => c !== 'doubt');
+  const selected = plan.branches.filter((b) => b.category !== 'doubt' && approvedCategories.includes(b.category));
+
+  const skipped: { item: string; reason: string }[] = [];
+  const removedWorktrees: string[] = [];
+
+  const withoutWorktree = selected.filter((b) => b.worktree === null);
+  const withWorktree = selected.filter((b) => b.worktree !== null);
+
+  // Step 4a: family gate — a checked-out branch cannot be deleted, so an
+  // unapproved family skips both the worktree and its branch immediately,
+  // before any live re-verify call.
+  const familyApproved: BranchPlanItem[] = [];
+  for (const b of withWorktree) {
+    const wtPlanItem = plan.worktrees.find((w) => w.path === b.worktree);
+    const family = wtPlanItem?.family ?? 'other';
+    if (!opts.worktreeFamilies.includes(family)) {
+      skipped.push({ item: b.worktree as string, reason: 'worktree family not approved' });
+      skipped.push({ item: b.branch, reason: 'worktree family not approved' });
+      continue;
+    }
+    familyApproved.push(b);
+  }
+
+  // Step 4b: one fresh lsof call covers every worktree being re-verified
+  // this run (mirrors classify's batching — see gatherWorktreeChecks caller
+  // contract).
+  let cwds: string[] = [];
+  if (familyApproved.length > 0) {
+    const lsofResult = run('lsof', ['-a', '-d', 'cwd', '-Fn'], spawn, { cwd, timeout: 15_000 });
+    cwds = parseCwdPaths(lsofResult.stdout).map((p) => realpath(p));
+  }
+
+  // Step 4c: per approved-family worktree, re-verify via gatherWorktreeChecks
+  // + assessWorktree — the same predicate classify() used to write
+  // `removable: true` into the plan. isPrimary/isCurrentSession are always
+  // false and branchDeletable is always true here: a worktree whose branch
+  // was protected or non-deletable could never have reached `selected`
+  // (protected branches never appear in plan.branches; non-deletable
+  // categories were filtered out in step 3). `locked` isn't part of the
+  // brief's re-verify set (dirty/active/recentlyModified only) — a lock
+  // acquired after classify is a gap the mtime/active checks don't close,
+  // but re-checking it isn't in scope for this task.
+  const branchDeleteCandidates: BranchPlanItem[] = [...withoutWorktree];
+  for (const b of familyApproved) {
+    const wtInfo: WorktreeInfo = {
+      path: b.worktree as string, sha: b.sha, branch: b.branch, locked: false, prunable: false,
+    };
+    const checks = gatherWorktreeChecks(wtInfo, false, false, true, {
+      spawn, cwd, statMtimes, nowMs, cwds, realpath,
+    });
+    const assessment = assessWorktree(checks);
+    if (!assessment.removable) {
+      skipped.push({ item: b.worktree as string, reason: assessment.reason });
+      skipped.push({ item: b.branch, reason: assessment.reason });
+      continue;
+    }
+    const removeResult = runGit(['worktree', 'remove', b.worktree as string]);
+    if (removeResult.exitCode !== 0) {
+      skipped.push({ item: b.worktree as string, reason: removeResult.stderr });
+      skipped.push({ item: b.branch, reason: removeResult.stderr });
+      continue;
+    }
+    removedWorktrees.push(b.worktree as string);
+    branchDeleteCandidates.push(b);
+  }
+
+  // Step 5: re-verify each surviving branch's sha, append the undo line
+  // BEFORE deleting, then delete.
+  const deletedBranches: string[] = [];
+  for (const b of branchDeleteCandidates) {
+    const revParseResult = runGit(['rev-parse', `refs/heads/${b.branch}`]);
+    if (revParseResult.exitCode !== 0 || revParseResult.stdout !== b.sha) {
+      skipped.push({ item: b.branch, reason: 'branch moved since classify' });
+      continue;
+    }
+    appendFile(undoLogPath, `${b.branch} ${b.sha}\n`);
+    const flag = b.category === 'merged-ancestor' ? '-d' : '-D';
+    const deleteResult = runGit(['branch', flag, b.branch]);
+    if (deleteResult.exitCode !== 0) {
+      skipped.push({ item: b.branch, reason: deleteResult.stderr });
+      continue;
+    }
+    deletedBranches.push(b.branch);
+  }
+
+  // Step 6: prune unconditionally.
+  runGit(['worktree', 'prune']);
+
+  // Step 7: totals. Skips are reported, never fatal.
+  return { ok: true, deletedBranches, removedWorktrees, skipped, undoLogPath };
+}
