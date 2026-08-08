@@ -2,6 +2,13 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { EventEmitter } from 'events';
 import { v4 as uuidv4 } from 'uuid';
 
+// Mocked so the misdirected-Flag test can assert the rejection log, which is
+// the only durable record that a dropped Flag arrived: no report is filed.
+vi.mock('@/server/activitypub/helper/rejection-logger', () => ({
+  logActivityRejection: vi.fn(),
+}));
+
+import { logActivityRejection } from '@/server/activitypub/helper/rejection-logger';
 import ProcessInboxService from '@/server/activitypub/service/inbox';
 import CalendarInterface from '@/server/calendar/interface';
 import ModerationInterface from '@/server/moderation/interface';
@@ -233,6 +240,37 @@ describe('ProcessInboxService - Flag Activity Processing', () => {
       await inboxService.processFlagActivity(otherCalendar, flagActivity);
 
       expect(moderationInterface.receiveRemoteReport).not.toHaveBeenCalled();
+    });
+
+    it('should log a misdirected Flag with the actor reduced to its host', async () => {
+      // Nothing else records that this Flag arrived and was refused — no
+      // report is written — so the rejection log is the whole audit trail.
+      // It must still honour the Flag log-redaction posture: the per-actor
+      // URI is never written durably, only the sending instance's host.
+      const mockLogRejection = logActivityRejection as ReturnType<typeof vi.fn>;
+      mockLogRejection.mockClear();
+
+      const otherCalendar = new Calendar(uuidv4(), 'unrelated-calendar');
+      const flagActivity = {
+        type: 'Flag',
+        id: 'https://remote.instance/flags/misdirected-logged',
+        actor: 'https://remote.instance/calendars/reporter',
+        object: `https://local.instance/events/${testEvent.id}`,
+        content: 'Report content',
+        tag: [{ type: 'Hashtag', name: '#spam' }],
+        published: '2026-02-07T12:00:00Z',
+      };
+
+      await inboxService.processFlagActivity(otherCalendar, flagActivity);
+
+      expect(mockLogRejection).toHaveBeenCalledOnce();
+      const context = mockLogRejection.mock.calls[0][0];
+      expect(context.rejection_type).toBe('misdirected_activity');
+      expect(context.activity_type).toBe('Flag');
+      expect(context.actor_uri, 'the reporter actor URI must be reduced to its host')
+        .toBe('https://remote.instance');
+      expect(context.actor_domain).toBe('remote.instance');
+      expect(context.calendar_id).toBe(otherCalendar.id);
     });
 
     it('should not emit reportReceived when the report is suppressed by the per-instance cap', async () => {

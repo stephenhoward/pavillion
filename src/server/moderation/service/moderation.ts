@@ -276,6 +276,11 @@ class ModerationService {
    * Collects validation errors for eventId, category, and description fields.
    * Does not throw - returns an array of error messages for aggregation.
    *
+   * Governs the locally-submitted report paths only. The inbound federated
+   * path has its own validator, {@link validateRemoteReportFields}, which
+   * shares the description length limit but deliberately diverges on empty
+   * descriptions and eventId format — change one and check the other.
+   *
    * @param eventId - Event UUID to report
    * @param category - Report category value
    * @param description - Report description text
@@ -1936,6 +1941,17 @@ class ModerationService {
    * - **No eventId format check.** The caller resolves the event by ID before
    *   this runs, so existence — not UUID shape — is the real invariant, and
    *   the id was parsed out of an object IRI rather than submitted directly.
+   *
+   * `private` on purpose, unlike the sibling validators on this service, and
+   * not an oversight. A caller outside the service can reach this validator's
+   * rules only by calling {@link receiveRemoteReport}, which always runs it
+   * first — there is nothing a direct call would let a caller do except run
+   * the checks without the write they guard. (The siblings are public because
+   * validation for the locally-submitted paths is aggregated across several
+   * calls before responding; `validateAdminActionFields` is invoked from
+   * `admin-report-routes` for exactly that reason.) Its boundary conditions
+   * are pinned through `receiveRemoteReport` rather than by calling it
+   * directly, which also keeps those tests behavioral.
    *
    * @param data - Remote report data from the inbound Flag
    * @returns Array of validation error messages (empty if valid)

@@ -18,6 +18,7 @@ export type RejectionType =
   | 'invalid_object'
   | 'invalid_object_uri_scheme'
   | 'no_relationship'
+  | 'domain_mismatch'
   | 'misdirected_activity';
 
 export interface RejectionContext {
