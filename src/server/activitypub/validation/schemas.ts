@@ -172,7 +172,9 @@ export const ACTIVITY_TYPES = [
   // FEP-8a8e: peers (e.g. Mobilizon) send Join to RSVP/attend an event.
   // Pavillion does not handle attendance, so it validates and enqueues the
   // Join only to reply with an Ignore (FEP-8a8e's blessed unhandled-Join
-  // response). Both must be recognized activity types.
+  // response). Ignore travels in both directions — Pavillion emits it in reply
+  // to a Join and accepts an inbound one; see joinActivitySchema and
+  // ignoreActivitySchema.
   'Join',
   'Ignore',
   // Cross-instance moderation reports arrive as Flag. See flagActivitySchema.
@@ -451,6 +453,32 @@ export const joinActivitySchema = activityBaseSchema.extend({
  * Type for a validated Join activity.
  */
 export type JoinActivity = z.infer<typeof joinActivitySchema>;
+
+/**
+ * Schema for ActivityPub Ignore activity.
+ *
+ * FEP-8a8e requires a server that does not handle a Join to reply with an
+ * Ignore rather than dropping it. Pavillion emits that reply itself (see
+ * `ProcessInboxService.processJoinActivity`), so it must also be able to
+ * receive one — from a peer answering a Join, or from another Pavillion
+ * instance. An Ignore is purely informational: it reports that the referenced
+ * activity was seen and deliberately not acted on.
+ *
+ * The `object` is the activity being ignored, carried either embedded (what
+ * Pavillion emits) or as a bare IRI.
+ *
+ * @see https://www.w3.org/TR/activitystreams-vocabulary/#dfn-ignore
+ * @see https://w3id.org/fep/8a8e
+ */
+export const ignoreActivitySchema = activityBaseSchema.extend({
+  type: z.literal('Ignore'),
+  object: objectReferenceSchema,
+});
+
+/**
+ * Type for a validated Ignore activity.
+ */
+export type IgnoreActivity = z.infer<typeof ignoreActivitySchema>;
 
 /**
  * Maximum length accepted for the free-text fields of an inbound Flag.

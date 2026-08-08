@@ -290,6 +290,77 @@ describe('addToInbox', () => {
     expect(res.send.calledWith('Message received')).toBe(true);
   });
 
+  it('should succeed with a valid Ignore activity and record http_signature auth', async () => {
+    // FEP-8a8e: a peer answers an unhandled Join with an Ignore. Pavillion
+    // emits that reply itself, so it must also be able to receive one.
+    const embeddedJoin = {
+      '@context': 'https://www.w3.org/ns/activitystreams',
+      type: 'Join',
+      id: 'https://local.example.com/calendars/testuser/joins/1',
+      actor: 'https://local.example.com/calendars/testuser',
+      object: 'https://remote.example.com/events/6b1f0a5e-0000-4000-8000-000000000001',
+    };
+    let req = {
+      params: { urlname: 'testuser' },
+      body: {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        type: 'Ignore',
+        id: 'https://remote.example.com/calendars/remote/ignores/abc-123',
+        actor: 'https://remote.example.com/calendars/remote',
+        object: embeddedJoin,
+        to: ['https://local.example.com/calendars/testuser'],
+      },
+    };
+    let res = { status: sinon.stub(), send: sinon.stub(), json: sinon.stub() };
+    let userFindMock = sandbox.stub(calendarAPI, 'getCalendarByName');
+    let inboxMock = sandbox.stub(activityPubInterface, 'addToInbox');
+
+    res.status.returns(res);
+    userFindMock.resolves(new Calendar('testId', 'testuser'));
+    inboxMock.resolves();
+
+    await routes.addToInbox(req as any, res as any);
+
+    expect(res.status.calledWith(200)).toBe(true);
+    expect(res.send.calledWith('Message received')).toBe(true);
+    expect(inboxMock.calledOnce).toBe(true);
+
+    const message = inboxMock.firstCall.args[1] as any;
+    expect(message.type).toBe('Ignore');
+    expect(message.id).toBe('https://remote.example.com/calendars/remote/ignores/abc-123');
+    // The embedded activity is preserved so the row records what was ignored.
+    expect(message.object).toEqual(embeddedJoin);
+
+    const auth = inboxMock.firstCall.args[2] as any;
+    expect(auth.source).toBe('http_signature');
+  });
+
+  it('should fail with an Ignore activity missing object', async () => {
+    let req = {
+      params: { urlname: 'testuser' },
+      body: {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        type: 'Ignore',
+        id: 'https://remote.example.com/calendars/remote/ignores/abc-124',
+        actor: 'https://remote.example.com/calendars/remote',
+      },
+    };
+    let res = { status: sinon.stub(), send: sinon.stub(), json: sinon.stub() };
+    let userFindMock = sandbox.stub(calendarAPI, 'getCalendarByName');
+    let inboxMock = sandbox.stub(activityPubInterface, 'addToInbox');
+
+    res.status.returns(res);
+    userFindMock.resolves(new Calendar('testId', 'testuser'));
+    inboxMock.resolves();
+
+    await routes.addToInbox(req as any, res as any);
+
+    expect(res.status.calledWith(400)).toBe(true);
+    const response = res.json.firstCall.args[0];
+    expect(response.error).toBe('Invalid Ignore activity');
+    expect(inboxMock.called).toBe(false);
+  });
+
   it('should succeed with a valid Flag activity and record http_signature auth', async () => {
     let req = {
       params: { urlname: 'testuser' },

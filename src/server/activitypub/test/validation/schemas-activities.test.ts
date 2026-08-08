@@ -2,7 +2,7 @@
  * Tests for ActivityPub validation schemas - activity-type schemas.
  *
  * Covers the activity-type schemas (Follow, Accept, Create, Update, Delete,
- * Announce, Undo, Join, Flag) that extend activityBaseSchema. The base/shared
+ * Announce, Undo, Join, Flag, Ignore) that extend activityBaseSchema. The base/shared
  * schemas they build on are exercised in the sibling schemas-base.test.ts
  * file.
  */
@@ -19,9 +19,11 @@ import {
   undoActivitySchema,
   joinActivitySchema,
   flagActivitySchema,
+  ignoreActivitySchema,
   MAX_FLAG_TEXT_LENGTH,
   MAX_FLAG_TAGS,
 } from '@/server/activitypub/validation/schemas';
+import IgnoreActivity from '@/server/activitypub/model/action/ignore';
 import FlagActivityBuilder from '@/server/moderation/service/flag-activity-builder';
 import { Report, ReportCategory, ReportStatus } from '@/common/model/report';
 import { CalendarEvent, CalendarEventContent } from '@/common/model/events';
@@ -1831,6 +1833,75 @@ describe('ActivityPub Validation Schemas - Activities', () => {
       );
 
       const result = flagActivitySchema.safeParse(activity);
+      expect(result.success, JSON.stringify((result as any).error?.issues)).toBe(true);
+    });
+  });
+
+  describe('ignoreActivitySchema', () => {
+    const embeddedJoin = {
+      '@context': 'https://www.w3.org/ns/activitystreams',
+      id: 'https://remote.example/activities/join/1',
+      type: 'Join',
+      actor: 'https://remote.example/users/bob',
+      object: 'https://example.com/calendars/mycal/events/e1',
+    };
+
+    it('should accept an Ignore activity embedding the activity being ignored', () => {
+      const result = ignoreActivitySchema.safeParse({
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        id: 'https://remote.example/calendars/mycal/ignores/1',
+        type: 'Ignore',
+        actor: 'https://remote.example/calendars/mycal',
+        object: embeddedJoin,
+        to: ['https://remote.example/users/bob'],
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.type).toBe('Ignore');
+      }
+    });
+
+    it('should accept an Ignore activity referencing the ignored activity by URI', () => {
+      const result = ignoreActivitySchema.safeParse({
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        id: 'https://remote.example/calendars/mycal/ignores/2',
+        type: 'Ignore',
+        actor: 'https://remote.example/calendars/mycal',
+        object: 'https://remote.example/activities/join/1',
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('should reject an Ignore activity with the wrong type', () => {
+      const result = ignoreActivitySchema.safeParse({
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        id: 'https://remote.example/calendars/mycal/ignores/3',
+        type: 'Reject',
+        actor: 'https://remote.example/calendars/mycal',
+        object: embeddedJoin,
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('should reject an Ignore activity missing object', () => {
+      const result = ignoreActivitySchema.safeParse({
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        id: 'https://remote.example/calendars/mycal/ignores/4',
+        type: 'Ignore',
+        actor: 'https://remote.example/calendars/mycal',
+      });
+      expect(result.success).toBe(false);
+    });
+
+    // The whole point of the schema is that the Ignore one Pavillion instance
+    // emits in reply to a Join validates on the instance that receives it.
+    // Build it with the real model rather than a hand-written fixture, so a
+    // change on the emit side that the schema does not tolerate fails here.
+    it('should accept the Ignore activity that IgnoreActivity emits', () => {
+      const ignore = new IgnoreActivity('https://remote.example/calendars/mycal', embeddedJoin);
+      ignore.to = [embeddedJoin.actor];
+
+      const result = ignoreActivitySchema.safeParse(ignore.toObject());
       expect(result.success, JSON.stringify((result as any).error?.issues)).toBe(true);
     });
   });

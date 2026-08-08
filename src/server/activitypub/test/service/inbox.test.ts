@@ -331,6 +331,52 @@ describe('processInboxMessage', () => {
     expect(followerCreateStub.called).toBe(false);
   });
 
+  it('should record an inbound Ignore without mutating state or replying', async () => {
+    // FEP-8a8e: an Ignore is the courtesy reply to an unhandled Join. Pavillion
+    // holds no Join state to clear, so dispatch records the row and stops —
+    // it must not error, mutate anything, or reply in turn.
+    const eventBus = new EventEmitter();
+    const testCalendarInterface = new CalendarInterface(eventBus);
+    const testService = new ProcessInboxService(eventBus, testCalendarInterface);
+
+    sandbox.stub(testService.calendarInterface, 'getCalendar')
+      .resolves(Calendar.fromObject({ id: TEST_CALENDAR_ID, urlName: 'testcalendar' }));
+
+    const outboxSaveStub = sandbox.stub(ActivityPubOutboxMessageEntity.prototype, 'save').resolves();
+    const addRemoteEventStub = sandbox.stub(testService.calendarInterface, 'addRemoteEvent');
+    const followerCreateStub = sandbox.stub(FollowerCalendarEntity, 'create');
+
+    const message = ActivityPubInboxMessageEntity.build({
+      calendar_id: TEST_CALENDAR_ID,
+      type: 'Ignore',
+      message: {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        id: `${REMOTE_ACTOR_URL}/ignores/1`,
+        type: 'Ignore',
+        actor: REMOTE_ACTOR_URL,
+        object: {
+          '@context': 'https://www.w3.org/ns/activitystreams',
+          id: `${LOCAL_CALENDAR_URL}/joins/1`,
+          type: 'Join',
+          actor: LOCAL_CALENDAR_URL,
+          object: `${REMOTE_ACTOR_URL}/events/123`,
+        },
+      },
+    });
+    const updateStub = sandbox.stub(ActivityPubInboxMessageEntity.prototype, 'update').resolves();
+
+    await testService.processInboxMessage(message);
+
+    // Recorded as handled — not left as an 'error' row by the default branch.
+    expect(updateStub.calledOnce).toBe(true);
+    expect(updateStub.getCalls()[0].args[0]['processed_status']).toBe('ok');
+
+    // Nothing was mutated, and no reply was queued.
+    expect(outboxSaveStub.called, 'an Ignore must not be answered').toBe(false);
+    expect(addRemoteEventStub.called).toBe(false);
+    expect(followerCreateStub.called).toBe(false);
+  });
+
   it('should process an announce activity', async () => {
     // Use Fedify helper to create a proper Announce (share) activity
     const activityMessage = createMockAnnounceActivity(REMOTE_ACTOR_URL, REMOTE_EVENT_URL);
