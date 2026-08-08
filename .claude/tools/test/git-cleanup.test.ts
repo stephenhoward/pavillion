@@ -10,6 +10,10 @@ import {
   parseBranchRefs,
   parseWorktrees,
   worktreeFamily,
+  parseOriginUrl,
+  buildPrQuery,
+  parsePrResponse,
+  chunk,
 } from '../lib/git-cleanup.js';
 
 describe('parseBranchRefs', () => {
@@ -66,5 +70,61 @@ describe('worktreeFamily', () => {
     expect(worktreeFamily('/Users/x/repo/.claude/worktrees/agent-a1')).toBe('agent');
     expect(worktreeFamily('/Users/x/pavillion/pv-jdot-chains/chain-b')).toBe('chain');
     expect(worktreeFamily('/Users/x/somewhere/else')).toBe('other');
+  });
+});
+
+describe('parseOriginUrl', () => {
+  it('parses ssh and https remote urls', () => {
+    expect(parseOriginUrl('git@github.com:stephenhoward/pavillion.git'))
+      .toEqual({ owner: 'stephenhoward', repo: 'pavillion' });
+    expect(parseOriginUrl('https://github.com/stephenhoward/pavillion.git'))
+      .toEqual({ owner: 'stephenhoward', repo: 'pavillion' });
+    expect(parseOriginUrl('https://github.com/stephenhoward/pavillion'))
+      .toEqual({ owner: 'stephenhoward', repo: 'pavillion' });
+    expect(parseOriginUrl('not-a-url')).toBeNull();
+  });
+});
+
+describe('buildPrQuery', () => {
+  it('aliases one pullRequests field per branch', () => {
+    const q = buildPrQuery(['feat.a', 'fix/b'], 'me', 'repo');
+    expect(q).toContain('repository(owner: "me", name: "repo")');
+    expect(q).toContain('b0: pullRequests(headRefName: "feat.a"');
+    expect(q).toContain('b1: pullRequests(headRefName: "fix/b"');
+    expect(q).toContain('states: [OPEN, MERGED, CLOSED]');
+  });
+
+  it('escapes quotes in branch names', () => {
+    const q = buildPrQuery(['we"ird'], 'me', 'repo');
+    expect(q).toContain('headRefName: "we\\"ird"');
+  });
+});
+
+describe('parsePrResponse', () => {
+  it('maps aliases back to branch names', () => {
+    const json = {
+      data: {
+        repository: {
+          b0: { nodes: [{ number: 7, state: 'MERGED', headRefOid: 'abc' }] },
+          b1: { nodes: [] },
+        },
+      },
+    };
+    const map = parsePrResponse(json, ['feat.a', 'fix/b']);
+    expect(map.get('feat.a')).toEqual([{ number: 7, state: 'MERGED', headRefOid: 'abc' }]);
+    expect(map.get('fix/b')).toEqual([]);
+  });
+
+  it('marks every branch lookup-failed on malformed response', () => {
+    const map = parsePrResponse({ errors: [{ message: 'boom' }] }, ['a', 'b']);
+    expect(map.get('a')).toBe('lookup-failed');
+    expect(map.get('b')).toBe('lookup-failed');
+  });
+});
+
+describe('chunk', () => {
+  it('splits into fixed-size chunks', () => {
+    expect(chunk([1, 2, 3, 4, 5], 2)).toEqual([[1, 2], [3, 4], [5]]);
+    expect(chunk([], 2)).toEqual([]);
   });
 });

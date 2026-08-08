@@ -71,3 +71,48 @@ export function worktreeFamily(path: string): WorktreeFamily {
   if (path.includes('/pv-jdot-chains/')) return 'chain';
   return 'other';
 }
+
+export interface PrInfo {
+  number: number;
+  state: 'OPEN' | 'MERGED' | 'CLOSED';
+  headRefOid: string;
+}
+
+/** Per-branch PR lookup result. 'lookup-failed' → classify as doubt, never merged. */
+export type PrLookup = Map<string, PrInfo[] | 'lookup-failed'>;
+
+export function parseOriginUrl(url: string): { owner: string; repo: string } | null {
+  const m = url.match(/github\.com[:/]([^/]+)\/([^/]+?)(?:\.git)?$/);
+  return m ? { owner: m[1], repo: m[2] } : null;
+}
+
+export function chunk<T>(items: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+  return out;
+}
+
+export function buildPrQuery(branches: string[], owner: string, repo: string): string {
+  const fields = branches
+    .map((name, i) => {
+      const escaped = name.replace(/"/g, '\\"');
+      return `    b${i}: pullRequests(headRefName: "${escaped}", states: [OPEN, MERGED, CLOSED], first: 10) { nodes { number state headRefOid } }`;
+    })
+    .join('\n');
+  return `query {\n  repository(owner: "${owner}", name: "${repo}") {\n${fields}\n  }\n}`;
+}
+
+export function parsePrResponse(json: unknown, branches: string[]): PrLookup {
+  const map: PrLookup = new Map();
+  const repository = (json as { data?: { repository?: Record<string, { nodes?: PrInfo[] }> } })
+    ?.data?.repository;
+  if (!repository) {
+    for (const b of branches) map.set(b, 'lookup-failed');
+    return map;
+  }
+  branches.forEach((name, i) => {
+    const nodes = repository[`b${i}`]?.nodes;
+    map.set(name, Array.isArray(nodes) ? nodes : 'lookup-failed');
+  });
+  return map;
+}
