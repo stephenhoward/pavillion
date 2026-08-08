@@ -31,7 +31,13 @@ const [command, ...args] = process.argv.slice(2);
 switch (command) {
   case 'classify': {
     const result = classify();
-    console.log(JSON.stringify(result, null, 2));
+    const { plan, ...rest } = result;
+    console.log(JSON.stringify({
+      ...rest,
+      protected: plan?.protected,
+      worktrees: plan?.worktrees.filter((w) => w.removable),
+      doubts: plan?.branches.filter((b) => b.category === 'doubt'),
+    }, null, 2));
     process.exit(result.ok ? 0 : 1);
     break;
   }
