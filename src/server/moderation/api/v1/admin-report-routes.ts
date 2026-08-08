@@ -14,7 +14,10 @@ import {
 } from '@/server/moderation/exceptions';
 
 import { logError } from '@/server/common/helper/error-logger';
+import { createLogger } from '@/server/common/helper/logger';
 import { ReportEscalationEntity } from '@/server/moderation/entity/report_escalation';
+
+const logger = createLogger('moderation');
 
 /** UUID v4 format regex for path parameter validation. */
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -372,7 +375,10 @@ export default class AdminReportRoutes {
   }
 
   /**
-   * Forwards a report to the remote instance's admin actor.
+   * Forwards a report across the federation boundary to the actor of the
+   * calendar that owns the reported event — not to the remote instance's
+   * admin, despite the route name (see DEC-015).
+   *
    * Requires that the reported event is from a remote instance (calendarId is null).
    * Creates an escalation record and sends a Flag activity via ActivityPub.
    *
@@ -448,11 +454,53 @@ export default class AdminReportRoutes {
         return;
       }
 
-      // Construct the remote admin actor URI
-      const remoteAdminActorUri = `https://${remoteInstanceDomain}/admin`;
+      // Resolve the origin calendar's actor URI. A report crossing a
+      // federation boundary is addressed to the calendar that owns the event,
+      // not to an instance-level admin actor (DEC-015).
+      const targetActorUri = await this.moderationInterface.getEventSourceActorUri(report.eventId);
+      if (!targetActorUri) {
+        res.status(400).json({
+          error: 'Cannot forward report: unable to determine remote calendar owner',
+          errorName: 'ValidationError',
+        });
+        return;
+      }
+
+      // Same-origin guard. `attributed_to` is bound to the signature-verified
+      // actor only on the Create ingest path; on the Announce path it comes
+      // from fetched remote content, so a hostile instance could otherwise
+      // aim a signed Flag — carrying the report body and the forwarding
+      // admin's key id — at a host of its choosing.
+      let targetHostname: string;
+      try {
+        targetHostname = new URL(targetActorUri).hostname;
+      }
+      catch {
+        logger.warn(
+          { reportId, targetActorUri },
+          'Refusing to forward report: resolved calendar actor is not a valid URI',
+        );
+        res.status(400).json({
+          error: 'Cannot forward report: calendar owner is not on the event source instance',
+          errorName: 'ValidationError',
+        });
+        return;
+      }
+
+      if (targetHostname !== remoteInstanceDomain) {
+        logger.warn(
+          { reportId, targetActorUri, eventSourceHost: remoteInstanceDomain },
+          'Refusing to forward report: resolved calendar actor is not on the event source instance',
+        );
+        res.status(400).json({
+          error: 'Cannot forward report: calendar owner is not on the event source instance',
+          errorName: 'ValidationError',
+        });
+        return;
+      }
 
       // Forward the report via ActivityPub
-      await this.moderationInterface.forwardReport(reportId, remoteAdminActorUri);
+      await this.moderationInterface.forwardReport(reportId, targetActorUri);
 
       // Create escalation record to track the forwarding action
       const escalationRecord = ReportEscalationEntity.fromModel({
@@ -461,13 +509,15 @@ export default class AdminReportRoutes {
         toStatus: report.status, // Status doesn't change when forwarding
         reviewerId: account.id,
         reviewerRole: 'admin',
+        // Persisted decision value kept as-is; renaming it needs a data
+        // migration and would orphan existing rows (DEC-015).
         decision: 'forwarded_to_remote_admin',
-        notes: `Forwarded to remote admin at ${remoteInstanceDomain}`,
+        notes: `Forwarded to the origin calendar owner at ${targetHostname}`,
       });
       await escalationRecord.save();
 
       res.json({
-        message: 'Report forwarded to remote admin',
+        message: 'Report forwarded to the origin calendar owner',
       });
     }
     catch (error: any) {
@@ -487,7 +537,7 @@ export default class AdminReportRoutes {
         return;
       }
 
-      logError(error, 'Failed to forward report to remote admin');
+      logError(error, 'Failed to forward report to the origin calendar owner');
       res.status(500).json({
         error: 'Failed to forward report',
       });
