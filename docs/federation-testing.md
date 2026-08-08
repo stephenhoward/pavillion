@@ -117,7 +117,7 @@ Every spec lives in `tests/e2e/federation/`.
 - **`webfinger.spec.ts`** — a calendar is discoverable across an instance boundary. WebFinger resolves an `acct:` resource to a profile URL, the profile returns a well-formed actor document, and an unknown account 404s rather than returning an empty actor.
 - **`follow.spec.ts`** — a Follow from Beta lands in Alpha's inbox and creates a follower row, and Undo(Follow) removes it. Alpha's Accept is proven only indirectly: the assertion is that Beta's follow row reaches the accepted state, not that an Accept was seen on the wire.
 - **`events.spec.ts`** — Create(Event) and Update(Event) reach a follower and change what that follower's feed shows.
-- **`signed_delivery.spec.ts`** — Create, Update, and Delete(Tombstone) survive real signature generation and are accepted by a remote *calendar* inbox, and an Add editor-invite is accepted by a remote *user* inbox. The only spec that exercises both inbox routes.
+- **`signed_delivery.spec.ts`** — Create, Update, and Delete(Tombstone) survive real signature generation and are accepted by a remote *calendar* inbox, and an Add editor-invite is accepted by a remote *user* inbox. The only spec that exercises both inbox routes with *calendar*-attributed activity; `cross_instance_editors.spec.ts` covers both routes for *Person*-attributed activity.
 - **`signature_strict_receive.spec.ts`** — with strict receive enabled, a genuine signature verifies, an unsigned POST is refused with 400, and a forged `Signature` header with 401. The negative cases are the point of the spec.
 - **`follow-backfill.spec.ts`** — history pulled from a peer's outbox after Accept(Follow) reaches the follower's feed, and replaying that history applies mid-flight activities in order: a backfilled Create+Update yields the later title, and a backfilled Announce+Undo(Announce) yields no share row at all. The only proof of the `outbox_pull` ingest path ([DEC-013](../agent-os/product/decisions/dec-013-inbox-authenticated-activity-log.md)).
 - **`auto-repost.spec.ts`** — a follow policy decides whether an inbound event also lands on the follower's own calendar. Originals and reposts are covered separately because they arrive as different activities: Create carries an original, Announce carries a repost ([DEC-014](../agent-os/product/decisions/dec-014-create-original-announce-repost.md)). Also covers a policy change taking effect only on subsequent events, self-origin loop prevention, and duplicate suppression across policy toggles.
@@ -141,7 +141,7 @@ The matrix is two-dimensional on purpose. An activity type can be fully handled 
 
 These are the types the calendar inbox accepts and `dispatchByType` handles.
 
-| Activity | `http_signature` | `outbox_pull` | `local_dispatch` | `ap_inbox` row | Federation e2e proof |
+| Activity | `http_signature` | `outbox_pull` | `local_dispatch` | `ap_inbox` row | Federation E2E proof |
 |----------|:----------------:|:-------------:|:----------------:|:--------------:|----------------------|
 | `Create(Event)` | yes | yes | yes | yes | `events`, `signed_delivery`; pulled form by `follow-backfill` |
 | `Update(Event)` | yes | yes | yes | yes | `events`, `signed_delivery`; pulled form by `follow-backfill` |
@@ -168,7 +168,7 @@ Rows that need more than a cell:
 
 Two inbound paths verify the sender, act synchronously, and return 200 without ever touching `ap_inbox`. They are invisible on a type-only axis, and they are the highest-privilege activities Pavillion accepts: one writes calendar content, the other changes who is allowed to write it.
 
-| Path | Route | Types | Handler | Federation e2e proof |
+| Path | Route | Types | Handler | Federation E2E proof |
 |------|-------|-------|---------|----------------------|
 | Person-actor content edits | `POST /calendars/:urlname/inbox` | `Create`, `Update`, `Delete` where the actor is a Person | `processPersonActorActivity` | `cross_instance_editors` |
 | Editor membership | `POST /users/:username/inbox` | `Add`, `Remove` | `processAddActivity`, `processRemoveActivity` | `signed_delivery` (Add), `cross_instance_editors` (Add and Remove) |
@@ -193,7 +193,7 @@ Local dispatch and the HTTP boundary share one dispatcher. A type that a same-in
 
 The structural form of the rule: the validation switch in `addToInbox` and the switch in `dispatchByType` must list the same set of types. They agree today. When they diverge, the boundary switch is almost always the one that is wrong.
 
-One thing this matrix cannot tell you: `local_dispatch` never crosses an instance boundary, so no federation e2e can prove it. The column records reachability, and integration tests carry the proof. Marking a `local_dispatch` cell "yes" is a statement about the code, not about the suite.
+One thing this matrix cannot tell you: `local_dispatch` never crosses an instance boundary, so no federation E2E can prove it. The column records reachability, and integration tests carry the proof. Marking a `local_dispatch` cell "yes" is a statement about the code, not about the suite.
 
 ## Accessing Instances in Browser
 
@@ -382,9 +382,7 @@ The federation testing infrastructure consists of:
 - `playwright.federation.config.ts` - Playwright configuration for federation E2E tests
 
 **Test Files:**
-- `tests/e2e/federation/webfinger.spec.ts` - WebFinger discovery tests
-- `tests/e2e/federation/follow.spec.ts` - Follow/unfollow tests
-- `tests/e2e/federation/events.spec.ts` - Event propagation tests
+- `tests/e2e/federation/*.spec.ts` - the federation specs, each described in [Federation Test Scenarios](#federation-test-scenarios)
 - `tests/e2e/federation/helpers/api.ts` - API helpers for programmatic test setup
 - `tests/e2e/federation/helpers/instances.ts` - Instance configuration and helpers
 
