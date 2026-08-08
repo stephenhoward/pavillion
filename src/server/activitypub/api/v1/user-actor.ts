@@ -2,6 +2,7 @@ import express, { Request, Response, Application, RequestHandler } from 'express
 
 import UserActorService from '@/server/activitypub/service/user_actor';
 import { verifyHttpSignature } from '@/server/activitypub/helper/http_signature';
+import { logInboxActivityAccepted } from '@/server/activitypub/helper/inbox-acceptance-log';
 import {
   createActorRateLimiter,
   createUserRateLimiter,
@@ -116,25 +117,34 @@ export default class UserActorRoutes {
       return;
     }
 
+    // Arrival, NOT acceptance: an unhandled activity type, or a handler that
+    // refuses the activity, still produces these lines. Acceptance is recorded
+    // separately by logInboxActivityAccepted below.
     logger.info({ activityType: req.body.type, username }, 'Received user inbox activity');
     logger.info({ activityBody: req.body }, 'User inbox activity body');
 
     const activity = req.body;
 
     try {
+      let accepted = false;
+
       switch (activity.type) {
         case 'Add':
           // User is being added as editor to a remote calendar
-          await this.userActorService.processAddActivity(username, activity);
+          accepted = await this.userActorService.processAddActivity(username, activity);
           break;
 
         case 'Remove':
           // User is being removed as editor from a remote calendar
-          await this.userActorService.processRemoveActivity(username, activity);
+          accepted = await this.userActorService.processRemoveActivity(username, activity);
           break;
 
         default:
           logger.info({ activityType: activity.type }, 'Unhandled user inbox activity type');
+      }
+
+      if (accepted) {
+        logInboxActivityAccepted('user', username, activity);
       }
 
       res.status(200).send('Activity processed');

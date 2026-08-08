@@ -1,10 +1,18 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import sinon from 'sinon';
 
 import UserActorRoutes from '@/server/activitypub/api/v1/user-actor';
 import UserActorService from '@/server/activitypub/service/user_actor';
 import { UserActor } from '@/server/activitypub/entity/user_actor';
 import CalendarInterface from '@/server/calendar/interface';
+import { logInboxActivityAccepted } from '@/server/activitypub/helper/inbox-acceptance-log';
+
+// The acceptance record is the observable that federation e2e assertions key
+// off (tests/e2e/federation/helpers/instances.ts). Stubbing the emitter lets
+// these tests pin WHICH activities are allowed to produce one.
+vi.mock('@/server/activitypub/helper/inbox-acceptance-log', () => ({
+  logInboxActivityAccepted: vi.fn(),
+}));
 
 describe('UserActorRoutes - GET /users/:username', () => {
   let routes: UserActorRoutes;
@@ -136,6 +144,7 @@ describe('UserActorRoutes - POST /users/:username/inbox', () => {
   beforeEach(() => {
     userActorService = new UserActorService({} as CalendarInterface);
     routes = new UserActorRoutes(userActorService);
+    vi.mocked(logInboxActivityAccepted).mockClear();
   });
 
   afterEach(() => {
@@ -213,6 +222,98 @@ describe('UserActorRoutes - POST /users/:username/inbox', () => {
 
     expect(res.status.calledWith(200)).toBe(true);
     expect(res.send.calledWith('Activity processed')).toBe(true);
+  });
+
+  it('should record acceptance for a Remove the handler acted on', async () => {
+    const mockActor: UserActor = {
+      id: 'test-id',
+      accountId: 'account-id',
+      actorUri: 'https://events.example/users/alice',
+      publicKey: '-----BEGIN PUBLIC KEY-----\nMOCK_KEY\n-----END PUBLIC KEY-----',
+      privateKey: 'PRIVATE',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    sandbox.stub(userActorService, 'getActorByUsername').resolves(mockActor);
+    sandbox.stub(userActorService, 'processRemoveActivity').resolves(true);
+
+    const req = {
+      params: { username: 'alice' },
+      body: {
+        type: 'Remove',
+        actor: 'https://other.example/calendars/test',
+        object: 'https://events.example/users/alice',
+        target: 'https://other.example/calendars/test/editors',
+      },
+    };
+    const res = { status: sandbox.stub(), send: sandbox.stub() };
+    res.status.returns(res);
+
+    await routes.postToInbox(req as any, res as any);
+
+    expect(vi.mocked(logInboxActivityAccepted)).toHaveBeenCalledOnce();
+    expect(vi.mocked(logInboxActivityAccepted)).toHaveBeenCalledWith('user', 'alice', req.body);
+  });
+
+  it('should not record acceptance when the handler refuses the activity', async () => {
+    // processRemoveActivity returns false when the activity does not apply to
+    // this actor. The response is still 200, so the acceptance record is the
+    // only thing separating a handled Remove from a refused one.
+    const mockActor: UserActor = {
+      id: 'test-id',
+      accountId: 'account-id',
+      actorUri: 'https://events.example/users/alice',
+      publicKey: '-----BEGIN PUBLIC KEY-----\nMOCK_KEY\n-----END PUBLIC KEY-----',
+      privateKey: 'PRIVATE',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    sandbox.stub(userActorService, 'getActorByUsername').resolves(mockActor);
+    sandbox.stub(userActorService, 'processRemoveActivity').resolves(false);
+
+    const req = {
+      params: { username: 'alice' },
+      body: {
+        type: 'Remove',
+        actor: 'https://other.example/calendars/test',
+        object: 'https://someone.else.example/users/bob',
+      },
+    };
+    const res = { status: sandbox.stub(), send: sandbox.stub() };
+    res.status.returns(res);
+
+    await routes.postToInbox(req as any, res as any);
+
+    expect(res.status.calledWith(200)).toBe(true);
+    expect(vi.mocked(logInboxActivityAccepted)).not.toHaveBeenCalled();
+  });
+
+  it('should not record acceptance for an unhandled activity type', async () => {
+    const mockActor: UserActor = {
+      id: 'test-id',
+      accountId: 'account-id',
+      actorUri: 'https://events.example/users/alice',
+      publicKey: '-----BEGIN PUBLIC KEY-----\nMOCK_KEY\n-----END PUBLIC KEY-----',
+      privateKey: 'PRIVATE',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    sandbox.stub(userActorService, 'getActorByUsername').resolves(mockActor);
+
+    const req = {
+      params: { username: 'alice' },
+      body: { type: 'Like', actor: 'https://other.example/calendars/test', object: 'https://events.example/x' },
+    };
+    const res = { status: sandbox.stub(), send: sandbox.stub() };
+    res.status.returns(res);
+
+    await routes.postToInbox(req as any, res as any);
+
+    expect(res.status.calledWith(200)).toBe(true);
+    expect(vi.mocked(logInboxActivityAccepted)).not.toHaveBeenCalled();
   });
 });
 

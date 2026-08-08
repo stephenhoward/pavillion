@@ -185,16 +185,103 @@ function getInboxLogLineCount(containerName: string): number {
 }
 
 /**
+ * Message of the log record an inbox handler emits once an activity has been
+ * validated AND persisted/processed. Emitted by
+ * `logInboxActivityAccepted` (src/server/activitypub/helper/inbox-acceptance-log.ts)
+ * from both the calendar inbox and the user inbox.
+ *
+ * Deliberately NOT the arrival line ('Received inbox activity'): that one is
+ * emitted before the validation switch, so it also fires for activities the
+ * handler then rejects with 400.
+ */
+const ACCEPTANCE_MESSAGE = 'Inbox activity accepted';
+
+/** ANSI SGR sequences pino-pretty emits when colorize is on. */
+// eslint-disable-next-line no-control-regex
+const ANSI_SEQUENCE = /\u001b\[[0-9;]*m/g;
+
+/**
+ * Start of a new log record. Instances run under NODE_ENV=federation, so pino
+ * renders through pino-pretty: a record is a `[HH:MM:SS.mmm]` header line
+ * followed by indented continuation lines carrying the structured fields.
+ * Raw pino JSON (one object per line) is also recognised so the matcher does
+ * not quietly stop working if an instance logs unprettified.
+ */
+const RECORD_HEADER = /^(\[\d{2}:\d{2}:\d{2}\.\d{3}\]|\{")/;
+
+/**
+ * Group a log slice into whole records, stripping ANSI escapes.
+ *
+ * Lines preceding the first header are dropped: the `sinceLine` anchor cuts at
+ * a line boundary, so a slice can open midway through a record emitted BEFORE
+ * the action under test. Those orphaned continuation lines belong to the past
+ * and must not be folded into the record that follows them.
+ */
+function splitLogRecords(logs: string): string[] {
+  const records: string[] = [];
+  let current: string[] | null = null;
+
+  for (const rawLine of logs.split('\n')) {
+    const line = rawLine.replace(ANSI_SEQUENCE, '');
+    if (RECORD_HEADER.test(line)) {
+      if (current) {
+        records.push(current.join('\n'));
+      }
+      current = [line];
+    }
+    else if (current) {
+      current.push(line);
+    }
+  }
+  if (current) {
+    records.push(current.join('\n'));
+  }
+
+  return records;
+}
+
+/**
+ * True when the log slice contains an acceptance record for an activity of
+ * `activityType` mentioning `needle`.
+ *
+ * All three conditions must hold within a SINGLE record. Matching across the
+ * whole slice would let three unrelated records satisfy the assertion between
+ * them -- including the pre-validation arrival line, which an activity
+ * rejected with 400 still emits.
+ *
+ * Exported for direct coverage in inbox_log_matching.spec.ts.
+ *
+ * @param logs - Raw `docker logs` output, already sliced to the post-anchor window
+ * @param activityType - ActivityPub activity type (e.g. 'Delete')
+ * @param needle - Substring that must appear in the same record, typically the
+ *                 activity's object IRI or an id embedded in it
+ */
+export function hasAcceptedInboxActivity(
+  logs: string,
+  activityType: string,
+  needle: string,
+): boolean {
+  return splitLogRecords(logs).some(record =>
+    record.includes(ACCEPTANCE_MESSAGE)
+    && (
+      record.includes(`activityType: "${activityType}"`)
+      || record.includes(`"activityType":"${activityType}"`)
+    )
+    && record.includes(needle),
+  );
+}
+
+/**
  * Poll a container's logs (only entries emitted AFTER `sinceLine`) for
  * evidence that an inbox activity of the given type, mentioning the given
- * needle, was processed.
+ * needle, was ACCEPTED.
  *
- * The inbox processing pipeline runs only AFTER verifyHttpSignature accepts
- * the request. Any log entry from inbox.ts that mentions the activity type
- * and the needle is positive evidence that signed delivery reached the inbox
- * handler. Downstream business-logic outcomes (accept, reject, ownership
- * failure) are out of scope here -- we are proving that the activity
- * arrived, not that it was semantically valid.
+ * Acceptance -- not arrival. The receiving handler emits its acceptance record
+ * only after HTTP signature verification, activity-schema validation, and the
+ * inbox write/processing have all succeeded, so a match proves the activity
+ * was admitted rather than merely delivered to the route. Downstream
+ * business-logic outcomes below that point (ownership verification, no-op
+ * guards) remain out of scope.
  *
  * Useful when the user-facing side effect ("event gone from feed",
  * "calendar removed") is masked by ownership-verification rules or other
@@ -202,8 +289,8 @@ function getInboxLogLineCount(containerName: string): number {
  *
  * @param containerName - Docker container name whose logs to poll
  * @param activityType - ActivityPub activity type to look for (e.g. 'Delete')
- * @param needle - Substring that must appear in the post-anchor log slice
- *                 (typically the event id under test)
+ * @param needle - Substring that must appear in the acceptance record itself
+ *                 (typically the object IRI, or an event id embedded in it)
  * @param sinceLine - Log line count captured BEFORE the action; only lines
  *                    after this offset are considered
  * @param timeoutMs - Maximum time to wait before resolving false
@@ -228,13 +315,7 @@ function waitForInboxActivity(
           `docker logs ${containerName} 2>&1 | tail -n +${sinceLine + 1}`,
           { encoding: 'utf8' },
         );
-        // The activityType is logged as a structured field; tolerate ANSI
-        // color codes around the JSON-ish key by checking substrings.
-        if (
-          logs.includes(needle)
-          && logs.includes('activityType')
-          && logs.includes(`"${activityType}"`)
-        ) {
+        if (hasAcceptedInboxActivity(logs, activityType, needle)) {
           resolve(true);
           return;
         }
