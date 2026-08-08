@@ -247,6 +247,83 @@ describe('addToInbox', () => {
     expect(vi.mocked(logInboxActivityAccepted)).not.toHaveBeenCalled();
   });
 
+  // The synchronous Person-actor branch is a separate inbound dispatch surface
+  // from the async addToInbox path above: a Create/Update/Delete from a
+  // `/users/` actor never reaches the inbox write, and records acceptance from
+  // its own call site. It refuses unauthorized editors with a 403, so it needs
+  // the same two-sided pinning the async path has.
+  const personActorCreate = (activityId: string) => ({
+    params: { urlname: 'testuser' },
+    body: {
+      '@context': 'https://www.w3.org/ns/activitystreams',
+      type: 'Create',
+      id: activityId,
+      actor: 'https://example.com/users/alice',
+      object: { id: 'https://example.com/objects/789', type: 'Event' },
+    },
+  });
+
+  it('should record acceptance when the Person actor activity is processed', async () => {
+    let req = personActorCreate('https://example.com/activities/128');
+    let res = { status: sinon.stub(), send: sinon.stub(), json: sinon.stub() };
+    let userFindMock = sandbox.stub(calendarAPI, 'getCalendarByName');
+    let inboxMock = sandbox.stub(activityPubInterface, 'addToInbox');
+    let personMock = sandbox.stub(activityPubInterface, 'processPersonActorActivity');
+
+    res.status.returns(res);
+    userFindMock.resolves(new Calendar('testId', 'testuser'));
+    personMock.resolves(null);
+
+    await routes.addToInbox(req as any, res as any);
+
+    expect(personMock.calledOnce).toBe(true);
+    // The synchronous branch returns before the async inbox write.
+    expect(inboxMock.called).toBe(false);
+    expect(res.status.calledWith(200)).toBe(true);
+    expect(vi.mocked(logInboxActivityAccepted)).toHaveBeenCalledOnce();
+    expect(vi.mocked(logInboxActivityAccepted)).toHaveBeenCalledWith('calendar', 'testuser', req.body);
+  });
+
+  it('should not record acceptance when the Person actor is not an authorized editor', async () => {
+    // The 403 refusal is the failure mode this pinning exists for: a handler
+    // that rejects the activity must leave no acceptance record behind.
+    let req = personActorCreate('https://example.com/activities/129');
+    let res = { status: sinon.stub(), send: sinon.stub(), json: sinon.stub() };
+    let userFindMock = sandbox.stub(calendarAPI, 'getCalendarByName');
+    let inboxMock = sandbox.stub(activityPubInterface, 'addToInbox');
+    let personMock = sandbox.stub(activityPubInterface, 'processPersonActorActivity');
+
+    res.status.returns(res);
+    userFindMock.resolves(new Calendar('testId', 'testuser'));
+    personMock.rejects(new Error('Actor is not an authorized editor of this calendar'));
+
+    await routes.addToInbox(req as any, res as any);
+
+    expect(res.status.calledWith(403)).toBe(true);
+    expect(res.send.calledWith('Forbidden: Not an authorized editor')).toBe(true);
+    expect(inboxMock.called).toBe(false);
+    expect(vi.mocked(logInboxActivityAccepted)).not.toHaveBeenCalled();
+  });
+
+  it('should not record acceptance when Person actor processing errors', async () => {
+    let req = personActorCreate('https://example.com/activities/130');
+    let res = { status: sinon.stub(), send: sinon.stub(), json: sinon.stub() };
+    let userFindMock = sandbox.stub(calendarAPI, 'getCalendarByName');
+    let inboxMock = sandbox.stub(activityPubInterface, 'addToInbox');
+    let personMock = sandbox.stub(activityPubInterface, 'processPersonActorActivity');
+
+    res.status.returns(res);
+    userFindMock.resolves(new Calendar('testId', 'testuser'));
+    personMock.rejects(new Error('Database unavailable'));
+
+    await routes.addToInbox(req as any, res as any);
+
+    expect(res.status.calledWith(500)).toBe(true);
+    expect(res.send.calledWith('Error processing activity')).toBe(true);
+    expect(inboxMock.called).toBe(false);
+    expect(vi.mocked(logInboxActivityAccepted)).not.toHaveBeenCalled();
+  });
+
   it('should pass keyId origin from Signature header as auth_origin', async () => {
     let req = {
       params: { orgname: 'testuser' },
