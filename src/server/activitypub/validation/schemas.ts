@@ -150,6 +150,11 @@ export const objectBaseSchema = z.object({
 /**
  * Activity types supported by the system.
  * Based on ActivityStreams 2.0 vocabulary.
+ *
+ * Descriptive only: `activityBaseSchema.type` is a plain non-empty string, and
+ * admission is decided by the per-type switch in the inbox route handler. This
+ * list documents what that switch is expected to cover; adding an entry here
+ * admits nothing on its own.
  */
 export const ACTIVITY_TYPES = [
   'Create',
@@ -170,6 +175,8 @@ export const ACTIVITY_TYPES = [
   // response). Both must be recognized activity types.
   'Join',
   'Ignore',
+  // Cross-instance moderation reports arrive as Flag. See flagActivitySchema.
+  'Flag',
 ] as const;
 
 /**
@@ -444,3 +451,58 @@ export const joinActivitySchema = activityBaseSchema.extend({
  * Type for a validated Join activity.
  */
 export type JoinActivity = z.infer<typeof joinActivitySchema>;
+
+/**
+ * Maximum length accepted for the free-text fields of an inbound Flag.
+ *
+ * Mirrors `MAX_DESCRIPTION_LENGTH` in the moderation domain, which bounds what
+ * a local reporter may submit. Without it a federated report would be bounded
+ * only by the Express body-size default — orders of magnitude more text than a
+ * local reporter can produce for the same report record.
+ */
+export const MAX_FLAG_TEXT_LENGTH = 2000;
+
+/**
+ * Maximum number of tags accepted on an inbound Flag. Pavillion emits one
+ * (the category) or two (admin-flag + priority); the cap leaves headroom for
+ * peer implementations without admitting an unbounded array.
+ */
+export const MAX_FLAG_TAGS = 10;
+
+/**
+ * Schema for an ActivityStreams Hashtag, as carried in a Flag's `tag` array.
+ *
+ * The inbound Flag handler reads the category from these tags by matching
+ * `name` (minus the leading `#`) against `ReportCategory`.
+ */
+export const hashtagSchema = z.object({
+  type: z.literal('Hashtag'),
+  name: z.string().min(1).max(200),
+}).passthrough();
+
+/**
+ * Schema for ActivityPub Flag activity.
+ *
+ * A Flag is a moderation report about the object it references — on this
+ * instance, an event. Pavillion accepts Flags from any instance it has not
+ * blocked: a report from a peer with no follow relationship is the expected
+ * case, not an anomaly.
+ *
+ * The field set mirrors what `FlagActivityBuilder` emits, so a Flag forwarded
+ * from one Pavillion instance validates on another.
+ *
+ * @see https://www.w3.org/TR/activitystreams-vocabulary/#dfn-flag
+ */
+export const flagActivitySchema = activityBaseSchema.extend({
+  type: z.literal('Flag'),
+  object: objectReferenceSchema,
+  content: z.string().max(MAX_FLAG_TEXT_LENGTH).optional(),
+  summary: z.string().max(MAX_FLAG_TEXT_LENGTH).optional(),
+  tag: z.array(hashtagSchema).max(MAX_FLAG_TAGS).optional(),
+  attributedTo: actorUriSchema.optional(),
+});
+
+/**
+ * Type for a validated Flag activity.
+ */
+export type FlagActivity = z.infer<typeof flagActivitySchema>;

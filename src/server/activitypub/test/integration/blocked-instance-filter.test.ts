@@ -300,5 +300,60 @@ describe('ProcessInboxService - Blocked Instance Filtering', () => {
       expect(context.message_id).toBe('msg-spam');
       expect(context.reason).toContain(blockedDomain);
     });
+
+    it('should not create a federation report for a Flag from a blocked instance', async () => {
+      // A defederated instance must not be able to file moderation reports.
+      // The blocked-instance gate runs ahead of dispatchByType, so the Flag
+      // never reaches processFlagActivity.
+      const blockedDomain = 'defederated.example.com';
+      const actorUri = `https://${blockedDomain}/calendars/reporter`;
+
+      const moderationService = moderationInterface.getModerationService();
+      sandbox.stub(moderationService, 'isInstanceBlocked').resolves(true);
+      const receiveRemoteReportStub = sandbox.stub(moderationService, 'receiveRemoteReport').resolves();
+
+      const calendar = new Calendar('test-cal-id', 'test-calendar');
+      calendar.urlName = 'test-calendar';
+      (calendarInterface.getCalendar as sinon.SinonStub).resolves(calendar);
+
+      const mockLogRejection = logActivityRejection as ReturnType<typeof vi.fn>;
+      mockLogRejection.mockClear();
+
+      const processFlagSpy = sandbox.spy(inboxService, 'processFlagActivity');
+
+      const mockMessage = {
+        id: 'https://defederated.example.com/flags/1',
+        calendar_id: 'test-cal-id',
+        type: 'Flag',
+        message: {
+          '@context': 'https://www.w3.org/ns/activitystreams',
+          type: 'Flag',
+          id: 'https://defederated.example.com/flags/1',
+          actor: actorUri,
+          object: 'https://local.example.com/events/6b1f0a5e-0000-4000-8000-000000000001',
+          content: 'Bad-faith report from a blocked instance',
+          tag: [{ type: 'Hashtag', name: '#spam' }],
+        },
+        messageTime: new Date(),
+        processedAt: null,
+        update: sandbox.stub().resolves(),
+      } as unknown as ActivityPubInboxMessageEntity;
+
+      await inboxService.processInboxMessage(mockMessage);
+
+      expect(processFlagSpy.called, 'Flag handler must not run').toBe(false);
+      expect(receiveRemoteReportStub.called, 'no report may be created').toBe(false);
+      expect((mockMessage.update as sinon.SinonStub).getCall(0).args[0].processed_status).toBe('blocked');
+
+      // The rejection log records the reporting instance, never the reporter's
+      // full actor URI: a blocked Flag must not be the one path that writes a
+      // remote reporter's identity into durable logs in cleartext.
+      const context = mockLogRejection.mock.calls[0][0];
+      expect(context.rejection_type).toBe('blocked_instance');
+      expect(context.activity_type).toBe('Flag');
+      expect(context.actor_domain).toBe(blockedDomain);
+      expect(context.actor_uri).toBe(`https://${blockedDomain}`);
+      expect(context.actor_uri).not.toBe(actorUri);
+    });
   });
 });
