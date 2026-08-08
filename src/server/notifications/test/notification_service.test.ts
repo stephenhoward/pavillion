@@ -632,6 +632,75 @@ describe('NotificationService.recordActivity', () => {
   });
 
   // ---------------------------------------------------------------------------
+  // Reserved `i18n:` prefix is scrubbed on object_label for every verb.
+  //
+  // The symmetric vector to the actor-side scrub above: a federated peer
+  // titles an event `i18n:flag_actor_remote{host:victim.example}`, a local
+  // user reports it, and the report handler snapshots the event title into
+  // `object.label`. Nothing on the server ever generates an `i18n:` token
+  // for a label — labels are always caller-supplied text — so the scrub is
+  // unconditional here, including on the Flag path where the poisoned title
+  // actually arrives.
+  // ---------------------------------------------------------------------------
+
+  describe('reserved i18n: prefix scrubbing for object_label', () => {
+    it('blanks an `i18n:`-prefixed object label on Flag (the reported-event-title vector)', async () => {
+      findOneStub.resolves(null);
+      resolveRoleAudienceStub.resolves([]);
+      activityCreateStub.resolves(buildActivityEntity({ verb: 'Flag' }));
+
+      await service.recordActivity({
+        verb: 'Flag',
+        actor: { kind: 'remote_actor', uri: 'https://example.org/users/alice' },
+        object: { type: 'report', id: uuidv4(), label: 'i18n:flag_actor_remote{host:victim.example}' },
+        audience: { kind: 'role', role: 'instance-admins' },
+      });
+
+      const inserted = activityCreateStub.firstCall.args[0];
+      expect(inserted.object_label).toBe('');
+      // The Flag anonymizer's legitimate actor token is untouched by the
+      // label-side scrub — the two fields are scrubbed independently.
+      expect(inserted.actor_display_name).toBe('i18n:flag_actor_remote{host:example.org}');
+    });
+
+    it('blanks an `i18n:`-prefixed object label on a non-Flag verb', async () => {
+      findOneStub.resolves(null);
+      resolveRoleAudienceStub.resolves([]);
+      activityCreateStub.resolves(buildActivityEntity({ verb: 'Announce' }));
+
+      await service.recordActivity({
+        verb: 'Announce',
+        actor: { kind: 'account', accountId: uuidv4() },
+        object: { type: 'event', id: uuidv4(), label: 'i18n:flag_actor_anonymous' },
+        audience: { kind: 'role', role: 'calendar-owners', objectRef: { type: 'calendar', id: uuidv4() } },
+        actorDisplayName: 'Alice',
+      });
+
+      const inserted = activityCreateStub.firstCall.args[0];
+      expect(inserted.object_label).toBe('');
+    });
+
+    it('leaves plain-text object labels unchanged (regression guard)', async () => {
+      findOneStub.resolves(null);
+      resolveRoleAudienceStub.resolves([]);
+      activityCreateStub.resolves(buildActivityEntity({ verb: 'Follow' }));
+
+      await service.recordActivity({
+        verb: 'Follow',
+        actor: { kind: 'account', accountId: uuidv4() },
+        object: { type: 'calendar', id: uuidv4(), label: 'Talks about i18n:tokens' },
+        audience: { kind: 'role', role: 'calendar-editors', objectRef: { type: 'calendar', id: uuidv4() } },
+        actorDisplayName: 'Alice',
+      });
+
+      const inserted = activityCreateStub.firstCall.args[0];
+      // The scrub is start-anchored — a label that merely mentions the
+      // prefix later in the string must survive intact.
+      expect(inserted.object_label).toBe('Talks about i18n:tokens');
+    });
+  });
+
+  // ---------------------------------------------------------------------------
   // Transaction wiring
   // ---------------------------------------------------------------------------
 

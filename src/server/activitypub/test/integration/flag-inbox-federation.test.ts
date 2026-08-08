@@ -240,6 +240,14 @@ describe('Federation Flag inbox — anonymization + no outbound side effect (int
     expect(activity.actor_display_url, 'actor_display_url is the instance root').toBe(
       `https://${REMOTE_HOST}`,
     );
+    // The display name is the server-generated i18n token carrying only the
+    // remote host. Asserting it end-to-end (not just in the anonymizer unit
+    // test) catches a regression in the host extraction — e.g. a future
+    // relaxation of validateApActorUri's RFC-1123 allowlist letting a
+    // crafted actor URI put something other than a bare hostname here.
+    expect(activity.actor_display_name, 'actor_display_name is the host-only i18n token').toBe(
+      `i18n:flag_actor_remote{host:${REMOTE_HOST}}`,
+    );
 
     // Object reference points at the created Report, not at the event.
     // The click-through target is the
