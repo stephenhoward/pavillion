@@ -476,7 +476,15 @@ export default class AdminReportRoutes {
         targetHostname = new URL(targetActorUri).hostname;
       }
       catch {
-        targetHostname = '';
+        logger.warn(
+          { reportId, targetActorUri },
+          'Refusing to forward report: resolved calendar actor is not a valid URI',
+        );
+        res.status(400).json({
+          error: 'Cannot forward report: calendar owner is not on the event source instance',
+          errorName: 'ValidationError',
+        });
+        return;
       }
 
       if (targetHostname !== remoteInstanceDomain) {
@@ -509,7 +517,7 @@ export default class AdminReportRoutes {
       await escalationRecord.save();
 
       res.json({
-        message: 'Report forwarded to remote admin',
+        message: 'Report forwarded to the origin calendar owner',
       });
     }
     catch (error: any) {
@@ -529,7 +537,7 @@ export default class AdminReportRoutes {
         return;
       }
 
-      logError(error, 'Failed to forward report to remote admin');
+      logError(error, 'Failed to forward report to the origin calendar owner');
       res.status(500).json({
         error: 'Failed to forward report',
       });

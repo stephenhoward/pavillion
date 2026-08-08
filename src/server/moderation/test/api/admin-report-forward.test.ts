@@ -161,7 +161,7 @@ describe('Admin Report Forward API', () => {
           .post(`/admin/reports/${TEST_REPORT_ID}/forward-to-admin`);
 
         expect(response.status).toBe(200);
-        expect(response.body.message).toBe('Report forwarded to remote admin');
+        expect(response.body.message).toBe('Report forwarded to the origin calendar owner');
       });
 
       it('should forward to the origin calendar actor resolved from the event', async () => {
@@ -207,6 +207,7 @@ describe('Admin Report Forward API', () => {
         sandbox.stub(moderationInterface, 'getEventSourceActorUri').resolves(ORIGIN_CALENDAR_ACTOR_URI);
         sandbox.stub(moderationInterface, 'forwardReport').resolves();
         const saveSpy = sandbox.stub(ReportEscalationEntity.prototype, 'save').resolves({} as any);
+        const fromModelSpy = sandbox.spy(ReportEscalationEntity, 'fromModel');
 
         router.post('/admin/reports/:reportId/forward-to-admin', addAdminUser, (req, res) => {
           routes.forwardToAdmin(req, res);
@@ -216,7 +217,8 @@ describe('Admin Report Forward API', () => {
           .post(`/admin/reports/${TEST_REPORT_ID}/forward-to-admin`);
 
         expect(saveSpy.calledOnce).toBe(true);
-        const escalation = saveSpy.thisValues[0] as ReportEscalationEntity;
+        expect(fromModelSpy.calledOnce).toBe(true);
+        const escalation = fromModelSpy.firstCall.args[0];
         expect(escalation.decision).toBe('forwarded_to_remote_admin');
         expect(escalation.notes).toBe('Forwarded to the origin calendar owner at remote.instance.com');
       });
@@ -294,6 +296,33 @@ describe('Admin Report Forward API', () => {
         sandbox.stub(moderationInterface, 'getEventById').resolves(remoteEvent);
         sandbox.stub(moderationInterface, 'getEventSourceActorUri')
           .resolves('https://attacker.example/calendars/victim');
+        const forwardStub = sandbox.stub(moderationInterface, 'forwardReport').resolves();
+
+        router.post('/admin/reports/:reportId/forward-to-admin', addAdminUser, (req, res) => {
+          routes.forwardToAdmin(req, res);
+        });
+
+        const response = await request(testApp(router))
+          .post(`/admin/reports/${TEST_REPORT_ID}/forward-to-admin`);
+
+        expect(response.status).toBe(400);
+        expect(response.body.errorName).toBe('ValidationError');
+        expect(response.body.error).toBe('Cannot forward report: calendar owner is not on the event source instance');
+        expect(forwardStub.called).toBe(false);
+      });
+
+      it('should return 400 when the resolved actor is not a valid URI', async () => {
+        // The same-origin guard must reject an unparseable actor URI outright
+        // rather than falling through to a hostname comparison.
+        const report = createTestReport();
+        const remoteEvent = createTestEvent({
+          calendarId: null,
+          eventSourceUrl: REMOTE_EVENT_URL,
+        });
+
+        sandbox.stub(moderationInterface, 'getAdminReport').resolves(report);
+        sandbox.stub(moderationInterface, 'getEventById').resolves(remoteEvent);
+        sandbox.stub(moderationInterface, 'getEventSourceActorUri').resolves('not-a-uri');
         const forwardStub = sandbox.stub(moderationInterface, 'forwardReport').resolves();
 
         router.post('/admin/reports/:reportId/forward-to-admin', addAdminUser, (req, res) => {
