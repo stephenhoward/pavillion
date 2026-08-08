@@ -858,9 +858,20 @@ describe('execute', () => {
         },
       ],
     });
+    const liveWorktreeOutput = [
+      'worktree /repo',
+      'HEAD mainsha1234567890abcdef1234567890abcdef12',
+      'branch refs/heads/main',
+      '',
+      'worktree /repo/wt2',
+      'HEAD sha2',
+      'branch refs/heads/b2',
+      '',
+    ].join('\n');
     const spawn = seqSpawn(
       fakeSpawn('/repo/.git'),               // rev-parse --git-common-dir
       fakeSpawn(''),                          // lsof -a -d cwd -Fn
+      fakeSpawn(liveWorktreeOutput),           // git worktree list --porcelain (live session check; cwd=/repo, not inside wt2)
       fakeSpawn(''),                          // git -C /repo/wt2 status --porcelain (clean)
       fakeSpawn(''),                          // git worktree remove /repo/wt2
       fakeSpawn('sha1'),                      // git rev-parse refs/heads/b1
@@ -974,9 +985,20 @@ describe('execute', () => {
         },
       ],
     });
+    const liveWorktreeOutput = [
+      'worktree /repo',
+      'HEAD mainsha1234567890abcdef1234567890abcdef12',
+      'branch refs/heads/main',
+      '',
+      'worktree /repo/wt4',
+      'HEAD sha4',
+      'branch refs/heads/b4',
+      '',
+    ].join('\n');
     const spawn = seqSpawn(
       fakeSpawn('/repo/.git'),        // rev-parse --git-common-dir
       fakeSpawn(''),                   // lsof -a -d cwd -Fn
+      fakeSpawn(liveWorktreeOutput),    // git worktree list --porcelain (live session check; cwd=/repo, not inside wt4)
       fakeSpawn(' M dirty-file.ts'),   // git -C /repo/wt4 status --porcelain (dirty!)
       fakeSpawn(''),                   // git worktree prune
     );
@@ -993,6 +1015,124 @@ describe('execute', () => {
       { item: 'b4', reason: 'uncommitted changes present' },
     ]));
     expect(appended).toEqual([]);
+  });
+
+  it('cwd inside a candidate worktree is skipped with the current-session reason, not removed (live derivation)', () => {
+    // Regression: execute() must not assume isCurrentSession is false. If
+    // the user cd's into a candidate worktree between plan approval and
+    // execute running, lsof alone won't catch it (fails open when
+    // absent/permission-limited, and a shell sitting idle at a prompt has
+    // no listed fd at all) — execute must re-derive the session worktree
+    // live, via the same findContainingWorktree longest-match containment
+    // classify() uses.
+    const plan = execPlan({
+      branches: [
+        {
+          branch: 'b6', sha: 'sha6', category: 'merged-ancestor',
+          reason: 'tip is an ancestor of origin/main', worktree: '/repo/wt6',
+        },
+      ],
+      worktrees: [
+        {
+          path: '/repo/wt6', branch: 'b6', sha: 'sha6', family: 'superset',
+          removable: true, reason: 'clean, inactive, unlocked',
+        },
+      ],
+    });
+    const liveWorktreeOutput = [
+      'worktree /repo',
+      'HEAD mainsha1234567890abcdef1234567890abcdef12',
+      'branch refs/heads/main',
+      '',
+      'worktree /repo/wt6',
+      'HEAD sha6',
+      'branch refs/heads/b6',
+      '',
+    ].join('\n');
+    const spawn = seqSpawn(
+      fakeSpawn('/repo/.git'),        // rev-parse --git-common-dir
+      fakeSpawn(''),                   // lsof -a -d cwd -Fn (no active procs — lsof alone would miss this)
+      fakeSpawn(liveWorktreeOutput),    // git worktree list --porcelain (live: cwd is nested inside wt6)
+      fakeSpawn(''),                    // git -C /repo/wt6 status --porcelain (clean)
+      fakeSpawn(''),                    // git worktree prune
+    );
+    const { deps } = makeExecDeps(plan, spawn);
+    deps.cwd = '/repo/wt6/src'; // simulates cd'ing into the candidate worktree after approval
+    const opts: ExecuteOptions = { categories: ['merged-ancestor'], worktreeFamilies: ['superset'] };
+
+    const result = execute(opts, deps);
+
+    expect(result.ok).toBe(true);
+    expect(result.removedWorktrees).toEqual([]);
+    expect(result.deletedBranches).toEqual([]);
+    expect(result.skipped).toEqual(expect.arrayContaining([
+      { item: '/repo/wt6', reason: 'current session worktree — never removed' },
+      { item: 'b6', reason: 'current session worktree — never removed' },
+    ]));
+  });
+
+  it('passes shell:false on every destructive git spawn (worktree remove, branch delete)', () => {
+    const plan = execPlan({
+      branches: [
+        {
+          branch: 'b7', sha: 'sha7', category: 'merged-ancestor',
+          reason: 'tip is an ancestor of origin/main', worktree: '/repo/wt7',
+        },
+      ],
+      worktrees: [
+        {
+          path: '/repo/wt7', branch: 'b7', sha: 'sha7', family: 'superset',
+          removable: true, reason: 'clean, inactive, unlocked',
+        },
+      ],
+    });
+    const liveWorktreeOutput = [
+      'worktree /repo',
+      'HEAD mainsha1234567890abcdef1234567890abcdef12',
+      'branch refs/heads/main',
+      '',
+      'worktree /repo/wt7',
+      'HEAD sha7',
+      'branch refs/heads/b7',
+      '',
+    ].join('\n');
+    const baseSpawn = seqSpawn(
+      fakeSpawn('/repo/.git'),        // rev-parse --git-common-dir
+      fakeSpawn(''),                   // lsof -a -d cwd -Fn
+      fakeSpawn(liveWorktreeOutput),    // git worktree list --porcelain
+      fakeSpawn(''),                    // git -C /repo/wt7 status --porcelain (clean)
+      fakeSpawn(''),                    // git worktree remove /repo/wt7
+      fakeSpawn('sha7'),                // git rev-parse refs/heads/b7
+      fakeSpawn(''),                    // git branch -d b7
+      fakeSpawn(''),                    // git worktree prune
+    );
+    const recorded: Array<{ cmd: string; args: string[]; opts: unknown }> = [];
+    const spawn = (cmd: string, args: string[], opts: unknown) => {
+      recorded.push({ cmd, args, opts });
+      return baseSpawn(cmd, args, opts);
+    };
+    const deps: ExecuteDeps = {
+      spawnFn: spawn as unknown as ExecuteDeps['spawnFn'],
+      cwd: '/repo',
+      nowMs: () => 1_700_000_000_000,
+      statMtimes: () => [],
+      readFile: () => JSON.stringify(plan),
+      appendFile: () => {},
+    };
+    const opts: ExecuteOptions = { categories: ['merged-ancestor'], worktreeFamilies: ['superset'] };
+
+    const result = execute(opts, deps);
+
+    expect(result.ok).toBe(true);
+    expect(result.deletedBranches).toEqual(['b7']);
+    expect(result.removedWorktrees).toEqual(['/repo/wt7']);
+
+    const removeCall = recorded.find((c) => c.cmd === 'git' && c.args.join(' ') === 'worktree remove /repo/wt7');
+    const deleteCall = recorded.find((c) => c.cmd === 'git' && c.args.join(' ') === 'branch -d b7');
+    expect(removeCall).toBeDefined();
+    expect(deleteCall).toBeDefined();
+    expect((removeCall?.opts as { shell?: boolean }).shell).toBe(false);
+    expect((deleteCall?.opts as { shell?: boolean }).shell).toBe(false);
   });
 
   it('doubt is never selectable even if forced into opts.categories', () => {

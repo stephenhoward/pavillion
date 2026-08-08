@@ -388,7 +388,7 @@ export function gatherWorktreeChecks(
   branchDeletable: boolean,
   ctx: WorktreeCheckContext,
 ): WorktreeChecks {
-  const statusResult = run('git', ['-C', wt.path, 'status', '--porcelain'], ctx.spawn, { cwd: ctx.cwd });
+  const statusResult = run('git', ['-C', wt.path, 'status', '--porcelain'], ctx.spawn, { cwd: ctx.cwd, shell: false });
   const dirty = isDirty(statusResult.stdout);
   const recentlyModified = isRecentlyModified(ctx.statMtimes(wt.path), ctx.nowMs);
   const resolvedPath = ctx.realpath(wt.path);
@@ -448,7 +448,7 @@ export function classify(deps: ClassifyDeps = {}): {
   const spawn = deps.spawnFn ?? nodeSpawnSync;
   const cwd = deps.cwd ?? process.cwd();
   const runGit = (args: string[], opts: { timeout?: number } = {}) =>
-    run('git', args, spawn, { cwd, ...opts });
+    run('git', args, spawn, { cwd, shell: false, ...opts });
 
   // Step 1: file locations + inside-work-tree guard.
   const commonDirResult = runGit(['rev-parse', '--git-common-dir']);
@@ -536,7 +536,9 @@ export function classify(deps: ClassifyDeps = {}): {
     else {
       for (const branchChunk of chunk(names, 50)) {
         const query = buildPrQuery(branchChunk, parsedOrigin.owner, parsedOrigin.repo);
-        const ghResult = run('gh', ['api', 'graphql', '-f', `query=${query}`], spawn, { cwd, timeout: 60_000 });
+        const ghResult = run('gh', ['api', 'graphql', '-f', `query=${query}`], spawn, {
+          cwd, timeout: 60_000, shell: false,
+        });
         if (ghResult.exitCode !== 0) {
           for (const name of branchChunk) prLookup.set(name, 'lookup-failed');
           continue;
@@ -583,7 +585,7 @@ export function classify(deps: ClassifyDeps = {}): {
     // processes' fds) while still printing every cwd it *could* read on
     // stdout. Parse stdout regardless of exit code — an empty cwd list only
     // when stdout itself is empty, never inferred from the exit code alone.
-    const lsofResult = run('lsof', ['-a', '-d', 'cwd', '-Fn'], spawn, { cwd, timeout: 15_000 });
+    const lsofResult = run('lsof', ['-a', '-d', 'cwd', '-Fn'], spawn, { cwd, timeout: 15_000, shell: false });
     cwds = parseCwdPaths(lsofResult.stdout).map((p) => realpath(p));
   }
 
@@ -722,7 +724,7 @@ export function execute(opts: ExecuteOptions, deps: ExecuteDeps = {}): ExecuteRe
   const spawn = deps.spawnFn ?? nodeSpawnSync;
   const cwd = deps.cwd ?? process.cwd();
   const runGit = (args: string[], runOpts: { timeout?: number } = {}) =>
-    run('git', args, spawn, { cwd, ...runOpts });
+    run('git', args, spawn, { cwd, shell: false, ...runOpts });
   const nowMs = (deps.nowMs ?? Date.now)();
   const realpath = deps.realpath ?? defaultRealpath;
   const readFile = deps.readFile ?? ((p: string) => fs.readFileSync(p, 'utf-8'));
@@ -793,15 +795,30 @@ export function execute(opts: ExecuteOptions, deps: ExecuteDeps = {}): ExecuteRe
   // contract).
   let cwds: string[] = [];
   if (familyApproved.length > 0) {
-    const lsofResult = run('lsof', ['-a', '-d', 'cwd', '-Fn'], spawn, { cwd, timeout: 15_000 });
+    const lsofResult = run('lsof', ['-a', '-d', 'cwd', '-Fn'], spawn, { cwd, timeout: 15_000, shell: false });
     cwds = parseCwdPaths(lsofResult.stdout).map((p) => realpath(p));
+  }
+
+  // isCurrentSession must be derived LIVE, not assumed false. Between plan
+  // approval and execute running, the user may have cd'd into a candidate
+  // worktree — lsof is not a complete substitute (it fails open when
+  // absent/permission-limited, and a shell sitting at a prompt has no
+  // listed fd at all). Re-run `git worktree list --porcelain` fresh and
+  // reuse findContainingWorktree — the SAME longest-match containment
+  // classify() uses to compute its own sessionWt — rather than forking a
+  // second containment check.
+  let sessionWt: WorktreeInfo | undefined;
+  if (familyApproved.length > 0) {
+    const worktreeListResult = runGit(['worktree', 'list', '--porcelain']);
+    const liveWorktrees = parseWorktrees(worktreeListResult.stdout);
+    sessionWt = findContainingWorktree(cwd, liveWorktrees, realpath);
   }
 
   // Step 4c: per approved-family worktree, re-verify via gatherWorktreeChecks
   // + assessWorktree — the same predicate classify() used to write
-  // `removable: true` into the plan. isPrimary/isCurrentSession are always
-  // false and branchDeletable is always true here: a worktree whose branch
-  // was protected or non-deletable could never have reached `selected`
+  // `removable: true` into the plan. isPrimary is always false and
+  // branchDeletable is always true here: a worktree whose branch was
+  // protected or non-deletable could never have reached `selected`
   // (protected branches never appear in plan.branches; non-deletable
   // categories were filtered out in step 3). `locked` isn't part of the
   // brief's re-verify set (dirty/active/recentlyModified only) — a lock
@@ -812,7 +829,8 @@ export function execute(opts: ExecuteOptions, deps: ExecuteDeps = {}): ExecuteRe
     const wtInfo: WorktreeInfo = {
       path: b.worktree as string, sha: b.sha, branch: b.branch, locked: false, prunable: false,
     };
-    const checks = gatherWorktreeChecks(wtInfo, false, false, true, {
+    const isCurrentSession = sessionWt !== undefined && realpath(wtInfo.path) === realpath(sessionWt.path);
+    const checks = gatherWorktreeChecks(wtInfo, false, isCurrentSession, true, {
       spawn, cwd, statMtimes, nowMs, cwds, realpath,
     });
     const assessment = assessWorktree(checks);

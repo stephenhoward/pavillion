@@ -28,11 +28,11 @@ export function run(
   cmd: string,
   args: string[],
   spawnFn: SpawnFn,
-  opts: { input?: string; timeout?: number; cwd?: string } = {},
+  opts: { input?: string; timeout?: number; cwd?: string; shell?: boolean } = {},
 ): { stdout: string; stderr: string; exitCode: number } {
   const result = spawnFn(cmd, args, {
     encoding: 'buffer' as never,
-    shell: true,
+    shell: opts.shell ?? true,
     timeout: opts.timeout ?? 30_000,
     ...(opts.cwd !== undefined ? { cwd: opts.cwd } : {}),
     ...(opts.input !== undefined ? { input: Buffer.from(opts.input) } : {}),
