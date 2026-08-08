@@ -27,6 +27,12 @@ const TEST_EVENT_ID = 'c0eebc99-9c0b-4ef8-bb6d-6bb9bd380a44';
 const TEST_CALENDAR_ID = 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11';
 const NONEXISTENT_REPORT_ID = 'd0eebc99-9c0b-4ef8-bb6d-6bb9bd380a55';
 
+/** Source URL of the remote event a report is filed against. */
+const REMOTE_EVENT_URL = 'https://remote.instance.com/events/event-uuid';
+
+/** Actor URI of the calendar that owns the remote event (DEC-015 forward target). */
+const ORIGIN_CALENDAR_ACTOR_URI = 'https://remote.instance.com/calendars/origin-calendar';
+
 /**
  * Middleware that attaches an admin user to the request.
  */
@@ -120,15 +126,16 @@ describe('Admin Report Forward API', () => {
   describe('POST /admin/reports/:reportId/forward-to-admin', () => {
 
     describe('successful forwarding', () => {
-      it('should return 200 when forwarding to remote admin succeeds', async () => {
+      it('should return 200 when forwarding to the origin calendar owner succeeds', async () => {
         const report = createTestReport();
         const remoteEvent = createTestEvent({
           calendarId: null,
-          eventSourceUrl: 'https://remote.instance.com/events/event-uuid',
+          eventSourceUrl: REMOTE_EVENT_URL,
         });
 
         sandbox.stub(moderationInterface, 'getAdminReport').resolves(report);
         sandbox.stub(moderationInterface, 'getEventById').resolves(remoteEvent);
+        sandbox.stub(moderationInterface, 'getEventSourceActorUri').resolves(ORIGIN_CALENDAR_ACTOR_URI);
         sandbox.stub(moderationInterface, 'forwardReport').resolves();
 
         // Mock the entity save to prevent DB operations
@@ -157,15 +164,19 @@ describe('Admin Report Forward API', () => {
         expect(response.body.message).toBe('Report forwarded to remote admin');
       });
 
-      it('should call forwardReport with correct parameters', async () => {
+      it('should forward to the origin calendar actor resolved from the event', async () => {
+        // DEC-015: the Flag is addressed to the origin calendar's actor,
+        // never to an instance-level admin URI.
         const report = createTestReport();
         const remoteEvent = createTestEvent({
           calendarId: null,
-          eventSourceUrl: 'https://remote.instance.com/events/event-uuid',
+          eventSourceUrl: REMOTE_EVENT_URL,
         });
 
         sandbox.stub(moderationInterface, 'getAdminReport').resolves(report);
         sandbox.stub(moderationInterface, 'getEventById').resolves(remoteEvent);
+        const resolveStub = sandbox.stub(moderationInterface, 'getEventSourceActorUri')
+          .resolves(ORIGIN_CALENDAR_ACTOR_URI);
         const forwardStub = sandbox.stub(moderationInterface, 'forwardReport').resolves();
         sandbox.stub(ReportEscalationEntity.prototype, 'save').resolves({} as any);
 
@@ -176,21 +187,24 @@ describe('Admin Report Forward API', () => {
         await request(testApp(router))
           .post(`/admin/reports/${TEST_REPORT_ID}/forward-to-admin`);
 
+        expect(resolveStub.calledOnceWith(TEST_EVENT_ID)).toBe(true);
         expect(forwardStub.calledOnce).toBe(true);
         expect(forwardStub.firstCall.args[0]).toBe(TEST_REPORT_ID);
-        // The second argument should be the remote admin actor URI
-        expect(forwardStub.firstCall.args[1]).toBe('https://remote.instance.com/admin');
+        expect(forwardStub.firstCall.args[1]).toBe(ORIGIN_CALENDAR_ACTOR_URI);
       });
 
-      it('should create escalation record with decision=forwarded_to_remote_admin', async () => {
+      it('should create escalation record with decision=forwarded_to_remote_admin and origin-calendar notes', async () => {
+        // The persisted `decision` value is deliberately unchanged (DEC-015);
+        // only the human-readable notes name the real recipient.
         const report = createTestReport();
         const remoteEvent = createTestEvent({
           calendarId: null,
-          eventSourceUrl: 'https://remote.instance.com/events/event-uuid',
+          eventSourceUrl: REMOTE_EVENT_URL,
         });
 
         sandbox.stub(moderationInterface, 'getAdminReport').resolves(report);
         sandbox.stub(moderationInterface, 'getEventById').resolves(remoteEvent);
+        sandbox.stub(moderationInterface, 'getEventSourceActorUri').resolves(ORIGIN_CALENDAR_ACTOR_URI);
         sandbox.stub(moderationInterface, 'forwardReport').resolves();
         const saveSpy = sandbox.stub(ReportEscalationEntity.prototype, 'save').resolves({} as any);
 
@@ -202,6 +216,9 @@ describe('Admin Report Forward API', () => {
           .post(`/admin/reports/${TEST_REPORT_ID}/forward-to-admin`);
 
         expect(saveSpy.calledOnce).toBe(true);
+        const escalation = saveSpy.thisValues[0] as ReportEscalationEntity;
+        expect(escalation.decision).toBe('forwarded_to_remote_admin');
+        expect(escalation.notes).toBe('Forwarded to the origin calendar owner at remote.instance.com');
       });
     });
 
@@ -237,6 +254,81 @@ describe('Admin Report Forward API', () => {
         expect(response.body.errorName).toBe('ValidationError');
         expect(response.body.error).toBe('Cannot forward report: event is not from a remote instance');
       });
+
+      it('should return 400 when the origin calendar actor cannot be resolved', async () => {
+        const report = createTestReport();
+        const remoteEvent = createTestEvent({
+          calendarId: null,
+          eventSourceUrl: REMOTE_EVENT_URL,
+        });
+
+        sandbox.stub(moderationInterface, 'getAdminReport').resolves(report);
+        sandbox.stub(moderationInterface, 'getEventById').resolves(remoteEvent);
+        sandbox.stub(moderationInterface, 'getEventSourceActorUri').resolves(null);
+        const forwardStub = sandbox.stub(moderationInterface, 'forwardReport').resolves();
+
+        router.post('/admin/reports/:reportId/forward-to-admin', addAdminUser, (req, res) => {
+          routes.forwardToAdmin(req, res);
+        });
+
+        const response = await request(testApp(router))
+          .post(`/admin/reports/${TEST_REPORT_ID}/forward-to-admin`);
+
+        expect(response.status).toBe(400);
+        expect(response.body.errorName).toBe('ValidationError');
+        expect(response.body.error).toBe('Cannot forward report: unable to determine remote calendar owner');
+        expect(forwardStub.called).toBe(false);
+      });
+
+      it('should return 400 when the resolved actor is not on the event source host', async () => {
+        // A hostile instance can set `attributed_to` on an Announce-ingested
+        // event; the same-origin guard stops a signed Flag being aimed at a
+        // host the event did not come from.
+        const report = createTestReport();
+        const remoteEvent = createTestEvent({
+          calendarId: null,
+          eventSourceUrl: REMOTE_EVENT_URL,
+        });
+
+        sandbox.stub(moderationInterface, 'getAdminReport').resolves(report);
+        sandbox.stub(moderationInterface, 'getEventById').resolves(remoteEvent);
+        sandbox.stub(moderationInterface, 'getEventSourceActorUri')
+          .resolves('https://attacker.example/calendars/victim');
+        const forwardStub = sandbox.stub(moderationInterface, 'forwardReport').resolves();
+
+        router.post('/admin/reports/:reportId/forward-to-admin', addAdminUser, (req, res) => {
+          routes.forwardToAdmin(req, res);
+        });
+
+        const response = await request(testApp(router))
+          .post(`/admin/reports/${TEST_REPORT_ID}/forward-to-admin`);
+
+        expect(response.status).toBe(400);
+        expect(response.body.errorName).toBe('ValidationError');
+        expect(response.body.error).toBe('Cannot forward report: calendar owner is not on the event source instance');
+        expect(forwardStub.called).toBe(false);
+      });
+
+      it('should return 400 when the event has no source URL', async () => {
+        const report = createTestReport();
+        const remoteEvent = createTestEvent({ calendarId: null, eventSourceUrl: '' });
+
+        sandbox.stub(moderationInterface, 'getAdminReport').resolves(report);
+        sandbox.stub(moderationInterface, 'getEventById').resolves(remoteEvent);
+        const forwardStub = sandbox.stub(moderationInterface, 'forwardReport').resolves();
+
+        router.post('/admin/reports/:reportId/forward-to-admin', addAdminUser, (req, res) => {
+          routes.forwardToAdmin(req, res);
+        });
+
+        const response = await request(testApp(router))
+          .post(`/admin/reports/${TEST_REPORT_ID}/forward-to-admin`);
+
+        expect(response.status).toBe(400);
+        expect(response.body.errorName).toBe('ValidationError');
+        expect(response.body.error).toBe('Event is missing source URL');
+        expect(forwardStub.called).toBe(false);
+      });
     });
 
     describe('not found - 404', () => {
@@ -262,11 +354,12 @@ describe('Admin Report Forward API', () => {
         const report = createTestReport();
         const remoteEvent = createTestEvent({
           calendarId: null,
-          eventSourceUrl: 'https://remote.instance.com/events/event-uuid',
+          eventSourceUrl: REMOTE_EVENT_URL,
         });
 
         sandbox.stub(moderationInterface, 'getAdminReport').resolves(report);
         sandbox.stub(moderationInterface, 'getEventById').resolves(remoteEvent);
+        sandbox.stub(moderationInterface, 'getEventSourceActorUri').resolves(ORIGIN_CALENDAR_ACTOR_URI);
         sandbox.stub(moderationInterface, 'forwardReport').rejects(new NoSigningCalendarError());
 
         router.post('/admin/reports/:reportId/forward-to-admin', addAdminUser, (req, res) => {

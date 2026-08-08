@@ -221,17 +221,16 @@
       "resolve_success": "Reporte resuelto correctamente",
       "override_success": "Decisión del propietario anulada correctamente",
       "dismiss_success": "Reporte desestimado correctamente",
-      "forward_to_admin": "Reenviar al administrador remoto",
-      "forward_confirm_title": "¿Reenviar el reporte al administrador remoto?",
-      "forward_confirm_message": "Esto enviará el reporte al administrador de la instancia remota donde se originó este evento. El administrador remoto será notificado sobre este problema.",
-      "forward_confirm_warning": "Esta acción escala el reporte a los administradores de la instancia remota y no se puede deshacer.",
+      "forward_to_admin": "Reenviar a la propiedad del calendario",
+      "forward_confirm_title": "¿Reenviar el reporte a la propiedad del calendario?",
+      "forward_confirm_message": "Esto enviará el reporte a quien administra el calendario del que proviene este evento. Esa persona lo revisa primero; la administración de su instancia lo verá si se escala.",
       "confirm_forward": "Reenviar reporte",
       "cancel": "Cancelar",
       "forwarding": "Reenviando...",
-      "forward_success": "Reporte reenviado correctamente al administrador remoto",
-      "forward_error": "Error al reenviar el reporte al administrador remoto",
+      "forward_success": "Reporte reenviado correctamente a la propiedad del calendario",
+      "forward_error": "Error al reenviar el reporte a la propiedad del calendario",
       "federation_actions": "Acciones de federación",
-      "forward_description": "Este reporte es para un evento remoto. Puedes reenviarlo al administrador de la instancia remota para su revisión."
+      "forward_description": "Este reporte es para un evento remoto. Puedes reenviarlo a quien administra el calendario del que proviene para su revisión."
     },
     "create": {
       "title": "Crear reporte administrativo",
