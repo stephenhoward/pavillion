@@ -12,6 +12,8 @@ When a calendar owner unposts a reposted event, the system writes a sticky `Repo
 
 The check lives inside the shared auto-repost path, so it applies to every way a shareable event arrives: an inbound `Create` carrying an original or an inbound `Announce` carrying a repost (see [DEC-014](dec-014-create-original-announce-repost.md)). A dismissal suppresses the outbound `Announce` and its paired `Create(Note)` together.
 
+Stickiness is scoped to state that records an explicit user choice. Where local state changed without an intent signal, the federated source stays authoritative: when a local `Space` row is deleted and the FK `SET NULL` clears `events.space_id`, a later inbound `Update` re-referencing the same `pavillion:space` re-creates the local row and re-pins the event. That null is automatic plumbing, not a decision, so it is not sticky. The behavior is pinned by `src/server/activitypub/test/place-spaces-atomic-save-federation.test.ts`.
+
 ## Context
 
 Before this decision, unposting a reposted event was fragile: if the source calendar re-broadcast or edited the event, the auto-repost handler would silently re-share it on the same calendar. Calendar owners had no durable way to say "no, not this one." The previous `unshareEvent` path destroyed the `SharedEventEntity` row but left no record of the owner's intent, so the next inbound activity re-sharing that event recreated it. This undermined the community-control principle ([DEC-001](dec-001-initial-product-planning.md)): followers had policy control over *future* follows but not over *this specific event I already said no to*.

@@ -161,12 +161,29 @@ describe('MediaService', () => {
         '/api/v1/media/calendar-1',
         expect.any(FormData),
         expect.objectContaining({
-          headers: {
-            'Content-Type': 'multipart/form-data',
-          },
           onUploadProgress: expect.any(Function),
         }),
       );
+    });
+
+    it('should leave the multipart Content-Type to the browser', async () => {
+      const validFile = new File(['test'], 'test.jpg', {
+        type: 'image/jpeg',
+      });
+
+      const axiosPost = vi.mocked(axios.post);
+      axiosPost.mockResolvedValue({
+        status: 200,
+        statusText: 'OK',
+        data: { media: { id: '1', filename: 'test.jpg' } },
+      });
+
+      await mediaService.uploadFile(validFile, 'calendar-1');
+
+      // A manually-set multipart Content-Type omits the boundary the server's
+      // multipart parser needs, so the request config must not carry one.
+      const config = axiosPost.mock.calls[0][2];
+      expect(config?.headers?.['Content-Type']).toBeUndefined();
     });
 
     it('should handle upload progress', async () => {

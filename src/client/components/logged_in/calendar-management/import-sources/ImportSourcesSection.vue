@@ -77,7 +77,7 @@
     >
       <div class="confirmation-modal">
         <p>
-          {{ t('confirm_remove_message', { url: state.sourceToRemove.url }) }}
+          {{ t('confirm_remove_message', { url: state.sourceToRemove.url ?? state.sourceToRemove.originalFilename ?? '' }) }}
         </p>
         <div class="confirmation-modal__actions">
           <button
@@ -117,7 +117,7 @@ import AdminSectionHeader from '@/client/components/common/admin-section-header.
 import { useToast } from '@/client/composables/useToast';
 
 import ImportSourceList from './ImportSourceList.vue';
-import AddImportSourceForm from './AddImportSourceForm.vue';
+import AddImportSourceForm, { type SubmitPayload } from './AddImportSourceForm.vue';
 import VerifyOwnershipWizard from './VerifyOwnershipWizard.vue';
 
 const props = withDefaults(defineProps<{
@@ -199,11 +199,29 @@ const closeAddForm = () => {
 };
 
 /**
- * Create a new import source. On success, prepend to the list, emit
- * `source-added`, and open the DNS-challenge modal so the owner can
+ * Dispatch the form's discriminated submit to the matching create path.
+ * URL sources go through the verify-ownership flow; file sources are imported
+ * synchronously with an inline run summary and no wizard. The payload shape
+ * (`SubmitPayload`) is imported from AddImportSourceForm so the emit contract
+ * stays tied to its source of truth. The `type` field selects between the
+ * live-URL create path (which requires ownership verification) and the
+ * one-shot file-upload path (which imports immediately and needs no
+ * verification).
+ */
+const onAddSubmit = async (payload: SubmitPayload) => {
+  if (payload.type === 'file') {
+    await createFileSource(payload.file);
+    return;
+  }
+  await createUrlSource(payload.url);
+};
+
+/**
+ * Create a new URL-backed import source. On success, prepend to the list,
+ * emit `source-added`, and open the DNS-challenge modal so the owner can
  * publish the TXT record immediately (pv-1qcp.3.4).
  */
-const onAddSubmit = async (url: string) => {
+const createUrlSource = async (url: string) => {
   state.isAdding = true;
   state.addError = null;
   try {
@@ -215,6 +233,77 @@ const onAddSubmit = async (url: string) => {
   }
   catch (err) {
     console.error('Failed to create import source', err);
+    state.addError = (err as Error)?.message || t('error_creating');
+  }
+  finally {
+    state.isAdding = false;
+  }
+};
+
+/**
+ * Build one clause per calendar-wide dedup counter that is nonzero.
+ *
+ * These counters are the only record that an incoming event was
+ * deliberately left alone — skipped because a URL-sync source owns its
+ * origin, or preserved because the origin is flagged `locally_edited` —
+ * so a run that reports zero created and zero updated still explains
+ * itself. Shared by both run-summary toasts; the file-upload and manual
+ * sync paths differ only in their leading sentence.
+ *
+ * @param summary - The finished run's wire summary
+ * @returns Zero, one, or two localized clauses
+ */
+const buildDedupClauses = (summary: ImportRunSummary): string[] => {
+  const clauses: string[] = [];
+
+  if (summary.eventsSkippedSyncManaged > 0) {
+    clauses.push(
+      t('sync_skipped_sync_managed', { skipped: summary.eventsSkippedSyncManaged }),
+    );
+  }
+  if (summary.eventsPreservedLocalEdits > 0) {
+    clauses.push(
+      t('sync_preserved_local_edits', { preserved: summary.eventsPreservedLocalEdits }),
+    );
+  }
+
+  return clauses;
+};
+
+/**
+ * Build the human-readable summary for a completed file import from the run
+ * counters returned by `createSourceFromFile`.
+ *
+ * The file path computes the calendar-wide dedup counters, and the wire DTO
+ * now forwards them, so the same clauses the manual sync toast renders apply
+ * here too.
+ */
+const buildImportSummary = (run: ImportRunSummary): string =>
+  [
+    t('import_success', {
+      created: run.eventsCreated,
+      updated: run.eventsUpdated,
+    }),
+    ...buildDedupClauses(run),
+  ].join(' ');
+
+/**
+ * Create a file-backed import source from an uploaded .ics file. The upload
+ * imports events synchronously, so there is no ownership wizard — on success
+ * we prepend the source and surface a run summary toast.
+ */
+const createFileSource = async (file: File) => {
+  state.isAdding = true;
+  state.addError = null;
+  try {
+    const { source, run } = await service.createSourceFromFile(props.calendarId, file);
+    state.sources = [source, ...state.sources];
+    state.showAddForm = false;
+    emit('source-added', source);
+    toast.success(buildImportSummary(run));
+  }
+  catch (err) {
+    console.error('Failed to import calendar file', err);
     state.addError = (err as Error)?.message || t('error_creating');
   }
   finally {
@@ -254,41 +343,24 @@ const executeRemove = async () => {
 };
 
 /**
- * Compose the success-toast text for a finished import run.
+ * Compose the success-toast text for a finished manual sync run.
  *
  * Leads with the created/updated counts (or the no-changes variant when
- * neither moved), then appends one clause per calendar-wide dedup counter
- * that is nonzero. Those counters are the only record that an incoming
- * event was deliberately left alone — skipped because a URL-sync source
- * owns it, or preserved because it was edited locally — so a run that
- * reports zero created and zero updated still explains itself.
+ * neither moved), then appends the dedup clauses.
  *
  * @param summary - The finished run's wire summary
  * @returns The localized toast message
  */
 const buildSyncMessage = (summary: ImportRunSummary): string => {
   const hasChanges = summary.eventsCreated > 0 || summary.eventsUpdated > 0;
-  const clauses = [
-    hasChanges
-      ? t('sync_success', {
-        created: summary.eventsCreated,
-        updated: summary.eventsUpdated,
-      })
-      : t('sync_success_no_changes'),
-  ];
+  const lead = hasChanges
+    ? t('sync_success', {
+      created: summary.eventsCreated,
+      updated: summary.eventsUpdated,
+    })
+    : t('sync_success_no_changes');
 
-  if (summary.eventsSkippedSyncManaged > 0) {
-    clauses.push(
-      t('sync_skipped_sync_managed', { skipped: summary.eventsSkippedSyncManaged }),
-    );
-  }
-  if (summary.eventsPreservedLocalEdits > 0) {
-    clauses.push(
-      t('sync_preserved_local_edits', { preserved: summary.eventsPreservedLocalEdits }),
-    );
-  }
-
-  return clauses.join(' ');
+  return [lead, ...buildDedupClauses(summary)].join(' ');
 };
 
 /**
