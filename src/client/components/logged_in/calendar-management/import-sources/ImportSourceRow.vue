@@ -2,7 +2,24 @@
   <li class="import-source-row">
     <div class="import-source-row__main">
       <div class="import-source-row__header">
-        <span class="import-source-row__url" :title="source.url">{{ source.url }}</span>
+        <!--
+          `sourceLabel` is the source's display name: the feed URL for `url`
+          sources, or the uploaded filename for `file` sources. `original_filename`
+          is attacker-controlled (a user-supplied upload name) — it is rendered
+          via normal mustache interpolation, which Vue HTML-escapes. NEVER switch
+          this to v-html.
+        -->
+        <span class="import-source-row__url" :title="sourceLabel">{{ sourceLabel }}</span>
+        <!--
+          File sources carry a static 'File' badge in place of a verification
+          badge — a one-shot upload has no ongoing ownership to verify.
+        -->
+        <span
+          v-if="isFileSource"
+          class="import-source-row__badge import-source-row__badge--file"
+        >
+          {{ t('file_badge') }}
+        </span>
         <!--
           Verification state is static on render (not a live-updating status
           message), so role='status' would over-promise to assistive tech.
@@ -12,6 +29,7 @@
           insufficient.
         -->
         <span
+          v-else
           :class="['import-source-row__badge', `import-source-row__badge--${source.verificationState}`]"
           :aria-label="t('verification_badge_aria', { state: verificationStateLabel })"
         >
@@ -26,34 +44,39 @@
 
     <div class="import-source-row__actions">
       <button
-        v-if="needsVerification"
+        v-if="!isFileSource && needsVerification"
         type="button"
         class="btn-ghost import-source-row__verify-btn"
-        :aria-label="t('verify_aria', { url: source.url })"
+        :aria-label="t('verify_aria', { url: sourceLabel })"
         @click="onVerify"
       >
         <ShieldCheck :size="16" :stroke-width="2" aria-hidden="true" />
         {{ t('dns_challenge.verify_button') }}
       </button>
       <!--
-        sr-only description that explains *why* the Sync Now button is
-        disabled. The `title` attribute alone is not exposed by many
-        screen readers; an aria-describedby reference on the button is
-        the recommended pattern (WCAG SC 4.1.2 Name, Role, Value).
+        Sync Now is only meaningful for live URL feeds. File sources are a
+        one-shot import with no feed to re-poll, so the button (and its
+        disabled-reason description) are omitted entirely.
+
+        sr-only description explains *why* the Sync Now button is disabled.
+        The `title` attribute alone is not exposed by many screen readers; an
+        aria-describedby reference on the button is the recommended pattern
+        (WCAG SC 4.1.2 Name, Role, Value).
       -->
       <span
-        v-if="!canSync"
+        v-if="!isFileSource && !canSync"
         :id="syncDisabledDescId"
         class="sr-only"
       >
         {{ t('sync_disabled_description') }}
       </span>
       <button
+        v-if="!isFileSource"
         type="button"
         class="btn-ghost"
         :disabled="!canSync || isSyncing"
         :aria-disabled="!canSync || isSyncing"
-        :aria-label="t('sync_aria', { url: source.url })"
+        :aria-label="t('sync_aria', { url: sourceLabel })"
         :aria-describedby="syncAriaDescribedBy"
         @click="onSync"
       >
@@ -64,7 +87,7 @@
         type="button"
         class="btn-ghost btn-ghost--danger"
         :disabled="isRemoving"
-        :aria-label="t('remove_source_aria', { url: source.url })"
+        :aria-label="t('remove_source_aria', { url: sourceLabel })"
         @click="onRemove"
       >
         <Trash2 :size="16" :stroke-width="2" aria-hidden="true" />
@@ -98,6 +121,23 @@ const { t } = useTranslation('calendars', { keyPrefix: 'import' });
 const uid = Math.random().toString(36).slice(2, 10);
 const syncDisabledDescId = `import-source-sync-disabled-${uid}`;
 
+/**
+ * A file-backed source (`source_type === 'file'`) is a one-shot .ics upload:
+ * it has no live URL to poll and no ownership to verify, so its row renders a
+ * filename + 'File' badge and hides the Sync/Verify actions.
+ */
+const isFileSource = computed(() => props.source.sourceType === 'file');
+
+/**
+ * Display name for the source: the feed URL for `url` sources, or the uploaded
+ * filename for `file` sources. Used for the visible label plus the row's
+ * action aria-labels. Rendered via mustache interpolation only (never v-html)
+ * because `originalFilename` is attacker-controlled.
+ */
+const sourceLabel = computed(() =>
+  (isFileSource.value ? props.source.originalFilename : props.source.url) ?? '',
+);
+
 const verificationStateLabel = computed(() =>
   t(`verification_state.${props.source.verificationState}`),
 );
@@ -106,9 +146,13 @@ const lastSyncLabel = computed(() => {
   if (!props.source.lastFetchedAt) {
     return t('last_sync_never');
   }
-  return t('last_sync_at', {
-    time: props.source.lastFetchedAt.toLocaleString(),
-  });
+  const time = props.source.lastFetchedAt.toLocaleString();
+  // A file source is a one-shot upload, not a polled feed — label its
+  // timestamp "Imported" rather than "Last synced" to match the File badge
+  // and the hidden Sync/Verify actions.
+  return isFileSource.value
+    ? t('imported_at', { time })
+    : t('last_sync_at', { time });
 });
 
 const canSync = computed(() => props.source.verificationState === 'verified');
@@ -232,6 +276,17 @@ const onVerify = () => {
 
       @media (prefers-color-scheme: dark) {
         color: var(--pav-color-red-400);
+      }
+    }
+
+    // File sources are one-shot uploads with no verification lifecycle, so
+    // their badge uses a neutral (non-status) tone.
+    &--file {
+      background-color: rgba(120, 113, 108, 0.1);
+      color: var(--pav-color-stone-700);
+
+      @media (prefers-color-scheme: dark) {
+        color: var(--pav-color-stone-300);
       }
     }
   }
