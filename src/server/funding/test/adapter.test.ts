@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import sinon from 'sinon';
+import Stripe from 'stripe';
 import { StripeAdapter } from '../service/provider/stripe';
 import { PayPalAdapter } from '../service/provider/paypal';
 import { MockStripeAdapter, MockPayPalAdapter } from '../service/provider/mock_adapters';
@@ -106,6 +107,15 @@ describe('Payment Provider Adapters', () => {
 
       // Replace the Stripe instance with our mock
       (stripeAdapter as any).stripe = mockStripe;
+    });
+
+    it('should pin the Stripe API version to the version the installed SDK types describe', () => {
+      // A drifted pin makes Stripe serialize responses in an older shape than
+      // the SDK types (and this adapter's field reads) expect.
+      const adapter = new StripeAdapter({ apiKey: 'sk_test_123' }, 'whsec_test');
+      const client = (adapter as any).stripe;
+
+      expect(client.getApiField('version')).toBe(Stripe.API_VERSION);
     });
 
     describe('validateCredentials', () => {
@@ -274,8 +284,15 @@ describe('Payment Provider Adapters', () => {
           type: 'invoice.paid',
           data: {
             object: {
-              subscription: 'sub_inv_123',
               customer: 'cus_inv_123',
+              parent: {
+                type: 'subscription_details',
+                quote_details: null,
+                subscription_details: {
+                  subscription: 'sub_inv_123',
+                  metadata: null,
+                },
+              },
             },
           },
         });
@@ -291,21 +308,115 @@ describe('Payment Provider Adapters', () => {
         expect(event.calendarIds).toBeUndefined();
       });
 
-      it('should parse invoice.payment_failed event', () => {
+      it('should parse invoice.payment_succeeded event', () => {
         const payload = JSON.stringify({
-          id: 'evt_inv_failed',
-          type: 'invoice.payment_failed',
+          id: 'evt_invoice_succeeded',
+          type: 'invoice.payment_succeeded',
           data: {
             object: {
-              subscription: 'sub_fail_123',
-              customer: 'cus_fail_123',
+              customer: 'cus_succ_123',
+              parent: {
+                type: 'subscription_details',
+                quote_details: null,
+                subscription_details: {
+                  subscription: 'sub_succ_123',
+                  metadata: null,
+                },
+              },
             },
           },
         });
 
         const event = stripeAdapter.parseWebhookEvent(payload);
 
+        expect(event.subscriptionId).toBe('sub_succ_123');
+        expect(event.status).toBe('active');
+      });
+
+      it('should parse invoice.payment_failed event', () => {
+        const payload = JSON.stringify({
+          id: 'evt_inv_failed',
+          type: 'invoice.payment_failed',
+          data: {
+            object: {
+              customer: 'cus_fail_123',
+              parent: {
+                type: 'subscription_details',
+                quote_details: null,
+                subscription_details: {
+                  subscription: 'sub_fail_123',
+                  metadata: null,
+                },
+              },
+            },
+          },
+        });
+
+        const event = stripeAdapter.parseWebhookEvent(payload);
+
+        expect(event.subscriptionId).toBe('sub_fail_123');
+        expect(event.customerId).toBe('cus_fail_123');
         expect(event.status).toBe('past_due');
+      });
+
+      it('should resolve the invoice subscription when it is expanded to an object', () => {
+        const payload = JSON.stringify({
+          id: 'evt_inv_expanded',
+          type: 'invoice.paid',
+          data: {
+            object: {
+              customer: 'cus_expanded',
+              parent: {
+                type: 'subscription_details',
+                quote_details: null,
+                subscription_details: {
+                  subscription: { id: 'sub_expanded_123', object: 'subscription' },
+                  metadata: null,
+                },
+              },
+            },
+          },
+        });
+
+        const event = stripeAdapter.parseWebhookEvent(payload);
+
+        expect(event.subscriptionId).toBe('sub_expanded_123');
+      });
+
+      it('should fall back to the legacy top-level invoice subscription field', () => {
+        const payload = JSON.stringify({
+          id: 'evt_inv_legacy',
+          type: 'invoice.paid',
+          data: {
+            object: {
+              subscription: 'sub_legacy_123',
+              customer: 'cus_legacy_123',
+            },
+          },
+        });
+
+        const event = stripeAdapter.parseWebhookEvent(payload);
+
+        expect(event.subscriptionId).toBe('sub_legacy_123');
+        expect(event.status).toBe('active');
+      });
+
+      it('should leave subscriptionId undefined for an invoice with no subscription parent', () => {
+        const payload = JSON.stringify({
+          id: 'evt_inv_one_off',
+          type: 'invoice.paid',
+          data: {
+            object: {
+              customer: 'cus_one_off',
+              parent: null,
+            },
+          },
+        });
+
+        const event = stripeAdapter.parseWebhookEvent(payload);
+
+        expect(event.subscriptionId).toBeUndefined();
+        expect(event.customerId).toBe('cus_one_off');
       });
 
       it('should parse customer.subscription.deleted event', () => {
@@ -328,6 +439,7 @@ describe('Payment Provider Adapters', () => {
 
       it('should parse customer.subscription.updated with status mapping', () => {
         const now = Math.floor(Date.now() / 1000);
+        const periodEnd = now + 30 * 24 * 60 * 60;
         const payload = JSON.stringify({
           id: 'evt_sub_updated',
           type: 'customer.subscription.updated',
@@ -336,8 +448,16 @@ describe('Payment Provider Adapters', () => {
               id: 'sub_upd_123',
               customer: 'cus_upd_123',
               status: 'past_due',
-              current_period_start: now,
-              current_period_end: now + 30 * 24 * 60 * 60,
+              items: {
+                object: 'list',
+                data: [
+                  {
+                    id: 'si_upd_123',
+                    current_period_start: now,
+                    current_period_end: periodEnd,
+                  },
+                ],
+              },
             },
           },
         });
@@ -346,8 +466,98 @@ describe('Payment Provider Adapters', () => {
 
         expect(event.subscriptionId).toBe('sub_upd_123');
         expect(event.status).toBe('past_due');
-        expect(event.currentPeriodStart).toBeInstanceOf(Date);
-        expect(event.currentPeriodEnd).toBeInstanceOf(Date);
+        expect(event.currentPeriodStart).toEqual(new Date(now * 1000));
+        expect(event.currentPeriodEnd).toEqual(new Date(periodEnd * 1000));
+      });
+
+      it('should fall back to legacy top-level subscription period fields', () => {
+        const now = Math.floor(Date.now() / 1000);
+        const periodEnd = now + 30 * 24 * 60 * 60;
+        const payload = JSON.stringify({
+          id: 'evt_sub_updated_legacy',
+          type: 'customer.subscription.updated',
+          data: {
+            object: {
+              id: 'sub_upd_legacy',
+              customer: 'cus_upd_legacy',
+              status: 'active',
+              current_period_start: now,
+              current_period_end: periodEnd,
+            },
+          },
+        });
+
+        const event = stripeAdapter.parseWebhookEvent(payload);
+
+        expect(event.currentPeriodStart).toEqual(new Date(now * 1000));
+        expect(event.currentPeriodEnd).toEqual(new Date(periodEnd * 1000));
+      });
+
+      it('should omit period dates when no billing period can be resolved', () => {
+        const payload = JSON.stringify({
+          id: 'evt_sub_no_period',
+          type: 'customer.subscription.updated',
+          data: {
+            object: {
+              id: 'sub_no_period',
+              customer: 'cus_no_period',
+              status: 'active',
+              items: { object: 'list', data: [] },
+            },
+          },
+        });
+
+        const event = stripeAdapter.parseWebhookEvent(payload);
+
+        expect(event.subscriptionId).toBe('sub_no_period');
+        expect(event.status).toBe('active');
+        expect(event.currentPeriodStart).toBeUndefined();
+        expect(event.currentPeriodEnd).toBeUndefined();
+      });
+    });
+
+    describe('getSubscription', () => {
+      it('should read the billing period from the first subscription item', async () => {
+        const start = Math.floor(Date.now() / 1000);
+        const end = start + 30 * 24 * 60 * 60;
+        mockStripe.subscriptions.retrieve.resolves({
+          id: 'sub_conv_123',
+          customer: 'cus_conv_123',
+          status: 'active',
+          items: {
+            data: [
+              {
+                id: 'si_conv_123',
+                current_period_start: start,
+                current_period_end: end,
+                price: { unit_amount: 1500, currency: 'usd' },
+              },
+            ],
+          },
+        });
+
+        const subscription = await stripeAdapter.getSubscription('sub_conv_123');
+
+        expect(subscription.providerSubscriptionId).toBe('sub_conv_123');
+        expect(subscription.providerCustomerId).toBe('cus_conv_123');
+        expect(subscription.status).toBe('active');
+        expect(subscription.currentPeriodStart).toEqual(new Date(start * 1000));
+        expect(subscription.currentPeriodEnd).toEqual(new Date(end * 1000));
+        expect(subscription.amount).toBe(1500000);
+        expect(subscription.currency).toBe('USD');
+      });
+
+      it('should throw when the subscription has no resolvable billing period', async () => {
+        mockStripe.subscriptions.retrieve.resolves({
+          id: 'sub_no_period',
+          customer: 'cus_no_period',
+          status: 'active',
+          items: { data: [] },
+        });
+
+        await expect(stripeAdapter.getSubscription('sub_no_period')).rejects.toThrow(
+          'has no billing period',
+        );
       });
     });
 
