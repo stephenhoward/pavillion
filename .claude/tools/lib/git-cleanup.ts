@@ -165,3 +165,55 @@ export function classifyBranch(
     reason: `${branch.upstreamGone ? 'upstream gone' : 'unmerged'}, ${aheadCount} commit(s) not on main, no PR found`,
   };
 }
+
+export const MTIME_THRESHOLD_MS = 30 * 60_000;
+
+/** Any `git status --porcelain` output means uncommitted changes. */
+export function isDirty(statusOutput: string): boolean {
+  return statusOutput.trim().length > 0;
+}
+
+/**
+ * mtime guard: catches a worktree provisioned for an agent that has not
+ * started working yet (no live process, nothing dirty). Complements the
+ * lsof check, which only sees processes running right now.
+ */
+export function isRecentlyModified(mtimesMs: number[], nowMs: number): boolean {
+  return mtimesMs.some((m) => nowMs - m < MTIME_THRESHOLD_MS);
+}
+
+/** Parse `lsof -a -d cwd -Fn` output: n-prefixed lines are cwd paths. */
+export function parseCwdPaths(lsofOutput: string): string[] {
+  return lsofOutput
+    .split('\n')
+    .filter((line) => line.startsWith('n'))
+    .map((line) => line.slice(1));
+}
+
+/** True when any live process has its cwd at or inside the worktree. */
+export function isActiveWorktree(path: string, cwds: string[]): boolean {
+  return cwds.some((cwd) => cwd === path || cwd.startsWith(`${path}/`));
+}
+
+export interface WorktreeChecks {
+  locked: boolean;
+  dirty: boolean;
+  recentlyModified: boolean;
+  active: boolean;
+  isCurrentSession: boolean;
+  isPrimary: boolean;
+}
+
+/**
+ * Single source of truth for worktree-removal safety. classify() and
+ * execute()'s re-verify both call this — never fork the logic.
+ */
+export function assessWorktree(checks: WorktreeChecks): { removable: boolean; reason: string } {
+  if (checks.isPrimary) return { removable: false, reason: 'primary checkout — never removed' };
+  if (checks.isCurrentSession) return { removable: false, reason: 'current session worktree — never removed' };
+  if (checks.locked) return { removable: false, reason: 'worktree is locked' };
+  if (checks.dirty) return { removable: false, reason: 'uncommitted changes present' };
+  if (checks.active) return { removable: false, reason: 'live process has cwd inside worktree' };
+  if (checks.recentlyModified) return { removable: false, reason: 'modified within the last 30 minutes' };
+  return { removable: true, reason: 'clean, inactive, unlocked' };
+}

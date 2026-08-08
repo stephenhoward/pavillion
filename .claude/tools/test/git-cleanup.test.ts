@@ -197,3 +197,78 @@ describe('classifyBranch', () => {
     expect(c.category).toBe('merged-pr');
   });
 });
+
+import {
+  isDirty,
+  isRecentlyModified,
+  parseCwdPaths,
+  isActiveWorktree,
+  assessWorktree,
+  MTIME_THRESHOLD_MS,
+  type WorktreeChecks,
+} from '../lib/git-cleanup.js';
+
+const cleanChecks: WorktreeChecks = {
+  locked: false, dirty: false, recentlyModified: false,
+  active: false, isCurrentSession: false, isPrimary: false,
+};
+
+describe('isDirty', () => {
+  it('is true for any porcelain output, false for empty', () => {
+    expect(isDirty(' M src/foo.ts')).toBe(true);
+    expect(isDirty('?? new-file')).toBe(true);
+    expect(isDirty('')).toBe(false);
+    expect(isDirty('  \n')).toBe(false);
+  });
+});
+
+describe('isRecentlyModified', () => {
+  const now = 1_000_000_000_000;
+  it('is true when any mtime is within the 30-minute threshold', () => {
+    expect(isRecentlyModified([now - MTIME_THRESHOLD_MS + 1000], now)).toBe(true);
+    expect(isRecentlyModified([now - MTIME_THRESHOLD_MS - 1000, now - 1000], now)).toBe(true);
+  });
+  it('is false when all mtimes are older than the threshold', () => {
+    expect(isRecentlyModified([now - MTIME_THRESHOLD_MS - 1000], now)).toBe(false);
+    expect(isRecentlyModified([], now)).toBe(false);
+  });
+});
+
+describe('parseCwdPaths', () => {
+  it('extracts n-lines from lsof -Fn output', () => {
+    const out = 'p123\nn/Users/x/repo\np456\nn/Users/x/.superset/worktrees/u/foo\n';
+    expect(parseCwdPaths(out)).toEqual(['/Users/x/repo', '/Users/x/.superset/worktrees/u/foo']);
+  });
+  it('returns empty for empty output', () => {
+    expect(parseCwdPaths('')).toEqual([]);
+  });
+});
+
+describe('isActiveWorktree', () => {
+  const cwds = ['/Users/x/wt-a', '/Users/x/wt-b/sub/dir'];
+  it('matches exact cwd and cwd nested inside the worktree', () => {
+    expect(isActiveWorktree('/Users/x/wt-a', cwds)).toBe(true);
+    expect(isActiveWorktree('/Users/x/wt-b', cwds)).toBe(true);
+  });
+  it('does not prefix-match sibling paths', () => {
+    expect(isActiveWorktree('/Users/x/wt', cwds)).toBe(false);
+  });
+});
+
+describe('assessWorktree', () => {
+  it('is removable only when every check passes', () => {
+    expect(assessWorktree(cleanChecks).removable).toBe(true);
+  });
+  it.each([
+    ['locked', { locked: true }, 'locked'],
+    ['dirty', { dirty: true }, 'uncommitted changes'],
+    ['recent', { recentlyModified: true }, 'modified within the last 30 minutes'],
+    ['active', { active: true }, 'live process'],
+    ['current session', { isCurrentSession: true }, 'current session'],
+    ['primary', { isPrimary: true }, 'primary checkout'],
+  ] as const)('%s worktree is protected', (_label, override, reasonFragment) => {
+    const result = assessWorktree({ ...cleanChecks, ...override });
+    expect(result.removable).toBe(false);
+    expect(result.reason).toContain(reasonFragment);
+  });
+});
