@@ -325,35 +325,67 @@ export class StripeAdapter implements PaymentProviderAdapter {
    * which the instance administrator sets independently of this adapter's
    * pin, so the legacy field is still honoured as a fallback.
    *
+   * The resolved id is used downstream as a lookup and authorization key for
+   * the local funding plan, so it is returned only after being confirmed to
+   * be a non-empty string.
+   *
    * @param invoice - Invoice object from a webhook payload
    * @param event - Enclosing event, used for diagnostic markers only
    * @returns Subscription ID, or undefined for an invoice with no subscription
    * @private
    */
   private extractInvoiceSubscriptionId(invoice: Stripe.Invoice, event: Stripe.Event): string | undefined {
-    const current = invoice.parent?.subscription_details?.subscription;
-    if (current) {
-      return typeof current === 'string' ? current : current.id;
+    const parentReference = invoice.parent?.subscription_details?.subscription;
+    const legacyReference = (invoice as unknown as {
+      subscription?: string | Stripe.Subscription;
+    }).subscription;
+
+    // The parent shape wins whenever it is present, so resolution stays
+    // deterministic for payloads that carry both.
+    const reference = parentReference ?? legacyReference;
+
+    if (reference === undefined || reference === null) {
+      if (invoice.parent?.type === 'subscription_details') {
+        // The parent claims a subscription but carries no reference: drift.
+        logger.warn({
+          eventId: event.id,
+          eventType: event.type,
+        }, 'Stripe invoice parent claims a subscription but carries no reference');
+      }
+      else {
+        // No parent, or a parent of some other kind: an ordinary one-off or
+        // quote invoice, not a signal worth raising.
+        logger.debug({
+          eventId: event.id,
+          eventType: event.type,
+          parentType: invoice.parent?.type,
+        }, 'Stripe invoice webhook has no subscription parent');
+      }
+      return undefined;
     }
 
-    const legacy = (invoice as unknown as { subscription?: string | Stripe.Subscription }).subscription;
-    if (legacy) {
-      const subscriptionId = typeof legacy === 'string' ? legacy : legacy.id;
+    const subscriptionId = typeof reference === 'string'
+      ? reference
+      : (reference as { id?: unknown }).id;
+
+    if (typeof subscriptionId !== 'string' || subscriptionId.length === 0) {
+      logger.warn({
+        eventId: event.id,
+        eventType: event.type,
+        referenceType: typeof reference,
+      }, 'Stripe invoice subscription reference is not a usable id');
+      return undefined;
+    }
+
+    if (parentReference === undefined || parentReference === null) {
       logger.debug({
         eventId: event.id,
         eventType: event.type,
         subscriptionId,
       }, 'Stripe invoice webhook used the legacy top-level subscription field');
-      return subscriptionId;
     }
 
-    logger.warn({
-      eventId: event.id,
-      eventType: event.type,
-      hasParent: Boolean(invoice.parent),
-      parentType: invoice.parent?.type,
-    }, 'Stripe invoice webhook has no resolvable subscription');
-    return undefined;
+    return subscriptionId;
   }
 
   /**
@@ -364,8 +396,13 @@ export class StripeAdapter implements PaymentProviderAdapter {
    * remain a fallback for webhook payloads serialized with an older API
    * version (see extractInvoiceSubscriptionId).
    *
+   * Both bounds are taken from a single shape. Item-level and
+   * subscription-level anchors are not guaranteed to describe the same
+   * window, and the end bound drives access expiry, so a period spliced from
+   * two shapes could grant entitlement beyond what was paid for.
+   *
    * @param subscription - Stripe subscription object
-   * @returns Billing period, or null when neither shape carries one
+   * @returns Billing period, or null when neither shape carries a whole one
    * @private
    */
   private extractBillingPeriod(subscription: Stripe.Subscription): BillingPeriod | null {
@@ -375,16 +412,29 @@ export class StripeAdapter implements PaymentProviderAdapter {
       current_period_end?: number;
     };
 
-    const start = item?.current_period_start ?? legacy.current_period_start;
-    const end = item?.current_period_end ?? legacy.current_period_end;
+    return this.toBillingPeriod(item?.current_period_start, item?.current_period_end)
+      ?? this.toBillingPeriod(legacy.current_period_start, legacy.current_period_end);
+  }
 
-    if (typeof start !== 'number' || typeof end !== 'number') {
+  /**
+   * Build a billing period from a pair of Stripe epoch-second timestamps
+   *
+   * Rejects anything that is not a finite number, so a malformed bound
+   * becomes an absent period rather than an invalid Date.
+   *
+   * @param start - Period start in epoch seconds
+   * @param end - Period end in epoch seconds
+   * @returns Billing period, or null if either bound is unusable
+   * @private
+   */
+  private toBillingPeriod(start: number | undefined, end: number | undefined): BillingPeriod | null {
+    if (!Number.isFinite(start) || !Number.isFinite(end)) {
       return null;
     }
 
     return {
-      start: new Date(start * 1000),
-      end: new Date(end * 1000),
+      start: new Date((start as number) * 1000),
+      end: new Date((end as number) * 1000),
     };
   }
 

@@ -401,6 +401,81 @@ describe('Payment Provider Adapters', () => {
         expect(event.status).toBe('active');
       });
 
+      it('should prefer the parent subscription when both shapes are present', () => {
+        // The resolved id is an authorization key downstream, so precedence
+        // between the two shapes must never silently invert.
+        const payload = JSON.stringify({
+          id: 'evt_inv_both_shapes',
+          type: 'invoice.paid',
+          data: {
+            object: {
+              subscription: 'sub_legacy_shape',
+              customer: 'cus_both_shapes',
+              parent: {
+                type: 'subscription_details',
+                quote_details: null,
+                subscription_details: {
+                  subscription: 'sub_modern_shape',
+                  metadata: null,
+                },
+              },
+            },
+          },
+        });
+
+        const event = stripeAdapter.parseWebhookEvent(payload);
+
+        expect(event.subscriptionId).toBe('sub_modern_shape');
+      });
+
+      it('should leave subscriptionId undefined when the subscription reference has no id', () => {
+        const payload = JSON.stringify({
+          id: 'evt_inv_malformed',
+          type: 'invoice.paid',
+          data: {
+            object: {
+              customer: 'cus_malformed',
+              parent: {
+                type: 'subscription_details',
+                quote_details: null,
+                subscription_details: {
+                  subscription: { object: 'subscription' },
+                  metadata: null,
+                },
+              },
+            },
+          },
+        });
+
+        const event = stripeAdapter.parseWebhookEvent(payload);
+
+        expect(event.subscriptionId).toBeUndefined();
+      });
+
+      it('should leave subscriptionId undefined when the subscription id is not a string', () => {
+        const payload = JSON.stringify({
+          id: 'evt_inv_nonstring_id',
+          type: 'invoice.paid',
+          data: {
+            object: {
+              customer: 'cus_nonstring_id',
+              parent: {
+                type: 'subscription_details',
+                quote_details: null,
+                subscription_details: {
+                  subscription: { id: 12345, object: 'subscription' },
+                  metadata: null,
+                },
+              },
+            },
+          },
+        });
+
+        const event = stripeAdapter.parseWebhookEvent(payload);
+
+        expect(event.subscriptionId).toBeUndefined();
+      });
+
       it('should leave subscriptionId undefined for an invoice with no subscription parent', () => {
         const payload = JSON.stringify({
           id: 'evt_inv_one_off',
@@ -493,6 +568,40 @@ describe('Payment Provider Adapters', () => {
         expect(event.currentPeriodEnd).toEqual(new Date(periodEnd * 1000));
       });
 
+      it('should not splice a period from the item and legacy shapes', () => {
+        // Item-level and subscription-level anchors need not describe the same
+        // window, and the end bound drives access expiry, so a half-populated
+        // payload must yield no period rather than a mixed one.
+        const now = Math.floor(Date.now() / 1000);
+        const payload = JSON.stringify({
+          id: 'evt_sub_mixed_shapes',
+          type: 'customer.subscription.updated',
+          data: {
+            object: {
+              id: 'sub_mixed_shapes',
+              customer: 'cus_mixed_shapes',
+              status: 'active',
+              current_period_end: now + 90 * 24 * 60 * 60,
+              items: {
+                object: 'list',
+                data: [
+                  {
+                    id: 'si_mixed_shapes',
+                    current_period_start: now,
+                  },
+                ],
+              },
+            },
+          },
+        });
+
+        const event = stripeAdapter.parseWebhookEvent(payload);
+
+        expect(event.subscriptionId).toBe('sub_mixed_shapes');
+        expect(event.currentPeriodStart).toBeUndefined();
+        expect(event.currentPeriodEnd).toBeUndefined();
+      });
+
       it('should omit period dates when no billing period can be resolved', () => {
         const payload = JSON.stringify({
           id: 'evt_sub_no_period',
@@ -545,6 +654,27 @@ describe('Payment Provider Adapters', () => {
         expect(subscription.currentPeriodEnd).toEqual(new Date(end * 1000));
         expect(subscription.amount).toBe(1500000);
         expect(subscription.currency).toBe('USD');
+      });
+
+      it('should throw rather than build an invalid date from a non-finite bound', async () => {
+        mockStripe.subscriptions.retrieve.resolves({
+          id: 'sub_nan_period',
+          customer: 'cus_nan_period',
+          status: 'active',
+          items: {
+            data: [
+              {
+                id: 'si_nan_period',
+                current_period_start: Number.NaN,
+                current_period_end: Number.POSITIVE_INFINITY,
+              },
+            ],
+          },
+        });
+
+        await expect(stripeAdapter.getSubscription('sub_nan_period')).rejects.toThrow(
+          'has no billing period',
+        );
       });
 
       it('should throw when the subscription has no resolvable billing period', async () => {
