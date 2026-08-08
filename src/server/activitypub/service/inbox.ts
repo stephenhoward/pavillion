@@ -501,6 +501,24 @@ class ProcessInboxService {
           await this.processJoinActivity(calendar, message.message);
         }
         break;
+      case 'Ignore':
+        // FEP-8a8e's reply to an unhandled Join, in the receiving direction.
+        // An Ignore is purely informational — it says the referenced activity
+        // was seen and deliberately not acted on. Pavillion keeps no Join or
+        // attendance state (DEC-004), so there is nothing to clear and nothing
+        // to reply to; the persisted ap_inbox row IS the outcome.
+        //
+        // This is a per-type case rather than a general "recognized but
+        // unhandled types are a no-op" default, because the `default: throw`
+        // below is load-bearing: it is what marks a type dispatch genuinely
+        // does not know about as processed_status: 'error'. Broadening the
+        // default would silence that signal for every future type, including
+        // ones added to the route switch but never wired into dispatch.
+        logger.info(
+          { activityId: message.id, calendarUrlName: calendar.urlName },
+          '[INBOX] Recorded inbound Ignore; no action taken',
+        );
+        break;
       case 'Flag':
         {
           await this.processFlagActivity(calendar, message.message);

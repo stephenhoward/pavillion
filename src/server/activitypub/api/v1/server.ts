@@ -10,6 +10,7 @@ import AcceptActivity from '@/server/activitypub/model/action/accept';
 import AnnounceActivity from '@/server/activitypub/model/action/announce';
 import UndoActivity from '@/server/activitypub/model/action/undo';
 import JoinActivity from '@/server/activitypub/model/action/join';
+import IgnoreActivity from '@/server/activitypub/model/action/ignore';
 import FlagActivity from '@/server/activitypub/model/action/flag';
 import ActivityPubInterface from '@/server/activitypub/interface';
 import { logError } from '@/server/common/helper/error-logger';
@@ -35,6 +36,7 @@ import {
   announceActivitySchema,
   undoActivitySchema,
   joinActivitySchema,
+  ignoreActivitySchema,
   flagActivitySchema,
 } from '@/server/activitypub/validation/schemas';
 
@@ -412,6 +414,12 @@ export default class ActivityPubServerRoutes {
         // answered with an Ignore. Pavillion never acts on the Join itself.
         activityValidation = joinActivitySchema.safeParse(req.body);
         break;
+      case 'Ignore':
+        // FEP-8a8e's reply to an unhandled Join. Pavillion emits one itself,
+        // so it must accept one: an Ignore is informational and is recorded
+        // rather than acted on (see dispatchByType).
+        activityValidation = ignoreActivitySchema.safeParse(req.body);
+        break;
       case 'Flag':
         // Cross-instance moderation report. Accepted from any instance this
         // one has not blocked — see the sender-policy note on FILTERED_TYPES
@@ -506,6 +514,9 @@ export default class ActivityPubServerRoutes {
         break;
       case 'Join':
         message = JoinActivity.fromObject(req.body);
+        break;
+      case 'Ignore':
+        message = IgnoreActivity.fromObject(req.body);
         break;
       case 'Flag':
         message = FlagActivity.fromObject(req.body);
