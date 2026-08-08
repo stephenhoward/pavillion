@@ -290,6 +290,101 @@ describe('addToInbox', () => {
     expect(res.send.calledWith('Message received')).toBe(true);
   });
 
+  it('should succeed with a valid Flag activity and record http_signature auth', async () => {
+    let req = {
+      params: { urlname: 'testuser' },
+      body: {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        type: 'Flag',
+        id: 'https://remote.example.com/flags/abc-123',
+        actor: 'https://remote.example.com/calendars/reporter',
+        object: 'https://local.example.com/events/6b1f0a5e-0000-4000-8000-000000000001',
+        content: 'This event is spam.',
+        summary: 'Event report: spam',
+        tag: [{ type: 'Hashtag', name: '#spam' }],
+        published: '2026-05-22T12:00:00Z',
+      },
+    };
+    let res = { status: sinon.stub(), send: sinon.stub(), json: sinon.stub() };
+    let userFindMock = sandbox.stub(calendarAPI, 'getCalendarByName');
+    let inboxMock = sandbox.stub(activityPubInterface, 'addToInbox');
+
+    res.status.returns(res);
+    userFindMock.resolves(new Calendar('testId', 'testuser'));
+    inboxMock.resolves();
+
+    await routes.addToInbox(req as any, res as any);
+
+    expect(res.status.calledWith(200)).toBe(true);
+    expect(res.send.calledWith('Message received')).toBe(true);
+    expect(inboxMock.calledOnce).toBe(true);
+
+    // The Flag must be constructed and handed to the inbox intact — the
+    // category hashtag is what processFlagActivity round-trips into the
+    // report's category.
+    const message = inboxMock.firstCall.args[1] as any;
+    expect(message.type).toBe('Flag');
+    expect(message.id).toBe('https://remote.example.com/flags/abc-123');
+    expect(message.tag).toEqual([{ type: 'Hashtag', name: '#spam' }]);
+
+    const auth = inboxMock.firstCall.args[2] as any;
+    expect(auth.source).toBe('http_signature');
+  });
+
+  it('should fail with a Flag activity missing object', async () => {
+    let req = {
+      params: { urlname: 'testuser' },
+      body: {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        type: 'Flag',
+        id: 'https://remote.example.com/flags/abc-124',
+        actor: 'https://remote.example.com/calendars/reporter',
+      },
+    };
+    let res = { status: sinon.stub(), send: sinon.stub(), json: sinon.stub() };
+    let userFindMock = sandbox.stub(calendarAPI, 'getCalendarByName');
+    let inboxMock = sandbox.stub(activityPubInterface, 'addToInbox');
+
+    res.status.returns(res);
+    userFindMock.resolves(new Calendar('testId', 'testuser'));
+    inboxMock.resolves();
+
+    await routes.addToInbox(req as any, res as any);
+
+    expect(res.status.calledWith(400)).toBe(true);
+    const response = res.json.firstCall.args[0];
+    expect(response.error).toBe('Invalid Flag activity');
+    expect(inboxMock.called).toBe(false);
+  });
+
+  it('should fail with a Flag activity whose content exceeds the report description cap', async () => {
+    let req = {
+      params: { urlname: 'testuser' },
+      body: {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        type: 'Flag',
+        id: 'https://remote.example.com/flags/abc-125',
+        actor: 'https://remote.example.com/calendars/reporter',
+        object: 'https://local.example.com/events/6b1f0a5e-0000-4000-8000-000000000001',
+        content: 'x'.repeat(2001),
+      },
+    };
+    let res = { status: sinon.stub(), send: sinon.stub(), json: sinon.stub() };
+    let userFindMock = sandbox.stub(calendarAPI, 'getCalendarByName');
+    let inboxMock = sandbox.stub(activityPubInterface, 'addToInbox');
+
+    res.status.returns(res);
+    userFindMock.resolves(new Calendar('testId', 'testuser'));
+    inboxMock.resolves();
+
+    await routes.addToInbox(req as any, res as any);
+
+    expect(res.status.calledWith(400)).toBe(true);
+    const response = res.json.firstCall.args[0];
+    expect(response.error).toBe('Invalid Flag activity');
+    expect(inboxMock.called).toBe(false);
+  });
+
   it('should fail with missing @context field', async () => {
     let req = {
       params: { urlname: 'testuser' },

@@ -259,13 +259,21 @@ class ProcessInboxService {
           const isBlocked = await this.moderationInterface.isInstanceBlocked(domain);
 
           if (isBlocked) {
-            logger.info({ domain, actorUri }, '[INBOX] Rejected activity from blocked instance');
+            // A Flag's actor is a remote moderation reporter. Everywhere else
+            // that identity is reduced to a bare instance host before anything
+            // durable is written (see anonymizeFlagActor); the rejection logs
+            // must not be the one place that records it in full. The host is
+            // retained — instance blocking is decided and audited at that
+            // granularity — but nothing narrower than the host is logged.
+            const loggableActorUri = message.type === 'Flag' ? `https://${domain}` : actorUri;
+
+            logger.info({ domain, actorUri: loggableActorUri }, '[INBOX] Rejected activity from blocked instance');
 
             // Log the rejection
             logActivityRejection({
               rejection_type: 'blocked_instance',
               activity_type: message.type || 'unknown',
-              actor_uri: actorUri,
+              actor_uri: loggableActorUri,
               actor_domain: domain,
               calendar_id: calendar.id,
               calendar_url_name: calendar.urlName,
@@ -285,7 +293,14 @@ class ProcessInboxService {
       }
 
 
-      // Relationship-based filtering for Calendar actors
+      // Relationship-based filtering for Calendar actors.
+      //
+      // Flag is deliberately NOT filtered: a moderation report from an
+      // instance this calendar has no follow relationship with is the
+      // expected case, not an anomaly, so unsolicited Flags are accepted.
+      // The sender-side gates that do apply to a Flag are the blocked-instance
+      // check above and the inbox route's per-actor and per-calendar rate
+      // limiters.
       const FILTERED_TYPES = ['Create', 'Update', 'Delete', 'Announce'];
       if (actorUri && FILTERED_TYPES.includes(message.type)) {
         const isPersonActor = await this.isPersonActorUri(actorUri);

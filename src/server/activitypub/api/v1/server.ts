@@ -10,6 +10,7 @@ import AcceptActivity from '@/server/activitypub/model/action/accept';
 import AnnounceActivity from '@/server/activitypub/model/action/announce';
 import UndoActivity from '@/server/activitypub/model/action/undo';
 import JoinActivity from '@/server/activitypub/model/action/join';
+import FlagActivity from '@/server/activitypub/model/action/flag';
 import ActivityPubInterface from '@/server/activitypub/interface';
 import { logError } from '@/server/common/helper/error-logger';
 import CalendarInterface from '@/server/calendar/interface';
@@ -34,6 +35,7 @@ import {
   announceActivitySchema,
   undoActivitySchema,
   joinActivitySchema,
+  flagActivitySchema,
 } from '@/server/activitypub/validation/schemas';
 
 /**
@@ -356,7 +358,17 @@ export default class ActivityPubServerRoutes {
     }
 
     logger.info({ activityType: req.body.type, calendarName }, 'Received inbox activity');
-    logger.info({ activityBody: req.body }, 'Inbox activity body');
+    if (req.body.type === 'Flag') {
+      // A Flag carries a remote reporter's actor URI and the free text of a
+      // moderation report. Everything downstream reduces that reporter to a
+      // bare instance host before anything durable is written; dumping the
+      // raw body here would put both the identity and the report text into
+      // the logs and bypass that reduction entirely. Log only the envelope.
+      logger.info({ activityId: req.body.id, calendarName }, 'Inbox Flag activity received (body withheld)');
+    }
+    else {
+      logger.info({ activityBody: req.body }, 'Inbox activity body');
+    }
 
     // Validate actor URI
     const actorUri = req.body.actor;
@@ -399,6 +411,12 @@ export default class ActivityPubServerRoutes {
         // FEP-8a8e: validate the inbound Join so it can be enqueued and
         // answered with an Ignore. Pavillion never acts on the Join itself.
         activityValidation = joinActivitySchema.safeParse(req.body);
+        break;
+      case 'Flag':
+        // Cross-instance moderation report. Accepted from any instance this
+        // one has not blocked — see the sender-policy note on FILTERED_TYPES
+        // in ProcessInboxService.processInboxMessage.
+        activityValidation = flagActivitySchema.safeParse(req.body);
         break;
       default:
         res.status(400).json({
@@ -488,6 +506,9 @@ export default class ActivityPubServerRoutes {
         break;
       case 'Join':
         message = JoinActivity.fromObject(req.body);
+        break;
+      case 'Flag':
+        message = FlagActivity.fromObject(req.body);
         break;
     }
 
