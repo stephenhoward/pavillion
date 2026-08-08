@@ -17,7 +17,9 @@ doubt, and never work around a protection the tool enforces.
    npx tsx .claude/tools/git-cleanup.ts classify
    ```
 
-   If `ok` is false, report the error and stop.
+   If `ok` is false, report the error and stop. Otherwise capture `planId`
+   from the JSON output — it identifies this specific plan and must be
+   threaded through to `execute` in step 4.
 
 2. **Report.** From the JSON summary and the report file (path in
    `reportPath`), present in chat:
@@ -25,27 +27,43 @@ doubt, and never work around a protection the tool enforces.
    - Worktree removals grouped by family (superset / agent / chain), with
      branch names.
    - The complete doubts list with each item's reason — do not truncate.
-     Omit worktree doubts whose reason is exactly 'branch not classified
-     deletable' from this chat list — they're covered by their branch's own
-     entry, and the full set remains in the report file.
+     Branch doubts come from `doubts`; non-removable-worktree doubts come
+     from `worktreeDoubts` (the tool already excludes worktrees whose only
+     issue is following a non-deletable branch — those are covered by their
+     branch's own entry). Show both lists in full; the same data is also in
+     the report file.
    - Point at `reportPath` for the full branch tables.
 
-3. **Approve.** One AskUserQuestion round (multiSelect), offering exactly:
-   - Delete `merged-ancestor` branches (N)
-   - Delete `merged-pr` branches (N)
-   - Delete `empty` branches (N)
-   - Remove worktrees per family present in the plan (one option per family
-     with a removable worktree)
+3. **Approve.** One AskUserQuestion call with two questions (both
+   multiSelect):
+   - Q1 — branch categories to delete: one option per deletable category
+     present in the plan, e.g. "Delete `merged-ancestor` branches (N)",
+     "Delete `merged-pr` branches (N)", "Delete `empty` branches (N)". At
+     most 3 options, so this always fits in one question.
+   - Q2 — worktree families to remove: one option per family that has at
+     least one removable worktree in the plan (superset / agent / chain).
+     Omit this question entirely when no family has any removable
+     worktrees.
 
-   Do not offer doubts. If the user selects nothing, stop cleanly.
+   Do not offer doubts. If the user selects nothing across both questions,
+   stop cleanly.
 
-4. **Execute.** Run with only the approved values:
+4. **Execute.** Run with only the approved values and the `planId` from
+   step 1:
 
    ```bash
    npx tsx .claude/tools/git-cleanup.ts execute \
      --categories=<approved categories> \
-     --worktree-families=<approved families>
+     --worktree-families=<approved families> \
+     --plan-id=<planId from step 1>
    ```
+
+   If `ok` is false, report the error and stop — do not retry blindly.
+   - `plan id mismatch`: another session re-ran classify and replaced the
+     plan. Re-run classify (step 1) and re-collect approval (step 3).
+   - `plan is older than 60 minutes`: re-run classify and re-approve before
+     trying again.
+   - Any other error: report it verbatim; do not attempt a workaround.
 
 5. **Summarize.** Report: branches deleted, worktrees removed, skipped
    items with reasons (the tool re-verifies every item immediately before

@@ -311,6 +311,7 @@ import { renderReport, classify, type CleanupPlan, type ClassifyDeps } from '../
 
 function buildPlan(): CleanupPlan {
   return {
+    planId: 'plan-render-test',
     createdAt: '2026-08-08T12:00:00.000Z',
     mainSha: 'abcdef1234567890abcdef1234567890abcdef12',
     branches: [
@@ -497,7 +498,7 @@ describe('classify', () => {
       'HEAD mainsha1234567890abcdef1234567890abcdef12',
       'branch refs/heads/main',
       '',
-      'worktree /symlink-alias/wt2',
+      'worktree /symlink-alias/.superset/worktrees/u/wt2',
       'HEAD cccccc3333333333333333333333333333333333',
       'branch refs/heads/wt2branch',
       '',
@@ -519,7 +520,7 @@ describe('classify', () => {
       fakeSpawn('main\nwt2branch'),                                 // for-each-ref --merged origin/main
       fakeSpawn(worktreeOutput),                                   // worktree list --porcelain
       fakeSpawn('n/real/wt2\n'),                                   // lsof -a -d cwd -Fn (called once, before the per-worktree loop)
-      fakeSpawn(''),                                                // git -C /symlink-alias/wt2 status --porcelain
+      fakeSpawn(''),                                                // git -C /symlink-alias/.superset/worktrees/u/wt2 status --porcelain
     );
 
     const written: Record<string, string> = {};
@@ -529,13 +530,13 @@ describe('classify', () => {
       nowMs: () => 1_700_000_000_000,
       statMtimes: () => [],
       writeFile: (path, content) => { written[path] = content; },
-      realpath: (p) => (p === '/symlink-alias/wt2' ? '/real/wt2' : p),
+      realpath: (p) => (p === '/symlink-alias/.superset/worktrees/u/wt2' ? '/real/wt2' : p),
     };
 
     const result = classify(deps);
 
     expect(result.ok).toBe(true);
-    const wt2 = result.plan?.worktrees.find((w) => w.path === '/symlink-alias/wt2');
+    const wt2 = result.plan?.worktrees.find((w) => w.path === '/symlink-alias/.superset/worktrees/u/wt2');
     expect(wt2?.removable).toBe(false);
     expect(wt2?.reason).toContain('live process has cwd inside worktree');
   });
@@ -599,7 +600,11 @@ describe('classify', () => {
   });
 
   it('a clean, inactive worktree whose branch is a doubt is not removable', () => {
-    const wtPath = '/other/feat-open-wt';
+    // Path deliberately lives under a managed family (superset) so the
+    // 'other'-family override (see the dedicated other-family test below)
+    // doesn't mask the "branch not classified deletable" reason this test
+    // is checking.
+    const wtPath = '/repo/.superset/worktrees/u2/feat-open-wt';
     const worktreeOutput = [
       'worktree /repo',
       'HEAD mainsha1234567890abcdef1234567890abcdef12',
@@ -651,7 +656,7 @@ describe('classify', () => {
   });
 
   it('parses lsof stdout even on non-zero exit, and passes cwd to the lsof spawn call', () => {
-    const wtPath = '/repo/other/wt3';
+    const wtPath = '/repo/.superset/worktrees/u/wt3';
     const worktreeOutput = [
       'worktree /repo',
       'HEAD mainsha1234567890abcdef1234567890abcdef12',
@@ -677,7 +682,7 @@ describe('classify', () => {
       fakeSpawn(worktreeOutput),                                   // worktree list --porcelain
       // lsof exits non-zero (macOS permission-denied on some fds) but still
       // printed a real cwd line on stdout — it must be parsed, not discarded.
-      fakeSpawn('n/repo/other/wt3\n', 'lsof: WARNING: ...', 1),
+      fakeSpawn('n/repo/.superset/worktrees/u/wt3\n', 'lsof: WARNING: ...', 1),
       fakeSpawn(''),                                                // git -C <wtPath> status --porcelain (clean)
     );
     const calls: Array<{ cmd: string; opts: unknown }> = [];
@@ -704,6 +709,218 @@ describe('classify', () => {
     const lsofCall = calls.find((c) => c.cmd === 'lsof');
     expect(lsofCall).toBeDefined();
     expect((lsofCall?.opts as { cwd?: string })?.cwd).toBe('/repo');
+  });
+
+  it('writes the injected planId into the plan (default is crypto.randomUUID)', () => {
+    const written: Record<string, string> = {};
+    const ghResult = fakeSpawn(JSON.stringify({ data: { repository: { b0: { nodes: [] } } } }));
+    const deps: ClassifyDeps = {
+      spawnFn: happyPathSpawn(ghResult) as unknown as ClassifyDeps['spawnFn'],
+      cwd: '/repo',
+      nowMs: () => 1_700_000_000_000,
+      statMtimes: () => [],
+      writeFile: (path, content) => { written[path] = content; },
+      planId: () => 'fixed-plan-id',
+    };
+
+    const result = classify(deps);
+
+    expect(result.ok).toBe(true);
+    expect(result.plan?.planId).toBe('fixed-plan-id');
+    expect(JSON.parse(written['/repo/.git/git-cleanup-plan.json']).planId).toBe('fixed-plan-id');
+  });
+
+  it('checks worktree status with --no-optional-locks (plain `git status` would rewrite the index mtime the 30-minute guard reads)', () => {
+    const wtPath = '/repo/other/wt-lock';
+    const worktreeOutput = [
+      'worktree /repo',
+      'HEAD mainsha1234567890abcdef1234567890abcdef12',
+      'branch refs/heads/main',
+      '',
+      `worktree ${wtPath}`,
+      'HEAD 1111111111111111111111111111111111111111',
+      'branch refs/heads/wt-lock-branch',
+      '',
+    ].join('\n');
+    const refsOutput = [
+      'main\tmainsha1234567890abcdef1234567890abcdef12\torigin/main\t',
+      'wt-lock-branch\t1111111111111111111111111111111111111111\torigin/wt-lock-branch\t',
+    ].join('\n');
+
+    const baseSpawn = seqSpawn(
+      fakeSpawn('/repo/.git'),
+      fakeSpawn('true'),
+      fakeSpawn(''),
+      fakeSpawn('mainsha1234567890abcdef1234567890abcdef12'),
+      fakeSpawn(refsOutput),
+      fakeSpawn('main\nwt-lock-branch'),
+      fakeSpawn(worktreeOutput),
+      fakeSpawn(''), // lsof (no live procs)
+      fakeSpawn(''), // git status --porcelain (clean)
+    );
+    const calls: Array<{ cmd: string; args: string[] }> = [];
+    const spawn = (cmd: string, args: string[], opts: unknown) => {
+      calls.push({ cmd, args });
+      return baseSpawn(cmd, args, opts);
+    };
+
+    const deps: ClassifyDeps = {
+      spawnFn: spawn as unknown as ClassifyDeps['spawnFn'],
+      cwd: '/repo',
+      nowMs: () => 1_700_000_000_000,
+      statMtimes: () => [],
+      writeFile: () => {},
+    };
+
+    const result = classify(deps);
+
+    expect(result.ok).toBe(true);
+    const statusCall = calls.find((c) => c.cmd === 'git' && c.args.includes('status'));
+    expect(statusCall?.args).toEqual(['--no-optional-locks', '-C', wtPath, 'status', '--porcelain']);
+  });
+
+  it('treats a non-zero status exit code as dirty — fails closed, not open', () => {
+    const wtPath = '/repo/.superset/worktrees/u/wt-status-fail';
+    const worktreeOutput = [
+      'worktree /repo',
+      'HEAD mainsha1234567890abcdef1234567890abcdef12',
+      'branch refs/heads/main',
+      '',
+      `worktree ${wtPath}`,
+      'HEAD 4444444444444444444444444444444444444444',
+      'branch refs/heads/wt-status-fail-branch',
+      '',
+    ].join('\n');
+    const refsOutput = [
+      'main\tmainsha1234567890abcdef1234567890abcdef12\torigin/main\t',
+      'wt-status-fail-branch\t4444444444444444444444444444444444444444\torigin/wt-status-fail-branch\t',
+    ].join('\n');
+
+    const spawn = seqSpawn(
+      fakeSpawn('/repo/.git'),
+      fakeSpawn('true'),
+      fakeSpawn(''),
+      fakeSpawn('mainsha1234567890abcdef1234567890abcdef12'),
+      fakeSpawn(refsOutput),
+      fakeSpawn('main\nwt-status-fail-branch'),
+      fakeSpawn(worktreeOutput),
+      fakeSpawn(''), // lsof (no live procs)
+      // git status --porcelain exits non-zero with empty stdout — must not
+      // be read as "clean" just because there's no porcelain output.
+      fakeSpawn('', 'fatal: unable to read index', 1),
+    );
+
+    const deps: ClassifyDeps = {
+      spawnFn: spawn as unknown as ClassifyDeps['spawnFn'],
+      cwd: '/repo',
+      nowMs: () => 1_700_000_000_000,
+      statMtimes: () => [],
+      writeFile: () => {},
+    };
+
+    const result = classify(deps);
+
+    expect(result.ok).toBe(true);
+    const wt = result.plan?.worktrees.find((w) => w.path === wtPath);
+    expect(wt?.removable).toBe(false);
+    expect(wt?.reason).toBe('uncommitted changes present');
+  });
+
+  it('downgrades a deletable branch to doubt when its worktree is dirty (spec: dirty worktree is a branch doubt reason)', () => {
+    const wtPath = '/repo/.superset/worktrees/u9/wt-dirty';
+    const worktreeOutput = [
+      'worktree /repo',
+      'HEAD mainsha1234567890abcdef1234567890abcdef12',
+      'branch refs/heads/main',
+      '',
+      `worktree ${wtPath}`,
+      'HEAD 2222222222222222222222222222222222222222',
+      'branch refs/heads/wt-dirty-branch',
+      '',
+    ].join('\n');
+    const refsOutput = [
+      'main\tmainsha1234567890abcdef1234567890abcdef12\torigin/main\t',
+      'wt-dirty-branch\t2222222222222222222222222222222222222222\torigin/wt-dirty-branch\t',
+    ].join('\n');
+
+    const spawn = seqSpawn(
+      fakeSpawn('/repo/.git'),
+      fakeSpawn('true'),
+      fakeSpawn(''),
+      fakeSpawn('mainsha1234567890abcdef1234567890abcdef12'),
+      fakeSpawn(refsOutput),
+      fakeSpawn('main\nwt-dirty-branch'), // both ancestors → merged-ancestor, no PR lookup needed
+      fakeSpawn(worktreeOutput),
+      fakeSpawn(''),               // lsof (no live procs)
+      fakeSpawn(' M dirty-file.ts'), // git status --porcelain (dirty!)
+    );
+
+    const deps: ClassifyDeps = {
+      spawnFn: spawn as unknown as ClassifyDeps['spawnFn'],
+      cwd: '/repo',
+      nowMs: () => 1_700_000_000_000,
+      statMtimes: () => [],
+      writeFile: () => {},
+    };
+
+    const result = classify(deps);
+
+    expect(result.ok).toBe(true);
+    const branchItem = result.plan?.branches.find((b) => b.branch === 'wt-dirty-branch');
+    expect(branchItem?.category).toBe('doubt');
+    expect(branchItem?.reason).toBe('worktree: uncommitted changes present');
+    const wtItem = result.plan?.worktrees.find((w) => w.path === wtPath);
+    expect(wtItem?.removable).toBe(false);
+    expect(wtItem?.reason).toBe('uncommitted changes present');
+  });
+
+  it('marks an other-family worktree non-removable and downgrades its branch (unmanaged family — execute can never approve it)', () => {
+    const wtPath = '/elsewhere/wt-other';
+    const worktreeOutput = [
+      'worktree /repo',
+      'HEAD mainsha1234567890abcdef1234567890abcdef12',
+      'branch refs/heads/main',
+      '',
+      `worktree ${wtPath}`,
+      'HEAD 3333333333333333333333333333333333333333',
+      'branch refs/heads/wt-other-branch',
+      '',
+    ].join('\n');
+    const refsOutput = [
+      'main\tmainsha1234567890abcdef1234567890abcdef12\torigin/main\t',
+      'wt-other-branch\t3333333333333333333333333333333333333333\torigin/wt-other-branch\t',
+    ].join('\n');
+
+    const spawn = seqSpawn(
+      fakeSpawn('/repo/.git'),
+      fakeSpawn('true'),
+      fakeSpawn(''),
+      fakeSpawn('mainsha1234567890abcdef1234567890abcdef12'),
+      fakeSpawn(refsOutput),
+      fakeSpawn('main\nwt-other-branch'),
+      fakeSpawn(worktreeOutput),
+      fakeSpawn(''), // lsof (no live procs)
+      fakeSpawn(''), // git status --porcelain (clean — irrelevant, the family override wins regardless)
+    );
+
+    const deps: ClassifyDeps = {
+      spawnFn: spawn as unknown as ClassifyDeps['spawnFn'],
+      cwd: '/repo',
+      nowMs: () => 1_700_000_000_000,
+      statMtimes: () => [],
+      writeFile: () => {},
+    };
+
+    const result = classify(deps);
+
+    expect(result.ok).toBe(true);
+    const wtItem = result.plan?.worktrees.find((w) => w.path === wtPath);
+    expect(wtItem?.family).toBe('other');
+    expect(wtItem?.removable).toBe(false);
+    expect(wtItem?.reason).toBe('worktree family not managed');
+    const branchItem = result.plan?.branches.find((b) => b.branch === 'wt-other-branch');
+    expect(branchItem?.category).toBe('doubt');
+    expect(branchItem?.reason).toBe('worktree: worktree family not managed');
   });
 });
 
@@ -736,32 +953,42 @@ describe('isPlanStale', () => {
 });
 
 describe('parseExecuteArgs', () => {
-  it('parses valid categories and worktree-families', () => {
-    const result = parseExecuteArgs(['--categories=merged-ancestor,empty', '--worktree-families=superset,agent']);
+  it('parses valid categories, worktree-families, and plan-id', () => {
+    const result = parseExecuteArgs([
+      '--categories=merged-ancestor,empty',
+      '--worktree-families=superset,agent',
+      '--plan-id=abc-123',
+    ]);
     expect(result).toEqual({
       categories: ['merged-ancestor', 'empty'],
       worktreeFamilies: ['superset', 'agent'],
+      planId: 'abc-123',
     });
   });
 
   it('rejects an unknown category', () => {
-    const result = parseExecuteArgs(['--categories=merged-ancestor,bogus']);
+    const result = parseExecuteArgs(['--categories=merged-ancestor,bogus', '--plan-id=abc-123']);
     expect('error' in result && result.error).toBeTruthy();
   });
 
   it('rejects doubt explicitly', () => {
-    const result = parseExecuteArgs(['--categories=doubt']);
+    const result = parseExecuteArgs(['--categories=doubt', '--plan-id=abc-123']);
     expect('error' in result && result.error).toContain('doubt');
   });
 
   it('defaults worktree-families to empty when the flag is missing', () => {
-    const result = parseExecuteArgs(['--categories=empty']);
-    expect(result).toEqual({ categories: ['empty'], worktreeFamilies: [] });
+    const result = parseExecuteArgs(['--categories=empty', '--plan-id=abc-123']);
+    expect(result).toEqual({ categories: ['empty'], worktreeFamilies: [], planId: 'abc-123' });
   });
 
   it('errors when categories is missing entirely', () => {
-    const result = parseExecuteArgs([]);
+    const result = parseExecuteArgs(['--plan-id=abc-123']);
     expect('error' in result && result.error).toBeTruthy();
+  });
+
+  it('rejects a missing plan-id', () => {
+    const result = parseExecuteArgs(['--categories=empty']);
+    expect('error' in result && result.error).toContain('plan-id');
   });
 });
 
@@ -769,8 +996,11 @@ describe('parseExecuteArgs', () => {
 // execute() test helpers
 // -----------------------------------------------------------------------------
 
+const TEST_PLAN_ID = 'plan-test-id';
+
 function execPlan(over: Partial<CleanupPlan> = {}): CleanupPlan {
   return {
+    planId: TEST_PLAN_ID,
     createdAt: new Date(1_700_000_000_000 - 5 * 60_000).toISOString(),
     mainSha: 'mainsha1234567890abcdef1234567890abcdef12',
     branches: [],
@@ -812,7 +1042,7 @@ describe('execute', () => {
         throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
       },
     };
-    const opts: ExecuteOptions = { categories: ['merged-ancestor'], worktreeFamilies: [] };
+    const opts: ExecuteOptions = { categories: ['merged-ancestor'], worktreeFamilies: [], planId: TEST_PLAN_ID };
 
     const result = execute(opts, deps);
 
@@ -831,12 +1061,79 @@ describe('execute', () => {
       nowMs: () => 1_700_000_000_000,
       readFile: () => JSON.stringify(plan),
     };
-    const opts: ExecuteOptions = { categories: ['merged-ancestor'], worktreeFamilies: [] };
+    const opts: ExecuteOptions = { categories: ['merged-ancestor'], worktreeFamilies: [], planId: TEST_PLAN_ID };
 
     const result = execute(opts, deps);
 
     expect(result.ok).toBe(false);
     expect(result.error).toContain('60 minutes');
+  });
+
+  it('refuses to execute when --plan-id does not match the saved plan', () => {
+    const plan = execPlan({ planId: 'plan-abc' });
+    const spawn = seqSpawn(fakeSpawn('/repo/.git')); // rev-parse --git-common-dir
+    const deps: ExecuteDeps = {
+      spawnFn: spawn as unknown as ExecuteDeps['spawnFn'],
+      cwd: '/repo',
+      nowMs: () => 1_700_000_000_000,
+      readFile: () => JSON.stringify(plan),
+    };
+    const opts: ExecuteOptions = { categories: ['merged-ancestor'], worktreeFamilies: [], planId: 'plan-xyz' };
+
+    const result = execute(opts, deps);
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain('plan id mismatch');
+    expect(result.deletedBranches).toEqual([]);
+  });
+
+  it('corrupt plan JSON returns ok: false instead of throwing', () => {
+    const spawn = seqSpawn(fakeSpawn('/repo/.git')); // rev-parse --git-common-dir
+    const deps: ExecuteDeps = {
+      spawnFn: spawn as unknown as ExecuteDeps['spawnFn'],
+      cwd: '/repo',
+      nowMs: () => 1_700_000_000_000,
+      readFile: () => '{not valid json',
+    };
+    const opts: ExecuteOptions = { categories: ['merged-ancestor'], worktreeFamilies: [], planId: TEST_PLAN_ID };
+
+    const result = execute(opts, deps);
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain('not valid JSON');
+  });
+
+  it('returns ok: false when the live worktree-list re-read fails, without deleting anything', () => {
+    const plan = execPlan({
+      branches: [
+        {
+          branch: 'b8', sha: 'sha8', category: 'merged-ancestor',
+          reason: 'tip is an ancestor of origin/main', worktree: '/repo/wt8',
+        },
+      ],
+      worktrees: [
+        {
+          path: '/repo/wt8', branch: 'b8', sha: 'sha8', family: 'superset',
+          removable: true, reason: 'clean, inactive, unlocked',
+        },
+      ],
+    });
+    const spawn = seqSpawn(
+      fakeSpawn('/repo/.git'),                              // rev-parse --git-common-dir
+      fakeSpawn(''),                                          // lsof -a -d cwd -Fn
+      fakeSpawn('', 'fatal: not a git repository', 128),      // git worktree list --porcelain (fails)
+    );
+    const { deps } = makeExecDeps(plan, spawn);
+    const opts: ExecuteOptions = {
+      categories: ['merged-ancestor'], worktreeFamilies: ['superset'], planId: TEST_PLAN_ID,
+    };
+
+    const result = execute(opts, deps);
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain('worktree list');
+    expect(result.deletedBranches).toEqual([]);
+    expect(result.removedWorktrees).toEqual([]);
   });
 
   it('happy path: deletes a plain branch (-d) and a worktree branch (-D), undo line appended before delete', () => {
@@ -881,7 +1178,9 @@ describe('execute', () => {
       fakeSpawn(''),                          // git worktree prune
     );
     const { deps, calls } = makeExecDeps(plan, spawn);
-    const opts: ExecuteOptions = { categories: ['merged-ancestor', 'merged-pr'], worktreeFamilies: ['superset'] };
+    const opts: ExecuteOptions = {
+      categories: ['merged-ancestor', 'merged-pr'], worktreeFamilies: ['superset'], planId: TEST_PLAN_ID,
+    };
 
     const result = execute(opts, deps);
 
@@ -926,7 +1225,7 @@ describe('execute', () => {
       fakeSpawn(''),                     // git worktree prune
     );
     const { deps, appended } = makeExecDeps(plan, spawn);
-    const opts: ExecuteOptions = { categories: ['merged-ancestor'], worktreeFamilies: [] };
+    const opts: ExecuteOptions = { categories: ['merged-ancestor'], worktreeFamilies: [], planId: TEST_PLAN_ID };
 
     const result = execute(opts, deps);
 
@@ -957,7 +1256,7 @@ describe('execute', () => {
     );
     const { deps } = makeExecDeps(plan, spawn);
     // 'agent' family not in the approved list — only 'superset' is approved.
-    const opts: ExecuteOptions = { categories: ['empty'], worktreeFamilies: ['superset'] };
+    const opts: ExecuteOptions = { categories: ['empty'], worktreeFamilies: ['superset'], planId: TEST_PLAN_ID };
 
     const result = execute(opts, deps);
 
@@ -1003,7 +1302,7 @@ describe('execute', () => {
       fakeSpawn(''),                   // git worktree prune
     );
     const { deps, appended } = makeExecDeps(plan, spawn);
-    const opts: ExecuteOptions = { categories: ['empty'], worktreeFamilies: ['superset'] };
+    const opts: ExecuteOptions = { categories: ['empty'], worktreeFamilies: ['superset'], planId: TEST_PLAN_ID };
 
     const result = execute(opts, deps);
 
@@ -1058,7 +1357,9 @@ describe('execute', () => {
     );
     const { deps } = makeExecDeps(plan, spawn);
     deps.cwd = '/repo/wt6/src'; // simulates cd'ing into the candidate worktree after approval
-    const opts: ExecuteOptions = { categories: ['merged-ancestor'], worktreeFamilies: ['superset'] };
+    const opts: ExecuteOptions = {
+      categories: ['merged-ancestor'], worktreeFamilies: ['superset'], planId: TEST_PLAN_ID,
+    };
 
     const result = execute(opts, deps);
 
@@ -1119,7 +1420,9 @@ describe('execute', () => {
       readFile: () => JSON.stringify(plan),
       appendFile: () => {},
     };
-    const opts: ExecuteOptions = { categories: ['merged-ancestor'], worktreeFamilies: ['superset'] };
+    const opts: ExecuteOptions = {
+      categories: ['merged-ancestor'], worktreeFamilies: ['superset'], planId: TEST_PLAN_ID,
+    };
 
     const result = execute(opts, deps);
 
@@ -1149,12 +1452,94 @@ describe('execute', () => {
       fakeSpawn(''),            // git worktree prune
     );
     const { deps } = makeExecDeps(plan, spawn);
-    const opts = { categories: ['doubt'], worktreeFamilies: [] } as unknown as ExecuteOptions;
+    const opts = { categories: ['doubt'], worktreeFamilies: [], planId: TEST_PLAN_ID } as unknown as ExecuteOptions;
 
     const result = execute(opts, deps);
 
     expect(result.ok).toBe(true);
     expect(result.deletedBranches).toEqual([]);
     expect(result.skipped).toEqual([]);
+  });
+
+  it('worktree remove failure skips the worktree and its branch with the stderr reason; prune still runs', () => {
+    const plan = execPlan({
+      branches: [
+        {
+          branch: 'b9', sha: 'sha9', category: 'merged-ancestor',
+          reason: 'tip is an ancestor of origin/main', worktree: '/repo/wt9',
+        },
+      ],
+      worktrees: [
+        {
+          path: '/repo/wt9', branch: 'b9', sha: 'sha9', family: 'superset',
+          removable: true, reason: 'clean, inactive, unlocked',
+        },
+      ],
+    });
+    const liveWorktreeOutput = [
+      'worktree /repo',
+      'HEAD mainsha1234567890abcdef1234567890abcdef12',
+      'branch refs/heads/main',
+      '',
+      'worktree /repo/wt9',
+      'HEAD sha9',
+      'branch refs/heads/b9',
+      '',
+    ].join('\n');
+    const spawn = seqSpawn(
+      fakeSpawn('/repo/.git'),                          // rev-parse --git-common-dir
+      fakeSpawn(''),                                     // lsof -a -d cwd -Fn
+      fakeSpawn(liveWorktreeOutput),                      // git worktree list --porcelain
+      fakeSpawn(''),                                      // git -C /repo/wt9 status --porcelain (clean)
+      fakeSpawn('', 'fatal: unable to remove', 1),        // git worktree remove /repo/wt9 (fails)
+      fakeSpawn(''),                                      // git worktree prune
+    );
+    const { deps, calls } = makeExecDeps(plan, spawn);
+    const opts: ExecuteOptions = {
+      categories: ['merged-ancestor'], worktreeFamilies: ['superset'], planId: TEST_PLAN_ID,
+    };
+
+    const result = execute(opts, deps);
+
+    expect(result.ok).toBe(true);
+    expect(result.removedWorktrees).toEqual([]);
+    expect(result.deletedBranches).toEqual([]);
+    expect(result.skipped).toEqual(expect.arrayContaining([
+      { item: '/repo/wt9', reason: 'fatal: unable to remove' },
+      { item: 'b9', reason: 'fatal: unable to remove' },
+    ]));
+    expect(calls).toContain('spawn:git worktree prune');
+  });
+
+  it("branch delete failure skips the branch with the stderr reason; undo line was already appended", () => {
+    const plan = execPlan({
+      branches: [
+        {
+          branch: 'b10', sha: 'sha10', category: 'merged-ancestor',
+          reason: 'tip is an ancestor of origin/main', worktree: null,
+        },
+      ],
+    });
+    const spawn = seqSpawn(
+      fakeSpawn('/repo/.git'),                                       // rev-parse --git-common-dir
+      fakeSpawn('sha10'),                                             // git rev-parse refs/heads/b10 (unchanged)
+      fakeSpawn('', 'error: branch is not fully merged', 1),          // git branch -d b10 (fails)
+      fakeSpawn(''),                                                  // git worktree prune
+    );
+    const { deps, calls, appended } = makeExecDeps(plan, spawn);
+    const opts: ExecuteOptions = { categories: ['merged-ancestor'], worktreeFamilies: [], planId: TEST_PLAN_ID };
+
+    const result = execute(opts, deps);
+
+    expect(result.ok).toBe(true);
+    expect(result.deletedBranches).toEqual([]);
+    expect(result.skipped).toEqual([{ item: 'b10', reason: 'error: branch is not fully merged' }]);
+    expect(appended).toEqual(['b10 sha10\n']);
+
+    const appendIdx = calls.indexOf('append:b10 sha10');
+    const deleteIdx = calls.indexOf('spawn:git branch -d b10');
+    expect(appendIdx).toBeGreaterThan(-1);
+    expect(deleteIdx).toBeGreaterThan(-1);
+    expect(appendIdx).toBeLessThan(deleteIdx);
   });
 });

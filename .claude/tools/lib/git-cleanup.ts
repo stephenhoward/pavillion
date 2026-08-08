@@ -9,6 +9,7 @@
  */
 
 import { spawnSync as nodeSpawnSync } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { run, type SpawnDeps, type SpawnFn } from './shared.js';
@@ -254,6 +255,14 @@ export interface WorktreePlanItem {
 }
 
 export interface CleanupPlan {
+  /**
+   * Random nonce, one per classify run. The plan file is shared across
+   * every worktree in the repo (keyed off the common git dir) — without an
+   * identity check, a concurrent session's classify would silently clobber
+   * this one's plan, and execute could act on approvals the current user
+   * never gave. execute() refuses to run unless its --plan-id matches.
+   */
+  planId: string;
   createdAt: string;
   mainSha: string;
   branches: BranchPlanItem[];
@@ -336,6 +345,8 @@ export interface ClassifyDeps extends SpawnDeps {
    * resolved through the same realpath call before comparison.
    */
   realpath?: (p: string) => string;
+  /** Injectable plan-id generator (default `crypto.randomUUID`). */
+  planId?: () => string;
 }
 
 function defaultRealpath(p: string): string {
@@ -388,9 +399,21 @@ export function gatherWorktreeChecks(
   branchDeletable: boolean,
   ctx: WorktreeCheckContext,
 ): WorktreeChecks {
-  const statusResult = run('git', ['-C', wt.path, 'status', '--porcelain'], ctx.spawn, { cwd: ctx.cwd, shell: false });
-  const dirty = isDirty(statusResult.stdout);
+  // mtimes must be read BEFORE the status call below: plain `git status
+  // --porcelain` opportunistically rewrites <commonDir>/worktrees/<name>/index
+  // even when nothing changed, which would bump the very mtime the 30-minute
+  // guard reads. Reading mtimes first, and passing --no-optional-locks to
+  // status as a second, independent guard, closes this both ways.
   const recentlyModified = isRecentlyModified(ctx.statMtimes(wt.path), ctx.nowMs);
+  const statusResult = run(
+    'git',
+    ['--no-optional-locks', '-C', wt.path, 'status', '--porcelain'],
+    ctx.spawn,
+    { cwd: ctx.cwd, shell: false },
+  );
+  // A non-zero exit means we could not determine cleanliness — fail closed
+  // (treat as dirty) rather than assume the worktree is safe to remove.
+  const dirty = statusResult.exitCode !== 0 || isDirty(statusResult.stdout);
   const resolvedPath = ctx.realpath(wt.path);
   const active = isActiveWorktree(resolvedPath, ctx.cwds);
   return {
@@ -594,25 +617,50 @@ export function classify(deps: ClassifyDeps = {}): {
     // Worktree handling condition 1 (design spec): only removable when its
     // checked-out branch was itself classified deletable. A detached
     // worktree (wt.branch === null) or one whose branch is protected/doubt
-    // is never branch-deletable.
+    // is never branch-deletable. branchDeletable is intentionally read from
+    // the ORIGINAL (pre-downgrade) branch category below — the downgrade
+    // pass runs after this map, so using it here would recurse.
     const branchItem = wt.branch ? branchPlanItems.find((b) => b.branch === wt.branch) : undefined;
     const branchDeletable = branchItem !== undefined && DELETABLE_CATEGORIES.includes(branchItem.category);
     const checks = gatherWorktreeChecks(wt, false, isCurrentSession, branchDeletable, {
       spawn, cwd, statMtimes, nowMs, cwds, realpath,
     });
-    const assessment = assessWorktree(checks);
+    const family = worktreeFamily(wt.path);
+    // 'other'-family worktrees can never be approved (execute()'s
+    // worktree-family allowlist is superset/agent/chain only) — mark them
+    // non-removable here so the plan's removable counts match what execute
+    // can actually do, regardless of what assessWorktree would otherwise say.
+    const assessment = family === 'other'
+      ? { removable: false, reason: 'worktree family not managed' }
+      : assessWorktree(checks);
     return {
       path: wt.path,
       branch: wt.branch,
       sha: wt.sha,
-      family: worktreeFamily(wt.path),
+      family,
       removable: assessment.removable,
       reason: assessment.reason,
     };
   });
 
+  // Step 11b: downgrade deletable branches whose worktree can't actually be
+  // removed. Without this, a branch could be reported (and approved) as
+  // deletable while its checked-out worktree blocks the delete — the
+  // design spec lists "dirty worktree" and "active worktree" as BRANCH
+  // doubt reasons for exactly this case. 'branch not classified deletable'
+  // is excluded because that's the worktree's OWN classification following
+  // the branch, not an independent reason to doubt the branch.
+  for (const item of branchPlanItems) {
+    if (!DELETABLE_CATEGORIES.includes(item.category)) continue;
+    const wtItem = worktreePlanItems.find((w) => w.path === item.worktree);
+    if (!wtItem || wtItem.removable || wtItem.reason === 'branch not classified deletable') continue;
+    item.category = 'doubt';
+    item.reason = `worktree: ${wtItem.reason}`;
+  }
+
   // Step 12: assemble and write.
   const plan: CleanupPlan = {
+    planId: (deps.planId ?? randomUUID)(),
     createdAt: new Date(nowMs).toISOString(),
     mainSha,
     branches: branchPlanItems,
@@ -648,7 +696,12 @@ export function classify(deps: ClassifyDeps = {}): {
 export const PLAN_MAX_AGE_MS = 60 * 60_000;
 
 export function isPlanStale(createdAt: string, nowMs: number): boolean {
-  return nowMs - new Date(createdAt).getTime() > PLAN_MAX_AGE_MS;
+  const createdMs = new Date(createdAt).getTime();
+  // An unparseable/corrupt createdAt yields NaN, and NaN comparisons are
+  // always false — that would fail OPEN (treated as fresh). Treat anything
+  // non-finite as stale instead, so a corrupt plan is refused, not trusted.
+  if (!Number.isFinite(createdMs)) return true;
+  return nowMs - createdMs > PLAN_MAX_AGE_MS;
 }
 
 const VALID_EXECUTE_CATEGORIES: Category[] = ['merged-ancestor', 'merged-pr', 'empty'];
@@ -657,6 +710,8 @@ const VALID_WORKTREE_FAMILIES: WorktreeFamily[] = ['superset', 'agent', 'chain']
 export interface ExecuteOptions {
   categories: Category[];
   worktreeFamilies: WorktreeFamily[];
+  /** Must match the loaded plan's `planId` — see CleanupPlan.planId. */
+  planId: string;
 }
 
 export interface ExecuteDeps extends SpawnDeps {
@@ -679,18 +734,21 @@ export interface ExecuteResult {
 }
 
 /**
- * Parse `execute` CLI args: `--categories=a,b` (required, non-empty) and
- * `--worktree-families=x,y` (optional, defaults to no families approved).
- * `doubt` is rejected here so it can never reach `execute` via the CLI —
- * `execute` itself also filters it defensively for callers that bypass this
- * parser.
+ * Parse `execute` CLI args: `--categories=a,b` (required, non-empty),
+ * `--worktree-families=x,y` (optional, defaults to no families approved),
+ * and `--plan-id=<id>` (required — must match the classify output the user
+ * approved; see CleanupPlan.planId). `doubt` is rejected here so it can
+ * never reach `execute` via the CLI — `execute` itself also filters it
+ * defensively for callers that bypass this parser.
  */
 export function parseExecuteArgs(argv: string[]): ExecuteOptions | { error: string } {
   let categoriesRaw: string | undefined;
   let familiesRaw: string | undefined;
+  let planId: string | undefined;
   for (const arg of argv) {
     if (arg.startsWith('--categories=')) categoriesRaw = arg.slice('--categories='.length);
     else if (arg.startsWith('--worktree-families=')) familiesRaw = arg.slice('--worktree-families='.length);
+    else if (arg.startsWith('--plan-id=')) planId = arg.slice('--plan-id='.length);
   }
 
   const categories = (categoriesRaw ?? '').split(',').map((s) => s.trim()).filter((s) => s.length > 0);
@@ -705,7 +763,9 @@ export function parseExecuteArgs(argv: string[]): ExecuteOptions | { error: stri
     if (!VALID_WORKTREE_FAMILIES.includes(f as WorktreeFamily)) return { error: `unknown worktree family: ${f}` };
   }
 
-  return { categories: categories as Category[], worktreeFamilies: families as WorktreeFamily[] };
+  if (!planId) return { error: '--plan-id is required (copy it from the classify output — re-run classify if you don\'t have one)' };
+
+  return { categories: categories as Category[], worktreeFamilies: families as WorktreeFamily[], planId };
 }
 
 function formatDateStamp(nowMs: number): string {
@@ -754,7 +814,23 @@ export function execute(opts: ExecuteOptions, deps: ExecuteDeps = {}): ExecuteRe
   catch {
     return fail('no plan file — run classify first');
   }
-  const plan = JSON.parse(planText) as CleanupPlan;
+
+  let plan: CleanupPlan;
+  try {
+    plan = JSON.parse(planText) as CleanupPlan;
+  }
+  catch {
+    return fail('plan file is not valid JSON — re-run classify');
+  }
+
+  // Step 1b: plan-identity gate. The plan file is shared across every
+  // worktree in the repo (keyed off the common git dir) — without this, a
+  // concurrent session's classify could silently replace the plan this
+  // session's user approved, and execute would act on approvals nobody
+  // actually gave for the plan now on disk.
+  if (!opts.planId || opts.planId !== plan.planId) {
+    return fail('plan id mismatch — re-run classify and re-approve');
+  }
 
   // Step 2: staleness gate.
   if (isPlanStale(plan.createdAt, nowMs)) {
@@ -810,6 +886,12 @@ export function execute(opts: ExecuteOptions, deps: ExecuteDeps = {}): ExecuteRe
   let sessionWt: WorktreeInfo | undefined;
   if (familyApproved.length > 0) {
     const worktreeListResult = runGit(['worktree', 'list', '--porcelain']);
+    if (worktreeListResult.exitCode !== 0) {
+      // Can't re-derive the current-session worktree without this — failing
+      // open here would mean the current-session protection silently does
+      // not apply, and a worktree remove could target the session itself.
+      return fail('could not re-read worktree list — re-run classify');
+    }
     const liveWorktrees = parseWorktrees(worktreeListResult.stdout);
     sessionWt = findContainingWorktree(cwd, liveWorktrees, realpath);
   }

@@ -4,7 +4,7 @@
  * Usage:
  *   npx tsx .claude/tools/git-cleanup.ts classify
  *   npx tsx .claude/tools/git-cleanup.ts execute --categories=merged-ancestor,merged-pr,empty \
- *       --worktree-families=superset,agent,chain
+ *       --worktree-families=superset,agent,chain --plan-id=<id from classify output>
  *
  * Design spec: docs/superpowers/specs/2026-08-08-git-cleanup-command-design.md
  */
@@ -15,10 +15,13 @@ const USAGE = `usage: git-cleanup.ts <command> [args]
 
 commands:
   classify                              fetch --prune, classify all branches/worktrees,
-                                        write plan + report to the common git dir
+                                        write plan + report to the common git dir,
+                                        print the plan's planId
   execute --categories=<a,b>            delete approved categories from the saved plan
-          [--worktree-families=<x,y>]   (categories: merged-ancestor, merged-pr, empty;
-                                        families: superset, agent, chain)
+          --plan-id=<id>                 (categories: merged-ancestor, merged-pr, empty;
+          [--worktree-families=<x,y>]   families: superset, agent, chain;
+                                        plan-id: the planId printed by classify — execute
+                                        refuses if it doesn't match the saved plan)
 `;
 
 function fail(message: string): never {
@@ -34,9 +37,11 @@ switch (command) {
     const { plan, ...rest } = result;
     console.log(JSON.stringify({
       ...rest,
+      planId: plan?.planId,
       protected: plan?.protected,
       worktrees: plan?.worktrees.filter((w) => w.removable),
       doubts: plan?.branches.filter((b) => b.category === 'doubt'),
+      worktreeDoubts: plan?.worktrees.filter((w) => !w.removable && w.reason !== 'branch not classified deletable'),
     }, null, 2));
     process.exit(result.ok ? 0 : 1);
     break;
