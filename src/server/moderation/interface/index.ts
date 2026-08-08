@@ -113,6 +113,16 @@ export default class ModerationInterface {
    * Receives a remote report forwarded from another federated instance.
    * Creates a Report with reporterType='federation'.
    *
+   * **The caller owns binding the report to the delivery endpoint.** The
+   * report is filed against the calendar that owns `eventId`, and this method
+   * takes no parameter describing where the report arrived, so it cannot check
+   * that the two agree. A federated report must only be accepted at the inbox
+   * of the calendar owning the reported event (the ActivityPub convention that
+   * a Flag goes to the object's host); the ActivityPub inbox handler enforces
+   * that before calling here. Any future caller must enforce the same
+   * relationship for its own transport, or it reopens a path for writing into
+   * one calendar's moderation queue by way of another calendar's endpoint.
+   *
    * @param data - Remote report data
    * @returns The created Report domain model
    * @throws EventNotFoundError if the event does not exist
