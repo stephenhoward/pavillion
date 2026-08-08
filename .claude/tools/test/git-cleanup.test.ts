@@ -239,7 +239,7 @@ import {
 
 const cleanChecks: WorktreeChecks = {
   locked: false, dirty: false, recentlyModified: false,
-  active: false, isCurrentSession: false, isPrimary: false,
+  active: false, isCurrentSession: false, isPrimary: false, branchDeletable: true,
 };
 
 describe('isDirty', () => {
@@ -295,6 +295,7 @@ describe('assessWorktree', () => {
     ['active', { active: true }, 'live process'],
     ['current session', { isCurrentSession: true }, 'current session'],
     ['primary', { isPrimary: true }, 'primary checkout'],
+    ['branch not deletable', { branchDeletable: false }, 'branch not classified deletable'],
   ] as const)('%s worktree is protected', (_label, override, reasonFragment) => {
     const result = assessWorktree({ ...cleanChecks, ...override });
     expect(result.removable).toBe(false);
@@ -498,10 +499,16 @@ describe('classify', () => {
       '',
       'worktree /symlink-alias/wt2',
       'HEAD cccccc3333333333333333333333333333333333',
-      'detached',
+      'branch refs/heads/wt2branch',
       '',
     ].join('\n');
-    const refsOutput = 'main\tmainsha1234567890abcdef1234567890abcdef12\torigin/main\t';
+    // wt2branch is an ancestor of origin/main (merged-ancestor, deletable) so
+    // it clears the branch-deletable gate and the test can observe the
+    // 'active' check specifically.
+    const refsOutput = [
+      'main\tmainsha1234567890abcdef1234567890abcdef12\torigin/main\t',
+      'wt2branch\tcccccc3333333333333333333333333333333333\torigin/wt2branch\t',
+    ].join('\n');
 
     const spawn = seqSpawn(
       fakeSpawn('/repo/.git'),                                    // rev-parse --git-common-dir
@@ -509,7 +516,7 @@ describe('classify', () => {
       fakeSpawn(''),                                               // fetch --prune origin
       fakeSpawn('mainsha1234567890abcdef1234567890abcdef12'),     // rev-parse origin/main
       fakeSpawn(refsOutput),                                       // for-each-ref refs/heads
-      fakeSpawn('main'),                                           // for-each-ref --merged origin/main
+      fakeSpawn('main\nwt2branch'),                                 // for-each-ref --merged origin/main
       fakeSpawn(worktreeOutput),                                   // worktree list --porcelain
       fakeSpawn('n/real/wt2\n'),                                   // lsof -a -d cwd -Fn (called once, before the per-worktree loop)
       fakeSpawn(''),                                                // git -C /symlink-alias/wt2 status --porcelain
@@ -531,5 +538,171 @@ describe('classify', () => {
     const wt2 = result.plan?.worktrees.find((w) => w.path === '/symlink-alias/wt2');
     expect(wt2?.removable).toBe(false);
     expect(wt2?.reason).toContain('live process has cwd inside worktree');
+  });
+
+  it('protects a nested current-session worktree and its branch (most-specific-wins containment)', () => {
+    // Agent worktrees live INSIDE the primary checkout
+    // (<repo>/.claude/worktrees/agent-1). A cwd inside the nested worktree
+    // is also a prefix match for the primary — the containing-worktree
+    // lookup must pick the longest (most specific) match, or the session
+    // branch is never protected and the nested worktree is never flagged
+    // as the current session.
+    const nestedPath = '/repo/.claude/worktrees/agent-1';
+    const worktreeOutput = [
+      'worktree /repo',
+      'HEAD mainsha1234567890abcdef1234567890abcdef12',
+      'branch refs/heads/main',
+      '',
+      `worktree ${nestedPath}`,
+      'HEAD dddddd4444444444444444444444444444444444',
+      'branch refs/heads/agent.branch',
+      '',
+    ].join('\n');
+    const refsOutput = [
+      'main\tmainsha1234567890abcdef1234567890abcdef12\torigin/main\t',
+      'agent.branch\tdddddd4444444444444444444444444444444444\torigin/agent.branch\t',
+    ].join('\n');
+
+    const spawn = seqSpawn(
+      fakeSpawn('/repo/.git'),                                    // rev-parse --git-common-dir
+      fakeSpawn('true'),                                          // rev-parse --is-inside-work-tree
+      fakeSpawn(''),                                               // fetch --prune origin
+      fakeSpawn('mainsha1234567890abcdef1234567890abcdef12'),     // rev-parse origin/main
+      fakeSpawn(refsOutput),                                       // for-each-ref refs/heads
+      fakeSpawn('main'),                                           // for-each-ref --merged origin/main (agent.branch NOT merged)
+      fakeSpawn(worktreeOutput),                                   // worktree list --porcelain
+      fakeSpawn(''),                                                // lsof -a -d cwd -Fn (no live processes)
+      fakeSpawn(''),                                                // git -C <nested> status --porcelain (clean)
+    );
+
+    const deps: ClassifyDeps = {
+      spawnFn: spawn as unknown as ClassifyDeps['spawnFn'],
+      cwd: `${nestedPath}/src`, // session cwd nested inside the agent worktree
+      nowMs: () => 1_700_000_000_000,
+      statMtimes: () => [],
+      writeFile: () => {},
+      realpath: (p) => p,
+    };
+
+    const result = classify(deps);
+
+    expect(result.ok).toBe(true);
+    // agent.branch is not an ancestor and would otherwise need a PR lookup
+    // to classify — it never reaches classifyBranch because it's protected.
+    expect(result.plan?.branches.find((b) => b.branch === 'agent.branch')).toBeUndefined();
+    const protectedEntry = result.plan?.protected.find((p) => p.branch === 'agent.branch');
+    expect(protectedEntry).toBeDefined();
+    expect(protectedEntry?.reason).toContain('current session');
+    const nestedWt = result.plan?.worktrees.find((w) => w.path === nestedPath);
+    expect(nestedWt?.removable).toBe(false);
+    expect(nestedWt?.reason).toContain('current session');
+  });
+
+  it('a clean, inactive worktree whose branch is a doubt is not removable', () => {
+    const wtPath = '/other/feat-open-wt';
+    const worktreeOutput = [
+      'worktree /repo',
+      'HEAD mainsha1234567890abcdef1234567890abcdef12',
+      'branch refs/heads/main',
+      '',
+      `worktree ${wtPath}`,
+      'HEAD eeeeee5555555555555555555555555555555555',
+      'branch refs/heads/feat.open',
+      '',
+    ].join('\n');
+    const refsOutput = [
+      'main\tmainsha1234567890abcdef1234567890abcdef12\torigin/main\t',
+      'feat.open\teeeeee5555555555555555555555555555555555\torigin/feat.open\t',
+    ].join('\n');
+    const ghResult = fakeSpawn(JSON.stringify({
+      data: { repository: { b0: { nodes: [{ number: 9, state: 'OPEN', headRefOid: 'eeeeee5555555555555555555555555555555555' }] } } },
+    }));
+
+    const spawn = seqSpawn(
+      fakeSpawn('/repo/.git'),                                    // rev-parse --git-common-dir
+      fakeSpawn('true'),                                          // rev-parse --is-inside-work-tree
+      fakeSpawn(''),                                               // fetch --prune origin
+      fakeSpawn('mainsha1234567890abcdef1234567890abcdef12'),     // rev-parse origin/main
+      fakeSpawn(refsOutput),                                       // for-each-ref refs/heads
+      fakeSpawn('main'),                                           // for-each-ref --merged origin/main
+      fakeSpawn(worktreeOutput),                                   // worktree list --porcelain
+      fakeSpawn('2'),                                               // rev-list --count origin/main..feat.open
+      fakeSpawn('git@github.com:me/repo.git'),                     // remote get-url origin
+      ghResult,                                                    // gh api graphql
+      fakeSpawn(''),                                                // lsof -a -d cwd -Fn (no live processes)
+      fakeSpawn(''),                                                // git -C <wtPath> status --porcelain (clean)
+    );
+
+    const deps: ClassifyDeps = {
+      spawnFn: spawn as unknown as ClassifyDeps['spawnFn'],
+      cwd: '/repo',
+      nowMs: () => 1_700_000_000_000,
+      statMtimes: () => [],
+      writeFile: () => {},
+    };
+
+    const result = classify(deps);
+
+    expect(result.ok).toBe(true);
+    expect(result.plan?.branches.find((b) => b.branch === 'feat.open')?.category).toBe('doubt');
+    const wt = result.plan?.worktrees.find((w) => w.path === wtPath);
+    expect(wt?.removable).toBe(false);
+    expect(wt?.reason).toBe('branch not classified deletable');
+  });
+
+  it('parses lsof stdout even on non-zero exit, and passes cwd to the lsof spawn call', () => {
+    const wtPath = '/repo/other/wt3';
+    const worktreeOutput = [
+      'worktree /repo',
+      'HEAD mainsha1234567890abcdef1234567890abcdef12',
+      'branch refs/heads/main',
+      '',
+      `worktree ${wtPath}`,
+      'HEAD ffffff6666666666666666666666666666666666',
+      'branch refs/heads/wt3branch',
+      '',
+    ].join('\n');
+    const refsOutput = [
+      'main\tmainsha1234567890abcdef1234567890abcdef12\torigin/main\t',
+      'wt3branch\tffffff6666666666666666666666666666666666\torigin/wt3branch\t',
+    ].join('\n');
+
+    const baseSpawn = seqSpawn(
+      fakeSpawn('/repo/.git'),                                    // rev-parse --git-common-dir
+      fakeSpawn('true'),                                          // rev-parse --is-inside-work-tree
+      fakeSpawn(''),                                               // fetch --prune origin
+      fakeSpawn('mainsha1234567890abcdef1234567890abcdef12'),     // rev-parse origin/main
+      fakeSpawn(refsOutput),                                       // for-each-ref refs/heads
+      fakeSpawn('main\nwt3branch'),                                 // for-each-ref --merged origin/main
+      fakeSpawn(worktreeOutput),                                   // worktree list --porcelain
+      // lsof exits non-zero (macOS permission-denied on some fds) but still
+      // printed a real cwd line on stdout — it must be parsed, not discarded.
+      fakeSpawn('n/repo/other/wt3\n', 'lsof: WARNING: ...', 1),
+      fakeSpawn(''),                                                // git -C <wtPath> status --porcelain (clean)
+    );
+    const calls: Array<{ cmd: string; opts: unknown }> = [];
+    const spawn = (cmd: string, args: string[], opts: unknown) => {
+      calls.push({ cmd, opts });
+      return baseSpawn(cmd, args, opts);
+    };
+
+    const deps: ClassifyDeps = {
+      spawnFn: spawn as unknown as ClassifyDeps['spawnFn'],
+      cwd: '/repo',
+      nowMs: () => 1_700_000_000_000,
+      statMtimes: () => [],
+      writeFile: () => {},
+    };
+
+    const result = classify(deps);
+
+    expect(result.ok).toBe(true);
+    const wt3 = result.plan?.worktrees.find((w) => w.path === wtPath);
+    expect(wt3?.removable).toBe(false);
+    expect(wt3?.reason).toContain('live process has cwd inside worktree');
+
+    const lsofCall = calls.find((c) => c.cmd === 'lsof');
+    expect(lsofCall).toBeDefined();
+    expect((lsofCall?.opts as { cwd?: string })?.cwd).toBe('/repo');
   });
 });

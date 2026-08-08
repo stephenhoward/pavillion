@@ -207,6 +207,14 @@ export interface WorktreeChecks {
   active: boolean;
   isCurrentSession: boolean;
   isPrimary: boolean;
+  /**
+   * True when the worktree's checked-out branch was itself classified
+   * deletable (`merged-ancestor`, `merged-pr`, or `empty`). A detached
+   * worktree (no branch) is never deletable. Design spec ("Worktree
+   * handling", condition 1): a worktree is removed only when its branch is
+   * classified deletable AND it passes every other safety check below.
+   */
+  branchDeletable: boolean;
 }
 
 /**
@@ -216,6 +224,7 @@ export interface WorktreeChecks {
 export function assessWorktree(checks: WorktreeChecks): { removable: boolean; reason: string } {
   if (checks.isPrimary) return { removable: false, reason: 'primary checkout — never removed' };
   if (checks.isCurrentSession) return { removable: false, reason: 'current session worktree — never removed' };
+  if (!checks.branchDeletable) return { removable: false, reason: 'branch not classified deletable' };
   if (checks.locked) return { removable: false, reason: 'worktree is locked' };
   if (checks.dirty) return { removable: false, reason: 'uncommitted changes present' };
   if (checks.active) return { removable: false, reason: 'live process has cwd inside worktree' };
@@ -376,6 +385,7 @@ export function gatherWorktreeChecks(
   wt: WorktreeInfo,
   isPrimary: boolean,
   isCurrentSession: boolean,
+  branchDeletable: boolean,
   ctx: WorktreeCheckContext,
 ): WorktreeChecks {
   const statusResult = run('git', ['-C', wt.path, 'status', '--porcelain'], ctx.spawn, { cwd: ctx.cwd });
@@ -390,17 +400,35 @@ export function gatherWorktreeChecks(
     active,
     isCurrentSession,
     isPrimary,
+    branchDeletable,
   };
 }
 
-/** True when `targetPath` is realpath-equal to, or nested inside, `containerPath`. */
+/**
+ * Find the worktree that most specifically contains `targetPath` (realpath
+ * -equal to, or nested inside, the worktree's path). Nested worktrees (e.g.
+ * agent worktrees under `<repo>/.claude/worktrees/agent-*`) live INSIDE the
+ * primary checkout, so a naive first-match would always return the primary
+ * — longest matching path wins (most-specific-wins), so a cwd inside a
+ * nested worktree resolves to that worktree, not its ancestor.
+ */
 function findContainingWorktree(
   targetPath: string,
   worktrees: WorktreeInfo[],
   realpath: (p: string) => string,
 ): WorktreeInfo | undefined {
   const resolvedTarget = realpath(targetPath);
-  return worktrees.find((wt) => isActiveWorktree(realpath(wt.path), [resolvedTarget]));
+  let best: WorktreeInfo | undefined;
+  let bestPathLength = -1;
+  for (const wt of worktrees) {
+    const resolvedWt = realpath(wt.path);
+    if (!isActiveWorktree(resolvedWt, [resolvedTarget])) continue;
+    if (resolvedWt.length > bestPathLength) {
+      best = wt;
+      bestPathLength = resolvedWt.length;
+    }
+  }
+  return best;
 }
 
 /**
@@ -551,14 +579,23 @@ export function classify(deps: ClassifyDeps = {}): {
 
   let cwds: string[] = [];
   if (nonPrimaryWorktrees.length > 0) {
-    const lsofResult = run('lsof', ['-a', '-d', 'cwd', '-Fn'], spawn, { timeout: 15_000 });
-    const rawCwds = lsofResult.exitCode === 0 ? parseCwdPaths(lsofResult.stdout) : [];
-    cwds = rawCwds.map((p) => realpath(p));
+    // lsof routinely exits non-zero on macOS (permission-denied reading some
+    // processes' fds) while still printing every cwd it *could* read on
+    // stdout. Parse stdout regardless of exit code — an empty cwd list only
+    // when stdout itself is empty, never inferred from the exit code alone.
+    const lsofResult = run('lsof', ['-a', '-d', 'cwd', '-Fn'], spawn, { cwd, timeout: 15_000 });
+    cwds = parseCwdPaths(lsofResult.stdout).map((p) => realpath(p));
   }
 
   const worktreePlanItems: WorktreePlanItem[] = nonPrimaryWorktrees.map((wt) => {
     const isCurrentSession = wt === sessionWt;
-    const checks = gatherWorktreeChecks(wt, false, isCurrentSession, {
+    // Worktree handling condition 1 (design spec): only removable when its
+    // checked-out branch was itself classified deletable. A detached
+    // worktree (wt.branch === null) or one whose branch is protected/doubt
+    // is never branch-deletable.
+    const branchItem = wt.branch ? branchPlanItems.find((b) => b.branch === wt.branch) : undefined;
+    const branchDeletable = branchItem !== undefined && DELETABLE_CATEGORIES.includes(branchItem.category);
+    const checks = gatherWorktreeChecks(wt, false, isCurrentSession, branchDeletable, {
       spawn, cwd, statMtimes, nowMs, cwds, realpath,
     });
     const assessment = assessWorktree(checks);
