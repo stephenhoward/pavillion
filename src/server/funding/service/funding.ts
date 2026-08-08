@@ -437,17 +437,44 @@ export default class FundingService {
   }
 
   /**
+   * Emits a domain event, deferring the emit until after the supplied
+   * transaction commits when one is present.
+   *
+   * Listeners must never observe state that a later rollback erases, so an
+   * emit raised inside a transaction is queued on `afterCommit`. The
+   * setImmediate hop escapes Sequelize's CLS context — without it the
+   * listener's async body inherits a scope still bound to the just-committed
+   * transaction and Sequelize's implicit transaction lookup picks it up.
+   *
+   * Without a transaction, the emit fires synchronously.
+   *
+   * @private
+   */
+  private emitAfterTx<T>(event: string, payload: T, tx?: Transaction): void {
+    const emit = () => this.eventBus.emit(event, payload);
+    if (tx) {
+      tx.afterCommit(() => setImmediate(emit));
+    }
+    else {
+      emit();
+    }
+  }
+
+  /**
    * Calculate the total amount from all active calendar funding plan allocations
    *
    * @param fundingPlanId - Funding plan ID
+   * @param tx - Optional transaction to read under, so the total reflects
+   *   allocation writes made earlier in the same transaction
    * @returns Total amount in millicents
    */
-  private async calculateActiveCalendarTotal(fundingPlanId: string): Promise<number> {
+  private async calculateActiveCalendarTotal(fundingPlanId: string, tx?: Transaction): Promise<number> {
     const activeCalendarSubs = await CalendarFundingPlanEntity.findAll({
       where: {
         funding_plan_id: fundingPlanId,
         end_time: { [Op.is]: null as any },
       },
+      transaction: tx,
     });
 
     return activeCalendarSubs.reduce((sum, cs) => sum + cs.amount, 0);
@@ -459,14 +486,23 @@ export default class FundingService {
    * Skips the provider call if the adapter does not support in-place amount updates
    * (e.g. PayPal funding plans have fixed amounts set at creation time).
    *
+   * Called from inside the allocation transaction: a provider rejection must
+   * unwind the local allocation rows rather than leave them disagreeing with
+   * the amount the provider is actually billing.
+   *
    * @param fundingPlanEntity - Funding plan entity
    * @param newAmount - New total amount in millicents
+   * @param tx - Optional transaction to read the provider config under
    */
   private async updateProviderAmount(
     fundingPlanEntity: FundingPlanEntity,
     newAmount: number,
+    tx?: Transaction,
   ): Promise<void> {
-    const providerEntity = await ProviderConfigEntity.findByPk(fundingPlanEntity.provider_config_id);
+    const providerEntity = await ProviderConfigEntity.findByPk(
+      fundingPlanEntity.provider_config_id,
+      { transaction: tx },
+    );
     if (!providerEntity) {
       throw new Error('Provider configuration not found');
     }
@@ -528,6 +564,10 @@ export default class FundingService {
    * Resolves the active funding plan for the account internally.
    * Creates a CalendarFundingPlan row and updates the provider total amount.
    *
+   * The duplicate check, the allocation row, and the provider amount update run
+   * in one transaction, so a provider rejection rolls the allocation back
+   * instead of leaving a local row the provider is not billing for.
+   *
    * @param accountId - Account ID (used to resolve funding plan and verify ownership)
    * @param calendarId - Calendar ID to add
    * @param amount - Amount to allocate in millicents
@@ -556,31 +596,34 @@ export default class FundingService {
     // Verify account owns the calendar
     await this.verifyCalendarOwnership(accountId, calendarId);
 
-    // Check for existing active calendar funding plan
-    const existing = await CalendarFundingPlanEntity.findOne({
-      where: {
+    await db.transaction(async (tx: Transaction) => {
+      // Check for existing active calendar funding plan
+      const existing = await CalendarFundingPlanEntity.findOne({
+        where: {
+          funding_plan_id: fundingPlanEntity.id,
+          calendar_id: calendarId,
+          end_time: { [Op.is]: null as any },
+        },
+        transaction: tx,
+      });
+
+      if (existing) {
+        throw new DuplicateCalendarFundingPlanError(fundingPlanEntity.id, calendarId);
+      }
+
+      // Create the calendar funding plan row
+      await CalendarFundingPlanEntity.create({
+        id: uuidv4(),
         funding_plan_id: fundingPlanEntity.id,
         calendar_id: calendarId,
-        end_time: { [Op.is]: null as any },
-      },
+        amount,
+        end_time: null,
+      }, { transaction: tx });
+
+      // Recalculate total and update provider
+      const newTotal = await this.calculateActiveCalendarTotal(fundingPlanEntity.id, tx);
+      await this.updateProviderAmount(fundingPlanEntity, newTotal, tx);
     });
-
-    if (existing) {
-      throw new DuplicateCalendarFundingPlanError(fundingPlanEntity.id, calendarId);
-    }
-
-    // Create the calendar funding plan row
-    await CalendarFundingPlanEntity.create({
-      id: uuidv4(),
-      funding_plan_id: fundingPlanEntity.id,
-      calendar_id: calendarId,
-      amount,
-      end_time: null,
-    });
-
-    // Recalculate total and update provider
-    const newTotal = await this.calculateActiveCalendarTotal(fundingPlanEntity.id);
-    await this.updateProviderAmount(fundingPlanEntity, newTotal);
   }
 
   /**
@@ -590,6 +633,11 @@ export default class FundingService {
    * Sets end_time to the funding plan's current_period_end (calendar retains access until then).
    * Reduces the provider amount immediately. If this is the last active calendar,
    * cancels the entire funding plan.
+   *
+   * The end_time write and the provider-side change (amount update, or plan
+   * cancellation when the last calendar leaves) run in one transaction, so a
+   * provider failure rolls the local end_time back rather than dropping the
+   * calendar from a plan the provider is still billing in full.
    *
    * @param accountId - Account ID (used to resolve funding plan and verify ownership)
    * @param calendarId - Calendar ID to remove
@@ -612,40 +660,44 @@ export default class FundingService {
     // Verify account owns the calendar
     await this.verifyCalendarOwnership(accountId, calendarId);
 
-    // Find the active calendar funding plan
-    const calendarSub = await CalendarFundingPlanEntity.findOne({
-      where: {
-        funding_plan_id: fundingPlanEntity.id,
-        calendar_id: calendarId,
-        end_time: { [Op.is]: null as any },
-      },
+    await db.transaction(async (tx: Transaction) => {
+      // Find the active calendar funding plan
+      const calendarSub = await CalendarFundingPlanEntity.findOne({
+        where: {
+          funding_plan_id: fundingPlanEntity.id,
+          calendar_id: calendarId,
+          end_time: { [Op.is]: null as any },
+        },
+        transaction: tx,
+      });
+
+      if (!calendarSub) {
+        throw new CalendarFundingPlanNotFoundError(fundingPlanEntity.id, calendarId);
+      }
+
+      // Set end_time to funding plan's current_period_end
+      calendarSub.end_time = fundingPlanEntity.current_period_end;
+      await calendarSub.save({ transaction: tx });
+
+      // Check remaining active calendar funding plans
+      const remainingActive = await CalendarFundingPlanEntity.findAll({
+        where: {
+          funding_plan_id: fundingPlanEntity.id,
+          end_time: { [Op.is]: null as any },
+        },
+        transaction: tx,
+      });
+
+      if (remainingActive.length === 0) {
+        // Last calendar removed: cancel the entire funding plan
+        await this.cancel(fundingPlanEntity.id, false, tx);
+      }
+      else {
+        // Recalculate total and update provider
+        const newTotal = remainingActive.reduce((sum, cs) => sum + cs.amount, 0);
+        await this.updateProviderAmount(fundingPlanEntity, newTotal, tx);
+      }
     });
-
-    if (!calendarSub) {
-      throw new CalendarFundingPlanNotFoundError(fundingPlanEntity.id, calendarId);
-    }
-
-    // Set end_time to funding plan's current_period_end
-    calendarSub.end_time = fundingPlanEntity.current_period_end;
-    await calendarSub.save();
-
-    // Check remaining active calendar funding plans
-    const remainingActive = await CalendarFundingPlanEntity.findAll({
-      where: {
-        funding_plan_id: fundingPlanEntity.id,
-        end_time: { [Op.is]: null as any },
-      },
-    });
-
-    if (remainingActive.length === 0) {
-      // Last calendar removed: cancel the entire funding plan
-      await this.cancel(fundingPlanEntity.id, false);
-    }
-    else {
-      // Recalculate total and update provider
-      const newTotal = remainingActive.reduce((sum, cs) => sum + cs.amount, 0);
-      await this.updateProviderAmount(fundingPlanEntity, newTotal);
-    }
   }
 
   /**
@@ -934,15 +986,21 @@ export default class FundingService {
    *
    * @param fundingPlanId - Funding plan ID
    * @param immediate - If true, cancel immediately; otherwise at period end
+   * @param tx - Optional caller-owned transaction to enlist the status write in.
+   *   Supplied by the allocation path when removing the last calendar, so the
+   *   allocation end_time and the cancellation commit or roll back together.
+   *   The cancellation event is deferred until that transaction commits.
    */
-  async cancel(fundingPlanId: string, immediate: boolean = false): Promise<void> {
-    const entity = await FundingPlanEntity.findByPk(fundingPlanId);
+  async cancel(fundingPlanId: string, immediate: boolean = false, tx?: Transaction): Promise<void> {
+    const entity = await FundingPlanEntity.findByPk(fundingPlanId, { transaction: tx });
     if (!entity) {
       throw new Error('Funding plan not found');
     }
 
     // Get provider configuration
-    const providerEntity = await ProviderConfigEntity.findByPk(entity.provider_config_id);
+    const providerEntity = await ProviderConfigEntity.findByPk(entity.provider_config_id, {
+      transaction: tx,
+    });
     if (!providerEntity) {
       throw new Error('Provider configuration not found');
     }
@@ -955,13 +1013,13 @@ export default class FundingService {
     // Update status
     entity.status = 'cancelled';
     entity.cancelled_at = new Date();
-    await entity.save();
+    await entity.save({ transaction: tx });
 
     // Emit event
-    this.eventBus.emit('funding:plan:cancelled', {
+    this.emitAfterTx('funding:plan:cancelled', {
       fundingPlan: entity.toModel(),
       immediate,
-    });
+    }, tx);
   }
 
   /**
