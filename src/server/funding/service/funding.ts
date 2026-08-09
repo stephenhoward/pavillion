@@ -1933,19 +1933,34 @@ export default class FundingService {
    * The instant at which a funding plan stops granting access to its
    * calendars, or null if nothing on the plan sets an end.
    *
+   * These dates never widen access: the caller has already required
+   * status 'active', so a plan Stripe moved to past_due or suspended is
+   * denied by the join before any date is read. The boundaries only
+   * discriminate among plans that still claim to be active.
+   *
    * Two candidate boundaries are considered and the EARLIEST wins, because a
    * gate helper must never round permissive:
    *
    *  - cancelled_at, the recorded cancellation. An immediate cancellation ends
    *    access when it happens, even though the interrupted billing period may
-   *    still have weeks to run. pv-jdot.3.1 adds an explicit cancel_at for
-   *    cancel-at-period-end plans, and this is where it joins the list.
+   *    still have weeks to run.
    *  - current_period_end plus the instance grace period. This is the boundary
    *    written on the happy path, on every renewal, so it is the one that
    *    still applies when a cancellation is never reported to us at all — the
-   *    silent-renewal-failure and missed-deletion cases. The grace period is
-   *    the same window suspendExpiredFundingPlans uses, so a customer in
-   *    dunning is not cut off before the instance's own policy says so.
+   *    silent-renewal-failure and missed-deletion cases. The grace window
+   *    exists for the plan that is still 'active' with a renewal webhook in
+   *    flight or lost: it keeps a paying customer from being cut off the
+   *    instant their period rolls over. It is not the dunning window —
+   *    suspendExpiredFundingPlans measures its own grace from updatedAt on
+   *    past_due rows, and those rows never reach this helper.
+   *
+   * pv-jdot.3.1 adds cancel_at for cancel-at-period-end plans. Adding it here
+   * is not the whole of that work: by then there are three markers that can
+   * end access (cancelled_at, cancel_at, current_period_end) against four
+   * predicates that read them (this helper, hasActiveFundingPlan,
+   * getFundingStatusForCalendar, getPlanStatusForCalendars), and which marker
+   * governs which predicate needs one ruling recorded on that bead rather than
+   * a fifth reading invented at this call site.
    *
    * @param plan - Funding plan the allocation belongs to
    * @param gracePeriodDays - Instance grace period applied after the paid-through date

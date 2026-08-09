@@ -115,29 +115,29 @@ describe('Subscription Entities', () => {
     });
 
     describe('status transition hook', () => {
+      const planRow = (status: 'active' | 'past_due' | 'suspended' | 'cancelled') => ({
+        id: 'sub-id',
+        account_id: 'account-id',
+        provider_config_id: 'provider-id',
+        provider_subscription_id: 'sub_123',
+        provider_customer_id: 'cus_123',
+        status,
+        billing_cycle: 'monthly' as const,
+        amount: 1000000,
+        currency: 'USD',
+        current_period_start: new Date(),
+        current_period_end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+        cancelled_at: new Date(Date.now() - 24 * 60 * 60 * 1000),
+        suspended_at: new Date(Date.now() - 24 * 60 * 60 * 1000),
+      });
+
       /**
-       * Builds a persisted-looking plan in the given status, with both
-       * lifecycle markers set, so a transition can be driven through the hook
-       * and its clean-up observed. isNewRecord: false is what makes
-       * instance.previous('status') report the stored status, as it does for
-       * a row loaded from the database and then updated.
+       * Builds a plan in the given status, with both lifecycle markers set, for
+       * tests that then reassign .status. That reassignment is what populates
+       * previous('status'), so these instances need no further ceremony.
        */
       function buildPlan(status: 'active' | 'past_due' | 'suspended' | 'cancelled'): FundingPlanEntity {
-        return FundingPlanEntity.build({
-          id: 'sub-id',
-          account_id: 'account-id',
-          provider_config_id: 'provider-id',
-          provider_subscription_id: 'sub_123',
-          provider_customer_id: 'cus_123',
-          status,
-          billing_cycle: 'monthly' as const,
-          amount: 1000000,
-          currency: 'USD',
-          current_period_start: new Date(),
-          current_period_end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-          cancelled_at: new Date(Date.now() - 24 * 60 * 60 * 1000),
-          suspended_at: new Date(Date.now() - 24 * 60 * 60 * 1000),
-        }, { isNewRecord: false });
+        return FundingPlanEntity.build(planRow(status));
       }
 
       it('should clear cancelled_at when a cancelled plan is resubscribed', () => {
@@ -170,6 +170,21 @@ describe('Subscription Entities', () => {
         expect(entity.cancelled_at).toBeInstanceOf(Date);
       });
 
+      it('should leave both markers untouched when the status does not change', () => {
+        // A save that touches some other column must not restamp the lifecycle
+        // markers. raw: true seeds previous() from the row without any
+        // reassignment, which is what a loaded-then-resaved record looks like
+        // when status is not among the columns being updated.
+        const row = planRow('cancelled');
+        const entity = FundingPlanEntity.build(row, { isNewRecord: false, raw: true });
+
+        expect(entity.previous('status')).toBe('cancelled');
+
+        FundingPlanEntity.validateStatusTransition(entity);
+
+        expect(entity.cancelled_at).toBe(row.cancelled_at);
+        expect(entity.suspended_at).toBe(row.suspended_at);
+      });
     });
   });
 

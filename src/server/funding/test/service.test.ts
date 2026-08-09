@@ -1142,6 +1142,15 @@ describe('FundingService', () => {
         expect(allowed).toBe(true);
       });
 
+      /**
+       * The three cases below pair a past or future cancelled_at with an
+       * active status to characterise planAccessExpiry as a pure function of
+       * the plan's dates. That combination is not reachable through today's
+       * writers — cancel() and the status-transition hook only ever write
+       * cancelled_at together with status 'cancelled' — so these pin the
+       * helper's arithmetic, not a live path. They become live when
+       * pv-jdot.3.1 lands a cancellation marker that leaves the plan active.
+       */
       it('should close the gate once a recorded cancellation has passed, however long the period runs', async () => {
         stubFundingEnabled(true);
         stubOwnerIsAdmin(false);
@@ -1285,7 +1294,8 @@ describe('FundingService', () => {
       /**
        * Builds the funding plan a resubscribe leaves behind, by driving a real
        * entity through the production status-transition hook rather than
-       * asserting what we imagine that hook writes.
+       * asserting what we imagine that hook writes. Assigning .status is what
+       * populates previous('status'), which is what the hook reads.
        */
       function buildReactivatedPlan(): { status: string; cancelled_at: Date | null; current_period_end: Date | null } {
         const plan = FundingPlanEntity.build({
@@ -1302,7 +1312,7 @@ describe('FundingService', () => {
           current_period_end: new Date(Date.now() + 30 * DAY),
           cancelled_at: new Date(Date.now() - 10 * DAY),
           suspended_at: null,
-        }, { isNewRecord: false });
+        });
 
         plan.status = 'active';
         FundingPlanEntity.validateStatusTransition(plan);
