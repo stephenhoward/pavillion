@@ -1,11 +1,16 @@
 /**
- * Classification and execution logic for the /git-cleanup command.
- *
- * Design spec: docs/superpowers/specs/2026-08-08-git-cleanup-command-design.md
+ * Classification and execution logic for the /git-cleanup command. The
+ * operator-facing flow lives in .claude/commands/git-cleanup.md.
  *
  * Safety invariant: execute() re-verifies through the SAME predicate
  * functions classify() uses. Do not add a parallel implementation of any
  * deletability or protection check.
+ *
+ * Every destructive path is covered twice: .claude/tools/test/
+ * git-cleanup.test.ts stubs spawn to assert decisions and call order, and
+ * git-cleanup.integration.test.ts runs the same code against real git in a
+ * temp repo. Changes to a proof predicate or a destructive invocation need a
+ * case in both — a stubbed spawn cannot see how git actually answers.
  */
 
 import { spawnSync as nodeSpawnSync } from 'node:child_process';

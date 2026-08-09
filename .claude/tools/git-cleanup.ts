@@ -7,7 +7,7 @@
  *       --worktree-families=superset,agent,chain --plan-id=<id from classify output>
  *   npx tsx .claude/tools/git-cleanup.ts execute --branches=old-a,old-b --plan-id=<id>
  *
- * Design spec: docs/superpowers/specs/2026-08-08-git-cleanup-command-design.md
+ * Operator-facing flow: .claude/commands/git-cleanup.md
  */
 
 import { classify, execute, parseExecuteArgs } from './lib/git-cleanup.js';

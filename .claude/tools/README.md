@@ -28,7 +28,7 @@ npx tsx .claude/tools/stack.ts create <branch> <parent> --chained|--single
 npx tsx .claude/tools/stack.ts submit <branch> --chained|--single
 npx tsx .claude/tools/stack.ts sync                      # gh stack sync --prune
 
-# Local branch/worktree cleanup (design spec: docs/superpowers/specs/2026-08-08-git-cleanup-command-design.md)
+# Local branch/worktree cleanup (flow: .claude/commands/git-cleanup.md)
 npx tsx .claude/tools/git-cleanup.ts classify             # fetch --prune, classify, write plan + report
 npx tsx .claude/tools/git-cleanup.ts execute --plan-id=<id> [--categories=<a,b>] \
     [--branches=<x,y>] [--worktree-families=<x,y>]   # --branches: reviewed doubts, by name

@@ -4,8 +4,25 @@ Clean up local branches and worktrees whose work has merged to main or that
 carry no new work. Classification and deletion are performed by the
 deterministic tool in `.claude/tools/git-cleanup.ts`; this command wraps it
 with a report, a category-approval gate, and a review pass over the branches
-the tool could not prove either way. Design spec:
-`docs/superpowers/specs/2026-08-08-git-cleanup-command-design.md`.
+the tool could not prove either way.
+
+What each category proves, and how the tool acts on it:
+
+| Category | Proof | Action |
+|---|---|---|
+| `merged-ancestor` | Tip is an ancestor of `origin/main` | delete, after a live ancestry re-verify |
+| `merged-pr` | GitHub reports the branch's PR merged at the tip (catches squash/rebase merges) | delete |
+| `empty` | No upstream, no commits beyond main | delete, after a live ancestry re-verify |
+| `superseded` | No open PR, and no file the branch touched still differs from `origin/main` | delete, after a live content re-verify |
+| `doubt` | Nothing proved it either way | never deletable by category — see step 5 |
+
+Protections are hard-coded and no approval overrides them: `main`, the
+primary checkout's branch, and the current session's worktree and branch are
+never touched; a worktree is removed only when it is clean, unlocked, has no
+live process inside it, and has not been modified in the last 30 minutes.
+Before every branch deletion the tool appends `<branch> <sha>` to
+`.git/git-cleanup-undo-<date>.log`, so any deletion is reversible with
+`git branch <name> <sha>`.
 
 Two rules that no step below overrides:
 
