@@ -245,13 +245,44 @@ class CalendarService {
   }
 
   /**
-   * Get calendar for widget embedding with funding-access check.
-   * This method performs defense-in-depth funding-access verification for widget data serving.
+   * Refuse the request unless this calendar may use the widget_embedding
+   * feature, per the funding domain.
+   *
+   * The one place the calendar domain asks the funding question, shared by the
+   * public widget read and the widget-domain write so the two surfaces cannot
+   * drift apart. A missing FundingInterface means no funding domain is wired
+   * in at all — an instance that charges for nothing — so the gate opens.
+   *
+   * @param calendarId - Calendar the widget would be embedded for
+   * @throws SubscriptionRequiredError if the calendar is determinately unfunded
+   * @throws FundingAccessIndeterminateError if the funding state is unreadable
+   */
+  private async requireWidgetEmbeddingAccess(calendarId: string): Promise<void> {
+    const allowed = (await this.fundingInterface?.checkFundingAccess(calendarId, 'widget_embedding')) ?? true;
+
+    if (!allowed) {
+      throw new SubscriptionRequiredError('widget_embedding');
+    }
+  }
+
+  /**
+   * Get calendar data for widget embedding, refusing to serve it when the
+   * calendar may not use the funding-gated widget_embedding feature.
+   *
+   * The funding decision belongs entirely to the funding domain (DEC-003):
+   * this passes a FUNDING_GATED_FEATURES key to FundingInterface and acts on
+   * the answer, holding no plan state and reading none. Instance settings,
+   * admin exemption and grant-or-plan status are all that method's business.
+   *
+   * Only a determinate "unfunded" becomes SubscriptionRequiredError. An
+   * indeterminate answer (FundingAccessIndeterminateError) propagates so the
+   * route can answer it as a server error — an instance whose funding state we
+   * cannot read must never be told its community owes money.
    *
    * @param urlName - Calendar URL name
    * @returns Calendar model if access is allowed
    * @throws CalendarNotFoundError if calendar doesn't exist
-   * @throws SubscriptionRequiredError if funding is enabled and the owner lacks an active funding plan
+   * @throws SubscriptionRequiredError if the calendar is determinately unfunded
    */
   async getCalendarForWidget(urlName: string): Promise<Calendar> {
     const calendar = await this.getCalendarByName(urlName);
@@ -260,24 +291,7 @@ class CalendarService {
       throw new CalendarNotFoundError();
     }
 
-    // Check funding access for widget access (defense-in-depth)
-    const settings = await this.fundingInterface?.getSettings();
-
-    if (settings?.enabled) {
-      const ownerId = await this.getCalendarOwnerAccountId(calendar.id);
-      if (!ownerId) {
-        throw new CalendarNotFoundError();
-      }
-
-      // Admin-owned calendars bypass funding-access checks
-      const isAdmin = await this.isCalendarOwnerAdmin(ownerId);
-      if (!isAdmin) {
-        const hasSubscription = await this.fundingInterface?.hasFundingAccess(calendar.id);
-        if (!hasSubscription) {
-          throw new SubscriptionRequiredError('widget_embedding');
-        }
-      }
-    }
+    await this.requireWidgetEmbeddingAccess(calendar.id);
 
     return calendar;
   }
@@ -430,34 +444,6 @@ class CalendarService {
     });
 
     return membership !== null;
-  }
-
-  /**
-   * Check if the calendar owner account has admin role.
-   * Returns false (fail-secure) if the account is not found or roles cannot be loaded.
-   *
-   * @param ownerId - The account ID of the calendar owner
-   * @returns True if the owner is an admin, false otherwise
-   * @private
-   */
-  private async isCalendarOwnerAdmin(ownerId: string): Promise<boolean> {
-    if (!this.accountsInterface) {
-      return false;
-    }
-
-    try {
-      const account = await this.accountsInterface.getAccountById(ownerId);
-      if (!account) {
-        return false;
-      }
-
-      const accountWithRoles = await this.accountsInterface.loadAccountRoles(account);
-      return accountWithRoles.hasRole('admin');
-    }
-    catch {
-      // Fail-secure: if we can't determine admin status, treat as non-admin
-      return false;
-    }
   }
 
   /**
@@ -1680,40 +1666,20 @@ class CalendarService {
   }
 
   /**
-   * Set the allowed domain for a calendar's widget.
-   * Includes funding-access verification when funding is enabled.
+   * Apply the widget_embedding funding gate to a widget-domain configuration.
    *
-   * @param account - Account setting the domain
-   * @param calendarId - Calendar ID to configure
-   * @param domain - Domain to allow for widget embedding
-   * @throws SubscriptionRequiredError if funding is enabled and the user lacks an active funding plan
-   * @throws CalendarNotFoundError if calendar not found
-   * @throws CalendarEditorPermissionError if user lacks permission
+   * Existence and edit-permission checks belong to CalendarInterface, which
+   * runs them before calling this. The order matters: the funding question is
+   * asked last so a "this calendar is unfunded" answer can never reveal the
+   * existence or funding state of a calendar the caller may not touch.
+   *
+   * @param _account - Account setting the domain; already authorised upstream
+   * @param calendarId - Calendar ID being configured
+   * @param _domain - Domain to allow; validated and stored by WidgetDomainService
+   * @throws SubscriptionRequiredError if the calendar is determinately unfunded
    */
-  async setWidgetDomain(account: Account, calendarId: string, _domain: string): Promise<void> {
-    // Check if funding is enabled
-    const settings = await this.fundingInterface?.getSettings();
-
-    if (settings?.enabled) {
-      // Resolve calendar ownership
-      const ownerId = await this.getCalendarOwnerAccountId(calendarId);
-      if (!ownerId) {
-        throw new CalendarNotFoundError();
-      }
-
-      // Admin-owned calendars bypass funding-access checks
-      const isAdmin = await this.isCalendarOwnerAdmin(ownerId);
-      if (!isAdmin) {
-        // Check funding-plan status
-        const hasSubscription = await this.fundingInterface?.hasFundingAccess(calendarId);
-        if (!hasSubscription) {
-          throw new SubscriptionRequiredError('widget_embedding');
-        }
-      }
-    }
-
-    // Existing permission and validation logic would be handled by CalendarInterface
-    // This method is called after those checks pass
+  async setWidgetDomain(_account: Account, calendarId: string, _domain: string): Promise<void> {
+    await this.requireWidgetEmbeddingAccess(calendarId);
   }
 
   /**

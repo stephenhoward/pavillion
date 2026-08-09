@@ -2,36 +2,37 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import sinon from 'sinon';
 
 import { Account } from '@/common/model/account';
-import { CalendarNotFoundError } from '@/common/exceptions/calendar';
 import { SubscriptionRequiredError } from '@/common/exceptions/subscription';
+import { FundingAccessIndeterminateError } from '@/common/exceptions/funding';
 import CalendarService from '@/server/calendar/service/calendar';
 import FundingInterface from '@/server/funding/interface';
-import AccountsInterface from '@/server/accounts/interface';
 
+/**
+ * setWidgetDomain is the write-side widget_embedding gate. CalendarInterface
+ * establishes that the calendar exists and that the caller may modify it
+ * before this runs, so these tests cover only the funding question and the
+ * three answers it can come back with.
+ */
 describe('CalendarService.setWidgetDomain', () => {
   let sandbox: sinon.SinonSandbox;
   let service: CalendarService;
   let mockFundingInterface: FundingInterface;
-  let mockAccountsInterface: AccountsInterface;
+  let checkFundingAccessStub: sinon.SinonStub;
   let account: Account;
+
+  const calendarId = 'calendar-id';
+  const domain = 'example.com';
 
   beforeEach(() => {
     sandbox = sinon.createSandbox();
 
-    // Create mock accounts interface
-    mockAccountsInterface = {
-      getAccountById: sandbox.stub(),
-      loadAccountRoles: sandbox.stub(),
-    } as any;
-
-    // Create mock funding interface
+    checkFundingAccessStub = sandbox.stub();
     mockFundingInterface = {
-      getSettings: sandbox.stub(),
-      hasFundingAccess: sandbox.stub(),
+      checkFundingAccess: checkFundingAccessStub,
     } as any;
 
     service = new CalendarService(
-      mockAccountsInterface,
+      undefined,
       undefined,
       undefined,
       mockFundingInterface,
@@ -44,230 +45,53 @@ describe('CalendarService.setWidgetDomain', () => {
     sandbox.restore();
   });
 
-  describe('when funding is disabled (free instance)', () => {
-    it('should succeed without a funding-access check', async () => {
-      const calendarId = 'calendar-id';
-      const domain = 'example.com';
+  it('should ask the funding domain about widget_embedding for the target calendar', async () => {
+    checkFundingAccessStub.resolves(true);
 
-      const settingsStub = mockFundingInterface.getSettings as sinon.SinonStub;
-      settingsStub.resolves({ enabled: false });
+    await service.setWidgetDomain(account, calendarId, domain);
 
-      await service.setWidgetDomain(account, calendarId, domain);
-
-      // Should not check funding access when disabled
-      const hasFundingAccessStub = mockFundingInterface.hasFundingAccess as sinon.SinonStub;
-      expect(hasFundingAccessStub.called).toBe(false);
-    });
+    expect(checkFundingAccessStub.calledOnceWithExactly(calendarId, 'widget_embedding')).toBe(true);
   });
 
-  describe('when funding is enabled', () => {
-    it('should throw CalendarNotFoundError if calendar has no owner', async () => {
-      const calendarId = 'calendar-id';
-      const domain = 'example.com';
+  it('should throw SubscriptionRequiredError naming the feature when the gate is closed', async () => {
+    checkFundingAccessStub.resolves(false);
 
-      sandbox.stub(service, 'getCalendarOwnerAccountId').resolves(null);
+    await expect(
+      service.setWidgetDomain(account, calendarId, domain),
+    ).rejects.toThrow(SubscriptionRequiredError);
 
-      const settingsStub = mockFundingInterface.getSettings as sinon.SinonStub;
-      settingsStub.resolves({ enabled: true });
-
-      await expect(
-        service.setWidgetDomain(account, calendarId, domain),
-      ).rejects.toThrow(CalendarNotFoundError);
-    });
-
-    it('should throw SubscriptionRequiredError if owner lacks a funding plan access', async () => {
-      const calendarId = 'calendar-id';
-      const ownerId = 'owner-account-id';
-      const domain = 'example.com';
-
-      sandbox.stub(service, 'getCalendarOwnerAccountId').resolves(ownerId);
-
-      const settingsStub = mockFundingInterface.getSettings as sinon.SinonStub;
-      settingsStub.resolves({ enabled: true });
-
-      const hasFundingAccessStub = mockFundingInterface.hasFundingAccess as sinon.SinonStub;
-      hasFundingAccessStub.resolves(false);
-
-      await expect(
-        service.setWidgetDomain(account, calendarId, domain),
-      ).rejects.toThrow(SubscriptionRequiredError);
-
-      await expect(
-        service.setWidgetDomain(account, calendarId, domain),
-      ).rejects.toThrow('widget_embedding requires an active funding plan');
-
-      expect(hasFundingAccessStub.calledWith(calendarId)).toBe(true);
-    });
-
-    it('should succeed if owner has active funding plan', async () => {
-      const calendarId = 'calendar-id';
-      const ownerId = 'owner-account-id';
-      const domain = 'example.com';
-
-      sandbox.stub(service, 'getCalendarOwnerAccountId').resolves(ownerId);
-
-      const settingsStub = mockFundingInterface.getSettings as sinon.SinonStub;
-      settingsStub.resolves({ enabled: true });
-
-      const hasFundingAccessStub = mockFundingInterface.hasFundingAccess as sinon.SinonStub;
-      hasFundingAccessStub.resolves(true);
-
+    try {
       await service.setWidgetDomain(account, calendarId, domain);
+      expect.fail('Should have thrown SubscriptionRequiredError');
+    }
+    catch (error) {
+      expect((error as SubscriptionRequiredError).feature).toBe('widget_embedding');
+      expect((error as Error).message).toBe('widget_embedding requires an active funding plan');
+    }
+  });
 
-      expect(hasFundingAccessStub.calledWith(calendarId)).toBe(true);
-    });
+  it('should propagate an indeterminate funding state rather than billing the caller for it', async () => {
+    checkFundingAccessStub.rejects(
+      new FundingAccessIndeterminateError('Instance funding settings could not be read'),
+    );
 
-    it('should succeed if owner has active complimentary grant', async () => {
-      const calendarId = 'calendar-id';
-      const ownerId = 'owner-account-id';
-      const domain = 'example.com';
-
-      sandbox.stub(service, 'getCalendarOwnerAccountId').resolves(ownerId);
-
-      const settingsStub = mockFundingInterface.getSettings as sinon.SinonStub;
-      settingsStub.resolves({ enabled: true });
-
-      const hasFundingAccessStub = mockFundingInterface.hasFundingAccess as sinon.SinonStub;
-      // hasFundingAccess returns true when calendar has a grant (even without active funding plan)
-      hasFundingAccessStub.resolves(true);
-
+    // An unreadable instance funding state must reach the route as a server
+    // error, never as 402 / SubscriptionRequiredError.
+    try {
       await service.setWidgetDomain(account, calendarId, domain);
+      expect.fail('Should have thrown FundingAccessIndeterminateError');
+    }
+    catch (error) {
+      expect(error).toBeInstanceOf(FundingAccessIndeterminateError);
+      expect(error).not.toBeInstanceOf(SubscriptionRequiredError);
+    }
+  });
 
-      expect(hasFundingAccessStub.calledWith(calendarId)).toBe(true);
-    });
+  it('should allow the configuration when no funding domain is wired in', async () => {
+    const serviceWithoutFunding = new CalendarService();
 
-    it('should include feature name in SubscriptionRequiredError', async () => {
-      const calendarId = 'calendar-id';
-      const ownerId = 'owner-account-id';
-      const domain = 'example.com';
-
-      sandbox.stub(service, 'getCalendarOwnerAccountId').resolves(ownerId);
-
-      const settingsStub = mockFundingInterface.getSettings as sinon.SinonStub;
-      settingsStub.resolves({ enabled: true });
-
-      const hasFundingAccessStub = mockFundingInterface.hasFundingAccess as sinon.SinonStub;
-      hasFundingAccessStub.resolves(false);
-
-      try {
-        await service.setWidgetDomain(account, calendarId, domain);
-        expect.fail('Should have thrown SubscriptionRequiredError');
-      }
-      catch (error) {
-        expect(error).toBeInstanceOf(SubscriptionRequiredError);
-        expect((error as SubscriptionRequiredError).feature).toBe('widget_embedding');
-      }
-    });
-
-    describe('admin bypass', () => {
-      it('should bypass funding-access check if calendar owner is admin', async () => {
-        const calendarId = 'calendar-id';
-        const ownerId = 'admin-account-id';
-        const domain = 'example.com';
-        const adminAccount = new Account('admin-account-id', 'admin', 'admin@example.com');
-        adminAccount.roles = ['admin'];
-
-        sandbox.stub(service, 'getCalendarOwnerAccountId').resolves(ownerId);
-
-        const settingsStub = mockFundingInterface.getSettings as sinon.SinonStub;
-        settingsStub.resolves({ enabled: true });
-
-        const getAccountStub = mockAccountsInterface.getAccountById as sinon.SinonStub;
-        getAccountStub.withArgs(ownerId).resolves(adminAccount);
-
-        const loadRolesStub = mockAccountsInterface.loadAccountRoles as sinon.SinonStub;
-        loadRolesStub.withArgs(adminAccount).resolves(adminAccount);
-
-        const hasFundingAccessStub = mockFundingInterface.hasFundingAccess as sinon.SinonStub;
-
-        await service.setWidgetDomain(account, calendarId, domain);
-
-        // Should not check funding access for admin
-        expect(hasFundingAccessStub.called).toBe(false);
-      });
-
-      it('should require a funding plan if calendar owner is not admin', async () => {
-        const calendarId = 'calendar-id';
-        const ownerId = 'regular-account-id';
-        const domain = 'example.com';
-        const regularAccount = new Account('regular-account-id', 'user', 'user@example.com');
-        regularAccount.roles = ['user'];
-
-        sandbox.stub(service, 'getCalendarOwnerAccountId').resolves(ownerId);
-
-        const settingsStub = mockFundingInterface.getSettings as sinon.SinonStub;
-        settingsStub.resolves({ enabled: true });
-
-        const getAccountStub = mockAccountsInterface.getAccountById as sinon.SinonStub;
-        getAccountStub.withArgs(ownerId).resolves(regularAccount);
-
-        const loadRolesStub = mockAccountsInterface.loadAccountRoles as sinon.SinonStub;
-        loadRolesStub.withArgs(regularAccount).resolves(regularAccount);
-
-        const hasFundingAccessStub = mockFundingInterface.hasFundingAccess as sinon.SinonStub;
-        hasFundingAccessStub.resolves(false);
-
-        await expect(
-          service.setWidgetDomain(account, calendarId, domain),
-        ).rejects.toThrow(SubscriptionRequiredError);
-
-        // Should check funding access for non-admin using calendarId (not account ID)
-        expect(hasFundingAccessStub.calledWith(calendarId)).toBe(true);
-      });
-
-      it('should require a funding plan if account not found (fail-secure)', async () => {
-        const calendarId = 'calendar-id';
-        const ownerId = 'unknown-account-id';
-        const domain = 'example.com';
-
-        sandbox.stub(service, 'getCalendarOwnerAccountId').resolves(ownerId);
-
-        const settingsStub = mockFundingInterface.getSettings as sinon.SinonStub;
-        settingsStub.resolves({ enabled: true });
-
-        const getAccountStub = mockAccountsInterface.getAccountById as sinon.SinonStub;
-        getAccountStub.withArgs(ownerId).resolves(undefined);
-
-        const hasFundingAccessStub = mockFundingInterface.hasFundingAccess as sinon.SinonStub;
-        hasFundingAccessStub.resolves(false);
-
-        await expect(
-          service.setWidgetDomain(account, calendarId, domain),
-        ).rejects.toThrow(SubscriptionRequiredError);
-
-        // Should check funding access using calendarId (not account ID) when account lookup fails
-        expect(hasFundingAccessStub.calledWith(calendarId)).toBe(true);
-      });
-
-      it('should require a funding plan if roles cannot be loaded (fail-secure)', async () => {
-        const calendarId = 'calendar-id';
-        const ownerId = 'account-id';
-        const domain = 'example.com';
-        const ownerAccount = new Account('account-id', 'user', 'user@example.com');
-        // No roles loaded
-
-        sandbox.stub(service, 'getCalendarOwnerAccountId').resolves(ownerId);
-
-        const settingsStub = mockFundingInterface.getSettings as sinon.SinonStub;
-        settingsStub.resolves({ enabled: true });
-
-        const getAccountStub = mockAccountsInterface.getAccountById as sinon.SinonStub;
-        getAccountStub.withArgs(ownerId).resolves(ownerAccount);
-
-        const loadRolesStub = mockAccountsInterface.loadAccountRoles as sinon.SinonStub;
-        // Return account with no roles (null/undefined)
-        loadRolesStub.withArgs(ownerAccount).resolves(ownerAccount);
-
-        const hasFundingAccessStub = mockFundingInterface.hasFundingAccess as sinon.SinonStub;
-        hasFundingAccessStub.resolves(false);
-
-        await expect(
-          service.setWidgetDomain(account, calendarId, domain),
-        ).rejects.toThrow(SubscriptionRequiredError);
-
-        // Should check funding access using calendarId (not account ID) when roles can't be determined
-        expect(hasFundingAccessStub.calledWith(calendarId)).toBe(true);
-      });
-    });
+    await expect(
+      serviceWithoutFunding.setWidgetDomain(account, calendarId, domain),
+    ).resolves.toBeUndefined();
   });
 });

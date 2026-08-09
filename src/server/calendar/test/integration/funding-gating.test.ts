@@ -95,8 +95,8 @@ describe('Funding Gating Integration Tests', () => {
 
   /**
    * Helper function to create an active funding plan for an account and link it to a calendar.
-   * hasActiveFundingPlan now checks CalendarFundingPlanEntity by calendar_id, so both
-   * a FundingPlanEntity and a CalendarFundingPlanEntity are required.
+   * checkFundingAccess looks for a live CalendarFundingPlanEntity allocation on an active
+   * plan, so both a FundingPlanEntity and a CalendarFundingPlanEntity are required.
    */
   async function createActiveFundingPlan(accountId: string, calendarId?: string) {
     const futureDate = new Date();
@@ -118,7 +118,7 @@ describe('Funding Gating Integration Tests', () => {
     });
     await plan.save();
 
-    // Link the plan to the calendar so hasActiveFundingPlan(calendarId) returns true
+    // Link the plan to the calendar so the gate opens for that calendar
     if (calendarId) {
       const calendarSub = CalendarFundingPlanEntity.build({
         id: uuidv4(),
@@ -182,6 +182,10 @@ describe('Funding Gating Integration Tests', () => {
     eventBus = new EventEmitter();
     fundingInterface = new FundingInterface(eventBus);
     calendarInterface = new CalendarInterface(eventBus, undefined, undefined, fundingInterface);
+    // Mirror server.ts: the funding domain resolves calendar ownership (for
+    // admin exemption) through CalendarInterface, so the back-reference has to
+    // be wired for checkFundingAccess to answer from a complete picture.
+    fundingInterface.setCalendarInterface(calendarInterface);
     const configurationInterface = new ConfigurationInterface();
     const setupInterface = new SetupInterface();
     const accountService = new AccountService(eventBus, configurationInterface, setupInterface);
