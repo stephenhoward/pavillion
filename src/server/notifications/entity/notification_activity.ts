@@ -35,6 +35,24 @@ import { NotificationRecipientEntity } from '@/server/notifications/entity/notif
  *     for the same reason as `object_id`, and NULL is a real case — an
  *     admin reporting a remote event produces a report no local calendar
  *     owns — not an error path.
+ *
+ *     Two kinds of denormalized column live on this row and they are NOT
+ *     interchangeable. `object_label` is a frozen display snapshot: its
+ *     staleness is a feature, because it is what keeps a row renderable
+ *     after the underlying object is deleted. `object_calendar_id` is a
+ *     live routing key: its staleness would be a defect, because a wrong
+ *     value routes a calendar owner to another calendar's reports tab.
+ *
+ *     What makes the copy safe is that a report's owning calendar is
+ *     immutable — `ReportEntity.calendar_id` is written once at creation
+ *     and no update path touches it. If that ever stops being true, this
+ *     column needs a write-through, not just a comment.
+ *
+ *     Populated only by the three report verbs (Flag, ReportEscalated,
+ *     ReportResolved). For every other verb it is legitimately absent, so
+ *     NULL here carries three distinct meanings — not applicable to this
+ *     verb, no owning calendar (admin-reported remote event), or a row
+ *     written before migration 0040 — and none of them is an error.
  *   - `verb`, `origin`, `actor_kind`, `object_type` are DB-level ENUMs so
  *     adding a value is a schema migration, not a config change. The
  *     corresponding TypeScript union types live in
