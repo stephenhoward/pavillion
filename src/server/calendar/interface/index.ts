@@ -154,6 +154,19 @@ export default class CalendarInterface {
     return this.calendarService.getCalendarByName(name);
   }
 
+  /**
+   * Resolves a set of calendar ids to their url names in a single query.
+   *
+   * Lets other domains build calendar links without reaching into calendar
+   * internals or issuing one lookup per row.
+   *
+   * @param calendarIds - The calendar UUIDs to resolve
+   * @returns Map of calendar ID to url name; ids with no matching calendar are absent
+   */
+  async getCalendarUrlNames(calendarIds: Set<string>): Promise<Map<string, string>> {
+    return this.calendarService.getCalendarUrlNames(calendarIds);
+  }
+
   async getCalendarForWidget(urlName: string): Promise<Calendar> {
     return this.calendarService.getCalendarForWidget(urlName);
   }

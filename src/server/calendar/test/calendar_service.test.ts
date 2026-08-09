@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import sinon from 'sinon';
 import { EventEmitter } from 'events';
+import { Op } from 'sequelize';
 
 import { Account } from '@/common/model/account';
 import { Calendar, CalendarContent } from '@/common/model/calendar';
@@ -1388,5 +1389,78 @@ describe('updateCalendarSettings - defaultEventImageId', () => {
 
     expect(calendarEntityStub.update.calledWith({ default_event_image_id: null })).toBe(true);
     expect(emitSpy.calledWith('mediaAttachedToCalendar')).toBe(false);
+  });
+});
+
+describe('getCalendarUrlNames', () => {
+  let sandbox: sinon.SinonSandbox;
+  let service: CalendarService;
+  let findAllStub: sinon.SinonStub;
+
+  beforeEach(() => {
+    sandbox = sinon.createSandbox();
+    service = new CalendarService();
+    findAllStub = sandbox.stub(CalendarEntity, 'findAll');
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+  });
+
+  it('should return an empty map without issuing a query for an empty set', async () => {
+    const result = await service.getCalendarUrlNames(new Set());
+
+    expect(result.size).toBe(0);
+    expect(findAllStub.called).toBe(false);
+  });
+
+  it('should resolve a single calendar id to its url name', async () => {
+    findAllStub.resolves([
+      { id: 'cal-1', url_name: 'first-calendar' },
+    ] as any);
+
+    const result = await service.getCalendarUrlNames(new Set(['cal-1']));
+
+    expect(result.size).toBe(1);
+    expect(result.get('cal-1')).toBe('first-calendar');
+  });
+
+  it('should resolve many calendar ids with exactly one query', async () => {
+    findAllStub.resolves([
+      { id: 'cal-1', url_name: 'first-calendar' },
+      { id: 'cal-2', url_name: 'second-calendar' },
+      { id: 'cal-3', url_name: 'third-calendar' },
+    ] as any);
+
+    const result = await service.getCalendarUrlNames(new Set(['cal-1', 'cal-2', 'cal-3']));
+
+    expect(findAllStub.calledOnce).toBe(true);
+    expect(result.size).toBe(3);
+    expect(result.get('cal-1')).toBe('first-calendar');
+    expect(result.get('cal-2')).toBe('second-calendar');
+    expect(result.get('cal-3')).toBe('third-calendar');
+  });
+
+  it('should query with an IN clause over the ids, narrowed attributes, and no include', async () => {
+    findAllStub.resolves([] as any);
+
+    await service.getCalendarUrlNames(new Set(['cal-1', 'cal-2']));
+
+    const options = findAllStub.firstCall.args[0];
+    expect(options.where.id[Op.in]).toEqual(['cal-1', 'cal-2']);
+    expect(options.attributes).toEqual(['id', 'url_name']);
+    expect(options.include).toBeUndefined();
+  });
+
+  it('should omit unknown calendar ids from the map', async () => {
+    findAllStub.resolves([
+      { id: 'cal-1', url_name: 'first-calendar' },
+    ] as any);
+
+    const result = await service.getCalendarUrlNames(new Set(['cal-1', 'missing-calendar']));
+
+    expect(result.size).toBe(1);
+    expect(result.has('missing-calendar')).toBe(false);
+    expect(result.get('missing-calendar')).toBeUndefined();
   });
 });
