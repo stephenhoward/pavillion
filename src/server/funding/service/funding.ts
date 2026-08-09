@@ -1651,19 +1651,32 @@ export default class FundingService {
    *     operator who has not turned funding on runs an instance with no paid
    *     tier, so no feature may be withheld (DEC-001 instance autonomy).
    *  2. The calendar's owner is an instance admin -> open.
-   *  3. An active complimentary grant or an active funding plan allocation ->
-   *     open, unless the plan's cancellation boundary has already passed. That
-   *     boundary is read from the plan itself rather than from its
-   *     webhook-driven status, so a missed customer.subscription.deleted
-   *     cannot grant access indefinitely.
+   *  3. An active complimentary grant, or a funding plan allocation that has
+   *     not passed its access boundary -> open. The boundary comes from the
+   *     plan's own dates rather than its webhook-driven status, so a missed
+   *     customer.subscription.deleted cannot grant access indefinitely.
    *  4. Funding is enabled but the answer is indeterminate (database error,
    *     credential decrypt failure, provider unreachable) -> CLOSED. "Cannot
-   *     tell" is not "entitled".
+   *     tell" is not "has access".
    *
    * Note the deliberate split in invariants 1 and 4: a *known* absence of
    * funding opens gates, an *unknown* funding state closes them. Neither is
    * the ambiguous "fail-secure" the earlier hasFundingAccess implemented,
    * which had no notion of an instance with funding switched off.
+   *
+   * Where invariants 3 and 4 meet, the tie-break is: **a determinate allow
+   * beats an indeterminate sibling read.** The admin, grant and plan checks
+   * are read independently; one of them failing means "unknown from that
+   * source", never a denial of what another source can still answer. A
+   * complimentary-grant table that is unreadable must not deny a calendar with
+   * a healthy paid allocation. The gate closes only when no source produced an
+   * allow.
+   *
+   * Constraint on consumers (middleware, API handlers, upsell UI): a denial
+   * from this method is not always "unfunded". When the instance-level funding
+   * state itself could not be read, the denial is a server-side failure and
+   * must surface as a server error — never as 402 / SubscriptionRequiredError,
+   * which would tell an operator to buy something to fix our outage.
    *
    * The feature key carries no policy of its own today — every gated feature
    * is decided the same way — but it is validated against the registry so an
@@ -1686,56 +1699,99 @@ export default class FundingService {
     }
 
     // Invariant 1: funding not enabled on this instance -> all gates open.
-    let fundingEnabled: boolean;
+    let settings: FundingSettings;
     try {
-      fundingEnabled = (await this.getSettings()).enabled;
+      settings = await this.getSettings();
     }
     catch (error) {
-      // Invariant 4: we cannot establish that funding is switched off, so we
-      // cannot open the gate on that basis either.
+      // Invariant 4, instance scope: we cannot establish that funding is
+      // switched off, so we cannot open the gate on that basis either. This is
+      // the denial that consumers must report as a server error.
       logError(error, 'checkFundingAccess: instance funding settings unreadable, closing gate');
       return false;
     }
 
-    if (!fundingEnabled) {
+    if (!settings.enabled) {
       return true;
     }
 
+    // Invariant 2: admin-owned calendars are exempt.
+    if (await this.readAccessSource(
+      () => this.isCalendarOwnerAdmin(calendarId),
+      'checkFundingAccess: calendar owner admin check unreadable',
+    )) {
+      return true;
+    }
+
+    // Invariant 3: an active grant, or a plan allocation still inside its
+    // access boundary.
+    if (await this.readAccessSource(
+      () => this.hasActiveGrant(calendarId),
+      'checkFundingAccess: complimentary grant lookup unreadable',
+    )) {
+      return true;
+    }
+
+    return this.readAccessSource(
+      () => this.hasQualifyingFundingPlan(calendarId, settings.gracePeriodDays),
+      'checkFundingAccess: funding plan lookup unreadable',
+    );
+  }
+
+  /**
+   * Read one source of funding access, treating a failure as "this source
+   * cannot answer" rather than as a denial.
+   *
+   * Keeping each source independent is what implements the tie-break rule in
+   * checkFundingAccess: an unreadable source contributes no allow, but it also
+   * never suppresses the allow a sibling source can still produce. With no
+   * allow from any source the gate closes, so a failure can only ever cost
+   * access it was not able to justify.
+   *
+   * @param read - The access check to run
+   * @param context - Log context describing which source failed
+   * @returns The check's answer, or false if it could not be read
+   */
+  private async readAccessSource(read: () => Promise<boolean>, context: string): Promise<boolean> {
     try {
-      // Invariant 2: admin-owned calendars are exempt.
-      const ownerId = this.calendarInterface
-        ? await this.calendarInterface.getCalendarOwnerAccountId(calendarId)
-        : null;
-
-      if (ownerId && await this.isAccountAdmin(ownerId)) {
-        return true;
-      }
-
-      // Invariant 3: an active grant or a still-entitling funding plan.
-      if (await this.hasActiveGrant(calendarId)) {
-        return true;
-      }
-
-      return await this.hasEntitlingFundingPlan(calendarId);
+      return await read();
     }
     catch (error) {
-      // Invariant 4: indeterminate funding status -> closed.
-      logError(error, 'checkFundingAccess: funding status indeterminate, closing gate');
+      logError(error, context);
       return false;
     }
   }
 
   /**
-   * Check whether the calendar has a funding plan allocation that still
-   * entitles it, i.e. an active allocation on an active plan that has not
-   * passed its cancellation boundary.
-   *
-   * Stricter than hasActiveFundingPlan, which trusts the plan's status alone.
+   * Check whether a calendar's owner is an instance admin.
    *
    * @param calendarId - Calendar ID to check
-   * @returns True if a funding plan allocation currently entitles the calendar
+   * @returns True if the calendar has a resolvable owner holding the admin role
    */
-  private async hasEntitlingFundingPlan(calendarId: string): Promise<boolean> {
+  private async isCalendarOwnerAdmin(calendarId: string): Promise<boolean> {
+    if (!this.calendarInterface) {
+      return false;
+    }
+
+    const ownerId = await this.calendarInterface.getCalendarOwnerAccountId(calendarId);
+
+    return ownerId ? this.isAccountAdmin(ownerId) : false;
+  }
+
+  /**
+   * Check whether the calendar has a funding plan allocation that still grants
+   * access: an active allocation, on an active plan, inside the plan's access
+   * boundary.
+   *
+   * Stricter than hasActiveFundingPlan, which trusts the plan's status alone
+   * and therefore keeps granting access to a plan whose ending was never
+   * reported to us.
+   *
+   * @param calendarId - Calendar ID to check
+   * @param gracePeriodDays - Instance grace period applied after the paid-through date
+   * @returns True if a funding plan allocation currently grants access
+   */
+  private async hasQualifyingFundingPlan(calendarId: string, gracePeriodDays: number): Promise<boolean> {
     const allocation = await CalendarFundingPlanEntity.findOne({
       where: {
         calendar_id: calendarId,
@@ -1755,30 +1811,48 @@ export default class FundingService {
       return false;
     }
 
-    const expiry = this.planEntitlementExpiry(allocation.fundingPlan);
+    const expiry = this.planAccessExpiry(allocation.fundingPlan, gracePeriodDays);
 
     return expiry === null || Date.now() < expiry.getTime();
   }
 
   /**
-   * The instant at which a funding plan stops entitling its calendars, or null
-   * if it has no scheduled end.
+   * The instant at which a funding plan stops granting access to its
+   * calendars, or null if nothing on the plan sets an end.
    *
-   * A plan cancelled at period end keeps entitling until its current period
-   * runs out, and then stops on the clock rather than on the webhook that
-   * reports the cancellation. cancelled_at is the cancellation marker the plan
-   * entity carries today; pv-jdot.3.1 introduces an explicit cancel_at for
-   * cancel-at-period-end plans, and this helper is where it gets read.
+   * Two candidate boundaries are considered and the EARLIEST wins, because a
+   * gate helper must never round permissive:
+   *
+   *  - cancelled_at, the recorded cancellation. An immediate cancellation ends
+   *    access when it happens, even though the interrupted billing period may
+   *    still have weeks to run. pv-jdot.3.1 adds an explicit cancel_at for
+   *    cancel-at-period-end plans, and this is where it joins the list.
+   *  - current_period_end plus the instance grace period. This is the boundary
+   *    written on the happy path, on every renewal, so it is the one that
+   *    still applies when a cancellation is never reported to us at all — the
+   *    silent-renewal-failure and missed-deletion cases. The grace period is
+   *    the same window suspendExpiredFundingPlans uses, so a customer in
+   *    dunning is not cut off before the instance's own policy says so.
    *
    * @param plan - Funding plan the allocation belongs to
-   * @returns Entitlement expiry instant, or null if the plan has none
+   * @param gracePeriodDays - Instance grace period applied after the paid-through date
+   * @returns Access expiry instant, or null if the plan sets none
    */
-  private planEntitlementExpiry(plan: FundingPlanEntity): Date | null {
-    if (!plan.cancelled_at) {
+  private planAccessExpiry(plan: FundingPlanEntity, gracePeriodDays: number): Date | null {
+    const graceMs = Math.max(gracePeriodDays, 0) * 24 * 60 * 60 * 1000;
+
+    const boundaries = [
+      plan.cancelled_at,
+      plan.current_period_end
+        ? new Date(plan.current_period_end.getTime() + graceMs)
+        : null,
+    ].filter((boundary): boundary is Date => boundary instanceof Date);
+
+    if (boundaries.length === 0) {
       return null;
     }
 
-    return plan.current_period_end ?? plan.cancelled_at;
+    return boundaries.reduce((earliest, boundary) => boundary < earliest ? boundary : earliest);
   }
 
   /**

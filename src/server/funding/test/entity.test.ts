@@ -113,6 +113,64 @@ describe('Subscription Entities', () => {
       expect(newEntity.get('status')).toBe('active');
       expect(newEntity.get('billing_cycle')).toBe('monthly');
     });
+
+    describe('status transition hook', () => {
+      /**
+       * Builds a persisted-looking plan in the given status, with both
+       * lifecycle markers set, so a transition can be driven through the hook
+       * and its clean-up observed. isNewRecord: false is what makes
+       * instance.previous('status') report the stored status, as it does for
+       * a row loaded from the database and then updated.
+       */
+      function buildPlan(status: 'active' | 'past_due' | 'suspended' | 'cancelled'): FundingPlanEntity {
+        return FundingPlanEntity.build({
+          id: 'sub-id',
+          account_id: 'account-id',
+          provider_config_id: 'provider-id',
+          provider_subscription_id: 'sub_123',
+          provider_customer_id: 'cus_123',
+          status,
+          billing_cycle: 'monthly' as const,
+          amount: 1000000,
+          currency: 'USD',
+          current_period_start: new Date(),
+          current_period_end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+          cancelled_at: new Date(Date.now() - 24 * 60 * 60 * 1000),
+          suspended_at: new Date(Date.now() - 24 * 60 * 60 * 1000),
+        }, { isNewRecord: false });
+      }
+
+      it('should clear cancelled_at when a cancelled plan is resubscribed', () => {
+        const entity = buildPlan('cancelled');
+
+        entity.status = 'active';
+        FundingPlanEntity.validateStatusTransition(entity);
+
+        // A stale cancellation marker on a paying plan would read as an
+        // expired plan to the funding-access check
+        expect(entity.cancelled_at).toBeNull();
+      });
+
+      it('should clear suspended_at when a suspended plan is reactivated', () => {
+        const entity = buildPlan('suspended');
+
+        entity.status = 'active';
+        FundingPlanEntity.validateStatusTransition(entity);
+
+        expect(entity.suspended_at).toBeNull();
+      });
+
+      it('should set cancelled_at when a plan is cancelled', () => {
+        const entity = buildPlan('active');
+        entity.cancelled_at = null;
+
+        entity.status = 'cancelled';
+        FundingPlanEntity.validateStatusTransition(entity);
+
+        expect(entity.cancelled_at).toBeInstanceOf(Date);
+      });
+
+    });
   });
 
   describe('FundingEventEntity', () => {
