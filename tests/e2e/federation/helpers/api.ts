@@ -919,3 +919,46 @@ export async function getCalendarReports(
 
   return await response.json();
 }
+
+/**
+ * POST a raw ActivityPub activity to a calendar's federation inbox.
+ *
+ * Unlike every other helper in this file, this one bypasses the Pavillion
+ * product API and speaks server-to-server ActivityPub directly. It exists for
+ * activity types Pavillion never originates — a peer that implements event
+ * attendance (Mobilizon, Gancio) sends a `Join`, but no Pavillion UI can
+ * produce one, so the only way to exercise the inbound path end to end is to
+ * hand-build the activity and post it.
+ *
+ * The federation instances run with `SKIP_SIGNATURES=true`
+ * (docker-compose.federation.yml), so no HTTP Signature is attached. Signature
+ * enforcement has its own coverage in `signature_strict_receive.spec.ts` and
+ * must not be duplicated here.
+ *
+ * The raw `Response` is returned rather than a parsed body: a 400 from the
+ * inbox's per-type validation switch is a meaningful protocol outcome the
+ * caller may want to assert, not a transport failure to throw on.
+ *
+ * @param instance - The instance whose inbox to post to
+ * @param calendarUrlName - URL name of the calendar that owns the inbox
+ * @param activity - The complete activity document to deliver
+ * @returns The raw fetch Response
+ */
+export async function postActivityToInbox(
+  instance: InstanceConfig,
+  calendarUrlName: string,
+  activity: Record<string, unknown>,
+): Promise<Response> {
+  return await fetch(
+    `${instance.baseUrl}/calendars/${encodeURIComponent(calendarUrlName)}/inbox`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/activity+json',
+      },
+      body: JSON.stringify(activity),
+      // @ts-ignore - agent is not in the TypeScript types but works at runtime
+      agent: httpsAgent,
+    },
+  );
+}
