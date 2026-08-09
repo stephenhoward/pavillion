@@ -9,6 +9,10 @@ import { testApp } from '@/server/common/test/lib/express';
 import ExpressHelper from '@/server/common/helper/express';
 import { Account } from '@/common/model/account';
 
+// Snapshot at module load: other suites stub ExpressHelper.adminOnly onto
+// their own middleware, and these tests must compare against the real chain.
+const ADMIN_ONLY_CHAIN = [...ExpressHelper.adminOnly];
+
 describe('Admin Funding API', () => {
   let router: express.Router;
   let service: FundingInterface;
@@ -198,7 +202,7 @@ describe('Admin Funding API', () => {
    * rejects a non-admin.
    */
   describe('instance settings write authorization', () => {
-    it('registers the settings routes behind the full adminOnly chain', () => {
+    it('should register the settings routes behind the full adminOnly chain', () => {
       const app = express();
       adminHandlers.installHandlers(app, '/api/funding/v1');
 
@@ -211,13 +215,13 @@ describe('Admin Funding API', () => {
 
       for (const layer of settingsLayers) {
         const handlers = layer.route.stack.map((l: any) => l.handle);
-        for (const guard of ExpressHelper.adminOnly) {
+        for (const guard of ADMIN_ONLY_CHAIN) {
           expect(handlers).toContain(guard);
         }
       }
     });
 
-    it('rejects a non-admin attempt to write settings.enabled', async () => {
+    it('should reject a non-admin attempt to write settings.enabled', async () => {
       const updateStub = sandbox.stub(service, 'updateSettings').resolves();
       const nonAdmin = new Account('user-uuid', 'user', 'user@example.com');
       nonAdmin.roles = [];
@@ -229,7 +233,7 @@ describe('Admin Funding API', () => {
       // Reuse the production role-check arm; only the passport arm is skipped.
       router.post(
         '/admin/settings',
-        ExpressHelper.adminOnly[1],
+        ADMIN_ONLY_CHAIN[1],
         adminHandlers.updateSettings.bind(adminHandlers),
       );
 
