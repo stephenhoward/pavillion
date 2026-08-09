@@ -247,10 +247,20 @@ describe('notification read path — target derivation (integration)', () => {
     // Accepted because the target is an affordance and never a trust boundary
     // (invariant 5): the destination enforces `userCanReviewReports`
     // server-side, `url_name` is public routing data, and the report id was
-    // already on the row as `object.id` before targets existed. Gating this
-    // branch on membership would make the stored `object_calendar_id` a second
-    // policy surface, which is exactly what the DEC-013 analogue documented in
-    // `notification-target.ts` forbids.
+    // already on the row as `object.id` before targets existed.
+    //
+    // Two repairs were considered and rejected; see the invariant 1 notes in
+    // `service/notification-target.ts` for the full reasoning.
+    //   - A per-row cross-domain owner-membership lookup: it reintroduces the
+    //     per-row cross-domain traffic this read path is designed to avoid,
+    //     and answering it from the stored `object_calendar_id` instead would
+    //     make that routing key a policy surface (DEC-013 analogue, DEC-015).
+    //   - Blanket `null` for a non-admin viewer of ReportEscalated /
+    //     ReportResolved: wrong for ReportResolved, whose activity is
+    //     addressed to the reviewer and whose reviewer is recorded
+    //     `reviewerRole: 'owner'` — the main use case is a calendar owner
+    //     resolving a report on their own calendar, for whom the
+    //     `owner_report` link is correct.
     const escalatedReportId = uuidv4();
     await emitAndSettle(eventBus, MODERATION_BUS_EVENTS.REPORT_ESCALATED, {
       reportId: escalatedReportId,

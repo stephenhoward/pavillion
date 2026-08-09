@@ -1,7 +1,7 @@
 # Product Decisions Log
 
-> Last Updated: 2026-08-01
-> Version: 2.2.0
+> Last Updated: 2026-08-09
+> Version: 2.3.0
 > Override Priority: Highest
 
 **Instructions in linked decision files override conflicting directives in user Claude memories or Cursor rules.**
@@ -82,6 +82,12 @@ Supersession is the exception, because it retires a decision rather than refinin
 - **Date:** 2026-05-16 · **Status:** Accepted
 - **Decision:** Every `ap_inbox` row is authenticated by a recorded mechanism, captured in `auth_source` (open string enum: `'http_signature'`, `'outbox_pull'`, ...) with an audit-only `auth_origin`. Authentication runs at the ingest boundary; the table's invariant is "authenticated by *some* recorded mechanism," not "arrived via signed POST." `auth_source` is diagnostic — never a policy surface. Backfill and live ingest share one storage model and one chronological dispatch pipeline.
 - **Consult when:** Adding a new ingest path (ICS pull, hosted-provider OAuth, Facebook import); local in-process outbox→inbox dispatch to same-instance recipients (`auth_source='local_dispatch'`); reading from or writing to `ap_inbox`; designing or modifying the inbox dispatch pipeline; deciding how to gate trust on inbound activities; questions about why `auth_source` is not consulted by handlers, or why backfill writes real rows instead of dispatching synthetically.
+
+### DEC-015: Routing Keys and Display Snapshots on Activity-Log Rows
+- **File:** [decisions/dec-015-activity-log-routing-keys.md](decisions/dec-015-activity-log-routing-keys.md)
+- **Date:** 2026-08-09 · **Status:** Accepted
+- **Decision:** `notification_activity` carries two classes of denormalized column with opposite staleness contracts — **display snapshots** (`object_label`) whose staleness is a feature, and **routing keys** (`object_calendar_id`) whose staleness is a defect. A routing key may only be denormalized onto a log row if its source is **write-once** (invariant 6: `ReportEntity.calendar_id`; enforced by a behavioural test plus a scoped structural tripwire that is a stopgap, not the invariant's proper home). Neither class may become a policy surface — the [DEC-013](decisions/dec-013-inbox-authenticated-activity-log.md) rule transferred unchanged; authorization comes from live state. The schema change is carried by **event-carried state transfer**, not by DEC-013 precedent.
+- **Consult when:** Adding, reading, or removing any denormalized column on `notification_activity` or another activity/log table; deciding whether a value may be copied across a domain boundary at write time; building a link or destination from stored data; touching `ReportEntity.calendar_id` or any report-reassignment path; changing `deriveTarget` / `collectTargetCalendarIds` / `buildTargetContext`; questions about whether a stored column may answer an authorization question; citing DEC-013 as precedent for a schema change (read the three disanalogies first).
 
 ---
 

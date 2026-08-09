@@ -46,10 +46,35 @@ import type { NotificationVerb } from '@/server/notifications/types';
  *    `test/integration/read-path-targets.test.ts`. The resolution is "the
  *    destination enforces" (invariant 5): the reports tab checks
  *    `userCanReviewReports` server-side, `url_name` is public routing data,
- *    and the report id is already on the row as `object.id`. Gating the
- *    `owner_report` branch on a membership check would turn the stored
- *    `object_calendar_id` into a second policy surface — precisely what the
- *    DEC-013 analogue below forbids.
+ *    and the report id is already on the row as `object.id`.
+ *
+ *    Two repairs were considered and rejected.
+ *
+ *    *An owner-membership check on the `owner_report` branch.* What is
+ *    rejected is specifically a **per-row cross-domain owner lookup on this
+ *    bounded read path** — not "any check that reads stored data". The read
+ *    path's whole design is a fixed two extra queries per page at any page
+ *    size (one live role read, one batched url-name lookup); a membership
+ *    test per report row reintroduces exactly the per-row cross-domain
+ *    traffic that design exists to avoid, to relabel an affordance that
+ *    grants nothing. Answering it instead from the stored
+ *    `object_calendar_id` would be the other failure: authorization decided
+ *    from a denormalized copy rather than live state (see below).
+ *
+ *    *Returning `null` for any non-admin viewer of `ReportEscalated` /
+ *    `ReportResolved`.* Tempting, because both verbs read as admin-flavoured
+ *    — but it is false for `ReportResolved`.
+ *    `ModerationService.resolveReport` records `reviewerRole: 'owner'` and
+ *    emits `REPORT_RESOLVED` with that `reviewerId`, and
+ *    `handleReportResolved` addresses the activity to that account alone.
+ *    So the primary recipient of a `ReportResolved` row is a non-admin
+ *    calendar owner who resolved a report on their own calendar, and their
+ *    `owner_report` link is correct and the main use case. A blanket
+ *    null-for-non-admin would delete that affordance. `ReportEscalated`
+ *    alone is genuinely role-addressed to instance-admins, but a
+ *    verb-specific special case for a cohort that exists only after a
+ *    demotion — and the codebase has no admin-role removal path today —
+ *    is not worth the asymmetry.
  * 2. **`isAdmin` wins for a dual-role viewer.** An account that is both an
  *    instance admin and the flagged calendar's owner gets `moderation_report`.
  *    A decision, not an accident of branch order.
@@ -67,16 +92,22 @@ import type { NotificationVerb } from '@/server/notifications/types';
  *    makes reading the denormalized `object_calendar_id` safe: a stale value
  *    would route an owner to a *different* calendar's reports tab. Unlike
  *    `object_label`, whose staleness is a feature, staleness here is a defect.
+ *    Enforced by `ReportEntity.calendar_id` being write-once (documented on
+ *    that column) plus the structural tripwire in
+ *    `test/integration/read-path-targets.test.ts`. Recorded as DEC-015.
  *
  * ## `object_calendar_id` is a routing key, not an authorization input
  *
  * Mirroring DEC-013's rule for `auth_source`: a persisted column must not
  * become a second policy surface, because it duplicates authorization logic
- * and then drifts from it. The owner-vs-admin choice comes exclusively from
- * the live `loadAccountRoles` read threaded in as `ctx.isAdmin`.
- * `object_calendar_id` only supplies the url name for the owner variant's
- * link. "This row has a calendar id, therefore the viewer is an owner" is
- * never a valid inference here.
+ * and then drifts from it. The rule forbids *answering an authorization
+ * question from a stored copy* — it is not a prohibition on reading stored
+ * data. The owner-vs-admin choice comes exclusively from the live
+ * `loadAccountRoles` read threaded in as `ctx.isAdmin`. `object_calendar_id`
+ * only supplies the url name for the owner variant's link. "This row has a
+ * calendar id, therefore the viewer is an owner" is never a valid inference
+ * here. Recorded as DEC-015
+ * (`agent-os/product/decisions/dec-015-activity-log-routing-keys.md`).
  *
  * ## NULL and unresolvable calendars are ordinary states
  *

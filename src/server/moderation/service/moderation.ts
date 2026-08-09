@@ -790,14 +790,22 @@ class ModerationService {
     // Both ids must be concrete strings before the query runs. A null calendarId
     // would become `calendar_id IS NULL` in SQL, matching exactly the
     // admin-initiated reports against remote events that the owner path must
-    // never return, and an undefined one would raise a raw Sequelize error. A
-    // non-string value is as dangerous as a missing one: Express's extended
-    // query parser turns `?calendarId[ne]=x` into an object, and Sequelize reads
-    // a nested object in a where value as an operator expression, so an
-    // operator-object would widen the scope instead of narrowing it. This throws
-    // ReportNotFoundError rather than a validation error on purpose: per DEC-004
-    // the owner path emits one indistinguishable failure, so a caller can never
-    // tell a malformed request from a report that isn't theirs.
+    // never return, and an undefined one would raise a raw Sequelize error.
+    //
+    // No current caller can pass a non-string: both ids arrive from
+    // `req.params` and are UUID_REGEX-validated in owner-report-routes.ts, and
+    // Express route params are always strings. The `typeof` half of this guard
+    // is therefore defensive rather than load-bearing — it removes the failure
+    // mode if a future caller ever sources either id from a query string, where
+    // a nested object in a where value is read by Sequelize as an operator
+    // expression and would widen the scope instead of narrowing it. Route
+    // validation, not this check, is what performs that job today.
+    //
+    // Throwing ReportNotFoundError rather than a validation error is deliberate:
+    // per DEC-004 the owner path emits one indistinguishable failure, so a
+    // caller can never tell a malformed request from a report that isn't theirs.
+    // The accepted trade is that an `undefined` id — a genuine programming
+    // error — is masked as a 404 rather than surfacing as a crash.
     if (typeof reportId !== 'string' || typeof calendarId !== 'string' || !reportId || !calendarId) {
       throw new ReportNotFoundError();
     }
