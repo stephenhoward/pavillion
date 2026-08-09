@@ -690,6 +690,9 @@ class NotificationService {
         type: activity.object_type,
         id: activity.object_id,
         label: activity.object_label,
+        // Target derivation lands with the read path in pv-mvfk.3; until then
+        // every row is non-navigable and renders as plain text.
+        target: null,
       },
       seen: recipient.seen_at !== null,
       dismissed: recipient.dismissed_at !== null,

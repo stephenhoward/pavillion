@@ -27,6 +27,7 @@ describe('InboxView', () => {
       type: 'calendar',
       id: 'cal-1',
       label: 'My Calendar',
+      target: null,
     },
     seen: false,
     dismissed: false,
@@ -112,7 +113,7 @@ describe('InboxView', () => {
         id: 'n2',
         verb: 'Announce',
         actor: { kind: 'remote_actor', displayName: 'Bob', displayUrl: null },
-        object: { type: 'event', id: 'evt-1', label: 'Town Hall' },
+        object: { type: 'event', id: 'evt-1', label: 'Town Hall', target: null },
       }),
     ];
 
@@ -160,7 +161,7 @@ describe('InboxView', () => {
       makeNotification({
         verb: 'Announce',
         actor: { kind: 'remote_actor', displayName: 'Bob', displayUrl: null },
-        object: { type: 'event', id: 'evt-123', label: 'Town Hall' },
+        object: { type: 'event', id: 'evt-123', label: 'Town Hall', target: null },
       }),
     ];
 
@@ -310,7 +311,7 @@ describe('InboxView', () => {
       makeNotification({
         verb: 'Flag',
         actor: { kind: 'anonymous', displayName: 'Anonymous reporter', displayUrl: null },
-        object: { type: 'report', id: 'rep-1', label: 'Reported Event' },
+        object: { type: 'report', id: 'rep-1', label: 'Reported Event', target: null },
       }),
     ];
 
@@ -339,7 +340,7 @@ describe('InboxView', () => {
           displayName: 'i18n:flag_actor_anonymous',
           displayUrl: null,
         },
-        object: { type: 'report', id: 'rep-anon', label: 'Reported Event' },
+        object: { type: 'report', id: 'rep-anon', label: 'Reported Event', target: null },
       }),
     ];
 
@@ -370,7 +371,7 @@ describe('InboxView', () => {
           displayName: 'i18n:flag_actor_remote{host:example.org}',
           displayUrl: 'https://example.org',
         },
-        object: { type: 'report', id: 'rep-remote', label: 'Reported Event' },
+        object: { type: 'report', id: 'rep-remote', label: 'Reported Event', target: null },
       }),
     ];
 
@@ -396,7 +397,7 @@ describe('InboxView', () => {
       makeNotification({
         verb: 'Flag',
         actor: { kind: 'anonymous', displayName: 'Anonymous reporter', displayUrl: null },
-        object: { type: 'report', id: 'rep-1', label: 'Yoga in the Park' },
+        object: { type: 'report', id: 'rep-1', label: 'Yoga in the Park', target: null },
       }),
     ];
 
@@ -417,7 +418,7 @@ describe('InboxView', () => {
       makeNotification({
         verb: 'EditorInvited',
         actor: { kind: 'account', displayName: 'Bob', displayUrl: null },
-        object: { type: 'calendar', id: 'cal-1', label: 'Community Events' },
+        object: { type: 'calendar', id: 'cal-1', label: 'Community Events', target: null },
       }),
     ];
 
@@ -438,7 +439,7 @@ describe('InboxView', () => {
       makeNotification({
         verb: 'EditorRevoked',
         actor: { kind: 'account', displayName: 'Carol', displayUrl: null },
-        object: { type: 'calendar', id: 'cal-1', label: 'Community Events' },
+        object: { type: 'calendar', id: 'cal-1', label: 'Community Events', target: null },
       }),
     ];
 
@@ -462,7 +463,7 @@ describe('InboxView', () => {
       makeNotification({
         verb: 'ReportEscalated',
         actor: { kind: 'system', displayName: '', displayUrl: null },
-        object: { type: 'report', id: 'rep-1', label: 'Yoga in the Park' },
+        object: { type: 'report', id: 'rep-1', label: 'Yoga in the Park', target: null },
       }),
     ];
 
@@ -485,7 +486,7 @@ describe('InboxView', () => {
       makeNotification({
         verb: 'ReportResolved',
         actor: { kind: 'system', displayName: '', displayUrl: null },
-        object: { type: 'report', id: 'rep-1', label: 'Yoga in the Park' },
+        object: { type: 'report', id: 'rep-1', label: 'Yoga in the Park', target: null },
       }),
     ];
 

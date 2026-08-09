@@ -221,6 +221,7 @@ describe('Notification API — GET /api/v1/notification', () => {
         type: 'calendar',
         id: activity.object_id,
         label: 'My Calendar',
+        target: null,
       });
       expect(row.seen).toBe(false);
       expect(row.dismissed).toBe(false);

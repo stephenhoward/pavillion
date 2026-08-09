@@ -35,6 +35,7 @@ function makeNotification(overrides: Partial<NotificationResponse> = {}): Notifi
       type: 'calendar',
       id: 'cal-1',
       label: 'My Calendar',
+      target: null,
     },
     seen: false,
     dismissed: false,
