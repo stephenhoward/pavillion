@@ -236,6 +236,90 @@ describe('Webhook Handling', () => {
   });
 
   // -------------------------------------------------------------------------
+  // Fail-closed signing secret — CVE-2026-41432 pattern.
+  //
+  // Stripe's constructEvent computes an HMAC over the payload keyed by the
+  // signing secret. Given an empty key it still produces a well-defined digest,
+  // so anyone who knows the secret is unset can forge a "valid" signature. A
+  // missing or blank secret must therefore reject the request outright rather
+  // than reach constructEvent at all.
+  //
+  // This is unconditional, not environment-gated: the assertions below run
+  // under NODE_ENV=test and still expect rejection. Development instances that
+  // have configured no Stripe credentials at all get MockStripeAdapter from
+  // ProviderFactory, which bypasses signature verification entirely — that is
+  // the only path where an unsigned webhook is accepted, and it is unreachable
+  // once real credentials exist.
+  // -------------------------------------------------------------------------
+  describe('Fail-closed webhook signing secret', () => {
+    beforeEach(() => {
+      vi.clearAllMocks();
+      ProviderFactory.clearAllCaches();
+    });
+
+    afterEach(() => {
+      vi.clearAllMocks();
+      ProviderFactory.clearAllCaches();
+    });
+
+    it('refuses to verify against an empty secret without calling constructEvent', () => {
+      const adapter = new StripeAdapter({ apiKey: 'sk_test_empty_secret' }, '');
+
+      expect(adapter.verifyWebhookSignature('{"id":"evt_x"}', 'any_signature')).toBe(false);
+      expect(vi.mocked(Stripe.Webhook.constructEvent)).not.toHaveBeenCalled();
+    });
+
+    it('refuses to verify against a whitespace-only secret', () => {
+      const adapter = new StripeAdapter({ apiKey: 'sk_test_blank_secret' }, '   ');
+
+      expect(adapter.verifyWebhookSignature('{"id":"evt_x"}', 'any_signature')).toBe(false);
+      expect(vi.mocked(Stripe.Webhook.constructEvent)).not.toHaveBeenCalled();
+    });
+
+    it('rejects a webhook with 400 when the stored signing secret is empty', async () => {
+      await db.sync({ force: true });
+
+      // Real API credentials but no signing secret — ProviderFactory builds a
+      // real StripeAdapter (not the mock), exactly as a misconfigured instance
+      // whose admin saved keys but never pasted the whsec_ value.
+      const stripeModel = new ProviderConfig(uuidv4(), 'stripe');
+      stripeModel.enabled = true;
+      stripeModel.displayName = 'Credit Card';
+      const unconfigured = ProviderConfigEntity.fromModel(stripeModel);
+      unconfigured._decryptedCredentials = JSON.stringify({ apiKey: 'sk_test_123' });
+      unconfigured._decryptedWebhookSecret = '';
+      await unconfigured.save();
+
+      const service = new FundingService(new EventEmitter());
+      const app = express();
+      FundingApiV1.install(app, service as any);
+
+      const webhookPayload = JSON.stringify({
+        id: 'evt_forged_no_secret',
+        type: 'invoice.payment_failed',
+        data: { object: { subscription: 'sub_forged', customer: 'cus_forged' } },
+      });
+
+      const response = await request(app)
+        .post('/api/funding/webhooks/stripe')
+        .set('stripe-signature', 'forged_signature')
+        .set('Content-Type', 'application/json')
+        .send(webhookPayload);
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toBe('Webhook signature verification failed');
+
+      // The payload must never reach Stripe's verifier with an empty key...
+      expect(vi.mocked(Stripe.Webhook.constructEvent)).not.toHaveBeenCalled();
+      // ...and the forged event must leave no trace in the event log.
+      const logged = await FundingEventEntity.findOne({
+        where: { provider_event_id: 'evt_forged_no_secret' },
+      });
+      expect(logged).toBeNull();
+    });
+  });
+
+  // -------------------------------------------------------------------------
   // Integration tests — real service, tests business logic through the stack
   // -------------------------------------------------------------------------
   describe('Integration (full stack)', () => {

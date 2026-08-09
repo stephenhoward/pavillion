@@ -220,11 +220,30 @@ export class StripeAdapter implements PaymentProviderAdapter {
   /**
    * Verify webhook signature from Stripe
    *
+   * Fails closed when no signing secret is configured. `constructEvent` keys an
+   * HMAC with the secret, and an empty key still yields a well-defined digest —
+   * so an unset secret turns signature verification into something an attacker
+   * who knows it is unset can satisfy (CVE-2026-41432 pattern). The secret is
+   * admin-supplied at runtime (stored on ProviderConfigEntity, not in config),
+   * so it cannot be asserted at startup; the check has to guard the call site.
+   *
+   * The check is deliberately unconditional rather than production-only. In
+   * development with no Stripe credentials at all, ProviderFactory hands back
+   * MockStripeAdapter, which skips verification entirely — that is the only
+   * intended bypass, and configuring real credentials removes it.
+   *
    * @param payload - Raw webhook payload (string)
    * @param signature - Signature header from webhook request
    * @returns True if signature is valid, false otherwise
    */
   verifyWebhookSignature(payload: string, signature: string): boolean {
+    if (!this.webhookSecret || this.webhookSecret.trim() === '') {
+      logger.error({
+        providerType: this.providerType,
+      }, 'Stripe webhook rejected: no signing secret is configured. Add the whsec_ signing secret to the Stripe provider configuration.');
+      return false;
+    }
+
     try {
       this.stripe.webhooks.constructEvent(payload, signature, this.webhookSecret);
       return true;
