@@ -14,14 +14,27 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { run, type SpawnDeps, type SpawnFn } from './shared.js';
 
-export type Category = 'merged-ancestor' | 'merged-pr' | 'empty' | 'doubt';
+export type Category = 'merged-ancestor' | 'merged-pr' | 'empty' | 'superseded' | 'doubt';
 export type WorktreeFamily = 'superset' | 'agent' | 'chain' | 'other';
+
+/**
+ * Triage bucket for a doubt. `keep` means the doubt names live work or an
+ * unresolved question elsewhere (open PR, unreadable GitHub state, a
+ * worktree still in use) — reading it every run is noise, and it is never a
+ * deletion candidate. `review` means the branch is plausibly dead but
+ * nothing proved it: the operator decides, and acts through
+ * `execute --branches=`. Report-only either way; no code path deletes on
+ * the strength of a doubtClass.
+ */
+export type DoubtClass = 'keep' | 'review';
 
 export interface BranchInfo {
   name: string;
   sha: string;
   upstream: string | null;
   upstreamGone: boolean;
+  /** Committer date of the branch tip, `YYYY-MM-DD`. Triage signal only. */
+  lastCommitDate: string;
 }
 
 export interface WorktreeInfo {
@@ -32,18 +45,23 @@ export interface WorktreeInfo {
   prunable: boolean;
 }
 
-/** Parse `git for-each-ref refs/heads --format='%(refname:short)%09%(objectname)%09%(upstream:short)%09%(upstream:track)'`. */
+/** The `--format` parseBranchRefs expects. Keep the two in lockstep. */
+export const BRANCH_REF_FORMAT =
+  '%(refname:short)%09%(objectname)%09%(upstream:short)%09%(upstream:track)%09%(committerdate:short)';
+
+/** Parse `git for-each-ref refs/heads --format=BRANCH_REF_FORMAT`. */
 export function parseBranchRefs(output: string): BranchInfo[] {
   return output
     .split('\n')
     .filter((line) => line.trim().length > 0)
     .map((line) => {
-      const [name, sha, upstream, track] = line.split('\t');
+      const [name, sha, upstream, track, committerDate] = line.split('\t');
       return {
         name,
         sha,
         upstream: upstream ? upstream : null,
         upstreamGone: track === '[gone]',
+        lastCommitDate: committerDate ?? '',
       };
     });
 }
@@ -71,10 +89,19 @@ export function parseWorktrees(output: string): WorktreeInfo[] {
   return result;
 }
 
+/**
+ * Chain worktrees are provisioned one directory per epic — `pv-jdot-chains`,
+ * `pv-federation-chains`, and whatever the next epic is called. Matching a
+ * single hard-coded directory name left every other epic's worktrees in
+ * `other`, where nothing can ever act on them; the pattern matches the
+ * convention instead of one instance of it.
+ */
+const CHAIN_DIR_PATTERN = /\/pv-[^/]+-chains\//;
+
 export function worktreeFamily(path: string): WorktreeFamily {
   if (path.includes('/.superset/worktrees/')) return 'superset';
   if (path.includes('/.claude/worktrees/')) return 'agent';
-  if (path.includes('/pv-jdot-chains/')) return 'chain';
+  if (CHAIN_DIR_PATTERN.test(path)) return 'chain';
   return 'other';
 }
 
@@ -123,21 +150,76 @@ export function parsePrResponse(json: unknown, branches: string[]): PrLookup {
   return map;
 }
 
+export interface ContentEquivalence {
+  /** True when nothing the branch carries is missing from origin/main. */
+  equivalent: boolean;
+  /** Files the branch changed relative to its merge base with origin/main. */
+  touchedCount: number;
+}
+
+export type GitRunner = (args: string[]) => { stdout: string; stderr: string; exitCode: number };
+
+function fileSet(stdout: string): Set<string> {
+  return new Set(stdout.split('\n').map((l) => l.trim()).filter((l) => l.length > 0));
+}
+
+/**
+ * Decide whether `ref` still carries content that origin/main does not.
+ *
+ * Two name-only diffs:
+ *   `origin/main...ref` — files the branch changed since the merge base
+ *   `origin/main..ref`  — files whose content differs between the two tips
+ * When no touched file appears in the second set, every file the branch
+ * changed is byte-identical to main's copy, so the branch's work is already
+ * in main (squash-merged, cherry-picked, or independently reimplemented) and
+ * deleting the ref loses only its commit history. This is the single
+ * definition of the `superseded` category — classify() proves it and
+ * execute() re-asserts it live through this same function.
+ *
+ * Fails closed: any git error, or a branch that touched nothing at all,
+ * returns `equivalent: false`. An empty touched set means the diff could not
+ * distinguish the branch from its base, which is not evidence of anything.
+ */
+export function contentEquivalence(ref: string, runGit: GitRunner): ContentEquivalence {
+  const touchedResult = runGit(['diff', '--name-only', `origin/main...${ref}`]);
+  if (touchedResult.exitCode !== 0) return { equivalent: false, touchedCount: 0 };
+  const touched = fileSet(touchedResult.stdout);
+  if (touched.size === 0) return { equivalent: false, touchedCount: 0 };
+
+  const differingResult = runGit(['diff', '--name-only', `origin/main..${ref}`]);
+  if (differingResult.exitCode !== 0) return { equivalent: false, touchedCount: touched.size };
+  const differing = fileSet(differingResult.stdout);
+
+  for (const file of touched) {
+    if (differing.has(file)) return { equivalent: false, touchedCount: touched.size };
+  }
+  return { equivalent: true, touchedCount: touched.size };
+}
+
 export interface Classified {
   category: Category;
   reason: string;
+  /** Set only when `category` is 'doubt'. See DoubtClass. */
+  doubtClass?: DoubtClass;
 }
 
 /**
  * Assign one category per branch. `prs` is null for ancestors (no GitHub
  * lookup needed), 'lookup-failed' when GitHub could not be consulted —
- * which is always a doubt, never an assumed merge.
+ * which is always a doubt, never an assumed merge. `content` is the
+ * contentEquivalence() verdict, or null when the probe was skipped because
+ * an earlier rule already decided the branch (see classify() step 9b).
+ *
+ * Decision order matters and is asserted by test. In particular an OPEN PR
+ * outranks content equivalence: deleting the branch would close a PR
+ * somebody is still using, whatever the file contents say.
  */
 export function classifyBranch(
   branch: BranchInfo,
   isAncestor: boolean,
   aheadCount: number,
   prs: PrInfo[] | 'lookup-failed' | null,
+  content: ContentEquivalence | null = null,
 ): Classified {
   if (isAncestor) {
     return branch.upstream === null
@@ -145,30 +227,53 @@ export function classifyBranch(
       : { category: 'merged-ancestor', reason: 'tip is an ancestor of origin/main' };
   }
   if (prs === 'lookup-failed' || prs === null) {
-    return { category: 'doubt', reason: 'GitHub PR lookup failed — cannot prove merge' };
+    return {
+      category: 'doubt',
+      reason: 'GitHub PR lookup failed — cannot prove merge',
+      doubtClass: 'keep',
+    };
   }
   const mergedAtTip = prs.find((p) => p.state === 'MERGED' && p.headRefOid === branch.sha);
   if (mergedAtTip) {
     return { category: 'merged-pr', reason: `PR #${mergedAtTip.number} merged at branch tip` };
   }
-  const merged = prs.find((p) => p.state === 'MERGED');
-  if (merged) {
-    return { category: 'doubt', reason: `ahead of merged PR #${merged.number} — has commits after the merge` };
-  }
   const open = prs.find((p) => p.state === 'OPEN');
   if (open) {
-    return { category: 'doubt', reason: `open PR #${open.number}` };
+    return { category: 'doubt', reason: `open PR #${open.number}`, doubtClass: 'keep' };
+  }
+  if (content?.equivalent) {
+    return {
+      category: 'superseded',
+      reason: `${content.touchedCount} touched file(s), none still differ from origin/main`,
+    };
+  }
+  const merged = prs.find((p) => p.state === 'MERGED');
+  if (merged) {
+    return {
+      category: 'doubt',
+      reason: `ahead of merged PR #${merged.number} — has commits after the merge`,
+      doubtClass: 'review',
+    };
   }
   const closed = prs.find((p) => p.state === 'CLOSED');
   if (closed) {
-    return { category: 'doubt', reason: `PR #${closed.number} closed without merging` };
+    return {
+      category: 'doubt',
+      reason: `PR #${closed.number} closed without merging`,
+      doubtClass: 'review',
+    };
   }
   if (branch.upstream === null) {
-    return { category: 'doubt', reason: `no upstream, ${aheadCount} unique commit(s)` };
+    return {
+      category: 'doubt',
+      reason: `no upstream, ${aheadCount} unique commit(s)`,
+      doubtClass: 'review',
+    };
   }
   return {
     category: 'doubt',
     reason: `${branch.upstreamGone ? 'upstream gone' : 'unmerged'}, ${aheadCount} commit(s) not on main, no PR found`,
+    doubtClass: 'review',
   };
 }
 
@@ -243,6 +348,12 @@ export interface BranchPlanItem {
   category: Category;
   reason: string;
   worktree: string | null;
+  /** Committer date of the tip, `YYYY-MM-DD` — the first thing an operator triaging doubts asks for. */
+  lastCommitDate: string;
+  /** Commits on the branch that are not on origin/main. 0 for ancestors. */
+  aheadCount: number;
+  /** Present only on doubts. See DoubtClass. */
+  doubtClass?: DoubtClass;
 }
 
 export interface WorktreePlanItem {
@@ -270,8 +381,8 @@ export interface CleanupPlan {
   protected: { branch: string; reason: string }[];
 }
 
-const DELETABLE_CATEGORIES: Category[] = ['merged-ancestor', 'merged-pr', 'empty'];
-const ALL_CATEGORIES: Category[] = ['merged-ancestor', 'merged-pr', 'empty', 'doubt'];
+const DELETABLE_CATEGORIES: Category[] = ['merged-ancestor', 'merged-pr', 'empty', 'superseded'];
+const ALL_CATEGORIES: Category[] = ['merged-ancestor', 'merged-pr', 'empty', 'superseded', 'doubt'];
 
 /**
  * Categories whose classification rests on `tip is an ancestor of
@@ -315,8 +426,10 @@ export function renderReport(plan: CleanupPlan): string {
     .map((cat) => {
       const items = plan.branches.filter((b) => b.category === cat);
       if (items.length === 0) return '';
-      const rows = items.map((b) => [b.branch, shortSha(b.sha), b.reason, b.worktree ?? '_none_']);
-      return `### ${cat}\n\n${mdTable(['Branch', 'SHA', 'Reason', 'Worktree'], rows)}`;
+      const rows = items.map((b) => [
+        b.branch, shortSha(b.sha), b.lastCommitDate, b.reason, b.worktree ?? '_none_',
+      ]);
+      return `### ${cat}\n\n${mdTable(['Branch', 'SHA', 'Last commit', 'Reason', 'Worktree'], rows)}`;
     })
     .filter((s) => s.length > 0)
     .join('\n');
@@ -328,13 +441,35 @@ export function renderReport(plan: CleanupPlan): string {
   ]);
   sections.push(`## Worktree removals\n\n${mdTable(['Family', 'Path', 'Branch', 'SHA', 'Reason'], worktreeRows)}`);
 
+  // Doubts split by triage bucket. A flat list mixes branches nobody may
+  // touch (open PR, live worktree) with the ones actually awaiting a
+  // decision — on a real repo the keep rows outnumber the review rows and
+  // re-reading them every run is what makes the section get skimmed.
   const doubtBranches = plan.branches.filter((b) => b.category === 'doubt');
+  const doubtRows = (items: BranchPlanItem[]) =>
+    items.map((b) => [b.branch, shortSha(b.sha), b.lastCommitDate, String(b.aheadCount), b.reason]);
+  const doubtHeaders = ['Branch', 'SHA', 'Last commit', 'Ahead', 'Reason'];
+
+  // Oldest first: age is the strongest cheap signal that a branch is dead.
+  const review = doubtBranches
+    .filter((b) => b.doubtClass === 'review')
+    .sort((a, b) => a.lastCommitDate.localeCompare(b.lastCommitDate));
+  const keep = doubtBranches.filter((b) => b.doubtClass !== 'review');
+
   const nonRemovableWorktrees = plan.worktrees.filter((w) => !w.removable);
-  const doubtRows = [
-    ...doubtBranches.map((b) => ['branch', b.branch, shortSha(b.sha), b.reason]),
-    ...nonRemovableWorktrees.map((w) => ['worktree', w.path, shortSha(w.sha), w.reason]),
-  ];
-  sections.push(`## Doubts\n\n${mdTable(['Type', 'Item', 'SHA', 'Reason'], doubtRows)}`);
+  const nonRemovableWorktreeRows = nonRemovableWorktrees.map((w) => [w.path, shortSha(w.sha), w.reason]);
+
+  sections.push([
+    '## Doubts\n',
+    '### Review — no proof either way, oldest first\n',
+    'Nothing here is deletable by category. After reviewing, delete by name:',
+    '`execute --branches=<a,b,c> --plan-id=<id>`.\n',
+    mdTable(doubtHeaders, doubtRows(review)),
+    '\n### Keep — active work or unreadable state\n',
+    mdTable(doubtHeaders, doubtRows(keep)),
+    '\n### Worktrees not removable\n',
+    mdTable(['Path', 'SHA', 'Reason'], nonRemovableWorktreeRows),
+  ].join('\n'));
 
   const protectedRows = plan.protected.map((p) => [p.branch, p.reason]);
   sections.push(`## Protected\n\n${mdTable(['Branch', 'Reason'], protectedRows)}`);
@@ -510,10 +645,7 @@ export function classify(deps: ClassifyDeps = {}): {
   const mainSha = mainShaResult.stdout;
 
   // Step 4: all local branch refs.
-  const refsResult = runGit([
-    'for-each-ref', 'refs/heads',
-    '--format=%(refname:short)%09%(objectname)%09%(upstream:short)%09%(upstream:track)',
-  ]);
+  const refsResult = runGit(['for-each-ref', 'refs/heads', `--format=${BRANCH_REF_FORMAT}`]);
   const branches = parseBranchRefs(refsResult.stdout);
 
   // Step 5: ancestor set.
@@ -589,6 +721,19 @@ export function classify(deps: ClassifyDeps = {}): {
     }
   }
 
+  // Step 9b: content-equivalence probe, two diffs per branch. Only run where
+  // it can change the verdict — the skip conditions below mirror the rules
+  // that outrank `superseded` in classifyBranch, so a branch already decided
+  // by GitHub state costs nothing here.
+  const contentByBranch = new Map<string, ContentEquivalence>();
+  for (const b of nonAncestorBranches) {
+    const prs = prLookup.get(b.name);
+    if (prs === undefined || prs === 'lookup-failed') continue;
+    if (prs.some((p) => p.state === 'MERGED' && p.headRefOid === b.sha)) continue;
+    if (prs.some((p) => p.state === 'OPEN')) continue;
+    contentByBranch.set(b.name, contentEquivalence(b.name, (args) => runGit(args)));
+  }
+
   // Step 10: classify every non-protected branch.
   const branchPlanItems: BranchPlanItem[] = branches
     .filter((b) => !protectedNames.has(b.name))
@@ -596,7 +741,8 @@ export function classify(deps: ClassifyDeps = {}): {
       const isAncestor = ancestorSet.has(b.name);
       const aheadCount = isAncestor ? 0 : (aheadCounts.get(b.name) ?? 0);
       const prs = isAncestor ? null : (prLookup.get(b.name) ?? 'lookup-failed');
-      const classified = classifyBranch(b, isAncestor, aheadCount, prs);
+      const content = contentByBranch.get(b.name) ?? null;
+      const classified = classifyBranch(b, isAncestor, aheadCount, prs, content);
       const wt = worktrees.find((w) => w.branch === b.name);
       return {
         branch: b.name,
@@ -604,6 +750,9 @@ export function classify(deps: ClassifyDeps = {}): {
         category: classified.category,
         reason: classified.reason,
         worktree: wt ? wt.path : null,
+        lastCommitDate: b.lastCommitDate,
+        aheadCount,
+        ...(classified.doubtClass ? { doubtClass: classified.doubtClass } : {}),
       };
     });
 
@@ -666,6 +815,10 @@ export function classify(deps: ClassifyDeps = {}): {
     if (!wtItem || wtItem.removable || wtItem.reason === 'branch not classified deletable') continue;
     item.category = 'doubt';
     item.reason = `worktree: ${wtItem.reason}`;
+    // 'keep', not 'review': the branch proved deletable and only its
+    // worktree blocks it. Nothing to decide — clear the worktree and the
+    // next classify moves it back to a deletable category on its own.
+    item.doubtClass = 'keep';
   }
 
   // Step 12: assemble and write.
@@ -685,7 +838,9 @@ export function classify(deps: ClassifyDeps = {}): {
   writeFile(reportPath, renderReport(plan));
 
   // Step 13: summary.
-  const summary: Record<Category, number> = { 'merged-ancestor': 0, 'merged-pr': 0, empty: 0, doubt: 0 };
+  const summary: Record<Category, number> = {
+    'merged-ancestor': 0, 'merged-pr': 0, empty: 0, superseded: 0, doubt: 0,
+  };
   for (const b of branchPlanItems) summary[b.category]++;
 
   return { ok: true, plan, planPath, reportPath, summary };
@@ -714,12 +869,24 @@ export function isPlanStale(createdAt: string, nowMs: number): boolean {
   return nowMs - createdMs > PLAN_MAX_AGE_MS;
 }
 
-const VALID_EXECUTE_CATEGORIES: Category[] = ['merged-ancestor', 'merged-pr', 'empty'];
+const VALID_EXECUTE_CATEGORIES: Category[] = ['merged-ancestor', 'merged-pr', 'empty', 'superseded'];
 const VALID_WORKTREE_FAMILIES: WorktreeFamily[] = ['superset', 'agent', 'chain'];
 
 export interface ExecuteOptions {
   categories: Category[];
   worktreeFamilies: WorktreeFamily[];
+  /**
+   * Branches named one by one, after the operator reviewed the report's
+   * doubts. A doubt is still never deletable BY CATEGORY — this is the
+   * narrower claim "I looked at this specific branch and I want it gone",
+   * and it exists because the alternative is a hand-rolled `git branch -D`
+   * loop that gets no re-verify, no protections, and no undo log. Every
+   * other guard still applies: the branch must be in the plan (so protected
+   * branches are unreachable), its sha must still match, and a branch
+   * checked out in a worktree still needs that worktree to pass the full
+   * removal assessment.
+   */
+  branches: string[];
   /** Must match the loaded plan's `planId` — see CleanupPlan.planId. */
   planId: string;
 }
@@ -744,27 +911,34 @@ export interface ExecuteResult {
 }
 
 /**
- * Parse `execute` CLI args: `--categories=a,b` (required, non-empty),
- * `--worktree-families=x,y` (optional, defaults to no families approved),
- * and `--plan-id=<id>` (required — must match the classify output the user
- * approved; see CleanupPlan.planId). `doubt` is rejected here so it can
- * never reach `execute` via the CLI — `execute` itself also filters it
- * defensively for callers that bypass this parser.
+ * Parse `execute` CLI args: `--categories=a,b` and/or `--branches=x,y` (at
+ * least one of the two, non-empty), `--worktree-families=x,y` (optional,
+ * defaults to no families approved), and `--plan-id=<id>` (required — must
+ * match the classify output the user approved; see CleanupPlan.planId).
+ * `doubt` is rejected as a CATEGORY here so it can never be bulk-selected —
+ * `execute` itself also filters it defensively for callers that bypass this
+ * parser. Individual doubt branches remain reachable through `--branches`;
+ * see ExecuteOptions.branches.
  */
 export function parseExecuteArgs(argv: string[]): ExecuteOptions | { error: string } {
   let categoriesRaw: string | undefined;
+  let branchesRaw: string | undefined;
   let familiesRaw: string | undefined;
   let planId: string | undefined;
   for (const arg of argv) {
     if (arg.startsWith('--categories=')) categoriesRaw = arg.slice('--categories='.length);
+    else if (arg.startsWith('--branches=')) branchesRaw = arg.slice('--branches='.length);
     else if (arg.startsWith('--worktree-families=')) familiesRaw = arg.slice('--worktree-families='.length);
     else if (arg.startsWith('--plan-id=')) planId = arg.slice('--plan-id='.length);
   }
 
   const categories = (categoriesRaw ?? '').split(',').map((s) => s.trim()).filter((s) => s.length > 0);
-  if (categories.length === 0) return { error: '--categories is required (comma-separated, non-empty)' };
+  const branches = (branchesRaw ?? '').split(',').map((s) => s.trim()).filter((s) => s.length > 0);
+  if (categories.length === 0 && branches.length === 0) {
+    return { error: 'one of --categories or --branches is required (comma-separated, non-empty)' };
+  }
   for (const c of categories) {
-    if (c === 'doubt') return { error: 'doubt is never selectable — it is report-only' };
+    if (c === 'doubt') return { error: 'doubt is never selectable as a category — name individual branches with --branches' };
     if (!VALID_EXECUTE_CATEGORIES.includes(c as Category)) return { error: `unknown category: ${c}` };
   }
 
@@ -775,7 +949,12 @@ export function parseExecuteArgs(argv: string[]): ExecuteOptions | { error: stri
 
   if (!planId) return { error: '--plan-id is required (copy it from the classify output — re-run classify if you don\'t have one)' };
 
-  return { categories: categories as Category[], worktreeFamilies: families as WorktreeFamily[], planId };
+  return {
+    categories: categories as Category[],
+    branches,
+    worktreeFamilies: families as WorktreeFamily[],
+    planId,
+  };
 }
 
 function formatDateStamp(nowMs: number): string {
@@ -849,13 +1028,33 @@ export function execute(opts: ExecuteOptions, deps: ExecuteDeps = {}): ExecuteRe
 
   const undoLogPath = path.join(commonDir, `git-cleanup-undo-${formatDateStamp(nowMs)}.log`);
 
-  // Step 3: select approved, non-doubt branch items. doubt is never
-  // selectable — parseExecuteArgs already rejects it, but execute()
-  // defends independently for callers that bypass the CLI parser.
+  // Step 3: select branch items — approved categories, plus any branch named
+  // explicitly. doubt is never selectable by CATEGORY (parseExecuteArgs
+  // already rejects it; execute() defends independently for callers that
+  // bypass the CLI parser), but an explicitly named doubt is allowed: see
+  // ExecuteOptions.branches.
   const approvedCategories = opts.categories.filter((c) => c !== 'doubt');
-  const selected = plan.branches.filter((b) => b.category !== 'doubt' && approvedCategories.includes(b.category));
+  const byCategory = plan.branches.filter(
+    (b) => b.category !== 'doubt' && approvedCategories.includes(b.category),
+  );
 
   const skipped: { item: string; reason: string }[] = [];
+
+  const namedBranches = opts.branches ?? [];
+  const selectedNames = new Set(byCategory.map((b) => b.branch));
+  const selected = [...byCategory];
+  for (const name of namedBranches) {
+    if (selectedNames.has(name)) continue;
+    const item = plan.branches.find((b) => b.branch === name);
+    if (!item) {
+      // Protected branches are never written into plan.branches, so this is
+      // also how `--branches=main` gets refused.
+      skipped.push({ item: name, reason: 'not in the plan — protected, unknown, or created since classify' });
+      continue;
+    }
+    selectedNames.add(name);
+    selected.push(item);
+  }
   const removedWorktrees: string[] = [];
 
   const withoutWorktree = selected.filter((b) => b.worktree === null);
@@ -910,9 +1109,12 @@ export function execute(opts: ExecuteOptions, deps: ExecuteDeps = {}): ExecuteRe
   // + assessWorktree — the same predicate classify() used to write
   // `removable: true` into the plan. isPrimary is always false and
   // branchDeletable is always true here: a worktree whose branch was
-  // protected or non-deletable could never have reached `selected`
-  // (protected branches never appear in plan.branches; non-deletable
-  // categories were filtered out in step 3). `locked` isn't part of the
+  // protected could never have reached `selected` (protected branches never
+  // appear in plan.branches), and every other branch that reached it either
+  // proved deletable or was named explicitly, which is the operator making
+  // the same call. Every live condition — dirty, active, recently modified
+  // — is still re-checked below, so naming a branch cannot force the
+  // removal of a worktree somebody is working in. `locked` isn't part of the
   // brief's re-verify set (dirty/active/recentlyModified only) — a lock
   // acquired after classify is a gap the mtime/active checks don't close,
   // but re-checking it isn't in scope for this task.
@@ -965,6 +1167,16 @@ export function execute(opts: ExecuteOptions, deps: ExecuteDeps = {}): ExecuteRe
       const ancestorResult = runGit(['merge-base', '--is-ancestor', b.sha, 'origin/main']);
       if (ancestorResult.exitCode !== 0) {
         skipped.push({ item: b.branch, reason: 'no longer an ancestor of origin/main — re-run classify' });
+        continue;
+      }
+    }
+    // `superseded` rests on a diff against origin/main, and origin/main can
+    // move between classify and execute. Re-assert it through the same
+    // function classify used, against the sha just re-verified above.
+    if (b.category === 'superseded') {
+      const recheck = contentEquivalence(b.sha, (args) => runGit(args));
+      if (!recheck.equivalent) {
+        skipped.push({ item: b.branch, reason: 'content no longer matches origin/main — re-run classify' });
         continue;
       }
     }

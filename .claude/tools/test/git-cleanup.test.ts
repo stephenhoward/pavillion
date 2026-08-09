@@ -16,7 +16,12 @@ import {
   parsePrResponse,
   chunk,
 } from '../lib/git-cleanup.js';
-import { classifyBranch, type BranchInfo, type PrInfo } from '../lib/git-cleanup.js';
+import {
+  classifyBranch,
+  contentEquivalence,
+  type BranchInfo,
+  type PrInfo,
+} from '../lib/git-cleanup.js';
 
 // =============================================================================
 // Test helpers (copied from test/stack.test.ts — canonical fakeSpawn/seqSpawn
@@ -50,17 +55,27 @@ describe('parseBranchRefs', () => {
   // git for-each-ref refs/heads --format='%(refname:short)%09%(objectname)%09%(upstream:short)%09%(upstream:track)'
   it('parses branch, sha, upstream, and gone status', () => {
     const output = [
-      'main\tabc123\torigin/main\t',
-      'feat.done\tdef456\torigin/feat.done\t[gone]',
-      'local-only\t789abc\t\t',
-      'ahead\t111222\torigin/ahead\t[ahead 2]',
+      'main\tabc123\torigin/main\t\t2026-08-07',
+      'feat.done\tdef456\torigin/feat.done\t[gone]\t2026-07-15',
+      'local-only\t789abc\t\t\t2025-11-02',
+      'ahead\t111222\torigin/ahead\t[ahead 2]\t2026-08-01',
     ].join('\n');
     const refs = parseBranchRefs(output);
     expect(refs).toHaveLength(4);
-    expect(refs[0]).toEqual({ name: 'main', sha: 'abc123', upstream: 'origin/main', upstreamGone: false });
-    expect(refs[1]).toEqual({ name: 'feat.done', sha: 'def456', upstream: 'origin/feat.done', upstreamGone: true });
-    expect(refs[2]).toEqual({ name: 'local-only', sha: '789abc', upstream: null, upstreamGone: false });
+    expect(refs[0]).toEqual({
+      name: 'main', sha: 'abc123', upstream: 'origin/main', upstreamGone: false, lastCommitDate: '2026-08-07',
+    });
+    expect(refs[1]).toEqual({
+      name: 'feat.done', sha: 'def456', upstream: 'origin/feat.done', upstreamGone: true, lastCommitDate: '2026-07-15',
+    });
+    expect(refs[2]).toEqual({
+      name: 'local-only', sha: '789abc', upstream: null, upstreamGone: false, lastCommitDate: '2025-11-02',
+    });
     expect(refs[3].upstreamGone).toBe(false);
+  });
+
+  it('tolerates a missing committer-date field', () => {
+    expect(parseBranchRefs('solo\tabc\t\t')[0].lastCommitDate).toBe('');
   });
 
   it('returns empty array for empty output', () => {
@@ -100,6 +115,14 @@ describe('worktreeFamily', () => {
     expect(worktreeFamily('/Users/x/repo/.claude/worktrees/agent-a1')).toBe('agent');
     expect(worktreeFamily('/Users/x/pavillion/pv-jdot-chains/chain-b')).toBe('chain');
     expect(worktreeFamily('/Users/x/somewhere/else')).toBe('other');
+  });
+
+  // Regression: matching one hard-coded chain directory left every other
+  // epic's chain worktrees in 'other', where execute can never act on them.
+  it('matches any pv-<epic>-chains directory, not just pv-jdot-chains', () => {
+    expect(worktreeFamily('/Users/x/pavillion/pv-federation-chains/chain-a')).toBe('chain');
+    expect(worktreeFamily('/Users/x/pavillion/pv-next-epic-chains/chain-a')).toBe('chain');
+    expect(worktreeFamily('/Users/x/pavillion/pv-chains/chain-a')).toBe('other');
   });
 });
 
@@ -160,8 +183,14 @@ describe('chunk', () => {
 });
 
 function branch(over: Partial<BranchInfo> = {}): BranchInfo {
-  return { name: 'b', sha: 'aaa', upstream: 'origin/b', upstreamGone: false, ...over };
+  return {
+    name: 'b', sha: 'aaa', upstream: 'origin/b', upstreamGone: false,
+    lastCommitDate: '2026-01-01', ...over,
+  };
 }
+/** contentEquivalence() verdict for a branch whose work is already in main. */
+const equivalent = { equivalent: true, touchedCount: 3 };
+const notEquivalent = { equivalent: false, touchedCount: 3 };
 function pr(over: Partial<PrInfo> = {}): PrInfo {
   return { number: 1, state: 'MERGED', headRefOid: 'aaa', ...over };
 }
@@ -224,6 +253,87 @@ describe('classifyBranch', () => {
   it('a MERGED PR at tip wins over an older CLOSED PR', () => {
     const c = classifyBranch(branch(), false, 1, [pr({ state: 'CLOSED', number: 2 }), pr()]);
     expect(c.category).toBe('merged-pr');
+  });
+
+  it('content already in main, no PR → superseded', () => {
+    const c = classifyBranch(branch({ upstream: null }), false, 2, [], equivalent);
+    expect(c.category).toBe('superseded');
+    expect(c.reason).toContain('3 touched file(s)');
+  });
+
+  it('content already in main and ahead of a merged PR → superseded, not doubt', () => {
+    const c = classifyBranch(branch({ sha: 'bbb' }), false, 5, [pr({ headRefOid: 'aaa' })], equivalent);
+    expect(c.category).toBe('superseded');
+  });
+
+  it('an OPEN PR outranks content equivalence — deleting would close the PR', () => {
+    const c = classifyBranch(branch(), false, 2, [pr({ state: 'OPEN' })], equivalent);
+    expect(c.category).toBe('doubt');
+    expect(c.reason).toContain('open PR');
+  });
+
+  it('a lookup failure outranks content equivalence — an OPEN PR could be invisible', () => {
+    const c = classifyBranch(branch(), false, 2, 'lookup-failed', equivalent);
+    expect(c.category).toBe('doubt');
+  });
+
+  it('non-equivalent content leaves the PR-based verdict untouched', () => {
+    const c = classifyBranch(branch({ upstream: null }), false, 2, [], notEquivalent);
+    expect(c.category).toBe('doubt');
+    expect(c.reason).toContain('no upstream');
+  });
+
+  it('tags doubts keep/review so the report can separate live work from candidates', () => {
+    expect(classifyBranch(branch(), false, 1, [pr({ state: 'OPEN' })]).doubtClass).toBe('keep');
+    expect(classifyBranch(branch(), false, 1, 'lookup-failed').doubtClass).toBe('keep');
+    expect(classifyBranch(branch(), false, 1, [pr({ state: 'CLOSED' })]).doubtClass).toBe('review');
+    expect(classifyBranch(branch({ sha: 'bbb' }), false, 1, [pr()]).doubtClass).toBe('review');
+    expect(classifyBranch(branch({ upstream: null }), false, 1, []).doubtClass).toBe('review');
+    expect(classifyBranch(branch({ upstreamGone: true }), false, 1, []).doubtClass).toBe('review');
+    // Deletable categories carry no triage bucket.
+    expect(classifyBranch(branch(), true, 0, null).doubtClass).toBeUndefined();
+  });
+});
+
+describe('contentEquivalence', () => {
+  /** Fake GitRunner keyed by the diff range in the args. */
+  function runner(map: Record<string, { stdout?: string; exitCode?: number }>) {
+    return (args: string[]) => {
+      const range = args[args.length - 1];
+      const entry = map[range] ?? { stdout: '', exitCode: 0 };
+      return { stdout: entry.stdout ?? '', stderr: '', exitCode: entry.exitCode ?? 0 };
+    };
+  }
+
+  it('is equivalent when no touched file still differs from main', () => {
+    const result = contentEquivalence('feat.squashed', runner({
+      'origin/main...feat.squashed': { stdout: 'a.ts\nb.ts' },
+      'origin/main..feat.squashed': { stdout: 'unrelated.ts' },
+    }));
+    expect(result).toEqual({ equivalent: true, touchedCount: 2 });
+  });
+
+  it('is not equivalent when any touched file still differs', () => {
+    const result = contentEquivalence('feat.live', runner({
+      'origin/main...feat.live': { stdout: 'a.ts\nb.ts' },
+      'origin/main..feat.live': { stdout: 'b.ts' },
+    }));
+    expect(result).toEqual({ equivalent: false, touchedCount: 2 });
+  });
+
+  it('fails closed when the branch touched nothing at all', () => {
+    const result = contentEquivalence('weird', runner({ 'origin/main...weird': { stdout: '' } }));
+    expect(result.equivalent).toBe(false);
+  });
+
+  it('fails closed on a git error in either diff', () => {
+    expect(contentEquivalence('bad', runner({
+      'origin/main...bad': { exitCode: 128 },
+    })).equivalent).toBe(false);
+    expect(contentEquivalence('bad', runner({
+      'origin/main...bad': { stdout: 'a.ts' },
+      'origin/main..bad': { exitCode: 128 },
+    })).equivalent).toBe(false);
   });
 });
 
@@ -321,6 +431,8 @@ function buildPlan(): CleanupPlan {
         category: 'merged-ancestor',
         reason: 'tip is an ancestor of origin/main',
         worktree: null,
+        lastCommitDate: '2026-07-30',
+        aheadCount: 0,
       },
       {
         branch: 'feat.wip',
@@ -328,6 +440,29 @@ function buildPlan(): CleanupPlan {
         category: 'doubt',
         reason: 'open PR #42',
         worktree: '/repo/.superset/worktrees/u/wt1',
+        lastCommitDate: '2026-08-05',
+        aheadCount: 4,
+        doubtClass: 'keep',
+      },
+      {
+        branch: 'ancient.experiment',
+        sha: 'ccccccc3333333333333333333333333333333',
+        category: 'doubt',
+        reason: 'no upstream, 2 unique commit(s)',
+        worktree: null,
+        lastCommitDate: '2025-03-14',
+        aheadCount: 2,
+        doubtClass: 'review',
+      },
+      {
+        branch: 'stale.review',
+        sha: 'ddddddd4444444444444444444444444444444',
+        category: 'doubt',
+        reason: 'PR #374 closed without merging',
+        worktree: null,
+        lastCommitDate: '2026-02-20',
+        aheadCount: 1,
+        doubtClass: 'review',
       },
     ],
     worktrees: [
@@ -381,6 +516,33 @@ describe('renderReport', () => {
     expect(report).toContain('2026-08-08T12:00:00.000Z');
     expect(report).toContain('abcdef1');
   });
+
+  it('splits doubts into review and keep sections', () => {
+    const report = renderReport(buildPlan());
+    expect(report).toContain('### Review');
+    expect(report).toContain('### Keep');
+    const reviewIdx = report.indexOf('### Review');
+    const keepIdx = report.indexOf('### Keep');
+    // The open-PR doubt belongs to keep, the dead branches to review.
+    expect(report.indexOf('ancient.experiment')).toBeGreaterThan(reviewIdx);
+    expect(report.indexOf('ancient.experiment')).toBeLessThan(keepIdx);
+    expect(report.indexOf('feat.wip')).toBeGreaterThan(keepIdx);
+  });
+
+  it('orders review doubts oldest first and shows age and ahead count', () => {
+    const report = renderReport(buildPlan());
+    expect(report.indexOf('ancient.experiment')).toBeLessThan(report.indexOf('stale.review'));
+    expect(report).toContain('2025-03-14');
+    expect(report).toContain('| 2 |');
+  });
+
+  it('points the operator at the explicit-branch path instead of a manual delete loop', () => {
+    expect(renderReport(buildPlan())).toContain('--branches=');
+  });
+
+  it('shows the last commit date on deletable rows too', () => {
+    expect(renderReport(buildPlan())).toContain('2026-07-30');
+  });
 });
 
 // =============================================================================
@@ -388,9 +550,9 @@ describe('renderReport', () => {
 // =============================================================================
 
 const REFS_OUTPUT = [
-  'main\tmainsha1234567890abcdef1234567890abcdef12\torigin/main\t',
-  'ancestor.done\taaaaaaa1111111111111111111111111111111\torigin/ancestor.done\t[gone]',
-  'gone.branch\tbbbbbbb2222222222222222222222222222222\torigin/gone.branch\t[gone]',
+  'main\tmainsha1234567890abcdef1234567890abcdef12\torigin/main\t\t2026-08-07',
+  'ancestor.done\taaaaaaa1111111111111111111111111111111\torigin/ancestor.done\t[gone]\t2026-07-15',
+  'gone.branch\tbbbbbbb2222222222222222222222222222222\torigin/gone.branch\t[gone]\t2026-06-01',
 ].join('\n');
 
 const MERGED_OUTPUT = ['main', 'ancestor.done'].join('\n');
@@ -402,7 +564,13 @@ const WORKTREE_OUTPUT = [
   '',
 ].join('\n');
 
-function happyPathSpawn(ghResult: SpawnSyncReturns<Buffer>) {
+function happyPathSpawn(
+  ghResult: SpawnSyncReturns<Buffer>,
+  // The step-9b content probe: three-dot diff (files the branch touched),
+  // then two-dot diff (files still differing from main). Defaults describe a
+  // branch that still carries work of its own.
+  contentDiffs: SpawnSyncReturns<Buffer>[] = [fakeSpawn('src/live.ts'), fakeSpawn('src/live.ts')],
+) {
   return seqSpawn(
     fakeSpawn('/repo/.git'),                                    // rev-parse --git-common-dir
     fakeSpawn('true'),                                          // rev-parse --is-inside-work-tree
@@ -414,6 +582,7 @@ function happyPathSpawn(ghResult: SpawnSyncReturns<Buffer>) {
     fakeSpawn('3'),                                              // rev-list --count origin/main..gone.branch
     fakeSpawn('git@github.com:me/repo.git'),                     // remote get-url origin
     ghResult,                                                    // gh api graphql
+    ...contentDiffs,                                             // diff --name-only (3-dot, 2-dot)
   );
 }
 
@@ -439,7 +608,11 @@ describe('classify', () => {
     const gone = branches.find((b) => b.branch === 'gone.branch');
     expect(gone?.category).toBe('doubt');
     expect(gone?.reason).toContain('upstream gone');
-    expect(result.summary).toEqual({ 'merged-ancestor': 1, 'merged-pr': 0, empty: 0, doubt: 1 });
+    expect(gone?.lastCommitDate).toBe('2026-06-01');
+    expect(gone?.aheadCount).toBe(3);
+    expect(result.summary).toEqual({
+      'merged-ancestor': 1, 'merged-pr': 0, empty: 0, superseded: 0, doubt: 1,
+    });
     expect(result.planPath).toBe('/repo/.git/git-cleanup-plan.json');
     expect(result.reportPath).toBe('/repo/.git/git-cleanup-report.md');
     expect(written['/repo/.git/git-cleanup-plan.json']).toBeDefined();
@@ -447,6 +620,51 @@ describe('classify', () => {
     expect(JSON.parse(written['/repo/.git/git-cleanup-plan.json']).mainSha).toBe(
       'mainsha1234567890abcdef1234567890abcdef12',
     );
+  });
+
+  it('classifies a branch whose touched files all match main as superseded', () => {
+    const ghResult = fakeSpawn(JSON.stringify({ data: { repository: { b0: { nodes: [] } } } }));
+    const deps: ClassifyDeps = {
+      spawnFn: happyPathSpawn(ghResult, [
+        fakeSpawn('src/a.ts\nsrc/b.ts'),   // diff --name-only origin/main...gone.branch
+        fakeSpawn('docs/unrelated.md'),    // diff --name-only origin/main..gone.branch
+      ]) as unknown as ClassifyDeps['spawnFn'],
+      cwd: '/repo',
+      nowMs: () => 1_700_000_000_000,
+      statMtimes: () => [],
+      writeFile: () => {},
+    };
+
+    const result = classify(deps);
+
+    const gone = result.plan?.branches.find((b) => b.branch === 'gone.branch');
+    expect(gone?.category).toBe('superseded');
+    expect(gone?.reason).toContain('2 touched file(s)');
+    expect(result.summary?.superseded).toBe(1);
+  });
+
+  it('skips the content probe when GitHub already decided the branch (open PR)', () => {
+    const calls: string[] = [];
+    const ghResult = fakeSpawn(JSON.stringify({
+      data: { repository: { b0: { nodes: [{ number: 7, state: 'OPEN', headRefOid: 'zzz' }] } } },
+    }));
+    const inner = happyPathSpawn(ghResult);
+    const recording = (cmd: string, args: string[], opts: unknown) => {
+      calls.push(`${cmd} ${args.join(' ')}`);
+      return (inner as (c: string, a: string[], o: unknown) => SpawnSyncReturns<Buffer>)(cmd, args, opts);
+    };
+    const deps: ClassifyDeps = {
+      spawnFn: recording as unknown as ClassifyDeps['spawnFn'],
+      cwd: '/repo',
+      nowMs: () => 1_700_000_000_000,
+      statMtimes: () => [],
+      writeFile: () => {},
+    };
+
+    const result = classify(deps);
+
+    expect(result.plan?.branches.find((b) => b.branch === 'gone.branch')?.category).toBe('doubt');
+    expect(calls.some((c) => c.includes('diff --name-only'))).toBe(false);
   });
 
   it('git fetch failure returns ok: false without writing files', () => {
@@ -961,9 +1179,30 @@ describe('parseExecuteArgs', () => {
     ]);
     expect(result).toEqual({
       categories: ['merged-ancestor', 'empty'],
+      branches: [],
       worktreeFamilies: ['superset', 'agent'],
       planId: 'abc-123',
     });
+  });
+
+  it('accepts superseded as a category', () => {
+    const result = parseExecuteArgs(['--categories=superseded', '--plan-id=abc-123']);
+    expect('error' in result).toBe(false);
+  });
+
+  it('accepts --branches with no categories at all', () => {
+    const result = parseExecuteArgs(['--branches=old-a,old-b', '--plan-id=abc-123']);
+    expect(result).toEqual({
+      categories: [],
+      branches: ['old-a', 'old-b'],
+      worktreeFamilies: [],
+      planId: 'abc-123',
+    });
+  });
+
+  it('still rejects doubt as a category, and says what to use instead', () => {
+    const result = parseExecuteArgs(['--categories=doubt', '--plan-id=abc-123']);
+    expect('error' in result && result.error).toContain('--branches');
   });
 
   it('rejects an unknown category', () => {
@@ -978,12 +1217,14 @@ describe('parseExecuteArgs', () => {
 
   it('defaults worktree-families to empty when the flag is missing', () => {
     const result = parseExecuteArgs(['--categories=empty', '--plan-id=abc-123']);
-    expect(result).toEqual({ categories: ['empty'], worktreeFamilies: [], planId: 'abc-123' });
+    expect(result).toEqual({
+      categories: ['empty'], branches: [], worktreeFamilies: [], planId: 'abc-123',
+    });
   });
 
-  it('errors when categories is missing entirely', () => {
+  it('errors when neither categories nor branches is given', () => {
     const result = parseExecuteArgs(['--plan-id=abc-123']);
-    expect('error' in result && result.error).toBeTruthy();
+    expect('error' in result && result.error).toContain('--branches');
   });
 
   it('rejects a missing plan-id', () => {
@@ -1042,7 +1283,7 @@ describe('execute', () => {
         throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
       },
     };
-    const opts: ExecuteOptions = { categories: ['merged-ancestor'], worktreeFamilies: [], planId: TEST_PLAN_ID };
+    const opts: ExecuteOptions = { branches: [], categories: ['merged-ancestor'], worktreeFamilies: [], planId: TEST_PLAN_ID };
 
     const result = execute(opts, deps);
 
@@ -1061,7 +1302,7 @@ describe('execute', () => {
       nowMs: () => 1_700_000_000_000,
       readFile: () => JSON.stringify(plan),
     };
-    const opts: ExecuteOptions = { categories: ['merged-ancestor'], worktreeFamilies: [], planId: TEST_PLAN_ID };
+    const opts: ExecuteOptions = { branches: [], categories: ['merged-ancestor'], worktreeFamilies: [], planId: TEST_PLAN_ID };
 
     const result = execute(opts, deps);
 
@@ -1078,7 +1319,7 @@ describe('execute', () => {
       nowMs: () => 1_700_000_000_000,
       readFile: () => JSON.stringify(plan),
     };
-    const opts: ExecuteOptions = { categories: ['merged-ancestor'], worktreeFamilies: [], planId: 'plan-xyz' };
+    const opts: ExecuteOptions = { branches: [], categories: ['merged-ancestor'], worktreeFamilies: [], planId: 'plan-xyz' };
 
     const result = execute(opts, deps);
 
@@ -1095,7 +1336,7 @@ describe('execute', () => {
       nowMs: () => 1_700_000_000_000,
       readFile: () => '{not valid json',
     };
-    const opts: ExecuteOptions = { categories: ['merged-ancestor'], worktreeFamilies: [], planId: TEST_PLAN_ID };
+    const opts: ExecuteOptions = { branches: [], categories: ['merged-ancestor'], worktreeFamilies: [], planId: TEST_PLAN_ID };
 
     const result = execute(opts, deps);
 
@@ -1109,6 +1350,7 @@ describe('execute', () => {
         {
           branch: 'b8', sha: 'sha8', category: 'merged-ancestor',
           reason: 'tip is an ancestor of origin/main', worktree: '/repo/wt8',
+          lastCommitDate: '2026-01-01', aheadCount: 1,
         },
       ],
       worktrees: [
@@ -1125,7 +1367,7 @@ describe('execute', () => {
     );
     const { deps } = makeExecDeps(plan, spawn);
     const opts: ExecuteOptions = {
-      categories: ['merged-ancestor'], worktreeFamilies: ['superset'], planId: TEST_PLAN_ID,
+      branches: [], categories: ['merged-ancestor'], worktreeFamilies: ['superset'], planId: TEST_PLAN_ID,
     };
 
     const result = execute(opts, deps);
@@ -1142,10 +1384,12 @@ describe('execute', () => {
         {
           branch: 'b1', sha: 'sha1', category: 'merged-ancestor',
           reason: 'tip is an ancestor of origin/main', worktree: null,
+          lastCommitDate: '2026-01-01', aheadCount: 1,
         },
         {
           branch: 'b2', sha: 'sha2', category: 'merged-pr',
           reason: 'PR #1 merged at branch tip', worktree: '/repo/wt2',
+          lastCommitDate: '2026-01-01', aheadCount: 1,
         },
       ],
       worktrees: [
@@ -1180,7 +1424,7 @@ describe('execute', () => {
     );
     const { deps, calls } = makeExecDeps(plan, spawn);
     const opts: ExecuteOptions = {
-      categories: ['merged-ancestor', 'merged-pr'], worktreeFamilies: ['superset'], planId: TEST_PLAN_ID,
+      branches: [], categories: ['merged-ancestor', 'merged-pr'], worktreeFamilies: ['superset'], planId: TEST_PLAN_ID,
     };
 
     const result = execute(opts, deps);
@@ -1218,6 +1462,7 @@ describe('execute', () => {
         {
           branch: 'b5', sha: 'sha5', category: 'merged-ancestor',
           reason: 'tip is an ancestor of origin/main', worktree: null,
+          lastCommitDate: '2026-01-01', aheadCount: 1,
         },
       ],
     });
@@ -1227,7 +1472,7 @@ describe('execute', () => {
       fakeSpawn(''),                     // git worktree prune
     );
     const { deps, appended } = makeExecDeps(plan, spawn);
-    const opts: ExecuteOptions = { categories: ['merged-ancestor'], worktreeFamilies: [], planId: TEST_PLAN_ID };
+    const opts: ExecuteOptions = { branches: [], categories: ['merged-ancestor'], worktreeFamilies: [], planId: TEST_PLAN_ID };
 
     const result = execute(opts, deps);
 
@@ -1243,6 +1488,7 @@ describe('execute', () => {
         {
           branch: 'b3', sha: 'sha3', category: 'empty',
           reason: 'no upstream, no commits beyond main', worktree: '/repo/wt3',
+          lastCommitDate: '2026-01-01', aheadCount: 1,
         },
       ],
       worktrees: [
@@ -1258,7 +1504,7 @@ describe('execute', () => {
     );
     const { deps } = makeExecDeps(plan, spawn);
     // 'agent' family not in the approved list — only 'superset' is approved.
-    const opts: ExecuteOptions = { categories: ['empty'], worktreeFamilies: ['superset'], planId: TEST_PLAN_ID };
+    const opts: ExecuteOptions = { branches: [], categories: ['empty'], worktreeFamilies: ['superset'], planId: TEST_PLAN_ID };
 
     const result = execute(opts, deps);
 
@@ -1277,6 +1523,7 @@ describe('execute', () => {
         {
           branch: 'b4', sha: 'sha4', category: 'empty',
           reason: 'no upstream, no commits beyond main', worktree: '/repo/wt4',
+          lastCommitDate: '2026-01-01', aheadCount: 1,
         },
       ],
       worktrees: [
@@ -1304,7 +1551,7 @@ describe('execute', () => {
       fakeSpawn(''),                   // git worktree prune
     );
     const { deps, appended } = makeExecDeps(plan, spawn);
-    const opts: ExecuteOptions = { categories: ['empty'], worktreeFamilies: ['superset'], planId: TEST_PLAN_ID };
+    const opts: ExecuteOptions = { branches: [], categories: ['empty'], worktreeFamilies: ['superset'], planId: TEST_PLAN_ID };
 
     const result = execute(opts, deps);
 
@@ -1331,6 +1578,7 @@ describe('execute', () => {
         {
           branch: 'b6', sha: 'sha6', category: 'merged-ancestor',
           reason: 'tip is an ancestor of origin/main', worktree: '/repo/wt6',
+          lastCommitDate: '2026-01-01', aheadCount: 1,
         },
       ],
       worktrees: [
@@ -1360,7 +1608,7 @@ describe('execute', () => {
     const { deps } = makeExecDeps(plan, spawn);
     deps.cwd = '/repo/wt6/src'; // simulates cd'ing into the candidate worktree after approval
     const opts: ExecuteOptions = {
-      categories: ['merged-ancestor'], worktreeFamilies: ['superset'], planId: TEST_PLAN_ID,
+      branches: [], categories: ['merged-ancestor'], worktreeFamilies: ['superset'], planId: TEST_PLAN_ID,
     };
 
     const result = execute(opts, deps);
@@ -1380,6 +1628,7 @@ describe('execute', () => {
         {
           branch: 'b7', sha: 'sha7', category: 'merged-ancestor',
           reason: 'tip is an ancestor of origin/main', worktree: '/repo/wt7',
+          lastCommitDate: '2026-01-01', aheadCount: 1,
         },
       ],
       worktrees: [
@@ -1424,7 +1673,7 @@ describe('execute', () => {
       appendFile: () => {},
     };
     const opts: ExecuteOptions = {
-      categories: ['merged-ancestor'], worktreeFamilies: ['superset'], planId: TEST_PLAN_ID,
+      branches: [], categories: ['merged-ancestor'], worktreeFamilies: ['superset'], planId: TEST_PLAN_ID,
     };
 
     const result = execute(opts, deps);
@@ -1447,6 +1696,7 @@ describe('execute', () => {
         {
           branch: 'bd', sha: 'shad', category: 'doubt',
           reason: 'open PR #9', worktree: null,
+          lastCommitDate: '2026-01-01', aheadCount: 1,
         },
       ],
     });
@@ -1470,6 +1720,7 @@ describe('execute', () => {
         {
           branch: 'b9', sha: 'sha9', category: 'merged-ancestor',
           reason: 'tip is an ancestor of origin/main', worktree: '/repo/wt9',
+          lastCommitDate: '2026-01-01', aheadCount: 1,
         },
       ],
       worktrees: [
@@ -1499,7 +1750,7 @@ describe('execute', () => {
     );
     const { deps, calls } = makeExecDeps(plan, spawn);
     const opts: ExecuteOptions = {
-      categories: ['merged-ancestor'], worktreeFamilies: ['superset'], planId: TEST_PLAN_ID,
+      branches: [], categories: ['merged-ancestor'], worktreeFamilies: ['superset'], planId: TEST_PLAN_ID,
     };
 
     const result = execute(opts, deps);
@@ -1520,6 +1771,7 @@ describe('execute', () => {
         {
           branch: 'b10', sha: 'sha10', category: 'merged-ancestor',
           reason: 'tip is an ancestor of origin/main', worktree: null,
+          lastCommitDate: '2026-01-01', aheadCount: 1,
         },
       ],
     });
@@ -1531,7 +1783,7 @@ describe('execute', () => {
       fakeSpawn(''),                                                  // git worktree prune
     );
     const { deps, calls, appended } = makeExecDeps(plan, spawn);
-    const opts: ExecuteOptions = { categories: ['merged-ancestor'], worktreeFamilies: [], planId: TEST_PLAN_ID };
+    const opts: ExecuteOptions = { branches: [], categories: ['merged-ancestor'], worktreeFamilies: [], planId: TEST_PLAN_ID };
 
     const result = execute(opts, deps);
 
@@ -1558,6 +1810,7 @@ describe('execute', () => {
         {
           branch: 'ahead-of-upstream', sha: 'sha11', category: 'merged-ancestor',
           reason: 'tip is an ancestor of origin/main', worktree: null,
+          lastCommitDate: '2026-01-01', aheadCount: 1,
         },
       ],
     });
@@ -1569,7 +1822,7 @@ describe('execute', () => {
       fakeSpawn(''),            // git worktree prune
     );
     const { deps, calls } = makeExecDeps(plan, spawn);
-    const opts: ExecuteOptions = { categories: ['merged-ancestor'], worktreeFamilies: [], planId: TEST_PLAN_ID };
+    const opts: ExecuteOptions = { branches: [], categories: ['merged-ancestor'], worktreeFamilies: [], planId: TEST_PLAN_ID };
 
     const result = execute(opts, deps);
 
@@ -1585,6 +1838,7 @@ describe('execute', () => {
         {
           branch: 'b12', sha: 'sha12', category: 'empty',
           reason: 'no upstream, no commits beyond main', worktree: null,
+          lastCommitDate: '2026-01-01', aheadCount: 1,
         },
       ],
     });
@@ -1595,7 +1849,7 @@ describe('execute', () => {
       fakeSpawn(''),              // git worktree prune
     );
     const { deps, appended } = makeExecDeps(plan, spawn);
-    const opts: ExecuteOptions = { categories: ['empty'], worktreeFamilies: [], planId: TEST_PLAN_ID };
+    const opts: ExecuteOptions = { branches: [], categories: ['empty'], worktreeFamilies: [], planId: TEST_PLAN_ID };
 
     const result = execute(opts, deps);
 
@@ -1606,5 +1860,186 @@ describe('execute', () => {
     ]);
     // The undo line must NOT be written for a branch that was never deleted.
     expect(appended).toEqual([]);
+  });
+
+  it('re-verifies a superseded branch against origin/main before deleting it', () => {
+    const plan = execPlan({
+      branches: [
+        {
+          branch: 'b13', sha: 'sha13', category: 'superseded',
+          reason: '2 touched file(s), none still differ from origin/main', worktree: null,
+          lastCommitDate: '2025-12-01', aheadCount: 2,
+        },
+      ],
+    });
+    const spawn = seqSpawn(
+      fakeSpawn('/repo/.git'),      // rev-parse --git-common-dir
+      fakeSpawn('sha13'),            // git rev-parse refs/heads/b13
+      fakeSpawn('src/a.ts'),         // git diff --name-only origin/main...sha13
+      fakeSpawn('docs/other.md'),    // git diff --name-only origin/main..sha13
+      fakeSpawn(''),                 // git branch -D b13
+      fakeSpawn(''),                 // git worktree prune
+    );
+    const { deps, calls } = makeExecDeps(plan, spawn);
+    const opts: ExecuteOptions = {
+      branches: [], categories: ['superseded'], worktreeFamilies: [], planId: TEST_PLAN_ID,
+    };
+
+    const result = execute(opts, deps);
+
+    expect(result.deletedBranches).toEqual(['b13']);
+    expect(calls).toContain('spawn:git diff --name-only origin/main...sha13');
+    // No ancestry check: a superseded tip is deliberately NOT an ancestor.
+    expect(calls.some((c) => c.includes('merge-base'))).toBe(false);
+  });
+
+  it('skips a superseded branch whose content now differs from a moved origin/main', () => {
+    const plan = execPlan({
+      branches: [
+        {
+          branch: 'b14', sha: 'sha14', category: 'superseded',
+          reason: '2 touched file(s), none still differ from origin/main', worktree: null,
+          lastCommitDate: '2025-12-01', aheadCount: 2,
+        },
+      ],
+    });
+    const spawn = seqSpawn(
+      fakeSpawn('/repo/.git'),   // rev-parse --git-common-dir
+      fakeSpawn('sha14'),         // git rev-parse refs/heads/b14
+      fakeSpawn('src/a.ts'),      // diff --name-only origin/main...sha14
+      fakeSpawn('src/a.ts'),      // diff --name-only origin/main..sha14 — now differs
+      fakeSpawn(''),              // git worktree prune
+    );
+    const { deps, appended } = makeExecDeps(plan, spawn);
+    const opts: ExecuteOptions = {
+      branches: [], categories: ['superseded'], worktreeFamilies: [], planId: TEST_PLAN_ID,
+    };
+
+    const result = execute(opts, deps);
+
+    expect(result.deletedBranches).toEqual([]);
+    expect(result.skipped).toEqual([
+      { item: 'b14', reason: 'content no longer matches origin/main — re-run classify' },
+    ]);
+    expect(appended).toEqual([]);
+  });
+
+  // --branches: the reviewed-doubt path. Everything the category path
+  // enforces still runs; only the "which items" question is answered by name.
+  it('deletes an explicitly named doubt branch, with undo line and sha re-verify', () => {
+    const plan = execPlan({
+      branches: [
+        {
+          branch: 'ancient', sha: 'sha15', category: 'doubt',
+          reason: 'no upstream, 2 unique commit(s)', worktree: null,
+          lastCommitDate: '2025-03-14', aheadCount: 2, doubtClass: 'review',
+        },
+      ],
+    });
+    const spawn = seqSpawn(
+      fakeSpawn('/repo/.git'), // rev-parse --git-common-dir
+      fakeSpawn('sha15'),       // git rev-parse refs/heads/ancient
+      fakeSpawn(''),            // git branch -D ancient
+      fakeSpawn(''),            // git worktree prune
+    );
+    const { deps, calls, appended } = makeExecDeps(plan, spawn);
+    const opts: ExecuteOptions = {
+      branches: ['ancient'], categories: [], worktreeFamilies: [], planId: TEST_PLAN_ID,
+    };
+
+    const result = execute(opts, deps);
+
+    expect(result.deletedBranches).toEqual(['ancient']);
+    expect(appended).toEqual(['ancient sha15\n']);
+    expect(calls.indexOf('append:ancient sha15')).toBeLessThan(calls.indexOf('spawn:git branch -D ancient'));
+    // A doubt carries no ancestry or content proof, so neither is re-asserted.
+    expect(calls.some((c) => c.includes('merge-base') || c.includes('diff'))).toBe(false);
+  });
+
+  it('skips a named branch that is not in the plan — this is how protected branches stay unreachable', () => {
+    const plan = execPlan({ branches: [], protected: [{ branch: 'main', reason: 'main branch' }] });
+    const spawn = seqSpawn(
+      fakeSpawn('/repo/.git'), // rev-parse --git-common-dir
+      fakeSpawn(''),            // git worktree prune
+    );
+    const { deps, appended } = makeExecDeps(plan, spawn);
+    const opts: ExecuteOptions = {
+      branches: ['main', 'never-existed'], categories: [], worktreeFamilies: [], planId: TEST_PLAN_ID,
+    };
+
+    const result = execute(opts, deps);
+
+    expect(result.deletedBranches).toEqual([]);
+    expect(result.skipped).toEqual([
+      { item: 'main', reason: 'not in the plan — protected, unknown, or created since classify' },
+      { item: 'never-existed', reason: 'not in the plan — protected, unknown, or created since classify' },
+    ]);
+    expect(appended).toEqual([]);
+  });
+
+  it('naming a branch cannot force removal of a worktree someone is working in', () => {
+    const plan = execPlan({
+      branches: [
+        {
+          branch: 'wip', sha: 'sha16', category: 'doubt',
+          reason: 'no upstream, 5 unique commit(s)', worktree: '/repo/wt16',
+          lastCommitDate: '2026-08-01', aheadCount: 5, doubtClass: 'review',
+        },
+      ],
+      worktrees: [
+        {
+          path: '/repo/wt16', branch: 'wip', sha: 'sha16', family: 'superset',
+          removable: false, reason: 'uncommitted changes present',
+        },
+      ],
+    });
+    const spawn = seqSpawn(
+      fakeSpawn('/repo/.git'),        // rev-parse --git-common-dir
+      fakeSpawn(''),                   // lsof
+      fakeSpawn(WORKTREE_OUTPUT),      // git worktree list --porcelain
+      fakeSpawn(' M src/foo.ts'),      // git status --porcelain in /repo/wt16 (dirty)
+      fakeSpawn(''),                   // git worktree prune
+    );
+    const { deps, appended } = makeExecDeps(plan, spawn);
+    const opts: ExecuteOptions = {
+      branches: ['wip'], categories: [], worktreeFamilies: ['superset'], planId: TEST_PLAN_ID,
+    };
+
+    const result = execute(opts, deps);
+
+    expect(result.deletedBranches).toEqual([]);
+    expect(result.removedWorktrees).toEqual([]);
+    expect(result.skipped).toEqual([
+      { item: '/repo/wt16', reason: 'uncommitted changes present' },
+      { item: 'wip', reason: 'uncommitted changes present' },
+    ]);
+    expect(appended).toEqual([]);
+  });
+
+  it('does not delete a named branch twice when its category was also approved', () => {
+    const plan = execPlan({
+      branches: [
+        {
+          branch: 'b17', sha: 'sha17', category: 'merged-pr',
+          reason: 'PR #1 merged at branch tip', worktree: null,
+          lastCommitDate: '2026-01-01', aheadCount: 1,
+        },
+      ],
+    });
+    const spawn = seqSpawn(
+      fakeSpawn('/repo/.git'), // rev-parse --git-common-dir
+      fakeSpawn('sha17'),       // git rev-parse refs/heads/b17
+      fakeSpawn(''),            // git branch -D b17
+      fakeSpawn(''),            // git worktree prune
+    );
+    const { deps, appended } = makeExecDeps(plan, spawn);
+    const opts: ExecuteOptions = {
+      branches: ['b17'], categories: ['merged-pr'], worktreeFamilies: [], planId: TEST_PLAN_ID,
+    };
+
+    const result = execute(opts, deps);
+
+    expect(result.deletedBranches).toEqual(['b17']);
+    expect(appended).toEqual(['b17 sha17\n']);
   });
 });

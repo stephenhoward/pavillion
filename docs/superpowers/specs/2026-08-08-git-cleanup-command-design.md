@@ -24,7 +24,11 @@ upstream, 78 with no upstream) and three worktree families:
 
 - **Superset worktrees** — `~/.superset/worktrees/<uuid>/<name>`
 - **Claude agent worktrees** — `<repo>/.claude/worktrees/agent-*`
-- **Chain worktrees** — `~/pavillion/pv-jdot-chains/chain-*`
+- **Chain worktrees** — `~/pavillion/pv-<epic>-chains/chain-*`, one directory
+  per epic (`pv-jdot-chains`, `pv-federation-chains`, …). The family is
+  matched by that pattern, not by a fixed directory name: a hard-coded name
+  silently strands every other epic's worktrees in `other`, where nothing can
+  act on them.
 
 All three families are in scope for removal, subject to the safety checks
 below.
@@ -39,6 +43,8 @@ assigns every local branch to exactly one category:
 | `merged-ancestor` | Branch tip is an ancestor of `origin/main` | delete (`git branch -D`, after live ancestry re-verify) |
 | `merged-pr` | Not an ancestor, but GitHub reports the branch's PR as MERGED | delete (`git branch -D`) |
 | `empty` | No upstream and zero commits not already on `main` | delete (`git branch -D`, after live ancestry re-verify) |
+| `superseded` | No open PR, and no file the branch touched still differs from `origin/main` | delete (`git branch -D`, after live content re-verify) |
+| `doubt` | Anything unproven (see below) | never deletable by category; see "Reviewing doubts" |
 
 `git branch -d` is deliberately **not** used for the two ancestry-proven
 categories. `-d` measures merged-ness against the branch's own upstream, not
@@ -49,7 +55,22 @@ answers, `execute` re-asserts the real predicate immediately before deleting
 (`git merge-base --is-ancestor <sha> origin/main`, any non-zero exit skips)
 and then uses `-D`. This is strictly stronger than `-d`: it proves
 merged-to-main rather than merged-to-upstream.
-| `doubt` | Anything unproven (see below) | report only |
+
+**`superseded`** is decided by two name-only diffs:
+`origin/main...<branch>` gives the files the branch changed since its merge
+base; `origin/main..<branch>` gives the files whose content differs between
+the two tips. When no touched file appears in the second set, every file the
+branch changed is byte-identical to main's copy — the work is in main
+(squash-merged under a different message, cherry-picked, or independently
+reimplemented) and only the commit history would be lost. It fails closed:
+any git error, or a branch that touched nothing, is not superseded.
+`execute` recomputes the same predicate against the re-verified sha, because
+`origin/main` can move between classify and execute.
+
+Decision order is load-bearing: an **open PR outranks content equivalence**
+(deleting the branch would close a PR someone is using), and so does a failed
+GitHub lookup (an open PR could be invisible). Both stay doubts however the
+files compare.
 
 **GitHub verification** uses batched GraphQL via `gh api graphql`
 (`associatedPullRequests` on branch head refs, ~50 branches per query) to
@@ -59,16 +80,52 @@ check; only 50 need GitHub lookup — one batched query at current scale. Keep
 the chunking logic trivial (a plain array-chunk loop); it exists so the query
 never exceeds GraphQL alias limits, not for throughput.
 
-**Doubt reasons** (each reported item carries its specific reason):
+**Doubt reasons** (each reported item carries its specific reason) and the
+triage bucket each falls into:
 
-- Upstream gone but branch has commits not on `main` and no merged PR
-- PR exists but was closed without merging
-- No upstream and branch has unique commits
-- Branch is ahead of its merged PR (extra commits after merge)
-- Branch checked out in a dirty worktree
-- Branch checked out in an active worktree (see protections)
-- GitHub lookup failed for the branch (network/auth error — never assume
-  merged on failure)
+| Reason | Bucket |
+|---|---|
+| Upstream gone but branch has commits not on `main` and no merged PR | review |
+| PR exists but was closed without merging | review |
+| No upstream and branch has unique commits | review |
+| Branch is ahead of its merged PR (extra commits after merge) | review |
+| Open PR on the branch | keep |
+| GitHub lookup failed (network/auth — never assume merged on failure) | keep |
+| Branch checked out in a dirty, active, or otherwise unremovable worktree | keep |
+
+`review` means nothing proved the branch either way and a person has to look.
+`keep` means the branch names live work or unreadable state — re-reading
+those rows every run is noise, so the report separates them and sorts review
+oldest-first. Every branch also carries its tip date and ahead count, which
+is what triage actually asks for first.
+
+The bucket is a presentation aid with no authority: `doubt` is never
+deletable by category, whichever bucket it lands in.
+
+## Reviewing doubts
+
+The review bucket is where the work is on a real repo — on the first live run
+it held 54 of 55 classified branches. Leaving it entirely to the operator
+means the session ends in a hand-rolled `git branch -D` loop, which is
+exactly the unsafe path the tool exists to replace: no re-verify, no
+protections, no undo log.
+
+So the command reviews it with judgment (branch age, what `git log
+origin/main..<branch>` and `git diff --stat` show, whether the work visibly
+landed under another name, related beads or closed PRs), recommends per
+branch or per cohort, discusses with the user, and then acts through:
+
+```
+execute --branches=<names> --plan-id=<id>
+```
+
+The invariant is narrowed, not dropped: a doubt is never deletable **by
+category** — only by explicit name, after review. Naming a branch bypasses
+nothing else. It must still be present in the plan (protected branches never
+are, so `--branches=main` is refused), its sha must still match what classify
+saw, and a branch checked out in a worktree still requires that worktree to
+pass the full removal assessment and its family to be approved. Every named
+deletion is written to the undo log like any other.
 
 ## Protections (hard-coded in the script, not overridable by approval)
 
@@ -96,7 +153,8 @@ process yet, nothing dirty). Neither covers the other's gap — both stay.
 A worktree is removed only when **all** hold:
 
 1. Its checked-out branch classified as deletable (`merged-ancestor`,
-   `merged-pr`, or `empty`)
+   `merged-pr`, `empty`, or `superseded`) — or was named explicitly in
+   `--branches`, which is the operator making the same call
 2. Working tree is clean
 3. It passes every protection check above
 4. Its category was approved by the user
@@ -116,18 +174,20 @@ as doubts with the failing check named.
    single shared formatter (`report = render(plan)`) — never built as an
    independent second serialization, so the two files cannot disagree.
 2. The command presents in chat: counts per category, the worktree removals
-   per family, and the full doubts list with reasons. Point at the report
-   file for the complete branch lists.
+   per family, and the doubts in their two buckets with reasons, tip dates,
+   and ahead counts. Point at the report file for the complete branch lists.
 3. One AskUserQuestion round (multiSelect): which deletable categories to
-   execute — `merged-ancestor`, `merged-pr`, `empty`, and worktree removal
-   per family (Superset / agent / chain). Doubts are not offered as an
-   option.
+   execute — `merged-ancestor`, `merged-pr`, `empty`, `superseded` — and
+   worktree removal per family (Superset / agent / chain). Doubts are not
+   offered as an option.
 4. Run `npx tsx .claude/tools/git-cleanup.ts execute
    --categories=<approved>`. The script reads the saved plan and, for each
    item, **re-verifies immediately before acting** (branch SHA unchanged,
-   worktree still clean/inactive); anything that changed since classify is
-   skipped and reported.
-5. Final summary: deleted branches, removed worktrees, skipped items with
+   ancestry or content proof still holding, worktree still clean/inactive);
+   anything that changed since classify is skipped and reported.
+5. Review the `review`-bucket doubts with the user (see "Reviewing doubts"),
+   then run `execute --branches=<confirmed>` with the same plan id.
+6. Final summary: deleted branches, removed worktrees, skipped items with
    reasons, undo log location.
 
 ## Undo
@@ -141,9 +201,14 @@ so no uncommitted work can be lost.
 
 ```
 npx tsx .claude/tools/git-cleanup.ts classify
-npx tsx .claude/tools/git-cleanup.ts execute --categories=merged-ancestor,merged-pr,empty \
+npx tsx .claude/tools/git-cleanup.ts execute --plan-id=<id> \
+    --categories=merged-ancestor,merged-pr,empty,superseded \
     --worktree-families=superset,agent,chain
+npx tsx .claude/tools/git-cleanup.ts execute --plan-id=<id> --branches=old-a,old-b
 ```
+
+`execute` requires at least one of `--categories` / `--branches`. `doubt` is
+rejected as a category value; reviewed doubts go through `--branches`.
 
 - `classify` — no side effects beyond `git fetch --prune` and writing the
   plan/report files. Exit non-zero on `gh` auth failure with a clear message
@@ -166,20 +231,37 @@ follows their conventions (TypeScript, tsx runner, tests under
 
 ## Testing
 
-Unit tests, following the existing `.claude/tools/test/` pattern with git/gh
-calls stubbed, cover:
+Two suites, both under `.claude/tools/test/`.
+
+**Unit** (`git-cleanup.test.ts`), git/gh calls stubbed:
 
 - Pure classification logic: parsing `git for-each-ref` / `git worktree list
-  --porcelain` output, category assignment, doubt reasons
+  --porcelain` output, category assignment, decision order, doubt reasons and
+  buckets, content-equivalence verdicts
 - **Protection predicates as pure/stubbable functions**: dirty-tree, lock
   detection, mtime threshold, `lsof` liveness — fed fake command output.
   These are the safety-critical half and get the same test rigor as
-  classification; only the actual `git worktree remove` / `git branch -D`
-  invocations are left to manual verification.
+  classification.
+
+**Integration** (`git-cleanup.integration.test.ts`), real git binary and real
+temp repositories, only `gh` (and the origin URL) faked:
+
+- classify and execute end-to-end over a repo containing a merged branch with
+  a stale remote-tracking ref, a squash-merged branch, and live unmerged work
+- the `--branches` round trip, including restoring from the undo log
+- the skip paths: branch moved since classify, content no longer matching
+
+This suite exists because a stubbed spawn can only assert which commands were
+issued, never how git answers them. That gap shipped a real bug: `git branch
+-d` refused every `merged-ancestor` branch whose tip was ahead of a stale
+upstream ref, so the first live run deleted nothing while every unit test
+passed. Any change to a destructive invocation or to a proof predicate needs
+a case here, not only in the unit suite.
 
 ## Out of scope
 
 - Remote branch deletion (CI already deletes branches on merge)
 - Scheduled or automatic runs
 - Cross-repo support
-- Acting on doubts (always report-only)
+- Bulk action on doubts (never selectable as a category — only by explicit
+  name after review)
