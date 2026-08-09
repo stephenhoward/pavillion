@@ -92,6 +92,14 @@ export default class NotificationRoutes {
 
     try {
       const notifications = await this.service.getNotifications(account.id, limit, offset);
+      // The body became role-dependent when the read path started emitting
+      // decided targets, so this pre-existing header now caches a role-shaped
+      // response. `private` keeps it out of shared caches, so there is no
+      // cross-user exposure; the only effect is that a role change may not be
+      // reflected in the caller's own browser for up to 25 seconds. Acceptable
+      // because the target is an affordance, never a trust boundary — both the
+      // moderation queue and the calendar reports tab authorize independently
+      // server-side, so a stale target grants nothing.
       res.set('Cache-Control', 'private, max-age=25');
       res.json(notifications);
     }

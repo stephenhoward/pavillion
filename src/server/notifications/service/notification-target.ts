@@ -32,6 +32,24 @@ import type { NotificationVerb } from '@/server/notifications/types';
  *    never receive report notifications, so `owner_report` is never emitted
  *    to someone who would land on a blocked tab. If audience resolution ever
  *    adds editors, this breaks silently.
+ *
+ *    The guarantee is **exact for `Flag`**, whose audience and stored
+ *    `object_calendar_id` derive from the same `payload.calendarId`, and
+ *    **weaker for the two admin-addressed report verbs**: `ReportEscalated`
+ *    addresses instance-admins and `ReportResolved` addresses the reviewer, so
+ *    neither recipient need own the report's calendar. Under role drift — a
+ *    recipient addressed while an admin who reads the row after demotion — the
+ *    live role read correctly returns `false` and the owner branch hands them
+ *    `owner_report` for a calendar they do not own.
+ *
+ *    That outcome is accepted, not repaired, and is pinned by a test in
+ *    `test/integration/read-path-targets.test.ts`. The resolution is "the
+ *    destination enforces" (invariant 5): the reports tab checks
+ *    `userCanReviewReports` server-side, `url_name` is public routing data,
+ *    and the report id is already on the row as `object.id`. Gating the
+ *    `owner_report` branch on a membership check would turn the stored
+ *    `object_calendar_id` into a second policy surface — precisely what the
+ *    DEC-013 analogue below forbids.
  * 2. **`isAdmin` wins for a dual-role viewer.** An account that is both an
  *    instance admin and the flagged calendar's owner gets `moderation_report`.
  *    A decision, not an accident of branch order.

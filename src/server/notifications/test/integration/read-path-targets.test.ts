@@ -45,6 +45,9 @@ import type { NotificationResponse } from '@/common/model/notification';
  *   - **Report-calendar immutability.** The denormalized
  *     `object_calendar_id` is a routing key, so a reassignment path in
  *     moderation would silently route owners to another calendar's reports.
+ *   - **Role drift on admin-addressed report verbs.** Pins the accepted
+ *     outcome for a recipient addressed as an admin who reads the row after
+ *     demotion — see the test's own comment for why this is deliberate.
  */
 describe('notification read path — target derivation (integration)', () => {
   let env: TestEnvironment;
@@ -229,35 +232,126 @@ describe('notification read path — target derivation (integration)', () => {
     expect(afterDemotion[0].object.target).toMatchObject({ kind: 'owner_report' });
   });
 
+  it('still hands owner_report to a demoted admin-addressed recipient — accepted role drift, not a defect', async () => {
+    // This pins a KNOWN AND ACCEPTED outcome. Do not "fix" it with a
+    // membership check.
+    //
+    // Invariant 1's structural guarantee is exact only for `Flag`, whose
+    // audience and stored `object_calendar_id` both derive from the same
+    // `payload.calendarId`. `ReportEscalated` addresses instance-admins and
+    // `ReportResolved` addresses the reviewer, so neither recipient need own
+    // the report's calendar. If such a recipient later loses the admin role,
+    // the live role read correctly returns false and drops them into the owner
+    // branch — handing them `owner_report` for a calendar they do not own.
+    //
+    // Accepted because the target is an affordance and never a trust boundary
+    // (invariant 5): the destination enforces `userCanReviewReports`
+    // server-side, `url_name` is public routing data, and the report id was
+    // already on the row as `object.id` before targets existed. Gating this
+    // branch on membership would make the stored `object_calendar_id` a second
+    // policy surface, which is exactly what the DEC-013 analogue documented in
+    // `notification-target.ts` forbids.
+    const escalatedReportId = uuidv4();
+    await emitAndSettle(eventBus, MODERATION_BUS_EVENTS.REPORT_ESCALATED, {
+      reportId: escalatedReportId,
+      eventId,
+      calendarId: calendar.id,
+      reason: 'escalation threshold reached',
+    });
+
+    const asAdmin = (await inboxFor(adminAccount))
+      .find(row => row.object.id === escalatedReportId);
+    expect(asAdmin!.verb).toBe('ReportEscalated');
+    expect(asAdmin!.object.target).toEqual({
+      kind: 'moderation_report',
+      reportId: escalatedReportId,
+    });
+
+    await AccountRoleEntity.destroy({
+      where: { account_id: adminAccount.id, role: 'admin' },
+    });
+    try {
+      // The demoted account is emphatically not an owner of this calendar.
+      const owners = await calendarInterface.getOwnersForCalendar(calendar.id);
+      expect(owners.map(o => o.id)).not.toContain(adminAccount.id);
+
+      const afterDemotion = (await inboxFor(adminAccount))
+        .find(row => row.object.id === escalatedReportId);
+      expect(afterDemotion!.object.target).toEqual({
+        kind: 'owner_report',
+        reportId: escalatedReportId,
+        calendarUrlName: 'readpathcal',
+      });
+    }
+    finally {
+      await AccountRoleEntity.create({ account_id: adminAccount.id, role: 'admin' });
+    }
+  });
+
   // ---------------------------------------------------------------------------
   // Invariant 6 — a report's owning calendar is immutable after creation
   // ---------------------------------------------------------------------------
 
   describe('report calendar immutability', () => {
     /**
-     * Extracts the first-argument text of every `.update(` call in a source
-     * file by brace-matching from the opening `{`. Regex alone cannot do this
-     * without truncating at the first nested object.
+     * Identifier names in `source` that hold a `ReportEntity`: the model class
+     * itself, plus every local bound to a `ReportEntity` query result — either
+     * directly or by iterating a collection of them.
+     *
+     * Narrowing the scan to these receivers is what keeps the tripwire honest.
+     * A scan over every `.update(` in the file also matched
+     * `createHmac(...).update(email...)` in `hashEmail` — a Node crypto call,
+     * not a database write — and picked up unrelated report columns from other
+     * entities besides. Either one turns this into a test that fails for
+     * reasons unconnected to report reassignment.
      */
-    function updatePayloads(source: string): string[] {
-      const payloads: string[] = [];
-      const marker = '.update(';
-      let cursor = source.indexOf(marker);
-      while (cursor !== -1) {
-        const open = source.indexOf('{', cursor);
-        if (open !== -1) {
-          let depth = 0;
-          let index = open;
-          for (; index < source.length; index++) {
-            if (source[index] === '{') depth++;
-            else if (source[index] === '}') {
-              depth--;
-              if (depth === 0) break;
-            }
-          }
-          payloads.push(source.slice(open, index + 1));
+    function reportEntityReceivers(source: string): Set<string> {
+      const receivers = new Set(['ReportEntity']);
+
+      const bindings = /\b(?:const|let)\s+([A-Za-z_$][\w$]*)\s*=\s*await\s+ReportEntity\./g;
+      for (const match of source.matchAll(bindings)) {
+        receivers.add(match[1]);
+      }
+
+      // `for (const entity of reportsToEscalate)` — the loop variable holds a
+      // ReportEntity whenever the iterated collection does.
+      const loops = /\bfor\s*\(\s*(?:const|let)\s+([A-Za-z_$][\w$]*)\s+of\s+([A-Za-z_$][\w$]*)\s*\)/g;
+      for (const match of source.matchAll(loops)) {
+        if (receivers.has(match[2])) {
+          receivers.add(match[1]);
         }
-        cursor = source.indexOf(marker, cursor + marker.length);
+      }
+
+      return receivers;
+    }
+
+    /**
+     * The first-argument object literal of every Sequelize write issued through
+     * a `ReportEntity` receiver, brace-matched so nested objects are not
+     * truncated (regex alone cannot do that).
+     *
+     * The match requires `\.update\(\s*\{` — only whitespace may separate the
+     * call from its object literal. A call whose first argument is not an
+     * object literal is therefore skipped outright rather than causing a walk
+     * forward into whatever unrelated block happens to come next.
+     */
+    function reportUpdatePayloads(source: string, receivers: Set<string>): string[] {
+      const alternation = [...receivers].join('|');
+      const writes = new RegExp(`\\b(?:${alternation})\\.update\\(\\s*\\{`, 'g');
+
+      const payloads: string[] = [];
+      for (const match of source.matchAll(writes)) {
+        const open = match.index + match[0].length - 1;
+        let depth = 0;
+        let index = open;
+        for (; index < source.length; index++) {
+          if (source[index] === '{') depth++;
+          else if (source[index] === '}') {
+            depth--;
+            if (depth === 0) break;
+          }
+        }
+        payloads.push(source.slice(open, index + 1));
       }
       return payloads;
     }
@@ -273,11 +367,18 @@ describe('notification read path — target derivation (integration)', () => {
         path.resolve(__dirname, '../../../moderation/service/moderation.ts'),
         'utf8',
       );
-      const payloads = updatePayloads(source);
+      const receivers = reportEntityReceivers(source);
+      const payloads = reportUpdatePayloads(source, receivers);
 
-      // Guard the extractor itself: zero payloads would make the assertion
-      // below vacuously true.
-      expect(payloads.length).toBeGreaterThan(0);
+      // Guard the extractor itself: too few payloads would make the assertion
+      // below vacuously true. Most report writes go through an *instance*
+      // (`entity.update(...)`), not the model class, so a receiver set that has
+      // collapsed to `ReportEntity` alone means the binding scan stopped
+      // recognising them. The moderation service has ~15 report update paths
+      // today; the floor is deliberately slack, but not slack enough to survive
+      // the matcher breaking.
+      expect(receivers.size).toBeGreaterThan(1);
+      expect(payloads.length).toBeGreaterThanOrEqual(10);
       for (const payload of payloads) {
         expect(payload).not.toContain('calendar_id');
       }
