@@ -125,7 +125,15 @@ Every spec lives in `tests/e2e/federation/`.
 - **`auto-repost.spec.ts`** — a follow policy decides whether an inbound event also lands on the follower's own calendar. Originals and reposts are covered separately because they arrive as different activities: Create carries an original, Announce carries a repost ([DEC-014](../agent-os/product/decisions/dec-014-create-original-announce-repost.md)). Also covers a policy change taking effect only on subsequent events, self-origin loop prevention, and duplicate suppression across policy toggles.
 - **`unpost-sticky.spec.ts`** — after an owner unposts an auto-reposted event, the origin re-broadcasting that event does not bring it back, while the underlying event still takes the update. Update is deliberately not gated; only re-share creation is ([DEC-008](../agent-os/product/decisions/dec-008-unpost-dismissals.md)).
 - **`cross_instance_editors.spec.ts`** — a user on one instance edits a calendar on another. Covers discovery of the remote Person actor, Add(editor), Create/Update/Delete signed by that Person actor and applied to the remote calendar, and Remove(editor) on revoke.
+- **`flag.spec.ts`** — a moderation report filed on one instance against an event hosted by another crosses the wire and is filed in the origin calendar owner's queue, with its category tag, reporting instance, and owning calendar intact. The Flag is addressed to the actor of the calendar that hosts the reported event, never to an instance-admin actor, and the report it creates is scoped to that same calendar ([DEC-015](../agent-os/product/decisions/dec-015-federated-report-routing.md)). The load-bearing assertion is the report row, not the acceptance record — see the policy-outcome caveat above. It is also the only spec that runs `resolveInboxUrl`'s direct-URL branch end to end; every other test either passes a WebFinger handle or stubs the resolver.
+- **`join-ignore.spec.ts`** — **partly proof by absence.** An inbound Join from a peer that models attendance is admitted, dispatched, and answered with an Ignore addressed to the sending actor alone, carrying `as:Public` in no addressing field. Proving the reply came back is what proves the Join was dispatched at all, so the returned Ignore is load-bearing, together with `processed_status: 'ok'` on the row it leaves in the receiver's `ap_inbox` ([DEC-013](../agent-os/product/decisions/dec-013-inbox-authenticated-activity-log.md)) — a null status would mean the row was written and never dispatched, an error status that the dispatcher did not recognise the type. Only against that round trip does the negative half mean anything: the origin's public event listing is byte-identical before and after, because Pavillion keeps no attendance state for a Join to write to.
 - **`note.spec.ts`** — **proof by absence.** The paired Create/Update/Delete(Note) activities Pavillion emits for Mastodon-class peers do reach a Pavillion inbox, and a Pavillion receiver skips every one of them without producing a second feed row or a Note-derived event. Notes are outbound interop only ([DEC-014](../agent-os/product/decisions/dec-014-create-original-announce-repost.md)).
+
+### Known suite failures
+
+A local full-suite run is not green today, and the failures are reproducible rather than flaky: `follow.spec.ts` (both tests), `follow-backfill.spec.ts`, `note.spec.ts`, `signed_delivery.spec.ts`, and `unpost-sticky.spec.ts` fail, with the remainder of `signed_delivery`'s serial block skipped as a cascade.
+
+None of them is failing for a reason of its own. `signature_strict_receive.spec.ts` toggles beta's enforcement by force-recreating the shared beta container, and `playwright.federation.config.ts` sets `fullyParallel: true` with no worker cap outside CI — so every other spec running at that moment gets a 502 from nginx, and each failure throws in fixture setup rather than at an assertion. CI pins `workers: 1` and never reproduces it. Running the suite with `signature_strict_receive.spec.ts` excluded is green. Tracked as `pv-jxbt`.
 
 ## Inbound Coverage Matrix
 
@@ -153,17 +161,19 @@ These are the types the calendar inbox accepts and `dispatchByType` handles.
 | `Announce(Event)` | yes | yes | yes | yes | `auto-repost`; pulled form by `follow-backfill` |
 | `Undo(Follow)` | yes | — | yes | yes | `follow` |
 | `Undo(Announce)` | yes | yes | yes | yes | `follow-backfill`, **`outbox_pull` only** |
-| `Join` | yes | — | — | yes | **none** |
-| `Ignore` | yes | — | yes | yes | **none** |
-| `Flag` | yes | — | yes | yes | **none** |
+| `Join` | yes | — | — | yes | `join-ignore` |
+| `Ignore` | yes | — | yes | yes | `join-ignore` |
+| `Flag` | yes | — | yes | yes | `flag` |
 | `Create/Update/Delete(Note)` | yes | yes | yes | yes | `note` — skipped before any side effect |
 
 Rows that need more than a cell:
 
 - **`Accept(Follow)` is indirect.** `follow.spec.ts` asserts that Beta's follow row reaches the accepted state, which could only happen if Alpha's Accept was ingested — but nothing asserts the Accept itself. A regression that accepted follows locally without the round-trip would still pass.
+- **`Delete(Event)` is unproven in its pulled form.** `signed_delivery.spec.ts` covers the signed POST. Nothing exercises a Delete arriving through `outbox_pull`, even though the backfill worker replays Deletes. Tracked as `pv-gjzd`.
 - **`Undo(Announce)` has no signed-POST proof.** `follow-backfill.spec.ts` proves the `outbox_pull` form. `unpost-sticky.spec.ts` exercises the *emitting* side — the unposting calendar has no followers in that fixture — so no spec puts an inbound Undo(Announce) through the signed POST path.
-- **`Join` mutates nothing, by design.** Pavillion emits every event with `joinMode: 'none'` and keeps no attendance state, so `processJoinActivity` replies with an Ignore addressed to the sender alone and writes nothing. A future spec proves the Ignore reply, not a state change — the absence of state *is* the correct outcome.
-- **`Ignore` is recorded, not acted on.** The persisted `ap_inbox` row is the entire outcome. It is a named case in `dispatchByType` rather than a fall-through, because the `default: throw` is what marks a genuinely unknown type as `processed_status: 'error'`.
+- **`Join` mutates nothing, by design.** Pavillion emits every event with `joinMode: 'none'` and keeps no attendance state, so `processJoinActivity` replies with an Ignore addressed to the sender alone and writes nothing. `join-ignore.spec.ts` therefore proves the Ignore reply rather than a state change — the absence of state *is* the correct outcome, and it is asserted as such.
+- **`Ignore` is recorded, not acted on.** The persisted `ap_inbox` row is the entire outcome. It is a named case in `dispatchByType` rather than a fall-through, because the `default: throw` is what marks a genuinely unknown type as `processed_status: 'error'`. That distinction is why `join-ignore.spec.ts` asserts `processed_status: 'ok'` on the row rather than merely its existence.
+- **`Flag` is proven end to end, on one of its two outbound routes.** `flag.spec.ts` drives the admin forward (`POST /api/v1/admin/reports/:reportId/forward-to-admin`) through to the origin calendar's queue. The owner forward (`POST /api/v1/calendars/:calendarId/reports/:reportId/forward`) resolves its recipient the same way but is not separately exercised by a federation E2E.
 - **`Join` has no `local_dispatch` cell** because Pavillion never emits a Join. `Ignore` and `Flag` do have one — both appear in the outbox routing switch and both can be addressed to a same-instance calendar.
 
 ### Paths that authenticate and act without writing a row
@@ -177,7 +187,7 @@ Two inbound paths verify the sender, act synchronously, and return 200 without e
 
 Both reach `logInboxActivityAccepted`, so a log poll can prove acceptance — but neither leaves a durable record. DEC-013's invariant covers the `ap_inbox` table, not the whole ingest surface, and these two paths are the surface it does not cover.
 
-The user inbox also differs from the calendar inbox in how it treats an unrecognized type: it logs and answers 200 rather than 400. A peer cannot tell from the response whether a `Remove` was applied or silently discarded.
+The user inbox also differs from the calendar inbox in how it treats an unrecognized type: it logs and answers 200 rather than 400. A peer cannot tell from the response whether a `Remove` was applied or silently discarded. Tracked as `pv-2qxr`.
 
 ### Types with no inbound path
 
