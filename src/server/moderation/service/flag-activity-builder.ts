@@ -13,8 +13,12 @@ interface Hashtag {
 
 /**
  * ActivityPub Flag activity structure for content reporting.
+ *
+ * The wire form only. It is handed to the ActivityPub domain
+ * (`publishFlag`), which parses it into the AP `FlagActivity` model —
+ * moderation never constructs AP model instances itself.
  */
-interface FlagActivity {
+export interface FlagActivityObject {
   '@context'?: string;
   type: 'Flag';
   id: string;
@@ -25,6 +29,8 @@ interface FlagActivity {
   tag: Hashtag[];
   summary: string;
   published: string;
+  /** Explicit recipients. Set by the caller after building. */
+  to?: string[];
 }
 
 /**
@@ -60,7 +66,7 @@ class FlagActivityBuilder {
     event: CalendarEvent,
     actorUri: string,
     eventOriginUri?: string,
-  ): FlagActivity {
+  ): FlagActivityObject {
     // Generate unique Flag ID
     const flagId = `https://${this.domain}/flags/${uuidv4()}`;
 
@@ -77,7 +83,7 @@ class FlagActivityBuilder {
     const summary = `Event report: ${report.category}`;
 
     // Build activity
-    const activity: FlagActivity = {
+    const activity: FlagActivityObject = {
       '@context': 'https://www.w3.org/ns/activitystreams',
       type: 'Flag',
       id: flagId,
@@ -106,7 +112,7 @@ class FlagActivityBuilder {
     event: CalendarEvent,
     adminActorUri: string,
     eventOriginUri?: string,
-  ): FlagActivity {
+  ): FlagActivityObject {
     // Generate unique Flag ID
     const flagId = `https://${this.domain}/flags/${uuidv4()}`;
 
@@ -132,7 +138,7 @@ class FlagActivityBuilder {
     const summary = `Admin report: ${report.category}`;
 
     // Build activity (no @context for admin flags as shown in spec)
-    const activity: FlagActivity = {
+    const activity: FlagActivityObject = {
       type: 'Flag',
       id: flagId,
       actor: adminActorUri,
