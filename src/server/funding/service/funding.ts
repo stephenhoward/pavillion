@@ -43,6 +43,7 @@ import {
   ProviderNotConfiguredError,
   InvalidSessionIdError,
   WebhookSignatureError,
+  FundingAccessIndeterminateError,
 } from '@/common/exceptions/funding';
 import { ValidationError } from '@/common/exceptions/base';
 import { CalendarNotFoundError } from '@/common/exceptions/calendar';
@@ -1379,6 +1380,11 @@ export default class FundingService {
    * Queries CalendarFundingPlanEntity for the given calendarId where the linked
    * funding plan is active and the allocation has not ended (end_time IS NULL or end_time > NOW()).
    *
+   * @deprecated Use {@link checkFundingAccess}. This reports only the plan's
+   * status, so it keeps granting access to a plan whose cancellation was never
+   * reported to us, and it knows nothing about instance-level funding settings
+   * or admin exemption. Retired at the widget-gate migration.
+   *
    * @param calendarId - Calendar ID to check
    * @returns True if calendar has an active funding plan allocation
    */
@@ -1619,6 +1625,11 @@ export default class FundingService {
    * Uses fail-secure error handling: if checks throw errors, access is denied.
    * Grant check runs first (smaller table); funding plan check runs second.
    *
+   * @deprecated Use {@link checkFundingAccess}. This answers only the
+   * grant-or-plan half of a gate decision, leaving every caller to remember
+   * the instance-enabled and admin-exemption checks for itself, and it applies
+   * no cancellation boundary. Retired at the widget-gate migration.
+   *
    * @param calendarId - Calendar ID to check
    * @returns True if calendar has an active grant or active funding plan
    */
@@ -1657,7 +1668,9 @@ export default class FundingService {
    *     customer.subscription.deleted cannot grant access indefinitely.
    *  4. Funding is enabled but the answer is indeterminate (database error,
    *     credential decrypt failure, provider unreachable) -> CLOSED. "Cannot
-   *     tell" is not "has access".
+   *     tell" is not "has access". Where the indeterminate read is the
+   *     instance-level settings themselves, the closure is signalled by
+   *     throwing rather than returning false — see the return contract below.
    *
    * Note the deliberate split in invariants 1 and 4: a *known* absence of
    * funding opens gates, an *unknown* funding state closes them. Neither is
@@ -1672,11 +1685,26 @@ export default class FundingService {
    * a healthy paid allocation. The gate closes only when no source produced an
    * allow.
    *
-   * Constraint on consumers (middleware, API handlers, upsell UI): a denial
-   * from this method is not always "unfunded". When the instance-level funding
-   * state itself could not be read, the denial is a server-side failure and
-   * must surface as a server error — never as 402 / SubscriptionRequiredError,
-   * which would tell an operator to buy something to fix our outage.
+   * The return contract carries three outcomes, not two, because a denial from
+   * this method is not always "unfunded":
+   *
+   *  - `true`  — the gate is open.
+   *  - `false` — a determinate denial. This calendar is unfunded on an
+   *    instance that does charge. Consumers may answer it commercially
+   *    (402 / SubscriptionRequiredError, an upsell prompt).
+   *  - throws {@link FundingAccessIndeterminateError} — the instance-level
+   *    funding state could not be read, so we cannot even say whether this
+   *    instance charges for anything. Still a denial, but a server-side one:
+   *    consumers must surface it as a server error and must NEVER answer it
+   *    with 402 / SubscriptionRequiredError, which would tell an operator to
+   *    buy something to fix our outage.
+   *
+   * The distinction is thrown rather than returned deliberately: a bare
+   * boolean cannot express it, and every consumer that forgets it produces the
+   * exact wrong answer (a bill during an outage). Throwing makes the correct
+   * handling the default — an unhandled throw is a 500, which is what this
+   * case should be — and leaves a consumer that wants to degrade differently
+   * free to catch.
    *
    * The feature key carries no policy of its own today — every gated feature
    * is decided the same way — but it is validated against the registry so an
@@ -1685,9 +1713,12 @@ export default class FundingService {
    *
    * @param calendarId - Calendar the feature would be used on
    * @param feature - Key from FUNDING_GATED_FEATURES naming the gated feature
-   * @returns True if the gate is open for this calendar
+   * @returns True if the gate is open for this calendar, false if this
+   *   calendar is determinately unfunded
    * @throws ValidationError if calendarId is not a UUID or feature is not a
    *   registered funding-gated feature
+   * @throws FundingAccessIndeterminateError if the instance funding settings
+   *   could not be read
    */
   async checkFundingAccess(calendarId: string, feature: FundingGatedFeature): Promise<boolean> {
     if (!isValidUUID(calendarId)) {
@@ -1705,10 +1736,12 @@ export default class FundingService {
     }
     catch (error) {
       // Invariant 4, instance scope: we cannot establish that funding is
-      // switched off, so we cannot open the gate on that basis either. This is
-      // the denial that consumers must report as a server error.
+      // switched off, so we cannot open the gate on that basis either. Thrown
+      // rather than returned so consumers cannot mistake it for "unfunded".
       logError(error, 'checkFundingAccess: instance funding settings unreadable, closing gate');
-      return false;
+      throw new FundingAccessIndeterminateError(
+        'Instance funding settings could not be read',
+      );
     }
 
     if (!settings.enabled) {
@@ -1765,12 +1798,21 @@ export default class FundingService {
   /**
    * Check whether a calendar's owner is an instance admin.
    *
+   * A missing CalendarInterface throws rather than answering false: "nobody
+   * injected the calendar domain" is this source being unable to answer, not
+   * an owner who turned out not to be an admin. Callers run this through
+   * readAccessSource, so the throw produces the same denial a false would have
+   * — with a logged reason instead of silence. Not a production path
+   * (server.ts wires the interface unconditionally); it guards construction
+   * order in tests and future wiring.
+   *
    * @param calendarId - Calendar ID to check
    * @returns True if the calendar has a resolvable owner holding the admin role
+   * @throws Error if no CalendarInterface has been injected
    */
   private async isCalendarOwnerAdmin(calendarId: string): Promise<boolean> {
     if (!this.calendarInterface) {
-      return false;
+      throw new Error('CalendarInterface not injected; calendar owner admin status is unknowable');
     }
 
     const ownerId = await this.calendarInterface.getCalendarOwnerAccountId(calendarId);

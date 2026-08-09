@@ -88,13 +88,21 @@ export default class FundingInterface {
    * exist and calendars the caller has no business touching. Compose it only
    * AFTER authentication, ownership and existence checks have run.
    *
-   * A false is not always "unfunded" either — an unreadable instance funding
-   * state also denies. That case is a server-side failure and must surface as
-   * a server error, never as 402 / SubscriptionRequiredError.
+   * Three outcomes, not two: `true` opens the gate, `false` is a determinate
+   * "this calendar is unfunded" that may be answered commercially, and a
+   * thrown {@link FundingAccessIndeterminateError} is a denial caused by an
+   * unreadable instance funding state — a server-side failure that must
+   * surface as a server error, never as 402 / SubscriptionRequiredError.
+   *
+   * HTTP consumers should not hand-roll that mapping: use
+   * {@link requireFundingAccess} from `@/server/funding/api/middleware`.
    *
    * @param calendarId - Calendar the feature would be used on
    * @param feature - Key from FUNDING_GATED_FEATURES naming the gated feature
-   * @returns True if the gate is open for this calendar
+   * @returns True if the gate is open for this calendar, false if this
+   *   calendar is determinately unfunded
+   * @throws FundingAccessIndeterminateError if the instance funding settings
+   *   could not be read
    */
   async checkFundingAccess(calendarId: string, feature: FundingGatedFeature): Promise<boolean> {
     return this.fundingService.checkFundingAccess(calendarId, feature);
