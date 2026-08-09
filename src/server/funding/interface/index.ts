@@ -55,28 +55,14 @@ export default class FundingInterface {
   // Cross-domain query methods
 
   /**
-   * Check if a calendar has an active funding plan
-   *
-   * @deprecated Use {@link checkFundingAccess}. This reports only the plan's
-   * status, so it keeps granting access to a plan whose cancellation was never
-   * reported to us, and it knows nothing about instance-level funding settings
-   * or admin exemption. Retired at the widget-gate migration.
-   *
-   * @param calendarId - Calendar ID to check
-   * @returns True if calendar has active funding plan, false otherwise
-   */
-  async hasActiveFundingPlan(calendarId: string): Promise<boolean> {
-    return this.fundingService.hasActiveFundingPlan(calendarId);
-  }
-
-  /**
    * Check if a calendar has access to funded features
    * (either via active funding plan or complimentary grant)
    *
    * @deprecated Use {@link checkFundingAccess}. This answers only the
    * grant-or-plan half of a gate decision, leaving every caller to remember
    * the instance-enabled and admin-exemption checks for itself, and it applies
-   * no cancellation boundary. Retired at the widget-gate migration.
+   * no cancellation boundary. The calendar domain's widget-embedding gates are
+   * its only remaining callers and are migrating off it. Do not add more.
    *
    * @param calendarId - Calendar ID to check
    * @returns True if calendar has funding access, false otherwise
@@ -99,13 +85,26 @@ export default class FundingInterface {
    * exist and calendars the caller has no business touching. Compose it only
    * AFTER authentication, ownership and existence checks have run.
    *
-   * A false is not always "unfunded" either — an unreadable instance funding
-   * state also denies. That case is a server-side failure and must surface as
-   * a server error, never as 402 / SubscriptionRequiredError.
+   * Three outcomes, not two: `true` opens the gate, `false` is a determinate
+   * "this calendar is unfunded" that may be answered commercially, and a
+   * thrown {@link FundingAccessIndeterminateError} is a denial caused by an
+   * unreadable instance funding state — a server-side failure that must
+   * surface as a server error, never as 402 / SubscriptionRequiredError.
+   *
+   * Consumers get that mapping for free by doing the obvious thing: throw
+   * {@link SubscriptionRequiredError} on a determinate `false` and let the
+   * indeterminate throw propagate. The handler's existing error serialization
+   * then answers the first with 402 and the second with 500, so the split is
+   * preserved by the repo's normal error convention rather than by a bespoke
+   * gate. Do not catch the indeterminate throw in order to answer it
+   * commercially.
    *
    * @param calendarId - Calendar the feature would be used on
    * @param feature - Key from FUNDING_GATED_FEATURES naming the gated feature
-   * @returns True if the gate is open for this calendar
+   * @returns True if the gate is open for this calendar, false if this
+   *   calendar is determinately unfunded
+   * @throws FundingAccessIndeterminateError if the instance funding settings
+   *   could not be read
    */
   async checkFundingAccess(calendarId: string, feature: FundingGatedFeature): Promise<boolean> {
     return this.fundingService.checkFundingAccess(calendarId, feature);
