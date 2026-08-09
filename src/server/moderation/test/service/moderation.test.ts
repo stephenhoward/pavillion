@@ -2343,6 +2343,12 @@ describe('ModerationService', () => {
         expect(flagActivity.type).toBe('Flag');
         expect(flagActivity.content).toBe('Test report description');
         expect(flagActivity.to).toEqual(['https://remote.instance/calendars/remote']);
+        // The Flag id is minted from the `domain` config key. Asserting the
+        // stubbed value reached the output is what makes the stub above load
+        // bearing: sinon returns undefined for unmatched args, so a regression
+        // to a key this application does not define would otherwise flow
+        // `domain: undefined` through the builder and fail nothing.
+        expect(flagActivity.id).toMatch(/^https:\/\/local\.instance\/flags\//);
 
         // Verify forwarding metadata was persisted on the report entity
         expect(mockUpdateStub.calledOnce).toBe(true);
@@ -2404,6 +2410,10 @@ describe('ModerationService', () => {
         expect(flagActivity.tag).toBeDefined();
         expect(flagActivity.tag.some((t: any) => t.name === '#admin-flag')).toBe(true);
         expect(flagActivity.tag.some((t: any) => t.name === '#priority-high')).toBe(true);
+        // Both the legacy admin actor URI and the Flag id are derived from the
+        // `domain` config key, so these pin the stub above to a real read.
+        expect(flagActivity.actor).toBe('https://local.instance/admin');
+        expect(flagActivity.id).toMatch(/^https:\/\/local\.instance\/flags\//);
 
         // Verify forwarding metadata was persisted on the report entity
         expect(mockUpdateStub.calledOnce).toBe(true);
@@ -2633,6 +2643,11 @@ describe('ModerationService', () => {
         const [calendarArg, activityArg] = publishFlagStub.firstCall.args;
         expect(activityArg.type).toBe('Flag');
         expect(activityArg.actor).toBe(SIGNING_CALENDAR_ACTOR_URI);
+        // Minted from the `domain` config key stubbed in beforeEach. Sinon
+        // returns undefined for unmatched args, so without a domain-derived
+        // assertion a regression to a key this application does not define
+        // would flow `domain: undefined` through the builder unnoticed.
+        expect(activityArg.id).toMatch(/^https:\/\/beta\.local\/flags\//);
         // actorUrl must be called with the resolved signing calendar so a
         // regression that derived the actor URI from a different calendar
         // (and therefore a mismatched signing key) would fail here.
