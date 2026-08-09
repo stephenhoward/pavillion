@@ -26,6 +26,11 @@ class FundingEventEntity extends Model {
    * here. It carries customer, payment-method and billing-address objects
    * that Pavillion has no reason to retain. FundingService builds the summary
    * that gets written — see its summarizeProviderEvent.
+   *
+   * This constrains new writes only. Rows written before minimization landed
+   * still hold complete Stripe event objects, so an instance's existing data
+   * is not covered by the rule above. Removing this column and backfilling
+   * away the residue are both pending a retention policy.
    */
   @Column({ type: DataType.JSON })
   declare payload: string; // JSON string

@@ -973,6 +973,46 @@ describe('Webhook Handling', () => {
         expect(JSON.parse(storedPayload)).toEqual({ status: 'past_due' });
       });
 
+      it('should record a null status for an event type the adapter does not parse', async () => {
+        // The adapter only sets a status for the five lifecycle event types it
+        // switches on. Endpoints are often subscribed to more than that, so
+        // any other delivery lands here carrying no status at all.
+        const webhookPayload = JSON.stringify({
+          id: 'evt_unparsed_type',
+          type: 'payment_intent.succeeded',
+          data: {
+            object: {
+              id: 'pi_test_123',
+              customer: 'cus_unparsed',
+              receipt_email: 'payer@example.com',
+              charges: { data: [{ billing_details: { name: 'A Payer' } }] },
+            },
+          },
+        });
+
+        vi.mocked(Stripe.Webhook.constructEvent).mockReturnValue(JSON.parse(webhookPayload) as any);
+
+        const response = await request(app)
+          .post('/api/funding/webhooks/stripe')
+          .set('stripe-signature', 'valid_signature')
+          .set('Content-Type', 'application/json')
+          .send(webhookPayload);
+
+        expect(response.status).toBe(200);
+
+        const loggedEvent = await FundingEventEntity.findOne({
+          where: { provider_event_id: 'evt_unparsed_type' },
+        });
+        expect(loggedEvent).not.toBeNull();
+        expect(loggedEvent!.event_type).toBe('payment_intent.succeeded');
+
+        const storedPayload = loggedEvent!.toModel().payload;
+        expect(storedPayload).not.toContain('payer@example.com');
+        expect(storedPayload).not.toContain('A Payer');
+        expect(storedPayload).not.toContain('cus_unparsed');
+        expect(JSON.parse(storedPayload)).toEqual({ status: null });
+      });
+
       it('should not persist the raw provider payload on checkout completion', async () => {
         const accountId = uuidv4();
         const now = new Date();
