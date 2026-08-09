@@ -101,9 +101,13 @@ import {
 const AS_PUBLIC = 'https://www.w3.org/ns/activitystreams#Public';
 
 /**
- * Every addressing field AS2 defines. Checked exhaustively rather than just
- * `to`, because `as:Public` in `cc`, `bto`, `bcc`, or `audience` makes the
- * activity just as public.
+ * Every addressing field AS2 defines — `as:Public` in any of them makes the
+ * activity just as public as it would be in `to`.
+ *
+ * Read the KNOWN LIMITATION note at the assertion site before trusting this
+ * list: against beta's stored row only `to` is actually verified, because
+ * `IgnoreActivity.fromObject` copies `to` alone and the receiving model has no
+ * `bto`/`bcc`/`audience` fields to hold the rest. Tracked as pv-uwou.
  */
 const ADDRESSING_FIELDS = ['to', 'cc', 'bto', 'bcc', 'audience'] as const;
 
@@ -267,6 +271,23 @@ test.describe.serial('Join/Ignore federation', () => {
       'the Ignore must be addressed to the Join\'s actor and no one else',
     ).toEqual([betaActorUri]);
 
+    // KNOWN LIMITATION — only the `to` assertion above is load-bearing.
+    //
+    // The loop below is future-drift protection, NOT active verification. It
+    // reads beta's *stored* row, and beta parses an inbound Ignore through
+    // `IgnoreActivity.fromObject`, which copies only `to`. `cc` is left at the
+    // base-class default `[]`, and `bto`/`bcc`/`audience` are not fields on
+    // `ActivityPubActivity` at all. So these four checks are structurally
+    // unable to fail regardless of what alpha actually put on the wire.
+    //
+    // Concretely: if a regression made `processJoinActivity` address the reply
+    // publicly via `cc`, alpha's `toObject()` WOULD emit `cc: [as:Public]` on
+    // the wire, and every assertion here would still pass. Proving that needs
+    // the raw body alpha transmits, not beta's re-parsed row. Tracked as
+    // pv-uwou.
+    //
+    // Kept because it costs nothing and would catch a future change that gives
+    // the receiving model real `cc`/`bto`/`bcc`/`audience` fields.
     for (const field of ADDRESSING_FIELDS) {
       const recipients = ignoreRow.message[field];
       const values = Array.isArray(recipients)
