@@ -783,9 +783,21 @@ class ModerationService {
    * @param reportId - Report UUID
    * @param calendarId - Calendar UUID the report must belong to
    * @returns The Report
-   * @throws ReportNotFoundError if report not found or belongs to a different calendar
+   * @throws ReportNotFoundError if either id is missing, or the report is not
+   *   found, or it belongs to a different calendar
    */
   async getReportForCalendar(reportId: string, calendarId: string): Promise<Report> {
+    // Both ids must be concrete before the query runs. A null calendarId would
+    // become `calendar_id IS NULL` in SQL, matching exactly the admin-initiated
+    // reports against remote events that the owner path must never return, and
+    // an undefined one would raise a raw Sequelize error. This throws
+    // ReportNotFoundError rather than a validation error on purpose: per DEC-004
+    // the owner path emits one indistinguishable failure, so a caller can never
+    // tell a malformed request from a report that isn't theirs.
+    if (!reportId || !calendarId) {
+      throw new ReportNotFoundError();
+    }
+
     const entity = await ReportEntity.findOne({ where: { id: reportId, calendar_id: calendarId } });
     if (!entity) {
       throw new ReportNotFoundError();

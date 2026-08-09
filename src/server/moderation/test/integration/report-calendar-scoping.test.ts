@@ -6,6 +6,10 @@ import { ReportEntity } from '@/server/moderation/entity/report';
 import { ReportCategory, ReportStatus } from '@/common/model/report';
 import ModerationService from '@/server/moderation/service/moderation';
 import { ReportNotFoundError } from '@/server/moderation/exceptions';
+import AccountService from '@/server/accounts/service/account';
+import CalendarInterface from '@/server/calendar/interface';
+import ConfigurationInterface from '@/server/configuration/interface';
+import SetupInterface from '@/server/setup/interface';
 import { TestEnvironment } from '@/server/common/test/lib/test_environment';
 
 /**
@@ -25,9 +29,27 @@ describe('ModerationService.getReportForCalendar - calendar scoping (integration
   const calendarAId = uuidv4();
   const calendarBId = uuidv4();
 
+  // A real, owned calendar is needed for the route-level case, where the
+  // request has to pass the owner permission check before the report is read.
+  let ownerAuthKey: string;
+  let ownedCalendarId: string;
+  const ownerEmail = 'report-scoping-owner@pavillion.dev';
+  const password = 'testpassword';
+
   beforeAll(async () => {
     env = new TestEnvironment();
     await env.init();
+
+    const eventBus = new EventEmitter();
+    const configurationInterface = new ConfigurationInterface();
+    const setupInterface = new SetupInterface();
+    const calendarInterface = new CalendarInterface(eventBus);
+    const accountService = new AccountService(eventBus, configurationInterface, setupInterface);
+
+    const ownerInfo = await accountService._setupAccount(ownerEmail, password);
+    const ownedCalendar = await calendarInterface.createCalendar(ownerInfo.account, 'reportscoping');
+    ownedCalendarId = ownedCalendar.id;
+    ownerAuthKey = await env.login(ownerEmail, password);
   });
 
   afterAll(async () => {
@@ -113,5 +135,53 @@ describe('ModerationService.getReportForCalendar - calendar scoping (integration
     expect(unknownError).toBeInstanceOf(ReportNotFoundError);
     expect(foreignError!.name).toBe(unknownError!.name);
     expect(foreignError!.message).toBe(unknownError!.message);
+  });
+
+  it('raises ReportNotFoundError for a missing calendarId instead of matching the calendar_id IS NULL rows', async () => {
+    // Sequelize renders `calendar_id: null` as `calendar_id IS NULL`, which
+    // would invert the scope into "every admin-initiated report against a
+    // remote event" - the one set the owner path must never return.
+    const remoteReportId = await seedReport(null, 'Remote event spam');
+
+    await expect(service.getReportForCalendar(remoteReportId, null as unknown as string))
+      .rejects.toThrow(ReportNotFoundError);
+    await expect(service.getReportForCalendar(remoteReportId, ''))
+      .rejects.toThrow(ReportNotFoundError);
+  });
+
+  it('raises ReportNotFoundError for a missing reportId', async () => {
+    await seedReport(calendarAId, 'Calendar A report');
+
+    await expect(service.getReportForCalendar(null as unknown as string, calendarAId))
+      .rejects.toThrow(ReportNotFoundError);
+    await expect(service.getReportForCalendar('', calendarAId))
+      .rejects.toThrow(ReportNotFoundError);
+  });
+
+  describe('owner report route', () => {
+
+    it('returns an identical response for a foreign report id and an id that never existed', async () => {
+      // The service tests above prove both cases raise the same error, and the
+      // route tests prove ReportNotFoundError maps to a 404 - but those route
+      // tests stub the service, so the two cases are only equal by
+      // construction of the stub. This drives a real report through the real
+      // service to a real HTTP response so the DEC-004 no-disclosure contract
+      // is proved end to end.
+      const foreignReportId = await seedReport(calendarBId, 'Calendar B report');
+      const unknownReportId = uuidv4();
+
+      const foreignResponse = await env.authGet(
+        ownerAuthKey,
+        `/api/v1/calendars/${ownedCalendarId}/reports/${foreignReportId}`,
+      );
+      const unknownResponse = await env.authGet(
+        ownerAuthKey,
+        `/api/v1/calendars/${ownedCalendarId}/reports/${unknownReportId}`,
+      );
+
+      expect(foreignResponse.status).toBe(404);
+      expect(foreignResponse.status).toBe(unknownResponse.status);
+      expect(JSON.stringify(foreignResponse.body)).toBe(JSON.stringify(unknownResponse.body));
+    });
   });
 });

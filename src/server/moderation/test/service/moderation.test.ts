@@ -886,12 +886,42 @@ describe('ModerationService', () => {
 
     it('should not read the report through an unscoped lookup', async () => {
       const findByPkStub = sandbox.stub(ReportEntity, 'findByPk');
-      sandbox.stub(ReportEntity, 'findOne').resolves(null);
+      const findAllStub = sandbox.stub(ReportEntity, 'findAll');
+      const findOneStub = sandbox.stub(ReportEntity, 'findOne').resolves(null);
 
       await expect(service.getReportForCalendar('report-id-1', 'calendar-1'))
         .rejects.toThrow(ReportNotFoundError);
 
       expect(findByPkStub.called).toBe(false);
+      expect(findAllStub.called).toBe(false);
+
+      // Exactly one read, and its where clause carries nothing but the two
+      // scoping keys - an id-only lookup reintroduced here would fail.
+      expect(findOneStub.calledOnce).toBe(true);
+      const callArgs = findOneStub.firstCall.args[0] as any;
+      expect(Object.keys(callArgs.where)).toEqual(['id', 'calendar_id']);
+    });
+
+    it('should throw ReportNotFoundError without querying when calendarId is missing', async () => {
+      const findOneStub = sandbox.stub(ReportEntity, 'findOne');
+
+      // A null calendarId would otherwise become `calendar_id IS NULL`, which
+      // matches admin-initiated reports against remote events.
+      await expect(service.getReportForCalendar('report-id-1', null as any))
+        .rejects.toThrow(ReportNotFoundError);
+
+      expect(findOneStub.called).toBe(false);
+    });
+
+    it('should throw ReportNotFoundError without querying when reportId is missing', async () => {
+      const findOneStub = sandbox.stub(ReportEntity, 'findOne');
+
+      await expect(service.getReportForCalendar(null as any, 'calendar-1'))
+        .rejects.toThrow(ReportNotFoundError);
+      await expect(service.getReportForCalendar('', 'calendar-1'))
+        .rejects.toThrow(ReportNotFoundError);
+
+      expect(findOneStub.called).toBe(false);
     });
   });
 
