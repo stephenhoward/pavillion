@@ -273,6 +273,16 @@ export interface CleanupPlan {
 const DELETABLE_CATEGORIES: Category[] = ['merged-ancestor', 'merged-pr', 'empty'];
 const ALL_CATEGORIES: Category[] = ['merged-ancestor', 'merged-pr', 'empty', 'doubt'];
 
+/**
+ * Categories whose classification rests on `tip is an ancestor of
+ * origin/main` — the two branches of the same `isAncestor` test in
+ * classifyBranch, differing only in whether an upstream is configured.
+ * execute() re-asserts that ancestry live before deleting either.
+ * `merged-pr` is absent: it is GitHub-proven, not ancestry-proven, and its
+ * tip is deliberately NOT an ancestor of main (squash/rebase merges).
+ */
+const ANCESTOR_PROVEN_CATEGORIES: Category[] = ['merged-ancestor', 'empty'];
+
 function shortSha(sha: string): string {
   return sha.slice(0, 7);
 }
@@ -940,9 +950,26 @@ export function execute(opts: ExecuteOptions, deps: ExecuteDeps = {}): ExecuteRe
       skipped.push({ item: b.branch, reason: 'branch moved since classify' });
       continue;
     }
+    // `git branch -d` is the wrong safety net for an ancestor-proven
+    // category. It measures merged-ness against the branch's own upstream,
+    // not against main, so a branch whose local tip is ahead of a stale
+    // remote-tracking ref is refused even when every commit it carries is
+    // already in origin/main — which is exactly what classify proved. Re-
+    // assert that predicate live instead, then delete with -D. This is
+    // strictly stronger than -d: it proves merged-to-main rather than
+    // merged-to-upstream, and it also covers `empty`, which previously got
+    // -D on the strength of the plan alone.
+    if (ANCESTOR_PROVEN_CATEGORIES.includes(b.category)) {
+      // Exit 0 = ancestor, 1 = not, >1 = git error (bad ref, missing
+      // origin/main). Every non-zero case skips, so this fails safe.
+      const ancestorResult = runGit(['merge-base', '--is-ancestor', b.sha, 'origin/main']);
+      if (ancestorResult.exitCode !== 0) {
+        skipped.push({ item: b.branch, reason: 'no longer an ancestor of origin/main — re-run classify' });
+        continue;
+      }
+    }
     appendFile(undoLogPath, `${b.branch} ${b.sha}\n`);
-    const flag = b.category === 'merged-ancestor' ? '-d' : '-D';
-    const deleteResult = runGit(['branch', flag, b.branch]);
+    const deleteResult = runGit(['branch', '-D', b.branch]);
     if (deleteResult.exitCode !== 0) {
       skipped.push({ item: b.branch, reason: deleteResult.stderr });
       continue;

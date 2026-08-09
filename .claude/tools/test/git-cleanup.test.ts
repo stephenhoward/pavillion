@@ -1136,7 +1136,7 @@ describe('execute', () => {
     expect(result.removedWorktrees).toEqual([]);
   });
 
-  it('happy path: deletes a plain branch (-d) and a worktree branch (-D), undo line appended before delete', () => {
+  it('happy path: deletes a plain branch and a worktree branch (-D), undo line appended before delete', () => {
     const plan = execPlan({
       branches: [
         {
@@ -1172,9 +1172,10 @@ describe('execute', () => {
       fakeSpawn(''),                          // git -C /repo/wt2 status --porcelain (clean)
       fakeSpawn(''),                          // git worktree remove /repo/wt2
       fakeSpawn('sha1'),                      // git rev-parse refs/heads/b1
-      fakeSpawn(''),                          // git branch -d b1
+      fakeSpawn(''),                          // git merge-base --is-ancestor sha1 origin/main
+      fakeSpawn(''),                          // git branch -D b1
       fakeSpawn('sha2'),                      // git rev-parse refs/heads/b2
-      fakeSpawn(''),                          // git branch -D b2
+      fakeSpawn(''),                          // git branch -D b2 (merged-pr: no ancestry re-verify)
       fakeSpawn(''),                          // git worktree prune
     );
     const { deps, calls } = makeExecDeps(plan, spawn);
@@ -1190,8 +1191,9 @@ describe('execute', () => {
     expect(result.skipped).toEqual([]);
     expect(result.undoLogPath).toBe('/repo/.git/git-cleanup-undo-2023-11-14.log');
 
-    // -d for merged-ancestor, -D for merged-pr
-    const b1DeleteIdx = calls.indexOf('spawn:git branch -d b1');
+    // -D for both; merged-ancestor earns it by a live ancestry re-verify
+    expect(calls).toContain('spawn:git merge-base --is-ancestor sha1 origin/main');
+    const b1DeleteIdx = calls.indexOf('spawn:git branch -D b1');
     const b2DeleteIdx = calls.indexOf('spawn:git branch -D b2');
     expect(b1DeleteIdx).toBeGreaterThan(-1);
     expect(b2DeleteIdx).toBeGreaterThan(-1);
@@ -1404,7 +1406,8 @@ describe('execute', () => {
       fakeSpawn(''),                    // git -C /repo/wt7 status --porcelain (clean)
       fakeSpawn(''),                    // git worktree remove /repo/wt7
       fakeSpawn('sha7'),                // git rev-parse refs/heads/b7
-      fakeSpawn(''),                    // git branch -d b7
+      fakeSpawn(''),                    // git merge-base --is-ancestor sha7 origin/main
+      fakeSpawn(''),                    // git branch -D b7
       fakeSpawn(''),                    // git worktree prune
     );
     const recorded: Array<{ cmd: string; args: string[]; opts: unknown }> = [];
@@ -1431,7 +1434,7 @@ describe('execute', () => {
     expect(result.removedWorktrees).toEqual(['/repo/wt7']);
 
     const removeCall = recorded.find((c) => c.cmd === 'git' && c.args.join(' ') === 'worktree remove /repo/wt7');
-    const deleteCall = recorded.find((c) => c.cmd === 'git' && c.args.join(' ') === 'branch -d b7');
+    const deleteCall = recorded.find((c) => c.cmd === 'git' && c.args.join(' ') === 'branch -D b7');
     expect(removeCall).toBeDefined();
     expect(deleteCall).toBeDefined();
     expect((removeCall?.opts as { shell?: boolean }).shell).toBe(false);
@@ -1523,7 +1526,8 @@ describe('execute', () => {
     const spawn = seqSpawn(
       fakeSpawn('/repo/.git'),                                       // rev-parse --git-common-dir
       fakeSpawn('sha10'),                                             // git rev-parse refs/heads/b10 (unchanged)
-      fakeSpawn('', 'error: branch is not fully merged', 1),          // git branch -d b10 (fails)
+      fakeSpawn(''),                                                  // git merge-base --is-ancestor sha10 origin/main
+      fakeSpawn('', 'error: cannot lock ref', 1),                     // git branch -D b10 (fails)
       fakeSpawn(''),                                                  // git worktree prune
     );
     const { deps, calls, appended } = makeExecDeps(plan, spawn);
@@ -1533,13 +1537,74 @@ describe('execute', () => {
 
     expect(result.ok).toBe(true);
     expect(result.deletedBranches).toEqual([]);
-    expect(result.skipped).toEqual([{ item: 'b10', reason: 'error: branch is not fully merged' }]);
+    expect(result.skipped).toEqual([{ item: 'b10', reason: 'error: cannot lock ref' }]);
     expect(appended).toEqual(['b10 sha10\n']);
 
     const appendIdx = calls.indexOf('append:b10 sha10');
-    const deleteIdx = calls.indexOf('spawn:git branch -d b10');
+    const deleteIdx = calls.indexOf('spawn:git branch -D b10');
     expect(appendIdx).toBeGreaterThan(-1);
     expect(deleteIdx).toBeGreaterThan(-1);
     expect(appendIdx).toBeLessThan(deleteIdx);
+  });
+
+  // Regression: a merged-ancestor branch whose local tip is AHEAD of its
+  // stale remote-tracking ref. `git branch -d` refuses these ("not fully
+  // merged to <upstream>") even though every commit is already in
+  // origin/main, so the category could never actually be deleted. The
+  // ancestry re-verify proves the real predicate and -D acts on it.
+  it('deletes a merged-ancestor branch that is ahead of its stale upstream', () => {
+    const plan = execPlan({
+      branches: [
+        {
+          branch: 'ahead-of-upstream', sha: 'sha11', category: 'merged-ancestor',
+          reason: 'tip is an ancestor of origin/main', worktree: null,
+        },
+      ],
+    });
+    const spawn = seqSpawn(
+      fakeSpawn('/repo/.git'), // rev-parse --git-common-dir
+      fakeSpawn('sha11'),       // git rev-parse refs/heads/ahead-of-upstream
+      fakeSpawn(''),            // git merge-base --is-ancestor sha11 origin/main (exit 0)
+      fakeSpawn(''),            // git branch -D ahead-of-upstream
+      fakeSpawn(''),            // git worktree prune
+    );
+    const { deps, calls } = makeExecDeps(plan, spawn);
+    const opts: ExecuteOptions = { categories: ['merged-ancestor'], worktreeFamilies: [], planId: TEST_PLAN_ID };
+
+    const result = execute(opts, deps);
+
+    expect(result.ok).toBe(true);
+    expect(result.deletedBranches).toEqual(['ahead-of-upstream']);
+    expect(result.skipped).toEqual([]);
+    expect(calls).not.toContain('spawn:git branch -d ahead-of-upstream');
+  });
+
+  it('skips an ancestor-proven branch whose ancestry no longer holds at execute time', () => {
+    const plan = execPlan({
+      branches: [
+        {
+          branch: 'b12', sha: 'sha12', category: 'empty',
+          reason: 'no upstream, no commits beyond main', worktree: null,
+        },
+      ],
+    });
+    const spawn = seqSpawn(
+      fakeSpawn('/repo/.git'),   // rev-parse --git-common-dir
+      fakeSpawn('sha12'),         // git rev-parse refs/heads/b12 (sha unchanged)
+      fakeSpawn('', '', 1),       // git merge-base --is-ancestor sha12 origin/main (exit 1: main rewound)
+      fakeSpawn(''),              // git worktree prune
+    );
+    const { deps, appended } = makeExecDeps(plan, spawn);
+    const opts: ExecuteOptions = { categories: ['empty'], worktreeFamilies: [], planId: TEST_PLAN_ID };
+
+    const result = execute(opts, deps);
+
+    expect(result.ok).toBe(true);
+    expect(result.deletedBranches).toEqual([]);
+    expect(result.skipped).toEqual([
+      { item: 'b12', reason: 'no longer an ancestor of origin/main — re-run classify' },
+    ]);
+    // The undo line must NOT be written for a branch that was never deleted.
+    expect(appended).toEqual([]);
   });
 });

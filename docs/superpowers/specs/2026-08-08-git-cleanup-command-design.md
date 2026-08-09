@@ -36,9 +36,19 @@ assigns every local branch to exactly one category:
 
 | Category | Rule | Action |
 |---|---|---|
-| `merged-ancestor` | Branch tip is an ancestor of `origin/main` | delete (`git branch -d`) |
+| `merged-ancestor` | Branch tip is an ancestor of `origin/main` | delete (`git branch -D`, after live ancestry re-verify) |
 | `merged-pr` | Not an ancestor, but GitHub reports the branch's PR as MERGED | delete (`git branch -D`) |
-| `empty` | No upstream and zero commits not already on `main` | delete (`git branch -D`) |
+| `empty` | No upstream and zero commits not already on `main` | delete (`git branch -D`, after live ancestry re-verify) |
+
+`git branch -d` is deliberately **not** used for the two ancestry-proven
+categories. `-d` measures merged-ness against the branch's own upstream, not
+against main, so it refuses any branch whose local tip is ahead of a stale
+remote-tracking ref even when every commit it carries is already in
+`origin/main`. Since that is a different question from the one classify
+answers, `execute` re-asserts the real predicate immediately before deleting
+(`git merge-base --is-ancestor <sha> origin/main`, any non-zero exit skips)
+and then uses `-D`. This is strictly stronger than `-d`: it proves
+merged-to-main rather than merged-to-upstream.
 | `doubt` | Anything unproven (see below) | report only |
 
 **GitHub verification** uses batched GraphQL via `gh api graphql`
@@ -91,7 +101,7 @@ A worktree is removed only when **all** hold:
 3. It passes every protection check above
 4. Its category was approved by the user
 
-Removal order per item: `git worktree remove <path>` → `git branch -d/-D
+Removal order per item: `git worktree remove <path>` → `git branch -D
 <branch>`. After all removals, run `git worktree prune`.
 
 Worktrees whose branch is deletable but which fail a safety check are listed
