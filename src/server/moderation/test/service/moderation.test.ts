@@ -899,7 +899,7 @@ describe('ModerationService', () => {
       // scoping keys - an id-only lookup reintroduced here would fail.
       expect(findOneStub.calledOnce).toBe(true);
       const callArgs = findOneStub.firstCall.args[0] as any;
-      expect(Object.keys(callArgs.where)).toEqual(['id', 'calendar_id']);
+      expect(Object.keys(callArgs.where).sort()).toEqual(['calendar_id', 'id']);
     });
 
     it('should throw ReportNotFoundError without querying when calendarId is missing', async () => {
@@ -908,6 +908,18 @@ describe('ModerationService', () => {
       // A null calendarId would otherwise become `calendar_id IS NULL`, which
       // matches admin-initiated reports against remote events.
       await expect(service.getReportForCalendar('report-id-1', null as any))
+        .rejects.toThrow(ReportNotFoundError);
+
+      expect(findOneStub.called).toBe(false);
+    });
+
+    it('should throw ReportNotFoundError without querying when calendarId is an operator object', async () => {
+      const findOneStub = sandbox.stub(ReportEntity, 'findOne');
+
+      // Express's extended query parser turns `?calendarId[ne]=x` into an
+      // object, which Sequelize would read as an operator expression rather
+      // than a value - widening the scope instead of narrowing it.
+      await expect(service.getReportForCalendar('report-id-1', { ne: null } as unknown as string))
         .rejects.toThrow(ReportNotFoundError);
 
       expect(findOneStub.called).toBe(false);

@@ -7,6 +7,7 @@ import { ReportCategory, ReportStatus } from '@/common/model/report';
 import ModerationService from '@/server/moderation/service/moderation';
 import { ReportNotFoundError } from '@/server/moderation/exceptions';
 import AccountService from '@/server/accounts/service/account';
+import { AccountRoleEntity } from '@/server/common/entity/account';
 import CalendarInterface from '@/server/calendar/interface';
 import ConfigurationInterface from '@/server/configuration/interface';
 import SetupInterface from '@/server/setup/interface';
@@ -29,10 +30,20 @@ describe('ModerationService.getReportForCalendar - calendar scoping (integration
   const calendarAId = uuidv4();
   const calendarBId = uuidv4();
 
-  // A real, owned calendar is needed for the route-level case, where the
+  // Real, owned calendars are needed for the route-level cases, where the
   // request has to pass the owner permission check before the report is read.
+  //
+  // Two accounts, because the permission check takes different paths for each.
+  // The first account created under NODE_ENV=test is granted the instance admin
+  // role, and userCanReviewReports short-circuits true for admins without ever
+  // consulting CalendarMemberEntity - so an admin never exercises the owner
+  // deep-link path the route case is about. The second account gets no admin
+  // role and reaches the route purely through its owner membership.
+  let adminAuthKey: string;
+  let adminCalendarId: string;
   let ownerAuthKey: string;
   let ownedCalendarId: string;
+  const adminEmail = 'report-scoping-admin@pavillion.dev';
   const ownerEmail = 'report-scoping-owner@pavillion.dev';
   const password = 'testpassword';
 
@@ -46,7 +57,19 @@ describe('ModerationService.getReportForCalendar - calendar scoping (integration
     const calendarInterface = new CalendarInterface(eventBus);
     const accountService = new AccountService(eventBus, configurationInterface, setupInterface);
 
+    // First account: receives the instance admin role automatically.
+    const adminInfo = await accountService._setupAccount(adminEmail, password);
+    const adminCalendar = await calendarInterface.createCalendar(adminInfo.account, 'reportscopingadmin');
+    adminCalendarId = adminCalendar.id;
+    adminAuthKey = await env.login(adminEmail, password);
+
+    // Second account: no admin role, reaches its calendar as owner only.
     const ownerInfo = await accountService._setupAccount(ownerEmail, password);
+    // Guards the premise of the non-admin route case below: if this account
+    // ever picked up the admin role, userCanReviewReports would short-circuit
+    // and the owner membership path would go untested.
+    const ownerRoles = await AccountRoleEntity.findAll({ where: { account_id: ownerInfo.account.id } });
+    expect(ownerRoles.map((role) => role.role)).not.toContain('admin');
     const ownedCalendar = await calendarInterface.createCalendar(ownerInfo.account, 'reportscoping');
     ownedCalendarId = ownedCalendar.id;
     ownerAuthKey = await env.login(ownerEmail, password);
@@ -160,28 +183,52 @@ describe('ModerationService.getReportForCalendar - calendar scoping (integration
 
   describe('owner report route', () => {
 
-    it('returns an identical response for a foreign report id and an id that never existed', async () => {
+    /**
+     * Drives a foreign report id and an id that never existed through the real
+     * route as the given account, and asserts the two responses are
+     * indistinguishable.
+     *
+     * The standalone 404 assertion comes first on purpose: it is what makes the
+     * equality non-vacuous. Without it a 403 short-circuit before the report is
+     * ever read would also produce two equal responses and prove nothing.
+     */
+    async function expectIndistinguishable404s(authKey: string, calendarId: string): Promise<void> {
+      const foreignReportId = await seedReport(calendarBId, 'Calendar B report');
+      const unknownReportId = uuidv4();
+
+      const foreignResponse = await env.authGet(
+        authKey,
+        `/api/v1/calendars/${calendarId}/reports/${foreignReportId}`,
+      );
+      const unknownResponse = await env.authGet(
+        authKey,
+        `/api/v1/calendars/${calendarId}/reports/${unknownReportId}`,
+      );
+
+      expect(foreignResponse.status).toBe(404);
+      expect(foreignResponse.status).toBe(unknownResponse.status);
+      expect(JSON.stringify(foreignResponse.body)).toBe(JSON.stringify(unknownResponse.body));
+    }
+
+    it('returns an identical response for a foreign report id and an id that never existed, for a non-admin calendar owner', async () => {
       // The service tests above prove both cases raise the same error, and the
       // route tests prove ReportNotFoundError maps to a 404 - but those route
       // tests stub the service, so the two cases are only equal by
       // construction of the stub. This drives a real report through the real
       // service to a real HTTP response so the DEC-004 no-disclosure contract
       // is proved end to end.
-      const foreignReportId = await seedReport(calendarBId, 'Calendar B report');
-      const unknownReportId = uuidv4();
+      //
+      // The account here holds no admin role, so the permission check resolves
+      // through its owner membership - the deep-link path a calendar owner
+      // actually takes.
+      await expectIndistinguishable404s(ownerAuthKey, ownedCalendarId);
+    });
 
-      const foreignResponse = await env.authGet(
-        ownerAuthKey,
-        `/api/v1/calendars/${ownedCalendarId}/reports/${foreignReportId}`,
-      );
-      const unknownResponse = await env.authGet(
-        ownerAuthKey,
-        `/api/v1/calendars/${ownedCalendarId}/reports/${unknownReportId}`,
-      );
-
-      expect(foreignResponse.status).toBe(404);
-      expect(foreignResponse.status).toBe(unknownResponse.status);
-      expect(JSON.stringify(foreignResponse.body)).toBe(JSON.stringify(unknownResponse.body));
+    it('returns an identical response for a foreign report id and an id that never existed, for an instance admin', async () => {
+      // Admins reach the route through the userCanReviewReports short-circuit
+      // rather than a membership lookup. The service applies no admin
+      // exemption, so the same no-disclosure contract has to hold here too.
+      await expectIndistinguishable404s(adminAuthKey, adminCalendarId);
     });
   });
 });
