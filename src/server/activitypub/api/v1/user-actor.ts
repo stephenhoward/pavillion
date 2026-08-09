@@ -2,7 +2,7 @@ import express, { Request, Response, Application, RequestHandler } from 'express
 
 import UserActorService from '@/server/activitypub/service/user_actor';
 import { verifyHttpSignature } from '@/server/activitypub/helper/http_signature';
-import { logInboxActivityAccepted } from '@/server/activitypub/helper/inbox-acceptance-log';
+import { logInboxActivityAccepted, logInboxActivityArrival } from '@/server/activitypub/helper/inbox-acceptance-log';
 import {
   createActorRateLimiter,
   createUserRateLimiter,
@@ -119,9 +119,12 @@ export default class UserActorRoutes {
 
     // Arrival, NOT acceptance: an unhandled activity type, or a handler that
     // refuses the activity, still produces these lines. Acceptance is recorded
-    // separately by logInboxActivityAccepted below.
-    logger.info({ activityType: req.body.type, username }, 'Received user inbox activity');
-    logger.info({ activityBody: req.body }, 'User inbox activity body');
+    // separately by logInboxActivityAccepted below. The helper is shared with
+    // the calendar inbox and withholds a Flag body — see its docstring. A Flag
+    // reaches this route today: it falls to the `default:` branch below, and
+    // dumping the raw body here would put the reporter's identity and the
+    // report free text into the logs.
+    logInboxActivityArrival('user', username, req.body);
 
     const activity = req.body;
 

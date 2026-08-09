@@ -112,6 +112,8 @@ Both instances run with `SKIP_SIGNATURES=true` unless a spec opts out, so most s
 
 A spec that claims an activity reached a peer's inbox proves it by polling that instance's container logs for the `Inbox activity accepted` record, which is written only after validation *and* the inbox write have both succeeded. The earlier `Received inbox activity` line is emitted before validation runs, so it fires for activities the boundary then refuses with a 400 — it is evidence of arrival, never of acceptance.
 
+An acceptance record proves admission to `ap_inbox`, not the policy outcome that follows it. A schema-valid `Flag` produces one and can still be dropped by the dispatcher as `misdirected_activity`, suppressed by the report throttle, or refused for arriving from a blocked instance. A spec must not read an acceptance record as proof that a report was filed — assert on the resulting report row for that.
+
 Every spec lives in `tests/e2e/federation/`.
 
 - **`webfinger.spec.ts`** — a calendar is discoverable across an instance boundary. WebFinger resolves an `acct:` resource to a profile URL, the profile returns a well-formed actor document, and an unknown account 404s rather than returning an empty actor.

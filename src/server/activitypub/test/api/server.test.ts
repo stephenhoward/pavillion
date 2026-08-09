@@ -14,6 +14,7 @@ import { logInboxActivityAccepted } from '@/server/activitypub/helper/inbox-acce
 // these tests pin WHERE in the handler it fires.
 vi.mock('@/server/activitypub/helper/inbox-acceptance-log', () => ({
   logInboxActivityAccepted: vi.fn(),
+  logInboxActivityArrival: vi.fn(),
 }));
 
 describe('lookupUser', () => {

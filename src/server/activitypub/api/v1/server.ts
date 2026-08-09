@@ -21,7 +21,7 @@ import { AP_CONTEXT } from '@/server/activitypub/model/base';
 
 const logger = createLogger('activitypub');
 import { verifyHttpSignature, extractKeyIdOrigin } from '@/server/activitypub/helper/http_signature';
-import { logInboxActivityAccepted } from '@/server/activitypub/helper/inbox-acceptance-log';
+import { logInboxActivityAccepted, logInboxActivityArrival } from '@/server/activitypub/helper/inbox-acceptance-log';
 import type { InboxAuthContext } from '@/server/activitypub/interface';
 import {
   createActorRateLimiter,
@@ -362,19 +362,9 @@ export default class ActivityPubServerRoutes {
 
     // Arrival, NOT acceptance: everything below can still reject with 400.
     // Acceptance is recorded separately by logInboxActivityAccepted once the
-    // activity has been validated and written to the inbox.
-    logger.info({ activityType: req.body.type, calendarName }, 'Received inbox activity');
-    if (req.body.type === 'Flag') {
-      // A Flag carries a remote reporter's actor URI and the free text of a
-      // moderation report. Everything downstream reduces that reporter to a
-      // bare instance host before anything durable is written; dumping the
-      // raw body here would put both the identity and the report text into
-      // the logs and bypass that reduction entirely. Log only the envelope.
-      logger.info({ activityId: req.body.id, calendarName }, 'Inbox Flag activity received (body withheld)');
-    }
-    else {
-      logger.info({ activityBody: req.body }, 'Inbox activity body');
-    }
+    // activity has been validated and written to the inbox. The helper is
+    // shared with the user inbox and withholds a Flag body — see its docstring.
+    logInboxActivityArrival('calendar', calendarName, req.body);
 
     // Validate actor URI
     const actorUri = req.body.actor;
