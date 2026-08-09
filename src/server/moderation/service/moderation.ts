@@ -776,8 +776,9 @@ class ModerationService {
   }
 
   /**
-   * Retrieves a report by ID and verifies it belongs to the specified calendar.
-   * Combines the common getReportById + calendar ownership check.
+   * Retrieves a report by ID, scoping the lookup to the specified calendar.
+   * Calendar ownership is part of the query rather than a check applied
+   * after loading, so a report belonging to another calendar is never read.
    *
    * @param reportId - Report UUID
    * @param calendarId - Calendar UUID the report must belong to
@@ -785,11 +786,11 @@ class ModerationService {
    * @throws ReportNotFoundError if report not found or belongs to a different calendar
    */
   async getReportForCalendar(reportId: string, calendarId: string): Promise<Report> {
-    const report = await this.getReportById(reportId);
-    if (!report || report.calendarId !== calendarId) {
+    const entity = await ReportEntity.findOne({ where: { id: reportId, calendar_id: calendarId } });
+    if (!entity) {
       throw new ReportNotFoundError();
     }
-    return report;
+    return entity.toModel();
   }
 
   /**

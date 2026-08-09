@@ -854,6 +854,47 @@ describe('ModerationService', () => {
     });
   });
 
+  describe('getReportForCalendar', () => {
+
+    it('should scope the query to both the report id and the calendar id', async () => {
+      const report = new Report('report-id-1');
+      report.calendarId = 'calendar-1';
+
+      const findOneStub = sandbox.stub(ReportEntity, 'findOne');
+      findOneStub.resolves({
+        toModel: () => report,
+      } as any);
+
+      const result = await service.getReportForCalendar('report-id-1', 'calendar-1');
+
+      expect(result.id).toBe('report-id-1');
+      expect(findOneStub.calledOnce).toBe(true);
+
+      // Both keys must be present: a query scoped on id alone would return
+      // another calendar's report.
+      const callArgs = findOneStub.firstCall.args[0] as any;
+      expect(callArgs.where.id).toBe('report-id-1');
+      expect(callArgs.where.calendar_id).toBe('calendar-1');
+    });
+
+    it('should throw ReportNotFoundError when the scoped query matches no row', async () => {
+      sandbox.stub(ReportEntity, 'findOne').resolves(null);
+
+      await expect(service.getReportForCalendar('report-id-1', 'calendar-1'))
+        .rejects.toThrow(ReportNotFoundError);
+    });
+
+    it('should not read the report through an unscoped lookup', async () => {
+      const findByPkStub = sandbox.stub(ReportEntity, 'findByPk');
+      sandbox.stub(ReportEntity, 'findOne').resolves(null);
+
+      await expect(service.getReportForCalendar('report-id-1', 'calendar-1'))
+        .rejects.toThrow(ReportNotFoundError);
+
+      expect(findByPkStub.called).toBe(false);
+    });
+  });
+
   describe('getReportsForCalendar', () => {
 
     it('should return paginated reports for a calendar', async () => {
