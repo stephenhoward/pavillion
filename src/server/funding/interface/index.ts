@@ -55,23 +55,6 @@ export default class FundingInterface {
   // Cross-domain query methods
 
   /**
-   * Check if a calendar has access to funded features
-   * (either via active funding plan or complimentary grant)
-   *
-   * @deprecated Use {@link checkFundingAccess}. This answers only the
-   * grant-or-plan half of a gate decision, leaving every caller to remember
-   * the instance-enabled and admin-exemption checks for itself, and it applies
-   * no cancellation boundary. The calendar domain's widget-embedding gates are
-   * its only remaining callers and are migrating off it. Do not add more.
-   *
-   * @param calendarId - Calendar ID to check
-   * @returns True if calendar has funding access, false otherwise
-   */
-  async hasFundingAccess(calendarId: string): Promise<boolean> {
-    return this.fundingService.hasFundingAccess(calendarId);
-  }
-
-  /**
    * Decide whether a calendar may use a funding-gated feature.
    *
    * The single entry point for funding gates: feature domains pass a key from

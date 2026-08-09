@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
 import { EventEmitter } from 'events';
 import { v4 as uuidv4 } from 'uuid';
 import request from 'supertest';
@@ -9,8 +9,10 @@ import CalendarInterface from '@/server/calendar/interface';
 import ConfigurationInterface from '@/server/configuration/interface';
 import SetupInterface from '@/server/setup/interface';
 import FundingInterface from '@/server/funding/interface';
+import AccountsInterface from '@/server/accounts/interface';
 import AccountService from '@/server/accounts/service/account';
 import { TestEnvironment } from '@/server/common/test/lib/test_environment';
+import { AccountRoleEntity } from '@/server/common/entity/account';
 import { FundingSettingsEntity } from '@/server/funding/entity/funding_settings';
 import { FundingPlanEntity } from '@/server/funding/entity/funding_plan';
 import { CalendarFundingPlanEntity } from '@/server/funding/entity/calendar_funding_plan';
@@ -27,14 +29,29 @@ import { CalendarFundingPlanEntity } from '@/server/funding/entity/calendar_fund
  * - Funding enabled + active funding plan → success
  * - Funding enabled + expired funding plan → 402 error
  * - Funding disabled → always success (free instance mode)
+ * - Admin-owned calendars exempt regardless of plan
  * - Security audit scenarios
  * - Edge cases and race conditions
+ *
+ * Fixture contract: exactly one account here holds the 'admin' role —
+ * adminAccount — and beforeAll asserts it. Admin-owned calendars are exempt
+ * from the funding gate (checkFundingAccess invariant 2), so any test that
+ * means to observe gating or check ordering must use a calendar owned by one
+ * of the non-admin accounts. See the note in beforeAll.
  */
 describe('Funding Gating Integration Tests', () => {
   let env: TestEnvironment;
   let calendarInterface: CalendarInterface;
   let fundingInterface: FundingInterface;
   let eventBus: EventEmitter;
+
+  // The instance admin. Deliberately the first account this file creates —
+  // see the note in beforeAll — so the implicit test-mode admin grant lands
+  // somewhere named, and every other account below is non-admin by
+  // construction rather than by accident of creation order.
+  let adminAccount: Account;
+  let adminCalendar: Calendar;
+  let adminToken: string;
 
   let supporterAccount: Account;
   let nonSupporterAccount: Account;
@@ -43,8 +60,16 @@ describe('Funding Gating Integration Tests', () => {
   let supporterToken: string;
   let nonSupporterToken: string;
 
+  // A third non-admin party: owns a calendar that no other test account may
+  // edit and that never receives a funding plan or grant. Needed to test
+  // check ordering, which is unobservable on an admin-owned calendar because
+  // the admin exemption opens the gate before ordering can matter.
+  let outsiderCalendar: Calendar;
+
+  const adminEmail = 'instance-admin@pavillion.dev';
   const supporterEmail = 'supporter@pavillion.dev';
   const nonSupporterEmail = 'non-supporter@pavillion.dev';
+  const outsiderEmail = 'outsider@pavillion.dev';
   const password = 'testpassword';
 
   /**
@@ -182,28 +207,55 @@ describe('Funding Gating Integration Tests', () => {
     eventBus = new EventEmitter();
     fundingInterface = new FundingInterface(eventBus);
     calendarInterface = new CalendarInterface(eventBus, undefined, undefined, fundingInterface);
-    // Mirror server.ts: the funding domain resolves calendar ownership (for
-    // admin exemption) through CalendarInterface, so the back-reference has to
-    // be wired for checkFundingAccess to answer from a complete picture.
-    fundingInterface.setCalendarInterface(calendarInterface);
     const configurationInterface = new ConfigurationInterface();
     const setupInterface = new SetupInterface();
+    // Mirror server.ts: the admin exemption is a two-hop cross-domain read —
+    // CalendarInterface resolves the calendar's owner, AccountsInterface says
+    // whether that owner holds the admin role. Both back-references have to be
+    // wired for checkFundingAccess to answer from a complete picture.
+    fundingInterface.setCalendarInterface(calendarInterface);
+    fundingInterface.setAccountsInterface(
+      new AccountsInterface(eventBus, configurationInterface, setupInterface),
+    );
     const accountService = new AccountService(eventBus, configurationInterface, setupInterface);
 
-    // Create test accounts
+    // AccountService._setupAccount grants the 'admin' role to the FIRST
+    // account created under NODE_ENV=test, so that the setup-mode middleware
+    // lets the suite run. That grant is implicit and creation-order dependent:
+    // whichever account happens to be created first becomes exempt from the
+    // funding gate by invariant 2, which silently makes any gating assertion
+    // about that account's calendars vacuous.
+    //
+    // So this file claims the grant deliberately. The admin fixture is created
+    // first, named, and pinned by the assertion below; every account created
+    // afterwards is guaranteed non-admin. Anyone reordering these lines gets a
+    // failing beforeAll rather than a quietly meaningless test.
+    const adminInfo = await accountService._setupAccount(adminEmail, password);
+    adminAccount = adminInfo.account;
+
+    const adminRoleRows = await AccountRoleEntity.findAll({ where: { role: 'admin' } });
+    expect(adminRoleRows.map((row) => row.account_id)).toEqual([adminAccount.id]);
+
+    // Create test accounts — all non-admin, the admin grant is already spent
     let supporterInfo = await accountService._setupAccount(supporterEmail, password);
     supporterAccount = supporterInfo.account;
 
     let nonSupporterInfo = await accountService._setupAccount(nonSupporterEmail, password);
     nonSupporterAccount = nonSupporterInfo.account;
 
-    // Login both users to get auth tokens
+    const outsiderInfo = await accountService._setupAccount(outsiderEmail, password);
+    const outsiderAccount = outsiderInfo.account;
+
+    // Login users to get auth tokens
+    adminToken = await env.login(adminEmail, password);
     supporterToken = await env.login(supporterEmail, password);
     nonSupporterToken = await env.login(nonSupporterEmail, password);
 
     // Create calendars for each user
+    adminCalendar = await calendarInterface.createCalendar(adminAccount, 'admin-cal');
     coveredCalendar = await calendarInterface.createCalendar(supporterAccount, 'covered-cal');
     uncoveredCalendar = await calendarInterface.createCalendar(nonSupporterAccount, 'uncovered-cal');
+    outsiderCalendar = await calendarInterface.createCalendar(outsiderAccount, 'outsider-cal');
 
     // Create active funding plan for the supporter account linked to their calendar
     await createActiveFundingPlan(supporterAccount.id, coveredCalendar.id);
@@ -412,6 +464,39 @@ describe('Funding Gating Integration Tests', () => {
       expect(response.headers['cache-control']).toBe('no-store');
     });
 
+    it('should refuse a non-allowlisted origin without consulting the funding gate', async () => {
+      await enableFunding();
+
+      // uncoveredCalendar is unfunded, so if the gate ran ahead of origin
+      // validation this request would answer 402 — telling an arbitrary site
+      // that has no business embedding this calendar whether it pays.
+      const gateSpy = vi.spyOn(FundingInterface.prototype, 'checkFundingAccess');
+
+      try {
+        const response = await request(env.app)
+          .get(`/api/widget/v1/calendars/${uncoveredCalendar.urlName}`)
+          .set('Origin', 'https://not-allowlisted.example');
+
+        expect(response.status).toBe(403);
+        expect(response.body.errorName).toBe('ForbiddenError');
+        expect(gateSpy).not.toHaveBeenCalled();
+      }
+      finally {
+        gateSpy.mockRestore();
+      }
+    });
+
+    it('should answer 404 for a nonexistent calendar on the widget read path', async () => {
+      await enableFunding();
+
+      const response = await request(env.app)
+        .get('/api/widget/v1/calendars/no-such-calendar-here')
+        .set('Origin', 'https://example.com');
+
+      expect(response.status).toBe(404);
+      expect(response.body.errorName).toBe('CalendarNotFoundError');
+    });
+
     it.skip('should enforce rate limiting after 300 requests (skipped: rate limiting disabled in test mode)', async () => {
       await disableFunding();
 
@@ -480,22 +565,66 @@ describe('Funding Gating Integration Tests', () => {
     });
 
     it('should check funding access after permission checks (no funding plan status leak)', async () => {
-      // Create a calendar owned by a supporter
-      const privateCalendar = await calendarInterface.createCalendar(supporterAccount, 'private-cal');
       await enableFunding();
-      await createActiveFundingPlan(supporterAccount.id, coveredCalendar.id);
 
-      // Non-supporter tries to configure widget on private calendar
-      const response = await env.authPut(
-        nonSupporterToken,
-        `/api/v1/calendars/${privateCalendar.id}/widget/domain`,
-        { domain: 'example.com' },
-      );
+      // The target must be a calendar the funding gate would concretely
+      // REFUSE: outsiderCalendar is owned by a non-admin account with no
+      // funding plan and no complimentary grant. On an admin-owned calendar
+      // the gate opens by exemption, so a 403 there would be satisfied by the
+      // permission check alone and prove nothing about ordering.
+      await expect(
+        fundingInterface.checkFundingAccess(outsiderCalendar.id, 'widget_embedding'),
+      ).resolves.toBe(false);
 
-      // Should get 403 Permission Denied, NOT 402 SubscriptionRequiredError
-      // This proves permission check happens BEFORE the funding-access check
-      expect(response.status).toBe(403);
-      expect(response.body.errorName).toBe('CalendarEditorPermissionError');
+      // Spied on the prototype rather than on this file's own instance: the
+      // request below runs through the Express app, which constructs its own
+      // domain interfaces in server.ts.
+      const gateSpy = vi.spyOn(FundingInterface.prototype, 'checkFundingAccess');
+
+      try {
+        // A user with no edit rights tries to configure the widget
+        const response = await env.authPut(
+          nonSupporterToken,
+          `/api/v1/calendars/${outsiderCalendar.id}/widget/domain`,
+          { domain: 'example.com' },
+        );
+
+        // 403 Permission Denied, NOT 402 SubscriptionRequiredError
+        expect(response.status).toBe(403);
+        expect(response.body.errorName).toBe('CalendarEditorPermissionError');
+
+        // The stronger claim, and the one that does not depend on which
+        // invariant happened to answer: the funding domain was never asked
+        // about a calendar this caller may not touch, so its funding state
+        // cannot have leaked.
+        expect(gateSpy).not.toHaveBeenCalled();
+      }
+      finally {
+        gateSpy.mockRestore();
+      }
+    });
+
+    it('should answer 404 for a nonexistent calendar without consulting the funding gate', async () => {
+      await enableFunding();
+
+      const gateSpy = vi.spyOn(FundingInterface.prototype, 'checkFundingAccess');
+
+      try {
+        const response = await env.authPut(
+          nonSupporterToken,
+          `/api/v1/calendars/${uuidv4()}/widget/domain`,
+          { domain: 'example.com' },
+        );
+
+        // checkFundingAccess returns a determinate "unfunded" for an unknown
+        // calendar id, so a gate that ran first would answer 402 here.
+        expect(response.status).toBe(404);
+        expect(response.body.errorName).toBe('CalendarNotFoundError');
+        expect(gateSpy).not.toHaveBeenCalled();
+      }
+      finally {
+        gateSpy.mockRestore();
+      }
     });
 
     it('should handle consistent behavior when funding plan expires during widget config request', async () => {
@@ -524,6 +653,52 @@ describe('Funding Gating Integration Tests', () => {
       // Should get consistent 402 error after expiration
       expect(response2.status).toBe(402);
       expect(response2.body.errorName).toBe('SubscriptionRequiredError');
+    });
+  });
+
+  /**
+   * Admin exemption (checkFundingAccess invariant 2) is the only invariant in
+   * this file that needs the funding domain to reach back out of itself:
+   * FundingService.isCalendarOwnerAdmin resolves the owner through the
+   * injected CalendarInterface, then asks the injected AccountsInterface
+   * whether that owner is an admin. Every other scenario here is decided by
+   * the calendar's own plan and grant rows, which is why removing either
+   * injection used to leave the whole suite green.
+   */
+  describe('Admin Exemption', () => {
+    it('should allow an unfunded admin-owned calendar to configure a widget domain', async () => {
+      await enableFunding();
+
+      // adminCalendar has no funding plan and no complimentary grant on an
+      // instance that charges, so nothing but the owner's admin role can open
+      // this gate.
+      const response = await env.authPut(
+        adminToken,
+        `/api/v1/calendars/${adminCalendar.id}/widget/domain`,
+        { domain: 'admin.example.com' },
+      );
+
+      expect(response.status).toBe(200);
+      expect(response.body.domain).toBe('admin.example.com');
+    });
+
+    it('should resolve the owner admin role through the injected domain interfaces', async () => {
+      await enableFunding();
+
+      // Asked of this file's own domain interfaces rather than over HTTP,
+      // because the wiring under test is the pair of back-references
+      // established in beforeAll (setCalendarInterface and
+      // setAccountsInterface); the Express app wires its own interfaces in
+      // server.ts. Drop either one and isCalendarOwnerAdmin stops resolving,
+      // so this unfunded calendar is refused.
+      await expect(
+        fundingInterface.checkFundingAccess(adminCalendar.id, 'widget_embedding'),
+      ).resolves.toBe(true);
+
+      await calendarInterface.setWidgetDomain(adminAccount, adminCalendar.id, 'wired.example.com');
+
+      expect(await calendarInterface.getWidgetDomain(adminAccount, adminCalendar.id))
+        .toBe('wired.example.com');
     });
   });
 

@@ -253,6 +253,13 @@ class CalendarService {
    * drift apart. A missing FundingInterface means no funding domain is wired
    * in at all — an instance that charges for nothing — so the gate opens.
    *
+   * That deliberately reads the opposite way to FundingService's guard on its
+   * own missing CalendarInterface, which throws. The two absences are not the
+   * same absence: no funding domain means there is no paid tier to withhold a
+   * feature for, while a funding domain that cannot reach the calendar domain
+   * is midway through answering a funding question and has lost one of its
+   * inputs. Absent policy opens; unreadable input closes.
+   *
    * @param calendarId - Calendar the widget would be embedded for
    * @throws SubscriptionRequiredError if the calendar is determinately unfunded
    * @throws FundingAccessIndeterminateError if the funding state is unreadable

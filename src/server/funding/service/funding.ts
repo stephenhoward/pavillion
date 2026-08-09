@@ -1770,10 +1770,11 @@ export default class FundingService {
    * @deprecated Use {@link checkFundingAccess}. This answers only the
    * grant-or-plan half of a gate decision, leaving every caller to remember
    * the instance-enabled and admin-exemption checks for itself, and it applies
-   * no cancellation boundary. It is retained as the legacy baseline that the
-   * parity test in service.test.ts measures checkFundingAccess against, which
-   * is the reason not to delete it, not a reason to call it. Do not add
-   * callers.
+   * no cancellation boundary. It has no callers left in or out of this domain
+   * — the FundingInterface wrapper that exposed it across the boundary is
+   * gone. It is retained only as the legacy baseline that the parity test in
+   * service.test.ts measures checkFundingAccess against, which is the reason
+   * not to delete it, not a reason to call it. Do not add callers.
    *
    * @param calendarId - Calendar ID to check
    * @returns True if calendar has an active grant or active funding plan
@@ -1853,6 +1854,15 @@ export default class FundingService {
    * is decided the same way — but it is validated against the registry so an
    * unregistered key can never be answered, and so per-feature policy has a
    * place to live if it is ever needed.
+   *
+   * A calendarId with no resolvable owner — a deleted or never-existing
+   * calendar — is answered as a determinate `false`, not as an existence
+   * error. This method decides funding and nothing else, and it is composed
+   * only after existence has been established; where a consumer reaches it
+   * with an unknown id anyway, the resulting 402 is safe because calendar
+   * existence is already public information under DEC-004. The one visible
+   * consequence is that an ownerless calendar's widget read answers 402 rather
+   * than 404 on a funding-enabled instance.
    *
    * @param calendarId - Calendar the feature would be used on
    * @param feature - Key from FUNDING_GATED_FEATURES naming the gated feature
