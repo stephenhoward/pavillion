@@ -515,6 +515,10 @@ export default class NotificationEventHandlers implements DomainEventHandlers {
           type: 'report',
           id: payload.reportId,
           label,
+          // Already in hand from the bus payload — persisting it here is
+          // what spares the read path a hop back into Moderation. Null for
+          // admin-reported remote events, which is a valid stored value.
+          calendarId: payload.calendarId,
         },
         audience: {
           kind: 'explicit',
@@ -545,6 +549,7 @@ export default class NotificationEventHandlers implements DomainEventHandlers {
           type: 'report',
           id: payload.reportId,
           label,
+          calendarId: payload.calendarId,
         },
         audience: {
           kind: 'role',
@@ -587,6 +592,7 @@ export default class NotificationEventHandlers implements DomainEventHandlers {
           type: 'report',
           id: payload.reportId,
           label,
+          calendarId: payload.calendarId,
         },
         audience: {
           kind: 'explicit',

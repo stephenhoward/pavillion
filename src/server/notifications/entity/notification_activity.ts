@@ -29,6 +29,12 @@ import { NotificationRecipientEntity } from '@/server/notifications/entity/notif
  *   - `actor_account_id` is nullable; it is only set when actor_kind='account'
  *     and is always NULL for Flag rows (Flag actor identity is anonymized at
  *     write time).
+ *   - `object_calendar_id` records the calendar that owns the object, when
+ *     one exists, so the read path never has to walk back into another
+ *     domain to rebuild a value the write path already held. It has no FK
+ *     for the same reason as `object_id`, and NULL is a real case — an
+ *     admin reporting a remote event produces a report no local calendar
+ *     owns — not an error path.
  *   - `verb`, `origin`, `actor_kind`, `object_type` are DB-level ENUMs so
  *     adding a value is a schema migration, not a config change. The
  *     corresponding TypeScript union types live in
@@ -97,6 +103,11 @@ class NotificationActivityEntity extends Model {
   @Index('idx_notification_activity_object')
   @Column({ type: DataType.UUID, allowNull: false })
   declare object_id: string;
+
+  // Deliberately no @ForeignKey and no @Index — see class doc. Nullable is
+  // load-bearing: reports against remote events have no owning calendar.
+  @Column({ type: DataType.UUID, allowNull: true })
+  declare object_calendar_id: string | null;
 
   @Column({ type: DataType.TEXT, allowNull: false })
   declare object_label: string;

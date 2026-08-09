@@ -102,11 +102,18 @@ export type RecordActivityActor =
  * Click-through URLs are computed at render time by the API layer
  * (pv-89mw.7.1) from `(type, id)` rather than stored on the row — there is no
  * `displayUrl` field on this shape by design.
+ *
+ * `calendarId` is the calendar that owns the object, when the emitter knows
+ * it. It is persisted verbatim so the read path never has to walk back into
+ * another domain to rebuild it. Optional and nullable: emitters whose object
+ * *is* the calendar have no use for it, and a report against a remote event
+ * genuinely has no owning calendar. It takes no part in dedup.
  */
 export interface RecordActivityObject {
   type: NotificationObjectType;
   id: string;
   label: string;
+  calendarId?: string | null;
 }
 
 /**
@@ -392,6 +399,12 @@ class NotificationService {
                   actor_display_url: actorRow.actor_display_url,
                   object_type: input.object.type,
                   object_id: input.object.id,
+                  // Normalized to null so an omitted calendarId stores NULL
+                  // rather than leaning on Sequelize's undefined handling.
+                  // Inert to dedup by design: `findDedupMatch` must never
+                  // key on it, or two Flags on one report that disagree on
+                  // calendarId would stop collapsing.
+                  object_calendar_id: input.object.calendarId ?? null,
                   object_label,
                 },
                 { transaction },

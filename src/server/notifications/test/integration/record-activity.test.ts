@@ -365,6 +365,110 @@ describe('NotificationService.recordActivity (integration)', () => {
       });
       expect(recipientCount).toBe(2);
     });
+
+    // Regression guard for the highest-risk mistake in this change: threading
+    // `calendarId` into `findDedupMatch`'s where-clause would split Flags on a
+    // single report across calendarId values and silently break dedup. This
+    // asserts the DB-level outcome rather than the query shape.
+    it('two Flags on the same report with DIFFERENT calendarId still collapse to one row', async () => {
+      const [adminAccount] = await seedAccounts(1);
+      resolvedAccountIds = [adminAccount];
+
+      const sharedReportId = uuidv4();
+      const calendarA = uuidv4();
+      const calendarB = uuidv4();
+
+      await service.recordActivity({
+        verb: 'Flag',
+        actor: { kind: 'anonymous' },
+        object: { type: 'report', id: sharedReportId, label: 'Reported event', calendarId: calendarA },
+        audience: { kind: 'role', role: 'instance-admins' },
+      });
+
+      await service.recordActivity({
+        verb: 'Flag',
+        actor: { kind: 'anonymous' },
+        object: { type: 'report', id: sharedReportId, label: 'Reported event', calendarId: calendarB },
+        audience: { kind: 'role', role: 'instance-admins' },
+      });
+
+      const flagRows = await NotificationActivityEntity.findAll({
+        where: { verb: 'Flag', object_id: sharedReportId },
+      });
+      expect(flagRows).toHaveLength(1);
+      // The surviving row is the first writer's; the second call deduped
+      // rather than overwriting.
+      expect(flagRows[0].object_calendar_id).toBe(calendarA);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // object_calendar_id persistence
+  // ---------------------------------------------------------------------------
+
+  describe('object_calendar_id persistence', () => {
+    it('persists a supplied calendarId on the activity row', async () => {
+      const [adminAccount] = await seedAccounts(1);
+      resolvedAccountIds = [adminAccount];
+
+      const reportId = uuidv4();
+      const calendarId = uuidv4();
+
+      await service.recordActivity({
+        verb: 'Flag',
+        actor: { kind: 'anonymous' },
+        object: { type: 'report', id: reportId, label: 'Reported event', calendarId },
+        audience: { kind: 'role', role: 'instance-admins' },
+      });
+
+      const row = await NotificationActivityEntity.findOne({
+        where: { verb: 'Flag', object_id: reportId },
+      });
+      expect(row!.object_calendar_id).toBe(calendarId);
+    });
+
+    it('persists NULL and does not throw when calendarId is null', async () => {
+      const [adminAccount] = await seedAccounts(1);
+      resolvedAccountIds = [adminAccount];
+
+      const reportId = uuidv4();
+
+      // Admin reporting a remote event: no local calendar owns the report.
+      // NULL is the documented real case, so the insert must succeed.
+      await service.recordActivity({
+        verb: 'Flag',
+        actor: { kind: 'anonymous' },
+        object: { type: 'report', id: reportId, label: 'Reported remote event', calendarId: null },
+        audience: { kind: 'role', role: 'instance-admins' },
+      });
+
+      const row = await NotificationActivityEntity.findOne({
+        where: { verb: 'Flag', object_id: reportId },
+      });
+      expect(row).not.toBeNull();
+      expect(row!.object_calendar_id).toBeNull();
+    });
+
+    it('persists NULL when calendarId is omitted entirely', async () => {
+      const [editorAccount] = await seedAccounts(1);
+      resolvedAccountIds = [editorAccount];
+
+      const calendarId = uuidv4();
+
+      await service.recordActivity({
+        verb: 'Follow',
+        actor: { kind: 'remote_actor', uri: 'https://remote.example/users/alice' },
+        object: { type: 'calendar', id: calendarId, label: 'My Calendar' },
+        audience: { kind: 'role', role: 'calendar-editors', objectRef: { type: 'calendar', id: calendarId } },
+        actorDisplayName: 'Alice',
+        origin: 'federated',
+      });
+
+      const row = await NotificationActivityEntity.findOne({
+        where: { verb: 'Follow', object_id: calendarId },
+      });
+      expect(row!.object_calendar_id).toBeNull();
+    });
   });
 
   // ---------------------------------------------------------------------------
