@@ -1,10 +1,27 @@
+---
+name: git-cleanup
+description: Delete local branches and worktrees whose work has already merged to main, and triage the ones nothing could prove either way. Use when the local checkout has accumulated stale branches or worktrees and they need clearing safely. User-invoked only.
+disable-model-invocation: true
+---
+
 # Git Cleanup
 
 Clean up local branches and worktrees whose work has merged to main or that
 carry no new work. Classification and deletion are performed by the
-deterministic tool in `.claude/tools/git-cleanup.ts`; this command wraps it
-with a report, a category-approval gate, and a review pass over the branches
-the tool could not prove either way.
+deterministic tool in `scripts/git-cleanup.ts`; this skill wraps it with a
+report, a category-approval gate, and a review pass over the branches the
+tool could not prove either way.
+
+Everything the flow needs lives in this directory:
+
+| Path | What it is |
+|---|---|
+| `scripts/git-cleanup.ts` | the CLI invoked in the steps below (`classify`, `execute`) |
+| `scripts/lib/git-cleanup.ts` | classification, protections, and execution logic |
+| `scripts/lib/run.ts` | command plumbing, `shell: false` on every spawn |
+| `scripts/test/` | unit tests over stubbed spawn, plus integration tests against real git |
+
+Tests run with `npx vitest run --config .claude/tools/vitest.config.ts`.
 
 What each category proves, and how the tool acts on it:
 
@@ -38,7 +55,7 @@ Two rules that no step below overrides:
 1. **Classify.** Run:
 
    ```bash
-   npx tsx .claude/tools/git-cleanup.ts classify
+   npx tsx .claude/skills/git-cleanup/scripts/git-cleanup.ts classify
    ```
 
    If `ok` is false, report the error and stop. Otherwise capture `planId`
@@ -79,7 +96,7 @@ Two rules that no step below overrides:
 4. **Execute the approved categories.**
 
    ```bash
-   npx tsx .claude/tools/git-cleanup.ts execute \
+   npx tsx .claude/skills/git-cleanup/scripts/git-cleanup.ts execute \
      --categories=<approved categories> \
      --worktree-families=<approved families> \
      --plan-id=<planId from step 1>
@@ -127,7 +144,7 @@ Two rules that no step below overrides:
 6. **Execute the reviewed branches** with only the names the user confirmed:
 
    ```bash
-   npx tsx .claude/tools/git-cleanup.ts execute \
+   npx tsx .claude/skills/git-cleanup/scripts/git-cleanup.ts execute \
      --branches=<confirmed branch names> \
      --plan-id=<planId from step 1>
    ```

@@ -1,5 +1,5 @@
 /**
- * Unit tests for .claude/tools/lib/git-cleanup.ts
+ * Unit tests for .claude/skills/git-cleanup/scripts/lib/git-cleanup.ts
  *
  * Pure functions are tested directly with canned command output. I/O
  * orchestration functions inject fake spawn/fs deps (later tasks).

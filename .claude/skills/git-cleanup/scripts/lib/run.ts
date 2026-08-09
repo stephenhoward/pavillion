@@ -1,5 +1,13 @@
 /**
- * Shared plumbing for the agent-facing CLI tools in .claude/tools/.
+ * Command plumbing for the git-cleanup scripts.
+ *
+ * A local copy of the `run()` helper in .claude/tools/lib/shared.ts, kept here
+ * so this skill's scripts are self-contained. The one deliberate difference:
+ * `shell` is hard-coded to false rather than defaulting to true. git-cleanup
+ * passes attacker-influenced strings — branch names, worktree paths — as
+ * argv, and a shell between this process and git would make those strings
+ * executable. There is no caller here that wants a shell, so the option does
+ * not exist.
  *
  * CLI-calling functions accept an injectable `spawnFn` for testing; pure
  * functions have no I/O at all.
@@ -11,13 +19,7 @@ export type SpawnFn = typeof nodeSpawnSync;
 
 export interface SpawnDeps {
   spawnFn?: SpawnFn;
-  /**
-   * Working directory for spawned commands. Used by the gh-stack helpers
-   * when a chain runs in its own git worktree (see git-workflow/stacking.md,
-   * "native gh-stack-in-worktrees" — decision memo D2): gh-stack state is a
-   * per-git-dir JSON file, NOT shared across worktrees, so stack operations
-   * must run from the checkout that holds the branch being operated on.
-   */
+  /** Working directory for spawned commands. */
   cwd?: string;
 }
 
@@ -32,7 +34,7 @@ export function run(
 ): { stdout: string; stderr: string; exitCode: number } {
   const result = spawnFn(cmd, args, {
     encoding: 'buffer' as never,
-    shell: true,
+    shell: false,
     timeout: opts.timeout ?? 30_000,
     ...(opts.cwd !== undefined ? { cwd: opts.cwd } : {}),
     ...(opts.input !== undefined ? { input: Buffer.from(opts.input) } : {}),

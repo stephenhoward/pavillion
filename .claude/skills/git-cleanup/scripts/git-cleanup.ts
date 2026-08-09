@@ -2,12 +2,12 @@
  * Agent-facing CLI for local branch/worktree cleanup. JSON to stdout.
  *
  * Usage:
- *   npx tsx .claude/tools/git-cleanup.ts classify
- *   npx tsx .claude/tools/git-cleanup.ts execute --categories=merged-ancestor,merged-pr,empty,superseded \
+ *   npx tsx .claude/skills/git-cleanup/scripts/git-cleanup.ts classify
+ *   npx tsx .claude/skills/git-cleanup/scripts/git-cleanup.ts execute --categories=merged-ancestor,merged-pr,empty,superseded \
  *       --worktree-families=superset,agent,chain --plan-id=<id from classify output>
- *   npx tsx .claude/tools/git-cleanup.ts execute --branches=old-a,old-b --plan-id=<id>
+ *   npx tsx .claude/skills/git-cleanup/scripts/git-cleanup.ts execute --branches=old-a,old-b --plan-id=<id>
  *
- * Operator-facing flow: .claude/commands/git-cleanup.md
+ * Operator-facing flow: .claude/skills/git-cleanup/SKILL.md
  */
 
 import { classify, execute, parseExecuteArgs } from './lib/git-cleanup.js';

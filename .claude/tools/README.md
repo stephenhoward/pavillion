@@ -27,15 +27,17 @@ npx tsx .claude/tools/stack.ts plan '<json>'             # dependency-chain plan
 npx tsx .claude/tools/stack.ts create <branch> <parent> --chained|--single
 npx tsx .claude/tools/stack.ts submit <branch> --chained|--single
 npx tsx .claude/tools/stack.ts sync                      # gh stack sync --prune
-
-# Local branch/worktree cleanup (flow: .claude/commands/git-cleanup.md)
-npx tsx .claude/tools/git-cleanup.ts classify             # fetch --prune, classify, write plan + report
-npx tsx .claude/tools/git-cleanup.ts execute --plan-id=<id> [--categories=<a,b>] \
-    [--branches=<x,y>] [--worktree-families=<x,y>]   # --branches: reviewed doubts, by name
 ```
+
+Local branch/worktree cleanup lives with its skill rather than here: the CLI
+is `.claude/skills/git-cleanup/scripts/git-cleanup.ts` and the flow that
+drives it is `.claude/skills/git-cleanup/SKILL.md`.
 
 ## Tests
 
 ```bash
 npx vitest run --config .claude/tools/vitest.config.ts
 ```
+
+That config covers both `.claude/tools/test/` and the `scripts/test/`
+directory of any skill that ships its own tooling.

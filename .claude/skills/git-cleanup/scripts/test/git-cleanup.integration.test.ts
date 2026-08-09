@@ -1,5 +1,5 @@
 /**
- * Integration tests for .claude/tools/lib/git-cleanup.ts against a REAL git
+ * Integration tests for .claude/skills/git-cleanup/scripts/lib/git-cleanup.ts against a REAL git
  * binary and real repositories in a temp directory.
  *
  * Why this file exists: the unit suite injects a fake spawn, so it can only

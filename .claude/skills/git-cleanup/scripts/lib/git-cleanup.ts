@@ -1,13 +1,13 @@
 /**
- * Classification and execution logic for the /git-cleanup command. The
- * operator-facing flow lives in .claude/commands/git-cleanup.md.
+ * Classification and execution logic for the git-cleanup skill. The
+ * operator-facing flow lives in .claude/skills/git-cleanup/SKILL.md.
  *
  * Safety invariant: execute() re-verifies through the SAME predicate
  * functions classify() uses. Do not add a parallel implementation of any
  * deletability or protection check.
  *
- * Every destructive path is covered twice: .claude/tools/test/
- * git-cleanup.test.ts stubs spawn to assert decisions and call order, and
+ * Every destructive path is covered twice: test/git-cleanup.test.ts stubs
+ * spawn to assert decisions and call order, and test/
  * git-cleanup.integration.test.ts runs the same code against real git in a
  * temp repo. Changes to a proof predicate or a destructive invocation need a
  * case in both — a stubbed spawn cannot see how git actually answers.
@@ -17,7 +17,7 @@ import { spawnSync as nodeSpawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { run, type SpawnDeps, type SpawnFn } from './shared.js';
+import { run, type SpawnDeps, type SpawnFn } from './run.js';
 
 export type Category = 'merged-ancestor' | 'merged-pr' | 'empty' | 'superseded' | 'doubt';
 export type WorktreeFamily = 'superset' | 'agent' | 'chain' | 'other';
@@ -559,7 +559,7 @@ export function gatherWorktreeChecks(
     'git',
     ['--no-optional-locks', '-C', wt.path, 'status', '--porcelain'],
     ctx.spawn,
-    { cwd: ctx.cwd, shell: false },
+    { cwd: ctx.cwd },
   );
   // A non-zero exit means we could not determine cleanliness — fail closed
   // (treat as dirty) rather than assume the worktree is safe to remove.
@@ -621,7 +621,7 @@ export function classify(deps: ClassifyDeps = {}): {
   const spawn = deps.spawnFn ?? nodeSpawnSync;
   const cwd = deps.cwd ?? process.cwd();
   const runGit = (args: string[], opts: { timeout?: number } = {}) =>
-    run('git', args, spawn, { cwd, shell: false, ...opts });
+    run('git', args, spawn, { cwd, ...opts });
 
   // Step 1: file locations + inside-work-tree guard.
   const commonDirResult = runGit(['rev-parse', '--git-common-dir']);
@@ -707,7 +707,7 @@ export function classify(deps: ClassifyDeps = {}): {
       for (const branchChunk of chunk(names, 50)) {
         const query = buildPrQuery(branchChunk, parsedOrigin.owner, parsedOrigin.repo);
         const ghResult = run('gh', ['api', 'graphql', '-f', `query=${query}`], spawn, {
-          cwd, timeout: 60_000, shell: false,
+          cwd, timeout: 60_000,
         });
         if (ghResult.exitCode !== 0) {
           for (const name of branchChunk) prLookup.set(name, 'lookup-failed');
@@ -772,7 +772,7 @@ export function classify(deps: ClassifyDeps = {}): {
     // processes' fds) while still printing every cwd it *could* read on
     // stdout. Parse stdout regardless of exit code — an empty cwd list only
     // when stdout itself is empty, never inferred from the exit code alone.
-    const lsofResult = run('lsof', ['-a', '-d', 'cwd', '-Fn'], spawn, { cwd, timeout: 15_000, shell: false });
+    const lsofResult = run('lsof', ['-a', '-d', 'cwd', '-Fn'], spawn, { cwd, timeout: 15_000 });
     cwds = parseCwdPaths(lsofResult.stdout).map((p) => realpath(p));
   }
 
@@ -978,7 +978,7 @@ export function execute(opts: ExecuteOptions, deps: ExecuteDeps = {}): ExecuteRe
   const spawn = deps.spawnFn ?? nodeSpawnSync;
   const cwd = deps.cwd ?? process.cwd();
   const runGit = (args: string[], runOpts: { timeout?: number } = {}) =>
-    run('git', args, spawn, { cwd, shell: false, ...runOpts });
+    run('git', args, spawn, { cwd, ...runOpts });
   const nowMs = (deps.nowMs ?? Date.now)();
   const realpath = deps.realpath ?? defaultRealpath;
   const readFile = deps.readFile ?? ((p: string) => fs.readFileSync(p, 'utf-8'));
@@ -1085,7 +1085,7 @@ export function execute(opts: ExecuteOptions, deps: ExecuteDeps = {}): ExecuteRe
   // contract).
   let cwds: string[] = [];
   if (familyApproved.length > 0) {
-    const lsofResult = run('lsof', ['-a', '-d', 'cwd', '-Fn'], spawn, { cwd, timeout: 15_000, shell: false });
+    const lsofResult = run('lsof', ['-a', '-d', 'cwd', '-Fn'], spawn, { cwd, timeout: 15_000 });
     cwds = parseCwdPaths(lsofResult.stdout).map((p) => realpath(p));
   }
 
