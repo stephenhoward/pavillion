@@ -419,6 +419,12 @@ async function buildFullApp(): Promise<BuiltApp> {
   );
   activityPubDomain.initialize(app);
   calendarDomain.interface.setActivityPubInterface(activityPubDomain.interface);
+  // Moderation is constructed before ActivityPub (the AP inbox needs
+  // ModerationInterface), so its AP interface arrives by late injection.
+  // Mirroring it here is not optional decoration: this function is the only
+  // place the real wiring graph is reconstructed, and an edge missing here is
+  // an edge no test exercises.
+  moderationDomain.setActivityPubInterface(activityPubDomain.interface);
 
   new NotificationsDomain(eventBus, calendarDomain.interface, accountsDomain.interface).initialize(app);
   accountsDomain.interface.setCalendarInterface(calendarDomain.interface);

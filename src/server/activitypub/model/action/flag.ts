@@ -20,8 +20,13 @@ class FlagActivity extends ActivityPubActivity {
   content?: string;
   tag?: Hashtag[];
   summary?: string;
-  published?: string;
   attributedTo?: string;
+  /**
+   * Inherited from `ActivityPubActivity` as `Date | null`, not redeclared as
+   * the wire's ISO string. Redeclaring it narrowed the class out of
+   * assignability to its own base, which is what let a plain Flag object
+   * literal reach the outbox untyped. `toObject`/`fromObject` convert.
+   */
 
   constructor(
     id: string,
@@ -70,7 +75,7 @@ class FlagActivity extends ActivityPubActivity {
     }
 
     if (this.published) {
-      obj.published = this.published;
+      obj.published = this.published.toISOString();
     }
 
     if (this.attributedTo) {
@@ -119,7 +124,10 @@ class FlagActivity extends ActivityPubActivity {
     }
 
     if (obj.published) {
-      activity.published = obj.published;
+      const published = new Date(obj.published);
+      if (!isNaN(published.getTime())) {
+        activity.published = published;
+      }
     }
 
     if (obj.attributedTo) {

@@ -12,6 +12,9 @@ import {
   ReportAlreadyResolvedError,
 } from '@/server/moderation/exceptions';
 import { logError } from '@/server/common/helper/error-logger';
+import { createLogger } from '@/server/common/helper/logger';
+
+const logger = createLogger('moderation');
 
 /** UUID v4 format regex for path parameter validation. */
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -435,11 +438,70 @@ export default class OwnerReportRoutes {
         return;
       }
 
+      // Extract the remote instance domain from the event source URL
+      // Event source URL format: https://remote.instance/events/uuid
+      let remoteInstanceDomain: string;
+
+      if (event.eventSourceUrl) {
+        try {
+          const url = new URL(event.eventSourceUrl);
+          remoteInstanceDomain = url.hostname;
+        }
+        catch {
+          res.status(400).json({
+            error: 'Cannot determine remote instance from event source URL',
+            errorName: 'ValidationError',
+          });
+          return;
+        }
+      }
+      else {
+        res.status(400).json({
+          error: 'Event is missing source URL',
+          errorName: 'ValidationError',
+        });
+        return;
+      }
+
       // Look up the authoritative actor URI for the event's source calendar
       const targetActorUri = await this.moderationInterface.getEventSourceActorUri(report.eventId);
       if (!targetActorUri) {
         res.status(400).json({
           error: 'Cannot forward report: unable to determine remote calendar owner',
+          errorName: 'ValidationError',
+        });
+        return;
+      }
+
+      // Same-origin guard, identical to the one on the admin forward route.
+      // `attributed_to` is bound to the signature-verified actor only on the
+      // Create ingest path; on the Announce path it comes from fetched remote
+      // content, so a hostile instance could otherwise aim a signed Flag —
+      // carrying the report body and the courier calendar's key id — at a
+      // host of its choosing.
+      let targetHostname: string;
+      try {
+        targetHostname = new URL(targetActorUri).hostname;
+      }
+      catch {
+        logger.warn(
+          { reportId: ctx.reportId, targetActorUri },
+          'Refusing to forward report: resolved calendar actor is not a valid URI',
+        );
+        res.status(400).json({
+          error: 'Cannot forward report: calendar owner is not on the event source instance',
+          errorName: 'ValidationError',
+        });
+        return;
+      }
+
+      if (targetHostname !== remoteInstanceDomain) {
+        logger.warn(
+          { reportId: ctx.reportId, targetActorUri, eventSourceHost: remoteInstanceDomain },
+          'Refusing to forward report: resolved calendar actor is not on the event source instance',
+        );
+        res.status(400).json({
+          error: 'Cannot forward report: calendar owner is not on the event source instance',
           errorName: 'ValidationError',
         });
         return;

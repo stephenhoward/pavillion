@@ -29,6 +29,7 @@ import ConfigurationInterface from '@/server/configuration/interface';
 import ActivityPubInterface from '@/server/activitypub/interface';
 import { validateActorUriProtocol } from '@/server/common/helper/uri-validation';
 import FlagActivityBuilder from '@/server/moderation/service/flag-activity-builder';
+import type { FlagActivityObject } from '@/server/moderation/service/flag-activity-builder';
 import { MODERATION_BUS_EVENTS } from '@/server/moderation/events/types';
 import EmailBlockingService from '@/server/moderation/service/email-blocking';
 import { PatternDetectionService } from '@/server/moderation/service/pattern-detection';
@@ -269,6 +270,20 @@ class ModerationService {
     this.accountsInterface = accountsInterface;
     this.configurationInterface = configurationInterface;
     this.emailBlockingService = new EmailBlockingService();
+    this.activityPubInterface = activityPubInterface;
+  }
+
+  /**
+   * Injects the ActivityPub interface after construction.
+   *
+   * The ActivityPub domain is built after moderation (its inbox depends on
+   * ModerationInterface), so the constructor argument is only populated by
+   * tests and by callers that already hold both. In the running server this
+   * setter is what makes {@link forwardReport} reachable at all.
+   *
+   * @param activityPubInterface - The ActivityPub domain interface
+   */
+  setActivityPubInterface(activityPubInterface: ActivityPubInterface): void {
     this.activityPubInterface = activityPubInterface;
   }
 
@@ -1839,8 +1854,10 @@ class ModerationService {
     if (!event) {
       throw new EventNotFoundError();
     }
-    // Build Flag activity using FlagActivityBuilder
-    const domain = config.get<string>('server.domain');
+    // Build Flag activity using FlagActivityBuilder.
+    // `domain` — not `server.domain`, which is not a key this application
+    // defines; reading it threw before a Flag was ever built.
+    const domain = config.get<string>('domain');
     const flagBuilder = new FlagActivityBuilder(domain);
 
     // Resolve the signing calendar.
@@ -1897,22 +1914,32 @@ class ModerationService {
     // For admin-initiated reports against *remote* events the new path
     // uses `buildFlagActivity` with the signing calendar's actor URI so
     // the activity `actor` matches the HTTP-Signature `keyId`.
-    let flagActivity;
+    //
+    // The Flag's `object` must be the event's IRI on the instance that HOSTS
+    // it. For a remote event that is `eventSourceUrl`, NOT the default
+    // `https://<our domain>/events/<local id>` the builder falls back to: this
+    // instance minted its own UUID for the federated copy, so the default
+    // names an event the recipient cannot resolve, and the report is dropped
+    // at the far end as referencing an unknown event.
+    let flagActivity: FlagActivityObject;
+    const eventOriginUri = event.isRemote() ? event.eventSourceUrl : undefined;
     if (report.reporterType === 'administrator' && report.adminId && report.calendarId !== null) {
       // Legacy admin flag for local-event admin reports
       const adminActorUri = `https://${domain}/admin`;
-      flagActivity = flagBuilder.buildAdminFlagActivity(report, event, adminActorUri);
+      flagActivity = flagBuilder.buildAdminFlagActivity(report, event, adminActorUri, eventOriginUri);
     }
     else {
       // Calendar-actor flag. Used for owner-level reports and for
       // admin reports against remote events (signing calendar acts as
       // federation courier).
-      flagActivity = flagBuilder.buildFlagActivity(report, event, signingCalendarActorUri);
+      flagActivity = flagBuilder.buildFlagActivity(report, event, signingCalendarActorUri, eventOriginUri);
     }
     // Set explicit recipient in 'to' field
     flagActivity.to = [targetActorUri];
-    // Send via ActivityPub outbox
-    await this.activityPubInterface.addToOutbox(signingCalendar, flagActivity);
+    // Send via ActivityPub outbox. `publishFlag` (not `addToOutbox`) because
+    // the outbox persists `toObject()`; the AP domain owns turning this wire
+    // form into the activity model that provides it.
+    await this.activityPubInterface.publishFlag(signingCalendar, flagActivity);
     // Update the report entity with forwarding metadata
     const reportEntity = await ReportEntity.findByPk(reportId);
     if (reportEntity) {
