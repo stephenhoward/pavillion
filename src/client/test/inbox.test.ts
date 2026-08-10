@@ -653,6 +653,53 @@ describe('InboxView', () => {
       }
     });
 
+    // `String.prototype.replace` with a string replacement expands `$`
+    // patterns in that replacement. The object label is user-authored — an
+    // event title or calendar name — so a title containing `$&` would splice
+    // the matched slot token back into the accessible name, and `$$`, `` $` ``,
+    // `$'` or `$1` would each corrupt it differently. The visible sentence is
+    // spliced by `<i18next>` and is unaffected, so the failure mode is the
+    // accessible name silently diverging from what the row displays.
+    it.each([
+      ['$&', 'Trivia $& Night', 'reposted Trivia $& Night'],
+      ['$$', 'Save $$5 Night', 'reposted Save $$5 Night'],
+      ['$\'', 'Deal$\'s Tonight', 'reposted Deal$\'s Tonight'],
+    ])('keeps a %s in the object label verbatim in both controls\' names', async (_pattern, label, expected) => {
+      const store = useNotificationStore();
+      vi.spyOn(store, 'fetchNotifications').mockResolvedValue(undefined);
+      store.notifications = [
+        makeNotification({
+          id: 'n1',
+          verb: 'Announce',
+          seen: false,
+          actor: { kind: 'remote_actor', displayName: 'Bob', displayUrl: null },
+          object: {
+            type: 'event',
+            id: 'evt-1',
+            label,
+            target: { kind: 'event', eventId: 'evt-1' },
+          },
+        }),
+      ];
+
+      const wrapper = await mountInbox();
+
+      // The visible sentence is the reference — all three renderings of the
+      // row must agree.
+      expect(wrapper.find('p.notification-text').text()).toBe(`Bob ${expected}`);
+      expect(wrapper.find('[data-testid="notification-mark-seen"]').attributes('aria-label'))
+        .toBe(`Unread. Mark as read: Bob ${expected}`);
+      expect(wrapper.find('[data-testid="notification-dismiss"]').attributes('aria-label'))
+        .toBe(`Dismiss: Bob ${expected}`);
+
+      // A raw slot token in an accessible name is the specific `$&` failure:
+      // assert it separately so the cause is legible when this regresses.
+      for (const testid of ['notification-mark-seen', 'notification-dismiss']) {
+        expect(wrapper.find(`[data-testid="${testid}"]`).attributes('aria-label') ?? '')
+          .not.toContain('{1}');
+      }
+    });
+
     it('calls store.markSeen when the mark-as-read button is clicked', async () => {
       const store = useNotificationStore();
       vi.spyOn(store, 'fetchNotifications').mockResolvedValue(undefined);

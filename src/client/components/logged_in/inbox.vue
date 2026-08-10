@@ -103,15 +103,23 @@ const safeActorUrl = (notification: NotificationResponse): string | null => {
 
 /**
  * Matches the `{1}` object slot in a sentence, using the same tolerance for
- * inner whitespace as the `<i18next>` component's own slot pattern.
+ * inner whitespace as the `<i18next>` component's own slot pattern, and global
+ * for the same reason it is: a sentence with two slots must have both filled,
+ * or the accessible name would disagree with the sentence the row displays.
  *
  * Coupling: this is a hand-written mirror of `i18next-vue`'s internal slot
  * regex. If that library changes its slot syntax, this pattern stops matching
  * and `content` silently degrades to a raw `"...{1}..."` string in both
  * buttons' accessible names — nothing here throws. `inbox.test.ts` asserts the
  * rendered label text, so the drift surfaces there rather than in production.
+ *
+ * Substitute it with a **function** replacement, never a string. A string
+ * replacement expands `$` patterns inside itself, and the object label is
+ * user-authored: an event titled "Trivia $& Night" would splice this very
+ * slot token into the accessible name, and `$$`, `` $` ``, `$'` and `$1` each
+ * corrupt it in their own way. The function form disables that expansion.
  */
-const OBJECT_SLOT_PATTERN = /\{\s*1\s*\}/;
+const OBJECT_SLOT_PATTERN = /\{\s*1\s*\}/g;
 
 /**
  * Everything one row renders, derived once per notification.
@@ -140,7 +148,7 @@ interface NotificationRow {
 const rows = computed<NotificationRow[]>(() => notifications.value.map((notification) => {
   const actorName = resolveActorDisplayName(notification.actor.displayName);
   const sentence = notificationSentence(notification);
-  const rendered = sentence.replace(OBJECT_SLOT_PATTERN, notification.object.label);
+  const rendered = sentence.replace(OBJECT_SLOT_PATTERN, () => notification.object.label);
 
   return {
     notification,
