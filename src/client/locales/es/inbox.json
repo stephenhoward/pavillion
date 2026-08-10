@@ -20,6 +20,7 @@
     "opens_in_new_tab": "(se abre en una pestaña nueva)",
     "dismiss_aria_label": "Descartar: {{content}}",
     "mark_seen_aria_label": "Marcar como leída: {{content}}",
+    "mark_seen_status": "Marcada como leída",
     "unread_badge": "Sin leer"
   }
 }

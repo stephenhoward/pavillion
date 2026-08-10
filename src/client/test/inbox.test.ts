@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { flushPromises } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import { createMemoryHistory, createRouter, RouteRecordRaw } from 'vue-router';
 import sinon from 'sinon';
@@ -43,12 +44,15 @@ describe('InboxView', () => {
     ...overrides,
   });
 
-  const mountInbox = async () => {
+  // `attachTo` puts the component in the live document. Tests that read
+  // `document.activeElement` need it — a detached mount can never focus
+  // anything, so the assertion would pass or fail for the wrong reason.
+  const mountInbox = async (attachTo?: Element) => {
     const router = createRouter({ history: createMemoryHistory(), routes });
     await router.push('/');
     await router.isReady();
 
-    const wrapper = mountComponent(InboxView, router, { pinia });
+    const wrapper = mountComponent(InboxView, router, { pinia, ...(attachTo ? { attachTo } : {}) });
     await wrapper.vm.$nextTick();
     return wrapper;
   };
@@ -609,8 +613,11 @@ describe('InboxView', () => {
 
       const wrapper = await mountInbox();
 
+      // The mark-as-read name leads with the unread state: the row's unread
+      // badge is folded into this control's accessible name rather than
+      // floating in the row as a standalone phrase.
       expect(wrapper.find('[data-testid="notification-mark-seen"]').attributes('aria-label'))
-        .toBe('Mark as read: Bob reposted Town Hall');
+        .toBe('Unread. Mark as read: Bob reposted Town Hall');
       expect(wrapper.find('[data-testid="notification-dismiss"]').attributes('aria-label'))
         .toBe('Dismiss: Bob reposted Town Hall');
     });
@@ -668,6 +675,88 @@ describe('InboxView', () => {
 
       expect(wrapper.find('[data-testid="notification-mark-seen"]').exists()).toBe(false);
       expect(markSeenSpy).not.toHaveBeenCalled();
+    });
+
+    it('carries the unread state on a control, never as a free-floating phrase', async () => {
+      // `sr-only` text is only reachable when it belongs to a control's
+      // accessible name; a bare span is announced as a standalone phrase in
+      // browse mode and is skipped entirely when tabbing.
+      const store = useNotificationStore();
+      vi.spyOn(store, 'fetchNotifications').mockResolvedValue(undefined);
+      store.notifications = [makeNotification({ id: 'n1', seen: false })];
+
+      const wrapper = await mountInbox();
+
+      const row = wrapper.find('[data-testid="notification-item"]');
+      expect(row.findAll('p, a, button, span').filter((el) => el.classes('sr-only')
+        && el.element.closest('a, button') === null)).toHaveLength(0);
+      expect(row.find('[data-testid="notification-mark-seen"]').attributes('aria-label'))
+        .toContain('Unread');
+    });
+
+    it('conveys no unread state anywhere on an already-seen row', async () => {
+      const store = useNotificationStore();
+      vi.spyOn(store, 'fetchNotifications').mockResolvedValue(undefined);
+      store.notifications = [makeNotification({ id: 'n1', seen: true })];
+
+      const wrapper = await mountInbox();
+
+      const row = wrapper.find('[data-testid="notification-item"]');
+      expect(row.html()).not.toContain('Unread');
+    });
+
+    it('moves focus to the row dismiss button when the mark-as-read button unmounts', async () => {
+      // Activating mark-as-read destroys the focused element. Without a
+      // deliberate move, focus falls back to <body> and a keyboard user
+      // marking several rows read is thrown to the top of the inbox.
+      const store = useNotificationStore();
+      vi.spyOn(store, 'fetchNotifications').mockResolvedValue(undefined);
+      vi.spyOn(store, 'markSeen').mockImplementation(async (id: string) => {
+        const target = store.notifications.find((n) => n.id === id);
+        if (target) {
+          target.seen = true;
+        }
+      });
+      store.notifications = [
+        makeNotification({ id: 'n1', seen: false }),
+        makeNotification({ id: 'n2', seen: false }),
+      ];
+
+      const wrapper = await mountInbox(document.body);
+      try {
+        const row = wrapper.findAll('[data-testid="notification-item"]')[0];
+        await row.find('[data-testid="notification-mark-seen"]').trigger('click');
+        await flushPromises();
+
+        expect(row.find('[data-testid="notification-mark-seen"]').exists()).toBe(false);
+        expect(document.activeElement).toBe(row.find('[data-testid="notification-dismiss"]').element);
+      }
+      finally {
+        wrapper.unmount();
+      }
+    });
+
+    it('announces the change in the status region when a row is marked read', async () => {
+      const store = useNotificationStore();
+      vi.spyOn(store, 'fetchNotifications').mockResolvedValue(undefined);
+      vi.spyOn(store, 'markSeen').mockImplementation(async (id: string) => {
+        const target = store.notifications.find((n) => n.id === id);
+        if (target) {
+          target.seen = true;
+        }
+      });
+      store.notifications = [makeNotification({ id: 'n1', seen: false })];
+
+      const wrapper = await mountInbox();
+
+      const status = wrapper.find('[data-testid="inbox-status"]');
+      expect(status.attributes('aria-live')).toBe('polite');
+      expect(status.text()).toBe('');
+
+      await wrapper.find('[data-testid="notification-mark-seen"]').trigger('click');
+      await flushPromises();
+
+      expect(status.text()).toBe('Marked as read');
     });
 
     it('renders a dismiss button on every row, seen or unseen', async () => {

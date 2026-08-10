@@ -41,6 +41,20 @@ const CONTENT_INTERPOLATED_KEYS = [
   'dismiss_aria_label',
 ];
 
+/**
+ * Keys rendered as standalone phrases with no interpolation.
+ *
+ * `unread_badge` is composed into the mark-as-read button's accessible name
+ * and `mark_seen_status` is the only text the inbox's live region ever holds,
+ * so a locale that drops or blanks either one loses the state information
+ * silently — the row still renders, just without the state a screen-reader
+ * user needs.
+ */
+const STANDALONE_PHRASE_KEYS = [
+  'unread_badge',
+  'mark_seen_status',
+];
+
 describe('inbox locale slot grammar', () => {
   for (const [language, resource] of Object.entries(LOCALES)) {
     describe(language, () => {
@@ -59,6 +73,14 @@ describe('inbox locale slot grammar', () => {
           expect(typeof value).toBe('string');
           expect(value.trim()).not.toBe('');
           expect(value).toContain('{{content}}');
+        });
+      }
+
+      for (const key of STANDALONE_PHRASE_KEYS) {
+        it(`defines a non-empty ${key}`, () => {
+          const value = resource.notifications[key];
+          expect(typeof value).toBe('string');
+          expect(value.trim()).not.toBe('');
         });
       }
 

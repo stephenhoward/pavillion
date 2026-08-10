@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, onMounted, onUnmounted } from 'vue';
+import { computed, ref, nextTick, onMounted, onUnmounted } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import type { RouteLocationRaw } from 'vue-router';
 import EmptyLayout from '@/client/components/common/empty_state.vue';
@@ -19,6 +19,32 @@ const isLoading = computed(() => store.isLoading);
 
 const sentinelRef = ref<HTMLElement | null>(null);
 let observer: IntersectionObserver | null = null;
+
+/**
+ * Text of the visually-hidden status region. Marking a row read is otherwise
+ * a silent change for a screen reader: the sentence does not change, and the
+ * only visible difference is the row's accent border.
+ */
+const statusMessage = ref('');
+
+/**
+ * Each row's dismiss button, keyed by notification id.
+ *
+ * The mark-as-read button unmounts the moment its row is marked read, so the
+ * element holding focus disappears and focus falls back to `<body>`. The
+ * dismiss button is the same row's next focus stop and is present on every
+ * row, seen or not, which makes it the one stable place to land.
+ */
+const dismissButtons = new Map<string, HTMLButtonElement>();
+
+const setDismissRef = (id: string, el: unknown): void => {
+  if (el instanceof HTMLButtonElement) {
+    dismissButtons.set(id, el);
+  }
+  else {
+    dismissButtons.delete(id);
+  }
+};
 
 /**
  * Returns the translated sentence describing the verb's effect on the object.
@@ -78,6 +104,12 @@ const safeActorUrl = (notification: NotificationResponse): string | null => {
 /**
  * Matches the `{1}` object slot in a sentence, using the same tolerance for
  * inner whitespace as the `<i18next>` component's own slot pattern.
+ *
+ * Coupling: this is a hand-written mirror of `i18next-vue`'s internal slot
+ * regex. If that library changes its slot syntax, this pattern stops matching
+ * and `content` silently degrades to a raw `"...{1}..."` string in both
+ * buttons' accessible names — nothing here throws. `inbox.test.ts` asserts the
+ * rendered label text, so the drift surfaces there rather than in production.
  */
 const OBJECT_SLOT_PATTERN = /\{\s*1\s*\}/;
 
@@ -130,14 +162,53 @@ const loadMore = () => {
 };
 
 /**
+ * Accessible name for a row's mark-as-read control.
+ *
+ * The unread state used to render as a free-floating `sr-only` span, which a
+ * screen reader announces as a standalone phrase and a Tab-only user never
+ * reaches at all. Composing it into this button's name instead ties the state
+ * to the control that acts on it. The button renders on unread rows only, so
+ * a read row still conveys no unread state anywhere.
+ */
+const markSeenLabel = (row: NotificationRow): string => {
+  const state = t('notifications.unread_badge');
+  const action = t('notifications.mark_seen_aria_label', { content: row.content });
+  return `${state}. ${action}`;
+};
+
+/**
  * Mark a row as seen. Reached only from the row's mark-as-read button, which
  * renders on unread rows alone; the guard here and the store's own
  * already-seen short-circuit collapse a double activation into one PATCH.
+ *
+ * Activating the button destroys it, so the two follow-ups exist to keep the
+ * change perceivable: focus moves to the same row's dismiss button rather
+ * than falling back to `<body>`, and the status region announces the change
+ * that is otherwise silent.
  */
-const handleSeen = (notification: NotificationResponse) => {
-  if (!notification.seen) {
-    void store.markSeen(notification.id);
+const handleSeen = async (notification: NotificationResponse): Promise<void> => {
+  if (notification.seen) {
+    return;
   }
+
+  try {
+    await store.markSeen(notification.id);
+  }
+  catch {
+    // The store logs and leaves the row unread, so the mark-as-read button is
+    // still mounted and still holds focus. Nothing to move, nothing to say.
+    return;
+  }
+
+  // Wait for the button to actually unmount before moving focus off it.
+  await nextTick();
+  dismissButtons.get(notification.id)?.focus();
+
+  // Clear before setting: marking a second row read writes the same string,
+  // and an unchanged live region is not a mutation, so nothing is announced.
+  statusMessage.value = '';
+  await nextTick();
+  statusMessage.value = t('notifications.mark_seen_status');
 };
 
 /**
@@ -216,10 +287,6 @@ onUnmounted(() => {
         :class="{ 'notification-item--unread': !row.notification.seen }"
         data-testid="notification-item"
       >
-        <span
-          v-if="!row.notification.seen"
-          class="sr-only"
-        >{{ t('notifications.unread_badge') }}</span>
         <p class="notification-text">
           <a
             v-if="row.actorUrl"
@@ -250,12 +317,13 @@ onUnmounted(() => {
           type="button"
           class="mark-seen"
           data-testid="notification-mark-seen"
-          :aria-label="t('notifications.mark_seen_aria_label', { content: row.content })"
+          :aria-label="markSeenLabel(row)"
           @click="handleSeen(row.notification)"
         >
           <span aria-hidden="true">&check;</span>
         </button>
         <button
+          :ref="(el) => setDismissRef(row.notification.id, el)"
           type="button"
           class="dismiss-button"
           data-testid="notification-dismiss"
@@ -274,6 +342,18 @@ onUnmounted(() => {
         data-testid="scroll-sentinel"
       />
     </ul>
+
+    <!--
+      Dedicated, always-empty-until-needed status region. Marking a row read
+      changes nothing a screen reader would otherwise voice, and the control
+      that was activated no longer exists to report its own new state.
+    -->
+    <div
+      class="sr-only"
+      role="status"
+      aria-live="polite"
+      data-testid="inbox-status"
+    >{{ statusMessage }}</div>
 
     <!-- Loading indicator (persistent aria-live region) -->
     <div
@@ -344,7 +424,7 @@ div.inbox-container {
 
       &.notification-item--unread {
         background: var(--pav-color-surface-accent, var(--pav-color-surface-secondary));
-        border-inline-start: 3px solid var(--pav-color-text-link);
+        border-inline-start: 3px solid var(--pav-color-interactive-primary);
         font-weight: var(--pav-font-weight-medium);
       }
 
@@ -361,11 +441,11 @@ div.inbox-container {
       // row does not have.
       a.actor-link,
       a.object-link {
-        color: var(--pav-color-text-link);
+        color: var(--pav-color-interactive-primary);
         text-decoration: underline;
 
         &:hover {
-          color: var(--pav-color-text-link-hover);
+          color: var(--pav-color-interactive-primary-hover);
         }
       }
 
