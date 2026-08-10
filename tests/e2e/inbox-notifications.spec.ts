@@ -251,11 +251,12 @@ test.describe('Inbox notification happy path (Follow → seen → dismiss)', () 
     await expect(unreadRow).toBeVisible({ timeout: 5000 });
     await expect(unreadRow).toHaveClass(/notification-item--unread/);
 
-    // Step 4: Click the row. The handler PATCHes /notification/:id with
-    // { seen: true } and the store mutates the local row, so the unread
-    // class drops on the next tick. The server-side `seen_at` flip is
-    // independently verifiable through the API.
-    await unreadRow.click();
+    // Step 4: Click the mark-seen button. The row itself is inert; marking
+    // read is a discrete control that renders only while the row is unread.
+    // Its handler PATCHes /notification/:id with { seen: true } and the store
+    // mutates the local row, so the unread class drops on the next tick. The
+    // server-side `seen_at` flip is independently verifiable through the API.
+    await unreadRow.locator('[data-testid="notification-mark-seen"]').click();
     await expect(unreadRow).not.toHaveClass(/notification-item--unread/, { timeout: 5000 });
 
     const adminHeaders = await authHeader(page);
