@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, computed, onBeforeMount, ref } from 'vue';
+import { reactive, computed, onBeforeMount, ref, nextTick } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import { useRoute } from 'vue-router';
 import { useTabNavigation } from '@/client/composables/useTabNavigation';
@@ -10,9 +10,16 @@ import ImportSourcesSection from './import-sources/ImportSourcesSection.vue';
 import ReportsDashboard from '@/client/components/moderation/reports-dashboard.vue';
 import ReportDetail from '@/client/components/moderation/report-detail.vue';
 import CalendarService from '../../../service/calendar';
+import ModerationService from '@/client/service/moderation';
 import Config from '@/client/service/config';
 import { CalendarInfo } from '@/common/model/calendar_info';
 import HelpButton from '@/client/components/common/help-button.vue';
+
+/**
+ * Strict UUID v4 shape, kept identical to the server's path-parameter
+ * validation so client and server agree on what counts as malformed.
+ */
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const route = useRoute();
 const calendarUrlName = Array.isArray(route.params.calendar)
@@ -24,6 +31,7 @@ const { t } = useTranslation('calendars', {
 });
 
 const calendarService = new CalendarService();
+const moderationService = new ModerationService();
 
 const state = reactive({
   activeTab: 'editors',
@@ -34,10 +42,58 @@ const state = reactive({
 
 // Reports sub-navigation state
 const selectedReportId = ref<string | null>(null);
+const reportsPanelRef = ref<HTMLElement | null>(null);
 
 const calendar = computed(() => state.calendarInfo?.calendar ?? null);
 const isOwner = computed(() => state.calendarInfo?.isOwner ?? false);
 const instanceHost = computed(() => new Config().settings()?.domain);
+
+/**
+ * Opens the report named by a `?report=<uuid>` deep link, e.g. when arriving
+ * from a notification.
+ *
+ * Gates before it resolves: ownership first (reusing the same `isOwner`
+ * predicate the reports tab is gated on), then the UUID shape, and only then
+ * the fetch. An absent, malformed, unauthorised or non-existent report all
+ * fall through to the plain management view, so the deep link never discloses
+ * whether a report exists.
+ */
+const openReportFromQuery = async () => {
+  const requestedReport = route.query.report;
+
+  if (typeof requestedReport !== 'string') {
+    return;
+  }
+
+  if (!isOwner.value) {
+    return;
+  }
+
+  if (!UUID_REGEX.test(requestedReport)) {
+    return;
+  }
+
+  const calendarId = calendar.value?.id;
+  if (!calendarId) {
+    return;
+  }
+
+  try {
+    await moderationService.getReport(calendarId, requestedReport);
+  }
+  catch {
+    // Non-existent or inaccessible reports fall through silently.
+    return;
+  }
+
+  state.activeTab = 'reports';
+  selectedReportId.value = requestedReport;
+
+  // The panel is `hidden` until the tab activation renders, and a hidden
+  // element cannot take focus, so the focus move waits for that render.
+  await nextTick();
+  reportsPanelRef.value?.focus();
+};
 
 onBeforeMount(async () => {
   state.loading = true;
@@ -61,6 +117,10 @@ onBeforeMount(async () => {
   finally {
     state.loading = false;
   }
+
+  // Runs once the management view is rendering: the deep link focuses the
+  // reports panel, which does not exist in the DOM while loading.
+  await openReportFromQuery();
 });
 
 /**
@@ -227,8 +287,10 @@ const backToReports = () => {
 
         <div
           id="reports-panel"
+          ref="reportsPanelRef"
           role="tabpanel"
           aria-labelledby="reports-tab"
+          tabindex="-1"
           :aria-hidden="state.activeTab !== 'reports' || !isOwner ? 'true' : 'false'"
           :hidden="state.activeTab !== 'reports' || !isOwner"
           class="calendar-management-root__panel"
