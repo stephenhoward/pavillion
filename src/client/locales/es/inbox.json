@@ -6,20 +6,20 @@
   "flag_actor_remote": "Denunciante de {{host}}",
   "notifications": {
     "follow_suffix": "siguió tu calendario",
-    "repost_suffix": "republicó uno de tus eventos",
-    "flag_suffix": "denunció \"{{eventTitle}}\"",
-    "editor_invited_suffix": "te invitó a editar \"{{calendarName}}\"",
+    "repost_sentence": "republicó {1}",
+    "flag_sentence": "denunció {1}",
+    "editor_invited_sentence": "te invitó a editar {1}",
     "editor_revoked_suffix": "te retiró el acceso de edición a \"{{calendarName}}\"",
-    "report_escalated_sentence": "Se escaló una denuncia sobre \"{{eventTitle}}\"",
-    "report_resolved_sentence": "Se resolvió una denuncia sobre \"{{eventTitle}}\"",
+    "report_escalated_sentence": "Se escaló una denuncia sobre {1}",
+    "report_resolved_sentence": "Se resolvió una denuncia sobre {1}",
     "follow_description": "{{actorName}} siguió {{calendarName}}",
     "repost_description": "{{actorName}} republicó {{eventTitle}}",
     "empty_state": "Aún no hay notificaciones",
     "mark_all_seen": "Marcar todas como leídas",
     "loading_more": "Cargando más notificaciones...",
     "opens_in_new_tab": "(se abre en una pestaña nueva)",
-    "dismiss_aria_label": "Descartar notificación",
-    "mark_seen_aria_label": "Marcar notificación como leída",
+    "dismiss_aria_label": "Descartar: {{content}}",
+    "mark_seen_aria_label": "Marcar como leída: {{content}}",
     "unread_badge": "Sin leer"
   }
 }
