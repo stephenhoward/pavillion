@@ -2,6 +2,7 @@ import { expect, describe, it, beforeEach, afterEach, vi } from 'vitest';
 import { createMemoryHistory, createRouter, Router } from 'vue-router';
 import { RouteRecordRaw } from 'vue-router';
 import { flushPromises } from '@vue/test-utils';
+import { createPinia, setActivePinia, Pinia } from 'pinia';
 
 import { Calendar } from '@/common/model/calendar';
 import { CalendarInfo } from '@/common/model/calendar_info';
@@ -9,6 +10,7 @@ import { mountComponent } from '@/client/test/lib/vue';
 import CalendarManagementRoot from '@/client/components/logged_in/calendar-management/root.vue';
 import CalendarService from '@/client/service/calendar';
 import ModerationService from '@/client/service/moderation';
+import { useModerationStore } from '@/client/stores/moderation-store';
 
 const routes: RouteRecordRaw[] = [
   { path: '/manage/:calendar', component: {}, name: 'manage' },
@@ -18,7 +20,7 @@ const routes: RouteRecordRaw[] = [
 const mountRootComponent = async (
   calendarUrlName: string = 'my-calendar',
   query: Record<string, string> = {},
-  options: { attachTo?: Element | string } = {},
+  options: { attachTo?: Element | string, pinia?: Pinia } = {},
 ) => {
   const router: Router = createRouter({
     history: createMemoryHistory(),
@@ -38,6 +40,7 @@ const mountRootComponent = async (
       ReportDetail: true,
       ImportSourcesSection: true,
     },
+    ...(options.pinia ? { pinia: options.pinia } : {}),
     ...(options.attachTo ? { attachTo: options.attachTo } : {}),
   });
 
@@ -532,6 +535,16 @@ describe('CalendarManagementRoot', () => {
       vi.spyOn(ModerationService.prototype, 'getReport').mockRejectedValue(new Error('Report not found'));
 
     /**
+     * Rejects the way the service does for a 403: `handleApiError` maps the
+     * response's `errorName` to a `ForbiddenError` instance and throws it.
+     */
+    const mockReportForbidden = () => {
+      const forbidden = new Error('You do not have permission to perform this action');
+      forbidden.name = 'ForbiddenError';
+      return vi.spyOn(ModerationService.prototype, 'getReport').mockRejectedValue(forbidden);
+    };
+
+    /**
      * Mounts without any ?report= param and captures what the plain management
      * view looks like, so failure modes can be asserted equal to it.
      */
@@ -713,6 +726,64 @@ describe('CalendarManagementRoot', () => {
 
       expect((wrapper.vm as any).state.activeTab).toBe(baseline.activeTab);
       expect(wrapper.html()).toBe(baseline.html);
+    });
+
+    it('treats a forbidden report exactly like a non-existent one', async () => {
+      const baseline = await captureBaseline('owner');
+
+      mockCalendarRole('owner');
+      const getReport = mockReportForbidden();
+      const { wrapper } = await mountRootComponent(
+        'my-calendar',
+        { report: VALID_REPORT_ID },
+        { attachTo: document.body },
+      );
+      currentWrapper = wrapper;
+      await flushPromises();
+
+      // A report the viewer may not read must be indistinguishable from one
+      // that does not exist: same view, no selection, no focus move.
+      expect(getReport).toHaveBeenCalledWith('cal-uuid-1', VALID_REPORT_ID);
+      expect((wrapper.vm as any).selectedReportId).toBeNull();
+      expect(document.activeElement).not.toBe(wrapper.find('#reports-panel').element);
+      expect((wrapper.vm as any).state.activeTab).toBe(baseline.activeTab);
+      expect(wrapper.html()).toBe(baseline.html);
+    });
+
+    /**
+     * The deep link resolves through `ModerationService` directly rather than
+     * `useModerationStore().fetchReport`, which sets `store.error` and rethrows.
+     * Routing it through the store would leave a stale error behind for the next
+     * time the reports tab is opened, so pin that the store stays untouched.
+     */
+    const expectStoreUntouchedAfterFailedResolve = async (
+      mockFailure: () => unknown,
+    ) => {
+      const pinia = createPinia();
+      setActivePinia(pinia);
+
+      mockCalendarRole('owner');
+      mockFailure();
+
+      const { wrapper } = await mountRootComponent(
+        'my-calendar',
+        { report: VALID_REPORT_ID },
+        { pinia },
+      );
+      currentWrapper = wrapper;
+      await flushPromises();
+
+      const store = useModerationStore(pinia);
+      expect(store.error).toBeNull();
+      expect(store.currentReport).toBeNull();
+    };
+
+    it('leaves the moderation store untouched when the report does not exist', async () => {
+      await expectStoreUntouchedAfterFailedResolve(mockReportMissing);
+    });
+
+    it('leaves the moderation store untouched when the report is forbidden', async () => {
+      await expectStoreUntouchedAfterFailedResolve(mockReportForbidden);
     });
   });
 });

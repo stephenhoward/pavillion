@@ -82,17 +82,27 @@ const openReportFromQuery = async () => {
     await moderationService.getReport(calendarId, requestedReport);
   }
   catch {
-    // Non-existent or inaccessible reports fall through silently.
+    // Non-existent and inaccessible reports both fall through to the plain
+    // management view. Silent in the UI: no banner, no toast, nothing that
+    // distinguishes the two. The service layer still logs the failure to the
+    // console, which other callers rely on.
     return;
   }
 
   state.activeTab = 'reports';
   selectedReportId.value = requestedReport;
 
-  // The panel is `hidden` until the tab activation renders, and a hidden
-  // element cannot take focus, so the focus move waits for that render.
-  await nextTick();
-  reportsPanelRef.value?.focus();
+  try {
+    // The panel is `hidden` until the tab activation renders, and a hidden
+    // element cannot take focus, so the focus move waits for that render.
+    await nextTick();
+    reportsPanelRef.value?.focus();
+  }
+  catch {
+    // Focus is best-effort. This flush is the one that first renders
+    // ReportDetail, so a throw from any job in it must not escape into the
+    // caller and turn a rendered report into an error state.
+  }
 };
 
 onBeforeMount(async () => {
