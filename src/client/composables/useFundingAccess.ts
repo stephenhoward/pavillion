@@ -7,10 +7,22 @@ import type { FundingGatedFeature, FundingStatus } from '@/common/model/funding-
 /**
  * What the client knows about one feature's gate on one calendar.
  *
- * Three values, not two, because the server has three answers: the gate is
- * open, the gate is closed, or the instance funding state could not be read.
- * The third is `unknown`, and it must render as neither of the others — an
- * operator whose database hiccuped is not shown an upsell.
+ * Three values, not two, because there are three things we can be in: the
+ * server said the gate is open, the server said it is not, or we could not
+ * read the server at all. The third is `unknown`, and it must render as
+ * neither of the others — an operator whose database hiccuped is not shown an
+ * upsell.
+ *
+ * `denied` carries less than its name suggests. The wire only has two values,
+ * and `false` there means "no source produced an allow", not "determinately
+ * unfunded": `FundingService.readAccessSource` on the server catches an
+ * unreadable grants table or plan lookup, logs it, and contributes `false`
+ * (only the instance-settings read throws). So a calendar genuinely funded by
+ * a grant, on an instance whose grant table is momentarily unreadable, arrives
+ * here as `denied`. That server-side tradeoff is deliberate — an unreadable
+ * source can only ever cost access it could not justify — but it means the
+ * client cannot recover the distinction, and `denied` is the weaker claim
+ * "nothing we can see grants this".
  */
 export type FundingAccessState = 'unknown' | 'granted' | 'denied';
 
@@ -26,6 +38,8 @@ export interface UseFundingAccessReturn {
   accessState: (feature: FundingGatedFeature) => FundingAccessState;
   /** True only when the gate is known to be open. */
   hasAccess: (feature: FundingGatedFeature) => boolean;
+  /** True only when the gate is known to be closed. The upsell predicate. */
+  isDenied: (feature: FundingGatedFeature) => boolean;
   /** Load the summary unless it is already cached. */
   ensureLoaded: () => Promise<void>;
   /** Load the summary, cached or not. */
@@ -33,6 +47,21 @@ export interface UseFundingAccessReturn {
   /** Fold a caught error into the cache if it was a funding refusal. */
   recordAccessDenial: (error: unknown) => boolean;
 }
+
+/**
+ * Loads currently in flight, keyed by calendar id.
+ *
+ * Module scope on purpose. The point of the guarantee on `ensureLoaded` is
+ * that two components each holding their own `useFundingAccess(id)` issue one
+ * request between them, so a ref inside the composable is the wrong lifetime —
+ * it dedupes an instance against itself, which nothing was doing. The store is
+ * the other candidate and is worse: it documents itself as a data cache
+ * holding only what is on the wire, and a pending promise is neither.
+ *
+ * Holds no user data, and each entry deletes itself when its load settles, so
+ * there is nothing here for logout to clear.
+ */
+const inFlightLoads = new Map<string, Promise<void>>();
 
 /**
  * Composable exposing a calendar's funding-gate answers to components.
@@ -45,9 +74,14 @@ export interface UseFundingAccessReturn {
  * `status === 'funded'` to decide what a calendar may do is a bug even on the
  * days it happens to give the same answer.
  *
- * Data flows Components -> useFundingAccess -> FundingService -> fundingStore:
- * the composable owns loading state and gate interpretation, the service owns
- * the request and the cache write, and the store holds nothing else.
+ * Reads and writes take different routes, as they do in useFeedFollows and
+ * useFeedEvents. Reads (`status`, `accessState`, `hasAccess`, `isDenied`) come
+ * straight off the fundingStore cache — no request, no service. Writes go
+ * through FundingService, which owns the request and is the only thing that
+ * writes an authoritative summary into the cache; the one exception is
+ * `recordAccessDenial`, which folds a 402 the component already caught into
+ * the cache without a round trip. The composable itself owns only loading
+ * state and the interpretation of a cached decision as a gate answer.
  *
  * @param calendarId - The calendar whose funding is being asked about
  * @returns Funding-gate state and the operations that change it
@@ -77,11 +111,27 @@ export function useFundingAccess(calendarId: string): UseFundingAccessReturn {
    * Whether the calendar may use a feature.
    *
    * True only for a known-open gate. This is not the inverse of "show the
-   * upsell": a UI that offers funding must test for `denied` explicitly, or an
-   * unreadable funding state would sell to someone who may already have access.
+   * upsell" — `!hasAccess` is also true while access is unknown. Use
+   * `isDenied` for that branch.
    */
   const hasAccess = (feature: FundingGatedFeature): boolean => {
     return accessState(feature) === 'granted';
+  };
+
+  /**
+   * Whether the calendar is known to be shut out of a feature.
+   *
+   * The predicate an upsell branches on. It exists because `!hasAccess()` is
+   * the shorter and more obvious way to write that and is wrong: `hasAccess`
+   * folds `unknown` in with `denied`, so negating it offers funding during our
+   * own outage to an operator who may already have paid. Only `denied` is a
+   * reason to sell anything, and only this returns true for it.
+   *
+   * Read `accessState` directly for any third branch — a "we cannot tell right
+   * now" notice, say. These two predicates are deliberately not exhaustive.
+   */
+  const isDenied = (feature: FundingGatedFeature): boolean => {
+    return accessState(feature) === 'denied';
   };
 
   /**
@@ -92,17 +142,30 @@ export function useFundingAccess(calendarId: string): UseFundingAccessReturn {
    * if something was. Rejecting here would push each caller into an error
    * branch whose only correct behaviour is to change nothing.
    */
-  const load = async (): Promise<void> => {
-    if (isLoading.value) {
-      return;
-    }
+  const startLoad = (): Promise<void> => {
+    const request = fundingService.loadFundingSummary(calendarId)
+      .then(() => undefined)
+      .catch((error: unknown) => {
+        console.error('Error loading funding access:', error);
+      })
+      .finally(() => {
+        inFlightLoads.delete(calendarId);
+      });
 
+    inFlightLoads.set(calendarId, request);
+    return request;
+  };
+
+  /**
+   * Await this calendar's load, starting one only if none is running.
+   *
+   * A caller that arrives mid-flight joins the request already out rather than
+   * issuing its own, and reports `isLoading` for as long as it waits.
+   */
+  const load = async (): Promise<void> => {
     isLoading.value = true;
     try {
-      await fundingService.loadFundingSummary(calendarId);
-    }
-    catch (error) {
-      console.error('Error loading funding access:', error);
+      await (inFlightLoads.get(calendarId) ?? startLoad());
     }
     finally {
       isLoading.value = false;
@@ -111,7 +174,11 @@ export function useFundingAccess(calendarId: string): UseFundingAccessReturn {
 
   /**
    * Load the calendar's funding summary unless it is already cached.
-   * Safe to call from every consumer's mount; only the first one requests.
+   *
+   * Safe to call from every consumer's mount; only one request goes out
+   * however many consumers call it, whether they arrive after the first load
+   * settled (served from the cache) or during it (joined to the request in
+   * flight).
    */
   const ensureLoaded = async (): Promise<void> => {
     if (fundingStore.statusFor(calendarId) !== null) {
@@ -123,6 +190,10 @@ export function useFundingAccess(calendarId: string): UseFundingAccessReturn {
   /**
    * Re-read the calendar's funding summary, cached or not. Call after anything
    * that could have changed it — a completed checkout, a cancelled plan.
+   *
+   * If a load is already in flight this joins it instead of racing a second
+   * one, so a refresh triggered while the initial mount is still loading
+   * resolves with that load's answer.
    */
   const refresh = async (): Promise<void> => {
     await load();
@@ -148,5 +219,5 @@ export function useFundingAccess(calendarId: string): UseFundingAccessReturn {
     return true;
   };
 
-  return { status, isLoading, accessState, hasAccess, ensureLoaded, refresh, recordAccessDenial };
+  return { status, isLoading, accessState, hasAccess, isDenied, ensureLoaded, refresh, recordAccessDenial };
 }

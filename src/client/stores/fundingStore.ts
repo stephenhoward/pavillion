@@ -9,8 +9,14 @@ import type { FundingGatedFeature, FundingStatus } from '@/common/model/funding-
  * 402 refusal names one feature and says nothing about the status, while the
  * funding endpoint answers all of it at once. An absent feature key means "not
  * asked yet", which is a different thing from a `false` decision — the
- * distinction is what keeps an unreadable instance funding state from being
+ * distinction is what keeps a funding state we could not read from being
  * displayed as an unfunded one.
+ *
+ * A cached `false` is the narrower claim "no source produced an allow". The
+ * server contributes `false` for a source it could not read as well as for one
+ * that answered no (see FundingService.readAccessSource), so a grant-funded
+ * calendar on an instance with an unreadable grant table lands here as `false`
+ * too. Nothing on the wire separates the two.
  */
 export interface CalendarFundingCache {
   /** How the calendar is funded. Display vocabulary, null until loaded. */
@@ -31,6 +37,62 @@ interface FundingState {
 }
 
 /**
+ * Build a record with no prototype, for the objects this cache keys by a
+ * string it did not choose.
+ *
+ * A `{}` inherits from Object.prototype, and neither reading nor writing stops
+ * at own properties: `calendars['toString']` resolves to a function, and
+ * `calendars['__proto__'] = entry` runs the inherited setter, reparenting the
+ * record instead of adding a key. Dropping the prototype closes both, at
+ * construction, rather than by a guard at each site that has to be remembered
+ * when the next one is added.
+ *
+ * Nothing here could pollute Object.prototype. What is at stake is
+ * `featureAccess` — and `accessState` above it — being *total* over the ids
+ * and keys it accepts: the tri-state safety argument assumes it always returns
+ * one of its three answers rather than throwing on the way.
+ *
+ * @param source - Entries to copy in, if any
+ * @returns The same shape, with a null prototype
+ */
+function prototypeFreeRecord<T extends object>(source?: T): T {
+  const record = Object.create(null) as T;
+  return source ? Object.assign(record, source) : record;
+}
+
+/**
+ * Look up one calendar's cache entry, by own property only.
+ *
+ * A null prototype is not quite enough on its own. Vue's reactive `get` trap
+ * shadows one key unconditionally — `proxy['hasOwnProperty']` returns Vue's
+ * instrumented function whatever the target holds, before Reflect.get is
+ * reached — so a calendar id of `hasOwnProperty` reads back as a non-nullish
+ * value with no `features` on it. The two tests here answer null instead: an
+ * own key, holding an object. A calendar cached under that one id is therefore
+ * unreadable rather than wrong, which is the safe direction — unknown, never
+ * denied — and no calendar id is ever that string.
+ *
+ * The read comes first and is discarded on the guarded path. The `get` trap is
+ * what registers the reactive dependency, and `Object.hasOwn` goes through no
+ * trap Vue defines, so testing before reading would leave a component that
+ * asked about an uncached calendar with nothing to re-render on.
+ *
+ * @param calendars - The keyed cache from store state
+ * @param calendarId - The calendar being asked about
+ * @returns The cached entry, or null if the cache has no own entry for it
+ */
+function cacheEntry(
+  calendars: Record<string, CalendarFundingCache>,
+  calendarId: string,
+): CalendarFundingCache | null {
+  const entry: unknown = calendars[calendarId];
+  if (!Object.hasOwn(calendars, calendarId) || typeof entry !== 'object' || entry === null) {
+    return null;
+  }
+  return entry as CalendarFundingCache;
+}
+
+/**
  * Pinia store caching what the client knows about calendar funding.
  *
  * Data cache only: it holds no loading state, performs no requests, and is
@@ -43,7 +105,7 @@ interface FundingState {
  */
 export const useFundingStore = defineStore('funding', {
   state: (): FundingState => ({
-    calendars: {},
+    calendars: prototypeFreeRecord<Record<string, CalendarFundingCache>>(),
   }),
 
   getters: {
@@ -51,7 +113,7 @@ export const useFundingStore = defineStore('funding', {
      * Everything cached for a calendar, or null if it has never been loaded.
      */
     summaryFor: (state) => (calendarId: string): CalendarFundingCache | null => {
-      return state.calendars[calendarId] ?? null;
+      return cacheEntry(state.calendars, calendarId);
     },
 
     /**
@@ -61,15 +123,16 @@ export const useFundingStore = defineStore('funding', {
      * never "may this calendar do X" — that is featureAccess.
      */
     statusFor: (state) => (calendarId: string): FundingStatus | null => {
-      return state.calendars[calendarId]?.status ?? null;
+      return cacheEntry(state.calendars, calendarId)?.status ?? null;
     },
 
     /**
-     * The gate decision for one feature on one calendar: true (open), false
-     * (closed) or null (not known — never to be shown as closed).
+     * The gate decision for one feature on one calendar: true (some source
+     * allowed it), false (none did) or null (we have not been told — never to
+     * be shown as closed).
      */
     featureAccess: (state) => (calendarId: string, feature: FundingGatedFeature): boolean | null => {
-      return state.calendars[calendarId]?.features[feature] ?? null;
+      return cacheEntry(state.calendars, calendarId)?.features?.[feature] ?? null;
     },
   },
 
@@ -89,7 +152,7 @@ export const useFundingStore = defineStore('funding', {
         status: summary.status,
         currentPeriodEnd: summary.currentPeriodEnd,
         accessExpiresAt: summary.accessExpiresAt,
-        features: { ...summary.features },
+        features: prototypeFreeRecord({ ...summary.features }),
       };
     },
 
@@ -105,7 +168,7 @@ export const useFundingStore = defineStore('funding', {
      * @param {FundingGatedFeature} feature - The feature named by the refusal
      */
     denyFeature(calendarId: string, feature: FundingGatedFeature) {
-      const cached = this.calendars[calendarId];
+      const cached = cacheEntry(this.calendars, calendarId);
       if (cached) {
         cached.features[feature] = false;
         return;
@@ -115,7 +178,7 @@ export const useFundingStore = defineStore('funding', {
         status: null,
         currentPeriodEnd: null,
         accessExpiresAt: null,
-        features: { [feature]: false },
+        features: prototypeFreeRecord({ [feature]: false }),
       };
     },
   },

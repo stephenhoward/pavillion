@@ -72,6 +72,50 @@ describe('useFundingAccess', () => {
       expect(second.hasAccess('widget_embedding')).toBe(true);
     });
 
+    it('issues one request when two consumers load concurrently', async () => {
+      // The deduplication guarantee, as two components mounting on the same
+      // tick would exercise it: neither awaits before the other starts, so
+      // both see an empty cache. Awaiting the first load in between would only
+      // demonstrate cache reuse, which is a different mechanism.
+      vi.mocked(axios.get).mockResolvedValue(summaryResponse(true));
+
+      const first = useFundingAccess(CALENDAR_ID);
+      const second = useFundingAccess(CALENDAR_ID);
+      await Promise.all([first.ensureLoaded(), second.ensureLoaded()]);
+
+      expect(axios.get).toHaveBeenCalledTimes(1);
+      expect(first.hasAccess('widget_embedding')).toBe(true);
+      expect(second.hasAccess('widget_embedding')).toBe(true);
+    });
+
+    it('reports loading on the consumer that joined a request already in flight', async () => {
+      vi.mocked(axios.get).mockResolvedValue(summaryResponse(true));
+
+      const first = useFundingAccess(CALENDAR_ID);
+      const firstPending = first.ensureLoaded();
+      const second = useFundingAccess(CALENDAR_ID);
+      const secondPending = second.ensureLoaded();
+
+      expect(second.isLoading.value).toBe(true);
+      await Promise.all([firstPending, secondPending]);
+
+      expect(second.isLoading.value).toBe(false);
+    });
+
+    it('requests again once an earlier load has settled and left nothing cached', async () => {
+      // The in-flight entry must not outlive its request, or a calendar whose
+      // first load failed could never be loaded again.
+      vi.mocked(axios.get).mockRejectedValue(apiError(500, { error: 'Internal server error' }));
+      await useFundingAccess(CALENDAR_ID).ensureLoaded();
+
+      vi.mocked(axios.get).mockResolvedValue(summaryResponse(true));
+      const second = useFundingAccess(CALENDAR_ID);
+      await second.ensureLoaded();
+
+      expect(axios.get).toHaveBeenCalledTimes(2);
+      expect(second.hasAccess('widget_embedding')).toBe(true);
+    });
+
     it('does not report a loading state once the load settles', async () => {
       vi.mocked(axios.get).mockResolvedValue(summaryResponse(true));
 
@@ -156,6 +200,57 @@ describe('useFundingAccess', () => {
     });
   });
 
+  describe('isDenied', () => {
+    it('is false while access is unknown, where !hasAccess would be true', async () => {
+      // The reason this predicate exists. `!hasAccess` folds unknown in with
+      // denied, so an upsell branching on it would offer funding during our
+      // own outage to an operator who may already have paid.
+      vi.mocked(axios.get).mockRejectedValue(apiError(500, { error: 'Internal server error' }));
+
+      const funding = useFundingAccess(CALENDAR_ID);
+      await funding.ensureLoaded();
+
+      expect(funding.accessState('widget_embedding')).toBe('unknown');
+      expect(funding.hasAccess('widget_embedding')).toBe(false);
+      expect(funding.isDenied('widget_embedding')).toBe(false);
+    });
+
+    it('is false before anything has been loaded at all', () => {
+      const funding = useFundingAccess(CALENDAR_ID);
+
+      expect(funding.isDenied('widget_embedding')).toBe(false);
+    });
+
+    it('is true only once the server has said the gate is closed', async () => {
+      vi.mocked(axios.get).mockResolvedValue(summaryResponse(false, 'unfunded'));
+
+      const funding = useFundingAccess(CALENDAR_ID);
+      await funding.ensureLoaded();
+
+      expect(funding.isDenied('widget_embedding')).toBe(true);
+    });
+
+    it('is false when the gate is open, whatever the display label reads', async () => {
+      vi.mocked(axios.get).mockResolvedValue(summaryResponse(true, 'unfunded'));
+
+      const funding = useFundingAccess(CALENDAR_ID);
+      await funding.ensureLoaded();
+
+      expect(funding.isDenied('widget_embedding')).toBe(false);
+    });
+
+    it('becomes true when a 402 refusal is recorded', () => {
+      const funding = useFundingAccess(CALENDAR_ID);
+
+      funding.recordAccessDenial(apiError(402, {
+        errorName: 'SubscriptionRequiredError',
+        feature: 'widget_embedding',
+      }));
+
+      expect(funding.isDenied('widget_embedding')).toBe(true);
+    });
+  });
+
   describe('recordAccessDenial', () => {
     it('flips the feature to denied on a 402 SubscriptionRequiredError', async () => {
       vi.mocked(axios.get).mockResolvedValue(summaryResponse(true));
@@ -192,6 +287,34 @@ describe('useFundingAccess', () => {
 
       expect(recognised).toBe(false);
       expect(funding.accessState('widget_embedding')).toBe('granted');
+    });
+
+    it('does not recognise a 5xx that names a feature, and leaves a granted feature granted', async () => {
+      // A 500 body carrying `feature` is the case that separates "recognises a
+      // funding refusal" from "recognises anything mentioning a feature". An
+      // operator on an instance that never enabled funding must not lose a
+      // granted feature because our database hiccuped mid-sentence.
+      vi.mocked(axios.get).mockResolvedValue(summaryResponse(true));
+      const funding = useFundingAccess(CALENDAR_ID);
+      await funding.ensureLoaded();
+
+      const recognised = funding.recordAccessDenial(apiError(500, { feature: 'widget_embedding' }));
+
+      expect(recognised).toBe(false);
+      expect(funding.accessState('widget_embedding')).toBe('granted');
+    });
+
+    it('does not recognise a 503 carrying the funding errorName and a feature', () => {
+      // Everything a real refusal carries except the 402.
+      const funding = useFundingAccess(CALENDAR_ID);
+
+      expect(funding.recordAccessDenial(apiError(503, {
+        error: 'subscription_required',
+        errorName: 'SubscriptionRequiredError',
+        feature: 'widget_embedding',
+      }))).toBe(false);
+      expect(funding.accessState('widget_embedding')).toBe('unknown');
+      expect(funding.isDenied('widget_embedding')).toBe(false);
     });
 
     it('does not recognise an unrelated error at another status', () => {

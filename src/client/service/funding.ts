@@ -110,6 +110,13 @@ export type AccountSearchResult = {
  * Date-valued field arrives here as an ISO-8601 string. Every other field
  * keeps the server's type, and a field added on the server appears here
  * without anything being retyped by hand.
+ *
+ * Only as far as the shapes it has been asked to carry, though: the Date arm
+ * matches `Date | null` exactly, so a non-nullable `Date` is widened to
+ * `string | null` and a `Date | undefined` is not converted at all, and a
+ * field typed as a model class passes through claiming a class the JSON does
+ * not carry. Widen the mapping when the summary grows a field of a shape it
+ * does not handle — do not assume it already did.
  */
 type Wire<T> = { [K in keyof T]: T[K] extends Date | null ? string | null : T[K] };
 
@@ -138,12 +145,23 @@ export type CalendarFundingSummaryResponse = Wire<CalendarFundingSummary>;
  * an unreadable instance funding state is *indeterminate*, not "unfunded", and
  * must never be rendered as a closed gate.
  *
+ * The membership test is `Object.hasOwn` on a string, not `feature in
+ * FUNDING_GATED_FEATURES`. `in` walks the prototype chain, so a response
+ * naming `toString` or `constructor` would pass as a registered feature; it
+ * also coerces its left operand, so a non-string — an array, or an object with
+ * a `toString` — would pass and be handed back behind the return-type cast,
+ * making that type a runtime lie. Both then reach the store as a feature key:
+ * one writes an entry a Vue template throws on interpolating, the other
+ * reports a refusal as recorded while writing nothing. No first-party emitter
+ * can produce either today, but this function's contract is to be handed an
+ * error caught from *any* request, which is the case it exists to reject.
+ *
  * @param error - An error caught from any axios call
  * @returns The denied feature, or null when this is not a funding denial
  */
 export function fundingGateDenial(error: unknown): FundingGatedFeature | null {
   const response = (error as {
-    response?: { status?: number; data?: { errorName?: string; feature?: string } };
+    response?: { status?: number; data?: { errorName?: string; feature?: unknown } };
   } | null)?.response;
 
   if (response?.status !== 402 || response.data?.errorName !== 'SubscriptionRequiredError') {
@@ -151,7 +169,9 @@ export function fundingGateDenial(error: unknown): FundingGatedFeature | null {
   }
 
   const feature = response.data?.feature;
-  return feature && feature in FUNDING_GATED_FEATURES ? feature as FundingGatedFeature : null;
+  return typeof feature === 'string' && Object.hasOwn(FUNDING_GATED_FEATURES, feature)
+    ? feature as FundingGatedFeature
+    : null;
 }
 
 /**

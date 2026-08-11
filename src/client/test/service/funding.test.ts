@@ -431,6 +431,29 @@ describe('fundingGateDenial', () => {
     expect(fundingGateDenial(error)).toBeNull();
   });
 
+  // The combinations the DEC-001 property is actually about. Testing "402 with
+  // the wrong errorName" and "5xx with neither marker" separately leaves the
+  // guard free to key off either half alone: a 500 that merely carries a
+  // `feature` field, or one carrying the refusal marker, would then close a
+  // gate. An operator whose instance never enabled funding must not be sold an
+  // upsell because our database hiccuped mid-sentence.
+  it.each([
+    ['a 500 naming a feature', 500, { feature: 'widget_embedding' }],
+    ['a 503 naming a feature', 503, { feature: 'widget_embedding' }],
+    [
+      'a 500 carrying the refusal marker and a feature',
+      500,
+      { error: 'subscription_required', errorName: 'SubscriptionRequiredError', feature: 'widget_embedding' },
+    ],
+    [
+      'a 503 carrying the refusal marker and a feature',
+      503,
+      { error: 'subscription_required', errorName: 'SubscriptionRequiredError', feature: 'widget_embedding' },
+    ],
+  ])('should not read %s as a refusal', (_label, status, data) => {
+    expect(fundingGateDenial({ response: { status, data } })).toBeNull();
+  });
+
   it('should not read a 402 without the funding errorName as a refusal', () => {
     const error = { response: { status: 402, data: { errorName: 'SomeOtherError', feature: 'widget_embedding' } } };
 
@@ -449,6 +472,38 @@ describe('fundingGateDenial', () => {
     expect(fundingGateDenial(new Error('Network Error'))).toBeNull();
     expect(fundingGateDenial(null)).toBeNull();
     expect(fundingGateDenial(undefined)).toBeNull();
+  });
+
+  // Membership in the registry has to mean an own key, not anything the
+  // prototype chain answers to. Every name below is `in FUNDING_GATED_FEATURES`
+  // and none of them is a funding-gated feature; letting one through would put
+  // it in the store as a feature key, where a Vue template interpolating the
+  // features map throws on it.
+  it.each(['__proto__', 'constructor', 'toString', 'hasOwnProperty', 'valueOf'])(
+    'should not read a refusal naming the inherited property %s',
+    (feature) => {
+      const error = {
+        response: { status: 402, data: { errorName: 'SubscriptionRequiredError', feature } },
+      };
+
+      expect(fundingGateDenial(error)).toBeNull();
+    },
+  );
+
+  // `in` coerces its left operand, so a non-string that stringifies to a
+  // registered key passes the membership test and is handed back unchanged —
+  // the declared FundingGatedFeature return type would be a runtime lie.
+  it.each([
+    ['an array', ['widget_embedding']],
+    ['an object with a matching toString', { toString: () => 'widget_embedding' }],
+    ['a number', 0],
+    ['a boolean', true],
+  ])('should not read a refusal whose feature is %s rather than a string', (_label, feature) => {
+    const error = {
+      response: { status: 402, data: { errorName: 'SubscriptionRequiredError', feature } },
+    };
+
+    expect(fundingGateDenial(error)).toBeNull();
   });
 });
 

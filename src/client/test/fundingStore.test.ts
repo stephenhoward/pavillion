@@ -52,7 +52,14 @@ describe('FundingStore', () => {
     });
 
     it('replaces a previously cached entry rather than merging into it', () => {
-      store.setSummary('cal-1', fundedSummary);
+      // The cached entry carries a feature key the next response does not
+      // mention — a client that outlived a change to the registry. Restating
+      // every key in the second summary would make merge and replace agree,
+      // and the assertion would pass either way.
+      store.setSummary('cal-1', {
+        ...fundedSummary,
+        features: { widget_embedding: true, retired_feature: true },
+      } as unknown as CalendarFundingSummaryResponse);
 
       store.setSummary('cal-1', {
         status: 'unfunded',
@@ -63,7 +70,9 @@ describe('FundingStore', () => {
 
       expect(store.statusFor('cal-1')).toBe('unfunded');
       expect(store.summaryFor('cal-1')?.currentPeriodEnd).toBeNull();
+      expect(store.summaryFor('cal-1')?.accessExpiresAt).toBeNull();
       expect(store.featureAccess('cal-1', 'widget_embedding')).toBe(false);
+      expect(store.summaryFor('cal-1')?.features).toEqual({ widget_embedding: false });
     });
   });
 
@@ -85,6 +94,53 @@ describe('FundingStore', () => {
 
       expect(store.featureAccess('cal-1', 'widget_embedding')).toBe(false);
       expect(store.statusFor('cal-1')).toBeNull();
+    });
+  });
+
+  describe('calendar ids that name an inherited property', () => {
+    // The cache is keyed by a string it does not choose. A plain object would
+    // resolve these through Object.prototype to a function — not nullish, so
+    // `?.` does not short-circuit — and the feature lookup behind it would
+    // throw, making featureAccess (and accessState above it) partial over its
+    // inputs. The whole tri-state safety argument assumes it is total.
+    const inheritedNames = ['__proto__', 'constructor', 'toString', 'hasOwnProperty', 'valueOf'];
+
+    // `hasOwnProperty` cannot round-trip: Vue's reactive get trap returns its
+    // own instrumented function for that key before the target is consulted,
+    // so a value stored under it is unreadable. Unknown is the safe answer, and
+    // no calendar id is ever that string — but the getters still have to reach
+    // it without throwing, which the case above covers.
+    const storableNames = inheritedNames.filter((name) => name !== 'hasOwnProperty');
+
+    it.each(inheritedNames)('answers null rather than throwing for %s', (calendarId) => {
+      expect(store.summaryFor(calendarId)).toBeNull();
+      expect(store.statusFor(calendarId)).toBeNull();
+      expect(store.featureAccess(calendarId, 'widget_embedding')).toBeNull();
+    });
+
+    it.each(inheritedNames)('still answers, rather than throwing, after a write under %s', (calendarId) => {
+      store.setSummary(calendarId, fundedSummary);
+      store.denyFeature(calendarId, 'widget_embedding');
+
+      expect(store.featureAccess(calendarId, 'widget_embedding')).not.toBeUndefined();
+      expect(store.statusFor('cal-1')).toBeNull();
+    });
+
+    it.each(storableNames)('caches and reads back a summary stored under %s', (calendarId) => {
+      store.setSummary(calendarId, fundedSummary);
+
+      expect(store.statusFor(calendarId)).toBe('funded');
+      expect(store.featureAccess(calendarId, 'widget_embedding')).toBe(true);
+      expect(store.statusFor('cal-1')).toBeNull();
+    });
+
+    it.each(storableNames)('records a denial under %s without disturbing other calendars', (calendarId) => {
+      store.setSummary('cal-1', fundedSummary);
+
+      store.denyFeature(calendarId, 'widget_embedding');
+
+      expect(store.featureAccess(calendarId, 'widget_embedding')).toBe(false);
+      expect(store.featureAccess('cal-1', 'widget_embedding')).toBe(true);
     });
   });
 
