@@ -10,6 +10,7 @@ import {
   FundingPlanNotFoundError,
   CalendarFundingPlanNotFoundError,
   DuplicateCalendarFundingPlanError,
+  FundingAccessIndeterminateError,
 } from '@/common/exceptions/funding';
 import { CalendarNotFoundError } from '@/common/exceptions/calendar';
 import { ValidationError } from '@/common/exceptions/base';
@@ -363,8 +364,24 @@ describe('CalendarFundingPlanRoutes API', () => {
       }, routes['getFundingStatus'].bind(routes));
     };
 
+    /**
+     * Resolve the summary the handler will project, with the given status.
+     *
+     * @param status - Unified single-calendar funding status
+     * @param overrides - Extra summary fields to merge in
+     */
+    const resolveSummary = (status: string, overrides: Record<string, unknown> = {}) => {
+      mockInterface.getCalendarFundingSummary.resolves({
+        status,
+        currentPeriodEnd: null,
+        accessExpiresAt: null,
+        features: { widget_embedding: false },
+        ...overrides,
+      } as any);
+    };
+
     it('should return 200 with funding status for calendar owner', async () => {
-      mockInterface.getFundingStatusForCalendar.resolves('funded' as any);
+      resolveSummary('funded');
 
       bindGetFundingStatus();
 
@@ -373,11 +390,85 @@ describe('CalendarFundingPlanRoutes API', () => {
         .expect(200);
 
       expect(response.body.status).toBe('funded');
-      // Verify accountId is passed to getFundingStatusForCalendar
-      expect(mockInterface.getFundingStatusForCalendar.calledWith(
+      // Verify accountId is passed to getCalendarFundingSummary
+      expect(mockInterface.getCalendarFundingSummary.calledWith(
         'test-account-id',
         'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d',
       )).toBe(true);
+    });
+
+    it('should return the plan dates and per-feature gate decisions', async () => {
+      const periodEnd = new Date('2026-09-01T00:00:00.000Z');
+      const accessExpiry = new Date('2026-09-08T00:00:00.000Z');
+      resolveSummary('funded', {
+        currentPeriodEnd: periodEnd,
+        accessExpiresAt: accessExpiry,
+        features: { widget_embedding: true },
+      });
+
+      bindGetFundingStatus();
+
+      const response = await request(testApp(router))
+        .get('/handler/a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d/funding')
+        .expect(200);
+
+      expect(response.body.currentPeriodEnd).toBe(periodEnd.toISOString());
+      expect(response.body.accessExpiresAt).toBe(accessExpiry.toISOString());
+      expect(response.body.features).toEqual({ widget_embedding: true });
+    });
+
+    /**
+     * The response is an explicit field allowlist, not a serialised model.
+     *
+     * FundingPlan.toObject() carries accountId, and the entity behind it holds
+     * the Stripe customer and subscription ids. Handing any of those to a
+     * caller would disclose who owns the plan and which Stripe objects back
+     * it — for no benefit to the settings screen that reads this route.
+     *
+     * The test drives the point by resolving a summary deliberately polluted
+     * with exactly those fields: a handler that spread the service's answer
+     * into the response, or that ever went back to serialising the plan,
+     * fails here. Asserting the key set rather than a handful of absences
+     * means a field added to the service in future is caught too.
+     */
+    it('should never disclose account or Stripe identifiers, whatever the service returns', async () => {
+      resolveSummary('funded', {
+        accountId: 'owner-account-id',
+        customerId: 'cus_leak',
+        subscriptionId: 'sub_leak',
+        providerCustomerId: 'cus_leak',
+        providerSubscriptionId: 'sub_leak',
+        providerConfigId: 'provider-config-id',
+      });
+
+      bindGetFundingStatus();
+
+      const response = await request(testApp(router))
+        .get('/handler/a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d/funding')
+        .expect(200);
+
+      expect(Object.keys(response.body).sort()).toEqual(
+        ['accessExpiresAt', 'currentPeriodEnd', 'features', 'status'],
+      );
+
+      const serialised = JSON.stringify(response.body);
+      for (const secret of ['owner-account-id', 'cus_leak', 'sub_leak', 'provider-config-id']) {
+        expect(serialised).not.toContain(secret);
+      }
+    });
+
+    it('should report only registered funding-gated features', async () => {
+      resolveSummary('funded', {
+        features: { widget_embedding: true, unregistered_feature: true },
+      });
+
+      bindGetFundingStatus();
+
+      const response = await request(testApp(router))
+        .get('/handler/a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d/funding')
+        .expect(200);
+
+      expect(response.body.features).toEqual({ widget_embedding: true });
     });
 
     it('should return 401 when not authenticated', async () => {
@@ -388,8 +479,15 @@ describe('CalendarFundingPlanRoutes API', () => {
         .expect(401);
     });
 
+    /**
+     * A calendar editor who is not the owner is refused here, not served a
+     * redacted body: the service verifies ownership through
+     * CalendarInterface.isCalendarOwnerById, which matches the membership role
+     * 'owner' only (calendar.ts isCalendarOwnerById). Nothing about the
+     * owner's funding — not even its existence — reaches a non-owner.
+     */
     it('should return 400 when user does not own the calendar (ValidationError from service)', async () => {
-      mockInterface.getFundingStatusForCalendar.rejects(
+      mockInterface.getCalendarFundingSummary.rejects(
         new ValidationError('Account does not own calendar'),
       );
 
@@ -413,7 +511,7 @@ describe('CalendarFundingPlanRoutes API', () => {
     });
 
     it('should return 404 when calendar does not exist', async () => {
-      mockInterface.getFundingStatusForCalendar.rejects(
+      mockInterface.getCalendarFundingSummary.rejects(
         new CalendarNotFoundError('a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d'),
       );
 
@@ -426,8 +524,8 @@ describe('CalendarFundingPlanRoutes API', () => {
       expect(response.body.errorName).toBe('CalendarNotFoundError');
     });
 
-    it('should return admin-exempt status', async () => {
-      mockInterface.getFundingStatusForCalendar.resolves('admin-exempt' as any);
+    it('should return admin_exempt status', async () => {
+      resolveSummary('admin_exempt');
 
       bindGetFundingStatus();
 
@@ -435,11 +533,30 @@ describe('CalendarFundingPlanRoutes API', () => {
         .get('/handler/a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d/funding')
         .expect(200);
 
-      expect(response.body.status).toBe('admin-exempt');
+      expect(response.body.status).toBe('admin_exempt');
+    });
+
+    /**
+     * An unreadable funding state is a server-side failure, never an
+     * "unfunded" answer: telling an operator they are unfunded during our own
+     * outage invites them to pay to fix it.
+     */
+    it('should return 500 when the instance funding state cannot be read', async () => {
+      mockInterface.getCalendarFundingSummary.rejects(
+        new FundingAccessIndeterminateError('Instance funding settings could not be read'),
+      );
+
+      bindGetFundingStatus();
+
+      const response = await request(testApp(router))
+        .get('/handler/a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d/funding')
+        .expect(500);
+
+      expect(response.body.status).toBeUndefined();
     });
 
     it('should return unfunded status', async () => {
-      mockInterface.getFundingStatusForCalendar.resolves('unfunded' as any);
+      resolveSummary('unfunded');
 
       bindGetFundingStatus();
 

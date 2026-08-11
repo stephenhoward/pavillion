@@ -1367,7 +1367,7 @@ describe('FundingService', () => {
       }
 
       /**
-       * Each world is a database state that produces one value of each legacy
+       * Each world is a database state that produces one value of each status
        * vocabulary. checkFundingAccess must reach the same allow/deny outcome
        * the legacy widget gate reached for that state, where the legacy gate is
        * the composite: instance enabled -> admin bypass -> hasFundingAccess.
@@ -1379,7 +1379,7 @@ describe('FundingService', () => {
           hasGrant: false,
           hasAllocation: false,
           reactivated: false,
-          legacyCalendarStatus: 'admin-exempt',
+          calendarStatus: 'admin_exempt',
           legacyPlanStatus: undefined,
           allowed: true,
         },
@@ -1389,7 +1389,7 @@ describe('FundingService', () => {
           hasGrant: true,
           hasAllocation: false,
           reactivated: false,
-          legacyCalendarStatus: 'grant',
+          calendarStatus: 'grant',
           legacyPlanStatus: 'grant',
           allowed: true,
         },
@@ -1399,7 +1399,7 @@ describe('FundingService', () => {
           hasGrant: false,
           hasAllocation: true,
           reactivated: false,
-          legacyCalendarStatus: 'funded',
+          calendarStatus: 'funded',
           legacyPlanStatus: 'subscribed',
           allowed: true,
         },
@@ -1412,7 +1412,7 @@ describe('FundingService', () => {
           hasGrant: false,
           hasAllocation: true,
           reactivated: true,
-          legacyCalendarStatus: 'funded',
+          calendarStatus: 'funded',
           legacyPlanStatus: 'subscribed',
           allowed: true,
         },
@@ -1422,7 +1422,7 @@ describe('FundingService', () => {
           hasGrant: false,
           hasAllocation: false,
           reactivated: false,
-          legacyCalendarStatus: 'unfunded',
+          calendarStatus: 'unfunded',
           legacyPlanStatus: undefined,
           allowed: false,
         },
@@ -1442,9 +1442,12 @@ describe('FundingService', () => {
             world.hasAllocation ? [{ calendar_id: calendarId } as any] : [],
           );
 
-          // Legacy vocabulary 1: single-calendar status
+          // Unified single-calendar vocabulary. No longer "legacy": this and
+          // the gate now share one predicate, so this assertion is a check
+          // that the display and the decision agree, not a compatibility
+          // mapping between two different rules.
           expect(await service.getFundingStatusForCalendar(ownerId, calendarId))
-            .toBe(world.legacyCalendarStatus);
+            .toBe(world.calendarStatus);
 
           // Legacy vocabulary 2: bulk plan status ('none' is an absent key)
           const bulk = await service.getPlanStatusForCalendars([calendarId]);

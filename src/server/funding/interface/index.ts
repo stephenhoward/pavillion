@@ -8,7 +8,7 @@ import {
   type ProviderStatus,
   type DisconnectionResult,
 } from '@/server/funding/service/provider_connection';
-import { FundingPlan, FundingSettings, ProviderConfig, FundingStatus, BillingCycle, ProviderType, FundingGatedFeature } from '@/common/model/funding-plan';
+import { FundingPlan, FundingSettings, ProviderConfig, FundingStatus, CalendarFundingSummary, BillingCycle, ProviderType, FundingGatedFeature } from '@/common/model/funding-plan';
 import type { ProviderInfo } from '@/server/funding/service/funding';
 import type { ProviderCredentials } from '@/server/funding/service/provider/adapter';
 import { ComplimentaryGrant } from '@/common/model/complimentary_grant';
@@ -286,15 +286,34 @@ export default class FundingInterface {
   /**
    * Get funding status for a calendar
    *
-   * Verifies ownership internally and returns the funding status.
+   * Verifies ownership internally and returns the funding status. This is the
+   * calendar's funding *relationship*, not an entitlement — use
+   * checkFundingAccess, or the feature flags on getCalendarFundingSummary, to
+   * decide whether a feature may be used.
    *
    * @param accountId - Account ID requesting the status (must own the calendar)
    * @param calendarId - Calendar ID to check
-   * @returns Funding status: 'admin-exempt' | 'grant' | 'funded' | 'unfunded'
+   * @returns Funding status: 'admin_exempt' | 'grant' | 'funded' | 'unfunded'
    * @throws ValidationError if accountId does not own the calendar
    */
   async getFundingStatusForCalendar(accountId: string, calendarId: string): Promise<FundingStatus> {
     return this.fundingService.getFundingStatusForCalendar(accountId, calendarId);
+  }
+
+  /**
+   * Get everything a calendar's owner may be told about its funding.
+   *
+   * Verifies ownership internally. Carries the display status, the funding
+   * plan dates bounding it, and the gate's per-feature decisions — and
+   * nothing that identifies an account or a Stripe object.
+   *
+   * @param accountId - Account ID requesting the summary (must own the calendar)
+   * @param calendarId - Calendar ID to describe
+   * @returns The calendar's funding status, plan dates and feature decisions
+   * @throws ValidationError if accountId does not own the calendar
+   */
+  async getCalendarFundingSummary(accountId: string, calendarId: string): Promise<CalendarFundingSummary> {
+    return this.fundingService.getCalendarFundingSummary(accountId, calendarId);
   }
 
   // Admin operations

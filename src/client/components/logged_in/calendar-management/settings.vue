@@ -137,7 +137,7 @@
           </p>
 
           <!-- Admin exempt -->
-          <div v-if="state.fundingStatus === 'admin-exempt'" class="setting-extended-status">
+          <div v-if="state.fundingStatus === 'admin_exempt'" class="setting-extended-status">
             <span class="setting-badge setting-badge--enabled">
               {{ t('extended_features_admin_exempt') }}
             </span>
