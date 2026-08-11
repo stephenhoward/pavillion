@@ -1,7 +1,9 @@
 import axios from 'axios';
 import i18next from 'i18next';
 import { ComplimentaryGrant } from '@/common/model/complimentary_grant';
-import type { FundingStatus as CalendarFundingStatus } from '@/common/model/funding-plan';
+import { FUNDING_GATED_FEATURES } from '@/common/model/funding-plan';
+import type { CalendarFundingSummary, FundingGatedFeature } from '@/common/model/funding-plan';
+import { useFundingStore } from '@/client/stores/fundingStore';
 
 /**
  * Funding settings returned from API
@@ -104,15 +106,53 @@ export type AccountSearchResult = {
 };
 
 /**
- * Funding status response for a calendar.
- *
- * `status` reuses the shared single-calendar vocabulary rather than restating
- * its values, so the wire cannot drift from the server's union.
+ * The wire form of a server-side type: JSON carries no Date, so every
+ * Date-valued field arrives here as an ISO-8601 string. Every other field
+ * keeps the server's type, and a field added on the server appears here
+ * without anything being retyped by hand.
  */
-export type FundingStatus = {
-  status: CalendarFundingStatus;
-  grantInfo?: { reason?: string; expiresAt?: string };
-};
+type Wire<T> = { [K in keyof T]: T[K] extends Date | null ? string | null : T[K] };
+
+/**
+ * Body of GET /api/funding/v1/calendars/:calendarId/funding.
+ *
+ * Derived from CalendarFundingSummary rather than restated, because that type
+ * is the endpoint's field allowlist and it can only be "expressed once" if the
+ * client reads it instead of describing the envelope again. An earlier
+ * hand-written version of this type had already drifted: it carried a
+ * `grantInfo` the server has never sent, and lacked `features` — the field the
+ * gate answer actually lives in.
+ *
+ * `status` is a relationship label for display. `features` is the entitlement.
+ * Decide what a calendar may do from `features`, never from `status`.
+ */
+export type CalendarFundingSummaryResponse = Wire<CalendarFundingSummary>;
+
+/**
+ * The funding-gated feature a failed request was refused for, or null if the
+ * failure was not a funding denial.
+ *
+ * Recognition is deliberately narrow: only a 402 carrying
+ * `errorName: 'SubscriptionRequiredError'` and a feature key that is in the
+ * registry counts. Everything else — a 5xx above all — returns null, because
+ * an unreadable instance funding state is *indeterminate*, not "unfunded", and
+ * must never be rendered as a closed gate.
+ *
+ * @param error - An error caught from any axios call
+ * @returns The denied feature, or null when this is not a funding denial
+ */
+export function fundingGateDenial(error: unknown): FundingGatedFeature | null {
+  const response = (error as {
+    response?: { status?: number; data?: { errorName?: string; feature?: string } };
+  } | null)?.response;
+
+  if (response?.status !== 402 || response.data?.errorName !== 'SubscriptionRequiredError') {
+    return null;
+  }
+
+  const feature = response.data?.feature;
+  return feature && feature in FUNDING_GATED_FEATURES ? feature as FundingGatedFeature : null;
+}
 
 /**
  * Resolved public calendar information
@@ -153,6 +193,19 @@ export type CheckoutSessionStatus = {
  * manage user funding plans.
  */
 export default class FundingService {
+  private _store?: ReturnType<typeof useFundingStore>;
+
+  /**
+   * Lazily access the funding store. Only initializes when first accessed, so
+   * the many HTTP-only methods on this service keep working without an active
+   * Pinia instance.
+   */
+  private get store(): ReturnType<typeof useFundingStore> {
+    if (!this._store) {
+      this._store = useFundingStore();
+    }
+    return this._store;
+  }
 
   /**
    * Convert millicents to display amount (dollars)
@@ -503,12 +556,16 @@ export default class FundingService {
   }
 
   /**
-   * Get funding status for a specific calendar
+   * Get the funding summary for a specific calendar.
+   *
+   * Named for the status it originally returned; the endpoint now answers with
+   * the whole summary — the display status, the plan dates and the per-feature
+   * gate decisions.
    *
    * @param {string} calendarId - The calendar ID to check funding for
-   * @returns {Promise<FundingStatus>} The funding status of the calendar
+   * @returns {Promise<CalendarFundingSummaryResponse>} The calendar's funding summary
    */
-  async getFundingStatus(calendarId: string): Promise<FundingStatus> {
+  async getFundingStatus(calendarId: string): Promise<CalendarFundingSummaryResponse> {
     try {
       const response = await axios.get(`/api/funding/v1/calendars/${calendarId}/funding`);
       return response.data;
@@ -517,6 +574,21 @@ export default class FundingService {
       console.error('Failed to get funding status:', error);
       throw error;
     }
+  }
+
+  /**
+   * Load a calendar's funding summary and cache it in the funding store.
+   *
+   * The store is a read-through cache only: it is populated here, never by a
+   * component, and it holds nothing that is not on the wire.
+   *
+   * @param {string} calendarId - The calendar ID to load funding for
+   * @returns {Promise<CalendarFundingSummaryResponse>} The loaded summary
+   */
+  async loadFundingSummary(calendarId: string): Promise<CalendarFundingSummaryResponse> {
+    const summary = await this.getFundingStatus(calendarId);
+    this.store.setSummary(calendarId, summary);
+    return summary;
   }
 
   // ========================================

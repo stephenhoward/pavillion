@@ -2,7 +2,7 @@ import express, { Request, Response } from 'express';
 import ExpressHelper from '@/server/common/helper/express';
 import FundingInterface from '@/server/funding/interface';
 import { Account } from '@/common/model/account';
-import { FUNDING_GATED_FEATURES, FundingGatedFeature } from '@/common/model/funding-plan';
+import { CalendarFundingSummary, FUNDING_GATED_FEATURES, FundingGatedFeature } from '@/common/model/funding-plan';
 import { ValidationError } from '@/common/exceptions/base';
 import {
   FundingPlanNotFoundError,
@@ -236,7 +236,12 @@ export default class CalendarFundingPlanRoutes {
 
       const summary = await this.service.getCalendarFundingSummary(account.id, calendarId);
 
-      res.json({
+      // Annotated, not spread: the annotation makes CalendarFundingSummary the
+      // checkable allowlist for this body rather than a prose one. A field
+      // dropped here stops compiling, and a field added here has to be added
+      // to the type first — which is where the reasoning about what an owner
+      // may be told lives.
+      const body: CalendarFundingSummary = {
         status: summary.status,
         currentPeriodEnd: summary.currentPeriodEnd,
         accessExpiresAt: summary.accessExpiresAt,
@@ -245,8 +250,10 @@ export default class CalendarFundingPlanRoutes {
         features: Object.fromEntries(
           (Object.keys(FUNDING_GATED_FEATURES) as FundingGatedFeature[])
             .map((feature) => [feature, summary.features[feature] === true]),
-        ),
-      });
+        ) as Record<FundingGatedFeature, boolean>,
+      };
+
+      res.json(body);
     }
     catch (error) {
       logError(error, 'Error fetching funding status');

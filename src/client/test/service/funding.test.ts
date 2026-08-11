@@ -1,6 +1,8 @@
-import { describe, it, expect, afterEach, vi } from 'vitest';
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import axios from 'axios';
-import FundingService from '@/client/service/funding';
+import { createPinia, setActivePinia } from 'pinia';
+import FundingService, { fundingGateDenial } from '@/client/service/funding';
+import { useFundingStore } from '@/client/stores/fundingStore';
 import { ComplimentaryGrant } from '@/common/model/complimentary_grant';
 
 vi.mock('axios');
@@ -297,23 +299,33 @@ describe('FundingService.getFundingStatus', () => {
 
   it('should call GET /api/funding/v1/calendars/:calendarId/funding', async () => {
     // Arrange
-    const mockStatus = { status: 'covered', planInfo: { amount: 500 } };
+    const mockSummary = {
+      status: 'covered',
+      currentPeriodEnd: '2026-09-01T00:00:00.000Z',
+      accessExpiresAt: '2026-09-08T00:00:00.000Z',
+      features: { widget_embedding: true },
+    };
     const axiosGet = vi.mocked(axios.get);
-    axiosGet.mockResolvedValue({ data: mockStatus });
+    axiosGet.mockResolvedValue({ data: mockSummary });
 
     // Act
     const result = await service.getFundingStatus('cal123');
 
     // Assert
     expect(axiosGet).toHaveBeenCalledWith('/api/funding/v1/calendars/cal123/funding');
-    expect(result).toEqual(mockStatus);
+    expect(result).toEqual(mockSummary);
   });
 
   it('should return not_covered status', async () => {
     // Arrange
-    const mockStatus = { status: 'not_covered' };
+    const mockSummary = {
+      status: 'not_covered',
+      currentPeriodEnd: null,
+      accessExpiresAt: null,
+      features: { widget_embedding: false },
+    };
     const axiosGet = vi.mocked(axios.get);
-    axiosGet.mockResolvedValue({ data: mockStatus });
+    axiosGet.mockResolvedValue({ data: mockSummary });
 
     // Act
     const result = await service.getFundingStatus('cal456');
@@ -322,18 +334,24 @@ describe('FundingService.getFundingStatus', () => {
     expect(result.status).toBe('not_covered');
   });
 
-  it('should return grant status with grantInfo', async () => {
-    // Arrange
-    const mockStatus = { status: 'grant', grantInfo: { reason: 'VIP', grantedBy: 'admin1' } };
+  it('should return the feature decisions alongside a grant status', async () => {
+    // The gate answer travels in `features`; `status` only names the
+    // relationship. A consumer reading one without the other is guessing.
+    const mockSummary = {
+      status: 'grant',
+      currentPeriodEnd: null,
+      accessExpiresAt: null,
+      features: { widget_embedding: true },
+    };
     const axiosGet = vi.mocked(axios.get);
-    axiosGet.mockResolvedValue({ data: mockStatus });
+    axiosGet.mockResolvedValue({ data: mockSummary });
 
     // Act
     const result = await service.getFundingStatus('cal789');
 
     // Assert
     expect(result.status).toBe('grant');
-    expect(result.grantInfo).toEqual({ reason: 'VIP', grantedBy: 'admin1' });
+    expect(result.features).toEqual({ widget_embedding: true });
   });
 
   it('should throw error when API call fails', async () => {
@@ -343,6 +361,94 @@ describe('FundingService.getFundingStatus', () => {
 
     // Act & Assert
     await expect(service.getFundingStatus('cal123')).rejects.toThrow('Server error');
+  });
+});
+
+describe('FundingService.loadFundingSummary', () => {
+  const service = new FundingService();
+
+  beforeEach(() => {
+    setActivePinia(createPinia());
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('should cache the summary in the funding store', async () => {
+    // Arrange
+    const axiosGet = vi.mocked(axios.get);
+    axiosGet.mockResolvedValue({
+      data: {
+        status: 'funded',
+        currentPeriodEnd: '2026-09-01T00:00:00.000Z',
+        accessExpiresAt: null,
+        features: { widget_embedding: true },
+      },
+    });
+
+    // Act
+    const result = await service.loadFundingSummary('cal123');
+
+    // Assert
+    const store = useFundingStore();
+    expect(result.status).toBe('funded');
+    expect(store.statusFor('cal123')).toBe('funded');
+    expect(store.featureAccess('cal123', 'widget_embedding')).toBe(true);
+  });
+
+  it('should leave the cache untouched when the read fails', async () => {
+    // Arrange
+    const axiosGet = vi.mocked(axios.get);
+    axiosGet.mockRejectedValue(new Error('Server error'));
+
+    // Act & Assert
+    await expect(service.loadFundingSummary('cal123')).rejects.toThrow('Server error');
+    expect(useFundingStore().summaryFor('cal123')).toBeNull();
+  });
+});
+
+describe('fundingGateDenial', () => {
+  it('should name the feature a 402 SubscriptionRequiredError refused', () => {
+    const error = {
+      response: {
+        status: 402,
+        data: {
+          error: 'subscription_required',
+          errorName: 'SubscriptionRequiredError',
+          feature: 'widget_embedding',
+        },
+      },
+    };
+
+    expect(fundingGateDenial(error)).toBe('widget_embedding');
+  });
+
+  it('should not read a 5xx as a refusal', () => {
+    // An unreadable instance funding state is indeterminate, never unfunded.
+    const error = { response: { status: 500, data: { error: 'Internal server error' } } };
+
+    expect(fundingGateDenial(error)).toBeNull();
+  });
+
+  it('should not read a 402 without the funding errorName as a refusal', () => {
+    const error = { response: { status: 402, data: { errorName: 'SomeOtherError', feature: 'widget_embedding' } } };
+
+    expect(fundingGateDenial(error)).toBeNull();
+  });
+
+  it('should not read a refusal naming an unregistered feature', () => {
+    const error = {
+      response: { status: 402, data: { errorName: 'SubscriptionRequiredError', feature: 'not_a_registered_feature' } },
+    };
+
+    expect(fundingGateDenial(error)).toBeNull();
+  });
+
+  it('should not read a refusal from an error with no response at all', () => {
+    expect(fundingGateDenial(new Error('Network Error'))).toBeNull();
+    expect(fundingGateDenial(null)).toBeNull();
+    expect(fundingGateDenial(undefined)).toBeNull();
   });
 });
 

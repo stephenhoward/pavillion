@@ -14,6 +14,7 @@ import { useCategoryStore } from '@/client/stores/categoryStore';
 import { useSeriesStore } from '@/client/stores/seriesStore';
 import { useInvitationStore } from '@/client/stores/invitationStore';
 import { useApplicationStore } from '@/client/stores/applicationStore';
+import { useFundingStore } from '@/client/stores/fundingStore';
 
 const router = useRouter();
 const authentication = inject('authn');
@@ -24,6 +25,7 @@ const categoryStore = useCategoryStore();
 const seriesStore = useSeriesStore();
 const invitationStore = useInvitationStore();
 const applicationStore = useApplicationStore();
+const fundingStore = useFundingStore();
 
 onBeforeMount( () => {
   authentication.logout();
@@ -35,6 +37,7 @@ onBeforeMount( () => {
   seriesStore.$reset();
   invitationStore.$reset();
   applicationStore.$reset();
+  fundingStore.$reset();
   router.replace('/');
 });
 </script>
