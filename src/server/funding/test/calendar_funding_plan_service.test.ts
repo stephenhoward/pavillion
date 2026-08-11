@@ -16,6 +16,7 @@ import {
   FundingPlanNotFoundError,
   CalendarFundingPlanNotFoundError,
   DuplicateCalendarFundingPlanError,
+  FundingAccessIndeterminateError,
 } from '@/common/exceptions/funding';
 
 describe('FundingService - Calendar Funding Plan Methods', () => {
@@ -719,6 +720,125 @@ describe('FundingService - Calendar Funding Plan Methods', () => {
       await expect(
         service.getCalendarFundingSummary(accountId, calendarId),
       ).rejects.toThrow(ValidationError);
+    });
+
+    /**
+     * The dates describe the plan that qualifies the calendar, so a calendar
+     * qualified by something else reports none — even when a live allocation
+     * is sitting underneath it.
+     *
+     * An admin who also pays is the case that separates the two: the status is
+     * decided by the exemption, and reporting the plan's period alongside it
+     * would describe a plan that is not what the status is about. Reading the
+     * allocation unconditionally is also what would turn into a genuine
+     * cross-account disclosure the day a calendar's owner and its funder can
+     * differ.
+     */
+    it('should report no plan dates for a calendar qualified by something other than its plan', async () => {
+      const calendarId = uuidv4();
+      const accountId = uuidv4();
+
+      mockCalendarInterface.isCalendarOwnerById.withArgs(accountId, calendarId).resolves(true);
+      mockCalendarInterface.getCalendarOwnerAccountId.withArgs(calendarId).resolves(accountId);
+
+      mockAccountsInterface.accountIsAdmin.withArgs(accountId).resolves(true);
+      sandbox.stub(ComplimentaryGrantEntity, 'findOne').resolves(null);
+
+      // A live, in-boundary allocation the admin exemption makes irrelevant.
+      const allocationLookup = sandbox.stub(CalendarFundingPlanEntity, 'findOne').resolves({
+        id: uuidv4(),
+        calendar_id: calendarId,
+        end_time: null,
+        fundingPlan: {
+          status: 'active',
+          cancelled_at: null,
+          current_period_end: new Date(Date.now() + 30 * DAY),
+        },
+      } as any);
+      stubFundingEnabled(true);
+
+      const summary = await service.getCalendarFundingSummary(accountId, calendarId);
+
+      expect(summary.status).toBe('admin_exempt');
+      expect(summary.currentPeriodEnd).toBeNull();
+      expect(summary.accessExpiresAt).toBeNull();
+      // Not merely nulled out afterwards — the plan is never read for the dates.
+      expect(allocationLookup.called).toBe(false);
+    });
+
+    /**
+     * Mirrors the handler-level allowlist assertion one layer down.
+     *
+     * The handler filters what it sends, but FundingInterface hands this object
+     * to a cross-domain caller unfiltered, so a field added at the service
+     * would escape through that path with nothing to catch it. Asserting the
+     * key set here means the addition fails a test whichever layer eventually
+     * consumes it.
+     */
+    it('should carry exactly the summary field allowlist and nothing else', async () => {
+      const calendarId = uuidv4();
+      const accountId = uuidv4();
+
+      mockCalendarInterface.isCalendarOwnerById.withArgs(accountId, calendarId).resolves(true);
+      mockCalendarInterface.getCalendarOwnerAccountId.withArgs(calendarId).resolves(accountId);
+
+      mockAccountsInterface.accountIsAdmin.withArgs(accountId).resolves(false);
+      sandbox.stub(ComplimentaryGrantEntity, 'findOne').resolves(null);
+      sandbox.stub(CalendarFundingPlanEntity, 'findOne').resolves({
+        id: uuidv4(),
+        calendar_id: calendarId,
+        end_time: null,
+        fundingPlan: {
+          status: 'active',
+          cancelled_at: null,
+          current_period_end: new Date(Date.now() + 30 * DAY),
+          account_id: 'owner-account-id',
+          provider_customer_id: 'cus_leak',
+          provider_subscription_id: 'sub_leak',
+        },
+      } as any);
+      stubFundingEnabled(true);
+
+      const summary = await service.getCalendarFundingSummary(accountId, calendarId);
+
+      expect(Object.keys(summary).sort()).toEqual(
+        ['accessExpiresAt', 'currentPeriodEnd', 'features', 'status'],
+      );
+
+      const serialised = JSON.stringify(summary);
+      for (const secret of ['owner-account-id', 'cus_leak', 'sub_leak']) {
+        expect(serialised).not.toContain(secret);
+      }
+    });
+
+    /**
+     * The instance settings are read three times over on this path — once for
+     * the display status, once for the dates, once inside every gate decision
+     * — and none of them can answer without it. An unreadable row is therefore
+     * the indeterminate case, and it must arrive as the class consumers branch
+     * on rather than as whatever the driver happened to throw: CalendarService
+     * keys on it to keep this out of the 402 path, and it would silently miss a
+     * raw Error.
+     */
+    it('should raise the indeterminate error when the instance settings cannot be read', async () => {
+      const calendarId = uuidv4();
+      const accountId = uuidv4();
+
+      mockCalendarInterface.isCalendarOwnerById.withArgs(accountId, calendarId).resolves(true);
+      mockCalendarInterface.getCalendarOwnerAccountId.withArgs(calendarId).resolves(accountId);
+
+      mockAccountsInterface.accountIsAdmin.withArgs(accountId).resolves(false);
+      sandbox.stub(ComplimentaryGrantEntity, 'findOne').resolves(null);
+      sandbox.stub(FundingSettingsEntity, 'findOne').rejects(new Error('DB error'));
+
+      await expect(
+        service.getCalendarFundingSummary(accountId, calendarId),
+      ).rejects.toThrow(FundingAccessIndeterminateError);
+
+      // errorName is what crosses the wire, so it is what a consumer keys on.
+      await expect(
+        service.getCalendarFundingSummary(accountId, calendarId),
+      ).rejects.toMatchObject({ name: 'FundingAccessIndeterminateError' });
     });
   });
 

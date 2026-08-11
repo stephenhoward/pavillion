@@ -1362,8 +1362,8 @@ describe('FundingService', () => {
         };
       }
 
-      function planFor(world: { reactivated: boolean }): Record<string, unknown> {
-        return world.reactivated ? buildReactivatedPlan() : {};
+      function planFor(world: { reactivated: boolean; plan: Record<string, unknown> }): Record<string, unknown> {
+        return world.reactivated ? buildReactivatedPlan() : world.plan;
       }
 
       /**
@@ -1371,6 +1371,17 @@ describe('FundingService', () => {
        * vocabulary. checkFundingAccess must reach the same allow/deny outcome
        * the legacy widget gate reached for that state, where the legacy gate is
        * the composite: instance enabled -> admin bypass -> hasFundingAccess.
+       *
+       * The last two worlds are the ones that give the display/gate assertion
+       * its teeth. Every world above them is decided the same way by an
+       * allocation-row lookup and by the boundary-aware predicate, so none of
+       * them can tell those two rules apart. The boundary worlds can: the
+       * allocation row is present and its plan still says 'active', and only
+       * the plan's own dates reveal that access has ended. They are therefore
+       * also the worlds where the legacy vocabularies visibly disagree with the
+       * current ones — `legacyAllowed` and `legacyPlanStatus` still say the
+       * calendar is funded — which is the divergence recorded on
+       * hasActiveFundingPlan and getPlanStatusForCalendars, not a defect here.
        */
       const worlds = [
         {
@@ -1379,9 +1390,11 @@ describe('FundingService', () => {
           hasGrant: false,
           hasAllocation: false,
           reactivated: false,
+          plan: {},
           calendarStatus: 'admin_exempt',
           legacyPlanStatus: undefined,
           allowed: true,
+          legacyAllowed: true,
         },
         {
           name: 'calendar with an active complimentary grant',
@@ -1389,9 +1402,11 @@ describe('FundingService', () => {
           hasGrant: true,
           hasAllocation: false,
           reactivated: false,
+          plan: {},
           calendarStatus: 'grant',
           legacyPlanStatus: 'grant',
           allowed: true,
+          legacyAllowed: true,
         },
         {
           name: 'calendar with an active funding plan allocation',
@@ -1399,9 +1414,11 @@ describe('FundingService', () => {
           hasGrant: false,
           hasAllocation: true,
           reactivated: false,
+          plan: {},
           calendarStatus: 'funded',
           legacyPlanStatus: 'subscribed',
           allowed: true,
+          legacyAllowed: true,
         },
         {
           // A plan resubscribed after cancellation. The status-transition hook
@@ -1412,9 +1429,11 @@ describe('FundingService', () => {
           hasGrant: false,
           hasAllocation: true,
           reactivated: true,
+          plan: {},
           calendarStatus: 'funded',
           legacyPlanStatus: 'subscribed',
           allowed: true,
+          legacyAllowed: true,
         },
         {
           name: 'calendar with no funding state at all',
@@ -1422,9 +1441,41 @@ describe('FundingService', () => {
           hasGrant: false,
           hasAllocation: false,
           reactivated: false,
+          plan: {},
           calendarStatus: 'unfunded',
           legacyPlanStatus: undefined,
           allowed: false,
+          legacyAllowed: false,
+        },
+        {
+          // Cancellation recorded on a plan Stripe never moved off 'active' —
+          // the missed customer.subscription.deleted case. The allocation row
+          // is untouched, so nothing but cancelled_at ends access.
+          name: 'calendar whose funding plan cancellation was recorded but never applied to its status',
+          isAdmin: false,
+          hasGrant: false,
+          hasAllocation: true,
+          reactivated: false,
+          plan: { cancelled_at: new Date(Date.now() - DAY) },
+          calendarStatus: 'unfunded',
+          legacyPlanStatus: 'subscribed',
+          allowed: false,
+          legacyAllowed: true,
+        },
+        {
+          // A plan whose renewal silently never happened: still 'active', still
+          // allocated, but its paid-through date and the instance grace period
+          // are both behind us.
+          name: 'calendar whose funding plan ran past its paid-through date and grace period',
+          isAdmin: false,
+          hasGrant: false,
+          hasAllocation: true,
+          reactivated: false,
+          plan: { current_period_end: new Date(Date.now() - 30 * DAY) },
+          calendarStatus: 'unfunded',
+          legacyPlanStatus: 'subscribed',
+          allowed: false,
+          legacyAllowed: true,
         },
       ] as const;
 
@@ -1455,7 +1506,7 @@ describe('FundingService', () => {
 
           // Legacy composite gate decision (calendar.ts widget gate)
           const legacyDecision = world.isAdmin || await service.hasFundingAccess(calendarId);
-          expect(legacyDecision).toBe(world.allowed);
+          expect(legacyDecision).toBe(world.legacyAllowed);
 
           expect(await service.checkFundingAccess(calendarId, feature)).toBe(world.allowed);
         });

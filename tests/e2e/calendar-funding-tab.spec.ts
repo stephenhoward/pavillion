@@ -25,7 +25,7 @@ test.describe.configure({ mode: 'serial' });
  */
 async function mockFundingAPIs(page: import('@playwright/test').Page, options: {
   subscriptionsEnabled: boolean;
-  fundingStatus: 'funded' | 'unfunded' | 'grant' | 'admin-exempt';
+  fundingStatus: 'funded' | 'unfunded' | 'grant' | 'admin_exempt';
 }) {
   // Mock funding plan status (user's subscription)
   await page.route('**/api/funding/v1/status', async (route) => {
@@ -162,7 +162,7 @@ test.describe('Calendar Settings — Extended Features (Funding)', () => {
   test('shows admin-exempt badge for admin-exempt calendars', async ({ page }) => {
     await mockFundingAPIs(page, {
       subscriptionsEnabled: true,
-      fundingStatus: 'admin-exempt',
+      fundingStatus: 'admin_exempt',
     });
 
     await navigateToSettingsTab(page, env.baseURL);

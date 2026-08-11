@@ -142,6 +142,42 @@ export default class FundingService {
   }
 
   /**
+   * Read the instance funding settings for a decision that cannot proceed
+   * without them, converting an unreadable read into the indeterminate signal.
+   *
+   * Every path that reports or gates funding needs the same two things from
+   * this row — whether the instance charges at all, and the grace period the
+   * access boundary is measured with — and none of them can answer safely
+   * without it. Failing to read it is therefore never "unfunded": it is "we
+   * cannot say", and it is thrown as {@link FundingAccessIndeterminateError} so
+   * a consumer branching on that class (see CalendarService's widget gate)
+   * cannot answer it commercially with a 402.
+   *
+   * Routing all of these reads through one helper is what keeps the error
+   * identity independent of ordering. getCalendarFundingSummary reads the
+   * settings three times over — once for the display status, once for the
+   * dates, once per gated feature inside checkFundingAccess — and before this
+   * existed only the checkFundingAccess read produced the declared class, so
+   * which error a consumer saw depended on which identical read happened to
+   * run first.
+   *
+   * @param context - Log context describing the decision that needed settings
+   * @returns The instance funding settings
+   * @throws FundingAccessIndeterminateError if the settings could not be read
+   */
+  private async settingsForFundingDecision(context: string): Promise<FundingSettings> {
+    try {
+      return await this.getSettings();
+    }
+    catch (error) {
+      logError(error, context);
+      throw new FundingAccessIndeterminateError(
+        'Instance funding settings could not be read',
+      );
+    }
+  }
+
+  /**
    * Update instance funding settings
    *
    * @param settings - Updated settings
@@ -835,21 +871,29 @@ export default class FundingService {
    * status and no boundary, so a calendar whose plan had been cancelled was
    * displayed as `funded` while every gate refused it.
    *
-   * Two divergences remain, and they are intentional because FundingStatus has
-   * no value that could express either:
+   * Two divergences remain. Both are cases the gate distinguishes and
+   * FundingStatus does not, and leaving the union at four values is a choice,
+   * not a constraint — the union is defined one directory over and this epic
+   * edits it freely. A fifth value would have to be named in the client's copy
+   * of the type, rendered by settings.vue's status branches and given an i18n
+   * key in every locale, for two states that screen already suppresses: it does
+   * not render the funding section at all when funding is off, and an
+   * indeterminate read never reaches it because the endpoint answers 500. The
+   * cost is real and the benefit is currently zero — but a consumer that does
+   * need to tell these apart should extend the union rather than infer them
+   * from `unfunded`, which is why they are recorded here:
    *
    *  1. Instance funding switched off. The gate opens every feature
    *     (invariant 1, DEC-001 instance autonomy); this method still reports the
-   *     calendar's own funding relationship, which is normally `unfunded`. The
-   *     settings screen does not render funding at all in that case, so the
-   *     value is never shown — but a new consumer must not read `unfunded`
-   *     here as "this calendar may not use feature X".
-   *  2. Indeterminate reads. The gate distinguishes a determinate denial from
-   *     an unreadable one and throws FundingAccessIndeterminateError for the
-   *     latter. This method has no third value, so it does not swallow the
-   *     failure into `unfunded` either: an unreadable settings row propagates
-   *     as an error and the endpoint answers 500. Reporting `unfunded` during
-   *     our own outage would invite an operator to pay to fix it.
+   *     calendar's own funding relationship, which is normally `unfunded`. A
+   *     new consumer must not read `unfunded` here as "this calendar may not
+   *     use feature X".
+   *  2. Indeterminate reads. The gate throws FundingAccessIndeterminateError
+   *     rather than returning a denial it cannot substantiate. This method has
+   *     no third value, so it does not swallow the failure into `unfunded`
+   *     either: an unreadable settings row propagates as that same error class
+   *     and the endpoint answers 500. Reporting `unfunded` during our own
+   *     outage would invite an operator to pay to fix it.
    *
    * The consequence for callers: use {@link getCalendarFundingSummary}'s
    * `features` — never this status — to decide what a calendar may do.
@@ -858,6 +902,8 @@ export default class FundingService {
    * @param calendarId - Calendar ID to check
    * @returns Funding status: 'admin_exempt' | 'grant' | 'funded' | 'unfunded'
    * @throws ValidationError if accountId does not own the calendar
+   * @throws FundingAccessIndeterminateError if the instance funding settings
+   *   could not be read — a server-side failure, never an "unfunded" answer
    */
   async getFundingStatusForCalendar(accountId: string, calendarId: string): Promise<FundingStatus> {
     if (!isValidUUID(calendarId)) {
@@ -871,6 +917,12 @@ export default class FundingService {
     // Verify ownership - throws ValidationError if not owner
     await this.verifyCalendarOwnership(accountId, calendarId);
 
+    // Neither guard below is reachable, and neither is a funding decision:
+    // verifyCalendarOwnership has already thrown if calendarInterface is
+    // absent, and it only returns having found an owner membership row — the
+    // same rows getCalendarOwnerAccountId reads. They are kept to narrow the
+    // optional interface and to stay fail-closed rather than crash if that
+    // ever stops holding. The funding rules start below.
     if (!this.calendarInterface) {
       return 'unfunded';
     }
@@ -896,7 +948,9 @@ export default class FundingService {
 
     // Same predicate the gate applies, so a plan past its access boundary is
     // not displayed as funded while every feature refuses it.
-    const settings = await this.getSettings();
+    const settings = await this.settingsForFundingDecision(
+      'getFundingStatusForCalendar: instance funding settings unreadable',
+    );
 
     if (await this.hasQualifyingFundingPlan(calendarId, settings.gracePeriodDays)) {
       return 'funded';
@@ -914,8 +968,21 @@ export default class FundingService {
    * would be guessing at the other.
    *
    * The dates describe the funding plan that currently qualifies the calendar,
-   * and are null for any other funding source — an admin-exempt or
-   * grant-funded calendar has no plan period to report.
+   * and are read only when the status is `funded` — the one status that means
+   * a plan is what qualifies it. They are null for every other status: an
+   * admin-exempt or grant-funded calendar has no plan period to report, and an
+   * unfunded one has no qualifying plan by definition. An admin-owned or
+   * granted calendar can still carry a live allocation underneath, and
+   * reporting its dates would describe a plan that is not what the reported
+   * status is about.
+   *
+   * This is a narrowing, not an access control: the requester is already the
+   * calendar's owner. It does not by itself scope the dates to the requester's
+   * own plan — a `funded` calendar reports the dates of whichever plan funds
+   * it, which is the same account today only because a calendar's owner and
+   * its funder cannot diverge. Multi-owner calendars or an ownership transfer
+   * would break that, and the fix then is to scope the plan lookup by account,
+   * not to widen this branch.
    *
    * @param accountId - Account ID requesting the summary (must own the calendar)
    * @param calendarId - Calendar ID to describe
@@ -928,8 +995,12 @@ export default class FundingService {
     // Validates both ids and verifies ownership before anything is read.
     const status = await this.getFundingStatusForCalendar(accountId, calendarId);
 
-    const settings = await this.getSettings();
-    const plan = await this.qualifyingFundingPlan(calendarId, settings.gracePeriodDays);
+    const settings = await this.settingsForFundingDecision(
+      'getCalendarFundingSummary: instance funding settings unreadable',
+    );
+    const plan = status === 'funded'
+      ? await this.qualifyingFundingPlan(calendarId, settings.gracePeriodDays)
+      : null;
 
     const featureKeys = Object.keys(FUNDING_GATED_FEATURES) as FundingGatedFeature[];
     const decisions = await Promise.all(
@@ -1960,19 +2031,12 @@ export default class FundingService {
     }
 
     // Invariant 1: funding not enabled on this instance -> all gates open.
-    let settings: FundingSettings;
-    try {
-      settings = await this.getSettings();
-    }
-    catch (error) {
-      // Invariant 4, instance scope: we cannot establish that funding is
-      // switched off, so we cannot open the gate on that basis either. Thrown
-      // rather than returned so consumers cannot mistake it for "unfunded".
-      logError(error, 'checkFundingAccess: instance funding settings unreadable, closing gate');
-      throw new FundingAccessIndeterminateError(
-        'Instance funding settings could not be read',
-      );
-    }
+    // Invariant 4, instance scope: we cannot establish that funding is switched
+    // off, so we cannot open the gate on that basis either. The helper throws
+    // rather than returning, so consumers cannot mistake it for "unfunded".
+    const settings = await this.settingsForFundingDecision(
+      'checkFundingAccess: instance funding settings unreadable, closing gate',
+    );
 
     if (!settings.enabled) {
       return true;
@@ -2174,8 +2238,14 @@ export default class FundingService {
    * Calendars with no matching record are intentionally omitted from the
    * returned Map — callers (e.g. admin calendar listing) default to 'none'
    * on lookup miss. Grant takes priority over funding plan when both exist
-   * for the same calendar, matching the precedence used by
-   * hasFundingAccess / getFundingStatusForCalendar.
+   * for the same calendar, which is the same ordering the single-calendar
+   * predicates use — but only the ordering. This method is NOT in parity with
+   * getFundingStatusForCalendar: it reads plan status alone, with no access
+   * boundary and no admin exemption, so a calendar whose plan was cancelled or
+   * has run past its paid-through date is still reported 'subscribed' here
+   * while the single-calendar path reports it unfunded and every gate refuses
+   * it. That is tolerable only because this vocabulary feeds admin listings,
+   * never an entitlement decision. Migrating it is deferred to pv-1u3s.
    *
    * Returns enum values only; no FundingPlan / CalendarFundingPlan /
    * ComplimentaryGrant entities cross the boundary.
