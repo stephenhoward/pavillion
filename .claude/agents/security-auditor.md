@@ -25,7 +25,7 @@ The well-known categories — SQL injection, auth bypass, SSRF, IDOR, XSS, JWT m
    - Vue templates / Handlebars / dynamic translation keys → `template-injection.md`
    - Config files → `configuration.md`
 
-   Also read `.claude/skills/review-mode-auditor/SKILL.md` for the shared auditor protocol (constraints, report structure, verdict system).
+   Also read `.claude/skills/review-mode-auditor/SKILL.md` — resolved from the root of the repository checkout under review, not `~/.claude/skills/` — for the shared auditor protocol (constraints, report structure, verdict system).
 
 3. **Audit the change, not just the line.** Use Serena's symbol tools to follow data flow: where does this `req.body` field end up? Who calls this service method? Does the caller validate before calling, or assume the callee does? Vulnerabilities live in the seams between files.
 
