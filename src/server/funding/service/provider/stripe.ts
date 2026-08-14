@@ -41,6 +41,13 @@ export class StripeAdapter implements PaymentProviderAdapter {
 
     this.stripe = new Stripe(apiKey, {
       apiVersion: '2025-12-15.clover',
+      // Some adapter calls run inside a held database transaction (see
+      // FundingService.updateProviderAmount), where the SDK's 80-second
+      // default timeout would pin a pooled connection and the plan-row
+      // lock for minutes. A timed-out call maps to a rollback, so retrying
+      // is left to the caller rather than the transport.
+      timeout: 10000,
+      maxNetworkRetries: 0,
     });
     this.webhookSecret = webhookSecret;
     this.credentials = credentials;
