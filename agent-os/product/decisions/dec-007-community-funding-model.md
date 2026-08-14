@@ -23,19 +23,13 @@ Pavillion will support optional community funding plans that allow calendar owne
 
 The concrete failure mode of a partial change: flip only the admin allowlist and PayPal becomes connectable and enableable in the admin UI, while `FundingForm.vue`'s denylist still hides it from purchasers — an instance with a configured, enabled, invisible provider. That is precisely the silent-failure mode this descope exists to prevent.
 
-Consolidating these into one shared constant is worthwhile but was deliberately not done here: it touches `src/common/model/funding-plan.ts` and `FundingForm.vue`, both outside the descope's scope and under concurrent change. Until that consolidation lands, this table is the authoritative enumeration.
+Consolidating these into one shared constant is worthwhile but was deliberately not done here: it touches `src/common/model/funding-plan.ts` and `FundingForm.vue`, both outside the descope's scope and under concurrent change. The consolidation is tracked as **pv-vhop**. Until it lands, this table is the authoritative enumeration.
 
 ### Inert scaffolding, and the one reachable piece
 
 Left in place and genuinely unreachable: the PayPal adapter (`service/provider/paypal.ts`), the `paypal` branch of `ProviderFactory.getAdapter`, the admin credential form in `add-provider-wizard.vue`, `paypal-config-modal.vue` (now referenced by nothing), and the unconfigured PayPal row seeded by `ensureDefaultProviders()`.
 
 **Reachable but inert:** `POST /api/funding/v1/admin/providers/paypal/configure` (`api/v1/provider_connection.ts`) and `FundingInterface.configurePayPal` remain live and admin-authenticated. A direct caller — not the UI, which no longer offers the route — can still validate credentials against the PayPal API, encrypt them, and persist them. This is accepted: it is a configuration surface, not a checkout path, it requires instance-admin authority, and the resulting row still cannot produce a checkout session. It is named here so that "inert" is not read as "removed."
-
-### Pre-existing PayPal configurations
-
-An instance that connected PayPal before the descope keeps its row: **pre-existing PayPal configurations are left in place and unmanaged.** The admin allowlist filters the provider list before the connected-providers view derives from it, so those encrypted credentials have no UI to inspect, disable, or disconnect them, and an `enabled` row is still returned by `GET /v1/options` (hidden from purchasers only by `FundingForm.vue`'s unrelated denylist).
-
-No migration is written for this. Completing a PayPal checkout was never possible, so a production instance in this state is unlikely; dev and staging instances that experimented with PayPal are the realistic case. **Operators who did configure PayPal should disconnect it before upgrading**, while the UI can still reach the row. Recovery after upgrade is a direct `DELETE /api/funding/v1/admin/providers/paypal` call or a database change.
 
 ### Terminology
 
@@ -72,7 +66,7 @@ On the PayPal descope specifically:
 
 5. **Hide PayPal, keep the scaffolding** (Selected)
    - Pros: No reachable half-finished payment path; the adapter abstraction survives, so finishing PayPal later is additive rather than a rewrite; smallest diff, no migration, nothing to un-delete
-   - Cons: Dead code stays in the tree and must be documented as deliberately unreachable (this decision); "Stripe only" ends up encoded in three sites rather than one; pre-existing PayPal rows become unmanaged
+   - Cons: Dead code stays in the tree and must be documented as deliberately unreachable (this decision); "Stripe only" ends up encoded in three sites rather than one
 
 6. **Remove the PayPal scaffolding entirely**
    - Pros: No dead code, no ambiguity about what is supported, only one place left encoding "Stripe only"
@@ -113,7 +107,6 @@ The community funding model was chosen because:
 - Funding plan management adds UI and backend complexity to the calendar domain
 - Per-calendar funding configuration requires calendar owners to understand pricing options
 - Inert PayPal scaffolding remains in the tree, so readers must consult this decision to know it is deliberately unreachable rather than merely unfinished
-- "Stripe only" is enforced at three uncoordinated sites of mixed polarity, so re-enabling PayPal is an all-three change and a partial change produces a configured-but-invisible provider. The enumeration table above is the mitigation; a shared constant is the real fix and remains outstanding
+- "Stripe only" is enforced at three uncoordinated sites of mixed polarity, so re-enabling PayPal is an all-three change and a partial change produces a configured-but-invisible provider. The enumeration table above is the mitigation; a shared constant is the real fix and is tracked as pv-vhop
 - The admin PayPal configure route stays live to direct callers, so an instance admin can still persist credentials that nothing will ever use
-- Pre-existing PayPal configurations become unmanageable through the UI after upgrade, with no migration to clean them up
 - `SubscriptionRequiredError` on the wire diverges from the "funding access" vocabulary used everywhere else, which requires the exception to be documented rather than inferred
