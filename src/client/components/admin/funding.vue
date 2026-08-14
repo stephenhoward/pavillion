@@ -5,7 +5,6 @@ import { ref, computed, reactive, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useToast } from '@/client/composables/useToast';
 import FundingService from '@/client/service/funding';
-import PayPalConfigModal from './paypal-config-modal.vue';
 import ConfirmDisconnectModal from './confirm-disconnect-modal.vue';
 import AddProviderWizard from './add-provider-wizard.vue';
 import GrantForm from './grant-form.vue';
@@ -47,7 +46,6 @@ const fieldErrors = reactive<Record<string, string>>({});
 const providers = ref([]);
 const providersLoading = ref(false);
 const connectingProvider = ref(null); // Track which provider is currently connecting
-const showPayPalModal = ref(false); // Control PayPal configuration modal visibility
 const showDisconnectModal = ref(false); // Control disconnect confirmation modal visibility
 const disconnectModalData = ref({
   providerType: '',
@@ -80,6 +78,29 @@ const currencyOptions = [
   { value: 'CAD', label: 'CAD - Canadian Dollar' },
   { value: 'AUD', label: 'AUD - Australian Dollar' },
 ];
+
+/**
+ * Payment providers offered by this release.
+ *
+ * PayPal is descoped for v1: the backend seeds an unconfigured PayPal provider row
+ * and the adapter/wizard/modal scaffolding remains in the tree, but checkout is
+ * Stripe-only, so PayPal must never be offered or shown as connected. Filtering
+ * here keeps it out of both the connected-providers list and the add-provider
+ * wizard.
+ *
+ * This is NOT the only place "Stripe only" is encoded. Re-enabling PayPal means
+ * changing all three of these together — changing only one leaves a provider that
+ * is configurable but invisible to purchasers:
+ *   1. this allowlist;
+ *   2. src/client/components/account/FundingForm.vue — availableProviders, a
+ *      pre-existing denylist (providerType !== 'paypal') over GET /v1/options;
+ *   3. src/server/funding/service/funding.ts — resolveEnabledStripeProvider(),
+ *      which hard-codes provider_type: 'stripe' for checkout sessions.
+ *
+ * See DEC-007 (agent-os/product/decisions/dec-007-community-funding-model.md),
+ * which enumerates these sites and the disposition of pre-existing PayPal rows.
+ */
+const V1_PROVIDER_TYPES = ['stripe'];
 
 // Computed property to check if any payment provider is configured
 const hasConfiguredProvider = computed(() => {
@@ -130,7 +151,8 @@ async function loadSettings() {
 async function loadProviders() {
   try {
     providersLoading.value = true;
-    providers.value = await fundingService.getProviders();
+    const allProviders = await fundingService.getProviders() ?? [];
+    providers.value = allProviders.filter(provider => V1_PROVIDER_TYPES.includes(provider.provider_type));
   }
   catch (error) {
     console.error('Failed to load providers:', error);
@@ -1132,12 +1154,6 @@ onMounted(async () => {
         </div>
       </section>
     </template>
-
-    <!-- PayPal Configuration Modal -->
-    <PayPalConfigModal
-      :show="showPayPalModal"
-      @close="showPayPalModal = false"
-    />
 
     <!-- Disconnect Confirmation Modal -->
     <ConfirmDisconnectModal
