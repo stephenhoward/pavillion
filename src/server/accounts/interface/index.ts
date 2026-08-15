@@ -163,6 +163,20 @@ export default class AccountsInterface {
     return this.accountService.getInstanceAdmins();
   }
 
+  /**
+   * Checks whether an account holds the instance admin role.
+   *
+   * The cross-domain answer for "is this account an admin?" — callers that
+   * only need the yes/no should use this rather than loading the account and
+   * its roles themselves.
+   *
+   * @param accountId - Account ID to check
+   * @returns True if the account holds the admin role
+   */
+  async accountIsAdmin(accountId: string): Promise<boolean> {
+    return this.accountService.accountIsAdmin(accountId);
+  }
+
   async generatePasswordResetCodeForAccount(account: Account): Promise<string> {
     return this.accountService.generatePasswordResetCodeForAccount(account);
   }

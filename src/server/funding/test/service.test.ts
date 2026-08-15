@@ -37,8 +37,7 @@ describe('FundingService', () => {
     getCalendar: sinon.SinonStub;
   };
   let mockAccountsInterface: {
-    getAccountById: sinon.SinonStub;
-    loadAccountRoles: sinon.SinonStub;
+    accountIsAdmin: sinon.SinonStub;
   };
   beforeAll(async () => {
     // Sync database schema before running tests
@@ -61,8 +60,7 @@ describe('FundingService', () => {
 
     // Create mock AccountsInterface and inject it
     mockAccountsInterface = {
-      getAccountById: sandbox.stub().resolves(undefined),
-      loadAccountRoles: sandbox.stub(),
+      accountIsAdmin: sandbox.stub().resolves(false),
     };
     service.setAccountsInterface(mockAccountsInterface as any);
   });
@@ -987,18 +985,12 @@ describe('FundingService', () => {
     }
 
     /**
-     * Stub the accounts-domain role lookup for the calendar owner. Returns the
-     * account-lookup stub so tests can assert the accounts domain was never
-     * consulted at all.
+     * Stub the accounts-domain admin check for the calendar owner. Returns the
+     * stub so tests can assert the accounts domain was never consulted at all.
      */
     function stubOwnerIsAdmin(isAdmin: boolean): sinon.SinonStub {
-      const owner = {
-        id: ownerId,
-        hasRole: (role: string) => isAdmin && role === 'admin',
-      };
-      mockAccountsInterface.getAccountById.withArgs(ownerId).resolves(owner);
-      mockAccountsInterface.loadAccountRoles.resolves(owner);
-      return mockAccountsInterface.getAccountById;
+      mockAccountsInterface.accountIsAdmin.withArgs(ownerId).resolves(isAdmin);
+      return mockAccountsInterface.accountIsAdmin;
     }
 
     /** Stub the active complimentary grant lookup for the calendar. */
@@ -1230,7 +1222,7 @@ describe('FundingService', () => {
 
       it('should open the gate on a determinate grant when the owner admin-role lookup fails', async () => {
         stubFundingEnabled(true);
-        mockAccountsInterface.getAccountById.rejects(new Error('DB error'));
+        mockAccountsInterface.accountIsAdmin.rejects(new Error('DB error'));
         stubGrant(true);
 
         const allowed = await service.checkFundingAccess(calendarId, feature);
@@ -1286,7 +1278,7 @@ describe('FundingService', () => {
 
       it('should close the gate when every funding read fails', async () => {
         stubFundingEnabled(true);
-        mockAccountsInterface.getAccountById.rejects(new Error('DB error'));
+        mockAccountsInterface.accountIsAdmin.rejects(new Error('DB error'));
         sandbox.stub(ComplimentaryGrantEntity, 'findOne').rejects(new Error('DB error'));
         sandbox.stub(CalendarFundingPlanEntity, 'findOne').rejects(new Error('DB error'));
 

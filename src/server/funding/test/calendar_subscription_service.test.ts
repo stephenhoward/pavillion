@@ -27,8 +27,7 @@ describe('FundingService - Calendar Subscription Methods', () => {
     getCalendarOwnerAccountId: sinon.SinonStub;
   };
   let mockAccountsInterface: {
-    getAccountById: sinon.SinonStub;
-    loadAccountRoles: sinon.SinonStub;
+    accountIsAdmin: sinon.SinonStub;
   };
 
   beforeAll(async () => {
@@ -50,8 +49,7 @@ describe('FundingService - Calendar Subscription Methods', () => {
 
     // Create mock AccountsInterface and inject it
     mockAccountsInterface = {
-      getAccountById: sandbox.stub().resolves(undefined),
-      loadAccountRoles: sandbox.stub(),
+      accountIsAdmin: sandbox.stub().resolves(false),
     };
     service.setAccountsInterface(mockAccountsInterface as any);
   });
@@ -397,9 +395,7 @@ describe('FundingService - Calendar Subscription Methods', () => {
         .resolves(accountId);
 
       // Owner has admin role (asked of the accounts domain)
-      const owner = { id: accountId, hasRole: (role: string) => role === 'admin' };
-      mockAccountsInterface.getAccountById.withArgs(accountId).resolves(owner);
-      mockAccountsInterface.loadAccountRoles.resolves(owner);
+      mockAccountsInterface.accountIsAdmin.withArgs(accountId).resolves(true);
 
       const status = await service.getFundingStatusForCalendar(accountId, calendarId);
       expect(status).toBe('admin-exempt');
@@ -418,9 +414,7 @@ describe('FundingService - Calendar Subscription Methods', () => {
         .withArgs(calendarId)
         .resolves(accountId);
 
-      const owner = { id: accountId, hasRole: () => false };
-      mockAccountsInterface.getAccountById.withArgs(accountId).resolves(owner);
-      mockAccountsInterface.loadAccountRoles.resolves(owner);
+      mockAccountsInterface.accountIsAdmin.withArgs(accountId).resolves(false);
 
       // Active grant for this calendar (via hasActiveGrant)
       sandbox.stub(ComplimentaryGrantEntity, 'findOne').resolves({
@@ -447,9 +441,7 @@ describe('FundingService - Calendar Subscription Methods', () => {
         .withArgs(calendarId)
         .resolves(accountId);
 
-      const owner = { id: accountId, hasRole: () => false };
-      mockAccountsInterface.getAccountById.withArgs(accountId).resolves(owner);
-      mockAccountsInterface.loadAccountRoles.resolves(owner);
+      mockAccountsInterface.accountIsAdmin.withArgs(accountId).resolves(false);
 
       // No grant - hasActiveGrant returns null for first call, CalendarFundingPlanEntity for second
       sandbox.stub(ComplimentaryGrantEntity, 'findOne').resolves(null);
@@ -478,9 +470,7 @@ describe('FundingService - Calendar Subscription Methods', () => {
         .withArgs(calendarId)
         .resolves(accountId);
 
-      const owner = { id: accountId, hasRole: () => false };
-      mockAccountsInterface.getAccountById.withArgs(accountId).resolves(owner);
-      mockAccountsInterface.loadAccountRoles.resolves(owner);
+      mockAccountsInterface.accountIsAdmin.withArgs(accountId).resolves(false);
       sandbox.stub(ComplimentaryGrantEntity, 'findOne').resolves(null);
       sandbox.stub(CalendarFundingPlanEntity, 'findOne').resolves(null);
 

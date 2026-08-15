@@ -422,15 +422,7 @@ export default class FundingService {
       return false;
     }
 
-    const account = await this.accountsInterface.getAccountById(accountId);
-
-    if (!account) {
-      return false;
-    }
-
-    const accountWithRoles = await this.accountsInterface.loadAccountRoles(account);
-
-    return accountWithRoles.hasRole('admin');
+    return this.accountsInterface.accountIsAdmin(accountId);
   }
 
   /**

@@ -1022,6 +1022,25 @@ export default class AccountService {
   }
 
   /**
+   * Checks whether an account holds the instance admin role.
+   *
+   * Queries the AccountRole table directly — no account row load — so
+   * cross-domain callers that only need a yes/no avoid extra fetches. An
+   * unknown account ID simply has no role row and answers false.
+   *
+   * @param accountId - Account ID to check
+   * @returns {Promise<boolean>} a promise that resolves to true if the
+   *   account holds the admin role
+   */
+  async accountIsAdmin(accountId: string): Promise<boolean> {
+    const adminRole = await AccountRoleEntity.findOne({
+      where: { account_id: accountId, role: 'admin' },
+    });
+
+    return !!adminRole;
+  }
+
+  /**
    * Checks credentials against an account, and returns the corresponding Account if successful
    * @param email
    * @param password
