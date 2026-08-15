@@ -20,7 +20,7 @@ import { FundingPlanEntity } from '@/server/funding/entity/funding_plan';
 import { FundingEventEntity } from '@/server/funding/entity/funding_event';
 import { ComplimentaryGrantEntity } from '@/server/funding/entity/complimentary_grant';
 import { CalendarFundingPlanEntity } from '@/server/funding/entity/calendar_funding_plan';
-import { AccountEntity, AccountRoleEntity } from '@/server/common/entity/account';
+import { AccountEntity } from '@/server/common/entity/account';
 import db from '@/server/common/entity/db';
 import { emitAfterTx } from '@/server/common/helper/emit-after-tx';
 import { ProviderFactory } from '@/server/funding/service/provider/factory';
@@ -50,6 +50,7 @@ import { ValidationError } from '@/common/exceptions/base';
 import { CalendarNotFoundError } from '@/common/exceptions/calendar';
 import { logError } from '@/server/common/helper/error-logger';
 import type CalendarInterface from '@/server/calendar/interface';
+import type AccountsInterface from '@/server/accounts/interface';
 
 // UUID v4 validation regex
 const UUID_V4_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -90,6 +91,7 @@ export interface ProviderInfo {
 export default class FundingService {
   private eventBus: EventEmitter;
   private calendarInterface?: CalendarInterface;
+  private accountsInterface?: AccountsInterface;
 
   constructor(eventBus: EventEmitter) {
     this.eventBus = eventBus;
@@ -103,6 +105,15 @@ export default class FundingService {
    */
   setCalendarInterface(calendarInterface: CalendarInterface): void {
     this.calendarInterface = calendarInterface;
+  }
+
+  /**
+   * Injects AccountsInterface for cross-domain account role checks.
+   *
+   * @param accountsInterface - The AccountsInterface instance from the accounts domain
+   */
+  setAccountsInterface(accountsInterface: AccountsInterface): void {
+    this.accountsInterface = accountsInterface;
   }
 
   /**
@@ -397,20 +408,29 @@ export default class FundingService {
   }
 
   /**
-   * Check whether an account holds the instance admin role.
+   * Check whether an account holds the instance admin role, asking the
+   * accounts domain via AccountsInterface.
+   *
+   * Errors from the accounts domain propagate to the caller, which decides
+   * what an unanswerable check means for its own decision.
    *
    * @param accountId - Account ID to check
    * @returns True if the account is an instance admin
    */
   private async isAccountAdmin(accountId: string): Promise<boolean> {
-    const adminRole = await AccountRoleEntity.findOne({
-      where: {
-        account_id: accountId,
-        role: 'admin',
-      },
-    });
+    if (!this.accountsInterface) {
+      return false;
+    }
 
-    return !!adminRole;
+    const account = await this.accountsInterface.getAccountById(accountId);
+
+    if (!account) {
+      return false;
+    }
+
+    const accountWithRoles = await this.accountsInterface.loadAccountRoles(account);
+
+    return accountWithRoles.hasRole('admin');
   }
 
   /**
@@ -1773,9 +1793,7 @@ export default class FundingService {
    *     tell" is not "has access".
    *
    * Note the deliberate split in invariants 1 and 4: a *known* absence of
-   * funding opens gates, an *unknown* funding state closes them. Neither is
-   * the ambiguous "fail-secure" the earlier hasFundingAccess implemented,
-   * which had no notion of an instance with funding switched off.
+   * funding opens gates, an *unknown* funding state closes them.
    *
    * Where invariants 3 and 4 meet, the tie-break is: **a determinate allow
    * beats an indeterminate sibling read.** The admin, grant and plan checks

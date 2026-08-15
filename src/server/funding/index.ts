@@ -5,6 +5,7 @@ import FundingEventHandlers from '@/server/funding/events';
 import FundingApiV1 from '@/server/funding/api/v1';
 import { startScheduledJobs } from '@/server/funding/service/jobs';
 import type CalendarInterface from '@/server/calendar/interface';
+import type AccountsInterface from '@/server/accounts/interface';
 
 /**
  * Funding Domain entry point.
@@ -31,6 +32,16 @@ export default class FundingDomain {
    */
   setCalendarInterface(calendarInterface: CalendarInterface): void {
     this.interface.setCalendarInterface(calendarInterface);
+  }
+
+  /**
+   * Injects AccountsInterface into the funding service for cross-domain
+   * account role checks (admin exemption from funding gates).
+   *
+   * @param accountsInterface - The AccountsInterface instance from the accounts domain
+   */
+  setAccountsInterface(accountsInterface: AccountsInterface): void {
+    this.interface.setAccountsInterface(accountsInterface);
   }
 
   public initialize(app: Application): void {

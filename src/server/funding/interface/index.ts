@@ -14,6 +14,7 @@ import type { ProviderCredentials } from '@/server/funding/service/provider/adap
 import { ComplimentaryGrant } from '@/common/model/complimentary_grant';
 import { CheckoutSessionResult } from '@/server/funding/service/provider/adapter';
 import type CalendarInterface from '@/server/calendar/interface';
+import type AccountsInterface from '@/server/accounts/interface';
 
 /**
  * Funding domain interface for cross-domain communication
@@ -39,6 +40,16 @@ export default class FundingInterface {
    */
   setCalendarInterface(calendarInterface: CalendarInterface): void {
     this.fundingService.setCalendarInterface(calendarInterface);
+  }
+
+  /**
+   * Injects AccountsInterface into the funding service for cross-domain
+   * account role checks (admin exemption from funding gates).
+   *
+   * @param accountsInterface - The AccountsInterface instance from the accounts domain
+   */
+  setAccountsInterface(accountsInterface: AccountsInterface): void {
+    this.fundingService.setAccountsInterface(accountsInterface);
   }
 
   // Cross-domain query methods

@@ -9,7 +9,6 @@ import { FundingPlanEntity } from '@/server/funding/entity/funding_plan';
 import { FundingEventEntity } from '@/server/funding/entity/funding_event';
 import { ComplimentaryGrantEntity } from '@/server/funding/entity/complimentary_grant';
 import { CalendarFundingPlanEntity } from '@/server/funding/entity/calendar_funding_plan';
-import { AccountRoleEntity } from '@/server/common/entity/account';
 import { ProviderFactory } from '@/server/funding/service/provider/factory';
 import { FundingSettings, ProviderConfig, FundingPlan } from '@/common/model/funding-plan';
 import { ComplimentaryGrant } from '@/common/model/complimentary_grant';
@@ -37,6 +36,10 @@ describe('FundingService', () => {
     getCalendarOwnerAccountId: sinon.SinonStub;
     getCalendar: sinon.SinonStub;
   };
+  let mockAccountsInterface: {
+    getAccountById: sinon.SinonStub;
+    loadAccountRoles: sinon.SinonStub;
+  };
   beforeAll(async () => {
     // Sync database schema before running tests
     await db.sync({ force: true });
@@ -55,6 +58,13 @@ describe('FundingService', () => {
       getCalendar: sandbox.stub().resolves(null),
     };
     service.setCalendarInterface(mockCalendarInterface as any);
+
+    // Create mock AccountsInterface and inject it
+    mockAccountsInterface = {
+      getAccountById: sandbox.stub().resolves(undefined),
+      loadAccountRoles: sandbox.stub(),
+    };
+    service.setAccountsInterface(mockAccountsInterface as any);
   });
 
   afterEach(() => {
@@ -976,11 +986,19 @@ describe('FundingService', () => {
       } as any);
     }
 
-    /** Stub the admin-role lookup for the calendar owner. */
+    /**
+     * Stub the accounts-domain role lookup for the calendar owner. Returns the
+     * account-lookup stub so tests can assert the accounts domain was never
+     * consulted at all.
+     */
     function stubOwnerIsAdmin(isAdmin: boolean): sinon.SinonStub {
-      return sandbox.stub(AccountRoleEntity, 'findOne').resolves(
-        isAdmin ? { account_id: ownerId, role: 'admin' } as any : null,
-      );
+      const owner = {
+        id: ownerId,
+        hasRole: (role: string) => isAdmin && role === 'admin',
+      };
+      mockAccountsInterface.getAccountById.withArgs(ownerId).resolves(owner);
+      mockAccountsInterface.loadAccountRoles.resolves(owner);
+      return mockAccountsInterface.getAccountById;
     }
 
     /** Stub the active complimentary grant lookup for the calendar. */
@@ -1212,7 +1230,7 @@ describe('FundingService', () => {
 
       it('should open the gate on a determinate grant when the owner admin-role lookup fails', async () => {
         stubFundingEnabled(true);
-        sandbox.stub(AccountRoleEntity, 'findOne').rejects(new Error('DB error'));
+        mockAccountsInterface.getAccountById.rejects(new Error('DB error'));
         stubGrant(true);
 
         const allowed = await service.checkFundingAccess(calendarId, feature);
@@ -1268,7 +1286,7 @@ describe('FundingService', () => {
 
       it('should close the gate when every funding read fails', async () => {
         stubFundingEnabled(true);
-        sandbox.stub(AccountRoleEntity, 'findOne').rejects(new Error('DB error'));
+        mockAccountsInterface.getAccountById.rejects(new Error('DB error'));
         sandbox.stub(ComplimentaryGrantEntity, 'findOne').rejects(new Error('DB error'));
         sandbox.stub(CalendarFundingPlanEntity, 'findOne').rejects(new Error('DB error'));
 
