@@ -243,6 +243,57 @@ describe('Admin Funding API', () => {
       expect(response.body).toEqual({ success: true });
       expect(updateStub.calledWith('stripe', 'Credit/Debit Card', true)).toBe(true);
     });
+
+    it('should reject a provider type outside the known set', async () => {
+      const updateStub = sandbox.stub(service, 'updateProvider').resolves();
+
+      router.put('/handler/:providerType', adminHandlers.updateProvider.bind(adminHandlers));
+
+      const response = await request(testApp(router))
+        .put('/handler/bogus')
+        .send({
+          displayName: 'Bogus Provider',
+          enabled: true,
+        })
+        .expect(400);
+
+      // Asserted on the wire shape rather than `instanceof`: the shared
+      // ValidationError base clobbers subclass prototypes, so
+      // `err instanceof InvalidProviderTypeError` is unreliable.
+      expect(response.body.errorName).toBe('InvalidProviderTypeError');
+      expect(response.body.error).toContain('stripe');
+      expect(updateStub.called).toBe(false);
+    });
+  });
+
+  describe('POST /admin/funding-plans/:id/cancel', () => {
+    it('should force cancel a funding plan', async () => {
+      const planId = '4e0b1b2c-4a6b-4f2d-9c3e-1a2b3c4d5e6f';
+      const cancelStub = sandbox.stub(service, 'forceCancel').resolves();
+
+      router.post('/handler/:id/cancel', adminHandlers.forceCancel.bind(adminHandlers));
+
+      const response = await request(testApp(router))
+        .post(`/handler/${planId}/cancel`)
+        .expect(200);
+
+      expect(response.body).toEqual({ success: true });
+      expect(cancelStub.calledOnceWith(planId)).toBe(true);
+    });
+
+    it('should reject a funding plan ID that is not a UUID', async () => {
+      const cancelStub = sandbox.stub(service, 'forceCancel').resolves();
+
+      router.post('/handler/:id/cancel', adminHandlers.forceCancel.bind(adminHandlers));
+
+      const response = await request(testApp(router))
+        .post('/handler/not-a-uuid/cancel')
+        .expect(400);
+
+      expect(response.body.errorName).toBe('ValidationError');
+      expect(response.body.error).toContain('must be a valid UUID');
+      expect(cancelStub.called).toBe(false);
+    });
   });
 
   describe('GET /admin/funding-plans', () => {

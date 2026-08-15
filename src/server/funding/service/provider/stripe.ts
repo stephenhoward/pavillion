@@ -53,8 +53,27 @@ export class StripeAdapter implements PaymentProviderAdapter {
     // Pinned to the version the installed SDK's types describe. Bump this in
     // lockstep with the stripe dependency, or the API will answer in an older
     // shape than the field reads below expect.
+    //
+    // timeout and maxNetworkRetries are set explicitly because provider calls
+    // run inside database transactions, and a transaction pins a connection
+    // from the pool the whole application shares. The worst-case hold is
+    //
+    //     sequential provider calls x timeout x (1 + maxNetworkRetries)
+    //
+    // and updateSubscriptionAmount below makes three sequential round trips.
+    // On the SDK defaults (80s, 2 retries) that is 3 x 80s x 3 — roughly twelve
+    // minutes on one connection, before retry backoff. At 8s with no retries it
+    // is 24 seconds. Every Stripe call this adapter makes is a short interactive
+    // operation; none of them wants eighty seconds. Retries are dropped rather
+    // than reduced because a caller holding a transaction open is the wrong
+    // place to wait out a Stripe outage — failing fast and rolling back is.
+    //
+    // ProviderFactory caches one adapter per provider config, so this single
+    // client serves every call path. Changing these values changes the bound.
     this.stripe = new Stripe(apiKey, {
       apiVersion: '2026-02-25.clover',
+      timeout: 8000,
+      maxNetworkRetries: 0,
     });
     this.webhookSecret = webhookSecret;
     this.credentials = credentials;
@@ -220,11 +239,30 @@ export class StripeAdapter implements PaymentProviderAdapter {
   /**
    * Verify webhook signature from Stripe
    *
+   * Fails closed when no signing secret is configured. `constructEvent` keys an
+   * HMAC with the secret, and an empty key still yields a well-defined digest —
+   * so an unset secret turns signature verification into something an attacker
+   * who knows it is unset can satisfy (CVE-2026-41432 pattern). The secret is
+   * admin-supplied at runtime (stored on ProviderConfigEntity, not in config),
+   * so it cannot be asserted at startup; the check has to guard the call site.
+   *
+   * The check is deliberately unconditional rather than production-only. In
+   * development with no Stripe credentials at all, ProviderFactory hands back
+   * MockStripeAdapter, which skips verification entirely — that is the only
+   * intended bypass, and configuring real credentials removes it.
+   *
    * @param payload - Raw webhook payload (string)
    * @param signature - Signature header from webhook request
    * @returns True if signature is valid, false otherwise
    */
   verifyWebhookSignature(payload: string, signature: string): boolean {
+    if (!this.webhookSecret || this.webhookSecret.trim() === '') {
+      logger.error({
+        providerType: this.providerType,
+      }, 'Stripe webhook rejected: no signing secret is configured. Add the whsec_ signing secret to the Stripe provider configuration.');
+      return false;
+    }
+
     try {
       this.stripe.webhooks.constructEvent(payload, signature, this.webhookSecret);
       return true;

@@ -149,6 +149,27 @@ describe('Payment Provider Adapters', () => {
       expect(client.getApiField('version')).toBe(Stripe.API_VERSION);
     });
 
+    it('should bound the Stripe client so a hung call cannot pin a pooled database connection', () => {
+      // updateSubscriptionAmount issues three sequential Stripe round trips and
+      // runs inside a database transaction, so the worst-case connection hold is
+      // calls x timeout x (1 + maxNetworkRetries). On the SDK defaults (80s, 2
+      // retries) that is roughly twelve minutes on one pooled connection; the
+      // explicit options bring it to twenty-four seconds. This test guards the
+      // inputs to that arithmetic — see the rationale comment in stripe.ts.
+      //
+      // getApiField returns exactly what was passed to the constructor, but it is
+      // absent from Stripe's published types, hence the cast.
+      const adapter = new StripeAdapter({ apiKey: 'sk_test_123' }, 'whsec_test');
+      const client = (adapter as any).stripe;
+
+      expect(client.getApiField('timeout')).toBe(8000);
+      expect(client.getApiField('maxNetworkRetries')).toBe(0);
+
+      // Fail loudly if the options object is ever dropped and the SDK defaults return.
+      expect(client.getApiField('timeout')).not.toBe(80000);
+      expect(client.getApiField('maxNetworkRetries')).not.toBe(2);
+    });
+
     describe('validateCredentials', () => {
       it('should return true when balance.retrieve() resolves', async () => {
         mockStripe.balance.retrieve.resolves({ available: [], pending: [] });

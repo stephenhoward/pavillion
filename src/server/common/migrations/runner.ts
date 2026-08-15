@@ -23,6 +23,33 @@ const namespace = cls.createNamespace(MIGRATION_CLS_NAMESPACE);
 (Sequelize as unknown as { useCLS: (ns: cls.Namespace) => void }).useCLS(namespace);
 
 /**
+ * Removes the per-connection session limits for the current transaction.
+ *
+ * The application's PostgreSQL connections carry a 60s `statement_timeout` and
+ * `idle_in_transaction_session_timeout` (see the `database.dialectOptions` block
+ * in `config/default.yaml`), which bound how long a request can pin a pooled
+ * connection. Migrations run through the same Sequelize instance and the same
+ * pool, but schema changes on a large table can legitimately run far longer than
+ * any request should — so the migration transaction opts itself out.
+ *
+ * `SET LOCAL` scopes the change to the enclosing transaction and reverts on
+ * commit or rollback, so the connection returns to the pool with the configured
+ * limits intact. Must therefore be called from inside a transaction.
+ *
+ * Non-PostgreSQL dialects have neither setting; the call is a no-op there.
+ *
+ * @param sequelize - The Sequelize instance running the migration transaction
+ */
+export async function clearMigrationSessionTimeouts(sequelize: Sequelize): Promise<void> {
+  if (sequelize.getDialect() !== 'postgres') {
+    return;
+  }
+
+  await sequelize.query('SET LOCAL statement_timeout = 0');
+  await sequelize.query('SET LOCAL idle_in_transaction_session_timeout = 0');
+}
+
+/**
  * Result of a migration run.
  */
 export interface MigrationResult {
@@ -66,12 +93,14 @@ export function createMigrationRunner(
             // cleanly instead of leaving the schema in a half-applied state.
             // CLS auto-enrolls all queries inside the callback.
             return context.transaction(async () => {
+              await clearMigrationSessionTimeouts(context);
               return migration.up({ context });
             });
           },
           down: async () => {
             const migration = await getModule();
             return context.transaction(async () => {
+              await clearMigrationSessionTimeouts(context);
               return migration.down({ context });
             });
           },
