@@ -9,6 +9,7 @@ import {
   ProviderType,
   BillingCycle,
   FundingStatus,
+  FundingPlanStatus,
 } from '@/common/model/funding-plan';
 import { ComplimentaryGrant } from '@/common/model/complimentary_grant';
 import { FundingSettingsEntity } from '@/server/funding/entity/funding_settings';
@@ -1207,6 +1208,23 @@ export default class FundingService {
   }
 
   /**
+   * Build the minimal JSON summary stored in FundingEventEntity.payload.
+   *
+   * Data minimization (DEC-004): the raw provider event carries customer
+   * records, payment-method details and billing addresses that Pavillion has
+   * no reason to retain. The event type, provider event ID and funding plan ID
+   * all have their own columns, so only the resolved lifecycle status is kept
+   * here — enough to reconstruct a plan's status history from the event log.
+   *
+   * @param status - Lifecycle status the event resolved to, if any
+   * @returns JSON string safe to persist
+   * @private
+   */
+  private summarizeProviderEvent(status: FundingPlanStatus | null): string {
+    return JSON.stringify({ status });
+  }
+
+  /**
    * Process webhook event from payment provider
    *
    * @param event - Webhook event data
@@ -1248,7 +1266,7 @@ export default class FundingService {
     eventEntity.funding_plan_id = fundingPlanRecord?.id || '';
     eventEntity.event_type = event.eventType;
     eventEntity.provider_event_id = event.eventId;
-    eventEntity.payload = JSON.stringify(event.rawPayload);
+    eventEntity.payload = this.summarizeProviderEvent(event.status ?? null);
     eventEntity.processed_at = new Date();
     await eventEntity.save();
 
@@ -1392,7 +1410,7 @@ export default class FundingService {
       eventEntity.funding_plan_id = plan.id;
       eventEntity.event_type = event.eventType;
       eventEntity.provider_event_id = event.eventId;
-      eventEntity.payload = JSON.stringify(event.rawPayload);
+      eventEntity.payload = this.summarizeProviderEvent(plan.status);
       eventEntity.processed_at = new Date();
       await eventEntity.save({ transaction: t });
 

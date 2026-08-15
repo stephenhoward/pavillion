@@ -58,6 +58,16 @@ bd sync               # Sync with git
 - App URL is http://localhost:3000 (the backend serves the HTML, which pulls JS/CSS assets from Vite on 5173) — not 5173, which returns 404 for SPA routes
 - Check ports: `lsof -i :3000` (backend/app) and `lsof -i :5173` (Vite/HMR)
 
+## Environment Quirks
+
+Recurring agent time-wasters, verified against session history — read before shelling out:
+
+- The Bash tool runs zsh. Quote glob arguments (`--include='*.ts'`, `ls 'vitest*.ts'`) — an unquoted glob that matches nothing aborts the **entire** command with "no matches found", including parts that would have worked. Bare `===` echo separators trigger zsh equals-expansion (`=== not found`); quote them (`echo '==='`).
+- `grep` in the Bash tool is a ugrep shim, not `/usr/bin/grep`. `\+` in patterns fails with "invalid syntax" — match a literal leading `+` (e.g. git-diff added lines) with `'^[+]'`. Prefer the Grep tool for searches.
+- A no-match `grep` exits 1, which marks the whole Bash call as an error and skips any later `&&` steps. Append `|| true` when zero matches is an acceptable outcome, or end compound commands with something that always succeeds.
+- `npm run test:e2e` (154 tests) exceeds the default 2-minute Bash timeout; pass a 10-minute timeout when running it.
+- Before editing a file, view it with the Read tool, not `sed`/`cat` — the Edit tool refuses files that were only viewed via Bash, and the failed attempt plus forced re-read wastes two calls.
+
 ## Path Aliases
 
 `@/*` maps to `src/*` (configured in tsconfig.json and vite.config.ts)

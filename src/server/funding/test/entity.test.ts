@@ -116,6 +116,26 @@ describe('Subscription Entities', () => {
   });
 
   describe('FundingEventEntity', () => {
+    it('should round-trip fundingPlanId through toModel and fromModel', () => {
+      const entity = FundingEventEntity.build({
+        id: 'event-id',
+        funding_plan_id: 'plan-id',
+        event_type: 'invoice.paid',
+        provider_event_id: 'evt_123',
+        payload: '{"status":"active"}',
+        processed_at: new Date(),
+      });
+
+      const model = entity.toModel();
+      expect(model.fundingPlanId).toBe('plan-id');
+
+      const newEntity = FundingEventEntity.fromModel(model);
+      expect(newEntity.get('funding_plan_id')).toBe('plan-id');
+      expect(newEntity.get('id')).toBe('event-id');
+      expect(newEntity.get('event_type')).toBe('invoice.paid');
+      expect(newEntity.get('provider_event_id')).toBe('evt_123');
+    });
+
     it('should store event payload as JSON', () => {
       const payload = {
         type: 'invoice.paid',

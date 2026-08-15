@@ -646,6 +646,10 @@ class ImportSourceRoutes {
  * `startedAt` is preserved from the service result; `finishedAt` is
  * captured at API-handler return time (the run is definitively finished
  * by the time this function runs).
+ *
+ * The two calendar-wide dedup counters are optional on `SyncResult` (the
+ * per-source path leaves them unset) but always numeric on the wire, so
+ * the client can render their clauses without null-guarding.
  */
 function toImportRunSummary(
   result: SyncResult,
@@ -661,6 +665,8 @@ function toImportRunSummary(
     eventsUpdated: result.eventsUpdated,
     eventsSkippedLocallyEdited: result.eventsSkippedLocallyEdited,
     eventsDisappeared: result.eventsDisappeared,
+    eventsSkippedSyncManaged: result.eventsSkippedSyncManaged ?? 0,
+    eventsPreservedLocalEdits: result.eventsPreservedLocalEdits ?? 0,
     errorMessage: result.errorMessage,
   };
 }

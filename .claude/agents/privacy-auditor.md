@@ -26,7 +26,7 @@ Then read **only** the topic files that are relevant to the changed code. The sk
 
 ### Step 1: Load Review Mode Protocol
 
-Read `.claude/skills/review-mode-auditor/SKILL.md` for shared auditor constraints, report structure, verdict system, and critical rules.
+Read `.claude/skills/review-mode-auditor/SKILL.md` — resolved from the root of the repository checkout under review, not `~/.claude/skills/` — for shared auditor constraints, report structure, verdict system, and critical rules.
 
 ### Step 2: Read the Privacy Index
 

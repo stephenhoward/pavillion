@@ -65,6 +65,10 @@ roadmap. If a spec is referenced, read it for broader context.
 
 Follow TDD. Stay scoped to the files listed.
 
+View every file you intend to edit with the Read tool first — the Edit tool
+refuses files that were only viewed via Bash (`sed`/`cat`), and each refusal
+costs a failed call plus a forced re-read.
+
 **Before closing:**
 
 1. Kill any stale vitest processes: `pkill -f "vitest" 2>/dev/null || true`
@@ -138,6 +142,15 @@ a per-bead branch stacked on a sibling bead's branch rather than on
 the implementer: it never creates, switches, or submits branches itself
 (stacking conventions: `git-workflow/stacking.md`; scheduling:
 [`bead-wave-orchestration`](../bead-wave-orchestration/SKILL.md)).
+
+### 4c. Read before Edit
+
+The harness's Edit tool only operates on files previously opened with the
+Read tool in the same conversation. A 5-month transcript audit found 33
+wasted round trips from implementers viewing files with `sed -n`/`cat`
+via Bash and then calling Edit — each such attempt fails with "File has
+not been read yet", forcing a Read and a retry. Browsing with `sed` is
+fine; files being **edited** must go through Read first.
 
 ### 5. Pre-close checklist (in order)
 

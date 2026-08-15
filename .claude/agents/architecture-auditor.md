@@ -31,7 +31,7 @@ A key differentiator of this audit: you **zoom out**. After checking individual 
 
 ### Step 1: Load Review Mode Protocol
 
-Read `.claude/skills/review-mode-auditor/SKILL.md` for shared auditor constraints, report structure, verdict system, and critical rules.
+Read `.claude/skills/review-mode-auditor/SKILL.md` — resolved from the root of the repository checkout under review, not `~/.claude/skills/` — for shared auditor constraints, report structure, verdict system, and critical rules.
 
 ### Step 2: Load Architecture Context
 
@@ -39,6 +39,11 @@ Read `.claude/skills/architecture-playbook/SKILL.md` to understand what dimensio
 - `agent-os/product/mission.md`
 - `agent-os/product/decisions.md`
 - `agent-os/product/roadmap.md`
+
+`mission.md` and `roadmap.md` are gitignored and exist only in the main
+checkout. If they are missing from the checkout under audit (a worktree),
+read them from `/Users/stephen/pavillion/code/agent-os/product/` — do not
+spend calls searching for them locally.
 
 ### Step 3: Identify and Classify Changed Files
 

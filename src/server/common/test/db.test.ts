@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-import { shiftDates, findEarliestDate } from '@/server/common/entity/db';
+import db, { shiftDates, findEarliestDate } from '@/server/common/entity/db';
 
 describe('shiftDates', () => {
   it('preserves the time component when shifting a naive datetime string forward', () => {
@@ -117,5 +117,32 @@ describe('findEarliestDate', () => {
     expect(result).not.toBeNull();
     // The UTC hour must always be 8, regardless of host timezone
     expect(result!.getUTCHours()).toBe(8);
+  });
+});
+
+describe('database connection options', () => {
+  // The pool is shared by the whole application. Sequelize's defaults (max 5,
+  // acquire 60s) mean a handful of requests stuck in a transaction starve every
+  // unrelated request — login, public calendar render, federation inbox. These
+  // assertions pin the explicit values from config/default.yaml so a config
+  // deletion is a test failure rather than a silent return to the defaults.
+  it('configures the connection pool explicitly rather than relying on Sequelize defaults', () => {
+    expect(db.options.pool).toMatchObject({
+      max: 10,
+      min: 0,
+      acquire: 30000,
+      idle: 10000,
+    });
+  });
+
+  it('bounds how long a connection may run a statement or sit idle inside a transaction', () => {
+    // Postgres-side backstops for the same exposure: statement_timeout bounds a
+    // lock wait, idle_in_transaction_session_timeout bounds a transaction parked
+    // on a hung outbound HTTP call. SQLite ignores both, so this asserts the
+    // configuration rather than the behaviour.
+    const dialectOptions = db.options.dialectOptions as Record<string, unknown> | undefined;
+
+    expect(dialectOptions?.statement_timeout).toBe(60000);
+    expect(dialectOptions?.idle_in_transaction_session_timeout).toBe(60000);
   });
 });

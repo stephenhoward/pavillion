@@ -363,6 +363,8 @@
     },
     "sync_success": "Sync complete: {{created}} added, {{updated}} updated.",
     "sync_success_no_changes": "Sync complete: no changes.",
+    "sync_skipped_sync_managed": "{{skipped}} skipped (managed by sync).",
+    "sync_preserved_local_edits": "{{preserved}} preserved (edited locally).",
     "import_success": "Import complete: {{created}} added, {{updated}} updated.",
     "verify_aria": "Verify ownership for import source {{url}}"
   },

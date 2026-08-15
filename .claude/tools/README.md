@@ -29,8 +29,15 @@ npx tsx .claude/tools/stack.ts submit <branch> --chained|--single
 npx tsx .claude/tools/stack.ts sync                      # gh stack sync --prune
 ```
 
+Local branch/worktree cleanup lives with its skill rather than here: the CLI
+is `.claude/skills/git-cleanup/scripts/git-cleanup.ts` and the flow that
+drives it is `.claude/skills/git-cleanup/SKILL.md`.
+
 ## Tests
 
 ```bash
 npx vitest run --config .claude/tools/vitest.config.ts
 ```
+
+That config covers both `.claude/tools/test/` and the `scripts/test/`
+directory of any skill that ships its own tooling.
