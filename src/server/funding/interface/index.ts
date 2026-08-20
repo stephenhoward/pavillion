@@ -8,12 +8,13 @@ import {
   type ProviderStatus,
   type DisconnectionResult,
 } from '@/server/funding/service/provider_connection';
-import { FundingPlan, FundingSettings, ProviderConfig, FundingStatus, BillingCycle, ProviderType } from '@/common/model/funding-plan';
+import { FundingPlan, FundingSettings, ProviderConfig, FundingStatus, BillingCycle, ProviderType, FundingGatedFeature } from '@/common/model/funding-plan';
 import type { ProviderInfo } from '@/server/funding/service/funding';
 import type { ProviderCredentials } from '@/server/funding/service/provider/adapter';
 import { ComplimentaryGrant } from '@/common/model/complimentary_grant';
 import { CheckoutSessionResult } from '@/server/funding/service/provider/adapter';
 import type CalendarInterface from '@/server/calendar/interface';
+import type AccountsInterface from '@/server/accounts/interface';
 
 /**
  * Funding domain interface for cross-domain communication
@@ -41,10 +42,25 @@ export default class FundingInterface {
     this.fundingService.setCalendarInterface(calendarInterface);
   }
 
+  /**
+   * Injects AccountsInterface into the funding service for cross-domain
+   * account role checks (admin exemption from funding gates).
+   *
+   * @param accountsInterface - The AccountsInterface instance from the accounts domain
+   */
+  setAccountsInterface(accountsInterface: AccountsInterface): void {
+    this.fundingService.setAccountsInterface(accountsInterface);
+  }
+
   // Cross-domain query methods
 
   /**
    * Check if a calendar has an active funding plan
+   *
+   * @deprecated Use {@link checkFundingAccess}. This reports only the plan's
+   * status, so it keeps granting access to a plan whose cancellation was never
+   * reported to us, and it knows nothing about instance-level funding settings
+   * or admin exemption. Retired at the widget-gate migration.
    *
    * @param calendarId - Calendar ID to check
    * @returns True if calendar has active funding plan, false otherwise
@@ -57,11 +73,42 @@ export default class FundingInterface {
    * Check if a calendar has access to funded features
    * (either via active funding plan or complimentary grant)
    *
+   * @deprecated Use {@link checkFundingAccess}. This answers only the
+   * grant-or-plan half of a gate decision, leaving every caller to remember
+   * the instance-enabled and admin-exemption checks for itself, and it applies
+   * no cancellation boundary. Retired at the widget-gate migration.
+   *
    * @param calendarId - Calendar ID to check
    * @returns True if calendar has funding access, false otherwise
    */
   async hasFundingAccess(calendarId: string): Promise<boolean> {
     return this.fundingService.hasFundingAccess(calendarId);
+  }
+
+  /**
+   * Decide whether a calendar may use a funding-gated feature.
+   *
+   * The single entry point for funding gates: feature domains pass a key from
+   * FUNDING_GATED_FEATURES and act on the answer, holding no funding state of
+   * their own. See FundingService.checkFundingAccess for the four invariants
+   * that produce the decision.
+   *
+   * This answers a funding question and nothing else. It is NOT an
+   * authorization check: when funding is not enabled on the instance it
+   * returns true for any well-formed UUID, including calendars that do not
+   * exist and calendars the caller has no business touching. Compose it only
+   * AFTER authentication, ownership and existence checks have run.
+   *
+   * A false is not always "unfunded" either — an unreadable instance funding
+   * state also denies. That case is a server-side failure and must surface as
+   * a server error, never as 402 / SubscriptionRequiredError.
+   *
+   * @param calendarId - Calendar the feature would be used on
+   * @param feature - Key from FUNDING_GATED_FEATURES naming the gated feature
+   * @returns True if the gate is open for this calendar
+   */
+  async checkFundingAccess(calendarId: string, feature: FundingGatedFeature): Promise<boolean> {
+    return this.fundingService.checkFundingAccess(calendarId, feature);
   }
 
   /**

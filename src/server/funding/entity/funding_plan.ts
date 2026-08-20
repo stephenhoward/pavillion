@@ -129,6 +129,13 @@ class FundingPlanEntity extends Model {
     if (newStatus === 'active' && previousStatus === 'suspended') {
       instance.suspended_at = null;
     }
+
+    // Clear cancelled_at when resubscribing. A stale cancellation marker on a
+    // plan that is active again reads as a lapsed plan to the funding-access
+    // check, which would deny a customer who is paying.
+    if (newStatus === 'active' && previousStatus === 'cancelled') {
+      instance.cancelled_at = null;
+    }
   }
 }
 

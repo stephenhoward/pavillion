@@ -113,6 +113,79 @@ describe('Subscription Entities', () => {
       expect(newEntity.get('status')).toBe('active');
       expect(newEntity.get('billing_cycle')).toBe('monthly');
     });
+
+    describe('status transition hook', () => {
+      const planRow = (status: 'active' | 'past_due' | 'suspended' | 'cancelled') => ({
+        id: 'sub-id',
+        account_id: 'account-id',
+        provider_config_id: 'provider-id',
+        provider_subscription_id: 'sub_123',
+        provider_customer_id: 'cus_123',
+        status,
+        billing_cycle: 'monthly' as const,
+        amount: 1000000,
+        currency: 'USD',
+        current_period_start: new Date(),
+        current_period_end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+        cancelled_at: new Date(Date.now() - 24 * 60 * 60 * 1000),
+        suspended_at: new Date(Date.now() - 24 * 60 * 60 * 1000),
+      });
+
+      /**
+       * Builds a plan in the given status, with both lifecycle markers set, for
+       * tests that then reassign .status. That reassignment is what populates
+       * previous('status'), so these instances need no further ceremony.
+       */
+      function buildPlan(status: 'active' | 'past_due' | 'suspended' | 'cancelled'): FundingPlanEntity {
+        return FundingPlanEntity.build(planRow(status));
+      }
+
+      it('should clear cancelled_at when a cancelled plan is resubscribed', () => {
+        const entity = buildPlan('cancelled');
+
+        entity.status = 'active';
+        FundingPlanEntity.validateStatusTransition(entity);
+
+        // A stale cancellation marker on a paying plan would read as an
+        // expired plan to the funding-access check
+        expect(entity.cancelled_at).toBeNull();
+      });
+
+      it('should clear suspended_at when a suspended plan is reactivated', () => {
+        const entity = buildPlan('suspended');
+
+        entity.status = 'active';
+        FundingPlanEntity.validateStatusTransition(entity);
+
+        expect(entity.suspended_at).toBeNull();
+      });
+
+      it('should set cancelled_at when a plan is cancelled', () => {
+        const entity = buildPlan('active');
+        entity.cancelled_at = null;
+
+        entity.status = 'cancelled';
+        FundingPlanEntity.validateStatusTransition(entity);
+
+        expect(entity.cancelled_at).toBeInstanceOf(Date);
+      });
+
+      it('should leave both markers untouched when the status does not change', () => {
+        // A save that touches some other column must not restamp the lifecycle
+        // markers. raw: true seeds previous() from the row without any
+        // reassignment, which is what a loaded-then-resaved record looks like
+        // when status is not among the columns being updated.
+        const row = planRow('cancelled');
+        const entity = FundingPlanEntity.build(row, { isNewRecord: false, raw: true });
+
+        expect(entity.previous('status')).toBe('cancelled');
+
+        FundingPlanEntity.validateStatusTransition(entity);
+
+        expect(entity.cancelled_at).toBe(row.cancelled_at);
+        expect(entity.suspended_at).toBe(row.suspended_at);
+      });
+    });
   });
 
   describe('FundingEventEntity', () => {

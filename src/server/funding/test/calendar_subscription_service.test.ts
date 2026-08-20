@@ -26,6 +26,9 @@ describe('FundingService - Calendar Subscription Methods', () => {
     calendarExists: sinon.SinonStub;
     getCalendarOwnerAccountId: sinon.SinonStub;
   };
+  let mockAccountsInterface: {
+    accountIsAdmin: sinon.SinonStub;
+  };
 
   beforeAll(async () => {
     await db.sync({ force: true });
@@ -43,6 +46,12 @@ describe('FundingService - Calendar Subscription Methods', () => {
       getCalendarOwnerAccountId: sandbox.stub(),
     };
     service.setCalendarInterface(mockCalendarInterface as any);
+
+    // Create mock AccountsInterface and inject it
+    mockAccountsInterface = {
+      accountIsAdmin: sandbox.stub().resolves(false),
+    };
+    service.setAccountsInterface(mockAccountsInterface as any);
   });
 
   afterEach(() => {
@@ -385,12 +394,8 @@ describe('FundingService - Calendar Subscription Methods', () => {
         .withArgs(calendarId)
         .resolves(accountId);
 
-      // Owner has admin role
-      const { AccountRoleEntity } = await import('@/server/common/entity/account');
-      sandbox.stub(AccountRoleEntity, 'findOne').resolves({
-        account_id: accountId,
-        role: 'admin',
-      } as any);
+      // Owner has admin role (asked of the accounts domain)
+      mockAccountsInterface.accountIsAdmin.withArgs(accountId).resolves(true);
 
       const status = await service.getFundingStatusForCalendar(accountId, calendarId);
       expect(status).toBe('admin-exempt');
@@ -409,8 +414,7 @@ describe('FundingService - Calendar Subscription Methods', () => {
         .withArgs(calendarId)
         .resolves(accountId);
 
-      const { AccountRoleEntity } = await import('@/server/common/entity/account');
-      sandbox.stub(AccountRoleEntity, 'findOne').resolves(null);
+      mockAccountsInterface.accountIsAdmin.withArgs(accountId).resolves(false);
 
       // Active grant for this calendar (via hasActiveGrant)
       sandbox.stub(ComplimentaryGrantEntity, 'findOne').resolves({
@@ -437,8 +441,7 @@ describe('FundingService - Calendar Subscription Methods', () => {
         .withArgs(calendarId)
         .resolves(accountId);
 
-      const { AccountRoleEntity } = await import('@/server/common/entity/account');
-      sandbox.stub(AccountRoleEntity, 'findOne').resolves(null);
+      mockAccountsInterface.accountIsAdmin.withArgs(accountId).resolves(false);
 
       // No grant - hasActiveGrant returns null for first call, CalendarFundingPlanEntity for second
       sandbox.stub(ComplimentaryGrantEntity, 'findOne').resolves(null);
@@ -467,8 +470,7 @@ describe('FundingService - Calendar Subscription Methods', () => {
         .withArgs(calendarId)
         .resolves(accountId);
 
-      const { AccountRoleEntity } = await import('@/server/common/entity/account');
-      sandbox.stub(AccountRoleEntity, 'findOne').resolves(null);
+      mockAccountsInterface.accountIsAdmin.withArgs(accountId).resolves(false);
       sandbox.stub(ComplimentaryGrantEntity, 'findOne').resolves(null);
       sandbox.stub(CalendarFundingPlanEntity, 'findOne').resolves(null);
 
