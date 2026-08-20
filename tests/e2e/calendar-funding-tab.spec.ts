@@ -21,6 +21,10 @@ import { startTestServer, TestEnvironment } from './helpers/test-server';
  * The `features` key on the funding-summary mock is load-bearing: the section
  * reads its capability from there, never from `status`. A mock that omits it
  * leaves every gate `unknown` and the section renders nothing at all.
+ *
+ * Locators here are scoped to `#settings-panel`, because the shared upsell is
+ * placed at more than one site and every tab panel is mounted at once — see
+ * `settingsPanel()` below.
  */
 
 let env: TestEnvironment;
@@ -92,6 +96,36 @@ async function mockFundingAPIs(page: import('@playwright/test').Page, options: {
 }
 
 /**
+ * The settings tab panel — the surface every assertion in this file is about.
+ *
+ * Calendar management mounts all of its tab panels at once and hides the
+ * inactive ones with the `hidden` attribute rather than `v-if`, so the widget
+ * tab's markup is in the DOM while the settings tab is showing. The funding
+ * upsell is one shared, self-gating card used at both sites, which means a shut
+ * widget-embedding gate puts two `.funding-upsell` blocks in the document at the
+ * same time. That is the design working: `hidden` keeps the inactive one away
+ * from sighted users and assistive tech alike, and exactly one is ever visible.
+ *
+ * Unscoped `.funding-upsell*` locators are therefore ambiguous by construction,
+ * whether or not a given assertion happens to trip strict mode today. Naming the
+ * panel keeps each assertion about the surface it means.
+ */
+function settingsPanel(page: import('@playwright/test').Page) {
+  return page.locator('#settings-panel');
+}
+
+/**
+ * Every upsell a user could actually see, anywhere on the page.
+ *
+ * The counterpart to scoping: scoping alone would let a real regression — two
+ * upsells visible at once — pass unnoticed, so the denied-gate tests assert on
+ * this as well.
+ */
+function visibleUpsells(page: import('@playwright/test').Page) {
+  return page.locator('.funding-upsell:visible');
+}
+
+/**
  * Navigate to calendar settings tab.
  */
 async function navigateToSettingsTab(page: import('@playwright/test').Page, baseURL: string) {
@@ -100,6 +134,8 @@ async function navigateToSettingsTab(page: import('@playwright/test').Page, base
 
   const settingsTab = page.locator('#settings-tab');
   await settingsTab.click();
+
+  await expect(settingsPanel(page)).toBeVisible({ timeout: 10000 });
 }
 
 test.describe('Calendar Settings — Extended Features (Funding)', () => {
@@ -124,8 +160,13 @@ test.describe('Calendar Settings — Extended Features (Funding)', () => {
 
     await navigateToSettingsTab(page, env.baseURL);
 
-    const upsellAction = page.locator('.funding-upsell__action');
+    const upsellAction = settingsPanel(page).locator('.funding-upsell__action');
     await expect(upsellAction).toBeVisible({ timeout: 10000 });
+
+    // The widget tab's copy of the card is mounted and denied too, but hidden
+    // with its panel. One offer is on screen, and it is this one.
+    await expect(visibleUpsells(page)).toHaveCount(1);
+    await expect(settingsPanel(page).locator('.funding-upsell:visible')).toHaveCount(1);
   });
 
   test('acting on the upsell opens the funding sheet', async ({ page }) => {
@@ -137,12 +178,15 @@ test.describe('Calendar Settings — Extended Features (Funding)', () => {
 
     await navigateToSettingsTab(page, env.baseURL);
 
-    const upsellAction = page.locator('.funding-upsell__action');
+    const upsellAction = settingsPanel(page).locator('.funding-upsell__action');
     await expect(upsellAction).toBeVisible({ timeout: 10000 });
+    await expect(visibleUpsells(page)).toHaveCount(1);
     await upsellAction.click();
 
-    // FundingSheet dialog should appear (Sheet component uses .sheet-dialog)
-    const fundingSheet = page.locator('.sheet-dialog');
+    // FundingSheet dialog should appear (Sheet component uses .sheet-dialog).
+    // The card renders its sheet in place, so the settings tab's card is the one
+    // that must have opened it.
+    const fundingSheet = settingsPanel(page).locator('.sheet-dialog');
     await expect(fundingSheet).toBeVisible({ timeout: 10000 });
   });
 
@@ -156,12 +200,15 @@ test.describe('Calendar Settings — Extended Features (Funding)', () => {
     await navigateToSettingsTab(page, env.baseURL);
 
     // Should show enabled badge
-    const enabledBadge = page.locator('.setting-badge--enabled');
+    const enabledBadge = settingsPanel(page).locator('.setting-badge--enabled');
     await expect(enabledBadge).toBeVisible({ timeout: 10000 });
 
     // Should show disable button — a plan is the one source with something to cancel
-    const disableButton = page.locator('.setting-disable-btn');
+    const disableButton = settingsPanel(page).locator('.setting-disable-btn');
     await expect(disableButton).toBeVisible();
+
+    // An open gate sells nothing, on this tab or any other.
+    await expect(page.locator('.funding-upsell')).toHaveCount(0);
   });
 
   test('sells nothing when funding is not enabled on the instance', async ({ page }) => {
@@ -176,9 +223,11 @@ test.describe('Calendar Settings — Extended Features (Funding)', () => {
 
     await navigateToSettingsTab(page, env.baseURL);
 
-    const enabledBadge = page.locator('.setting-badge--enabled');
+    const enabledBadge = settingsPanel(page).locator('.setting-badge--enabled');
     await expect(enabledBadge).toBeVisible({ timeout: 10000 });
 
+    // Deliberately page-wide: the claim is that nothing is offered for sale
+    // anywhere, including the widget tab mounted alongside this one.
     await expect(page.locator('.funding-upsell')).toHaveCount(0);
   });
 
@@ -192,8 +241,10 @@ test.describe('Calendar Settings — Extended Features (Funding)', () => {
     await navigateToSettingsTab(page, env.baseURL);
 
     // Should show enabled badge (admin-exempt uses same badge style)
-    const enabledBadge = page.locator('.setting-badge--enabled');
+    const enabledBadge = settingsPanel(page).locator('.setting-badge--enabled');
     await expect(enabledBadge).toBeVisible({ timeout: 10000 });
+
+    await expect(page.locator('.funding-upsell')).toHaveCount(0);
   });
 
   test('shows neither entitlement nor upsell when the funding state is unreadable', async ({ page }) => {
@@ -206,10 +257,12 @@ test.describe('Calendar Settings — Extended Features (Funding)', () => {
 
     await navigateToSettingsTab(page, env.baseURL);
 
-    const settingsContent = page.locator('.settings-content');
+    const settingsContent = settingsPanel(page).locator('.settings-content');
     await expect(settingsContent).toBeVisible({ timeout: 10000 });
 
+    // Page-wide again: an unreadable funding state must not produce an upsell on
+    // any surface, and the widget tab reads the same gate.
     await expect(page.locator('.funding-upsell')).toHaveCount(0);
-    await expect(page.locator('.setting-badge--enabled')).toHaveCount(0);
+    await expect(settingsPanel(page).locator('.setting-badge--enabled')).toHaveCount(0);
   });
 });
