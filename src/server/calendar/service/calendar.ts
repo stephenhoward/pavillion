@@ -245,13 +245,13 @@ class CalendarService {
   }
 
   /**
-   * Get calendar for widget embedding with subscription check.
-   * This method performs defense-in-depth subscription verification for widget data serving.
+   * Get calendar for widget embedding with funding-access check.
+   * This method performs defense-in-depth funding-access verification for widget data serving.
    *
    * @param urlName - Calendar URL name
    * @returns Calendar model if access is allowed
    * @throws CalendarNotFoundError if calendar doesn't exist
-   * @throws SubscriptionRequiredError if subscriptions enabled and owner lacks active subscription
+   * @throws SubscriptionRequiredError if funding is enabled and the owner lacks an active funding plan
    */
   async getCalendarForWidget(urlName: string): Promise<Calendar> {
     const calendar = await this.getCalendarByName(urlName);
@@ -260,7 +260,7 @@ class CalendarService {
       throw new CalendarNotFoundError();
     }
 
-    // Check subscription for widget access (defense-in-depth)
+    // Check funding access for widget access (defense-in-depth)
     const settings = await this.fundingInterface?.getSettings();
 
     if (settings?.enabled) {
@@ -269,7 +269,7 @@ class CalendarService {
         throw new CalendarNotFoundError();
       }
 
-      // Admin-owned calendars bypass subscription checks
+      // Admin-owned calendars bypass funding-access checks
       const isAdmin = await this.isCalendarOwnerAdmin(ownerId);
       if (!isAdmin) {
         const hasSubscription = await this.fundingInterface?.hasFundingAccess(calendar.id);
@@ -1681,17 +1681,17 @@ class CalendarService {
 
   /**
    * Set the allowed domain for a calendar's widget.
-   * Includes subscription verification when subscriptions are enabled.
+   * Includes funding-access verification when funding is enabled.
    *
    * @param account - Account setting the domain
    * @param calendarId - Calendar ID to configure
    * @param domain - Domain to allow for widget embedding
-   * @throws SubscriptionRequiredError if subscriptions enabled and user lacks active subscription
+   * @throws SubscriptionRequiredError if funding is enabled and the user lacks an active funding plan
    * @throws CalendarNotFoundError if calendar not found
    * @throws CalendarEditorPermissionError if user lacks permission
    */
   async setWidgetDomain(account: Account, calendarId: string, _domain: string): Promise<void> {
-    // Check if subscriptions are enabled
+    // Check if funding is enabled
     const settings = await this.fundingInterface?.getSettings();
 
     if (settings?.enabled) {
@@ -1701,10 +1701,10 @@ class CalendarService {
         throw new CalendarNotFoundError();
       }
 
-      // Admin-owned calendars bypass subscription checks
+      // Admin-owned calendars bypass funding-access checks
       const isAdmin = await this.isCalendarOwnerAdmin(ownerId);
       if (!isAdmin) {
-        // Check subscription status
+        // Check funding-plan status
         const hasSubscription = await this.fundingInterface?.hasFundingAccess(calendarId);
         if (!hasSubscription) {
           throw new SubscriptionRequiredError('widget_embedding');

@@ -55,7 +55,7 @@ import type AccountsInterface from '@/server/accounts/interface';
 // UUID v4 validation regex
 const UUID_V4_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-// Maximum number of calendar IDs allowed in a single subscribe call
+// Maximum number of calendar IDs allowed in a single coverage-change call
 export const MAX_CALENDAR_IDS = 50;
 
 // Checkout session ID format: cs_test_ or cs_live_ prefix, then 1-190 alphanumeric/underscore chars
@@ -882,7 +882,7 @@ export default class FundingService {
    * @param billingCycle - 'monthly' or 'yearly'
    * @param returnUrl - URL to return to after checkout
    * @param amount - Optional amount in millicents (for PWYC pricing)
-   * @param calendarIds - Optional array of calendar IDs to fund
+   * @param calendarIds - Optional array of calendar IDs the plan should cover
    * @returns Client secret and session ID for the embedded checkout
    */
   async createCheckoutSession(
@@ -1156,8 +1156,22 @@ export default class FundingService {
       order: [['createdAt', 'DESC']],
     });
 
+    // Fetch account emails in a single batch query for admin display
+    const accountIds = [...new Set(rows.map((row) => row.account_id))];
+    const accounts = accountIds.length > 0
+      ? await AccountEntity.findAll({
+        where: { id: accountIds },
+        attributes: ['id', 'email'],
+      })
+      : [];
+    const emailByAccountId = new Map(accounts.map((a) => [a.id, a.email]));
+
     return {
-      fundingPlans: rows.map((entity) => entity.toModel()),
+      fundingPlans: rows.map((entity) => {
+        const plan = entity.toModel();
+        plan.accountEmail = emailByAccountId.get(entity.account_id);
+        return plan;
+      }),
       pagination: {
         currentPage: page,
         totalPages: Math.ceil(count / limit),

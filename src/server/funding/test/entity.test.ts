@@ -7,7 +7,7 @@ import { FundingEventEntity } from '../entity/funding_event';
 import { FundingSettings } from '@/common/model/funding-plan';
 import { millicentsToDisplay, displayToMillicents } from '@/common/model/funding-plan';
 
-describe('Subscription Entities', () => {
+describe('Funding Plan Entities', () => {
   const sandbox = sinon.createSandbox();
 
   afterEach(() => {
@@ -256,8 +256,8 @@ describe('Subscription Entities', () => {
   });
 
   describe('Entity Associations', () => {
-    it('should establish subscription to account relationship', () => {
-      const subscriptionData = {
+    it('should establish funding plan to account relationship', () => {
+      const planData = {
         id: 'sub-id',
         account_id: 'account-id',
         provider_config_id: 'provider-id',
@@ -273,13 +273,13 @@ describe('Subscription Entities', () => {
         suspended_at: null,
       };
 
-      const subscription = FundingPlanEntity.build(subscriptionData);
+      const plan = FundingPlanEntity.build(planData);
 
-      expect(subscription.account_id).toBe('account-id');
-      expect(subscription.provider_config_id).toBe('provider-id');
+      expect(plan.account_id).toBe('account-id');
+      expect(plan.provider_config_id).toBe('provider-id');
 
       // Test toModel includes foreign key relationships
-      const model = subscription.toModel();
+      const model = plan.toModel();
       expect(model.accountId).toBe('account-id');
       expect(model.providerConfigId).toBe('provider-id');
     });

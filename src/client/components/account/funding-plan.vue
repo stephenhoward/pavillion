@@ -243,16 +243,16 @@ onMounted(async () => {
 
       <!-- Funded calendars list -->
       <div v-if="hasFundingPlan" class="funded-calendars">
-        <h2>{{ t("funded_calendars_title") }}</h2>
+        <h2>{{ t("covered_calendars_title") }}</h2>
 
         <div v-if="fundedCalendars.length === 0" class="funded-calendars-empty">
-          <p>{{ t("no_funded_calendars") }}</p>
+          <p>{{ t("no_covered_calendars") }}</p>
         </div>
 
         <ul v-else class="funded-calendars-list">
           <li v-for="item in fundedCalendars" :key="item.calendarId" class="funded-calendar-item">
             <span class="calendar-name">{{ getCalendarName(item.calendarId) }}</span>
-            <span class="calendar-amount">{{ t("funded_calendar_amount", { amount: formatCalendarAmount(item.amount) }) }}</span>
+            <span class="calendar-amount">{{ t("covered_calendar_amount", { amount: formatCalendarAmount(item.amount) }) }}</span>
           </li>
         </ul>
       </div>

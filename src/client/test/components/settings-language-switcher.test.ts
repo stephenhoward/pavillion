@@ -58,7 +58,7 @@ function mountSettings() {
 
 describe('Settings Language Switcher', () => {
   beforeEach(() => {
-    // Default: profile returns English, subscription disabled, language changes succeed
+    // Default: profile returns English, funding disabled, language changes succeed
     vi.spyOn(AccountService.prototype, 'getProfile').mockResolvedValue(buildProfile('en'));
     vi.spyOn(AccountService.prototype, 'updateLanguage').mockResolvedValue(undefined);
     vi.spyOn(FundingService.prototype, 'getOptions').mockResolvedValue({ enabled: false });

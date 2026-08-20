@@ -236,7 +236,7 @@ export default class FundingInterface {
    * @param billingCycle - 'monthly' or 'yearly'
    * @param returnUrl - URL to return to after checkout
    * @param amount - Optional amount in millicents (for PWYC pricing)
-   * @param calendarIds - Optional array of calendar IDs to fund
+   * @param calendarIds - Optional array of calendar IDs the plan should cover
    * @returns Client secret and session ID for the embedded checkout
    */
   async createCheckoutSession(

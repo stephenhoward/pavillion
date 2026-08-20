@@ -32,7 +32,7 @@ vi.mock('@/client/service/funding', () => {
         enabled: false,
       },
     ]),
-    listFundingPlans: vi.fn().mockResolvedValue({ subscriptions: [], total: 0 }),
+    listFundingPlans: vi.fn().mockResolvedValue({ fundingPlans: [], pagination: { currentPage: 1, totalPages: 0, totalCount: 0, limit: 20 } }),
   }));
 
   // Add static methods to the mock class
@@ -130,7 +130,7 @@ describe('Funding Page Wizard Integration', () => {
           enabled: true,
         },
       ]),
-      listFundingPlans: vi.fn().mockResolvedValue({ subscriptions: [], total: 0 }),
+      listFundingPlans: vi.fn().mockResolvedValue({ fundingPlans: [], pagination: { currentPage: 1, totalPages: 0, totalCount: 0, limit: 20 } }),
     };
 
     vi.mocked(FundingService).mockImplementation(() => mockService as any);
@@ -177,7 +177,7 @@ describe('Funding Page Wizard Integration', () => {
           enabled: false,
         },
       ]),
-      listFundingPlans: vi.fn().mockResolvedValue({ subscriptions: [], total: 0 }),
+      listFundingPlans: vi.fn().mockResolvedValue({ fundingPlans: [], pagination: { currentPage: 1, totalPages: 0, totalCount: 0, limit: 20 } }),
     } as any));
 
     wrapper = mountWithI18n({
@@ -256,7 +256,7 @@ describe('Funding Page Wizard Integration', () => {
             enabled: false,
           },
         ]),
-      listFundingPlans: vi.fn().mockResolvedValue({ subscriptions: [], total: 0 }),
+      listFundingPlans: vi.fn().mockResolvedValue({ fundingPlans: [], pagination: { currentPage: 1, totalPages: 0, totalCount: 0, limit: 20 } }),
     };
 
     vi.mocked(FundingService).mockImplementation(() => mockService as any);
@@ -366,7 +366,7 @@ describe('Funding Page Wizard Integration', () => {
             enabled: true,
           },
         ]),
-      listFundingPlans: vi.fn().mockResolvedValue({ subscriptions: [], total: 0 }),
+      listFundingPlans: vi.fn().mockResolvedValue({ fundingPlans: [], pagination: { currentPage: 1, totalPages: 0, totalCount: 0, limit: 20 } }),
     };
 
     vi.mocked(FundingService).mockImplementation(() => mockService as any);
@@ -410,7 +410,7 @@ describe('Funding Page Wizard Integration', () => {
           ...overrides,
         }),
         getProviders: vi.fn().mockResolvedValue([]),
-        listFundingPlans: vi.fn().mockResolvedValue({ subscriptions: [], total: 0 }),
+        listFundingPlans: vi.fn().mockResolvedValue({ fundingPlans: [], pagination: { currentPage: 1, totalPages: 0, totalCount: 0, limit: 20 } }),
         updateSettings: vi.fn().mockResolvedValue(true),
       } as any));
 

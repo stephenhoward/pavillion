@@ -6,12 +6,12 @@
       class="alert alert--error"
       role="alert"
       aria-live="polite">
-      <span v-if="!state.isSubscriptionError">{{ state.error }}</span>
+      <span v-if="!state.isFundingGateError">{{ state.error }}</span>
       <span v-else>
         {{ state.error }}
         <router-link
           to="/funding"
-          class="subscription-link"
+          class="funding-link"
           :aria-label="t('funding_plan_action_full_context')">
           {{ t('funding_plan_action') }}
         </router-link>
@@ -91,7 +91,7 @@ const state = reactive({
   success: '',
   newDomain: '',
   currentDomain: null, // Changed from domains array to single domain
-  isSubscriptionError: false,
+  isFundingGateError: false,
 });
 
 /**
@@ -138,7 +138,7 @@ const clearMessages = (delay = 5000) => {
   setTimeout(() => {
     state.error = '';
     state.success = '';
-    state.isSubscriptionError = false;
+    state.isFundingGateError = false;
   }, delay);
 };
 
@@ -172,7 +172,7 @@ const addDomain = async () => {
 
   if (!isValidDomain(domain)) {
     state.error = t('error_invalid_domain');
-    state.isSubscriptionError = false;
+    state.isFundingGateError = false;
     clearMessages();
     return;
   }
@@ -181,7 +181,7 @@ const addDomain = async () => {
     state.isAdding = true;
     state.error = '';
     state.success = '';
-    state.isSubscriptionError = false;
+    state.isFundingGateError = false;
 
     const encodedId = validateAndEncodeId(props.calendarId, 'Calendar ID');
     const response = await axios.put(`/api/v1/calendars/${encodedId}/widget/domain`, {
@@ -196,31 +196,31 @@ const addDomain = async () => {
   catch (error) {
     console.error('Error setting domain:', error);
 
-    // Check for subscription required error (402 Payment Required)
-    // Admin users should not see subscription errors (they bypass subscription checks)
+    // Check for funding-gate error (402 Payment Required)
+    // Admin users should not see funding-gate errors (they bypass funding-access checks)
     if (error.response?.status === 402 && error.response?.data?.errorName === 'SubscriptionRequiredError') {
       if (!authn.isAdmin()) {
         state.error = t('funding_plan_required');
-        state.isSubscriptionError = true;
-        // Don't auto-clear subscription errors - user needs to see them
-        clearMessages(10000); // Longer timeout for subscription errors
+        state.isFundingGateError = true;
+        // Don't auto-clear funding-gate errors - user needs to see them
+        clearMessages(10000); // Longer timeout for funding-gate errors
       }
       else {
-        // Admin got subscription error - this shouldn't happen, treat as generic error
-        console.error('Admin user received subscription error - this is unexpected');
+        // Admin got a funding-gate error - this should not happen, treat as generic error
+        console.error('Admin user received funding-gate error - this is unexpected');
         state.error = t('error_adding');
-        state.isSubscriptionError = false;
+        state.isFundingGateError = false;
         clearMessages();
       }
     }
     else if (error.response?.data?.errorName === 'InvalidDomainFormatError') {
       state.error = t('error_invalid_domain');
-      state.isSubscriptionError = false;
+      state.isFundingGateError = false;
       clearMessages();
     }
     else {
       state.error = t('error_adding');
-      state.isSubscriptionError = false;
+      state.isFundingGateError = false;
       clearMessages();
     }
   }
@@ -241,7 +241,7 @@ const removeDomain = async () => {
     state.removingId = true;
     state.error = '';
     state.success = '';
-    state.isSubscriptionError = false;
+    state.isFundingGateError = false;
 
     const encodedCalendarId = validateAndEncodeId(props.calendarId, 'Calendar ID');
     await axios.delete(`/api/v1/calendars/${encodedCalendarId}/widget/domain`);
@@ -253,7 +253,7 @@ const removeDomain = async () => {
   catch (error) {
     console.error('Error clearing domain:', error);
     state.error = t('error_removing');
-    state.isSubscriptionError = false;
+    state.isFundingGateError = false;
     clearMessages();
   }
   finally {
@@ -344,7 +344,7 @@ onMounted(loadDomains);
   }
 }
 
-.subscription-link {
+.funding-link {
   margin-left: 0.5rem;
   color: var(--pav-color-red-700);
   text-decoration: underline;

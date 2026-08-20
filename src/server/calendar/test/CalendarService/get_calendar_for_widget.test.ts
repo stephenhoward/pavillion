@@ -24,7 +24,7 @@ describe('CalendarService.getCalendarForWidget', () => {
       loadAccountRoles: sandbox.stub(),
     } as any;
 
-    // Create mock subscription interface
+    // Create mock funding interface
     mockFundingInterface = {
       getSettings: sandbox.stub(),
       hasFundingAccess: sandbox.stub(),
@@ -52,8 +52,8 @@ describe('CalendarService.getCalendarForWidget', () => {
     });
   });
 
-  describe('when subscriptions are disabled (free instance)', () => {
-    it('should return calendar without subscription check', async () => {
+  describe('when funding is disabled (free instance)', () => {
+    it('should return calendar without a funding-access check', async () => {
       const calendar = new Calendar('calendar-id', 'test-calendar');
       sandbox.stub(service, 'getCalendarByName').resolves(calendar);
 
@@ -64,13 +64,13 @@ describe('CalendarService.getCalendarForWidget', () => {
 
       expect(result).toBe(calendar);
       expect(settingsStub.calledOnce).toBe(true);
-      // Should not check subscription when disabled
+      // Should not check funding access when disabled
       const hasFundingAccessStub = mockFundingInterface.hasFundingAccess as sinon.SinonStub;
       expect(hasFundingAccessStub.called).toBe(false);
     });
   });
 
-  describe('when subscriptions are enabled', () => {
+  describe('when funding is enabled', () => {
     it('should throw SubscriptionRequiredError if calendar has no owner', async () => {
       const calendar = new Calendar('calendar-id', 'test-calendar');
       sandbox.stub(service, 'getCalendarByName').resolves(calendar);
@@ -84,7 +84,7 @@ describe('CalendarService.getCalendarForWidget', () => {
       ).rejects.toThrow(CalendarNotFoundError);
     });
 
-    it('should throw SubscriptionRequiredError if owner lacks subscription access', async () => {
+    it('should throw SubscriptionRequiredError if owner lacks a funding plan access', async () => {
       const calendar = new Calendar('calendar-id', 'test-calendar');
       const ownerId = 'owner-account-id';
 
@@ -103,12 +103,12 @@ describe('CalendarService.getCalendarForWidget', () => {
 
       await expect(
         service.getCalendarForWidget('test-calendar'),
-      ).rejects.toThrow('widget_embedding requires an active subscription');
+      ).rejects.toThrow('widget_embedding requires an active funding plan');
 
       expect(hasFundingAccessStub.calledWith(calendar.id)).toBe(true);
     });
 
-    it('should return calendar if owner has active subscription', async () => {
+    it('should return calendar if owner has active funding plan', async () => {
       const calendar = new Calendar('calendar-id', 'test-calendar');
       const ownerId = 'owner-account-id';
 
@@ -138,7 +138,7 @@ describe('CalendarService.getCalendarForWidget', () => {
       settingsStub.resolves({ enabled: true });
 
       const hasFundingAccessStub = mockFundingInterface.hasFundingAccess as sinon.SinonStub;
-      // hasFundingAccess returns true when account has a grant (even without active subscription)
+      // hasFundingAccess returns true when account has a grant (even without active funding plan)
       hasFundingAccessStub.resolves(true);
 
       const result = await service.getCalendarForWidget('test-calendar');
@@ -171,7 +171,7 @@ describe('CalendarService.getCalendarForWidget', () => {
     });
 
     describe('admin bypass', () => {
-      it('should bypass subscription check if calendar owner is admin', async () => {
+      it('should bypass funding-access check if calendar owner is admin', async () => {
         const calendar = new Calendar('calendar-id', 'test-calendar');
         const ownerId = 'admin-account-id';
         const adminAccount = new Account('admin-account-id', 'admin', 'admin@example.com');
@@ -194,11 +194,11 @@ describe('CalendarService.getCalendarForWidget', () => {
         const result = await service.getCalendarForWidget('test-calendar');
 
         expect(result).toBe(calendar);
-        // Should not check subscription for admin
+        // Should not check funding access for admin
         expect(hasFundingAccessStub.called).toBe(false);
       });
 
-      it('should require subscription if calendar owner is not admin', async () => {
+      it('should require a funding plan if calendar owner is not admin', async () => {
         const calendar = new Calendar('calendar-id', 'test-calendar');
         const ownerId = 'regular-account-id';
         const regularAccount = new Account('regular-account-id', 'user', 'user@example.com');
@@ -223,11 +223,11 @@ describe('CalendarService.getCalendarForWidget', () => {
           service.getCalendarForWidget('test-calendar'),
         ).rejects.toThrow(SubscriptionRequiredError);
 
-        // Should check subscription for non-admin
+        // Should check funding access for non-admin
         expect(hasFundingAccessStub.calledWith(calendar.id)).toBe(true);
       });
 
-      it('should require subscription if account not found (fail-secure)', async () => {
+      it('should require a funding plan if account not found (fail-secure)', async () => {
         const calendar = new Calendar('calendar-id', 'test-calendar');
         const ownerId = 'unknown-account-id';
 
@@ -247,11 +247,11 @@ describe('CalendarService.getCalendarForWidget', () => {
           service.getCalendarForWidget('test-calendar'),
         ).rejects.toThrow(SubscriptionRequiredError);
 
-        // Should check subscription when account lookup fails
+        // Should check funding access when account lookup fails
         expect(hasFundingAccessStub.calledWith(calendar.id)).toBe(true);
       });
 
-      it('should require subscription if roles cannot be loaded (fail-secure)', async () => {
+      it('should require a funding plan if roles cannot be loaded (fail-secure)', async () => {
         const calendar = new Calendar('calendar-id', 'test-calendar');
         const ownerId = 'account-id';
         const account = new Account('account-id', 'user', 'user@example.com');
@@ -277,7 +277,7 @@ describe('CalendarService.getCalendarForWidget', () => {
           service.getCalendarForWidget('test-calendar'),
         ).rejects.toThrow(SubscriptionRequiredError);
 
-        // Should check subscription when roles can't be determined
+        // Should check funding access when roles can't be determined
         expect(hasFundingAccessStub.calledWith(calendar.id)).toBe(true);
       });
     });

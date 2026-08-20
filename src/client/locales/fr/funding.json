@@ -5,13 +5,10 @@
   "load_error": "Échec du chargement des informations de financement. Veuillez réessayer.",
 
   "no_funding_plan": "Aucun plan de financement actif",
-  "no_funding_plan_description": "Abonnez-vous pour soutenir cette instance et accéder aux fonctionnalités premium.",
-  "no_plan_redirect": "Pour démarrer un plan de financement, accédez à un calendrier dont vous êtes propriétaire et ouvrez l'onglet Financement.",
+  "no_plan_redirect": "Pour démarrer un plan de financement et soutenir cette instance, ouvrez l'onglet Financement sur un calendrier dont vous êtes propriétaire.",
   "monthly_option": "Mensuel",
   "yearly_option": "Annuel",
-  "subscribe_button": "S'abonner maintenant",
 
-  "subscribe_title": "Choisissez votre plan de financement",
   "select_provider": "Mode de paiement",
   "select_cycle": "Cycle de facturation",
   "billing_cycle_monthly": "Mensuel",
@@ -23,11 +20,11 @@
   "yearly_discount_note": "Économisez {{percent}} % avec la facturation annuelle",
   "suggested_amount": "Suggéré : {{amount}}",
   "select_provider_error": "Veuillez sélectionner un mode de paiement.",
-  "confirm_subscribe_button": "Confirmer et s'abonner",
+  "confirm_contribution_button": "Confirmer la contribution",
   "cancel_button": "Annuler",
 
-  "subscribe_success": "Plan de financement créé avec succès !",
-  "subscribe_error": "Échec de la création du plan de financement. Veuillez réessayer.",
+  "plan_started_success": "Merci de soutenir cette instance. Votre plan de financement est actif.",
+  "plan_start_error": "Échec du démarrage de votre plan de financement. Veuillez réessayer.",
 
   "checkout_done_button": "Terminé",
   "checkout_try_again_button": "Réessayer",
@@ -45,25 +42,25 @@
   "status_cancelled": "Annulé",
 
   "cancellation_info": "Votre plan de financement restera actif jusqu'au {{date}}",
-  "past_due_warning": "Votre paiement a échoué. Veuillez mettre à jour votre mode de paiement pour maintenir votre plan de financement actif.",
-  "suspended_message": "Votre plan de financement a été suspendu en raison d'un échec de paiement. Veuillez contacter le support.",
+  "past_due_warning": "Votre paiement n'a pas abouti. Mettez à jour votre mode de paiement pour continuer à soutenir cette instance.",
+  "suspended_message": "Votre plan de financement est suspendu car le paiement a continué d'échouer. Veuillez contacter le support.",
 
   "manage_payment_button": "Gérer le mode de paiement",
-  "cancel_funding_plan_button": "Annuler le plan de financement",
-  "cancel_confirm": "Êtes-vous sûr de vouloir annuler votre plan de financement ? Vous conserverez l'accès jusqu'à la fin de votre période de facturation.",
-  "cancel_success": "Plan de financement annulé avec succès. Vous conserverez l'accès jusqu'à la fin de votre période de facturation.",
+  "cancel_funding_plan_button": "Annuler le plan",
+  "cancel_confirm": "Annuler votre plan de financement ? Votre abonnement prendra fin à la clôture de la période de facturation en cours, et vous conserverez les fonctionnalités étendues jusque-là. Vos calendriers restent en ligne quoi qu'il arrive.",
+  "cancel_success": "Plan de financement annulé. Vous conserverez les fonctionnalités étendues jusqu'à la fin de votre période de facturation.",
   "cancel_error": "Échec de l'annulation du plan de financement. Veuillez réessayer.",
 
   "portal_error": "Impossible d'accéder au portail de facturation. Veuillez réessayer.",
 
   "funding_disabled": "Le financement n'est pas actuellement activé sur cette instance.",
 
-  "subscribe_to_fund_title": "Activer les fonctionnalités du calendrier",
-  "subscribe_to_fund_description": "Ces fonctionnalités sont disponibles lorsque vous contribuez à {{instanceName}}. Votre contribution aide à pérenniser ce service pour tout le monde.",
+  "extended_features_title": "Fonctionnalités étendues",
+  "extended_features_description": "Les fonctionnalités étendues sont un merci adressé à celles et ceux qui contribuent. Démarrez un plan de financement pour les débloquer — et aidez à garder {{instanceName}} en ligne pour tout le monde.",
 
   "redirect_message": "Redirection vers le fournisseur de paiement...",
   "processing_message": "Traitement de votre paiement...",
-  "funded_calendars_title": "Calendriers financés",
-  "no_funded_calendars": "Aucun calendrier n'est actuellement financé dans le cadre de ce plan.",
-  "funded_calendar_amount": "{{amount}} par cycle de facturation"
+  "covered_calendars_title": "Calendriers sur ce plan",
+  "no_covered_calendars": "Aucun calendrier n'est encore couvert par ce plan.",
+  "covered_calendar_amount": "{{amount}} par cycle de facturation"
 }

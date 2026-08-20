@@ -105,7 +105,7 @@
       },
       "funding_owner": {
         "label": "Community funding",
-        "description": "Enable a voluntary community funding plan — closer to public radio than a subscription."
+        "description": "Support your instance with a voluntary funding plan — closer to public radio than a paywall."
       },
       "moderation_owner": {
         "label": "Handle reports",
@@ -161,7 +161,7 @@
       },
       "funding_setup": {
         "label": "Set up funding plans",
-        "description": "Set up Stripe so calendar owners on your instance can offer community funding plans."
+        "description": "Set up Stripe so calendar owners can support your instance with funding plans."
       },
       "asking": {
         "label": "Asking for money",

@@ -5,13 +5,13 @@ import db from '@/server/common/entity/db';
 
 /**
  * Database entity for calendar funding plan allocations.
- * Represents the allocation of funding plan funds to a specific calendar.
+ * Represents which calendars are covered by an account's funding plan.
  * Server-only junction table — intentionally omits toModel/fromModel as there
  * is no corresponding common model. Data is accessed directly via entity properties.
  *
  * end_time semantics:
  *   NULL = currently active allocation
- *   future date = funded through that date
+ *   future date = covered through that date
  *   past date = allocation has ended
  */
 @Table({

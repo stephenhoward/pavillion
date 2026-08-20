@@ -7,7 +7,7 @@
 
 ## Decision
 
-Pavillion will support optional community funding plans that allow calendar owners to collect contributions from their community to sustain calendar infrastructure. The feature uses Stripe Embedded Checkout for payment processing, with instance administrators entering Stripe API keys directly rather than using Stripe Connect OAuth. The term "funding plan" is used instead of "subscription" throughout the codebase and UI to avoid terminology collision with ActivityPub's use of "subscription" for follow relationships.
+Pavillion supports voluntary funding plans: calendar owners contribute a recurring amount to the instance that hosts them, helping the operator keep the service online — the NPR/Wikipedia model applied instance-inward. In return, supporters unlock funding-gated extended features ([DEC-011](dec-011-federated-value-boundary.md)). The feature uses Stripe Embedded Checkout for payment processing, with instance administrators entering Stripe API keys directly rather than using Stripe Connect OAuth. A funding plan is paid as a recurring subscription, but the product vocabulary is "funding plan" and "support" — "subscription" describes the payment mechanics, not the relationship (see Terminology).
 
 **Stripe is the only payment provider in v1.** PayPal is descoped: the scaffolding stays in the tree, inert. There is no reachable PayPal payment path — checkout resolves an enabled Stripe provider only. PayPal completion is deferred, not cancelled.
 
@@ -33,14 +33,17 @@ Left in place and genuinely unreachable: the PayPal adapter (`service/provider/p
 
 ### Terminology
 
-- The access-gating platform built on top of funding plans is called **funding access** — `checkFundingAccess`, `useFundingAccess`, `FundingStatus`. "Entitlement" is not used as an identifier anywhere in the codebase.
-- `SubscriptionRequiredError` is the one documented **legacy wire exception**. Gated endpoints keep returning `402` with `errorName: 'SubscriptionRequiredError'` so existing clients continue to recognise the response. That name is frozen at the wire boundary; no new identifier — service method, model field, API field, translation key, or UI copy — may propagate "subscription" into the funding vocabulary.
+- **The money flows owner → instance.** Copy and identifiers always frame the instance (or "this service") as the recipient of support. A calendar is **covered by** or **included in** a funding plan — never "funded". "Fund/funding your calendar" is a banned construction; it inverts the model.
+- **"Funding plan" is the product noun** — headings, status displays, gate messages, docs, decision records, identifiers, and the first mention in any surface. After first mention, prefer "your plan" or "your contribution"; ritually repeating the full bigram is its own preciousness failure.
+- **"Subscription" is the plain word for payment mechanics** and is unrestricted in that context — billing, renewal, cancellation, dunning ("renews as a monthly subscription"). Say it before Stripe's portal does. It is never a heading, CTA verb, feature name, or status value. Hard lines: no "Subscribe" as a CTA, no "requires a subscription" as gate copy, no "premium" (gated features are **extended features**), and the relationship noun is **supporter**, not subscriber. Translations follow the same register split.
+- The access-gating platform built on top of funding plans is called **funding access** — `hasFundingAccess` (`FundingInterface`/`FundingService`), `FundingStatus`. "Entitlement" is not used as an identifier anywhere in the codebase.
+- Two bounded identifier exceptions carry "subscription". `SubscriptionRequiredError` is the **legacy wire exception**: gated endpoints keep returning `402` with `errorName: 'SubscriptionRequiredError'` so existing clients continue to recognise the response — the name is frozen at the wire boundary, while the human-readable `message` is not frozen and uses funding vocabulary. The **provider boundary** is the other: adapter identifiers mirror Stripe's own object names (`providerSubscriptionId`, `cancelSubscription`, `updateSubscriptionAmount`).
 
 ## Context
 
-Running a Pavillion instance requires ongoing costs for hosting, maintenance, and community development. Rather than monetizing the platform through advertising or data collection, Pavillion adopts a community-supported funding model analogous to NPR or Wikipedia donation drives. Calendar owners can create funding plans that invite voluntary contributions from community members who benefit from the calendar. This approach directly aligns with the economic gardening mission ([DEC-001](dec-001-initial-product-planning.md)) by keeping community infrastructure community-funded rather than commercially driven.
+Running a Pavillion instance requires ongoing costs for hosting, maintenance, and community development. Rather than monetizing the platform through advertising or data collection, Pavillion adopts a community-supported funding model analogous to NPR or Wikipedia membership drives: the service stays free to use, and the calendar owners who rely on it can voluntarily start a funding plan that helps their instance operator keep it online. This approach directly aligns with the economic gardening mission ([DEC-001](dec-001-initial-product-planning.md)) by keeping community infrastructure community-funded rather than commercially driven.
 
-The initial implementation used Stripe Connect with OAuth, which is designed for marketplace platforms that route payments between multiple parties. This was the wrong product for Pavillion's use case, where each instance collects payments directly on behalf of its own calendars. Stripe Embedded Checkout is the correct product: it handles payment processing via an iframe embedded in the page, the user never leaves the site, and the instance owner maintains a direct relationship with Stripe using their own API keys — the same direct-credential shape the PayPal scaffolding was built around before PayPal was descoped for v1.
+The initial implementation used Stripe Connect with OAuth, which is designed for marketplace platforms that route payments between multiple parties. This was the wrong product for Pavillion's use case, where each instance collects support payments directly from its own users. Stripe Embedded Checkout is the correct product: it handles payment processing via an iframe embedded in the page, the user never leaves the site, and the instance owner maintains a direct relationship with Stripe using their own API keys — the same direct-credential shape the PayPal scaffolding was built around before PayPal was descoped for v1.
 
 Multi-provider support was designed in early (a provider adapter interface, a factory, and per-provider admin credential forms) with Stripe and PayPal as the two implementations. Only the Stripe path reached the correctness bar needed to gate paid features on it: PayPal's checkout completion, webhook handling, and lifecycle reconciliation were never finished or validated. Shipping a half-wired second provider in the admin UI would let an instance administrator connect PayPal and end up with a funding configuration that silently fails to renew, suspend, or cancel.
 
@@ -81,12 +84,12 @@ On the PayPal descope specifically:
 The community funding model was chosen because:
 
 1. **Mission alignment** - Community infrastructure should be funded by the community it serves, not through commercialization or data extraction. This follows the NPR/Wikipedia model where the service is free to access but sustained by voluntary contributions from those who value it.
-2. **Economic gardening** - Funding plans enable local organizations to sustain their event calendars as community infrastructure, supporting the broader goal of strengthening local economies and community resilience.
+2. **Economic gardening** - Funding plans let the local organizations that rely on an instance share the cost of keeping that community infrastructure running, supporting the broader goal of strengthening local economies and community resilience.
 3. **Correct Stripe product** - Embedded Checkout is the right product for direct payment collection. Connect OAuth is designed for platforms that facilitate payments between third parties (marketplaces), which is not what Pavillion does. Each instance owner has their own Stripe account and collects payments directly.
-4. **Terminology clarity** - Using "funding plan" instead of "subscription" avoids confusion with ActivityPub terminology where "subscription" refers to following an actor or calendar. This distinction is important in a federated system where ActivityPub concepts are core to the architecture.
+4. **Terminology clarity** - "Funding plan" rather than "subscription" keeps the relationship framed as voluntary support rather than purchased access. "Subscription" remains the plain word wherever payment mechanics are the topic, so the copy never tiptoes around what the reader's bank statement will say (see Terminology).
 5. **Privacy consistency** - The funding model maintains Pavillion's privacy-first principles ([DEC-004](dec-004-privacy-first-public-access.md)). Payment processing is handled by Stripe; Pavillion stores only the minimum metadata needed to track funding plan status, not payment details.
 6. **One provider, correct** - Gating features on funding access means the payment lifecycle has to be trustworthy. One fully-validated provider is worth more than two partially-wired ones, and hiding PayPal costs nothing today because no instance has ever been able to complete a PayPal checkout. Removing the scaffolding instead of hiding it would throw away the adapter abstraction that makes a second provider cheap to finish later.
-7. **Terminology discipline with a bounded exception** - "Funding access" keeps the gating platform in the same vocabulary as funding plans, and rules out a third term ("entitlement") for the same concept. `SubscriptionRequiredError` is grandfathered rather than renamed because it is an observable wire contract; confining the exception to the wire keeps the collision with ActivityPub "subscription" out of everything new.
+7. **Terminology discipline with bounded exceptions** - "Funding access" keeps the gating platform in the same vocabulary as funding plans, and rules out a third term ("entitlement") for the same concept. `SubscriptionRequiredError` is grandfathered rather than renamed because it is an observable wire contract, and provider-adapter identifiers mirror Stripe's own object vocabulary; confining "subscription" to payment mechanics and these two boundaries keeps the support framing intact everywhere else.
 
 ## Consequences
 
@@ -95,7 +98,7 @@ The community funding model was chosen because:
 - Consistent with economic gardening mission and community-first values
 - Simpler integration than Connect OAuth with fewer moving parts
 - Users complete payment without leaving the site
-- Clear terminology boundary between funding plans and ActivityPub subscriptions
+- Clear terminology split between the support relationship ("funding plan", "supporter") and payment mechanics ("subscription")
 - Instance owners maintain direct Stripe relationship and full control over their payment configuration
 - A single supported provider means one payment lifecycle to validate before enabling live funds
 - The provider adapter abstraction survives the descope, so finishing PayPal later is additive
@@ -104,8 +107,8 @@ The community funding model was chosen because:
 - Instance administrators must create and configure their own Stripe account
 - Instances that would prefer PayPal have no option in v1, and Stripe availability varies by country
 - API keys must be stored securely (encrypted at rest) adding operational complexity
-- Funding plan management adds UI and backend complexity to the calendar domain
-- Per-calendar funding configuration requires calendar owners to understand pricing options
+- Funding plan management adds UI and backend complexity (a dedicated funding domain plus per-calendar coverage surfaces)
+- Per-calendar coverage configuration requires calendar owners to understand pricing options
 - Inert PayPal scaffolding remains in the tree, so readers must consult this decision to know it is deliberately unreachable rather than merely unfinished
 - "Stripe only" is enforced at three uncoordinated sites of mixed polarity, so re-enabling PayPal is an all-three change and a partial change produces a configured-but-invisible provider. The enumeration table above is the mitigation; a shared constant is the real fix and is tracked as pv-vhop
 - The admin PayPal configure route stays live to direct callers, so an instance admin can still persist credentials that nothing will ever use

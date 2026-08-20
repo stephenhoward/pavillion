@@ -297,7 +297,7 @@ describe('FundingService.getFundingStatus', () => {
 
   it('should call GET /api/funding/v1/calendars/:calendarId/funding', async () => {
     // Arrange
-    const mockStatus = { status: 'funded', subscriptionInfo: { amount: 500 } };
+    const mockStatus = { status: 'funded', planInfo: { amount: 500 } };
     const axiosGet = vi.mocked(axios.get);
     axiosGet.mockResolvedValue({ data: mockStatus });
 

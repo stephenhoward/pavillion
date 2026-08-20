@@ -28,7 +28,7 @@ const saving = ref(false);
 const toast = useToast();
 
 // Sub-tab state
-const activeSubTab = ref<'subscriptions' | 'settings' | 'grants'>('subscriptions');
+const activeSubTab = ref<'plans' | 'settings' | 'grants'>('plans');
 
 // Settings form state
 const enabled = ref(false);
@@ -56,11 +56,11 @@ const disconnectModalData = ref({
 // Wizard state
 const showWizard = ref(false);
 
-// Subscription list state
-const subscriptions = ref([]);
-const subscriptionsPage = ref(1);
-const subscriptionsLimit = ref(20);
-const subscriptionsTotal = ref(0);
+// Funding plan list state
+const fundingPlans = ref([]);
+const plansPage = ref(1);
+const plansLimit = ref(20);
+const plansTotal = ref(0);
 
 // Grants state
 const grants = ref<ComplimentaryGrant[]>([]);
@@ -123,7 +123,7 @@ const allProvidersConfigured = computed(() => {
 });
 
 /**
- * Load subscription settings from API
+ * Load funding settings from API
  */
 async function loadSettings() {
   try {
@@ -163,16 +163,16 @@ async function loadProviders() {
 }
 
 /**
- * Load subscriptions list
+ * Load funding plans list
  */
-async function loadSubscriptions() {
+async function loadFundingPlans() {
   try {
-    const result = await fundingService.listFundingPlans(subscriptionsPage.value, subscriptionsLimit.value);
-    subscriptions.value = result.subscriptions || [];
-    subscriptionsTotal.value = result.total || 0;
+    const result = await fundingService.listFundingPlans(plansPage.value, plansLimit.value);
+    fundingPlans.value = result.fundingPlans || [];
+    plansTotal.value = result.pagination?.totalCount ?? 0;
   }
   catch (error) {
-    console.error('Failed to load subscriptions:', error);
+    console.error('Failed to load funding plans:', error);
   }
 }
 
@@ -273,9 +273,9 @@ async function toggleEnabled() {
 
     if (success) {
       toast.success(t('settings_update_success'));
-      // Reload subscriptions if just enabled
+      // Reload fundingPlans if just enabled
       if (enabled.value) {
-        await loadSubscriptions();
+        await loadFundingPlans();
       }
     }
     else {
@@ -296,7 +296,7 @@ async function toggleEnabled() {
 }
 
 /**
- * Update subscription settings
+ * Update funding settings
  */
 async function updateSettings() {
   Object.keys(fieldErrors).forEach(k => delete fieldErrors[k]);
@@ -445,26 +445,26 @@ async function confirmDisconnect() {
 }
 
 /**
- * Force cancel a subscription
+ * Force cancel a funding plan
  */
-async function forceCancelFundingPlan(subscriptionId) {
+async function forceCancelFundingPlan(planId) {
   if (!confirm(t('force_cancel_confirm'))) {
     return;
   }
 
   try {
-    const success = await fundingService.forceCancelFundingPlan(subscriptionId);
+    const success = await fundingService.forceCancelFundingPlan(planId);
 
     if (success) {
       toast.success(t('force_cancel_success'));
-      await loadSubscriptions();
+      await loadFundingPlans();
     }
     else {
       toast.error(t('force_cancel_failed'));
     }
   }
   catch (error) {
-    console.error('Failed to force cancel subscription:', error);
+    console.error('Failed to force cancel funding plan:', error);
     toast.error(t('force_cancel_failed'));
   }
 }
@@ -520,7 +520,7 @@ onMounted(async () => {
   await loadSettings();
   await loadProviders();
   if (enabled.value) {
-    await loadSubscriptions();
+    await loadFundingPlans();
   }
 });
 </script>
@@ -564,18 +564,18 @@ onMounted(async () => {
           <button
             type="button"
             role="tab"
-            :aria-selected="activeSubTab === 'subscriptions' ? 'true' : 'false'"
-            aria-controls="subscriptions-panel"
+            :aria-selected="activeSubTab === 'plans' ? 'true' : 'false'"
+            aria-controls="plans-panel"
             class="subtab"
-            @click="activeSubTab = 'subscriptions'"
+            @click="activeSubTab = 'plans'"
           >
             {{ t("funding_plans_section_title") }}
             <span
-              v-if="subscriptions.length > 0"
+              v-if="fundingPlans.length > 0"
               class="subtab-badge"
-              :class="{ 'subtab-badge--active': activeSubTab === 'subscriptions' }"
+              :class="{ 'subtab-badge--active': activeSubTab === 'plans' }"
             >
-              {{ subscriptions.length }}
+              {{ fundingPlans.length }}
             </span>
           </button>
           <button
@@ -608,17 +608,17 @@ onMounted(async () => {
         </nav>
       </div>
 
-      <!-- Subscriptions Tab Panel -->
+      <!-- Funding Plans Tab Panel -->
       <section
-        id="subscriptions-panel"
+        id="plans-panel"
         role="tabpanel"
         tabindex="-1"
-        :aria-hidden="activeSubTab !== 'subscriptions' ? 'true' : 'false'"
-        :hidden="activeSubTab !== 'subscriptions'"
+        :aria-hidden="activeSubTab !== 'plans' ? 'true' : 'false'"
+        :hidden="activeSubTab !== 'plans'"
         class="tab-panel"
       >
         <!-- Empty state -->
-        <div v-if="subscriptions.length === 0" class="empty-card">
+        <div v-if="fundingPlans.length === 0" class="empty-card">
           <svg class="empty-icon"
                width="48"
                height="48"
@@ -633,11 +633,11 @@ onMounted(async () => {
           <p class="empty-description">{{ t("funding_plans_empty_state") }}</p>
         </div>
 
-        <!-- Subscriptions list -->
-        <div v-else class="subscriptions-card">
+        <!-- Funding plans list -->
+        <div v-else class="plans-card">
           <!-- Desktop Table -->
-          <div class="subscriptions-table-desktop">
-            <table class="subscriptions-table" role="table" :aria-label="t('funding_plans_table_aria')">
+          <div class="plans-table-desktop">
+            <table class="plans-table" role="table" :aria-label="t('funding_plans_table_aria')">
               <thead>
                 <tr>
                   <th scope="col">{{ t("funding_plan_user_column") }}</th>
@@ -649,10 +649,10 @@ onMounted(async () => {
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="sub in subscriptions" :key="sub.id">
-                  <td class="cell-user">{{ sub.account_email }}</td>
+                <tr v-for="sub in fundingPlans" :key="sub.id">
+                  <td class="cell-user">{{ sub.accountEmail }}</td>
                   <td class="cell-amount">{{ formatAmount(sub.amount, sub.currency) }}</td>
-                  <td class="cell-cycle">{{ t(`billing_cycle_${sub.billing_cycle}`) }}</td>
+                  <td class="cell-cycle">{{ t(`billing_cycle_${sub.billingCycle}`) }}</td>
                   <td class="cell-status">
                     <span
                       class="status-badge"
@@ -661,7 +661,7 @@ onMounted(async () => {
                       {{ t(`status_${sub.status}`) }}
                     </span>
                   </td>
-                  <td class="cell-date">{{ formatDate(sub.current_period_end) }}</td>
+                  <td class="cell-date">{{ formatDate(sub.currentPeriodEnd) }}</td>
                   <td class="cell-actions">
                     <button
                       v-if="sub.status === 'active'"
@@ -678,14 +678,14 @@ onMounted(async () => {
           </div>
 
           <!-- Mobile Cards -->
-          <div class="subscriptions-mobile">
-            <div v-for="sub in subscriptions" :key="sub.id" class="subscription-card">
-              <div class="subscription-card-header">
-                <div class="subscription-card-info">
-                  <p class="subscription-card-email">{{ sub.account_email }}</p>
-                  <p class="subscription-card-amount">
+          <div class="plans-mobile">
+            <div v-for="sub in fundingPlans" :key="sub.id" class="plan-card">
+              <div class="plan-card-header">
+                <div class="plan-card-info">
+                  <p class="plan-card-email">{{ sub.accountEmail }}</p>
+                  <p class="plan-card-amount">
                     <span class="amount-value">{{ formatAmount(sub.amount, sub.currency) }}</span>
-                    / {{ t(`billing_cycle_${sub.billing_cycle}`) }}
+                    / {{ t(`billing_cycle_${sub.billingCycle}`) }}
                   </p>
                 </div>
                 <span
@@ -695,9 +695,9 @@ onMounted(async () => {
                   {{ t(`status_${sub.status}`) }}
                 </span>
               </div>
-              <div class="subscription-card-footer">
-                <p class="subscription-card-period">
-                  {{ t("funding_plan_period_end") }} {{ formatDate(sub.current_period_end) }}
+              <div class="plan-card-footer">
+                <p class="plan-card-period">
+                  {{ t("funding_plan_period_end") }} {{ formatDate(sub.currentPeriodEnd) }}
                 </p>
                 <button
                   v-if="sub.status === 'active'"
@@ -712,22 +712,22 @@ onMounted(async () => {
           </div>
 
           <!-- Pagination -->
-          <div v-if="subscriptionsTotal > subscriptionsLimit" class="pagination">
+          <div v-if="plansTotal > plansLimit" class="pagination">
             <p class="pagination-info">
-              {{ t("page_indicator", { page: subscriptionsPage, total: Math.ceil(subscriptionsTotal / subscriptionsLimit) }) }}
+              {{ t("page_indicator", { page: plansPage, total: Math.ceil(plansTotal / plansLimit) }) }}
             </p>
             <div class="pagination-buttons">
               <button
                 class="pagination-btn"
-                :disabled="subscriptionsPage === 1"
-                @click="subscriptionsPage--; loadSubscriptions()"
+                :disabled="plansPage === 1"
+                @click="plansPage--; loadFundingPlans()"
               >
                 {{ t("previous_page") }}
               </button>
               <button
                 class="pagination-btn"
-                :disabled="subscriptionsPage * subscriptionsLimit >= subscriptionsTotal"
-                @click="subscriptionsPage++; loadSubscriptions()"
+                :disabled="plansPage * plansLimit >= plansTotal"
+                @click="plansPage++; loadFundingPlans()"
               >
                 {{ t("next_page") }}
               </button>
@@ -746,7 +746,7 @@ onMounted(async () => {
         class="tab-panel"
       >
         <div class="settings-content">
-          <!-- Enable Subscriptions Toggle Card -->
+          <!-- Enable Funding Toggle Card -->
           <div class="settings-card">
             <label class="toggle-row">
               <input
@@ -871,7 +871,7 @@ onMounted(async () => {
             </template>
           </section>
 
-          <!-- Subscription Pricing Section - only show when enabled AND provider configured -->
+          <!-- Funding Pricing Section - only show when enabled AND provider configured -->
           <template v-if="enabled && hasConfiguredProvider">
             <section class="pricing-card">
               <div class="card-header card-header--border-only">
@@ -1416,21 +1416,21 @@ onMounted(async () => {
     }
   }
 
-  /* Subscriptions Card (table + mobile) */
-  .subscriptions-card {
+  /* Funding Plans Card (table + mobile) */
+  .plans-card {
     background: var(--pav-color-surface-primary);
     border-radius: var(--pav-border-radius-xl);
     border: 1px solid var(--pav-border-color-light);
     overflow: hidden;
 
-    .subscriptions-table-desktop {
+    .plans-table-desktop {
       display: none;
 
       @include pav-media(md) {
         display: block;
       }
 
-      .subscriptions-table {
+      .plans-table {
         width: 100%;
         border-collapse: collapse;
 
@@ -1500,14 +1500,14 @@ onMounted(async () => {
       }
     }
 
-    .subscriptions-mobile {
+    .plans-mobile {
       display: block;
 
       @include pav-media(md) {
         display: none;
       }
 
-      .subscription-card {
+      .plan-card {
         padding: var(--pav-space-4);
         border-bottom: 1px solid var(--pav-border-color-light);
 
@@ -1515,24 +1515,24 @@ onMounted(async () => {
           border-bottom: none;
         }
 
-        .subscription-card-header {
+        .plan-card-header {
           display: flex;
           align-items: flex-start;
           justify-content: space-between;
           gap: var(--pav-space-3);
 
-          .subscription-card-info {
+          .plan-card-info {
             min-width: 0;
             flex: 1;
 
-            .subscription-card-email {
+            .plan-card-email {
               margin: 0;
               font-weight: var(--pav-font-weight-medium);
               color: var(--pav-color-text-primary);
               word-break: break-all;
             }
 
-            .subscription-card-amount {
+            .plan-card-amount {
               margin: var(--pav-space-1) 0 0;
               font-size: var(--pav-font-size-xs);
               color: var(--pav-color-text-muted);
@@ -1545,14 +1545,14 @@ onMounted(async () => {
           }
         }
 
-        .subscription-card-footer {
+        .plan-card-footer {
           display: flex;
           align-items: center;
           justify-content: space-between;
           gap: var(--pav-space-3);
           margin-top: var(--pav-space-3);
 
-          .subscription-card-period {
+          .plan-card-period {
             margin: 0;
             font-size: var(--pav-font-size-xs);
             color: var(--pav-color-text-muted);

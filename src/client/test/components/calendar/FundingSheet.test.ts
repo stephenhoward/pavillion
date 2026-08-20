@@ -30,7 +30,7 @@ const mountFundingSheet = async (calendarId: string = 'cal-uuid-1') => {
       FundingForm: {
         template: '<div class="funding-form-stub"></div>',
         props: ['calendarId'],
-        emits: ['subscribed'],
+        emits: ['plan-started'],
       },
     },
   });
@@ -70,7 +70,7 @@ describe('FundingSheet', () => {
     // The calendarId is passed through - verified by component rendering
   });
 
-  it('emits close and subscribed when form emits subscribed', async () => {
+  it('emits close and plan-started when form emits plan-started', async () => {
     const wrapper = await mountFundingSheet();
     currentWrapper = wrapper;
 
@@ -80,12 +80,12 @@ describe('FundingSheet', () => {
     const formStub = wrapper.find('.funding-form-stub');
     expect(formStub.exists()).toBe(true);
 
-    // Trigger subscribed event via the parent component's onSubscribed handler
+    // Trigger plan-started event via the parent component's onPlanStarted handler
     const fundingFormComponent = wrapper.findComponent('.funding-form-stub');
-    fundingFormComponent.vm.$emit('subscribed');
+    fundingFormComponent.vm.$emit('plan-started');
     await flushPromises();
 
-    expect(wrapper.emitted('subscribed')).toBeTruthy();
+    expect(wrapper.emitted('plan-started')).toBeTruthy();
     expect(wrapper.emitted('close')).toBeTruthy();
   });
 });

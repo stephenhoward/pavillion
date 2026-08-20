@@ -92,8 +92,8 @@ class WidgetConfigService {
 
   /**
    * Upsert widget config for a calendar. Editor permission required.
-   * Not subscription-gated — owners can edit draft config even on a free
-   * instance; the subscription gate applies at the widget-serving boundary.
+   * Not funding-gated — owners can edit draft config even on a free
+   * instance; the funding gate applies at the widget-serving boundary.
    *
    * Validates all three fields up front and throws ValidationError with a
    * `fields` map keyed by the camelCase request-body names

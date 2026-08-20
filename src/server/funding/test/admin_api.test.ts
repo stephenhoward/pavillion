@@ -4,7 +4,7 @@ import request from 'supertest';
 import sinon from 'sinon';
 import FundingInterface from '@/server/funding/interface';
 import AdminRoutes from '@/server/funding/api/v1/admin';
-import { FundingSettings, ProviderConfig } from '@/common/model/funding-plan';
+import { FundingPlan, FundingSettings, ProviderConfig } from '@/common/model/funding-plan';
 import { testApp } from '@/server/common/test/lib/express';
 import ExpressHelper from '@/server/common/helper/express';
 import { Account } from '@/common/model/account';
@@ -36,7 +36,7 @@ describe('Admin Funding API', () => {
   });
 
   describe('GET /admin/settings', () => {
-    it('should return current subscription settings for admin user', async () => {
+    it('should return current funding settings for admin user', async () => {
       const mockSettings = new FundingSettings();
       mockSettings.enabled = true;
       mockSettings.monthlyPrice = 1000000; // $10.00 in millicents
@@ -375,6 +375,36 @@ describe('Admin Funding API', () => {
         totalCount: 0,
         limit,
       },
+    });
+
+    it('should serialize plans with accountEmail and without provider identifiers', async () => {
+      const plan = new FundingPlan('11111111-1111-4111-8111-111111111111');
+      plan.accountId = '22222222-2222-4222-8222-222222222222';
+      plan.accountEmail = 'supporter@pavillion.dev';
+      plan.providerSubscriptionId = 'sub_123';
+      plan.providerCustomerId = 'cus_123';
+      plan.status = 'active';
+      plan.billingCycle = 'monthly';
+      plan.amount = 500000;
+      plan.currency = 'USD';
+
+      sandbox.stub(service, 'listFundingPlans').resolves({
+        fundingPlans: [plan],
+        pagination: { currentPage: 1, totalPages: 1, totalCount: 1, limit: 50 },
+      });
+
+      router.get('/handler', adminHandlers.listFundingPlans.bind(adminHandlers));
+
+      const response = await request(testApp(router))
+        .get('/handler')
+        .expect(200);
+
+      expect(response.body.pagination.totalCount).toBe(1);
+      const row = response.body.fundingPlans[0];
+      expect(row.accountEmail).toBe('supporter@pavillion.dev');
+      expect(row.billingCycle).toBe('monthly');
+      expect(row).not.toHaveProperty('providerSubscriptionId');
+      expect(row).not.toHaveProperty('providerCustomerId');
     });
 
     it('should use default limit of 50 when no limit is provided', async () => {

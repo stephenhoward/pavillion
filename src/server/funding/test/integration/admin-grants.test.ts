@@ -47,9 +47,9 @@ describe('Admin Grant CRUD Integration Tests', () => {
   const password = 'testpassword';
 
   /**
-   * Enable subscriptions so widget access can be tested
+   * Enable funding so widget access can be tested
    */
-  async function enableSubscriptions() {
+  async function enableFunding() {
     let settings = await FundingSettingsEntity.findOne();
     if (!settings) {
       settings = FundingSettingsEntity.build({
@@ -103,7 +103,7 @@ describe('Admin Grant CRUD Integration Tests', () => {
     regularCalendar = await calendarInterface.createCalendar(regularAccount, 'grants-test-cal');
     adminCalendar = await calendarInterface.createCalendar(adminAccount, 'grants-admin-cal');
 
-    // Set a widget domain while subscriptions are disabled
+    // Set a widget domain while funding is disabled
     await env.authPut(
       regularToken,
       `/api/v1/calendars/${regularCalendar.id}/widget/domain`,
@@ -375,7 +375,7 @@ describe('Admin Grant CRUD Integration Tests', () => {
 
   describe('Widget access after grant revocation', () => {
     it('should block widget access after grant is revoked (SubscriptionRequiredError)', async () => {
-      await enableSubscriptions();
+      await enableFunding();
 
       // Create a grant to allow widget access
       const grant = await fundingInterface.createGrant(regularCalendar.id, adminAccount.id);

@@ -24,7 +24,7 @@ describe('CalendarService.setWidgetDomain', () => {
       loadAccountRoles: sandbox.stub(),
     } as any;
 
-    // Create mock subscription interface
+    // Create mock funding interface
     mockFundingInterface = {
       getSettings: sandbox.stub(),
       hasFundingAccess: sandbox.stub(),
@@ -44,8 +44,8 @@ describe('CalendarService.setWidgetDomain', () => {
     sandbox.restore();
   });
 
-  describe('when subscriptions are disabled (free instance)', () => {
-    it('should succeed without subscription check', async () => {
+  describe('when funding is disabled (free instance)', () => {
+    it('should succeed without a funding-access check', async () => {
       const calendarId = 'calendar-id';
       const domain = 'example.com';
 
@@ -54,13 +54,13 @@ describe('CalendarService.setWidgetDomain', () => {
 
       await service.setWidgetDomain(account, calendarId, domain);
 
-      // Should not check subscription when disabled
+      // Should not check funding access when disabled
       const hasFundingAccessStub = mockFundingInterface.hasFundingAccess as sinon.SinonStub;
       expect(hasFundingAccessStub.called).toBe(false);
     });
   });
 
-  describe('when subscriptions are enabled', () => {
+  describe('when funding is enabled', () => {
     it('should throw CalendarNotFoundError if calendar has no owner', async () => {
       const calendarId = 'calendar-id';
       const domain = 'example.com';
@@ -75,7 +75,7 @@ describe('CalendarService.setWidgetDomain', () => {
       ).rejects.toThrow(CalendarNotFoundError);
     });
 
-    it('should throw SubscriptionRequiredError if owner lacks subscription access', async () => {
+    it('should throw SubscriptionRequiredError if owner lacks a funding plan access', async () => {
       const calendarId = 'calendar-id';
       const ownerId = 'owner-account-id';
       const domain = 'example.com';
@@ -94,12 +94,12 @@ describe('CalendarService.setWidgetDomain', () => {
 
       await expect(
         service.setWidgetDomain(account, calendarId, domain),
-      ).rejects.toThrow('widget_embedding requires an active subscription');
+      ).rejects.toThrow('widget_embedding requires an active funding plan');
 
       expect(hasFundingAccessStub.calledWith(calendarId)).toBe(true);
     });
 
-    it('should succeed if owner has active subscription', async () => {
+    it('should succeed if owner has active funding plan', async () => {
       const calendarId = 'calendar-id';
       const ownerId = 'owner-account-id';
       const domain = 'example.com';
@@ -128,7 +128,7 @@ describe('CalendarService.setWidgetDomain', () => {
       settingsStub.resolves({ enabled: true });
 
       const hasFundingAccessStub = mockFundingInterface.hasFundingAccess as sinon.SinonStub;
-      // hasFundingAccess returns true when calendar has a grant (even without active subscription)
+      // hasFundingAccess returns true when calendar has a grant (even without active funding plan)
       hasFundingAccessStub.resolves(true);
 
       await service.setWidgetDomain(account, calendarId, domain);
@@ -160,7 +160,7 @@ describe('CalendarService.setWidgetDomain', () => {
     });
 
     describe('admin bypass', () => {
-      it('should bypass subscription check if calendar owner is admin', async () => {
+      it('should bypass funding-access check if calendar owner is admin', async () => {
         const calendarId = 'calendar-id';
         const ownerId = 'admin-account-id';
         const domain = 'example.com';
@@ -182,11 +182,11 @@ describe('CalendarService.setWidgetDomain', () => {
 
         await service.setWidgetDomain(account, calendarId, domain);
 
-        // Should not check subscription for admin
+        // Should not check funding access for admin
         expect(hasFundingAccessStub.called).toBe(false);
       });
 
-      it('should require subscription if calendar owner is not admin', async () => {
+      it('should require a funding plan if calendar owner is not admin', async () => {
         const calendarId = 'calendar-id';
         const ownerId = 'regular-account-id';
         const domain = 'example.com';
@@ -211,11 +211,11 @@ describe('CalendarService.setWidgetDomain', () => {
           service.setWidgetDomain(account, calendarId, domain),
         ).rejects.toThrow(SubscriptionRequiredError);
 
-        // Should check subscription for non-admin using calendarId (not account ID)
+        // Should check funding access for non-admin using calendarId (not account ID)
         expect(hasFundingAccessStub.calledWith(calendarId)).toBe(true);
       });
 
-      it('should require subscription if account not found (fail-secure)', async () => {
+      it('should require a funding plan if account not found (fail-secure)', async () => {
         const calendarId = 'calendar-id';
         const ownerId = 'unknown-account-id';
         const domain = 'example.com';
@@ -235,11 +235,11 @@ describe('CalendarService.setWidgetDomain', () => {
           service.setWidgetDomain(account, calendarId, domain),
         ).rejects.toThrow(SubscriptionRequiredError);
 
-        // Should check subscription using calendarId (not account ID) when account lookup fails
+        // Should check funding access using calendarId (not account ID) when account lookup fails
         expect(hasFundingAccessStub.calledWith(calendarId)).toBe(true);
       });
 
-      it('should require subscription if roles cannot be loaded (fail-secure)', async () => {
+      it('should require a funding plan if roles cannot be loaded (fail-secure)', async () => {
         const calendarId = 'calendar-id';
         const ownerId = 'account-id';
         const domain = 'example.com';
@@ -265,7 +265,7 @@ describe('CalendarService.setWidgetDomain', () => {
           service.setWidgetDomain(account, calendarId, domain),
         ).rejects.toThrow(SubscriptionRequiredError);
 
-        // Should check subscription using calendarId (not account ID) when roles can't be determined
+        // Should check funding access using calendarId (not account ID) when roles can't be determined
         expect(hasFundingAccessStub.calledWith(calendarId)).toBe(true);
       });
     });
