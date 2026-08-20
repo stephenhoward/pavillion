@@ -733,7 +733,9 @@ describe('Notification API — GET /api/v1/notification', () => {
       // Deleted calendar: the batch returns no url name for the id. The row
       // must be shape-identical to a non-navigable Follow row so a client
       // cannot distinguish "no link for this verb" from "not resolvable for
-      // you" (DEC-004).
+      // you" — privacy-playbook `error-responses` (no existence disclosure)
+      // plus IDOR hygiene, per DEC-015. DEC-004 does not reach this surface:
+      // it governs anonymous attendee access, and the inbox is authenticated.
       const accountId = await seedAccount();
       const flagged = await seedActivity({
         verb: 'Flag',

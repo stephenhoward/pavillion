@@ -21,7 +21,11 @@ import { TestEnvironment } from '@/server/common/test/lib/test_environment';
  * the scoping is what keeps one calendar's owner from reaching another
  * calendar's report by id. A report that belongs to a different calendar,
  * a report that never existed, and a report that has since been deleted all
- * have to fail the same way (DEC-004: no existence disclosure).
+ * have to fail the same way — the privacy-playbook `error-responses` standard
+ * (no existence disclosure) applied to an authenticated owner surface, plus
+ * ordinary IDOR hygiene. Not DEC-004: that decision governs anonymous attendee
+ * access to public event information and explicitly excludes organizer,
+ * curator and admin surfaces; see DEC-015 (Consequences).
  */
 describe('ModerationService.getReportForCalendar - calendar scoping (integration)', () => {
   let env: TestEnvironment;
@@ -215,8 +219,8 @@ describe('ModerationService.getReportForCalendar - calendar scoping (integration
       // route tests prove ReportNotFoundError maps to a 404 - but those route
       // tests stub the service, so the two cases are only equal by
       // construction of the stub. This drives a real report through the real
-      // service to a real HTTP response so the DEC-004 no-disclosure contract
-      // is proved end to end.
+      // service to a real HTTP response so the `error-responses` no-disclosure
+      // contract is proved end to end.
       //
       // The account here holds no admin role, so the permission check resolves
       // through its owner membership - the deep-link path a calendar owner

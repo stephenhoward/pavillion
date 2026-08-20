@@ -21,6 +21,7 @@
     "dismiss_aria_label": "Ignorer : {{content}}",
     "mark_seen_aria_label": "Marquer comme lue : {{content}}",
     "mark_seen_status": "Marquée comme lue",
+    "dismiss_status": "Notification ignorée",
     "unread_badge": "Non lu"
   }
 }

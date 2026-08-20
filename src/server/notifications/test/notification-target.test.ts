@@ -164,9 +164,11 @@ describe('deriveTarget', () => {
   });
 
   it('makes an unresolvable report indistinguishable from a non-navigable verb', () => {
-    // DEC-004: a non-admin whose report calendar cannot be resolved gets the
-    // exact same shape as Follow — a client cannot tell "no link for this
-    // verb" from "you are not entitled to this calendar".
+    // Privacy-playbook `error-responses` (no existence disclosure) plus IDOR
+    // hygiene, per DEC-015: a non-admin whose report calendar cannot be
+    // resolved gets the exact same shape as Follow — a client cannot tell "no
+    // link for this verb" from "you are not entitled to this calendar". Not
+    // DEC-004, which covers anonymous attendee access, not this admin surface.
     const unresolvable = deriveTarget(
       activity({ verb: 'Flag', object_id: REPORT_ID, object_calendar_id: OTHER_CALENDAR_ID }),
       context(false, {}),

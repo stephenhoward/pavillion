@@ -21,6 +21,7 @@
     "dismiss_aria_label": "Dismiss: {{content}}",
     "mark_seen_aria_label": "Mark as read: {{content}}",
     "mark_seen_status": "Marked as read",
+    "dismiss_status": "Notification dismissed",
     "unread_badge": "Unread"
   }
 }

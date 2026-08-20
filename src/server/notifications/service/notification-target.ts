@@ -116,8 +116,16 @@ import type { NotificationVerb } from '@/server/notifications/types';
  * written before migration 0040. A resolvable-looking id can also miss the
  * lookup map when the calendar has since been deleted. All of these degrade to
  * `target: null` — the same shape `Follow` produces — so a client cannot
- * distinguish "not navigable for this verb" from "not resolvable for you"
- * (DEC-004: no existence disclosure).
+ * distinguish "not navigable for this verb" from "not resolvable for you".
+ *
+ * That uniformity is grounded in the privacy-playbook `error-responses`
+ * standard (no existence disclosure, no internal ids) plus ordinary IDOR
+ * hygiene — not in DEC-004, which governs anonymous *attendee* access to
+ * public event information and places organizers, curators and instance
+ * admins outside its guarantee. Every surface a routing key can reach is an
+ * authenticated organizer/admin surface. See DEC-015
+ * (`agent-os/product/decisions/dec-015-activity-log-routing-keys.md`,
+ * Consequences), which records the earlier mis-citation.
  */
 
 /**

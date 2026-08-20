@@ -44,15 +44,16 @@ const CONTENT_INTERPOLATED_KEYS = [
 /**
  * Keys rendered as standalone phrases with no interpolation.
  *
- * `unread_badge` is composed into the mark-as-read button's accessible name
- * and `mark_seen_status` is the only text the inbox's live region ever holds,
- * so a locale that drops or blanks either one loses the state information
- * silently — the row still renders, just without the state a screen-reader
- * user needs.
+ * `unread_badge` is composed into the mark-as-read button's accessible name;
+ * `mark_seen_status` and `dismiss_status` are the only two strings the inbox's
+ * live region ever holds. A locale that drops or blanks any of them loses the
+ * state information silently — the row still renders, and dismissing still
+ * removes it, just without the change a screen-reader user needs announced.
  */
 const STANDALONE_PHRASE_KEYS = [
   'unread_badge',
   'mark_seen_status',
+  'dismiss_status',
 ];
 
 describe('inbox locale slot grammar', () => {

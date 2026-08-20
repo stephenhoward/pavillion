@@ -802,8 +802,12 @@ class ModerationService {
     // validation, not this check, is what performs that job today.
     //
     // Throwing ReportNotFoundError rather than a validation error is deliberate:
-    // per DEC-004 the owner path emits one indistinguishable failure, so a
-    // caller can never tell a malformed request from a report that isn't theirs.
+    // per the privacy-playbook `error-responses` standard (no existence
+    // disclosure) and ordinary IDOR hygiene, the owner path emits one
+    // indistinguishable failure, so a caller can never tell a malformed request
+    // from a report that isn't theirs. Not DEC-004 — that decision governs
+    // anonymous attendee access and excludes organizer/admin surfaces such as
+    // this one; see DEC-015 (Consequences) for the recorded mis-citation.
     // The accepted trade is that an `undefined` id — a genuine programming
     // error — is masked as a 404 rather than surfacing as a crash.
     if (typeof reportId !== 'string' || typeof calendarId !== 'string' || !reportId || !calendarId) {

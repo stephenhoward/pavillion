@@ -833,6 +833,147 @@ describe('InboxView', () => {
       expect(markDismissedSpy).toHaveBeenCalledWith('n1');
     });
 
+    it('moves focus to the next row dismiss button when a row is dismissed', async () => {
+      // Dismissing unmounts the whole row, taking the button that was just
+      // activated with it. Focus has to land on a surviving control or it
+      // falls back to <body>.
+      const store = useNotificationStore();
+      vi.spyOn(store, 'fetchNotifications').mockResolvedValue(undefined);
+      vi.spyOn(store, 'markDismissed').mockImplementation(async (id: string) => {
+        const index = store.notifications.findIndex((n) => n.id === id);
+        if (index !== -1) {
+          store.notifications.splice(index, 1);
+        }
+      });
+      store.notifications = [
+        makeNotification({ id: 'n1', seen: true }),
+        makeNotification({ id: 'n2', seen: true }),
+        makeNotification({ id: 'n3', seen: true }),
+      ];
+
+      const wrapper = await mountInbox(document.body);
+      try {
+        const rows = wrapper.findAll('[data-testid="notification-item"]');
+        await rows[1].find('[data-testid="notification-dismiss"]').trigger('click');
+        await flushPromises();
+
+        const remaining = wrapper.findAll('[data-testid="notification-item"]');
+        expect(remaining).toHaveLength(2);
+        expect(document.activeElement)
+          .toBe(remaining[1].find('[data-testid="notification-dismiss"]').element);
+      }
+      finally {
+        wrapper.unmount();
+      }
+    });
+
+    it('falls back to the previous row when the last row is dismissed', async () => {
+      const store = useNotificationStore();
+      vi.spyOn(store, 'fetchNotifications').mockResolvedValue(undefined);
+      vi.spyOn(store, 'markDismissed').mockImplementation(async (id: string) => {
+        const index = store.notifications.findIndex((n) => n.id === id);
+        if (index !== -1) {
+          store.notifications.splice(index, 1);
+        }
+      });
+      store.notifications = [
+        makeNotification({ id: 'n1', seen: true }),
+        makeNotification({ id: 'n2', seen: true }),
+      ];
+
+      const wrapper = await mountInbox(document.body);
+      try {
+        const rows = wrapper.findAll('[data-testid="notification-item"]');
+        await rows[1].find('[data-testid="notification-dismiss"]').trigger('click');
+        await flushPromises();
+
+        const remaining = wrapper.findAll('[data-testid="notification-item"]');
+        expect(remaining).toHaveLength(1);
+        expect(document.activeElement)
+          .toBe(remaining[0].find('[data-testid="notification-dismiss"]').element);
+      }
+      finally {
+        wrapper.unmount();
+      }
+    });
+
+    it('lands focus on the heading, not <body>, when the only row is dismissed', async () => {
+      // The list is empty afterwards, so there is no dismiss button left to
+      // receive focus. The heading is the stable landing point.
+      const store = useNotificationStore();
+      vi.spyOn(store, 'fetchNotifications').mockResolvedValue(undefined);
+      vi.spyOn(store, 'markDismissed').mockImplementation(async (id: string) => {
+        const index = store.notifications.findIndex((n) => n.id === id);
+        if (index !== -1) {
+          store.notifications.splice(index, 1);
+        }
+      });
+      store.notifications = [makeNotification({ id: 'n1', seen: true })];
+
+      const wrapper = await mountInbox(document.body);
+      try {
+        await wrapper.find('[data-testid="notification-dismiss"]').trigger('click');
+        await flushPromises();
+
+        expect(wrapper.findAll('[data-testid="notification-item"]')).toHaveLength(0);
+        expect(document.activeElement).not.toBe(document.body);
+        expect(document.activeElement).toBe(wrapper.find('h1.inbox-heading').element);
+      }
+      finally {
+        wrapper.unmount();
+      }
+    });
+
+    it('leaves focus on the dismiss button when the dismissal fails', async () => {
+      // The store rethrows and leaves the row mounted, so the button that was
+      // activated still exists and still holds focus — moving it would be a
+      // change the user did not ask for.
+      const store = useNotificationStore();
+      vi.spyOn(store, 'fetchNotifications').mockResolvedValue(undefined);
+      vi.spyOn(store, 'markDismissed').mockRejectedValue(new Error('patch failed'));
+      store.notifications = [
+        makeNotification({ id: 'n1', seen: true }),
+        makeNotification({ id: 'n2', seen: true }),
+      ];
+
+      const wrapper = await mountInbox(document.body);
+      try {
+        const button = wrapper.findAll('[data-testid="notification-dismiss"]')[0];
+        (button.element as HTMLButtonElement).focus();
+        await button.trigger('click');
+        await flushPromises();
+
+        expect(wrapper.findAll('[data-testid="notification-item"]')).toHaveLength(2);
+        expect(document.activeElement).toBe(button.element);
+        expect(wrapper.find('[data-testid="inbox-status"]').text()).toBe('');
+      }
+      finally {
+        wrapper.unmount();
+      }
+    });
+
+    it('announces the removal in the status region when a row is dismissed', async () => {
+      const store = useNotificationStore();
+      vi.spyOn(store, 'fetchNotifications').mockResolvedValue(undefined);
+      vi.spyOn(store, 'markDismissed').mockImplementation(async (id: string) => {
+        const index = store.notifications.findIndex((n) => n.id === id);
+        if (index !== -1) {
+          store.notifications.splice(index, 1);
+        }
+      });
+      store.notifications = [makeNotification({ id: 'n1', seen: true })];
+
+      const wrapper = await mountInbox();
+
+      const status = wrapper.find('[data-testid="inbox-status"]');
+      expect(status.text()).toBe('');
+
+      await wrapper.find('[data-testid="notification-dismiss"]').trigger('click');
+      await flushPromises();
+
+      expect(status.text()).toBe('Notification dismissed');
+    });
+
     it('does not also mark a row seen when the dismiss button is clicked', async () => {
       // The row carries no click handler any more, so dismissing cannot
       // flip the seen flag as a side effect — no event-propagation guard

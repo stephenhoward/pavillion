@@ -21,9 +21,25 @@ const sentinelRef = ref<HTMLElement | null>(null);
 let observer: IntersectionObserver | null = null;
 
 /**
- * Text of the visually-hidden status region. Marking a row read is otherwise
- * a silent change for a screen reader: the sentence does not change, and the
- * only visible difference is the row's accent border.
+ * The inbox `<h1>`, carrying `tabindex="-1"` so it can receive focus
+ * programmatically.
+ *
+ * It is the fallback landing point when dismissing the last row empties the
+ * list: every dismiss button is gone, and leaving focus to fall back to
+ * `<body>` would drop a keyboard user at the top of the document with no
+ * position in the page. The heading is the only element inside this view that
+ * renders unconditionally, and landing on it puts the user immediately above
+ * the empty state, so the next Tab reaches the help button. This is how
+ * `calendar-management/root.vue` handles the same problem for
+ * `#reports-panel`.
+ */
+const headingRef = ref<HTMLElement | null>(null);
+
+/**
+ * Text of the visually-hidden status region. Marking a row read or dismissing
+ * a row is otherwise a silent change for a screen reader: for mark-as-read the
+ * sentence does not change and the only visible difference is the row's accent
+ * border; for dismiss the row simply disappears.
  */
 const statusMessage = ref('');
 
@@ -34,6 +50,9 @@ const statusMessage = ref('');
  * element holding focus disappears and focus falls back to `<body>`. The
  * dismiss button is the same row's next focus stop and is present on every
  * row, seen or not, which makes it the one stable place to land.
+ *
+ * Dismissing takes the whole row with it, so `handleDismiss` reads the same
+ * map for an *adjacent* row's button instead.
  */
 const dismissButtons = new Map<string, HTMLButtonElement>();
 
@@ -220,12 +239,47 @@ const handleSeen = async (notification: NotificationResponse): Promise<void> => 
 };
 
 /**
- * Dismiss a row. The store optimistically splices the row out of the
- * local list; the active inbox refreshes immediately. The PATCH runs in
- * the background.
+ * Dismiss a row. On success the store splices the row out of the local list,
+ * which unmounts the whole `<li>` — including the dismiss button that was just
+ * activated and therefore holds focus.
+ *
+ * This is the same problem `handleSeen` solves, one degree worse: dismiss is
+ * present on every row and is the only control on a read row, so a keyboard
+ * user clearing several rows would be thrown back to `<body>` on each one.
+ * Focus therefore moves to a surviving control and the status region announces
+ * the removal, which is otherwise entirely silent.
  */
-const handleDismiss = (notification: NotificationResponse) => {
-  void store.markDismissed(notification.id);
+const handleDismiss = async (notification: NotificationResponse): Promise<void> => {
+  // Resolve the neighbour before the splice: afterwards the dismissed row's
+  // index is gone and there is no way back to the row that followed it.
+  // Prefer the next row so repeated dismissals walk down the list; fall back
+  // to the previous row when the dismissed row was last.
+  const index = rows.value.findIndex((row) => row.notification.id === notification.id);
+  const neighbour = index === -1
+    ? undefined
+    : (rows.value[index + 1] ?? rows.value[index - 1]);
+
+  try {
+    await store.markDismissed(notification.id);
+  }
+  catch {
+    // The store logs and leaves the row in place, so the dismiss button is
+    // still mounted and still holds focus. Nothing to move, nothing to say.
+    return;
+  }
+
+  // Wait for the row to actually unmount before moving focus off it.
+  await nextTick();
+  // No neighbour means the list is now empty and no dismiss button survives.
+  const landing = neighbour ? dismissButtons.get(neighbour.notification.id) : undefined;
+  (landing ?? headingRef.value)?.focus();
+
+  // Clear before setting, for the same reason as `handleSeen`: dismissing a
+  // second row writes the same string, and an unchanged live region is not a
+  // mutation, so nothing would be announced.
+  statusMessage.value = '';
+  await nextTick();
+  statusMessage.value = t('notifications.dismiss_status');
 };
 
 /**
@@ -266,7 +320,16 @@ onUnmounted(() => {
 <template>
   <div class="inbox-container">
     <div class="inbox-heading-row">
-      <h1 class="inbox-heading">
+      <!--
+        `tabindex="-1"` makes the heading scriptable-focusable only: it is not
+        added to the Tab order, it is just the landing point `handleDismiss`
+        uses when the last row unmounts and no dismiss button is left.
+      -->
+      <h1
+        ref="headingRef"
+        class="inbox-heading"
+        tabindex="-1"
+      >
         {{ t('title') }}
       </h1>
       <HelpButton />
@@ -353,8 +416,9 @@ onUnmounted(() => {
 
     <!--
       Dedicated, always-empty-until-needed status region. Marking a row read
-      changes nothing a screen reader would otherwise voice, and the control
-      that was activated no longer exists to report its own new state.
+      changes nothing a screen reader would otherwise voice, and dismissing a
+      row removes it without a word; in both cases the control that was
+      activated no longer exists to report its own new state.
     -->
     <div
       class="sr-only"
@@ -461,8 +525,11 @@ div.inbox-container {
       // #292524. There is no `*-active-text-hover` token, and the component
       // layer may not carry its own `prefers-color-scheme` block, so the fix
       // is to hold the colour and let the permanent underline carry the
-      // affordance. `_navigation.scss:48-51` sets the same precedent — hover
-      // keeps `interactive-active-text` and moves the border instead.
+      // affordance. `_navigation.scss:47-50` sets the same precedent — the
+      // active tab's hover block reasserts the same `interactive-active-text`
+      // colour rather than changing it (it exists to override the generic
+      // `.tabs__link:hover` rule, which would otherwise repaint both the text
+      // and the border).
       a.actor-link,
       a.object-link {
         color: var(--pav-color-interactive-active-text);
