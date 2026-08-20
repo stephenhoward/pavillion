@@ -199,9 +199,46 @@ async function managementViewState(page: Page) {
  * Load the owner's management view at `query` and wait for the reports
  * dashboard's table to finish rendering, so the snapshot is taken against a
  * settled view rather than a loading state.
+ *
+ * Only for cases that issue NO report-detail request — the baseline with no
+ * `?report=`, and the malformed id that `root.vue`'s `UUID_REGEX` rejects
+ * before any fetch. The dashboard's own list request is on a different
+ * timeline from the detail fetch, so for cases that do fetch, this settle
+ * point proves nothing about the thing under test: use
+ * `loadRejectedReportView`.
  */
 async function loadPlainReportsView(page: Page, query: string) {
   await page.goto(`${env.baseURL}/calendar/${TESTUSER_CALENDAR_URL_NAME}/manage${query}`);
+  await expect(page.locator('.reports-dashboard__table-container')).toBeVisible({ timeout: 10000 });
+  return managementViewState(page);
+}
+
+/**
+ * Load the owner's management view deep-linked at `reportId`, wait for the
+ * report-detail request the deep link issues, and assert the server refused
+ * it — then snapshot.
+ *
+ * Settling on the response rather than on the dashboard table is the point.
+ * The dashboard's list request and the detail fetch are independent; the
+ * detail fetch happening to resolve first is incidental to the order
+ * `root.vue` awaits them in, not enforced by anything. Waiting on the
+ * dashboard would let a regression that DID render a foreign report still
+ * snapshot green, because the snapshot could be taken before that render
+ * landed. Asserting the 404 also upgrades the case from "nothing rendered" to
+ * "the server refused", which is where the guarantee actually has to live.
+ */
+async function loadRejectedReportView(page: Page, reportId: string) {
+  const detailResponse = page.waitForResponse(
+    response => response.url().includes(`/reports/${reportId}`),
+    { timeout: 10000 },
+  );
+
+  await page.goto(
+    `${env.baseURL}/calendar/${TESTUSER_CALENDAR_URL_NAME}/manage`
+    + `?tab=reports&report=${reportId}`,
+  );
+
+  expect((await detailResponse).status()).toBe(404);
   await expect(page.locator('.reports-dashboard__table-container')).toBeVisible({ timeout: 10000 });
   return managementViewState(page);
 }
@@ -245,21 +282,20 @@ test.describe('Reports deep link (?report=)', () => {
     expect(absent.activeElementId).toBeNull();
     expect(absent.activeElementTag).toBe('body');
 
+    // Malformed ids never reach the network: `root.vue` rejects them on shape
+    // before the fetch, so this is the one negative case with no response to
+    // settle on and it stays on the dashboard settle point.
     const malformed = await loadPlainReportsView(page, '?tab=reports&report=not-a-uuid');
     expect(malformed).toEqual(absent);
 
     // Well-formed UUID v4, no such report anywhere.
-    const missing = await loadPlainReportsView(
-      page,
-      '?tab=reports&report=00000000-0000-4000-8000-000000000000',
-    );
+    const missing = await loadRejectedReportView(page, '00000000-0000-4000-8000-000000000000');
     expect(missing).toEqual(absent);
 
-    // A real report — on a calendar this viewer does not own.
-    const unauthorised = await loadPlainReportsView(
-      page,
-      `?tab=reports&report=${fixtures.foreignReportId}`,
-    );
+    // A real report — on a calendar this viewer does not own. The 404 is what
+    // proves the scope lives in the query rather than in a post-fetch
+    // comparison the client could be talked out of.
+    const unauthorised = await loadRejectedReportView(page, fixtures.foreignReportId);
     expect(unauthorised).toEqual(absent);
   });
 });

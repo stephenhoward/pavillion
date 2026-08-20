@@ -32,29 +32,28 @@ import {
 const WCAG_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'];
 
 /**
- * `color-contrast` is excluded, and this is a recorded exception rather than a
- * convenience: it is the one rule in the pinned set that both surfaces fail,
- * and on both it fails on the brand token rather than on anything this epic
- * restructured.
+ * `color-contrast` is excluded from the REPORTS PANEL scan alone, and this is a
+ * recorded exception rather than a convenience.
  *
- * Measured on this branch:
+ * The inbox row no longer needs it. `a.actor-link` / `a.object-link` used to
+ * render `--pav-color-interactive-primary` (→ `--pav-color-brand-primary`,
+ * `#F97316`) on the row's `#fafafa` at **2.69:1** against a 4.5:1 threshold;
+ * they now render `--pav-color-interactive-active-text` (→
+ * `--pav-color-orange-700`, `#C2410C`) at **4.96:1**, and
+ * `--pav-color-orange-300` on the dark surface at **8.99:1**. The inbox scan
+ * below therefore runs with `color-contrast` ENABLED and gates it.
  *
- *  - inbox list — `a.actor-link` / `a.object-link` render
- *    `--pav-color-interactive-primary` (→ `--pav-color-brand-primary`,
- *    `#F97316`) on the unread row's `#fafafa`: **2.69:1**, against a 4.5:1
- *    threshold.
- *  - reports panel — the shared `.pill-button--primary` renders white on that
- *    same `#F97316`: **2.8:1**. That button is a design-system component this
- *    epic never touched, which is what makes the diagnosis unambiguous.
+ * What remains is the reports panel: the shared `.pill-button--primary`
+ * renders white on `#F97316` at **2.8:1**. That button is a design-system
+ * component this epic never touched, on a surface this epic only deep-links
+ * into — which is what makes the diagnosis unambiguously pre-existing.
+ * Repainting it is a design-system change with app-wide blast radius, not a
+ * test fix. Tracked, with the remaining components that use the brand token as
+ * inline text colour, as pv-jqa4.
  *
- * The same token is used as text colour in `follow_list_item.vue`,
- * `funding-plan.vue` and `repost-categories-modal.vue`, so repainting it is a
- * design-system change with app-wide blast radius, not a test fix and not a
- * change this spec's bead is scoped to make. Tracked separately as pv-jqa4.
- *
- * Every other rule in the pinned set passes on both surfaces, so the scan
- * still gates exactly what it was added to gate. Narrow the exclusion — never
- * widen it — when the token lands.
+ * Every other rule in the pinned set passes on both surfaces, so the scans
+ * still gate exactly what they were added to gate. Narrow the exclusion —
+ * never widen it — as pv-jqa4 lands.
  */
 const KNOWN_DESIGN_TOKEN_VIOLATIONS = ['color-contrast'];
 
@@ -113,7 +112,6 @@ test.describe('Inbox accessibility scans', () => {
     const results = await new AxeBuilder({ page })
       .include('ul.notifications-list')
       .withTags(WCAG_TAGS)
-      .disableRules(KNOWN_DESIGN_TOKEN_VIOLATIONS)
       .analyze();
 
     // Compare ids rather than the raw violation objects: a failing diff of

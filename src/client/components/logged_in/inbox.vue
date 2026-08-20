@@ -447,13 +447,20 @@ div.inbox-container {
       // The object link shares the actor link's treatment: both point away
       // from the row, and distinguishing them would signal a difference the
       // row does not have.
+      //
+      // `--pav-color-interactive-active-text` and not the brand token: the
+      // brand orange is a surface colour, and as link text on the row's
+      // background it measures 2.69:1 against WCAG 1.4.3's 4.5:1. The
+      // active-text token is the app's existing on-brand *text* colour
+      // (navigation, tabs, badges all use it) and clears the threshold in
+      // both colour schemes. `tests/e2e/a11y/inbox-axe.spec.ts` gates this.
       a.actor-link,
       a.object-link {
-        color: var(--pav-color-interactive-primary);
+        color: var(--pav-color-interactive-active-text);
         text-decoration: underline;
 
         &:hover {
-          color: var(--pav-color-interactive-primary-hover);
+          color: var(--pav-color-orange-800);
         }
       }
 
