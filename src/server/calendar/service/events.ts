@@ -19,6 +19,7 @@ import { LocationSpaceEntity, LocationSpaceContentEntity } from "@/server/calend
 import { MediaEntity } from "@/server/media/entity/media";
 import LocationService, { spacesIncludeWithEventCount } from "@/server/calendar/service/locations";
 import { EventEmitter } from 'events';
+import { emitAfterTx } from '@/server/common/helper/emit-after-tx';
 import type MediaInterface from '@/server/media/interface';
 import type ActivityPubInterface from '@/server/activitypub/interface';
 import { EventNotFoundError, InsufficientCalendarPermissionsError, CalendarNotFoundError, BulkEventsNotFoundError, MixedCalendarEventsError, CategoriesNotFoundError, LocationValidationError, InvalidExternalUrlError, SpaceLocationMismatchError } from '@/common/exceptions/calendar';
@@ -234,31 +235,6 @@ class EventService {
   private isValidUUID(uuid: string): boolean {
     const UUID_V4_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
     return typeof uuid === 'string' && UUID_V4_REGEX.test(uuid);
-  }
-
-  /**
-   * Emits a domain event, deferring the emit until after the supplied
-   * transaction commits when one is present.
-   *
-   * When the caller supplies a transaction, the emit is deferred until after
-   * commit. The setImmediate hop is required to escape Sequelize's CLS
-   * context — without it the listener's async body inherits a CLS scope
-   * that still binds the just-committed transaction, and Sequelize's
-   * implicit transaction lookup picks it up, causing
-   * "commit has been called on this transaction" errors.
-   *
-   * Without a transaction, the emit fires synchronously.
-   *
-   * @private
-   */
-  private emitAfterTx<T>(event: string, payload: T, tx?: Transaction): void {
-    const emit = () => this.eventBus.emit(event, payload);
-    if (tx) {
-      tx.afterCommit(() => setImmediate(emit));
-    }
-    else {
-      emit();
-    }
   }
 
   /**
@@ -878,7 +854,7 @@ class EventService {
     // Notify media domain that media has been attached to an event.
     if (eventEntity.media_id) {
       const mediaId = eventEntity.media_id;
-      this.emitAfterTx('mediaAttachedToEvent', { mediaId, eventId: event.id }, tx);
+      emitAfterTx(this.eventBus, 'mediaAttachedToEvent', { mediaId, eventId: event.id }, tx);
     }
 
     if ( eventParams.content ) {
@@ -894,7 +870,7 @@ class EventService {
       }
     }
 
-    this.emitAfterTx('eventCreated', { calendar, event }, tx);
+    emitAfterTx(this.eventBus, 'eventCreated', { calendar, event }, tx);
     return event;
   }
 
@@ -1245,10 +1221,10 @@ class EventService {
     // Notify media domain that media has been attached to an event.
     if (newMediaAttached && eventEntity.media_id) {
       const mediaId = eventEntity.media_id;
-      this.emitAfterTx('mediaAttachedToEvent', { mediaId, eventId: event.id }, tx);
+      emitAfterTx(this.eventBus, 'mediaAttachedToEvent', { mediaId, eventId: event.id }, tx);
     }
 
-    this.emitAfterTx('eventUpdated', { calendar, event }, tx);
+    emitAfterTx(this.eventBus, 'eventUpdated', { calendar, event }, tx);
     return event;
   }
 

@@ -303,53 +303,18 @@ describe('FundingService allocation transactions', () => {
   });
 
   /**
-   * Direct tests of the deferral helper.
+   * Call-site coverage for the deferral helper.
    *
-   * Testing it only through `cancel()` cannot distinguish `emitAfterTx` from a
-   * plain synchronous emit: every failure injected into a cancel happens before
-   * the emit line is reached, so the listener stays silent either way. These
-   * reach the private helper deliberately, with a probe event name so no real
-   * listener is involved, and drive the two orderings that actually differ.
+   * The helper itself is exercised directly in
+   * common/test/integration/emit_after_tx.test.ts. Those tests cannot see a
+   * call site that bypasses the helper and emits on the bus directly, which is
+   * what this one pins down.
    */
   describe('emitAfterTx deferral', () => {
-    const PROBE_EVENT = 'funding:test:probe';
-
-    it('should not emit when the enclosing transaction rolls back', async () => {
-      const received: unknown[] = [];
-      eventBus.on(PROBE_EVENT, (payload) => received.push(payload));
-
-      await expect(
-        db.transaction(async (tx) => {
-          (service as any).emitAfterTx(PROBE_EVENT, { probe: true }, tx);
-          throw new Error('forced rollback');
-        }),
-      ).rejects.toThrow('forced rollback');
-
-      // Give a deferred emit the macrotask tick it would have used
-      await new Promise((resolve) => setImmediate(resolve));
-
-      expect(received).toHaveLength(0);
-    });
-
-    it('should emit after the enclosing transaction commits, not before', async () => {
-      const received: unknown[] = [];
-      eventBus.on(PROBE_EVENT, (payload) => received.push(payload));
-
-      await db.transaction(async (tx) => {
-        (service as any).emitAfterTx(PROBE_EVENT, { probe: true }, tx);
-        // Still inside the transaction: nothing may have fired yet
-        expect(received).toHaveLength(0);
-      });
-
-      await new Promise((resolve) => setImmediate(resolve));
-
-      expect(received).toEqual([{ probe: true }]);
-    });
-
     it('should not emit plan cancellation when the caller-owned transaction rolls back', async () => {
-      // Covers the call site as well as the helper: a cancel() that emitted
-      // directly on the bus would pass every other test in this file, because
-      // each of those injects its failure before the emit line is reached.
+      // A cancel() that emitted directly on the bus would pass every other
+      // test in this file, because each of those injects its failure before
+      // the emit line is reached.
       await createAllocation(calendarId, 500000);
       sandbox.stub(ProviderFactory, 'getAdapter').returns({
         cancelSubscription: sandbox.stub().resolves(),
@@ -371,15 +336,6 @@ describe('FundingService allocation transactions', () => {
 
       const plan = await FundingPlanEntity.findByPk(fundingPlanId);
       expect(plan!.status).toBe('active');
-    });
-
-    it('should emit synchronously when there is no transaction', async () => {
-      const received: unknown[] = [];
-      eventBus.on(PROBE_EVENT, (payload) => received.push(payload));
-
-      (service as any).emitAfterTx(PROBE_EVENT, { probe: true });
-
-      expect(received).toEqual([{ probe: true }]);
     });
   });
 });

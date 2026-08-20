@@ -20,6 +20,7 @@ import { ComplimentaryGrantEntity } from '@/server/funding/entity/complimentary_
 import { CalendarFundingPlanEntity } from '@/server/funding/entity/calendar_funding_plan';
 import { AccountEntity, AccountRoleEntity } from '@/server/common/entity/account';
 import db from '@/server/common/entity/db';
+import { emitAfterTx } from '@/server/common/helper/emit-after-tx';
 import { ProviderFactory } from '@/server/funding/service/provider/factory';
 import {
   WebhookEvent,
@@ -434,31 +435,6 @@ export default class FundingService {
 
     if (!allowedOrigins.has(parsed.origin)) {
       throw new ValidationError('returnUrl origin does not match this instance');
-    }
-  }
-
-  /**
-   * Emits a domain event, deferring the emit until after the supplied
-   * transaction commits when one is present.
-   *
-   * Listeners must never observe state that a later rollback erases, so an
-   * emit raised inside a transaction is queued on `afterCommit`. The
-   * setImmediate hop escapes Sequelize's CLS context — without it the
-   * listener's async body inherits a scope still bound to the just-committed
-   * transaction and Sequelize's implicit transaction lookup picks it up,
-   * causing "commit has been called on this transaction" errors.
-   *
-   * Without a transaction, the emit fires synchronously.
-   *
-   * @private
-   */
-  private emitAfterTx<T>(event: string, payload: T, tx?: Transaction): void {
-    const emit = () => this.eventBus.emit(event, payload);
-    if (tx) {
-      tx.afterCommit(() => setImmediate(emit));
-    }
-    else {
-      emit();
     }
   }
 
@@ -1078,7 +1054,7 @@ export default class FundingService {
     await entity.save({ transaction: tx });
 
     // Emit event
-    this.emitAfterTx('funding:plan:cancelled', {
+    emitAfterTx(this.eventBus, 'funding:plan:cancelled', {
       fundingPlan: entity.toModel(),
       immediate,
     }, tx);
