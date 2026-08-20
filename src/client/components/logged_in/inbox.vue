@@ -454,14 +454,19 @@ div.inbox-container {
       // active-text token is the app's existing on-brand *text* colour
       // (navigation, tabs, badges all use it) and clears the threshold in
       // both colour schemes. `tests/e2e/a11y/inbox-axe.spec.ts` gates this.
+      // Hover deliberately does not change the colour. `interactive-active-text`
+      // flips to a LIGHT orange in dark mode (`_colors.scss:189`), so any
+      // darker-on-hover value that is correct on white is wrong on the dark
+      // row: `--pav-color-orange-800` measures 7.0:1 on #FAFAFA but ~2.1:1 on
+      // #292524. There is no `*-active-text-hover` token, and the component
+      // layer may not carry its own `prefers-color-scheme` block, so the fix
+      // is to hold the colour and let the permanent underline carry the
+      // affordance. `_navigation.scss:48-51` sets the same precedent — hover
+      // keeps `interactive-active-text` and moves the border instead.
       a.actor-link,
       a.object-link {
         color: var(--pav-color-interactive-active-text);
         text-decoration: underline;
-
-        &:hover {
-          color: var(--pav-color-orange-800);
-        }
       }
 
       // Mark-as-read and dismiss are a visually paired set, so they are

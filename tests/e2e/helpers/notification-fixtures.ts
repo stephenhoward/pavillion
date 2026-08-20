@@ -185,6 +185,20 @@ export async function seedNotificationFixtures(baseURL: string): Promise<Notific
     `unexpected follow response: ${followResponse.status} ${JSON.stringify(followResponse.data)}`,
   ).toContain(followResponse.status);
 
+  // Drain the Follow before issuing the repost. Both notifications are
+  // addressed to the admin, but the repost's audience is computed as
+  // `editors(source) - editors(reposter)` at handling time, and issuing it
+  // while the Follow is still in flight let that resolution observe a
+  // half-applied relationship: the row silently came back with no recipients
+  // and only the Follow ever landed. Measured at roughly one run in four when
+  // the two inbox specs ran concurrently, and never once the seed was
+  // serialised. Wait for each row before provoking the next.
+  await waitForNotificationRow(
+    baseURL,
+    adminToken,
+    row => row.verb === 'Follow' && row.object.id === ADMIN_CALENDAR_ID,
+  );
+
   // --- Announce: TestUser's calendar reposts an admin event. `shareEvent`
   // takes an AP event URL and resolves the embedded UUID to the local event,
   // creating the EventObjectEntity on the fly for a seed event that was never
@@ -203,6 +217,12 @@ export async function seedNotificationFixtures(baseURL: string): Promise<Notific
     `unexpected share response: ${shareResponse.status} ${JSON.stringify(shareResponse.data)}`,
   ).toContain(shareResponse.status);
 
+  await waitForNotificationRow(
+    baseURL,
+    adminToken,
+    row => row.verb === 'Announce' && row.object.id === ADMIN_EVENT_ID,
+  );
+
   // --- EditorInvited: the admin grants FreshUser edit access to
   // test_calendar. Addressed explicitly to the invitee. ---
   const inviteResponse = await axios.post(
@@ -214,6 +234,12 @@ export async function seedNotificationFixtures(baseURL: string): Promise<Notific
     [201, 409],
     `unexpected editor-grant response: ${inviteResponse.status} ${JSON.stringify(inviteResponse.data)}`,
   ).toContain(inviteResponse.status);
+
+  await waitForNotificationRow(
+    baseURL,
+    freshToken,
+    row => row.verb === 'EditorInvited' && row.object.id === ADMIN_CALENDAR_ID,
+  );
 
   // --- Flag (owned): FreshUser reports an event on TestUser's calendar. An
   // authenticated report is SUBMITTED immediately, so the Flag is emitted
@@ -254,19 +280,11 @@ export async function seedNotificationFixtures(baseURL: string): Promise<Notific
   ).toBe(201);
   const foreignReportId: string = foreignReportResponse.data.report.id;
 
-  // Wait for every row to land before any test reads the UI. Polling here
-  // rather than in each test means a test failure is about the assertion
-  // under test, not about a race with the bus.
-  await waitForNotificationRow(
-    baseURL,
-    adminToken,
-    row => row.verb === 'Follow' && row.object.id === ADMIN_CALENDAR_ID,
-  );
-  await waitForNotificationRow(
-    baseURL,
-    adminToken,
-    row => row.verb === 'Announce' && row.object.id === ADMIN_EVENT_ID,
-  );
+  // The Follow, Announce and EditorInvited rows were each drained at the point
+  // they were provoked, so only the Flag pair is outstanding. Both are raised
+  // by the same report and must be visible to both viewers before any test
+  // reads the UI — that one report seen through two roles is what the
+  // moderation_report / owner_report cases are pinned to.
   await waitForNotificationRow(
     baseURL,
     adminToken,
@@ -276,11 +294,6 @@ export async function seedNotificationFixtures(baseURL: string): Promise<Notific
     baseURL,
     testuserToken,
     row => row.verb === 'Flag' && row.object.id === ownedReportId,
-  );
-  await waitForNotificationRow(
-    baseURL,
-    freshToken,
-    row => row.verb === 'EditorInvited' && row.object.id === ADMIN_CALENDAR_ID,
   );
 
   return { ownedReportId, foreignReportId };
