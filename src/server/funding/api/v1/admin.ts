@@ -233,7 +233,10 @@ export default class AdminRoutes {
 
       const result = await this.service.listFundingPlans(page, limit);
 
-      res.json(result);
+      res.json({
+        fundingPlans: result.fundingPlans.map((plan) => plan.toObject()),
+        pagination: result.pagination,
+      });
     }
     catch (error) {
       logError(error, 'Error listing funding plans');

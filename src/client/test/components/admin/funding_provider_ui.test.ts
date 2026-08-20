@@ -46,7 +46,7 @@ describe('Funding Provider UI Components', () => {
       routes: routes,
     });
 
-    // Mock the subscription service
+    // Mock the funding service
     mockService = {
       getSettings: vi.fn().mockResolvedValue({
         enabled: true,
@@ -73,14 +73,14 @@ describe('Funding Provider UI Components', () => {
         },
       ]),
       listFundingPlans: vi.fn().mockResolvedValue({
-        subscriptions: [],
-        total: 0,
+        fundingPlans: [],
+        pagination: { currentPage: 1, totalPages: 0, totalCount: 0, limit: 20 },
       }),
       updateProvider: vi.fn().mockResolvedValue(true),
       disconnectProvider: vi.fn().mockResolvedValue({ success: true }),
     };
 
-    // Mock the subscription service prototype methods
+    // Mock the funding service prototype methods
     vi.spyOn(FundingService.prototype, 'getSettings').mockImplementation(mockService.getSettings);
     vi.spyOn(FundingService.prototype, 'getProviders').mockImplementation(mockService.getProviders);
     vi.spyOn(FundingService.prototype, 'listFundingPlans').mockImplementation(mockService.listFundingPlans);
@@ -217,7 +217,7 @@ describe('Funding Provider UI Components', () => {
    * Test 2: Disconnection warning dialog with confirmation checkbox
    */
   it('shows confirmation dialog before disconnecting provider', async () => {
-    // Mock provider with active subscriptions
+    // Mock provider with active funding plans
     mockService.getProviders.mockResolvedValue([
       {
         id: 'provider-1',

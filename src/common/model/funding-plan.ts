@@ -152,6 +152,7 @@ export class FundingPlan extends PrimaryModel {
   currentPeriodEnd: Date | null = null;
   cancelledAt: Date | null = null;
   suspendedAt: Date | null = null;
+  accountEmail?: string; // display-only, populated by admin listings
 
   constructor(id?: string) {
     super(id);
@@ -161,6 +162,7 @@ export class FundingPlan extends PrimaryModel {
     return {
       id: this.id,
       accountId: this.accountId,
+      accountEmail: this.accountEmail,
       status: this.status,
       billingCycle: this.billingCycle,
       amount: this.amount,
@@ -178,6 +180,7 @@ export class FundingPlan extends PrimaryModel {
     plan.providerConfigId = obj.providerConfigId ?? '';
     plan.providerSubscriptionId = obj.providerSubscriptionId ?? '';
     plan.providerCustomerId = obj.providerCustomerId ?? '';
+    plan.accountEmail = obj.accountEmail ?? undefined;
     plan.status = obj.status ?? 'active';
     plan.billingCycle = obj.billingCycle ?? 'monthly';
     plan.amount = obj.amount ?? 0;
