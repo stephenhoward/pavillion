@@ -20,6 +20,7 @@ import { ComplimentaryGrantEntity } from '@/server/funding/entity/complimentary_
 import { CalendarFundingPlanEntity } from '@/server/funding/entity/calendar_funding_plan';
 import { AccountEntity, AccountRoleEntity } from '@/server/common/entity/account';
 import db from '@/server/common/entity/db';
+import { emitAfterTx } from '@/server/common/helper/emit-after-tx';
 import { ProviderFactory } from '@/server/funding/service/provider/factory';
 import {
   WebhookEvent,
@@ -441,14 +442,17 @@ export default class FundingService {
    * Calculate the total amount from all active calendar funding plan allocations
    *
    * @param fundingPlanId - Funding plan ID
+   * @param tx - Optional transaction to read under, so the total reflects
+   *   allocation writes made earlier in the same transaction
    * @returns Total amount in millicents
    */
-  private async calculateActiveCalendarTotal(fundingPlanId: string): Promise<number> {
+  private async calculateActiveCalendarTotal(fundingPlanId: string, tx?: Transaction): Promise<number> {
     const activeCalendarSubs = await CalendarFundingPlanEntity.findAll({
       where: {
         funding_plan_id: fundingPlanId,
         end_time: { [Op.is]: null as any },
       },
+      transaction: tx,
     });
 
     return activeCalendarSubs.reduce((sum, cs) => sum + cs.amount, 0);
@@ -460,14 +464,37 @@ export default class FundingService {
    * Skips the provider call if the adapter does not support in-place amount updates
    * (e.g. PayPal funding plans have fixed amounts set at creation time).
    *
+   * Deliberately called from *inside* the allocation transaction, which is the
+   * opposite of how the rest of the codebase orders remote calls against
+   * transactions. `processCheckoutCompleted` below calls `adapter.getSubscription`
+   * before it opens its transaction, and `activitypub/service/members.ts`
+   * (`addToOutbox` after `db.transaction`) fires outbound requests only after
+   * commit. Both can do that because their remote call is either a read or an
+   * operation that is safe to repeat.
+   *
+   * This one is neither. The provider amount is a function of the local
+   * allocation rows, and nothing else ever recomputes it — there is no
+   * reconciliation job, and `getFundingStatusForCalendar` grants `funded` on the
+   * mere existence of an active allocation row without ever consulting the
+   * provider. Committing the rows first and calling the provider after would
+   * mean any provider failure permanently grants funded status for an amount
+   * nobody is billing. Holding the transaction open across the call is the
+   * cheaper exposure. Do not "fix" this by moving the call after commit unless
+   * a reconciliation path exists to catch what it drops.
+   *
    * @param fundingPlanEntity - Funding plan entity
    * @param newAmount - New total amount in millicents
+   * @param tx - Optional transaction to read the provider config under
    */
   private async updateProviderAmount(
     fundingPlanEntity: FundingPlanEntity,
     newAmount: number,
+    tx?: Transaction,
   ): Promise<void> {
-    const providerEntity = await ProviderConfigEntity.findByPk(fundingPlanEntity.provider_config_id);
+    const providerEntity = await ProviderConfigEntity.findByPk(
+      fundingPlanEntity.provider_config_id,
+      { transaction: tx },
+    );
     if (!providerEntity) {
       throw new Error('Provider configuration not found');
     }
@@ -489,13 +516,31 @@ export default class FundingService {
   /**
    * Resolve the active funding plan for an account
    *
+   * When a transaction is supplied the plan row is selected `FOR UPDATE`, which
+   * serialises every allocation change against a single plan. Allocation totals
+   * are computed by summing sibling rows, so two concurrent changes that lock
+   * nothing conflict on nothing — neither the plan row nor the partial unique
+   * index on (funding_plan_id, calendar_id) — and each computes its total from a
+   * snapshot missing the other's insert. Both then push their total to the
+   * provider, the later call wins, and the plan ends up with more funded
+   * calendars than it is billing for. Taking the plan row lock first forces the
+   * second caller to wait, and under READ COMMITTED its subsequent statements
+   * then see the first caller's committed rows.
+   *
+   * SQLite ignores the lock clause (Sequelize omits it for dialects without
+   * lock support), so this is a Postgres-only guarantee. SQLite's whole-database
+   * write serialisation makes the race unreachable there anyway.
+   *
    * @param accountId - Account ID
+   * @param tx - Optional transaction; when supplied, the row is locked FOR UPDATE
    * @returns Active funding plan entity
    * @throws FundingPlanNotFoundError if no active funding plan exists
    */
-  private async resolveActiveFundingPlan(accountId: string): Promise<FundingPlanEntity> {
+  private async resolveActiveFundingPlan(accountId: string, tx?: Transaction): Promise<FundingPlanEntity> {
     const fundingPlanEntity = await FundingPlanEntity.findOne({
       where: { account_id: accountId, status: 'active' },
+      transaction: tx,
+      ...(tx ? { lock: Transaction.LOCK.UPDATE } : {}),
     });
 
     if (!fundingPlanEntity) {
@@ -529,6 +574,20 @@ export default class FundingService {
    * Resolves the active funding plan for the account internally.
    * Creates a CalendarFundingPlan row and updates the provider total amount.
    *
+   * The plan lock, the duplicate check, the allocation row, and the provider
+   * amount update run in one transaction. What that buys is local atomicity on
+   * provider rejection: if the provider refuses the new total, the allocation
+   * row is rolled back rather than left granting a calendar funded status the
+   * provider is not billing for.
+   *
+   * It does not make the pair atomic in the other direction. The provider call
+   * is a remote mutation that rollback cannot unwind, so a commit failure after
+   * the provider accepted leaves the provider billing the new total with no
+   * local allocation row — the account is charged for a calendar it did not get.
+   * There is no compensation path for that window; it is accepted as the rarer
+   * and less harmful of the two failure orderings, and it fails toward
+   * over-charging rather than toward unbilled entitlement.
+   *
    * @param accountId - Account ID (used to resolve funding plan and verify ownership)
    * @param calendarId - Calendar ID to add
    * @param amount - Amount to allocate in millicents
@@ -551,37 +610,41 @@ export default class FundingService {
       throw new InvalidAmountError();
     }
 
-    // Resolve the active funding plan for this account
-    const fundingPlanEntity = await this.resolveActiveFundingPlan(accountId);
+    await db.transaction(async (tx: Transaction) => {
+      // Lock the plan row first: every read below derives the provider total
+      // from it, so it must not move under a concurrent allocation change
+      const fundingPlanEntity = await this.resolveActiveFundingPlan(accountId, tx);
 
-    // Verify account owns the calendar
-    await this.verifyCalendarOwnership(accountId, calendarId);
+      // Verify account owns the calendar
+      await this.verifyCalendarOwnership(accountId, calendarId);
 
-    // Check for existing active calendar funding plan
-    const existing = await CalendarFundingPlanEntity.findOne({
-      where: {
+      // Check for existing active calendar funding plan
+      const existing = await CalendarFundingPlanEntity.findOne({
+        where: {
+          funding_plan_id: fundingPlanEntity.id,
+          calendar_id: calendarId,
+          end_time: { [Op.is]: null as any },
+        },
+        transaction: tx,
+      });
+
+      if (existing) {
+        throw new DuplicateCalendarFundingPlanError(fundingPlanEntity.id, calendarId);
+      }
+
+      // Create the calendar funding plan row
+      await CalendarFundingPlanEntity.create({
+        id: uuidv4(),
         funding_plan_id: fundingPlanEntity.id,
         calendar_id: calendarId,
-        end_time: { [Op.is]: null as any },
-      },
+        amount,
+        end_time: null,
+      }, { transaction: tx });
+
+      // Recalculate total and update provider
+      const newTotal = await this.calculateActiveCalendarTotal(fundingPlanEntity.id, tx);
+      await this.updateProviderAmount(fundingPlanEntity, newTotal, tx);
     });
-
-    if (existing) {
-      throw new DuplicateCalendarFundingPlanError(fundingPlanEntity.id, calendarId);
-    }
-
-    // Create the calendar funding plan row
-    await CalendarFundingPlanEntity.create({
-      id: uuidv4(),
-      funding_plan_id: fundingPlanEntity.id,
-      calendar_id: calendarId,
-      amount,
-      end_time: null,
-    });
-
-    // Recalculate total and update provider
-    const newTotal = await this.calculateActiveCalendarTotal(fundingPlanEntity.id);
-    await this.updateProviderAmount(fundingPlanEntity, newTotal);
   }
 
   /**
@@ -591,6 +654,21 @@ export default class FundingService {
    * Sets end_time to the funding plan's current_period_end (calendar retains access until then).
    * Reduces the provider amount immediately. If this is the last active calendar,
    * cancels the entire funding plan.
+   *
+   * The plan lock, the end_time write, and the provider-side change (amount
+   * update, or plan cancellation when the last calendar leaves) run in one
+   * transaction, so a provider rejection rolls the end_time back rather than
+   * dropping the calendar from a plan the provider is still billing in full.
+   *
+   * The lock also decides the last-calendar branch correctly under concurrency.
+   * Two unlocked removals from a two-calendar plan would each see one remaining
+   * allocation — neither can see the other's uncommitted end_time — so neither
+   * would cancel, leaving an active plan billing for nothing.
+   *
+   * As on the add path, the provider call is a remote mutation that rollback
+   * cannot unwind: a commit failure after the provider accepted leaves the
+   * provider reduced or cancelled while the local plan stays `active` and the
+   * calendar keeps reporting `funded`. That direction has no compensation path.
    *
    * @param accountId - Account ID (used to resolve funding plan and verify ownership)
    * @param calendarId - Calendar ID to remove
@@ -607,46 +685,51 @@ export default class FundingService {
       throw new ValidationError('Invalid calendarId: must be a valid UUID');
     }
 
-    // Resolve the active funding plan for this account
-    const fundingPlanEntity = await this.resolveActiveFundingPlan(accountId);
+    await db.transaction(async (tx: Transaction) => {
+      // Lock the plan row first: the remaining-active count below decides
+      // whether the whole plan is cancelled, so it must not race
+      const fundingPlanEntity = await this.resolveActiveFundingPlan(accountId, tx);
 
-    // Verify account owns the calendar
-    await this.verifyCalendarOwnership(accountId, calendarId);
+      // Verify account owns the calendar
+      await this.verifyCalendarOwnership(accountId, calendarId);
 
-    // Find the active calendar funding plan
-    const calendarSub = await CalendarFundingPlanEntity.findOne({
-      where: {
-        funding_plan_id: fundingPlanEntity.id,
-        calendar_id: calendarId,
-        end_time: { [Op.is]: null as any },
-      },
+      // Find the active calendar funding plan
+      const calendarSub = await CalendarFundingPlanEntity.findOne({
+        where: {
+          funding_plan_id: fundingPlanEntity.id,
+          calendar_id: calendarId,
+          end_time: { [Op.is]: null as any },
+        },
+        transaction: tx,
+      });
+
+      if (!calendarSub) {
+        throw new CalendarFundingPlanNotFoundError(fundingPlanEntity.id, calendarId);
+      }
+
+      // Set end_time to funding plan's current_period_end
+      calendarSub.end_time = fundingPlanEntity.current_period_end;
+      await calendarSub.save({ transaction: tx });
+
+      // Check remaining active calendar funding plans
+      const remainingActive = await CalendarFundingPlanEntity.findAll({
+        where: {
+          funding_plan_id: fundingPlanEntity.id,
+          end_time: { [Op.is]: null as any },
+        },
+        transaction: tx,
+      });
+
+      if (remainingActive.length === 0) {
+        // Last calendar removed: cancel the entire funding plan
+        await this.cancel(fundingPlanEntity.id, false, tx);
+      }
+      else {
+        // Recalculate total and update provider
+        const newTotal = remainingActive.reduce((sum, cs) => sum + cs.amount, 0);
+        await this.updateProviderAmount(fundingPlanEntity, newTotal, tx);
+      }
     });
-
-    if (!calendarSub) {
-      throw new CalendarFundingPlanNotFoundError(fundingPlanEntity.id, calendarId);
-    }
-
-    // Set end_time to funding plan's current_period_end
-    calendarSub.end_time = fundingPlanEntity.current_period_end;
-    await calendarSub.save();
-
-    // Check remaining active calendar funding plans
-    const remainingActive = await CalendarFundingPlanEntity.findAll({
-      where: {
-        funding_plan_id: fundingPlanEntity.id,
-        end_time: { [Op.is]: null as any },
-      },
-    });
-
-    if (remainingActive.length === 0) {
-      // Last calendar removed: cancel the entire funding plan
-      await this.cancel(fundingPlanEntity.id, false);
-    }
-    else {
-      // Recalculate total and update provider
-      const newTotal = remainingActive.reduce((sum, cs) => sum + cs.amount, 0);
-      await this.updateProviderAmount(fundingPlanEntity, newTotal);
-    }
   }
 
   /**
@@ -935,15 +1018,27 @@ export default class FundingService {
    *
    * @param fundingPlanId - Funding plan ID
    * @param immediate - If true, cancel immediately; otherwise at period end
+   * @param tx - Optional caller-owned transaction to enlist the status write in.
+   *   Supplied by the allocation path when removing the last calendar, so a
+   *   provider rejection rolls the allocation end_time and the local
+   *   cancellation back together. The cancellation event is deferred until that
+   *   transaction commits, so no listener acts on a cancellation that rolled
+   *   back. Note the asymmetry: `adapter.cancelSubscription` runs before
+   *   `entity.save()` and before commit, so if the provider succeeds and the
+   *   commit then fails, Stripe has cancelled while the plan stays `active` and
+   *   its calendars keep reporting `funded` — entitlement retained, billing
+   *   stopped, with no compensation path.
    */
-  async cancel(fundingPlanId: string, immediate: boolean = false): Promise<void> {
-    const entity = await FundingPlanEntity.findByPk(fundingPlanId);
+  async cancel(fundingPlanId: string, immediate: boolean = false, tx?: Transaction): Promise<void> {
+    const entity = await FundingPlanEntity.findByPk(fundingPlanId, { transaction: tx });
     if (!entity) {
       throw new Error('Funding plan not found');
     }
 
     // Get provider configuration
-    const providerEntity = await ProviderConfigEntity.findByPk(entity.provider_config_id);
+    const providerEntity = await ProviderConfigEntity.findByPk(entity.provider_config_id, {
+      transaction: tx,
+    });
     if (!providerEntity) {
       throw new Error('Provider configuration not found');
     }
@@ -956,13 +1051,13 @@ export default class FundingService {
     // Update status
     entity.status = 'cancelled';
     entity.cancelled_at = new Date();
-    await entity.save();
+    await entity.save({ transaction: tx });
 
     // Emit event
-    this.eventBus.emit('funding:plan:cancelled', {
+    emitAfterTx(this.eventBus, 'funding:plan:cancelled', {
       fundingPlan: entity.toModel(),
       immediate,
-    });
+    }, tx);
   }
 
   /**
