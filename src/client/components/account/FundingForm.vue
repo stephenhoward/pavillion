@@ -15,7 +15,7 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  subscribed: [];
+  'plan-started': [];
 }>();
 
 const { t } = useTranslation('funding');
@@ -222,7 +222,7 @@ async function startStripeCheckout() {
   const provider = selectedProviderInfo.value;
 
   if (!provider?.publishableKey) {
-    errorMessage.value = t('subscribe_error');
+    errorMessage.value = t('plan_start_error');
     return;
   }
 
@@ -290,7 +290,7 @@ async function startStripeCheckout() {
   }
   catch (error) {
     console.error('Failed to start Stripe checkout:', error);
-    errorMessage.value = t('subscribe_error');
+    errorMessage.value = t('plan_start_error');
     formState.value = 'configure';
     processing.value = false;
   }
@@ -301,13 +301,13 @@ async function startStripeCheckout() {
  */
 async function startPayPalCheckout() {
   // TODO: Implement PayPal checkout flow
-  errorMessage.value = t('subscribe_error');
+  errorMessage.value = t('plan_start_error');
 }
 
 /**
  * Submit handler dispatches to the appropriate provider flow
  */
-async function submitSubscribe() {
+async function submitContribution() {
   if (!selectedProvider.value) {
     errorMessage.value = t('select_provider_error');
     return;
@@ -334,7 +334,7 @@ function backToConfigure() {
  * Handle successful result acknowledgment
  */
 function acknowledgeResult() {
-  emit('subscribed');
+  emit('plan-started');
 }
 
 onMounted(async () => {
@@ -469,9 +469,9 @@ onBeforeUnmount(() => {
           type="button"
           class="btn btn--primary"
           :disabled="processing"
-          @click="submitSubscribe"
+          @click="submitContribution"
         >
-          {{ t("confirm_subscribe_button") }}
+          {{ t("confirm_contribution_button") }}
         </button>
       </div>
     </template>
@@ -499,10 +499,10 @@ onBeforeUnmount(() => {
     <template v-if="formState === 'result'">
       <div class="result-state">
         <div v-if="resultStatus === 'success'" class="success-message" role="status">
-          {{ t("subscribe_success") }}
+          {{ t("plan_started_success") }}
         </div>
         <div v-else class="error-message" role="alert">
-          {{ t("subscribe_error") }}
+          {{ t("plan_start_error") }}
         </div>
         <div class="form-actions">
           <button

@@ -229,8 +229,8 @@ describe('Widget API Routes', () => {
     });
   });
 
-  describe('Subscription gating for widget data', () => {
-    it('should return 402 when calendar owner lacks subscription', async () => {
+  describe('Funding gating for widget data', () => {
+    it('should return 402 when calendar owner lacks a funding plan', async () => {
       const getCalendarByNameStub = mockInterface.getCalendarByName as sinon.SinonStub;
       getCalendarByNameStub.resolves(calendar);
 
@@ -274,7 +274,7 @@ describe('Widget API Routes', () => {
       expect(response.headers['cache-control']).toBe('no-store');
     });
 
-    it('should serve data when calendar owner has active subscription', async () => {
+    it('should serve data when calendar owner has an active funding plan', async () => {
       const getCalendarByNameStub = mockInterface.getCalendarByName as sinon.SinonStub;
       getCalendarByNameStub.resolves(calendar);
 
@@ -367,7 +367,7 @@ describe('Widget API Routes', () => {
       expect(varyHeader).toContain('Origin');
     });
 
-    it('should set Cache-Control: no-store on 402 (subscription required) response', async () => {
+    it('should set Cache-Control: no-store on 402 (funding required) response', async () => {
       const getCalendarByNameStub = mockInterface.getCalendarByName as sinon.SinonStub;
       getCalendarByNameStub.resolves(calendar);
 

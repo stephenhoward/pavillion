@@ -613,7 +613,7 @@ describe('FundingForm', () => {
       expect(wrapper.find('.error-message').exists()).toBe(true);
     });
 
-    it('emits subscribed when done button clicked after success', async () => {
+    it('emits plan-started when done button clicked after success', async () => {
       mockGetOptions.mockResolvedValue(makeStripeOptions());
 
       const { mockStripeInstance, triggerOnComplete } = makeMockStripeWithCallbackCapture();
@@ -642,7 +642,7 @@ describe('FundingForm', () => {
       await doneButton.trigger('click');
       await flushPromises();
 
-      expect(wrapper.emitted('subscribed')).toBeTruthy();
+      expect(wrapper.emitted('plan-started')).toBeTruthy();
     });
 
     it('returns to configure state when try again clicked after error', async () => {

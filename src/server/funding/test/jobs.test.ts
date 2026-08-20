@@ -10,7 +10,7 @@ import { ProviderConfigEntity } from '@/server/funding/entity/provider_config';
 import FundingService from '@/server/funding/service/funding';
 import { checkGracePeriodExpiry } from '@/server/funding/service/jobs';
 
-describe('Subscription Scheduled Jobs', () => {
+describe('Funding Plan Scheduled Jobs', () => {
   let sandbox: sinon.SinonSandbox;
   let eventBus: EventEmitter;
   let _service: FundingService;
@@ -38,7 +38,7 @@ describe('Subscription Scheduled Jobs', () => {
   });
 
   describe('checkGracePeriodExpiry', () => {
-    it('should identify past_due subscriptions past grace period', async () => {
+    it('should identify past_due funding plans past grace period', async () => {
       // Create settings with 7-day grace period
       const settings = FundingSettingsEntity.build({
         id: uuidv4(),
@@ -72,8 +72,8 @@ describe('Subscription Scheduled Jobs', () => {
       });
       await providerConfig.save();
 
-      // Create subscription that went past_due 8 days ago (beyond grace period)
-      const expiredSubscription = FundingPlanEntity.build({
+      // Create funding plan that went past_due 8 days ago (beyond grace period)
+      const expiredPlan = FundingPlanEntity.build({
         id: uuidv4(),
         account_id: account.id,
         provider_config_id: providerConfig.id,
@@ -88,25 +88,25 @@ describe('Subscription Scheduled Jobs', () => {
         cancelled_at: null,
         suspended_at: null,
       });
-      await expiredSubscription.save();
+      await expiredPlan.save();
 
       // Manually update updatedAt to 8 days ago using raw query
       const eightDaysAgo = new Date('2026-01-07T12:00:00Z');
       await db.query(
         'UPDATE funding_plan SET updatedAt = ? WHERE id = ?',
         {
-          replacements: [eightDaysAgo.toISOString(), expiredSubscription.id],
+          replacements: [eightDaysAgo.toISOString(), expiredPlan.id],
         },
       );
 
       // Run the job
       await checkGracePeriodExpiry();
 
-      // Reload subscription to check status
-      await expiredSubscription.reload();
+      // Reload funding plan to check status
+      await expiredPlan.reload();
 
       // Should be suspended
-      expect(expiredSubscription.status).toBe('suspended');
+      expect(expiredPlan.status).toBe('suspended');
     });
 
     it('should transition status to suspended', async () => {
@@ -143,8 +143,8 @@ describe('Subscription Scheduled Jobs', () => {
       });
       await providerConfig.save();
 
-      // Create past_due subscription beyond grace period
-      const subscription = FundingPlanEntity.build({
+      // Create past_due funding plan beyond grace period
+      const plan = FundingPlanEntity.build({
         id: uuidv4(),
         account_id: account.id,
         provider_config_id: providerConfig.id,
@@ -159,26 +159,26 @@ describe('Subscription Scheduled Jobs', () => {
         cancelled_at: null,
         suspended_at: null,
       });
-      await subscription.save();
+      await plan.save();
 
       // Manually update updatedAt to 10 days ago
       const tenDaysAgo = new Date('2026-01-05T12:00:00Z');
       await db.query(
         'UPDATE funding_plan SET updatedAt = ? WHERE id = ?',
         {
-          replacements: [tenDaysAgo.toISOString(), subscription.id],
+          replacements: [tenDaysAgo.toISOString(), plan.id],
         },
       );
 
       // Verify initial status
-      expect(subscription.status).toBe('past_due');
+      expect(plan.status).toBe('past_due');
 
       // Run the job
       await checkGracePeriodExpiry();
 
       // Reload and verify transition
-      await subscription.reload();
-      expect(subscription.status).toBe('suspended');
+      await plan.reload();
+      expect(plan.status).toBe('suspended');
     });
 
     it('should set suspended_at timestamp', async () => {
@@ -215,8 +215,8 @@ describe('Subscription Scheduled Jobs', () => {
       });
       await providerConfig.save();
 
-      // Create past_due subscription
-      const subscription = FundingPlanEntity.build({
+      // Create past_due funding plan
+      const plan = FundingPlanEntity.build({
         id: uuidv4(),
         account_id: account.id,
         provider_config_id: providerConfig.id,
@@ -231,34 +231,34 @@ describe('Subscription Scheduled Jobs', () => {
         cancelled_at: null,
         suspended_at: null,
       });
-      await subscription.save();
+      await plan.save();
 
       // Manually update updatedAt to 9 days ago
       const nineDaysAgo = new Date('2026-01-06T12:00:00Z');
       await db.query(
         'UPDATE funding_plan SET updatedAt = ? WHERE id = ?',
         {
-          replacements: [nineDaysAgo.toISOString(), subscription.id],
+          replacements: [nineDaysAgo.toISOString(), plan.id],
         },
       );
 
       // Verify no suspended_at initially
-      expect(subscription.suspended_at).toBeNull();
+      expect(plan.suspended_at).toBeNull();
 
       // Run the job
       await checkGracePeriodExpiry();
 
       // Reload and verify suspended_at is set
-      await subscription.reload();
-      expect(subscription.suspended_at).not.toBeNull();
-      expect(subscription.suspended_at).toBeInstanceOf(Date);
+      await plan.reload();
+      expect(plan.suspended_at).not.toBeNull();
+      expect(plan.suspended_at).toBeInstanceOf(Date);
 
       // Should be set to current time (within fake timer context)
       const expectedTime = new Date('2026-01-15T12:00:00Z');
-      expect(subscription.suspended_at?.getTime()).toBe(expectedTime.getTime());
+      expect(plan.suspended_at?.getTime()).toBe(expectedTime.getTime());
     });
 
-    it('should not affect subscriptions within grace period', async () => {
+    it('should not affect funding plans within grace period', async () => {
       // Create settings with 7-day grace period
       const settings = FundingSettingsEntity.build({
         id: uuidv4(),
@@ -292,8 +292,8 @@ describe('Subscription Scheduled Jobs', () => {
       });
       await providerConfig.save();
 
-      // Create subscription that went past_due 5 days ago (within grace period)
-      const recentSubscription = FundingPlanEntity.build({
+      // Create funding plan that went past_due 5 days ago (within grace period)
+      const recentPlan = FundingPlanEntity.build({
         id: uuidv4(),
         account_id: account.id,
         provider_config_id: providerConfig.id,
@@ -308,19 +308,19 @@ describe('Subscription Scheduled Jobs', () => {
         cancelled_at: null,
         suspended_at: null,
       });
-      await recentSubscription.save();
+      await recentPlan.save();
 
       // Manually update updatedAt to 5 days ago
       const fiveDaysAgo = new Date('2026-01-10T12:00:00Z');
       await db.query(
         'UPDATE funding_plan SET updatedAt = ? WHERE id = ?',
         {
-          replacements: [fiveDaysAgo.toISOString(), recentSubscription.id],
+          replacements: [fiveDaysAgo.toISOString(), recentPlan.id],
         },
       );
 
-      // Create subscription that went past_due 1 day ago (well within grace period)
-      const veryRecentSubscription = FundingPlanEntity.build({
+      // Create funding plan that went past_due 1 day ago (well within grace period)
+      const veryRecentPlan = FundingPlanEntity.build({
         id: uuidv4(),
         account_id: account.id,
         provider_config_id: providerConfig.id,
@@ -335,30 +335,30 @@ describe('Subscription Scheduled Jobs', () => {
         cancelled_at: null,
         suspended_at: null,
       });
-      await veryRecentSubscription.save();
+      await veryRecentPlan.save();
 
       // Manually update updatedAt to 1 day ago
       const oneDayAgo = new Date('2026-01-14T12:00:00Z');
       await db.query(
         'UPDATE funding_plan SET updatedAt = ? WHERE id = ?',
         {
-          replacements: [oneDayAgo.toISOString(), veryRecentSubscription.id],
+          replacements: [oneDayAgo.toISOString(), veryRecentPlan.id],
         },
       );
 
       // Run the job
       await checkGracePeriodExpiry();
 
-      // Reload both subscriptions
-      await recentSubscription.reload();
-      await veryRecentSubscription.reload();
+      // Reload both funding plans
+      await recentPlan.reload();
+      await veryRecentPlan.reload();
 
       // Both should still be past_due
-      expect(recentSubscription.status).toBe('past_due');
-      expect(recentSubscription.suspended_at).toBeNull();
+      expect(recentPlan.status).toBe('past_due');
+      expect(recentPlan.suspended_at).toBeNull();
 
-      expect(veryRecentSubscription.status).toBe('past_due');
-      expect(veryRecentSubscription.suspended_at).toBeNull();
+      expect(veryRecentPlan.status).toBe('past_due');
+      expect(veryRecentPlan.suspended_at).toBeNull();
     });
   });
 });

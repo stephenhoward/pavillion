@@ -214,7 +214,7 @@
     v-if="state.showFundingSheet"
     :calendarId="props.calendarId"
     @close="state.showFundingSheet = false"
-    @subscribed="onSubscribed"
+    @plan-started="onPlanStarted"
     :instanceName="instanceName"
   />
 </template>
@@ -509,9 +509,9 @@ const disableExtendedFeatures = async () => {
 };
 
 /**
- * Handle successful funding subscription from FundingSheet
+ * Handle a successfully started funding plan from FundingSheet
  */
-const onSubscribed = async () => {
+const onPlanStarted = async () => {
   state.showFundingSheet = false;
   state.success = t('extended_features_enabled_success');
   clearMessages();

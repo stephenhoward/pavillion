@@ -263,7 +263,7 @@ function onCalendarInputChange() {
 }
 
 /**
- * Resolve calendar URL name to calendar ID using the subscription service
+ * Resolve calendar URL name to calendar ID using the funding service
  */
 async function resolveCalendar() {
   const urlName = state.calendarUrlName.trim();

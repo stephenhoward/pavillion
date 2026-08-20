@@ -17,7 +17,7 @@ import {
   DuplicateCalendarFundingPlanError,
 } from '@/common/exceptions/funding';
 
-describe('FundingService - Calendar Subscription Methods', () => {
+describe('FundingService - Calendar Funding Plan Methods', () => {
   let sandbox: sinon.SinonSandbox;
   let eventBus: EventEmitter;
   let service: FundingService;
@@ -59,15 +59,15 @@ describe('FundingService - Calendar Subscription Methods', () => {
   });
 
   describe('addCalendarToFundingPlan', () => {
-    it('should create a CalendarSubscription row and update provider total', async () => {
-      const subscriptionId = uuidv4();
+    it('should create a CalendarFundingPlan row and update provider total', async () => {
+      const fundingPlanId = uuidv4();
       const calendarId = uuidv4();
       const accountId = uuidv4();
       const amount = 500000; // $5.00 in millicents
       const providerConfigId = uuidv4();
 
       const mockFundingPlanEntity = {
-        id: subscriptionId,
+        id: fundingPlanId,
         account_id: accountId,
         provider_config_id: providerConfigId,
         provider_subscription_id: 'sub_123',
@@ -83,9 +83,9 @@ describe('FundingService - Calendar Subscription Methods', () => {
         },
       };
 
-      const mockCalendarSubscription = {
+      const mockCalendarFundingPlan = {
         id: uuidv4(),
-        funding_plan_id: subscriptionId,
+        funding_plan_id: fundingPlanId,
         calendar_id: calendarId,
         amount: amount,
         end_time: null,
@@ -107,11 +107,11 @@ describe('FundingService - Calendar Subscription Methods', () => {
         .resolves(true);
 
       sandbox.stub(FundingPlanEntity, 'findOne').resolves(mockFundingPlanEntity as any);
-      // No existing active calendar subscription
+      // No existing active calendar plan
       sandbox.stub(CalendarFundingPlanEntity, 'findOne').resolves(null);
-      const createStub = sandbox.stub(CalendarFundingPlanEntity, 'create').resolves(mockCalendarSubscription as any);
+      const createStub = sandbox.stub(CalendarFundingPlanEntity, 'create').resolves(mockCalendarFundingPlan as any);
       // Sum of active calendar amounts (just the new one)
-      sandbox.stub(CalendarFundingPlanEntity, 'findAll').resolves([mockCalendarSubscription] as any);
+      sandbox.stub(CalendarFundingPlanEntity, 'findAll').resolves([mockCalendarFundingPlan] as any);
       sandbox.stub(ProviderConfigEntity, 'findByPk').resolves(mockProviderConfig as any);
       sandbox.stub(ProviderFactory, 'getAdapter').returns(mockAdapter as any);
 
@@ -121,7 +121,7 @@ describe('FundingService - Calendar Subscription Methods', () => {
       expect(mockAdapter.updateSubscriptionAmount.called).toBe(true);
     });
 
-    it('should throw FundingPlanNotFoundError if no active subscription exists', async () => {
+    it('should throw FundingPlanNotFoundError if no active plan exists', async () => {
       const accountId = uuidv4();
       const calendarId = uuidv4();
 
@@ -135,10 +135,10 @@ describe('FundingService - Calendar Subscription Methods', () => {
     it('should throw ValidationError if account does not own the calendar', async () => {
       const accountId = uuidv4();
       const calendarId = uuidv4();
-      const subscriptionId = uuidv4();
+      const fundingPlanId = uuidv4();
 
       sandbox.stub(FundingPlanEntity, 'findOne').resolves({
-        id: subscriptionId,
+        id: fundingPlanId,
         account_id: accountId,
         status: 'active',
       } as any);
@@ -153,13 +153,13 @@ describe('FundingService - Calendar Subscription Methods', () => {
       ).rejects.toThrow(ValidationError);
     });
 
-    it('should throw DuplicateCalendarFundingPlanError if active subscription already exists', async () => {
+    it('should throw DuplicateCalendarFundingPlanError if active plan already exists', async () => {
       const accountId = uuidv4();
-      const subscriptionId = uuidv4();
+      const fundingPlanId = uuidv4();
       const calendarId = uuidv4();
 
       sandbox.stub(FundingPlanEntity, 'findOne').resolves({
-        id: subscriptionId,
+        id: fundingPlanId,
         account_id: accountId,
         status: 'active',
       } as any);
@@ -204,14 +204,14 @@ describe('FundingService - Calendar Subscription Methods', () => {
 
   describe('removeCalendarFromFundingPlan', () => {
     it('should set end_time and reduce provider amount', async () => {
-      const subscriptionId = uuidv4();
+      const fundingPlanId = uuidv4();
       const calendarId = uuidv4();
       const accountId = uuidv4();
       const providerConfigId = uuidv4();
       const periodEnd = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
       const mockFundingPlanEntity = {
-        id: subscriptionId,
+        id: fundingPlanId,
         account_id: accountId,
         provider_config_id: providerConfigId,
         provider_subscription_id: 'sub_123',
@@ -230,17 +230,17 @@ describe('FundingService - Calendar Subscription Methods', () => {
 
       const mockCalendarSub = {
         id: uuidv4(),
-        funding_plan_id: subscriptionId,
+        funding_plan_id: fundingPlanId,
         calendar_id: calendarId,
         amount: 500000,
         end_time: null as Date | null,
         save: sandbox.stub().resolves(),
       };
 
-      // Another active calendar subscription remains
+      // Another active calendar plan remains
       const otherCalendarSub = {
         id: uuidv4(),
-        funding_plan_id: subscriptionId,
+        funding_plan_id: fundingPlanId,
         calendar_id: uuidv4(),
         amount: 300000,
         end_time: null,
@@ -261,9 +261,9 @@ describe('FundingService - Calendar Subscription Methods', () => {
         .withArgs(accountId, calendarId)
         .resolves(true);
 
-      // The specific calendar subscription to remove
+      // The specific calendar plan to remove
       sandbox.stub(CalendarFundingPlanEntity, 'findOne').resolves(mockCalendarSub as any);
-      // Remaining active subscriptions (after end_time is set)
+      // Remaining active plans (after end_time is set)
       sandbox.stub(CalendarFundingPlanEntity, 'findAll').resolves([otherCalendarSub] as any);
       sandbox.stub(ProviderConfigEntity, 'findByPk').resolves(mockProviderConfig as any);
       sandbox.stub(ProviderFactory, 'getAdapter').returns(mockAdapter as any);
@@ -277,15 +277,15 @@ describe('FundingService - Calendar Subscription Methods', () => {
       expect(mockAdapter.updateSubscriptionAmount.firstCall.args[1]).toBe(300000);
     });
 
-    it('should cancel subscription via this.cancel() when removing last active calendar', async () => {
-      const subscriptionId = uuidv4();
+    it('should cancel plan via this.cancel() when removing last active calendar', async () => {
+      const fundingPlanId = uuidv4();
       const calendarId = uuidv4();
       const accountId = uuidv4();
       const providerConfigId = uuidv4();
       const periodEnd = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
       const mockFundingPlanEntity = {
-        id: subscriptionId,
+        id: fundingPlanId,
         account_id: accountId,
         provider_config_id: providerConfigId,
         provider_subscription_id: 'sub_123',
@@ -305,7 +305,7 @@ describe('FundingService - Calendar Subscription Methods', () => {
 
       const mockCalendarSub = {
         id: uuidv4(),
-        funding_plan_id: subscriptionId,
+        funding_plan_id: fundingPlanId,
         calendar_id: calendarId,
         amount: 500000,
         end_time: null as Date | null,
@@ -329,7 +329,7 @@ describe('FundingService - Calendar Subscription Methods', () => {
         .withArgs(accountId, calendarId)
         .resolves(true);
       sandbox.stub(CalendarFundingPlanEntity, 'findOne').resolves(mockCalendarSub as any);
-      // No remaining active subscriptions
+      // No remaining active plans
       sandbox.stub(CalendarFundingPlanEntity, 'findAll').resolves([]);
       sandbox.stub(ProviderConfigEntity, 'findByPk').resolves(mockProviderConfig as any);
       sandbox.stub(ProviderFactory, 'getAdapter').returns(mockAdapter as any);
@@ -341,7 +341,7 @@ describe('FundingService - Calendar Subscription Methods', () => {
       expect(mockFundingPlanEntity.status).toBe('cancelled');
     });
 
-    it('should throw FundingPlanNotFoundError if no active subscription exists', async () => {
+    it('should throw FundingPlanNotFoundError if no active plan exists', async () => {
       const accountId = uuidv4();
       sandbox.stub(FundingPlanEntity, 'findOne').resolves(null);
 
@@ -350,13 +350,13 @@ describe('FundingService - Calendar Subscription Methods', () => {
       ).rejects.toThrow(FundingPlanNotFoundError);
     });
 
-    it('should throw CalendarFundingPlanNotFoundError if no active calendar subscription', async () => {
+    it('should throw CalendarFundingPlanNotFoundError if no active calendar plan', async () => {
       const accountId = uuidv4();
-      const subscriptionId = uuidv4();
+      const fundingPlanId = uuidv4();
       const calendarId = uuidv4();
 
       sandbox.stub(FundingPlanEntity, 'findOne').resolves({
-        id: subscriptionId,
+        id: fundingPlanId,
         account_id: accountId,
         status: 'active',
       } as any);
@@ -428,7 +428,7 @@ describe('FundingService - Calendar Subscription Methods', () => {
       expect(status).toBe('grant');
     });
 
-    it('should return funded when calendar has an active calendar subscription', async () => {
+    it('should return funded when calendar has an active calendar plan', async () => {
       const calendarId = uuidv4();
       const accountId = uuidv4();
 
@@ -446,7 +446,7 @@ describe('FundingService - Calendar Subscription Methods', () => {
       // No grant - hasActiveGrant returns null for first call, CalendarFundingPlanEntity for second
       sandbox.stub(ComplimentaryGrantEntity, 'findOne').resolves(null);
 
-      // Active calendar subscription exists
+      // Active calendar plan exists
       sandbox.stub(CalendarFundingPlanEntity, 'findOne').resolves({
         id: uuidv4(),
         calendar_id: calendarId,
@@ -457,7 +457,7 @@ describe('FundingService - Calendar Subscription Methods', () => {
       expect(status).toBe('funded');
     });
 
-    it('should return unfunded when no exemption, grant, or subscription exists', async () => {
+    it('should return unfunded when no exemption, grant, or plan exists', async () => {
       const calendarId = uuidv4();
       const accountId = uuidv4();
 

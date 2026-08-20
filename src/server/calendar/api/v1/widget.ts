@@ -129,7 +129,7 @@ class WidgetRoutes {
     const calendarUrlName = req.params.urlName;
 
     try {
-      // Use getCalendarForWidget which includes subscription check
+      // Use getCalendarForWidget which includes the funding-access check
       const calendar = await this.service.getCalendarForWidget(calendarUrlName);
 
       if (!calendar) {

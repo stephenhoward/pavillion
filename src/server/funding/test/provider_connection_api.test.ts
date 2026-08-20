@@ -263,11 +263,11 @@ describe('Provider Connection API Routes', () => {
   });
 
   describe('DELETE /admin/providers/:providerType', () => {
-    it('should return confirmation requirement when active subscriptions exist', async () => {
+    it('should return confirmation requirement when active funding plans exist', async () => {
       sandbox.stub(service, 'disconnectProviderConnection').resolves({
         requiresConfirmation: true,
         activeFundingPlanCount: 5,
-        message: 'This provider has 5 active subscription(s). Disconnecting will cancel all active subscriptions.',
+        message: 'This provider has 5 active funding plan(s). Disconnecting will cancel all active funding plans.',
       });
 
       router.delete('/:providerType', routes.disconnectProvider.bind(routes));
@@ -278,7 +278,7 @@ describe('Provider Connection API Routes', () => {
 
       expect(response.body.requiresConfirmation).toBe(true);
       expect(response.body.activeFundingPlanCount).toBe(5);
-      expect(response.body.message).toContain('5 active subscription');
+      expect(response.body.message).toContain('5 active funding plan');
     });
 
     it('should disconnect provider when confirmation is provided', async () => {

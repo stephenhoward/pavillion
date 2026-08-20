@@ -16,41 +16,41 @@ import { FundingPlanEntity } from '@/server/funding/entity/funding_plan';
 import { CalendarFundingPlanEntity } from '@/server/funding/entity/calendar_funding_plan';
 
 /**
- * Integration tests for Subscription Gating in Widget Embedding
+ * Integration tests for Funding Gating in Widget Embedding
  *
- * These tests verify that subscription enforcement works correctly for:
+ * These tests verify that funding-gate enforcement works correctly for:
  * - Widget domain configuration (PUT /api/v1/calendars/:calendarId/widget/domain)
  * - Widget data serving (GET /api/widget/v1/calendars/:urlName)
  *
  * Test scenarios:
- * - Subscriptions enabled + no subscription → 402 error
- * - Subscriptions enabled + active subscription → success
- * - Subscriptions enabled + expired subscription → 402 error
- * - Subscriptions disabled → always success (free instance mode)
+ * - Funding enabled + no funding plan → 402 error
+ * - Funding enabled + active funding plan → success
+ * - Funding enabled + expired funding plan → 402 error
+ * - Funding disabled → always success (free instance mode)
  * - Security audit scenarios
  * - Edge cases and race conditions
  */
-describe('Subscription Gating Integration Tests', () => {
+describe('Funding Gating Integration Tests', () => {
   let env: TestEnvironment;
   let calendarInterface: CalendarInterface;
   let fundingInterface: FundingInterface;
   let eventBus: EventEmitter;
 
-  let subscribedAccount: Account;
-  let unsubscribedAccount: Account;
-  let subscribedCalendar: Calendar;
-  let unsubscribedCalendar: Calendar;
-  let subscribedToken: string;
-  let unsubscribedToken: string;
+  let supporterAccount: Account;
+  let nonSupporterAccount: Account;
+  let coveredCalendar: Calendar;
+  let uncoveredCalendar: Calendar;
+  let supporterToken: string;
+  let nonSupporterToken: string;
 
-  const subscribedEmail = 'subscribed@pavillion.dev';
-  const unsubscribedEmail = 'unsubscribed@pavillion.dev';
+  const supporterEmail = 'supporter@pavillion.dev';
+  const nonSupporterEmail = 'non-supporter@pavillion.dev';
   const password = 'testpassword';
 
   /**
-   * Helper function to enable subscriptions instance-wide
+   * Helper function to enable funding instance-wide
    */
-  async function enableSubscriptions() {
+  async function enableFunding() {
     let settings = await FundingSettingsEntity.findOne();
     if (!settings) {
       settings = FundingSettingsEntity.build({
@@ -71,9 +71,9 @@ describe('Subscription Gating Integration Tests', () => {
   }
 
   /**
-   * Helper function to disable subscriptions instance-wide
+   * Helper function to disable funding instance-wide
    */
-  async function disableSubscriptions() {
+  async function disableFunding() {
     let settings = await FundingSettingsEntity.findOne();
     if (!settings) {
       settings = FundingSettingsEntity.build({
@@ -94,15 +94,15 @@ describe('Subscription Gating Integration Tests', () => {
   }
 
   /**
-   * Helper function to create an active subscription for an account and link it to a calendar.
+   * Helper function to create an active funding plan for an account and link it to a calendar.
    * hasActiveFundingPlan now checks CalendarFundingPlanEntity by calendar_id, so both
    * a FundingPlanEntity and a CalendarFundingPlanEntity are required.
    */
-  async function createActiveSubscription(accountId: string, calendarId?: string) {
+  async function createActiveFundingPlan(accountId: string, calendarId?: string) {
     const futureDate = new Date();
     futureDate.setFullYear(futureDate.getFullYear() + 1); // 1 year in the future
 
-    const subscription = FundingPlanEntity.build({
+    const plan = FundingPlanEntity.build({
       id: uuidv4(),
       account_id: accountId,
       provider_type: 'stripe',
@@ -116,13 +116,13 @@ describe('Subscription Gating Integration Tests', () => {
       created_at: new Date(),
       updated_at: new Date(),
     });
-    await subscription.save();
+    await plan.save();
 
-    // Link the subscription to the calendar so hasActiveFundingPlan(calendarId) returns true
+    // Link the plan to the calendar so hasActiveFundingPlan(calendarId) returns true
     if (calendarId) {
       const calendarSub = CalendarFundingPlanEntity.build({
         id: uuidv4(),
-        funding_plan_id: subscription.id,
+        funding_plan_id: plan.id,
         calendar_id: calendarId,
         amount: 5.00,
         end_time: null,
@@ -130,17 +130,17 @@ describe('Subscription Gating Integration Tests', () => {
       await calendarSub.save();
     }
 
-    return subscription;
+    return plan;
   }
 
   /**
-   * Helper function to create an expired subscription for an account
+   * Helper function to create an expired funding plan for an account
    */
-  async function createExpiredSubscription(accountId: string) {
+  async function createExpiredFundingPlan(accountId: string) {
     const pastDate = new Date();
     pastDate.setDate(pastDate.getDate() - 30); // 30 days ago
 
-    const subscription = FundingPlanEntity.build({
+    const plan = FundingPlanEntity.build({
       id: uuidv4(),
       account_id: accountId,
       provider_type: 'stripe',
@@ -154,18 +154,18 @@ describe('Subscription Gating Integration Tests', () => {
       created_at: pastDate,
       updated_at: new Date(),
     });
-    await subscription.save();
+    await plan.save();
   }
 
   /**
-   * Helper function to clear all subscriptions for an account (and their calendar links)
+   * Helper function to clear all funding plans for an account (and their calendar links)
    */
-  async function clearSubscriptions(accountId: string) {
-    // Find all subscriptions for this account first
+  async function clearFundingPlans(accountId: string) {
+    // Find all funding plans for this account first
     const subs = await FundingPlanEntity.findAll({ where: { account_id: accountId } });
     const subIds = subs.map((s) => s.id);
 
-    // Remove calendar subscription links before removing subscriptions
+    // Remove calendar coverage links before removing funding plans
     if (subIds.length > 0) {
       await CalendarFundingPlanEntity.destroy({ where: { funding_plan_id: subIds } });
     }
@@ -187,22 +187,22 @@ describe('Subscription Gating Integration Tests', () => {
     const accountService = new AccountService(eventBus, configurationInterface, setupInterface);
 
     // Create test accounts
-    let subscribedInfo = await accountService._setupAccount(subscribedEmail, password);
-    subscribedAccount = subscribedInfo.account;
+    let supporterInfo = await accountService._setupAccount(supporterEmail, password);
+    supporterAccount = supporterInfo.account;
 
-    let unsubscribedInfo = await accountService._setupAccount(unsubscribedEmail, password);
-    unsubscribedAccount = unsubscribedInfo.account;
+    let nonSupporterInfo = await accountService._setupAccount(nonSupporterEmail, password);
+    nonSupporterAccount = nonSupporterInfo.account;
 
     // Login both users to get auth tokens
-    subscribedToken = await env.login(subscribedEmail, password);
-    unsubscribedToken = await env.login(unsubscribedEmail, password);
+    supporterToken = await env.login(supporterEmail, password);
+    nonSupporterToken = await env.login(nonSupporterEmail, password);
 
     // Create calendars for each user
-    subscribedCalendar = await calendarInterface.createCalendar(subscribedAccount, 'subscribed-cal');
-    unsubscribedCalendar = await calendarInterface.createCalendar(unsubscribedAccount, 'unsubscribed-cal');
+    coveredCalendar = await calendarInterface.createCalendar(supporterAccount, 'covered-cal');
+    uncoveredCalendar = await calendarInterface.createCalendar(nonSupporterAccount, 'uncovered-cal');
 
-    // Create active subscription for subscribed account linked to their calendar
-    await createActiveSubscription(subscribedAccount.id, subscribedCalendar.id);
+    // Create active funding plan for the supporter account linked to their calendar
+    await createActiveFundingPlan(supporterAccount.id, coveredCalendar.id);
   });
 
   afterAll(async () => {
@@ -213,20 +213,20 @@ describe('Subscription Gating Integration Tests', () => {
   });
 
   beforeEach(async () => {
-    // Reset subscription state before each test
-    await disableSubscriptions();
-    await clearSubscriptions(subscribedAccount.id);
-    await clearSubscriptions(unsubscribedAccount.id);
+    // Reset funding-plan state before each test
+    await disableFunding();
+    await clearFundingPlans(supporterAccount.id);
+    await clearFundingPlans(nonSupporterAccount.id);
   });
 
   describe('Widget Domain Configuration Tests', () => {
-    it('should return 402 when subscriptions enabled and user has no subscription', async () => {
-      await enableSubscriptions();
-      // unsubscribedAccount has no subscription
+    it('should return 402 when funding enabled and user has no funding plan', async () => {
+      await enableFunding();
+      // nonSupporterAccount has no funding plan
 
       const response = await env.authPut(
-        unsubscribedToken,
-        `/api/v1/calendars/${unsubscribedCalendar.id}/widget/domain`,
+        nonSupporterToken,
+        `/api/v1/calendars/${uncoveredCalendar.id}/widget/domain`,
         { domain: 'example.com' },
       );
 
@@ -236,13 +236,13 @@ describe('Subscription Gating Integration Tests', () => {
       expect(response.body).not.toHaveProperty('subscriptionUrl');
     });
 
-    it('should return 200 when subscriptions enabled and user has active subscription', async () => {
-      await enableSubscriptions();
-      await createActiveSubscription(subscribedAccount.id, subscribedCalendar.id);
+    it('should return 200 when funding enabled and user has active funding plan', async () => {
+      await enableFunding();
+      await createActiveFundingPlan(supporterAccount.id, coveredCalendar.id);
 
       const response = await env.authPut(
-        subscribedToken,
-        `/api/v1/calendars/${subscribedCalendar.id}/widget/domain`,
+        supporterToken,
+        `/api/v1/calendars/${coveredCalendar.id}/widget/domain`,
         { domain: 'example.com' },
       );
 
@@ -250,13 +250,13 @@ describe('Subscription Gating Integration Tests', () => {
       expect(response.body.domain).toBe('example.com');
     });
 
-    it('should return 402 when subscriptions enabled and subscription expired', async () => {
-      await enableSubscriptions();
-      await createExpiredSubscription(unsubscribedAccount.id);
+    it('should return 402 when funding enabled and funding plan expired', async () => {
+      await enableFunding();
+      await createExpiredFundingPlan(nonSupporterAccount.id);
 
       const response = await env.authPut(
-        unsubscribedToken,
-        `/api/v1/calendars/${unsubscribedCalendar.id}/widget/domain`,
+        nonSupporterToken,
+        `/api/v1/calendars/${uncoveredCalendar.id}/widget/domain`,
         { domain: 'example.com' },
       );
 
@@ -264,12 +264,12 @@ describe('Subscription Gating Integration Tests', () => {
       expect(response.body.errorName).toBe('SubscriptionRequiredError');
     });
 
-    it('should return 200 when subscriptions disabled (free instance mode)', async () => {
-      await disableSubscriptions();
+    it('should return 200 when funding disabled (free instance mode)', async () => {
+      await disableFunding();
 
       const response = await env.authPut(
-        unsubscribedToken,
-        `/api/v1/calendars/${unsubscribedCalendar.id}/widget/domain`,
+        nonSupporterToken,
+        `/api/v1/calendars/${uncoveredCalendar.id}/widget/domain`,
         { domain: 'example.com' },
       );
 
@@ -279,7 +279,7 @@ describe('Subscription Gating Integration Tests', () => {
 
     it('should return 400 for invalid UUID calendarId', async () => {
       const response = await env.authPut(
-        subscribedToken,
+        supporterToken,
         '/api/v1/calendars/not-a-valid-uuid/widget/domain',
         { domain: 'example.com' },
       );
@@ -290,11 +290,11 @@ describe('Subscription Gating Integration Tests', () => {
     });
 
     it('should not include subscriptionUrl in error response', async () => {
-      await enableSubscriptions();
+      await enableFunding();
 
       const response = await env.authPut(
-        unsubscribedToken,
-        `/api/v1/calendars/${unsubscribedCalendar.id}/widget/domain`,
+        nonSupporterToken,
+        `/api/v1/calendars/${uncoveredCalendar.id}/widget/domain`,
         { domain: 'example.com' },
       );
 
@@ -304,16 +304,16 @@ describe('Subscription Gating Integration Tests', () => {
     });
 
     it.skip('should enforce rate limiting after 100 requests (skipped: rate limiting disabled in test mode)', async () => {
-      await disableSubscriptions();
+      await disableFunding();
 
       // Create a fresh calendar for this test to avoid interference
-      const rateLimitCal = await calendarInterface.createCalendar(subscribedAccount, 'rate-limit-test');
+      const rateLimitCal = await calendarInterface.createCalendar(supporterAccount, 'rate-limit-test');
 
       // Make 101 rapid requests
       let last429Response = null;
       for (let i = 0; i < 101; i++) {
         const response = await env.authPut(
-          subscribedToken,
+          supporterToken,
           `/api/v1/calendars/${rateLimitCal.id}/widget/domain`,
           { domain: `example${i}.com` },
         );
@@ -333,26 +333,26 @@ describe('Subscription Gating Integration Tests', () => {
   describe('Widget Data Serving Tests', () => {
     beforeEach(async () => {
       // Set widget domains for both calendars before testing data serving
-      await disableSubscriptions();
+      await disableFunding();
 
       await env.authPut(
-        subscribedToken,
-        `/api/v1/calendars/${subscribedCalendar.id}/widget/domain`,
+        supporterToken,
+        `/api/v1/calendars/${coveredCalendar.id}/widget/domain`,
         { domain: 'example.com' },
       );
 
       await env.authPut(
-        unsubscribedToken,
-        `/api/v1/calendars/${unsubscribedCalendar.id}/widget/domain`,
+        nonSupporterToken,
+        `/api/v1/calendars/${uncoveredCalendar.id}/widget/domain`,
         { domain: 'example.com' },
       );
     });
 
-    it('should return 402 when subscriptions enabled and calendar owner has no subscription', async () => {
-      await enableSubscriptions();
+    it('should return 402 when funding enabled and calendar owner has no funding plan', async () => {
+      await enableFunding();
 
       const response = await request(env.app)
-        .get(`/api/widget/v1/calendars/${unsubscribedCalendar.urlName}`)
+        .get(`/api/widget/v1/calendars/${uncoveredCalendar.urlName}`)
         .set('Origin', 'https://example.com');
 
       expect(response.status).toBe(402);
@@ -360,35 +360,35 @@ describe('Subscription Gating Integration Tests', () => {
       expect(response.body.feature).toBe('widget_embedding');
     });
 
-    it('should return 200 when subscriptions enabled and calendar owner has subscription', async () => {
-      await enableSubscriptions();
-      await createActiveSubscription(subscribedAccount.id, subscribedCalendar.id);
+    it('should return 200 when funding enabled and calendar owner has a funding plan', async () => {
+      await enableFunding();
+      await createActiveFundingPlan(supporterAccount.id, coveredCalendar.id);
 
       const response = await request(env.app)
-        .get(`/api/widget/v1/calendars/${subscribedCalendar.urlName}`)
+        .get(`/api/widget/v1/calendars/${coveredCalendar.urlName}`)
         .set('Origin', 'https://example.com');
 
       expect(response.status).toBe(200);
       expect(response.body).toHaveProperty('id');
-      expect(response.body.urlName).toBe(subscribedCalendar.urlName);
+      expect(response.body.urlName).toBe(coveredCalendar.urlName);
     });
 
-    it('should return 200 when subscriptions disabled for any calendar', async () => {
-      await disableSubscriptions();
+    it('should return 200 when funding disabled for any calendar', async () => {
+      await disableFunding();
 
       const response = await request(env.app)
-        .get(`/api/widget/v1/calendars/${unsubscribedCalendar.urlName}`)
+        .get(`/api/widget/v1/calendars/${uncoveredCalendar.urlName}`)
         .set('Origin', 'https://example.com');
 
       expect(response.status).toBe(200);
-      expect(response.body.urlName).toBe(unsubscribedCalendar.urlName);
+      expect(response.body.urlName).toBe(uncoveredCalendar.urlName);
     });
 
     it('should include CORS headers in 402 error responses', async () => {
-      await enableSubscriptions();
+      await enableFunding();
 
       const response = await request(env.app)
-        .get(`/api/widget/v1/calendars/${unsubscribedCalendar.urlName}`)
+        .get(`/api/widget/v1/calendars/${uncoveredCalendar.urlName}`)
         .set('Origin', 'https://example.com');
 
       expect(response.status).toBe(402);
@@ -398,10 +398,10 @@ describe('Subscription Gating Integration Tests', () => {
     });
 
     it('should include Cache-Control: no-store header on 402 error responses', async () => {
-      await enableSubscriptions();
+      await enableFunding();
 
       const response = await request(env.app)
-        .get(`/api/widget/v1/calendars/${unsubscribedCalendar.urlName}`)
+        .get(`/api/widget/v1/calendars/${uncoveredCalendar.urlName}`)
         .set('Origin', 'https://example.com');
 
       expect(response.status).toBe(402);
@@ -409,13 +409,13 @@ describe('Subscription Gating Integration Tests', () => {
     });
 
     it.skip('should enforce rate limiting after 300 requests (skipped: rate limiting disabled in test mode)', async () => {
-      await disableSubscriptions();
+      await disableFunding();
 
       // Make 301 rapid requests from same IP
       let last429Response = null;
       for (let i = 0; i < 301; i++) {
         const response = await request(env.app)
-          .get(`/api/widget/v1/calendars/${subscribedCalendar.urlName}`)
+          .get(`/api/widget/v1/calendars/${coveredCalendar.urlName}`)
           .set('Origin', 'https://example.com');
 
         if (response.status === 429) {
@@ -431,41 +431,41 @@ describe('Subscription Gating Integration Tests', () => {
   });
 
   describe('Security Audit Test Scenarios', () => {
-    it('should return 402 when calendar exists but owner has no subscription (not calendar existence leak)', async () => {
-      // Set domain with subscriptions disabled
-      await disableSubscriptions();
+    it('should return 402 when calendar exists but owner has no funding plan (not calendar existence leak)', async () => {
+      // Set domain with funding disabled
+      await disableFunding();
       await env.authPut(
-        unsubscribedToken,
-        `/api/v1/calendars/${unsubscribedCalendar.id}/widget/domain`,
+        nonSupporterToken,
+        `/api/v1/calendars/${uncoveredCalendar.id}/widget/domain`,
         { domain: 'example.com' },
       );
 
-      // Enable subscriptions
-      await enableSubscriptions();
+      // Enable funding
+      await enableFunding();
 
       // This should fail with 402, not reveal calendar existence
       const response = await request(env.app)
-        .get(`/api/widget/v1/calendars/${unsubscribedCalendar.urlName}`)
+        .get(`/api/widget/v1/calendars/${uncoveredCalendar.urlName}`)
         .set('Origin', 'https://example.com');
 
       expect(response.status).toBe(402);
       expect(response.body.errorName).toBe('SubscriptionRequiredError');
     });
 
-    it('should return 200 when calendar exists and subscriptions disabled instance-wide', async () => {
-      await disableSubscriptions();
+    it('should return 200 when calendar exists and funding disabled instance-wide', async () => {
+      await disableFunding();
 
       const response = await request(env.app)
-        .get(`/api/widget/v1/calendars/${unsubscribedCalendar.urlName}`)
+        .get(`/api/widget/v1/calendars/${uncoveredCalendar.urlName}`)
         .set('Origin', 'https://example.com');
 
       expect(response.status).toBe(200);
-      expect(response.body.urlName).toBe(unsubscribedCalendar.urlName);
+      expect(response.body.urlName).toBe(uncoveredCalendar.urlName);
     });
 
     it('should return 400 for invalid calendarId UUID format in widget config', async () => {
       const response = await env.authPut(
-        subscribedToken,
+        supporterToken,
         '/api/v1/calendars/not-a-uuid/widget/domain',
         { domain: 'example.com' },
       );
@@ -475,45 +475,45 @@ describe('Subscription Gating Integration Tests', () => {
       expect(response.body.error).toContain('invalid calendarId format');
     });
 
-    it('should check subscription after permission checks (no subscription status leak)', async () => {
-      // Create a calendar owned by subscribed user
-      const privateCalendar = await calendarInterface.createCalendar(subscribedAccount, 'private-cal');
-      await enableSubscriptions();
-      await createActiveSubscription(subscribedAccount.id, subscribedCalendar.id);
+    it('should check funding access after permission checks (no funding plan status leak)', async () => {
+      // Create a calendar owned by a supporter
+      const privateCalendar = await calendarInterface.createCalendar(supporterAccount, 'private-cal');
+      await enableFunding();
+      await createActiveFundingPlan(supporterAccount.id, coveredCalendar.id);
 
-      // Unsubscribed user tries to configure widget on private calendar
+      // Non-supporter tries to configure widget on private calendar
       const response = await env.authPut(
-        unsubscribedToken,
+        nonSupporterToken,
         `/api/v1/calendars/${privateCalendar.id}/widget/domain`,
         { domain: 'example.com' },
       );
 
-      // Should get 403 Permission Denied, NOT 402 Subscription Required
-      // This proves permission check happens BEFORE subscription check
+      // Should get 403 Permission Denied, NOT 402 SubscriptionRequiredError
+      // This proves permission check happens BEFORE the funding-access check
       expect(response.status).toBe(403);
       expect(response.body.errorName).toBe('CalendarEditorPermissionError');
     });
 
-    it('should handle consistent behavior when subscription expires during widget config request', async () => {
-      await enableSubscriptions();
-      await createActiveSubscription(unsubscribedAccount.id, unsubscribedCalendar.id);
+    it('should handle consistent behavior when funding plan expires during widget config request', async () => {
+      await enableFunding();
+      await createActiveFundingPlan(nonSupporterAccount.id, uncoveredCalendar.id);
 
-      // First call: active subscription
+      // First call: active funding plan
       const response1 = await env.authPut(
-        unsubscribedToken,
-        `/api/v1/calendars/${unsubscribedCalendar.id}/widget/domain`,
+        nonSupporterToken,
+        `/api/v1/calendars/${uncoveredCalendar.id}/widget/domain`,
         { domain: 'test1.com' },
       );
 
       expect(response1.status).toBe(200);
 
-      // Subscription expires (simulate by clearing and creating expired)
-      await clearSubscriptions(unsubscribedAccount.id);
-      await createExpiredSubscription(unsubscribedAccount.id);
+      // Funding plan expires (simulate by clearing and creating expired)
+      await clearFundingPlans(nonSupporterAccount.id);
+      await createExpiredFundingPlan(nonSupporterAccount.id);
 
       const response2 = await env.authPut(
-        unsubscribedToken,
-        `/api/v1/calendars/${unsubscribedCalendar.id}/widget/domain`,
+        nonSupporterToken,
+        `/api/v1/calendars/${uncoveredCalendar.id}/widget/domain`,
         { domain: 'test2.com' },
       );
 
@@ -524,64 +524,64 @@ describe('Subscription Gating Integration Tests', () => {
   });
 
   describe('Edge Cases', () => {
-    it('should stop serving widget data when calendar owner subscription expires', async () => {
-      await enableSubscriptions();
-      await createActiveSubscription(unsubscribedAccount.id, unsubscribedCalendar.id);
+    it('should stop serving widget data when calendar owner funding plan expires', async () => {
+      await enableFunding();
+      await createActiveFundingPlan(nonSupporterAccount.id, uncoveredCalendar.id);
 
-      // Set widget domain while subscribed
+      // Set widget domain while the owner has an active plan
       await env.authPut(
-        unsubscribedToken,
-        `/api/v1/calendars/${unsubscribedCalendar.id}/widget/domain`,
+        nonSupporterToken,
+        `/api/v1/calendars/${uncoveredCalendar.id}/widget/domain`,
         { domain: 'example.com' },
       );
 
       // Widget data should work
       const response1 = await request(env.app)
-        .get(`/api/widget/v1/calendars/${unsubscribedCalendar.urlName}`)
+        .get(`/api/widget/v1/calendars/${uncoveredCalendar.urlName}`)
         .set('Origin', 'https://example.com');
 
       expect(response1.status).toBe(200);
 
-      // Subscription expires
-      await clearSubscriptions(unsubscribedAccount.id);
-      await createExpiredSubscription(unsubscribedAccount.id);
+      // Funding plan expires
+      await clearFundingPlans(nonSupporterAccount.id);
+      await createExpiredFundingPlan(nonSupporterAccount.id);
 
       // Widget data should now return 402
       const response2 = await request(env.app)
-        .get(`/api/widget/v1/calendars/${unsubscribedCalendar.urlName}`)
+        .get(`/api/widget/v1/calendars/${uncoveredCalendar.urlName}`)
         .set('Origin', 'https://example.com');
 
       expect(response2.status).toBe(402);
       expect(response2.body.errorName).toBe('SubscriptionRequiredError');
     });
 
-    it('should enforce gating immediately when subscriptions re-enabled after being disabled', async () => {
-      // Initial: subscriptions disabled
-      await disableSubscriptions();
+    it('should enforce gating immediately when funding re-enabled after being disabled', async () => {
+      // Initial: funding disabled
+      await disableFunding();
 
       const response1 = await env.authPut(
-        unsubscribedToken,
-        `/api/v1/calendars/${unsubscribedCalendar.id}/widget/domain`,
+        nonSupporterToken,
+        `/api/v1/calendars/${uncoveredCalendar.id}/widget/domain`,
         { domain: 'example.com' },
       );
 
       expect(response1.status).toBe(200);
 
-      // Subscriptions re-enabled
-      await enableSubscriptions();
+      // Funding re-enabled
+      await enableFunding();
 
       const response2 = await env.authPut(
-        unsubscribedToken,
-        `/api/v1/calendars/${unsubscribedCalendar.id}/widget/domain`,
+        nonSupporterToken,
+        `/api/v1/calendars/${uncoveredCalendar.id}/widget/domain`,
         { domain: 'example2.com' },
       );
 
-      // Should immediately enforce subscription requirement
+      // Should immediately enforce the funding requirement
       expect(response2.status).toBe(402);
       expect(response2.body.errorName).toBe('SubscriptionRequiredError');
     });
 
-    it('should check each calendar independently with different subscription states', async () => {
+    it('should check each calendar independently with different coverage states', async () => {
       // Create third calendar with different owner
       const thirdEmail = 'third@pavillion.dev';
       const configurationInterface = new ConfigurationInterface();
@@ -592,24 +592,24 @@ describe('Subscription Gating Integration Tests', () => {
       const thirdToken = await env.login(thirdEmail, password);
       const thirdCalendar = await calendarInterface.createCalendar(thirdAccount, 'third-cal');
 
-      // Enable subscriptions and set up different states
-      await enableSubscriptions();
-      await createActiveSubscription(subscribedAccount.id, subscribedCalendar.id);
-      // unsubscribedAccount has no subscription
-      await createActiveSubscription(thirdAccount.id, thirdCalendar.id);
+      // Enable funding and set up different states
+      await enableFunding();
+      await createActiveFundingPlan(supporterAccount.id, coveredCalendar.id);
+      // nonSupporterAccount has no funding plan
+      await createActiveFundingPlan(thirdAccount.id, thirdCalendar.id);
 
-      // Test subscribed calendar (should work)
+      // Test covered calendar (should work)
       const response1 = await env.authPut(
-        subscribedToken,
-        `/api/v1/calendars/${subscribedCalendar.id}/widget/domain`,
+        supporterToken,
+        `/api/v1/calendars/${coveredCalendar.id}/widget/domain`,
         { domain: 'example.com' },
       );
       expect(response1.status).toBe(200);
 
-      // Test unsubscribed calendar (should fail)
+      // Test uncovered calendar (should fail)
       const response2 = await env.authPut(
-        unsubscribedToken,
-        `/api/v1/calendars/${unsubscribedCalendar.id}/widget/domain`,
+        nonSupporterToken,
+        `/api/v1/calendars/${uncoveredCalendar.id}/widget/domain`,
         { domain: 'example.com' },
       );
       expect(response2.status).toBe(402);
@@ -623,22 +623,22 @@ describe('Subscription Gating Integration Tests', () => {
       expect(response3.status).toBe(200);
     });
 
-    it('should return 402 on data serving when widget domain configured but subscription expires', async () => {
-      // Setup: subscriptions disabled, configure widget domain
-      await disableSubscriptions();
+    it('should return 402 on data serving when widget domain configured but funding plan expires', async () => {
+      // Setup: funding disabled, configure widget domain
+      await disableFunding();
 
       await env.authPut(
-        unsubscribedToken,
-        `/api/v1/calendars/${unsubscribedCalendar.id}/widget/domain`,
+        nonSupporterToken,
+        `/api/v1/calendars/${uncoveredCalendar.id}/widget/domain`,
         { domain: 'example.com' },
       );
 
-      // Now enable subscriptions (simulating policy change)
-      await enableSubscriptions();
+      // Now enable funding (simulating policy change)
+      await enableFunding();
 
       // Widget data serving should now fail even though domain was configured earlier
       const response = await request(env.app)
-        .get(`/api/widget/v1/calendars/${unsubscribedCalendar.urlName}`)
+        .get(`/api/widget/v1/calendars/${uncoveredCalendar.urlName}`)
         .set('Origin', 'https://example.com');
 
       expect(response.status).toBe(402);

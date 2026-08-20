@@ -70,7 +70,7 @@ describe('FundingService', () => {
   });
 
   describe('getSettings', () => {
-    it('should return instance subscription settings', async () => {
+    it('should return instance funding settings', async () => {
       const settingsId = uuidv4();
       const mockEntity = {
         id: settingsId,
@@ -139,10 +139,10 @@ describe('FundingService', () => {
   });
 
   describe('cancel', () => {
-    it('should mark subscription for end-of-period cancellation', async () => {
-      const subscriptionId = uuidv4();
+    it('should mark funding plan for end-of-period cancellation', async () => {
+      const fundingPlanId = uuidv4();
       const mockEntity = {
-        id: subscriptionId,
+        id: fundingPlanId,
         account_id: uuidv4(),
         provider_config_id: uuidv4(),
         provider_subscription_id: 'sub_123',
@@ -175,7 +175,7 @@ describe('FundingService', () => {
       sandbox.stub(ProviderConfigEntity, 'findByPk').resolves(mockProviderConfig as any);
       sandbox.stub(ProviderFactory, 'getAdapter').returns(mockAdapter as any);
 
-      await service.cancel(subscriptionId, false);
+      await service.cancel(fundingPlanId, false);
 
       expect(mockAdapter.cancelSubscription.calledWith('sub_123', false)).toBe(true);
       expect(mockEntity.status).toBe('cancelled');
@@ -184,12 +184,12 @@ describe('FundingService', () => {
   });
 
   describe('processWebhookEvent', () => {
-    it('should update subscription status based on webhook event', async () => {
-      const subscriptionId = uuidv4();
+    it('should update funding plan status based on webhook event', async () => {
+      const fundingPlanId = uuidv4();
       const providerEventId = 'evt_123';
 
       const mockEntity = {
-        id: subscriptionId,
+        id: fundingPlanId,
         account_id: uuidv4(),
         provider_config_id: uuidv4(),
         provider_subscription_id: 'sub_123',
@@ -316,9 +316,9 @@ describe('FundingService', () => {
 
   describe('status transitions', () => {
     it('should transition from active to past_due on payment failure', async () => {
-      const subscriptionId = uuidv4();
+      const fundingPlanId = uuidv4();
       const mockEntity = {
-        id: subscriptionId,
+        id: fundingPlanId,
         status: 'active',
         save: sandbox.stub().resolves(),
         toModel: function() {
@@ -351,12 +351,12 @@ describe('FundingService', () => {
     });
 
     it('should transition from past_due to suspended after grace period', async () => {
-      const subscriptionId = uuidv4();
+      const fundingPlanId = uuidv4();
       const gracePeriodDays = 7;
       const pastDueDate = new Date(Date.now() - (gracePeriodDays + 1) * 24 * 60 * 60 * 1000);
 
       const mockEntity = {
-        id: subscriptionId,
+        id: fundingPlanId,
         status: 'past_due',
         updated_at: pastDueDate,
         save: sandbox.stub().resolves(),
@@ -903,7 +903,7 @@ describe('FundingService', () => {
       expect(result).toBe(false);
     });
 
-    it('should return false if grant check errors and subscription check returns false (fail-secure)', async () => {
+    it('should return false if grant check errors and plan check returns false (fail-secure)', async () => {
       const calendarId = uuidv4();
 
       sandbox.stub(service, 'hasActiveGrant').rejects(new Error('DB error'));
@@ -914,7 +914,7 @@ describe('FundingService', () => {
       expect(result).toBe(false);
     });
 
-    it('should return false if grant check returns false and subscription check errors (fail-secure)', async () => {
+    it('should return false if grant check returns false and plan check errors (fail-secure)', async () => {
       const calendarId = uuidv4();
 
       sandbox.stub(service, 'hasActiveGrant').resolves(false);
@@ -936,7 +936,7 @@ describe('FundingService', () => {
       expect(result).toBe(false);
     });
 
-    it('should not check subscription if grant check succeeds with true', async () => {
+    it('should not check funding plan if grant check succeeds with true', async () => {
       const calendarId = uuidv4();
 
       sandbox.stub(service, 'hasActiveGrant').resolves(true);
@@ -1753,7 +1753,7 @@ describe('FundingService', () => {
       };
       sandbox.stub(ProviderFactory, 'getAdapter').returns(mockAdapter as any);
       // Stub idempotency check so processCheckoutCompleted returns early
-      // without needing full subscription/DB mocking
+      // without needing full funding-plan/DB mocking
       sandbox.stub(FundingPlanEntity, 'findOne').resolves({ id: uuidv4() } as any);
       return mockAdapter;
     }

@@ -6,7 +6,7 @@ import db from '@/server/common/entity/db';
 
 /**
  * Database entity for complimentary grants.
- * Represents a grant that gives an account free access to gated subscription features.
+ * Represents a grant that gives an account free access to funding-gated features.
  * Uses soft-delete pattern: revoked_at and revoked_by columns track revocation.
  */
 @Table({

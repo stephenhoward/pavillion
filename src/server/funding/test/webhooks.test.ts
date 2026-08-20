@@ -357,21 +357,21 @@ describe('Webhook Handling', () => {
     });
 
     describe('Webhook event processing', () => {
-      it('should update subscription status when webhook event is processed', async () => {
-        const subscriptionId = uuidv4();
-        const subscription = new FundingPlanEntity();
-        subscription.id = subscriptionId;
-        subscription.account_id = uuidv4();
-        subscription.provider_config_id = stripeConfig.id;
-        subscription.provider_subscription_id = 'sub_test_123';
-        subscription.provider_customer_id = 'cus_test_123';
-        subscription.status = 'active';
-        subscription.billing_cycle = 'monthly';
-        subscription.amount = 1000000;
-        subscription.currency = 'USD';
-        subscription.current_period_start = new Date();
-        subscription.current_period_end = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-        await subscription.save();
+      it('should update funding plan status when webhook event is processed', async () => {
+        const fundingPlanId = uuidv4();
+        const plan = new FundingPlanEntity();
+        plan.id = fundingPlanId;
+        plan.account_id = uuidv4();
+        plan.provider_config_id = stripeConfig.id;
+        plan.provider_subscription_id = 'sub_test_123';
+        plan.provider_customer_id = 'cus_test_123';
+        plan.status = 'active';
+        plan.billing_cycle = 'monthly';
+        plan.amount = 1000000;
+        plan.currency = 'USD';
+        plan.current_period_start = new Date();
+        plan.current_period_end = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+        await plan.save();
 
         const webhookPayload = JSON.stringify({
           id: 'evt_payment_failed',
@@ -394,26 +394,26 @@ describe('Webhook Handling', () => {
 
         expect(response.status).toBe(200);
 
-        const updatedSubscription = await FundingPlanEntity.findByPk(subscriptionId);
-        expect(updatedSubscription).toBeDefined();
-        expect(updatedSubscription?.status).toBe('past_due');
+        const updatedPlan = await FundingPlanEntity.findByPk(fundingPlanId);
+        expect(updatedPlan).toBeDefined();
+        expect(updatedPlan?.status).toBe('past_due');
       });
 
       it('should store local FundingPlan UUID in funding_plan_id, not the Stripe subscription ID', async () => {
         const localPlanId = uuidv4();
-        const subscription = new FundingPlanEntity();
-        subscription.id = localPlanId;
-        subscription.account_id = uuidv4();
-        subscription.provider_config_id = stripeConfig.id;
-        subscription.provider_subscription_id = 'sub_fk_test_456';
-        subscription.provider_customer_id = 'cus_fk_test_456';
-        subscription.status = 'active';
-        subscription.billing_cycle = 'monthly';
-        subscription.amount = 1000000;
-        subscription.currency = 'USD';
-        subscription.current_period_start = new Date();
-        subscription.current_period_end = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-        await subscription.save();
+        const plan = new FundingPlanEntity();
+        plan.id = localPlanId;
+        plan.account_id = uuidv4();
+        plan.provider_config_id = stripeConfig.id;
+        plan.provider_subscription_id = 'sub_fk_test_456';
+        plan.provider_customer_id = 'cus_fk_test_456';
+        plan.status = 'active';
+        plan.billing_cycle = 'monthly';
+        plan.amount = 1000000;
+        plan.currency = 'USD';
+        plan.current_period_start = new Date();
+        plan.current_period_end = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+        await plan.save();
 
         const webhookPayload = JSON.stringify({
           id: 'evt_fk_test',
@@ -480,20 +480,20 @@ describe('Webhook Handling', () => {
 
     describe('Webhook event deduplication', () => {
       it('should handle duplicate webhook events idempotently', async () => {
-        const subscriptionId = uuidv4();
-        const subscription = new FundingPlanEntity();
-        subscription.id = subscriptionId;
-        subscription.account_id = uuidv4();
-        subscription.provider_config_id = stripeConfig.id;
-        subscription.provider_subscription_id = 'sub_test_dup';
-        subscription.provider_customer_id = 'cus_test_dup';
-        subscription.status = 'active';
-        subscription.billing_cycle = 'monthly';
-        subscription.amount = 1000000;
-        subscription.currency = 'USD';
-        subscription.current_period_start = new Date();
-        subscription.current_period_end = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-        await subscription.save();
+        const fundingPlanId = uuidv4();
+        const plan = new FundingPlanEntity();
+        plan.id = fundingPlanId;
+        plan.account_id = uuidv4();
+        plan.provider_config_id = stripeConfig.id;
+        plan.provider_subscription_id = 'sub_test_dup';
+        plan.provider_customer_id = 'cus_test_dup';
+        plan.status = 'active';
+        plan.billing_cycle = 'monthly';
+        plan.amount = 1000000;
+        plan.currency = 'USD';
+        plan.current_period_start = new Date();
+        plan.current_period_end = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+        await plan.save();
 
         const webhookPayload = JSON.stringify({
           id: 'evt_duplicate_test',
@@ -533,8 +533,8 @@ describe('Webhook Handling', () => {
         });
         expect(eventCount).toBe(1);
 
-        const finalSubscription = await FundingPlanEntity.findByPk(subscriptionId);
-        expect(finalSubscription?.status).toBe('active');
+        const finalPlan = await FundingPlanEntity.findByPk(fundingPlanId);
+        expect(finalPlan?.status).toBe('active');
       });
     });
 
@@ -1006,19 +1006,19 @@ describe('Webhook Handling', () => {
 
     describe('Funding event data minimization', () => {
       it('should not persist the raw provider payload for a lifecycle event', async () => {
-        const subscription = new FundingPlanEntity();
-        subscription.id = uuidv4();
-        subscription.account_id = uuidv4();
-        subscription.provider_config_id = stripeConfig.id;
-        subscription.provider_subscription_id = 'sub_minimization';
-        subscription.provider_customer_id = 'cus_minimization';
-        subscription.status = 'active';
-        subscription.billing_cycle = 'monthly';
-        subscription.amount = 1000000;
-        subscription.currency = 'USD';
-        subscription.current_period_start = new Date();
-        subscription.current_period_end = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-        await subscription.save();
+        const plan = new FundingPlanEntity();
+        plan.id = uuidv4();
+        plan.account_id = uuidv4();
+        plan.provider_config_id = stripeConfig.id;
+        plan.provider_subscription_id = 'sub_minimization';
+        plan.provider_customer_id = 'cus_minimization';
+        plan.status = 'active';
+        plan.billing_cycle = 'monthly';
+        plan.amount = 1000000;
+        plan.currency = 'USD';
+        plan.current_period_start = new Date();
+        plan.current_period_end = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+        await plan.save();
 
         const webhookPayload = JSON.stringify({
           id: 'evt_minimization',

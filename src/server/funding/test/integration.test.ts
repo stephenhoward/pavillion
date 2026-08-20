@@ -17,13 +17,13 @@ import { WebhookEvent } from '@/server/funding/service/provider/adapter';
 import { checkGracePeriodExpiry } from '@/server/funding/service/jobs';
 
 /**
- * Integration tests for subscription payment system
+ * Integration tests for funding plan payment system
  * Task 9.3: Write up to 10 additional strategic tests
  *
  * These tests cover end-to-end workflows and integration points
  * that are not fully covered by unit tests.
  */
-describe('Subscription System Integration Tests', () => {
+describe('Funding Plan System Integration Tests', () => {
   let sandbox: sinon.SinonSandbox;
   let eventBus: EventEmitter;
   let service: FundingService;
@@ -100,8 +100,8 @@ describe('Subscription System Integration Tests', () => {
     });
     await account.save();
 
-    // Create active subscription
-    const subscription = FundingPlanEntity.build({
+    // Create active funding plan
+    const plan = FundingPlanEntity.build({
       id: uuidv4(),
       account_id: account.id,
       provider_config_id: providerConfig.id,
@@ -116,7 +116,7 @@ describe('Subscription System Integration Tests', () => {
       cancelled_at: null,
       suspended_at: null,
     });
-    await subscription.save();
+    await plan.save();
 
     // Step 1: Payment fails (webhook)
     const failureEvent: WebhookEvent = {
@@ -130,15 +130,15 @@ describe('Subscription System Integration Tests', () => {
     await service.processWebhookEvent(failureEvent, providerConfig.id);
 
     // Verify: Status changed to past_due
-    await subscription.reload();
-    expect(subscription.status).toBe('past_due');
+    await plan.reload();
+    expect(plan.status).toBe('past_due');
 
     // Step 2: Advance time beyond grace period (8 days)
     const eightDaysAgo = new Date('2026-01-07T12:00:00Z');
     await db.query(
       'UPDATE funding_plan SET updatedAt = ? WHERE id = ?',
       {
-        replacements: [eightDaysAgo.toISOString(), subscription.id],
+        replacements: [eightDaysAgo.toISOString(), plan.id],
       },
     );
 
@@ -146,9 +146,9 @@ describe('Subscription System Integration Tests', () => {
     await checkGracePeriodExpiry();
 
     // Verify: Status changed to suspended
-    await subscription.reload();
-    expect(subscription.status).toBe('suspended');
-    expect(subscription.suspended_at).not.toBeNull();
+    await plan.reload();
+    expect(plan.status).toBe('suspended');
+    expect(plan.suspended_at).not.toBeNull();
   });
 
   /**
@@ -167,8 +167,8 @@ describe('Subscription System Integration Tests', () => {
     });
     await account.save();
 
-    // Create active subscription
-    const subscription = FundingPlanEntity.build({
+    // Create active funding plan
+    const plan = FundingPlanEntity.build({
       id: uuidv4(),
       account_id: account.id,
       provider_config_id: providerConfig.id,
@@ -183,7 +183,7 @@ describe('Subscription System Integration Tests', () => {
       cancelled_at: null,
       suspended_at: null,
     });
-    await subscription.save();
+    await plan.save();
 
     // Mock adapter cancel method
     const mockAdapter = {
@@ -191,18 +191,18 @@ describe('Subscription System Integration Tests', () => {
     };
     sandbox.stub(ProviderFactory, 'getAdapter').returns(mockAdapter as any);
 
-    // Step 1: User cancels subscription (end of period)
-    await service.cancel(subscription.id, false);
+    // Step 1: User cancels funding plan (end of period)
+    await service.cancel(plan.id, false);
 
-    // Verify: Status is cancelled, but subscription continues
-    await subscription.reload();
-    expect(subscription.status).toBe('cancelled');
-    expect(subscription.cancelled_at).not.toBeNull();
+    // Verify: Status is cancelled, but funding plan continues
+    await plan.reload();
+    expect(plan.status).toBe('cancelled');
+    expect(plan.cancelled_at).not.toBeNull();
     expect(mockAdapter.cancelSubscription.calledWith('sub_user_cancel', false)).toBe(true);
 
-    // Verify: Subscription should still be queryable as "active" until period ends
+    // Verify: Funding plan should still be queryable as "active" until period ends
     const currentDate = new Date('2026-06-01T00:00:00Z'); // 6 months later, still in period
-    expect(subscription.current_period_end.getTime()).toBeGreaterThan(currentDate.getTime());
+    expect(plan.current_period_end.getTime()).toBeGreaterThan(currentDate.getTime());
   });
 
   /**
@@ -221,8 +221,8 @@ describe('Subscription System Integration Tests', () => {
     });
     await account.save();
 
-    // Create active subscription
-    const subscription = FundingPlanEntity.build({
+    // Create active funding plan
+    const plan = FundingPlanEntity.build({
       id: uuidv4(),
       account_id: account.id,
       provider_config_id: providerConfig.id,
@@ -237,7 +237,7 @@ describe('Subscription System Integration Tests', () => {
       cancelled_at: null,
       suspended_at: null,
     });
-    await subscription.save();
+    await plan.save();
 
     // Mock adapter
     const mockAdapter = {
@@ -246,11 +246,11 @@ describe('Subscription System Integration Tests', () => {
     sandbox.stub(ProviderFactory, 'getAdapter').returns(mockAdapter as any);
 
     // Admin force cancels (immediate = true)
-    await service.cancel(subscription.id, true);
+    await service.cancel(plan.id, true);
 
     // Verify: Immediate cancellation
-    await subscription.reload();
-    expect(subscription.status).toBe('cancelled');
+    await plan.reload();
+    expect(plan.status).toBe('cancelled');
     expect(mockAdapter.cancelSubscription.calledWith('sub_force_cancel', true)).toBe(true);
   });
 
@@ -270,7 +270,7 @@ describe('Subscription System Integration Tests', () => {
     });
     await account.save();
 
-    const subscription = FundingPlanEntity.build({
+    const plan = FundingPlanEntity.build({
       id: uuidv4(),
       account_id: account.id,
       provider_config_id: providerConfig.id,
@@ -285,7 +285,7 @@ describe('Subscription System Integration Tests', () => {
       cancelled_at: null,
       suspended_at: null,
     });
-    await subscription.save();
+    await plan.save();
 
     // Create webhook event
     const webhookEvent: WebhookEvent = {
@@ -300,19 +300,19 @@ describe('Subscription System Integration Tests', () => {
     await service.processWebhookEvent(webhookEvent, providerConfig.id);
 
     // Verify status changed
-    await subscription.reload();
-    expect(subscription.status).toBe('past_due');
+    await plan.reload();
+    expect(plan.status).toBe('past_due');
 
     // Change status back to active (simulating recovery)
-    subscription.status = 'active';
-    await subscription.save();
+    plan.status = 'active';
+    await plan.save();
 
     // Process same event again (duplicate webhook delivery)
     await service.processWebhookEvent(webhookEvent, providerConfig.id);
 
     // Verify status did NOT change (idempotent)
-    await subscription.reload();
-    expect(subscription.status).toBe('active'); // Should remain active, not go back to past_due
+    await plan.reload();
+    expect(plan.status).toBe('active'); // Should remain active, not go back to past_due
 
     // Verify only one event log exists
     const eventCount = await FundingEventEntity.count({
@@ -322,9 +322,9 @@ describe('Subscription System Integration Tests', () => {
   });
 
   /**
-   * Integration Test 8: Subscription interface cross-domain query
+   * Integration Test 8: Funding plan interface cross-domain query
    */
-  it('should provide subscription status via domain interface', async () => {
+  it('should provide funding plan status via domain interface', async () => {
     // Setup
     const account = AccountEntity.build({
       id: uuidv4(),
@@ -335,7 +335,7 @@ describe('Subscription System Integration Tests', () => {
     });
     await account.save();
 
-    // Create a calendar for the account so we can link the subscription to it
+    // Create a calendar for the account so we can link the funding plan to it
     const calendar = CalendarEntity.build({
       id: uuidv4(),
       url_name: 'interface-test-cal',
@@ -346,8 +346,8 @@ describe('Subscription System Integration Tests', () => {
 
     const providerConfig = await createProviderConfig('stripe');
 
-    // Create active subscription for the account
-    const subscription = FundingPlanEntity.build({
+    // Create active funding plan for the account
+    const plan = FundingPlanEntity.build({
       id: uuidv4(),
       account_id: account.id,
       provider_config_id: providerConfig.id,
@@ -362,12 +362,12 @@ describe('Subscription System Integration Tests', () => {
       cancelled_at: null,
       suspended_at: null,
     });
-    await subscription.save();
+    await plan.save();
 
-    // Link the subscription to the calendar via CalendarFundingPlanEntity
+    // Link the funding plan to the calendar via CalendarFundingPlanEntity
     const calendarSub = CalendarFundingPlanEntity.build({
       id: uuidv4(),
-      funding_plan_id: subscription.id,
+      funding_plan_id: plan.id,
       calendar_id: calendar.id,
       amount: 1000000,
       end_time: null,
@@ -378,7 +378,7 @@ describe('Subscription System Integration Tests', () => {
     const hasActive = await service.hasActiveFundingPlan(calendar.id);
     expect(hasActive).toBe(true);
 
-    // Test with a calendar that has no subscription
+    // Test with a calendar that has no funding plan
     const calendarWithoutSub = CalendarEntity.build({
       id: uuidv4(),
       url_name: 'no-sub-cal',
@@ -424,8 +424,8 @@ describe('Subscription System Integration Tests', () => {
     });
     await account.save();
 
-    // Create subscription past_due
-    const subscription = FundingPlanEntity.build({
+    // Create funding plan past_due
+    const plan = FundingPlanEntity.build({
       id: uuidv4(),
       account_id: account.id,
       provider_config_id: providerConfig.id,
@@ -440,14 +440,14 @@ describe('Subscription System Integration Tests', () => {
       cancelled_at: null,
       suspended_at: null,
     });
-    await subscription.save();
+    await plan.save();
 
     // Set updatedAt to 9 days ago (clearly past grace period)
     const nineDaysAgo = new Date('2026-01-06T12:00:00Z');
     await db.query(
       'UPDATE funding_plan SET updatedAt = ? WHERE id = ?',
       {
-        replacements: [nineDaysAgo.toISOString(), subscription.id],
+        replacements: [nineDaysAgo.toISOString(), plan.id],
       },
     );
 
@@ -455,8 +455,8 @@ describe('Subscription System Integration Tests', () => {
     await checkGracePeriodExpiry();
 
     // Verify: Should be suspended (past grace period)
-    await subscription.reload();
-    expect(subscription.status).toBe('suspended');
-    expect(subscription.suspended_at).not.toBeNull();
+    await plan.reload();
+    expect(plan.status).toBe('suspended');
+    expect(plan.suspended_at).not.toBeNull();
   });
 });
