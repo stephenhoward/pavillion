@@ -495,11 +495,9 @@
     "error_loading": "Échec du chargement des paramètres",
     "error_saving": "Échec de l'enregistrement des paramètres",
     "extended_features_label": "Fonctionnalités étendues",
-    "extended_features_description": "Ces fonctionnalités sont disponibles lorsque vous contribuez à {{instanceName}}. Votre contribution aide à pérenniser ce service pour tout le monde.",
     "extended_features_enabled": "Activées",
     "extended_features_admin_exempt": "Incluses avec le compte administrateur",
     "extended_features_grant": "Accès gracieux",
-    "extended_features_enable_button": "Activer",
     "extended_features_disable_button": "Désactiver les fonctionnalités étendues",
     "extended_features_disabling": "Désactivation...",
     "confirm_disable_title": "Désactiver les fonctionnalités étendues ?",
@@ -538,10 +536,7 @@
       "error_adding": "Échec de l'ajout du domaine",
       "error_removing": "Échec de la suppression du domaine",
       "error_invalid_domain": "Format de domaine invalide. Le domaine ne doit pas inclure de protocole ni de chemin (par exemple, utilisez « exemple.com » au lieu de « https://exemple.com/ »).",
-      "error_duplicate": "Ce domaine figure déjà dans la liste des domaines autorisés",
-      "funding_plan_required": "L'intégration du widget nécessite un plan de financement actif",
-      "funding_plan_action": "Voir les plans de financement",
-      "funding_plan_action_full_context": "Voir les plans de financement pour activer l'intégration du widget"
+      "error_duplicate": "Ce domaine figure déjà dans la liste des domaines autorisés"
     },
     "config": {
       "configuration_title": "Paramètres du widget",

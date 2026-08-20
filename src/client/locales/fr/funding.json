@@ -58,6 +58,13 @@
   "extended_features_title": "Fonctionnalités étendues",
   "extended_features_description": "Les fonctionnalités étendues sont un merci adressé à celles et ceux qui contribuent. Démarrez un plan de financement pour les débloquer — et aidez à garder {{instanceName}} en ligne pour tout le monde.",
 
+  "upsell": {
+    "action": "Contribuer pour activer",
+    "already_contributing": "Si vous contribuez déjà, rechargez cette page : une contribution récente n'a peut-être pas encore été prise en compte.",
+    "this_instance": "cette instance",
+    "widget_embedding_message": "L'intégration de ce calendrier dans un autre site web est une fonctionnalité étendue, réservée à celles et ceux qui contribuent à {{instanceName}}."
+  },
+
   "redirect_message": "Redirection vers le fournisseur de paiement...",
   "processing_message": "Traitement de votre paiement...",
   "covered_calendars_title": "Calendriers sur ce plan",

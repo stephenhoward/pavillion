@@ -66,5 +66,6 @@
   @include meta.load-css('./components/calendar-admin');  // Calendar Administration UI patterns
   @include meta.load-css('./components/authentication');  // Auth field/button component surface
   @include meta.load-css('./components/translatable-form');  // Per-language form-field primitives
+  @include meta.load-css('./components/funding-upsell');  // Funding-gate upsell notice layout
   @include meta.load-css('./layout/logged-out');  // Auth screens with component-specific styling
 }
