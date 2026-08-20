@@ -94,11 +94,15 @@ describe('CalendarSettings — language removal wiring', () => {
     const calendar = createBilingualCalendar();
 
     vi.spyOn(CalendarService.prototype, 'getCalendarById').mockResolvedValue(calendar);
-    // Funding disabled so the extended-features card (and its async status
-    // load) stays out of this test.
-    vi.spyOn(FundingService.prototype, 'getOptions').mockResolvedValue({
-      enabled: false,
-      providers: [],
+    // The settings screen reads the calendar's funding summary on mount.
+    // Answer it here so the mount makes no request: left unmocked the read
+    // hits the network, and the failure lands the gate on `unknown`, which
+    // hides the extended-features section for the wrong reason.
+    vi.spyOn(FundingService.prototype, 'getFundingStatus').mockResolvedValue({
+      status: 'unfunded',
+      currentPeriodEnd: null,
+      accessExpiresAt: null,
+      features: { widget_embedding: false },
     } as never);
     vi.spyOn(Config, 'init').mockResolvedValue({
       settings: () => ({ siteTitle: 'Test Instance' }),

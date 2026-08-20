@@ -500,7 +500,6 @@
     "extended_features_grant": "Concesión gratuita",
     "extended_features_disable_button": "Desactivar funciones ampliadas",
     "extended_features_disabling": "Desactivando...",
-    "confirm_disable_title": "¿Desactivar funciones ampliadas?",
     "confirm_disable_message": "Esto eliminará este calendario de tu plan de financiación.",
     "confirm_disable_button": "Desactivar",
     "confirm_cancel_button": "Cancelar",

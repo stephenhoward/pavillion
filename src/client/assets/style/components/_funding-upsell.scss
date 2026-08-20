@@ -7,9 +7,13 @@
  * row, and an upsell reads better as a message stacked above its action.
  *
  * No colour, spacing scale or radius is declared here — those come from
- * `.alert` and `.btn`, whose `--pav-*` tokens are already redefined for
- * `[data-theme="dark"]` and for the system dark preference (themes/_dark.scss).
- * Adding a theme block here would fork values that are correct by inheritance.
+ * `.alert` and `.btn`. The alert tokens this card inherits
+ * (`--pav-color-alert-info-bg`, `--pav-color-alert-info-text`,
+ * `--pav-color-info`) are redefined for dark only inside the
+ * `@media (prefers-color-scheme: dark)` block in `tokens/_colors.scss`, so
+ * dark-mode coverage here follows the OS preference and not an explicit
+ * `[data-theme="dark"]` choice. That gap is in the token layer and is tracked
+ * separately; a theme block here would fork values this card does not own.
  */
 
 .funding-upsell {

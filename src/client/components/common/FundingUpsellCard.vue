@@ -52,10 +52,27 @@ const showFundingSheet = ref(false);
 const showUpsell = computed(() => isDenied(props.feature));
 
 /**
- * The feature-specific pitch. One key per registry entry, so gating a new
- * feature is a translation entry rather than a branch in this component.
+ * The feature-specific pitch, one key per registry entry.
+ *
+ * Written out rather than derived as `` t(`${feature}_message`) ``. The
+ * template literal reads as less ceremony and hides a real coupling: adding a
+ * feature to `FUNDING_GATED_FEATURES` and forgetting its copy would ship an
+ * upsell whose message is the raw key. Keyed on `FundingGatedFeature`, the
+ * same omission is a type error at the registry entry.
  */
-const message = computed(() => t(`${props.feature}_message`, { instanceName: instanceName.value }));
+const FEATURE_MESSAGE_KEYS: Record<FundingGatedFeature, string> = {
+  widget_embedding: 'widget_embedding_message',
+};
+
+const message = computed(() => {
+  // Only reachable for a registered feature — the card is hidden for anything
+  // else, because nothing is ever cached under an unregistered key. The
+  // fallback keeps a mistyped prop from throwing on the way to rendering
+  // nothing.
+  const feature: FundingGatedFeature = props.feature;
+  const key: string | undefined = FEATURE_MESSAGE_KEYS[feature];
+  return key ? t(key, { instanceName: instanceName.value }) : '';
+});
 
 onMounted(async () => {
   // Cheap when another consumer already asked: the composable serves a cached

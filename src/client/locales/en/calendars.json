@@ -515,7 +515,6 @@
     "extended_features_grant": "Complimentary grant",
     "extended_features_disable_button": "Disable extended features",
     "extended_features_disabling": "Disabling...",
-    "confirm_disable_title": "Disable extended features?",
     "confirm_disable_message": "This will remove this calendar from your funding plan.",
     "confirm_disable_button": "Disable",
     "confirm_cancel_button": "Cancel",

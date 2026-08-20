@@ -500,7 +500,6 @@
     "extended_features_grant": "Accès gracieux",
     "extended_features_disable_button": "Désactiver les fonctionnalités étendues",
     "extended_features_disabling": "Désactivation...",
-    "confirm_disable_title": "Désactiver les fonctionnalités étendues ?",
     "confirm_disable_message": "Cela retirera ce calendrier de votre plan de financement.",
     "confirm_disable_button": "Désactiver",
     "confirm_cancel_button": "Annuler",
