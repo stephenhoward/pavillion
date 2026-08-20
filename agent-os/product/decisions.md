@@ -1,6 +1,6 @@
 # Product Decisions Log
 
-> Last Updated: 2026-08-08
+> Last Updated: 2026-08-19
 > Version: 2.2.0
 > Override Priority: Highest
 
@@ -39,7 +39,7 @@ Supersession is the exception, because it retires a decision rather than refinin
 ### DEC-007: Community Funding Model and Stripe Product Choice
 - **File:** [decisions/dec-007-community-funding-model.md](decisions/dec-007-community-funding-model.md)
 - **Date:** 2026-03-15 · **Status:** Accepted
-- **Decision:** Voluntary "funding plans" (NPR/Wikipedia model) using Stripe Embedded Checkout — instance admins enter their own Stripe keys; not Stripe Connect. Stripe is the only provider in v1; PayPal is descoped, its scaffolding left inert and hidden from the admin UI. Term "funding plan" used in place of "subscription" to avoid ActivityPub terminology collision; the access-gating platform is "funding access", with `SubscriptionRequiredError` frozen as the one legacy wire exception.
+- **Decision:** Voluntary "funding plans" (NPR/Wikipedia model, applied instance-inward: calendar owners support the instance operator, who keeps the service online) using Stripe Embedded Checkout — instance admins enter their own Stripe keys; not Stripe Connect. Stripe is the only provider in v1; PayPal is descoped, its scaffolding left inert and hidden from the admin UI. Vocabulary: the instance is always the recipient of support and calendars are "covered by" a plan, never "funded"; "funding plan" is the product noun and "subscription" is reserved for payment-mechanics prose and the provider boundary; the access-gating platform is "funding access", with `SubscriptionRequiredError` frozen as the legacy wire exception.
 - **Consult when:** Implementing or modifying payment/billing flows; configuring Stripe; adding or re-enabling a payment provider; CSP changes for payment iframes; naming anything in the funding or access-gating vocabulary; deciding terminology around funding/subscription/payment/entitlement; questions about why we don't use Connect OAuth, or why PayPal code exists but is unreachable.
 
 ### DEC-009: ICS Import Funding-Gate Posture

@@ -27,7 +27,7 @@ What an editor *cannot* do — these stay with the owner:
 - Change the calendar's URL handle or display name
 - Invite or remove other editors
 - Cancel or resend pending invitations
-- Set up or change the calendar's funding plan
+- Start or change a funding plan, including which calendars it covers
 - Delete the calendar itself
 
 That's the whole list. The split is roughly *content vs. identity*: editors shape what's *on* the calendar, the owner controls what the calendar *is* and who's authorized to shape it.

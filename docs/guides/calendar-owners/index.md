@@ -25,7 +25,7 @@ Two ways to read this section:
 
 **Share your calendar** — public URLs, embeddable widgets, the distribution surface.
 
-**Sustain your calendar** — community funding plans for keeping the lights on.
+**Support your instance** — a voluntary funding plan that helps keep the service your calendar relies on online.
 
 **Day-to-day operations** — cancellations, moderation, account management.
 
