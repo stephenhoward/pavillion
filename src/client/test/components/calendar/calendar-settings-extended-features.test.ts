@@ -114,7 +114,7 @@ describe('CalendarSettings — extended features section', () => {
   describe('when the gate answer is unknown', () => {
     it('renders no part of the section at all when the funding read fails', async () => {
       // The DEC-001 case, and the one this site got wrong before: the old
-      // status chain let an unrecognised value fall through to the "Unfunded"
+      // status chain let an unrecognised value fall through to the "not covered"
       // upsell branch, so a failed read told an operator their community owed
       // money. Neither half of the section may appear.
       mockRequests(new Error('funding read failed'));
@@ -130,7 +130,7 @@ describe('CalendarSettings — extended features section', () => {
 
   describe('when the gate is closed', () => {
     it('offers funding and claims no entitlement', async () => {
-      mockRequests(summaryResponse(false, 'unfunded'));
+      mockRequests(summaryResponse(false, 'not_covered'));
 
       wrapper = await mountSettings(pinia);
 
@@ -143,7 +143,7 @@ describe('CalendarSettings — extended features section', () => {
 
   describe('when the gate is open', () => {
     it('shows the enabled badge and the disable control for a funding plan', async () => {
-      mockRequests(summaryResponse(true, 'funded'));
+      mockRequests(summaryResponse(true, 'covered'));
 
       wrapper = await mountSettings(pinia);
 
@@ -177,10 +177,10 @@ describe('CalendarSettings — extended features section', () => {
   });
 
   describe('when the status and the gate disagree', () => {
-    it('refuses the feature on a calendar the status calls funded', async () => {
+    it('refuses the feature on a calendar the status calls covered', async () => {
       // Access can expire while the plan itself is still reported as funded.
       // The gate decides capability; the status only ever names a badge.
-      mockRequests(summaryResponse(false, 'funded'));
+      mockRequests(summaryResponse(false, 'covered'));
 
       wrapper = await mountSettings(pinia);
 
@@ -189,16 +189,16 @@ describe('CalendarSettings — extended features section', () => {
       expect(wrapper.find('.setting-disable-btn').exists()).toBe(false);
     });
 
-    it('grants the feature on a calendar the status calls unfunded', async () => {
+    it('grants the feature on a calendar the status calls not covered', async () => {
       // What an instance that does not charge looks like: no funding
       // relationship to report, every gate open, and nothing to sell.
-      mockRequests(summaryResponse(true, 'unfunded'));
+      mockRequests(summaryResponse(true, 'not_covered'));
 
       wrapper = await mountSettings(pinia);
 
       expect(wrapper.find('.setting-badge--enabled').text()).toBe('Enabled');
       expect(wrapper.find('.funding-upsell').exists()).toBe(false);
-      // Nothing to cancel: 'unfunded' names no plan, whatever opened the gate.
+      // Nothing to cancel: 'not_covered' names no plan, whatever opened the gate.
       expect(wrapper.find('.setting-disable-btn').exists()).toBe(false);
     });
   });

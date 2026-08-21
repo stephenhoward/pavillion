@@ -133,7 +133,7 @@
           Extended Features.
 
           The whole section is hidden while the gate answer is unknown. An
-          unreadable funding state is not an unfunded one, and this is the
+          unreadable funding state is not an uncovered one, and this is the
           site where that mattered: the old chain tested three status values
           and let everything else — including the empty initial value — fall
           through to the upsell branch, so a failed read structurally rendered

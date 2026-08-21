@@ -99,7 +99,7 @@ describe('CalendarSettings — language removal wiring', () => {
     // hits the network, and the failure lands the gate on `unknown`, which
     // hides the extended-features section for the wrong reason.
     vi.spyOn(FundingService.prototype, 'getFundingStatus').mockResolvedValue({
-      status: 'unfunded',
+      status: 'not_covered',
       currentPeriodEnd: null,
       accessExpiresAt: null,
       features: { widget_embedding: false },

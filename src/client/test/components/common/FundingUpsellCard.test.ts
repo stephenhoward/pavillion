@@ -23,7 +23,7 @@ const routes: RouteRecordRaw[] = [
  * the feature decision so the tests can hold the display label and the
  * entitlement apart — the card must read only the latter.
  */
-function summaryResponse(widgetEmbedding: boolean, status = 'unfunded') {
+function summaryResponse(widgetEmbedding: boolean, status = 'not_covered') {
   return {
     data: {
       status,
@@ -124,7 +124,7 @@ describe('FundingUpsellCard', () => {
     it('reads the feature gate, not the display status', async () => {
       // The two are allowed to disagree: a calendar reported as funded can
       // still be refused a feature whose access has expired.
-      mockRequests(summaryResponse(false, 'funded'));
+      mockRequests(summaryResponse(false, 'covered'));
 
       wrapper = await mountCard(pinia);
 
@@ -187,7 +187,7 @@ describe('FundingUpsellCard', () => {
       await flushPromises();
 
       // The gate is open by the time the sheet reports success.
-      mockRequests(summaryResponse(true, 'funded'));
+      mockRequests(summaryResponse(true, 'covered'));
       wrapper.findComponent('.funding-sheet-stub').vm.$emit('plan-started');
       await flushPromises();
 

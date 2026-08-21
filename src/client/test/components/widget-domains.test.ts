@@ -25,7 +25,7 @@ const FUNDING_URL = `/api/funding/v1/calendars/${CALENDAR_ID}/funding`;
 function summaryResponse(widgetEmbedding: boolean) {
   return {
     data: {
-      status: widgetEmbedding ? 'funded' : 'unfunded',
+      status: widgetEmbedding ? 'covered' : 'not_covered',
       currentPeriodEnd: null,
       accessExpiresAt: null,
       features: { widget_embedding: widgetEmbedding },
