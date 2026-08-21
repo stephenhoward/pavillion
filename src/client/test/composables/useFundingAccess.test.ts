@@ -15,7 +15,7 @@ const FUNDING_URL = `/api/funding/v1/calendars/${CALENDAR_ID}/funding`;
  * test. `status` is varied independently so the tests can hold the display
  * label and the entitlement apart.
  */
-function summaryResponse(widgetEmbedding: boolean, status = 'funded') {
+function summaryResponse(widgetEmbedding: boolean, status = 'covered') {
   return {
     data: {
       status,
@@ -55,9 +55,9 @@ describe('useFundingAccess', () => {
 
       expect(serviceCall).toHaveBeenCalledWith(CALENDAR_ID);
       expect(axios.get).toHaveBeenCalledWith(FUNDING_URL);
-      expect(funding.status.value).toBe('funded');
+      expect(funding.status.value).toBe('covered');
       expect(funding.hasAccess('widget_embedding')).toBe(true);
-      expect(useFundingStore().statusFor(CALENDAR_ID)).toBe('funded');
+      expect(useFundingStore().statusFor(CALENDAR_ID)).toBe('covered');
     });
 
     it('serves a second consumer from the cache without a second request', async () => {
@@ -68,7 +68,7 @@ describe('useFundingAccess', () => {
       await second.ensureLoaded();
 
       expect(axios.get).toHaveBeenCalledTimes(1);
-      expect(second.status.value).toBe('funded');
+      expect(second.status.value).toBe('covered');
       expect(second.hasAccess('widget_embedding')).toBe(true);
     });
 
@@ -134,17 +134,17 @@ describe('useFundingAccess', () => {
       const funding = useFundingAccess(CALENDAR_ID);
       await funding.ensureLoaded();
 
-      vi.mocked(axios.get).mockResolvedValue(summaryResponse(false, 'unfunded'));
+      vi.mocked(axios.get).mockResolvedValue(summaryResponse(false, 'not_covered'));
       await funding.refresh();
 
       expect(axios.get).toHaveBeenCalledTimes(2);
-      expect(funding.status.value).toBe('unfunded');
+      expect(funding.status.value).toBe('not_covered');
       expect(funding.accessState('widget_embedding')).toBe('denied');
     });
 
     it('leaves access unknown when the funding state cannot be read', async () => {
       // A 5xx means the instance funding state is indeterminate. Rendering
-      // that as "unfunded" would sell an upsell to an operator whose database
+      // that as "not covered" would sell an upsell to an operator whose database
       // merely hiccuped.
       vi.mocked(axios.get).mockRejectedValue(apiError(500, { error: 'Internal server error' }));
 
@@ -172,23 +172,23 @@ describe('useFundingAccess', () => {
     it('answers from the features map, not from the display status', async () => {
       // The gate and the label disagree in real cases (an expiring plan, an
       // instance with funding disabled). features is the entitlement.
-      vi.mocked(axios.get).mockResolvedValue(summaryResponse(false, 'funded'));
+      vi.mocked(axios.get).mockResolvedValue(summaryResponse(false, 'covered'));
 
       const funding = useFundingAccess(CALENDAR_ID);
       await funding.ensureLoaded();
 
-      expect(funding.status.value).toBe('funded');
+      expect(funding.status.value).toBe('covered');
       expect(funding.hasAccess('widget_embedding')).toBe(false);
       expect(funding.accessState('widget_embedding')).toBe('denied');
     });
 
     it('grants access when the features map says so whatever the label reads', async () => {
-      vi.mocked(axios.get).mockResolvedValue(summaryResponse(true, 'unfunded'));
+      vi.mocked(axios.get).mockResolvedValue(summaryResponse(true, 'not_covered'));
 
       const funding = useFundingAccess(CALENDAR_ID);
       await funding.ensureLoaded();
 
-      expect(funding.status.value).toBe('unfunded');
+      expect(funding.status.value).toBe('not_covered');
       expect(funding.hasAccess('widget_embedding')).toBe(true);
     });
 
@@ -222,7 +222,7 @@ describe('useFundingAccess', () => {
     });
 
     it('is true only once the server has said the gate is closed', async () => {
-      vi.mocked(axios.get).mockResolvedValue(summaryResponse(false, 'unfunded'));
+      vi.mocked(axios.get).mockResolvedValue(summaryResponse(false, 'not_covered'));
 
       const funding = useFundingAccess(CALENDAR_ID);
       await funding.ensureLoaded();
@@ -231,7 +231,7 @@ describe('useFundingAccess', () => {
     });
 
     it('is false when the gate is open, whatever the display label reads', async () => {
-      vi.mocked(axios.get).mockResolvedValue(summaryResponse(true, 'unfunded'));
+      vi.mocked(axios.get).mockResolvedValue(summaryResponse(true, 'not_covered'));
 
       const funding = useFundingAccess(CALENDAR_ID);
       await funding.ensureLoaded();

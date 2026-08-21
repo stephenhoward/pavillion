@@ -3,8 +3,8 @@ import { createPinia, setActivePinia } from 'pinia';
 import { useFundingStore } from '@/client/stores/fundingStore';
 import type { CalendarFundingSummaryResponse } from '@/client/service/funding';
 
-const fundedSummary: CalendarFundingSummaryResponse = {
-  status: 'funded',
+const coveredSummary: CalendarFundingSummaryResponse = {
+  status: 'covered',
   currentPeriodEnd: '2026-09-01T00:00:00.000Z',
   accessExpiresAt: '2026-09-08T00:00:00.000Z',
   features: { widget_embedding: true },
@@ -36,16 +36,16 @@ describe('FundingStore', () => {
 
   describe('setSummary', () => {
     it('caches the status, the plan dates and the feature decisions', () => {
-      store.setSummary('cal-1', fundedSummary);
+      store.setSummary('cal-1', coveredSummary);
 
-      expect(store.statusFor('cal-1')).toBe('funded');
+      expect(store.statusFor('cal-1')).toBe('covered');
       expect(store.summaryFor('cal-1')?.currentPeriodEnd).toBe('2026-09-01T00:00:00.000Z');
       expect(store.summaryFor('cal-1')?.accessExpiresAt).toBe('2026-09-08T00:00:00.000Z');
       expect(store.featureAccess('cal-1', 'widget_embedding')).toBe(true);
     });
 
     it('keeps each calendar independent', () => {
-      store.setSummary('cal-1', fundedSummary);
+      store.setSummary('cal-1', coveredSummary);
 
       expect(store.statusFor('cal-2')).toBeNull();
       expect(store.featureAccess('cal-2', 'widget_embedding')).toBeNull();
@@ -57,18 +57,18 @@ describe('FundingStore', () => {
       // every key in the second summary would make merge and replace agree,
       // and the assertion would pass either way.
       store.setSummary('cal-1', {
-        ...fundedSummary,
+        ...coveredSummary,
         features: { widget_embedding: true, retired_feature: true },
       } as unknown as CalendarFundingSummaryResponse);
 
       store.setSummary('cal-1', {
-        status: 'unfunded',
+        status: 'not_covered',
         currentPeriodEnd: null,
         accessExpiresAt: null,
         features: { widget_embedding: false },
       });
 
-      expect(store.statusFor('cal-1')).toBe('unfunded');
+      expect(store.statusFor('cal-1')).toBe('not_covered');
       expect(store.summaryFor('cal-1')?.currentPeriodEnd).toBeNull();
       expect(store.summaryFor('cal-1')?.accessExpiresAt).toBeNull();
       expect(store.featureAccess('cal-1', 'widget_embedding')).toBe(false);
@@ -79,14 +79,14 @@ describe('FundingStore', () => {
   describe('denyFeature', () => {
     it('closes the gate on one feature without touching the display status', () => {
       // status is a relationship label and features are the entitlement: a
-      // calendar can be 'funded' and still be refused a feature, so a denial
+      // calendar can be 'covered' and still be refused a feature, so a denial
       // must not rewrite the label.
-      store.setSummary('cal-1', fundedSummary);
+      store.setSummary('cal-1', coveredSummary);
 
       store.denyFeature('cal-1', 'widget_embedding');
 
       expect(store.featureAccess('cal-1', 'widget_embedding')).toBe(false);
-      expect(store.statusFor('cal-1')).toBe('funded');
+      expect(store.statusFor('cal-1')).toBe('covered');
     });
 
     it('records a denial for a calendar whose summary has never been loaded', () => {
@@ -119,7 +119,7 @@ describe('FundingStore', () => {
     });
 
     it.each(inheritedNames)('still answers, rather than throwing, after a write under %s', (calendarId) => {
-      store.setSummary(calendarId, fundedSummary);
+      store.setSummary(calendarId, coveredSummary);
       store.denyFeature(calendarId, 'widget_embedding');
 
       expect(store.featureAccess(calendarId, 'widget_embedding')).not.toBeUndefined();
@@ -127,15 +127,15 @@ describe('FundingStore', () => {
     });
 
     it.each(storableNames)('caches and reads back a summary stored under %s', (calendarId) => {
-      store.setSummary(calendarId, fundedSummary);
+      store.setSummary(calendarId, coveredSummary);
 
-      expect(store.statusFor(calendarId)).toBe('funded');
+      expect(store.statusFor(calendarId)).toBe('covered');
       expect(store.featureAccess(calendarId, 'widget_embedding')).toBe(true);
       expect(store.statusFor('cal-1')).toBeNull();
     });
 
     it.each(storableNames)('records a denial under %s without disturbing other calendars', (calendarId) => {
-      store.setSummary('cal-1', fundedSummary);
+      store.setSummary('cal-1', coveredSummary);
 
       store.denyFeature(calendarId, 'widget_embedding');
 
@@ -146,7 +146,7 @@ describe('FundingStore', () => {
 
   describe('$reset', () => {
     it('drops every cached calendar so a logout leaks nothing to the next session', () => {
-      store.setSummary('cal-1', fundedSummary);
+      store.setSummary('cal-1', coveredSummary);
 
       store.$reset();
 

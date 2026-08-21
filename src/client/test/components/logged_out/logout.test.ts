@@ -49,7 +49,7 @@ describe('Logout Component (client logged_out)', () => {
     // account's entitlements.
     const fundingStore = useFundingStore();
     fundingStore.setSummary(CALENDAR_ID, {
-      status: 'funded',
+      status: 'covered',
       currentPeriodEnd: '2026-09-01T00:00:00.000Z',
       accessExpiresAt: null,
       features: { widget_embedding: true },

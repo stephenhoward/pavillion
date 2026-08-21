@@ -15,9 +15,9 @@ import type { FundingGatedFeature, FundingStatus } from '@/common/model/funding-
  *
  * `denied` carries less than its name suggests. The wire only has two values,
  * and `false` there means "no source produced an allow", not "determinately
- * unfunded": `FundingService.readAccessSource` on the server catches an
+ * not covered": `FundingService.readAccessSource` on the server catches an
  * unreadable grants table or plan lookup, logs it, and contributes `false`
- * (only the instance-settings read throws). So a calendar genuinely funded by
+ * (only the instance-settings read throws). So a calendar genuinely covered by
  * a grant, on an instance whose grant table is momentarily unreadable, arrives
  * here as `denied`. That server-side tradeoff is deliberate — an unreadable
  * source can only ever cost access it could not justify — but it means the
@@ -68,10 +68,10 @@ const inFlightLoads = new Map<string, Promise<void>>();
  *
  * The gate answer is the per-feature `features` map from
  * `GET /calendars/:calendarId/funding`, and `hasAccess` reads it. `status` is
- * published alongside for display — "funded", "on a grant" — and is
+ * published alongside for display — "covered", "on a grant" — and is
  * deliberately not what any capability decision reads. The two answer
  * different questions and are allowed to disagree, so branching on
- * `status === 'funded'` to decide what a calendar may do is a bug even on the
+ * `status === 'covered'` to decide what a calendar may do is a bug even on the
  * days it happens to give the same answer.
  *
  * Reads and writes take different routes, as they do in useFeedFollows and

@@ -10,16 +10,16 @@ import type { FundingGatedFeature, FundingStatus } from '@/common/model/funding-
  * funding endpoint answers all of it at once. An absent feature key means "not
  * asked yet", which is a different thing from a `false` decision — the
  * distinction is what keeps a funding state we could not read from being
- * displayed as an unfunded one.
+ * displayed as an uncovered one.
  *
  * A cached `false` is the narrower claim "no source produced an allow". The
  * server contributes `false` for a source it could not read as well as for one
- * that answered no (see FundingService.readAccessSource), so a grant-funded
+ * that answered no (see FundingService.readAccessSource), so a grant-covered
  * calendar on an instance with an unreadable grant table lands here as `false`
  * too. Nothing on the wire separates the two.
  */
 export interface CalendarFundingCache {
-  /** How the calendar is funded. Display vocabulary, null until loaded. */
+  /** How the calendar is covered. Display vocabulary, null until loaded. */
   status: FundingStatus | null;
   /** End of the paid-through period of the funding plan, ISO-8601. */
   currentPeriodEnd: string | null;
@@ -119,7 +119,7 @@ export const useFundingStore = defineStore('funding', {
     /**
      * A calendar's display status, or null while it is unknown.
      *
-     * This is a relationship label. It answers "how is this calendar funded",
+     * This is a relationship label. It answers "how is this calendar covered",
      * never "may this calendar do X" — that is featureAccess.
      */
     statusFor: (state) => (calendarId: string): FundingStatus | null => {
@@ -160,7 +160,7 @@ export const useFundingStore = defineStore('funding', {
      * Record that the server refused one feature for this calendar.
      *
      * Only that feature moves. The display status is left alone because the
-     * two can legitimately disagree — a calendar reported as `funded` can still
+     * two can legitimately disagree — a calendar reported as `covered` can still
      * be refused a feature whose access has expired — and rewriting the label
      * from a refusal would invent a relationship the server never described.
      *

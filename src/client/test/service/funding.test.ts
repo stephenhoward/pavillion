@@ -380,7 +380,7 @@ describe('FundingService.loadFundingSummary', () => {
     const axiosGet = vi.mocked(axios.get);
     axiosGet.mockResolvedValue({
       data: {
-        status: 'funded',
+        status: 'covered',
         currentPeriodEnd: '2026-09-01T00:00:00.000Z',
         accessExpiresAt: null,
         features: { widget_embedding: true },
@@ -392,8 +392,8 @@ describe('FundingService.loadFundingSummary', () => {
 
     // Assert
     const store = useFundingStore();
-    expect(result.status).toBe('funded');
-    expect(store.statusFor('cal123')).toBe('funded');
+    expect(result.status).toBe('covered');
+    expect(store.statusFor('cal123')).toBe('covered');
     expect(store.featureAccess('cal123', 'widget_embedding')).toBe(true);
   });
 
@@ -425,7 +425,7 @@ describe('fundingGateDenial', () => {
   });
 
   it('should not read a 5xx as a refusal', () => {
-    // An unreadable instance funding state is indeterminate, never unfunded.
+    // An unreadable instance funding state is indeterminate, never not covered.
     const error = { response: { status: 500, data: { error: 'Internal server error' } } };
 
     expect(fundingGateDenial(error)).toBeNull();

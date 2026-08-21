@@ -142,7 +142,7 @@ export type CalendarFundingSummaryResponse = Wire<CalendarFundingSummary>;
  * Recognition is deliberately narrow: only a 402 carrying
  * `errorName: 'SubscriptionRequiredError'` and a feature key that is in the
  * registry counts. Everything else — a 5xx above all — returns null, because
- * an unreadable instance funding state is *indeterminate*, not "unfunded", and
+ * an unreadable instance funding state is *indeterminate*, not "not covered", and
  * must never be rendered as a closed gate.
  *
  * The membership test is `Object.hasOwn` on a string, not `feature in
