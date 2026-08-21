@@ -330,6 +330,47 @@ describe('Payment Provider Adapters', () => {
         expect(event.calendarIds).toBeUndefined();
       });
 
+      it('should resolve the checkout session subscription when it is expanded to an object', () => {
+        const payload = JSON.stringify({
+          id: 'evt_checkout_expanded',
+          type: 'checkout.session.completed',
+          data: {
+            object: {
+              subscription: { id: 'sub_checkout_expanded', object: 'subscription' },
+              customer: 'cus_checkout_expanded',
+              metadata: {
+                pavillion_account_id: 'acc_expanded',
+              },
+            },
+          },
+        });
+
+        const event = stripeAdapter.parseWebhookEvent(payload);
+
+        expect(event.subscriptionId).toBe('sub_checkout_expanded');
+      });
+
+      it('should leave subscriptionId undefined when the checkout session subscription id is not a string', () => {
+        const payload = JSON.stringify({
+          id: 'evt_checkout_nonstring_id',
+          type: 'checkout.session.completed',
+          data: {
+            object: {
+              subscription: { id: 12345, object: 'subscription' },
+              customer: 'cus_checkout_nonstring',
+              metadata: {
+                pavillion_account_id: 'acc_nonstring',
+              },
+            },
+          },
+        });
+
+        const event = stripeAdapter.parseWebhookEvent(payload);
+
+        expect(event.subscriptionId).toBeUndefined();
+        expect(warnStub).toHaveBeenCalled();
+      });
+
       it('should parse invoice.paid event', () => {
         const payload = JSON.stringify({
           id: 'evt_invoice_paid',
@@ -953,10 +994,43 @@ describe('Payment Provider Adapters', () => {
         const result = await stripeAdapter.getCheckoutSessionStatus('cs_test_open');
 
         expect(result.status).toBe('open');
-        expect(result.subscriptionId).toBeNull();
+        expect(result.subscriptionId).toBeUndefined();
         expect(result.customerId).toBeNull();
         expect(result.metadata.accountId).toBe('acc_456');
         expect(result.metadata.calendarIds).toBeUndefined();
+      });
+
+      it('should resolve the session subscription when it is expanded to an object', async () => {
+        mockStripe.checkout.sessions.retrieve.resolves({
+          id: 'cs_test_expanded',
+          status: 'complete',
+          subscription: { id: 'sub_status_expanded', object: 'subscription' },
+          customer: 'cus_status_expanded',
+          metadata: {
+            pavillion_account_id: 'acc_status_expanded',
+          },
+        });
+
+        const result = await stripeAdapter.getCheckoutSessionStatus('cs_test_expanded');
+
+        expect(result.subscriptionId).toBe('sub_status_expanded');
+      });
+
+      it('should leave subscriptionId undefined when the session subscription id is not a string', async () => {
+        mockStripe.checkout.sessions.retrieve.resolves({
+          id: 'cs_test_nonstring',
+          status: 'complete',
+          subscription: { id: 12345, object: 'subscription' },
+          customer: 'cus_status_nonstring',
+          metadata: {
+            pavillion_account_id: 'acc_status_nonstring',
+          },
+        });
+
+        const result = await stripeAdapter.getCheckoutSessionStatus('cs_test_nonstring');
+
+        expect(result.subscriptionId).toBeUndefined();
+        expect(warnStub).toHaveBeenCalled();
       });
 
       it('should handle missing metadata gracefully', async () => {
