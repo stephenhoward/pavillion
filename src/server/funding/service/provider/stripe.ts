@@ -56,20 +56,22 @@ export class StripeAdapter implements PaymentProviderAdapter {
     //
     // timeout and maxNetworkRetries are set explicitly because provider calls
     // run inside database transactions, and a transaction pins a connection
-    // from the pool the whole application shares. The worst-case hold is
-    //
-    //     sequential provider calls x timeout x (1 + maxNetworkRetries)
-    //
-    // and updateSubscriptionAmount below makes three sequential round trips.
-    // On the SDK defaults (80s, 2 retries) that is 3 x 80s x 3 — roughly twelve
-    // minutes on one connection, before retry backoff. At 8s with no retries it
-    // is 24 seconds. Every Stripe call this adapter makes is a short interactive
-    // operation; none of them wants eighty seconds. Retries are dropped rather
-    // than reduced because a caller holding a transaction open is the wrong
-    // place to wait out a Stripe outage — failing fast and rolling back is.
+    // from the pool the whole application shares. Stripe's timeout is a
+    // socket-inactivity timeout (req.setTimeout under the hood), not a cap on
+    // total request duration: it fires only after that many milliseconds of
+    // silence, so a response that keeps dribbling bytes can run far longer
+    // than the configured value without ever tripping it. The hard cap on
+    // how long a call can pin a connection is therefore PostgreSQL's
+    // idle_in_transaction_session_timeout (60s, config/default.yaml), which
+    // terminates the transaction while the app is parked waiting on a slow
+    // provider response. Every Stripe call this adapter makes is a short
+    // interactive operation; none of them wants the SDK's default 80s of
+    // inactivity allowance. Retries are dropped rather than reduced because
+    // a caller holding a transaction open is the wrong place to wait out a
+    // Stripe outage — failing fast and rolling back is.
     //
     // ProviderFactory caches one adapter per provider config, so this single
-    // client serves every call path. Changing these values changes the bound.
+    // client serves every call path.
     this.stripe = new Stripe(apiKey, {
       apiVersion: '2026-02-25.clover',
       timeout: 8000,
