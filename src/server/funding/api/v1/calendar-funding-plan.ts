@@ -243,8 +243,6 @@ export default class CalendarFundingPlanRoutes {
       // may be told lives.
       const body: CalendarFundingSummary = {
         status: summary.status,
-        currentPeriodEnd: summary.currentPeriodEnd,
-        accessExpiresAt: summary.accessExpiresAt,
         // The registry is the allowlist for this sub-object: only registered
         // funding-gated features are reported, whatever the service returned.
         features: Object.fromEntries(

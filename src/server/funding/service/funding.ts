@@ -962,31 +962,23 @@ export default class FundingService {
   /**
    * Everything the owner of a calendar may be told about its coverage.
    *
-   * Composes the display status with the gate's per-feature decisions and the
-   * dates that bound them. Both halves are here on purpose: they can disagree
-   * (see getFundingStatusForCalendar), and a consumer holding only one of them
+   * Composes the display status with the gate's per-feature decisions. Both
+   * halves are here on purpose: they can disagree (see
+   * getFundingStatusForCalendar), and a consumer holding only one of them
    * would be guessing at the other.
    *
-   * The dates describe the funding plan that currently qualifies the calendar,
-   * and are read only when the status is `covered` — the one status that means
-   * a plan is what qualifies it. They are null for every other status: an
-   * admin-exempt or grant-covered calendar has no plan period to report, and an
-   * uncovered one has no qualifying plan by definition. An admin-owned or
-   * granted calendar can still carry a live allocation underneath, and
-   * reporting its dates would describe a plan that is not what the reported
-   * status is about.
-   *
-   * This is a narrowing, not an access control: the requester is already the
-   * calendar's owner. It does not by itself scope the dates to the requester's
-   * own plan — a `covered` calendar reports the dates of whichever plan covers
-   * it, which is the same account today only because a calendar's owner and the
-   * supporter paying for it cannot diverge. Multi-owner calendars or an
-   * ownership transfer would break that, and the fix then is to scope the plan
-   * lookup by account, not to widen this branch.
+   * The summary deliberately carries no plan dates. `currentPeriodEnd` and
+   * `accessExpiresAt` were once reported here, but nothing client-side ever
+   * read them, and unread wire surface sits against DEC-004's send-what-is-
+   * needed posture while drifting untested. When lifecycle work
+   * (cancel-at-period-end) gives the client a reason to display an access
+   * boundary, reintroduce the fields together with their consumer — the plan
+   * lookup they need is qualifyingFundingPlan plus planAccessExpiry, both
+   * still exercised by checkFundingAccess.
    *
    * @param accountId - Account ID requesting the summary (must own the calendar)
    * @param calendarId - Calendar ID to describe
-   * @returns The calendar's coverage status, plan dates and feature decisions
+   * @returns The calendar's coverage status and feature decisions
    * @throws ValidationError if accountId does not own the calendar
    * @throws FundingAccessIndeterminateError if instance funding settings could
    *   not be read — a server-side failure, never a "not covered" answer
@@ -995,13 +987,6 @@ export default class FundingService {
     // Validates both ids and verifies ownership before anything is read.
     const status = await this.getFundingStatusForCalendar(accountId, calendarId);
 
-    const settings = await this.settingsForFundingDecision(
-      'getCalendarFundingSummary: instance funding settings unreadable',
-    );
-    const plan = status === 'covered'
-      ? await this.qualifyingFundingPlan(calendarId, settings.gracePeriodDays)
-      : null;
-
     const featureKeys = Object.keys(FUNDING_GATED_FEATURES) as FundingGatedFeature[];
     const decisions = await Promise.all(
       featureKeys.map((feature) => this.checkFundingAccess(calendarId, feature)),
@@ -1009,8 +994,6 @@ export default class FundingService {
 
     return {
       status,
-      currentPeriodEnd: plan?.current_period_end ?? null,
-      accessExpiresAt: plan ? this.planAccessExpiry(plan, settings.gracePeriodDays) : null,
       features: Object.fromEntries(
         featureKeys.map((feature, index) => [feature, decisions[index]]),
       ) as Record<FundingGatedFeature, boolean>,

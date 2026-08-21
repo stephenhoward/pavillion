@@ -653,7 +653,7 @@ describe('FundingService - Calendar Funding Plan Methods', () => {
       } as any);
     }
 
-    it('should report the qualifying plan dates alongside the gate decision', async () => {
+    it('should report the coverage status alongside the gate decision', async () => {
       const calendarId = uuidv4();
       const accountId = uuidv4();
       const periodEnd = new Date(Date.now() + 30 * DAY);
@@ -678,9 +678,6 @@ describe('FundingService - Calendar Funding Plan Methods', () => {
       const summary = await service.getCalendarFundingSummary(accountId, calendarId);
 
       expect(summary.status).toBe('covered');
-      expect(summary.currentPeriodEnd).toEqual(periodEnd);
-      // Access outlives the paid-through date by the instance grace period.
-      expect(summary.accessExpiresAt).toEqual(new Date(periodEnd.getTime() + GRACE_DAYS * DAY));
       expect(summary.features.widget_embedding).toBe(true);
     });
 
@@ -707,8 +704,6 @@ describe('FundingService - Calendar Funding Plan Methods', () => {
 
       expect(summary.status).toBe('not_covered');
       expect(summary.features.widget_embedding).toBe(true);
-      expect(summary.currentPeriodEnd).toBeNull();
-      expect(summary.accessExpiresAt).toBeNull();
     });
 
     it('should verify ownership before reporting anything', async () => {
@@ -723,18 +718,16 @@ describe('FundingService - Calendar Funding Plan Methods', () => {
     });
 
     /**
-     * The dates describe the plan that qualifies the calendar, so a calendar
-     * qualified by something else reports none — even when a live allocation
-     * is sitting underneath it.
+     * The summary carries no plan dates, so a calendar qualified by something
+     * other than its plan never has its allocation read at all.
      *
-     * An admin who also pays is the case that separates the two: the status is
-     * decided by the exemption, and reporting the plan's period alongside it
-     * would describe a plan that is not what the status is about. Reading the
-     * allocation unconditionally is also what would turn into a genuine
+     * An admin who also pays is the case that proves it: the status is decided
+     * by the exemption, and the gate short-circuits on the same exemption.
+     * Reading the allocation unconditionally is what would turn into a genuine
      * cross-account disclosure the day a calendar's owner and its funder can
-     * differ.
+     * differ, so the lookup never happening is the property under test.
      */
-    it('should report no plan dates for a calendar qualified by something other than its plan', async () => {
+    it('should not read the plan allocation for a calendar qualified by something other than its plan', async () => {
       const calendarId = uuidv4();
       const accountId = uuidv4();
 
@@ -760,9 +753,7 @@ describe('FundingService - Calendar Funding Plan Methods', () => {
       const summary = await service.getCalendarFundingSummary(accountId, calendarId);
 
       expect(summary.status).toBe('admin_exempt');
-      expect(summary.currentPeriodEnd).toBeNull();
-      expect(summary.accessExpiresAt).toBeNull();
-      // Not merely nulled out afterwards — the plan is never read for the dates.
+      // The plan is never read — not merely left out of the response.
       expect(allocationLookup.called).toBe(false);
     });
 
@@ -802,7 +793,7 @@ describe('FundingService - Calendar Funding Plan Methods', () => {
       const summary = await service.getCalendarFundingSummary(accountId, calendarId);
 
       expect(Object.keys(summary).sort()).toEqual(
-        ['accessExpiresAt', 'currentPeriodEnd', 'features', 'status'],
+        ['features', 'status'],
       );
 
       const serialised = JSON.stringify(summary);
@@ -812,13 +803,12 @@ describe('FundingService - Calendar Funding Plan Methods', () => {
     });
 
     /**
-     * The instance settings are read three times over on this path — once for
-     * the display status, once for the dates, once inside every gate decision
-     * — and none of them can answer without it. An unreadable row is therefore
-     * the indeterminate case, and it must arrive as the class consumers branch
-     * on rather than as whatever the driver happened to throw: CalendarService
-     * keys on it to keep this out of the 402 path, and it would silently miss a
-     * raw Error.
+     * The instance settings are read twice over on this path — once for the
+     * display status and once inside every gate decision — and neither can
+     * answer without it. An unreadable row is therefore the indeterminate
+     * case, and it must arrive as the class consumers branch on rather than
+     * as whatever the driver happened to throw: CalendarService keys on it to
+     * keep this out of the 402 path, and it would silently miss a raw Error.
      */
     it('should raise the indeterminate error when the instance settings cannot be read', async () => {
       const calendarId = uuidv4();

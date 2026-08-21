@@ -21,10 +21,6 @@ import type { FundingGatedFeature, FundingStatus } from '@/common/model/funding-
 export interface CalendarFundingCache {
   /** How the calendar is covered. Display vocabulary, null until loaded. */
   status: FundingStatus | null;
-  /** End of the paid-through period of the funding plan, ISO-8601. */
-  currentPeriodEnd: string | null;
-  /** When funding stops granting access, ISO-8601. */
-  accessExpiresAt: string | null;
   /** Known per-feature gate decisions. A missing key is not a denial. */
   features: Partial<Record<FundingGatedFeature, boolean>>;
 }
@@ -150,8 +146,6 @@ export const useFundingStore = defineStore('funding', {
     setSummary(calendarId: string, summary: CalendarFundingSummaryResponse) {
       this.calendars[calendarId] = {
         status: summary.status,
-        currentPeriodEnd: summary.currentPeriodEnd,
-        accessExpiresAt: summary.accessExpiresAt,
         features: prototypeFreeRecord({ ...summary.features }),
       };
     },
@@ -176,8 +170,6 @@ export const useFundingStore = defineStore('funding', {
 
       this.calendars[calendarId] = {
         status: null,
-        currentPeriodEnd: null,
-        accessExpiresAt: null,
         features: prototypeFreeRecord({ [feature]: false }),
       };
     },

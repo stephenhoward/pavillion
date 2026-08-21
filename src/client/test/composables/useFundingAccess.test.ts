@@ -19,8 +19,6 @@ function summaryResponse(widgetEmbedding: boolean, status = 'covered') {
   return {
     data: {
       status,
-      currentPeriodEnd: null,
-      accessExpiresAt: null,
       features: { widget_embedding: widgetEmbedding },
     },
   };

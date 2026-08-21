@@ -5,8 +5,6 @@ import type { CalendarFundingSummaryResponse } from '@/client/service/funding';
 
 const coveredSummary: CalendarFundingSummaryResponse = {
   status: 'covered',
-  currentPeriodEnd: '2026-09-01T00:00:00.000Z',
-  accessExpiresAt: '2026-09-08T00:00:00.000Z',
   features: { widget_embedding: true },
 };
 
@@ -35,12 +33,10 @@ describe('FundingStore', () => {
   });
 
   describe('setSummary', () => {
-    it('caches the status, the plan dates and the feature decisions', () => {
+    it('caches the status and the feature decisions', () => {
       store.setSummary('cal-1', coveredSummary);
 
       expect(store.statusFor('cal-1')).toBe('covered');
-      expect(store.summaryFor('cal-1')?.currentPeriodEnd).toBe('2026-09-01T00:00:00.000Z');
-      expect(store.summaryFor('cal-1')?.accessExpiresAt).toBe('2026-09-08T00:00:00.000Z');
       expect(store.featureAccess('cal-1', 'widget_embedding')).toBe(true);
     });
 
@@ -63,14 +59,10 @@ describe('FundingStore', () => {
 
       store.setSummary('cal-1', {
         status: 'not_covered',
-        currentPeriodEnd: null,
-        accessExpiresAt: null,
         features: { widget_embedding: false },
       });
 
       expect(store.statusFor('cal-1')).toBe('not_covered');
-      expect(store.summaryFor('cal-1')?.currentPeriodEnd).toBeNull();
-      expect(store.summaryFor('cal-1')?.accessExpiresAt).toBeNull();
       expect(store.featureAccess('cal-1', 'widget_embedding')).toBe(false);
       expect(store.summaryFor('cal-1')?.features).toEqual({ widget_embedding: false });
     });
