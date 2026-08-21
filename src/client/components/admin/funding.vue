@@ -9,6 +9,7 @@ import ConfirmDisconnectModal from './confirm-disconnect-modal.vue';
 import AddProviderWizard from './add-provider-wizard.vue';
 import GrantForm from './grant-form.vue';
 import { ComplimentaryGrant } from '@/common/model/complimentary_grant';
+import { SUPPORTED_PROVIDER_TYPES } from '@/common/model/funding-plan';
 import HelpButton from '@/client/components/common/help-button.vue';
 
 const { t } = useTranslation('admin', {
@@ -79,29 +80,6 @@ const currencyOptions = [
   { value: 'AUD', label: 'AUD - Australian Dollar' },
 ];
 
-/**
- * Payment providers offered by this release.
- *
- * PayPal is descoped for v1: the backend seeds an unconfigured PayPal provider row
- * and the adapter/wizard/modal scaffolding remains in the tree, but checkout is
- * Stripe-only, so PayPal must never be offered or shown as connected. Filtering
- * here keeps it out of both the connected-providers list and the add-provider
- * wizard.
- *
- * This is NOT the only place "Stripe only" is encoded. Re-enabling PayPal means
- * changing all three of these together — changing only one leaves a provider that
- * is configurable but invisible to purchasers:
- *   1. this allowlist;
- *   2. src/client/components/account/FundingForm.vue — availableProviders, a
- *      pre-existing denylist (providerType !== 'paypal') over GET /v1/options;
- *   3. src/server/funding/service/funding.ts — resolveEnabledStripeProvider(),
- *      which hard-codes provider_type: 'stripe' for checkout sessions.
- *
- * See DEC-007 (agent-os/product/decisions/dec-007-community-funding-model.md),
- * which enumerates these sites and the disposition of pre-existing PayPal rows.
- */
-const V1_PROVIDER_TYPES = ['stripe'];
-
 // Computed property to check if any payment provider is configured
 const hasConfiguredProvider = computed(() => {
   return providers.value?.some(provider => provider.configured) ?? false;
@@ -152,7 +130,11 @@ async function loadProviders() {
   try {
     providersLoading.value = true;
     const allProviders = await fundingService.getProviders() ?? [];
-    providers.value = allProviders.filter(provider => V1_PROVIDER_TYPES.includes(provider.provider_type));
+    // Offer only the providers supported by this release (DEC-007: Stripe only
+    // in v1); see SUPPORTED_PROVIDER_TYPES for the re-enablement contract.
+    providers.value = allProviders.filter(
+      provider => SUPPORTED_PROVIDER_TYPES.some(type => type === provider.provider_type),
+    );
   }
   catch (error) {
     console.error('Failed to load providers:', error);
