@@ -1380,7 +1380,7 @@ describe('FundingService', () => {
        * the plan's own dates reveal that access has ended. They are therefore
        * also the worlds where the legacy vocabularies visibly disagree with the
        * current ones — `legacyAllowed` and `legacyPlanStatus` still say the
-       * calendar is funded — which is the divergence recorded on
+       * calendar is covered — which is the divergence recorded on
        * hasActiveFundingPlan and getPlanStatusForCalendars, not a defect here.
        */
       const worlds = [
@@ -1415,7 +1415,7 @@ describe('FundingService', () => {
           hasAllocation: true,
           reactivated: false,
           plan: {},
-          calendarStatus: 'funded',
+          calendarStatus: 'covered',
           legacyPlanStatus: 'subscribed',
           allowed: true,
           legacyAllowed: true,
@@ -1430,7 +1430,7 @@ describe('FundingService', () => {
           hasAllocation: true,
           reactivated: true,
           plan: {},
-          calendarStatus: 'funded',
+          calendarStatus: 'covered',
           legacyPlanStatus: 'subscribed',
           allowed: true,
           legacyAllowed: true,
@@ -1442,7 +1442,7 @@ describe('FundingService', () => {
           hasAllocation: false,
           reactivated: false,
           plan: {},
-          calendarStatus: 'unfunded',
+          calendarStatus: 'not_covered',
           legacyPlanStatus: undefined,
           allowed: false,
           legacyAllowed: false,
@@ -1457,7 +1457,7 @@ describe('FundingService', () => {
           hasAllocation: true,
           reactivated: false,
           plan: { cancelled_at: new Date(Date.now() - DAY) },
-          calendarStatus: 'unfunded',
+          calendarStatus: 'not_covered',
           legacyPlanStatus: 'subscribed',
           allowed: false,
           legacyAllowed: true,
@@ -1472,7 +1472,7 @@ describe('FundingService', () => {
           hasAllocation: true,
           reactivated: false,
           plan: { current_period_end: new Date(Date.now() - 30 * DAY) },
-          calendarStatus: 'unfunded',
+          calendarStatus: 'not_covered',
           legacyPlanStatus: 'subscribed',
           allowed: false,
           legacyAllowed: true,

@@ -126,7 +126,7 @@ export class InvalidSessionIdError extends ValidationError {
  * anything at all — the instance-level funding settings could not be read.
  *
  * This is the one denial from checkFundingAccess that is NOT "this calendar is
- * unfunded". It is our outage, not the caller's unpaid bill, and it must reach
+ * not covered". It is our outage, not the caller's unpaid bill, and it must reach
  * the client as a server error. Answering it with 402 /
  * SubscriptionRequiredError would tell an operator whose instance never
  * enabled funding that their community owes money to fix our database

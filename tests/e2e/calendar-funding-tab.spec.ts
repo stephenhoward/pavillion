@@ -6,9 +6,9 @@ import { startTestServer, TestEnvironment } from './helpers/test-server';
  * E2E Tests: Calendar Settings — Extended Features (Funding)
  *
  * Tests the funding workflow in the Settings tab's Extended Features section:
- *   1. When funding is enabled and calendar is unfunded, shows an "Enable" button.
+ *   1. When funding is enabled and calendar is not covered, shows an "Enable" button.
  *   2. Clicking "Enable" opens the FundingSheet overlay.
- *   3. When funding is enabled and calendar is funded, shows enabled badge with disable option.
+ *   3. When funding is enabled and calendar is covered, shows enabled badge with disable option.
  *   4. When funding is disabled, the extended features section is hidden.
  *   5. When calendar has admin-exempt status, shows admin-exempt badge.
  *
@@ -25,7 +25,7 @@ test.describe.configure({ mode: 'serial' });
  */
 async function mockFundingAPIs(page: import('@playwright/test').Page, options: {
   subscriptionsEnabled: boolean;
-  fundingStatus: 'funded' | 'unfunded' | 'grant' | 'admin_exempt';
+  fundingStatus: 'covered' | 'not_covered' | 'grant' | 'admin_exempt';
 }) {
   // Mock funding plan status (user's subscription)
   await page.route('**/api/funding/v1/status', async (route) => {
@@ -91,10 +91,10 @@ test.describe('Calendar Settings — Extended Features (Funding)', () => {
     await loginAsAdmin(page, env.baseURL);
   });
 
-  test('shows enable button when funding is enabled and calendar is unfunded', async ({ page }) => {
+  test('shows enable button when funding is enabled and calendar is not covered', async ({ page }) => {
     await mockFundingAPIs(page, {
       subscriptionsEnabled: true,
-      fundingStatus: 'unfunded',
+      fundingStatus: 'not_covered',
     });
 
     await navigateToSettingsTab(page, env.baseURL);
@@ -107,7 +107,7 @@ test.describe('Calendar Settings — Extended Features (Funding)', () => {
   test('clicking enable button opens funding sheet', async ({ page }) => {
     await mockFundingAPIs(page, {
       subscriptionsEnabled: true,
-      fundingStatus: 'unfunded',
+      fundingStatus: 'not_covered',
     });
 
     await navigateToSettingsTab(page, env.baseURL);
@@ -121,10 +121,10 @@ test.describe('Calendar Settings — Extended Features (Funding)', () => {
     await expect(fundingSheet).toBeVisible({ timeout: 10000 });
   });
 
-  test('shows enabled badge when calendar is funded', async ({ page }) => {
+  test('shows enabled badge when calendar is covered', async ({ page }) => {
     await mockFundingAPIs(page, {
       subscriptionsEnabled: true,
-      fundingStatus: 'funded',
+      fundingStatus: 'covered',
     });
 
     await navigateToSettingsTab(page, env.baseURL);
@@ -141,7 +141,7 @@ test.describe('Calendar Settings — Extended Features (Funding)', () => {
   test('hides extended features section when funding is disabled', async ({ page }) => {
     await mockFundingAPIs(page, {
       subscriptionsEnabled: false,
-      fundingStatus: 'unfunded',
+      fundingStatus: 'not_covered',
     });
 
     await navigateToSettingsTab(page, env.baseURL);

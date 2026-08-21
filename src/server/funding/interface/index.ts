@@ -69,7 +69,7 @@ export default class FundingInterface {
    * AFTER authentication, ownership and existence checks have run.
    *
    * Three outcomes, not two: `true` opens the gate, `false` is a determinate
-   * "this calendar is unfunded" that may be answered commercially, and a
+   * "this calendar is not covered" that may be answered commercially, and a
    * thrown {@link FundingAccessIndeterminateError} is a denial caused by an
    * unreadable instance funding state — a server-side failure that must
    * surface as a server error, never as 402 / SubscriptionRequiredError.
@@ -85,7 +85,7 @@ export default class FundingInterface {
    * @param calendarId - Calendar the feature would be used on
    * @param feature - Key from FUNDING_GATED_FEATURES naming the gated feature
    * @returns True if the gate is open for this calendar, false if this
-   *   calendar is determinately unfunded
+   *   calendar is determinately not covered
    * @throws FundingAccessIndeterminateError if the instance funding settings
    *   could not be read
    */
@@ -254,7 +254,7 @@ export default class FundingInterface {
    * Get all calendars in the account's active funding plan
    *
    * @param accountId - Account ID to look up
-   * @returns Array of funded calendar allocations (calendarId, amount, createdAt)
+   * @returns Array of covered calendar allocations (calendarId, amount, createdAt)
    */
   async getCalendarsInFundingPlan(
     accountId: string,

@@ -187,7 +187,7 @@ describe('CalendarFundingPlanRoutes API', () => {
       }, routes['getCalendars'].bind(routes));
     };
 
-    it('should return 200 with array of funded calendars', async () => {
+    it('should return 200 with array of covered calendars', async () => {
       mockInterface.getCalendarsInFundingPlan.resolves([
         { calendarId: 'cal-1-uuid-aaaa-bbbb-ccccddddeeee', amount: 500000, createdAt: new Date('2026-01-01') },
         { calendarId: 'cal-2-uuid-aaaa-bbbb-ccccddddeeee', amount: 300000, createdAt: new Date('2026-02-01') },
@@ -381,7 +381,7 @@ describe('CalendarFundingPlanRoutes API', () => {
     };
 
     it('should return 200 with funding status for calendar owner', async () => {
-      resolveSummary('funded');
+      resolveSummary('covered');
 
       bindGetFundingStatus();
 
@@ -389,7 +389,7 @@ describe('CalendarFundingPlanRoutes API', () => {
         .get('/handler/a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d/funding')
         .expect(200);
 
-      expect(response.body.status).toBe('funded');
+      expect(response.body.status).toBe('covered');
       // Verify accountId is passed to getCalendarFundingSummary
       expect(mockInterface.getCalendarFundingSummary.calledWith(
         'test-account-id',
@@ -400,7 +400,7 @@ describe('CalendarFundingPlanRoutes API', () => {
     it('should return the plan dates and per-feature gate decisions', async () => {
       const periodEnd = new Date('2026-09-01T00:00:00.000Z');
       const accessExpiry = new Date('2026-09-08T00:00:00.000Z');
-      resolveSummary('funded', {
+      resolveSummary('covered', {
         currentPeriodEnd: periodEnd,
         accessExpiresAt: accessExpiry,
         features: { widget_embedding: true },
@@ -432,7 +432,7 @@ describe('CalendarFundingPlanRoutes API', () => {
      * means a field added to the service in future is caught too.
      */
     it('should never disclose account or Stripe identifiers, whatever the service returns', async () => {
-      resolveSummary('funded', {
+      resolveSummary('covered', {
         accountId: 'owner-account-id',
         customerId: 'cus_leak',
         subscriptionId: 'sub_leak',
@@ -458,7 +458,7 @@ describe('CalendarFundingPlanRoutes API', () => {
     });
 
     it('should report only registered funding-gated features', async () => {
-      resolveSummary('funded', {
+      resolveSummary('covered', {
         features: { widget_embedding: true, unregistered_feature: true },
       });
 
@@ -538,7 +538,7 @@ describe('CalendarFundingPlanRoutes API', () => {
 
     /**
      * An unreadable funding state is a server-side failure, never an
-     * "unfunded" answer: telling an operator they are unfunded during our own
+     * "not covered" answer: telling an operator they are not covered during our own
      * outage invites them to pay to fix it.
      */
     it('should return 500 when the instance funding state cannot be read', async () => {
@@ -555,8 +555,8 @@ describe('CalendarFundingPlanRoutes API', () => {
       expect(response.body.status).toBeUndefined();
     });
 
-    it('should return unfunded status', async () => {
-      resolveSummary('unfunded');
+    it('should return not_covered status', async () => {
+      resolveSummary('not_covered');
 
       bindGetFundingStatus();
 
@@ -564,7 +564,7 @@ describe('CalendarFundingPlanRoutes API', () => {
         .get('/handler/a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d/funding')
         .expect(200);
 
-      expect(response.body.status).toBe('unfunded');
+      expect(response.body.status).toBe('not_covered');
     });
   });
 });

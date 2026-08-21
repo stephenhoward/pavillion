@@ -150,8 +150,8 @@
             </span>
           </div>
 
-          <!-- Funded -->
-          <div v-else-if="state.fundingStatus === 'funded'" class="setting-extended-status">
+          <!-- Covered by a funding plan -->
+          <div v-else-if="state.fundingStatus === 'covered'" class="setting-extended-status">
             <span class="setting-badge setting-badge--enabled">
               {{ t('extended_features_enabled') }}
             </span>
@@ -187,7 +187,7 @@
             </div>
           </div>
 
-          <!-- Unfunded -->
+          <!-- Not covered -->
           <div v-else class="setting-extended-status">
             <button
               type="button"

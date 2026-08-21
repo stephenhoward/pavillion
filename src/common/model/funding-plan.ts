@@ -16,15 +16,19 @@ export type BillingCycle = 'monthly' | 'yearly';
 export type ProviderType = 'stripe' | 'paypal';
 
 /**
- * How a single calendar is currently funded.
+ * How a single calendar is currently covered.
  *
- * This is the one vocabulary for a single calendar's funding relationship,
- * shared verbatim by the service, the calendar funding endpoint and the
- * frontend. snake_case, string-literal union, no TS runtime enum: the values
- * travel over the wire, so a runtime enum would only add a second spelling to
- * keep in sync.
+ * This is the one vocabulary for a single calendar's coverage, shared verbatim
+ * by the service, the calendar funding endpoint and the frontend. snake_case,
+ * string-literal union, no TS runtime enum: the values travel over the wire, so
+ * a runtime enum would only add a second spelling to keep in sync.
  *
- * It describes a *relationship*, not an entitlement. `unfunded` means "this
+ * The values say `covered`, never `funded`, because the money flows owner →
+ * instance (DEC-007): a calendar is covered by a funding plan, and it is the
+ * instance that is funded. "This calendar is funded" inverts the model, so it
+ * is not a value this union can express.
+ *
+ * It describes a *relationship*, not an entitlement. `not_covered` means "this
  * calendar has no grant and no paying allocation", which is not the same
  * question as "may this calendar use feature X" — that is
  * FundingService.checkFundingAccess, and the two deliberately disagree in two
@@ -36,7 +40,7 @@ export type ProviderType = 'stripe' | 'paypal';
  * getPlanStatusForCalendars) is a separate, un-migrated vocabulary. Do not map
  * one onto the other casually — they are computed by different queries.
  */
-export type FundingStatus = 'admin_exempt' | 'grant' | 'funded' | 'unfunded';
+export type FundingStatus = 'admin_exempt' | 'grant' | 'covered' | 'not_covered';
 
 /**
  * The features whose availability depends on funding access.
@@ -79,7 +83,7 @@ export const FUNDING_GATED_FEATURES = {
 export type FundingGatedFeature = keyof typeof FUNDING_GATED_FEATURES;
 
 /**
- * Everything a calendar's owner may be told about how that calendar is funded.
+ * Everything a calendar's owner may be told about how that calendar is covered.
  *
  * This type is the field allowlist for GET /v1/calendars/:calendarId/funding,
  * expressed once so the service, the route and the frontend cannot drift. It
@@ -93,9 +97,9 @@ export type FundingGatedFeature = keyof typeof FUNDING_GATED_FEATURES;
  * the authoritative answer to "may this calendar do X".
  */
 export type CalendarFundingSummary = {
-  /** How this calendar is funded. Display vocabulary, not an entitlement. */
+  /** How this calendar is covered. Display vocabulary, not an entitlement. */
   status: FundingStatus;
-  /** End of the paid-through period of the plan funding this calendar, if any. */
+  /** End of the paid-through period of the plan covering this calendar, if any. */
   currentPeriodEnd: Date | null;
   /** When the funding plan stops granting access, if it sets any boundary. */
   accessExpiresAt: Date | null;

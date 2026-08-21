@@ -148,7 +148,7 @@ export default class FundingService {
    * Every path that reports or gates funding needs the same two things from
    * this row — whether the instance charges at all, and the grace period the
    * access boundary is measured with — and none of them can answer safely
-   * without it. Failing to read it is therefore never "unfunded": it is "we
+   * without it. Failing to read it is therefore never "not covered": it is "we
    * cannot say", and it is thrown as {@link FundingAccessIndeterminateError} so
    * a consumer branching on that class (see CalendarService's widget gate)
    * cannot answer it commercially with a 402.
@@ -544,10 +544,10 @@ export default class FundingService {
    *
    * This one is neither. The provider amount is a function of the local
    * allocation rows, and nothing else ever recomputes it — there is no
-   * reconciliation job, and `getFundingStatusForCalendar` grants `funded` on the
-   * mere existence of an active allocation row without ever consulting the
+   * reconciliation job, and `getFundingStatusForCalendar` grants `covered` on
+   * the mere existence of an active allocation row without ever consulting the
    * provider. Committing the rows first and calling the provider after would
-   * mean any provider failure permanently grants funded status for an amount
+   * mean any provider failure permanently grants covered status for an amount
    * nobody is billing. Holding the transaction open across the call is the
    * cheaper exposure. Do not "fix" this by moving the call after commit unless
    * a reconciliation path exists to catch what it drops.
@@ -592,7 +592,7 @@ export default class FundingService {
    * nothing conflict on nothing — neither the plan row nor the partial unique
    * index on (funding_plan_id, calendar_id) — and each computes its total from a
    * snapshot missing the other's insert. Both then push their total to the
-   * provider, the later call wins, and the plan ends up with more funded
+   * provider, the later call wins, and the plan ends up covering more
    * calendars than it is billing for. Taking the plan row lock first forces the
    * second caller to wait, and under READ COMMITTED its subsequent statements
    * then see the first caller's committed rows.
@@ -647,7 +647,7 @@ export default class FundingService {
    * The plan lock, the duplicate check, the allocation row, and the provider
    * amount update run in one transaction. What that buys is local atomicity on
    * provider rejection: if the provider refuses the new total, the allocation
-   * row is rolled back rather than left granting a calendar funded status the
+   * row is rolled back rather than left granting a calendar covered status the
    * provider is not billing for.
    *
    * It does not make the pair atomic in the other direction. The provider call
@@ -738,7 +738,7 @@ export default class FundingService {
    * As on the add path, the provider call is a remote mutation that rollback
    * cannot unwind: a commit failure after the provider accepted leaves the
    * provider reduced or cancelled while the local plan stays `active` and the
-   * calendar keeps reporting `funded`. That direction has no compensation path.
+   * calendar keeps reporting `covered`. That direction has no compensation path.
    *
    * @param accountId - Account ID (used to resolve funding plan and verify ownership)
    * @param calendarId - Calendar ID to remove
@@ -843,7 +843,7 @@ export default class FundingService {
   }
 
   /**
-   * Describe how a calendar is currently funded, for its owner.
+   * Describe how a calendar is currently covered, for its owner.
    *
    * Checks in priority order: ownership verification, admin exemption, active
    * grant, qualifying funding plan allocation.
@@ -866,10 +866,10 @@ export default class FundingService {
    * allocations: both go through hasActiveGrant and hasQualifyingFundingPlan,
    * so a plan that has passed its access boundary — cancelled, or past its
    * paid-through date plus grace, whether or not Stripe ever told us — reports
-   * `unfunded` here exactly as the gate denies it. Before this was aligned,
+   * `not_covered` here exactly as the gate denies it. Before this was aligned,
    * this method read the allocation row alone with no join to the plan's
    * status and no boundary, so a calendar whose plan had been cancelled was
-   * displayed as `funded` while every gate refused it.
+   * displayed as `covered` while every gate refused it.
    *
    * Two divergences remain. Both are cases the gate distinguishes and
    * FundingStatus does not, and leaving the union at four values is a choice,
@@ -881,18 +881,18 @@ export default class FundingService {
    * indeterminate read never reaches it because the endpoint answers 500. The
    * cost is real and the benefit is currently zero — but a consumer that does
    * need to tell these apart should extend the union rather than infer them
-   * from `unfunded`, which is why they are recorded here:
+   * from `not_covered`, which is why they are recorded here:
    *
    *  1. Instance funding switched off. The gate opens every feature
    *     (invariant 1, DEC-001 instance autonomy); this method still reports the
-   *     calendar's own funding relationship, which is normally `unfunded`. A
-   *     new consumer must not read `unfunded` here as "this calendar may not
+   *     calendar's own coverage, which is normally `not_covered`. A new
+   *     consumer must not read `not_covered` here as "this calendar may not
    *     use feature X".
    *  2. Indeterminate reads. The gate throws FundingAccessIndeterminateError
    *     rather than returning a denial it cannot substantiate. This method has
-   *     no third value, so it does not swallow the failure into `unfunded`
+   *     no third value, so it does not swallow the failure into `not_covered`
    *     either: an unreadable settings row propagates as that same error class
-   *     and the endpoint answers 500. Reporting `unfunded` during our own
+   *     and the endpoint answers 500. Reporting `not_covered` during our own
    *     outage would invite an operator to pay to fix it.
    *
    * The consequence for callers: use {@link getCalendarFundingSummary}'s
@@ -900,10 +900,10 @@ export default class FundingService {
    *
    * @param accountId - Account ID requesting the funding status (must own the calendar)
    * @param calendarId - Calendar ID to check
-   * @returns Funding status: 'admin_exempt' | 'grant' | 'funded' | 'unfunded'
+   * @returns Funding status: 'admin_exempt' | 'grant' | 'covered' | 'not_covered'
    * @throws ValidationError if accountId does not own the calendar
    * @throws FundingAccessIndeterminateError if the instance funding settings
-   *   could not be read — a server-side failure, never an "unfunded" answer
+   *   could not be read — a server-side failure, never a "not covered" answer
    */
   async getFundingStatusForCalendar(accountId: string, calendarId: string): Promise<FundingStatus> {
     if (!isValidUUID(calendarId)) {
@@ -924,14 +924,14 @@ export default class FundingService {
     // optional interface and to stay fail-closed rather than crash if that
     // ever stops holding. The funding rules start below.
     if (!this.calendarInterface) {
-      return 'unfunded';
+      return 'not_covered';
     }
 
     // Find the calendar owner via CalendarInterface
     const ownerId = await this.calendarInterface.getCalendarOwnerAccountId(calendarId);
 
     if (!ownerId) {
-      return 'unfunded';
+      return 'not_covered';
     }
 
     // Check if owner is admin
@@ -947,20 +947,20 @@ export default class FundingService {
     }
 
     // Same predicate the gate applies, so a plan past its access boundary is
-    // not displayed as funded while every feature refuses it.
+    // not displayed as covered while every feature refuses it.
     const settings = await this.settingsForFundingDecision(
       'getFundingStatusForCalendar: instance funding settings unreadable',
     );
 
     if (await this.hasQualifyingFundingPlan(calendarId, settings.gracePeriodDays)) {
-      return 'funded';
+      return 'covered';
     }
 
-    return 'unfunded';
+    return 'not_covered';
   }
 
   /**
-   * Everything the owner of a calendar may be told about its funding.
+   * Everything the owner of a calendar may be told about its coverage.
    *
    * Composes the display status with the gate's per-feature decisions and the
    * dates that bound them. Both halves are here on purpose: they can disagree
@@ -968,28 +968,28 @@ export default class FundingService {
    * would be guessing at the other.
    *
    * The dates describe the funding plan that currently qualifies the calendar,
-   * and are read only when the status is `funded` — the one status that means
+   * and are read only when the status is `covered` — the one status that means
    * a plan is what qualifies it. They are null for every other status: an
-   * admin-exempt or grant-funded calendar has no plan period to report, and an
-   * unfunded one has no qualifying plan by definition. An admin-owned or
+   * admin-exempt or grant-covered calendar has no plan period to report, and an
+   * uncovered one has no qualifying plan by definition. An admin-owned or
    * granted calendar can still carry a live allocation underneath, and
    * reporting its dates would describe a plan that is not what the reported
    * status is about.
    *
    * This is a narrowing, not an access control: the requester is already the
    * calendar's owner. It does not by itself scope the dates to the requester's
-   * own plan — a `funded` calendar reports the dates of whichever plan funds
-   * it, which is the same account today only because a calendar's owner and
-   * its funder cannot diverge. Multi-owner calendars or an ownership transfer
-   * would break that, and the fix then is to scope the plan lookup by account,
-   * not to widen this branch.
+   * own plan — a `covered` calendar reports the dates of whichever plan covers
+   * it, which is the same account today only because a calendar's owner and the
+   * supporter paying for it cannot diverge. Multi-owner calendars or an
+   * ownership transfer would break that, and the fix then is to scope the plan
+   * lookup by account, not to widen this branch.
    *
    * @param accountId - Account ID requesting the summary (must own the calendar)
    * @param calendarId - Calendar ID to describe
-   * @returns The calendar's funding status, plan dates and feature decisions
+   * @returns The calendar's coverage status, plan dates and feature decisions
    * @throws ValidationError if accountId does not own the calendar
    * @throws FundingAccessIndeterminateError if instance funding settings could
-   *   not be read — a server-side failure, never an "unfunded" answer
+   *   not be read — a server-side failure, never a "not covered" answer
    */
   async getCalendarFundingSummary(accountId: string, calendarId: string): Promise<CalendarFundingSummary> {
     // Validates both ids and verifies ownership before anything is read.
@@ -998,7 +998,7 @@ export default class FundingService {
     const settings = await this.settingsForFundingDecision(
       'getCalendarFundingSummary: instance funding settings unreadable',
     );
-    const plan = status === 'funded'
+    const plan = status === 'covered'
       ? await this.qualifyingFundingPlan(calendarId, settings.gracePeriodDays)
       : null;
 
@@ -1200,7 +1200,7 @@ export default class FundingService {
    *   back. Note the asymmetry: `adapter.cancelSubscription` runs before
    *   `entity.save()` and before commit, so if the provider succeeds and the
    *   commit then fails, Stripe has cancelled while the plan stays `active` and
-   *   its calendars keep reporting `funded` — entitlement retained, billing
+   *   its calendars keep reporting `covered` — entitlement retained, billing
    *   stopped, with no compensation path.
    */
   async cancel(fundingPlanId: string, immediate: boolean = false, tx?: Transaction): Promise<void> {
@@ -1978,10 +1978,10 @@ export default class FundingService {
    * allow.
    *
    * The return contract carries three outcomes, not two, because a denial from
-   * this method is not always "unfunded":
+   * this method is not always "not covered":
    *
    *  - `true`  — the gate is open.
-   *  - `false` — a determinate denial. This calendar is unfunded on an
+   *  - `false` — a determinate denial. This calendar is not covered on an
    *    instance that does charge. Consumers may answer it commercially
    *    (402 / SubscriptionRequiredError, an upsell prompt).
    *  - throws {@link FundingAccessIndeterminateError} — the instance-level
@@ -2015,7 +2015,7 @@ export default class FundingService {
    * @param calendarId - Calendar the feature would be used on
    * @param feature - Key from FUNDING_GATED_FEATURES naming the gated feature
    * @returns True if the gate is open for this calendar, false if this
-   *   calendar is determinately unfunded
+   *   calendar is determinately not covered
    * @throws ValidationError if calendarId is not a UUID or feature is not a
    *   registered funding-gated feature
    * @throws FundingAccessIndeterminateError if the instance funding settings
@@ -2033,7 +2033,7 @@ export default class FundingService {
     // Invariant 1: funding not enabled on this instance -> all gates open.
     // Invariant 4, instance scope: we cannot establish that funding is switched
     // off, so we cannot open the gate on that basis either. The helper throws
-    // rather than returning, so consumers cannot mistake it for "unfunded".
+    // rather than returning, so consumers cannot mistake it for "not covered".
     const settings = await this.settingsForFundingDecision(
       'checkFundingAccess: instance funding settings unreadable, closing gate',
     );
@@ -2243,7 +2243,7 @@ export default class FundingService {
    * getFundingStatusForCalendar: it reads plan status alone, with no access
    * boundary and no admin exemption, so a calendar whose plan was cancelled or
    * has run past its paid-through date is still reported 'subscribed' here
-   * while the single-calendar path reports it unfunded and every gate refuses
+   * while the single-calendar path reports it not_covered and every gate refuses
    * it. That is tolerable only because this vocabulary feeds admin listings,
    * never an entitlement decision. Migrating it is deferred to pv-1u3s.
    *

@@ -461,7 +461,7 @@ describe('FundingService - Calendar Funding Plan Methods', () => {
      * `where: { status: 'active' }` exactly as the database would, so a query
      * written without the join still sees the row. That asymmetry is what the
      * boundary tests below are measuring: a predicate that reads the
-     * allocation alone reports funded here, and one that goes through the
+     * allocation alone reports covered here, and one that goes through the
      * plan does not.
      *
      * @param calendarId - Calendar the allocation belongs to
@@ -497,7 +497,7 @@ describe('FundingService - Calendar Funding Plan Methods', () => {
       });
     }
 
-    it('should return funded when calendar has an active calendar plan', async () => {
+    it('should return covered when calendar has an active calendar plan', async () => {
       const calendarId = uuidv4();
       const accountId = uuidv4();
 
@@ -505,19 +505,19 @@ describe('FundingService - Calendar Funding Plan Methods', () => {
       stubAllocation(calendarId, {});
 
       const status = await service.getFundingStatusForCalendar(accountId, calendarId);
-      expect(status).toBe('funded');
+      expect(status).toBe('covered');
     });
 
     /**
      * The displayed status and the gate decision are computed by the same
-     * predicate, so a calendar the gate refuses is never shown as funded.
+     * predicate, so a calendar the gate refuses is never shown as covered.
      * Before they were aligned this method read the allocation row alone —
-     * no join to the plan's status, no access boundary — and reported 'funded'
+     * no join to the plan's status, no access boundary — and reported 'covered'
      * for a calendar whose plan had been cancelled while every feature on it
      * was already refused.
      */
     describe('agreement with the gate for a plan past its access boundary', () => {
-      it('should return unfunded when the funding plan behind the allocation was cancelled', async () => {
+      it('should return not_covered when the funding plan behind the allocation was cancelled', async () => {
         const calendarId = uuidv4();
         const accountId = uuidv4();
 
@@ -525,10 +525,10 @@ describe('FundingService - Calendar Funding Plan Methods', () => {
         stubAllocation(calendarId, { status: 'cancelled' });
 
         const status = await service.getFundingStatusForCalendar(accountId, calendarId);
-        expect(status).toBe('unfunded');
+        expect(status).toBe('not_covered');
       });
 
-      it('should return unfunded when an active plan recorded a cancellation date in the past', async () => {
+      it('should return not_covered when an active plan recorded a cancellation date in the past', async () => {
         const calendarId = uuidv4();
         const accountId = uuidv4();
 
@@ -536,10 +536,10 @@ describe('FundingService - Calendar Funding Plan Methods', () => {
         stubAllocation(calendarId, { cancelled_at: new Date(Date.now() - DAY) });
 
         const status = await service.getFundingStatusForCalendar(accountId, calendarId);
-        expect(status).toBe('unfunded');
+        expect(status).toBe('not_covered');
       });
 
-      it('should return unfunded when the paid-through date plus grace has passed', async () => {
+      it('should return not_covered when the paid-through date plus grace has passed', async () => {
         const calendarId = uuidv4();
         const accountId = uuidv4();
 
@@ -549,10 +549,10 @@ describe('FundingService - Calendar Funding Plan Methods', () => {
         stubAllocation(calendarId, { current_period_end: new Date(Date.now() - 30 * DAY) });
 
         const status = await service.getFundingStatusForCalendar(accountId, calendarId);
-        expect(status).toBe('unfunded');
+        expect(status).toBe('not_covered');
       });
 
-      it('should still return funded inside the grace period after the paid-through date', async () => {
+      it('should still return covered inside the grace period after the paid-through date', async () => {
         const calendarId = uuidv4();
         const accountId = uuidv4();
 
@@ -560,11 +560,11 @@ describe('FundingService - Calendar Funding Plan Methods', () => {
         stubAllocation(calendarId, { current_period_end: new Date(Date.now() - DAY) });
 
         const status = await service.getFundingStatusForCalendar(accountId, calendarId);
-        expect(status).toBe('funded');
+        expect(status).toBe('covered');
       });
     });
 
-    it('should return unfunded when no exemption, grant, or plan exists', async () => {
+    it('should return not_covered when no exemption, grant, or plan exists', async () => {
       const calendarId = uuidv4();
       const accountId = uuidv4();
 
@@ -582,10 +582,10 @@ describe('FundingService - Calendar Funding Plan Methods', () => {
       sandbox.stub(CalendarFundingPlanEntity, 'findOne').resolves(null);
 
       const status = await service.getFundingStatusForCalendar(accountId, calendarId);
-      expect(status).toBe('unfunded');
+      expect(status).toBe('not_covered');
     });
 
-    it('should return unfunded when calendar has no owner', async () => {
+    it('should return not_covered when calendar has no owner', async () => {
       const calendarId = uuidv4();
       const accountId = uuidv4();
 
@@ -599,7 +599,7 @@ describe('FundingService - Calendar Funding Plan Methods', () => {
         .resolves(null);
 
       const status = await service.getFundingStatusForCalendar(accountId, calendarId);
-      expect(status).toBe('unfunded');
+      expect(status).toBe('not_covered');
     });
 
     it('should throw ValidationError for invalid calendarId UUID', async () => {
@@ -677,7 +677,7 @@ describe('FundingService - Calendar Funding Plan Methods', () => {
 
       const summary = await service.getCalendarFundingSummary(accountId, calendarId);
 
-      expect(summary.status).toBe('funded');
+      expect(summary.status).toBe('covered');
       expect(summary.currentPeriodEnd).toEqual(periodEnd);
       // Access outlives the paid-through date by the instance grace period.
       expect(summary.accessExpiresAt).toEqual(new Date(periodEnd.getTime() + GRACE_DAYS * DAY));
@@ -691,7 +691,7 @@ describe('FundingService - Calendar Funding Plan Methods', () => {
      * A consumer must read the feature flags rather than the status to learn
      * what a calendar may do — this is the case that proves the difference.
      */
-    it('should report open features with an unfunded status when the instance does not charge', async () => {
+    it('should report open features with a not_covered status when the instance does not charge', async () => {
       const calendarId = uuidv4();
       const accountId = uuidv4();
 
@@ -705,7 +705,7 @@ describe('FundingService - Calendar Funding Plan Methods', () => {
 
       const summary = await service.getCalendarFundingSummary(accountId, calendarId);
 
-      expect(summary.status).toBe('unfunded');
+      expect(summary.status).toBe('not_covered');
       expect(summary.features.widget_embedding).toBe(true);
       expect(summary.currentPeriodEnd).toBeNull();
       expect(summary.accessExpiresAt).toBeNull();
