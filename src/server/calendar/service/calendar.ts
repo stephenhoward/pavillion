@@ -249,9 +249,13 @@ class CalendarService {
    * feature, per the funding domain.
    *
    * The one place the calendar domain asks the funding question, shared by the
-   * public widget read and the widget-domain write so the two surfaces cannot
-   * drift apart. A missing FundingInterface means no funding domain is wired
-   * in at all — an instance that charges for nothing — so the gate opens.
+   * public widget read below and — via CalendarInterface — the widget-domain
+   * write, so the two surfaces cannot drift apart. On the write path the
+   * caller runs it after its own existence and edit-permission checks: the
+   * funding question is asked last so a "this calendar is unfunded" answer can
+   * never reveal the existence or funding state of a calendar the caller may
+   * not touch. A missing FundingInterface means no funding domain is wired in
+   * at all — an instance that charges for nothing — so the gate opens.
    *
    * That deliberately reads the opposite way to FundingService's guard on its
    * own missing CalendarInterface, which throws. The two absences are not the
@@ -264,7 +268,7 @@ class CalendarService {
    * @throws SubscriptionRequiredError if the calendar is determinately unfunded
    * @throws FundingAccessIndeterminateError if the funding state is unreadable
    */
-  private async requireWidgetEmbeddingAccess(calendarId: string): Promise<void> {
+  async assertWidgetEmbeddingAccess(calendarId: string): Promise<void> {
     const allowed = (await this.fundingInterface?.checkFundingAccess(calendarId, 'widget_embedding')) ?? true;
 
     if (!allowed) {
@@ -298,7 +302,7 @@ class CalendarService {
       throw new CalendarNotFoundError();
     }
 
-    await this.requireWidgetEmbeddingAccess(calendar.id);
+    await this.assertWidgetEmbeddingAccess(calendar.id);
 
     return calendar;
   }
@@ -1670,23 +1674,6 @@ class CalendarService {
     });
 
     return membership.toModel();
-  }
-
-  /**
-   * Apply the widget_embedding funding gate to a widget-domain configuration.
-   *
-   * Existence and edit-permission checks belong to CalendarInterface, which
-   * runs them before calling this. The order matters: the funding question is
-   * asked last so a "this calendar is unfunded" answer can never reveal the
-   * existence or funding state of a calendar the caller may not touch.
-   *
-   * @param _account - Account setting the domain; already authorised upstream
-   * @param calendarId - Calendar ID being configured
-   * @param _domain - Domain to allow; validated and stored by WidgetDomainService
-   * @throws SubscriptionRequiredError if the calendar is determinately unfunded
-   */
-  async setWidgetDomain(_account: Account, calendarId: string, _domain: string): Promise<void> {
-    await this.requireWidgetEmbeddingAccess(calendarId);
   }
 
   /**

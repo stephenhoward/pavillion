@@ -1,27 +1,25 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import sinon from 'sinon';
 
-import { Account } from '@/common/model/account';
 import { SubscriptionRequiredError } from '@/common/exceptions/subscription';
 import { FundingAccessIndeterminateError } from '@/common/exceptions/funding';
 import CalendarService from '@/server/calendar/service/calendar';
 import FundingInterface from '@/server/funding/interface';
 
 /**
- * setWidgetDomain is the write-side widget_embedding gate. CalendarInterface
- * establishes that the calendar exists and that the caller may modify it
- * before this runs, so these tests cover only the funding question and the
- * three answers it can come back with.
+ * assertWidgetEmbeddingAccess is the calendar domain's only widget_embedding
+ * gate, shared by the public widget read and — through CalendarInterface — the
+ * widget-domain write. Existence and permission checks belong to those
+ * callers, so these tests cover only the funding question and the three
+ * answers it can come back with.
  */
-describe('CalendarService.setWidgetDomain', () => {
+describe('CalendarService.assertWidgetEmbeddingAccess', () => {
   let sandbox: sinon.SinonSandbox;
   let service: CalendarService;
   let mockFundingInterface: FundingInterface;
   let checkFundingAccessStub: sinon.SinonStub;
-  let account: Account;
 
   const calendarId = 'calendar-id';
-  const domain = 'example.com';
 
   beforeEach(() => {
     sandbox = sinon.createSandbox();
@@ -37,8 +35,6 @@ describe('CalendarService.setWidgetDomain', () => {
       undefined,
       mockFundingInterface,
     );
-
-    account = new Account('account-id', 'testuser', 'test@example.com');
   });
 
   afterEach(() => {
@@ -48,7 +44,7 @@ describe('CalendarService.setWidgetDomain', () => {
   it('should ask the funding domain about widget_embedding for the target calendar', async () => {
     checkFundingAccessStub.resolves(true);
 
-    await service.setWidgetDomain(account, calendarId, domain);
+    await service.assertWidgetEmbeddingAccess(calendarId);
 
     expect(checkFundingAccessStub.calledOnceWithExactly(calendarId, 'widget_embedding')).toBe(true);
   });
@@ -57,11 +53,11 @@ describe('CalendarService.setWidgetDomain', () => {
     checkFundingAccessStub.resolves(false);
 
     await expect(
-      service.setWidgetDomain(account, calendarId, domain),
+      service.assertWidgetEmbeddingAccess(calendarId),
     ).rejects.toThrow(SubscriptionRequiredError);
 
     try {
-      await service.setWidgetDomain(account, calendarId, domain);
+      await service.assertWidgetEmbeddingAccess(calendarId);
       expect.fail('Should have thrown SubscriptionRequiredError');
     }
     catch (error) {
@@ -78,7 +74,7 @@ describe('CalendarService.setWidgetDomain', () => {
     // An unreadable instance funding state must reach the route as a server
     // error, never as 402 / SubscriptionRequiredError.
     try {
-      await service.setWidgetDomain(account, calendarId, domain);
+      await service.assertWidgetEmbeddingAccess(calendarId);
       expect.fail('Should have thrown FundingAccessIndeterminateError');
     }
     catch (error) {
@@ -87,11 +83,11 @@ describe('CalendarService.setWidgetDomain', () => {
     }
   });
 
-  it('should allow the configuration when no funding domain is wired in', async () => {
+  it('should open the gate when no funding domain is wired in', async () => {
     const serviceWithoutFunding = new CalendarService();
 
     await expect(
-      serviceWithoutFunding.setWidgetDomain(account, calendarId, domain),
+      serviceWithoutFunding.assertWidgetEmbeddingAccess(calendarId),
     ).resolves.toBeUndefined();
   });
 });
