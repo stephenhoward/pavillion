@@ -1,6 +1,6 @@
 # Product Decisions Log
 
-> Last Updated: 2026-08-20
+> Last Updated: 2026-08-21
 > Version: 2.3.0
 > Override Priority: Highest
 
@@ -80,8 +80,8 @@ Supersession is the exception, because it retires a decision rather than refinin
 ### DEC-013: Inbox is the Authenticated-Activity Log
 - **File:** [decisions/dec-013-inbox-authenticated-activity-log.md](decisions/dec-013-inbox-authenticated-activity-log.md)
 - **Date:** 2026-05-16 · **Status:** Accepted
-- **Decision:** Every `ap_inbox` row is authenticated by a recorded mechanism, captured in `auth_source` (open string enum: `'http_signature'`, `'outbox_pull'`, ...) with an audit-only `auth_origin`. Authentication runs at the ingest boundary; the table's invariant is "authenticated by *some* recorded mechanism," not "arrived via signed POST." `auth_source` is diagnostic — never a policy surface. Backfill and live ingest share one storage model and one chronological dispatch pipeline.
-- **Consult when:** Adding a new ingest path (ICS pull, hosted-provider OAuth, Facebook import); local in-process outbox→inbox dispatch to same-instance recipients (`auth_source='local_dispatch'`); reading from or writing to `ap_inbox`; designing or modifying the inbox dispatch pipeline; deciding how to gate trust on inbound activities; questions about why `auth_source` is not consulted by handlers, or why backfill writes real rows instead of dispatching synthetically.
+- **Decision:** Every `ap_inbox` row is authenticated by a recorded mechanism, captured in `auth_source` (open string enum: `'http_signature'`, `'outbox_pull'`, ...) alongside `auth_origin`, the peer origin verified at the ingest boundary. The table's invariant is "authenticated by *some* recorded mechanism," not "arrived via signed POST." The two columns split: `auth_source` (mechanism) is diagnostic — never a policy surface — while `auth_origin` (verified peer origin) is the **sanctioned policy key for inbound gates**: any gate keyed on the sender's identity consumes it, never a host re-derived from the self-asserted `actor` field. Backfill and live ingest share one storage model and one chronological dispatch pipeline.
+- **Consult when:** Adding a new ingest path (ICS pull, hosted-provider OAuth, Facebook import); local in-process outbox→inbox dispatch to same-instance recipients (`auth_source='local_dispatch'`); reading from or writing to `ap_inbox`; designing or modifying the inbox dispatch pipeline; deciding how to gate trust on inbound activities; adding any inbound gate, throttle, or block keyed on the sending instance's identity — which value to key on; questions about why `auth_source` is not consulted by handlers, or why backfill writes real rows instead of dispatching synthetically.
 
 ---
 
