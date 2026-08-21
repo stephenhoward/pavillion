@@ -1,3 +1,5 @@
+import type { Stripe, StripeConstructor } from '@stripe/stripe-js';
+
 const STRIPE_JS_URL = 'https://js.stripe.com/v3/';
 
 /**
@@ -11,21 +13,31 @@ const STRIPE_JS_URL = 'https://js.stripe.com/v3/';
  * @param publishableKey - Stripe publishable key from the options API
  * @returns Promise resolving to the initialized Stripe instance
  */
-export async function loadStripe(publishableKey: string): Promise<any> {
+export async function loadStripe(publishableKey: string): Promise<Stripe> {
   // If Stripe is already loaded globally, initialize immediately
-  if ((window as any).Stripe) {
-    return (window as any).Stripe(publishableKey);
+  if (window.Stripe) {
+    return window.Stripe(publishableKey);
   }
 
   // Load the Stripe.js script
   await loadStripeScript();
 
-  const Stripe = (window as any).Stripe;
-  if (!Stripe) {
+  const stripeConstructor = getStripeGlobal();
+  if (!stripeConstructor) {
     throw new Error('Stripe.js loaded but Stripe is not available');
   }
 
-  return Stripe(publishableKey);
+  return stripeConstructor(publishableKey);
+}
+
+/**
+ * Read window.Stripe without control-flow narrowing. Inside loadStripe, TS
+ * narrows window.Stripe to undefined after the early-return branch and does
+ * not reset that narrowing across the script-loading call, so a direct read
+ * there would be typed as always-undefined.
+ */
+function getStripeGlobal(): StripeConstructor | undefined {
+  return window.Stripe;
 }
 
 /**
@@ -38,7 +50,7 @@ function loadStripeScript(): Promise<void> {
     const existingScript = document.querySelector(`script[src="${STRIPE_JS_URL}"]`);
     if (existingScript) {
       // Script tag exists but Stripe isn't available yet; wait for it
-      if ((window as any).Stripe) {
+      if (window.Stripe) {
         resolve();
       }
       else {
