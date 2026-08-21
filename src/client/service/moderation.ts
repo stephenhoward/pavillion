@@ -536,8 +536,9 @@ export default class ModerationService {
   }
 
   /**
-   * Forwards a report to the remote instance's administrator.
-   * Only applicable for reports on remote events.
+   * Forwards a report to the owner of the calendar the event came from
+   * (DEC-015 — the method name says "remote admin" but the recipient is the
+   * origin calendar's actor). Only applicable for reports on remote events.
    *
    * @param reportId - The report UUID
    */

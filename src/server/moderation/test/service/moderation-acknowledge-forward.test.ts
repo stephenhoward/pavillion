@@ -88,6 +88,29 @@ describe('ModerationService.acknowledgeForwardedReport', () => {
     expect(updateStub.called).toBe(false);
   });
 
+  it('should accept an Accept sent by the same calendar actor the Flag was addressed to', async () => {
+    // DEC-015: the forward target is the origin calendar's own actor, so the
+    // Accept normally comes back from that exact URI rather than a sibling
+    // actor on the same host.
+    const updateStub = sandbox.stub().resolves();
+    const originCalendarActorUri = 'https://origin.example/calendars/origin-calendar';
+    const mockEntity = {
+      id: 'report-uuid',
+      forward_status: 'pending',
+      forwarded_to_actor_uri: originCalendarActorUri,
+      update: updateStub,
+    };
+    sandbox.stub(ReportEntity, 'findOne').resolves(mockEntity as any);
+
+    const result = await service.acknowledgeForwardedReport(
+      'https://local.instance/flags/flag-id',
+      originCalendarActorUri,
+    );
+
+    expect(result).toBe(true);
+    expect(updateStub.calledWith({ forward_status: 'acknowledged' })).toBe(true);
+  });
+
   it('should return true without updating when already acknowledged (idempotency)', async () => {
     const updateStub = sandbox.stub().resolves();
     const mockEntity = {
