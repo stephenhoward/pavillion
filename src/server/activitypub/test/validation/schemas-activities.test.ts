@@ -1,8 +1,8 @@
 /**
  * Tests for ActivityPub validation schemas - activity-type schemas.
  *
- * Covers the seven activity-type schemas (Follow, Accept, Create, Update,
- * Delete, Announce, Undo) that extend activityBaseSchema. The base/shared
+ * Covers the activity-type schemas (Follow, Accept, Create, Update, Delete,
+ * Announce, Undo, Join, Flag, Ignore) that extend activityBaseSchema. The base/shared
  * schemas they build on are exercised in the sibling schemas-base.test.ts
  * file.
  */
@@ -18,7 +18,15 @@ import {
   announceActivitySchema,
   undoActivitySchema,
   joinActivitySchema,
+  flagActivitySchema,
+  ignoreActivitySchema,
+  MAX_FLAG_TEXT_LENGTH,
+  MAX_FLAG_TAGS,
 } from '@/server/activitypub/validation/schemas';
+import IgnoreActivity from '@/server/activitypub/model/action/ignore';
+import FlagActivityBuilder from '@/server/moderation/service/flag-activity-builder';
+import { Report, ReportCategory, ReportStatus } from '@/common/model/report';
+import { CalendarEvent, CalendarEventContent } from '@/common/model/events';
 
 describe('ActivityPub Validation Schemas - Activities', () => {
   describe('followActivitySchema', () => {
@@ -1701,6 +1709,200 @@ describe('ActivityPub Validation Schemas - Activities', () => {
         actor: 'https://remote.example/users/bob',
       });
       expect(result.success).toBe(false);
+    });
+  });
+
+  describe('flagActivitySchema', () => {
+    const baseFlag = {
+      '@context': 'https://www.w3.org/ns/activitystreams',
+      id: 'https://remote.example/flags/1',
+      type: 'Flag',
+      actor: 'https://remote.example/calendars/reporter',
+      object: 'https://local.example/events/6b1f0a5e-0000-4000-8000-000000000001',
+    };
+
+    it('should accept a minimal Flag activity', () => {
+      const result = flagActivitySchema.safeParse(baseFlag);
+      expect(result.success).toBe(true);
+    });
+
+    it('should accept a Flag activity carrying a category Hashtag', () => {
+      const result = flagActivitySchema.safeParse({
+        ...baseFlag,
+        content: 'This event is spam.',
+        summary: 'Event report: spam',
+        tag: [{ type: 'Hashtag', name: '#spam' }],
+        published: '2026-05-22T12:00:00Z',
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.tag?.[0].name).toBe('#spam');
+      }
+    });
+
+    it('should accept an embedded object reference', () => {
+      const result = flagActivitySchema.safeParse({
+        ...baseFlag,
+        object: {
+          id: 'https://local.example/events/6b1f0a5e-0000-4000-8000-000000000001',
+          type: 'Event',
+        },
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('should accept an attributedTo actor URI', () => {
+      const result = flagActivitySchema.safeParse({
+        ...baseFlag,
+        attributedTo: 'https://remote.example/admin',
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('should reject a Flag activity missing object', () => {
+      const { object: _object, ...withoutObject } = baseFlag;
+      const result = flagActivitySchema.safeParse(withoutObject);
+      expect(result.success).toBe(false);
+    });
+
+    it('should reject a Flag activity with the wrong type', () => {
+      const result = flagActivitySchema.safeParse({ ...baseFlag, type: 'Follow' });
+      expect(result.success).toBe(false);
+    });
+
+    it('should reject content longer than the local report description cap', () => {
+      const result = flagActivitySchema.safeParse({
+        ...baseFlag,
+        content: 'x'.repeat(MAX_FLAG_TEXT_LENGTH + 1),
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('should reject summary longer than the local report description cap', () => {
+      const result = flagActivitySchema.safeParse({
+        ...baseFlag,
+        summary: 'x'.repeat(MAX_FLAG_TEXT_LENGTH + 1),
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('should reject an unbounded tag array', () => {
+      const result = flagActivitySchema.safeParse({
+        ...baseFlag,
+        tag: Array.from({ length: MAX_FLAG_TAGS + 1 }, (_, i) => ({
+          type: 'Hashtag',
+          name: `#tag${i}`,
+        })),
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('should reject a tag entry that is not a Hashtag', () => {
+      const result = flagActivitySchema.safeParse({
+        ...baseFlag,
+        tag: [{ type: 'Mention', name: '@someone' }],
+      });
+      expect(result.success).toBe(false);
+    });
+
+    // The point of the schema is that a Flag forwarded by one Pavillion
+    // instance validates on another. Build the activity with the real
+    // outbound builder rather than a hand-written fixture, so a field added
+    // on the emit side that the schema does not tolerate fails here.
+    it('should accept the Flag activity that FlagActivityBuilder emits', () => {
+      const report = new Report('report-uuid-123');
+      report.eventId = '6b1f0a5e-0000-4000-8000-000000000001';
+      report.calendarId = 'calendar-uuid-789';
+      report.category = ReportCategory.INAPPROPRIATE;
+      report.description = 'This event contains inappropriate content.';
+      report.reporterType = 'authenticated';
+      report.status = ReportStatus.SUBMITTED;
+      report.createdAt = new Date('2026-02-07T12:00:00Z');
+
+      const event = new CalendarEvent('6b1f0a5e-0000-4000-8000-000000000001');
+      event.calendarId = 'calendar-uuid-789';
+      event.date = '2026-03-01';
+      const content = new CalendarEventContent('en');
+      content.title = 'Test Event';
+      event.addContent(content);
+
+      const activity = new FlagActivityBuilder('remote.example').buildFlagActivity(
+        report,
+        event,
+        'https://remote.example/calendars/reporter',
+      );
+
+      const result = flagActivitySchema.safeParse(activity);
+      expect(result.success, JSON.stringify((result as any).error?.issues)).toBe(true);
+    });
+  });
+
+  describe('ignoreActivitySchema', () => {
+    const embeddedJoin = {
+      '@context': 'https://www.w3.org/ns/activitystreams',
+      id: 'https://remote.example/activities/join/1',
+      type: 'Join',
+      actor: 'https://remote.example/users/bob',
+      object: 'https://example.com/calendars/mycal/events/e1',
+    };
+
+    it('should accept an Ignore activity embedding the activity being ignored', () => {
+      const result = ignoreActivitySchema.safeParse({
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        id: 'https://remote.example/calendars/mycal/ignores/1',
+        type: 'Ignore',
+        actor: 'https://remote.example/calendars/mycal',
+        object: embeddedJoin,
+        to: ['https://remote.example/users/bob'],
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.type).toBe('Ignore');
+      }
+    });
+
+    it('should accept an Ignore activity referencing the ignored activity by URI', () => {
+      const result = ignoreActivitySchema.safeParse({
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        id: 'https://remote.example/calendars/mycal/ignores/2',
+        type: 'Ignore',
+        actor: 'https://remote.example/calendars/mycal',
+        object: 'https://remote.example/activities/join/1',
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('should reject an Ignore activity with the wrong type', () => {
+      const result = ignoreActivitySchema.safeParse({
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        id: 'https://remote.example/calendars/mycal/ignores/3',
+        type: 'Reject',
+        actor: 'https://remote.example/calendars/mycal',
+        object: embeddedJoin,
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('should reject an Ignore activity missing object', () => {
+      const result = ignoreActivitySchema.safeParse({
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        id: 'https://remote.example/calendars/mycal/ignores/4',
+        type: 'Ignore',
+        actor: 'https://remote.example/calendars/mycal',
+      });
+      expect(result.success).toBe(false);
+    });
+
+    // The whole point of the schema is that the Ignore one Pavillion instance
+    // emits in reply to a Join validates on the instance that receives it.
+    // Build it with the real model rather than a hand-written fixture, so a
+    // change on the emit side that the schema does not tolerate fails here.
+    it('should accept the Ignore activity that IgnoreActivity emits', () => {
+      const ignore = new IgnoreActivity('https://remote.example/calendars/mycal', embeddedJoin);
+      ignore.to = [embeddedJoin.actor];
+
+      const result = ignoreActivitySchema.safeParse(ignore.toObject());
+      expect(result.success, JSON.stringify((result as any).error?.issues)).toBe(true);
     });
   });
 });
