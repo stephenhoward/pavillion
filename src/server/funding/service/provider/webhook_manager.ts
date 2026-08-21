@@ -36,38 +36,37 @@ export class WebhookManager {
   }
 
   private resolveRawDomain(): string {
-    // Try to get domain from config
-    try {
-      if (config.has('server.domain')) {
-        const domain = config.get<string>('server.domain');
-        if (domain && typeof domain === 'string' && domain.trim().length > 0) {
-          // Ensure domain has protocol
-          return domain.startsWith('http') ? domain : `https://${domain}`;
-        }
-      }
+    // The instance domain comes from the canonical `domain` config key — the
+    // same key every other URL-minting call site in the codebase reads, with
+    // `config/default.yaml` guaranteeing a value in every environment and
+    // LOCAL_DOMAIN as the env override (config/custom-environment-variables.yaml).
+    //
+    // Decision: no BASE_URL or localhost fallback. This method previously read
+    // the nonexistent `server.domain` key and silently fell through to
+    // process.env.BASE_URL or a hardcoded localhost URL, so a misconfigured
+    // instance registered a webhook against the wrong domain with no error —
+    // a payment-integration failure that presents as "webhooks never arrive."
+    // A webhook URL pasted into a provider dashboard must use the real
+    // instance domain, so a missing or blank domain fails loudly instead.
+    const domain = config.get<string>('domain');
+    if (typeof domain !== 'string' || domain.trim().length === 0) {
+      throw new Error(
+        'Instance domain is not configured: the "domain" config key is blank. '
+        + 'Refusing to generate a payment-provider webhook URL without it.',
+      );
     }
-    catch {
-      // Config doesn't have server.domain, continue to fallback
-    }
-
-    // Try environment variable
-    const baseUrl = process.env.BASE_URL;
-    if (baseUrl && typeof baseUrl === 'string' && baseUrl.trim().length > 0) {
-      return baseUrl;
-    }
-
-    // Unconditional fallback to localhost for development/test environments
-    // This handles cases where NODE_ENV might not be properly set in test environments
-    return 'http://localhost:3000';
+    // Ensure domain has protocol
+    return domain.startsWith('http') ? domain : `https://${domain}`;
   }
 
   /**
    * Upgrade http:// to https:// for any non-localhost host.
    *
    * Payment provider dashboards (Stripe, PayPal) reject non-HTTPS webhook URLs
-   * in production. A reverse proxy that terminates TLS in front of the app
-   * commonly leaves the in-cluster BASE_URL as http://, which would otherwise
-   * leak through into the URL we hand to the operator.
+   * in production. An operator who sets the `domain` config value with an
+   * explicit http:// prefix (typical when a reverse proxy terminates TLS in
+   * front of the app) would otherwise leak that scheme through into the URL
+   * we hand to the operator.
    *
    * Localhost is left as http:// so local development still works without
    * generating a TLS certificate.
