@@ -459,4 +459,127 @@ describe('Funding Plan System Integration Tests', () => {
     expect(plan.status).toBe('suspended');
     expect(plan.suspended_at).not.toBeNull();
   });
+
+  /**
+   * checkFundingAccess against real entities.
+   *
+   * The gate's plan lookup eager-loads the funding plan through the
+   * `fundingPlan` association on CalendarFundingPlanEntity. Unit tests stub
+   * findOne wholesale, so these tests exist to execute that include (and the
+   * access-boundary read of the loaded plan) against a real database — a
+   * broken association alias must fail here.
+   */
+  describe('checkFundingAccess funding plan gate', () => {
+    /**
+     * Enable instance funding so the gate actually consults coverage.
+     */
+    async function enableInstanceFunding(): Promise<void> {
+      const settings = FundingSettingsEntity.build({
+        id: uuidv4(),
+        enabled: true,
+        monthly_price: 1000000,
+        yearly_price: 10000000,
+        currency: 'USD',
+        pay_what_you_can: false,
+        grace_period_days: 7,
+      });
+      await settings.save();
+    }
+
+    /**
+     * Create a calendar covered by a funding plan allocation. Plan defaults
+     * to active and inside its billing period (fake clock: 2026-01-15);
+     * overrides let a test push the plan past its access boundary.
+     */
+    async function createCoveredCalendar(planOverrides: Record<string, unknown> = {}): Promise<CalendarEntity> {
+      const providerConfig = await createProviderConfig('stripe');
+
+      const account = AccountEntity.build({
+        id: uuidv4(),
+        email: `gate-${uuidv4()}@example.com`,
+        password_hash: 'hash',
+        status: 'active',
+        languages: 'en',
+      });
+      await account.save();
+
+      const calendar = CalendarEntity.build({
+        id: uuidv4(),
+        url_name: `gate-cal-${uuidv4().slice(0, 8)}`,
+        languages: 'en',
+        default_date_range: 'month',
+      });
+      await calendar.save();
+
+      const plan = FundingPlanEntity.build({
+        id: uuidv4(),
+        account_id: account.id,
+        provider_config_id: providerConfig.id,
+        provider_subscription_id: `sub_${uuidv4().slice(0, 8)}`,
+        provider_customer_id: `cus_${uuidv4().slice(0, 8)}`,
+        status: 'active',
+        billing_cycle: 'monthly',
+        amount: 1000000,
+        currency: 'USD',
+        current_period_start: new Date('2026-01-01T00:00:00Z'),
+        current_period_end: new Date('2026-02-01T00:00:00Z'),
+        cancelled_at: null,
+        suspended_at: null,
+        ...planOverrides,
+      });
+      await plan.save();
+
+      const allocation = CalendarFundingPlanEntity.build({
+        id: uuidv4(),
+        funding_plan_id: plan.id,
+        calendar_id: calendar.id,
+        amount: 1000000,
+        end_time: null,
+      });
+      await allocation.save();
+
+      return calendar;
+    }
+
+    it('should open the gate for a calendar covered by an active funding plan', async () => {
+      await enableInstanceFunding();
+      const calendar = await createCoveredCalendar();
+
+      const access = await service.checkFundingAccess(calendar.id, 'widget_embedding');
+
+      expect(access).toBe(true);
+    });
+
+    it('should close the gate for a calendar with no funding plan allocation', async () => {
+      await enableInstanceFunding();
+
+      const calendar = CalendarEntity.build({
+        id: uuidv4(),
+        url_name: 'gate-uncovered-cal',
+        languages: 'en',
+        default_date_range: 'month',
+      });
+      await calendar.save();
+
+      const access = await service.checkFundingAccess(calendar.id, 'widget_embedding');
+
+      expect(access).toBe(false);
+    });
+
+    it('should close the gate when the covering plan is past its access boundary', async () => {
+      await enableInstanceFunding();
+
+      // Still status 'active' with a live allocation, but the paid-through
+      // date plus the 7-day grace period ended before the fake clock's
+      // 2026-01-15 — only the boundary read of the eager-loaded plan denies it.
+      const calendar = await createCoveredCalendar({
+        current_period_start: new Date('2025-11-01T00:00:00Z'),
+        current_period_end: new Date('2025-12-01T00:00:00Z'),
+      });
+
+      const access = await service.checkFundingAccess(calendar.id, 'widget_embedding');
+
+      expect(access).toBe(false);
+    });
+  });
 });
