@@ -32,7 +32,7 @@ describe('CalendarFundingPlanEntity', () => {
     expect(entity.end_time).toBeNull();
   });
 
-  it('should create entity with future end_time indicating funded through that date', () => {
+  it('should create entity with future end_time indicating coverage through that date', () => {
     const futureDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
     const data = { ...sampleData, end_time: futureDate };
 
