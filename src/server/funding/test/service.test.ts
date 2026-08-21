@@ -21,6 +21,7 @@ import {
   InvalidSessionIdError,
   WebhookSignatureError,
   FundingPlanNotFoundError,
+  FundingAccessIndeterminateError,
 } from '@/common/exceptions/funding';
 import { ValidationError } from '@/common/exceptions/base';
 import { v4 as uuidv4 } from 'uuid';
@@ -1215,7 +1216,34 @@ describe('FundingService', () => {
         stubOwnerIsAdmin(false);
         stubGrant(true);
 
-        const allowed = await service.checkFundingAccess(calendarId, feature);
+        // Still fail-closed — but signalled by throwing rather than by
+        // returning false, because a consumer that answers this one with 402
+        // tells an operator their community owes money to fix our outage.
+        // A bare boolean cannot carry that distinction.
+        await expect(service.checkFundingAccess(calendarId, feature))
+          .rejects.toThrow(FundingAccessIndeterminateError);
+      });
+
+      it('should name the indeterminate denial distinctly from any other failure', async () => {
+        sandbox.stub(FundingSettingsEntity, 'findOne').rejects(new Error('DB error'));
+
+        // errorName is what crosses the wire, so it is what a consumer can
+        // key on to keep this out of the 402 path.
+        await expect(service.checkFundingAccess(calendarId, feature))
+          .rejects.toMatchObject({ name: 'FundingAccessIndeterminateError' });
+      });
+
+      it('should close the gate rather than exempt an admin when no calendar interface is wired', async () => {
+        const unwiredService = new FundingService(eventBus);
+        stubFundingEnabled(true);
+        stubOwnerIsAdmin(true);
+        stubGrant(false);
+        stubAllocation(null);
+
+        // A construction-order guard, not a production path: the owner really
+        // may be an admin, but with no calendar domain injected this source
+        // cannot answer, and an unanswerable source never grants.
+        const allowed = await unwiredService.checkFundingAccess(calendarId, feature);
 
         expect(allowed).toBe(false);
       });
