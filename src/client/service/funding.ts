@@ -1,6 +1,7 @@
 import axios from 'axios';
 import i18next from 'i18next';
 import { ComplimentaryGrant } from '@/common/model/complimentary_grant';
+import type { FundingStatus as CalendarFundingStatus } from '@/common/model/funding-plan';
 
 /**
  * Funding settings returned from API
@@ -103,10 +104,13 @@ export type AccountSearchResult = {
 };
 
 /**
- * Funding status for a calendar
+ * Funding status response for a calendar.
+ *
+ * `status` reuses the shared single-calendar vocabulary rather than restating
+ * its values, so the wire cannot drift from the server's union.
  */
 export type FundingStatus = {
-  status: 'funded' | 'unfunded' | 'grant' | 'admin-exempt';
+  status: CalendarFundingStatus;
   grantInfo?: { reason?: string; expiresAt?: string };
 };
 

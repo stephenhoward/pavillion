@@ -297,7 +297,7 @@ describe('FundingService.getFundingStatus', () => {
 
   it('should call GET /api/funding/v1/calendars/:calendarId/funding', async () => {
     // Arrange
-    const mockStatus = { status: 'funded', planInfo: { amount: 500 } };
+    const mockStatus = { status: 'covered', planInfo: { amount: 500 } };
     const axiosGet = vi.mocked(axios.get);
     axiosGet.mockResolvedValue({ data: mockStatus });
 
@@ -309,9 +309,9 @@ describe('FundingService.getFundingStatus', () => {
     expect(result).toEqual(mockStatus);
   });
 
-  it('should return unfunded status', async () => {
+  it('should return not_covered status', async () => {
     // Arrange
-    const mockStatus = { status: 'unfunded' };
+    const mockStatus = { status: 'not_covered' };
     const axiosGet = vi.mocked(axios.get);
     axiosGet.mockResolvedValue({ data: mockStatus });
 
@@ -319,7 +319,7 @@ describe('FundingService.getFundingStatus', () => {
     const result = await service.getFundingStatus('cal456');
 
     // Assert
-    expect(result.status).toBe('unfunded');
+    expect(result.status).toBe('not_covered');
   });
 
   it('should return grant status with grantInfo', async () => {

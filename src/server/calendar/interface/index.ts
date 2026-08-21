@@ -692,7 +692,7 @@ export default class CalendarInterface {
       throw new CalendarEditorPermissionError();
     }
 
-    // Funding is asked last: an "unfunded" answer must never precede the 404
+    // Funding is asked last: a "not covered" answer must never precede the 404
     // or 403 above, or it would leak a calendar the caller may not touch.
     await this.calendarService.assertWidgetEmbeddingAccess(calendarId);
 

@@ -8,7 +8,7 @@ import {
   type ProviderStatus,
   type DisconnectionResult,
 } from '@/server/funding/service/provider_connection';
-import { FundingPlan, FundingSettings, ProviderConfig, FundingStatus, BillingCycle, ProviderType, FundingGatedFeature } from '@/common/model/funding-plan';
+import { FundingPlan, FundingSettings, ProviderConfig, CalendarFundingSummary, BillingCycle, ProviderType, FundingGatedFeature } from '@/common/model/funding-plan';
 import type { ProviderInfo } from '@/server/funding/service/funding';
 import type { ProviderCredentials } from '@/server/funding/service/provider/adapter';
 import { ComplimentaryGrant } from '@/common/model/complimentary_grant';
@@ -69,7 +69,7 @@ export default class FundingInterface {
    * AFTER authentication, ownership and existence checks have run.
    *
    * Three outcomes, not two: `true` opens the gate, `false` is a determinate
-   * "this calendar is unfunded" that may be answered commercially, and a
+   * "this calendar is not covered" that may be answered commercially, and a
    * thrown {@link FundingAccessIndeterminateError} is a denial caused by an
    * unreadable instance funding state — a server-side failure that must
    * surface as a server error, never as 402 / SubscriptionRequiredError.
@@ -85,7 +85,7 @@ export default class FundingInterface {
    * @param calendarId - Calendar the feature would be used on
    * @param feature - Key from FUNDING_GATED_FEATURES naming the gated feature
    * @returns True if the gate is open for this calendar, false if this
-   *   calendar is determinately unfunded
+   *   calendar is determinately not covered
    * @throws FundingAccessIndeterminateError if the instance funding settings
    *   could not be read
    */
@@ -254,7 +254,7 @@ export default class FundingInterface {
    * Get all calendars in the account's active funding plan
    *
    * @param accountId - Account ID to look up
-   * @returns Array of funded calendar allocations (calendarId, amount, createdAt)
+   * @returns Array of covered calendar allocations (calendarId, amount, createdAt)
    */
   async getCalendarsInFundingPlan(
     accountId: string,
@@ -284,17 +284,24 @@ export default class FundingInterface {
   }
 
   /**
-   * Get funding status for a calendar
+   * Get everything a calendar's owner may be told about its funding.
    *
-   * Verifies ownership internally and returns the funding status.
+   * Deliberately the only cross-domain way to ask about one calendar's funding.
+   * The bare display status (FundingService.getFundingStatusForCalendar) is not
+   * published here: it is not an entitlement, and a caller holding it without
+   * `features` has no path to the authoritative answer.
    *
-   * @param accountId - Account ID requesting the status (must own the calendar)
-   * @param calendarId - Calendar ID to check
-   * @returns Funding status: 'admin-exempt' | 'grant' | 'funded' | 'unfunded'
+   * Verifies ownership internally. Carries the display status, the funding
+   * plan dates bounding it, and the gate's per-feature decisions — and
+   * nothing that identifies an account or a Stripe object.
+   *
+   * @param accountId - Account ID requesting the summary (must own the calendar)
+   * @param calendarId - Calendar ID to describe
+   * @returns The calendar's funding status, plan dates and feature decisions
    * @throws ValidationError if accountId does not own the calendar
    */
-  async getFundingStatusForCalendar(accountId: string, calendarId: string): Promise<FundingStatus> {
-    return this.fundingService.getFundingStatusForCalendar(accountId, calendarId);
+  async getCalendarFundingSummary(accountId: string, calendarId: string): Promise<CalendarFundingSummary> {
+    return this.fundingService.getCalendarFundingSummary(accountId, calendarId);
   }
 
   // Admin operations

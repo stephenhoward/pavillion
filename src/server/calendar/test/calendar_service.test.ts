@@ -1390,3 +1390,97 @@ describe('updateCalendarSettings - defaultEventImageId', () => {
     expect(emitSpy.calledWith('mediaAttachedToCalendar')).toBe(false);
   });
 });
+
+/**
+ * Direct coverage for the ownership predicate the cross-domain interface
+ * publishes.
+ *
+ * Everything else in the repository reaches isCalendarOwnerById through a
+ * sinon stub of CalendarInterface, so no other test can observe what the real
+ * predicate matches on. That matters because it is load-bearing for more than
+ * routing: the funding endpoint treats "owner" as the whole of its
+ * authorisation, so an editor must be refused here, and the calendar's own
+ * funding summary — its plan period, its access expiry — turns on that refusal.
+ * Deleting `role: 'owner'` from the query is a one-token change that widens
+ * ownership to every membership row, and until this existed the whole suite
+ * stayed green under it.
+ *
+ * Real rows rather than a stubbed findOne: an assertion about which where
+ * clause was passed would restate the implementation, while an editor row that
+ * the database itself declines to match states the boundary.
+ */
+describe('CalendarService.isCalendarOwnerById', () => {
+  let service: CalendarService;
+  let calendarId: string;
+  let ownerId: string;
+  let editorId: string;
+
+  beforeEach(async () => {
+    await db.sync({ force: true });
+
+    service = new CalendarService({ getAccountById: async () => null } as any);
+
+    calendarId = crypto.randomUUID();
+    ownerId = crypto.randomUUID();
+    editorId = crypto.randomUUID();
+
+    await AccountEntity.create({ id: ownerId, email: 'owner@pavillion.dev', is_activated: true });
+    await AccountEntity.create({ id: editorId, email: 'editor@pavillion.dev', is_activated: true });
+    await CalendarEntity.create({
+      id: calendarId,
+      account_id: ownerId,
+      url_name: 'ownership_predicate',
+      languages: 'en',
+    });
+
+    await CalendarMemberEntity.create({
+      id: crypto.randomUUID(),
+      calendar_id: calendarId,
+      account_id: ownerId,
+      role: 'owner',
+      granted_by: null,
+    });
+
+    await CalendarMemberEntity.create({
+      id: crypto.randomUUID(),
+      calendar_id: calendarId,
+      account_id: editorId,
+      role: 'editor',
+      granted_by: ownerId,
+    });
+  });
+
+  afterEach(async () => {
+    await CalendarMemberEntity.destroy({ where: {}, force: true });
+    await CalendarEntity.destroy({ where: {}, force: true });
+    await AccountEntity.destroy({ where: {}, force: true });
+  });
+
+  it('should recognise the account holding the owner membership', async () => {
+    expect(await service.isCalendarOwnerById(ownerId, calendarId)).toBe(true);
+  });
+
+  it('should refuse an editor of the same calendar', async () => {
+    // An editor holds a membership row on this calendar and may change its
+    // events. Ownership is a strictly narrower thing, and the funding endpoint
+    // spends this distinction: an editor asking for the owner's funding
+    // summary is refused outright.
+    expect(await service.isCalendarOwnerById(editorId, calendarId)).toBe(false);
+  });
+
+  it('should refuse an account with no membership on the calendar', async () => {
+    expect(await service.isCalendarOwnerById(crypto.randomUUID(), calendarId)).toBe(false);
+  });
+
+  it('should not let ownership of one calendar carry to another', async () => {
+    const otherCalendarId = crypto.randomUUID();
+    await CalendarEntity.create({
+      id: otherCalendarId,
+      account_id: editorId,
+      url_name: 'other_calendar',
+      languages: 'en',
+    });
+
+    expect(await service.isCalendarOwnerById(ownerId, otherCalendarId)).toBe(false);
+  });
+});
