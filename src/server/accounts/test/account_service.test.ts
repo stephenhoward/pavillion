@@ -1726,3 +1726,41 @@ describe('listAccounts', () => {
     expect(result.accounts[0].email).toBe(storedEmail);
   });
 });
+
+describe('accountIsAdmin', () => {
+
+  let sandbox = sinon.createSandbox();
+  let accountService: AccountService;
+
+  beforeEach(() => {
+    const eventBus = new EventEmitter();
+    const configurationInterface = new ConfigurationInterface();
+    const setupInterface = new SetupInterface();
+    const emailInterface = new EmailInterface();
+    accountService = new AccountService(eventBus, configurationInterface, setupInterface, emailInterface);
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+  });
+
+  it('returns true when the account holds the admin role', async () => {
+    const findOneStub = sandbox.stub(AccountRoleEntity, 'findOne').resolves({
+      account_id: 'admin-id',
+      role: 'admin',
+    } as any);
+
+    const isAdmin = await accountService.accountIsAdmin('admin-id');
+
+    expect(isAdmin).toBe(true);
+    expect(findOneStub.firstCall.args[0]?.where).toEqual({ account_id: 'admin-id', role: 'admin' });
+  });
+
+  it('returns false when the account has no admin role row', async () => {
+    sandbox.stub(AccountRoleEntity, 'findOne').resolves(null);
+
+    const isAdmin = await accountService.accountIsAdmin('regular-id');
+
+    expect(isAdmin).toBe(false);
+  });
+});

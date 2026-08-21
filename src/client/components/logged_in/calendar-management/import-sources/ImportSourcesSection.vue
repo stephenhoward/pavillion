@@ -241,21 +241,51 @@ const createUrlSource = async (url: string) => {
 };
 
 /**
+ * Build one clause per calendar-wide dedup counter that is nonzero.
+ *
+ * These counters are the only record that an incoming event was
+ * deliberately left alone — skipped because a URL-sync source owns its
+ * origin, or preserved because the origin is flagged `locally_edited` —
+ * so a run that reports zero created and zero updated still explains
+ * itself. Shared by both run-summary toasts; the file-upload and manual
+ * sync paths differ only in their leading sentence.
+ *
+ * @param summary - The finished run's wire summary
+ * @returns Zero, one, or two localized clauses
+ */
+const buildDedupClauses = (summary: ImportRunSummary): string[] => {
+  const clauses: string[] = [];
+
+  if (summary.eventsSkippedSyncManaged > 0) {
+    clauses.push(
+      t('sync_skipped_sync_managed', { skipped: summary.eventsSkippedSyncManaged }),
+    );
+  }
+  if (summary.eventsPreservedLocalEdits > 0) {
+    clauses.push(
+      t('sync_preserved_local_edits', { preserved: summary.eventsPreservedLocalEdits }),
+    );
+  }
+
+  return clauses;
+};
+
+/**
  * Build the human-readable summary for a completed file import from the run
  * counters returned by `createSourceFromFile`.
  *
- * NOTE: The API's `run` payload (see `toImportRunSummary`) currently exposes
- * only `eventsCreated` / `eventsUpdated` (plus the per-source
- * `eventsSkippedLocallyEdited` / `eventsDisappeared`). The calendar-wide dedup
- * counters the file path computes — `eventsSkippedSyncManaged` and
- * `eventsPreservedLocalEdits` — are dropped by the wire DTO, so they cannot be
- * surfaced here yet. Wiring them through is a backend follow-up.
+ * The file path computes the calendar-wide dedup counters, and the wire DTO
+ * now forwards them, so the same clauses the manual sync toast renders apply
+ * here too.
  */
 const buildImportSummary = (run: ImportRunSummary): string =>
-  t('import_success', {
-    created: run.eventsCreated,
-    updated: run.eventsUpdated,
-  });
+  [
+    t('import_success', {
+      created: run.eventsCreated,
+      updated: run.eventsUpdated,
+    }),
+    ...buildDedupClauses(run),
+  ].join(' ');
 
 /**
  * Create a file-backed import source from an uploaded .ics file. The upload
@@ -313,6 +343,27 @@ const executeRemove = async () => {
 };
 
 /**
+ * Compose the success-toast text for a finished manual sync run.
+ *
+ * Leads with the created/updated counts (or the no-changes variant when
+ * neither moved), then appends the dedup clauses.
+ *
+ * @param summary - The finished run's wire summary
+ * @returns The localized toast message
+ */
+const buildSyncMessage = (summary: ImportRunSummary): string => {
+  const hasChanges = summary.eventsCreated > 0 || summary.eventsUpdated > 0;
+  const lead = hasChanges
+    ? t('sync_success', {
+      created: summary.eventsCreated,
+      updated: summary.eventsUpdated,
+    })
+    : t('sync_success_no_changes');
+
+  return [lead, ...buildDedupClauses(summary)].join(' ');
+};
+
+/**
  * Trigger a manual sync for a verified source. Surfaces results via
  * toast notifications and refreshes the row's timestamp/status on
  * success. Also emits `sync-requested` for parent observability (kept
@@ -339,18 +390,7 @@ const onSync = async (source: ImportSource) => {
       console.warn('Sync refresh failed', refreshErr);
     }
 
-    const hasChanges = summary.eventsCreated > 0 || summary.eventsUpdated > 0;
-    if (hasChanges) {
-      toast.success(
-        t('sync_success', {
-          created: summary.eventsCreated,
-          updated: summary.eventsUpdated,
-        }),
-      );
-    }
-    else {
-      toast.success(t('sync_success_no_changes'));
-    }
+    toast.success(buildSyncMessage(summary));
   }
   catch (err) {
     console.error('Failed to sync import source', err);

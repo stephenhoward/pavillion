@@ -4,6 +4,7 @@ import express, { Application } from 'express';
 import supertest from 'supertest';
 
 import { Calendar } from '@/common/model/calendar';
+import { CalendarNotFoundError } from '@/common/exceptions/calendar';
 import { WidgetConfig } from '@/common/model/widget_config';
 import CalendarInterface from '@/server/calendar/interface';
 import WidgetDomainService from '@/server/calendar/service/widget_domain';
@@ -217,7 +218,10 @@ describe('Widget API Routes', () => {
       const getCalendarStub = mockInterface.getCalendarByName as sinon.SinonStub;
       const getCalendarForWidgetStub = mockInterface.getCalendarForWidget as sinon.SinonStub;
       getCalendarStub.resolves(null);
-      getCalendarForWidgetStub.resolves(null);
+      // The real interface signals a missing calendar by throwing, never by
+      // resolving null; stubbing a null resolution here would pin a branch
+      // that cannot occur in production.
+      getCalendarForWidgetStub.rejects(new CalendarNotFoundError());
 
       const response = await supertest(app)
         .get('/api/widget/v1/calendars/nonexistent')
@@ -226,11 +230,12 @@ describe('Widget API Routes', () => {
 
       expect(response.body).toHaveProperty('error');
       expect(response.body.error).toContain('not found');
+      expect(response.body.errorName).toBe('CalendarNotFoundError');
     });
   });
 
-  describe('Subscription gating for widget data', () => {
-    it('should return 402 when calendar owner lacks subscription', async () => {
+  describe('Funding gating for widget data', () => {
+    it('should return 402 when calendar owner lacks a funding plan', async () => {
       const getCalendarByNameStub = mockInterface.getCalendarByName as sinon.SinonStub;
       getCalendarByNameStub.resolves(calendar);
 
@@ -274,7 +279,7 @@ describe('Widget API Routes', () => {
       expect(response.headers['cache-control']).toBe('no-store');
     });
 
-    it('should serve data when calendar owner has active subscription', async () => {
+    it('should serve data when calendar owner has an active funding plan', async () => {
       const getCalendarByNameStub = mockInterface.getCalendarByName as sinon.SinonStub;
       getCalendarByNameStub.resolves(calendar);
 
@@ -367,7 +372,7 @@ describe('Widget API Routes', () => {
       expect(varyHeader).toContain('Origin');
     });
 
-    it('should set Cache-Control: no-store on 402 (subscription required) response', async () => {
+    it('should set Cache-Control: no-store on 402 (funding required) response', async () => {
       const getCalendarByNameStub = mockInterface.getCalendarByName as sinon.SinonStub;
       getCalendarByNameStub.resolves(calendar);
 

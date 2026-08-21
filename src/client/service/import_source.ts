@@ -47,6 +47,17 @@ export type ImportRunSummary = {
   eventsUpdated: number;
   eventsSkippedLocallyEdited: number;
   eventsDisappeared: number;
+  /**
+   * Calendar-wide dedup only: events skipped because a URL-sync source already
+   * owns their origin. Always present on the wire (0 on the per-source path).
+   */
+  eventsSkippedSyncManaged: number;
+  /**
+   * Calendar-wide dedup only: events left untouched because their origin is
+   * flagged `locally_edited`. Always present on the wire (0 on the per-source
+   * path).
+   */
+  eventsPreservedLocalEdits: number;
   errorMessage: string | null;
 };
 

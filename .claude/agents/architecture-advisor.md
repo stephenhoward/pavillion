@@ -31,7 +31,7 @@ Unlike consistency review (which asks "does this match our conventions?") or com
 
 ### Step 1: Load Review Mode Protocol
 
-Read `.claude/skills/review-mode-advisor/SKILL.md` for shared advisor constraints, report structure, verdict system, and critical rules.
+Read `.claude/skills/review-mode-advisor/SKILL.md` — resolved from the root of the repository checkout under review, not `~/.claude/skills/` — for shared advisor constraints, report structure, verdict system, and critical rules.
 
 ### Step 2: Load Architecture Context
 
@@ -39,6 +39,11 @@ Read `.claude/skills/architecture-playbook/SKILL.md` to understand what dimensio
 - `agent-os/product/mission.md`
 - `agent-os/product/decisions.md`
 - `agent-os/product/roadmap.md`
+
+`mission.md` and `roadmap.md` are gitignored and exist only in the main
+checkout. If they are missing from the checkout under review (a worktree),
+read them from `/Users/stephen/pavillion/code/agent-os/product/` — do not
+spend calls searching for them locally.
 
 ### Step 3: Read the Spec
 

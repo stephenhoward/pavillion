@@ -5,13 +5,10 @@
   "load_error": "Failed to load funding information. Please try again.",
 
   "no_funding_plan": "No Active Funding Plan",
-  "no_funding_plan_description": "Subscribe to support this instance and access premium features.",
-  "no_plan_redirect": "To start a funding plan, go to any calendar you own and open the Funding tab.",
+  "no_plan_redirect": "To start a funding plan and support this instance, open the Funding tab on any calendar you own.",
   "monthly_option": "Monthly",
   "yearly_option": "Yearly",
-  "subscribe_button": "Subscribe Now",
 
-  "subscribe_title": "Choose Your Funding Plan",
   "select_provider": "Payment Method",
   "select_cycle": "Billing Cycle",
   "billing_cycle_monthly": "Monthly",
@@ -23,11 +20,11 @@
   "yearly_discount_note": "Save {{percent}}% with annual billing",
   "suggested_amount": "Suggested: {{amount}}",
   "select_provider_error": "Please select a payment method.",
-  "confirm_subscribe_button": "Confirm & Subscribe",
+  "confirm_contribution_button": "Confirm Contribution",
   "cancel_button": "Cancel",
 
-  "subscribe_success": "Funding plan created successfully!",
-  "subscribe_error": "Failed to create funding plan. Please try again.",
+  "plan_started_success": "Thank you for supporting this instance. Your funding plan is active.",
+  "plan_start_error": "Failed to start your funding plan. Please try again.",
 
   "checkout_done_button": "Done",
   "checkout_try_again_button": "Try Again",
@@ -45,25 +42,25 @@
   "status_cancelled": "Cancelled",
 
   "cancellation_info": "Your funding plan will remain active until {{date}}",
-  "past_due_warning": "Your payment failed. Please update your payment method to keep your funding plan active.",
-  "suspended_message": "Your funding plan has been suspended due to payment failure. Please contact support.",
+  "past_due_warning": "Your payment didn't go through. Update your payment method to keep supporting this instance.",
+  "suspended_message": "Your funding plan is suspended because payment kept failing. Please contact support.",
 
   "manage_payment_button": "Manage Payment Method",
-  "cancel_funding_plan_button": "Cancel Funding Plan",
-  "cancel_confirm": "Are you sure you want to cancel your funding plan? You will retain access until the end of your billing period.",
-  "cancel_success": "Funding plan cancelled successfully. You will retain access until the end of your billing period.",
+  "cancel_funding_plan_button": "Cancel Plan",
+  "cancel_confirm": "Cancel your funding plan? Your subscription ends at the close of the current billing period, and you'll keep extended features until then. Your calendars stay up either way.",
+  "cancel_success": "Funding plan cancelled. You'll keep extended features until the end of your billing period.",
   "cancel_error": "Failed to cancel funding plan. Please try again.",
 
   "portal_error": "Failed to access billing portal. Please try again.",
 
   "funding_disabled": "Funding is not currently enabled on this instance.",
 
-  "subscribe_to_fund_title": "Enable Calendar Features",
-  "subscribe_to_fund_description": "These features are available when you contribute to {{instanceName}}. Your contribution helps sustain this service for everyone.",
+  "extended_features_title": "Extended Features",
+  "extended_features_description": "Extended features are a thank-you to supporters. Start a funding plan to unlock them — and help keep {{instanceName}} running for everyone.",
 
   "redirect_message": "Redirecting to payment provider...",
   "processing_message": "Processing your payment...",
-  "funded_calendars_title": "Funded Calendars",
-  "no_funded_calendars": "No calendars are currently funded under this plan.",
-  "funded_calendar_amount": "{{amount}} per billing cycle"
+  "covered_calendars_title": "Calendars on This Plan",
+  "no_covered_calendars": "No calendars are covered by this plan yet.",
+  "covered_calendar_amount": "{{amount}} per billing cycle"
 }

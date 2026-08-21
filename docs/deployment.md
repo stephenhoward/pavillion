@@ -305,6 +305,33 @@ chmod 600 secrets/*.txt
 | 443 | Caddy | HTTPS (standalone mode only, automatic Let's Encrypt) |
 | 5432 | PostgreSQL | Database (internal only, not exposed by default) |
 
+## Database Connection Limits
+
+Pavillion bounds how long a single request can hold a database connection, so that
+a slow query or a stalled outbound call cannot exhaust the connection pool and take
+the rest of the instance down with it. The application applies these limits to every
+connection it opens, using the `database.pool` and `database.dialectOptions` settings
+described in [Configuration Reference](configuration.md). The bundled PostgreSQL
+service needs no extra setup.
+
+If you run Pavillion against an external or managed PostgreSQL, consider setting the
+same limits on the database role as well. Role-level limits apply to any session that
+authenticates as that role, including one opened by a version of the application that
+somehow lacks the configuration:
+
+```sql
+ALTER ROLE pavillion SET statement_timeout = '60s';
+ALTER ROLE pavillion SET idle_in_transaction_session_timeout = '60s';
+```
+
+Run this as a user with permission to alter the role. Some managed providers do not
+grant it; that is fine, the application-level limits still apply. Do not set these on
+a superuser or migration role — schema changes on large tables can legitimately run
+longer than the limits allow.
+
+If your provider caps concurrent connections below the pool's `max` (10 by default),
+lower `database.pool.max` in `config/local.yaml` to stay under the cap.
+
 ## Volume Reference
 
 | Volume | Container Path | Description |

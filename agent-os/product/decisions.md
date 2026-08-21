@@ -1,6 +1,6 @@
 # Product Decisions Log
 
-> Last Updated: 2026-08-08
+> Last Updated: 2026-08-20
 > Version: 2.3.0
 > Override Priority: Highest
 
@@ -39,8 +39,8 @@ Supersession is the exception, because it retires a decision rather than refinin
 ### DEC-007: Community Funding Model and Stripe Product Choice
 - **File:** [decisions/dec-007-community-funding-model.md](decisions/dec-007-community-funding-model.md)
 - **Date:** 2026-03-15 · **Status:** Accepted
-- **Decision:** Voluntary "funding plans" (NPR/Wikipedia model) using Stripe Embedded Checkout — instance admins enter their own Stripe keys; not Stripe Connect. Term "funding plan" used in place of "subscription" to avoid ActivityPub terminology collision.
-- **Consult when:** Implementing or modifying payment/billing flows; configuring Stripe; CSP changes for payment iframes; deciding terminology around funding/subscription/payment; questions about why we don't use Connect OAuth.
+- **Decision:** Voluntary "funding plans" (NPR/Wikipedia model, applied instance-inward: calendar owners support the instance operator, who keeps the service online) using Stripe Embedded Checkout — instance admins enter their own Stripe keys; not Stripe Connect. Stripe is the only provider in v1; PayPal is descoped, its scaffolding left inert and hidden from the admin UI. Vocabulary: the instance is always the recipient of support and calendars are "covered by" a plan, never "funded" — a rule that binds enum values and identifiers as much as prose, so the single-calendar status union is `'admin_exempt' | 'grant' | 'covered' | 'not_covered'`; "funding plan" is the product noun and "subscription" is reserved for payment-mechanics prose and the provider boundary; the access-gating platform is "funding access", with three bounded identifier exceptions (`SubscriptionRequiredError` as the legacy wire exception, the Stripe-mirroring provider adapter names, and the bulk admin `'subscribed'` enum).
+- **Consult when:** Implementing or modifying payment/billing flows; configuring Stripe; adding or re-enabling a payment provider; CSP changes for payment iframes; naming anything in the funding or access-gating vocabulary; adding or renaming a funding status value, enum member, identifier or CSS class that describes how a calendar relates to a plan; deciding terminology around funding/subscription/payment/entitlement; distinguishing the display status from the funding-access gate; questions about why we don't use Connect OAuth, or why PayPal code exists but is unreachable.
 
 ### DEC-009: ICS Import Funding-Gate Posture
 - **File:** [decisions/dec-009-ics-import-funding-gate-posture.md](decisions/dec-009-ics-import-funding-gate-posture.md)
@@ -53,7 +53,7 @@ Supersession is the exception, because it retires a decision rather than refinin
 - **File:** [decisions/dec-011-federated-value-boundary.md](decisions/dec-011-federated-value-boundary.md)
 - **Date:** 2026-05-16 · **Status:** Accepted
 - **Decision:** (1) ICS import is exclusively organizer migration tooling — not a curator aggregation surface. (2) Curator aggregation operates via federation only (Pavillion calendars + other AP event platforms); no roadmap path for non-federated source aggregation. (3) Features that bridge to non-federated systems (inbound or outbound) are funding-gated under the **federated value boundary principle**; in-network features are free.
-- **Consult when:** Classifying any feature as free vs funding-gated; designing aggregation features; ICS import scope work; questions about what curators do in Pavillion's model; deciding whether an inbound/outbound integration is in-network or platform-bridge; any feature touching outbound feeds, third-party APIs, or hosted-provider integrations.
+- **Consult when:** Classifying any feature as free vs funding-gated; adding an entry to the funding-gated feature registry (`FUNDING_GATED_FEATURES`); designing aggregation features; ICS import scope work; questions about what curators do in Pavillion's model; deciding whether an inbound/outbound integration is in-network or platform-bridge; any feature touching outbound feeds, third-party APIs, or hosted-provider integrations.
 
 ---
 

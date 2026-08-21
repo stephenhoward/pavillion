@@ -17,6 +17,12 @@ Three connected scope decisions:
 
 3. **Advanced ICS sync (background polling, hosted-provider OAuth, mirror mode) remains funding-gated, but the rationale is rewritten.** DEC-009 framed this as operational-cost gating. This decision regates it under the *federated value boundary principle*: features that maintain ongoing integrations with non-federated systems — inbound (Google Calendar OAuth, Outlook/M365, iCloud, ICS polling of non-federated sources) or outbound (ICS feed export, third-party read API, advanced widget embedding) — are platform-bridge services, structurally distinct from in-network features. Operational cost remains a secondary contributing concern but is no longer the primary justification.
 
+## Implementation Surface
+
+The boundary's implementation surface is the funding-gated feature registry, `FUNDING_GATED_FEATURES` in `src/common/model/funding-plan.ts`. Every funding-gated feature is an entry in that const map, and every entry carries a `boundaryRationale` naming which side of this boundary the feature sits on and why. The registry is the single place where the in-network/platform-bridge classification is recorded in code, so an unclassifiable feature cannot be gated by accident: a key with no defensible boundary rationale does not belong in the map.
+
+The funding domain owns both the gate decision and the vocabulary of feature keys. Feature domains declare nothing about funding, hold no plan state, and read none — they pass a registry key to `FundingInterface` and act on the answer ([DEC-003](dec-003-domain-driven-architecture.md)). Gating a new feature is therefore one registry entry plus one call, never funding logic grown inside the feature's own domain.
+
 ## Context
 
 DEC-009 was written when Facebook event import was the planned vector for community aggregation from non-federated platforms. Subsequent investigation has confirmed Facebook import is infeasible due to platform constraints Facebook has imposed. This invalidates DEC-009's comparative framing, which positioned ICS import (free, personal migration) against Facebook import (funding-gated, community aggregation) as two ends of a use-case spectrum. With Facebook removed, that spectrum collapses, and the curator aggregation model needs to be restated without reference to non-federated platforms.
@@ -59,6 +65,7 @@ Three reasons drove this revision:
 - ICS import scope is clear: organizer migration tool, full stop — no aggregation use case attached
 - Roadmap v5 Phase 1 has a defensible decision-level foundation
 - The boundary principle gives every future inbound/outbound feature a deterministic free/gated classification, reducing future scope debates
+- The classification is recorded in code per feature (registry `boundaryRationale`), so the boundary stays reviewable in diffs rather than living only in this document
 
 **Negative:**
 - Reading DEC-009 now requires also reading DEC-011 to understand which paragraphs are superseded (standard cost of the supersession convention)

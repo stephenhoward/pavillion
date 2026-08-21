@@ -176,12 +176,33 @@ database:
   username: pavillion     # Database user
   # password: (use environment variable DB_PASSWORD)
   logging: false          # Set to true to log SQL queries
+```
+
+#### Connection pool and session limits
+
+Pavillion ships explicit values for these; the defaults below are what runs unless
+you override them. Override in `config/local.yaml` if your database imposes a lower
+connection limit than the pool asks for.
+
+```yaml
+database:
   pool:
     max: 10               # Maximum connections in pool
-    min: 2                # Minimum connections in pool
-    acquire: 30000        # Max time (ms) to acquire connection
-    idle: 10000           # Max time (ms) connection can be idle
+    min: 0                # Minimum connections held open when idle
+    acquire: 30000        # Max time (ms) a request waits for a connection
+    idle: 10000           # Max time (ms) a connection sits unused before release
+  dialectOptions:         # PostgreSQL only; ignored by SQLite
+    statement_timeout: 60000                      # Max ms for a single query
+    idle_in_transaction_session_timeout: 60000    # Max ms a transaction may sit idle
 ```
+
+The pool is shared by the whole application, so these values decide how many
+requests can be in flight against the database at once. The two `dialectOptions`
+timeouts bound how long any one request can hold its connection: `statement_timeout`
+caps a query blocked on a row lock, and `idle_in_transaction_session_timeout` caps a
+transaction parked on a slow outbound call such as a payment provider request.
+Database migrations clear both for the duration of their own transaction, so schema
+changes on large tables are not cut short.
 
 ### Host Configuration
 

@@ -9,10 +9,10 @@ import { FundingPlan } from '@/common/model/funding-plan';
 import type { ProviderInfo } from '@/server/funding/service/funding';
 import { testApp } from '@/server/common/test/lib/express';
 
-describe('User Subscription API Routes', () => {
+describe('User Funding Plan API Routes', () => {
   let router: express.Router;
   let service: FundingService;
-  let subscriptionHandlers: FundingPlanRoutes;
+  let fundingPlanHandlers: FundingPlanRoutes;
   let sandbox: sinon.SinonSandbox;
   let mockAccount: Account;
 
@@ -25,7 +25,7 @@ describe('User Subscription API Routes', () => {
     service = new FundingService(eventBus);
 
     // Create handlers
-    subscriptionHandlers = new FundingPlanRoutes(service);
+    fundingPlanHandlers = new FundingPlanRoutes(service);
 
     // Create mock account
     mockAccount = new Account('test-account-id');
@@ -65,7 +65,7 @@ describe('User Subscription API Routes', () => {
       router.get('/handler', (req: Request, res: Response, next) => {
         req.user = mockAccount;
         next();
-      }, subscriptionHandlers.getOptions.bind(subscriptionHandlers));
+      }, fundingPlanHandlers.getOptions.bind(fundingPlanHandlers));
 
       const response = await request(testApp(router))
         .get('/handler')
@@ -114,7 +114,7 @@ describe('User Subscription API Routes', () => {
       router.get('/handler', (req: Request, res: Response, next) => {
         req.user = mockAccount;
         next();
-      }, subscriptionHandlers.getOptions.bind(subscriptionHandlers));
+      }, fundingPlanHandlers.getOptions.bind(fundingPlanHandlers));
 
       const response = await request(testApp(router))
         .get('/handler')
@@ -146,7 +146,7 @@ describe('User Subscription API Routes', () => {
       router.get('/handler', (req: Request, res: Response, next) => {
         req.user = mockAccount;
         next();
-      }, subscriptionHandlers.getOptions.bind(subscriptionHandlers));
+      }, fundingPlanHandlers.getOptions.bind(fundingPlanHandlers));
 
       const response = await request(testApp(router))
         .get('/handler')
@@ -178,7 +178,7 @@ describe('User Subscription API Routes', () => {
       router.get('/handler', (req: Request, res: Response, next) => {
         req.user = mockAccount;
         next();
-      }, subscriptionHandlers.getOptions.bind(subscriptionHandlers));
+      }, fundingPlanHandlers.getOptions.bind(fundingPlanHandlers));
 
       const response = await request(testApp(router))
         .get('/handler')
@@ -221,7 +221,7 @@ describe('User Subscription API Routes', () => {
       router.get('/handler', (req: Request, res: Response, next) => {
         req.user = mockAccount;
         next();
-      }, subscriptionHandlers.getOptions.bind(subscriptionHandlers));
+      }, fundingPlanHandlers.getOptions.bind(fundingPlanHandlers));
 
       const response = await request(testApp(router))
         .get('/handler')
@@ -259,7 +259,7 @@ describe('User Subscription API Routes', () => {
       router.get('/handler', (req: Request, res: Response, next) => {
         req.user = mockAccount;
         next();
-      }, subscriptionHandlers.getOptions.bind(subscriptionHandlers));
+      }, fundingPlanHandlers.getOptions.bind(fundingPlanHandlers));
 
       const response = await request(testApp(router))
         .get('/handler')
@@ -290,7 +290,7 @@ describe('User Subscription API Routes', () => {
       router.get('/handler', (req: Request, res: Response, next) => {
         req.user = mockAccount;
         next();
-      }, subscriptionHandlers.getOptions.bind(subscriptionHandlers));
+      }, fundingPlanHandlers.getOptions.bind(fundingPlanHandlers));
 
       const response = await request(testApp(router))
         .get('/handler')
@@ -321,7 +321,7 @@ describe('User Subscription API Routes', () => {
       router.get('/handler', (req: Request, res: Response, next) => {
         req.user = mockAccount;
         next();
-      }, subscriptionHandlers.getOptions.bind(subscriptionHandlers));
+      }, fundingPlanHandlers.getOptions.bind(fundingPlanHandlers));
 
       const response = await request(testApp(router))
         .get('/handler')
@@ -332,22 +332,22 @@ describe('User Subscription API Routes', () => {
   });
 
   describe('GET /status', () => {
-    it('should return current subscription status', async () => {
-      const mockSubscription = new FundingPlan('sub-1');
-      mockSubscription.accountId = 'test-account-id';
-      mockSubscription.status = 'active';
-      mockSubscription.billingCycle = 'yearly';
-      mockSubscription.amount = 10000000;
-      mockSubscription.currency = 'USD';
-      mockSubscription.currentPeriodStart = new Date('2025-01-01');
-      mockSubscription.currentPeriodEnd = new Date('2026-01-01');
+    it('should return current funding plan status', async () => {
+      const mockPlan = new FundingPlan('sub-1');
+      mockPlan.accountId = 'test-account-id';
+      mockPlan.status = 'active';
+      mockPlan.billingCycle = 'yearly';
+      mockPlan.amount = 10000000;
+      mockPlan.currency = 'USD';
+      mockPlan.currentPeriodStart = new Date('2025-01-01');
+      mockPlan.currentPeriodEnd = new Date('2026-01-01');
 
-      sandbox.stub(service, 'getStatus').resolves(mockSubscription);
+      sandbox.stub(service, 'getStatus').resolves(mockPlan);
 
       router.get('/handler', (req: Request, res: Response, next) => {
         req.user = mockAccount;
         next();
-      }, subscriptionHandlers.getStatus.bind(subscriptionHandlers));
+      }, fundingPlanHandlers.getStatus.bind(fundingPlanHandlers));
 
       const response = await request(testApp(router))
         .get('/handler')
@@ -364,18 +364,18 @@ describe('User Subscription API Routes', () => {
   });
 
   describe('POST /cancel', () => {
-    it('should mark subscription for end-of-period cancellation', async () => {
-      const mockSubscription = new FundingPlan('sub-1');
-      mockSubscription.accountId = 'test-account-id';
-      mockSubscription.status = 'active';
+    it('should mark funding plan for end-of-period cancellation', async () => {
+      const mockPlan = new FundingPlan('sub-1');
+      mockPlan.accountId = 'test-account-id';
+      mockPlan.status = 'active';
 
-      const getStatusStub = sandbox.stub(service, 'getStatus').resolves(mockSubscription);
+      const getStatusStub = sandbox.stub(service, 'getStatus').resolves(mockPlan);
       const cancelStub = sandbox.stub(service, 'cancel').resolves();
 
       router.post('/handler', (req: Request, res: Response, next) => {
         req.user = mockAccount;
         next();
-      }, subscriptionHandlers.cancel.bind(subscriptionHandlers));
+      }, fundingPlanHandlers.cancel.bind(fundingPlanHandlers));
 
       const response = await request(testApp(router))
         .post('/handler')
@@ -395,7 +395,7 @@ describe('User Subscription API Routes', () => {
       router.get('/handler', (req: Request, res: Response, next) => {
         req.user = mockAccount;
         next();
-      }, subscriptionHandlers.getPortal.bind(subscriptionHandlers));
+      }, fundingPlanHandlers.getPortal.bind(fundingPlanHandlers));
 
       const response = await request(testApp(router))
         .get('/handler')
@@ -421,9 +421,9 @@ describe('User Subscription API Routes', () => {
 
       // Test without adding req.user - handlers should return 401
       // Note: /options is NOT tested here as it may be public
-      router.get('/handler-status', subscriptionHandlers.getStatus.bind(subscriptionHandlers));
-      router.post('/handler-cancel', subscriptionHandlers.cancel.bind(subscriptionHandlers));
-      router.get('/handler-portal', subscriptionHandlers.getPortal.bind(subscriptionHandlers));
+      router.get('/handler-status', fundingPlanHandlers.getStatus.bind(fundingPlanHandlers));
+      router.post('/handler-cancel', fundingPlanHandlers.cancel.bind(fundingPlanHandlers));
+      router.get('/handler-portal', fundingPlanHandlers.getPortal.bind(fundingPlanHandlers));
 
       await request(testApp(router))
         .get('/handler-status')

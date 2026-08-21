@@ -21,6 +21,7 @@ import {
   InvalidSessionIdError,
   WebhookSignatureError,
   FundingPlanNotFoundError,
+  FundingAccessIndeterminateError,
 } from '@/common/exceptions/funding';
 import { ValidationError } from '@/common/exceptions/base';
 import { v4 as uuidv4 } from 'uuid';
@@ -35,6 +36,9 @@ describe('FundingService', () => {
     calendarExists: sinon.SinonStub;
     getCalendarOwnerAccountId: sinon.SinonStub;
     getCalendar: sinon.SinonStub;
+  };
+  let mockAccountsInterface: {
+    accountIsAdmin: sinon.SinonStub;
   };
   beforeAll(async () => {
     // Sync database schema before running tests
@@ -54,6 +58,12 @@ describe('FundingService', () => {
       getCalendar: sandbox.stub().resolves(null),
     };
     service.setCalendarInterface(mockCalendarInterface as any);
+
+    // Create mock AccountsInterface and inject it
+    mockAccountsInterface = {
+      accountIsAdmin: sandbox.stub().resolves(false),
+    };
+    service.setAccountsInterface(mockAccountsInterface as any);
   });
 
   afterEach(() => {
@@ -61,7 +71,7 @@ describe('FundingService', () => {
   });
 
   describe('getSettings', () => {
-    it('should return instance subscription settings', async () => {
+    it('should return instance funding settings', async () => {
       const settingsId = uuidv4();
       const mockEntity = {
         id: settingsId,
@@ -130,10 +140,10 @@ describe('FundingService', () => {
   });
 
   describe('cancel', () => {
-    it('should mark subscription for end-of-period cancellation', async () => {
-      const subscriptionId = uuidv4();
+    it('should mark funding plan for end-of-period cancellation', async () => {
+      const fundingPlanId = uuidv4();
       const mockEntity = {
-        id: subscriptionId,
+        id: fundingPlanId,
         account_id: uuidv4(),
         provider_config_id: uuidv4(),
         provider_subscription_id: 'sub_123',
@@ -166,7 +176,7 @@ describe('FundingService', () => {
       sandbox.stub(ProviderConfigEntity, 'findByPk').resolves(mockProviderConfig as any);
       sandbox.stub(ProviderFactory, 'getAdapter').returns(mockAdapter as any);
 
-      await service.cancel(subscriptionId, false);
+      await service.cancel(fundingPlanId, false);
 
       expect(mockAdapter.cancelSubscription.calledWith('sub_123', false)).toBe(true);
       expect(mockEntity.status).toBe('cancelled');
@@ -175,12 +185,12 @@ describe('FundingService', () => {
   });
 
   describe('processWebhookEvent', () => {
-    it('should update subscription status based on webhook event', async () => {
-      const subscriptionId = uuidv4();
+    it('should update funding plan status based on webhook event', async () => {
+      const fundingPlanId = uuidv4();
       const providerEventId = 'evt_123';
 
       const mockEntity = {
-        id: subscriptionId,
+        id: fundingPlanId,
         account_id: uuidv4(),
         provider_config_id: uuidv4(),
         provider_subscription_id: 'sub_123',
@@ -307,9 +317,9 @@ describe('FundingService', () => {
 
   describe('status transitions', () => {
     it('should transition from active to past_due on payment failure', async () => {
-      const subscriptionId = uuidv4();
+      const fundingPlanId = uuidv4();
       const mockEntity = {
-        id: subscriptionId,
+        id: fundingPlanId,
         status: 'active',
         save: sandbox.stub().resolves(),
         toModel: function() {
@@ -342,12 +352,12 @@ describe('FundingService', () => {
     });
 
     it('should transition from past_due to suspended after grace period', async () => {
-      const subscriptionId = uuidv4();
+      const fundingPlanId = uuidv4();
       const gracePeriodDays = 7;
       const pastDueDate = new Date(Date.now() - (gracePeriodDays + 1) * 24 * 60 * 60 * 1000);
 
       const mockEntity = {
-        id: subscriptionId,
+        id: fundingPlanId,
         status: 'past_due',
         updated_at: pastDueDate,
         save: sandbox.stub().resolves(),
@@ -894,7 +904,7 @@ describe('FundingService', () => {
       expect(result).toBe(false);
     });
 
-    it('should return false if grant check errors and subscription check returns false (fail-secure)', async () => {
+    it('should return false if grant check errors and plan check returns false (fail-secure)', async () => {
       const calendarId = uuidv4();
 
       sandbox.stub(service, 'hasActiveGrant').rejects(new Error('DB error'));
@@ -905,7 +915,7 @@ describe('FundingService', () => {
       expect(result).toBe(false);
     });
 
-    it('should return false if grant check returns false and subscription check errors (fail-secure)', async () => {
+    it('should return false if grant check returns false and plan check errors (fail-secure)', async () => {
       const calendarId = uuidv4();
 
       sandbox.stub(service, 'hasActiveGrant').resolves(false);
@@ -927,7 +937,7 @@ describe('FundingService', () => {
       expect(result).toBe(false);
     });
 
-    it('should not check subscription if grant check succeeds with true', async () => {
+    it('should not check funding plan if grant check succeeds with true', async () => {
       const calendarId = uuidv4();
 
       sandbox.stub(service, 'hasActiveGrant').resolves(true);
@@ -936,6 +946,571 @@ describe('FundingService', () => {
       await service.hasFundingAccess(calendarId);
 
       expect(subStub.called).toBe(false);
+    });
+  });
+
+  describe('checkFundingAccess', () => {
+    const feature = 'widget_embedding';
+    const HOUR = 60 * 60 * 1000;
+    const DAY = 24 * HOUR;
+    let calendarId: string;
+    let ownerId: string;
+
+    beforeEach(() => {
+      calendarId = uuidv4();
+      ownerId = uuidv4();
+      mockCalendarInterface.getCalendarOwnerAccountId.resolves(ownerId);
+    });
+
+    /** Stub the single instance funding-settings row. */
+    function stubFundingEnabled(enabled: boolean): sinon.SinonStub {
+      return sandbox.stub(FundingSettingsEntity, 'findOne').resolves({
+        id: uuidv4(),
+        enabled,
+        monthly_price: 1000000,
+        yearly_price: 10000000,
+        currency: 'USD',
+        pay_what_you_can: false,
+        grace_period_days: 7,
+        toModel: function() {
+          const settings = new FundingSettings(this.id);
+          settings.enabled = this.enabled;
+          settings.monthlyPrice = this.monthly_price;
+          settings.yearlyPrice = this.yearly_price;
+          settings.currency = this.currency;
+          settings.payWhatYouCan = this.pay_what_you_can;
+          settings.gracePeriodDays = this.grace_period_days;
+          return settings;
+        },
+      } as any);
+    }
+
+    /**
+     * Stub the accounts-domain admin check for the calendar owner. Returns the
+     * stub so tests can assert the accounts domain was never consulted at all.
+     */
+    function stubOwnerIsAdmin(isAdmin: boolean): sinon.SinonStub {
+      mockAccountsInterface.accountIsAdmin.withArgs(ownerId).resolves(isAdmin);
+      return mockAccountsInterface.accountIsAdmin;
+    }
+
+    /** Stub the active complimentary grant lookup for the calendar. */
+    function stubGrant(hasGrant: boolean): sinon.SinonStub {
+      return sandbox.stub(ComplimentaryGrantEntity, 'findOne').resolves(
+        hasGrant ? { calendar_id: calendarId, revoked_at: null, expires_at: null } as any : null,
+      );
+    }
+
+    /**
+     * Stub the calendar's funding-plan allocation. Pass null for no allocation,
+     * or plan overrides to shape the funding plan the allocation belongs to.
+     */
+    function stubAllocation(
+      plan: { status?: string; cancelled_at?: Date | null; current_period_end?: Date | null } | null,
+    ): sinon.SinonStub {
+      if (plan === null) {
+        return sandbox.stub(CalendarFundingPlanEntity, 'findOne').resolves(null);
+      }
+
+      return sandbox.stub(CalendarFundingPlanEntity, 'findOne').resolves({
+        calendar_id: calendarId,
+        end_time: null,
+        fundingPlan: {
+          status: 'active',
+          cancelled_at: null,
+          current_period_end: new Date(Date.now() + 30 * DAY),
+          ...plan,
+        },
+      } as any);
+    }
+
+    describe('invariant 1: funding not enabled on the instance', () => {
+      it('should open the gate without consulting any funding state', async () => {
+        stubFundingEnabled(false);
+        const grantStub = stubGrant(false);
+        const allocationStub = stubAllocation(null);
+        const adminStub = stubOwnerIsAdmin(false);
+
+        const allowed = await service.checkFundingAccess(calendarId, feature);
+
+        expect(allowed).toBe(true);
+        // Instance autonomy (DEC-001): a calendar's funding state is irrelevant
+        // when the instance operator has not turned funding on at all.
+        expect(grantStub.called).toBe(false);
+        expect(allocationStub.called).toBe(false);
+        expect(adminStub.called).toBe(false);
+      });
+    });
+
+    describe('invariant 2: admin-exempt', () => {
+      it('should open the gate for a calendar owned by an admin', async () => {
+        stubFundingEnabled(true);
+        stubOwnerIsAdmin(true);
+        const grantStub = stubGrant(false);
+        const allocationStub = stubAllocation(null);
+
+        const allowed = await service.checkFundingAccess(calendarId, feature);
+
+        expect(allowed).toBe(true);
+        // Admin exemption is decided before any funding state is read
+        expect(grantStub.called).toBe(false);
+        expect(allocationStub.called).toBe(false);
+      });
+
+      it('should fall through to funding state when the owner is not an admin', async () => {
+        stubFundingEnabled(true);
+        stubOwnerIsAdmin(false);
+        stubGrant(false);
+        const allocationStub = stubAllocation(null);
+
+        const allowed = await service.checkFundingAccess(calendarId, feature);
+
+        expect(allowed).toBe(false);
+        expect(allocationStub.called).toBe(true);
+      });
+
+      it('should fall through to funding state when the calendar has no resolvable owner', async () => {
+        stubFundingEnabled(true);
+        mockCalendarInterface.getCalendarOwnerAccountId.resolves(null);
+        const adminStub = stubOwnerIsAdmin(true);
+        stubGrant(true);
+
+        const allowed = await service.checkFundingAccess(calendarId, feature);
+
+        expect(allowed).toBe(true);
+        expect(adminStub.called).toBe(false);
+      });
+    });
+
+    describe('invariant 3: active plan or grant', () => {
+      it('should open the gate for an active complimentary grant', async () => {
+        stubFundingEnabled(true);
+        stubOwnerIsAdmin(false);
+        stubGrant(true);
+        const allocationStub = stubAllocation(null);
+
+        const allowed = await service.checkFundingAccess(calendarId, feature);
+
+        expect(allowed).toBe(true);
+        expect(allocationStub.called).toBe(false);
+      });
+
+      it('should open the gate for an active funding plan allocation', async () => {
+        stubFundingEnabled(true);
+        stubOwnerIsAdmin(false);
+        stubGrant(false);
+        stubAllocation({});
+
+        const allowed = await service.checkFundingAccess(calendarId, feature);
+
+        expect(allowed).toBe(true);
+      });
+
+      it('should close the gate with neither a grant nor a funding plan allocation', async () => {
+        stubFundingEnabled(true);
+        stubOwnerIsAdmin(false);
+        stubGrant(false);
+        stubAllocation(null);
+
+        const allowed = await service.checkFundingAccess(calendarId, feature);
+
+        expect(allowed).toBe(false);
+      });
+
+      it('should close the gate once the paid-through period and its grace window have passed', async () => {
+        stubFundingEnabled(true);
+        stubOwnerIsAdmin(false);
+        stubGrant(false);
+        // The plan the missed-webhook case actually produces: a deletion that
+        // never arrived leaves status 'active' and no cancellation marker at
+        // all, so only the paid-through date can end access.
+        stubAllocation({
+          status: 'active',
+          cancelled_at: null,
+          current_period_end: new Date(Date.now() - 30 * DAY),
+        });
+
+        const allowed = await service.checkFundingAccess(calendarId, feature);
+
+        expect(allowed).toBe(false);
+      });
+
+      it('should keep the gate open inside the grace window after the paid-through date', async () => {
+        stubFundingEnabled(true);
+        stubOwnerIsAdmin(false);
+        stubGrant(false);
+        // Two days past the period end with a 7-day grace window: a customer
+        // mid-dunning, or a renewal whose webhook has not landed yet, keeps
+        // access until the instance's own grace period runs out.
+        stubAllocation({
+          status: 'active',
+          cancelled_at: null,
+          current_period_end: new Date(Date.now() - 2 * DAY),
+        });
+
+        const allowed = await service.checkFundingAccess(calendarId, feature);
+
+        expect(allowed).toBe(true);
+      });
+
+      /**
+       * The three cases below pair a past or future cancelled_at with an
+       * active status to characterise planAccessExpiry as a pure function of
+       * the plan's dates. That combination is not reachable through today's
+       * writers — cancel() and the status-transition hook only ever write
+       * cancelled_at together with status 'cancelled' — so these pin the
+       * helper's arithmetic, not a live path. They become live when
+       * pv-jdot.3.1 lands a cancellation marker that leaves the plan active.
+       */
+      it('should close the gate once a recorded cancellation has passed, however long the period runs', async () => {
+        stubFundingEnabled(true);
+        stubOwnerIsAdmin(false);
+        stubGrant(false);
+        // An immediate cancellation ends access when it is recorded, even
+        // though the billing period it interrupted still has weeks to run.
+        stubAllocation({
+          status: 'active',
+          cancelled_at: new Date(Date.now() - HOUR),
+          current_period_end: new Date(Date.now() + 30 * DAY),
+        });
+
+        const allowed = await service.checkFundingAccess(calendarId, feature);
+
+        expect(allowed).toBe(false);
+      });
+
+      it('should keep the gate open until a scheduled cancellation is reached', async () => {
+        stubFundingEnabled(true);
+        stubOwnerIsAdmin(false);
+        stubGrant(false);
+        stubAllocation({
+          status: 'active',
+          cancelled_at: new Date(Date.now() + HOUR),
+          current_period_end: null,
+        });
+
+        const allowed = await service.checkFundingAccess(calendarId, feature);
+
+        expect(allowed).toBe(true);
+      });
+
+      it('should close the gate on a passed cancellation with no period end recorded', async () => {
+        stubFundingEnabled(true);
+        stubOwnerIsAdmin(false);
+        stubGrant(false);
+        stubAllocation({
+          status: 'active',
+          cancelled_at: new Date(Date.now() - HOUR),
+          current_period_end: null,
+        });
+
+        const allowed = await service.checkFundingAccess(calendarId, feature);
+
+        expect(allowed).toBe(false);
+      });
+    });
+
+    describe('invariant 4: indeterminate reads', () => {
+      it('should close every gate when the instance funding settings cannot be read', async () => {
+        sandbox.stub(FundingSettingsEntity, 'findOne').rejects(new Error('DB error'));
+        stubOwnerIsAdmin(false);
+        stubGrant(true);
+
+        // Still fail-closed — but signalled by throwing rather than by
+        // returning false, because a consumer that answers this one with 402
+        // tells an operator their community owes money to fix our outage.
+        // A bare boolean cannot carry that distinction.
+        await expect(service.checkFundingAccess(calendarId, feature))
+          .rejects.toThrow(FundingAccessIndeterminateError);
+      });
+
+      it('should name the indeterminate denial distinctly from any other failure', async () => {
+        sandbox.stub(FundingSettingsEntity, 'findOne').rejects(new Error('DB error'));
+
+        // errorName is what crosses the wire, so it is what a consumer can
+        // key on to keep this out of the 402 path.
+        await expect(service.checkFundingAccess(calendarId, feature))
+          .rejects.toMatchObject({ name: 'FundingAccessIndeterminateError' });
+      });
+
+      it('should close the gate rather than exempt an admin when no calendar interface is wired', async () => {
+        const unwiredService = new FundingService(eventBus);
+        stubFundingEnabled(true);
+        stubOwnerIsAdmin(true);
+        stubGrant(false);
+        stubAllocation(null);
+
+        // A construction-order guard, not a production path: the owner really
+        // may be an admin, but with no calendar domain injected this source
+        // cannot answer, and an unanswerable source never grants.
+        const allowed = await unwiredService.checkFundingAccess(calendarId, feature);
+
+        expect(allowed).toBe(false);
+      });
+
+      it('should open the gate on a determinate grant when the owner admin-role lookup fails', async () => {
+        stubFundingEnabled(true);
+        mockAccountsInterface.accountIsAdmin.rejects(new Error('DB error'));
+        stubGrant(true);
+
+        const allowed = await service.checkFundingAccess(calendarId, feature);
+
+        expect(allowed).toBe(true);
+      });
+
+      it('should open the gate on a determinate grant when the owner lookup fails', async () => {
+        stubFundingEnabled(true);
+        mockCalendarInterface.getCalendarOwnerAccountId.rejects(new Error('Calendar domain unavailable'));
+        stubGrant(true);
+
+        const allowed = await service.checkFundingAccess(calendarId, feature);
+
+        expect(allowed).toBe(true);
+      });
+
+      it('should open the gate on a determinate plan allocation when the grant lookup fails', async () => {
+        stubFundingEnabled(true);
+        stubOwnerIsAdmin(false);
+        sandbox.stub(ComplimentaryGrantEntity, 'findOne').rejects(new Error('DB error'));
+        const allocationStub = stubAllocation({});
+
+        const allowed = await service.checkFundingAccess(calendarId, feature);
+
+        // A grant read that fell over says nothing about the paid allocation
+        // sitting right next to it
+        expect(allowed).toBe(true);
+        expect(allocationStub.called).toBe(true);
+      });
+
+      it('should close the gate when the grant lookup fails and there is no plan allocation', async () => {
+        stubFundingEnabled(true);
+        stubOwnerIsAdmin(false);
+        sandbox.stub(ComplimentaryGrantEntity, 'findOne').rejects(new Error('DB error'));
+        stubAllocation(null);
+
+        const allowed = await service.checkFundingAccess(calendarId, feature);
+
+        expect(allowed).toBe(false);
+      });
+
+      it('should close the gate when the funding plan lookup fails', async () => {
+        stubFundingEnabled(true);
+        stubOwnerIsAdmin(false);
+        stubGrant(false);
+        sandbox.stub(CalendarFundingPlanEntity, 'findOne').rejects(new Error('DB error'));
+
+        const allowed = await service.checkFundingAccess(calendarId, feature);
+
+        expect(allowed).toBe(false);
+      });
+
+      it('should close the gate when every funding read fails', async () => {
+        stubFundingEnabled(true);
+        mockAccountsInterface.accountIsAdmin.rejects(new Error('DB error'));
+        sandbox.stub(ComplimentaryGrantEntity, 'findOne').rejects(new Error('DB error'));
+        sandbox.stub(CalendarFundingPlanEntity, 'findOne').rejects(new Error('DB error'));
+
+        const allowed = await service.checkFundingAccess(calendarId, feature);
+
+        expect(allowed).toBe(false);
+      });
+    });
+
+    describe('input validation', () => {
+      it('should reject a calendarId that is not a UUID', async () => {
+        await expect(service.checkFundingAccess('not-a-uuid', feature))
+          .rejects.toThrow(ValidationError);
+      });
+
+      it('should reject a feature key that is not in the registry', async () => {
+        await expect(service.checkFundingAccess(calendarId, 'made_up_feature' as any))
+          .rejects.toThrow(ValidationError);
+      });
+    });
+
+    describe('parity with the legacy status vocabularies', () => {
+      /**
+       * Builds the funding plan a resubscribe leaves behind, by driving a real
+       * entity through the production status-transition hook rather than
+       * asserting what we imagine that hook writes. Assigning .status is what
+       * populates previous('status'), which is what the hook reads.
+       */
+      function buildReactivatedPlan(): { status: string; cancelled_at: Date | null; current_period_end: Date | null } {
+        const plan = FundingPlanEntity.build({
+          id: uuidv4(),
+          account_id: uuidv4(),
+          provider_config_id: uuidv4(),
+          provider_subscription_id: 'sub_test',
+          provider_customer_id: 'cus_test',
+          status: 'cancelled',
+          billing_cycle: 'monthly',
+          amount: 1000000,
+          currency: 'USD',
+          current_period_start: new Date(Date.now() - DAY),
+          current_period_end: new Date(Date.now() + 30 * DAY),
+          cancelled_at: new Date(Date.now() - 10 * DAY),
+          suspended_at: null,
+        });
+
+        plan.status = 'active';
+        FundingPlanEntity.validateStatusTransition(plan);
+
+        return {
+          status: plan.status,
+          cancelled_at: plan.cancelled_at,
+          current_period_end: plan.current_period_end,
+        };
+      }
+
+      function planFor(world: { reactivated: boolean; plan: Record<string, unknown> }): Record<string, unknown> {
+        return world.reactivated ? buildReactivatedPlan() : world.plan;
+      }
+
+      /**
+       * Each world is a database state that produces one value of each status
+       * vocabulary. checkFundingAccess must reach the same allow/deny outcome
+       * the legacy widget gate reached for that state, where the legacy gate is
+       * the composite: instance enabled -> admin bypass -> hasFundingAccess.
+       *
+       * The last two worlds are the ones that give the display/gate assertion
+       * its teeth. Every world above them is decided the same way by an
+       * allocation-row lookup and by the boundary-aware predicate, so none of
+       * them can tell those two rules apart. The boundary worlds can: the
+       * allocation row is present and its plan still says 'active', and only
+       * the plan's own dates reveal that access has ended. They are therefore
+       * also the worlds where the legacy vocabularies visibly disagree with the
+       * current ones — `legacyAllowed` and `legacyPlanStatus` still say the
+       * calendar is covered — which is the divergence recorded on
+       * hasActiveFundingPlan and getPlanStatusForCalendars, not a defect here.
+       */
+      const worlds = [
+        {
+          name: 'admin-owned calendar with no funding state',
+          isAdmin: true,
+          hasGrant: false,
+          hasAllocation: false,
+          reactivated: false,
+          plan: {},
+          calendarStatus: 'admin_exempt',
+          legacyPlanStatus: undefined,
+          allowed: true,
+          legacyAllowed: true,
+        },
+        {
+          name: 'calendar with an active complimentary grant',
+          isAdmin: false,
+          hasGrant: true,
+          hasAllocation: false,
+          reactivated: false,
+          plan: {},
+          calendarStatus: 'grant',
+          legacyPlanStatus: 'grant',
+          allowed: true,
+          legacyAllowed: true,
+        },
+        {
+          name: 'calendar with an active funding plan allocation',
+          isAdmin: false,
+          hasGrant: false,
+          hasAllocation: true,
+          reactivated: false,
+          plan: {},
+          calendarStatus: 'covered',
+          legacyPlanStatus: 'subscribed',
+          allowed: true,
+          legacyAllowed: true,
+        },
+        {
+          // A plan resubscribed after cancellation. The status-transition hook
+          // clears cancelled_at on cancelled -> active, so no stale
+          // cancellation marker can deny a customer who is paying again.
+          name: 'calendar whose funding plan was reactivated after cancellation',
+          isAdmin: false,
+          hasGrant: false,
+          hasAllocation: true,
+          reactivated: true,
+          plan: {},
+          calendarStatus: 'covered',
+          legacyPlanStatus: 'subscribed',
+          allowed: true,
+          legacyAllowed: true,
+        },
+        {
+          name: 'calendar with no funding state at all',
+          isAdmin: false,
+          hasGrant: false,
+          hasAllocation: false,
+          reactivated: false,
+          plan: {},
+          calendarStatus: 'not_covered',
+          legacyPlanStatus: undefined,
+          allowed: false,
+          legacyAllowed: false,
+        },
+        {
+          // Cancellation recorded on a plan Stripe never moved off 'active' —
+          // the missed customer.subscription.deleted case. The allocation row
+          // is untouched, so nothing but cancelled_at ends access.
+          name: 'calendar whose funding plan cancellation was recorded but never applied to its status',
+          isAdmin: false,
+          hasGrant: false,
+          hasAllocation: true,
+          reactivated: false,
+          plan: { cancelled_at: new Date(Date.now() - DAY) },
+          calendarStatus: 'not_covered',
+          legacyPlanStatus: 'subscribed',
+          allowed: false,
+          legacyAllowed: true,
+        },
+        {
+          // A plan whose renewal silently never happened: still 'active', still
+          // allocated, but its paid-through date and the instance grace period
+          // are both behind us.
+          name: 'calendar whose funding plan ran past its paid-through date and grace period',
+          isAdmin: false,
+          hasGrant: false,
+          hasAllocation: true,
+          reactivated: false,
+          plan: { current_period_end: new Date(Date.now() - 30 * DAY) },
+          calendarStatus: 'not_covered',
+          legacyPlanStatus: 'subscribed',
+          allowed: false,
+          legacyAllowed: true,
+        },
+      ] as const;
+
+      for (const world of worlds) {
+        it(`should decide identically to the legacy vocabularies for a ${world.name}`, async () => {
+          stubFundingEnabled(true);
+          stubOwnerIsAdmin(world.isAdmin);
+          stubGrant(world.hasGrant);
+          stubAllocation(world.hasAllocation ? planFor(world) : null);
+          mockCalendarInterface.isCalendarOwnerById.resolves(true);
+          sandbox.stub(ComplimentaryGrantEntity, 'findAll').resolves(
+            world.hasGrant ? [{ calendar_id: calendarId } as any] : [],
+          );
+          sandbox.stub(CalendarFundingPlanEntity, 'findAll').resolves(
+            world.hasAllocation ? [{ calendar_id: calendarId } as any] : [],
+          );
+
+          // Unified single-calendar vocabulary. No longer "legacy": this and
+          // the gate now share one predicate, so this assertion is a check
+          // that the display and the decision agree, not a compatibility
+          // mapping between two different rules.
+          expect(await service.getFundingStatusForCalendar(ownerId, calendarId))
+            .toBe(world.calendarStatus);
+
+          // Legacy vocabulary 2: bulk plan status ('none' is an absent key)
+          const bulk = await service.getPlanStatusForCalendars([calendarId]);
+          expect(bulk.get(calendarId)).toBe(world.legacyPlanStatus);
+
+          // Legacy composite gate decision (calendar.ts widget gate)
+          const legacyDecision = world.isAdmin || await service.hasFundingAccess(calendarId);
+          expect(legacyDecision).toBe(world.legacyAllowed);
+
+          expect(await service.checkFundingAccess(calendarId, feature)).toBe(world.allowed);
+        });
+      }
     });
   });
 
@@ -1260,7 +1835,7 @@ describe('FundingService', () => {
       };
       sandbox.stub(ProviderFactory, 'getAdapter').returns(mockAdapter as any);
       // Stub idempotency check so processCheckoutCompleted returns early
-      // without needing full subscription/DB mocking
+      // without needing full funding-plan/DB mocking
       sandbox.stub(FundingPlanEntity, 'findOne').resolves({ id: uuidv4() } as any);
       return mockAdapter;
     }

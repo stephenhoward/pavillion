@@ -32,7 +32,7 @@ vi.mock('@/client/service/funding', () => {
         enabled: false,
       },
     ]),
-    listFundingPlans: vi.fn().mockResolvedValue({ subscriptions: [], total: 0 }),
+    listFundingPlans: vi.fn().mockResolvedValue({ fundingPlans: [], pagination: { currentPage: 1, totalPages: 0, totalCount: 0, limit: 20 } }),
   }));
 
   // Add static methods to the mock class
@@ -92,7 +92,6 @@ describe('Funding Page Wizard Integration', () => {
     wrapper = mountWithI18n({
       global: {
         stubs: {
-          PayPalConfigModal: true,
           ConfirmDisconnectModal: true,
           AddProviderWizard: true,
         },
@@ -131,7 +130,7 @@ describe('Funding Page Wizard Integration', () => {
           enabled: true,
         },
       ]),
-      listFundingPlans: vi.fn().mockResolvedValue({ subscriptions: [], total: 0 }),
+      listFundingPlans: vi.fn().mockResolvedValue({ fundingPlans: [], pagination: { currentPage: 1, totalPages: 0, totalCount: 0, limit: 20 } }),
     };
 
     vi.mocked(FundingService).mockImplementation(() => mockService as any);
@@ -139,7 +138,6 @@ describe('Funding Page Wizard Integration', () => {
     wrapper = mountWithI18n({
       global: {
         stubs: {
-          PayPalConfigModal: true,
           ConfirmDisconnectModal: true,
           AddProviderWizard: true,
         },
@@ -179,13 +177,12 @@ describe('Funding Page Wizard Integration', () => {
           enabled: false,
         },
       ]),
-      listFundingPlans: vi.fn().mockResolvedValue({ subscriptions: [], total: 0 }),
+      listFundingPlans: vi.fn().mockResolvedValue({ fundingPlans: [], pagination: { currentPage: 1, totalPages: 0, totalCount: 0, limit: 20 } }),
     } as any));
 
     wrapper = mountWithI18n({
       global: {
         stubs: {
-          PayPalConfigModal: true,
           ConfirmDisconnectModal: true,
         },
       },
@@ -214,10 +211,10 @@ describe('Funding Page Wizard Integration', () => {
     expect(wizardComponent.exists()).toBe(true);
     expect(wizardComponent.props('show')).toBe(true);
 
+    // PayPal is descoped for v1 (DEC-007), so the wizard only ever offers Stripe.
     const unconfiguredProviders = wizardComponent.props('unconfiguredProviders');
-    expect(unconfiguredProviders).toHaveLength(2);
+    expect(unconfiguredProviders).toHaveLength(1);
     expect(unconfiguredProviders[0].provider_type).toBe('stripe');
-    expect(unconfiguredProviders[1].provider_type).toBe('paypal');
   });
 
   it('updates provider list after successful wizard completion', async () => {
@@ -259,7 +256,7 @@ describe('Funding Page Wizard Integration', () => {
             enabled: false,
           },
         ]),
-      listFundingPlans: vi.fn().mockResolvedValue({ subscriptions: [], total: 0 }),
+      listFundingPlans: vi.fn().mockResolvedValue({ fundingPlans: [], pagination: { currentPage: 1, totalPages: 0, totalCount: 0, limit: 20 } }),
     };
 
     vi.mocked(FundingService).mockImplementation(() => mockService as any);
@@ -267,7 +264,6 @@ describe('Funding Page Wizard Integration', () => {
     wrapper = mountWithI18n({
       global: {
         stubs: {
-          PayPalConfigModal: true,
           ConfirmDisconnectModal: true,
         },
       },
@@ -293,7 +289,6 @@ describe('Funding Page Wizard Integration', () => {
     wrapper = mountWithI18n({
       global: {
         stubs: {
-          PayPalConfigModal: true,
           ConfirmDisconnectModal: true,
           AddProviderWizard: true,
         },
@@ -313,7 +308,6 @@ describe('Funding Page Wizard Integration', () => {
     wrapper = mountWithI18n({
       global: {
         stubs: {
-          PayPalConfigModal: true,
           ConfirmDisconnectModal: true,
         },
       },
@@ -372,7 +366,7 @@ describe('Funding Page Wizard Integration', () => {
             enabled: true,
           },
         ]),
-      listFundingPlans: vi.fn().mockResolvedValue({ subscriptions: [], total: 0 }),
+      listFundingPlans: vi.fn().mockResolvedValue({ fundingPlans: [], pagination: { currentPage: 1, totalPages: 0, totalCount: 0, limit: 20 } }),
     };
 
     vi.mocked(FundingService).mockImplementation(() => mockService as any);
@@ -380,7 +374,6 @@ describe('Funding Page Wizard Integration', () => {
     wrapper = mountWithI18n({
       global: {
         stubs: {
-          PayPalConfigModal: true,
           ConfirmDisconnectModal: true,
         },
       },
@@ -417,7 +410,7 @@ describe('Funding Page Wizard Integration', () => {
           ...overrides,
         }),
         getProviders: vi.fn().mockResolvedValue([]),
-        listFundingPlans: vi.fn().mockResolvedValue({ subscriptions: [], total: 0 }),
+        listFundingPlans: vi.fn().mockResolvedValue({ fundingPlans: [], pagination: { currentPage: 1, totalPages: 0, totalCount: 0, limit: 20 } }),
         updateSettings: vi.fn().mockResolvedValue(true),
       } as any));
 
@@ -425,7 +418,6 @@ describe('Funding Page Wizard Integration', () => {
         global: {
           plugins: [[I18NextVue, { i18next }]],
           stubs: {
-            PayPalConfigModal: true,
             ConfirmDisconnectModal: true,
             AddProviderWizard: true,
             GrantForm: true,
