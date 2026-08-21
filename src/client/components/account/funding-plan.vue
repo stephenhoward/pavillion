@@ -3,7 +3,7 @@ import { useTranslation } from 'i18next-vue';
 import i18next from 'i18next';
 import { ref, computed, onMounted } from 'vue';
 import FundingService from '@/client/service/funding';
-import type { FundedCalendarInfo } from '@/client/service/funding';
+import type { CoveredCalendarInfo } from '@/client/service/funding';
 import { useCalendarStore } from '@/client/stores/calendarStore';
 import HelpButton from '@/client/components/common/help-button.vue';
 
@@ -22,7 +22,7 @@ const errorMessage = ref('');
 // Data state
 const options = ref(null);
 const status = ref(null);
-const fundedCalendars = ref<FundedCalendarInfo[]>([]);
+const coveredCalendars = ref<CoveredCalendarInfo[]>([]);
 
 // Computed properties
 const hasFundingPlan = computed(() => status.value !== null);
@@ -43,7 +43,7 @@ const currentAmountDisplay = computed(() => {
 });
 
 /**
- * Get the display name for a funded calendar
+ * Get the display name for a covered calendar
  */
 function getCalendarName(calendarId: string): string {
   const calendar = calendarStore.getCalendarById(calendarId);
@@ -74,11 +74,11 @@ async function loadData() {
 
     if (status.value) {
       try {
-        fundedCalendars.value = await fundingService.getCalendarsInFundingPlan();
+        coveredCalendars.value = await fundingService.getCalendarsInFundingPlan();
       }
       catch (error) {
-        console.error('Failed to load funded calendars:', error);
-        fundedCalendars.value = [];
+        console.error('Failed to load covered calendars:', error);
+        coveredCalendars.value = [];
       }
     }
   }
@@ -241,16 +241,16 @@ onMounted(async () => {
         </div>
       </div>
 
-      <!-- Funded calendars list -->
-      <div v-if="hasFundingPlan" class="funded-calendars">
+      <!-- Covered calendars list -->
+      <div v-if="hasFundingPlan" class="covered-calendars">
         <h2>{{ t("covered_calendars_title") }}</h2>
 
-        <div v-if="fundedCalendars.length === 0" class="funded-calendars-empty">
+        <div v-if="coveredCalendars.length === 0" class="covered-calendars-empty">
           <p>{{ t("no_covered_calendars") }}</p>
         </div>
 
-        <ul v-else class="funded-calendars-list">
-          <li v-for="item in fundedCalendars" :key="item.calendarId" class="funded-calendar-item">
+        <ul v-else class="covered-calendars-list">
+          <li v-for="item in coveredCalendars" :key="item.calendarId" class="covered-calendar-item">
             <span class="calendar-name">{{ getCalendarName(item.calendarId) }}</span>
             <span class="calendar-amount">{{ t("covered_calendar_amount", { amount: formatCalendarAmount(item.amount) }) }}</span>
           </li>
@@ -341,19 +341,19 @@ h2 {
   padding: 2rem;
 }
 
-.funded-calendars {
-  .funded-calendars-empty {
+.covered-calendars {
+  .covered-calendars-empty {
     padding: 1rem;
     text-align: center;
     color: var(--pav-color-text-secondary);
   }
 
-  .funded-calendars-list {
+  .covered-calendars-list {
     list-style: none;
     padding: 0;
     margin: 0;
 
-    .funded-calendar-item {
+    .covered-calendar-item {
       display: flex;
       justify-content: space-between;
       align-items: center;

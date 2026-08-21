@@ -161,7 +161,7 @@ describe('FundingService allocation transactions', () => {
    * it. Asserting the option is issued is the only regression guard available
    * short of a Postgres-backed test, and the race it prevents — two parallel
    * adds each computing a total blind to the other's insert, leaving a calendar
-   * funded that nobody is billed for — is worth guarding.
+   * covered that nobody is billed for — is worth guarding.
    *
    * Ordering matters as much as the option: a refactor that reintroduced an
    * unlocked pre-transaction read and locked only a later re-read would still

@@ -125,7 +125,7 @@ export type ResolvedCalendar = {
 /**
  * Calendar funding information within a user's funding plan
  */
-export type FundedCalendarInfo = {
+export type CoveredCalendarInfo = {
   calendarId: string;
   amount: number;
   createdAt?: string;
@@ -453,9 +453,9 @@ export default class FundingService {
   /**
    * Get all calendars in the user's funding plan
    *
-   * @returns {Promise<FundedCalendarInfo[]>} List of funded calendars with amounts
+   * @returns {Promise<CoveredCalendarInfo[]>} List of covered calendars with amounts
    */
-  async getCalendarsInFundingPlan(): Promise<FundedCalendarInfo[]> {
+  async getCalendarsInFundingPlan(): Promise<CoveredCalendarInfo[]> {
     try {
       const response = await axios.get('/api/funding/v1/calendars');
       return response.data;
