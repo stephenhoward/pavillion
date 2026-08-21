@@ -1,8 +1,8 @@
 import type { FundingGatedFeature } from '@/common/model/funding-plan';
 
 /**
- * Exception thrown when a calendar is determinately unfunded and the feature
- * it is reaching for is funding-gated.
+ * Exception thrown when a calendar is determinately not covered by a funding
+ * plan and the feature it is reaching for is funding-gated.
  *
  * The feature is a FUNDING_GATED_FEATURES key rather than a free string
  * because it is wire-visible: it is echoed as the `feature` field of the 402

@@ -252,8 +252,8 @@ class CalendarService {
    * public widget read below and — via CalendarInterface — the widget-domain
    * write, so the two surfaces cannot drift apart. On the write path the
    * caller runs it after its own existence and edit-permission checks: the
-   * funding question is asked last so a "this calendar is unfunded" answer can
-   * never reveal the existence or funding state of a calendar the caller may
+   * funding question is asked last so a "this calendar is not covered" answer
+   * can never reveal the existence or funding state of a calendar the caller may
    * not touch. A missing FundingInterface means no funding domain is wired in
    * at all — an instance that charges for nothing — so the gate opens.
    *
@@ -265,7 +265,7 @@ class CalendarService {
    * inputs. Absent policy opens; unreadable input closes.
    *
    * @param calendarId - Calendar the widget would be embedded for
-   * @throws SubscriptionRequiredError if the calendar is determinately unfunded
+   * @throws SubscriptionRequiredError if the calendar is determinately not covered
    * @throws FundingAccessIndeterminateError if the funding state is unreadable
    */
   async assertWidgetEmbeddingAccess(calendarId: string): Promise<void> {
@@ -285,7 +285,7 @@ class CalendarService {
    * the answer, holding no plan state and reading none. Instance settings,
    * admin exemption and grant-or-plan status are all that method's business.
    *
-   * Only a determinate "unfunded" becomes SubscriptionRequiredError. An
+   * Only a determinate "not covered" becomes SubscriptionRequiredError. An
    * indeterminate answer (FundingAccessIndeterminateError) propagates so the
    * route can answer it as a server error — an instance whose funding state we
    * cannot read must never be told its community owes money.
@@ -293,7 +293,7 @@ class CalendarService {
    * @param urlName - Calendar URL name
    * @returns Calendar model if access is allowed
    * @throws CalendarNotFoundError if calendar doesn't exist
-   * @throws SubscriptionRequiredError if the calendar is determinately unfunded
+   * @throws SubscriptionRequiredError if the calendar is determinately not covered
    */
   async getCalendarForWidget(urlName: string): Promise<Calendar> {
     const calendar = await this.getCalendarByName(urlName);

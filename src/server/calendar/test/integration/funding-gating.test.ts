@@ -467,7 +467,7 @@ describe('Funding Gating Integration Tests', () => {
     it('should refuse a non-allowlisted origin without consulting the funding gate', async () => {
       await enableFunding();
 
-      // uncoveredCalendar is unfunded, so if the gate ran ahead of origin
+      // uncoveredCalendar has no coverage, so if the gate ran ahead of origin
       // validation this request would answer 402 — telling an arbitrary site
       // that has no business embedding this calendar whether it pays.
       const gateSpy = vi.spyOn(FundingInterface.prototype, 'checkFundingAccess');
@@ -616,7 +616,7 @@ describe('Funding Gating Integration Tests', () => {
           { domain: 'example.com' },
         );
 
-        // checkFundingAccess returns a determinate "unfunded" for an unknown
+        // checkFundingAccess returns a determinate "not covered" for an unknown
         // calendar id, so a gate that ran first would answer 402 here.
         expect(response.status).toBe(404);
         expect(response.body.errorName).toBe('CalendarNotFoundError');
@@ -666,7 +666,7 @@ describe('Funding Gating Integration Tests', () => {
    * injection used to leave the whole suite green.
    */
   describe('Admin Exemption', () => {
-    it('should allow an unfunded admin-owned calendar to configure a widget domain', async () => {
+    it('should allow an uncovered admin-owned calendar to configure a widget domain', async () => {
       await enableFunding();
 
       // adminCalendar has no funding plan and no complimentary grant on an
@@ -690,7 +690,7 @@ describe('Funding Gating Integration Tests', () => {
       // established in beforeAll (setCalendarInterface and
       // setAccountsInterface); the Express app wires its own interfaces in
       // server.ts. Drop either one and isCalendarOwnerAdmin stops resolving,
-      // so this unfunded calendar is refused.
+      // so this uncovered calendar is refused.
       await expect(
         fundingInterface.checkFundingAccess(adminCalendar.id, 'widget_embedding'),
       ).resolves.toBe(true);
