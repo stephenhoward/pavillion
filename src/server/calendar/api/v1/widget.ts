@@ -6,6 +6,7 @@ const logger = createLogger('calendar');
 import CalendarInterface from '../../interface';
 import WidgetDomainService from '../../service/widget_domain';
 import { SubscriptionRequiredError } from '@/common/exceptions/subscription';
+import { CalendarNotFoundError } from '@/common/exceptions/calendar';
 import { limitPublicWidgetByIp } from '@/server/common/middleware/rate-limiters';
 
 /**
@@ -129,16 +130,8 @@ class WidgetRoutes {
     const calendarUrlName = req.params.urlName;
 
     try {
-      // Use getCalendarForWidget which includes the funding-access check
+      // Use getCalendarForWidget which includes the funding gate
       const calendar = await this.service.getCalendarForWidget(calendarUrlName);
-
-      if (!calendar) {
-        res.status(404).json({
-          "error": "Calendar not found",
-          errorName: 'CalendarNotFoundError',
-        });
-        return;
-      }
 
       // Fetch widget display configuration (lazy defaults when no row exists).
       const widgetConfig = await this.service.getWidgetConfig(calendarUrlName);
@@ -156,6 +149,17 @@ class WidgetRoutes {
       });
     }
     catch (error: any) {
+      if (error instanceof CalendarNotFoundError) {
+        // getCalendarForWidget signals a missing calendar by throwing, so this
+        // is the only path that can produce a 404 here — there is no falsy
+        // return to test for.
+        res.status(404).json({
+          "error": "Calendar not found",
+          errorName: error.name,
+        });
+        return;
+      }
+
       if (error instanceof SubscriptionRequiredError) {
         // Return 402 with Cache-Control: no-store header
         res.setHeader('Cache-Control', 'no-store');

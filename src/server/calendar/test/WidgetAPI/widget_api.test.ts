@@ -4,6 +4,7 @@ import express, { Application } from 'express';
 import supertest from 'supertest';
 
 import { Calendar } from '@/common/model/calendar';
+import { CalendarNotFoundError } from '@/common/exceptions/calendar';
 import { WidgetConfig } from '@/common/model/widget_config';
 import CalendarInterface from '@/server/calendar/interface';
 import WidgetDomainService from '@/server/calendar/service/widget_domain';
@@ -217,7 +218,10 @@ describe('Widget API Routes', () => {
       const getCalendarStub = mockInterface.getCalendarByName as sinon.SinonStub;
       const getCalendarForWidgetStub = mockInterface.getCalendarForWidget as sinon.SinonStub;
       getCalendarStub.resolves(null);
-      getCalendarForWidgetStub.resolves(null);
+      // The real interface signals a missing calendar by throwing, never by
+      // resolving null; stubbing a null resolution here would pin a branch
+      // that cannot occur in production.
+      getCalendarForWidgetStub.rejects(new CalendarNotFoundError());
 
       const response = await supertest(app)
         .get('/api/widget/v1/calendars/nonexistent')
@@ -226,6 +230,7 @@ describe('Widget API Routes', () => {
 
       expect(response.body).toHaveProperty('error');
       expect(response.body.error).toContain('not found');
+      expect(response.body.errorName).toBe('CalendarNotFoundError');
     });
   });
 
