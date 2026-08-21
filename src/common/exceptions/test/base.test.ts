@@ -59,6 +59,19 @@ describe('ValidationError', () => {
       const error = new ValidationError('test');
       expect(error).toBeInstanceOf(ValidationError);
     });
+
+    it('preserves the prototype chain of subclasses that do not re-set it', () => {
+      class SubclassWithoutSetPrototypeOf extends ValidationError {
+        constructor() {
+          super('subclass message');
+          this.name = 'SubclassWithoutSetPrototypeOf';
+        }
+      }
+      const error = new SubclassWithoutSetPrototypeOf();
+
+      expect(error).toBeInstanceOf(SubclassWithoutSetPrototypeOf);
+      expect(error).toBeInstanceOf(ValidationError);
+    });
   });
 
   describe('fields property', () => {

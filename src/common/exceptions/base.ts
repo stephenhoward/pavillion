@@ -75,7 +75,8 @@ export class ValidationError extends Error {
     this.name = 'ValidationError';
     this.errors = errorArray;
     this.fields = fields;
-    // Maintaining proper prototype chain in ES5+
-    Object.setPrototypeOf(this, ValidationError.prototype);
+    // Maintaining proper prototype chain in ES5+. Using new.target so
+    // subclasses keep their own prototype without re-setting it after super().
+    Object.setPrototypeOf(this, new.target.prototype);
   }
 }
