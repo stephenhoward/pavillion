@@ -26,7 +26,7 @@ import db from '@/server/common/entity/db';
  * ImportSourceEntity
  *
  * Sequelize entity mirroring the `import_source` table defined in
- * migration 0026. Stores calendar-level ICS import subscriptions with
+ * migration 0026. Stores calendar-level ICS import sources with
  * their verification lifecycle and fetch bookkeeping.
  *
  * No business logic lives here — verification, fetch scheduling, and

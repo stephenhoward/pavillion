@@ -25,7 +25,7 @@ Unlike the testing auditor (which reviews actual test code), you review the **te
 
 ### Step 1: Load Review Mode Protocol
 
-Read `.claude/skills/review-mode-advisor/SKILL.md` for shared advisor constraints, report structure, verdict system, and critical rules.
+Read `.claude/skills/review-mode-advisor/SKILL.md` — resolved from the root of the repository checkout under review, not `~/.claude/skills/` — for shared advisor constraints, report structure, verdict system, and critical rules.
 
 ### Step 2: Read the Testing Playbook
 

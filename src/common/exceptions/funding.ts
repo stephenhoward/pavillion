@@ -121,6 +121,29 @@ export class InvalidSessionIdError extends ValidationError {
   }
 }
 
+/**
+ * Thrown when a funding gate cannot establish whether the instance charges for
+ * anything at all — the instance-level funding settings could not be read.
+ *
+ * This is the one denial from checkFundingAccess that is NOT "this calendar is
+ * not covered". It is our outage, not the caller's unpaid bill, and it must reach
+ * the client as a server error. Answering it with 402 /
+ * SubscriptionRequiredError would tell an operator whose instance never
+ * enabled funding that their community owes money to fix our database
+ * problem — the failure mode DEC-001 is most pointed about avoiding.
+ *
+ * The throw is still fail-closed: it denies access, it just refuses to blame
+ * the caller for the denial. A consumer that wants to degrade some other way
+ * can catch it.
+ */
+export class FundingAccessIndeterminateError extends Error {
+  constructor(message?: string) {
+    super(message || 'Funding access could not be determined');
+    this.name = 'FundingAccessIndeterminateError';
+    Object.setPrototypeOf(this, FundingAccessIndeterminateError.prototype);
+  }
+}
+
 export class WebhookSignatureError extends Error {
   constructor(message?: string) {
     super(message || 'Webhook signature verification failed');

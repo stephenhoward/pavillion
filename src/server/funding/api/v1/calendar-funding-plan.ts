@@ -2,6 +2,7 @@ import express, { Request, Response } from 'express';
 import ExpressHelper from '@/server/common/helper/express';
 import FundingInterface from '@/server/funding/interface';
 import { Account } from '@/common/model/account';
+import { CalendarFundingSummary, FUNDING_GATED_FEATURES, FundingGatedFeature } from '@/common/model/funding-plan';
 import { ValidationError } from '@/common/exceptions/base';
 import {
   FundingPlanNotFoundError,
@@ -200,8 +201,22 @@ export default class CalendarFundingPlanRoutes {
    * GET /calendars/:calendarId/funding
    * Get funding status for a calendar (owner-only)
    *
-   * Ownership is verified by the service layer. Returns 400 (ValidationError)
-   * if the authenticated user does not own the calendar.
+   * Ownership is verified by the service layer via CalendarInterface
+   * .isCalendarOwnerById, which matches the calendar membership role 'owner'
+   * only. A calendar editor is therefore refused outright with 400
+   * (ValidationError) — the funding of a calendar is its owner's business, and
+   * an editor is not told anything about it.
+   *
+   * ## Response field allowlist
+   *
+   * The body is assembled field by field below, and a model's toObject() is
+   * never handed to res.json(). That is deliberate rather than stylistic:
+   * FundingPlan.toObject() includes accountId, and the entity behind it holds
+   * provider_customer_id and provider_subscription_id. Those identify the
+   * owner's account and their Stripe customer/subscription objects, answer no
+   * question this screen asks, and must not reach any caller here. Widening
+   * this response means adding a named field to CalendarFundingSummary and to
+   * the literal below — never relaxing it into a spread.
    */
   async getFundingStatus(req: Request, res: Response): Promise<void> {
     try {
@@ -219,9 +234,26 @@ export default class CalendarFundingPlanRoutes {
         return;
       }
 
-      const fundingStatus = await this.service.getFundingStatusForCalendar(account.id, calendarId);
+      const summary = await this.service.getCalendarFundingSummary(account.id, calendarId);
 
-      res.json({ status: fundingStatus });
+      // Annotated, not spread: the annotation makes CalendarFundingSummary the
+      // checkable allowlist for this body rather than a prose one. A field
+      // dropped here stops compiling, and a field added here has to be added
+      // to the type first — which is where the reasoning about what an owner
+      // may be told lives.
+      const body: CalendarFundingSummary = {
+        status: summary.status,
+        currentPeriodEnd: summary.currentPeriodEnd,
+        accessExpiresAt: summary.accessExpiresAt,
+        // The registry is the allowlist for this sub-object: only registered
+        // funding-gated features are reported, whatever the service returned.
+        features: Object.fromEntries(
+          (Object.keys(FUNDING_GATED_FEATURES) as FundingGatedFeature[])
+            .map((feature) => [feature, summary.features[feature] === true]),
+        ) as Record<FundingGatedFeature, boolean>,
+      };
+
+      res.json(body);
     }
     catch (error) {
       logError(error, 'Error fetching funding status');

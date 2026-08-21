@@ -4,7 +4,7 @@ import { EventEmitter } from 'events';
 import { Op, UniqueConstraintError } from 'sequelize';
 
 import { Report, ReportCategory, ReportStatus } from '@/common/model/report';
-import { DuplicateReportError, ReportValidationError } from '@/common/exceptions/report';
+import { DuplicateReportError, FederatedReportRateLimitError, ReportValidationError } from '@/common/exceptions/report';
 import { ReportEntity } from '@/server/moderation/entity/report';
 import { EventReporterEntity } from '@/server/moderation/entity/event_reporter';
 import { ReportEscalationEntity } from '@/server/moderation/entity/report_escalation';
@@ -822,6 +822,208 @@ describe('ModerationService', () => {
       expect(callArgs.where.reporter_email_hash).toBe('test-hash-123');
       // The created_at filter should use Op.gte with a date within the window
       expect(callArgs.where.created_at).toBeDefined();
+    });
+  });
+
+  describe('receiveRemoteReport abuse controls', () => {
+    const REMOTE_INSTANCE = 'remote.example';
+    const MAX_PER_INSTANCE = config.get<number>('rateLimit.moderation.federatedReportByInstance.max');
+    const WINDOW_MS = config.get<number>('rateLimit.moderation.federatedReportByInstance.windowMs');
+    let fedService: ModerationService;
+    let saveStub: sinon.SinonStub;
+    /** Stands in for the rows in `reports`: what the service has written. */
+    let filedReports: Array<{ eventId: string; instance: string; createdAt: Date }>;
+
+    /**
+     * Builds a service whose event lookup succeeds and whose report save is
+     * observable, so each test can assert on whether a report was written.
+     */
+    beforeEach(() => {
+      const mockCalendarInterface = {
+        getEventById: sandbox.stub().resolves({ id: VALID_UUID, calendarId: 'calendar-fed-1' }),
+      } as any;
+      fedService = new ModerationService(new EventEmitter(), mockCalendarInterface);
+
+      filedReports = [];
+      const savedReport = new Report('report-fed-1');
+      savedReport.eventId = VALID_UUID;
+      savedReport.calendarId = 'calendar-fed-1';
+      savedReport.status = ReportStatus.SUBMITTED;
+      saveStub = sandbox.stub().resolves({ toModel: () => savedReport });
+      // `fromModel` is called only immediately before the save that follows it
+      // on this path, so recording here is equivalent to recording the write.
+      sandbox.stub(ReportEntity, 'fromModel').callsFake((report: any) => {
+        filedReports.push({
+          eventId: report.eventId,
+          instance: report.forwardedFromInstance,
+          createdAt: new Date(),
+        });
+        return { save: saveStub } as any;
+      });
+    });
+
+    const remoteReport = (overrides: Record<string, any> = {}) => ({
+      eventId: VALID_UUID,
+      category: ReportCategory.SPAM,
+      description: 'Federated report',
+      forwardedFromInstance: REMOTE_INSTANCE,
+      forwardedReportId: 'https://remote.example/flags/1',
+      ...overrides,
+    });
+
+    /**
+     * Boundary conditions for `validateRemoteReportFields`. That validator is
+     * private (see its JSDoc), so it is exercised through the only caller that
+     * can reach it — which also means these assert the outcome that matters:
+     * whether the report was refused or filed.
+     */
+    describe('validateRemoteReportFields', () => {
+      beforeEach(() => {
+        sandbox.stub(ReportEntity, 'count').resolves(0);
+      });
+
+      it('rejects a description longer than the local report limit', async () => {
+        await expect(
+          fedService.receiveRemoteReport(remoteReport({ description: 'x'.repeat(2001) })),
+        ).rejects.toBeInstanceOf(ReportValidationError);
+
+        expect(saveStub.called, 'no report may be persisted').toBe(false);
+      });
+
+      it('accepts a description at exactly the limit', async () => {
+        await fedService.receiveRemoteReport(remoteReport({ description: 'x'.repeat(2000) }));
+
+        expect(saveStub.calledOnce).toBe(true);
+      });
+
+      it('accepts an empty description', async () => {
+        // A Flag legitimately carries no content; the category is the report.
+        // This divergence from validateReportFields is deliberate.
+        await fedService.receiveRemoteReport(remoteReport({ description: '' }));
+
+        expect(saveStub.calledOnce).toBe(true);
+      });
+
+      it('rejects a category outside the allowlist', async () => {
+        await expect(
+          fedService.receiveRemoteReport(remoteReport({ category: 'not-a-category' as any })),
+        ).rejects.toBeInstanceOf(ReportValidationError);
+
+        expect(saveStub.called).toBe(false);
+      });
+
+      it('rejects a non-string description', async () => {
+        await expect(
+          fedService.receiveRemoteReport(remoteReport({ description: { toString: () => 'x' } as any })),
+        ).rejects.toBeInstanceOf(ReportValidationError);
+
+        expect(saveStub.called).toBe(false);
+      });
+
+      it('does not reject an eventId that is not UUID-shaped', async () => {
+        // The other deliberate divergence from validateReportFields: the id
+        // was parsed out of an object IRI, and the event lookup — not the
+        // string's shape — is the real invariant. A future refactor that
+        // "fixes" the divergence by copying validateReportFields wholesale
+        // would start rejecting ids that resolve to a real event.
+        await fedService.receiveRemoteReport(remoteReport({ eventId: 'not-a-uuid' }));
+
+        expect(saveStub.calledOnce).toBe(true);
+      });
+    });
+
+    describe('per-instance report cap', () => {
+      /**
+       * Counts against the reports this test has actually filed, so the cap's
+       * behavior can be observed end to end rather than inferred from the
+       * query the service builds.
+       */
+      beforeEach(() => {
+        sandbox.stub(ReportEntity, 'count').callsFake(async (options: any) => {
+          const { event_id, forwarded_from_instance, created_at } = options.where;
+          const windowStart = created_at[Op.gte] as Date;
+          return filedReports.filter(
+            (r) => r.eventId === event_id
+              && r.instance === forwarded_from_instance
+              && r.createdAt >= windowStart,
+          ).length;
+        });
+      });
+
+      /** Files `count` reports, asserting each is accepted. */
+      const fileReports = async (count: number, overrides: Record<string, any> = {}) => {
+        for (let i = 0; i < count; i++) {
+          await fedService.receiveRemoteReport(remoteReport({
+            ...overrides,
+            forwardedReportId: `https://remote.example/flags/${i}`,
+          }));
+        }
+      };
+
+      it('accepts reports from the same instance up to the cap, then suppresses', async () => {
+        // The cap is not 1: a remote instance forwards each of its own users'
+        // reports separately, so corroborating reports are legitimate.
+        await fileReports(MAX_PER_INSTANCE);
+        expect(filedReports).toHaveLength(MAX_PER_INSTANCE);
+
+        await expect(
+          fedService.receiveRemoteReport(remoteReport()),
+        ).rejects.toBeInstanceOf(FederatedReportRateLimitError);
+
+        expect(filedReports, 'suppressed reports are dropped, not persisted')
+          .toHaveLength(MAX_PER_INSTANCE);
+      });
+
+      it('caps each event separately', async () => {
+        // A sender that saturates one event must not lock the same instance
+        // out of reporting any other event.
+        const OTHER_EVENT = 'b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e';
+        await fileReports(MAX_PER_INSTANCE);
+
+        await expect(
+          fedService.receiveRemoteReport(remoteReport()),
+        ).rejects.toBeInstanceOf(FederatedReportRateLimitError);
+
+        await fedService.receiveRemoteReport(remoteReport({ eventId: OTHER_EVENT }));
+
+        expect(
+          filedReports.filter((r) => r.eventId === OTHER_EVENT),
+          'a saturated event does not suppress reports about another event',
+        ).toHaveLength(1);
+      });
+
+      it('caps each reporting instance separately', async () => {
+        // Otherwise one hostile instance could silence every other instance's
+        // reports about the same event.
+        const OTHER_INSTANCE = 'other.example';
+        await fileReports(MAX_PER_INSTANCE);
+
+        await expect(
+          fedService.receiveRemoteReport(remoteReport()),
+        ).rejects.toBeInstanceOf(FederatedReportRateLimitError);
+
+        await fedService.receiveRemoteReport(remoteReport({ forwardedFromInstance: OTHER_INSTANCE }));
+
+        expect(
+          filedReports.filter((r) => r.instance === OTHER_INSTANCE),
+          'a saturated instance does not suppress another instance',
+        ).toHaveLength(1);
+      });
+
+      it('does not count reports that fell out of the window', async () => {
+        // The cap is a rolling window, not a lifetime total.
+        for (let i = 0; i < MAX_PER_INSTANCE; i++) {
+          filedReports.push({
+            eventId: VALID_UUID,
+            instance: REMOTE_INSTANCE,
+            createdAt: new Date(Date.now() - WINDOW_MS - 60_000),
+          });
+        }
+
+        await fedService.receiveRemoteReport(remoteReport());
+
+        expect(saveStub.calledOnce, 'expired reports no longer occupy the cap').toBe(true);
+      });
     });
   });
 
@@ -1809,6 +2011,8 @@ describe('ModerationService', () => {
         sandbox.stub(ReportEntity, 'fromModel').returns({
           save: sandbox.stub().resolves({ toModel: () => fedReport }),
         } as any);
+        // Under the per-(event, instance) cap enforced by receiveRemoteReport.
+        sandbox.stub(ReportEntity, 'count').resolves(0);
 
         const emitSpy = sandbox.spy(fedEventBus, 'emit');
 

@@ -1,6 +1,6 @@
 # Product Decisions Log
 
-> Last Updated: 2026-08-09
+> Last Updated: 2026-08-20
 > Version: 2.3.0
 > Override Priority: Highest
 
@@ -39,8 +39,8 @@ Supersession is the exception, because it retires a decision rather than refinin
 ### DEC-007: Community Funding Model and Stripe Product Choice
 - **File:** [decisions/dec-007-community-funding-model.md](decisions/dec-007-community-funding-model.md)
 - **Date:** 2026-03-15 · **Status:** Accepted
-- **Decision:** Voluntary "funding plans" (NPR/Wikipedia model) using Stripe Embedded Checkout — instance admins enter their own Stripe keys; not Stripe Connect. Term "funding plan" used in place of "subscription" to avoid ActivityPub terminology collision.
-- **Consult when:** Implementing or modifying payment/billing flows; configuring Stripe; CSP changes for payment iframes; deciding terminology around funding/subscription/payment; questions about why we don't use Connect OAuth.
+- **Decision:** Voluntary "funding plans" (NPR/Wikipedia model, applied instance-inward: calendar owners support the instance operator, who keeps the service online) using Stripe Embedded Checkout — instance admins enter their own Stripe keys; not Stripe Connect. Stripe is the only provider in v1; PayPal is descoped, its scaffolding left inert and hidden from the admin UI. Vocabulary: the instance is always the recipient of support and calendars are "covered by" a plan, never "funded" — a rule that binds enum values and identifiers as much as prose, so the single-calendar status union is `'admin_exempt' | 'grant' | 'covered' | 'not_covered'`; "funding plan" is the product noun and "subscription" is reserved for payment-mechanics prose and the provider boundary; the access-gating platform is "funding access", with three bounded identifier exceptions (`SubscriptionRequiredError` as the legacy wire exception, the Stripe-mirroring provider adapter names, and the bulk admin `'subscribed'` enum).
+- **Consult when:** Implementing or modifying payment/billing flows; configuring Stripe; adding or re-enabling a payment provider; CSP changes for payment iframes; naming anything in the funding or access-gating vocabulary; adding or renaming a funding status value, enum member, identifier or CSS class that describes how a calendar relates to a plan; deciding terminology around funding/subscription/payment/entitlement; distinguishing the display status from the funding-access gate; questions about why we don't use Connect OAuth, or why PayPal code exists but is unreachable.
 
 ### DEC-009: ICS Import Funding-Gate Posture
 - **File:** [decisions/dec-009-ics-import-funding-gate-posture.md](decisions/dec-009-ics-import-funding-gate-posture.md)
@@ -53,7 +53,7 @@ Supersession is the exception, because it retires a decision rather than refinin
 - **File:** [decisions/dec-011-federated-value-boundary.md](decisions/dec-011-federated-value-boundary.md)
 - **Date:** 2026-05-16 · **Status:** Accepted
 - **Decision:** (1) ICS import is exclusively organizer migration tooling — not a curator aggregation surface. (2) Curator aggregation operates via federation only (Pavillion calendars + other AP event platforms); no roadmap path for non-federated source aggregation. (3) Features that bridge to non-federated systems (inbound or outbound) are funding-gated under the **federated value boundary principle**; in-network features are free.
-- **Consult when:** Classifying any feature as free vs funding-gated; designing aggregation features; ICS import scope work; questions about what curators do in Pavillion's model; deciding whether an inbound/outbound integration is in-network or platform-bridge; any feature touching outbound feeds, third-party APIs, or hosted-provider integrations.
+- **Consult when:** Classifying any feature as free vs funding-gated; adding an entry to the funding-gated feature registry (`FUNDING_GATED_FEATURES`); designing aggregation features; ICS import scope work; questions about what curators do in Pavillion's model; deciding whether an inbound/outbound integration is in-network or platform-bridge; any feature touching outbound feeds, third-party APIs, or hosted-provider integrations.
 
 ---
 
@@ -104,6 +104,12 @@ Supersession is the exception, because it retires a decision rather than refinin
 - **Date:** 2026-08-01 · **Status:** Accepted
 - **Decision:** A locally-created event federates as `Create(Event)` with the full object embedded (id `{eventUrl}/create`); a repost federates as `Announce` carrying the canonical event IRI only. Announce is never used for an original. `isOriginal` stays derived from attribution (`attributed_to === actor`), not from wire type, so peers that Announce their own originals still classify correctly. Same-instance fan-out drives the auto-repost cascade from the Create path under `trustLocalOrigin`, where a pre-existing `EventObjectEntity` is expected rather than a duplicate. Paired Note emissions are outbound interop only — inbound Notes are never ingested. Records two intentional v1 limitations: inbound `eventStatus:EventCancelled` is not acted on, and the FEP category keyword heuristic is English-only with a frozen keyword table.
 - **Consult when:** Emitting or handling any Event-bearing activity; changing `handleEventCreated`, `processCreateEvent`, `processShareEvent`, or `checkAndPerformAutoRepost`; reasoning about original-vs-repost classification or the originals/reposts follow-policy split; adding or reordering paired Note emission; FEP-8a8e interop with Mobilizon/Gancio; questions about inbound `eventStatus` handling or why non-English categories emit no FEP category.
+
+### DEC-015: A Federated Report Reaches the Origin Calendar Owner First
+- **File:** [decisions/dec-015-federated-report-routing.md](decisions/dec-015-federated-report-routing.md)
+- **Date:** 2026-08-08 · **Status:** Accepted
+- **Decision:** A moderation report crossing a federation boundary is addressed to the **origin calendar's actor**, never the origin instance's admin — outbound via `getEventSourceActorUri` from **both** send routes (`owner-report-routes.ts` and `admin-report-routes.ts`), inbound scoped to `event.calendarId`. Neither route constructs an instance-level URI and both 400 when the actor cannot be resolved; the admin route additionally pins the resolved actor to the event's source host. The origin admin sees the report only through the ordinary escalation path. This is safe **only** because `dismissReport` auto-escalates (`status: ESCALATED, escalation_type: 'automatic'`) — unlike [DEC-008](decisions/dec-008-unpost-dismissals.md)'s sticky repost dismissal, a report dismissal never persists as one — so an owner controls *when* their admin sees a report, never *whether*. The endpoint (`forward-to-admin`), the persisted `decision: 'forwarded_to_remote_admin'`, and the `forward_to_admin` UI key keep "admin" names that contradict the behavior; this file is the compensating control.
+- **Consult when:** Changing `dismissReport`, `ReportStatus.DISMISSED` semantics, or the `getAdminReports` escalated-OR-admin-initiated base condition; changing how either forward route picks a `Flag` recipient (they must move together); adding an instance-level admin actor (`pv-rctv`); changing `getEventSourceActorUri`; reading or writing `forwarded_to_actor_uri` or `decision: 'forwarded_to_remote_admin'`; deciding what a calendar owner may see about a remote reporter; designing Phase 5 "Federated moderation signals."
 
 ---
 

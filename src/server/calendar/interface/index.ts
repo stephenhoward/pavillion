@@ -705,8 +705,9 @@ export default class CalendarInterface {
       throw new CalendarEditorPermissionError();
     }
 
-    // Call service method for subscription check
-    await this.calendarService.setWidgetDomain(account, calendarId, domain);
+    // Funding is asked last: a "not covered" answer must never precede the 404
+    // or 403 above, or it would leak a calendar the caller may not touch.
+    await this.calendarService.assertWidgetEmbeddingAccess(calendarId);
 
     // Set the domain using widget domain service
     return this.widgetDomainService.setAllowedDomain(calendar, domain);
@@ -753,7 +754,7 @@ export default class CalendarInterface {
 
   /**
    * Upsert widget config for a calendar. Editor permission required; not
-   * subscription-gated.
+   * funding-gated.
    *
    * @param account - The requesting account
    * @param calendarId - The calendar UUID

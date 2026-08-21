@@ -1,5 +1,8 @@
 import { Model, Table, Column, PrimaryKey, DataType, BeforeCreate, BeforeUpdate } from 'sequelize-typescript';
-import { ProviderConfig, ProviderType } from '@/common/model/funding-plan';
+import { ProviderConfig } from '@/common/model/funding-plan';
+// Types used in decorated signatures must be type-only imports under
+// isolatedModules + emitDecoratorMetadata.
+import type { ProviderType } from '@/common/model/funding-plan';
 import db from '@/server/common/entity/db';
 import crypto from 'crypto';
 import config from 'config';

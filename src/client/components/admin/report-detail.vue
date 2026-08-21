@@ -153,7 +153,7 @@ function closeForwardModal() {
 }
 
 /**
- * Forwards the report to the remote instance's administrator.
+ * Forwards the report to the owner of the calendar the event came from.
  */
 async function handleForward() {
   state.isForwarding = true;
@@ -364,7 +364,7 @@ async function handleForward() {
         </ol>
       </section>
 
-      <!-- Forward to Remote Admin Section -->
+      <!-- Forward to Origin Calendar Owner Section -->
       <section
         v-if="shouldShowForwardButton"
         class="info-card"

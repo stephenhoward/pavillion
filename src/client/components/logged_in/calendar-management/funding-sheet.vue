@@ -12,27 +12,27 @@ defineProps<{
 
 const emit = defineEmits<{
   close: [];
-  subscribed: [];
+  'plan-started': [];
 }>();
 
 const { t } = useTranslation('funding');
 
-function onSubscribed() {
-  emit('subscribed');
+function onPlanStarted() {
+  emit('plan-started');
   emit('close');
 }
 </script>
 
 <template>
-  <Sheet :title="t('subscribe_to_fund_title')" @close="emit('close')">
+  <Sheet :title="t('extended_features_title')" @close="emit('close')">
     <p class="input-description">
-      {{ t('subscribe_to_fund_description', { instanceName: instanceName }) }}
+      {{ t('extended_features_description', { instanceName: instanceName }) }}
     </p>
     <FundingForm
       :calendarId="calendarId"
       :initialCycle="initialCycle"
       :initialAmount="initialAmount"
-      @subscribed="onSubscribed"
+      @plan-started="onPlanStarted"
     />
   </Sheet>
 </template>

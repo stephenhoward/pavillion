@@ -1,5 +1,8 @@
 import { Model, Table, Column, PrimaryKey, ForeignKey, DataType, BeforeUpdate } from 'sequelize-typescript';
-import { FundingPlan, FundingPlanStatus, BillingCycle } from '@/common/model/funding-plan';
+import { FundingPlan } from '@/common/model/funding-plan';
+// Types used in decorated signatures must be type-only imports under
+// isolatedModules + emitDecoratorMetadata.
+import type { FundingPlanStatus, BillingCycle } from '@/common/model/funding-plan';
 import { AccountEntity } from '@/server/common/entity/account';
 import { ProviderConfigEntity } from './provider_config';
 import db from '@/server/common/entity/db';
@@ -57,40 +60,40 @@ class FundingPlanEntity extends Model {
    * Convert entity to domain model
    */
   toModel(): FundingPlan {
-    const subscription = new FundingPlan(this.id);
-    subscription.accountId = this.account_id;
-    subscription.providerConfigId = this.provider_config_id;
-    subscription.providerSubscriptionId = this.provider_subscription_id;
-    subscription.providerCustomerId = this.provider_customer_id;
-    subscription.status = this.status;
-    subscription.billingCycle = this.billing_cycle;
-    subscription.amount = this.amount;
-    subscription.currency = this.currency;
-    subscription.currentPeriodStart = this.current_period_start;
-    subscription.currentPeriodEnd = this.current_period_end;
-    subscription.cancelledAt = this.cancelled_at;
-    subscription.suspendedAt = this.suspended_at;
-    return subscription;
+    const plan = new FundingPlan(this.id);
+    plan.accountId = this.account_id;
+    plan.providerConfigId = this.provider_config_id;
+    plan.providerSubscriptionId = this.provider_subscription_id;
+    plan.providerCustomerId = this.provider_customer_id;
+    plan.status = this.status;
+    plan.billingCycle = this.billing_cycle;
+    plan.amount = this.amount;
+    plan.currency = this.currency;
+    plan.currentPeriodStart = this.current_period_start;
+    plan.currentPeriodEnd = this.current_period_end;
+    plan.cancelledAt = this.cancelled_at;
+    plan.suspendedAt = this.suspended_at;
+    return plan;
   }
 
   /**
    * Convert domain model to entity
    */
-  static fromModel(subscription: FundingPlan): FundingPlanEntity {
+  static fromModel(plan: FundingPlan): FundingPlanEntity {
     return FundingPlanEntity.build({
-      id: subscription.id,
-      account_id: subscription.accountId,
-      provider_config_id: subscription.providerConfigId,
-      provider_subscription_id: subscription.providerSubscriptionId,
-      provider_customer_id: subscription.providerCustomerId,
-      status: subscription.status,
-      billing_cycle: subscription.billingCycle,
-      amount: subscription.amount,
-      currency: subscription.currency,
-      current_period_start: subscription.currentPeriodStart,
-      current_period_end: subscription.currentPeriodEnd,
-      cancelled_at: subscription.cancelledAt,
-      suspended_at: subscription.suspendedAt,
+      id: plan.id,
+      account_id: plan.accountId,
+      provider_config_id: plan.providerConfigId,
+      provider_subscription_id: plan.providerSubscriptionId,
+      provider_customer_id: plan.providerCustomerId,
+      status: plan.status,
+      billing_cycle: plan.billingCycle,
+      amount: plan.amount,
+      currency: plan.currency,
+      current_period_start: plan.currentPeriodStart,
+      current_period_end: plan.currentPeriodEnd,
+      cancelled_at: plan.cancelledAt,
+      suspended_at: plan.suspendedAt,
     });
   }
 
@@ -107,7 +110,7 @@ class FundingPlanEntity extends Model {
     // past_due -> active (payment succeeded)
     // past_due -> suspended (grace period expired)
     // suspended -> active (reactivated with payment)
-    // cancelled -> active (resubscribed)
+    // cancelled -> active (plan restarted)
 
     const previousStatus = instance.previous('status') as FundingPlanStatus;
     const newStatus = instance.status;
@@ -125,6 +128,13 @@ class FundingPlanEntity extends Model {
     // Clear suspended_at when reactivating
     if (newStatus === 'active' && previousStatus === 'suspended') {
       instance.suspended_at = null;
+    }
+
+    // Clear cancelled_at when resubscribing. A stale cancellation marker on a
+    // plan that is active again reads as a lapsed plan to the funding-access
+    // check, which would deny a customer who is paying.
+    if (newStatus === 'active' && previousStatus === 'cancelled') {
+      instance.cancelled_at = null;
     }
   }
 }

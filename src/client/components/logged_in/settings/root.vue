@@ -79,7 +79,7 @@ async function loadProfile() {
 }
 
 /**
- * Check if subscriptions are enabled on this instance
+ * Check if funding is enabled on this instance
  */
 async function checkFundingEnabled() {
   try {

@@ -8,12 +8,13 @@ import {
   type ProviderStatus,
   type DisconnectionResult,
 } from '@/server/funding/service/provider_connection';
-import { FundingPlan, FundingSettings, ProviderConfig, FundingStatus, BillingCycle, ProviderType } from '@/common/model/funding-plan';
+import { FundingPlan, FundingSettings, ProviderConfig, CalendarFundingSummary, BillingCycle, ProviderType, FundingGatedFeature } from '@/common/model/funding-plan';
 import type { ProviderInfo } from '@/server/funding/service/funding';
 import type { ProviderCredentials } from '@/server/funding/service/provider/adapter';
 import { ComplimentaryGrant } from '@/common/model/complimentary_grant';
 import { CheckoutSessionResult } from '@/server/funding/service/provider/adapter';
 import type CalendarInterface from '@/server/calendar/interface';
+import type AccountsInterface from '@/server/accounts/interface';
 
 /**
  * Funding domain interface for cross-domain communication
@@ -41,27 +42,55 @@ export default class FundingInterface {
     this.fundingService.setCalendarInterface(calendarInterface);
   }
 
+  /**
+   * Injects AccountsInterface into the funding service for cross-domain
+   * account role checks (admin exemption from funding gates).
+   *
+   * @param accountsInterface - The AccountsInterface instance from the accounts domain
+   */
+  setAccountsInterface(accountsInterface: AccountsInterface): void {
+    this.fundingService.setAccountsInterface(accountsInterface);
+  }
+
   // Cross-domain query methods
 
   /**
-   * Check if a calendar has an active funding plan
+   * Decide whether a calendar may use a funding-gated feature.
    *
-   * @param calendarId - Calendar ID to check
-   * @returns True if calendar has active funding plan, false otherwise
-   */
-  async hasActiveFundingPlan(calendarId: string): Promise<boolean> {
-    return this.fundingService.hasActiveFundingPlan(calendarId);
-  }
-
-  /**
-   * Check if a calendar has access to funded features
-   * (either via active funding plan or complimentary grant)
+   * The single entry point for funding gates: feature domains pass a key from
+   * FUNDING_GATED_FEATURES and act on the answer, holding no funding state of
+   * their own. See FundingService.checkFundingAccess for the four invariants
+   * that produce the decision.
    *
-   * @param calendarId - Calendar ID to check
-   * @returns True if calendar has funding access, false otherwise
+   * This answers a funding question and nothing else. It is NOT an
+   * authorization check: when funding is not enabled on the instance it
+   * returns true for any well-formed UUID, including calendars that do not
+   * exist and calendars the caller has no business touching. Compose it only
+   * AFTER authentication, ownership and existence checks have run.
+   *
+   * Three outcomes, not two: `true` opens the gate, `false` is a determinate
+   * "this calendar is not covered" that may be answered commercially, and a
+   * thrown {@link FundingAccessIndeterminateError} is a denial caused by an
+   * unreadable instance funding state — a server-side failure that must
+   * surface as a server error, never as 402 / SubscriptionRequiredError.
+   *
+   * Consumers get that mapping for free by doing the obvious thing: throw
+   * {@link SubscriptionRequiredError} on a determinate `false` and let the
+   * indeterminate throw propagate. The handler's existing error serialization
+   * then answers the first with 402 and the second with 500, so the split is
+   * preserved by the repo's normal error convention rather than by a bespoke
+   * gate. Do not catch the indeterminate throw in order to answer it
+   * commercially.
+   *
+   * @param calendarId - Calendar the feature would be used on
+   * @param feature - Key from FUNDING_GATED_FEATURES naming the gated feature
+   * @returns True if the gate is open for this calendar, false if this
+   *   calendar is determinately not covered
+   * @throws FundingAccessIndeterminateError if the instance funding settings
+   *   could not be read
    */
-  async hasFundingAccess(calendarId: string): Promise<boolean> {
-    return this.fundingService.hasFundingAccess(calendarId);
+  async checkFundingAccess(calendarId: string, feature: FundingGatedFeature): Promise<boolean> {
+    return this.fundingService.checkFundingAccess(calendarId, feature);
   }
 
   /**
@@ -97,11 +126,11 @@ export default class FundingInterface {
     return this.fundingService.getProviders();
   }
 
-  async updateProvider(providerType: 'stripe' | 'paypal', displayName: string, enabled: boolean): Promise<void> {
+  async updateProvider(providerType: ProviderType, displayName: string | undefined, enabled: boolean): Promise<boolean> {
     return this.fundingService.updateProvider(providerType, displayName, enabled);
   }
 
-  async disconnectProvider(providerType: 'stripe' | 'paypal'): Promise<void> {
+  async disconnectProvider(providerType: ProviderType): Promise<boolean> {
     return this.fundingService.disconnectProvider(providerType);
   }
 
@@ -168,7 +197,7 @@ export default class FundingInterface {
     return this.fundingService.getOptions();
   }
 
-  async getStatus(accountId: string): Promise<FundingPlan | null> {
+  async getStatus(accountId: string): Promise<FundingPlan | undefined> {
     return this.fundingService.getStatus(accountId);
   }
 
@@ -189,7 +218,7 @@ export default class FundingInterface {
    * @param billingCycle - 'monthly' or 'yearly'
    * @param returnUrl - URL to return to after checkout
    * @param amount - Optional amount in millicents (for PWYC pricing)
-   * @param calendarIds - Optional array of calendar IDs to fund
+   * @param calendarIds - Optional array of calendar IDs the plan should cover
    * @returns Client secret and session ID for the embedded checkout
    */
   async createCheckoutSession(
@@ -225,7 +254,7 @@ export default class FundingInterface {
    * Get all calendars in the account's active funding plan
    *
    * @param accountId - Account ID to look up
-   * @returns Array of funded calendar allocations (calendarId, amount, createdAt)
+   * @returns Array of covered calendar allocations (calendarId, amount, createdAt)
    */
   async getCalendarsInFundingPlan(
     accountId: string,
@@ -255,17 +284,24 @@ export default class FundingInterface {
   }
 
   /**
-   * Get funding status for a calendar
+   * Get everything a calendar's owner may be told about its funding.
    *
-   * Verifies ownership internally and returns the funding status.
+   * Deliberately the only cross-domain way to ask about one calendar's funding.
+   * The bare display status (FundingService.getFundingStatusForCalendar) is not
+   * published here: it is not an entitlement, and a caller holding it without
+   * `features` has no path to the authoritative answer.
    *
-   * @param accountId - Account ID requesting the status (must own the calendar)
-   * @param calendarId - Calendar ID to check
-   * @returns Funding status: 'admin-exempt' | 'grant' | 'funded' | 'unfunded'
+   * Verifies ownership internally. Carries the display status, the funding
+   * plan dates bounding it, and the gate's per-feature decisions — and
+   * nothing that identifies an account or a Stripe object.
+   *
+   * @param accountId - Account ID requesting the summary (must own the calendar)
+   * @param calendarId - Calendar ID to describe
+   * @returns The calendar's funding status, plan dates and feature decisions
    * @throws ValidationError if accountId does not own the calendar
    */
-  async getFundingStatusForCalendar(accountId: string, calendarId: string): Promise<FundingStatus> {
-    return this.fundingService.getFundingStatusForCalendar(accountId, calendarId);
+  async getCalendarFundingSummary(accountId: string, calendarId: string): Promise<CalendarFundingSummary> {
+    return this.fundingService.getCalendarFundingSummary(accountId, calendarId);
   }
 
   // Admin operations

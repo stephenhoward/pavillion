@@ -147,6 +147,12 @@ export default class CheckoutSessionRoutes {
 
       const { sessionId } = req.params;
 
+      // Express types route params as string | string[]; the service performs
+      // the format check, so this only rejects a repeated parameter.
+      if (typeof sessionId !== 'string') {
+        throw new InvalidSessionIdError();
+      }
+
       const result = await this.service.getCheckoutSessionStatus(
         account.id,
         sessionId,

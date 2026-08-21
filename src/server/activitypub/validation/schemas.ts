@@ -150,6 +150,11 @@ export const objectBaseSchema = z.object({
 /**
  * Activity types supported by the system.
  * Based on ActivityStreams 2.0 vocabulary.
+ *
+ * Descriptive only: `activityBaseSchema.type` is a plain non-empty string, and
+ * admission is decided by the per-type switch in the inbox route handler. This
+ * list documents what that switch is expected to cover; adding an entry here
+ * admits nothing on its own.
  */
 export const ACTIVITY_TYPES = [
   'Create',
@@ -167,9 +172,13 @@ export const ACTIVITY_TYPES = [
   // FEP-8a8e: peers (e.g. Mobilizon) send Join to RSVP/attend an event.
   // Pavillion does not handle attendance, so it validates and enqueues the
   // Join only to reply with an Ignore (FEP-8a8e's blessed unhandled-Join
-  // response). Both must be recognized activity types.
+  // response). Ignore travels in both directions — Pavillion emits it in reply
+  // to a Join and accepts an inbound one; see joinActivitySchema and
+  // ignoreActivitySchema.
   'Join',
   'Ignore',
+  // Cross-instance moderation reports arrive as Flag. See flagActivitySchema.
+  'Flag',
 ] as const;
 
 /**
@@ -444,3 +453,84 @@ export const joinActivitySchema = activityBaseSchema.extend({
  * Type for a validated Join activity.
  */
 export type JoinActivity = z.infer<typeof joinActivitySchema>;
+
+/**
+ * Schema for ActivityPub Ignore activity.
+ *
+ * FEP-8a8e requires a server that does not handle a Join to reply with an
+ * Ignore rather than dropping it. Pavillion emits that reply itself (see
+ * `ProcessInboxService.processJoinActivity`), so it must also be able to
+ * receive one — from a peer answering a Join, or from another Pavillion
+ * instance. An Ignore is purely informational: it reports that the referenced
+ * activity was seen and deliberately not acted on.
+ *
+ * The `object` is the activity being ignored, carried either embedded (what
+ * Pavillion emits) or as a bare IRI.
+ *
+ * @see https://www.w3.org/TR/activitystreams-vocabulary/#dfn-ignore
+ * @see https://w3id.org/fep/8a8e
+ */
+export const ignoreActivitySchema = activityBaseSchema.extend({
+  type: z.literal('Ignore'),
+  object: objectReferenceSchema,
+});
+
+/**
+ * Type for a validated Ignore activity.
+ */
+export type IgnoreActivity = z.infer<typeof ignoreActivitySchema>;
+
+/**
+ * Maximum length accepted for the free-text fields of an inbound Flag.
+ *
+ * Mirrors `MAX_DESCRIPTION_LENGTH` in the moderation domain, which bounds what
+ * a local reporter may submit. Without it a federated report would be bounded
+ * only by the Express body-size default — orders of magnitude more text than a
+ * local reporter can produce for the same report record.
+ */
+export const MAX_FLAG_TEXT_LENGTH = 2000;
+
+/**
+ * Maximum number of tags accepted on an inbound Flag. Pavillion emits one
+ * (the category) or two (admin-flag + priority); the cap leaves headroom for
+ * peer implementations without admitting an unbounded array.
+ */
+export const MAX_FLAG_TAGS = 10;
+
+/**
+ * Schema for an ActivityStreams Hashtag, as carried in a Flag's `tag` array.
+ *
+ * The inbound Flag handler reads the category from these tags by matching
+ * `name` (minus the leading `#`) against `ReportCategory`.
+ */
+export const hashtagSchema = z.object({
+  type: z.literal('Hashtag'),
+  name: z.string().min(1).max(200),
+}).passthrough();
+
+/**
+ * Schema for ActivityPub Flag activity.
+ *
+ * A Flag is a moderation report about the object it references — on this
+ * instance, an event. Pavillion accepts Flags from any instance it has not
+ * blocked: a report from a peer with no follow relationship is the expected
+ * case, not an anomaly.
+ *
+ * The field set mirrors what `FlagActivityBuilder` emits, so a Flag forwarded
+ * from one Pavillion instance validates on another.
+ *
+ * @see https://www.w3.org/TR/activitystreams-vocabulary/#dfn-flag
+ */
+export const flagActivitySchema = activityBaseSchema.extend({
+  type: z.literal('Flag'),
+  object: objectReferenceSchema,
+  content: z.string().max(MAX_FLAG_TEXT_LENGTH).optional(),
+  summary: z.string().max(MAX_FLAG_TEXT_LENGTH).optional(),
+  tag: z.array(hashtagSchema).max(MAX_FLAG_TAGS).optional(),
+  attributedTo: actorUriSchema.optional(),
+});
+
+/**
+ * Type for a validated Flag activity.
+ */
+export type FlagActivity = z.infer<typeof flagActivitySchema>;

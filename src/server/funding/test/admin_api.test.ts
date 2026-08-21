@@ -4,8 +4,14 @@ import request from 'supertest';
 import sinon from 'sinon';
 import FundingInterface from '@/server/funding/interface';
 import AdminRoutes from '@/server/funding/api/v1/admin';
-import { FundingSettings, ProviderConfig } from '@/common/model/funding-plan';
+import { FundingPlan, FundingSettings, ProviderConfig } from '@/common/model/funding-plan';
 import { testApp } from '@/server/common/test/lib/express';
+import ExpressHelper from '@/server/common/helper/express';
+import { Account } from '@/common/model/account';
+
+// Snapshot at module load: other suites stub ExpressHelper.adminOnly onto
+// their own middleware, and these tests must compare against the real chain.
+const ADMIN_ONLY_CHAIN = [...ExpressHelper.adminOnly];
 
 describe('Admin Funding API', () => {
   let router: express.Router;
@@ -30,7 +36,7 @@ describe('Admin Funding API', () => {
   });
 
   describe('GET /admin/settings', () => {
-    it('should return current subscription settings for admin user', async () => {
+    it('should return current funding settings for admin user', async () => {
       const mockSettings = new FundingSettings();
       mockSettings.enabled = true;
       mockSettings.monthlyPrice = 1000000; // $10.00 in millicents
@@ -184,6 +190,70 @@ describe('Admin Funding API', () => {
     });
   });
 
+  /**
+   * settings.enabled is an instance-level switch: it decides whether funding
+   * gates apply at all (checkFundingAccess invariant 1), so the only path that
+   * may write it is the admin-gated POST /api/funding/v1/admin/settings.
+   *
+   * The passport arm of ExpressHelper.adminOnly is captured at module load and
+   * cannot be restubbed, so authorization is covered in two parts, following
+   * the pattern in src/server/calendar/test/admin.integration.test.ts:
+   * registration wires the whole adminOnly chain, and the role-check arm
+   * rejects a non-admin.
+   */
+  describe('instance settings write authorization', () => {
+    it('should register the settings routes behind the full adminOnly chain', () => {
+      const app = express();
+      adminHandlers.installHandlers(app, '/api/funding/v1');
+
+      const settingsLayers = (app as any)._router.stack
+        .filter((layer: any) => layer.name === 'router')
+        .flatMap((layer: any) => layer.handle.stack)
+        .filter((layer: any) => layer.route?.path === '/admin/settings');
+
+      expect(settingsLayers.length).toBe(2); // GET and POST
+
+      for (const layer of settingsLayers) {
+        const handlers = layer.route.stack.map((l: any) => l.handle);
+        for (const guard of ADMIN_ONLY_CHAIN) {
+          expect(handlers).toContain(guard);
+        }
+      }
+    });
+
+    it('should reject a non-admin attempt to write settings.enabled', async () => {
+      const updateStub = sandbox.stub(service, 'updateSettings').resolves();
+      const nonAdmin = new Account('user-uuid', 'user', 'user@example.com');
+      nonAdmin.roles = [];
+
+      router.use((req, _res, next) => {
+        req.user = nonAdmin;
+        next();
+      });
+      // Reuse the production role-check arm; only the passport arm is skipped.
+      router.post(
+        '/admin/settings',
+        ADMIN_ONLY_CHAIN[1],
+        adminHandlers.updateSettings.bind(adminHandlers),
+      );
+
+      await request(testApp(router))
+        .post('/admin/settings')
+        .send({
+          enabled: true,
+          monthlyPrice: 1000000,
+          yearlyPrice: 10000000,
+          currency: 'USD',
+          payWhatYouCan: false,
+          gracePeriodDays: 7,
+          payWhatYouCanYearlyDiscount: 0,
+        })
+        .expect(403);
+
+      expect(updateStub.called).toBe(false);
+    });
+  });
+
   describe('GET /admin/providers', () => {
     it('should list all configured providers with configured status', async () => {
       const mockProviders: ProviderConfig[] = [
@@ -243,6 +313,57 @@ describe('Admin Funding API', () => {
       expect(response.body).toEqual({ success: true });
       expect(updateStub.calledWith('stripe', 'Credit/Debit Card', true)).toBe(true);
     });
+
+    it('should reject a provider type outside the known set', async () => {
+      const updateStub = sandbox.stub(service, 'updateProvider').resolves();
+
+      router.put('/handler/:providerType', adminHandlers.updateProvider.bind(adminHandlers));
+
+      const response = await request(testApp(router))
+        .put('/handler/bogus')
+        .send({
+          displayName: 'Bogus Provider',
+          enabled: true,
+        })
+        .expect(400);
+
+      // Asserted on the wire shape rather than `instanceof`: the shared
+      // ValidationError base clobbers subclass prototypes, so
+      // `err instanceof InvalidProviderTypeError` is unreliable.
+      expect(response.body.errorName).toBe('InvalidProviderTypeError');
+      expect(response.body.error).toContain('stripe');
+      expect(updateStub.called).toBe(false);
+    });
+  });
+
+  describe('POST /admin/funding-plans/:id/cancel', () => {
+    it('should force cancel a funding plan', async () => {
+      const planId = '4e0b1b2c-4a6b-4f2d-9c3e-1a2b3c4d5e6f';
+      const cancelStub = sandbox.stub(service, 'forceCancel').resolves();
+
+      router.post('/handler/:id/cancel', adminHandlers.forceCancel.bind(adminHandlers));
+
+      const response = await request(testApp(router))
+        .post(`/handler/${planId}/cancel`)
+        .expect(200);
+
+      expect(response.body).toEqual({ success: true });
+      expect(cancelStub.calledOnceWith(planId)).toBe(true);
+    });
+
+    it('should reject a funding plan ID that is not a UUID', async () => {
+      const cancelStub = sandbox.stub(service, 'forceCancel').resolves();
+
+      router.post('/handler/:id/cancel', adminHandlers.forceCancel.bind(adminHandlers));
+
+      const response = await request(testApp(router))
+        .post('/handler/not-a-uuid/cancel')
+        .expect(400);
+
+      expect(response.body.errorName).toBe('ValidationError');
+      expect(response.body.error).toContain('must be a valid UUID');
+      expect(cancelStub.called).toBe(false);
+    });
   });
 
   describe('GET /admin/funding-plans', () => {
@@ -254,6 +375,36 @@ describe('Admin Funding API', () => {
         totalCount: 0,
         limit,
       },
+    });
+
+    it('should serialize plans with accountEmail and without provider identifiers', async () => {
+      const plan = new FundingPlan('11111111-1111-4111-8111-111111111111');
+      plan.accountId = '22222222-2222-4222-8222-222222222222';
+      plan.accountEmail = 'supporter@pavillion.dev';
+      plan.providerSubscriptionId = 'sub_123';
+      plan.providerCustomerId = 'cus_123';
+      plan.status = 'active';
+      plan.billingCycle = 'monthly';
+      plan.amount = 500000;
+      plan.currency = 'USD';
+
+      sandbox.stub(service, 'listFundingPlans').resolves({
+        fundingPlans: [plan],
+        pagination: { currentPage: 1, totalPages: 1, totalCount: 1, limit: 50 },
+      });
+
+      router.get('/handler', adminHandlers.listFundingPlans.bind(adminHandlers));
+
+      const response = await request(testApp(router))
+        .get('/handler')
+        .expect(200);
+
+      expect(response.body.pagination.totalCount).toBe(1);
+      const row = response.body.fundingPlans[0];
+      expect(row.accountEmail).toBe('supporter@pavillion.dev');
+      expect(row.billingCycle).toBe('monthly');
+      expect(row).not.toHaveProperty('providerSubscriptionId');
+      expect(row).not.toHaveProperty('providerCustomerId');
     });
 
     it('should use default limit of 50 when no limit is provided', async () => {

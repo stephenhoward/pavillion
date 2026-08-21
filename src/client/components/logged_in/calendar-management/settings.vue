@@ -137,7 +137,7 @@
           </p>
 
           <!-- Admin exempt -->
-          <div v-if="state.fundingStatus === 'admin-exempt'" class="setting-extended-status">
+          <div v-if="state.fundingStatus === 'admin_exempt'" class="setting-extended-status">
             <span class="setting-badge setting-badge--enabled">
               {{ t('extended_features_admin_exempt') }}
             </span>
@@ -150,8 +150,8 @@
             </span>
           </div>
 
-          <!-- Funded -->
-          <div v-else-if="state.fundingStatus === 'funded'" class="setting-extended-status">
+          <!-- Covered by a funding plan -->
+          <div v-else-if="state.fundingStatus === 'covered'" class="setting-extended-status">
             <span class="setting-badge setting-badge--enabled">
               {{ t('extended_features_enabled') }}
             </span>
@@ -187,7 +187,7 @@
             </div>
           </div>
 
-          <!-- Unfunded -->
+          <!-- Not covered -->
           <div v-else class="setting-extended-status">
             <button
               type="button"
@@ -214,7 +214,7 @@
     v-if="state.showFundingSheet"
     :calendarId="props.calendarId"
     @close="state.showFundingSheet = false"
-    @subscribed="onSubscribed"
+    @plan-started="onPlanStarted"
     :instanceName="instanceName"
   />
 </template>
@@ -509,9 +509,9 @@ const disableExtendedFeatures = async () => {
 };
 
 /**
- * Handle successful funding subscription from FundingSheet
+ * Handle a successfully started funding plan from FundingSheet
  */
-const onSubscribed = async () => {
+const onPlanStarted = async () => {
   state.showFundingSheet = false;
   state.success = t('extended_features_enabled_success');
   clearMessages();

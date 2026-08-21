@@ -5,22 +5,11 @@ import fs from 'fs/promises';
 import { v4 as uuidv4 } from 'uuid';
 import logger from '@/server/common/helper/logger';
 
-// tests
+// The entire `database` config object is handed to Sequelize as-is, so every
+// connection setting — dialect, credentials, pool, dialectOptions — is declared
+// in config/*.yaml rather than here. See the `database` block in
+// config/default.yaml for the pool sizing and PostgreSQL session limits.
 const db = new Sequelize( config.get('database') );
-
-// production/ development
-// new Sequelize('pavillion', 'username', 'password', {
-//     host: 'localhost',
-//     port: 5432,
-//     dialect: 'postgres',
-//     logging: console.log,
-//     pool: {
-//         max: 5,
-//         min: 0,
-//         acquire: 30000,
-//         idle: 10000
-//     }
-//     });
 
 // ISO date pattern for seed data (without timezone suffix)
 const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}$/;

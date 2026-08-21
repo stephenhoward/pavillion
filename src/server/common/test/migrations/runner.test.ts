@@ -6,6 +6,7 @@ import {
   runMigrations,
   getPendingMigrations,
   getExecutedMigrations,
+  clearMigrationSessionTimeouts,
 } from '@/server/common/migrations/runner';
 
 /**
@@ -97,6 +98,44 @@ describe('Migration Runner', () => {
 
       const pending = await getPendingMigrations(sequelize, testMigrationsDir);
       expect(pending).toHaveLength(0);
+    });
+  });
+
+  describe('Session Timeout Exemption', () => {
+    // The app's pooled connections carry a 60s statement_timeout and
+    // idle_in_transaction_session_timeout (config/default.yaml). Migrations run
+    // on that same Sequelize instance, and DDL on a large table can legitimately
+    // run far longer, so the migration transaction clears both for its own
+    // session. SET LOCAL reverts at commit, leaving the pooled setting intact.
+    it('clears both session timeouts for the migration transaction on postgres', async () => {
+      const statements: string[] = [];
+      const fakeSequelize = {
+        getDialect: () => 'postgres',
+        query: async (sql: string) => {
+          statements.push(sql);
+        },
+      };
+
+      await clearMigrationSessionTimeouts(fakeSequelize as unknown as Sequelize);
+
+      expect(statements).toEqual([
+        'SET LOCAL statement_timeout = 0',
+        'SET LOCAL idle_in_transaction_session_timeout = 0',
+      ]);
+    });
+
+    it('issues no session statements on dialects that do not support them', async () => {
+      const statements: string[] = [];
+      const fakeSequelize = {
+        getDialect: () => 'sqlite',
+        query: async (sql: string) => {
+          statements.push(sql);
+        },
+      };
+
+      await clearMigrationSessionTimeouts(fakeSequelize as unknown as Sequelize);
+
+      expect(statements).toEqual([]);
     });
   });
 

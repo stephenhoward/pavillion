@@ -10,6 +10,8 @@ import AcceptActivity from '@/server/activitypub/model/action/accept';
 import AnnounceActivity from '@/server/activitypub/model/action/announce';
 import UndoActivity from '@/server/activitypub/model/action/undo';
 import JoinActivity from '@/server/activitypub/model/action/join';
+import IgnoreActivity from '@/server/activitypub/model/action/ignore';
+import FlagActivity from '@/server/activitypub/model/action/flag';
 import ActivityPubInterface from '@/server/activitypub/interface';
 import { logError } from '@/server/common/helper/error-logger';
 import CalendarInterface from '@/server/calendar/interface';
@@ -19,6 +21,7 @@ import { AP_CONTEXT } from '@/server/activitypub/model/base';
 
 const logger = createLogger('activitypub');
 import { verifyHttpSignature, extractKeyIdOrigin } from '@/server/activitypub/helper/http_signature';
+import { logInboxActivityAccepted } from '@/server/activitypub/helper/inbox-acceptance-log';
 import type { InboxAuthContext } from '@/server/activitypub/interface';
 import {
   createActorRateLimiter,
@@ -34,6 +37,8 @@ import {
   announceActivitySchema,
   undoActivitySchema,
   joinActivitySchema,
+  ignoreActivitySchema,
+  flagActivitySchema,
 } from '@/server/activitypub/validation/schemas';
 
 /**
@@ -355,8 +360,21 @@ export default class ActivityPubServerRoutes {
       return;
     }
 
+    // Arrival, NOT acceptance: everything below can still reject with 400.
+    // Acceptance is recorded separately by logInboxActivityAccepted once the
+    // activity has been validated and written to the inbox.
     logger.info({ activityType: req.body.type, calendarName }, 'Received inbox activity');
-    logger.info({ activityBody: req.body }, 'Inbox activity body');
+    if (req.body.type === 'Flag') {
+      // A Flag carries a remote reporter's actor URI and the free text of a
+      // moderation report. Everything downstream reduces that reporter to a
+      // bare instance host before anything durable is written; dumping the
+      // raw body here would put both the identity and the report text into
+      // the logs and bypass that reduction entirely. Log only the envelope.
+      logger.info({ activityId: req.body.id, calendarName }, 'Inbox Flag activity received (body withheld)');
+    }
+    else {
+      logger.info({ activityBody: req.body }, 'Inbox activity body');
+    }
 
     // Validate actor URI
     const actorUri = req.body.actor;
@@ -400,6 +418,18 @@ export default class ActivityPubServerRoutes {
         // answered with an Ignore. Pavillion never acts on the Join itself.
         activityValidation = joinActivitySchema.safeParse(req.body);
         break;
+      case 'Ignore':
+        // FEP-8a8e's reply to an unhandled Join. Pavillion emits one itself,
+        // so it must accept one: an Ignore is informational and is recorded
+        // rather than acted on (see dispatchByType).
+        activityValidation = ignoreActivitySchema.safeParse(req.body);
+        break;
+      case 'Flag':
+        // Cross-instance moderation report. Accepted from any instance this
+        // one has not blocked — see the sender-policy note on FILTERED_TYPES
+        // in ProcessInboxService.processInboxMessage.
+        activityValidation = flagActivitySchema.safeParse(req.body);
+        break;
       default:
         res.status(400).json({
           error: 'Unsupported activity type',
@@ -440,6 +470,7 @@ export default class ActivityPubServerRoutes {
 
         if (activity) {
           const result = await this.service.processPersonActorActivity(calendar, activity);
+          logInboxActivityAccepted('calendar', calendarName, req.body);
           if (result) {
             res.status(200).json(result.toObject());
           }
@@ -489,6 +520,12 @@ export default class ActivityPubServerRoutes {
       case 'Join':
         message = JoinActivity.fromObject(req.body);
         break;
+      case 'Ignore':
+        message = IgnoreActivity.fromObject(req.body);
+        break;
+      case 'Flag':
+        message = FlagActivity.fromObject(req.body);
+        break;
     }
 
     if ( message ) {
@@ -497,6 +534,7 @@ export default class ActivityPubServerRoutes {
         origin: extractKeyIdOrigin(req),
       };
       await this.service.addToInbox(calendar, message, auth);
+      logInboxActivityAccepted('calendar', calendarName, req.body);
       res.status(200).send('Message received');
     }
     else {

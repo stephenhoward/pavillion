@@ -27,9 +27,12 @@ const UUID_V4_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[
 
 export default {
   /**
-   * Validates if a string is a valid UUID v4
+   * Validates if a value is a valid UUID v4
+   *
+   * Takes `unknown` and narrows to `string` so it can guard route parameters,
+   * which Express types as `string | string[]`.
    */
-  isValidUUID(uuid: string): boolean {
+  isValidUUID(uuid: unknown): uuid is string {
     return typeof uuid === 'string' && UUID_V4_REGEX.test(uuid);
   },
 

@@ -7,7 +7,7 @@ import { FundingEventEntity } from '../entity/funding_event';
 import { FundingSettings } from '@/common/model/funding-plan';
 import { millicentsToDisplay, displayToMillicents } from '@/common/model/funding-plan';
 
-describe('Subscription Entities', () => {
+describe('Funding Plan Entities', () => {
   const sandbox = sinon.createSandbox();
 
   afterEach(() => {
@@ -113,9 +113,102 @@ describe('Subscription Entities', () => {
       expect(newEntity.get('status')).toBe('active');
       expect(newEntity.get('billing_cycle')).toBe('monthly');
     });
+
+    describe('status transition hook', () => {
+      const planRow = (status: 'active' | 'past_due' | 'suspended' | 'cancelled') => ({
+        id: 'sub-id',
+        account_id: 'account-id',
+        provider_config_id: 'provider-id',
+        provider_subscription_id: 'sub_123',
+        provider_customer_id: 'cus_123',
+        status,
+        billing_cycle: 'monthly' as const,
+        amount: 1000000,
+        currency: 'USD',
+        current_period_start: new Date(),
+        current_period_end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+        cancelled_at: new Date(Date.now() - 24 * 60 * 60 * 1000),
+        suspended_at: new Date(Date.now() - 24 * 60 * 60 * 1000),
+      });
+
+      /**
+       * Builds a plan in the given status, with both lifecycle markers set, for
+       * tests that then reassign .status. That reassignment is what populates
+       * previous('status'), so these instances need no further ceremony.
+       */
+      function buildPlan(status: 'active' | 'past_due' | 'suspended' | 'cancelled'): FundingPlanEntity {
+        return FundingPlanEntity.build(planRow(status));
+      }
+
+      it('should clear cancelled_at when a cancelled plan is resubscribed', () => {
+        const entity = buildPlan('cancelled');
+
+        entity.status = 'active';
+        FundingPlanEntity.validateStatusTransition(entity);
+
+        // A stale cancellation marker on a paying plan would read as an
+        // expired plan to the funding-access check
+        expect(entity.cancelled_at).toBeNull();
+      });
+
+      it('should clear suspended_at when a suspended plan is reactivated', () => {
+        const entity = buildPlan('suspended');
+
+        entity.status = 'active';
+        FundingPlanEntity.validateStatusTransition(entity);
+
+        expect(entity.suspended_at).toBeNull();
+      });
+
+      it('should set cancelled_at when a plan is cancelled', () => {
+        const entity = buildPlan('active');
+        entity.cancelled_at = null;
+
+        entity.status = 'cancelled';
+        FundingPlanEntity.validateStatusTransition(entity);
+
+        expect(entity.cancelled_at).toBeInstanceOf(Date);
+      });
+
+      it('should leave both markers untouched when the status does not change', () => {
+        // A save that touches some other column must not restamp the lifecycle
+        // markers. raw: true seeds previous() from the row without any
+        // reassignment, which is what a loaded-then-resaved record looks like
+        // when status is not among the columns being updated.
+        const row = planRow('cancelled');
+        const entity = FundingPlanEntity.build(row, { isNewRecord: false, raw: true });
+
+        expect(entity.previous('status')).toBe('cancelled');
+
+        FundingPlanEntity.validateStatusTransition(entity);
+
+        expect(entity.cancelled_at).toBe(row.cancelled_at);
+        expect(entity.suspended_at).toBe(row.suspended_at);
+      });
+    });
   });
 
   describe('FundingEventEntity', () => {
+    it('should round-trip fundingPlanId through toModel and fromModel', () => {
+      const entity = FundingEventEntity.build({
+        id: 'event-id',
+        funding_plan_id: 'plan-id',
+        event_type: 'invoice.paid',
+        provider_event_id: 'evt_123',
+        payload: '{"status":"active"}',
+        processed_at: new Date(),
+      });
+
+      const model = entity.toModel();
+      expect(model.fundingPlanId).toBe('plan-id');
+
+      const newEntity = FundingEventEntity.fromModel(model);
+      expect(newEntity.get('funding_plan_id')).toBe('plan-id');
+      expect(newEntity.get('id')).toBe('event-id');
+      expect(newEntity.get('event_type')).toBe('invoice.paid');
+      expect(newEntity.get('provider_event_id')).toBe('evt_123');
+    });
+
     it('should store event payload as JSON', () => {
       const payload = {
         type: 'invoice.paid',
@@ -163,8 +256,8 @@ describe('Subscription Entities', () => {
   });
 
   describe('Entity Associations', () => {
-    it('should establish subscription to account relationship', () => {
-      const subscriptionData = {
+    it('should establish funding plan to account relationship', () => {
+      const planData = {
         id: 'sub-id',
         account_id: 'account-id',
         provider_config_id: 'provider-id',
@@ -180,13 +273,13 @@ describe('Subscription Entities', () => {
         suspended_at: null,
       };
 
-      const subscription = FundingPlanEntity.build(subscriptionData);
+      const plan = FundingPlanEntity.build(planData);
 
-      expect(subscription.account_id).toBe('account-id');
-      expect(subscription.provider_config_id).toBe('provider-id');
+      expect(plan.account_id).toBe('account-id');
+      expect(plan.provider_config_id).toBe('provider-id');
 
       // Test toModel includes foreign key relationships
-      const model = subscription.toModel();
+      const model = plan.toModel();
       expect(model.accountId).toBe('account-id');
       expect(model.providerConfigId).toBe('provider-id');
     });

@@ -1070,7 +1070,7 @@ class ImportSourceService {
 
   /**
    * Reject duplicate URLs on the same calendar (case-insensitive hostname +
-   * exact path comparison). Prevents accidental double-subscription to the
+   * exact path comparison). Prevents accidentally adding a duplicate import source for the
    * same feed on a single calendar.
    */
   private async assertUrlNotDuplicate(calendarId: string, url: string): Promise<void> {

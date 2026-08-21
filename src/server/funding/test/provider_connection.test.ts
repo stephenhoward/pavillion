@@ -329,7 +329,7 @@ describe('ProviderConnectionService', () => {
   });
 
   describe('disconnectProvider', () => {
-    it('should check active subscriptions and return warning if not confirmed', async () => {
+    it('should check active funding plans and return warning if not confirmed', async () => {
       const mockEntity = {
         id: uuidv4(),
         provider_type: 'stripe',
@@ -345,7 +345,7 @@ describe('ProviderConnectionService', () => {
       findOneStub.resolves(mockEntity as any);
 
       const countStub = sandbox.stub(FundingPlanEntity, 'count');
-      countStub.resolves(5); // 5 active subscriptions
+      countStub.resolves(5); // 5 active funding plans
 
       const result = await service.disconnectProvider('stripe', false);
 
@@ -354,7 +354,7 @@ describe('ProviderConnectionService', () => {
       expect(countStub.calledOnce).toBe(true);
     });
 
-    it('should force-cancel subscriptions and delete provider if confirmed', async () => {
+    it('should force-cancel funding plans and delete provider if confirmed', async () => {
       const providerId = uuidv4();
       const mockEntity = {
         id: providerId,
@@ -372,22 +372,22 @@ describe('ProviderConnectionService', () => {
       const findOneStub = sandbox.stub(ProviderConfigEntity, 'findOne');
       findOneStub.resolves(mockEntity as any);
 
-      // Stub count for active subscriptions check
+      // Stub count for active funding plans check
       const countStub = sandbox.stub(FundingPlanEntity, 'count');
-      countStub.resolves(2); // 2 active subscriptions
+      countStub.resolves(2); // 2 active funding plans
 
-      const mockSubscriptions = [
+      const mockPlans = [
         { id: uuidv4(), provider_subscription_id: 'sub_1', provider_config_id: providerId },
         { id: uuidv4(), provider_subscription_id: 'sub_2', provider_config_id: providerId },
       ];
 
       const findAllStub = sandbox.stub(FundingPlanEntity, 'findAll');
-      findAllStub.resolves(mockSubscriptions as any);
+      findAllStub.resolves(mockPlans as any);
 
       // Stub adapter
       sandbox.stub(service as any, 'getAdapter').returns(mockStripeAdapter);
 
-      // Stub cancel subscription via service
+      // Stub cancel funding plan via service
       const cancelStub = sandbox.stub();
       (service as any).fundingService = {
         forceCancel: cancelStub,
@@ -396,13 +396,13 @@ describe('ProviderConnectionService', () => {
       const result = await service.disconnectProvider('stripe', true);
 
       expect(result.requiresConfirmation).toBeUndefined();
-      expect(cancelStub.callCount).toBe(2); // Called for each subscription
+      expect(cancelStub.callCount).toBe(2); // Called for each funding plan
       expect(mockEntity.destroy.calledOnce).toBe(true);
     });
   });
 
   describe('getActiveFundingPlanCount', () => {
-    it('should return count of active subscriptions for provider', async () => {
+    it('should return count of active funding plans for provider', async () => {
       const providerId = uuidv4();
       const mockEntity = {
         id: providerId,

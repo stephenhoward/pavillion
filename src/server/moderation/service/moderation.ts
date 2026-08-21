@@ -9,7 +9,7 @@ import type { ReporterType, EscalationType } from '@/common/model/report';
 import { BlockedInstance } from '@/common/model/blocked_instance';
 import { BlockedReporter } from '@/common/model/blocked_reporter';
 import { EventNotFoundError } from '@/common/exceptions/calendar';
-import { DuplicateReportError, ReportValidationError } from '@/common/exceptions/report';
+import { DuplicateReportError, FederatedReportRateLimitError, ReportValidationError } from '@/common/exceptions/report';
 import { ReportEntity } from '@/server/moderation/entity/report';
 import { EventReporterEntity } from '@/server/moderation/entity/event_reporter';
 import { ReportEscalationEntity } from '@/server/moderation/entity/report_escalation';
@@ -275,6 +275,11 @@ class ModerationService {
   /**
    * Collects validation errors for eventId, category, and description fields.
    * Does not throw - returns an array of error messages for aggregation.
+   *
+   * Governs the locally-submitted report paths only. The inbound federated
+   * path has its own validator, {@link validateRemoteReportFields}, which
+   * shares the description length limit but deliberately diverges on empty
+   * descriptions and eventId format — change one and check the other.
    *
    * @param eventId - Event UUID to report
    * @param category - Report category value
@@ -1953,21 +1958,131 @@ class ModerationService {
     });
   }
   /**
+   * Collects validation errors for an inbound federated report.
+   *
+   * Shares the description length invariant with {@link validateReportFields}
+   * (same `MAX_DESCRIPTION_LENGTH`), and deliberately diverges on two points
+   * because the inputs are ActivityPub wire values rather than form fields:
+   *
+   * - **Empty description is allowed.** A `Flag` legitimately carries no
+   *   `content`; the category alone is the report. Requiring text here would
+   *   reject well-formed reports from other implementations.
+   * - **No eventId format check.** The caller resolves the event by ID before
+   *   this runs, so existence — not UUID shape — is the real invariant, and
+   *   the id was parsed out of an object IRI rather than submitted directly.
+   *
+   * `private` on purpose, unlike the sibling validators on this service, and
+   * not an oversight. A caller outside the service can reach this validator's
+   * rules only by calling {@link receiveRemoteReport}, which always runs it
+   * first — there is nothing a direct call would let a caller do except run
+   * the checks without the write they guard. (The siblings are public because
+   * validation for the locally-submitted paths is aggregated across several
+   * calls before responding; `validateAdminActionFields` is invoked from
+   * `admin-report-routes` for exactly that reason.) Its boundary conditions
+   * are pinned through `receiveRemoteReport` rather than by calling it
+   * directly, which also keeps those tests behavioral.
+   *
+   * @param data - Remote report data from the inbound Flag
+   * @returns Array of validation error messages (empty if valid)
+   */
+  private validateRemoteReportFields(data: ReceiveRemoteReportData): string[] {
+    const errors: string[] = [];
+
+    if (!data.category) {
+      errors.push('Category is required');
+    }
+    else if (!VALID_CATEGORIES.includes(data.category)) {
+      errors.push(`Invalid category. Must be one of: ${VALID_CATEGORIES.join(', ')}`);
+    }
+
+    if (typeof data.description !== 'string') {
+      errors.push('Description must be a string');
+    }
+    else if (data.description.trim().length > MAX_DESCRIPTION_LENGTH) {
+      errors.push(`Description must be ${MAX_DESCRIPTION_LENGTH} characters or fewer`);
+    }
+
+    return errors;
+  }
+
+  /**
+   * Reports whether a remote instance has hit its cap on federated reports
+   * about a single event within the configured window.
+   *
+   * Keyed on `(eventId, forwardedFromInstance)` rather than on the delivery
+   * endpoint: the inbox route's per-actor and per-calendar limiters bound how
+   * fast a sender may talk to one inbox, but neither bounds how many reports
+   * accumulate against one target event.
+   *
+   * @param eventId - The reported event's UUID
+   * @param instance - The reporting instance's host
+   * @returns True when the instance has reached the cap for this event
+   */
+  async hasExceededFederatedReportLimit(eventId: string, instance: string): Promise<boolean> {
+    const windowMs = config.get<number>('rateLimit.moderation.federatedReportByInstance.windowMs');
+    const maxReports = config.get<number>('rateLimit.moderation.federatedReportByInstance.max');
+
+    const windowStart = new Date(Date.now() - windowMs);
+
+    const recentCount = await ReportEntity.count({
+      where: {
+        event_id: eventId,
+        forwarded_from_instance: instance,
+        reporter_type: 'federation',
+        created_at: {
+          [Op.gte]: windowStart,
+        },
+      },
+    });
+
+    return recentCount >= maxReports;
+  }
+
+  /**
    * Receives a remote report forwarded from another federated instance.
    * Creates a Report with reporterType='federation'.
+   *
+   * This is an unauthenticated-by-relationship write path into a calendar
+   * owner's moderation queue: any instance this one has not blocked may reach
+   * it, with no follow relationship in either direction. The two abuse
+   * controls the local report paths enforce therefore apply here as well —
+   * field validation (bounding what a single report may contain) and a
+   * per-(event, instance) window cap (bounding how many of them there can be).
+   * Both are enforced at the service layer rather than only at the inbox
+   * schema, so every caller of this method inherits them.
+   *
+   * A suppressed report is dropped, not persisted in any form: recording
+   * suppressions would put a second write path into the very table the cap
+   * exists to bound. On the ActivityPub path the `ap_inbox` row (DEC-013) is
+   * the durable record that the Flag arrived and was authenticated.
    *
    * @param data - Remote report data including source instance information
    * @returns The created Report domain model
    * @throws EventNotFoundError if the event does not exist
+   * @throws ReportValidationError if the report fields are invalid
+   * @throws FederatedReportRateLimitError if the instance has hit its cap for this event
    */
   async receiveRemoteReport(data: ReceiveRemoteReportData): Promise<Report> {
     if (!this.calendarInterface) {
       throw new Error('CalendarInterface is required for receiveRemoteReport');
     }
+    const validationErrors = this.validateRemoteReportFields(data);
+    if (validationErrors.length > 0) {
+      throw new ReportValidationError(validationErrors);
+    }
     // Look up the event to get calendarId
     const event = await this.calendarInterface.getEventById(data.eventId);
     if (!event || !event.calendarId) {
       throw new EventNotFoundError();
+    }
+    // Throttle before writing: a remote instance mints its own activity ids,
+    // so nothing about the Flag itself bounds how many it can send.
+    if (await this.hasExceededFederatedReportLimit(data.eventId, data.forwardedFromInstance)) {
+      logger.warn(
+        { eventId: data.eventId, instance: data.forwardedFromInstance },
+        '[MODERATION] Suppressed federated report: per-instance cap reached for this event',
+      );
+      throw new FederatedReportRateLimitError();
     }
     // Create the report with federation reporter type
     const report = new Report();

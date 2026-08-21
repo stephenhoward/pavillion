@@ -16,9 +16,96 @@ export type BillingCycle = 'monthly' | 'yearly';
 export type ProviderType = 'stripe' | 'paypal';
 
 /**
- * Calendar funding status for UI display
+ * How a single calendar is currently covered.
+ *
+ * This is the one vocabulary for a single calendar's coverage, shared verbatim
+ * by the service, the calendar funding endpoint and the frontend. snake_case,
+ * string-literal union, no TS runtime enum: the values travel over the wire, so
+ * a runtime enum would only add a second spelling to keep in sync.
+ *
+ * The values say `covered`, never `funded`, because the money flows owner →
+ * instance (DEC-007): a calendar is covered by a funding plan, and it is the
+ * instance that is funded. "This calendar is funded" inverts the model, so it
+ * is not a value this union can express.
+ *
+ * It describes a *relationship*, not an entitlement. `not_covered` means "this
+ * calendar has no grant and no paying allocation", which is not the same
+ * question as "may this calendar use feature X" — that is
+ * FundingService.checkFundingAccess, and the two deliberately disagree in two
+ * cases documented at getFundingStatusForCalendar. Read the feature flags on
+ * the funding endpoint's response, never this value, to decide what a calendar
+ * may do.
+ *
+ * The bulk admin-dashboard vocabulary ('subscribed' | 'grant' | 'none' from
+ * getPlanStatusForCalendars) is a separate, un-migrated vocabulary. Do not map
+ * one onto the other casually — they are computed by different queries.
  */
-export type FundingStatus = 'admin-exempt' | 'grant' | 'funded' | 'unfunded';
+export type FundingStatus = 'admin_exempt' | 'grant' | 'covered' | 'not_covered';
+
+/**
+ * The features whose availability depends on funding access.
+ *
+ * This registry is the implementation surface of the DEC-011 federated value
+ * boundary: in-network features are free, and features that bridge to
+ * non-federated systems — inbound or outbound — are funding-gated. Every entry
+ * records which side of that boundary its feature sits on and why. A feature
+ * that cannot state a boundary rationale does not belong here.
+ *
+ * Ownership (DEC-003): the funding domain owns both the decision to gate a
+ * feature and the vocabulary of keys used to name one. Feature domains declare
+ * nothing, hold no plan state, and read none — they pass a key from this
+ * registry to FundingInterface and act on the answer. Gating a new feature is
+ * therefore an entry here plus a call, never funding logic grown inside the
+ * feature's own domain.
+ */
+export const FUNDING_GATED_FEATURES = {
+  // Scope (DEC-004): this gates the embedding surface only — the widget data
+  // endpoint and the widget-domain configuration. A calendar's own public
+  // /view/ pages stay anonymously readable whatever its funding state. The
+  // widget is the one gate that legitimately faces an anonymous caller,
+  // because embedding into a non-federated site is an outbound bridge; the
+  // public read of the calendar itself never is.
+  widget_embedding: {
+    boundaryRationale:
+      'Outside the network. A widget publishes calendar content into non-federated '
+      + 'web properties, which is an outbound platform bridge rather than participation '
+      + 'in the federated network. Following, reposting, and curating between Pavillion '
+      + 'and other ActivityPub event platforms stay free because they are in-network.',
+  },
+} as const;
+
+/**
+ * Key identifying a funding-gated feature.
+ *
+ * Derived from the registry so the union cannot drift from the entries that
+ * carry the boundary rationales.
+ */
+export type FundingGatedFeature = keyof typeof FUNDING_GATED_FEATURES;
+
+/**
+ * Everything a calendar's owner may be told about how that calendar is covered.
+ *
+ * This type is the field allowlist for GET /v1/calendars/:calendarId/funding,
+ * expressed once so the service, the route and the frontend cannot drift. It
+ * exists because the alternative — serialising a FundingPlan — leaks:
+ * FundingPlan.toObject() carries accountId, and the entity behind it carries
+ * the Stripe customer and subscription ids. None of those answer any question
+ * the calendar settings screen asks, so none of them appear here.
+ *
+ * `status` and `features` answer different questions and may disagree; see the
+ * divergence note on FundingService.getFundingStatusForCalendar. `features` is
+ * the authoritative answer to "may this calendar do X".
+ */
+export type CalendarFundingSummary = {
+  /** How this calendar is covered. Display vocabulary, not an entitlement. */
+  status: FundingStatus;
+  /** End of the paid-through period of the plan covering this calendar, if any. */
+  currentPeriodEnd: Date | null;
+  /** When the funding plan stops granting access, if it sets any boundary. */
+  accessExpiresAt: Date | null;
+  /** Per-feature gate decisions, keyed by FUNDING_GATED_FEATURES. */
+  features: Record<FundingGatedFeature, boolean>;
+};
 
 /**
  * Instance-wide funding settings
@@ -118,6 +205,7 @@ export class FundingPlan extends PrimaryModel {
   currentPeriodEnd: Date | null = null;
   cancelledAt: Date | null = null;
   suspendedAt: Date | null = null;
+  accountEmail?: string; // display-only, populated by admin listings
 
   constructor(id?: string) {
     super(id);
@@ -127,6 +215,7 @@ export class FundingPlan extends PrimaryModel {
     return {
       id: this.id,
       accountId: this.accountId,
+      accountEmail: this.accountEmail,
       status: this.status,
       billingCycle: this.billingCycle,
       amount: this.amount,
@@ -144,6 +233,7 @@ export class FundingPlan extends PrimaryModel {
     plan.providerConfigId = obj.providerConfigId ?? '';
     plan.providerSubscriptionId = obj.providerSubscriptionId ?? '';
     plan.providerCustomerId = obj.providerCustomerId ?? '';
+    plan.accountEmail = obj.accountEmail ?? undefined;
     plan.status = obj.status ?? 'active';
     plan.billingCycle = obj.billingCycle ?? 'monthly';
     plan.amount = obj.amount ?? 0;

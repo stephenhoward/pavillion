@@ -107,9 +107,10 @@ test.describe.serial('Note federation', () => {
     const eventIri = `${INSTANCE_ALPHA.baseUrl}/calendars/${alphaCalendar.urlName}/events/${event.id}`;
     const noteIri = `${eventIri}/note`;
 
-    // PRIMARY: Create(Note) reached beta's inbox handler. The inbox-guard
-    // skip path (08e7df6) fires AFTER the "Received inbox activity" log entry,
-    // so the log line is the only reliable observable for the Note variant.
+    // PRIMARY: beta accepted the Create(Note) — validated it and wrote it to
+    // the inbox. The inbox-guard skip path (08e7df6) fires downstream of that
+    // write, so the acceptance log record is the only reliable observable for
+    // the Note variant.
     const createDelivered = await waitForBetaInboxActivity('Create', noteIri, anchorCreate);
     expect(
       createDelivered,

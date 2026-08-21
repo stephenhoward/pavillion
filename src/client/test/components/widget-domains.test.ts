@@ -48,11 +48,11 @@ describe('WidgetDomains', () => {
     });
   };
 
-  describe('subscription error handling', () => {
-    it('should show subscription error for non-admin users', async () => {
+  describe('funding-gate error handling', () => {
+    it('should show funding-gate error for non-admin users', async () => {
       const wrapper = createWrapper();
 
-      // Mock axios PUT to return 402 subscription error
+      // Mock axios PUT to return 402 funding-gate error
       vi.mocked(axios.put).mockRejectedValue({
         response: {
           status: 402,
@@ -70,19 +70,19 @@ describe('WidgetDomains', () => {
       await wrapper.vm.addDomain();
       await nextTick();
 
-      // Should show subscription error
+      // Should show funding-gate error
       expect(wrapper.vm.state.error).toBe('funding_plan_required');
-      expect(wrapper.vm.state.isSubscriptionError).toBe(true);
+      expect(wrapper.vm.state.isFundingGateError).toBe(true);
     });
 
-    it('should NOT show subscription error for admin users', async () => {
+    it('should NOT show funding-gate error for admin users', async () => {
       // Create wrapper with admin user
       const adminAuthn = {
         isAdmin: vi.fn(() => true),
       };
       const wrapper = createWrapper(adminAuthn);
 
-      // Mock axios PUT to return 402 subscription error
+      // Mock axios PUT to return 402 funding-gate error
       vi.mocked(axios.put).mockRejectedValue({
         response: {
           status: 402,
@@ -100,9 +100,9 @@ describe('WidgetDomains', () => {
       await wrapper.vm.addDomain();
       await nextTick();
 
-      // Should show generic error instead of subscription error
+      // Should show generic error instead of funding-gate error
       expect(wrapper.vm.state.error).toBe('error_adding');
-      expect(wrapper.vm.state.isSubscriptionError).toBe(false);
+      expect(wrapper.vm.state.isFundingGateError).toBe(false);
 
       // Verify isAdmin was called
       expect(adminAuthn.isAdmin).toHaveBeenCalled();
@@ -131,7 +131,7 @@ describe('WidgetDomains', () => {
 
       // Should show generic error
       expect(wrapper.vm.state.error).toBe('error_adding');
-      expect(wrapper.vm.state.isSubscriptionError).toBe(false);
+      expect(wrapper.vm.state.isFundingGateError).toBe(false);
     });
 
     it('should show generic error for other errors (admin)', async () => {
@@ -161,7 +161,7 @@ describe('WidgetDomains', () => {
 
       // Should show generic error
       expect(wrapper.vm.state.error).toBe('error_adding');
-      expect(wrapper.vm.state.isSubscriptionError).toBe(false);
+      expect(wrapper.vm.state.isFundingGateError).toBe(false);
     });
 
     it('should show invalid domain error for InvalidDomainFormatError (non-admin)', async () => {
@@ -187,7 +187,7 @@ describe('WidgetDomains', () => {
 
       // Should show invalid domain error
       expect(wrapper.vm.state.error).toBe('error_invalid_domain');
-      expect(wrapper.vm.state.isSubscriptionError).toBe(false);
+      expect(wrapper.vm.state.isFundingGateError).toBe(false);
     });
 
     it('should successfully add domain for admin user', async () => {
@@ -218,7 +218,7 @@ describe('WidgetDomains', () => {
       expect(wrapper.vm.state.currentDomain).toBe('example.com');
     });
 
-    it('should successfully add domain for non-admin user with subscription', async () => {
+    it('should successfully add domain for non-admin user with funding plan', async () => {
       const wrapper = createWrapper();
 
       // Mock successful response
