@@ -129,11 +129,9 @@ Every spec lives in `tests/e2e/federation/`.
 - **`join-ignore.spec.ts`** — **partly proof by absence.** An inbound Join from a peer that models attendance is admitted, dispatched, and answered with an Ignore addressed to the sending actor alone, carrying `as:Public` in no addressing field. Proving the reply came back is what proves the Join was dispatched at all, so the returned Ignore is load-bearing, together with `processed_status: 'ok'` on the row it leaves in the receiver's `ap_inbox` ([DEC-013](../agent-os/product/decisions/dec-013-inbox-authenticated-activity-log.md)) — a null status would mean the row was written and never dispatched, an error status that the dispatcher did not recognise the type. Only against that round trip does the negative half mean anything: the origin's public event listing is byte-identical before and after, because Pavillion keeps no attendance state for a Join to write to.
 - **`note.spec.ts`** — **proof by absence.** The paired Create/Update/Delete(Note) activities Pavillion emits for Mastodon-class peers do reach a Pavillion inbox, and a Pavillion receiver skips every one of them without producing a second feed row or a Note-derived event. Notes are outbound interop only ([DEC-014](../agent-os/product/decisions/dec-014-create-original-announce-repost.md)).
 
-### Known suite failures
+### The suite runs serially
 
-A local full-suite run is not green today, and the failures are reproducible rather than flaky: `follow.spec.ts` (both tests), `follow-backfill.spec.ts`, `note.spec.ts`, `signed_delivery.spec.ts`, and `unpost-sticky.spec.ts` fail, with the remainder of `signed_delivery`'s serial block skipped as a cascade.
-
-None of them is failing for a reason of its own. `signature_strict_receive.spec.ts` toggles beta's enforcement by force-recreating the shared beta container, and `playwright.federation.config.ts` sets `fullyParallel: true` with no worker cap outside CI — so every other spec running at that moment gets a 502 from nginx, and each failure throws in fixture setup rather than at an assertion. CI pins `workers: 1` and never reproduces it. Running the suite with `signature_strict_receive.spec.ts` excluded is green. Tracked as `pv-jxbt`.
+`playwright.federation.config.ts` pins `workers: 1` everywhere, not only on CI. Every spec shares the same two Docker instances, and `signature_strict_receive.spec.ts` force-recreates the beta container to toggle signature enforcement — so a concurrent worker gets a 502 from nginx and fails in fixture setup, for a reason belonging to no spec in particular. CI has always been serial and never saw it; a local run with default workers did. A spec that needs to change instance configuration must assume it owns both instances while it runs.
 
 ## Inbound Coverage Matrix
 
@@ -169,7 +167,7 @@ These are the types the calendar inbox accepts and `dispatchByType` handles.
 Rows that need more than a cell:
 
 - **`Accept(Follow)` is indirect.** `follow.spec.ts` asserts that Beta's follow row reaches the accepted state, which could only happen if Alpha's Accept was ingested — but nothing asserts the Accept itself. A regression that accepted follows locally without the round-trip would still pass.
-- **`Delete(Event)` is unproven in its pulled form.** `signed_delivery.spec.ts` covers the signed POST. Nothing exercises a Delete arriving through `outbox_pull`, even though the backfill worker replays Deletes. Tracked as `pv-gjzd`.
+- **`Delete(Event)` is unproven in its pulled form.** `signed_delivery.spec.ts` covers the signed POST. Nothing exercises a Delete arriving through `outbox_pull`, even though the backfill worker replays Deletes.
 - **`Undo(Announce)` has no signed-POST proof.** `follow-backfill.spec.ts` proves the `outbox_pull` form. `unpost-sticky.spec.ts` exercises the *emitting* side — the unposting calendar has no followers in that fixture — so no spec puts an inbound Undo(Announce) through the signed POST path.
 - **`Join` mutates nothing, by design.** Pavillion emits every event with `joinMode: 'none'` and keeps no attendance state, so `processJoinActivity` replies with an Ignore addressed to the sender alone and writes nothing. `join-ignore.spec.ts` therefore proves the Ignore reply rather than a state change — the absence of state *is* the correct outcome, and it is asserted as such.
 - **`Ignore` is recorded, not acted on.** The persisted `ap_inbox` row is the entire outcome. It is a named case in `dispatchByType` rather than a fall-through, because the `default: throw` is what marks a genuinely unknown type as `processed_status: 'error'`. That distinction is why `join-ignore.spec.ts` asserts `processed_status: 'ok'` on the row rather than merely its existence.
@@ -187,7 +185,7 @@ Two inbound paths verify the sender, act synchronously, and return 200 without e
 
 Both reach `logInboxActivityAccepted`, so a log poll can prove acceptance — but neither leaves a durable record. DEC-013's invariant covers the `ap_inbox` table, not the whole ingest surface, and these two paths are the surface it does not cover.
 
-The user inbox also differs from the calendar inbox in how it treats an unrecognized type: it logs and answers 200 rather than 400. A peer cannot tell from the response whether a `Remove` was applied or silently discarded. Tracked as `pv-2qxr`.
+The user inbox also differs from the calendar inbox in how it treats an unrecognized type: it logs and answers 200 rather than 400. A peer cannot tell from the response whether a `Remove` was applied or silently discarded.
 
 ### Types with no inbound path
 
