@@ -293,12 +293,12 @@ describe('NoteObject', () => {
 
   });
 
-  describe('no fromActivityPubObject', () => {
+  describe('no parseInboundEvent', () => {
 
-    it('does not expose a fromActivityPubObject method', () => {
+    it('does not expose a parseInboundEvent method', () => {
       // Pavillion never ingests remote Notes — they are minted on-the-wire by
       // each instance to wrap its own canonical Event.
-      expect((NoteObject as any).fromActivityPubObject).toBeUndefined();
+      expect((NoteObject as any).parseInboundEvent).toBeUndefined();
     });
 
   });

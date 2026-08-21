@@ -19,8 +19,9 @@ const domain = config.get<string>('domain');
  * AP serialization where Pavillion EMITS HTML (a `<p><a href>…</a></p>`
  * paragraph) for Mastodon-class consumers that render Note content verbatim.
  *
- * NoteObject has NO `fromActivityPubObject` — Pavillion never ingests remote
- * Notes (note.ts:45-47). So unlike the EventObject strip path, the threat here
+ * NoteObject has NO inbound parser (`parseInboundEvent`) — Pavillion never
+ * ingests remote Notes (see the NoteObject class doc in note.ts). So unlike
+ * the EventObject strip path, the threat here
  * is not inbound markup smuggling; it is OUTBOUND template injection. If a
  * locally-stored event title or location name contained HTML/quote characters
  * and were interpolated raw into the content string, a malicious value could

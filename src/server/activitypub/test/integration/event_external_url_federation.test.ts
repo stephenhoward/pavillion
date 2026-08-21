@@ -18,7 +18,7 @@ import { EventObject } from '@/server/activitypub/model/object/event';
  * The end-to-end path under test:
  *
  *   local CalendarEvent  -- EventObject.toActivityPubObject -->  AS JSON
- *            AS JSON     -- EventObject.fromActivityPubObject -> eventParams
+ *            AS JSON     -- EventObject.parseInboundEvent -> eventParams
  *            eventParams -- calendarInterface.addRemoteEvent ---> stored EventEntity
  *            stored EventEntity -- getEventById --> CalendarEvent
  *
@@ -97,7 +97,7 @@ describe('Event externalUrl + urlPrompt — AP federation round-trip (integratio
       expect(apObject['pavillion:urlPrompt']).toBe('tickets');
 
       // Inbound: parse the AS JSON and store on a fresh "receiver" calendar
-      const parsedParams = EventObject.fromActivityPubObject(apObject);
+      const parsedParams = EventObject.parseInboundEvent(apObject);
       expect(parsedParams.externalUrl).toBe('https://example.com/tix');
       expect(parsedParams.urlPrompt).toBe('tickets');
 
@@ -127,7 +127,7 @@ describe('Event externalUrl + urlPrompt — AP federation round-trip (integratio
       expect(apObject).not.toHaveProperty('attachment');
       expect(apObject).not.toHaveProperty('pavillion:urlPrompt');
 
-      const parsedParams = EventObject.fromActivityPubObject(apObject);
+      const parsedParams = EventObject.parseInboundEvent(apObject);
       expect(parsedParams.externalUrl).toBeNull();
       expect(parsedParams.urlPrompt).toBeNull();
 
@@ -197,7 +197,7 @@ describe('Event externalUrl + urlPrompt — AP federation round-trip (integratio
         'pavillion:urlPrompt': 'tickets',
       };
 
-      const parsedParams = EventObject.fromActivityPubObject(hostileApObject);
+      const parsedParams = EventObject.parseInboundEvent(hostileApObject);
       // Cross-field rule: both must be null when either is invalid
       expect(parsedParams.externalUrl).toBeNull();
       expect(parsedParams.urlPrompt).toBeNull();
@@ -236,7 +236,7 @@ describe('Event externalUrl + urlPrompt — AP federation round-trip (integratio
         'pavillion:urlPrompt': 'nope',
       };
 
-      const parsedParams = EventObject.fromActivityPubObject(hostileApObject);
+      const parsedParams = EventObject.parseInboundEvent(hostileApObject);
       expect(parsedParams.externalUrl).toBeNull();
       expect(parsedParams.urlPrompt).toBeNull();
 
@@ -273,7 +273,7 @@ describe('Event externalUrl + urlPrompt — AP federation round-trip (integratio
         'pavillion:urlPrompt': 'tickets',
       };
 
-      const parsedParams = EventObject.fromActivityPubObject(hostileApObject);
+      const parsedParams = EventObject.parseInboundEvent(hostileApObject);
       expect(parsedParams.externalUrl).toBeNull();
       expect(parsedParams.urlPrompt).toBeNull();
 
@@ -309,7 +309,7 @@ describe('Event externalUrl + urlPrompt — AP federation round-trip (integratio
       const receiverCalendar = await calendarInterface.createCalendar(testAccount, 'apdoublehop');
       const storedEventId = uuidv4();
       await calendarInterface.addRemoteEvent(receiverCalendar, {
-        ...EventObject.fromActivityPubObject(firstAp),
+        ...EventObject.parseInboundEvent(firstAp),
         id: storedEventId,
         calendarId: receiverCalendar.id,
       });

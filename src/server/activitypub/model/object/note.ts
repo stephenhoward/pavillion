@@ -19,10 +19,11 @@ import { sanitizeExternalUrlHref } from '@/server/activitypub/helper/url-sanitiz
  * companion `EventObject` activity; the Note exists purely so Mastodon
  * timelines render Pavillion posts at all.
  *
- * No `fromActivityPubObject` is implemented — Pavillion never ingests remote
- * Notes (they are minted on-the-wire by each instance to wrap its own canonical
- * Event). No `pavillion:*` extensions are emitted: this is an interop-only
- * rendering, not a Pavillion-to-Pavillion wire format.
+ * No inbound parser (cf. `EventObject.parseInboundEvent`) is implemented —
+ * Pavillion never ingests remote Notes (they are minted on-the-wire by each
+ * instance to wrap its own canonical Event). No `pavillion:*` extensions are
+ * emitted: this is an interop-only rendering, not a Pavillion-to-Pavillion
+ * wire format.
  */
 class NoteObject extends ActivityPubObject {
   type: string = 'Note';

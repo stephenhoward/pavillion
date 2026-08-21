@@ -23,7 +23,7 @@ import { EventObject } from '@/server/activitypub/model/object/event';
  * End-to-end path:
  *
  *   crafted AP payload
- *     -- EventObject.fromActivityPubObject(apObject, { actorUri }) -->
+ *     -- EventObject.parseInboundEvent(apObject, { actorUri }) -->
  *     eventParams
  *     -- calendarInterface.addRemoteEvent --> persisted EventEntity +
  *        EventScheduleEntity (with hide_from_public set or not)
@@ -96,7 +96,7 @@ describe('hideFromPublic federation — origin-actor gate (integration)', () => 
   it('persists hideFromPublic when the activity actor shares the event origin domain', async () => {
     const payload = makePayload('origin-evt-1');
 
-    const parsed = EventObject.fromActivityPubObject(payload, {
+    const parsed = EventObject.parseInboundEvent(payload, {
       actorUri: 'https://origin.example/calendars/owner',
     });
     expect(parsed.schedules).toHaveLength(1);
@@ -118,7 +118,7 @@ describe('hideFromPublic federation — origin-actor gate (integration)', () => 
   it('ignores hideFromPublic when the activity actor is from a different domain', async () => {
     const payload = makePayload('origin-evt-2');
 
-    const parsed = EventObject.fromActivityPubObject(payload, {
+    const parsed = EventObject.parseInboundEvent(payload, {
       actorUri: 'https://other.example/users/editor',
     });
 
@@ -163,7 +163,7 @@ describe('hideFromPublic federation — origin-actor gate (integration)', () => 
       ],
     };
 
-    const parsed = EventObject.fromActivityPubObject(payload, {
+    const parsed = EventObject.parseInboundEvent(payload, {
       actorUri: 'https://other.example/users/editor',
     });
 
