@@ -21,6 +21,7 @@ import { AP_CONTEXT } from '@/server/activitypub/model/base';
 
 const logger = createLogger('activitypub');
 import { verifyHttpSignature, extractKeyIdOrigin } from '@/server/activitypub/helper/http_signature';
+import { logInboxActivityAccepted } from '@/server/activitypub/helper/inbox-acceptance-log';
 import type { InboxAuthContext } from '@/server/activitypub/interface';
 import {
   createActorRateLimiter,
@@ -359,6 +360,9 @@ export default class ActivityPubServerRoutes {
       return;
     }
 
+    // Arrival, NOT acceptance: everything below can still reject with 400.
+    // Acceptance is recorded separately by logInboxActivityAccepted once the
+    // activity has been validated and written to the inbox.
     logger.info({ activityType: req.body.type, calendarName }, 'Received inbox activity');
     if (req.body.type === 'Flag') {
       // A Flag carries a remote reporter's actor URI and the free text of a
@@ -466,6 +470,7 @@ export default class ActivityPubServerRoutes {
 
         if (activity) {
           const result = await this.service.processPersonActorActivity(calendar, activity);
+          logInboxActivityAccepted('calendar', calendarName, req.body);
           if (result) {
             res.status(200).json(result.toObject());
           }
@@ -529,6 +534,7 @@ export default class ActivityPubServerRoutes {
         origin: extractKeyIdOrigin(req),
       };
       await this.service.addToInbox(calendar, message, auth);
+      logInboxActivityAccepted('calendar', calendarName, req.body);
       res.status(200).send('Message received');
     }
     else {

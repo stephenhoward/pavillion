@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import sinon from 'sinon';
 import { EventEmitter } from 'events';
 
@@ -7,6 +7,14 @@ import { WebFingerResponse } from '@/server/activitypub/model/webfinger';
 import ActivityPubServerRoutes from '@/server/activitypub/api/v1/server';
 import ActivityPubInterface from '@/server/activitypub/interface';
 import CalendarInterface from '@/server/calendar/interface';
+import { logInboxActivityAccepted } from '@/server/activitypub/helper/inbox-acceptance-log';
+
+// The acceptance record is the observable that federation e2e assertions key
+// off (tests/e2e/federation/helpers/instances.ts). Stubbing the emitter lets
+// these tests pin WHERE in the handler it fires.
+vi.mock('@/server/activitypub/helper/inbox-acceptance-log', () => ({
+  logInboxActivityAccepted: vi.fn(),
+}));
 
 describe('lookupUser', () => {
   let routes: ActivityPubServerRoutes;
@@ -73,6 +81,7 @@ describe('addToInbox', () => {
     activityPubInterface = new ActivityPubInterface(eventBus);
     calendarAPI = new CalendarInterface(eventBus);
     routes = new ActivityPubServerRoutes(activityPubInterface, calendarAPI);
+    vi.mocked(logInboxActivityAccepted).mockClear();
   });
 
   afterEach(() => {
@@ -139,6 +148,180 @@ describe('addToInbox', () => {
     expect(auth.source).toBe('http_signature');
     // No Signature header on the request, so origin must be null but the row still writes.
     expect(auth.origin).toBe(null);
+  });
+
+  it('should record acceptance only after the inbox write succeeds', async () => {
+    let req = {
+      params: { urlname: 'testuser' },
+      body: {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        type: 'Create',
+        id: 'https://example.com/activities/125',
+        actor: 'https://example.com/actor',
+        object: { id: 'https://example.com/objects/456', type: 'Event' },
+      },
+    };
+    let res = { status: sinon.stub(), send: sinon.stub() };
+    let userFindMock = sandbox.stub(calendarAPI, 'getCalendarByName');
+    let inboxMock = sandbox.stub(activityPubInterface, 'addToInbox');
+
+    res.status.returns(res);
+    userFindMock.resolves(new Calendar('testId', 'testuser'));
+    inboxMock.resolves();
+
+    await routes.addToInbox(req as any, res as any);
+
+    expect(inboxMock.calledOnce).toBe(true);
+    expect(vi.mocked(logInboxActivityAccepted)).toHaveBeenCalledOnce();
+    expect(vi.mocked(logInboxActivityAccepted)).toHaveBeenCalledWith('calendar', 'testuser', req.body);
+  });
+
+  it('should not record acceptance when the inbox write fails', async () => {
+    // Ordering is the point: the acceptance record must sit downstream of the
+    // write, so a write that throws leaves no acceptance behind.
+    let req = {
+      params: { urlname: 'testuser' },
+      body: {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        type: 'Create',
+        id: 'https://example.com/activities/127',
+        actor: 'https://example.com/actor',
+        object: { id: 'https://example.com/objects/456', type: 'Event' },
+      },
+    };
+    let res = { status: sinon.stub(), send: sinon.stub() };
+    let userFindMock = sandbox.stub(calendarAPI, 'getCalendarByName');
+    let inboxMock = sandbox.stub(activityPubInterface, 'addToInbox');
+
+    res.status.returns(res);
+    userFindMock.resolves(new Calendar('testId', 'testuser'));
+    inboxMock.rejects(new Error('Account not found'));
+
+    await expect(routes.addToInbox(req as any, res as any)).rejects.toThrow('Account not found');
+
+    expect(vi.mocked(logInboxActivityAccepted)).not.toHaveBeenCalled();
+  });
+
+  it('should not record acceptance for an activity rejected at the validation switch', async () => {
+    // 'Foobar' falls through to the unsupported-type branch. The handler has
+    // already logged arrival by then; nothing may log acceptance.
+    let req = { params: { urlname: 'testuser' }, body: { type: 'Foobar', actor: 'https://example.com/actor' } };
+    let res = { status: sinon.stub(), send: sinon.stub(), json: sinon.stub() };
+    let userFindMock = sandbox.stub(calendarAPI, 'getCalendarByName');
+    let inboxMock = sandbox.stub(activityPubInterface, 'addToInbox');
+
+    res.status.returns(res);
+    userFindMock.resolves(new Calendar('testId', 'testuser'));
+    inboxMock.resolves();
+
+    await routes.addToInbox(req as any, res as any);
+
+    expect(res.status.calledWith(400)).toBe(true);
+    expect(vi.mocked(logInboxActivityAccepted)).not.toHaveBeenCalled();
+  });
+
+  it('should not record acceptance for an activity that fails schema validation', async () => {
+    // A supported type whose payload fails its zod schema: the Create carries
+    // no object, so validation rejects it after the arrival log.
+    let req = {
+      params: { urlname: 'testuser' },
+      body: {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        type: 'Create',
+        id: 'https://example.com/activities/126',
+        actor: 'https://example.com/actor',
+      },
+    };
+    let res = { status: sinon.stub(), send: sinon.stub(), json: sinon.stub() };
+    let userFindMock = sandbox.stub(calendarAPI, 'getCalendarByName');
+    let inboxMock = sandbox.stub(activityPubInterface, 'addToInbox');
+
+    res.status.returns(res);
+    userFindMock.resolves(new Calendar('testId', 'testuser'));
+    inboxMock.resolves();
+
+    await routes.addToInbox(req as any, res as any);
+
+    expect(res.status.calledWith(400)).toBe(true);
+    expect(inboxMock.called).toBe(false);
+    expect(vi.mocked(logInboxActivityAccepted)).not.toHaveBeenCalled();
+  });
+
+  // The synchronous Person-actor branch is a separate inbound dispatch surface
+  // from the async addToInbox path above: a Create/Update/Delete from a
+  // `/users/` actor never reaches the inbox write, and records acceptance from
+  // its own call site. It refuses unauthorized editors with a 403, so it needs
+  // the same two-sided pinning the async path has.
+  const personActorCreate = (activityId: string) => ({
+    params: { urlname: 'testuser' },
+    body: {
+      '@context': 'https://www.w3.org/ns/activitystreams',
+      type: 'Create',
+      id: activityId,
+      actor: 'https://example.com/users/alice',
+      object: { id: 'https://example.com/objects/789', type: 'Event' },
+    },
+  });
+
+  it('should record acceptance when the Person actor activity is processed', async () => {
+    let req = personActorCreate('https://example.com/activities/128');
+    let res = { status: sinon.stub(), send: sinon.stub(), json: sinon.stub() };
+    let userFindMock = sandbox.stub(calendarAPI, 'getCalendarByName');
+    let inboxMock = sandbox.stub(activityPubInterface, 'addToInbox');
+    let personMock = sandbox.stub(activityPubInterface, 'processPersonActorActivity');
+
+    res.status.returns(res);
+    userFindMock.resolves(new Calendar('testId', 'testuser'));
+    personMock.resolves(null);
+
+    await routes.addToInbox(req as any, res as any);
+
+    expect(personMock.calledOnce).toBe(true);
+    // The synchronous branch returns before the async inbox write.
+    expect(inboxMock.called).toBe(false);
+    expect(res.status.calledWith(200)).toBe(true);
+    expect(vi.mocked(logInboxActivityAccepted)).toHaveBeenCalledOnce();
+    expect(vi.mocked(logInboxActivityAccepted)).toHaveBeenCalledWith('calendar', 'testuser', req.body);
+  });
+
+  it('should not record acceptance when the Person actor is not an authorized editor', async () => {
+    // The 403 refusal is the failure mode this pinning exists for: a handler
+    // that rejects the activity must leave no acceptance record behind.
+    let req = personActorCreate('https://example.com/activities/129');
+    let res = { status: sinon.stub(), send: sinon.stub(), json: sinon.stub() };
+    let userFindMock = sandbox.stub(calendarAPI, 'getCalendarByName');
+    let inboxMock = sandbox.stub(activityPubInterface, 'addToInbox');
+    let personMock = sandbox.stub(activityPubInterface, 'processPersonActorActivity');
+
+    res.status.returns(res);
+    userFindMock.resolves(new Calendar('testId', 'testuser'));
+    personMock.rejects(new Error('Actor is not an authorized editor of this calendar'));
+
+    await routes.addToInbox(req as any, res as any);
+
+    expect(res.status.calledWith(403)).toBe(true);
+    expect(res.send.calledWith('Forbidden: Not an authorized editor')).toBe(true);
+    expect(inboxMock.called).toBe(false);
+    expect(vi.mocked(logInboxActivityAccepted)).not.toHaveBeenCalled();
+  });
+
+  it('should not record acceptance when Person actor processing errors', async () => {
+    let req = personActorCreate('https://example.com/activities/130');
+    let res = { status: sinon.stub(), send: sinon.stub(), json: sinon.stub() };
+    let userFindMock = sandbox.stub(calendarAPI, 'getCalendarByName');
+    let inboxMock = sandbox.stub(activityPubInterface, 'addToInbox');
+    let personMock = sandbox.stub(activityPubInterface, 'processPersonActorActivity');
+
+    res.status.returns(res);
+    userFindMock.resolves(new Calendar('testId', 'testuser'));
+    personMock.rejects(new Error('Database unavailable'));
+
+    await routes.addToInbox(req as any, res as any);
+
+    expect(res.status.calledWith(500)).toBe(true);
+    expect(res.send.calledWith('Error processing activity')).toBe(true);
+    expect(inboxMock.called).toBe(false);
+    expect(vi.mocked(logInboxActivityAccepted)).not.toHaveBeenCalled();
   });
 
   it('should pass keyId origin from Signature header as auth_origin', async () => {

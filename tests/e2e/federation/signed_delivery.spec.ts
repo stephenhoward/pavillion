@@ -217,15 +217,15 @@ test.describe.serial('Signed Delivery for All Four Activity Types', () => {
   test('Delete(Event) Tombstone signed delivery is accepted by remote calendar inbox', async () => {
     // Delete the event on Alpha. Outbox emits a signed Delete (Tombstone) and
     // POSTs it to Beta's calendar inbox. The signature gate runs first; only
-    // if it passes does the inbox handler log "Received inbox activity".
+    // if it passes does the inbox handler reach validation and the inbox write.
     //
     // We assert delivery acceptance via Beta's container logs rather than via
     // feed observation because Beta's actorOwnsObject check fetches the
     // (now-deleted) event from Alpha and rejects on 404, which would mask a
-    // signature success. The presence of "Received inbox activity" with
-    // activityType: Delete and the deleted event id proves signed delivery
-    // succeeded; the downstream ownership rejection is a separate concern
-    // outside this bead's scope.
+    // signature success. An acceptance log record carrying activityType Delete
+    // and the deleted event id proves signed delivery succeeded AND the
+    // activity was admitted; the downstream ownership rejection is a separate
+    // concern outside this bead's scope.
     expect(createdEventId).toBeDefined();
     const deletedId = createdEventId;
 
