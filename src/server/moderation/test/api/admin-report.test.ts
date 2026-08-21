@@ -246,6 +246,24 @@ describe('Admin Report API', () => {
         expect(getAdminReportsStub.firstCall.args[0].source).toBe('administrator');
       });
 
+      it('should pass source=federation filter to service', async () => {
+        const getAdminReportsStub = sandbox.stub(moderationInterface, 'getAdminReports').resolves({
+          reports: [],
+          pagination: { currentPage: 1, totalPages: 0, totalCount: 0, limit: 20 },
+        });
+
+        router.get('/admin/reports', addAdminUser, (req, res) => {
+          routes.listReports(req, res);
+        });
+
+        const response = await request(testApp(router))
+          .get('/admin/reports?source=federation');
+
+        expect(response.status).toBe(200);
+        expect(getAdminReportsStub.calledOnce).toBe(true);
+        expect(getAdminReportsStub.firstCall.args[0].source).toBe('federation');
+      });
+
       it('should pass escalationType filter to service', async () => {
         const getAdminReportsStub = sandbox.stub(moderationInterface, 'getAdminReports').resolves({
           reports: [],

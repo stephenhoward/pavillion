@@ -245,6 +245,26 @@ describe('Owner Report API', () => {
         expect(getReportsStub.firstCall.args[1].source).toBe('anonymous');
       });
 
+      it('should pass source=federation filter to service', async () => {
+        stubAccess();
+
+        const getReportsStub = sandbox.stub(moderationInterface, 'getReportsForCalendar').resolves({
+          reports: [],
+          pagination: { currentPage: 1, totalPages: 0, totalCount: 0, limit: 20 },
+        });
+
+        router.get('/calendars/:calendarId/reports', addRequestUser, (req, res) => {
+          routes.listReports(req, res);
+        });
+
+        const response = await request(testApp(router))
+          .get(`/calendars/${TEST_CALENDAR_ID}/reports?source=federation`);
+
+        expect(response.status).toBe(200);
+        expect(getReportsStub.calledOnce).toBe(true);
+        expect(getReportsStub.firstCall.args[1].source).toBe('federation');
+      });
+
       it('should pass sortBy and sortOrder to service', async () => {
         stubAccess();
 

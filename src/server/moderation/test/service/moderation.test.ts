@@ -1191,6 +1191,26 @@ describe('ModerationService', () => {
       expect(callArgs.where.category).toBe(ReportCategory.SPAM);
     });
 
+    it('should apply source filter for federation reports', async () => {
+      // 'federation' is written by receiveRemoteReport, so the owner queue
+      // must accept it as a source filter rather than rejecting it.
+      const findAndCountAllStub = sandbox.stub(ReportEntity, 'findAndCountAll');
+      findAndCountAllStub.resolves({ rows: [], count: 0 });
+
+      await service.getReportsForCalendar('calendar-1', { source: 'federation' });
+
+      const callArgs = findAndCountAllStub.firstCall.args[0];
+      expect(callArgs.where.reporter_type).toBe('federation');
+    });
+
+    it('should reject an invalid source value', async () => {
+      sandbox.stub(ReportEntity, 'findAndCountAll').resolves({ rows: [], count: 0 });
+
+      await expect(
+        service.getReportsForCalendar('calendar-1', { source: 'invalid_source' as any }),
+      ).rejects.toThrow(ReportValidationError);
+    });
+
     it('should paginate with custom page and limit', async () => {
       const findAndCountAllStub = sandbox.stub(ReportEntity, 'findAndCountAll');
       findAndCountAllStub.resolves({ rows: [], count: 50 });
@@ -1204,6 +1224,36 @@ describe('ModerationService', () => {
       expect(result.pagination.totalPages).toBe(5);
       expect(result.pagination.totalCount).toBe(50);
       expect(result.pagination.limit).toBe(10);
+    });
+  });
+
+  describe('getAdminReports', () => {
+
+    it('should accept source=federation and AND it with the escalated-or-admin base condition', async () => {
+      // The admin queue keeps its escalated-OR-admin-initiated base
+      // condition (DEC-015 owner-first routing); source=federation is a
+      // filter within that set, so only escalated federation reports match.
+      const findAndCountAllStub = sandbox.stub(ReportEntity, 'findAndCountAll');
+      findAndCountAllStub.resolves({ rows: [], count: 0 });
+
+      await service.getAdminReports({ source: 'federation' });
+
+      const callArgs = findAndCountAllStub.firstCall.args[0];
+      const andConditions = callArgs.where[Op.and];
+      expect(andConditions).toBeDefined();
+      expect(andConditions[0][Op.or]).toEqual([
+        { status: ReportStatus.ESCALATED },
+        { reporter_type: 'administrator' },
+      ]);
+      expect(andConditions).toContainEqual({ reporter_type: 'federation' });
+    });
+
+    it('should reject an invalid source value', async () => {
+      sandbox.stub(ReportEntity, 'findAndCountAll').resolves({ rows: [], count: 0 });
+
+      await expect(
+        service.getAdminReports({ source: 'invalid_source' as any }),
+      ).rejects.toThrow(ReportValidationError);
     });
   });
 
