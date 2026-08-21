@@ -149,9 +149,68 @@
   --pav-color-darken: rgba(0, 0, 0, 0.4);
 }
 
-/* Dark mode color overrides */
+/* Dark mode color overrides (manual override via data-theme attribute).
+   Keep in sync with the prefers-color-scheme block below — two delivery
+   channels for the same dark-mode values. */
+[data-theme="dark"] {
+  /* Surface Colors - Dark mode (Stone-based) */
+  --pav-color-surface-primary: var(--pav-color-stone-900);
+  --pav-color-surface-secondary: var(--pav-color-stone-800);
+  --pav-color-surface-tertiary: var(--pav-color-stone-700);
+
+  /* Stone Palette - Dark mode (inverted scale for semantic usage) */
+  --pav-color-neutral-50: var(--pav-color-stone-900);
+  --pav-color-neutral-100: var(--pav-color-stone-800);
+  --pav-color-neutral-200: var(--pav-color-stone-700);
+  --pav-color-neutral-300: var(--pav-color-stone-600);
+  --pav-color-neutral-400: var(--pav-color-stone-500);
+  --pav-color-neutral-500: var(--pav-color-stone-400);
+  --pav-color-neutral-600: var(--pav-color-stone-400);
+  --pav-color-neutral-700: var(--pav-color-stone-300);
+  --pav-color-neutral-800: var(--pav-color-stone-200);
+  --pav-color-neutral-900: var(--pav-color-stone-50);
+
+  /* Text Colors - Dark mode */
+  --pav-color-text-primary: var(--pav-color-stone-50);
+  --pav-color-text-secondary: var(--pav-color-stone-300);
+  --pav-color-text-muted: var(--pav-color-stone-400);
+  --pav-color-text-inverse: var(--pav-color-stone-900);
+
+  /* Border Colors - Dark mode */
+  --pav-color-border-primary: var(--pav-color-stone-600);
+  --pav-color-border-secondary: var(--pav-color-stone-700);
+
+  /* Interactive Colors - Dark mode */
+  --pav-color-interactive-secondary: var(--pav-color-stone-400);
+  --pav-color-interactive-secondary-hover: var(--pav-color-stone-300);
+
+  /* Active/Selected State Colors - Dark mode (Orange with transparency) */
+  --pav-color-interactive-active: var(--pav-color-orange-400);
+  --pav-color-interactive-active-bg: oklch(0.705 0.213 47.604 / 0.1);
+  --pav-color-interactive-active-text: var(--pav-color-orange-300);
+  --pav-color-interactive-active-border: var(--pav-color-orange-600);
+
+  /* Alert Colors - Dark mode */
+  --pav-color-alert-info-bg: #1A4848;
+  --pav-color-alert-info-text: #80CBC4;
+  --pav-color-alert-success-bg: #1A2C48;
+  --pav-color-alert-success-text: #90CAF9;
+  --pav-color-alert-warning-bg: #4A2A0A;
+  --pav-color-alert-warning-text: #FFCC80;
+  --pav-color-alert-error-bg: #3D1A4A;
+  --pav-color-alert-error-text: #CE93D8;
+
+  /* Semantic Colors - Dark mode (colorblind-accessible) */
+  --pav-color-success: #64B5F6;
+  --pav-color-warning: #FFB74D;
+  --pav-color-error: #CE93D8;
+  --pav-color-info: #4DB6AC;
+}
+
+/* Dark mode color overrides (OS preference, unless the user explicitly
+   chose the light theme). Keep in sync with the data-theme block above. */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     /* Surface Colors - Dark mode (Stone-based) */
     --pav-color-surface-primary: var(--pav-color-stone-900);
     --pav-color-surface-secondary: var(--pav-color-stone-800);
@@ -296,7 +355,9 @@ $black: var(--pav-color-stone-900);
  * 1. Prefer CSS custom properties (--pav-color-*) in new components
  * 2. Use SCSS variables ($color-*) when build-time logic is needed
  * 3. Legacy variables ($orange, $gray-dark, etc.) are for migration only
- * 4. Dark mode is handled automatically via prefers-color-scheme
+ * 4. Dark mode uses the dual mechanism: [data-theme="dark"] (manual toggle)
+ *    plus a guarded prefers-color-scheme block (OS preference); keep both
+ *    blocks' values identical
  * 5. All colors are WCAG 2.1 AA compliant for their intended usage
  * 6. Semantic colors are colorblind-accessible (no red/green dependence)
  *
