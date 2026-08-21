@@ -3,6 +3,7 @@ import { Op } from 'sequelize';
 import { v4 as uuidv4 } from 'uuid';
 import { Account } from '@/common/model/account';
 import { Calendar } from '@/common/model/calendar';
+import { Report } from '@/common/model/report';
 import { CalendarEvent } from '@/common/model/events';
 import { ActivityPubActivity } from '@/server/activitypub/model/base';
 import { WebFingerResponse } from '@/server/activitypub/model/webfinger';
@@ -28,7 +29,7 @@ import ModerationInterface from '@/server/moderation/interface';
 import CreateActivity from '@/server/activitypub/model/action/create';
 import UpdateActivity from '@/server/activitypub/model/action/update';
 import DeleteActivity from '@/server/activitypub/model/action/delete';
-import FlagActivity from '@/server/activitypub/model/action/flag';
+import FlagActivityBuilder from '@/server/activitypub/service/flag-activity-builder';
 
 /**
  * Implementation of the ActivityPub internal API interface
@@ -258,27 +259,37 @@ export default class ActivityPubInterface {
   }
 
   /**
-   * Publishes a Flag activity (a moderation report crossing a federation
-   * boundary) from a local calendar's outbox.
+   * Publishes a moderation report across a federation boundary as a `Flag`
+   * activity, from a local calendar's outbox.
    *
-   * The moderation domain builds the Flag's wire form but must not construct
-   * AP model instances itself: the outbox persists `message.toObject()`, so a
-   * plain object literal reaches it without the serializer it needs. This
-   * method parses the wire form into a `FlagActivity` inside the AP domain,
-   * which is where that knowledge belongs.
+   * The moderation domain passes its own `Report` and the event it is about;
+   * this method owns the translation into ActivityPub. Nothing AP-shaped
+   * crosses the interface in either direction: the caller neither builds the
+   * activity nor sees it, and gets back only the IRI the Flag went out under,
+   * which is what the report row records as `forwarded_report_id`.
    *
    * @param calendar The local calendar signing and anchoring the Flag. Its
-   *   actor URI must equal the Flag's `actor` so the HTTP-Signature `keyId`
+   *   actor URI becomes the Flag's `actor`, so the HTTP-Signature `keyId`
    *   matches the activity actor.
-   * @param flag The Flag activity in ActivityStreams wire form.
-   * @throws Error if the object is not a well-formed Flag activity.
+   * @param report The report being forwarded.
+   * @param event The event the report is about.
+   * @param recipientActorUri The actor the Flag is addressed to.
+   * @returns The IRI minted for the published Flag.
    */
-  async publishFlag(calendar: Calendar, flag: Record<string, any>): Promise<void> {
-    const activity = FlagActivity.fromObject(flag);
-    if (!activity) {
-      throw new Error('Cannot publish Flag: malformed Flag activity');
-    }
-    return this.memberService.addToOutbox(calendar, activity);
+  async publishFlag(
+    calendar: Calendar,
+    report: Report,
+    event: CalendarEvent,
+    recipientActorUri: string,
+  ): Promise<string> {
+    const activity = new FlagActivityBuilder().build(
+      report,
+      event,
+      await this.actorUrl(calendar),
+      recipientActorUri,
+    );
+    await this.memberService.addToOutbox(calendar, activity);
+    return activity.id;
   }
 
   async addToInbox(calendar: Calendar, message: ActivityPubActivity, auth: InboxAuthContext): Promise<null> {

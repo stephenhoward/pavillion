@@ -225,8 +225,8 @@ test.describe.serial('Flag federation', () => {
     // validation, so a Flag alpha then rejected with 400 would satisfy an
     // arrival-based assertion. Using alpha's event UUID as the needle also
     // pins the Flag's `object`: a Flag carrying beta's local URI (the shape
-    // `buildFlagActivity` produces when no origin URI is supplied) would not
-    // match, and alpha could not resolve the event from it either.
+    // the builder falls back to for a non-remote event) would not match, and
+    // alpha could not resolve the event from it either.
     const flagDelivered = await waitForAlphaInboxActivity('Flag', alphaEvent.id, anchor);
     expect(
       flagDelivered,

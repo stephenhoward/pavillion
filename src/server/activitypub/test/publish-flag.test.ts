@@ -1,22 +1,26 @@
 /**
  * Unit tests for `ActivityPubInterface.publishFlag`.
  *
- * This method exists because the moderation domain builds a Flag in its wire
- * form (a plain object literal) but the outbox persists `message.toObject()`.
- * Handing the literal straight to `addToOutbox` therefore wrote a Flag with no
- * body. `publishFlag` is the seam where the AP domain parses the wire form into
- * its own activity model before the outbox ever sees it.
+ * This is the seam a moderation report crosses to become ActivityPub. The
+ * moderation domain passes its own `Report` and the reported event and gets
+ * back only the IRI the Flag went out under; the activity itself is built,
+ * signed and anchored here. These tests pin that contract from the interface
+ * side — that the signing calendar's actor reaches the wire, that the outbox
+ * receives a model rather than a literal (it persists `toObject()`), and that
+ * the returned IRI is the one the report row will record.
  *
  * The moderation-side tests stub `publishFlag` wholesale, so without this file
- * the parse — and the malformed-input rejection that goes with it — is only
- * exercised by the Docker-gated federation suite.
+ * the translation is only exercised by the Docker-gated federation suite.
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import sinon from 'sinon';
+import config from 'config';
 import { EventEmitter } from 'events';
 
 import { Calendar } from '@/common/model/calendar';
+import { CalendarEvent } from '@/common/model/events';
+import { Report, ReportCategory, ReportStatus } from '@/common/model/report';
 import ActivityPubInterface from '@/server/activitypub/interface';
 import ActivityPubMemberService from '@/server/activitypub/service/members';
 import FlagActivity from '@/server/activitypub/model/action/flag';
@@ -26,34 +30,38 @@ import AccountsInterface from '@/server/accounts/interface';
 const LOCAL_ACTOR_URI = 'https://local.instance/calendars/test-calendar';
 const REMOTE_TARGET_ACTOR_URI = 'https://remote.instance/calendars/origin-calendar';
 const REMOTE_EVENT_IRI = 'https://remote.instance/calendars/origin-calendar/events/event-uuid';
-const FLAG_ID = 'https://local.instance/flags/8d2b6a1e-0a3c-4f5b-9c1d-2e3f4a5b6c7d';
 
-/** The wire form moderation's FlagActivityBuilder produces. */
-function buildFlagWireObject(overrides: Record<string, any> = {}): Record<string, any> {
-  return {
-    '@context': 'https://www.w3.org/ns/activitystreams',
-    type: 'Flag',
-    id: FLAG_ID,
-    actor: LOCAL_ACTOR_URI,
-    to: [REMOTE_TARGET_ACTOR_URI],
-    object: REMOTE_EVENT_IRI,
-    content: 'Report description text',
-    tag: [{ type: 'Hashtag', name: '#spam' }],
-    summary: 'Event report: spam',
-    published: '2026-02-10T12:00:00.000Z',
-    ...overrides,
-  };
+function buildReport(): Report {
+  const report = new Report('report-uuid');
+  report.eventId = 'local-copy-uuid';
+  report.calendarId = 'calendar-id';
+  report.category = ReportCategory.SPAM;
+  report.description = 'Report description text';
+  report.reporterType = 'authenticated';
+  report.status = ReportStatus.SUBMITTED;
+  report.createdAt = new Date('2026-02-10T12:00:00Z');
+  return report;
+}
+
+function buildReportedEvent(): CalendarEvent {
+  return CalendarEvent.fromObject({
+    id: 'local-copy-uuid',
+    calendarId: null,
+    eventSourceUrl: REMOTE_EVENT_IRI,
+  });
 }
 
 describe('ActivityPubInterface.publishFlag', () => {
   let sandbox: sinon.SinonSandbox;
   let apInterface: ActivityPubInterface;
   let addToOutboxStub: sinon.SinonStub;
+  let actorUrlStub: sinon.SinonStub;
   let calendar: Calendar;
 
   beforeEach(() => {
     sandbox = sinon.createSandbox();
     addToOutboxStub = sandbox.stub(ActivityPubMemberService.prototype, 'addToOutbox').resolves();
+    actorUrlStub = sandbox.stub(ActivityPubMemberService.prototype, 'actorUrl').resolves(LOCAL_ACTOR_URI);
 
     const eventBus = new EventEmitter();
     const calendarInterface = new CalendarInterface(eventBus);
@@ -70,8 +78,8 @@ describe('ActivityPubInterface.publishFlag', () => {
     sandbox.restore();
   });
 
-  it('parses the wire form into a FlagActivity before handing it to the outbox', async () => {
-    await apInterface.publishFlag(calendar, buildFlagWireObject());
+  it('hands the outbox a FlagActivity anchored on the signing calendar', async () => {
+    await apInterface.publishFlag(calendar, buildReport(), buildReportedEvent(), REMOTE_TARGET_ACTOR_URI);
 
     expect(addToOutboxStub.calledOnce).toBe(true);
     const [calendarArg, activityArg] = addToOutboxStub.firstCall.args;
@@ -79,14 +87,22 @@ describe('ActivityPubInterface.publishFlag', () => {
     // The signing calendar must pass through untouched — the outbox anchors
     // the Flag on it and signs with its key.
     expect(calendarArg).toBe(calendar);
-    // A model instance, not the literal. This is the whole point of the
-    // method: the outbox persists `message.toObject()`, which a plain object
-    // literal does not provide.
+    // A model instance, not a literal. The outbox persists
+    // `message.toObject()`, which a plain object literal does not provide.
     expect(activityArg).toBeInstanceOf(FlagActivity);
   });
 
-  it('preserves the wire fields through the parse so the persisted Flag is complete', async () => {
-    await apInterface.publishFlag(calendar, buildFlagWireObject());
+  it('derives the Flag actor from the signing calendar', async () => {
+    // The HTTP-Signature keyId resolves to the signing calendar's key, so an
+    // actor derived from anything else is refused at the far end.
+    await apInterface.publishFlag(calendar, buildReport(), buildReportedEvent(), REMOTE_TARGET_ACTOR_URI);
+
+    expect(actorUrlStub.calledWith(calendar)).toBe(true);
+    expect(addToOutboxStub.firstCall.args[1].actor).toBe(LOCAL_ACTOR_URI);
+  });
+
+  it('persists a complete Flag built from the report', async () => {
+    await apInterface.publishFlag(calendar, buildReport(), buildReportedEvent(), REMOTE_TARGET_ACTOR_URI);
 
     // Assert on what the outbox actually persists, not on the model fields.
     const persisted = addToOutboxStub.firstCall.args[1].toObject();
@@ -94,7 +110,6 @@ describe('ActivityPubInterface.publishFlag', () => {
     expect(persisted).toMatchObject({
       '@context': 'https://www.w3.org/ns/activitystreams',
       type: 'Flag',
-      id: FLAG_ID,
       actor: LOCAL_ACTOR_URI,
       to: [REMOTE_TARGET_ACTOR_URI],
       object: REMOTE_EVENT_IRI,
@@ -105,22 +120,35 @@ describe('ActivityPubInterface.publishFlag', () => {
     expect(persisted.tag).toEqual([{ type: 'Hashtag', name: '#spam' }]);
   });
 
-  it('throws and does not reach the outbox when the object is not a Flag', async () => {
-    const notAFlag = buildFlagWireObject({ type: 'Create' });
+  it('mints the Flag IRI from the `domain` config key', async () => {
+    // `domain` is the key this application defines; `server.domain` is not,
+    // and reading it threw before a Flag was ever built. Sinon returns
+    // undefined for unmatched args, so a regression to the wrong key would
+    // flow `domain: undefined` into the minted IRI and be caught here.
+    const configStub = sandbox.stub(config, 'get');
+    configStub.withArgs('domain').returns('local.instance');
 
-    await expect(apInterface.publishFlag(calendar, notAFlag))
-      .rejects.toThrow('Cannot publish Flag: malformed Flag activity');
-    expect(addToOutboxStub.called).toBe(false);
+    const flagId = await apInterface.publishFlag(
+      calendar,
+      buildReport(),
+      buildReportedEvent(),
+      REMOTE_TARGET_ACTOR_URI,
+    );
+
+    expect(flagId).toMatch(/^https:\/\/local\.instance\/flags\//);
   });
 
-  it('throws and does not reach the outbox when required Flag fields are missing', async () => {
-    // `object` is the reported event IRI. A Flag without it names nothing, so
-    // the parse rejects rather than emitting an unactionable report.
-    const noObject = buildFlagWireObject();
-    delete noObject.object;
+  it('returns the IRI of the Flag it published', async () => {
+    // The report row records this as `forwarded_report_id`; an acknowledgement
+    // from the recipient is matched back against it.
+    const flagId = await apInterface.publishFlag(
+      calendar,
+      buildReport(),
+      buildReportedEvent(),
+      REMOTE_TARGET_ACTOR_URI,
+    );
 
-    await expect(apInterface.publishFlag(calendar, noObject))
-      .rejects.toThrow('Cannot publish Flag: malformed Flag activity');
-    expect(addToOutboxStub.called).toBe(false);
+    expect(flagId).toBe(addToOutboxStub.firstCall.args[1].id);
+    expect(flagId).toBeTruthy();
   });
 });

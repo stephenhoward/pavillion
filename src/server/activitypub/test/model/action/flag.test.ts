@@ -18,7 +18,7 @@ const FLAG_ID = 'https://local.instance/flags/8d2b6a1e-0a3c-4f5b-9c1d-2e3f4a5b6c
 const LOCAL_ACTOR_URI = 'https://local.instance/calendars/test-calendar';
 const REMOTE_EVENT_IRI = 'https://remote.instance/calendars/origin-calendar/events/event-uuid';
 
-/** The wire form moderation's FlagActivityBuilder produces. */
+/** The wire form `FlagActivityBuilder` produces on the way out. */
 function buildFlagWireObject(overrides: Record<string, any> = {}): Record<string, any> {
   return {
     '@context': 'https://www.w3.org/ns/activitystreams',

@@ -28,8 +28,6 @@ import AccountsInterface from '@/server/accounts/interface';
 import ConfigurationInterface from '@/server/configuration/interface';
 import ActivityPubInterface from '@/server/activitypub/interface';
 import { validateActorUriProtocol } from '@/server/common/helper/uri-validation';
-import FlagActivityBuilder from '@/server/moderation/service/flag-activity-builder';
-import type { FlagActivityObject } from '@/server/moderation/service/flag-activity-builder';
 import { MODERATION_BUS_EVENTS } from '@/server/moderation/events/types';
 import EmailBlockingService from '@/server/moderation/service/email-blocking';
 import { PatternDetectionService } from '@/server/moderation/service/pattern-detection';
@@ -1854,11 +1852,6 @@ class ModerationService {
     if (!event) {
       throw new EventNotFoundError();
     }
-    // Build Flag activity using FlagActivityBuilder.
-    // `domain` — not `server.domain`, which is not a key this application
-    // defines; reading it threw before a Flag was ever built.
-    const domain = config.get<string>('domain');
-    const flagBuilder = new FlagActivityBuilder(domain);
 
     // Resolve the signing calendar.
     //
@@ -1867,7 +1860,7 @@ class ModerationService {
     // 1. Legacy local-event report: `report.calendarId` is set, signing
     //    happens via the calendar that owns the reported event.
     //
-    // 2. Admin report against a remote event (pv-o3ay.7):
+    // 2. Admin report against a remote event:
     //    `report.calendarId` is null because the event is remote on this
     //    instance. There is no owning local calendar to sign as. Instead,
     //    we resolve the admin's primary owned calendar and use it as the
@@ -1901,50 +1894,22 @@ class ModerationService {
       signingCalendar = primaryCalendar;
     }
 
-    const signingCalendarActorUri = await this.activityPubInterface.actorUrl(signingCalendar);
-
-    // Build appropriate Flag activity based on reporter type and report scope.
-    //
-    // For admin-initiated reports against *local* events we keep the
-    // legacy `buildAdminFlagActivity` path (signed by `<domain>/admin`).
-    // That path has a pre-existing signing mismatch — `<domain>/admin`
-    // has no key entry in any actor table — that is intentionally not
-    // fixed here; see Interim Debt #2 on the bead (pv-o3ay.7).
-    //
-    // For admin-initiated reports against *remote* events the new path
-    // uses `buildFlagActivity` with the signing calendar's actor URI so
-    // the activity `actor` matches the HTTP-Signature `keyId`.
-    //
-    // The Flag's `object` must be the event's IRI on the instance that HOSTS
-    // it. For a remote event that is `eventSourceUrl`, NOT the default
-    // `https://<our domain>/events/<local id>` the builder falls back to: this
-    // instance minted its own UUID for the federated copy, so the default
-    // names an event the recipient cannot resolve, and the report is dropped
-    // at the far end as referencing an unknown event.
-    let flagActivity: FlagActivityObject;
-    const eventOriginUri = event.isRemote() ? event.eventSourceUrl : undefined;
-    if (report.reporterType === 'administrator' && report.adminId && report.calendarId !== null) {
-      // Legacy admin flag for local-event admin reports
-      const adminActorUri = `https://${domain}/admin`;
-      flagActivity = flagBuilder.buildAdminFlagActivity(report, event, adminActorUri, eventOriginUri);
-    }
-    else {
-      // Calendar-actor flag. Used for owner-level reports and for
-      // admin reports against remote events (signing calendar acts as
-      // federation courier).
-      flagActivity = flagBuilder.buildFlagActivity(report, event, signingCalendarActorUri, eventOriginUri);
-    }
-    // Set explicit recipient in 'to' field
-    flagActivity.to = [targetActorUri];
-    // Send via ActivityPub outbox. `publishFlag` (not `addToOutbox`) because
-    // the outbox persists `toObject()`; the AP domain owns turning this wire
-    // form into the activity model that provides it.
-    await this.activityPubInterface.publishFlag(signingCalendar, flagActivity);
+    // Hand the report to the ActivityPub domain in Pavillion's own terms —
+    // the report, the event it is about, and who it is for. Everything
+    // protocol-shaped is decided there: the Flag itself, the IRI minted for
+    // it, which IRI names the reported event, and which actor it is
+    // attributed to. Moderation records only the IRI it went out under.
+    const forwardedFlagId = await this.activityPubInterface.publishFlag(
+      signingCalendar,
+      report,
+      event,
+      targetActorUri,
+    );
     // Update the report entity with forwarding metadata
     const reportEntity = await ReportEntity.findByPk(reportId);
     if (reportEntity) {
       await reportEntity.update({
-        forwarded_report_id: flagActivity.id,
+        forwarded_report_id: forwardedFlagId,
         forward_status: ForwardStatus.PENDING,
         forwarded_to_actor_uri: targetActorUri,
       });
