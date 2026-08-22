@@ -12,8 +12,17 @@ import type { FundingGatedFeature } from '@/common/model/funding-plan';
  * One component so that no feature has to re-derive "should we be selling
  * anything here". It answers that itself from `useFundingAccess`, renders
  * nothing unless the gate is *known* to be closed, and opens the existing
- * FundingSheet when the reader acts on it. A consumer's whole obligation is to
- * place it and name a feature.
+ * FundingSheet when the reader acts on it. A consumer's obligations are to
+ * place it, name a feature, and — where the consumer's own action was what the
+ * gate refused — retry that action on `plan-started`.
+ *
+ * Placement: the card hosts the FundingSheet, so each placement is a modal
+ * host, not a passive notice. Place it only inside a container that is
+ * mutually exclusive with every other placement for the same calendar (the
+ * calendar-management tab panels qualify: inactive panels are `hidden`, so one
+ * card is visible at a time). A third placement in a persistently visible
+ * region would put a second upsell and a second modal host on screen beside
+ * the existing one.
  *
  * The self-gating is the point. `useFundingAccess` distinguishes `granted`,
  * `denied` and `unknown`, and only `denied` is a reason to offer funding —
@@ -36,8 +45,8 @@ const props = defineProps<{
 const emit = defineEmits<{
   /**
    * A funding plan was started from this card, and the calendar's access has
-   * already been re-read. Consumers use it to report success or retry the
-   * action the gate refused.
+   * already been re-read. Consumers use it to report success and, where one
+   * of their own actions was what the gate refused, to retry that action.
    */
   'plan-started': [];
 }>();

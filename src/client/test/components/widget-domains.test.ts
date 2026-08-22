@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mount, flushPromises } from '@vue/test-utils';
 import { createPinia, setActivePinia, Pinia } from 'pinia';
 import WidgetDomains from '@/client/components/logged_in/calendar-management/widget-domains.vue';
+import FundingUpsellCard from '@/client/components/common/FundingUpsellCard.vue';
 import { useFundingStore } from '@/client/stores/fundingStore';
 import axios from 'axios';
 
@@ -114,6 +115,41 @@ describe('WidgetDomains', () => {
       expect(wrapper.find('.funding-upsell').exists()).toBe(true);
       expect(wrapper.find('.alert--error').exists()).toBe(false);
       expect(wrapper.vm.state.error).toBe('');
+    });
+
+    it('retries the refused domain, still in the input, once a plan is started', async () => {
+      wrapper = await createWrapper();
+
+      vi.mocked(axios.put).mockRejectedValueOnce(
+        apiError(402, { errorName: 'SubscriptionRequiredError', feature: 'widget_embedding' }),
+      );
+
+      wrapper.vm.state.newDomain = 'example.com';
+      await wrapper.vm.addDomain();
+      await flushPromises();
+
+      // The refusal leaves what the reader typed in place for the retry.
+      expect(wrapper.vm.state.newDomain).toBe('example.com');
+      expect(axios.put).toHaveBeenCalledTimes(1);
+
+      vi.mocked(axios.put).mockResolvedValueOnce({ data: { domain: 'example.com' } });
+      wrapper.findComponent(FundingUpsellCard).vm.$emit('plan-started');
+      await flushPromises();
+
+      expect(axios.put).toHaveBeenCalledTimes(2);
+      expect(axios.put).toHaveBeenLastCalledWith(DOMAIN_URL, { domain: 'example.com' });
+      expect(wrapper.vm.state.currentDomain).toBe('example.com');
+      expect(wrapper.vm.state.newDomain).toBe('');
+      expect(wrapper.vm.state.success).toBe('add_success');
+    });
+
+    it('does not re-issue anything on plan-started when no domain was refused', async () => {
+      wrapper = await createWrapper();
+
+      wrapper.findComponent(FundingUpsellCard).vm.$emit('plan-started');
+      await flushPromises();
+
+      expect(axios.put).not.toHaveBeenCalled();
     });
 
     it('shows the upsell on load when the gate is already known to be shut', async () => {
