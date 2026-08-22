@@ -143,6 +143,63 @@ describe('resolveInbox', () => {
     const result = await service.resolveInboxUrl(REMOTE_CALENDAR_HANDLE);
     expect(result).toBeNull();
   });
+
+  describe('direct actor URL branch — inbox host binding', () => {
+    function stubActorDocument(sandbox: sinon.SinonSandbox, inbox: unknown) {
+      const getStub = sandbox.stub(axios, 'get');
+      getStub.resolves({
+        data: {
+          '@context': 'https://www.w3.org/ns/activitystreams',
+          type: 'Organization',
+          id: REMOTE_PROFILE_URL,
+          inbox,
+        },
+      });
+      return getStub;
+    }
+
+    it('accepts an inbox on the same host as the actor URL', async () => {
+      const getStub = stubActorDocument(sandbox, REMOTE_INBOX_URL);
+
+      const result = await service.resolveInboxUrl(REMOTE_PROFILE_URL);
+
+      expect(result).toBe(REMOTE_INBOX_URL);
+      expect(getStub.firstCall.args[0]).toBe(REMOTE_PROFILE_URL);
+    });
+
+    it('rejects an inbox on a different host than the actor URL', async () => {
+      stubActorDocument(sandbox, 'https://victim.example/collect');
+
+      const result = await service.resolveInboxUrl(REMOTE_PROFILE_URL);
+
+      expect(result).toBeNull();
+    });
+
+    it('rejects an inbox on a subdomain of the actor host', async () => {
+      stubActorDocument(sandbox, 'https://inbox.remotedomain.test/collect');
+
+      const result = await service.resolveInboxUrl(REMOTE_PROFILE_URL);
+
+      expect(result).toBeNull();
+    });
+
+    it('rejects a non-https inbox even on the same host', async () => {
+      stubActorDocument(sandbox, 'http://remotedomain.test/calendars/testcalendar/inbox');
+
+      const result = await service.resolveInboxUrl(REMOTE_PROFILE_URL);
+
+      expect(result).toBeNull();
+    });
+
+    it('rejects a missing or malformed inbox field', async () => {
+      stubActorDocument(sandbox, undefined);
+      expect(await service.resolveInboxUrl(REMOTE_PROFILE_URL)).toBeNull();
+      sandbox.restore();
+
+      stubActorDocument(sandbox, 'not a url');
+      expect(await service.resolveInboxUrl(REMOTE_PROFILE_URL)).toBeNull();
+    });
+  });
 });
 
 
