@@ -373,8 +373,6 @@ describe('CalendarFundingPlanRoutes API', () => {
     const resolveSummary = (status: string, overrides: Record<string, unknown> = {}) => {
       mockInterface.getCalendarFundingSummary.resolves({
         status,
-        currentPeriodEnd: null,
-        accessExpiresAt: null,
         features: { widget_embedding: false },
         ...overrides,
       } as any);
@@ -397,12 +395,8 @@ describe('CalendarFundingPlanRoutes API', () => {
       )).toBe(true);
     });
 
-    it('should return the plan dates and per-feature gate decisions', async () => {
-      const periodEnd = new Date('2026-09-01T00:00:00.000Z');
-      const accessExpiry = new Date('2026-09-08T00:00:00.000Z');
+    it('should return the per-feature gate decisions', async () => {
       resolveSummary('covered', {
-        currentPeriodEnd: periodEnd,
-        accessExpiresAt: accessExpiry,
         features: { widget_embedding: true },
       });
 
@@ -412,8 +406,6 @@ describe('CalendarFundingPlanRoutes API', () => {
         .get('/handler/a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d/funding')
         .expect(200);
 
-      expect(response.body.currentPeriodEnd).toBe(periodEnd.toISOString());
-      expect(response.body.accessExpiresAt).toBe(accessExpiry.toISOString());
       expect(response.body.features).toEqual({ widget_embedding: true });
     });
 
@@ -448,7 +440,7 @@ describe('CalendarFundingPlanRoutes API', () => {
         .expect(200);
 
       expect(Object.keys(response.body).sort()).toEqual(
-        ['accessExpiresAt', 'currentPeriodEnd', 'features', 'status'],
+        ['features', 'status'],
       );
 
       const serialised = JSON.stringify(response.body);

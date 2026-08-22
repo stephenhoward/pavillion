@@ -100,8 +100,6 @@ describe('CalendarSettings — language removal wiring', () => {
     // hides the extended-features section for the wrong reason.
     vi.spyOn(FundingService.prototype, 'getFundingStatus').mockResolvedValue({
       status: 'not_covered',
-      currentPeriodEnd: null,
-      accessExpiresAt: null,
       features: { widget_embedding: false },
     } as never);
     vi.spyOn(Config, 'init').mockResolvedValue({

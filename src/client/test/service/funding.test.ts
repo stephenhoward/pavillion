@@ -301,8 +301,6 @@ describe('FundingService.getFundingStatus', () => {
     // Arrange
     const mockSummary = {
       status: 'covered',
-      currentPeriodEnd: '2026-09-01T00:00:00.000Z',
-      accessExpiresAt: '2026-09-08T00:00:00.000Z',
       features: { widget_embedding: true },
     };
     const axiosGet = vi.mocked(axios.get);
@@ -320,8 +318,6 @@ describe('FundingService.getFundingStatus', () => {
     // Arrange
     const mockSummary = {
       status: 'not_covered',
-      currentPeriodEnd: null,
-      accessExpiresAt: null,
       features: { widget_embedding: false },
     };
     const axiosGet = vi.mocked(axios.get);
@@ -339,8 +335,6 @@ describe('FundingService.getFundingStatus', () => {
     // relationship. A consumer reading one without the other is guessing.
     const mockSummary = {
       status: 'grant',
-      currentPeriodEnd: null,
-      accessExpiresAt: null,
       features: { widget_embedding: true },
     };
     const axiosGet = vi.mocked(axios.get);
@@ -381,8 +375,6 @@ describe('FundingService.loadFundingSummary', () => {
     axiosGet.mockResolvedValue({
       data: {
         status: 'covered',
-        currentPeriodEnd: '2026-09-01T00:00:00.000Z',
-        accessExpiresAt: null,
         features: { widget_embedding: true },
       },
     });

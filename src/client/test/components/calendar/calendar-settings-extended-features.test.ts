@@ -31,8 +31,6 @@ function summaryResponse(widgetEmbedding: boolean, status: string) {
   return {
     data: {
       status,
-      currentPeriodEnd: null,
-      accessExpiresAt: null,
       features: { widget_embedding: widgetEmbedding },
     },
   };

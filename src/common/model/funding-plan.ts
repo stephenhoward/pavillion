@@ -117,10 +117,6 @@ export type FundingGatedFeature = keyof typeof FUNDING_GATED_FEATURES;
 export type CalendarFundingSummary = {
   /** How this calendar is covered. Display vocabulary, not an entitlement. */
   status: FundingStatus;
-  /** End of the paid-through period of the plan covering this calendar, if any. */
-  currentPeriodEnd: Date | null;
-  /** When the funding plan stops granting access, if it sets any boundary. */
-  accessExpiresAt: Date | null;
   /** Per-feature gate decisions, keyed by FUNDING_GATED_FEATURES. */
   features: Record<FundingGatedFeature, boolean>;
 };
