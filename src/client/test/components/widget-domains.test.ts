@@ -1,7 +1,8 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { mount } from '@vue/test-utils';
-import { nextTick } from 'vue';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { mount, flushPromises } from '@vue/test-utils';
+import { createPinia, setActivePinia, Pinia } from 'pinia';
 import WidgetDomains from '@/client/components/logged_in/calendar-management/widget-domains.vue';
+import { useFundingStore } from '@/client/stores/fundingStore';
 import axios from 'axios';
 
 // Mock axios
@@ -14,28 +15,68 @@ vi.mock('i18next-vue', () => ({
   }),
 }));
 
+const CALENDAR_ID = 'test-calendar-id';
+const DOMAIN_URL = `/api/v1/calendars/${CALENDAR_ID}/widget/domain`;
+const FUNDING_URL = `/api/funding/v1/calendars/${CALENDAR_ID}/funding`;
+
+/**
+ * Body of GET /calendars/:calendarId/funding with the widget gate open or shut.
+ */
+function summaryResponse(widgetEmbedding: boolean) {
+  return {
+    data: {
+      status: widgetEmbedding ? 'covered' : 'not_covered',
+      currentPeriodEnd: null,
+      accessExpiresAt: null,
+      features: { widget_embedding: widgetEmbedding },
+    },
+  };
+}
+
+/**
+ * An axios-shaped rejection, as the component catches it from a refused write.
+ */
+function apiError(status: number, data: Record<string, unknown>) {
+  return { response: { status, data } };
+}
+
 describe('WidgetDomains', () => {
-  let mockAuthn;
+  let pinia: Pinia;
+  let wrapper: ReturnType<typeof mount> | null = null;
 
   beforeEach(() => {
-    // Reset all mocks
     vi.clearAllMocks();
+    pinia = createPinia();
+    setActivePinia(pinia);
+    vi.spyOn(console, 'error').mockImplementation(() => {});
 
-    // Default mock for authn - non-admin user
-    mockAuthn = {
-      isAdmin: vi.fn(() => false),
-    };
+    // GETs the component and its funding card issue on mount. The gate starts
+    // open unless a test says otherwise, so nothing is being sold by default.
+    vi.mocked(axios.get).mockImplementation((url: string) => {
+      if (url === FUNDING_URL) {
+        return Promise.resolve(summaryResponse(true));
+      }
+      if (url === DOMAIN_URL) {
+        return Promise.resolve({ data: { domain: null } });
+      }
+      return Promise.resolve({ data: { siteTitle: 'Example Instance' } });
+    });
   });
 
-  const createWrapper = (authnOverride = null) => {
-    return mount(WidgetDomains, {
-      props: {
-        calendarId: 'test-calendar-id',
-      },
+  afterEach(() => {
+    if (wrapper) {
+      wrapper.unmount();
+      wrapper = null;
+    }
+    vi.restoreAllMocks();
+  });
+
+  const createWrapper = async () => {
+    const mounted = mount(WidgetDomains, {
+      props: { calendarId: CALENDAR_ID },
       global: {
-        provide: {
-          authn: authnOverride || mockAuthn,
-        },
+        plugins: [pinia],
+        provide: { authn: {} },
         stubs: {
           PillButton: {
             template: '<button @click="$emit(\'click\')"><slot /></button>',
@@ -43,200 +84,126 @@ describe('WidgetDomains', () => {
           LoadingMessage: {
             template: '<div>Loading...</div>',
           },
+          FundingSheet: {
+            template: '<div class="funding-sheet-stub"></div>',
+            props: ['calendarId', 'instanceName'],
+            emits: ['close', 'plan-started'],
+          },
         },
       },
     });
+
+    await flushPromises();
+    return mounted;
   };
 
-  describe('funding-gate error handling', () => {
-    it('should show funding-gate error for non-admin users', async () => {
-      const wrapper = createWrapper();
+  describe('funding refusals', () => {
+    it('answers a 402 with the shared upsell instead of a one-off error alert', async () => {
+      wrapper = await createWrapper();
+      expect(wrapper.find('.funding-upsell').exists()).toBe(false);
 
-      // Mock axios PUT to return 402 funding-gate error
-      vi.mocked(axios.put).mockRejectedValue({
-        response: {
-          status: 402,
-          data: {
-            errorName: 'SubscriptionRequiredError',
-          },
-        },
-      });
+      vi.mocked(axios.put).mockRejectedValue(
+        apiError(402, { errorName: 'SubscriptionRequiredError', feature: 'widget_embedding' }),
+      );
 
-      // Set domain input
       wrapper.vm.state.newDomain = 'example.com';
-      await nextTick();
-
-      // Trigger add domain
       await wrapper.vm.addDomain();
-      await nextTick();
+      await flushPromises();
 
-      // Should show funding-gate error
-      expect(wrapper.vm.state.error).toBe('funding_plan_required');
-      expect(wrapper.vm.state.isFundingGateError).toBe(true);
-    });
-
-    it('should NOT show funding-gate error for admin users', async () => {
-      // Create wrapper with admin user
-      const adminAuthn = {
-        isAdmin: vi.fn(() => true),
-      };
-      const wrapper = createWrapper(adminAuthn);
-
-      // Mock axios PUT to return 402 funding-gate error
-      vi.mocked(axios.put).mockRejectedValue({
-        response: {
-          status: 402,
-          data: {
-            errorName: 'SubscriptionRequiredError',
-          },
-        },
-      });
-
-      // Set domain input
-      wrapper.vm.state.newDomain = 'example.com';
-      await nextTick();
-
-      // Trigger add domain
-      await wrapper.vm.addDomain();
-      await nextTick();
-
-      // Should show generic error instead of funding-gate error
-      expect(wrapper.vm.state.error).toBe('error_adding');
-      expect(wrapper.vm.state.isFundingGateError).toBe(false);
-
-      // Verify isAdmin was called
-      expect(adminAuthn.isAdmin).toHaveBeenCalled();
-    });
-
-    it('should show generic error for other errors (non-admin)', async () => {
-      const wrapper = createWrapper();
-
-      // Mock axios PUT to return generic 500 error
-      vi.mocked(axios.put).mockRejectedValue({
-        response: {
-          status: 500,
-          data: {
-            errorName: 'InternalServerError',
-          },
-        },
-      });
-
-      // Set domain input
-      wrapper.vm.state.newDomain = 'example.com';
-      await nextTick();
-
-      // Trigger add domain
-      await wrapper.vm.addDomain();
-      await nextTick();
-
-      // Should show generic error
-      expect(wrapper.vm.state.error).toBe('error_adding');
-      expect(wrapper.vm.state.isFundingGateError).toBe(false);
-    });
-
-    it('should show generic error for other errors (admin)', async () => {
-      // Create wrapper with admin user
-      const adminAuthn = {
-        isAdmin: vi.fn(() => true),
-      };
-      const wrapper = createWrapper(adminAuthn);
-
-      // Mock axios PUT to return generic 500 error
-      vi.mocked(axios.put).mockRejectedValue({
-        response: {
-          status: 500,
-          data: {
-            errorName: 'InternalServerError',
-          },
-        },
-      });
-
-      // Set domain input
-      wrapper.vm.state.newDomain = 'example.com';
-      await nextTick();
-
-      // Trigger add domain
-      await wrapper.vm.addDomain();
-      await nextTick();
-
-      // Should show generic error
-      expect(wrapper.vm.state.error).toBe('error_adding');
-      expect(wrapper.vm.state.isFundingGateError).toBe(false);
-    });
-
-    it('should show invalid domain error for InvalidDomainFormatError (non-admin)', async () => {
-      const wrapper = createWrapper();
-
-      // Mock axios PUT to return invalid domain error
-      vi.mocked(axios.put).mockRejectedValue({
-        response: {
-          status: 400,
-          data: {
-            errorName: 'InvalidDomainFormatError',
-          },
-        },
-      });
-
-      // Set domain input
-      wrapper.vm.state.newDomain = 'invalid domain';
-      await nextTick();
-
-      // Trigger add domain
-      await wrapper.vm.addDomain();
-      await nextTick();
-
-      // Should show invalid domain error
-      expect(wrapper.vm.state.error).toBe('error_invalid_domain');
-      expect(wrapper.vm.state.isFundingGateError).toBe(false);
-    });
-
-    it('should successfully add domain for admin user', async () => {
-      // Create wrapper with admin user
-      const adminAuthn = {
-        isAdmin: vi.fn(() => true),
-      };
-      const wrapper = createWrapper(adminAuthn);
-
-      // Mock successful response
-      vi.mocked(axios.put).mockResolvedValue({
-        data: {
-          domain: 'example.com',
-        },
-      });
-
-      // Set domain input
-      wrapper.vm.state.newDomain = 'example.com';
-      await nextTick();
-
-      // Trigger add domain
-      await wrapper.vm.addDomain();
-      await nextTick();
-
-      // Should succeed
-      expect(wrapper.vm.state.success).toBe('add_success');
+      // The refusal moved into the shared funding cache, and the upsell — not
+      // an alert this component composes for itself — is what the reader sees.
+      expect(useFundingStore().featureAccess(CALENDAR_ID, 'widget_embedding')).toBe(false);
+      expect(wrapper.find('.funding-upsell').exists()).toBe(true);
+      expect(wrapper.find('.alert--error').exists()).toBe(false);
       expect(wrapper.vm.state.error).toBe('');
-      expect(wrapper.vm.state.currentDomain).toBe('example.com');
     });
 
-    it('should successfully add domain for non-admin user with funding plan', async () => {
-      const wrapper = createWrapper();
-
-      // Mock successful response
-      vi.mocked(axios.put).mockResolvedValue({
-        data: {
-          domain: 'example.com',
-        },
+    it('shows the upsell on load when the gate is already known to be shut', async () => {
+      vi.mocked(axios.get).mockImplementation((url: string) => {
+        if (url === FUNDING_URL) {
+          return Promise.resolve(summaryResponse(false));
+        }
+        if (url === DOMAIN_URL) {
+          return Promise.resolve({ data: { domain: null } });
+        }
+        return Promise.resolve({ data: { siteTitle: 'Example Instance' } });
       });
 
-      // Set domain input
+      wrapper = await createWrapper();
+
+      expect(wrapper.find('.funding-upsell').exists()).toBe(true);
+    });
+
+    it('does not sell anything when the funding state cannot be read', async () => {
+      vi.mocked(axios.get).mockImplementation((url: string) => {
+        if (url === FUNDING_URL) {
+          return Promise.reject(new Error('funding lookup failed'));
+        }
+        if (url === DOMAIN_URL) {
+          return Promise.resolve({ data: { domain: null } });
+        }
+        return Promise.resolve({ data: { siteTitle: 'Example Instance' } });
+      });
+
+      wrapper = await createWrapper();
+
+      expect(wrapper.find('.funding-upsell').exists()).toBe(false);
+    });
+
+    it('treats a 5xx as an ordinary failure, never as a closed gate', async () => {
+      wrapper = await createWrapper();
+
+      vi.mocked(axios.put).mockRejectedValue(
+        apiError(500, { errorName: 'InternalServerError' }),
+      );
+
       wrapper.vm.state.newDomain = 'example.com';
-      await nextTick();
-
-      // Trigger add domain
       await wrapper.vm.addDomain();
-      await nextTick();
+      await flushPromises();
 
-      // Should succeed
+      expect(wrapper.vm.state.error).toBe('error_adding');
+      expect(wrapper.find('.funding-upsell').exists()).toBe(false);
+      expect(useFundingStore().featureAccess(CALENDAR_ID, 'widget_embedding')).toBe(true);
+    });
+  });
+
+  describe('domain errors', () => {
+    it('shows the invalid-domain error for InvalidDomainFormatError', async () => {
+      wrapper = await createWrapper();
+
+      vi.mocked(axios.put).mockRejectedValue(
+        apiError(400, { errorName: 'InvalidDomainFormatError' }),
+      );
+
+      wrapper.vm.state.newDomain = 'invalid domain';
+      await wrapper.vm.addDomain();
+      await flushPromises();
+
+      expect(wrapper.vm.state.error).toBe('error_invalid_domain');
+    });
+
+    it('rejects a malformed domain before any request', async () => {
+      wrapper = await createWrapper();
+
+      wrapper.vm.state.newDomain = 'https://example.com/path';
+      await wrapper.vm.addDomain();
+      await flushPromises();
+
+      expect(wrapper.vm.state.error).toBe('error_invalid_domain');
+      expect(axios.put).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('adding a domain', () => {
+    it('records the new domain on success', async () => {
+      wrapper = await createWrapper();
+
+      vi.mocked(axios.put).mockResolvedValue({ data: { domain: 'example.com' } });
+
+      wrapper.vm.state.newDomain = 'example.com';
+      await wrapper.vm.addDomain();
+      await flushPromises();
+
       expect(wrapper.vm.state.success).toBe('add_success');
       expect(wrapper.vm.state.error).toBe('');
       expect(wrapper.vm.state.currentDomain).toBe('example.com');

@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mount } from '@vue/test-utils';
+import { createPinia } from 'pinia';
 import sinon from 'sinon';
 import i18next from 'i18next';
 import I18NextVue from 'i18next-vue';
@@ -118,14 +119,15 @@ describe('Widget Admin UI Components', () => {
           calendarId: 'test-calendar-id',
         },
         global: {
-          plugins: [[I18NextVue, { i18next }]],
+          // Pinia backs the shared funding cache the embedded upsell reads.
+          plugins: [[I18NextVue, { i18next }], createPinia()],
         },
       });
 
       // Wait for async loading
       await new Promise(resolve => setTimeout(resolve, 100));
 
-      expect(axiosGetStub.calledOnce).toBe(true);
+      expect(axiosGetStub.calledWith('/api/v1/calendars/test-calendar-id/widget/domain')).toBe(true);
       expect(wrapper.html()).toContain('example.com');
     });
 
@@ -139,7 +141,7 @@ describe('Widget Admin UI Components', () => {
           calendarId: 'test-calendar-id',
         },
         global: {
-          plugins: [[I18NextVue, { i18next }]],
+          plugins: [[I18NextVue, { i18next }], createPinia()],
         },
       });
 
@@ -465,7 +467,7 @@ describe('Widget Admin UI Components', () => {
           calendarUrlName: 'my-calendar',
         },
         global: {
-          plugins: [[I18NextVue, { i18next }]],
+          plugins: [[I18NextVue, { i18next }], createPinia()],
         },
       });
 

@@ -58,6 +58,13 @@
   "extended_features_title": "Extended Features",
   "extended_features_description": "Extended features are a thank-you to supporters. Start a funding plan to unlock them — and help keep {{instanceName}} running for everyone.",
 
+  "upsell": {
+    "action": "Contribute to enable",
+    "already_contributing": "If you already contribute, reload this page — a recent contribution may not have been picked up yet.",
+    "this_instance": "this instance",
+    "widget_embedding_message": "Embedding this calendar in another website is an extended feature, available to supporters of {{instanceName}}."
+  },
+
   "redirect_message": "Redirecting to payment provider...",
   "processing_message": "Processing your payment...",
   "covered_calendars_title": "Calendars on This Plan",

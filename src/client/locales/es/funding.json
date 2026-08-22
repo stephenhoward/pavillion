@@ -58,6 +58,13 @@
   "extended_features_title": "Funciones Extendidas",
   "extended_features_description": "Las funciones extendidas son un agradecimiento a quienes colaboran. Inicia un plan de financiación para desbloquearlas — y ayuda a mantener {{instanceName}} en línea para todos.",
 
+  "upsell": {
+    "action": "Contribuir para activar",
+    "already_contributing": "Si ya contribuyes, recarga esta página: es posible que una contribución reciente aún no se haya registrado.",
+    "this_instance": "esta instancia",
+    "widget_embedding_message": "La incrustación de este calendario en otro sitio web es una función extendida, disponible para quienes colaboran con {{instanceName}}."
+  },
+
   "redirect_message": "Redirigiendo al proveedor de pagos...",
   "processing_message": "Procesando tu pago...",
   "covered_calendars_title": "Calendarios en Este Plan",

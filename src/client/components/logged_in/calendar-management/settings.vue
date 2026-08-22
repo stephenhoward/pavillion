@@ -129,74 +129,80 @@
           </div>
         </div>
 
-        <!-- Extended Features -->
-        <div v-if="!state.fundingDisabled && !state.fundingLoading" class="setting-card">
+        <!--
+          Extended Features.
+
+          The whole section is hidden while the gate answer is unknown. An
+          unreadable funding state is not an uncovered one, and this is the
+          site where that mattered: the old chain tested three status values
+          and let everything else — including the empty initial value — fall
+          through to the upsell branch, so a failed read structurally rendered
+          as "your community owes money". There are only three states here now
+          and the third renders nothing.
+        -->
+        <div v-if="extendedFeaturesAccess !== 'unknown'" class="setting-card">
           <h3 class="setting-label">{{ t('extended_features_label') }}</h3>
-          <p class="input-description">
-            {{ t('extended_features_description', { instanceName: instanceName }) }}
-          </p>
 
-          <!-- Admin exempt -->
-          <div v-if="state.fundingStatus === 'admin_exempt'" class="setting-extended-status">
-            <span class="setting-badge setting-badge--enabled">
-              {{ t('extended_features_admin_exempt') }}
-            </span>
-          </div>
+          <!--
+            No standing "these features need funding" line under the heading.
+            It would repeat the upsell card's own pitch in the denied state,
+            and contradict the granted one on an instance that does not charge
+            at all — where every gate is open and the badge below is the whole
+            truth. Each state says its own piece instead.
+          -->
 
-          <!-- Grant -->
-          <div v-else-if="state.fundingStatus === 'grant'" class="setting-extended-status">
+          <!--
+            Granted. What the calendar may do comes from the feature gate; the
+            badge wording comes from the display status, which is the only
+            thing that vocabulary decides.
+          -->
+          <div v-if="extendedFeaturesAccess === 'granted'" class="setting-extended-status">
             <span class="setting-badge setting-badge--enabled">
-              {{ t('extended_features_grant') }}
+              {{ t(extendedFeaturesBadgeKey) }}
             </span>
-          </div>
 
-          <!-- Covered by a funding plan -->
-          <div v-else-if="state.fundingStatus === 'covered'" class="setting-extended-status">
-            <span class="setting-badge setting-badge--enabled">
-              {{ t('extended_features_enabled') }}
-            </span>
-            <template v-if="!state.showDisableConfirm">
-              <button
-                type="button"
-                class="setting-disable-btn"
-                @click="state.showDisableConfirm = true"
-              >
-                {{ t('extended_features_disable_button') }}
-              </button>
-            </template>
-            <div v-else class="setting-confirm">
-              <p class="setting-confirm-message">{{ t('confirm_disable_message') }}</p>
-              <div class="setting-confirm-actions">
+            <!-- A plan is the one funding source with something to cancel. -->
+            <template v-if="fundingStatus === 'covered'">
+              <template v-if="!state.showDisableConfirm">
                 <button
                   type="button"
                   class="setting-disable-btn"
-                  :disabled="state.isDisabling"
-                  @click="disableExtendedFeatures"
+                  @click="state.showDisableConfirm = true"
                 >
-                  {{ state.isDisabling ? t('extended_features_disabling') : t('confirm_disable_button') }}
+                  {{ t('extended_features_disable_button') }}
                 </button>
-                <button
-                  type="button"
-                  class="setting-cancel-btn"
-                  :disabled="state.isDisabling"
-                  @click="state.showDisableConfirm = false"
-                >
-                  {{ t('confirm_cancel_button') }}
-                </button>
+              </template>
+              <div v-else class="setting-confirm">
+                <p class="setting-confirm-message">{{ t('confirm_disable_message') }}</p>
+                <div class="setting-confirm-actions">
+                  <button
+                    type="button"
+                    class="setting-disable-btn"
+                    :disabled="state.isDisabling"
+                    @click="disableExtendedFeatures"
+                  >
+                    {{ state.isDisabling ? t('extended_features_disabling') : t('confirm_disable_button') }}
+                  </button>
+                  <button
+                    type="button"
+                    class="setting-cancel-btn"
+                    :disabled="state.isDisabling"
+                    @click="state.showDisableConfirm = false"
+                  >
+                    {{ t('confirm_cancel_button') }}
+                  </button>
+                </div>
               </div>
-            </div>
+            </template>
           </div>
 
-          <!-- Not covered -->
-          <div v-else class="setting-extended-status">
-            <button
-              type="button"
-              class="setting-enable-btn"
-              @click="state.showFundingSheet = true"
-            >
-              {{ t('extended_features_enable_button') }}
-            </button>
-          </div>
+          <!-- Denied. The card re-checks the gate before it shows anything. -->
+          <FundingUpsellCard
+            v-else
+            :calendarId="props.calendarId"
+            feature="widget_embedding"
+            @plan-started="onPlanStarted"
+          />
         </div>
       </div>
     </div>
@@ -209,14 +215,6 @@
     @select="handleAddLanguage"
     @close="closeLanguagePicker"
   />
-
-  <FundingSheet
-    v-if="state.showFundingSheet"
-    :calendarId="props.calendarId"
-    @close="state.showFundingSheet = false"
-    @plan-started="onPlanStarted"
-    :instanceName="instanceName"
-  />
 </template>
 
 <script setup>
@@ -227,14 +225,14 @@ import { DEFAULT_LANGUAGE_CODE } from '@/common/i18n/languages';
 import { CalendarContent } from '@/common/model/calendar';
 import CalendarService from '@/client/service/calendar';
 import FundingService from '@/client/service/funding';
-import Config from '@/client/service/config';
 import { useLanguageManagement } from '@/client/composables/useLanguageManagement';
 import LoadingMessage from '@/client/components/common/loading_message.vue';
 import ImageUpload from '@/client/components/common/media/image-upload.vue';
 import EventImage from '@/client/components/common/media/event-image.vue';
 import LanguageTabSelector from '@/client/components/common/language-tab-selector.vue';
 import LanguagePicker from '@/client/components/common/language-picker.vue';
-import FundingSheet from './funding-sheet.vue';
+import FundingUpsellCard from '@/client/components/common/FundingUpsellCard.vue';
+import { useFundingAccess } from '@/client/composables/useFundingAccess';
 
 // Props
 const props = defineProps({
@@ -253,8 +251,15 @@ const { t } = useTranslation('calendars', {
 const calendarService = new CalendarService();
 const fundingService = new FundingService();
 
-// Instance name for extended features description
-const instanceName = ref('this instance');
+// The calendar's funding gate. `extendedFeaturesAccess` decides what the
+// section may offer; `fundingStatus` only labels it. They are separate reads
+// because they answer separate questions and are allowed to disagree.
+const {
+  status: fundingStatus,
+  accessState: fundingAccessState,
+  ensureLoaded: ensureFundingLoaded,
+  refresh: refreshFundingAccess,
+} = useFundingAccess(props.calendarId);
 
 // Local calendar clone for translatable content editing
 const localCalendar = ref(null);
@@ -268,12 +273,32 @@ const state = reactive({
   success: '',
   defaultDateRange: '2weeks',
   defaultEventImage: null,
-  fundingStatus: '',
-  fundingDisabled: false,
-  fundingLoading: false,
-  showFundingSheet: false,
   isDisabling: false,
   showDisableConfirm: false,
+});
+
+/**
+ * The gate answer this section is about.
+ *
+ * "Extended features" is the user-facing name for the funding-gated set, and
+ * widget embedding is the whole of that set today. When a second feature is
+ * registered this becomes a fold over the registry rather than one key.
+ */
+const extendedFeaturesAccess = computed(() => fundingAccessState('widget_embedding'));
+
+/**
+ * Which badge names the granted state. Display vocabulary only — nothing about
+ * what the calendar may do is decided here.
+ */
+const extendedFeaturesBadgeKey = computed(() => {
+  switch (fundingStatus.value) {
+    case 'admin_exempt':
+      return 'extended_features_admin_exempt';
+    case 'grant':
+      return 'extended_features_grant';
+    default:
+      return 'extended_features_enabled';
+  }
 });
 
 // Language management composable. Entity-level side effects (adding/dropping
@@ -463,29 +488,6 @@ const removeDefaultImage = async () => {
 };
 
 /**
- * Load funding status for this calendar
- */
-const loadFundingStatus = async () => {
-  try {
-    state.fundingLoading = true;
-    const options = await fundingService.getOptions();
-    state.fundingDisabled = !options.enabled || options.providers.length === 0;
-
-    if (options.enabled && options.providers.length > 0) {
-      const status = await fundingService.getFundingStatus(props.calendarId);
-      state.fundingStatus = status.status;
-    }
-  }
-  catch (error) {
-    console.error('Error loading funding status:', error);
-    state.fundingDisabled = true;
-  }
-  finally {
-    state.fundingLoading = false;
-  }
-};
-
-/**
  * Disable extended features by removing calendar from funding plan
  */
 const disableExtendedFeatures = async () => {
@@ -496,7 +498,7 @@ const disableExtendedFeatures = async () => {
     state.success = t('extended_features_disable_success');
     state.showDisableConfirm = false;
     clearMessages();
-    await loadFundingStatus();
+    await refreshFundingAccess();
   }
   catch (error) {
     console.error('Error disabling extended features:', error);
@@ -509,21 +511,20 @@ const disableExtendedFeatures = async () => {
 };
 
 /**
- * Handle a successfully started funding plan from FundingSheet
+ * Report a funding plan started from the upsell card. The card has already
+ * re-read the gate, so the section has switched to its granted state by the
+ * time this runs.
  */
-const onPlanStarted = async () => {
-  state.showFundingSheet = false;
+const onPlanStarted = () => {
   state.success = t('extended_features_enabled_success');
   clearMessages();
-  await loadFundingStatus();
 };
 
-// Load settings and funding status when component mounts
-onMounted(async () => {
+// Load settings and funding status when component mounts. The instance name
+// the upsell needs is the card's own business, not this screen's.
+onMounted(() => {
   loadSettings();
-  loadFundingStatus();
-  const config = await Config.init();
-  instanceName.value = config.settings().siteTitle || 'this instance';
+  ensureFundingLoaded();
 });
 </script>
 
@@ -777,22 +778,6 @@ onMounted(async () => {
     @media (prefers-color-scheme: dark) {
       color: var(--pav-color-green-400);
     }
-  }
-}
-
-.setting-enable-btn {
-  padding: 0.5rem 1rem;
-  border: 0;
-  border-radius: 0.5rem;
-  background: var(--pav-color-orange-500);
-  color: white;
-  font-size: 0.875rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: background 0.2s;
-
-  &:hover {
-    background: var(--pav-color-orange-600);
   }
 }
 

@@ -1,0 +1,33 @@
+/**
+ * Funding Upsell Component Styles
+ *
+ * Layout for FundingUpsellCard, which is an `.alert.alert--info` carrying a
+ * short message and one `.btn--primary` action. Only what the alert primitive
+ * does not already provide lives here: `.alert` lays its children out in a
+ * row, and an upsell reads better as a message stacked above its action.
+ *
+ * No colour, spacing scale or radius is declared here — those come from
+ * `.alert` and `.btn`. The alert tokens this card inherits
+ * (`--pav-color-alert-info-bg`, `--pav-color-alert-info-text`,
+ * `--pav-color-info`) are redefined for dark only inside the
+ * `@media (prefers-color-scheme: dark)` block in `tokens/_colors.scss`, so
+ * dark-mode coverage here follows the OS preference and not an explicit
+ * `[data-theme="dark"]` choice. That gap is in the token layer and is tracked
+ * separately; a theme block here would fork values this card does not own.
+ */
+
+.funding-upsell {
+  /* Stack message, hint and action. `.alert` supplies the gap between them
+     and `align-items: flex-start`, which is writing-mode relative and keeps
+     the action button sized to its own content in both LTR and RTL. */
+  flex-direction: column;
+
+  &__message,
+  &__hint {
+    margin: 0;
+  }
+
+  &__hint {
+    font-size: var(--pav-font-size-sm);
+  }
+}

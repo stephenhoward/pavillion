@@ -6,17 +6,14 @@
       class="alert alert--error"
       role="alert"
       aria-live="polite">
-      <span v-if="!state.isFundingGateError">{{ state.error }}</span>
-      <span v-else>
-        {{ state.error }}
-        <router-link
-          to="/funding"
-          class="funding-link"
-          :aria-label="t('funding_plan_action_full_context')">
-          {{ t('funding_plan_action') }}
-        </router-link>
-      </span>
+      {{ state.error }}
     </div>
+
+    <!--
+      Funding gate. The card decides for itself whether the widget-embedding
+      gate is known to be closed, so nothing here branches on funding state.
+    -->
+    <FundingUpsellCard :calendarId="props.calendarId" feature="widget_embedding" />
 
     <!-- Success Display -->
     <div
@@ -59,15 +56,14 @@
 </template>
 
 <script setup>
-import { reactive, onMounted, inject } from 'vue';
+import { reactive, onMounted } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import axios from 'axios';
 import PillButton from '@/client/components/common/pill-button.vue';
 import LoadingMessage from '@/client/components/common/loading_message.vue';
+import FundingUpsellCard from '@/client/components/common/FundingUpsellCard.vue';
+import { useFundingAccess } from '@/client/composables/useFundingAccess';
 import { validateAndEncodeId } from '@/client/service/utils';
-
-// Injected dependencies
-const authn = inject('authn');
 
 // Props
 const props = defineProps({
@@ -82,6 +78,11 @@ const { t } = useTranslation('calendars', {
   keyPrefix: 'widget.domains',
 });
 
+// Shared funding-gate state. Only the denial recorder is used here — the
+// reading of the gate, and every decision about what to show for it, belongs
+// to FundingUpsellCard.
+const { recordAccessDenial } = useFundingAccess(props.calendarId);
+
 // Component state
 const state = reactive({
   isLoading: false,
@@ -91,7 +92,6 @@ const state = reactive({
   success: '',
   newDomain: '',
   currentDomain: null, // Changed from domains array to single domain
-  isFundingGateError: false,
 });
 
 /**
@@ -138,7 +138,6 @@ const clearMessages = (delay = 5000) => {
   setTimeout(() => {
     state.error = '';
     state.success = '';
-    state.isFundingGateError = false;
   }, delay);
 };
 
@@ -172,7 +171,6 @@ const addDomain = async () => {
 
   if (!isValidDomain(domain)) {
     state.error = t('error_invalid_domain');
-    state.isFundingGateError = false;
     clearMessages();
     return;
   }
@@ -181,7 +179,6 @@ const addDomain = async () => {
     state.isAdding = true;
     state.error = '';
     state.success = '';
-    state.isFundingGateError = false;
 
     const encodedId = validateAndEncodeId(props.calendarId, 'Calendar ID');
     const response = await axios.put(`/api/v1/calendars/${encodedId}/widget/domain`, {
@@ -196,33 +193,25 @@ const addDomain = async () => {
   catch (error) {
     console.error('Error setting domain:', error);
 
-    // Check for funding-gate error (402 Payment Required)
-    // Admin users should not see funding-gate errors (they bypass funding-access checks)
-    if (error.response?.status === 402 && error.response?.data?.errorName === 'SubscriptionRequiredError') {
-      if (!authn.isAdmin()) {
-        state.error = t('funding_plan_required');
-        state.isFundingGateError = true;
-        // Don't auto-clear funding-gate errors - user needs to see them
-        clearMessages(10000); // Longer timeout for funding-gate errors
-      }
-      else {
-        // Admin got a funding-gate error - this should not happen, treat as generic error
-        console.error('Admin user received funding-gate error - this is unexpected');
-        state.error = t('error_adding');
-        state.isFundingGateError = false;
-        clearMessages();
-      }
+    // A funding refusal is recorded in the shared funding cache and answered
+    // by FundingUpsellCard, which appears with the explanation and the way to
+    // act on it. No alert here would add anything, and a timed one would
+    // expire while the upsell it duplicates stays on screen.
+    //
+    // Nothing checks for an admin: recognition is the composable's, and the
+    // gate itself already exempts admins server-side, so a client-side second
+    // guess can only disagree with the server about what just happened.
+    if (recordAccessDenial(error)) {
+      return;
     }
-    else if (error.response?.data?.errorName === 'InvalidDomainFormatError') {
+
+    if (error.response?.data?.errorName === 'InvalidDomainFormatError') {
       state.error = t('error_invalid_domain');
-      state.isFundingGateError = false;
-      clearMessages();
     }
     else {
       state.error = t('error_adding');
-      state.isFundingGateError = false;
-      clearMessages();
     }
+    clearMessages();
   }
   finally {
     state.isAdding = false;
@@ -241,7 +230,6 @@ const removeDomain = async () => {
     state.removingId = true;
     state.error = '';
     state.success = '';
-    state.isFundingGateError = false;
 
     const encodedCalendarId = validateAndEncodeId(props.calendarId, 'Calendar ID');
     await axios.delete(`/api/v1/calendars/${encodedCalendarId}/widget/domain`);
@@ -253,7 +241,6 @@ const removeDomain = async () => {
   catch (error) {
     console.error('Error clearing domain:', error);
     state.error = t('error_removing');
-    state.isFundingGateError = false;
     clearMessages();
   }
   finally {
@@ -341,21 +328,6 @@ onMounted(loadDomains);
     @media (prefers-color-scheme: dark) {
       color: var(--pav-color-green-400);
     }
-  }
-}
-
-.funding-link {
-  margin-left: 0.5rem;
-  color: var(--pav-color-red-700);
-  text-decoration: underline;
-  font-weight: 500;
-
-  @media (prefers-color-scheme: dark) {
-    color: var(--pav-color-red-400);
-  }
-
-  &:hover {
-    text-decoration: none;
   }
 }
 </style>

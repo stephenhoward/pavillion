@@ -495,14 +495,11 @@
     "error_loading": "Error al cargar la configuración",
     "error_saving": "Error al guardar la configuración",
     "extended_features_label": "Funciones ampliadas",
-    "extended_features_description": "Estas funciones están disponibles cuando contribuyes a {{instanceName}}. Tu contribución ayuda a sostener este servicio para todos.",
     "extended_features_enabled": "Activadas",
     "extended_features_admin_exempt": "Incluidas con la cuenta de administrador",
     "extended_features_grant": "Concesión gratuita",
-    "extended_features_enable_button": "Activar",
     "extended_features_disable_button": "Desactivar funciones ampliadas",
     "extended_features_disabling": "Desactivando...",
-    "confirm_disable_title": "¿Desactivar funciones ampliadas?",
     "confirm_disable_message": "Esto eliminará este calendario de tu plan de financiación.",
     "confirm_disable_button": "Desactivar",
     "confirm_cancel_button": "Cancelar",
@@ -538,10 +535,7 @@
       "error_adding": "Error al añadir el dominio",
       "error_removing": "Error al eliminar el dominio",
       "error_invalid_domain": "Formato de dominio no válido. El dominio no debe incluir protocolo ni ruta (p. ej., usa 'ejemplo.com' en lugar de 'https://ejemplo.com/').",
-      "error_duplicate": "Este dominio ya está en la lista de permitidos",
-      "funding_plan_required": "La incrustación de widgets requiere un plan de financiación activo",
-      "funding_plan_action": "Ver planes de financiación",
-      "funding_plan_action_full_context": "Ver planes de financiación para activar la incrustación de widgets"
+      "error_duplicate": "Este dominio ya está en la lista de permitidos"
     },
     "config": {
       "configuration_title": "Configuración del widget",
