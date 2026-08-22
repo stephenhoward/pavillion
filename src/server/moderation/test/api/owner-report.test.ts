@@ -458,6 +458,7 @@ describe('Owner Report API', () => {
 
       it('should return 403 when user is not a calendar owner or editor', async () => {
         stubAccessDenied();
+        const readStub = sandbox.stub(moderationInterface, 'getReportsForCalendar');
 
         router.get('/calendars/:calendarId/reports', addRequestUser, (req, res) => {
           routes.listReports(req, res);
@@ -468,6 +469,9 @@ describe('Owner Report API', () => {
 
         expect(response.status).toBe(403);
         expect(response.body.errorName).toBe('ForbiddenError');
+        // Authorization must run before any report read, so an unauthorized
+        // caller cannot learn whether a report exists.
+        expect(readStub.called).toBe(false);
       });
 
       it('should return 403 when calendar does not exist', async () => {
@@ -642,6 +646,7 @@ describe('Owner Report API', () => {
 
       it('should return 403 when user lacks calendar access', async () => {
         stubAccessDenied();
+        const readStub = sandbox.stub(moderationInterface, 'getReportForCalendar');
 
         router.get('/calendars/:calendarId/reports/:reportId', addRequestUser, (req, res) => {
           routes.getReport(req, res);
@@ -652,6 +657,9 @@ describe('Owner Report API', () => {
 
         expect(response.status).toBe(403);
         expect(response.body.errorName).toBe('ForbiddenError');
+        // Authorization must run before any report read, so an unauthorized
+        // caller cannot learn whether a report exists.
+        expect(readStub.called).toBe(false);
       });
     });
 
@@ -850,6 +858,7 @@ describe('Owner Report API', () => {
 
       it('should return 403 when user lacks calendar access', async () => {
         stubAccessDenied();
+        const readStub = sandbox.stub(moderationInterface, 'getReportForCalendar');
 
         router.put('/calendars/:calendarId/reports/:reportId', addRequestUser, (req, res) => {
           routes.updateReport(req, res);
@@ -860,6 +869,9 @@ describe('Owner Report API', () => {
           .send({ ownerNotes: 'notes' });
 
         expect(response.status).toBe(403);
+        // Authorization must run before any report read, so an unauthorized
+        // caller cannot learn whether a report exists.
+        expect(readStub.called).toBe(false);
       });
     });
 
@@ -1081,6 +1093,7 @@ describe('Owner Report API', () => {
 
       it('should return 403 when user lacks calendar access', async () => {
         stubAccessDenied();
+        const readStub = sandbox.stub(moderationInterface, 'getReportForCalendar');
 
         router.post('/calendars/:calendarId/reports/:reportId/resolve', addRequestUser, (req, res) => {
           routes.resolveReport(req, res);
@@ -1091,6 +1104,9 @@ describe('Owner Report API', () => {
           .send({ notes: 'notes' });
 
         expect(response.status).toBe(403);
+        // Authorization must run before any report read, so an unauthorized
+        // caller cannot learn whether a report exists.
+        expect(readStub.called).toBe(false);
       });
     });
 
@@ -1312,6 +1328,7 @@ describe('Owner Report API', () => {
 
       it('should return 403 when user lacks calendar access', async () => {
         stubAccessDenied();
+        const readStub = sandbox.stub(moderationInterface, 'getReportForCalendar');
 
         router.post('/calendars/:calendarId/reports/:reportId/dismiss', addRequestUser, (req, res) => {
           routes.dismissReport(req, res);
@@ -1322,6 +1339,9 @@ describe('Owner Report API', () => {
           .send({ notes: 'notes' });
 
         expect(response.status).toBe(403);
+        // Authorization must run before any report read, so an unauthorized
+        // caller cannot learn whether a report exists.
+        expect(readStub.called).toBe(false);
       });
     });
 
