@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ref } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import Sheet from '@/client/components/common/sheet.vue';
 import FundingForm from '@/client/components/account/FundingForm.vue';
@@ -17,14 +18,20 @@ const emit = defineEmits<{
 
 const { t } = useTranslation('funding');
 
+const sheetRef = ref<InstanceType<typeof Sheet> | null>(null);
+
 function onPlanStarted() {
+  // Close through the Sheet so its dialog lifecycle runs — restoring focus to
+  // the element that opened it — and it emits `close` on our behalf. Emitting
+  // `close` directly lets the parent tear the sheet down before focus is
+  // ever restored.
+  sheetRef.value?.close();
   emit('plan-started');
-  emit('close');
 }
 </script>
 
 <template>
-  <Sheet :title="t('extended_features_title')" @close="emit('close')">
+  <Sheet ref="sheetRef" :title="t('extended_features_title')" @close="emit('close')">
     <p class="input-description">
       {{ t('extended_features_description', { instanceName: instanceName }) }}
     </p>
