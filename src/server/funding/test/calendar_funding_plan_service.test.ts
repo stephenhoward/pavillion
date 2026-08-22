@@ -630,6 +630,23 @@ describe('FundingService - Calendar Funding Plan Methods', () => {
         service.getFundingStatusForCalendar(accountId, calendarId),
       ).rejects.toThrow(ValidationError);
     });
+
+    it('should not echo the account or calendar id in the ownership refusal', async () => {
+      const calendarId = uuidv4();
+      const accountId = uuidv4();
+
+      mockCalendarInterface.isCalendarOwnerById
+        .withArgs(accountId, calendarId)
+        .resolves(false);
+
+      const error = await service
+        .getFundingStatusForCalendar(accountId, calendarId)
+        .then(() => { throw new Error('expected rejection'); }, (e: unknown) => e as Error);
+
+      expect(error).toBeInstanceOf(ValidationError);
+      expect(error.message).not.toContain(accountId);
+      expect(error.message).not.toContain(calendarId);
+    });
   });
 
   describe('getCalendarFundingSummary', () => {
