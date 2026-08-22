@@ -20,8 +20,9 @@ class LocationSpaceEntity extends Model {
   @Column({ type: DataType.UUID, allowNull: false })
   declare place_id: string;
 
-  // origin_uri identifies AP-originated records for inbound dedup.
-  // Should be cleared when the source calendar is unfollowed — see follow-up.
+  // origin_uri identifies AP-originated records for inbound dedup. Cleared by
+  // LocationService.clearOriginUrisFromSource when the parent Place's calendar
+  // unfollows the source (activitypub:calendar:unfollowed).
   @Column({ type: DataType.STRING(2048), allowNull: true })
   declare origin_uri: string | null;
 

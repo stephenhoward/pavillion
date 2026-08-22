@@ -34,8 +34,9 @@ class LocationEntity extends Model {
   @Column({ type: DataType.STRING })
   declare country: string;
 
-  // origin_uri identifies AP-originated records for inbound dedup.
-  // Should be cleared when the source calendar is unfollowed — see follow-up.
+  // origin_uri identifies AP-originated records for inbound dedup. Cleared by
+  // LocationService.clearOriginUrisFromSource when the owning calendar
+  // unfollows the source (activitypub:calendar:unfollowed).
   @Column({ type: DataType.STRING(2048), allowNull: true })
   declare origin_uri: string | null;
 

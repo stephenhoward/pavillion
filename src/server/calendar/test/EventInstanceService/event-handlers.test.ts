@@ -203,6 +203,30 @@ describe('CalendarEventHandlers (single-producer model)', () => {
     });
   });
 
+  describe('activitypub:calendar:unfollowed handler', () => {
+    it('clears origin_uri stamps for the unfollowing calendar and source actor', async () => {
+      mockService.clearOriginUrisFromSource.resolves();
+
+      eventBus.emit('activitypub:calendar:unfollowed', {
+        calendarId: 'cal-1',
+        sourceActorUri: 'https://source.example/calendars/townhall',
+      });
+      await new Promise(resolve => setImmediate(resolve));
+
+      expect(mockService.clearOriginUrisFromSource.calledOnceWithExactly(
+        'cal-1',
+        'https://source.example/calendars/townhall',
+      )).toBe(true);
+    });
+
+    it('ignores a payload missing identity fields', async () => {
+      eventBus.emit('activitypub:calendar:unfollowed', { calendarId: 'cal-1' });
+      await new Promise(resolve => setImmediate(resolve));
+
+      expect(mockService.clearOriginUrisFromSource.called).toBe(false);
+    });
+  });
+
   describe('eventInstanceCancelled handler', () => {
     it('should NOT call buildEventInstances and should re-emit eventUpdated with skipRebuild:true', async () => {
       const event = createTestEvent('event-1', 'calendar-1');
