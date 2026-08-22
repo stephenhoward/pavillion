@@ -25,6 +25,7 @@ import ExpressHelper from '@/server/common/helper/express';
 import { logError } from '@/server/common/helper/error-logger';
 import {
   limitWidgetConfigByAccount,
+  limitImportSourceCreateByAccount,
   limitImportSourceVerifyBySource,
   limitImportSourceSyncBySource,
 } from '@/server/common/middleware/rate-limiters';
@@ -75,8 +76,12 @@ const icsUpload = multer({
  * layer (ImportSourceService.assertEditorAccess).
  *
  * Rate limiting:
- *  - list/create/get/delete/verify-issue: account-scoped limiter
+ *  - list/get/delete/verify-issue/file: account-scoped limiter
  *    (`limitWidgetConfigByAccount`) as a conservative default.
+ *  - create:  account-scoped limiter (`limitImportSourceCreateByAccount`)
+ *    configured to 15 requests per account per hour — each new source is a
+ *    fresh outbound-fetch target, so creation is the pivot that multiplies
+ *    the per-source verify/sync budgets.
  *  - /verify: per-source limiter (`limitImportSourceVerifyBySource`)
  *    configured to 3 requests per source per hour.
  *  - /sync:   per-source limiter (`limitImportSourceSyncBySource`)
@@ -104,7 +109,7 @@ class ImportSourceRoutes {
     router.post(
       '/calendars/:calendarId/import-sources',
       ExpressHelper.loggedInOnly,
-      limitWidgetConfigByAccount,
+      limitImportSourceCreateByAccount,
       this.createSource.bind(this),
     );
     router.post(

@@ -235,7 +235,7 @@ const REVIEWED_NO_LIMITER_ROUTES: { method: string; path: string; reason: string
   { method: 'PUT', path: '/api/v1/calendars/:calendarId/widget/domain', reason: 'per-account limited (limitWidgetConfigByAccount)' },
   { method: 'DELETE', path: '/api/v1/calendars/:calendarId/widget/domain', reason: 'per-account limited (limitWidgetConfigByAccount)' },
   { method: 'PUT', path: '/api/v1/calendars/:calendarId/widget/config', reason: 'per-account limited (limitWidgetConfigByAccount)' },
-  { method: 'POST', path: '/api/v1/calendars/:calendarId/import-sources', reason: 'per-account limited (limitWidgetConfigByAccount)' },
+  { method: 'POST', path: '/api/v1/calendars/:calendarId/import-sources', reason: 'per-account limited (limitImportSourceCreateByAccount)' },
   { method: 'DELETE', path: '/api/v1/calendars/:calendarId/import-sources/:id', reason: 'per-account limited (limitWidgetConfigByAccount)' },
   { method: 'POST', path: '/api/v1/calendars/:calendarId/import-sources/:id/verify-issue', reason: 'per-account limited (limitWidgetConfigByAccount)' },
   { method: 'POST', path: '/api/v1/calendars/:calendarId/import-sources/:id/verify', reason: 'per-source limited (limitImportSourceVerifyBySource)' },
