@@ -50,6 +50,25 @@ function activityObjectId(body: Record<string, any>): string | undefined {
 }
 
 /**
+ * Whether an inbound activity carries a Flag, either as the activity itself or
+ * embedded as the object of a wrapper such as `Ignore` or `Undo`.
+ *
+ * A wrapped Flag carries the same reporter actor URI and report text as a
+ * bare one, so the arrival-log redaction has to see through the envelope.
+ *
+ * @param body - The raw inbound activity
+ * @returns True when the activity or its embedded object is a Flag
+ */
+function carriesFlag(body: Record<string, any>): boolean {
+  if (body?.type === 'Flag') {
+    return true;
+  }
+
+  const object = body?.object;
+  return !!object && typeof object === 'object' && object.type === 'Flag';
+}
+
+/**
  * Log that an inbound activity arrived at an inbox.
  *
  * Arrival, NOT acceptance: an unhandled activity type, a validation failure, or
@@ -70,12 +89,13 @@ export function logInboxActivityArrival(
 ): void {
   logger.info({ inbox, recipient, activityType: body?.type }, 'Received inbox activity');
 
-  if (body?.type === 'Flag') {
+  if (carriesFlag(body)) {
     // A Flag carries a remote reporter's actor URI and the free text of a
     // moderation report. Everything downstream reduces that reporter to a
     // bare instance host before anything durable is written; dumping the
     // raw body here would put both the identity and the report text into
     // the logs and bypass that reduction entirely. Log only the envelope.
+    // Wrappers (Ignore, Undo) embed the Flag whole, so they are redacted too.
     logger.info({ inbox, recipient, activityId: body?.id }, 'Inbox Flag activity received (body withheld)');
     return;
   }

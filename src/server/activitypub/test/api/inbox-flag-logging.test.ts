@@ -102,6 +102,29 @@ describe('addToInbox logging hygiene for Flag activities', () => {
     expect(logged, 'reporter actor URI must not be logged').not.toContain(REPORTER_ACTOR_URI);
   });
 
+  it.each(['Ignore', 'Undo'])('withholds the body when a %s wraps a Flag', async (wrapper) => {
+    // The redaction must key on the embedded object, not only the envelope:
+    // a wrapper around a Flag carries the same reporter identity and report
+    // text as the Flag itself.
+    await post({
+      '@context': 'https://www.w3.org/ns/activitystreams',
+      type: wrapper,
+      id: `https://remote.example.com/activities/${wrapper.toLowerCase()}-flag-1`,
+      actor: 'https://remote.example.com/calendars/origin',
+      object: {
+        type: 'Flag',
+        id: 'https://remote.example.com/flags/wrapped-1',
+        actor: REPORTER_ACTOR_URI,
+        object: 'https://local.example.com/events/6b1f0a5e-0000-4000-8000-000000000001',
+        content: REPORT_TEXT,
+      },
+    });
+
+    const logged = JSON.stringify(logCalls);
+    expect(logged, 'report free text must not be logged').not.toContain(REPORT_TEXT);
+    expect(logged, 'reporter actor URI must not be logged').not.toContain(REPORTER_ACTOR_URI);
+  });
+
   it('still logs the full body for a non-Flag activity', async () => {
     // Guards against the redaction being applied indiscriminately: the body
     // log is a federation debugging aid for every other activity type.
