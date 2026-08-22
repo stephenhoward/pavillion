@@ -34,6 +34,12 @@ export interface UseFundingAccessReturn {
   status: ComputedRef<FundingStatus | null>;
   /** Whether a load is in flight. */
   isLoading: Ref<boolean>;
+  /**
+   * Whether the most recent read failed. Separates "we asked and the server
+   * could not answer" from "we never asked" — the gate predicates report
+   * `unknown` for both, and neither may render as an upsell.
+   */
+  loadFailed: ComputedRef<boolean>;
   /** The full gate answer for a feature, including "not known". */
   accessState: (feature: FundingGatedFeature) => FundingAccessState;
   /** True only when the gate is known to be open. */
@@ -64,6 +70,16 @@ export interface UseFundingAccessReturn {
 const inFlightLoads = new Map<string, Promise<void>>();
 
 /**
+ * Reloads queued behind an in-flight load, keyed by calendar id.
+ *
+ * Same lifetime argument as `inFlightLoads`. A refresh that arrives while a
+ * load is out cannot join it — that load left before whatever prompted the
+ * refresh — so it waits for it and then issues one more. Every refresh that
+ * arrives during the same in-flight load shares that one follow-up.
+ */
+const queuedReloads = new Map<string, Promise<void>>();
+
+/**
  * Composable exposing a calendar's funding-gate answers to components.
  *
  * The gate answer is the per-feature `features` map from
@@ -92,12 +108,14 @@ export function useFundingAccess(calendarId: string): UseFundingAccessReturn {
   const isLoading = ref(false);
 
   const status = computed(() => fundingStore.statusFor(calendarId));
+  const loadFailed = computed(() => fundingStore.loadFailedFor(calendarId));
 
   /**
    * Read a feature's gate decision from the cache.
    *
    * `null` from the store means nothing has told us yet — either nothing has
-   * been loaded, or the load failed. Both are `unknown`, never `denied`.
+   * been loaded, or the load failed. Both are `unknown`, never `denied`;
+   * `loadFailed` is where the two come apart.
    */
   const accessState = (feature: FundingGatedFeature): FundingAccessState => {
     const access = fundingStore.featureAccess(calendarId, feature);
@@ -140,13 +158,16 @@ export function useFundingAccess(calendarId: string): UseFundingAccessReturn {
    * A failed read is swallowed after logging, on purpose: it leaves every
    * feature exactly as it was — unknown if nothing was loaded, still granted
    * if something was. Rejecting here would push each caller into an error
-   * branch whose only correct behaviour is to change nothing.
+   * branch whose only correct behaviour is to change nothing. The failure is
+   * recorded on the cache entry instead, so `loadFailed` can tell it apart
+   * from a read never attempted.
    */
   const startLoad = (): Promise<void> => {
     const request = fundingService.loadFundingSummary(calendarId)
       .then(() => undefined)
       .catch((error: unknown) => {
         console.error('Error loading funding access:', error);
+        fundingStore.markLoadFailed(calendarId);
       })
       .finally(() => {
         inFlightLoads.delete(calendarId);
@@ -173,6 +194,40 @@ export function useFundingAccess(calendarId: string): UseFundingAccessReturn {
   };
 
   /**
+   * Await a load that started after this call, starting one as soon as any
+   * load already in flight has settled.
+   *
+   * With nothing in flight this is just `load`. Otherwise one follow-up is
+   * queued behind the in-flight request and every caller arriving during
+   * that request awaits the same follow-up — so a burst of refreshes costs
+   * exactly two requests, the one already out and one more.
+   */
+  const reload = async (): Promise<void> => {
+    isLoading.value = true;
+    try {
+      const inFlight = inFlightLoads.get(calendarId);
+      if (!inFlight) {
+        await startLoad();
+        return;
+      }
+
+      let queued = queuedReloads.get(calendarId);
+      if (!queued) {
+        queued = inFlight
+          .then(() => startLoad())
+          .finally(() => {
+            queuedReloads.delete(calendarId);
+          });
+        queuedReloads.set(calendarId, queued);
+      }
+      await queued;
+    }
+    finally {
+      isLoading.value = false;
+    }
+  };
+
+  /**
    * Load the calendar's funding summary unless it is already cached.
    *
    * Safe to call from every consumer's mount; only one request goes out
@@ -191,12 +246,13 @@ export function useFundingAccess(calendarId: string): UseFundingAccessReturn {
    * Re-read the calendar's funding summary, cached or not. Call after anything
    * that could have changed it — a completed checkout, a cancelled plan.
    *
-   * If a load is already in flight this joins it instead of racing a second
-   * one, so a refresh triggered while the initial mount is still loading
-   * resolves with that load's answer.
+   * Resolves with the answer of a request issued after this call. A load
+   * already in flight left before whatever prompted the refresh, so joining it
+   * could hand back the pre-change answer; instead one reload is queued behind
+   * it, shared by every refresh requested while it is out.
    */
   const refresh = async (): Promise<void> => {
-    await load();
+    await reload();
   };
 
   /**
@@ -219,5 +275,15 @@ export function useFundingAccess(calendarId: string): UseFundingAccessReturn {
     return true;
   };
 
-  return { status, isLoading, accessState, hasAccess, isDenied, ensureLoaded, refresh, recordAccessDenial };
+  return {
+    status,
+    isLoading,
+    loadFailed,
+    accessState,
+    hasAccess,
+    isDenied,
+    ensureLoaded,
+    refresh,
+    recordAccessDenial,
+  };
 }

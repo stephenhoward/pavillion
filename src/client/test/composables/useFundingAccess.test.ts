@@ -154,6 +154,55 @@ describe('useFundingAccess', () => {
       expect(funding.status.value).toBeNull();
     });
 
+    it('resolves with the answer of a reload issued after the in-flight load settles', async () => {
+      // A refresh after a cancellation must not hand back the answer of a
+      // request that left before the cancellation. The first GET is held open
+      // until the refresh has been requested, and answers "covered"; only the
+      // reload the refresh forces sees the cancelled state.
+      let resolveFirst!: (value: unknown) => void;
+      vi.mocked(axios.get)
+        .mockImplementationOnce(() => new Promise((resolve) => {
+          resolveFirst = resolve;
+        }))
+        .mockResolvedValueOnce(summaryResponse(false, 'not_covered'));
+
+      const funding = useFundingAccess(CALENDAR_ID);
+      const initial = funding.ensureLoaded();
+      const refreshed = funding.refresh();
+
+      resolveFirst(summaryResponse(true));
+      await initial;
+      await refreshed;
+
+      expect(axios.get).toHaveBeenCalledTimes(2);
+      expect(funding.status.value).toBe('not_covered');
+      expect(funding.accessState('widget_embedding')).toBe('denied');
+    });
+
+    it('coalesces refreshes requested during one load into a single reload', async () => {
+      let resolveFirst!: (value: unknown) => void;
+      vi.mocked(axios.get)
+        .mockImplementationOnce(() => new Promise((resolve) => {
+          resolveFirst = resolve;
+        }))
+        .mockResolvedValue(summaryResponse(false, 'not_covered'));
+
+      const first = useFundingAccess(CALENDAR_ID);
+      const second = useFundingAccess(CALENDAR_ID);
+      const initial = first.ensureLoaded();
+      const refreshes = Promise.all([first.refresh(), second.refresh(), first.refresh()]);
+
+      expect(second.isLoading.value).toBe(true);
+      resolveFirst(summaryResponse(true));
+      await initial;
+      await refreshes;
+
+      expect(axios.get).toHaveBeenCalledTimes(2);
+      expect(first.status.value).toBe('not_covered');
+      expect(second.status.value).toBe('not_covered');
+      expect(second.isLoading.value).toBe(false);
+    });
+
     it('keeps a previously granted feature granted when a later read fails', async () => {
       vi.mocked(axios.get).mockResolvedValue(summaryResponse(true));
       const funding = useFundingAccess(CALENDAR_ID);
@@ -162,6 +211,40 @@ describe('useFundingAccess', () => {
       vi.mocked(axios.get).mockRejectedValue(apiError(503, { error: 'Service unavailable' }));
       await funding.refresh();
 
+      expect(funding.accessState('widget_embedding')).toBe('granted');
+    });
+  });
+
+  describe('loadFailed', () => {
+    it('is false before anything has been asked, while access is unknown', () => {
+      const funding = useFundingAccess(CALENDAR_ID);
+
+      expect(funding.loadFailed.value).toBe(false);
+      expect(funding.accessState('widget_embedding')).toBe('unknown');
+    });
+
+    it('is true after a read the server could not answer, while access stays unknown', async () => {
+      // Same `unknown` as never-loaded for every gate predicate — neither may
+      // render an upsell — but a consumer can tell the two apart here.
+      vi.mocked(axios.get).mockRejectedValue(apiError(500, { error: 'Internal server error' }));
+
+      const funding = useFundingAccess(CALENDAR_ID);
+      await funding.ensureLoaded();
+
+      expect(funding.loadFailed.value).toBe(true);
+      expect(funding.accessState('widget_embedding')).toBe('unknown');
+      expect(funding.isDenied('widget_embedding')).toBe(false);
+    });
+
+    it('clears once a later read succeeds', async () => {
+      vi.mocked(axios.get).mockRejectedValueOnce(apiError(500, { error: 'Internal server error' }));
+      const funding = useFundingAccess(CALENDAR_ID);
+      await funding.ensureLoaded();
+
+      vi.mocked(axios.get).mockResolvedValue(summaryResponse(true));
+      await funding.refresh();
+
+      expect(funding.loadFailed.value).toBe(false);
       expect(funding.accessState('widget_embedding')).toBe('granted');
     });
   });
