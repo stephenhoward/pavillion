@@ -34,7 +34,7 @@ import { createHash } from 'node:crypto';
 import dns from 'node:dns';
 import { createRequire } from 'node:module';
 import { promisify } from 'node:util';
-import { Agent, request as undiciRequest } from 'undici';
+import { type Agent, request as undiciRequest } from 'undici';
 
 import {
   ImportSourceFetchError,
@@ -49,6 +49,7 @@ import {
   createIcsUrlValidator,
   isLocalhostIcsImportAllowed,
 } from '@/server/common/helper/test-ssrf-gate';
+import { createPinnedAgent } from '@/server/calendar/service/import/pinned_agent';
 import type { UrlValidatorFn } from '@/server/calendar/service/import/types';
 
 const logger = createLogger('calendar.import.fetcher');
@@ -216,38 +217,7 @@ async function defaultDnsLookup(hostname: string): Promise<string[]> {
 }
 
 function defaultCreateAgent(pinnedIp: string): Agent {
-  return new Agent({
-    connect: {
-      // Mirrors the dual-signature contract of `dns.lookup`: when undici
-      // (or any caller) passes `options.all = true`, the callback must
-      // receive an *array* of `{ address, family }` entries; otherwise
-      // it receives the positional `(err, address, family)` tuple.
-      // Node 24+ undici calls with `{ all: true }` for http connects,
-      // so an array-aware path is required to avoid
-      // `ERR_INVALID_IP_ADDRESS` under the pinned agent.
-      lookup: (
-        _hostname: string,
-        options: unknown,
-        callback: (
-          err: NodeJS.ErrnoException | null,
-          addressOrAddresses: string | Array<{ address: string; family: number }>,
-          family?: number,
-        ) => void,
-      ) => {
-        const family = pinnedIp.includes(':') ? 6 : 4;
-        const wantsAll = typeof options === 'object'
-          && options !== null
-          && (options as { all?: unknown }).all === true;
-        if (wantsAll) {
-          callback(null, [{ address: pinnedIp, family }]);
-        }
-        else {
-          callback(null, pinnedIp, family);
-        }
-      },
-      timeout: CONNECT_TIMEOUT_MS,
-    },
-  });
+  return createPinnedAgent(pinnedIp, CONNECT_TIMEOUT_MS);
 }
 
 const defaultRequest: RequestFn = async (url, init) => {
