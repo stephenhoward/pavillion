@@ -129,7 +129,7 @@ Implementers receive the canonical prompt from
 [`implementer-prompt-template`](../implementer-prompt-template/SKILL.md).
 Each implementer independently runs its own pre-close checklist
 (`pkill -f "vitest"`, `npm run lint`, `npx vitest run <file1> <file2>
---maxThreads=2`) and calls `bd close {bead_id}` only when lint and
+--maxWorkers=2`) and calls `bd close {bead_id}` only when lint and
 targeted tests pass. If lint or targeted tests fail, the implementer does
 not close; it reports back and the orchestrator routes to the failure
 handling below.

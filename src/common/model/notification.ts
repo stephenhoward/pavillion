@@ -1,4 +1,26 @@
 /**
+ * What a notification row points at, decided by the server.
+ *
+ * Every `kind` names a resource **plus the viewer's authority over it**, never
+ * a destination screen. `moderation_report` and `owner_report` are the same
+ * report seen with different authority, which is why their payloads differ: an
+ * admin reaches the moderation queue, a calendar owner reaches their own
+ * calendar's reports. A hypothetical `settings_tab` kind would violate the
+ * invariant — it names a screen, not a resource.
+ *
+ * Keeping authority in the discriminant means the client never re-derives the
+ * viewer's role to decide where a row leads; the server has already decided.
+ *
+ * `kind` values are snake_case to match the sibling `actor.kind` discriminant
+ * in `NotificationResponse` below.
+ */
+export type NotificationTarget =
+  | { kind: 'event'; eventId: string }
+  | { kind: 'calendar'; calendarUrlName: string }
+  | { kind: 'moderation_report'; reportId: string }
+  | { kind: 'owner_report'; reportId: string; calendarUrlName: string };
+
+/**
  * Wire-shape returned by `GET /api/v1/notification`. The response is a
  * per-recipient projection over the (activity, recipient) pair — `id` is
  * the recipient row, `activityId` is the underlying activity, and
@@ -37,6 +59,8 @@ export interface NotificationResponse {
     type: string;
     id: string;
     label: string;
+    /** Where this row leads for this recipient; `null` renders as plain text. */
+    target: NotificationTarget | null;
   };
   seen: boolean;
   dismissed: boolean;

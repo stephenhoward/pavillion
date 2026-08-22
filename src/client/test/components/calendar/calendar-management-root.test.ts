@@ -2,19 +2,26 @@ import { expect, describe, it, beforeEach, afterEach, vi } from 'vitest';
 import { createMemoryHistory, createRouter, Router } from 'vue-router';
 import { RouteRecordRaw } from 'vue-router';
 import { flushPromises } from '@vue/test-utils';
+import { createPinia, setActivePinia, Pinia } from 'pinia';
 
 import { Calendar } from '@/common/model/calendar';
 import { CalendarInfo } from '@/common/model/calendar_info';
 import { mountComponent } from '@/client/test/lib/vue';
 import CalendarManagementRoot from '@/client/components/logged_in/calendar-management/root.vue';
 import CalendarService from '@/client/service/calendar';
+import ModerationService from '@/client/service/moderation';
+import { useModerationStore } from '@/client/stores/moderation-store';
 
 const routes: RouteRecordRaw[] = [
   { path: '/manage/:calendar', component: {}, name: 'manage' },
   { path: '/test', component: {}, name: 'test' },
 ];
 
-const mountRootComponent = async (calendarUrlName: string = 'my-calendar', query: Record<string, string> = {}) => {
+const mountRootComponent = async (
+  calendarUrlName: string = 'my-calendar',
+  query: Record<string, string> = {},
+  options: { attachTo?: Element | string, pinia?: Pinia } = {},
+) => {
   const router: Router = createRouter({
     history: createMemoryHistory(),
     routes: routes,
@@ -33,6 +40,8 @@ const mountRootComponent = async (calendarUrlName: string = 'my-calendar', query
       ReportDetail: true,
       ImportSourcesSection: true,
     },
+    ...(options.pinia ? { pinia: options.pinia } : {}),
+    ...(options.attachTo ? { attachTo: options.attachTo } : {}),
   });
 
   return { wrapper, router };
@@ -502,6 +511,279 @@ describe('CalendarManagementRoot', () => {
       expect(breadcrumbLabel).toBeTruthy();
       expect(tablistLabel).toBeTruthy();
       expect(breadcrumbLabel).not.toBe(tablistLabel);
+    });
+  });
+
+  describe('Report deep link from ?report=', () => {
+    // Strict v4 shape, matching the server's path-parameter validation.
+    const VALID_REPORT_ID = '9f8b7c6d-5e4f-4a3b-9c2d-1e0f9a8b7c6d';
+    // Same shape but version 1: the server rejects it, so the client must too.
+    const NON_V4_REPORT_ID = '9f8b7c6d-5e4f-1a3b-9c2d-1e0f9a8b7c6d';
+
+    const mockCalendarRole = (role: 'owner' | 'editor') => {
+      const info = makeCalendarInfo('my-calendar', role);
+      vi.spyOn(CalendarService.prototype, 'loadCalendarsWithRelationship').mockResolvedValue([info]);
+    };
+
+    const mockReportFound = () =>
+      vi.spyOn(ModerationService.prototype, 'getReport').mockResolvedValue({
+        report: {} as any,
+        escalationHistory: [],
+      });
+
+    const mockReportMissing = () =>
+      vi.spyOn(ModerationService.prototype, 'getReport').mockRejectedValue(new Error('Report not found'));
+
+    /**
+     * Rejects the way the service does for a 403: `handleApiError` maps the
+     * response's `errorName` to a `ForbiddenError` instance and throws it.
+     */
+    const mockReportForbidden = () => {
+      const forbidden = new Error('You do not have permission to perform this action');
+      forbidden.name = 'ForbiddenError';
+      return vi.spyOn(ModerationService.prototype, 'getReport').mockRejectedValue(forbidden);
+    };
+
+    /**
+     * Mounts without any ?report= param and captures what the plain management
+     * view looks like, so failure modes can be asserted equal to it.
+     */
+    const captureBaseline = async (role: 'owner' | 'editor', query: Record<string, string> = {}) => {
+      mockCalendarRole(role);
+      const { wrapper } = await mountRootComponent('my-calendar', query);
+      await flushPromises();
+      const snapshot = {
+        html: wrapper.html(),
+        activeTab: (wrapper.vm as any).state.activeTab,
+      };
+      wrapper.unmount();
+      return snapshot;
+    };
+
+    it('activates the reports tab and selects the report for a valid owner deep link', async () => {
+      mockCalendarRole('owner');
+      const getReport = mockReportFound();
+
+      const { wrapper } = await mountRootComponent('my-calendar', { report: VALID_REPORT_ID });
+      currentWrapper = wrapper;
+
+      await flushPromises();
+
+      expect(getReport).toHaveBeenCalledWith('cal-uuid-1', VALID_REPORT_ID);
+      expect((wrapper.vm as any).state.activeTab).toBe('reports');
+      expect((wrapper.vm as any).selectedReportId).toBe(VALID_REPORT_ID);
+      expect(wrapper.findComponent({ name: 'ReportDetail' }).exists()).toBe(true);
+    });
+
+    it('moves focus to the reports tabpanel on success', async () => {
+      mockCalendarRole('owner');
+      mockReportFound();
+
+      const { wrapper } = await mountRootComponent(
+        'my-calendar',
+        { report: VALID_REPORT_ID },
+        { attachTo: document.body },
+      );
+      currentWrapper = wrapper;
+
+      await flushPromises();
+
+      const panel = wrapper.find('#reports-panel');
+      expect(panel.attributes('tabindex')).toBe('-1');
+      expect(document.activeElement).toBe(panel.element);
+    });
+
+    it('issues no request and moves no focus for a malformed report id', async () => {
+      mockCalendarRole('owner');
+      const getReport = mockReportFound();
+
+      const { wrapper } = await mountRootComponent(
+        'my-calendar',
+        { report: 'not-a-uuid' },
+        { attachTo: document.body },
+      );
+      currentWrapper = wrapper;
+
+      await flushPromises();
+
+      expect(getReport).not.toHaveBeenCalled();
+      expect((wrapper.vm as any).selectedReportId).toBeNull();
+      expect(document.activeElement).not.toBe(wrapper.find('#reports-panel').element);
+    });
+
+    it('issues no request for a well-formed but non-v4 report id', async () => {
+      mockCalendarRole('owner');
+      const getReport = mockReportFound();
+
+      const { wrapper } = await mountRootComponent('my-calendar', { report: NON_V4_REPORT_ID });
+      currentWrapper = wrapper;
+
+      await flushPromises();
+
+      expect(getReport).not.toHaveBeenCalled();
+      expect((wrapper.vm as any).selectedReportId).toBeNull();
+    });
+
+    it('issues no request and moves no focus for a non-owner', async () => {
+      mockCalendarRole('editor');
+      const getReport = mockReportFound();
+
+      const { wrapper } = await mountRootComponent(
+        'my-calendar',
+        { report: VALID_REPORT_ID },
+        { attachTo: document.body },
+      );
+      currentWrapper = wrapper;
+
+      await flushPromises();
+
+      expect(getReport).not.toHaveBeenCalled();
+      expect((wrapper.vm as any).selectedReportId).toBeNull();
+      expect((wrapper.vm as any).state.activeTab).toBe('editors');
+      expect(document.activeElement).not.toBe(wrapper.find('#reports-panel').element);
+    });
+
+    it('falls through without selecting or focusing when the report does not exist', async () => {
+      mockCalendarRole('owner');
+      const getReport = mockReportMissing();
+
+      const { wrapper } = await mountRootComponent(
+        'my-calendar',
+        { report: VALID_REPORT_ID },
+        { attachTo: document.body },
+      );
+      currentWrapper = wrapper;
+
+      await flushPromises();
+
+      expect(getReport).toHaveBeenCalledWith('cal-uuid-1', VALID_REPORT_ID);
+      expect((wrapper.vm as any).selectedReportId).toBeNull();
+      expect((wrapper.vm as any).state.activeTab).toBe('editors');
+      expect(wrapper.find('.error-message').exists()).toBe(false);
+      expect(document.activeElement).not.toBe(wrapper.find('#reports-panel').element);
+    });
+
+    it('issues no request when no report query param is present', async () => {
+      mockCalendarRole('owner');
+      const getReport = mockReportFound();
+
+      const { wrapper } = await mountRootComponent('my-calendar');
+      currentWrapper = wrapper;
+
+      await flushPromises();
+
+      expect(getReport).not.toHaveBeenCalled();
+      expect((wrapper.vm as any).selectedReportId).toBeNull();
+    });
+
+    it('leaves the ?tab= restore untouched when the report id is malformed', async () => {
+      mockCalendarRole('owner');
+      mockReportFound();
+
+      const { wrapper } = await mountRootComponent('my-calendar', { tab: 'settings', report: 'not-a-uuid' });
+      currentWrapper = wrapper;
+
+      await flushPromises();
+
+      expect((wrapper.vm as any).state.activeTab).toBe('settings');
+      expect((wrapper.vm as any).selectedReportId).toBeNull();
+    });
+
+    it('renders a view identical to the no-report baseline for a malformed report id', async () => {
+      const baseline = await captureBaseline('owner');
+
+      mockCalendarRole('owner');
+      mockReportFound();
+      const { wrapper } = await mountRootComponent('my-calendar', { report: 'not-a-uuid' });
+      currentWrapper = wrapper;
+      await flushPromises();
+
+      expect((wrapper.vm as any).state.activeTab).toBe(baseline.activeTab);
+      expect(wrapper.html()).toBe(baseline.html);
+    });
+
+    it('renders a view identical to the no-report baseline for a non-owner', async () => {
+      const baseline = await captureBaseline('editor');
+
+      mockCalendarRole('editor');
+      mockReportFound();
+      const { wrapper } = await mountRootComponent('my-calendar', { report: VALID_REPORT_ID });
+      currentWrapper = wrapper;
+      await flushPromises();
+
+      expect((wrapper.vm as any).state.activeTab).toBe(baseline.activeTab);
+      expect(wrapper.html()).toBe(baseline.html);
+    });
+
+    it('renders a view identical to the no-report baseline for a non-existent report', async () => {
+      const baseline = await captureBaseline('owner');
+
+      mockCalendarRole('owner');
+      mockReportMissing();
+      const { wrapper } = await mountRootComponent('my-calendar', { report: VALID_REPORT_ID });
+      currentWrapper = wrapper;
+      await flushPromises();
+
+      expect((wrapper.vm as any).state.activeTab).toBe(baseline.activeTab);
+      expect(wrapper.html()).toBe(baseline.html);
+    });
+
+    it('treats a forbidden report exactly like a non-existent one', async () => {
+      const baseline = await captureBaseline('owner');
+
+      mockCalendarRole('owner');
+      const getReport = mockReportForbidden();
+      const { wrapper } = await mountRootComponent(
+        'my-calendar',
+        { report: VALID_REPORT_ID },
+        { attachTo: document.body },
+      );
+      currentWrapper = wrapper;
+      await flushPromises();
+
+      // A report the viewer may not read must be indistinguishable from one
+      // that does not exist: same view, no selection, no focus move.
+      expect(getReport).toHaveBeenCalledWith('cal-uuid-1', VALID_REPORT_ID);
+      expect((wrapper.vm as any).selectedReportId).toBeNull();
+      expect(document.activeElement).not.toBe(wrapper.find('#reports-panel').element);
+      expect((wrapper.vm as any).state.activeTab).toBe(baseline.activeTab);
+      expect(wrapper.html()).toBe(baseline.html);
+    });
+
+    /**
+     * The deep link resolves through `ModerationService` directly rather than
+     * `useModerationStore().fetchReport`, which sets `store.error` and rethrows.
+     * Routing it through the store would leave a stale error behind for the next
+     * time the reports tab is opened, so pin that the store stays untouched.
+     */
+    const expectStoreUntouchedAfterFailedResolve = async (
+      mockFailure: () => unknown,
+    ) => {
+      const pinia = createPinia();
+      setActivePinia(pinia);
+
+      mockCalendarRole('owner');
+      mockFailure();
+
+      const { wrapper } = await mountRootComponent(
+        'my-calendar',
+        { report: VALID_REPORT_ID },
+        { pinia },
+      );
+      currentWrapper = wrapper;
+      await flushPromises();
+
+      const store = useModerationStore(pinia);
+      expect(store.error).toBeNull();
+      expect(store.currentReport).toBeNull();
+    };
+
+    it('leaves the moderation store untouched when the report does not exist', async () => {
+      await expectStoreUntouchedAfterFailedResolve(mockReportMissing);
+    });
+
+    it('leaves the moderation store untouched when the report is forbidden', async () => {
+      await expectStoreUntouchedAfterFailedResolve(mockReportForbidden);
     });
   });
 });

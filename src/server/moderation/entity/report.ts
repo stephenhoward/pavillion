@@ -40,6 +40,14 @@ class ReportEntity extends Model {
    * locally-hosted events always carry a calendar_id; admin-initiated
    * reports against remote events have calendar_id === null because the
    * remote event has no owning calendar here.
+   *
+   * Write-once: this column is set at report creation and must never be
+   * reassigned. `notification_activity.object_calendar_id` (see
+   * `server/notifications/entity/notification_activity.ts`) denormalizes it
+   * as a *live routing key*, so a stale copy routes a calendar owner to a
+   * different calendar's reports tab. Adding a report-reassignment path
+   * therefore requires a write-through to that column, not just a comment.
+   * See DEC-015 (`agent-os/product/decisions/dec-015-activity-log-routing-keys.md`).
    */
   @Column({ type: DataType.UUID, allowNull: true })
   declare calendar_id: string | null;

@@ -8,6 +8,9 @@ import { testApp } from '@/server/common/test/lib/express';
 import NotificationRoutes from '@/server/notifications/api/v1/notification';
 import NotificationsInterface from '@/server/notifications/interface';
 import NotificationService from '@/server/notifications/service/notification';
+import type CalendarInterface from '@/server/calendar/interface';
+import type AccountsInterface from '@/server/accounts/interface';
+import type { Account } from '@/common/model/account';
 import db from '@/server/common/entity/db';
 import { AccountEntity } from '@/server/common/entity/account';
 import {
@@ -44,6 +47,13 @@ describe('Notification API — GET /api/v1/notification', () => {
   let sandbox: sinon.SinonSandbox;
   let routes: NotificationRoutes;
   let router: express.Router;
+  /** Roles the stubbed `loadAccountRoles` returns; per-test overridable. */
+  let viewerRoles: string[];
+  /** `calendarId -> urlName` the stubbed batch lookup resolves. */
+  let calendarUrlNames: Map<string, string>;
+  let loadAccountRolesStub: sinon.SinonStub;
+  let getCalendarUrlNamesStub: sinon.SinonStub;
+  let getInstanceAdminsStub: sinon.SinonStub;
 
   beforeAll(async () => {
     await db.sync({ force: true });
@@ -51,12 +61,43 @@ describe('Notification API — GET /api/v1/notification', () => {
 
   beforeEach(async () => {
     sandbox = sinon.createSandbox();
-    // The service has no real role-resolver dependencies for the read path,
-    // but the constructor signature requires deps — pass minimal stand-ins.
-    // `getNotifications` does not exercise the calendar/accounts interfaces.
+    viewerRoles = [];
+    calendarUrlNames = new Map();
+
+    // The read path DOES exercise both cross-domain interfaces (pv-mvfk.3):
+    // `loadAccountRoles` resolves the caller's live instance-admin status once
+    // per list call, and `getCalendarUrlNames` resolves the page's calendar
+    // ids in one batch. Both are real fakes so the target-derivation and
+    // call-count assertions below have something to observe.
+    loadAccountRolesStub = sandbox.stub().callsFake(async (account: Account) => {
+      account.roles = [...viewerRoles];
+      return account;
+    });
+    getCalendarUrlNamesStub = sandbox.stub().callsFake(async (ids: Set<string>) => {
+      const resolved = new Map<string, string>();
+      for (const id of ids) {
+        const urlName = calendarUrlNames.get(id);
+        if (urlName !== undefined) {
+          resolved.set(id, urlName);
+        }
+      }
+      return resolved;
+    });
+    // The read path must never enumerate the instance's admins to answer
+    // "is this caller an admin" — that would couple every inbox page load to
+    // instance-wide admin enumeration. Any call fails the test.
+    getInstanceAdminsStub = sandbox.stub().rejects(
+      new Error('getInstanceAdmins must not be called on the notification read path'),
+    );
+
     const service = new NotificationService({
-      calendarInterface: {} as unknown as never,
-      accountsInterface: {} as unknown as never,
+      calendarInterface: {
+        getCalendarUrlNames: getCalendarUrlNamesStub,
+      } as unknown as CalendarInterface,
+      accountsInterface: {
+        loadAccountRoles: loadAccountRolesStub,
+        getInstanceAdmins: getInstanceAdminsStub,
+      } as unknown as AccountsInterface,
     });
     const internalAPI = new NotificationsInterface(service);
     routes = new NotificationRoutes(internalAPI);
@@ -118,6 +159,7 @@ describe('Notification API — GET /api/v1/notification', () => {
     actor_display_url: string | null;
     object_type: 'calendar' | 'event' | 'report';
     object_id: string;
+    object_calendar_id: string | null;
     object_label: string;
   }> = {}): Promise<NotificationActivityEntity> {
     // Use the `in` operator (not `??`) for nullable fields so an explicit
@@ -139,6 +181,9 @@ describe('Notification API — GET /api/v1/notification', () => {
       actor_display_url: 'actor_display_url' in overrides ? overrides.actor_display_url : defaults.actor_display_url,
       object_type: overrides.object_type ?? 'calendar',
       object_id: overrides.object_id ?? uuidv4(),
+      // Nullable and load-bearing: NULL is the real state for every non-report
+      // verb, for an admin-reported remote event, and for pre-migration rows.
+      object_calendar_id: 'object_calendar_id' in overrides ? overrides.object_calendar_id : null,
       object_label: overrides.object_label ?? 'My Calendar',
     });
   }
@@ -221,6 +266,7 @@ describe('Notification API — GET /api/v1/notification', () => {
         type: 'calendar',
         id: activity.object_id,
         label: 'My Calendar',
+        target: null,
       });
       expect(row.seen).toBe(false);
       expect(row.dismissed).toBe(false);
@@ -431,6 +477,286 @@ describe('Notification API — GET /api/v1/notification', () => {
       expect(response.body).toHaveLength(2);
       expect(response.body[0].object.label).toBe('Newer');
       expect(response.body[1].object.label).toBe('Older');
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Target derivation (pv-mvfk.3) — the read path's query budget and the
+  // owner-vs-admin surface decision, exercised end-to-end through the route.
+  // ---------------------------------------------------------------------------
+
+  describe('object.target derivation', () => {
+    it('gives a calendar owner an owner_report target for a report row', async () => {
+      const accountId = await seedAccount();
+      const calendarId = uuidv4();
+      const reportId = uuidv4();
+      calendarUrlNames.set(calendarId, 'brewery');
+      const activity = await seedActivity({
+        verb: 'Flag',
+        object_type: 'report',
+        object_id: reportId,
+        object_calendar_id: calendarId,
+        object_label: 'Trivia Night',
+      });
+      await seedRecipient(activity.id, accountId);
+
+      router.get('/notification', withAccount(accountId), (req, res) => {
+        routes.getNotifications(req, res);
+      });
+
+      const response = await request(testApp(router)).get('/notification');
+
+      expect(response.status).toBe(200);
+      expect(response.body[0].object.target).toEqual({
+        kind: 'owner_report',
+        reportId,
+        calendarUrlName: 'brewery',
+      });
+    });
+
+    it('gives an instance admin a moderation_report target for the SAME report row', async () => {
+      // Same stored row, different viewer authority. The surface is decided
+      // from the live role read, never from the presence of a calendar id on
+      // the row (the DEC-013 analogue: a persisted column is not a policy
+      // input).
+      const ownerId = await seedAccount();
+      const adminId = await seedAccount();
+      const calendarId = uuidv4();
+      const reportId = uuidv4();
+      calendarUrlNames.set(calendarId, 'brewery');
+      const activity = await seedActivity({
+        verb: 'Flag',
+        object_type: 'report',
+        object_id: reportId,
+        object_calendar_id: calendarId,
+      });
+      await seedRecipient(activity.id, ownerId);
+      await seedRecipient(activity.id, adminId);
+
+      router.get('/owner', withAccount(ownerId), (req, res) => {
+        routes.getNotifications(req, res);
+      });
+      router.get('/admin', withAccount(adminId), (req, res) => {
+        routes.getNotifications(req, res);
+      });
+      const app = testApp(router);
+
+      const ownerResponse = await request(app).get('/owner');
+      viewerRoles = ['admin'];
+      const adminResponse = await request(app).get('/admin');
+
+      expect(ownerResponse.body[0].object.target).toEqual({
+        kind: 'owner_report',
+        reportId,
+        calendarUrlName: 'brewery',
+      });
+      expect(adminResponse.body[0].object.target).toEqual({
+        kind: 'moderation_report',
+        reportId,
+      });
+    });
+
+    it('renders a pre-migration report row (NULL object_calendar_id) as plain text for an owner', async () => {
+      // Rows written before migration 0040 carry no calendar id. They must
+      // serialize exactly as they do today — target null, label intact — not
+      // throw and not 500.
+      const accountId = await seedAccount();
+      const activity = await seedActivity({
+        verb: 'ReportEscalated',
+        object_type: 'report',
+        object_id: uuidv4(),
+        object_calendar_id: null,
+        object_label: 'Trivia Night',
+      });
+      await seedRecipient(activity.id, accountId);
+
+      router.get('/notification', withAccount(accountId), (req, res) => {
+        routes.getNotifications(req, res);
+      });
+
+      const response = await request(testApp(router)).get('/notification');
+
+      expect(response.status).toBe(200);
+      expect(response.body[0].object.label).toBe('Trivia Night');
+      expect(response.body[0].object.target).toBeNull();
+    });
+
+    it('issues no calendar lookup at all when the page needs no calendar', async () => {
+      // Empty-set guard: a page of Follow/Announce rows must skip the batch
+      // entirely rather than issue a lookup with an empty `IN` list.
+      const accountId = await seedAccount();
+      const follow = await seedActivity({ verb: 'Follow', object_type: 'calendar' });
+      const announce = await seedActivity({
+        verb: 'Announce',
+        object_type: 'event',
+        object_id: uuidv4(),
+      });
+      await seedRecipient(follow.id, accountId);
+      await seedRecipient(announce.id, accountId);
+
+      router.get('/notification', withAccount(accountId), (req, res) => {
+        routes.getNotifications(req, res);
+      });
+
+      const response = await request(testApp(router)).get('/notification');
+
+      expect(response.status).toBe(200);
+      expect(getCalendarUrlNamesStub.callCount).toBe(0);
+      expect(loadAccountRolesStub.callCount).toBe(1);
+    });
+
+    it('issues no calendar lookup for an admin whose page is all report rows', async () => {
+      // `moderation_report` is addressed by report id alone, so an admin's
+      // report page costs zero calendar queries even though every row stores
+      // a calendar id.
+      viewerRoles = ['admin'];
+      const accountId = await seedAccount();
+      for (let i = 0; i < 5; i++) {
+        const activity = await seedActivity({
+          verb: 'Flag',
+          object_type: 'report',
+          object_id: uuidv4(),
+          object_calendar_id: uuidv4(),
+        });
+        await seedRecipient(activity.id, accountId);
+      }
+
+      router.get('/notification', withAccount(accountId), (req, res) => {
+        routes.getNotifications(req, res);
+      });
+
+      const response = await request(testApp(router)).get('/notification');
+
+      expect(response.status).toBe(200);
+      expect(response.body).toHaveLength(5);
+      expect(getCalendarUrlNamesStub.callCount).toBe(0);
+    });
+
+    it('resolves 50 rows across 25 calendars with exactly one role read and one batched lookup', async () => {
+      // The bead's core performance claim. Call counts alone are not enough:
+      // an implementation that resolves one url name and reuses it for every
+      // row passes a count-only assertion, so the 50 rows are asserted to
+      // carry 50 distinct, correct targets as well.
+      const accountId = await seedAccount();
+      const calendarIds = Array.from({ length: 25 }, () => uuidv4());
+      calendarIds.forEach((id, index) => calendarUrlNames.set(id, `cal-${index}`));
+
+      // Two rows per calendar — an EditorInvited (calendar id in object_id)
+      // and a Flag (calendar id in object_calendar_id) — so both collection
+      // paths feed the same single batch, and the dedupe is exercised.
+      const expected = new Map<string, unknown>();
+      for (const [index, calendarId] of calendarIds.entries()) {
+        const invited = await seedActivity({
+          verb: 'EditorInvited',
+          object_type: 'calendar',
+          object_id: calendarId,
+        });
+        await seedRecipient(invited.id, accountId);
+        expected.set(invited.id, { kind: 'calendar', calendarUrlName: `cal-${index}` });
+
+        const reportId = uuidv4();
+        const flagged = await seedActivity({
+          verb: 'Flag',
+          object_type: 'report',
+          object_id: reportId,
+          object_calendar_id: calendarId,
+        });
+        await seedRecipient(flagged.id, accountId);
+        expected.set(flagged.id, {
+          kind: 'owner_report',
+          reportId,
+          calendarUrlName: `cal-${index}`,
+        });
+      }
+
+      router.get('/notification', withAccount(accountId), (req, res) => {
+        routes.getNotifications(req, res);
+      });
+
+      const response = await request(testApp(router)).get('/notification?limit=50');
+
+      expect(response.status).toBe(200);
+      expect(response.body).toHaveLength(50);
+
+      // Exactly one extra query beyond the notification fetch, plus the one
+      // role read — neither scales with page size.
+      expect(getCalendarUrlNamesStub.callCount).toBe(1);
+      expect(loadAccountRolesStub.callCount).toBe(1);
+
+      // One batch containing every distinct calendar the page needs, deduped.
+      const lookupArg = getCalendarUrlNamesStub.firstCall.args[0] as Set<string>;
+      expect(lookupArg.size).toBe(25);
+      expect([...lookupArg].sort()).toEqual([...calendarIds].sort());
+
+      // Every row resolved to its OWN calendar, not to a shared one.
+      for (const row of response.body) {
+        expect(row.object.target).toEqual(expected.get(row.activityId));
+      }
+      const distinctUrlNames = new Set(
+        response.body.map((row: { object: { target: { calendarUrlName: string } } }) =>
+          row.object.target.calendarUrlName),
+      );
+      expect(distinctUrlNames.size).toBe(25);
+    });
+
+    it('reads the caller role live on every call rather than caching it', async () => {
+      // A demoted admin must stop receiving admin-shaped targets immediately,
+      // not at the end of their session.
+      viewerRoles = ['admin'];
+      const accountId = await seedAccount();
+      const calendarId = uuidv4();
+      calendarUrlNames.set(calendarId, 'brewery');
+      const activity = await seedActivity({
+        verb: 'Flag',
+        object_type: 'report',
+        object_id: uuidv4(),
+        object_calendar_id: calendarId,
+      });
+      await seedRecipient(activity.id, accountId);
+
+      router.get('/notification', withAccount(accountId), (req, res) => {
+        routes.getNotifications(req, res);
+      });
+      const app = testApp(router);
+
+      const asAdmin = await request(app).get('/notification');
+      viewerRoles = [];
+      const afterDemotion = await request(app).get('/notification');
+
+      expect(asAdmin.body[0].object.target.kind).toBe('moderation_report');
+      expect(afterDemotion.body[0].object.target.kind).toBe('owner_report');
+      expect(loadAccountRolesStub.callCount).toBe(2);
+      expect(getInstanceAdminsStub.callCount).toBe(0);
+    });
+
+    it('degrades a report row to plain text when its calendar no longer resolves', async () => {
+      // Deleted calendar: the batch returns no url name for the id. The row
+      // must be shape-identical to a non-navigable Follow row so a client
+      // cannot distinguish "no link for this verb" from "not resolvable for
+      // you" — privacy-playbook `error-responses` (no existence disclosure)
+      // plus IDOR hygiene, per DEC-015. DEC-004 does not reach this surface:
+      // it governs anonymous attendee access, and the inbox is authenticated.
+      const accountId = await seedAccount();
+      const flagged = await seedActivity({
+        verb: 'Flag',
+        object_type: 'report',
+        object_id: uuidv4(),
+        object_calendar_id: uuidv4(),
+        object_label: 'Trivia Night',
+      });
+      const follow = await seedActivity({ verb: 'Follow', object_type: 'calendar' });
+      await seedRecipient(flagged.id, accountId);
+      await seedRecipient(follow.id, accountId);
+
+      router.get('/notification', withAccount(accountId), (req, res) => {
+        routes.getNotifications(req, res);
+      });
+
+      const response = await request(testApp(router)).get('/notification');
+
+      expect(response.status).toBe(200);
+      const targets = response.body.map((row: { object: { target: unknown } }) => row.object.target);
+      expect(targets).toEqual([null, null]);
     });
   });
 

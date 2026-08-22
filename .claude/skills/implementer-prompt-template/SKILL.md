@@ -76,7 +76,7 @@ costs a failed call plus a forced re-read.
 3. If the bead notes list specific test files under "Relevant Tests", run those
    targeted tests only (not the full suite):
    ```bash
-   npx vitest run <file1> <file2> --maxThreads=2
+   npx vitest run <file1> <file2> --maxWorkers=2
    ```
 4. If lint and targeted tests pass: `bd close {bead_id}`
 
@@ -164,10 +164,15 @@ order:
 2. **Lint.** `npm run lint`. This is cheap and catches style / type
    regressions before the build-guardian runs the full suite later. Must
    pass.
-3. **Targeted tests.** `npx vitest run <file1> <file2> --maxThreads=2`
+3. **Targeted tests.** `npx vitest run <file1> <file2> --maxWorkers=2`
    where the file list comes from the bead's `## Relevant Tests` section.
-   `--maxThreads=2` keeps the run responsive without flooding the
+   `--maxWorkers=2` keeps the run responsive without flooding the
    machine. Must pass.
+
+   The flag is `--maxWorkers`, NOT `--maxThreads`. Vitest 3.x rejects
+   `--maxThreads` outright (`CACError: Unknown option`), so an implementer
+   handed that flag either drops it silently or reports a spurious failure.
+   Verified against vitest 3.2.4.
 4. **Close the bead.** `bd close {bead_id}`, **only** if steps 2 and 3
    both passed. A closed bead signals to the orchestrator that this
    worker is done; closing on failing tests would corrupt that signal.

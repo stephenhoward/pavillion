@@ -359,6 +359,33 @@ class CalendarService {
   }
 
   /**
+   * Resolves a set of calendar ids to their url names in a single query.
+   *
+   * Intended for read paths that render many rows at once and need link targets
+   * without hydrating full Calendar models. Callers dedupe into a Set so a page
+   * of rows costs one query regardless of page size.
+   *
+   * @param calendarIds - The calendar UUIDs to resolve
+   * @returns Map of calendar ID to url name; ids with no matching calendar are absent
+   */
+  async getCalendarUrlNames(calendarIds: Set<string>): Promise<Map<string, string>> {
+    if (calendarIds.size === 0) {
+      return new Map();
+    }
+
+    const calendars = await CalendarEntity.findAll({
+      where: { id: { [Op.in]: [...calendarIds] } },
+      attributes: ['id', 'url_name'],
+    });
+
+    const urlNamesById = new Map<string, string>();
+    for (const calendar of calendars) {
+      urlNamesById.set(calendar.id, calendar.url_name);
+    }
+    return urlNamesById;
+  }
+
+  /**
    * Retrieves the account ID of the calendar owner.
    *
    * @param calendarId - The calendar UUID to find the owner for

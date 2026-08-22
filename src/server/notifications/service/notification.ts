@@ -1,6 +1,7 @@
 import { Op, Transaction, UniqueConstraintError, literal } from 'sequelize';
 
 import { type NotificationResponse } from '@/common/model/notification';
+import { Account } from '@/common/model/account';
 import { NotificationRecipientNotFoundError } from '@/common/exceptions/notifications';
 import db from '@/server/common/entity/db';
 import { AccountEntity } from '@/server/common/entity/account';
@@ -15,6 +16,12 @@ import {
   NotificationVerb,
 } from '@/server/notifications/types';
 import { anonymizeFlagActor, type FlagActorInput } from '@/server/notifications/service/anonymize-flag-actor';
+import {
+  collectTargetCalendarIds,
+  deriveTarget,
+  type TargetActivity,
+  type TargetDerivationContext,
+} from '@/server/notifications/service/notification-target';
 import { sanitize } from '@/server/notifications/service/sanitize';
 import {
   resolveRoleAudience as defaultResolveRoleAudience,
@@ -102,11 +109,18 @@ export type RecordActivityActor =
  * Click-through URLs are computed at render time by the API layer
  * (pv-89mw.7.1) from `(type, id)` rather than stored on the row — there is no
  * `displayUrl` field on this shape by design.
+ *
+ * `calendarId` is the calendar that owns the object, when the emitter knows
+ * it. It is persisted verbatim so the read path never has to walk back into
+ * another domain to rebuild it. Optional and nullable: emitters whose object
+ * *is* the calendar have no use for it, and a report against a remote event
+ * genuinely has no owning calendar. It takes no part in dedup.
  */
 export interface RecordActivityObject {
   type: NotificationObjectType;
   id: string;
   label: string;
+  calendarId?: string | null;
 }
 
 /**
@@ -392,6 +406,12 @@ class NotificationService {
                   actor_display_url: actorRow.actor_display_url,
                   object_type: input.object.type,
                   object_id: input.object.id,
+                  // Normalized to null so an omitted calendarId stores NULL
+                  // rather than leaning on Sequelize's undefined handling.
+                  // Inert to dedup by design: `findDedupMatch` must never
+                  // key on it, or two Flags on one report that disagree on
+                  // calendarId would stop collapsing.
+                  object_calendar_id: input.object.calendarId ?? null,
                   object_label,
                 },
                 { transaction },
@@ -642,6 +662,35 @@ class NotificationService {
    * identity columns NULL, so the projection cannot leak Flag reporter
    * identity even by accident.
    *
+   * ## Target derivation costs one extra query per call, at any page size
+   *
+   * Each row carries a server-decided `object.target` (see
+   * `notification-target.ts`). Deriving it needs two things, both resolved
+   * once per call and never per row:
+   *
+   *   1. **The caller's instance-admin status**, from a live
+   *      `loadAccountRoles` read. Live is the point: a JWT claim or a cached
+   *      role would keep serving admin-shaped targets to a recently demoted
+   *      admin for the rest of their session. `loadAccountRoles` is used
+   *      rather than `getInstanceAdmins()` because the two answer different
+   *      questions — the latter would couple every inbox page load to
+   *      instance-wide admin enumeration.
+   *   2. **Url names for the page's calendar ids**, from one batched
+   *      `getCalendarUrlNames` lookup over the deduplicated set collected
+   *      from the whole page before any response is built. A page is 50 rows
+   *      by default and 100 at maximum, so a per-row resolve would be up to
+   *      100 queries per inbox load. When the page needs no calendar at all
+   *      (an admin's report rows, or a page of Follow/Announce rows) the
+   *      lookup is skipped entirely rather than issued with an empty set.
+   *
+   * Resolving url names at read time — rather than snapshotting them on the
+   * activity row — is what keeps links live across calendar renames.
+   *
+   * Neither lookup is logged. If debug logging is ever added here it may
+   * carry a `calendarId`/`reportId`, never an `accountId` paired with a
+   * report identifier: that pairing would let a log reader reconstruct which
+   * account read which report.
+   *
    * @param accountId - Authenticated account id; the scope filter.
    * @param limit - Page size (already clamped by the route handler).
    * @param offset - Pagination offset (already clamped by the route handler).
@@ -660,8 +709,57 @@ class NotificationService {
       order: [['created_at', 'DESC']],
       limit,
       offset,
-    });
-    return rows.map((row) => this.toNotificationResponse(row as RecipientWithActivity));
+    }) as RecipientWithActivity[];
+
+    const targetContext = await this.buildTargetContext(accountId, rows);
+    return rows.map((row) => this.toNotificationResponse(row, targetContext));
+  }
+
+  /**
+   * Resolves the once-per-call inputs to target derivation: the caller's live
+   * instance-admin status and the batched url-name map for the page.
+   *
+   * The calendar-id set is collected through the same helper the derivation
+   * reads it back with, so the batch contains exactly the ids the page can
+   * consume — an id that is never collected can never be resolved, and a row
+   * that needs one can never be missed.
+   *
+   * @param accountId - Authenticated account id whose roles are read live
+   * @param rows - The page's recipient rows with their eager-loaded activities
+   * @returns Derivation context to thread into every row on this page
+   */
+  private async buildTargetContext(
+    accountId: string,
+    rows: RecipientWithActivity[],
+  ): Promise<TargetDerivationContext> {
+    const account = await this.deps.accountsInterface.loadAccountRoles(new Account(accountId));
+    const isAdmin = account.hasRole('admin');
+
+    const activities = rows.map((row) => this.toTargetActivity(row.activity));
+    const calendarIds = collectTargetCalendarIds(activities, isAdmin);
+    const calendarUrlNames = calendarIds.size === 0
+      ? new Map<string, string>()
+      : await this.deps.calendarInterface.getCalendarUrlNames(calendarIds);
+
+    return { isAdmin, calendarUrlNames };
+  }
+
+  /**
+   * Narrows the activity entity to the three columns the target derivation
+   * reads. The entity's ENUM columns are typed `string` by Sequelize; the
+   * cast back to the union is the same one `origin`/`actor_kind` already get
+   * in `toNotificationResponse`, and the derivation's `default` branch
+   * absorbs any value outside the union rather than throwing.
+   *
+   * @param activity - Eager-loaded activity entity
+   * @returns The narrow projection the derivation consumes
+   */
+  private toTargetActivity(activity: NotificationActivityEntity): TargetActivity {
+    return {
+      verb: activity.verb as NotificationVerb,
+      object_id: activity.object_id,
+      object_calendar_id: activity.object_calendar_id,
+    };
   }
 
   /**
@@ -673,8 +771,17 @@ class NotificationService {
    * Identity columns (`actor_account_id`, `actor_uri`) are intentionally
    * dropped here. For Flag rows the entity layer already stores them NULL,
    * so this is defense-in-depth.
+   *
+   * `object.target` is decided here from the per-call context, so the client
+   * never re-derives the viewer's authority to work out where a row leads.
+   *
+   * @param recipient - Recipient row with its eager-loaded activity
+   * @param targetContext - Per-call viewer role and batched url-name map
    */
-  private toNotificationResponse(recipient: RecipientWithActivity): NotificationResponse {
+  private toNotificationResponse(
+    recipient: RecipientWithActivity,
+    targetContext: TargetDerivationContext,
+  ): NotificationResponse {
     const activity = recipient.activity;
     return {
       id: recipient.id,
@@ -690,6 +797,7 @@ class NotificationService {
         type: activity.object_type,
         id: activity.object_id,
         label: activity.object_label,
+        target: deriveTarget(this.toTargetActivity(activity), targetContext),
       },
       seen: recipient.seen_at !== null,
       dismissed: recipient.dismissed_at !== null,

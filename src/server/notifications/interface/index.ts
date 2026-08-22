@@ -73,6 +73,12 @@ export default class NotificationsInterface {
    * rows surface with `actor.kind='anonymous'` regardless of the underlying
    * reporter identity.
    *
+   * Each row carries a server-decided `object.target` naming where the row
+   * leads *for this caller* — a calendar owner and an instance admin get
+   * different targets for the same report. The caller's role is read live,
+   * once per call. The target is an affordance, never a trust boundary: the
+   * destination surfaces enforce their own authorization.
+   *
    * @param accountId - Authenticated account id; the scope filter.
    * @param limit - Page size (the route handler clamps to [1, 100]).
    * @param offset - Pagination offset (the route handler clamps to [0, 10000]).

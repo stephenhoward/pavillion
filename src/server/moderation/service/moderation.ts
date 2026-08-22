@@ -794,20 +794,49 @@ class ModerationService {
   }
 
   /**
-   * Retrieves a report by ID and verifies it belongs to the specified calendar.
-   * Combines the common getReportById + calendar ownership check.
+   * Retrieves a report by ID, scoping the lookup to the specified calendar.
+   * Calendar ownership is part of the query rather than a check applied
+   * after loading, so a report belonging to another calendar is never read.
    *
    * @param reportId - Report UUID
    * @param calendarId - Calendar UUID the report must belong to
    * @returns The Report
-   * @throws ReportNotFoundError if report not found or belongs to a different calendar
+   * @throws ReportNotFoundError if either id is missing, or the report is not
+   *   found, or it belongs to a different calendar
    */
   async getReportForCalendar(reportId: string, calendarId: string): Promise<Report> {
-    const report = await this.getReportById(reportId);
-    if (!report || report.calendarId !== calendarId) {
+    // Both ids must be concrete strings before the query runs. A null calendarId
+    // would become `calendar_id IS NULL` in SQL, matching exactly the
+    // admin-initiated reports against remote events that the owner path must
+    // never return, and an undefined one would raise a raw Sequelize error.
+    //
+    // No current caller can pass a non-string: both ids arrive from
+    // `req.params` and are UUID_REGEX-validated in owner-report-routes.ts, and
+    // Express route params are always strings. The `typeof` half of this guard
+    // is therefore defensive rather than load-bearing — it removes the failure
+    // mode if a future caller ever sources either id from a query string, where
+    // a nested object in a where value is read by Sequelize as an operator
+    // expression and would widen the scope instead of narrowing it. Route
+    // validation, not this check, is what performs that job today.
+    //
+    // Throwing ReportNotFoundError rather than a validation error is deliberate:
+    // per the privacy-playbook `error-responses` standard (no existence
+    // disclosure) and ordinary IDOR hygiene, the owner path emits one
+    // indistinguishable failure, so a caller can never tell a malformed request
+    // from a report that isn't theirs. Not DEC-004 — that decision governs
+    // anonymous attendee access and excludes organizer/admin surfaces such as
+    // this one; see DEC-015 (Consequences) for the recorded mis-citation.
+    // The accepted trade is that an `undefined` id — a genuine programming
+    // error — is masked as a 404 rather than surfacing as a crash.
+    if (typeof reportId !== 'string' || typeof calendarId !== 'string' || !reportId || !calendarId) {
       throw new ReportNotFoundError();
     }
-    return report;
+
+    const entity = await ReportEntity.findOne({ where: { id: reportId, calendar_id: calendarId } });
+    if (!entity) {
+      throw new ReportNotFoundError();
+    }
+    return entity.toModel();
   }
 
   /**

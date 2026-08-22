@@ -221,6 +221,53 @@ describe('NotificationService.recordActivity', () => {
       expect(where.actor_kind).toBeUndefined();
     });
 
+    // -------------------------------------------------------------------------
+    // Regression guard: object_calendar_id is inert to dedup.
+    //
+    // `object_calendar_id` is written on the activity row but must never
+    // appear in `findDedupMatch`'s where-clause. If it did, two Flags on the
+    // same report that disagree on calendarId would stop collapsing and
+    // moderators would see duplicate inbox rows for one report.
+    // -------------------------------------------------------------------------
+
+    it('two Flags on the same report with DIFFERENT calendarId still collapse to one row', async () => {
+      resolveRoleAudienceStub.resolves([]);
+      activityCreateStub.resolves(buildActivityEntity({ verb: 'Flag' }));
+
+      const reportId = uuidv4();
+
+      // First Flag: nothing in the window, so it inserts.
+      findOneStub.onFirstCall().resolves(null);
+      await service.recordActivity({
+        verb: 'Flag',
+        actor: { kind: 'anonymous' },
+        object: { type: 'report', id: reportId, label: 'Flagged event title', calendarId: uuidv4() },
+        audience: { kind: 'role', role: 'instance-admins' },
+      });
+
+      // The dedup lookup must not be narrowed by the calendar column.
+      const firstWhere = findOneStub.firstCall.args[0].where;
+      expect(firstWhere.object_calendar_id).toBeUndefined();
+      expect(Object.keys(firstWhere)).not.toContain('object_calendar_id');
+
+      // Second Flag on the same report from a different calendar: the lookup
+      // finds the first row (it is not filtered by calendar) and the service
+      // dedups instead of inserting again.
+      findOneStub.onSecondCall().resolves(buildActivityEntity({ id: 'first-flag', verb: 'Flag' }));
+      await service.recordActivity({
+        verb: 'Flag',
+        actor: { kind: 'anonymous' },
+        object: { type: 'report', id: reportId, label: 'Flagged event title', calendarId: uuidv4() },
+        audience: { kind: 'role', role: 'instance-admins' },
+      });
+
+      const secondWhere = findOneStub.secondCall.args[0].where;
+      expect(secondWhere.object_id).toBe(reportId);
+      expect(secondWhere.object_calendar_id).toBeUndefined();
+      // Exactly one insert across both calls.
+      expect(activityCreateStub.callCount).toBe(1);
+    });
+
     it('skips insert when a matching row is in window (dedup hit)', async () => {
       const existing = buildActivityEntity({ id: 'existing-activity-id' });
       findOneStub.resolves(existing);
@@ -327,6 +374,64 @@ describe('NotificationService.recordActivity', () => {
       const inWhere = accountFindAllStub.firstCall.args[0].where.id[Op.in];
       expect(inWhere).toHaveLength(1);
       expect(inWhere[0]).toBe(realId);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // object_calendar_id persistence
+  // ---------------------------------------------------------------------------
+
+  describe('object_calendar_id on the inserted row', () => {
+    it('persists the supplied calendarId', async () => {
+      findOneStub.resolves(null);
+      resolveRoleAudienceStub.resolves([]);
+      activityCreateStub.resolves(buildActivityEntity({ verb: 'Flag' }));
+
+      const calendarId = uuidv4();
+      await service.recordActivity({
+        verb: 'Flag',
+        actor: { kind: 'anonymous' },
+        object: { type: 'report', id: uuidv4(), label: 'Flagged event title', calendarId },
+        audience: { kind: 'role', role: 'instance-admins' },
+      });
+
+      expect(activityCreateStub.firstCall.args[0].object_calendar_id).toBe(calendarId);
+    });
+
+    it('persists null (not undefined) when calendarId is explicitly null', async () => {
+      findOneStub.resolves(null);
+      resolveRoleAudienceStub.resolves([]);
+      activityCreateStub.resolves(buildActivityEntity({ verb: 'Flag' }));
+
+      // Admin reporting a remote event: no local calendar owns the report.
+      await service.recordActivity({
+        verb: 'Flag',
+        actor: { kind: 'anonymous' },
+        object: { type: 'report', id: uuidv4(), label: 'Flagged event title', calendarId: null },
+        audience: { kind: 'role', role: 'instance-admins' },
+      });
+
+      expect(activityCreateStub.firstCall.args[0].object_calendar_id).toBeNull();
+    });
+
+    it('persists null when calendarId is omitted entirely', async () => {
+      findOneStub.resolves(null);
+      resolveRoleAudienceStub.resolves([]);
+      activityCreateStub.resolves(buildActivityEntity({ verb: 'Follow' }));
+
+      // The four non-report emitters never supply calendarId; their rows must
+      // store NULL rather than undefined so the read path sees one shape.
+      await service.recordActivity({
+        verb: 'Follow',
+        actor: { kind: 'account', accountId: uuidv4() },
+        object: { type: 'calendar', id: uuidv4(), label: 'Test Calendar' },
+        audience: { kind: 'role', role: 'calendar-editors', objectRef: { type: 'calendar', id: uuidv4() } },
+        actorDisplayName: 'Alice',
+      });
+
+      const inserted = activityCreateStub.firstCall.args[0];
+      expect(inserted.object_calendar_id).toBeNull();
+      expect(inserted.object_calendar_id).not.toBeUndefined();
     });
   });
 

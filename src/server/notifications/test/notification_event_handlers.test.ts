@@ -252,6 +252,9 @@ describe('NotificationEventHandlers', () => {
       expect(activity.object_id).toBe(calendarId);
       expect(activity.actor_kind).toBe('remote_actor');
       expect(activity.actor_uri).toBe(followerUrl);
+      // Non-report handlers pass no calendarId — the calendar already IS the
+      // object here — so the column stores NULL, never undefined.
+      expect(activity.object_calendar_id).toBeNull();
 
       // Audience members are exactly the seeded editors.
       const recipients = await NotificationRecipientEntity.findAll({
@@ -727,6 +730,9 @@ describe('NotificationEventHandlers', () => {
       const activity = activities[0];
       expect(activity.object_type).toBe('report');
       expect(activity.origin).toBe('local');
+      // The bus payload's calendarId is persisted on the row rather than
+      // discarded, so the read path never has to walk back into Moderation.
+      expect(activity.object_calendar_id).toBe(calendarId);
       // Flag anonymizer must have stripped identity columns regardless of
       // what the handler passed in. The actor_kind stays 'anonymous'.
       expect(activity.actor_kind).toBe('anonymous');
@@ -792,6 +798,9 @@ describe('NotificationEventHandlers', () => {
       expect(recipients.map(r => r.account_id)).toEqual([adminA]);
       // Owner lookup must not have been called when calendarId is null.
       expect(getOwnersStub.called).toBe(false);
+      // NULL is a real stored value here, not an error: the report has no
+      // owning local calendar. The insert must succeed and persist NULL.
+      expect(activities[0].object_calendar_id).toBeNull();
     });
 
     it('passes origin=federated through to the recorded activity row', async () => {
@@ -922,10 +931,11 @@ describe('NotificationEventHandlers', () => {
       getInstanceAdminsStub.resolves([adminA, adminB]);
 
       const reportId = uuidv4();
+      const calendarId = uuidv4();
       await emit('moderation:report:escalated', {
         reportId,
         eventId: uuidv4(),
-        calendarId: uuidv4(),
+        calendarId,
         reason: 'Auto-escalated due to inaction',
       });
 
@@ -935,6 +945,7 @@ describe('NotificationEventHandlers', () => {
       expect(activity).not.toBeNull();
       expect(activity!.object_type).toBe('report');
       expect(activity!.actor_kind).toBe('system');
+      expect(activity!.object_calendar_id).toBe(calendarId);
 
       const recipients = await NotificationRecipientEntity.findAll({
         where: { notification_activity_id: activity!.id },
@@ -975,10 +986,11 @@ describe('NotificationEventHandlers', () => {
         { notification_activity_id: priorFlag.id, account_id: adminC },
       ]);
 
+      const calendarId = uuidv4();
       await emit('moderation:report:resolved', {
         reportId,
         eventId: uuidv4(),
-        calendarId: uuidv4(),
+        calendarId,
         reviewerId,
       });
 
@@ -988,6 +1000,7 @@ describe('NotificationEventHandlers', () => {
       });
       expect(resolved).not.toBeNull();
       expect(resolved!.object_type).toBe('report');
+      expect(resolved!.object_calendar_id).toBe(calendarId);
       const resolvedRecipients = await NotificationRecipientEntity.findAll({
         where: { notification_activity_id: resolved!.id },
       });

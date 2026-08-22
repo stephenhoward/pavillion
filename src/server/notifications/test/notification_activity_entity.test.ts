@@ -13,6 +13,7 @@ describe('NotificationActivityEntity column mapping', () => {
     actor_display_url: 'https://remote.example/users/alice',
     object_type: 'calendar',
     object_id: 'cal-456',
+    object_calendar_id: 'cal-456' as string | null,
     object_label: 'Summer Concerts',
     created_at: new Date('2026-05-22T12:00:00Z'),
   };
@@ -30,6 +31,7 @@ describe('NotificationActivityEntity column mapping', () => {
     expect(entity.actor_display_url).toBe('https://remote.example/users/alice');
     expect(entity.object_type).toBe('calendar');
     expect(entity.object_id).toBe('cal-456');
+    expect(entity.object_calendar_id).toBe('cal-456');
     expect(entity.object_label).toBe('Summer Concerts');
     expect(entity.created_at).toEqual(new Date('2026-05-22T12:00:00Z'));
   });
@@ -45,6 +47,9 @@ describe('NotificationActivityEntity column mapping', () => {
       actor_display_url: null,
       object_type: 'report',
       object_id: 'report-789',
+      // An admin reporting a remote event owns no local calendar. NULL here
+      // is the documented real case, not a defensive placeholder.
+      object_calendar_id: null,
       object_label: 'Event title that was flagged',
     };
 
@@ -58,6 +63,7 @@ describe('NotificationActivityEntity column mapping', () => {
     expect(entity.actor_display_name).toBe('Anonymous reporter');
     expect(entity.object_type).toBe('report');
     expect(entity.object_id).toBe('report-789');
+    expect(entity.object_calendar_id).toBeNull();
     expect(entity.object_label).toBe('Event title that was flagged');
   });
 
