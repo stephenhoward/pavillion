@@ -3,7 +3,7 @@ import sinon from 'sinon';
 import { EventEmitter } from 'events';
 import { v4 as uuidv4 } from 'uuid';
 import db from '@/server/common/entity/db';
-import FundingService from '@/server/funding/service/funding';
+import FundingService, { MIN_PWYC_AMOUNT } from '@/server/funding/service/funding';
 import { FundingPlanEntity } from '@/server/funding/entity/funding_plan';
 import { CalendarFundingPlanEntity } from '@/server/funding/entity/calendar_funding_plan';
 import { ComplimentaryGrantEntity } from '@/server/funding/entity/complimentary_grant';
@@ -13,6 +13,7 @@ import { FundingSettingsEntity } from '@/server/funding/entity/funding_settings'
 import { ProviderConfig, FundingPlan, FundingSettings } from '@/common/model/funding-plan';
 import { ValidationError } from '@/common/exceptions/base';
 import {
+  InvalidAmountError,
   FundingPlanNotFoundError,
   CalendarFundingPlanNotFoundError,
   DuplicateCalendarFundingPlanError,
@@ -191,6 +192,62 @@ describe('FundingService - Calendar Funding Plan Methods', () => {
       catch (err: any) {
         expect(err.name).toBe('InvalidAmountError');
       }
+    });
+
+    it.each([
+      ['zero', 0],
+      ['NaN', Number.NaN],
+      ['Infinity', Number.POSITIVE_INFINITY],
+      ['non-integer', MIN_PWYC_AMOUNT + 0.5],
+      ['below the minimum', MIN_PWYC_AMOUNT - 1],
+    ])('should throw InvalidAmountError when amount is %s', async (_label, amount) => {
+      const findOneStub = sandbox.stub(FundingPlanEntity, 'findOne');
+
+      await expect(
+        service.addCalendarToFundingPlan(uuidv4(), uuidv4(), amount),
+      ).rejects.toThrow(InvalidAmountError);
+
+      expect(findOneStub.called).toBe(false);
+    });
+
+    it('should accept an amount equal to the minimum', async () => {
+      const accountId = uuidv4();
+      const calendarId = uuidv4();
+      const fundingPlanId = uuidv4();
+      const providerConfigId = uuidv4();
+
+      const mockFundingPlanEntity = {
+        id: fundingPlanId,
+        account_id: accountId,
+        provider_config_id: providerConfigId,
+        status: 'active',
+      };
+      const mockCalendarFundingPlan = {
+        id: uuidv4(),
+        funding_plan_id: fundingPlanId,
+        calendar_id: calendarId,
+        amount: MIN_PWYC_AMOUNT,
+        end_time: null,
+      };
+      const mockAdapter = {
+        updateSubscriptionAmount: sandbox.stub().resolves(),
+        supportsAmountUpdates: sandbox.stub().returns(true),
+      };
+
+      mockCalendarInterface.isCalendarOwnerById.withArgs(accountId, calendarId).resolves(true);
+      sandbox.stub(FundingPlanEntity, 'findOne').resolves(mockFundingPlanEntity as any);
+      sandbox.stub(CalendarFundingPlanEntity, 'findOne').resolves(null);
+      const createStub = sandbox.stub(CalendarFundingPlanEntity, 'create').resolves(mockCalendarFundingPlan as any);
+      sandbox.stub(CalendarFundingPlanEntity, 'findAll').resolves([mockCalendarFundingPlan] as any);
+      sandbox.stub(ProviderConfigEntity, 'findByPk').resolves({
+        toModel: () => new ProviderConfig(providerConfigId, 'stripe'),
+      } as any);
+      sandbox.stub(ProviderFactory, 'getAdapter').returns(mockAdapter as any);
+
+      await service.addCalendarToFundingPlan(accountId, calendarId, MIN_PWYC_AMOUNT);
+
+      expect(createStub.calledOnce).toBe(true);
+      expect(mockAdapter.updateSubscriptionAmount.calledOnce).toBe(true);
     });
 
     it('should throw ValidationError for invalid UUID parameters', async () => {
