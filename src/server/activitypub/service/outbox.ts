@@ -7,6 +7,16 @@ import { createLogger } from '@/server/common/helper/logger';
 
 const logger = createLogger('activitypub');
 
+/** Hostname of a URL for log output, or null when the URL cannot be parsed. */
+function safeHostname(url: string): string | null {
+  try {
+    return new URL(url).hostname;
+  }
+  catch {
+    return null;
+  }
+}
+
 import { Calendar } from "@/common/model/calendar";
 import { ActivityPubOutboxMessageEntity, EventActivityEntity, FollowerCalendarEntity, FollowingCalendarEntity } from "@/server/activitypub/entity/activitypub";
 import { CalendarActorEntity } from "@/server/activitypub/entity/calendar_actor";
@@ -646,13 +656,54 @@ class ProcessOutboxService {
       });
 
       if ( response && response.data ) {
-        logger.info({ inboxUrl: response.data.inbox }, 'Resolved inbox URL');
-        return response.data.inbox;
+        const inboxUrl = this.bindInboxToActorHost(profileUrl, response.data.inbox);
+        if ( inboxUrl ) {
+          logger.info({ inboxUrl }, 'Resolved inbox URL');
+          return inboxUrl;
+        }
       }
     }
 
     logger.info({ remote_user }, 'Failed to resolve inbox');
     return null;
+  }
+
+  /**
+   * Binds a fetched actor document's `inbox` to the actor URI it was fetched from.
+   *
+   * SECURITY: Callers verify the *actor* host (same-origin guards, private-IP
+   * checks), but the URL actually POSTed to is the `inbox` field of a document
+   * the remote instance controls. Without this check a hostile actor document
+   * can redirect signed deliveries to an arbitrary third party. The inbox must
+   * be an https: URL whose hostname exactly equals the actor URI's hostname —
+   * no subdomain or suffix allowance.
+   *
+   * @returns The inbox URL when it is bound to the actor host, otherwise null
+   */
+  private bindInboxToActorHost(actorUrl: string, inbox: unknown): string | null {
+    let actorHost: string;
+    let parsedInbox: URL;
+    try {
+      actorHost = new URL(actorUrl).hostname;
+      if ( typeof inbox !== 'string' ) {
+        throw new TypeError('inbox is not a string');
+      }
+      parsedInbox = new URL(inbox);
+    }
+    catch {
+      logger.warn({ actorHost: safeHostname(actorUrl) }, '[SECURITY] Actor document has missing or malformed inbox');
+      return null;
+    }
+
+    if ( parsedInbox.protocol !== 'https:' || parsedInbox.hostname !== actorHost ) {
+      logger.warn(
+        { actorHost, inboxHost: parsedInbox.hostname, inboxProtocol: parsedInbox.protocol },
+        '[SECURITY] Rejected inbox not bound to actor host',
+      );
+      return null;
+    }
+
+    return inbox;
   }
 
   /**
