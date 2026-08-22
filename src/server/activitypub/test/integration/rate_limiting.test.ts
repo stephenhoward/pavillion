@@ -37,7 +37,8 @@ const describeOrSkip = rateLimitEnabled ? describe : describe.skip;
 /**
  * Minimal stub of UserActorService. The user-inbox limiters precede the handler,
  * so the handler only needs to resolve a user and return 200 for under-limit
- * requests. processAdd/Remove are never reached for the default activity type.
+ * requests. Requests send an Add so they reach a handled branch; an unhandled
+ * type is refused with 400 and would mask the limiter's 200/429 split.
  */
 function createStubUserActorService(): any {
   return {
@@ -92,14 +93,14 @@ describeOrSkip('ActivityPub User Inbox Rate Limiting Integration Tests', () => {
       for (let i = 0; i < max; i++) {
         const response = await request(app)
           .post('/users/alice/inbox')
-          .send({ type: 'Follow', actor: `https://remote.example/users/sender${i}` });
+          .send({ type: 'Add', actor: `https://remote.example/users/sender${i}` });
 
         expect(response.status).toBe(200);
       }
 
       const blocked = await request(app)
         .post('/users/alice/inbox')
-        .send({ type: 'Follow', actor: 'https://remote.example/users/senderN' });
+        .send({ type: 'Add', actor: 'https://remote.example/users/senderN' });
 
       expect(blocked.status).toBe(429);
       expect(blocked.headers['retry-after']).toBeDefined();
@@ -112,21 +113,21 @@ describeOrSkip('ActivityPub User Inbox Rate Limiting Integration Tests', () => {
       for (let i = 0; i < max; i++) {
         const response = await request(app)
           .post('/users/alice/inbox')
-          .send({ type: 'Follow', actor: `https://remote.example/users/sender${i}` });
+          .send({ type: 'Add', actor: `https://remote.example/users/sender${i}` });
 
         expect(response.status).toBe(200);
       }
 
       const aBlocked = await request(app)
         .post('/users/alice/inbox')
-        .send({ type: 'Follow', actor: 'https://remote.example/users/senderN' });
+        .send({ type: 'Add', actor: 'https://remote.example/users/senderN' });
 
       expect(aBlocked.status).toBe(429);
 
       // User B is unaffected by user A's exhaustion.
       const bAllowed = await request(app)
         .post('/users/bob/inbox')
-        .send({ type: 'Follow', actor: 'https://remote.example/users/fresh' });
+        .send({ type: 'Add', actor: 'https://remote.example/users/fresh' });
 
       expect(bAllowed.status).toBe(200);
     });
@@ -137,12 +138,12 @@ describeOrSkip('ActivityPub User Inbox Rate Limiting Integration Tests', () => {
       for (let i = 0; i < max; i++) {
         await request(app)
           .post('/users/secret-user/inbox')
-          .send({ type: 'Follow', actor: `https://remote.example/users/sender${i}` });
+          .send({ type: 'Add', actor: `https://remote.example/users/sender${i}` });
       }
 
       const blocked = await request(app)
         .post('/users/secret-user/inbox')
-        .send({ type: 'Follow', actor: 'https://remote.example/users/senderN' });
+        .send({ type: 'Add', actor: 'https://remote.example/users/senderN' });
 
       expect(blocked.status).toBe(429);
       expect(JSON.stringify(blocked.body)).not.toContain('secret-user');
@@ -160,14 +161,14 @@ describeOrSkip('ActivityPub User Inbox Rate Limiting Integration Tests', () => {
       for (let i = 0; i < max; i++) {
         const response = await request(app)
           .post(`/users/target${i}/inbox`)
-          .send({ type: 'Follow', actor });
+          .send({ type: 'Add', actor });
 
         expect(response.status).toBe(200);
       }
 
       const blocked = await request(app)
         .post('/users/targetN/inbox')
-        .send({ type: 'Follow', actor });
+        .send({ type: 'Add', actor });
 
       expect(blocked.status).toBe(429);
       expect(blocked.headers['retry-after']).toBeDefined();
@@ -182,21 +183,21 @@ describeOrSkip('ActivityPub User Inbox Rate Limiting Integration Tests', () => {
       for (let i = 0; i < max; i++) {
         const response = await request(app)
           .post(`/users/target${i}/inbox`)
-          .send({ type: 'Follow', actor: actorA });
+          .send({ type: 'Add', actor: actorA });
 
         expect(response.status).toBe(200);
       }
 
       const aBlocked = await request(app)
         .post('/users/targetN/inbox')
-        .send({ type: 'Follow', actor: actorA });
+        .send({ type: 'Add', actor: actorA });
 
       expect(aBlocked.status).toBe(429);
 
       // Actor B is unaffected by actor A's exhaustion.
       const bAllowed = await request(app)
         .post('/users/freshtarget/inbox')
-        .send({ type: 'Follow', actor: actorB });
+        .send({ type: 'Add', actor: actorB });
 
       expect(bAllowed.status).toBe(200);
     });
@@ -208,12 +209,12 @@ describeOrSkip('ActivityPub User Inbox Rate Limiting Integration Tests', () => {
       for (let i = 0; i < max; i++) {
         await request(app)
           .post(`/users/target${i}/inbox`)
-          .send({ type: 'Follow', actor });
+          .send({ type: 'Add', actor });
       }
 
       const blocked = await request(app)
         .post('/users/targetN/inbox')
-        .send({ type: 'Follow', actor });
+        .send({ type: 'Add', actor });
 
       expect(blocked.status).toBe(429);
       expect(JSON.stringify(blocked.body)).not.toContain('secret-actor');
@@ -231,14 +232,14 @@ describeOrSkip('ActivityPub User Inbox Rate Limiting Integration Tests', () => {
       for (let i = 0; i < actorMax; i++) {
         const response = await request(app)
           .post('/users/alice/inbox')
-          .send({ type: 'Follow', actor });
+          .send({ type: 'Add', actor });
 
         expect(response.status).toBe(200);
       }
 
       const blocked = await request(app)
         .post('/users/alice/inbox')
-        .send({ type: 'Follow', actor });
+        .send({ type: 'Add', actor });
 
       // 429 (not 401) confirms the limiter shed the request before signature
       // verification ran, matching the calendar-inbox chain ordering.

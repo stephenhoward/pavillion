@@ -11,9 +11,9 @@
  *
  * BOTH inbox routes are covered. A signature-verified peer can POST a Flag to
  * the user inbox just as easily as to the calendar inbox; the user route falls
- * through to its unhandled-type branch and answers 200, which is exactly the
- * shape that let the reporter identity and report text reach the logs while
- * the calendar route looked correct. The two routes now share one arrival
+ * through to its unhandled-type branch, and arrival logging runs before that
+ * branch, which is exactly the shape that let the reporter identity and report
+ * text reach the logs while the calendar route looked correct. The two routes now share one arrival
  * logger so they cannot drift apart again.
  *
  * The logger module is mocked wholesale because `createLogger` returns a new
@@ -174,8 +174,9 @@ describe('postToInbox logging hygiene for Flag activities', () => {
 
   it('logs neither the reporter actor URI nor the report text for a Flag', async () => {
     // The user inbox has no Flag handler: the activity falls through to the
-    // unhandled-type branch and still answers 200. Arrival logging runs before
-    // that branch, so it is the only thing standing between a Flag and the log.
+    // unhandled-type branch and is refused with 400. Arrival logging runs
+    // before that branch, so it is the only thing standing between a Flag and
+    // the log.
     const res = await post({
       '@context': 'https://www.w3.org/ns/activitystreams',
       type: 'Flag',
@@ -186,7 +187,7 @@ describe('postToInbox logging hygiene for Flag activities', () => {
       summary: 'Event report: spam',
     });
 
-    expect(res.status.calledWith(200)).toBe(true);
+    expect(res.status.calledWith(400)).toBe(true);
 
     const logged = JSON.stringify(logCalls);
     expect(logged, 'report free text must not be logged').not.toContain(REPORT_TEXT);
