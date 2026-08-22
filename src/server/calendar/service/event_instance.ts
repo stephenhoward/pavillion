@@ -119,8 +119,8 @@ export default class EventInstanceService {
 
   constructor(eventBus: EventEmitter, eventService?: EventService) {
     this.eventBus = eventBus;
-    this.categoryService = new CategoryService();
     this.calendarService = new CalendarService();
+    this.categoryService = new CategoryService(this.calendarService);
     // Intra-domain dependency: EventService.listEventIdsForCalendar drives the
     // listing union under the single-producer model. Constructed locally when
     // not supplied so existing callers (and tests) keep working without wiring
