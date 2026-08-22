@@ -352,6 +352,21 @@ export default class ActivityPubServerRoutes {
    * reference: https://www.w3.org/TR/activitypub/#server-to-server-interactions
    */
   async addToInbox(req: Request, res: Response): Promise<void> {
+    // Express 4 does not await handlers: a rejection that escapes here is an
+    // unhandled rejection and terminates the process. Every failure path in
+    // the inbox flow (calendar lookup, persistence) must end in a response.
+    try {
+      await this.handleInboxRequest(req, res);
+    }
+    catch (error) {
+      // The activity body is deliberately not logged here: a Flag carries the
+      // reporter's identity and report text (see inbox-acceptance-log).
+      logError(error, `Error adding activity to inbox for calendar ${req.params.urlname}`);
+      res.status(500).send('Internal server error');
+    }
+  }
+
+  private async handleInboxRequest(req: Request, res: Response): Promise<void> {
     const calendarName = req.params.urlname;
     let calendar = await this.calendarService.getCalendarByName(calendarName);
 

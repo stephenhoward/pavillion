@@ -198,9 +198,63 @@ describe('addToInbox', () => {
     userFindMock.resolves(new Calendar('testId', 'testuser'));
     inboxMock.rejects(new Error('Account not found'));
 
-    await expect(routes.addToInbox(req as any, res as any)).rejects.toThrow('Account not found');
+    await routes.addToInbox(req as any, res as any);
 
+    expect(res.status.calledWith(500)).toBe(true);
     expect(vi.mocked(logInboxActivityAccepted)).not.toHaveBeenCalled();
+  });
+
+  it('should respond 500 instead of escaping a rejection when the inbox write fails', async () => {
+    // Express 4 does not await handlers: a rejection that escapes addToInbox
+    // becomes an unhandled rejection and terminates the process. The handler
+    // must absorb any persistence failure and answer with a 500.
+    let req = {
+      params: { urlname: 'testuser' },
+      body: {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        type: 'Create',
+        id: 'https://example.com/activities/128',
+        actor: 'https://example.com/actor',
+        object: { id: 'https://example.com/objects/456', type: 'Event' },
+      },
+    };
+    let res = { status: sinon.stub(), send: sinon.stub() };
+    let userFindMock = sandbox.stub(calendarAPI, 'getCalendarByName');
+    let inboxMock = sandbox.stub(activityPubInterface, 'addToInbox');
+
+    res.status.returns(res);
+    userFindMock.resolves(new Calendar('testId', 'testuser'));
+    inboxMock.rejects(new Error('value too long for type character varying(255)'));
+
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown) => { unhandled.push(reason); };
+    process.on('unhandledRejection', onUnhandled);
+    try {
+      // Not awaited: mirrors Express 4 dropping the handler promise.
+      void routes.addToInbox(req as any, res as any);
+      await new Promise((resolve) => setImmediate(resolve));
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+    finally {
+      process.off('unhandledRejection', onUnhandled);
+    }
+
+    expect(unhandled).toEqual([]);
+    expect(res.status.calledWith(500)).toBe(true);
+    expect(res.send.calledWith('Internal server error')).toBe(true);
+    expect(vi.mocked(logInboxActivityAccepted)).not.toHaveBeenCalled();
+  });
+
+  it('should respond 500 when the calendar lookup itself fails', async () => {
+    let req = { params: { urlname: 'testuser' }, body: { type: 'Create' } };
+    let res = { status: sinon.stub(), send: sinon.stub() };
+    sandbox.stub(calendarAPI, 'getCalendarByName').rejects(new Error('connection refused'));
+    res.status.returns(res);
+
+    await routes.addToInbox(req as any, res as any);
+
+    expect(res.status.calledWith(500)).toBe(true);
+    expect(res.send.calledWith('Internal server error')).toBe(true);
   });
 
   it('should not record acceptance for an activity rejected at the validation switch', async () => {
