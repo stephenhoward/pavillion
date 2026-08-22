@@ -325,12 +325,16 @@ ALTER ROLE pavillion SET idle_in_transaction_session_timeout = '60s';
 ```
 
 Run this as a user with permission to alter the role. Some managed providers do not
-grant it; that is fine, the application-level limits still apply. Do not set these on
-a superuser or migration role — schema changes on large tables can legitimately run
-longer than the limits allow.
+grant it; that is fine, the application-level limits still apply. Schema migrations
+run as this same role and can legitimately run longer than these limits allow, but
+they need no exemption here: the application clears both limits inside its own
+migration transaction with `SET LOCAL`, which overrides the role-level setting for
+that transaction only.
 
-If your provider caps concurrent connections below the pool's `max` (10 by default),
-lower `database.pool.max` in `config/local.yaml` to stay under the cap.
+The app and worker containers each open their own connection pool, so the figure to
+compare against a provider's connection cap is twice the pool's `max` — 20 connections
+by default. If your provider caps concurrent connections below that, lower
+`database.pool.max` in `config/local.yaml` to stay under the cap.
 
 ## Volume Reference
 
