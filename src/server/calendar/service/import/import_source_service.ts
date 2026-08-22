@@ -4,7 +4,7 @@ import { promisify } from 'util';
 import { v4 as uuidv4 } from 'uuid';
 import config from 'config';
 import * as cheerio from 'cheerio';
-import { Agent, request as undiciRequest } from 'undici';
+import { type Agent, request as undiciRequest } from 'undici';
 
 import { Account } from '@/common/model/account';
 import {
@@ -42,6 +42,7 @@ import { generateVerificationToken } from '@/server/calendar/service/import/hmac
 import { hostnameFromUrl, passesPslCheck } from '@/server/calendar/service/import/hostname';
 import { DnsVerifier, VERIFICATION_VALIDITY_DAYS } from '@/server/calendar/service/import/dns-verifier';
 import { MAX_BODY_BYTES, hasVcalendarSignature } from '@/server/calendar/service/import/fetcher';
+import { createPinnedAgent } from '@/server/calendar/service/import/pinned_agent';
 import type SyncService from '@/server/calendar/service/import/sync';
 import type { SyncResult } from '@/server/calendar/service/import/sync';
 
@@ -1288,7 +1289,7 @@ class DefaultHtmlFetcher implements HtmlFetcher {
 
         // 3. Pick the first validated IP and build a pinned Agent.
         const pinnedIp = addresses[0].address;
-        const agent = createPinnedAgent(pinnedIp);
+        const agent = createPinnedAgent(pinnedIp, RELME_CONNECT_TIMEOUT_MS);
         agents.push(agent);
 
         // 4. Issue the request. Manual redirect handling — undici v7+ no
@@ -1365,40 +1366,6 @@ class DefaultHtmlFetcher implements HtmlFetcher {
       }
     }
   }
-}
-
-/**
- * Build an undici Agent whose `connect.lookup` always resolves to the given
- * IP. This pins the socket to a previously-validated address, defeating
- * DNS-rebinding attacks at the socket layer (a second DNS resolution at
- * connect time cannot redirect the connection).
- */
-function createPinnedAgent(pinnedIp: string): Agent {
-  return new Agent({
-    connect: {
-      lookup: (
-        _hostname: string,
-        options: unknown,
-        callback: (
-          err: NodeJS.ErrnoException | null,
-          addressOrAddresses: string | Array<{ address: string; family: number }>,
-          family?: number,
-        ) => void,
-      ) => {
-        const family = pinnedIp.includes(':') ? 6 : 4;
-        const wantsAll = typeof options === 'object'
-          && options !== null
-          && (options as { all?: unknown }).all === true;
-        if (wantsAll) {
-          callback(null, [{ address: pinnedIp, family }]);
-        }
-        else {
-          callback(null, pinnedIp, family);
-        }
-      },
-      timeout: RELME_CONNECT_TIMEOUT_MS,
-    },
-  });
 }
 
 function extractHeader(
