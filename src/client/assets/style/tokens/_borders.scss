@@ -53,9 +53,20 @@
   --pav-border-color-active: var(--pav-color-interactive-active-border);
 }
 
-/* Dark mode border color overrides */
+/* Dark mode border color overrides (manual override via data-theme attribute).
+   Keep in sync with the prefers-color-scheme block below — two delivery
+   channels for the same dark-mode values. */
+[data-theme="dark"] {
+  --pav-border-color-subtle: var(--pav-color-stone-700);
+  --pav-border-color-light: var(--pav-color-stone-700);
+  --pav-border-color-medium: var(--pav-color-stone-600);
+  --pav-border-color-strong: var(--pav-color-stone-500);
+}
+
+/* Dark mode border color overrides (OS preference, unless the user explicitly
+   chose the light theme). Keep in sync with the data-theme block above. */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --pav-border-color-subtle: var(--pav-color-stone-700);
     --pav-border-color-light: var(--pav-color-stone-700);
     --pav-border-color-medium: var(--pav-color-stone-600);
