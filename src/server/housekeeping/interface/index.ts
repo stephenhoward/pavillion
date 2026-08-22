@@ -69,7 +69,7 @@ export interface HousekeepingStatus {
     percentageUsed: number;
     totalBytes: string;
     freeBytes: string;
-  };
+  } | null;
   alerts: string[];
   retentionStats: {
     daily: { current: number; target: number };
@@ -139,6 +139,10 @@ export default class HousekeepingInterface {
    * Gets the status of the housekeeping system.
    * Used by dashboard and API endpoints.
    *
+   * Each sub-section is fetched independently so that a failure in one
+   * (e.g., backup path not found in development) does not prevent the
+   * rest of the status from loading.
+   *
    * @returns Status information including backups, disk usage, and alerts
    */
   async getStatus(): Promise<HousekeepingStatus> {
@@ -148,11 +152,13 @@ export default class HousekeepingInterface {
     // Get next scheduled backup time
     const nextBackupTime = this.getNextBackupTime();
 
-    // Get disk usage
+    // Get disk usage (gracefully handles missing backup path)
     const diskUsageInfo = await this.getDiskUsageInfo();
 
     // Determine alert states
-    const alerts = this.getAlerts(diskUsageInfo.percentageUsed);
+    const alerts = diskUsageInfo
+      ? this.getAlerts(diskUsageInfo.percentageUsed)
+      : ['ok'];
 
     // Get retention statistics
     const retentionStats = await this.getRetentionStats();
@@ -176,20 +182,26 @@ export default class HousekeepingInterface {
     size: number;
     type: string;
   } | null> {
-    const lastBackup = await BackupEntity.findOne({
-      where: { verified: true },
-      order: [['created_at', 'DESC']],
-    });
+    try {
+      const lastBackup = await BackupEntity.findOne({
+        where: { verified: true },
+        order: [['created_at', 'DESC']],
+      });
 
-    if (!lastBackup) {
+      if (!lastBackup) {
+        return null;
+      }
+
+      return {
+        date: lastBackup.created_at.toISOString(),
+        size: Number(lastBackup.size_bytes),
+        type: lastBackup.type,
+      };
+    }
+    catch (error) {
+      logger.error({ err: error }, 'Error fetching last backup info');
       return null;
     }
-
-    return {
-      date: lastBackup.created_at.toISOString(),
-      size: Number(lastBackup.size_bytes),
-      type: lastBackup.type,
-    };
   }
 
   /**
@@ -232,21 +244,31 @@ export default class HousekeepingInterface {
   /**
    * Gets disk usage information for the backup volume.
    *
-   * @returns Disk usage statistics
+   * Returns null when the backup path does not exist (e.g., in local
+   * development without a /backups mount), allowing the dashboard to
+   * display a graceful "not configured" state instead of failing.
+   *
+   * @returns Disk usage statistics or null if unavailable
    */
   private async getDiskUsageInfo(): Promise<{
     percentageUsed: number;
     totalBytes: string;
     freeBytes: string;
-  }> {
-    const backupPath = config.get<string>('housekeeping.backup.path');
-    const usage = await this.diskMonitor.checkDiskUsage(backupPath);
+  } | null> {
+    try {
+      const backupPath = config.get<string>('housekeeping.backup.path');
+      const usage = await this.diskMonitor.checkDiskUsage(backupPath);
 
-    return {
-      percentageUsed: usage.percentageUsed,
-      totalBytes: usage.totalBytes.toString(),
-      freeBytes: usage.freeBytes.toString(),
-    };
+      return {
+        percentageUsed: usage.percentageUsed,
+        totalBytes: usage.totalBytes.toString(),
+        freeBytes: usage.freeBytes.toString(),
+      };
+    }
+    catch (error) {
+      logger.warn({ err: error }, 'Disk usage unavailable');
+      return null;
+    }
   }
 
   /**
@@ -284,19 +306,29 @@ export default class HousekeepingInterface {
     weekly: { current: number; target: number };
     monthly: { current: number; target: number };
   }> {
-    const dailyCount = await BackupEntity.count({ where: { category: 'daily' } });
-    const weeklyCount = await BackupEntity.count({ where: { category: 'weekly' } });
-    const monthlyCount = await BackupEntity.count({ where: { category: 'monthly' } });
-
     const dailyTarget = config.get<number>('housekeeping.backup.retention.daily');
     const weeklyTarget = config.get<number>('housekeeping.backup.retention.weekly');
     const monthlyTarget = config.get<number>('housekeeping.backup.retention.monthly');
 
-    return {
-      daily: { current: dailyCount, target: dailyTarget },
-      weekly: { current: weeklyCount, target: weeklyTarget },
-      monthly: { current: monthlyCount, target: monthlyTarget },
-    };
+    try {
+      const dailyCount = await BackupEntity.count({ where: { category: 'daily' } });
+      const weeklyCount = await BackupEntity.count({ where: { category: 'weekly' } });
+      const monthlyCount = await BackupEntity.count({ where: { category: 'monthly' } });
+
+      return {
+        daily: { current: dailyCount, target: dailyTarget },
+        weekly: { current: weeklyCount, target: weeklyTarget },
+        monthly: { current: monthlyCount, target: monthlyTarget },
+      };
+    }
+    catch (error) {
+      logger.error({ err: error }, 'Error fetching retention stats');
+      return {
+        daily: { current: 0, target: dailyTarget },
+        weekly: { current: 0, target: weeklyTarget },
+        monthly: { current: 0, target: monthlyTarget },
+      };
+    }
   }
 
   /**
