@@ -894,6 +894,17 @@ export default class FundingService {
    *     either: an unreadable settings row propagates as that same error class
    *     and the endpoint answers 500. Reporting `not_covered` during our own
    *     outage would invite an operator to pay to fix it.
+   *  3. Display-only read failures. The gate wraps each of its sources in
+   *     readAccessSource so that a determinate allow beats an indeterminate
+   *     sibling read; this method leaves the same reads (grant table, plan
+   *     allocation) unguarded, for the reason in 2. So an unreadable grant
+   *     table with a healthy paid allocation is a case where the gate still
+   *     allows and this method throws. getCalendarFundingSummary therefore
+   *     takes the gate's answer first, in isolation, and withholds the status
+   *     (null) when this method fails — the display half degrades, the
+   *     access half does not. It does not wrap this method in
+   *     readAccessSource, which would reintroduce "unreadable displays as
+   *     unfunded".
    *
    * The consequence for callers: use {@link getCalendarFundingSummary}'s
    * `features` — never this status — to decide what a calendar may do.
@@ -917,6 +928,21 @@ export default class FundingService {
     // Verify ownership - throws ValidationError if not owner
     await this.verifyCalendarOwnership(accountId, calendarId);
 
+    return this.resolveFundingStatus(calendarId);
+  }
+
+  /**
+   * The display-status rules behind getFundingStatusForCalendar, with no
+   * ownership check of their own. Split out so getCalendarFundingSummary can
+   * verify ownership once, take the gate's answer first, and then run these
+   * reads in isolation — see the third divergence in that method's note.
+   *
+   * @param calendarId - Calendar ID to check (already validated and owned)
+   * @returns Funding status: 'admin_exempt' | 'grant' | 'covered' | 'not_covered'
+   * @throws FundingAccessIndeterminateError if the instance funding settings
+   *   could not be read
+   */
+  private async resolveFundingStatus(calendarId: string): Promise<FundingStatus> {
     // Neither guard below is reachable, and neither is a funding decision:
     // verifyCalendarOwnership has already thrown if calendarInterface is
     // absent, and it only returns having found an owner membership row — the
@@ -967,6 +993,11 @@ export default class FundingService {
    * getFundingStatusForCalendar), and a consumer holding only one of them
    * would be guessing at the other.
    *
+   * The gate is computed first and in isolation; the display status is then
+   * read on its own and withheld (`status: null`) if that read fails. A
+   * display-only failure therefore never costs the owner the features the
+   * gate would have allowed (divergence 3 on getFundingStatusForCalendar).
+   *
    * The summary deliberately carries no plan dates. `currentPeriodEnd` and
    * `accessExpiresAt` were once reported here, but nothing client-side ever
    * read them, and unread wire surface sits against DEC-004's send-what-is-
@@ -978,19 +1009,44 @@ export default class FundingService {
    *
    * @param accountId - Account ID requesting the summary (must own the calendar)
    * @param calendarId - Calendar ID to describe
-   * @returns The calendar's coverage status and feature decisions
+   * @returns The calendar's coverage status (null if unreadable) and feature decisions
    * @throws ValidationError if accountId does not own the calendar
-   * @throws FundingAccessIndeterminateError if instance funding settings could
-   *   not be read — a server-side failure, never a "not covered" answer
+   * @throws FundingAccessIndeterminateError if the gate could not read the
+   *   instance funding settings — a server-side failure, never a "not
+   *   covered" answer
    */
   async getCalendarFundingSummary(accountId: string, calendarId: string): Promise<CalendarFundingSummary> {
-    // Validates both ids and verifies ownership before anything is read.
-    const status = await this.getFundingStatusForCalendar(accountId, calendarId);
+    if (!isValidUUID(calendarId)) {
+      throw new ValidationError('Invalid calendarId: must be a valid UUID');
+    }
 
+    if (!isValidUUID(accountId)) {
+      throw new ValidationError('Invalid accountId: must be a valid UUID');
+    }
+
+    // Verify ownership - throws ValidationError if not owner
+    await this.verifyCalendarOwnership(accountId, calendarId);
+
+    // The gate goes first and alone. Its answer is the authoritative half of
+    // this response and it carries its own partial-failure tolerance, so
+    // nothing the display path reads may run before it or throw over it.
     const featureKeys = Object.keys(FUNDING_GATED_FEATURES) as FundingGatedFeature[];
     const decisions = await Promise.all(
       featureKeys.map((feature) => this.checkFundingAccess(calendarId, feature)),
     );
+
+    // The display status is read in isolation: a failure here withholds the
+    // status (null) and never touches the decisions above. It is not run
+    // through readAccessSource — that would display an unreadable calendar
+    // as `not_covered`, which divergence 2 rejects.
+    let status: FundingStatus | null;
+    try {
+      status = await this.resolveFundingStatus(calendarId);
+    }
+    catch (error) {
+      logError(error, 'getCalendarFundingSummary: coverage status unreadable, withholding it');
+      status = null;
+    }
 
     return {
       status,
