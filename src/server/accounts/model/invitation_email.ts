@@ -1,7 +1,7 @@
 import config from 'config';
 import AccountInvitation from '@/common/model/invitation';
-import { MailData } from '@/server/email/model/types';
-import { EmailMessage, compileTemplate } from '@/server/email/model/message';
+import { MailData } from '@/server/common/email/types';
+import { EmailMessage, compileTemplate } from '@/server/common/email/message';
 
 const textTemplate = compileTemplate('src/server/accounts', 'account_invitation_email.text.hbs');
 const htmlTemplate = compileTemplate('src/server/accounts', 'account_invitation_email.html.hbs');

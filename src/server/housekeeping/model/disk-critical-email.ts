@@ -1,5 +1,5 @@
-import { MailData } from '@/server/email/model/types';
-import { EmailMessage, compileTemplate } from '@/server/email/model/message';
+import { MailData } from '@/server/common/email/types';
+import { EmailMessage, compileTemplate } from '@/server/common/email/message';
 
 const textTemplate = compileTemplate('src/server/housekeeping', 'disk-critical.text.hbs');
 const htmlTemplate = compileTemplate('src/server/housekeeping', 'disk-critical.html.hbs');
