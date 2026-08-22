@@ -9,6 +9,14 @@ import CalendarInterface from '@/server/calendar/interface';
 import { Account } from '@/common/model/account';
 import { Calendar } from '@/common/model/calendar';
 
+const PNG_BYTES = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d]);
+const JPEG_BYTES = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01]);
+const HEIC_BYTES = Buffer.concat([
+  Buffer.from([0x00, 0x00, 0x00, 0x18]),
+  Buffer.from('ftypheic', 'ascii'),
+  Buffer.from([0x00, 0x00, 0x00, 0x00]),
+]);
+
 describe('MediaService', () => {
   let mediaService: MediaService;
   let eventBus: EventEmitter;
@@ -24,21 +32,42 @@ describe('MediaService', () => {
 
   describe('validateFile', () => {
     it('should validate a proper PNG file', () => {
-      const buffer = Buffer.from('fake png data');
       const filename = 'test.png';
       const mimeType = 'image/png';
 
       // Should not throw
-      expect(() => mediaService['validateFile'](buffer, filename, mimeType)).not.toThrow();
+      expect(() => mediaService['validateFile'](PNG_BYTES, filename, mimeType)).not.toThrow();
     });
 
     it('should validate a proper JPEG file', () => {
-      const buffer = Buffer.from('fake jpeg data');
       const filename = 'test.jpg';
       const mimeType = 'image/jpeg';
 
       // Should not throw
-      expect(() => mediaService['validateFile'](buffer, filename, mimeType)).not.toThrow();
+      expect(() => mediaService['validateFile'](JPEG_BYTES, filename, mimeType)).not.toThrow();
+    });
+
+    it('should validate a proper HEIC file', () => {
+      expect(() => mediaService['validateFile'](HEIC_BYTES, 'test.heic', 'image/heic')).not.toThrow();
+    });
+
+    it('should reject content that does not match any allowed signature despite an allowed declared type', () => {
+      const buffer = Buffer.from('<!DOCTYPE html><script>alert(1)</script>');
+
+      expect(() => mediaService['validateFile'](buffer, 'test.png', 'image/png'))
+        .toThrow(MediaInvalidTypeError);
+    });
+
+    it('should reject content whose sniffed type disagrees with the declared type', () => {
+      expect(() => mediaService['validateFile'](JPEG_BYTES, 'test.png', 'image/png'))
+        .toThrow(MediaInvalidTypeError);
+    });
+
+    it('should reject a GIF even when declared as an allowed type', () => {
+      const buffer = Buffer.from('GIF89a\x00\x00\x00\x00\x00\x00', 'latin1');
+
+      expect(() => mediaService['validateFile'](buffer, 'test.png', 'image/png'))
+        .toThrow(MediaInvalidTypeError);
     });
 
     it('should reject file with invalid MIME type', () => {
@@ -232,13 +261,11 @@ describe('uploadFile storage error handling', () => {
     };
     mediaService['storageDisk'] = fakeDisk as any;
 
-    const buffer = Buffer.from('fake png data');
-
     await expect(
       mediaService.uploadFile(
         testAccount,
         calendarId,
-        buffer,
+        PNG_BYTES,
         'photo.png',
         'image/png',
       ),

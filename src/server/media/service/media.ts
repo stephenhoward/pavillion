@@ -7,6 +7,7 @@ import { Disk } from 'flydrive';
 import { MediaEntity } from '@/server/media/entity/media';
 import { Media, MediaStatus } from '@/common/model/media';
 import { StorageConfig, createStorageDisk } from './storage-factory';
+import { detectImageType } from './image-signature';
 import CalendarInterface from '@/server/calendar/interface';
 import { Account } from '@/common/model/account';
 import { CalendarNotFoundError, InsufficientCalendarPermissionsError } from '@/common/exceptions/calendar';
@@ -64,7 +65,11 @@ export default class MediaService {
   }
 
   /**
-   * Validates file type and size
+   * Validates file type and size.
+   *
+   * The declared MIME type and extension are cheap pre-filters; the type
+   * sniffed from the buffer's magic bytes is authoritative and must both be
+   * allowlisted and agree with the declared type.
    */
   private validateFile(buffer: Buffer, filename: string, mimeType: string): void {
     if (buffer.length > this.config.maxFileSize) {
@@ -77,6 +82,11 @@ export default class MediaService {
 
     const extension = path.extname(filename).toLowerCase();
     if (!this.config.allowedExtensions.includes(extension)) {
+      throw new MediaInvalidTypeError();
+    }
+
+    const detectedType = detectImageType(buffer);
+    if (!detectedType || detectedType !== mimeType || !this.config.allowedTypes.includes(detectedType)) {
       throw new MediaInvalidTypeError();
     }
   }
