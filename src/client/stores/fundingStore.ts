@@ -19,7 +19,11 @@ import type { FundingGatedFeature, FundingStatus } from '@/common/model/funding-
  * too. Nothing on the wire separates the two.
  */
 export interface CalendarFundingCache {
-  /** How the calendar is covered. Display vocabulary, null until loaded. */
+  /**
+   * How the calendar is covered. Display vocabulary, null until loaded — or
+   * null from the server when the status was unreadable while `features`
+   * was not, in which case ensureLoaded simply re-reads on the next mount.
+   */
   status: FundingStatus | null;
   /** Known per-feature gate decisions. A missing key is not a denial. */
   features: Partial<Record<FundingGatedFeature, boolean>>;
