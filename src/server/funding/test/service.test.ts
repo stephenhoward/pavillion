@@ -1004,24 +1004,39 @@ describe('FundingService', () => {
     /**
      * Stub the calendar's funding-plan allocation. Pass null for no allocation,
      * or plan overrides to shape the funding plan the allocation belongs to.
+     *
+     * The fake honours the include's `where: { status: 'active' }` exactly as
+     * the database would: a query written without the status join still sees
+     * the allocation row, whatever state its plan is in. That asymmetry is
+     * what lets the non-active-status tests below fail if the join filter is
+     * ever dropped from qualifyingFundingPlan.
      */
     function stubAllocation(
       plan: { status?: string; cancelled_at?: Date | null; current_period_end?: Date | null } | null,
     ): sinon.SinonStub {
-      if (plan === null) {
-        return sandbox.stub(CalendarFundingPlanEntity, 'findOne').resolves(null);
-      }
+      return sandbox.stub(CalendarFundingPlanEntity, 'findOne').callsFake(async (options?: any) => {
+        if (plan === null) {
+          return null;
+        }
 
-      return sandbox.stub(CalendarFundingPlanEntity, 'findOne').resolves({
-        calendar_id: calendarId,
-        end_time: null,
-        fundingPlan: {
+        const fundingPlan = {
           status: 'active',
           cancelled_at: null,
           current_period_end: new Date(Date.now() + 30 * DAY),
           ...plan,
-        },
-      } as any);
+        };
+
+        const joinedStatus = options?.include?.[0]?.where?.status;
+        if (joinedStatus !== undefined && fundingPlan.status !== joinedStatus) {
+          return null;
+        }
+
+        return {
+          calendar_id: calendarId,
+          end_time: null,
+          fundingPlan,
+        } as any;
+      });
     }
 
     describe('invariant 1: funding not enabled on the instance', () => {
@@ -1111,6 +1126,45 @@ describe('FundingService', () => {
         stubOwnerIsAdmin(false);
         stubGrant(false);
         stubAllocation(null);
+
+        const allowed = await service.checkFundingAccess(calendarId, feature);
+
+        expect(allowed).toBe(false);
+      });
+
+      /**
+       * The three cases below give the plan dates that would grant access on
+       * their own (no cancellation, a period end weeks away), so only the
+       * `status: 'active'` join filter in qualifyingFundingPlan can produce
+       * the denial. Each fails if that filter is removed.
+       */
+      it('should close the gate when the allocation points at a cancelled plan', async () => {
+        stubFundingEnabled(true);
+        stubOwnerIsAdmin(false);
+        stubGrant(false);
+        stubAllocation({ status: 'cancelled' });
+
+        const allowed = await service.checkFundingAccess(calendarId, feature);
+
+        expect(allowed).toBe(false);
+      });
+
+      it('should close the gate when the allocation points at a past_due plan', async () => {
+        stubFundingEnabled(true);
+        stubOwnerIsAdmin(false);
+        stubGrant(false);
+        stubAllocation({ status: 'past_due' });
+
+        const allowed = await service.checkFundingAccess(calendarId, feature);
+
+        expect(allowed).toBe(false);
+      });
+
+      it('should close the gate when the allocation points at a suspended plan', async () => {
+        stubFundingEnabled(true);
+        stubOwnerIsAdmin(false);
+        stubGrant(false);
+        stubAllocation({ status: 'suspended' });
 
         const allowed = await service.checkFundingAccess(calendarId, feature);
 
