@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import sinon from 'sinon';
 import express from 'express';
 import request from 'supertest';
+import config from 'config';
 import { WebhookManager } from '../service/provider/webhook_manager';
 import WebhookRoutes from '../api/v1/webhooks';
 
@@ -42,12 +43,28 @@ describe('WebhookManager Utility Service', () => {
     expect(stripeUrl).not.toBe(paypalUrl);
   });
 
-  it('should use instance domain from configuration', () => {
+  // Regression test for the bug where the generator read the nonexistent
+  // `server.domain` config key: config.has() returned false, so the URL
+  // silently fell back to BASE_URL or localhost instead of the configured
+  // instance domain. The generator must read the canonical `domain` key.
+  it('should use the instance domain from the `domain` config key', () => {
+    const configStub = sandbox.stub(config, 'get');
+    configStub.withArgs('domain').returns('events.example.org');
+
     const webhookUrl = webhookManager.generateWebhookUrl('stripe');
 
-    // Should generate a valid webhook URL path
-    expect(webhookUrl).toContain('/api/funding/webhooks/');
-    expect(webhookUrl.length).toBeGreaterThan(0);
+    expect(webhookUrl).toBe('https://events.example.org/api/funding/webhooks/stripe');
+  });
+
+  // Decision (stated per the missing-domain acceptance criterion): a blank
+  // domain fails loudly rather than silently falling back to localhost — a
+  // webhook registered against the wrong domain is a payment-integration
+  // failure that presents as "webhooks never arrive."
+  it('should throw rather than fall back when the configured domain is blank', () => {
+    const configStub = sandbox.stub(config, 'get');
+    configStub.withArgs('domain').returns('   ');
+
+    expect(() => webhookManager.generateWebhookUrl('stripe')).toThrow(/domain/);
   });
 
   // Regression test for the bug where the wizard surfaced /api/funding/v1/webhooks/...
@@ -74,38 +91,31 @@ describe('WebhookManager Utility Service', () => {
     expect(response.status).not.toBe(404);
   });
 
-  // Payment provider dashboards (Stripe, PayPal) reject non-HTTPS webhook URLs in
-  // production. If a deployment sets BASE_URL to http:// (typical when a reverse
-  // proxy terminates TLS in front of the app), the generator must still emit
-  // https:// so the URL the operator pastes is actually accepted.
+  // Payment provider dashboards (Stripe, PayPal) reject non-HTTPS webhook URLs
+  // in production. If an operator sets the `domain` config value with an
+  // explicit http:// prefix (typical when a reverse proxy terminates TLS in
+  // front of the app), the generator must still emit https:// so the URL the
+  // operator pastes is actually accepted.
   describe('HTTPS enforcement', () => {
-    let originalBaseUrl: string | undefined;
-
-    beforeEach(() => {
-      originalBaseUrl = process.env.BASE_URL;
-    });
-
-    afterEach(() => {
-      if (originalBaseUrl === undefined) delete process.env.BASE_URL;
-      else process.env.BASE_URL = originalBaseUrl;
-    });
-
-    it('should upgrade BASE_URL http:// to https:// for non-localhost domains', () => {
-      process.env.BASE_URL = 'http://staging.pavillion.dev';
+    it('should upgrade a configured http:// domain to https:// for non-localhost hosts', () => {
+      const configStub = sandbox.stub(config, 'get');
+      configStub.withArgs('domain').returns('http://staging.pavillion.dev');
       const url = webhookManager.generateWebhookUrl('stripe');
       expect(url.startsWith('https://staging.pavillion.dev')).toBe(true);
     });
 
-    it('should preserve BASE_URL https:// unchanged', () => {
-      process.env.BASE_URL = 'https://prod.pavillion.dev';
+    it('should preserve a configured https:// domain unchanged', () => {
+      const configStub = sandbox.stub(config, 'get');
+      configStub.withArgs('domain').returns('https://prod.pavillion.dev');
       const url = webhookManager.generateWebhookUrl('stripe');
       expect(url.startsWith('https://prod.pavillion.dev')).toBe(true);
     });
 
-    it('should keep http:// for localhost so local dev still works', () => {
-      delete process.env.BASE_URL;
+    it('should keep an explicit http://localhost domain so local dev still works', () => {
+      const configStub = sandbox.stub(config, 'get');
+      configStub.withArgs('domain').returns('http://localhost:3000');
       const url = webhookManager.generateWebhookUrl('stripe');
-      expect(url.startsWith('http://localhost')).toBe(true);
+      expect(url.startsWith('http://localhost:3000')).toBe(true);
     });
   });
 });
