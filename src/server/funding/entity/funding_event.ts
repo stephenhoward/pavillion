@@ -9,9 +9,13 @@ class FundingEventEntity extends Model {
   @Column({ type: DataType.UUID })
   declare id: string;
 
+  /**
+   * NULL for provider events that arrive with no matching local plan. The row
+   * is still recorded so provider_event_id deduplication stops provider retries.
+   */
   @ForeignKey(() => FundingPlanEntity)
-  @Column({ type: DataType.UUID })
-  declare funding_plan_id: string;
+  @Column({ type: DataType.UUID, allowNull: true })
+  declare funding_plan_id: string | null;
 
   @Column({ type: DataType.STRING })
   declare event_type: string;

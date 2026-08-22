@@ -447,7 +447,7 @@ describe('Webhook Handling', () => {
         expect(loggedEvent?.funding_plan_id).not.toBe('sub_fk_test_456');
       });
 
-      it('should log event with empty funding_plan_id when no matching FundingPlan exists', async () => {
+      it('should log event with null funding_plan_id when no matching FundingPlan exists', async () => {
         const webhookPayload = JSON.stringify({
           id: 'evt_unknown_sub',
           type: 'invoice.paid',
@@ -473,8 +473,39 @@ describe('Webhook Handling', () => {
           where: { provider_event_id: 'evt_unknown_sub' },
         });
         expect(loggedEvent).toBeDefined();
-        expect(loggedEvent?.funding_plan_id).toBe('');
+        // Must be SQL NULL, never '' — Postgres rejects '' for a UUID column,
+        // which would abort the insert and leave Stripe retrying forever.
+        expect(loggedEvent?.funding_plan_id).toBeNull();
         expect(loggedEvent?.event_type).toBe('invoice.paid');
+      });
+
+      it('should dedupe a redelivered event that has no matching FundingPlan', async () => {
+        const webhookPayload = JSON.stringify({
+          id: 'evt_unknown_sub_redelivered',
+          type: 'invoice.paid',
+          data: {
+            object: {
+              subscription: 'sub_nonexistent_redelivered',
+              customer: 'cus_nonexistent_redelivered',
+            },
+          },
+        });
+
+        vi.mocked(Stripe.Webhook.constructEvent).mockReturnValue(JSON.parse(webhookPayload) as any);
+
+        for (let delivery = 0; delivery < 2; delivery++) {
+          const response = await request(app)
+            .post('/api/funding/webhooks/stripe')
+            .set('stripe-signature', 'valid_signature')
+            .set('Content-Type', 'application/json')
+            .send(webhookPayload);
+          expect(response.status).toBe(200);
+        }
+
+        const eventCount = await FundingEventEntity.count({
+          where: { provider_event_id: 'evt_unknown_sub_redelivered' },
+        });
+        expect(eventCount).toBe(1);
       });
     });
 

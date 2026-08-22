@@ -268,7 +268,8 @@ export class FundingPlan extends PrimaryModel {
  * Funding event audit log
  */
 export class FundingEvent extends PrimaryModel {
-  fundingPlanId: string = '';
+  /** Null when the provider event matched no local funding plan. */
+  fundingPlanId: string | null = null;
   eventType: string = '';
   providerEventId: string = '';
   payload: string = '{}'; // JSON string
@@ -291,7 +292,7 @@ export class FundingEvent extends PrimaryModel {
 
   static fromObject(obj: Record<string, any>): FundingEvent {
     const event = new FundingEvent(obj.id);
-    event.fundingPlanId = obj.fundingPlanId ?? '';
+    event.fundingPlanId = obj.fundingPlanId ?? null;
     event.eventType = obj.eventType ?? '';
     event.providerEventId = obj.providerEventId ?? '';
     event.payload = obj.payload ?? '{}';

@@ -209,6 +209,23 @@ describe('Funding Plan Entities', () => {
       expect(newEntity.get('provider_event_id')).toBe('evt_123');
     });
 
+    it('should round-trip a null fundingPlanId for events with no local plan', () => {
+      const entity = FundingEventEntity.build({
+        id: 'event-id',
+        funding_plan_id: null,
+        event_type: 'invoice.paid',
+        provider_event_id: 'evt_orphan',
+        payload: '{"status":null}',
+        processed_at: new Date(),
+      });
+
+      const model = entity.toModel();
+      expect(model.fundingPlanId).toBeNull();
+
+      const newEntity = FundingEventEntity.fromModel(model);
+      expect(newEntity.get('funding_plan_id')).toBeNull();
+    });
+
     it('should store event payload as JSON', () => {
       const payload = {
         type: 'invoice.paid',
