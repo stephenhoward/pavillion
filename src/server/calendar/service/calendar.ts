@@ -26,6 +26,7 @@ import AccountsInterface from '@/server/accounts/interface';
 import EmailInterface from '@/server/email/interface';
 import { logError } from '@/server/common/helper/error-logger';
 import { createLogger } from '@/server/common/helper/logger';
+import { isValidUuidV4 } from '@/server/common/helper/uuid';
 
 const logger = createLogger('calendar');
 import FundingInterface from '@/server/funding/interface';
@@ -79,18 +80,13 @@ class CalendarService {
     this.moderationInterface = moderationInterface;
   }
 
-  private isValidUUID(uuid: string): boolean {
-    const UUID_V4_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-    return typeof uuid === 'string' && UUID_V4_REGEX.test(uuid);
-  }
-
   private withPublicUrl(calendar: Calendar): Calendar {
     calendar.publicUrl = 'https://' + config.get('domain') + '/view/' + calendar.urlName;
     return calendar;
   }
 
   async getCalendar(id: string): Promise<Calendar|null> {
-    if (!this.isValidUUID(id)) {
+    if (!isValidUuidV4(id)) {
       return null;
     }
     const calendar = await CalendarEntity.findByPk(id, {
@@ -1395,7 +1391,7 @@ class CalendarService {
 
     // Validate defaultEventImageId format if provided (null is allowed to clear)
     if (settings.defaultEventImageId !== undefined && settings.defaultEventImageId !== null) {
-      if (!this.isValidUUID(settings.defaultEventImageId)) {
+      if (!isValidUuidV4(settings.defaultEventImageId)) {
         throw new ValidationError('defaultEventImageId must be a valid UUID or null');
       }
     }

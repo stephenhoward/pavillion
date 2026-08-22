@@ -51,11 +51,9 @@ import {
 import { ValidationError } from '@/common/exceptions/base';
 import { CalendarNotFoundError } from '@/common/exceptions/calendar';
 import { logError } from '@/server/common/helper/error-logger';
+import { isValidUuidV4 as isValidUUID } from '@/server/common/helper/uuid';
 import type CalendarInterface from '@/server/calendar/interface';
 import type AccountsInterface from '@/server/accounts/interface';
-
-// UUID v4 validation regex
-const UUID_V4_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 // Maximum number of calendar IDs allowed in a single coverage-change call
 export const MAX_CALENDAR_IDS = 50;
@@ -66,13 +64,6 @@ const CHECKOUT_SESSION_ID_REGEX = /^cs_(test|live)_[a-zA-Z0-9_]{1,190}$/;
 // PWYC amount bounds in millicents
 export const MIN_PWYC_AMOUNT = 100000; // $1.00
 export const MAX_PWYC_AMOUNT = 10000000000; // $100,000.00
-
-/**
- * Validates if a string is a valid UUID v4
- */
-function isValidUUID(id: string): boolean {
-  return typeof id === 'string' && UUID_V4_REGEX.test(id);
-}
 
 /**
  * Sanitized provider info safe for client responses.

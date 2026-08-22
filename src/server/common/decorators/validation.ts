@@ -129,6 +129,12 @@ export function Email() {
  * Empty / absent values are allowed — combine with `@Required()` to enforce
  * presence.
  *
+ * Deliberately neither of the two predicates in `common/helper/uuid.ts`:
+ * this is a generic DTO-field rule that accepts any RFC 4122 version (its
+ * tests assert v1 and v3 pass), whereas `isValidUuidV4` is the identity check
+ * for ids Pavillion mints and `looksLikeUuid` is a shape sniff that ignores
+ * version/variant bits entirely. Use `isValidUuidV4` for local identifiers.
+ *
  * @example
  * @UUID()
  * calendarId: string = '';
