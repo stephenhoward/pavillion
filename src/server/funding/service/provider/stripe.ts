@@ -297,7 +297,10 @@ export class StripeAdapter implements PaymentProviderAdapter {
     switch (event.type) {
       case 'checkout.session.completed': {
         const session = event.data.object as Stripe.Checkout.Session;
-        webhookEvent.subscriptionId = session.subscription as string;
+        webhookEvent.subscriptionId = this.resolveSubscriptionReference(session.subscription, {
+          eventId: event.id,
+          eventType: event.type,
+        });
         webhookEvent.customerId = session.customer as string;
         webhookEvent.status = 'active';
         webhookEvent.accountId = session.metadata?.pavillion_account_id;
@@ -404,16 +407,12 @@ export class StripeAdapter implements PaymentProviderAdapter {
       return undefined;
     }
 
-    const subscriptionId = typeof reference === 'string'
-      ? reference
-      : (reference as { id?: unknown }).id;
+    const subscriptionId = this.resolveSubscriptionReference(reference, {
+      eventId: event.id,
+      eventType: event.type,
+    });
 
-    if (typeof subscriptionId !== 'string' || subscriptionId.length === 0) {
-      logger.warn({
-        eventId: event.id,
-        eventType: event.type,
-        referenceType: typeof reference,
-      }, 'Stripe invoice subscription reference is not a usable id');
+    if (subscriptionId === undefined) {
       return undefined;
     }
 
@@ -423,6 +422,43 @@ export class StripeAdapter implements PaymentProviderAdapter {
         eventType: event.type,
         subscriptionId,
       }, 'Stripe invoice webhook used the legacy top-level subscription field');
+    }
+
+    return subscriptionId;
+  }
+
+  /**
+   * Resolve a Stripe subscription reference to a usable id
+   *
+   * Stripe types these fields `string | Stripe.Subscription | null`, so a
+   * reference may arrive as a bare id or as an expanded subscription object.
+   * The resolved id is used downstream as a lookup and authorization key for
+   * the local funding plan, so it is returned only after being confirmed to
+   * be a non-empty string.
+   *
+   * @param reference - Subscription reference from a Stripe payload
+   * @param logContext - Diagnostic markers identifying the calling context
+   * @returns Subscription ID, or undefined when no usable id can be resolved
+   * @private
+   */
+  private resolveSubscriptionReference(
+    reference: string | Stripe.Subscription | null | undefined,
+    logContext: Record<string, unknown>,
+  ): string | undefined {
+    if (reference === undefined || reference === null) {
+      return undefined;
+    }
+
+    const subscriptionId = typeof reference === 'string'
+      ? reference
+      : (reference as { id?: unknown }).id;
+
+    if (typeof subscriptionId !== 'string' || subscriptionId.length === 0) {
+      logger.warn({
+        ...logContext,
+        referenceType: typeof reference,
+      }, 'Stripe subscription reference is not a usable id');
+      return undefined;
     }
 
     return subscriptionId;
@@ -553,7 +589,7 @@ export class StripeAdapter implements PaymentProviderAdapter {
 
     return {
       status: session.status as 'complete' | 'open' | 'expired',
-      subscriptionId: session.subscription as string | undefined,
+      subscriptionId: this.resolveSubscriptionReference(session.subscription, { sessionId }),
       customerId: session.customer as string | undefined,
       metadata: {
         accountId: session.metadata?.pavillion_account_id || '',
