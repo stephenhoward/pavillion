@@ -92,8 +92,8 @@ export default class CalendarFundingPlanRoutes {
         return;
       }
 
-      if (amount === undefined || amount === null || typeof amount !== 'number') {
-        res.status(400).json({ error: 'amount is required and must be a number', errorName: 'ValidationError' });
+      if (typeof amount !== 'number' || !Number.isFinite(amount)) {
+        res.status(400).json({ error: 'amount is required and must be a finite number', errorName: 'ValidationError' });
         return;
       }
 
