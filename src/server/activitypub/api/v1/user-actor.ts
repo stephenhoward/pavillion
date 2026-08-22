@@ -121,9 +121,9 @@ export default class UserActorRoutes {
     // refuses the activity, still produces these lines. Acceptance is recorded
     // separately by logInboxActivityAccepted below. The helper is shared with
     // the calendar inbox and withholds a Flag body — see its docstring. A Flag
-    // reaches this route today: it falls to the `default:` branch below, and
-    // dumping the raw body here would put the reporter's identity and the
-    // report free text into the logs.
+    // reaches this route today: it is refused by the `default:` branch below,
+    // but dumping the raw body here would already have put the reporter's
+    // identity and the report free text into the logs.
     logInboxActivityArrival('user', username, req.body);
 
     const activity = req.body;
@@ -143,7 +143,17 @@ export default class UserActorRoutes {
           break;
 
         default:
+          // Mirrors the calendar inbox (activitypub/api/v1/server.ts): an
+          // activity this inbox does not handle is refused on the wire, so a
+          // peer can tell a discarded activity from an applied one. Falls
+          // outside the acceptance record below by construction.
           logger.info({ activityType: activity.type }, 'Unhandled user inbox activity type');
+          res.status(400).json({
+            error: 'Unsupported activity type',
+            details: `Activity type '${activity.type}' is not supported`,
+            errorName: 'ValidationError',
+          });
+          return;
       }
 
       if (accepted) {
