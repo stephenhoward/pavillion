@@ -41,14 +41,27 @@
   --pav-shadow-focus: var(--pav-shadow-outline);         /* Focus indicator */
 }
 
-/* Dark mode (manual override via data-theme attribute) */
+/* Dark mode shadow adjustments (manual override via data-theme attribute).
+   Keep in sync with the prefers-color-scheme block below — two delivery
+   channels for the same dark-mode values. */
 [data-theme="dark"] {
+  /* Darker, more pronounced shadows for dark backgrounds */
+  --pav-shadow-1: 0 1px 2px 0 rgb(0 0 0 / 30%);
+  --pav-shadow-2: 0 1px 3px 0 rgb(0 0 0 / 40%), 0 1px 2px -1px rgb(0 0 0 / 40%);
+  --pav-shadow-3: 0 4px 6px -1px rgb(0 0 0 / 40%), 0 2px 4px -2px rgb(0 0 0 / 40%);
+  --pav-shadow-4: 0 10px 15px -3px rgb(0 0 0 / 40%), 0 4px 6px -4px rgb(0 0 0 / 40%);
+  --pav-shadow-5: 0 20px 25px -5px rgb(0 0 0 / 50%), 0 8px 10px -6px rgb(0 0 0 / 50%);
+  --pav-shadow-6: 0 25px 50px -12px rgb(0 0 0 / 60%);
+
+  /* Adjusted focus outline for dark mode */
+  --pav-shadow-outline: 0 0 0 3px var(--pav-color-brand-secondary);
   --pav-shadow-focus-brand: 0 0 0 3px var(--pav-color-orange-300); /* ~10.4:1 vs stone-900 surface (WCAG SC 1.4.11) */
 }
 
-/* Dark mode shadow adjustments */
+/* Dark mode shadow adjustments (OS preference, unless the user explicitly
+   chose the light theme). Keep in sync with the data-theme block above. */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     /* Darker, more pronounced shadows for dark backgrounds */
     --pav-shadow-1: 0 1px 2px 0 rgb(0 0 0 / 30%);
     --pav-shadow-2: 0 1px 3px 0 rgb(0 0 0 / 40%), 0 1px 2px -1px rgb(0 0 0 / 40%);
@@ -59,9 +72,6 @@
 
     /* Adjusted focus outline for dark mode */
     --pav-shadow-outline: 0 0 0 3px var(--pav-color-brand-secondary);
-  }
-
-  :root:not([data-theme="light"]) {
     --pav-shadow-focus-brand: 0 0 0 3px var(--pav-color-orange-300); /* ~10.4:1 vs stone-900 surface (WCAG SC 1.4.11) */
   }
 }
