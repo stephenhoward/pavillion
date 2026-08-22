@@ -141,6 +141,8 @@
     "import_tab": "Importar",
     "loading_calendar": "Cargando calendario...",
     "error_loading_calendar": "No se pudo cargar el calendario. Por favor, inténtalo de nuevo más tarde.",
+    "calendar_not_available": "Calendario no disponible",
+    "calendar_not_available_description": "Este calendario no existe o no tienes acceso para administrarlo.",
     "title": "Gestión de categorías",
     "event_categories": "Categorías de eventos",
     "add_category_button": "Añadir categoría",

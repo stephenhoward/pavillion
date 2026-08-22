@@ -145,6 +145,8 @@
     "import_tab": "Import",
     "loading_calendar": "Loading calendar...",
     "error_loading_calendar": "Unable to load calendar. Please try again later.",
+    "calendar_not_available": "Calendar not available",
+    "calendar_not_available_description": "This calendar doesn't exist or you don't have access to manage it.",
     "title": "Category Management",
     "event_categories": "Event Categories",
     "add_category_button": "Add Category",

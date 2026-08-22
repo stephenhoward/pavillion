@@ -14,6 +14,7 @@ import ModerationService from '@/client/service/moderation';
 import Config from '@/client/service/config';
 import { CalendarInfo } from '@/common/model/calendar_info';
 import HelpButton from '@/client/components/common/help-button.vue';
+import EmptyLayout from '@/client/components/common/empty_state.vue';
 
 /**
  * Strict UUID v4 shape, kept identical to the server's path-parameter
@@ -361,6 +362,13 @@ const backToReports = () => {
         </div>
       </div>
     </template>
+
+    <!-- One non-disclosing message: does not distinguish "doesn't exist" from "no relationship" -->
+    <EmptyLayout
+      v-else
+      :title="t('calendar_not_available')"
+      :description="t('calendar_not_available_description')"
+    />
   </div>
 </template>
 

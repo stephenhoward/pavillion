@@ -476,6 +476,22 @@ describe('CalendarManagementRoot', () => {
 
       expect(wrapper.find('.error-message').exists()).toBe(true);
     });
+
+    it('shows a not-available message when no calendar matches the route param', async () => {
+      vi.spyOn(CalendarService.prototype, 'loadCalendarsWithRelationship').mockResolvedValue([
+        makeCalendarInfo('other-calendar', 'owner'),
+      ]);
+
+      const { wrapper } = await mountRootComponent('unknown-calendar');
+      currentWrapper = wrapper;
+
+      await flushPromises();
+
+      const emptyState = wrapper.find('.empty-state');
+      expect(emptyState.exists()).toBe(true);
+      expect(emptyState.text()).toContain('Calendar not available');
+      expect(wrapper.find('.calendar-management-root__header').exists()).toBe(false);
+    });
   });
 
   describe('Breadcrumb accessibility', () => {
