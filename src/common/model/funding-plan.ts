@@ -16,6 +16,24 @@ export type BillingCycle = 'monthly' | 'yearly';
 export type ProviderType = 'stripe' | 'paypal';
 
 /**
+ * The payment providers this release offers in the UI.
+ *
+ * DEC-007 descopes PayPal for v1: its scaffolding stays in the tree, inert,
+ * and checkout resolves Stripe only. This constant is the funding domain's
+ * single answer to "which providers may be shown" — both the admin provider
+ * list (src/client/components/admin/funding.vue) and the purchase form
+ * (src/client/components/account/FundingForm.vue) filter against it.
+ *
+ * The server-side checkout gate is separate and deliberately not derived from
+ * this constant: resolveEnabledStripeProvider() in
+ * src/server/funding/service/funding.ts hard-codes Stripe whatever the UI
+ * offers. Re-enabling a provider means adding it here AND revisiting that
+ * resolver together — see DEC-007
+ * (agent-os/product/decisions/dec-007-community-funding-model.md).
+ */
+export const SUPPORTED_PROVIDER_TYPES: readonly ProviderType[] = ['stripe'];
+
+/**
  * How a single calendar is currently covered.
  *
  * This is the one vocabulary for a single calendar's coverage, shared verbatim

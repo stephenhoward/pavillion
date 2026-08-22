@@ -4,6 +4,7 @@ import i18next from 'i18next';
 import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import FundingService from '@/client/service/funding';
 import type { FundingOptions, FundingProvider } from '@/client/service/funding';
+import { SUPPORTED_PROVIDER_TYPES } from '@/common/model/funding-plan';
 import { loadStripe } from '@/client/service/stripe-loader';
 import type { StripeEmbeddedCheckout } from '@stripe/stripe-js';
 
@@ -55,8 +56,12 @@ function isDarkMode(): boolean {
   return window.matchMedia('(prefers-color-scheme: dark)').matches;
 }
 
+// Offer only the providers supported by this release (DEC-007: Stripe only
+// in v1); see SUPPORTED_PROVIDER_TYPES for the re-enablement contract.
 const availableProviders = computed(() =>
-  options.value?.providers.filter(p => p.providerType !== 'paypal') ?? [],
+  options.value?.providers.filter(
+    p => SUPPORTED_PROVIDER_TYPES.some(type => type === p.providerType),
+  ) ?? [],
 );
 
 const singleProvider = computed(() =>
