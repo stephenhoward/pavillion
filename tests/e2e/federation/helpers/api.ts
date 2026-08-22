@@ -101,6 +101,40 @@ export interface FollowerResponse {
 }
 
 /**
+ * Data for creating an admin-initiated moderation report
+ */
+export interface AdminReportData {
+  /** Local event UUID on the reporting instance (NOT the remote event IRI) */
+  eventId: string;
+  /** Report category (e.g. 'spam', 'inappropriate', 'misleading', 'harassment') */
+  category: string;
+  /** Free-text explanation of the report */
+  description?: string;
+  /** Triage priority — required by the admin report API ('low' | 'medium' | 'high') */
+  priority: string;
+}
+
+/**
+ * A moderation report as returned by the admin and calendar-owner report APIs.
+ *
+ * Fields common to `Report.toAdminObject()` and `Report.toOwnerObject()`;
+ * the calendar-owner queue is the surface a federated (inbound Flag) report
+ * lands on, so both serializations are covered by this shape.
+ */
+export interface ReportResponse {
+  id: string;
+  eventId: string;
+  calendarId: string | null;
+  category: string;
+  description: string;
+  status: string;
+  reporterType: string;
+  forwardedFromInstance: string | null;
+  forwardedToActorUri: string | null;
+  forwardStatus: string | null;
+}
+
+/**
  * Get an authentication token for API calls
  *
  * Authenticates with the Pavillion API and returns a JWT token that
@@ -751,4 +785,180 @@ export async function shareEvent(
   }
 
   return response;
+}
+
+/**
+ * Create an admin-initiated moderation report against an event
+ *
+ * Admin reports skip reporter email verification and are created directly in
+ * `submitted` status. When the reported event is remote on this instance the
+ * report is stored with `calendarId: null` — there is no local owning
+ * calendar — and only this admin path accepts it.
+ *
+ * @param instance - The instance filing the report
+ * @param token - Authentication token for an account with the admin role
+ * @param data - Report fields; `eventId` is the instance's LOCAL event UUID
+ * @returns The created report
+ * @throws Error if the request fails (404 unknown event, 409 duplicate report)
+ *
+ * @example
+ * const report = await submitAdminReport(INSTANCE_BETA, betaToken, {
+ *   eventId: remoteEventInBetaFeed.id,
+ *   category: 'spam',
+ *   description: 'Federated moderation report',
+ * });
+ */
+export async function submitAdminReport(
+  instance: InstanceConfig,
+  token: string,
+  data: AdminReportData,
+): Promise<ReportResponse> {
+  const response = await fetch(
+    `${instance.baseUrl}/api/v1/admin/reports`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify(data),
+      // @ts-ignore - agent is not in the TypeScript types but works at runtime
+      agent: httpsAgent,
+    },
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Failed to submit admin report: ${response.status} ${errorText}`);
+  }
+
+  const body = await response.json();
+  return body.report;
+}
+
+/**
+ * Forward a report about a remote event to the instance that hosts it
+ *
+ * Emits a Flag activity addressed to the origin calendar's actor (DEC-015).
+ * The report must target an event that is remote on this instance, and the
+ * forwarding admin must own at least one calendar to act as the signing
+ * courier — otherwise the API responds 422 NoSigningCalendarError.
+ *
+ * @param instance - The instance holding the report
+ * @param token - Authentication token for an account with the admin role
+ * @param reportId - UUID of the report to forward
+ * @throws Error if the request fails
+ */
+export async function forwardReportToAdmin(
+  instance: InstanceConfig,
+  token: string,
+  reportId: string,
+): Promise<void> {
+  const response = await fetch(
+    `${instance.baseUrl}/api/v1/admin/reports/${encodeURIComponent(reportId)}/forward-to-admin`,
+    {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+      // @ts-ignore - agent is not in the TypeScript types but works at runtime
+      agent: httpsAgent,
+    },
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Failed to forward report: ${response.status} ${errorText}`);
+  }
+}
+
+/**
+ * List the moderation reports filed against a calendar's events
+ *
+ * This is the calendar-owner queue, which is where an inbound federated Flag
+ * lands: `receiveRemoteReport` scopes the report to the calendar that owns
+ * the reported event. The instance-admin queue (`GET /api/v1/admin/reports`)
+ * only surfaces escalated or admin-initiated reports, so a freshly received
+ * `reporterType: 'federation'` report is not visible there.
+ *
+ * Note: `source` is deliberately absent from the filter options. The API
+ * validates it against `['anonymous', 'authenticated', 'administrator']` and
+ * rejects `federation` with 400, even though `federation` is a valid
+ * ReporterType on the stored report. Filter client-side instead.
+ *
+ * @param instance - The instance to query
+ * @param token - Authentication token for an account that can review the
+ *   calendar's reports (owner, editor with moderation rights, or admin)
+ * @param calendarId - UUID of the calendar whose report queue to read
+ * @param filters - Optional query filters
+ * @returns The matching reports
+ * @throws Error if the request fails
+ */
+export async function getCalendarReports(
+  instance: InstanceConfig,
+  token: string,
+  calendarId: string,
+  filters: { status?: string; category?: string; eventId?: string } = {},
+): Promise<{ reports: ReportResponse[] }> {
+  const query = new URLSearchParams(filters).toString();
+  const response = await fetch(
+    `${instance.baseUrl}/api/v1/calendars/${encodeURIComponent(calendarId)}/reports${query ? `?${query}` : ''}`,
+    {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+      // @ts-ignore - agent is not in the TypeScript types but works at runtime
+      agent: httpsAgent,
+    },
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Failed to list calendar reports: ${response.status} ${errorText}`);
+  }
+
+  return await response.json();
+}
+
+/**
+ * POST a raw ActivityPub activity to a calendar's federation inbox.
+ *
+ * Unlike every other helper in this file, this one bypasses the Pavillion
+ * product API and speaks server-to-server ActivityPub directly. It exists for
+ * activity types Pavillion never originates — a peer that implements event
+ * attendance (Mobilizon, Gancio) sends a `Join`, but no Pavillion UI can
+ * produce one, so the only way to exercise the inbound path end to end is to
+ * hand-build the activity and post it.
+ *
+ * The federation instances run with `SKIP_SIGNATURES=true`
+ * (docker-compose.federation.yml), so no HTTP Signature is attached. Signature
+ * enforcement has its own coverage in `signature_strict_receive.spec.ts` and
+ * must not be duplicated here.
+ *
+ * The raw `Response` is returned rather than a parsed body: a 400 from the
+ * inbox's per-type validation switch is a meaningful protocol outcome the
+ * caller may want to assert, not a transport failure to throw on.
+ *
+ * @param instance - The instance whose inbox to post to
+ * @param calendarUrlName - URL name of the calendar that owns the inbox
+ * @param activity - The complete activity document to deliver
+ * @returns The raw fetch Response
+ */
+export async function postActivityToInbox(
+  instance: InstanceConfig,
+  calendarUrlName: string,
+  activity: Record<string, unknown>,
+): Promise<Response> {
+  return await fetch(
+    `${instance.baseUrl}/calendars/${encodeURIComponent(calendarUrlName)}/inbox`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/activity+json',
+      },
+      body: JSON.stringify(activity),
+      // @ts-ignore - agent is not in the TypeScript types but works at runtime
+      agent: httpsAgent,
+    },
+  );
 }

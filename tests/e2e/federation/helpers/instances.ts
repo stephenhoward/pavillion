@@ -162,6 +162,14 @@ const ALPHA_CONTAINER = 'pavillion-federation-alpha';
 const BETA_CONTAINER = 'pavillion-federation-beta';
 
 /**
+ * Beta's Postgres container and credentials. Mirrors the `db_beta` service in
+ * `docker-compose.federation.yml`.
+ */
+const BETA_DB_CONTAINER = 'pavillion-federation-db-beta';
+const BETA_DB_NAME = 'beta_db';
+const DB_USER = 'pavillion';
+
+/**
  * Capture the current container log line count so subsequent log inspections
  * can be restricted to entries emitted AFTER an action under test. Without
  * this anchor, a stale entry from a prior run (or a prior test in the same
@@ -373,4 +381,82 @@ export function waitForAlphaInboxActivity(
   intervalMs?: number,
 ): Promise<boolean> {
   return waitForInboxActivity(ALPHA_CONTAINER, activityType, needle, sinceLine, timeoutMs, intervalMs);
+}
+
+/**
+ * A persisted `ap_inbox` row, as read back out of an instance's database.
+ */
+export interface InboxRow {
+  /** The activity's own id (its `id` property on the wire). */
+  id: string;
+  /** The activity type the row was filed under. */
+  type: string;
+  /**
+   * Dispatch outcome. `null` while the row is still queued, `'ok'` once
+   * `dispatchByType` returned, `'error'` when it threw, `'blocked'` /
+   * `'rejected'` when the sender-policy gates refused it. This is the only
+   * observable that separates "dispatched and deliberately no-opped" from
+   * "written to the inbox and never dispatched".
+   */
+  processedStatus: string | null;
+  /** The stored activity document. */
+  message: Record<string, any>;
+}
+
+/**
+ * Read back the `ap_inbox` row on BETA whose activity embeds `objectId` as its
+ * `object.id`, filed under `activityType`.
+ *
+ * Keyed on the embedded object rather than the row's own id because a reply
+ * activity (FEP-8a8e's `Ignore` answering a `Join`, `Accept` answering a
+ * `Follow`) mints its id on the responding instance — the test never sees it.
+ * The id of the activity being replied to is known up front and is what makes
+ * the row identifiable.
+ *
+ * Reads the database directly because no HTTP surface exposes `ap_inbox`, and
+ * two of the fields that matter here — the stored addressing and
+ * `processed_status` — appear in no log line.
+ *
+ * @param activityType - Value of the row's `type` column (e.g. 'Ignore')
+ * @param objectId - The `id` of the activity's embedded object
+ * @returns The row, or null when no row matches yet
+ */
+export function readBetaInboxRowForObject(
+  activityType: string,
+  objectId: string,
+): InboxRow | null {
+  // Test-controlled inputs, but quoted defensively so a value carrying an
+  // apostrophe produces a failed match rather than a malformed query.
+  const type = activityType.replace(/'/g, "''");
+  const object = objectId.replace(/'/g, "''");
+
+  const sql = `select row_to_json(r) from (
+    select id, type, processed_status, message
+    from ap_inbox
+    where type = '${type}' and message->'object'->>'id' = '${object}'
+  ) r`;
+
+  let raw: string;
+  try {
+    raw = execSync(
+      `docker exec ${BETA_DB_CONTAINER} psql -U ${DB_USER} -d ${BETA_DB_NAME} -t -A -c "${sql.replace(/\n\s*/g, ' ')}"`,
+      { encoding: 'utf8' },
+    ).trim();
+  }
+  catch {
+    // Container briefly unavailable; callers poll, so report "not yet".
+    return null;
+  }
+
+  if (!raw) {
+    return null;
+  }
+
+  const row = JSON.parse(raw);
+  return {
+    id: row.id,
+    type: row.type,
+    processedStatus: row.processed_status,
+    message: row.message,
+  };
 }

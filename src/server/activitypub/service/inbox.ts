@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { EventEmitter } from "events";
 import { logError } from '@/server/common/helper/error-logger';
 import { logActivityRejection } from '../helper/rejection-logger';
+import { flagActorHostUri } from '../helper/flag-actor-host';
 import { validateActorUriProtocol } from '@/server/common/helper/uri-validation';
 import { createLogger } from '@/server/common/helper/logger';
 
@@ -262,11 +263,9 @@ class ProcessInboxService {
           if (isBlocked) {
             // A Flag's actor is a remote moderation reporter. Everywhere else
             // that identity is reduced to a bare instance host before anything
-            // durable is written (see anonymizeFlagActor); the rejection logs
-            // must not be the one place that records it in full. The host is
-            // retained — instance blocking is decided and audited at that
-            // granularity — but nothing narrower than the host is logged.
-            const loggableActorUri = message.type === 'Flag' ? `https://${domain}` : actorUri;
+            // durable is written (see flagActorHostUri); the rejection logs
+            // must not be the one place that records it in full.
+            const loggableActorUri = message.type === 'Flag' ? flagActorHostUri(domain) : actorUri;
 
             logger.info({ domain, actorUri: loggableActorUri }, '[INBOX] Rejected activity from blocked instance');
 
@@ -656,8 +655,8 @@ class ProcessInboxService {
     }
 
     // Extract domain from actor URI. Everything logged about a Flag sender is
-    // reduced to this host: the per-actor URI is never written durably (see
-    // the blocked-instance branch in processInboxMessage).
+    // reduced to this host by flagActorHostUri: the per-actor URI is never
+    // written durably (see the blocked-instance branch in processInboxMessage).
     const actorUri = message.actor;
     const domain = this.extractDomainFromActorUri(actorUri);
 
@@ -666,7 +665,7 @@ class ProcessInboxService {
       logActivityRejection({
         rejection_type: 'misdirected_activity',
         activity_type: 'Flag',
-        actor_uri: `https://${domain}`,
+        actor_uri: flagActorHostUri(domain),
         actor_domain: domain,
         calendar_id: calendar.id,
         calendar_url_name: calendar.urlName,

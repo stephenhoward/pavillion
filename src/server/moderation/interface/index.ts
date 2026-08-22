@@ -28,7 +28,12 @@ export default class ModerationInterface {
   private accountsInterface: AccountsInterface;
   private emailInterface: EmailInterface;
   private configurationInterface: ConfigurationInterface;
-  private activityPubInterface: ActivityPubInterface;
+  /**
+   * Late-bound: the ActivityPub domain is constructed AFTER moderation
+   * (its inbox needs ModerationInterface for instance blocking), so this is
+   * injected via {@link setActivityPubInterface} once both exist.
+   */
+  private activityPubInterface?: ActivityPubInterface;
 
   constructor(
     eventBus: EventEmitter,
@@ -36,7 +41,7 @@ export default class ModerationInterface {
     accountsInterface: AccountsInterface,
     emailInterface: EmailInterface,
     configurationInterface: ConfigurationInterface,
-    activityPubInterface: ActivityPubInterface,
+    activityPubInterface?: ActivityPubInterface,
   ) {
     this.calendarInterface = calendarInterface;
     this.accountsInterface = accountsInterface;
@@ -51,6 +56,23 @@ export default class ModerationInterface {
       accountsInterface,
     );
     this.analyticsService = new AnalyticsService();
+  }
+
+  /**
+   * Injects the ActivityPub interface after construction.
+   *
+   * Required because the two domains are mutually dependent: the ActivityPub
+   * inbox needs ModerationInterface (instance blocking, inbound Flag
+   * handling), so moderation is constructed first and cannot receive the
+   * ActivityPub interface as a constructor argument. Everything on the
+   * outbound federation path — forwarding a report as a Flag, resolving the
+   * origin calendar actor to address it to — is unreachable until this runs.
+   *
+   * @param activityPubInterface - The ActivityPub domain interface
+   */
+  setActivityPubInterface(activityPubInterface: ActivityPubInterface): void {
+    this.activityPubInterface = activityPubInterface;
+    this.moderationService.setActivityPubInterface(activityPubInterface);
   }
 
   /**
@@ -525,6 +547,9 @@ export default class ModerationInterface {
    * @returns The actor URI string, or null if no AP identity exists for this event
    */
   async getEventSourceActorUri(eventId: string): Promise<string | null> {
+    if (!this.activityPubInterface) {
+      throw new Error('ActivityPubInterface is required for getEventSourceActorUri');
+    }
     return this.activityPubInterface.getEventSourceActorUri(eventId);
   }
 }

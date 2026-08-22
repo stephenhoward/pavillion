@@ -5,9 +5,16 @@
  * remote reporter's actor URI, and the free text of a moderation report.
  * Everywhere downstream both are reduced to a bare instance host before
  * anything durable is written (see `anonymizeFlagActor` and the
- * `forwardedFromInstance` column). The inbox route's unconditional
+ * `forwardedFromInstance` column). The inbox routes' unconditional
  * body log predates Flag support and would bypass that reduction entirely,
  * so it is special-cased — these tests pin that behavior.
+ *
+ * BOTH inbox routes are covered. A signature-verified peer can POST a Flag to
+ * the user inbox just as easily as to the calendar inbox; the user route falls
+ * through to its unhandled-type branch and answers 200, which is exactly the
+ * shape that let the reporter identity and report text reach the logs while
+ * the calendar route looked correct. The two routes now share one arrival
+ * logger so they cannot drift apart again.
  *
  * The logger module is mocked wholesale because `createLogger` returns a new
  * pino child per call; there is no shared instance a spy could attach to.
@@ -36,6 +43,9 @@ vi.mock('@/server/common/helper/logger', () => {
 
 import { Calendar } from '@/common/model/calendar';
 import ActivityPubServerRoutes from '@/server/activitypub/api/v1/server';
+import UserActorRoutes from '@/server/activitypub/api/v1/user-actor';
+import UserActorService from '@/server/activitypub/service/user_actor';
+import { UserActor } from '@/server/activitypub/entity/user_actor';
 import ActivityPubInterface from '@/server/activitypub/interface';
 import CalendarInterface from '@/server/calendar/interface';
 
@@ -124,5 +134,78 @@ describe('addToInbox logging hygiene for Flag activities', () => {
     const logged = JSON.stringify(logCalls);
     expect(logged).not.toContain(REPORT_TEXT);
     expect(logged).not.toContain(REPORTER_ACTOR_URI);
+  });
+});
+
+describe('postToInbox logging hygiene for Flag activities', () => {
+  let routes: UserActorRoutes;
+  let sandbox: sinon.SinonSandbox;
+  let userActorService: UserActorService;
+
+  beforeEach(() => {
+    sandbox = sinon.createSandbox();
+    logCalls.length = 0;
+
+    userActorService = new UserActorService({} as CalendarInterface);
+    routes = new UserActorRoutes(userActorService);
+
+    sandbox.stub(userActorService, 'getActorByUsername').resolves({
+      id: 'test-id',
+      accountId: 'account-id',
+      actorUri: 'https://local.example.com/users/alice',
+      publicKey: 'PUBLIC',
+      privateKey: 'PRIVATE',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    } as UserActor);
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+  });
+
+  const post = async (body: Record<string, unknown>) => {
+    const req = { params: { username: 'alice' }, body };
+    const res = { status: sinon.stub(), send: sinon.stub(), json: sinon.stub() };
+    res.status.returns(res);
+    await routes.postToInbox(req as any, res as any);
+    return res;
+  };
+
+  it('logs neither the reporter actor URI nor the report text for a Flag', async () => {
+    // The user inbox has no Flag handler: the activity falls through to the
+    // unhandled-type branch and still answers 200. Arrival logging runs before
+    // that branch, so it is the only thing standing between a Flag and the log.
+    const res = await post({
+      '@context': 'https://www.w3.org/ns/activitystreams',
+      type: 'Flag',
+      id: 'https://remote.example.com/flags/user-log-1',
+      actor: REPORTER_ACTOR_URI,
+      object: 'https://local.example.com/users/alice',
+      content: REPORT_TEXT,
+      summary: 'Event report: spam',
+    });
+
+    expect(res.status.calledWith(200)).toBe(true);
+
+    const logged = JSON.stringify(logCalls);
+    expect(logged, 'report free text must not be logged').not.toContain(REPORT_TEXT);
+    expect(logged, 'reporter actor URI must not be logged').not.toContain(REPORTER_ACTOR_URI);
+  });
+
+  it('still logs the full body for a non-Flag activity', async () => {
+    // Positive control: without this the Flag assertions above would pass even
+    // if the user inbox stopped logging bodies altogether.
+    await post({
+      '@context': 'https://www.w3.org/ns/activitystreams',
+      type: 'Follow',
+      id: 'https://remote.example.com/activities/user-follow-1',
+      actor: REPORTER_ACTOR_URI,
+      object: 'https://local.example.com/users/alice',
+    });
+
+    const logged = JSON.stringify(logCalls);
+    expect(logged).toContain('activityBody');
+    expect(logged).toContain(REPORTER_ACTOR_URI);
   });
 });

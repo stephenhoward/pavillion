@@ -1,16 +1,22 @@
 /**
- * Centralized logging utility for accepted inbound ActivityPub activities.
+ * Centralized logging utilities for inbound ActivityPub activities: the
+ * arrival record every inbox writes as soon as its recipient resolves, and the
+ * acceptance record written once the activity has cleared every gate.
  *
- * The counterpart to `rejection-logger.ts`: where that module records why an
- * activity was refused, this one records that an activity got past every gate.
+ * The acceptance record is the counterpart to `rejection-logger.ts`: where that
+ * module records why an activity was refused, this one records that an activity
+ * got past every gate.
  *
- * The inbox handlers also log an arrival line ('Received inbox activity') as
- * soon as the recipient resolves. That line is emitted BEFORE actor and
+ * The arrival line ('Received inbox activity') is emitted BEFORE actor and
  * activity validation, so it fires for activities the handler then rejects
- * with 400 and cannot be read as evidence of acceptance. This record is
- * emitted only after validation AND the inbox write (or, for the synchronous
+ * with 400 and cannot be read as evidence of acceptance. The acceptance record
+ * is emitted only after validation AND the inbox write (or, for the synchronous
  * paths, the processing itself) have succeeded, so its presence means the
  * activity was admitted.
+ *
+ * Both inbox routes — the calendar inbox and the user inbox — call the same
+ * helpers, so the redaction rule that arrival logging enforces for `Flag`
+ * cannot drift between them.
  */
 
 import { createLogger } from '@/server/common/helper/logger';
@@ -41,6 +47,40 @@ function activityObjectId(body: Record<string, any>): string | undefined {
   }
 
   return undefined;
+}
+
+/**
+ * Log that an inbound activity arrived at an inbox.
+ *
+ * Arrival, NOT acceptance: an unhandled activity type, a validation failure, or
+ * a handler that refuses the activity still produces these lines. Acceptance is
+ * recorded separately by `logInboxActivityAccepted`.
+ *
+ * Call as soon as the inbox owner resolves, on every inbox route — the `Flag`
+ * redaction below is the whole reason this lives in one place.
+ *
+ * @param inbox - Which inbox the activity arrived at
+ * @param recipient - The inbox owner's url name (calendar) or username (user)
+ * @param body - The raw inbound activity
+ */
+export function logInboxActivityArrival(
+  inbox: InboxKind,
+  recipient: string,
+  body: Record<string, any>,
+): void {
+  logger.info({ inbox, recipient, activityType: body?.type }, 'Received inbox activity');
+
+  if (body?.type === 'Flag') {
+    // A Flag carries a remote reporter's actor URI and the free text of a
+    // moderation report. Everything downstream reduces that reporter to a
+    // bare instance host before anything durable is written; dumping the
+    // raw body here would put both the identity and the report text into
+    // the logs and bypass that reduction entirely. Log only the envelope.
+    logger.info({ inbox, recipient, activityId: body?.id }, 'Inbox Flag activity received (body withheld)');
+    return;
+  }
+
+  logger.info({ inbox, recipient, activityBody: body }, 'Inbox activity body');
 }
 
 /**

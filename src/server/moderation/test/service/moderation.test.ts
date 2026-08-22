@@ -29,6 +29,13 @@ import config from 'config';
 /** A valid UUID v4 for use in tests. */
 const VALID_UUID = 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d';
 
+/**
+ * The IRI `ActivityPubInterface.publishFlag` reports back for a published
+ * Flag. Moderation records it as `forwarded_report_id` and never derives it,
+ * so the stub returns a value the service could not have constructed itself.
+ */
+const PUBLISHED_FLAG_IRI = 'https://local.instance/flags/2f8b1c30-5a4d-4c11-9a7e-8b6f0d2e4a91';
+
 describe('ModerationService', () => {
   let sandbox: sinon.SinonSandbox;
   let service: ModerationService;
@@ -2294,7 +2301,7 @@ describe('ModerationService', () => {
         );
       });
 
-      it('should send Flag activity via ActivityPub outbox', async () => {
+      it('hands the report and the reported event to the ActivityPub domain', async () => {
         const mockReport = Report.fromObject({
           id: 'report-id',
           eventId: 'event-id',
@@ -2321,13 +2328,8 @@ describe('ModerationService', () => {
         sandbox.stub(mockCalendarInterface, 'getEventById').resolves(mockEvent);
         sandbox.stub(mockCalendarInterface, 'getCalendar').resolves(mockCalendar);
 
-        const actorUrlStub = sandbox.stub().resolves('https://local.instance/calendars/test-calendar');
-        const addToOutboxStub = sandbox.stub().resolves();
-        mockActivityPubInterface.actorUrl = actorUrlStub;
-        mockActivityPubInterface.addToOutbox = addToOutboxStub;
-
-        const configStub = sandbox.stub(config, 'get');
-        configStub.withArgs('server.domain').returns('local.instance');
+        const publishFlagStub = sandbox.stub().resolves(PUBLISHED_FLAG_IRI);
+        mockActivityPubInterface.publishFlag = publishFlagStub;
 
         const eventEmitSpy = sandbox.spy(mockEventBus, 'emit');
 
@@ -2337,17 +2339,25 @@ describe('ModerationService', () => {
 
         await service.forwardReport('report-id', 'https://remote.instance/calendars/remote');
 
-        // Verify Flag activity was built and sent
-        expect(addToOutboxStub.calledOnce).toBe(true);
-        const flagActivity = addToOutboxStub.getCall(0).args[1];
-        expect(flagActivity.type).toBe('Flag');
-        expect(flagActivity.content).toBe('Test report description');
-        expect(flagActivity.to).toEqual(['https://remote.instance/calendars/remote']);
+        // Moderation hands over its own models and the recipient. Nothing
+        // ActivityPub-shaped crosses the interface: the Flag is built,
+        // addressed and attributed inside the AP domain, which is where the
+        // wire form is asserted.
+        expect(publishFlagStub.calledOnce).toBe(true);
+        expect(publishFlagStub.firstCall.args).toEqual([
+          mockCalendar,
+          mockReport,
+          mockEvent,
+          'https://remote.instance/calendars/remote',
+        ]);
 
         // Verify forwarding metadata was persisted on the report entity
         expect(mockUpdateStub.calledOnce).toBe(true);
         const updateArgs = mockUpdateStub.getCall(0).args[0];
-        expect(updateArgs.forwarded_report_id).toBe(flagActivity.id);
+        // The IRI the AP domain reports back is what an acknowledgement from
+        // the recipient is later matched against, so it must be recorded
+        // verbatim rather than re-derived here.
+        expect(updateArgs.forwarded_report_id).toBe(PUBLISHED_FLAG_IRI);
         expect(updateArgs.forward_status).toBe('pending');
         expect(updateArgs.forwarded_to_actor_uri).toBe('https://remote.instance/calendars/remote');
 
@@ -2355,7 +2365,11 @@ describe('ModerationService', () => {
         expect(eventEmitSpy.calledWith('reportForwarded')).toBe(true);
       });
 
-      it('should build admin Flag activity for administrator reports', async () => {
+      it('forwards an administrator report through the same seam', async () => {
+        // The admin-flag wire shape — the `https://<domain>/admin` attribution
+        // and its #admin-flag/#priority tags — is decided in the ActivityPub
+        // domain and asserted there. What moderation owns is that an admin
+        // report takes the same route out and records the same metadata.
         const mockReport = Report.fromObject({
           id: 'report-id',
           eventId: 'event-id',
@@ -2384,12 +2398,8 @@ describe('ModerationService', () => {
         sandbox.stub(mockCalendarInterface, 'getEventById').resolves(mockEvent);
         sandbox.stub(mockCalendarInterface, 'getCalendar').resolves(mockCalendar);
 
-        const addToOutboxStub = sandbox.stub().resolves();
-        mockActivityPubInterface.actorUrl = sandbox.stub().resolves('https://local.instance/calendars/test');
-        mockActivityPubInterface.addToOutbox = addToOutboxStub;
-
-        const configStub = sandbox.stub(config, 'get');
-        configStub.withArgs('server.domain').returns('local.instance');
+        const publishFlagStub = sandbox.stub().resolves(PUBLISHED_FLAG_IRI);
+        mockActivityPubInterface.publishFlag = publishFlagStub;
 
         // Stub ReportEntity.findByPk for forwarding metadata update
         const mockUpdateStub = sandbox.stub().resolves();
@@ -2397,25 +2407,25 @@ describe('ModerationService', () => {
 
         await service.forwardReport('report-id', 'https://remote.instance/admin');
 
-        // Verify admin Flag activity was built
-        expect(addToOutboxStub.calledOnce).toBe(true);
-        const flagActivity = addToOutboxStub.getCall(0).args[1];
-        expect(flagActivity.type).toBe('Flag');
-        expect(flagActivity.tag).toBeDefined();
-        expect(flagActivity.tag.some((t: any) => t.name === '#admin-flag')).toBe(true);
-        expect(flagActivity.tag.some((t: any) => t.name === '#priority-high')).toBe(true);
+        expect(publishFlagStub.calledOnce).toBe(true);
+        expect(publishFlagStub.firstCall.args).toEqual([
+          mockCalendar,
+          mockReport,
+          mockEvent,
+          'https://remote.instance/admin',
+        ]);
 
         // Verify forwarding metadata was persisted on the report entity
         expect(mockUpdateStub.calledOnce).toBe(true);
         const updateArgs = mockUpdateStub.getCall(0).args[0];
-        expect(updateArgs.forwarded_report_id).toBe(flagActivity.id);
+        expect(updateArgs.forwarded_report_id).toBe(PUBLISHED_FLAG_IRI);
         expect(updateArgs.forward_status).toBe('pending');
         expect(updateArgs.forwarded_to_actor_uri).toBe('https://remote.instance/admin');
       });
     });
 
     // =========================================================================
-    // pv-o3ay.7: admin reports against remote events
+    // Admin reports against remote events
     // =========================================================================
     describe('createAdminReport (remote event branch)', () => {
       let service: ModerationService;
@@ -2538,7 +2548,6 @@ describe('ModerationService', () => {
     });
 
     describe('forwardReport (null-calendarId branch)', () => {
-      const SIGNING_CALENDAR_ACTOR_URI = 'https://beta.local/calendars/admin-cal/actor';
       const REMOTE_TARGET_ACTOR_URI = 'https://alpha.remote/admin';
 
       let service: ModerationService;
@@ -2570,7 +2579,7 @@ describe('ModerationService', () => {
         sandbox.stub(ReportEntity, 'findByPk').resolves({ update: mockUpdateStub } as any);
 
         const configStub = sandbox.stub(config, 'get');
-        configStub.withArgs('server.domain').returns('beta.local');
+        configStub.withArgs('domain').returns('beta.local');
       });
 
       afterEach(() => {
@@ -2605,7 +2614,7 @@ describe('ModerationService', () => {
         });
       }
 
-      it('signs the Flag with the admin primary calendar actor and uses buildFlagActivity', async () => {
+      it('signs a remote-event admin report with the admin primary calendar', async () => {
         const report = buildRemoteAdminReport();
         const remoteEvent = CalendarEvent.fromObject({
           id: 'event-id',
@@ -2619,38 +2628,52 @@ describe('ModerationService', () => {
         sandbox.stub(mockCalendarInterface, 'getEventById').resolves(remoteEvent);
         sandbox.stub(mockAccountsInterface, 'getAccountById').resolves(adminAccount);
         sandbox.stub(mockCalendarInterface, 'getPrimaryCalendarForUser').resolves(signingCalendar);
-        const actorUrlStub = sandbox.stub().resolves(SIGNING_CALENDAR_ACTOR_URI);
-        const addToOutboxStub = sandbox.stub().resolves();
-        mockActivityPubInterface.actorUrl = actorUrlStub;
-        mockActivityPubInterface.addToOutbox = addToOutboxStub;
+        const publishFlagStub = sandbox.stub().resolves(PUBLISHED_FLAG_IRI);
+        mockActivityPubInterface.publishFlag = publishFlagStub;
 
         await service.forwardReport('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', REMOTE_TARGET_ACTOR_URI);
 
-        // The Flag's actor must equal the signing calendar's actor URI
-        // so HTTP signature keyId matches the activity actor (security
-        // invariant).
-        expect(addToOutboxStub.calledOnce).toBe(true);
-        const [calendarArg, activityArg] = addToOutboxStub.firstCall.args;
-        expect(activityArg.type).toBe('Flag');
-        expect(activityArg.actor).toBe(SIGNING_CALENDAR_ACTOR_URI);
-        // actorUrl must be called with the resolved signing calendar so a
-        // regression that derived the actor URI from a different calendar
-        // (and therefore a mismatched signing key) would fail here.
-        expect(actorUrlStub.calledWith(signingCalendar)).toBe(true);
-        // Must NOT have admin-flag/priority tags from buildAdminFlagActivity
-        const hasAdminFlagTag = (activityArg.tag || []).some(
-          (t: any) => t.name === '#admin-flag',
+        // The report has no owning local calendar, so the admin's primary
+        // calendar carries it as courier. Picking the wrong calendar here
+        // signs the Flag with a key that does not match the actor the AP
+        // domain derives from it, and the far end refuses it.
+        expect(publishFlagStub.calledOnce).toBe(true);
+        expect(publishFlagStub.firstCall.args).toEqual([
+          signingCalendar,
+          report,
+          remoteEvent,
+          REMOTE_TARGET_ACTOR_URI,
+        ]);
+      });
+
+      it('hands over the remote event itself, not a locally-minted reference', async () => {
+        const report = buildRemoteAdminReport();
+        const remoteEvent = CalendarEvent.fromObject({
+          id: 'event-id',
+          calendarId: null,
+          name: 'Remote Event',
+          eventSourceUrl: 'https://alpha.local/calendars/alpha_cal/events/origin-event-id',
+        });
+
+        sandbox.stub(service, 'getReportById').resolves(report);
+        sandbox.stub(mockCalendarInterface, 'getEventById').resolves(remoteEvent);
+        sandbox.stub(mockAccountsInterface, 'getAccountById').resolves(buildAdminAccount());
+        sandbox.stub(mockCalendarInterface, 'getPrimaryCalendarForUser').resolves(buildSigningCalendar());
+        const publishFlagStub = sandbox.stub().resolves(PUBLISHED_FLAG_IRI);
+        mockActivityPubInterface.publishFlag = publishFlagStub;
+
+        await service.forwardReport('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', REMOTE_TARGET_ACTOR_URI);
+
+        // The event carries the origin IRI the recipient can resolve. The AP
+        // domain reads it off the model to address the Flag — a local id
+        // minted for this instance's own copy names nothing the recipient
+        // knows, and the report is dropped at the far end. Passing anything
+        // less than the event forecloses that choice here.
+        const [, , eventArg] = publishFlagStub.firstCall.args;
+        expect(eventArg).toBe(remoteEvent);
+        expect(eventArg.eventSourceUrl).toBe(
+          'https://alpha.local/calendars/alpha_cal/events/origin-event-id',
         );
-        expect(hasAdminFlagTag).toBe(false);
-        // Must include the category hashtag emitted by buildFlagActivity
-        const hasCategoryTag = (activityArg.tag || []).some(
-          (t: any) => t.name === '#spam',
-        );
-        expect(hasCategoryTag).toBe(true);
-        // Recipient is the remote admin actor URI
-        expect(activityArg.to).toEqual([REMOTE_TARGET_ACTOR_URI]);
-        // Outbox is invoked with the signing calendar (the federation courier)
-        expect(calendarArg).toBe(signingCalendar);
       });
 
       it('throws NoSigningCalendarError when the admin account cannot be resolved', async () => {
@@ -2666,7 +2689,7 @@ describe('ModerationService', () => {
         sandbox.stub(mockAccountsInterface, 'getAccountById').resolves(undefined);
 
         mockActivityPubInterface.actorUrl = sandbox.stub();
-        mockActivityPubInterface.addToOutbox = sandbox.stub();
+        mockActivityPubInterface.publishFlag = sandbox.stub();
 
         await expect(
           service.forwardReport('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', REMOTE_TARGET_ACTOR_URI),
@@ -2688,7 +2711,7 @@ describe('ModerationService', () => {
         sandbox.stub(mockCalendarInterface, 'getPrimaryCalendarForUser').resolves(null);
 
         mockActivityPubInterface.actorUrl = sandbox.stub();
-        mockActivityPubInterface.addToOutbox = sandbox.stub();
+        mockActivityPubInterface.publishFlag = sandbox.stub();
 
         await expect(
           service.forwardReport('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', REMOTE_TARGET_ACTOR_URI),
@@ -2708,14 +2731,14 @@ describe('ModerationService', () => {
         sandbox.stub(mockCalendarInterface, 'getEventById').resolves(remoteEvent);
 
         mockActivityPubInterface.actorUrl = sandbox.stub();
-        mockActivityPubInterface.addToOutbox = sandbox.stub();
+        mockActivityPubInterface.publishFlag = sandbox.stub();
 
         await expect(
           service.forwardReport('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', REMOTE_TARGET_ACTOR_URI),
         ).rejects.toThrow(NoSigningCalendarError);
       });
 
-      it('persists forwarding metadata with the Flag activity id', async () => {
+      it('persists forwarding metadata with the published Flag IRI', async () => {
         const report = buildRemoteAdminReport();
         const remoteEvent = CalendarEvent.fromObject({
           id: 'event-id',
@@ -2729,17 +2752,14 @@ describe('ModerationService', () => {
         sandbox.stub(mockCalendarInterface, 'getEventById').resolves(remoteEvent);
         sandbox.stub(mockAccountsInterface, 'getAccountById').resolves(adminAccount);
         sandbox.stub(mockCalendarInterface, 'getPrimaryCalendarForUser').resolves(signingCalendar);
-        mockActivityPubInterface.actorUrl = sandbox.stub().resolves(SIGNING_CALENDAR_ACTOR_URI);
-
-        const addToOutboxStub = sandbox.stub().resolves();
-        mockActivityPubInterface.addToOutbox = addToOutboxStub;
+        const publishFlagStub = sandbox.stub().resolves(PUBLISHED_FLAG_IRI);
+        mockActivityPubInterface.publishFlag = publishFlagStub;
 
         await service.forwardReport('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', REMOTE_TARGET_ACTOR_URI);
 
         expect(mockUpdateStub.calledOnce).toBe(true);
         const updateArgs = mockUpdateStub.firstCall.args[0];
-        const flagActivity = addToOutboxStub.firstCall.args[1];
-        expect(updateArgs.forwarded_report_id).toBe(flagActivity.id);
+        expect(updateArgs.forwarded_report_id).toBe(PUBLISHED_FLAG_IRI);
         expect(updateArgs.forward_status).toBe('pending');
         expect(updateArgs.forwarded_to_actor_uri).toBe(REMOTE_TARGET_ACTOR_URI);
       });

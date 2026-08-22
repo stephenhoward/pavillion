@@ -33,21 +33,23 @@ export default defineConfig({
   // Run tests in files in parallel
   fullyParallel: true,
 
-  // Set environment variable to accept self-signed certificates
-  use: {
-    ...devices['Desktop Chrome'],
-    // Allow self-signed certificates for federation testing
-    ignoreHTTPSErrors: true,
-  },
-
   // Fail the build on CI if you accidentally left test.only in the source code
   forbidOnly: !!process.env.CI,
 
   // Retry on CI only
   retries: process.env.CI ? 2 : 0,
 
-  // Opt out of parallel tests on CI
-  workers: process.env.CI ? 1 : undefined,
+  // One worker everywhere, not just on CI.
+  //
+  // Every spec shares the same two Docker instances, and that shared state is
+  // not read-only: `signature_strict_receive.spec.ts` toggles beta's signature
+  // enforcement by force-recreating the beta container mid-run. Concurrent
+  // workers see that container go away and fail in fixture setup with a 502
+  // from nginx — failures that belong to no spec in particular and that CI,
+  // already pinned to one worker, never reproduced. Serial execution is what
+  // the fixture topology actually supports; `fullyParallel` above still
+  // governs ordering within a file.
+  workers: 1,
 
   // Reporter to use - open: 'never' prevents auto-launching browser after tests
   reporter: [['html', { open: 'never' }]],
@@ -57,6 +59,9 @@ export default defineConfig({
     // Base URL to use in actions like `await page.goto('/')`
     // Tests primarily interact with alpha.federation.local
     baseURL: 'http://alpha.federation.local',
+
+    // Allow the self-signed certificates the federation environment generates
+    ignoreHTTPSErrors: true,
 
     // Collect trace when retrying the failed test
     trace: 'on-first-retry',

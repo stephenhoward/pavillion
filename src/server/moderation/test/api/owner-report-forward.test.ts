@@ -22,6 +22,7 @@ const TEST_CALENDAR_ID = 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11';
 const TEST_REPORT_ID = 'b0eebc99-9c0b-4ef8-bb6d-6bb9bd380a22';
 const TEST_EVENT_ID = 'e0eebc99-9c0b-4ef8-bb6d-6bb9bd380a33';
 const REMOTE_OWNER_URI = 'https://remote.instance/calendars/remote-calendar';
+const REMOTE_EVENT_URL = 'https://remote.instance/events/123';
 
 /**
  * Creates a test Report instance with reasonable defaults.
@@ -50,11 +51,12 @@ function createTestReport(overrides: Partial<{
 function createTestEvent(overrides: Partial<{
   id: string;
   calendarId: string | null;
+  eventSourceUrl: string;
 }> = {}): CalendarEvent {
   const event = new CalendarEvent(
     overrides.id ?? TEST_EVENT_ID,
     overrides.calendarId === undefined ? null : overrides.calendarId,
-    'https://remote.instance/events/123',
+    overrides.eventSourceUrl ?? REMOTE_EVENT_URL,
   );
   return event;
 }
@@ -247,6 +249,86 @@ describe('POST /calendars/:calendarId/reports/:reportId/forward - Forward report
       expect(response.status).toBe(400);
       expect(response.body.error).toContain('unable to determine remote calendar owner');
       expect(response.body.errorName).toBe('ValidationError');
+    });
+
+    it('should return 400 when the resolved actor is not on the event source host', async () => {
+      // A hostile instance can set `attributed_to` on an Announce-ingested
+      // event; the same-origin guard stops a signed Flag being aimed at a
+      // host the event did not come from.
+      stubAccess();
+
+      const report = createTestReport();
+      const remoteEvent = createTestEvent({ calendarId: null });
+
+      sandbox.stub(moderationInterface, 'getReportForCalendar').resolves(report);
+      sandbox.stub(calendarInterface, 'getEventById').resolves(remoteEvent);
+      sandbox.stub(moderationInterface, 'getEventSourceActorUri')
+        .resolves('https://attacker.example/calendars/victim');
+      const forwardStub = sandbox.stub(moderationInterface, 'forwardReport').resolves();
+
+      router.post('/calendars/:calendarId/reports/:reportId/forward', addRequestUser, (req, res) => {
+        routes.forwardReport(req, res);
+      });
+
+      const response = await request(testApp(router))
+        .post(`/calendars/${TEST_CALENDAR_ID}/reports/${TEST_REPORT_ID}/forward`)
+        .send({});
+
+      expect(response.status).toBe(400);
+      expect(response.body.errorName).toBe('ValidationError');
+      expect(response.body.error).toBe('Cannot forward report: calendar owner is not on the event source instance');
+      expect(forwardStub.called).toBe(false);
+    });
+
+    it('should return 400 when the resolved actor is not a valid URI', async () => {
+      // The same-origin guard must reject an unparseable actor URI outright
+      // rather than falling through to a hostname comparison.
+      stubAccess();
+
+      const report = createTestReport();
+      const remoteEvent = createTestEvent({ calendarId: null });
+
+      sandbox.stub(moderationInterface, 'getReportForCalendar').resolves(report);
+      sandbox.stub(calendarInterface, 'getEventById').resolves(remoteEvent);
+      sandbox.stub(moderationInterface, 'getEventSourceActorUri').resolves('not-a-uri');
+      const forwardStub = sandbox.stub(moderationInterface, 'forwardReport').resolves();
+
+      router.post('/calendars/:calendarId/reports/:reportId/forward', addRequestUser, (req, res) => {
+        routes.forwardReport(req, res);
+      });
+
+      const response = await request(testApp(router))
+        .post(`/calendars/${TEST_CALENDAR_ID}/reports/${TEST_REPORT_ID}/forward`)
+        .send({});
+
+      expect(response.status).toBe(400);
+      expect(response.body.errorName).toBe('ValidationError');
+      expect(response.body.error).toBe('Cannot forward report: calendar owner is not on the event source instance');
+      expect(forwardStub.called).toBe(false);
+    });
+
+    it('should return 400 when the event has no source URL', async () => {
+      stubAccess();
+
+      const report = createTestReport();
+      const remoteEvent = createTestEvent({ calendarId: null, eventSourceUrl: '' });
+
+      sandbox.stub(moderationInterface, 'getReportForCalendar').resolves(report);
+      sandbox.stub(calendarInterface, 'getEventById').resolves(remoteEvent);
+      const forwardStub = sandbox.stub(moderationInterface, 'forwardReport').resolves();
+
+      router.post('/calendars/:calendarId/reports/:reportId/forward', addRequestUser, (req, res) => {
+        routes.forwardReport(req, res);
+      });
+
+      const response = await request(testApp(router))
+        .post(`/calendars/${TEST_CALENDAR_ID}/reports/${TEST_REPORT_ID}/forward`)
+        .send({});
+
+      expect(response.status).toBe(400);
+      expect(response.body.errorName).toBe('ValidationError');
+      expect(response.body.error).toBe('Event is missing source URL');
+      expect(forwardStub.called).toBe(false);
     });
 
     it('should return 400 for invalid message type', async () => {

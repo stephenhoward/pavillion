@@ -3,6 +3,7 @@ import { Op } from 'sequelize';
 import { v4 as uuidv4 } from 'uuid';
 import { Account } from '@/common/model/account';
 import { Calendar } from '@/common/model/calendar';
+import { Report } from '@/common/model/report';
 import { CalendarEvent } from '@/common/model/events';
 import { ActivityPubActivity } from '@/server/activitypub/model/base';
 import { WebFingerResponse } from '@/server/activitypub/model/webfinger';
@@ -28,6 +29,7 @@ import ModerationInterface from '@/server/moderation/interface';
 import CreateActivity from '@/server/activitypub/model/action/create';
 import UpdateActivity from '@/server/activitypub/model/action/update';
 import DeleteActivity from '@/server/activitypub/model/action/delete';
+import FlagActivityBuilder from '@/server/activitypub/service/flag-activity-builder';
 
 /**
  * Implementation of the ActivityPub internal API interface
@@ -254,6 +256,40 @@ export default class ActivityPubInterface {
     remoteUserActorUri: string,
   ): Promise<void> {
     return this.federationPublisher.sendEditorRevoke(calendar, remoteUserActorUri);
+  }
+
+  /**
+   * Publishes a moderation report across a federation boundary as a `Flag`
+   * activity, from a local calendar's outbox.
+   *
+   * The moderation domain passes its own `Report` and the event it is about;
+   * this method owns the translation into ActivityPub. Nothing AP-shaped
+   * crosses the interface in either direction: the caller neither builds the
+   * activity nor sees it, and gets back only the IRI the Flag went out under,
+   * which is what the report row records as `forwarded_report_id`.
+   *
+   * @param calendar The local calendar signing and anchoring the Flag. Its
+   *   actor URI becomes the Flag's `actor`, so the HTTP-Signature `keyId`
+   *   matches the activity actor.
+   * @param report The report being forwarded.
+   * @param event The event the report is about.
+   * @param recipientActorUri The actor the Flag is addressed to.
+   * @returns The IRI minted for the published Flag.
+   */
+  async publishFlag(
+    calendar: Calendar,
+    report: Report,
+    event: CalendarEvent,
+    recipientActorUri: string,
+  ): Promise<string> {
+    const activity = new FlagActivityBuilder().build(
+      report,
+      event,
+      await this.actorUrl(calendar),
+      recipientActorUri,
+    );
+    await this.memberService.addToOutbox(calendar, activity);
+    return activity.id;
   }
 
   async addToInbox(calendar: Calendar, message: ActivityPubActivity, auth: InboxAuthContext): Promise<null> {

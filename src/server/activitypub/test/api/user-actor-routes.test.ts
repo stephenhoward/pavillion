@@ -12,6 +12,7 @@ import { logInboxActivityAccepted } from '@/server/activitypub/helper/inbox-acce
 // these tests pin WHICH activities are allowed to produce one.
 vi.mock('@/server/activitypub/helper/inbox-acceptance-log', () => ({
   logInboxActivityAccepted: vi.fn(),
+  logInboxActivityArrival: vi.fn(),
 }));
 
 describe('UserActorRoutes - GET /users/:username', () => {

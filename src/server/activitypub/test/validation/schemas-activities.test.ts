@@ -24,7 +24,7 @@ import {
   MAX_FLAG_TAGS,
 } from '@/server/activitypub/validation/schemas';
 import IgnoreActivity from '@/server/activitypub/model/action/ignore';
-import FlagActivityBuilder from '@/server/moderation/service/flag-activity-builder';
+import FlagActivityBuilder from '@/server/activitypub/service/flag-activity-builder';
 import { Report, ReportCategory, ReportStatus } from '@/common/model/report';
 import { CalendarEvent, CalendarEventContent } from '@/common/model/events';
 
@@ -1826,13 +1826,14 @@ describe('ActivityPub Validation Schemas - Activities', () => {
       content.title = 'Test Event';
       event.addContent(content);
 
-      const activity = new FlagActivityBuilder('remote.example').buildFlagActivity(
+      const activity = new FlagActivityBuilder('remote.example').build(
         report,
         event,
         'https://remote.example/calendars/reporter',
+        'https://example.com/calendars/mycal',
       );
 
-      const result = flagActivitySchema.safeParse(activity);
+      const result = flagActivitySchema.safeParse(activity.toObject());
       expect(result.success, JSON.stringify((result as any).error?.issues)).toBe(true);
     });
   });

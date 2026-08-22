@@ -346,6 +346,12 @@ const initPavillionServer = async (app: express.Application, port: number): Prom
   // Wire AP interface into calendar domain for cross-domain queries
   calendarDomain.interface.setActivityPubInterface(activityPubDomain.interface);
 
+  // Wire AP interface into moderation domain. Moderation is constructed
+  // before ActivityPub (the AP inbox needs ModerationInterface), so the
+  // outbound federation path — forwarding a report as a Flag to the origin
+  // calendar actor — is dead until this injection runs.
+  moderationDomain.setActivityPubInterface(activityPubDomain.interface);
+
   // Initialize Notifications domain after ActivityPub (depends on CalendarInterface and AccountsInterface for role resolution)
   new NotificationsDomain(eventBus, calendarDomain.interface, accountsDomain.interface).initialize(app);
 
