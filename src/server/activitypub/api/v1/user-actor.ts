@@ -109,8 +109,18 @@ export default class UserActorRoutes {
   async postToInbox(req: Request, res: Response): Promise<void> {
     const { username } = req.params;
 
-    // Verify user exists
-    const actor = await this.userActorService.getActorByUsername(username);
+    // Verify user exists. Express 4 does not await handlers, so a lookup
+    // failure that escaped here would be an unhandled rejection and terminate
+    // the process; the activity-processing block below has its own guard.
+    let actor;
+    try {
+      actor = await this.userActorService.getActorByUsername(username);
+    }
+    catch (error) {
+      logger.error({ err: error }, 'Error looking up user inbox actor');
+      res.status(500).send('Error processing activity');
+      return;
+    }
 
     if (!actor) {
       res.status(404).send('User not found');

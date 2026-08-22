@@ -386,3 +386,43 @@ describe('UserActorRoutes - GET /users/:username/outbox', () => {
     expect(res.send.calledWith('User not found')).toBe(true);
   });
 });
+
+describe('UserActorRoutes - POST /users/:username/inbox lookup failure', () => {
+  let routes: UserActorRoutes;
+  let sandbox: sinon.SinonSandbox = sinon.createSandbox();
+  let userActorService: UserActorService;
+
+  beforeEach(() => {
+    userActorService = new UserActorService({} as CalendarInterface);
+    routes = new UserActorRoutes(userActorService);
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+  });
+
+  it('should respond 500 instead of escaping a rejection when the actor lookup fails', async () => {
+    // Express 4 does not await handlers: a rejection that escapes postToInbox
+    // would terminate the process as an unhandled rejection.
+    sandbox.stub(userActorService, 'getActorByUsername').rejects(new Error('connection refused'));
+    const req = { params: { username: 'alice' }, body: { type: 'Add' } };
+    const res = { status: sinon.stub(), send: sinon.stub() };
+    res.status.returns(res);
+
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown) => { unhandled.push(reason); };
+    process.on('unhandledRejection', onUnhandled);
+    try {
+      void routes.postToInbox(req as any, res as any);
+      await new Promise((resolve) => setImmediate(resolve));
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+    finally {
+      process.off('unhandledRejection', onUnhandled);
+    }
+
+    expect(unhandled).toEqual([]);
+    expect(res.status.calledWith(500)).toBe(true);
+    expect(res.send.calledWith('Error processing activity')).toBe(true);
+  });
+});
