@@ -26,7 +26,7 @@ describe('EventService - Calendar ID Storage', () => {
     eventBus = new EventEmitter();
     eventService = new EventService(eventBus);
     calendarService = new CalendarService();
-    categoryService = new CategoryService();
+    categoryService = new CategoryService(calendarService);
 
     // Inject a minimal AP interface stub so listEvents does not crash when
     // no real ActivityPub domain is wired up in these unit tests.
