@@ -33,8 +33,9 @@ class FlagActivityBuilder {
    * @param report - The report being forwarded
    * @param event - The event the report is about
    * @param senderActorUri - Actor URI of the calendar signing and sending the
-   *   Flag. Ignored on the legacy admin-flag path, which attributes the Flag
-   *   to the instance admin URI instead.
+   *   Flag. Every Flag is attributed to this calendar actor — admin-initiated
+   *   reports included, since the admin's calendar carries them as courier and
+   *   the activity `actor` must match the HTTP-Signature `keyId`.
    * @param recipientActorUri - The actor the Flag is addressed to
    * @returns A `FlagActivity` model, ready for the outbox
    */
@@ -44,59 +45,20 @@ class FlagActivityBuilder {
     senderActorUri: string,
     recipientActorUri: string,
   ): FlagActivity {
-    const admin = this.isAdminFlag(report);
-    const actorUri = admin ? this.adminActorUri() : senderActorUri;
-
     const activity = new FlagActivity(
       `https://${this.domain}/flags/${uuidv4()}`,
-      actorUri,
+      senderActorUri,
       this.reportedEventUri(event),
     );
 
     activity.to = [recipientActorUri];
     activity.content = report.description;
     activity.published = report.createdAt;
-
-    if (admin) {
-      activity.attributedTo = actorUri;
-      activity.summary = `Admin report: ${report.category}`;
-      activity.tag = [
-        { type: 'Hashtag', name: '#admin-flag' },
-        { type: 'Hashtag', name: `#priority-${report.adminPriority || 'low'}` },
-      ];
-    }
-    else {
-      activity['@context'] = 'https://www.w3.org/ns/activitystreams';
-      activity.summary = `Event report: ${report.category}`;
-      activity.tag = [{ type: 'Hashtag', name: `#${report.category}` }];
-    }
+    activity['@context'] = 'https://www.w3.org/ns/activitystreams';
+    activity.summary = `Event report: ${report.category}`;
+    activity.tag = [{ type: 'Hashtag', name: `#${report.category}` }];
 
     return activity;
-  }
-
-  /**
-   * Whether a report takes the legacy admin-flag shape: attributed to
-   * `https://<domain>/admin`, carrying `#admin-flag` and a priority tag.
-   *
-   * Only admin-initiated reports about *locally* hosted events do. An admin
-   * report about a remote event has no owning local calendar (`calendarId` is
-   * null) and travels as an ordinary calendar-actor Flag, signed by the
-   * admin's primary calendar acting as courier, so that the activity `actor`
-   * matches the HTTP-Signature `keyId`.
-   *
-   * The legacy shape carries a known signing mismatch — `https://<domain>/admin`
-   * has no key entry in any actor table — kept here as it was rather than
-   * fixed in passing. An instance-level admin actor is the fix.
-   */
-  private isAdminFlag(report: Report): boolean {
-    return report.reporterType === 'administrator'
-      && !!report.adminId
-      && report.calendarId !== null;
-  }
-
-  /** The legacy instance-admin actor URI. See {@link isAdminFlag}. */
-  private adminActorUri(): string {
-    return `https://${this.domain}/admin`;
   }
 
   /**

@@ -38,8 +38,8 @@ describe('FlagActivityBuilder', () => {
     ownerReport.status = ReportStatus.SUBMITTED;
     ownerReport.createdAt = new Date('2026-02-07T12:00:00Z');
 
-    // An admin-initiated report about a locally hosted event: the legacy
-    // admin-flag shape.
+    // An admin-initiated report. Admin reports travel as ordinary calendar
+    // Flags: the admin's calendar carries them as courier.
     adminReport = new Report('admin-report-uuid-999');
     adminReport.eventId = 'event-uuid-456';
     adminReport.calendarId = 'calendar-uuid-789';
@@ -141,29 +141,19 @@ describe('FlagActivityBuilder', () => {
     });
   });
 
-  describe('admin-initiated reports about local events', () => {
-    it('attributes the Flag to the instance admin URI and tags its priority', () => {
+  describe('admin-initiated reports', () => {
+    it('sends an admin report about a local event as an ordinary calendar Flag', () => {
+      // No instance-level admin actor exists, so nothing may attribute a Flag
+      // to one: the activity `actor` must match the HTTP-Signature keyId, and
+      // only calendar actors hold keys.
       const activity = builder.build(adminReport, event, SENDER_ACTOR_URI, RECIPIENT_ACTOR_URI);
       const persisted = activity.toObject();
 
-      expect(persisted.actor).toBe('https://local.instance.example/admin');
-      expect(persisted.attributedTo).toBe('https://local.instance.example/admin');
-      expect(persisted.content).toBe('Admin escalation: serious policy violation.');
-      expect(persisted.summary).toBe('Admin report: harassment');
-      expect(persisted.tag).toEqual([
-        { type: 'Hashtag', name: '#admin-flag' },
-        { type: 'Hashtag', name: '#priority-high' },
-      ]);
-      // The legacy admin shape carries no @context.
-      expect(persisted['@context']).toBeUndefined();
-    });
-
-    it('defaults an unprioritized admin report to low', () => {
-      adminReport.adminPriority = null;
-
-      const activity = builder.build(adminReport, event, SENDER_ACTOR_URI, RECIPIENT_ACTOR_URI);
-
-      expect(activity.tag).toContainEqual({ type: 'Hashtag', name: '#priority-low' });
+      expect(persisted.actor).toBe(SENDER_ACTOR_URI);
+      expect(persisted.attributedTo).toBeUndefined();
+      expect(persisted['@context']).toBe('https://www.w3.org/ns/activitystreams');
+      expect(persisted.summary).toBe('Event report: harassment');
+      expect(persisted.tag).toEqual([{ type: 'Hashtag', name: '#harassment' }]);
     });
 
     it('sends an admin report about a REMOTE event as an ordinary calendar Flag', () => {
@@ -182,15 +172,6 @@ describe('FlagActivityBuilder', () => {
 
       expect(activity.actor).toBe(SENDER_ACTOR_URI);
       expect(activity.attributedTo).toBeUndefined();
-      expect(activity.tag).toEqual([{ type: 'Hashtag', name: '#harassment' }]);
-    });
-
-    it('sends an administrator report with no adminId as an ordinary calendar Flag', () => {
-      adminReport.adminId = null;
-
-      const activity = builder.build(adminReport, event, SENDER_ACTOR_URI, RECIPIENT_ACTOR_URI);
-
-      expect(activity.actor).toBe(SENDER_ACTOR_URI);
       expect(activity.tag).toEqual([{ type: 'Hashtag', name: '#harassment' }]);
     });
   });
