@@ -44,16 +44,24 @@
  *   written -- before dispatch runs (pv-gbqu) -- so on its own it cannot
  *   distinguish "acted on" from "queued and forgotten".
  *
- *   The LOAD-BEARING assertion is the returned Ignore, checked two ways.
+ *   The LOAD-BEARING assertion is the returned Ignore, checked three ways.
  *   Because the Ignore exists only if alpha's dispatcher actually ran
  *   `processJoinActivity`, its arrival at beta is positive evidence that the
- *   Join was dispatched -- the thing the alpha-side log record cannot show. Its
- *   stored `ap_inbox` row on beta then supplies the two facts no log line
- *   carries: the delivered addressing (`to`, and the absence of `as:Public`)
- *   and `processed_status`. A `processed_status` of `'ok'` is what separates
+ *   Join was dispatched -- the thing the alpha-side log record cannot show.
+ *   Alpha's `ap_outbox` row holds the serialized form alpha transmits
+ *   (`addToOutbox` persists `toObject()`), which is where the addressing is
+ *   proven: `to` is the sender alone and no addressing field carries
+ *   `as:Public`. Beta's stored `ap_inbox` row then supplies what the sender
+ *   side cannot -- that the delivered `to` survived the hop, and
+ *   `processed_status`. A `processed_status` of `'ok'` is what separates
  *   "dispatched and deliberately no-opped" from "written to the inbox and
  *   never dispatched" (`null`) or "dispatch did not recognise the type"
  *   (`'error'`, what the `default: throw` in `dispatchByType` produces).
+ *
+ *   Addressing is NOT asserted against beta's row beyond `to`, on purpose:
+ *   `IgnoreActivity.fromObject` copies only `to`, so a `cc` alpha emitted
+ *   would be dropped before beta's row is written and an assertion on that row
+ *   could never fail. See the note at `ADDRESSING_FIELDS`.
  *
  *   Only then is the negative assertion meaningful: alpha's participant-facing
  *   event listing is byte-identical before and after. Asserting absence alone
@@ -80,6 +88,7 @@ import {
   generateCalendarName,
   getAlphaLogLineCount,
   getBetaLogLineCount,
+  readAlphaOutboxRowForObject,
   readBetaInboxRowForObject,
   waitForAlphaInboxActivity,
   waitForBetaInboxActivity,
@@ -101,15 +110,17 @@ import {
 const AS_PUBLIC = 'https://www.w3.org/ns/activitystreams#Public';
 
 /**
- * Every addressing field AS2 defines — `as:Public` in any of them makes the
- * activity just as public as it would be in `to`.
+ * The addressing fields alpha can actually put on the wire. Checked against
+ * alpha's `ap_outbox` row, which stores the serialized activity
+ * (`toObject()`), so each of these CAN fail: a regression that addressed the
+ * reply publicly through `to` or `cc` would land in that row verbatim.
  *
- * Read the KNOWN LIMITATION note at the assertion site before trusting this
- * list: against beta's stored row only `to` is actually verified, because
- * `IgnoreActivity.fromObject` copies `to` alone and the receiving model has no
- * `bto`/`bcc`/`audience` fields to hold the rest. Tracked as pv-uwou.
+ * AS2 also defines `bto`, `bcc` and `audience`. They are deliberately absent:
+ * `ActivityPubActivity` has no such fields and `toObject()` never emits them,
+ * so an assertion on them cannot fail on any stored or transmitted form and
+ * would only look like coverage. Add them here when the model grows them.
  */
-const ADDRESSING_FIELDS = ['to', 'cc', 'bto', 'bcc', 'audience'] as const;
+const ADDRESSING_FIELDS = ['to', 'cc'] as const;
 
 /**
  * Fetch alpha's public event listing for a calendar as a stable string.
@@ -264,32 +275,37 @@ test.describe.serial('Join/Ignore federation', () => {
       'dispatch must record the Ignore as a completed no-op; \'error\' would mean dispatchByType did not recognise the type, null that it never ran',
     ).toBe('ok');
 
-    // Addressing: the sender alone. Read off the stored row because no log
-    // line carries the delivered recipients.
+    // Delivered addressing: the `to` beta received is the sender alone. This
+    // is the one addressing fact beta's row can prove, because `to` is the
+    // only addressing field `IgnoreActivity.fromObject` preserves.
     expect(
       ignoreRow.message.to,
       'the Ignore must be addressed to the Join\'s actor and no one else',
     ).toEqual([betaActorUri]);
 
-    // KNOWN LIMITATION — only the `to` assertion above is load-bearing.
+    // ---- Send side (LOAD-BEARING): the addressing alpha transmitted ----
+    // Read off ALPHA's `ap_outbox` row, not beta's `ap_inbox` row. The outbox
+    // row is `toObject()` of the Ignore `processJoinActivity` built -- the
+    // serialized form, with every addressing field the model can emit. Beta's
+    // row is unusable for this: its parser keeps `to` and discards the rest,
+    // so `cc: [as:Public]` on the wire would vanish before the row was
+    // written and an assertion there would pass anyway.
     //
-    // The loop below is future-drift protection, NOT active verification. It
-    // reads beta's *stored* row, and beta parses an inbound Ignore through
-    // `IgnoreActivity.fromObject`, which copies only `to`. `cc` is left at the
-    // base-class default `[]`, and `bto`/`bcc`/`audience` are not fields on
-    // `ActivityPubActivity` at all. So these four checks are structurally
-    // unable to fail regardless of what alpha actually put on the wire.
-    //
-    // Concretely: if a regression made `processJoinActivity` address the reply
-    // publicly via `cc`, alpha's `toObject()` WOULD emit `cc: [as:Public]` on
-    // the wire, and every assertion here would still pass. Proving that needs
-    // the raw body alpha transmits, not beta's re-parsed row. Tracked as
-    // pv-uwou.
-    //
-    // Kept because it costs nothing and would catch a future change that gives
-    // the receiving model real `cc`/`bto`/`bcc`/`audience` fields.
+    // The beta poll above already proved delivery happened, so the row is
+    // expected to exist by now; no second poll is needed.
+    const outboxRow = readAlphaOutboxRowForObject('Ignore', joinActivityId);
+    expect(
+      outboxRow,
+      'alpha must have queued the Ignore in its outbox; beta received it, so the row has to exist',
+    ).not.toBeNull();
+
+    expect(
+      outboxRow!.message.to,
+      'alpha must address the Ignore to the Join\'s actor and no one else',
+    ).toEqual([betaActorUri]);
+
     for (const field of ADDRESSING_FIELDS) {
-      const recipients = ignoreRow.message[field];
+      const recipients = outboxRow!.message[field];
       const values = Array.isArray(recipients)
         ? recipients
         : (recipients === undefined || recipients === null ? [] : [recipients]);

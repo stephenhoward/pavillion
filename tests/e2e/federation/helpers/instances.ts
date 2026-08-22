@@ -170,6 +170,13 @@ const BETA_DB_NAME = 'beta_db';
 const DB_USER = 'pavillion';
 
 /**
+ * Alpha's Postgres container and database. Mirrors the `db_alpha` service in
+ * `docker-compose.federation.yml`; shares `DB_USER` with beta.
+ */
+const ALPHA_DB_CONTAINER = 'pavillion-federation-db-alpha';
+const ALPHA_DB_NAME = 'alpha_db';
+
+/**
  * Capture the current container log line count so subsequent log inspections
  * can be restricted to entries emitted AFTER an action under test. Without
  * this anchor, a stale entry from a prior run (or a prior test in the same
@@ -384,7 +391,8 @@ export function waitForAlphaInboxActivity(
 }
 
 /**
- * A persisted `ap_inbox` row, as read back out of an instance's database.
+ * A persisted `ap_inbox` or `ap_outbox` row, as read back out of an
+ * instance's database. Both tables share the `ActivityPubMessageEntity` shape.
  */
 export interface InboxRow {
   /** The activity's own id (its `id` property on the wire). */
@@ -401,6 +409,54 @@ export interface InboxRow {
   processedStatus: string | null;
   /** The stored activity document. */
   message: Record<string, any>;
+}
+
+/**
+ * Shared reader behind the per-instance, per-table wrappers below: the
+ * `ap_inbox` / `ap_outbox` row in `database` whose activity embeds `objectId`
+ * as its `object.id`, filed under `activityType`.
+ */
+function readMessageRowForObject(
+  dbContainer: string,
+  database: string,
+  table: 'ap_inbox' | 'ap_outbox',
+  activityType: string,
+  objectId: string,
+): InboxRow | null {
+  // Test-controlled inputs, but quoted defensively so a value carrying an
+  // apostrophe produces a failed match rather than a malformed query.
+  const type = activityType.replace(/'/g, "''");
+  const object = objectId.replace(/'/g, "''");
+
+  const sql = `select row_to_json(r) from (
+    select id, type, processed_status, message
+    from ${table}
+    where type = '${type}' and message->'object'->>'id' = '${object}'
+  ) r`;
+
+  let raw: string;
+  try {
+    raw = execSync(
+      `docker exec ${dbContainer} psql -U ${DB_USER} -d ${database} -t -A -c "${sql.replace(/\n\s*/g, ' ')}"`,
+      { encoding: 'utf8' },
+    ).trim();
+  }
+  catch {
+    // Container briefly unavailable; callers poll, so report "not yet".
+    return null;
+  }
+
+  if (!raw) {
+    return null;
+  }
+
+  const row = JSON.parse(raw);
+  return {
+    id: row.id,
+    type: row.type,
+    processedStatus: row.processed_status,
+    message: row.message,
+  };
 }
 
 /**
@@ -425,38 +481,27 @@ export function readBetaInboxRowForObject(
   activityType: string,
   objectId: string,
 ): InboxRow | null {
-  // Test-controlled inputs, but quoted defensively so a value carrying an
-  // apostrophe produces a failed match rather than a malformed query.
-  const type = activityType.replace(/'/g, "''");
-  const object = objectId.replace(/'/g, "''");
+  return readMessageRowForObject(BETA_DB_CONTAINER, BETA_DB_NAME, 'ap_inbox', activityType, objectId);
+}
 
-  const sql = `select row_to_json(r) from (
-    select id, type, processed_status, message
-    from ap_inbox
-    where type = '${type}' and message->'object'->>'id' = '${object}'
-  ) r`;
-
-  let raw: string;
-  try {
-    raw = execSync(
-      `docker exec ${BETA_DB_CONTAINER} psql -U ${DB_USER} -d ${BETA_DB_NAME} -t -A -c "${sql.replace(/\n\s*/g, ' ')}"`,
-      { encoding: 'utf8' },
-    ).trim();
-  }
-  catch {
-    // Container briefly unavailable; callers poll, so report "not yet".
-    return null;
-  }
-
-  if (!raw) {
-    return null;
-  }
-
-  const row = JSON.parse(raw);
-  return {
-    id: row.id,
-    type: row.type,
-    processedStatus: row.processed_status,
-    message: row.message,
-  };
+/**
+ * Read back the `ap_outbox` row on ALPHA whose activity embeds `objectId` as
+ * its `object.id`, filed under `activityType`.
+ *
+ * This is the SENDER's record of the activity. `addToOutbox` persists
+ * `activity.toObject()` — the serialized wire form, addressing fields
+ * included — so the stored `message` shows what alpha put on the wire rather
+ * than what the receiver's parser chose to keep. Use it for any assertion
+ * about outbound addressing: a receiving `fromObject` drops fields it does
+ * not model, so the receiver's `ap_inbox` row cannot prove their absence.
+ *
+ * @param activityType - Value of the row's `type` column (e.g. 'Ignore')
+ * @param objectId - The `id` of the activity's embedded object
+ * @returns The row, or null when no row matches yet
+ */
+export function readAlphaOutboxRowForObject(
+  activityType: string,
+  objectId: string,
+): InboxRow | null {
+  return readMessageRowForObject(ALPHA_DB_CONTAINER, ALPHA_DB_NAME, 'ap_outbox', activityType, objectId);
 }
