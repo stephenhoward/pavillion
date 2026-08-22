@@ -59,6 +59,7 @@ export default class CalendarFundingPlanRoutes {
     router.get(
       '/calendars/:calendarId/funding',
       ...ExpressHelper.loggedInOnly,
+      limitCalendarFundingPlanByAccount,
       this.getFundingStatus.bind(this),
     );
 
