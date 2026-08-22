@@ -2499,10 +2499,9 @@ describe('ModerationService', () => {
       });
 
       it('forwards an administrator report through the same seam', async () => {
-        // The admin-flag wire shape — the `https://<domain>/admin` attribution
-        // and its #admin-flag/#priority tags — is decided in the ActivityPub
-        // domain and asserted there. What moderation owns is that an admin
-        // report takes the same route out and records the same metadata.
+        // The Flag wire shape is decided in the ActivityPub domain and
+        // asserted there. What moderation owns is that an admin report takes
+        // the same route out and records the same metadata.
         const mockReport = Report.fromObject({
           id: 'report-id',
           eventId: 'event-id',
