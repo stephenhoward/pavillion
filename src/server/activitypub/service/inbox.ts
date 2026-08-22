@@ -868,7 +868,7 @@ class ProcessInboxService {
 
     // Pavillion never ingests remote Notes — they are interop-only, minted on
     // the wire to wrap a peer's canonical Event for Mastodon-class consumers
-    // (see note.ts). Parsing a Note payload through EventObject.fromActivityPubObject
+    // (see note.ts). Parsing a Note payload through EventObject.parseInboundEvent
     // produces a phantom event that, in mutual auto-repost setups, cascades back
     // to the source and trips federation rate-limits.
     if ((message.object as any).type === 'Note') {
@@ -1006,11 +1006,11 @@ class ProcessInboxService {
     // Create the event
     // calendarId is intentionally omitted for calendar-actor federation;
     // addRemoteEvent will set it to null for remote federated events.
-    // Pass actorUri so fromActivityPubObject can origin-gate privileged
+    // Pass actorUri so parseInboundEvent can origin-gate privileged
     // schedule fields (hideFromPublic) — a remote Person editor cannot
     // forge cancellation state for an event on a non-matching origin.
     const eventParams: Record<string, any> = {
-      ...EventObject.fromActivityPubObject(message.object, { actorUri }),
+      ...EventObject.parseInboundEvent(message.object, { actorUri }),
       id: localEventId,
       eventSourceUrl: apObjectId,
     };
@@ -1695,14 +1695,14 @@ class ProcessInboxService {
     }
 
     // Create event params with local UUID for database.
-    // Pass actorUri so fromActivityPubObject can origin-gate privileged fields
+    // Pass actorUri so parseInboundEvent can origin-gate privileged fields
     // (hideFromPublic on schedules). For the Person-actor path (remote editor),
     // this prevents non-origin editors from forging cancellation state. For
     // the calendar-actor path, domain-of-origin is already enforced above
     // (line 1324), but passing actorUri here is harmless and makes the origin
     // invariant explicit at the parse boundary.
     const eventParams = {
-      ...EventObject.fromActivityPubObject(message.object, { actorUri }),
+      ...EventObject.parseInboundEvent(message.object, { actorUri }),
       id: apObject.event_id,
       eventSourceUrl: apObjectId,
     };
@@ -2413,12 +2413,12 @@ class ProcessInboxService {
       // Store the event locally with null calendar_id (remote event).
       // Normalize the fetched AP object into internal eventParams shape.
       // Pass attributedTo (the owning actor URI on the fetched object) so
-      // fromActivityPubObject can origin-gate privileged schedule fields
+      // parseInboundEvent can origin-gate privileged schedule fields
       // (hideFromPublic). An Announce reshared into this calendar can carry
       // arbitrary payload, but cancellation state must only stick when the
       // owning-actor domain matches the event origin.
       const eventParams = {
-        ...EventObject.fromActivityPubObject(
+        ...EventObject.parseInboundEvent(
           remoteData as Record<string, any>,
           { actorUri: attributedTo },
         ),

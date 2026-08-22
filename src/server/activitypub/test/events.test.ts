@@ -443,7 +443,7 @@ describe('AP serialize → parse round-trip (Place + Space + multilingual conten
   // Integration test for the Place + Spaces federation surface.
   //
   // This test exercises both the outbound emit path (toActivityPubObject) and
-  // the inbound priority-consumption path (fromActivityPubObject) together. It
+  // the inbound priority-consumption path (parseInboundEvent) together. It
   // is the structural guard against drift between the two surfaces: when emit
   // changes shape but consume does not (or vice versa), this test fails.
   //
@@ -482,7 +482,7 @@ describe('AP serialize → parse round-trip (Place + Space + multilingual conten
 
     // Serialize → parse round trip.
     const apObject = new EventObject(calendar, event).toActivityPubObject();
-    const restored = EventObject.fromActivityPubObject(apObject);
+    const restored = EventObject.parseInboundEvent(apObject);
 
     // --- Place restoration ---
     // restored.location must be populated. Guarded with not.toBeNull() so a
@@ -492,7 +492,7 @@ describe('AP serialize → parse round-trip (Place + Space + multilingual conten
     expect(restored.location, 'restored.location must be present after round-trip').toBeDefined();
 
     // restored.location.name comes from the structured pavillion:place
-    // content[lang].name (priority-consumed by fromActivityPubObject), NOT
+    // content[lang].name (priority-consumed by parseInboundEvent), NOT
     // from the concatenated flat as:Place.name (which would be
     // 'Convention Center — Pacific Room' for this event). The inbound parser
     // picks the first available content[lang].name, which today carries the

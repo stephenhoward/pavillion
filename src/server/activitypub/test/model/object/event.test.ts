@@ -1184,7 +1184,7 @@ describe('EventObject', () => {
 
   });
 
-  describe('fromActivityPubObject()', () => {
+  describe('parseInboundEvent()', () => {
 
     it('should normalize standard AS input into eventParams shape', () => {
       const apObject = {
@@ -1194,7 +1194,7 @@ describe('EventObject', () => {
         summary: 'A description',
       };
 
-      const result = EventObject.fromActivityPubObject(apObject);
+      const result = EventObject.parseInboundEvent(apObject);
 
       expect(result.content.en.name).toBe('Test');
       expect(result.content.en.description).toBe('A description');
@@ -1209,7 +1209,7 @@ describe('EventObject', () => {
         summaryMap: { en: 'Eng desc', es: 'Esp desc' },
       };
 
-      const result = EventObject.fromActivityPubObject(apObject);
+      const result = EventObject.parseInboundEvent(apObject);
 
       expect(result.content.en.name).toBe('English');
       expect(result.content.es.name).toBe('Spanish');
@@ -1225,7 +1225,7 @@ describe('EventObject', () => {
         'pavillion:schedules': [{ id: 's1', start: '2026-04-15T09:00:00Z', end: '2026-04-15T12:00:00Z' }],
       };
 
-      const result = EventObject.fromActivityPubObject(apObject);
+      const result = EventObject.parseInboundEvent(apObject);
 
       expect(result.content).toEqual({ en: { name: 'Test', description: 'Desc' } });
       expect(result.categories).toEqual(['uri1']);
@@ -1240,7 +1240,7 @@ describe('EventObject', () => {
         schedules: [{ id: 's1' }],
       };
 
-      const result = EventObject.fromActivityPubObject(apObject);
+      const result = EventObject.parseInboundEvent(apObject);
 
       expect(result.content).toEqual({ en: { name: 'Old', description: 'Format' } });
       expect(result.categories).toEqual(['cat-uri']);
@@ -1253,7 +1253,7 @@ describe('EventObject', () => {
         'pavillion:content': { en: { name: 'Pavillion Name', description: 'Pav Desc' } },
       };
 
-      const result = EventObject.fromActivityPubObject(apObject);
+      const result = EventObject.parseInboundEvent(apObject);
 
       expect(result.content.en.name).toBe('Pavillion Name');
     });
@@ -1274,7 +1274,7 @@ describe('EventObject', () => {
         },
       };
 
-      const result = EventObject.fromActivityPubObject(apObject);
+      const result = EventObject.parseInboundEvent(apObject);
 
       expect(result.location.name).toBe('Park');
       expect(result.location.address).toBe('123 Main St');
@@ -1284,7 +1284,7 @@ describe('EventObject', () => {
       expect(result.location.country).toBe('US');
 
       // String location should be wrapped
-      const stringResult = EventObject.fromActivityPubObject({ location: 'Some Place' });
+      const stringResult = EventObject.parseInboundEvent({ location: 'Some Place' });
       expect(stringResult.location.name).toBe('Some Place');
     });
 
@@ -1296,7 +1296,7 @@ describe('EventObject', () => {
         },
       };
 
-      const result = EventObject.fromActivityPubObject(apObject);
+      const result = EventObject.parseInboundEvent(apObject);
       expect(result.content.en.name).toBe('alert("xss")Event');
       expect(result.content.en.description).toBe('Desc');
       expect(result.content.es.name).toBe('Evento');
@@ -1310,7 +1310,7 @@ describe('EventObject', () => {
         },
       };
 
-      const result = EventObject.fromActivityPubObject(apObject);
+      const result = EventObject.parseInboundEvent(apObject);
       expect(result.content.en.name).toBe('xssTitle');
     });
 
@@ -1327,7 +1327,7 @@ describe('EventObject', () => {
         },
       };
 
-      const result = EventObject.fromActivityPubObject(apObject);
+      const result = EventObject.parseInboundEvent(apObject);
       expect(result.location.name).toBe('alert(1)Park');
       expect(result.location.address).toBe('123 Main St');
       expect(result.location.city).toBe('Springfield');
@@ -1352,7 +1352,7 @@ describe('EventObject', () => {
         ],
       };
 
-      const result = EventObject.fromActivityPubObject(apObject);
+      const result = EventObject.parseInboundEvent(apObject);
 
       expect(result.location.name).toBe('Conference Center');
       expect(result.location.address).toBe('456 Oak Ave');
@@ -1371,7 +1371,7 @@ describe('EventObject', () => {
         ],
       };
 
-      const result = EventObject.fromActivityPubObject(apObject);
+      const result = EventObject.parseInboundEvent(apObject);
 
       expect(result.location.name).toBe('Online Meeting');
       expect(result.location.virtualUrl).toBe('https://zoom.example.com/meeting');
@@ -1387,13 +1387,13 @@ describe('EventObject', () => {
         ],
       };
 
-      const result = EventObject.fromActivityPubObject(apObject);
+      const result = EventObject.parseInboundEvent(apObject);
 
       expect(result.location.name).toBe('City Hall');
       expect(result.location.virtualUrl).toBeUndefined();
     });
 
-    it('should round-trip through toActivityPubObject and fromActivityPubObject', () => {
+    it('should round-trip through toActivityPubObject and parseInboundEvent', () => {
       const calendar = new Calendar('calendar-uuid', 'mycal');
       const event = new CalendarEvent('event-uuid', 'calendar-uuid');
       event.addContent(new CalendarEventContent('en', 'Round Trip', 'Test description'));
@@ -1405,7 +1405,7 @@ describe('EventObject', () => {
 
       const obj = new EventObject(calendar, event);
       const apOutput = obj.toActivityPubObject();
-      const normalized = EventObject.fromActivityPubObject(apOutput);
+      const normalized = EventObject.parseInboundEvent(apOutput);
       const reconstituted = CalendarEvent.fromObject(normalized);
 
       // Content should match
@@ -1460,7 +1460,7 @@ describe('EventObject', () => {
 
       // Inbound (origin actor, no gating applied by omitting actorUri):
       // hideFromPublic is preserved on both schedules through the reconstitute.
-      const normalized = EventObject.fromActivityPubObject(apOutput);
+      const normalized = EventObject.parseInboundEvent(apOutput);
       const reconstituted = CalendarEvent.fromObject(normalized);
 
       const rebuiltNormal = reconstituted.schedules.find(s => s.id === 's-normal');
@@ -1484,7 +1484,7 @@ describe('EventObject', () => {
       // The AP output should have a synthesized endTime
       expect(apOutput).toHaveProperty('endTime');
 
-      const normalized = EventObject.fromActivityPubObject(apOutput);
+      const normalized = EventObject.parseInboundEvent(apOutput);
       const reconstituted = CalendarEvent.fromObject(normalized);
 
       // pavillion:schedules preserves the original schedule (no endDate),
@@ -1502,7 +1502,7 @@ describe('EventObject', () => {
         summary: 'From external source',
       };
 
-      const result = EventObject.fromActivityPubObject(apObject);
+      const result = EventObject.parseInboundEvent(apObject);
 
       expect(result.schedules[0].start).toBe('2026-04-15T09:00:00.000Z');
       expect(result.schedules[0].end).toBe('2026-04-15T10:00:00.000Z');
@@ -1517,7 +1517,7 @@ describe('EventObject', () => {
         startTime: '2026-05-01T10:00:00Z',
       };
 
-      const result = EventObject.fromActivityPubObject(apObject);
+      const result = EventObject.parseInboundEvent(apObject);
       expect(result.content.en.name).toBe('Gancio Event');
       expect(result.content.en.description).toBe('A great event description');
     });
@@ -1532,7 +1532,7 @@ describe('EventObject', () => {
         startTime: '2026-05-01T10:00:00Z',
       };
 
-      const result = EventObject.fromActivityPubObject(apObject);
+      const result = EventObject.parseInboundEvent(apObject);
       expect(result.content.en.description).toBe('Short summary');
     });
 
@@ -1545,7 +1545,7 @@ describe('EventObject', () => {
         startTime: '2026-05-01T10:00:00Z',
       };
 
-      const result = EventObject.fromActivityPubObject(apObject);
+      const result = EventObject.parseInboundEvent(apObject);
       expect(result.content.en.name).toBe('English Title');
       expect(result.content.en.description).toBe('English description');
       expect(result.content.fr.name).toBe('Titre Français');
@@ -1562,7 +1562,7 @@ describe('EventObject', () => {
         startTime: '2026-05-01T10:00:00Z',
       };
 
-      const result = EventObject.fromActivityPubObject(apObject);
+      const result = EventObject.parseInboundEvent(apObject);
       expect(result.content.en.description).toBe('Summary text');
     });
 
@@ -1575,7 +1575,7 @@ describe('EventObject', () => {
         startTime: '2026-05-01T10:00:00Z',
       };
 
-      const result = EventObject.fromActivityPubObject(apObject);
+      const result = EventObject.parseInboundEvent(apObject);
       expect(result.content.en.description).toBe('Rock & Roll "Night"');
     });
 
@@ -1585,7 +1585,7 @@ describe('EventObject', () => {
         startTime: '2026-05-01T10:00:00Z',
       };
 
-      const result = EventObject.fromActivityPubObject(apObject);
+      const result = EventObject.parseInboundEvent(apObject);
       expect(result.content.en.name).toBe('alert("xss")My Event');
       expect(result.content.en.name).not.toContain('<script>');
     });
@@ -1597,7 +1597,7 @@ describe('EventObject', () => {
         startTime: '2026-05-01T10:00:00Z',
       };
 
-      const result = EventObject.fromActivityPubObject(apObject);
+      const result = EventObject.parseInboundEvent(apObject);
       expect(result.content.en.name).toBe('Bold Title');
       expect(result.content.es.name).toBe('Evento');
     });
@@ -1609,7 +1609,7 @@ describe('EventObject', () => {
         startTime: '2026-05-01T10:00:00Z',
       };
 
-      const result = EventObject.fromActivityPubObject(apObject);
+      const result = EventObject.parseInboundEvent(apObject);
       expect(result.content.en.description).toBe('steal(cookies)A safe description');
       expect(result.content.en.description).not.toContain('<script>');
     });
@@ -1621,7 +1621,7 @@ describe('EventObject', () => {
         startTime: '2026-05-01T10:00:00Z',
       };
 
-      const result = EventObject.fromActivityPubObject(apObject);
+      const result = EventObject.parseInboundEvent(apObject);
       expect(result.content.en.description).toBe('Hoverable');
       expect(result.content.fr.description).toBe('Lien');
     });
@@ -1633,7 +1633,7 @@ describe('EventObject', () => {
         startTime: '2026-05-01T10:00:00Z',
       };
 
-      const result = EventObject.fromActivityPubObject(apObject);
+      const result = EventObject.parseInboundEvent(apObject);
       expect(result.content.en.name).toBe('Rock & Roll "Night"');
       expect(result.content.en.description).toBe('Fun & Games ahead');
     });
@@ -1647,7 +1647,7 @@ describe('EventObject', () => {
         startTime: '2026-05-01T10:00:00Z',
       };
 
-      const result = EventObject.fromActivityPubObject(apObject);
+      const result = EventObject.parseInboundEvent(apObject);
       expect(result.content.de).toBeDefined();
       expect(result.content.de.description).toBe('Deutsch');
     });
@@ -1667,7 +1667,7 @@ describe('EventObject', () => {
           eventStatus: 'EventCancelled',
         };
 
-        const result = EventObject.fromActivityPubObject(apObject);
+        const result = EventObject.parseInboundEvent(apObject);
 
         // Parses without error; core fields still normalize as usual.
         expect(result.content.en.name).toBe('FEP Event');
@@ -1684,7 +1684,7 @@ describe('EventObject', () => {
           timezone: 'Europe/Vienna',
         };
 
-        const result = EventObject.fromActivityPubObject(apObject);
+        const result = EventObject.parseInboundEvent(apObject);
 
         // Absolute instant is preserved...
         expect(DateTime.fromISO(result.schedules[0].start).toUTC().toISO())
@@ -1702,7 +1702,7 @@ describe('EventObject', () => {
           timezone: 'UTC+5',
         };
 
-        const result = EventObject.fromActivityPubObject(apObject);
+        const result = EventObject.parseInboundEvent(apObject);
 
         expect(result.schedules[0].start).toBe('2026-04-15T09:00:00Z');
       });
@@ -1714,7 +1714,7 @@ describe('EventObject', () => {
           timezone: 'Not/AZone',
         };
 
-        const result = EventObject.fromActivityPubObject(apObject);
+        const result = EventObject.parseInboundEvent(apObject);
 
         expect(result.schedules[0].start).toBe('2026-04-15T09:00:00Z');
       });
@@ -1727,7 +1727,7 @@ describe('EventObject', () => {
           'pavillion:schedules': [{ id: 's1', start: '2026-04-15T09:00:00Z' }],
         };
 
-        const result = EventObject.fromActivityPubObject(apObject);
+        const result = EventObject.parseInboundEvent(apObject);
 
         // pavillion:schedules pass through verbatim; the FEP timezone hint is
         // only used on the synthesize-from-startTime path.
@@ -1748,7 +1748,7 @@ describe('EventObject', () => {
           'pavillion:urlPrompt': 'tickets' as UrlPrompt,
         };
 
-        const result = EventObject.fromActivityPubObject(apObject);
+        const result = EventObject.parseInboundEvent(apObject);
 
         expect(result.externalUrl).toBe('https://example.com/tickets');
         expect(result.urlPrompt).toBe('tickets');
@@ -1763,7 +1763,7 @@ describe('EventObject', () => {
           'pavillion:urlPrompt': 'tickets',
         };
 
-        const result = EventObject.fromActivityPubObject(apObject);
+        const result = EventObject.parseInboundEvent(apObject);
 
         expect(result.externalUrl).toBeNull();
         expect(result.urlPrompt).toBeNull();
@@ -1778,7 +1778,7 @@ describe('EventObject', () => {
           'pavillion:urlPrompt': 'tickets',
         };
 
-        const result = EventObject.fromActivityPubObject(apObject);
+        const result = EventObject.parseInboundEvent(apObject);
 
         expect(result.externalUrl).toBeNull();
         expect(result.urlPrompt).toBeNull();
@@ -1793,7 +1793,7 @@ describe('EventObject', () => {
           'pavillion:urlPrompt': 'tickets',
         };
 
-        const result = EventObject.fromActivityPubObject(apObject);
+        const result = EventObject.parseInboundEvent(apObject);
 
         expect(result.externalUrl).toBeNull();
         expect(result.urlPrompt).toBeNull();
@@ -1808,7 +1808,7 @@ describe('EventObject', () => {
           'pavillion:urlPrompt': 'buy_now_pay_later', // not a valid enum
         };
 
-        const result = EventObject.fromActivityPubObject(apObject);
+        const result = EventObject.parseInboundEvent(apObject);
 
         expect(result.externalUrl).toBeNull();
         expect(result.urlPrompt).toBeNull();
@@ -1822,7 +1822,7 @@ describe('EventObject', () => {
           ],
         };
 
-        const result = EventObject.fromActivityPubObject(apObject);
+        const result = EventObject.parseInboundEvent(apObject);
 
         expect(result.externalUrl).toBeNull();
         expect(result.urlPrompt).toBeNull();
@@ -1834,7 +1834,7 @@ describe('EventObject', () => {
           'pavillion:urlPrompt': 'tickets',
         };
 
-        const result = EventObject.fromActivityPubObject(apObject);
+        const result = EventObject.parseInboundEvent(apObject);
 
         expect(result.externalUrl).toBeNull();
         expect(result.urlPrompt).toBeNull();
@@ -1850,7 +1850,7 @@ describe('EventObject', () => {
           'pavillion:urlPrompt': 'tickets',
         };
 
-        const result = EventObject.fromActivityPubObject(apObject);
+        const result = EventObject.parseInboundEvent(apObject);
 
         expect(result.externalUrl).toBeNull();
         expect(result.urlPrompt).toBeNull();
@@ -1865,7 +1865,7 @@ describe('EventObject', () => {
           'pavillion:urlPrompt': 'tickets',
         };
 
-        const result = EventObject.fromActivityPubObject(apObject);
+        const result = EventObject.parseInboundEvent(apObject);
 
         expect(result.externalUrl).toBeNull();
         expect(result.urlPrompt).toBeNull();
@@ -1880,7 +1880,7 @@ describe('EventObject', () => {
           'pavillion:urlPrompt': 'tickets',
         };
 
-        const result = EventObject.fromActivityPubObject(apObject);
+        const result = EventObject.parseInboundEvent(apObject);
 
         expect(result.externalUrl).toBeNull();
         expect(result.urlPrompt).toBeNull();
@@ -1896,7 +1896,7 @@ describe('EventObject', () => {
           'pavillion:urlPrompt': 'tickets',
         };
 
-        const result = EventObject.fromActivityPubObject(apObject);
+        const result = EventObject.parseInboundEvent(apObject);
 
         expect(result.externalUrl).toBeNull();
         expect(result.urlPrompt).toBeNull();
@@ -1911,7 +1911,7 @@ describe('EventObject', () => {
           'pavillion:urlPrompt': 'tickets',
         };
 
-        const result = EventObject.fromActivityPubObject(apObject);
+        const result = EventObject.parseInboundEvent(apObject);
 
         expect(result.externalUrl).toBeNull();
         expect(result.urlPrompt).toBeNull();
@@ -1926,7 +1926,7 @@ describe('EventObject', () => {
           'pavillion:urlPrompt': 'tickets',
         };
 
-        const result = EventObject.fromActivityPubObject(apObject);
+        const result = EventObject.parseInboundEvent(apObject);
 
         expect(result.externalUrl).toBeNull();
         expect(result.urlPrompt).toBeNull();
@@ -1939,14 +1939,14 @@ describe('EventObject', () => {
           'pavillion:urlPrompt': 'tickets',
         };
 
-        const result = EventObject.fromActivityPubObject(apObject);
+        const result = EventObject.parseInboundEvent(apObject);
 
         expect(result.externalUrl).toBeNull();
         expect(result.urlPrompt).toBeNull();
       });
 
       it('should accept all four valid urlPrompt values (rsvp, more_info, register)', () => {
-        const rsvpResult = EventObject.fromActivityPubObject({
+        const rsvpResult = EventObject.parseInboundEvent({
           name: 'Test',
           attachment: [{ type: 'Link', href: 'https://example.com/rsvp', rel: 'external' }],
           'pavillion:urlPrompt': 'rsvp',
@@ -1954,7 +1954,7 @@ describe('EventObject', () => {
         expect(rsvpResult.externalUrl).toBe('https://example.com/rsvp');
         expect(rsvpResult.urlPrompt).toBe('rsvp');
 
-        const infoResult = EventObject.fromActivityPubObject({
+        const infoResult = EventObject.parseInboundEvent({
           name: 'Test',
           attachment: [{ type: 'Link', href: 'https://example.com/info', rel: 'external' }],
           'pavillion:urlPrompt': 'more_info',
@@ -1962,7 +1962,7 @@ describe('EventObject', () => {
         expect(infoResult.externalUrl).toBe('https://example.com/info');
         expect(infoResult.urlPrompt).toBe('more_info');
 
-        const registerResult = EventObject.fromActivityPubObject({
+        const registerResult = EventObject.parseInboundEvent({
           name: 'Test',
           attachment: [{ type: 'Link', href: 'https://example.com/register', rel: 'external' }],
           'pavillion:urlPrompt': 'register',
@@ -1971,7 +1971,7 @@ describe('EventObject', () => {
         expect(registerResult.urlPrompt).toBe('register');
       });
 
-      it('should round-trip externalUrl and urlPrompt through toActivityPubObject and fromActivityPubObject', () => {
+      it('should round-trip externalUrl and urlPrompt through toActivityPubObject and parseInboundEvent', () => {
         const calendar = new Calendar('calendar-uuid', 'mycal');
         const event = new CalendarEvent('event-uuid', 'calendar-uuid');
         event.addContent(new CalendarEventContent('en', 'Round Trip', 'desc'));
@@ -1982,7 +1982,7 @@ describe('EventObject', () => {
 
         const obj = new EventObject(calendar, event);
         const apOutput = obj.toActivityPubObject();
-        const normalized = EventObject.fromActivityPubObject(apOutput);
+        const normalized = EventObject.parseInboundEvent(apOutput);
 
         expect(normalized.externalUrl).toBe('https://example.com/tickets');
         expect(normalized.urlPrompt).toBe('tickets');
@@ -1994,7 +1994,7 @@ describe('EventObject', () => {
           startTime: '2026-04-15T09:00:00Z',
         };
 
-        const result = EventObject.fromActivityPubObject(apObject);
+        const result = EventObject.parseInboundEvent(apObject);
 
         expect(result.externalUrl).toBeNull();
         expect(result.urlPrompt).toBeNull();
@@ -2030,7 +2030,7 @@ describe('EventObject', () => {
           },
         };
 
-        const result = EventObject.fromActivityPubObject(apObject);
+        const result = EventObject.parseInboundEvent(apObject);
 
         // Address fields come from the extension's flat keys
         expect(result.location.address).toBe('100 Main St');
@@ -2061,7 +2061,7 @@ describe('EventObject', () => {
           },
         };
 
-        const result = EventObject.fromActivityPubObject(apObject);
+        const result = EventObject.parseInboundEvent(apObject);
 
         // The existing _normalizeLocation flat-path output is preserved
         expect(result.location.name).toBe('City Park');
@@ -2093,7 +2093,7 @@ describe('EventObject', () => {
           },
         };
 
-        const result = EventObject.fromActivityPubObject(apObject);
+        const result = EventObject.parseInboundEvent(apObject);
 
         expect(result.space).toBeDefined();
         expect(result.space.originUri).toBe(spaceId);
@@ -2120,7 +2120,7 @@ describe('EventObject', () => {
           },
         };
 
-        const result = EventObject.fromActivityPubObject(apObject);
+        const result = EventObject.parseInboundEvent(apObject);
 
         expect(result.location.content.en.accessibilityInfo).toBe('Accessible parking');
         expect(result.location.content.fr.accessibilityInfo).toBe('Stationnement accessible');
@@ -2154,7 +2154,7 @@ describe('EventObject', () => {
           },
         };
 
-        const result = EventObject.fromActivityPubObject(apObject);
+        const result = EventObject.parseInboundEvent(apObject);
 
         expect(result.space.content.en.name).toBe('alert("xss")Pacific Room');
         expect(result.space.content.en.name).not.toContain('<script>');
@@ -2180,7 +2180,7 @@ describe('EventObject', () => {
           },
         };
 
-        const result = EventObject.fromActivityPubObject(apObject);
+        const result = EventObject.parseInboundEvent(apObject);
 
         // Place still ingests
         expect(result.location).toBeDefined();
@@ -2221,7 +2221,7 @@ describe('EventObject', () => {
           },
         };
 
-        const result = EventObject.fromActivityPubObject(apObject);
+        const result = EventObject.parseInboundEvent(apObject);
 
         // Space orphan dropped
         expect(result.space).toBeUndefined();
@@ -2249,7 +2249,7 @@ describe('EventObject', () => {
           ],
         };
 
-        const result = EventObject.fromActivityPubObject(apObject);
+        const result = EventObject.parseInboundEvent(apObject);
 
         expect(result.location.name).toBe('Conference Center');
         expect(result.location.address).toBe('456 Oak Ave');
@@ -2269,7 +2269,7 @@ describe('EventObject', () => {
           },
         };
 
-        const result = EventObject.fromActivityPubObject(apObject);
+        const result = EventObject.parseInboundEvent(apObject);
 
         // First available content entry's name is used; either is acceptable per spec.
         expect(['Centre Français', 'English Center']).toContain(result.location.name);
@@ -2287,7 +2287,7 @@ describe('EventObject', () => {
           },
         };
 
-        const result = EventObject.fromActivityPubObject(apObject);
+        const result = EventObject.parseInboundEvent(apObject);
         expect(result.location).toBeDefined();
         expect(result.space).toBeUndefined();
       });
@@ -2305,7 +2305,7 @@ describe('EventObject', () => {
           },
         };
 
-        const result = EventObject.fromActivityPubObject(apObject);
+        const result = EventObject.parseInboundEvent(apObject);
 
         expect(result.location).toBeDefined();
         expect(result.location.name).toBe('Convention Center');
@@ -2320,7 +2320,7 @@ describe('EventObject', () => {
           },
         };
 
-        const result = EventObject.fromActivityPubObject(apObject);
+        const result = EventObject.parseInboundEvent(apObject);
 
         expect(result.location).toBeDefined();
         expect(result.location.originUri).toBeUndefined();
@@ -2334,7 +2334,7 @@ describe('EventObject', () => {
           },
         };
 
-        const result = EventObject.fromActivityPubObject(apObject);
+        const result = EventObject.parseInboundEvent(apObject);
 
         expect(result.location).toBeDefined();
         expect(result.location.originUri).toBeUndefined();
@@ -2348,7 +2348,7 @@ describe('EventObject', () => {
           },
         };
 
-        const result = EventObject.fromActivityPubObject(apObject);
+        const result = EventObject.parseInboundEvent(apObject);
 
         expect(result.location).toBeDefined();
         expect(result.location.originUri).toBeUndefined();
@@ -2365,7 +2365,7 @@ describe('EventObject', () => {
         };
 
         // ...but the sender is impostor.example
-        const result = EventObject.fromActivityPubObject(apObject, {
+        const result = EventObject.parseInboundEvent(apObject, {
           actorUri: 'https://impostor.example/calendars/attacker',
         });
 
@@ -2393,7 +2393,7 @@ describe('EventObject', () => {
           },
         };
 
-        const result = EventObject.fromActivityPubObject(apObject, {
+        const result = EventObject.parseInboundEvent(apObject, {
           actorUri: 'https://origin.example/calendars/owner',
         });
 
@@ -2417,7 +2417,7 @@ describe('EventObject', () => {
           },
         };
 
-        const result = EventObject.fromActivityPubObject(apObject);
+        const result = EventObject.parseInboundEvent(apObject);
 
         expect(result.space).toBeDefined();
         expect(result.space.originUri).toBeUndefined();
@@ -2448,7 +2448,7 @@ describe('EventObject', () => {
       it('preserves hideFromPublic when the actor shares the event origin domain', () => {
         const apObject = makeApObjectWithCancellation();
 
-        const result = EventObject.fromActivityPubObject(apObject, {
+        const result = EventObject.parseInboundEvent(apObject, {
           actorUri: 'https://origin.example/calendars/owner',
         });
 
@@ -2460,7 +2460,7 @@ describe('EventObject', () => {
       it('preserves hideFromPublic when no actorUri is supplied (legacy caller)', () => {
         const apObject = makeApObjectWithCancellation();
 
-        const result = EventObject.fromActivityPubObject(apObject);
+        const result = EventObject.parseInboundEvent(apObject);
 
         expect(result.schedules).toHaveLength(2);
         expect(result.schedules[0].hideFromPublic).toBe(true);
@@ -2470,7 +2470,7 @@ describe('EventObject', () => {
       it('strips hideFromPublic from every schedule when actor domain differs from event origin', () => {
         const apObject = makeApObjectWithCancellation();
 
-        const result = EventObject.fromActivityPubObject(apObject, {
+        const result = EventObject.parseInboundEvent(apObject, {
           actorUri: 'https://other.example/users/editor',
         });
 
@@ -2485,7 +2485,7 @@ describe('EventObject', () => {
       it('strips hideFromPublic when actorUri is present but malformed', () => {
         const apObject = makeApObjectWithCancellation();
 
-        const result = EventObject.fromActivityPubObject(apObject, {
+        const result = EventObject.parseInboundEvent(apObject, {
           actorUri: 'not-a-valid-uri',
         });
 
@@ -2506,7 +2506,7 @@ describe('EventObject', () => {
           ],
         };
 
-        const result = EventObject.fromActivityPubObject(apObject, {
+        const result = EventObject.parseInboundEvent(apObject, {
           actorUri: 'https://origin.example/users/someone',
         });
 
@@ -2523,7 +2523,7 @@ describe('EventObject', () => {
           endTime: '2026-04-15T10:00:00Z',
         };
 
-        const result = EventObject.fromActivityPubObject(apObject, {
+        const result = EventObject.parseInboundEvent(apObject, {
           actorUri: 'https://other.example/users/editor',
         });
 
@@ -2582,7 +2582,7 @@ describe('EventObject', () => {
 
     });
 
-    describe('fromActivityPubObject()', () => {
+    describe('parseInboundEvent()', () => {
 
       it('should map published to createdAt in the result', () => {
         const apObject = {
@@ -2591,7 +2591,7 @@ describe('EventObject', () => {
           published: '2026-03-01T10:00:00.000Z',
         };
 
-        const result = EventObject.fromActivityPubObject(apObject);
+        const result = EventObject.parseInboundEvent(apObject);
 
         expect(result.createdAt).toBeInstanceOf(Date);
         expect((result.createdAt as Date).toISOString()).toBe('2026-03-01T10:00:00.000Z');
@@ -2603,7 +2603,7 @@ describe('EventObject', () => {
           startTime: '2026-04-15T09:00:00Z',
         };
 
-        const result = EventObject.fromActivityPubObject(apObject);
+        const result = EventObject.parseInboundEvent(apObject);
 
         expect(result).not.toHaveProperty('createdAt');
       });
@@ -2615,12 +2615,12 @@ describe('EventObject', () => {
           published: 'not-a-date',
         };
 
-        const result = EventObject.fromActivityPubObject(apObject);
+        const result = EventObject.parseInboundEvent(apObject);
 
         expect(result).not.toHaveProperty('createdAt');
       });
 
-      it('should survive round-trip: toActivityPubObject → fromActivityPubObject preserves published', () => {
+      it('should survive round-trip: toActivityPubObject → parseInboundEvent preserves published', () => {
         const calendar = new Calendar('calendar-uuid', 'mycal');
         const event = new CalendarEvent('event-uuid', 'calendar-uuid');
         event.addContent(new CalendarEventContent('en', 'Round-trip Event', ''));
@@ -2632,7 +2632,7 @@ describe('EventObject', () => {
         const apRepresentation = obj.toActivityPubObject();
 
         // Simulate receiving this AP representation
-        const parsed = EventObject.fromActivityPubObject(apRepresentation);
+        const parsed = EventObject.parseInboundEvent(apRepresentation);
 
         expect(parsed.createdAt).toBeInstanceOf(Date);
         expect((parsed.createdAt as Date).toISOString()).toBe('2026-02-15T12:00:00.000Z');

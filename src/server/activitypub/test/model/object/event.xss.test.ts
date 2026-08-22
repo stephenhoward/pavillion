@@ -24,7 +24,7 @@ import { EventObject } from '@/server/activitypub/model/object/event';
  *
  * stripHtmlTags is module-private by design (event.test.ts drives it through
  * public entry points rather than exporting it); these tests follow the same
- * convention via `EventObject.fromActivityPubObject`. The assertions confirm
+ * convention via `EventObject.parseInboundEvent`. The assertions confirm
  * every text-field ingestion branch yields plain text: no `<tag` token, no
  * `on*=` handler, no `javascript:`/`data:` attribute scheme.
  *
@@ -53,7 +53,7 @@ function expectInert(value: unknown): void {
   expect(s).not.toMatch(/=\s*["']?\s*(?:javascript|data|vbscript):/i);
 }
 
-describe('EventObject.fromActivityPubObject — federated XSS strip path', () => {
+describe('EventObject.parseInboundEvent — federated XSS strip path', () => {
 
   // ---------------------------------------------------------------------------
   // Positive controls: one per ingestion branch. Benign HTML must strip to the
@@ -63,7 +63,7 @@ describe('EventObject.fromActivityPubObject — federated XSS strip path', () =>
   // ---------------------------------------------------------------------------
   describe('positive controls (harness wiring per ingestion branch)', () => {
     it('bare name/summary strips benign HTML to plain text', () => {
-      const r = EventObject.fromActivityPubObject({
+      const r = EventObject.parseInboundEvent({
         name: '<p>Hello <strong>world</strong></p>',
         summary: '<em>Friendly</em> description',
       });
@@ -72,7 +72,7 @@ describe('EventObject.fromActivityPubObject — federated XSS strip path', () =>
     });
 
     it('bare content string fallback strips benign HTML to plain text', () => {
-      const r = EventObject.fromActivityPubObject({
+      const r = EventObject.parseInboundEvent({
         name: 'Title',
         content: '<p>Body <b>text</b></p>',
       });
@@ -80,7 +80,7 @@ describe('EventObject.fromActivityPubObject — federated XSS strip path', () =>
     });
 
     it('nameMap/summaryMap strip benign HTML per language', () => {
-      const r = EventObject.fromActivityPubObject({
+      const r = EventObject.parseInboundEvent({
         nameMap: { en: '<b>Bold</b> Title', es: '<i>Evento</i>' },
         summaryMap: { en: '<u>Desc</u>', es: 'Normal' },
       });
@@ -90,7 +90,7 @@ describe('EventObject.fromActivityPubObject — federated XSS strip path', () =>
     });
 
     it('contentMap fallback (no summaryMap) strips benign HTML to plain text', () => {
-      const r = EventObject.fromActivityPubObject({
+      const r = EventObject.parseInboundEvent({
         nameMap: { en: 'Title' },
         contentMap: { en: '<p>Html <strong>Body</strong></p>' },
       });
@@ -98,7 +98,7 @@ describe('EventObject.fromActivityPubObject — federated XSS strip path', () =>
     });
 
     it('pavillion:content strips benign HTML in name, description, accessibilityInfo', () => {
-      const r = EventObject.fromActivityPubObject({
+      const r = EventObject.parseInboundEvent({
         'pavillion:content': {
           en: {
             name: '<b>Festival</b>',
@@ -113,7 +113,7 @@ describe('EventObject.fromActivityPubObject — federated XSS strip path', () =>
     });
 
     it('pavillion:place strips benign HTML in name, address, accessibilityInfo', () => {
-      const r = EventObject.fromActivityPubObject({
+      const r = EventObject.parseInboundEvent({
         'pavillion:place': {
           id: 'https://peer.example/p/1',
           address: '<b>123</b> Main St',
@@ -126,7 +126,7 @@ describe('EventObject.fromActivityPubObject — federated XSS strip path', () =>
     });
 
     it('pavillion:space (parent-path matched) strips benign HTML in content', () => {
-      const r = EventObject.fromActivityPubObject({
+      const r = EventObject.parseInboundEvent({
         'pavillion:place': {
           id: 'https://peer.example/p/1',
           content: { en: { name: 'Parent Place' } },
@@ -141,12 +141,12 @@ describe('EventObject.fromActivityPubObject — federated XSS strip path', () =>
     });
 
     it('flat as:location string strips benign HTML to plain text', () => {
-      const r = EventObject.fromActivityPubObject({ location: '<b>Downtown</b> Plaza' });
+      const r = EventObject.parseInboundEvent({ location: '<b>Downtown</b> Plaza' });
       expect(r.location.name).toBe('Downtown Plaza');
     });
 
     it('flat as:Place object strips benign HTML in name and address fields', () => {
-      const r = EventObject.fromActivityPubObject({
+      const r = EventObject.parseInboundEvent({
         location: {
           type: 'Place',
           name: '<b>Hall</b>',
@@ -177,14 +177,14 @@ describe('EventObject.fromActivityPubObject — federated XSS strip path', () =>
     ];
     for (const { name, input } of rawVectors) {
       it(`bare name: ${name}`, () => {
-        const r = EventObject.fromActivityPubObject({ name: input });
+        const r = EventObject.parseInboundEvent({ name: input });
         expectInert(r.content.en.name);
         expect(r.content.en.name).not.toContain('script>');
       });
     }
 
     it('pavillion:content name + description strip raw markup inertly', () => {
-      const r = EventObject.fromActivityPubObject({
+      const r = EventObject.parseInboundEvent({
         'pavillion:content': {
           en: {
             name: '<script>alert("xss")</script>Event',
@@ -197,7 +197,7 @@ describe('EventObject.fromActivityPubObject — federated XSS strip path', () =>
     });
 
     it('flat as:Place name strips raw markup inertly', () => {
-      const r = EventObject.fromActivityPubObject({
+      const r = EventObject.parseInboundEvent({
         location: { type: 'Place', name: '<script>alert(1)</script>Park' },
       });
       expectInert(r.location.name);
@@ -217,20 +217,20 @@ describe('EventObject.fromActivityPubObject — federated XSS strip path', () =>
     ];
     for (const { name, input } of encVectors) {
       it(`bare name: ${name}`, () => {
-        const r = EventObject.fromActivityPubObject({ name: input });
+        const r = EventObject.parseInboundEvent({ name: input });
         expectInert(r.content.en.name);
       });
     }
 
     it('summary field decodes-then-strips single-encoded markup', () => {
-      const r = EventObject.fromActivityPubObject({
+      const r = EventObject.parseInboundEvent({
         summary: '&lt;script&gt;steal(cookies)&lt;/script&gt;Safe description',
       });
       expectInert(r.content.en.description);
     });
 
     it('nameMap value decodes-then-strips single-encoded markup', () => {
-      const r = EventObject.fromActivityPubObject({
+      const r = EventObject.parseInboundEvent({
         nameMap: { en: '&lt;img src=x onerror=alert(1)&gt;Evento' },
         summaryMap: { en: 'Desc' },
       });
@@ -250,7 +250,7 @@ describe('EventObject.fromActivityPubObject — federated XSS strip path', () =>
   // ---------------------------------------------------------------------------
   describe('double-encoded entity vectors (contract: inert text, not markup)', () => {
     it('double-encoded script un-nests one level to inert entity text', () => {
-      const r = EventObject.fromActivityPubObject({ name: '&amp;lt;script&amp;gt;alert(1)&amp;lt;/script&amp;gt;' });
+      const r = EventObject.parseInboundEvent({ name: '&amp;lt;script&amp;gt;alert(1)&amp;lt;/script&amp;gt;' });
       // One he.decode pass: &amp; -> & leaves the literal text "<script>…".
       // striptags then removes the angle-bracketed run, leaving inert text.
       // The field is plain text with no live handler/scheme and is never
@@ -270,7 +270,7 @@ describe('EventObject.fromActivityPubObject — federated XSS strip path', () =>
   // ---------------------------------------------------------------------------
   describe('striptags parser-edge vectors', () => {
     it('no-whitespace attribute separator (<img/onerror=...>)', () => {
-      const r = EventObject.fromActivityPubObject({ name: '<img/onerror=alert(1)>Title' });
+      const r = EventObject.parseInboundEvent({ name: '<img/onerror=alert(1)>Title' });
       expectInert(r.content.en.name);
     });
 
@@ -278,18 +278,18 @@ describe('EventObject.fromActivityPubObject — federated XSS strip path', () =>
       // A NUL embedded in the opening tag-name. striptags treats `<`…`>` as a
       // tag regardless of interior bytes, so the whole run is removed.
       const input = 'pre <scr' + String.fromCharCode(0) + 'ipt>alert(1)</script> post';
-      const r = EventObject.fromActivityPubObject({ name: input });
+      const r = EventObject.parseInboundEvent({ name: input });
       expectInert(r.content.en.name);
       expect(r.content.en.name).not.toContain('script');
     });
 
     it('unterminated/broken close-tag sequence', () => {
-      const r = EventObject.fromActivityPubObject({ name: '<img src=x onerror=alert(1)//Trailing' });
+      const r = EventObject.parseInboundEvent({ name: '<img src=x onerror=alert(1)//Trailing' });
       expectInert(r.content.en.name);
     });
 
     it('mixed live + entity-encoded markup in one field', () => {
-      const r = EventObject.fromActivityPubObject({ name: 'Hi <b>there</b> &lt;script&gt;x&lt;/script&gt;' });
+      const r = EventObject.parseInboundEvent({ name: 'Hi <b>there</b> &lt;script&gt;x&lt;/script&gt;' });
       expectInert(r.content.en.name);
     });
   });

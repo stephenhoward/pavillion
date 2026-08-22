@@ -35,6 +35,56 @@ function stripHtmlTags(html: string): string {
   return striptags(he.decode(html)).trim();
 }
 
+/**
+ * Normalized inbound event parameters produced by
+ * {@link EventObject.parseInboundEvent} and consumed by
+ * CalendarEvent.fromObject() via the calendar service layer.
+ *
+ * The parser is spread-first: the entire raw AP wire object is copied into
+ * the result and only the handled keys below are overwritten. The index
+ * signature reflects that passthrough of unhandled wire fields — it is not
+ * looseness in the normalized fields themselves.
+ */
+export interface RemoteEventParams {
+  /**
+   * Per-language content entries, normally `{ name, description }` with HTML
+   * stripped. The entry shape is dynamic: the Pavillion-format sanitizer
+   * spreads unhandled entry keys through (e.g. `accessibilityInfo`) and
+   * passes non-object entries raw, so this is not typed to the nominal
+   * two-field shape. When no resolution branch produces content, a raw wire
+   * `content` value passes through unmodified via the spread.
+   */
+  content?: Record<string, any>;
+  /** Wire-provided category list, passed through unvalidated. */
+  categories?: unknown;
+  /** Wire-provided series reference, passed through unvalidated. */
+  series?: unknown;
+  /** Sanitized external link href; null unless paired with a valid urlPrompt. */
+  externalUrl: string | null;
+  /** Validated URL prompt token; null unless paired with a valid externalUrl. */
+  urlPrompt: UrlPrompt | null;
+  /**
+   * Schedule entries. Wire-supplied values (`pavillion:schedules` or bare
+   * `schedules`) pass through unvalidated — not even guaranteed to be an
+   * array — so this stays deliberately loose; the synthesized fallback
+   * produces `{ start, end? }` ISO-string entries.
+   */
+  schedules?: any;
+  /** AP `published` mapped to the canonical publication timestamp. */
+  createdAt?: Date;
+  /**
+   * `yyyy-MM-dd` string derived from `startTime`; a wire-supplied `date`
+   * passes through as-is.
+   */
+  date?: string;
+  /** EventLocation-shaped object built from `pavillion:place` or flat AS location. */
+  location?: Record<string, any>;
+  /** EventLocationSpace-shaped object from `pavillion:space` (only when its parent path matches the place id). */
+  space?: { originUri?: string; content?: Record<string, any> };
+  /** Passthrough of every unhandled raw wire field (spread-first normalization). */
+  [key: string]: any;
+}
+
 class EventObject extends ActivityPubObject {
   type: string = 'Event';
   attributedTo: string;
@@ -336,11 +386,13 @@ class EventObject extends ActivityPubObject {
    * 3. Standard AS format: name/summary/nameMap/summaryMap mapped to content, startTime/endTime
    *    synthesized into schedules and date
    *
-   * Note: This intentionally returns Record<string, any> (eventParams shape) rather than
-   * a domain model instance. The caller (inbox.ts) spreads these params and then passes
-   * them to CalendarEvent.fromObject() via the calendar service layer. This diverges from
-   * the typical fromObject() pattern because the AP wire format does not map 1:1 to the
-   * domain model constructor.
+   * Note: This is a pure wire-parser, not a factory — it returns a
+   * {@link RemoteEventParams} record (eventParams shape) rather than an
+   * EventObject instance; no EventObject exists on the inbound path. The caller
+   * (inbox.ts) spreads these params and then passes them to
+   * CalendarEvent.fromObject() via the calendar service layer. This diverges
+   * from the typical fromObject() pattern because the AP wire format does not
+   * map 1:1 to the domain model constructor.
    *
    * @param apObject - Raw ActivityPub object from the wire
    * @param options - Optional parsing context. When `actorUri` is provided, it is
@@ -352,12 +404,18 @@ class EventObject extends ActivityPubObject {
    *   Update activities that already reject on domain mismatch).
    * @returns eventParams shape compatible with CalendarEvent.fromObject()
    */
-  static fromActivityPubObject(
+  static parseInboundEvent(
     apObject: Record<string, any>,
     options: { actorUri?: string } = {},
-  ): Record<string, any> {
-    // Spread entire input first; subsequent normalization overwrites handled keys
-    const result: Record<string, any> = Object.assign({}, apObject);
+  ): RemoteEventParams {
+    // Spread entire input first; subsequent normalization overwrites handled
+    // keys. externalUrl/urlPrompt are seeded null to satisfy their
+    // non-optional typing; both are unconditionally re-assigned by the
+    // resolution block below, with any wire-supplied value discarded.
+    const result: RemoteEventParams = Object.assign(
+      { externalUrl: null, urlPrompt: null },
+      apObject,
+    );
 
     // --- Content resolution ---
     // Priority: pavillion:content > bare content (old format) > name/summary/nameMap/summaryMap

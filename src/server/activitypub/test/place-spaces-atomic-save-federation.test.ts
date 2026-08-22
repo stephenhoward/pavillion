@@ -314,7 +314,7 @@ describe('Place+Spaces inbound re-pin: federation source-of-truth', () => {
 
     // Pass actorUri so _validatePavillionId stamps origin_uri (host equality
     // check passes — same origin as the place + space ids).
-    const result = EventObject.fromActivityPubObject(apObject, {
+    const result = EventObject.parseInboundEvent(apObject, {
       actorUri: 'https://remote.example/calendars/mycal',
     });
 
@@ -365,7 +365,7 @@ describe('Place+Spaces inbound re-pin: federation source-of-truth', () => {
       // No pavillion:space — the source moved the event to whole-venue.
     };
 
-    const result = EventObject.fromActivityPubObject(apObject, {
+    const result = EventObject.parseInboundEvent(apObject, {
       actorUri: 'https://remote.example/calendars/mycal',
     });
 
