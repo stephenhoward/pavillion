@@ -8,6 +8,7 @@ import { CalendarEvent, CalendarEventSchedule, UrlPrompt, URL_PROMPT_VALUES } fr
 import { EventLocation, EventLocationSpace } from '@/common/model/location';
 import { ActivityPubObject } from '@/server/activitypub/model/base';
 import { SeriesObject } from '@/server/activitypub/model/object/series';
+import { resolveEventStartTime } from '@/server/activitypub/model/object/start-time';
 import { createLogger } from '@/server/common/helper/logger';
 import { sanitizeExternalUrlHref } from '@/server/activitypub/helper/url-sanitizer';
 import { mapEventCategoriesToFep } from '@/server/activitypub/helper/fep_category_map';
@@ -120,7 +121,7 @@ class EventObject extends ActivityPubObject {
     }
 
     // Build startTime from first schedule or fallback to date field
-    const startTime = this._resolveStartTime(event);
+    const startTime = resolveEventStartTime(event);
 
     const result: Record<string, any> = {
       type: this.type,
@@ -883,26 +884,6 @@ class EventObject extends ActivityPubObject {
     }
 
     return normalized;
-  }
-
-  /**
-   * Resolves startTime from the first schedule's startDate, falling back to the event date field.
-   */
-  private _resolveStartTime(event: CalendarEvent): string {
-    const firstSchedule = event.schedules[0];
-    if (firstSchedule?.startDate) {
-      return firstSchedule.startDate.toISO()!;
-    }
-
-    // Fallback: parse date string as YYYY-MM-DD and emit as midnight UTC
-    if (event.date) {
-      const parsed = DateTime.fromISO(String(event.date), { zone: 'utc' });
-      if (parsed.isValid) {
-        return parsed.toISO()!;
-      }
-    }
-
-    return DateTime.utc().toISO()!;
   }
 
   /**

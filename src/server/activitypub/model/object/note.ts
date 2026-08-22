@@ -1,11 +1,11 @@
 import config from 'config';
 import he from 'he';
-import { DateTime } from 'luxon';
 
 import { Calendar } from '@/common/model/calendar';
 import { CalendarEvent } from '@/common/model/events';
 import { ActivityPubObject, ActivityPubActor } from '@/server/activitypub/model/base';
 import { EventObject } from '@/server/activitypub/model/object/event';
+import { resolveEventStartTime } from '@/server/activitypub/model/object/start-time';
 
 import { sanitizeExternalUrlHref } from '@/server/activitypub/helper/url-sanitizer';
 
@@ -117,7 +117,7 @@ class NoteObject extends ActivityPubObject {
     // fails so the content HTML still renders a working link.
     const anchorHref = resolvedUrl ?? EventObject.eventUrl(calendar, event);
 
-    const formattedStartTime = this._formatStartTime(event);
+    const formattedStartTime = resolveEventStartTime(event);
 
     const buildContent = (title: string, location: string | null): string => {
       const escapedTitle = he.encode(title);
@@ -179,29 +179,6 @@ class NoteObject extends ActivityPubObject {
     }
 
     return result;
-  }
-
-  /**
-   * Resolves a human-readable start-time string for the Note content. Uses
-   * ISO 8601 so the rendered surface is locale-independent and unambiguous —
-   * Mastodon clients render Note content verbatim, so the wire string is what
-   * the user sees. Falls back to the event's date field, then to current time
-   * (matching EventObject's defensive posture).
-   */
-  private _formatStartTime(event: CalendarEvent): string {
-    const firstSchedule = event.schedules[0];
-    if (firstSchedule?.startDate) {
-      return firstSchedule.startDate.toISO()!;
-    }
-
-    if (event.date) {
-      const parsed = DateTime.fromISO(String(event.date), { zone: 'utc' });
-      if (parsed.isValid) {
-        return parsed.toISO()!;
-      }
-    }
-
-    return DateTime.utc().toISO()!;
   }
 }
 
