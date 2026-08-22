@@ -5,6 +5,7 @@ import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import FundingService from '@/client/service/funding';
 import type { FundingOptions, FundingProvider } from '@/client/service/funding';
 import { loadStripe } from '@/client/service/stripe-loader';
+import type { StripeEmbeddedCheckout } from '@stripe/stripe-js';
 
 type FormState = 'configure' | 'checkout' | 'result';
 
@@ -41,7 +42,7 @@ const yearlyOptIn = ref(false);
 const checkoutContainerRef = ref<HTMLElement | null>(null);
 
 // Stripe embedded checkout state
-let checkoutInstance: any = null;
+let checkoutInstance: StripeEmbeddedCheckout | null = null;
 
 /**
  * Detect whether the user's current color mode is dark.
@@ -270,10 +271,11 @@ async function startStripeCheckout() {
     const stripeInstance = await loadStripe(provider.publishableKey);
 
     // Initialize embedded checkout with onComplete callback
-    checkoutInstance = await stripeInstance.initEmbeddedCheckout({
+    const checkout = await stripeInstance.initEmbeddedCheckout({
       clientSecret: session.clientSecret,
       onComplete: () => handleCheckoutComplete(session.sessionId),
     });
+    checkoutInstance = checkout;
 
     // Switch to checkout state so the container is rendered
     formState.value = 'checkout';
@@ -285,7 +287,7 @@ async function startStripeCheckout() {
     const container = checkoutContainerRef.value;
 
     if (container) {
-      checkoutInstance.mount(container);
+      checkout.mount(container);
     }
   }
   catch (error) {
