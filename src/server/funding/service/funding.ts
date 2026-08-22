@@ -675,9 +675,13 @@ export default class FundingService {
       throw new ValidationError('Invalid calendarId: must be a valid UUID');
     }
 
-    // Validate amount
-    if (amount < 0) {
-      throw new InvalidAmountError();
+    // Validate amount: same floor as the checkout path, so an allocation can
+    // never cover a calendar for less than checkout would have charged
+    if (!Number.isInteger(amount)) {
+      throw new InvalidAmountError('Amount must be a positive integer in millicents');
+    }
+    if (amount < MIN_PWYC_AMOUNT) {
+      throw new InvalidAmountError(`Amount must be at least ${MIN_PWYC_AMOUNT} millicents ($1.00)`);
     }
 
     await db.transaction(async (tx: Transaction) => {

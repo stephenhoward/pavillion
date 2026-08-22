@@ -118,6 +118,21 @@ describe('CalendarFundingPlanRoutes API', () => {
       expect(response.body.error).toContain('amount is required');
     });
 
+    it.each([
+      ['a string', '500000'],
+      ['null', null],
+    ])('should return 400 without calling the service when amount is %s', async (_label, amount) => {
+      bindAddCalendar();
+
+      const response = await request(testApp(router))
+        .post('/handler')
+        .send({ calendarId: 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d', amount })
+        .expect(400);
+
+      expect(response.body.errorName).toBe('ValidationError');
+      expect(mockInterface.addCalendarToFundingPlan.called).toBe(false);
+    });
+
     it('should return 404 when service throws FundingPlanNotFoundError', async () => {
       mockInterface.addCalendarToFundingPlan.rejects(
         new FundingPlanNotFoundError('test-account-id'),
