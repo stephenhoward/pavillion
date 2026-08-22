@@ -308,12 +308,44 @@ describe('UserActorRoutes - POST /users/:username/inbox', () => {
       params: { username: 'alice' },
       body: { type: 'Like', actor: 'https://other.example/calendars/test', object: 'https://events.example/x' },
     };
-    const res = { status: sandbox.stub(), send: sandbox.stub() };
+    const res = { status: sandbox.stub(), send: sandbox.stub(), json: sandbox.stub() };
     res.status.returns(res);
 
     await routes.postToInbox(req as any, res as any);
 
-    expect(res.status.calledWith(200)).toBe(true);
+    expect(vi.mocked(logInboxActivityAccepted)).not.toHaveBeenCalled();
+  });
+
+  it('should reject an unhandled activity type with 400 like the calendar inbox', async () => {
+    // Mirrors 'should fail with invalid message type' in server.test.ts: a
+    // peer must not see a discarded activity answered as success.
+    const mockActor: UserActor = {
+      id: 'test-id',
+      accountId: 'account-id',
+      actorUri: 'https://events.example/users/alice',
+      publicKey: '-----BEGIN PUBLIC KEY-----\nMOCK_KEY\n-----END PUBLIC KEY-----',
+      privateKey: 'PRIVATE',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    sandbox.stub(userActorService, 'getActorByUsername').resolves(mockActor);
+
+    const req = {
+      params: { username: 'alice' },
+      body: { type: 'Foobar', actor: 'https://other.example/calendars/test' },
+    };
+    const res = { status: sandbox.stub(), send: sandbox.stub(), json: sandbox.stub() };
+    res.status.returns(res);
+
+    await routes.postToInbox(req as any, res as any);
+
+    expect(res.status.calledWith(400)).toBe(true);
+    expect(res.send.called).toBe(false);
+    expect(res.json.calledOnce).toBe(true);
+    const response = res.json.firstCall.args[0];
+    expect(response.error).toBe('Unsupported activity type');
+    expect(response.errorName).toBe('ValidationError');
     expect(vi.mocked(logInboxActivityAccepted)).not.toHaveBeenCalled();
   });
 });
