@@ -6,12 +6,18 @@ import {
   CheckoutSessionStatus,
   ProviderSubscription,
   ProviderCredentials,
+  ProviderRequestOptions,
   WebhookEvent,
 } from './adapter';
 import { ProviderType } from '@/common/model/funding-plan';
 import { createLogger } from '@/server/common/helper/logger';
 
 const logger = createLogger('funding');
+
+/**
+ * Stripe rejects Idempotency-Key headers longer than this.
+ */
+const MAX_IDEMPOTENCY_KEY_LENGTH = 255;
 
 /**
  * Billing period resolved from a Stripe subscription
@@ -69,6 +75,15 @@ export class StripeAdapter implements PaymentProviderAdapter {
     // inactivity allowance. Retries are dropped rather than reduced because
     // a caller holding a transaction open is the wrong place to wait out a
     // Stripe outage — failing fast and rolling back is.
+    //
+    // Dropping retries also drops the idempotency key the SDK would have
+    // generated for them, and a local rollback does not roll Stripe back: a
+    // request that times out client-side may still have been applied. Every
+    // mutating call in this adapter therefore sends an explicit
+    // Idempotency-Key derived from the caller's operation identity (see
+    // requestOptions), so a caller that replays the operation with the same
+    // key gets Stripe's cached result instead of a second mutation. This
+    // adapter still does not retry; it only makes a retry safe.
     //
     // ProviderFactory caches one adapter per provider config, so this single
     // client serves every call path.
@@ -134,21 +149,53 @@ export class StripeAdapter implements PaymentProviderAdapter {
   }
 
   /**
+   * Build Stripe request options for one mutating call
+   *
+   * Stripe scopes an idempotency key to a single request, so an operation
+   * that makes several mutating calls needs a distinct key per call. The
+   * step name keeps sibling calls apart while leaving each key a pure
+   * function of the caller's key, so a replay of the whole operation hits
+   * the same keys in the same order.
+   *
+   * @param options - Caller-supplied request options
+   * @param step - Name of this call within the operation
+   * @returns Stripe request options, empty when no key was supplied
+   * @private
+   */
+  private requestOptions(options: ProviderRequestOptions | undefined, step: string): Stripe.RequestOptions {
+    if (!options?.idempotencyKey) {
+      return {};
+    }
+
+    const idempotencyKey = `${options.idempotencyKey}:${step}`;
+    if (idempotencyKey.length > MAX_IDEMPOTENCY_KEY_LENGTH) {
+      throw new Error(`Stripe idempotency key exceeds ${MAX_IDEMPOTENCY_KEY_LENGTH} characters`);
+    }
+
+    return { idempotencyKey };
+  }
+
+  /**
    * Cancel an existing subscription
    *
    * @param subscriptionId - Provider's subscription ID
    * @param immediate - If true, cancel immediately; otherwise at period end
+   * @param options - Per-request options (idempotency key)
    */
-  async cancelSubscription(subscriptionId: string, immediate: boolean): Promise<void> {
+  async cancelSubscription(
+    subscriptionId: string,
+    immediate: boolean,
+    options?: ProviderRequestOptions,
+  ): Promise<void> {
     if (immediate) {
       // Cancel immediately
-      await this.stripe.subscriptions.cancel(subscriptionId);
+      await this.stripe.subscriptions.cancel(subscriptionId, {}, this.requestOptions(options, 'cancel'));
     }
     else {
       // Cancel at period end
       await this.stripe.subscriptions.update(subscriptionId, {
         cancel_at_period_end: true,
-      });
+      }, this.requestOptions(options, 'cancel-at-period-end'));
     }
   }
 
@@ -170,11 +217,13 @@ export class StripeAdapter implements PaymentProviderAdapter {
    * @param providerSubscriptionId - Provider's subscription ID
    * @param newAmount - New subscription amount in millicents
    * @param currency - ISO 4217 currency code
+   * @param options - Per-request options (idempotency key)
    */
   async updateSubscriptionAmount(
     providerSubscriptionId: string,
     newAmount: number,
     currency: string,
+    options?: ProviderRequestOptions,
   ): Promise<void> {
     // Retrieve the current subscription to get the existing item
     const subscription = await this.stripe.subscriptions.retrieve(providerSubscriptionId);
@@ -197,7 +246,7 @@ export class StripeAdapter implements PaymentProviderAdapter {
       product_data: {
         name: 'Pavillion Subscription',
       },
-    });
+    }, this.requestOptions(options, 'price'));
 
     // Update the subscription item with the new price, no proration
     await this.stripe.subscriptions.update(providerSubscriptionId, {
@@ -208,7 +257,7 @@ export class StripeAdapter implements PaymentProviderAdapter {
         },
       ],
       proration_behavior: 'none',
-    });
+    }, this.requestOptions(options, 'update'));
   }
 
   /**
@@ -227,13 +276,18 @@ export class StripeAdapter implements PaymentProviderAdapter {
    *
    * @param customerId - Provider's customer ID
    * @param returnUrl - URL to return to after portal session
+   * @param options - Per-request options (idempotency key)
    * @returns Billing portal URL
    */
-  async getBillingPortalUrl(customerId: string, returnUrl: string): Promise<string> {
+  async getBillingPortalUrl(
+    customerId: string,
+    returnUrl: string,
+    options?: ProviderRequestOptions,
+  ): Promise<string> {
     const session = await this.stripe.billingPortal.sessions.create({
       customer: customerId,
       return_url: returnUrl,
-    });
+    }, this.requestOptions(options, 'portal-session'));
 
     return session.url;
   }
@@ -522,15 +576,19 @@ export class StripeAdapter implements PaymentProviderAdapter {
    * on the fly using the provided amount.
    *
    * @param params - Checkout session parameters
+   * @param options - Per-request options (idempotency key)
    * @returns Client secret and session ID
    */
-  async createCheckoutSession(params: CreateCheckoutSessionParams): Promise<CheckoutSessionResult> {
+  async createCheckoutSession(
+    params: CreateCheckoutSessionParams,
+    options?: ProviderRequestOptions,
+  ): Promise<CheckoutSessionResult> {
     // Determine the price to use
     let priceId = params.priceId;
 
     if (!priceId && params.amount) {
       // PWYC: create a price on the fly
-      priceId = await this.createPrice(params.amount, params.currency, params.interval);
+      priceId = await this.createPrice(params.amount, params.currency, params.interval, options);
     }
 
     if (!priceId) {
@@ -570,7 +628,7 @@ export class StripeAdapter implements PaymentProviderAdapter {
       metadata,
       return_url: returnUrl.toString(),
       ...(Object.keys(brandingSettings).length > 0 && { branding_settings: brandingSettings }),
-    });
+    }, this.requestOptions(options, 'checkout-session'));
 
     return {
       clientSecret: session.client_secret as string,
@@ -606,9 +664,15 @@ export class StripeAdapter implements PaymentProviderAdapter {
    * @param amount - Amount in millicents
    * @param currency - ISO 4217 currency code
    * @param interval - Billing interval ('month' or 'year')
+   * @param options - Per-request options (idempotency key)
    * @returns Stripe Price ID
    */
-  async createPrice(amount: number, currency: string, interval: 'month' | 'year'): Promise<string> {
+  async createPrice(
+    amount: number,
+    currency: string,
+    interval: 'month' | 'year',
+    options?: ProviderRequestOptions,
+  ): Promise<string> {
     const price = await this.stripe.prices.create({
       unit_amount: Math.round(amount / 1000), // Convert millicents to cents
       currency: currency.toLowerCase(),
@@ -618,7 +682,7 @@ export class StripeAdapter implements PaymentProviderAdapter {
       product_data: {
         name: 'Pavillion Subscription',
       },
-    });
+    }, this.requestOptions(options, 'price'));
 
     return price.id;
   }
