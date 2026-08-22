@@ -514,8 +514,14 @@ class ProcessInboxService {
         // does not know about as processed_status: 'error'. Broadening the
         // default would silence that signal for every future type, including
         // ones added to the route switch but never wired into dispatch.
+        // Attribute the row to the sending instance so a burst of Ignores —
+        // which leaves no other operator-visible trace — can be traced.
         logger.info(
-          { activityId: message.id, calendarUrlName: calendar.urlName },
+          {
+            activityId: message.id,
+            actor_domain: this.extractDomain((message.message as any)?.actor || 'unknown'),
+            calendarUrlName: calendar.urlName,
+          },
           '[INBOX] Recorded inbound Ignore; no action taken',
         );
         break;

@@ -518,6 +518,54 @@ describe('Activity Model fromObject Null Checks', () => {
         { pavillion: 'https://pavillion.social/ns/activitypub#' },
       ]);
     });
+    // The persisted inbox row is the whole outcome of an inbound Ignore, so
+    // fromObject keeps only the ignored activity's identity (plus its actor,
+    // which outbox delivery reads for the reply recipient) — never the
+    // peer's full embedded payload.
+    it('reduces an embedded object to id, type and actor', () => {
+      const result = IgnoreActivity.fromObject({
+        actor: 'https://example.com/calendars/mycal',
+        id: 'https://example.com/calendars/mycal/ignores/2',
+        object: {
+          '@context': 'https://www.w3.org/ns/activitystreams',
+          id: 'https://remote.example/activities/join/1',
+          type: 'Join',
+          actor: 'https://remote.example/users/bob',
+          object: 'https://example.com/calendars/mycal/events/e1',
+          summary: 'x'.repeat(10_000),
+          nested: { deep: {} },
+        },
+      });
+      expect(result?.object).toEqual({
+        id: 'https://remote.example/activities/join/1',
+        type: 'Join',
+        actor: 'https://remote.example/users/bob',
+      });
+    });
+
+    it('keeps a bare URI object as-is', () => {
+      const result = IgnoreActivity.fromObject({
+        actor: 'https://example.com/calendars/mycal',
+        object: 'https://remote.example/activities/join/1',
+      });
+      expect(result?.object).toBe('https://remote.example/activities/join/1');
+    });
+
+    it('copies a valid published timestamp and ignores an invalid one', () => {
+      const valid = IgnoreActivity.fromObject({
+        actor: 'https://example.com/calendars/mycal',
+        object: 'https://remote.example/activities/join/1',
+        published: '2026-08-01T12:00:00Z',
+      });
+      expect(valid?.published?.toISOString()).toBe('2026-08-01T12:00:00.000Z');
+
+      const invalid = IgnoreActivity.fromObject({
+        actor: 'https://example.com/calendars/mycal',
+        object: 'https://remote.example/activities/join/1',
+        published: 'not-a-date',
+      });
+      expect(invalid?.published).toBeNull();
+    });
   });
 
   describe('JoinActivity', () => {

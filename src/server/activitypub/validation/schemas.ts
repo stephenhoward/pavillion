@@ -455,6 +455,28 @@ export const joinActivitySchema = activityBaseSchema.extend({
 export type JoinActivity = z.infer<typeof joinActivitySchema>;
 
 /**
+ * Maximum length accepted for the `type` of the activity an Ignore embeds.
+ * ActivityStreams type names are short identifiers; this only needs to admit
+ * any plausible one.
+ */
+export const MAX_IGNORED_OBJECT_TYPE_LENGTH = 64;
+
+/**
+ * Schema for the `object` of an Ignore activity: the activity being ignored,
+ * as a bare IRI or a shallow reference to it. Unrecognised keys are stripped,
+ * so a peer embedding its full original activity (as Pavillion itself does)
+ * still validates, but only the identity survives.
+ */
+export const ignoredObjectSchema = z.union([
+  objectUriSchema,
+  z.object({
+    id: objectUriSchema,
+    type: z.string().max(MAX_IGNORED_OBJECT_TYPE_LENGTH).optional(),
+    actor: actorUriSchema.optional(),
+  }),
+]);
+
+/**
  * Schema for ActivityPub Ignore activity.
  *
  * FEP-8a8e requires a server that does not handle a Join to reply with an
@@ -465,14 +487,20 @@ export type JoinActivity = z.infer<typeof joinActivitySchema>;
  * activity was seen and deliberately not acted on.
  *
  * The `object` is the activity being ignored, carried either embedded (what
- * Pavillion emits) or as a bare IRI.
+ * Pavillion emits) or as a bare IRI. Nothing downstream reads more than that
+ * activity's identity — dispatch records the row and stops, and outbox
+ * delivery reads only the embedded `actor` for the reply recipient — so the
+ * embedded form is bounded to `{ id, type, actor }` via `ignoredObjectSchema`
+ * rather than passed through. Without that bound an inbound Ignore is a
+ * durable write of whatever the sender embedded, up to the JSON body limit,
+ * with nothing an operator would notice.
  *
  * @see https://www.w3.org/TR/activitystreams-vocabulary/#dfn-ignore
  * @see https://w3id.org/fep/8a8e
  */
 export const ignoreActivitySchema = activityBaseSchema.extend({
   type: z.literal('Ignore'),
-  object: objectReferenceSchema,
+  object: ignoredObjectSchema,
 });
 
 /**

@@ -38,9 +38,15 @@ class IgnoreActivity extends ActivityPubActivity {
       return null;
     }
 
-    const activity = new IgnoreActivity(object.actor, object.object);
+    const activity = new IgnoreActivity(object.actor, IgnoreActivity.reduceObject(object.object));
     if (object.id) {
       activity.id = object.id;
+    }
+    if (object.published) {
+      const published = new Date(object.published);
+      if (!isNaN(published.getTime())) {
+        activity.published = published;
+      }
     }
     // Preserve direct addressing so the delivered Ignore stays scoped to the
     // sender (never public).
@@ -48,6 +54,27 @@ class IgnoreActivity extends ActivityPubActivity {
       activity.to = object.to;
     }
     return activity;
+  }
+
+  /**
+   * Reduces an embedded ignored activity to its identity. An Ignore is
+   * informational, so nothing reads more of the embedded activity than its
+   * `id`/`type` and — for outbox delivery of Pavillion's own reply — its
+   * `actor`. Persisting the peer's full payload into `ap_inbox.message` would
+   * make an inbound Ignore an unbounded durable write for no consumer.
+   */
+  private static reduceObject(object: unknown): string | Record<string, string> {
+    if (typeof object !== 'object' || object === null) {
+      return typeof object === 'string' ? object : '';
+    }
+    const reduced: Record<string, string> = {};
+    for (const key of ['id', 'type', 'actor'] as const) {
+      const value = (object as Record<string, unknown>)[key];
+      if (typeof value === 'string') {
+        reduced[key] = value;
+      }
+    }
+    return reduced;
   }
 }
 
