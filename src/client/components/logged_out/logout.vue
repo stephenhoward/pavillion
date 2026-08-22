@@ -15,6 +15,10 @@ import { useSeriesStore } from '@/client/stores/seriesStore';
 import { useInvitationStore } from '@/client/stores/invitationStore';
 import { useApplicationStore } from '@/client/stores/applicationStore';
 import { useFundingStore } from '@/client/stores/fundingStore';
+import { useCalendarAdminStore } from '@/client/stores/calendarAdminStore';
+import { useLocationStore } from '@/client/stores/locationStore';
+import { useModerationStore } from '@/client/stores/moderation-store';
+import { useNotificationStore } from '@/client/stores/notificationStore';
 
 const router = useRouter();
 const authentication = inject('authn');
@@ -26,6 +30,10 @@ const seriesStore = useSeriesStore();
 const invitationStore = useInvitationStore();
 const applicationStore = useApplicationStore();
 const fundingStore = useFundingStore();
+const calendarAdminStore = useCalendarAdminStore();
+const locationStore = useLocationStore();
+const moderationStore = useModerationStore();
+const notificationStore = useNotificationStore();
 
 onBeforeMount( () => {
   authentication.logout();
@@ -38,6 +46,10 @@ onBeforeMount( () => {
   invitationStore.$reset();
   applicationStore.$reset();
   fundingStore.$reset();
+  calendarAdminStore.$reset();
+  locationStore.$reset();
+  moderationStore.$reset();
+  notificationStore.$reset();
   router.replace('/');
 });
 </script>
