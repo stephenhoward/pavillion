@@ -441,7 +441,9 @@ export default class FundingService {
     const isOwner = await this.calendarInterface.isCalendarOwnerById(accountId, calendarId);
 
     if (!isOwner) {
-      throw new ValidationError(`Account ${accountId} does not own calendar ${calendarId}`);
+      // Fixed message: this reaches the caller verbatim via sendValidationError,
+      // so it must not echo the account or calendar id back in the body.
+      throw new ValidationError('Account does not own calendar');
     }
   }
 

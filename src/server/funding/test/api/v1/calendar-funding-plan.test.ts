@@ -14,6 +14,7 @@ import {
 } from '@/common/exceptions/funding';
 import { CalendarNotFoundError } from '@/common/exceptions/calendar';
 import { ValidationError } from '@/common/exceptions/base';
+import { limitCalendarFundingPlanByAccount } from '@/server/common/middleware/rate-limiters';
 
 /**
  * Tests for CalendarFundingPlanRoutes API handlers.
@@ -21,7 +22,9 @@ import { ValidationError } from '@/common/exceptions/base';
  * These tests verify the HTTP-level behavior of POST /calendars,
  * GET /calendars, DELETE /calendars/:calendarId, and
  * GET /calendars/:calendarId/funding without rate limiting middleware
- * (bypassed via direct handler binding).
+ * (bypassed via direct handler binding). A separate block asserts that the
+ * real router wires limitCalendarFundingPlanByAccount onto every route that
+ * is meant to carry it.
  */
 describe('CalendarFundingPlanRoutes API', () => {
   let sandbox: sinon.SinonSandbox;
@@ -44,6 +47,39 @@ describe('CalendarFundingPlanRoutes API', () => {
 
   afterEach(() => {
     sandbox.restore();
+  });
+
+  /**
+   * The handler tests above bind handlers directly, so the limiter is never in
+   * their path. This block installs the real router and introspects the route
+   * stack so a route that silently drops the per-account limiter fails here.
+   * GET /calendars/:calendarId/funding is included because it is fetched on
+   * every mount of an authenticated screen, reachable by editors and admins
+   * who do not own the calendar.
+   */
+  describe('rate limiter wiring', () => {
+    const LIMITED_ROUTES: { method: string; path: string }[] = [
+      { method: 'post', path: '/calendars' },
+      { method: 'delete', path: '/calendars/:calendarId' },
+      { method: 'get', path: '/calendars/:calendarId/funding' },
+    ];
+
+    it.each(LIMITED_ROUTES)(
+      'should wire limitCalendarFundingPlanByAccount onto $method $path',
+      ({ method, path }) => {
+        const app = express();
+        routes.installHandlers(app, '/api/funding/v1');
+
+        const layers = (app as any)._router.stack
+          .filter((layer: any) => layer.name === 'router')
+          .flatMap((layer: any) => layer.handle.stack)
+          .filter((layer: any) => layer.route?.path === path && layer.route.methods[method]);
+
+        expect(layers.length).toBe(1);
+        const handlers = layers[0].route.stack.map((l: any) => l.handle);
+        expect(handlers).toContain(limitCalendarFundingPlanByAccount);
+      },
+    );
   });
 
   describe('POST /calendars (addCalendar)', () => {
