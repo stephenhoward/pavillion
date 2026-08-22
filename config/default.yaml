@@ -16,16 +16,23 @@ database:
   # federation, and Docker development all reach PostgreSQL through this block.
   # SQLite reads only `mode` from dialectOptions and ignores the rest.
   #
-  # statement_timeout bounds a query blocked on a row lock;
+  # statement_timeout bounds a running query;
   # idle_in_transaction_session_timeout bounds a transaction parked on a hung
   # outbound call. Both are backstops well above the Stripe client's own 24s
   # worst case (see src/server/funding/service/provider/stripe.ts) and well
   # below the multi-minute holds the SDK defaults would allow.
-  # Migrations clear both for their own transaction — see
+  #
+  # lock_timeout bounds a statement blocked on a row lock (SELECT ... FOR UPDATE
+  # on a funding plan row). Without it a lock waiter pins its pool connection for
+  # the full statement_timeout, so a burst of contended requests from one account
+  # can exhaust the pool for 60s. A lock held longer than a few seconds means the
+  # holder is already misbehaving; failing the waiter fast keeps the pool free.
+  # Migrations clear all three for their own transaction — see
   # clearMigrationSessionTimeouts in src/server/common/migrations/runner.ts.
   dialectOptions:
     statement_timeout: 60000
     idle_in_transaction_session_timeout: 60000
+    lock_timeout: 5000
 host:
   port: 3000
 domain: 'localhost:3000' # Domain for ActivityPub actor URIs

@@ -145,4 +145,17 @@ describe('database connection options', () => {
     expect(dialectOptions?.statement_timeout).toBe(60000);
     expect(dialectOptions?.idle_in_transaction_session_timeout).toBe(60000);
   });
+
+  it('releases a row-lock waiter well before statement_timeout', () => {
+    // statement_timeout is the wrong instrument for lock contention: a
+    // SELECT ... FOR UPDATE waiter holds its pool connection for the whole
+    // timeout, so a burst of contended funding requests can occupy the entire
+    // pool for 60s. lock_timeout cancels the wait itself. Sequelize forwards it
+    // to PostgreSQL as a per-connection session setting; SQLite ignores it.
+    const dialectOptions = db.options.dialectOptions as Record<string, unknown> | undefined;
+
+    expect(dialectOptions?.lock_timeout).toBe(5000);
+    expect(dialectOptions?.lock_timeout as number)
+      .toBeLessThan(dialectOptions?.statement_timeout as number);
+  });
 });
