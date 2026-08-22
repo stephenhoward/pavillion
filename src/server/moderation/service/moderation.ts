@@ -54,8 +54,14 @@ const VALID_SORT_ORDERS = ['ASC', 'DESC'];
 /** Valid report status values for filtering. */
 const VALID_STATUSES = Object.values(ReportStatus);
 
-/** Valid reporter type values for source filtering. */
-const VALID_SOURCES: ReporterType[] = ['anonymous', 'authenticated', 'administrator'];
+/**
+ * Valid reporter type values for source filtering. Covers every value the
+ * system writes, including 'federation' (written by receiveRemoteReport for
+ * inbound federated Flag activities). On the admin queue, source=federation
+ * matches only escalated federated reports — the escalated-OR-admin-initiated
+ * base condition stands per DEC-015's owner-first routing.
+ */
+const VALID_SOURCES: ReporterType[] = ['anonymous', 'authenticated', 'administrator', 'federation'];
 
 /** Valid escalation type values for filtering. */
 const VALID_ESCALATION_TYPES: EscalationType[] = ['manual', 'automatic'];
