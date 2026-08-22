@@ -1185,36 +1185,54 @@ export default class FundingService {
    *   commit then fails, Stripe has cancelled while the plan stays `active` and
    *   its calendars keep reporting `covered` — entitlement retained, billing
    *   stopped, with no compensation path.
+   *
+   * The plan row is resolved FOR UPDATE (in the caller's transaction, or in
+   * one opened here for a standalone cancel) *before* the provider call, so a
+   * cancel racing an allocation change queues behind it instead of cancelling
+   * at the provider while the other transaction is still pushing a new total.
+   * Same Postgres-only caveat as `resolveActiveFundingPlan`.
    */
   async cancel(fundingPlanId: string, immediate: boolean = false, tx?: Transaction): Promise<void> {
-    const entity = await FundingPlanEntity.findByPk(fundingPlanId, { transaction: tx });
-    if (!entity) {
-      throw new Error('Funding plan not found');
+    const run = async (t: Transaction): Promise<void> => {
+      const entity = await FundingPlanEntity.findByPk(fundingPlanId, {
+        transaction: t,
+        lock: Transaction.LOCK.UPDATE,
+      });
+      if (!entity) {
+        throw new Error('Funding plan not found');
+      }
+
+      // Get provider configuration
+      const providerEntity = await ProviderConfigEntity.findByPk(entity.provider_config_id, {
+        transaction: t,
+      });
+      if (!providerEntity) {
+        throw new Error('Provider configuration not found');
+      }
+
+      const adapter = ProviderFactory.getAdapter(providerEntity);
+
+      // Cancel via provider
+      await adapter.cancelSubscription(entity.provider_subscription_id, immediate);
+
+      // Update status
+      entity.status = 'cancelled';
+      entity.cancelled_at = new Date();
+      await entity.save({ transaction: t });
+
+      // Emit event
+      emitAfterTx(this.eventBus, 'funding:plan:cancelled', {
+        fundingPlan: entity.toModel(),
+        immediate,
+      }, t);
+    };
+
+    if (tx) {
+      await run(tx);
     }
-
-    // Get provider configuration
-    const providerEntity = await ProviderConfigEntity.findByPk(entity.provider_config_id, {
-      transaction: tx,
-    });
-    if (!providerEntity) {
-      throw new Error('Provider configuration not found');
+    else {
+      await db.transaction(run);
     }
-
-    const adapter = ProviderFactory.getAdapter(providerEntity);
-
-    // Cancel via provider
-    await adapter.cancelSubscription(entity.provider_subscription_id, immediate);
-
-    // Update status
-    entity.status = 'cancelled';
-    entity.cancelled_at = new Date();
-    await entity.save({ transaction: tx });
-
-    // Emit event
-    emitAfterTx(this.eventBus, 'funding:plan:cancelled', {
-      fundingPlan: entity.toModel(),
-      immediate,
-    }, tx);
   }
 
   /**
@@ -1534,7 +1552,25 @@ export default class FundingService {
     }
 
     // Wrap all mutations in a transaction to prevent orphaned records
-    const fundingPlan = await db.transaction(async (t: Transaction) => {
+    const fundingPlan = await db.transaction(async (t: Transaction): Promise<FundingPlan | null> => {
+      // Re-run the idempotency check under the plan row lock: the webhook and
+      // the session-return path both reach here for the same subscription, and
+      // the unlocked pre-transaction check cannot see the other's uncommitted
+      // row. Locking the existing row (when there is one) also serialises this
+      // path against a concurrent allocation change or cancel on that plan.
+      const lockedExisting = await FundingPlanEntity.findOne({
+        where: {
+          provider_subscription_id: event.subscriptionId,
+          provider_config_id: providerConfigId,
+        },
+        transaction: t,
+        lock: Transaction.LOCK.UPDATE,
+      });
+
+      if (lockedExisting) {
+        return null;
+      }
+
       // Create local FundingPlan record
       const plan = new FundingPlan(uuidv4());
       plan.accountId = event.accountId!;
@@ -1578,6 +1614,10 @@ export default class FundingService {
 
       return plan;
     });
+
+    if (!fundingPlan) {
+      return;
+    }
 
     this.eventBus.emit('funding:plan:created', {
       fundingPlan: fundingPlan,

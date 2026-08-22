@@ -211,6 +211,78 @@ describe('FundingService allocation transactions', () => {
     expect(planFindOne.firstCall.calledBefore(allocationFindOne.firstCall)).toBe(true);
   });
 
+  it('should resolve the plan under a FOR UPDATE lock before cancelling at the provider on a standalone cancel', async () => {
+    await createAllocation(calendarId, 500000);
+
+    const planFindByPk = sandbox.spy(FundingPlanEntity, 'findByPk');
+    const cancelSubscription = sandbox.stub().resolves();
+    sandbox.stub(ProviderFactory, 'getAdapter').returns({ cancelSubscription } as any);
+
+    await service.cancel(fundingPlanId, false);
+
+    const options = planFindByPk.firstCall.args[1] as any;
+    expect(options.lock).toBe(Transaction.LOCK.UPDATE);
+    expect(options.transaction).toBeDefined();
+    // The provider call must wait behind any in-flight allocation change, so
+    // the lock is taken before it rather than only before the status write
+    expect(planFindByPk.firstCall.calledBefore(cancelSubscription.firstCall)).toBe(true);
+
+    const plan = await FundingPlanEntity.findByPk(fundingPlanId);
+    expect(plan!.status).toBe('cancelled');
+  });
+
+  it('should resolve the plan under a FOR UPDATE lock in the caller-owned transaction on cancel', async () => {
+    const planFindByPk = sandbox.spy(FundingPlanEntity, 'findByPk');
+    sandbox.stub(ProviderFactory, 'getAdapter').returns({
+      cancelSubscription: sandbox.stub().resolves(),
+    } as any);
+
+    await db.transaction(async (tx) => {
+      await service.cancel(fundingPlanId, false, tx);
+
+      const options = planFindByPk.firstCall.args[1] as any;
+      expect(options.lock).toBe(Transaction.LOCK.UPDATE);
+      expect(options.transaction).toBe(tx);
+    });
+  });
+
+  it('should re-check for an existing plan under a FOR UPDATE lock before writing on checkout completion', async () => {
+    sandbox.stub(ProviderFactory, 'getAdapter').returns({
+      getSubscription: sandbox.stub().resolves({
+        providerSubscriptionId: 'sub_lock_new',
+        providerCustomerId: 'cus_lock_new',
+        status: 'active',
+        currentPeriodStart: new Date(),
+        currentPeriodEnd: periodEnd,
+        amount: 1000000,
+        currency: 'USD',
+      }),
+    } as any);
+
+    const planFindOne = sandbox.spy(FundingPlanEntity, 'findOne');
+    const allocationCreate = sandbox.spy(CalendarFundingPlanEntity, 'create');
+
+    await service.processWebhookEvent({
+      eventId: 'evt_lock_checkout',
+      eventType: 'checkout.session.completed',
+      subscriptionId: 'sub_lock_new',
+      customerId: 'cus_lock_new',
+      accountId,
+      calendarIds: JSON.stringify([calendarId]),
+      rawPayload: { type: 'checkout.session.completed' },
+    }, providerConfigId);
+
+    const lockedRead = planFindOne.getCalls().find((call) => (call.args[0] as any)?.lock === Transaction.LOCK.UPDATE);
+    expect(lockedRead).toBeDefined();
+    expect((lockedRead!.args[0] as any).transaction).toBeDefined();
+    expect(lockedRead!.calledBefore(allocationCreate.firstCall)).toBe(true);
+
+    const plans = await FundingPlanEntity.findAll({
+      where: { provider_subscription_id: 'sub_lock_new' },
+    });
+    expect(plans).toHaveLength(1);
+  });
+
   it('should roll back the end_time write when the provider amount update fails on remove', async () => {
     const allocation = await createAllocation(calendarId, 500000);
     await createAllocation(secondCalendarId, 300000);
