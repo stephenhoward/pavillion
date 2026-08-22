@@ -78,6 +78,10 @@ costs a failed call plus a forced re-read.
    ```bash
    npx vitest run <file1> <file2> --maxWorkers=2
    ```
+   Do NOT pass `--maxThreads` — the pinned vitest rejects it. Files under
+   `server/**/test/integration/**` are excluded by the default vitest config
+   and are **silently skipped** by the command above; run each of those with
+   `npx vitest run --config vitest.integration.config.ts <file>` instead.
 4. If lint and targeted tests pass: `bd close {bead_id}`
 
 Do NOT run `npm test` or the full test suite — the build-guardian handles that
@@ -173,6 +177,11 @@ order:
    `--maxThreads` outright (`CACError: Unknown option`), so an implementer
    handed that flag either drops it silently or reports a spurious failure.
    Verified against vitest 3.2.4.
+
+   Files under `server/**/test/integration/**` are excluded by the default
+   vitest config, so naming one in this command silently skips it (no
+   error, no warning); run each integration file with
+   `npx vitest run --config vitest.integration.config.ts <file>` instead.
 4. **Close the bead.** `bd close {bead_id}`, **only** if steps 2 and 3
    both passed. A closed bead signals to the orchestrator that this
    worker is done; closing on failing tests would corrupt that signal.
