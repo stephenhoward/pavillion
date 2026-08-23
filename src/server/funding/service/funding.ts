@@ -1413,10 +1413,13 @@ export default class FundingService {
       })
       : null;
 
-    // Log event for funding plan lifecycle events
+    // Log event for funding plan lifecycle events. When no local plan matches,
+    // funding_plan_id is NULL (never '' — Postgres rejects '' for a UUID column,
+    // which would abort this insert and leave the provider retrying forever).
+    // The row is still written so provider_event_id dedupe ends the retry loop.
     const eventEntity = new FundingEventEntity();
     eventEntity.id = uuidv4();
-    eventEntity.funding_plan_id = fundingPlanRecord?.id || '';
+    eventEntity.funding_plan_id = fundingPlanRecord?.id ?? null;
     eventEntity.event_type = event.eventType;
     eventEntity.provider_event_id = event.eventId;
     eventEntity.payload = this.summarizeProviderEvent(event.status ?? null);
