@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { Sequelize } from 'sequelize-typescript';
 import path from 'path';
+import cls from 'cls-hooked';
 import {
   createMigrationRunner,
   runMigrations,
@@ -193,5 +194,99 @@ describe('Migration Runner', () => {
       );
       expect(tables).toHaveLength(0);
     });
+  });
+});
+
+describe('Migration Runner session-timeout wiring', () => {
+  // Proves the runner actually calls clearMigrationSessionTimeouts, not just
+  // that the helper works in isolation. Deleting the call sites in up()/down()
+  // leaves every other test green, so these assert on the statement stream the
+  // runner emits through the context it hands to migrations.
+  //
+  // The wrapper is a real SQLite Sequelize with two seams: getDialect() claims
+  // postgres so the helper emits its statements, and query() records every
+  // statement — swallowing SET LOCAL (SQLite would reject it) and forwarding
+  // the rest. Storage, transactions and CLS are the real implementations.
+  const probeDir = path.join(__dirname, 'fixtures', 'session-timeout-migrations');
+  const namespace = cls.getNamespace('sequelize-migrations')!;
+
+  interface Recorded {
+    sql: string;
+    inTransaction: boolean;
+  }
+
+  let sequelize: Sequelize;
+  let recorded: Recorded[];
+  let context: Sequelize;
+
+  beforeEach(() => {
+    sequelize = new Sequelize({ dialect: 'sqlite', storage: ':memory:', logging: false });
+    recorded = [];
+    context = new Proxy(sequelize, {
+      get(target, prop, receiver) {
+        if (prop === 'getDialect') {
+          return () => 'postgres';
+        }
+        if (prop === 'query') {
+          return async (sql: string, ...rest: unknown[]) => {
+            recorded.push({ sql, inTransaction: Boolean(namespace.get('transaction')) });
+            if (sql.startsWith('SET LOCAL')) {
+              return [];
+            }
+            return target.query(sql, ...(rest as []));
+          };
+        }
+        const value = Reflect.get(target, prop, receiver);
+        return typeof value === 'function' ? value.bind(target) : value;
+      },
+    });
+  });
+
+  afterEach(async () => {
+    await sequelize.close();
+  });
+
+  const setLocalStatements = [
+    'SET LOCAL statement_timeout = 0',
+    'SET LOCAL idle_in_transaction_session_timeout = 0',
+  ];
+
+  const indexOf = (sql: string) => recorded.findIndex((entry) => entry.sql === sql);
+
+  it('clears both session timeouts before the migration body on up()', async () => {
+    await createMigrationRunner(context, probeDir).up();
+
+    const sqls = recorded.map((entry) => entry.sql);
+    expect(sqls).toEqual(expect.arrayContaining(setLocalStatements));
+    for (const statement of setLocalStatements) {
+      expect(indexOf(statement)).toBeLessThan(indexOf("SELECT 'migration-body-up'"));
+    }
+  });
+
+  it('clears both session timeouts before the migration body on down()', async () => {
+    const runner = createMigrationRunner(context, probeDir);
+    await runner.up();
+    recorded = [];
+
+    await runner.down();
+
+    const sqls = recorded.map((entry) => entry.sql);
+    expect(sqls).toEqual(expect.arrayContaining(setLocalStatements));
+    for (const statement of setLocalStatements) {
+      expect(indexOf(statement)).toBeLessThan(indexOf("SELECT 'migration-body-down'"));
+    }
+  });
+
+  it('issues the SET LOCAL statements inside the migration transaction', async () => {
+    // PostgreSQL silently ignores SET LOCAL outside a transaction, so a CLS
+    // regression would leave the 60s statement_timeout in force without any
+    // error. Assert the transaction is bound when each statement is issued.
+    const runner = createMigrationRunner(context, probeDir);
+    await runner.up();
+    await runner.down();
+
+    const setLocals = recorded.filter((entry) => entry.sql.startsWith('SET LOCAL'));
+    expect(setLocals).toHaveLength(4);
+    expect(setLocals.every((entry) => entry.inTransaction)).toBe(true);
   });
 });
