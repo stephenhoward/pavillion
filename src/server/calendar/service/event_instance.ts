@@ -1107,30 +1107,20 @@ export default class EventInstanceService {
     // Get all local calendars and build a map of calendar ID -> Calendar
     const localCalendars = await CalendarEntity.findAll();
     const calendarMap = new Map<string, Calendar>();
-    const calendarIdConditions: string[] = [];
 
     for (const calendarEntity of localCalendars) {
       const calendar = calendarEntity.toModel();
-      const uuid = calendar.id;
-
-      // Map UUID to the calendar for lookup
-      calendarMap.set(uuid, calendar);
-      calendarIdConditions.push(uuid);
-
-      // Also map the AP actor URL for transition support
-      if (this.activityPubInterface) {
-        const apId = await this.activityPubInterface.actorUrl(calendar);
-        calendarMap.set(apId, calendar);
-        calendarIdConditions.push(apId);
-      }
+      calendarMap.set(calendar.id, calendar);
     }
 
-    // Only get events for local calendars (not remote federated events)
-    // Query supports both UUID and AP identifier calendar IDs during transition
+    // Only get events for local calendars (not remote federated events).
+    // `calendar_id` is a uuid column with an FK to `calendar`, so calendar
+    // UUIDs are the only values it can hold; mixing AP actor URLs into this
+    // list makes postgres reject the whole statement (22P02).
     const events = await EventEntity.findAll({
       where: {
         calendar_id: {
-          [Op.in]: calendarIdConditions,
+          [Op.in]: [...calendarMap.keys()],
         },
       },
     });
