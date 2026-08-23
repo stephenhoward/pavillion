@@ -422,7 +422,7 @@ describe('Notification API — GET /api/v1/notification', () => {
       expect(row.actor.displayName).not.toBe(followerActorUri);
     });
 
-    it('returns Cache-Control: private, max-age=25', async () => {
+    it('returns Cache-Control: no-store so a shared browser profile never replays another account\'s inbox', async () => {
       const accountId = await seedAccount();
 
       router.get('/notification', withAccount(accountId), (req, res) => {
@@ -432,7 +432,7 @@ describe('Notification API — GET /api/v1/notification', () => {
       const response = await request(testApp(router)).get('/notification');
 
       expect(response.status).toBe(200);
-      expect(response.headers['cache-control']).toBe('private, max-age=25');
+      expect(response.headers['cache-control']).toBe('no-store');
     });
 
     it('returns an empty array when the user has no notifications', async () => {

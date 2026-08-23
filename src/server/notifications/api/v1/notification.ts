@@ -61,7 +61,7 @@ export default class NotificationRoutes {
    *   offset (optional): number of notifications to skip (default 0, max 10000)
    *
    * Response headers:
-   *   Cache-Control: private, max-age=25
+   *   Cache-Control: no-store
    */
   async getNotifications(req: Request, res: Response): Promise<void> {
     const account = req.user as Account | undefined;
@@ -92,29 +92,16 @@ export default class NotificationRoutes {
 
     try {
       const notifications = await this.service.getNotifications(account.id, limit, offset);
-      // The body became role-dependent when the read path started emitting
-      // decided targets, so this pre-existing header now caches a role-shaped
-      // response — and the body is per-account, not just per-role.
-      //
-      // `private` only excludes *shared* caches. It does not make the
-      // browser's own cache per-account: RFC 9111 §3.5 restricts reuse of an
-      // Authorization-bearing response for shared caches alone, so a private
-      // cache may store and replay this body. Two residual windows follow, and
-      // neither is closed by `private`:
-      //   - a role change is not reflected in the caller's own browser for up
-      //     to 25 seconds;
-      //   - on a shared browser profile, `Authentication.logout()` clears only
-      //     the localStorage token and never the HTTP cache, so a second user
-      //     logging in within 25 seconds can be served the first user's inbox
-      //     from cache with no network round trip.
-      //
-      // The first window is acceptable: a target is an affordance, never a
-      // trust boundary — the moderation queue and the calendar reports tab
-      // each authorize independently server-side, so a stale target grants
-      // nothing. The second is a real cross-account disclosure and is tracked
-      // separately; fixing it means changing this header's value, which is a
-      // deliberate change and not one to make in passing.
-      res.set('Cache-Control', 'private, max-age=25');
+      // The body is per-account (decided targets are role-shaped and the
+      // rows are recipient-scoped), so it must never be served from a cache.
+      // `private` is not enough: it only excludes *shared* caches, and the
+      // browser's own cache is not per-account (RFC 9111 section 3.5). On a
+      // shared browser profile, `Authentication.logout()` clears only the
+      // localStorage token and never the HTTP cache, so any `max-age` window
+      // would let the next account to log in be served the previous
+      // account's inbox with no network round trip. `no-store` closes that
+      // window; the client polls every 30s, so nothing relied on a cache hit.
+      res.set('Cache-Control', 'no-store');
       res.json(notifications);
     }
     catch (error) {
