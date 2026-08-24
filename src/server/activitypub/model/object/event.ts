@@ -217,9 +217,9 @@ class EventObject extends ActivityPubObject {
     }
 
     // FEP-8a8e event extension terms (timezone / eventStatus / organizers /
-    // joinMode / category). displayEndTime is emitted above, inline with the
-    // synthesized-endTime branch it qualifies. Key order is preserved: these
-    // land between endTime and location exactly as before the extraction.
+    // joinMode / category), merged at this position so they serialize between
+    // endTime and location. displayEndTime is not among them — it is emitted
+    // above, inline with the synthesized-endTime branch it qualifies.
     Object.assign(result, this._buildFepExtensions(event));
 
     // location: emitted as Place with optional PostalAddress; omitted if no location.
