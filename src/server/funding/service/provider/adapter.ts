@@ -15,6 +15,20 @@ export interface CreateCheckoutSessionParams {
 }
 
 /**
+ * Per-request options for mutating provider calls
+ *
+ * `idempotencyKey` identifies one logical operation so a provider can
+ * de-duplicate a replay of it. The service generates the key once per
+ * logical operation (a stable operation name, the local entity id, and a
+ * nonce minted for that attempt) and threads it through; an adapter that
+ * makes several mutating calls for one operation derives one sub-key per
+ * call from it. Providers without idempotency support may ignore it.
+ */
+export interface ProviderRequestOptions {
+  idempotencyKey?: string;
+}
+
+/**
  * Result of creating a checkout session
  */
 export interface CheckoutSessionResult {
@@ -105,8 +119,9 @@ export interface PaymentProviderAdapter {
    *
    * @param subscriptionId - Provider's subscription ID
    * @param immediate - If true, cancel immediately; otherwise at period end
+   * @param options - Per-request options (idempotency key)
    */
-  cancelSubscription(subscriptionId: string, immediate: boolean): Promise<void>;
+  cancelSubscription(subscriptionId: string, immediate: boolean, options?: ProviderRequestOptions): Promise<void>;
 
   /**
    * Whether the provider supports in-place subscription amount updates
@@ -124,8 +139,14 @@ export interface PaymentProviderAdapter {
    * @param providerSubscriptionId - Provider's subscription ID
    * @param newAmount - New subscription amount in millicents
    * @param currency - ISO 4217 currency code
+   * @param options - Per-request options (idempotency key)
    */
-  updateSubscriptionAmount(providerSubscriptionId: string, newAmount: number, currency: string): Promise<void>;
+  updateSubscriptionAmount(
+    providerSubscriptionId: string,
+    newAmount: number,
+    currency: string,
+    options?: ProviderRequestOptions,
+  ): Promise<void>;
 
   /**
    * Retrieve current subscription status from provider
@@ -140,9 +161,10 @@ export interface PaymentProviderAdapter {
    *
    * @param customerId - Provider's customer ID
    * @param returnUrl - URL to return to after portal session
+   * @param options - Per-request options (idempotency key)
    * @returns Billing portal URL
    */
-  getBillingPortalUrl(customerId: string, returnUrl: string): Promise<string>;
+  getBillingPortalUrl(customerId: string, returnUrl: string, options?: ProviderRequestOptions): Promise<string>;
 
   /**
    * Verify webhook signature from provider
@@ -168,9 +190,13 @@ export interface PaymentProviderAdapter {
    * which will be used to create a price on the fly.
    *
    * @param params - Checkout session parameters
+   * @param options - Per-request options (idempotency key)
    * @returns Client secret and session ID for the embedded checkout
    */
-  createCheckoutSession(params: CreateCheckoutSessionParams): Promise<CheckoutSessionResult>;
+  createCheckoutSession(
+    params: CreateCheckoutSessionParams,
+    options?: ProviderRequestOptions,
+  ): Promise<CheckoutSessionResult>;
 
   /**
    * Retrieve the status of a checkout session
@@ -186,7 +212,13 @@ export interface PaymentProviderAdapter {
    * @param amount - Amount in millicents
    * @param currency - ISO 4217 currency code
    * @param interval - Billing interval ('month' or 'year')
+   * @param options - Per-request options (idempotency key)
    * @returns Provider price ID
    */
-  createPrice(amount: number, currency: string, interval: 'month' | 'year'): Promise<string>;
+  createPrice(
+    amount: number,
+    currency: string,
+    interval: 'month' | 'year',
+    options?: ProviderRequestOptions,
+  ): Promise<string>;
 }

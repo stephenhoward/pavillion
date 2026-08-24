@@ -30,6 +30,7 @@ vi.mock('@/server/common/helper/logger', () => ({
 }));
 
 import { StripeAdapter } from '../service/provider/stripe';
+import { buildProviderIdempotencyKey } from '../service/provider/idempotency';
 import { PayPalAdapter } from '../service/provider/paypal';
 import { MockStripeAdapter, MockPayPalAdapter } from '../service/provider/mock_adapters';
 import { ProviderFactory } from '../service/provider/factory';
@@ -1094,6 +1095,113 @@ describe('Payment Provider Adapters', () => {
         await stripeAdapter.createPrice(10000000000, 'USD', 'month');
         expect(mockStripe.prices.create.secondCall.args[0].unit_amount).toBe(10000000);
       });
+    });
+
+    describe('idempotency keys', () => {
+      const options = { idempotencyKey: 'pavillion:op:entity-1:nonce-1' };
+
+      beforeEach(() => {
+        mockStripe.subscriptions.retrieve.resolves({
+          id: 'sub_1',
+          items: { data: [{ id: 'si_1', price: { recurring: { interval: 'month' } } }] },
+        });
+        mockStripe.prices.create.resolves({ id: 'price_1' });
+        mockStripe.subscriptions.update.resolves({ id: 'sub_1' });
+        mockStripe.subscriptions.cancel.resolves({ id: 'sub_1' });
+        mockStripe.checkout.sessions.create.resolves({ id: 'cs_1', client_secret: 'secret' });
+        mockStripe.billingPortal.sessions.create.resolves({ url: 'https://portal.example' });
+      });
+
+      it('should send an idempotency key on immediate cancel', async () => {
+        await stripeAdapter.cancelSubscription('sub_1', true, options);
+
+        const requestOptions = mockStripe.subscriptions.cancel.firstCall.args[2];
+        expect(requestOptions.idempotencyKey).toBe('pavillion:op:entity-1:nonce-1:cancel');
+      });
+
+      it('should send an idempotency key on cancel at period end', async () => {
+        await stripeAdapter.cancelSubscription('sub_1', false, options);
+
+        const requestOptions = mockStripe.subscriptions.update.firstCall.args[2];
+        expect(requestOptions.idempotencyKey).toBe('pavillion:op:entity-1:nonce-1:cancel-at-period-end');
+      });
+
+      it('should send distinct keys for each mutating call in an amount update', async () => {
+        await stripeAdapter.updateSubscriptionAmount('sub_1', 2000000, 'USD', options);
+
+        const priceKey = mockStripe.prices.create.firstCall.args[1].idempotencyKey;
+        const updateKey = mockStripe.subscriptions.update.firstCall.args[2].idempotencyKey;
+        expect(priceKey).toBe('pavillion:op:entity-1:nonce-1:price');
+        expect(updateKey).toBe('pavillion:op:entity-1:nonce-1:update');
+        expect(priceKey).not.toBe(updateKey);
+      });
+
+      it('should send distinct keys for the price and session in a PWYC checkout', async () => {
+        await stripeAdapter.createCheckoutSession({
+          amount: 1000000,
+          currency: 'USD',
+          interval: 'month',
+          accountId: 'acc_1',
+          returnUrl: 'https://example.com/return',
+        }, options);
+
+        expect(mockStripe.prices.create.firstCall.args[1].idempotencyKey)
+          .toBe('pavillion:op:entity-1:nonce-1:price');
+        expect(mockStripe.checkout.sessions.create.firstCall.args[1].idempotencyKey)
+          .toBe('pavillion:op:entity-1:nonce-1:checkout-session');
+      });
+
+      it('should send an idempotency key on price creation and portal session creation', async () => {
+        await stripeAdapter.createPrice(1000000, 'USD', 'month', options);
+        await stripeAdapter.getBillingPortalUrl('cus_1', 'https://example.com', options);
+
+        expect(mockStripe.prices.create.firstCall.args[1].idempotencyKey)
+          .toBe('pavillion:op:entity-1:nonce-1:price');
+        expect(mockStripe.billingPortal.sessions.create.firstCall.args[1].idempotencyKey)
+          .toBe('pavillion:op:entity-1:nonce-1:portal-session');
+      });
+
+      it('should derive the same keys when the same operation is replayed', async () => {
+        await stripeAdapter.updateSubscriptionAmount('sub_1', 2000000, 'USD', options);
+        await stripeAdapter.updateSubscriptionAmount('sub_1', 2000000, 'USD', options);
+
+        expect(mockStripe.prices.create.firstCall.args[1].idempotencyKey)
+          .toBe(mockStripe.prices.create.secondCall.args[1].idempotencyKey);
+        expect(mockStripe.subscriptions.update.firstCall.args[2].idempotencyKey)
+          .toBe(mockStripe.subscriptions.update.secondCall.args[2].idempotencyKey);
+      });
+
+      it('should derive different keys for different operations', async () => {
+        await stripeAdapter.cancelSubscription('sub_1', true, { idempotencyKey: 'pavillion:plan-cancel:e:n1' });
+        await stripeAdapter.cancelSubscription('sub_1', true, { idempotencyKey: 'pavillion:plan-cancel:e:n2' });
+
+        expect(mockStripe.subscriptions.cancel.firstCall.args[2].idempotencyKey)
+          .not.toBe(mockStripe.subscriptions.cancel.secondCall.args[2].idempotencyKey);
+      });
+
+      it('should send no idempotency key when none is supplied', async () => {
+        await stripeAdapter.cancelSubscription('sub_1', true);
+
+        expect(mockStripe.subscriptions.cancel.firstCall.args[2]).toEqual({});
+      });
+
+      it('should reject a derived key longer than 255 characters', async () => {
+        await expect(
+          stripeAdapter.cancelSubscription('sub_1', true, { idempotencyKey: 'k'.repeat(250) }),
+        ).rejects.toThrow('exceeds 255 characters');
+        expect(mockStripe.subscriptions.cancel.called).toBe(false);
+      });
+    });
+  });
+
+  describe('buildProviderIdempotencyKey', () => {
+    it('should name the operation and entity and mint a fresh nonce per call', () => {
+      const first = buildProviderIdempotencyKey('plan-cancel', 'entity-1');
+      const second = buildProviderIdempotencyKey('plan-cancel', 'entity-1');
+
+      expect(first).toMatch(/^pavillion:plan-cancel:entity-1:[0-9a-f-]{36}$/);
+      expect(first).not.toBe(second);
+      expect(first.length).toBeLessThanOrEqual(255);
     });
   });
 

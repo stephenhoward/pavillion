@@ -49,6 +49,7 @@ import {
   FundingAccessIndeterminateError,
 } from '@/common/exceptions/funding';
 import { ValidationError } from '@/common/exceptions/base';
+import { buildProviderIdempotencyKey } from '@/server/funding/service/provider/idempotency';
 import { CalendarNotFoundError } from '@/common/exceptions/calendar';
 import { logError } from '@/server/common/helper/error-logger';
 import { isValidUuidV4 as isValidUUID } from '@/server/common/helper/uuid';
@@ -573,6 +574,7 @@ export default class FundingService {
       fundingPlanEntity.provider_subscription_id,
       newAmount,
       fundingPlanEntity.currency,
+      { idempotencyKey: buildProviderIdempotencyKey('plan-amount', fundingPlanEntity.id) },
     );
   }
 
@@ -1155,7 +1157,9 @@ export default class FundingService {
       colorMode,
     };
 
-    return adapter.createCheckoutSession(params);
+    return adapter.createCheckoutSession(params, {
+      idempotencyKey: buildProviderIdempotencyKey('checkout-session', accountId),
+    });
   }
 
   /**
@@ -1266,7 +1270,9 @@ export default class FundingService {
       const adapter = ProviderFactory.getAdapter(providerEntity);
 
       // Cancel via provider
-      await adapter.cancelSubscription(entity.provider_subscription_id, immediate);
+      await adapter.cancelSubscription(entity.provider_subscription_id, immediate, {
+        idempotencyKey: buildProviderIdempotencyKey('plan-cancel', entity.id),
+      });
 
       // Update status
       entity.status = 'cancelled';
@@ -1329,7 +1335,9 @@ export default class FundingService {
 
     const adapter = ProviderFactory.getAdapter(providerEntity);
 
-    return adapter.getBillingPortalUrl(fundingPlan.providerCustomerId, returnUrl);
+    return adapter.getBillingPortalUrl(fundingPlan.providerCustomerId, returnUrl, {
+      idempotencyKey: buildProviderIdempotencyKey('billing-portal', fundingPlan.id),
+    });
   }
 
   /**
