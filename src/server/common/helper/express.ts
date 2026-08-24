@@ -5,6 +5,7 @@ import passport from 'passport';
 
 import { Account } from '@/common/model/account';
 import { ValidationError } from '@/common/exceptions/base';
+import { isValidUuidV4 } from '@/server/common/helper/uuid';
 
 interface User {
   id: string;
@@ -22,9 +23,6 @@ declare module 'express-serve-static-core' {
 const jwtSecret = config.get<string>('jwt.secret');
 const expirationMinutes = 5;
 
-// UUID v4 validation regex
-const UUID_V4_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
 export default {
   /**
    * Validates if a value is a valid UUID v4
@@ -33,7 +31,7 @@ export default {
    * which Express types as `string | string[]`.
    */
   isValidUUID(uuid: unknown): uuid is string {
-    return typeof uuid === 'string' && UUID_V4_REGEX.test(uuid);
+    return isValidUuidV4(uuid);
   },
 
   /**

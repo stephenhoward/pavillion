@@ -20,6 +20,7 @@ import { MediaEntity } from "@/server/media/entity/media";
 import LocationService, { spacesIncludeWithEventCount } from "@/server/calendar/service/locations";
 import { EventEmitter } from 'events';
 import { emitAfterTx } from '@/server/common/helper/emit-after-tx';
+import { isValidUuidV4, looksLikeUuid } from '@/server/common/helper/uuid';
 import type MediaInterface from '@/server/media/interface';
 import type ActivityPubInterface from '@/server/activitypub/interface';
 import { EventNotFoundError, InsufficientCalendarPermissionsError, CalendarNotFoundError, BulkEventsNotFoundError, MixedCalendarEventsError, CategoriesNotFoundError, LocationValidationError, InvalidExternalUrlError, SpaceLocationMismatchError } from '@/common/exceptions/calendar';
@@ -191,15 +192,6 @@ export type EventOriginatorContext = {
 const DEFAULT_ORIGINATOR_CONTEXT: EventOriginatorContext = { source: 'user' };
 
 /**
- * Loose UUID regex used to filter out legacy AP-URL identifiers from
- * `ap_shared_event` rows before passing the resulting ids into `Op.in`
- * queries against `EventEntity.id` (UUID column). Permissive enough to
- * accept any UUID variant; strict enough to reject AP URLs and other
- * non-UUID strings that would otherwise blow up Sequelize's UUID coercion.
- */
-const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-/**
  * Service class for managing events
  *
  * @remarks
@@ -226,15 +218,6 @@ class EventService {
 
   setActivityPubInterface(apInterface: ActivityPubInterface): void {
     this.activityPubInterface = apInterface;
-  }
-
-  /**
-   * Validates if a string is a valid UUID v4
-   * @private
-   */
-  private isValidUUID(uuid: string): boolean {
-    const UUID_V4_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-    return typeof uuid === 'string' && UUID_V4_REGEX.test(uuid);
   }
 
   /**
@@ -397,7 +380,7 @@ class EventService {
    */
   async listEventIdsForCalendar(calendar: Calendar): Promise<string[]> {
     // Filter to valid UUIDs for safety since old ap_shared_event rows may
-    // carry AP URLs rather than EventEntity ids — see module-level UUID_REGEX.
+    // carry AP URLs rather than EventEntity ids — see `looksLikeUuid`.
     const [ownedEvents, reposts, sharedStatusMap] = await Promise.all([
       EventEntity.findAll({
         where: { calendar_id: calendar.id },
@@ -418,7 +401,7 @@ class EventService {
       ids.add(r.event_id);
     }
     for (const sharedId of sharedStatusMap.keys()) {
-      if (UUID_REGEX.test(sharedId)) {
+      if (looksLikeUuid(sharedId)) {
         ids.add(sharedId);
       }
     }
@@ -433,7 +416,7 @@ class EventService {
    * keyed by event id, with this precedence:
    *   - SharedEventEntity (via the AP interface) is authoritative and carries
    *     the auto/manual distinction (derived from auto_posted). Non-UUID keys
-   *     (legacy AP-URL rows) are filtered out — see module-level UUID_REGEX.
+   *     (legacy AP-URL rows) are filtered out — see `looksLikeUuid`.
    *   - EventRepostEntity is a legacy direct-repost link with no auto/manual
    *     distinction; entries present only there default to 'manual'.
    * Events absent from the returned map are owned by the calendar; call sites
@@ -457,7 +440,7 @@ class EventService {
 
     const repostStatusByEventId = new Map<string, 'auto' | 'manual'>();
     for (const [eventId, status] of sharedStatusMap.entries()) {
-      if (UUID_REGEX.test(eventId)) {
+      if (looksLikeUuid(eventId)) {
         repostStatusByEventId.set(eventId, status);
       }
     }
@@ -942,7 +925,7 @@ class EventService {
       throw new ValidationError('Event ID is required');
     }
 
-    if (!this.isValidUUID(eventId)) {
+    if (!isValidUuidV4(eventId)) {
       throw new ValidationError('Invalid UUID format in event ID');
     }
 
@@ -1859,12 +1842,12 @@ class EventService {
     }
 
     // Validate that all IDs are valid UUIDs
-    const invalidEventIds = eventIds.filter(id => !this.isValidUUID(id));
+    const invalidEventIds = eventIds.filter(id => !isValidUuidV4(id));
     if (invalidEventIds.length > 0) {
       throw new ValidationError('invalid UUID format in eventIds', { invalidIds: invalidEventIds });
     }
 
-    const invalidCategoryIds = categoryIds.filter(id => !this.isValidUUID(id));
+    const invalidCategoryIds = categoryIds.filter(id => !isValidUuidV4(id));
     if (invalidCategoryIds.length > 0) {
       throw new ValidationError('invalid UUID format in categoryIds', { invalidIds: invalidCategoryIds });
     }
@@ -2012,13 +1995,13 @@ class EventService {
     calendarId?: string,
   ): Promise<CalendarEvent> {
     // Validate eventId is a valid UUID
-    if (!this.isValidUUID(eventId)) {
+    if (!isValidUuidV4(eventId)) {
       throw new ValidationError('eventId must be a valid UUID');
     }
 
     // Validate each categoryId is a valid UUID
     if (categoryIds.length > 0) {
-      const invalidCategoryIds = categoryIds.filter(id => !this.isValidUUID(id));
+      const invalidCategoryIds = categoryIds.filter(id => !isValidUuidV4(id));
       if (invalidCategoryIds.length > 0) {
         throw new ValidationError('invalid UUID format in categoryIds');
       }
@@ -2149,7 +2132,7 @@ class EventService {
       throw new ValidationError('Event ID is required');
     }
 
-    if (!this.isValidUUID(eventId)) {
+    if (!isValidUuidV4(eventId)) {
       throw new ValidationError('Invalid UUID format in event ID');
     }
 

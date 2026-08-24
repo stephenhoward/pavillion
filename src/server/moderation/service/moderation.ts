@@ -9,6 +9,7 @@ import type { ReporterType, EscalationType } from '@/common/model/report';
 import { BlockedInstance } from '@/common/model/blocked_instance';
 import { BlockedReporter } from '@/common/model/blocked_reporter';
 import { EventNotFoundError } from '@/common/exceptions/calendar';
+import { isValidUuidV4 } from '@/server/common/helper/uuid';
 import { DuplicateReportError, FederatedReportRateLimitError, ReportValidationError } from '@/common/exceptions/report';
 import { ReportEntity } from '@/server/moderation/entity/report';
 import { EventReporterEntity } from '@/server/moderation/entity/event_reporter';
@@ -86,9 +87,6 @@ const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /** Maximum allowed length for email address (RFC 5321 limit). */
 const MAX_EMAIL_LENGTH = 254;
-
-/** UUID v4 validation regex. */
-const UUID_V4_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 /** Valid admin priority values. */
 const VALID_PRIORITIES = ['low', 'medium', 'high'];
@@ -312,7 +310,7 @@ class ModerationService {
     if (!eventId) {
       errors.push('Event ID is required');
     }
-    else if (typeof eventId !== 'string' || !UUID_V4_REGEX.test(eventId)) {
+    else if (!isValidUuidV4(eventId)) {
       errors.push('Event ID must be a valid UUID');
     }
 
@@ -817,7 +815,7 @@ class ModerationService {
     // never return, and an undefined one would raise a raw Sequelize error.
     //
     // No current caller can pass a non-string: both ids arrive from
-    // `req.params` and are UUID_REGEX-validated in owner-report-routes.ts, and
+    // `req.params` and are UUID-validated in owner-report-routes.ts, and
     // Express route params are always strings. The `typeof` half of this guard
     // is therefore defensive rather than load-bearing — it removes the failure
     // mode if a future caller ever sources either id from a query string, where

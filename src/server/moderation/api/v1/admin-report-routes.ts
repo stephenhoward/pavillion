@@ -19,9 +19,6 @@ import { ReportEscalationEntity } from '@/server/moderation/entity/report_escala
 
 const logger = createLogger('moderation');
 
-/** UUID v4 format regex for path parameter validation. */
-const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
 /**
  * Route handler for admin report management.
  *
@@ -251,7 +248,7 @@ export default class AdminReportRoutes {
 
     const { reportId } = req.params;
 
-    if (!UUID_REGEX.test(reportId)) {
+    if (!ExpressHelper.isValidUUID(reportId)) {
       res.status(400).json({
         error: 'Invalid reportId format',
         errorName: 'ValidationError',
@@ -311,7 +308,7 @@ export default class AdminReportRoutes {
 
     const { reportId } = req.params;
 
-    if (!UUID_REGEX.test(reportId)) {
+    if (!ExpressHelper.isValidUUID(reportId)) {
       res.status(400).json({
         error: 'Invalid reportId format',
         errorName: 'ValidationError',
@@ -405,7 +402,7 @@ export default class AdminReportRoutes {
 
     const { reportId } = req.params;
 
-    if (!UUID_REGEX.test(reportId)) {
+    if (!ExpressHelper.isValidUUID(reportId)) {
       res.status(400).json({
         error: 'Invalid reportId format',
         errorName: 'ValidationError',

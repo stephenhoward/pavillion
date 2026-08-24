@@ -16,9 +16,6 @@ import { createLogger } from '@/server/common/helper/logger';
 
 const logger = createLogger('moderation');
 
-/** UUID v4 format regex for path parameter validation. */
-const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
 /**
  * Validated request context extracted by requireAuth.
  */
@@ -115,7 +112,7 @@ export default class OwnerReportRoutes {
 
     const { calendarId, reportId } = req.params;
 
-    if (!UUID_REGEX.test(calendarId)) {
+    if (!ExpressHelper.isValidUUID(calendarId)) {
       res.status(400).json({
         error: 'Invalid calendarId format',
         errorName: 'ValidationError',
@@ -123,7 +120,7 @@ export default class OwnerReportRoutes {
       return null;
     }
 
-    if (requireReportId && !UUID_REGEX.test(reportId)) {
+    if (requireReportId && !ExpressHelper.isValidUUID(reportId)) {
       res.status(400).json({
         error: 'Invalid reportId format',
         errorName: 'ValidationError',

@@ -5,6 +5,7 @@ import { logError } from '@/server/common/helper/error-logger';
 import { logActivityRejection } from '../helper/rejection-logger';
 import { flagActorHostUri } from '../helper/flag-actor-host';
 import { validateActorUriProtocol } from '@/server/common/helper/uri-validation';
+import { looksLikeUuid } from '@/server/common/helper/uuid';
 import { createLogger } from '@/server/common/helper/logger';
 
 const logger = createLogger('activitypub');
@@ -1004,7 +1005,7 @@ class ProcessInboxService {
             const id = parts[parts.length - 1];
             return { id };
           })
-          .filter((cat) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cat.id));
+          .filter((cat) => looksLikeUuid(cat.id));
         sourceCategories = parsed.length > 0 ? parsed : null;
       }
     }

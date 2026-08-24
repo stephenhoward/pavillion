@@ -22,6 +22,7 @@ import CalendarInterface from "@/server/calendar/interface";
 import { EventObject } from "@/server/activitypub/model/object/event";
 import { addToOutbox as addToOutboxHelper } from "@/server/activitypub/helper/outbox";
 import { validateUrlNotPrivate } from "@/server/common/helper/ip-validation";
+import { looksLikeUuid } from "@/server/common/helper/uuid";
 import { PUBLIC_KEY_FETCH_TIMEOUT_MS } from "@/server/common/constants";
 import { isValidCalendarUrlName } from "@/common/validation/calendarUrlName";
 import {
@@ -497,9 +498,8 @@ class ActivityPubService {
     //
     // SharedEventEntity.event_id and RepostDismissalEntity.event_id both store
     // UUIDs, so we must resolve to a UUID before hitting either table.
-    const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     let localEventId: string;
-    if (UUID_REGEX.test(eventIdOrUrl)) {
+    if (looksLikeUuid(eventIdOrUrl)) {
       localEventId = eventIdOrUrl;
     }
     else {
