@@ -103,12 +103,13 @@ describe('Migration Runner', () => {
   });
 
   describe('Session Timeout Exemption', () => {
-    // The app's pooled connections carry a 60s statement_timeout and
-    // idle_in_transaction_session_timeout (config/default.yaml). Migrations run
-    // on that same Sequelize instance, and DDL on a large table can legitimately
-    // run far longer, so the migration transaction clears both for its own
+    // The app's pooled connections carry a 60s statement_timeout, a 60s
+    // idle_in_transaction_session_timeout and a 5s lock_timeout
+    // (config/default.yaml). Migrations run on that same Sequelize instance, and
+    // DDL on a large table can legitimately run, or wait on a table lock, far
+    // longer, so the migration transaction clears all three for its own
     // session. SET LOCAL reverts at commit, leaving the pooled setting intact.
-    it('clears both session timeouts for the migration transaction on postgres', async () => {
+    it('clears every session timeout for the migration transaction on postgres', async () => {
       const statements: string[] = [];
       const fakeSequelize = {
         getDialect: () => 'postgres',
@@ -122,6 +123,7 @@ describe('Migration Runner', () => {
       expect(statements).toEqual([
         'SET LOCAL statement_timeout = 0',
         'SET LOCAL idle_in_transaction_session_timeout = 0',
+        'SET LOCAL lock_timeout = 0',
       ]);
     });
 

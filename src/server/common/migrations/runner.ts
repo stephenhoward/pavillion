@@ -25,12 +25,13 @@ const namespace = cls.createNamespace(MIGRATION_CLS_NAMESPACE);
 /**
  * Removes the per-connection session limits for the current transaction.
  *
- * The application's PostgreSQL connections carry a 60s `statement_timeout` and
- * `idle_in_transaction_session_timeout` (see the `database.dialectOptions` block
- * in `config/default.yaml`), which bound how long a request can pin a pooled
- * connection. Migrations run through the same Sequelize instance and the same
- * pool, but schema changes on a large table can legitimately run far longer than
- * any request should — so the migration transaction opts itself out.
+ * The application's PostgreSQL connections carry a 60s `statement_timeout`, a
+ * 60s `idle_in_transaction_session_timeout` and a 5s `lock_timeout` (see the
+ * `database.dialectOptions` block in `config/default.yaml`), which bound how
+ * long a request can pin a pooled connection. Migrations run through the same
+ * Sequelize instance and the same pool, but schema changes on a large table can
+ * legitimately run — or wait on a table lock — far longer than any request
+ * should, so the migration transaction opts itself out.
  *
  * `SET LOCAL` scopes the change to the enclosing transaction and reverts on
  * commit or rollback, so the connection returns to the pool with the configured
@@ -47,6 +48,7 @@ export async function clearMigrationSessionTimeouts(sequelize: Sequelize): Promi
 
   await sequelize.query('SET LOCAL statement_timeout = 0');
   await sequelize.query('SET LOCAL idle_in_transaction_session_timeout = 0');
+  await sequelize.query('SET LOCAL lock_timeout = 0');
 }
 
 /**
