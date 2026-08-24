@@ -27,6 +27,16 @@ export interface CalendarFundingCache {
   status: FundingStatus | null;
   /** Known per-feature gate decisions. A missing key is not a denial. */
   features: Partial<Record<FundingGatedFeature, boolean>>;
+  /**
+   * Whether the most recent read of the summary failed.
+   *
+   * The server models "asked and could not answer" as a positive outcome of
+   * its own (FundingAccessIndeterminateError); this keeps the client
+   * isomorphic to it. A failed read leaves `status` and `features` exactly as
+   * they were, so without this flag a calendar that was asked and got no
+   * answer looks identical to one never asked.
+   */
+  loadFailed: boolean;
 }
 
 /**
@@ -96,7 +106,8 @@ function cacheEntry(
  * Pinia store caching what the client knows about calendar funding.
  *
  * Data cache only: it holds no loading state, performs no requests, and is
- * written by FundingService (reads) and by useFundingAccess (402 refusals).
+ * written by FundingService (reads) and by useFundingAccess (402 refusals and
+ * failed reads).
  * Components reach it through useFundingAccess, never directly.
  *
  * In-memory only — no persistence plugin. A reload starts empty, and
@@ -134,6 +145,14 @@ export const useFundingStore = defineStore('funding', {
     featureAccess: (state) => (calendarId: string, feature: FundingGatedFeature): boolean | null => {
       return cacheEntry(state.calendars, calendarId)?.features?.[feature] ?? null;
     },
+
+    /**
+     * Whether the most recent summary read for a calendar failed. False for a
+     * calendar never asked about — the distinction this getter exists for.
+     */
+    loadFailedFor: (state) => (calendarId: string): boolean => {
+      return cacheEntry(state.calendars, calendarId)?.loadFailed ?? false;
+    },
   },
 
   actions: {
@@ -151,6 +170,30 @@ export const useFundingStore = defineStore('funding', {
       this.calendars[calendarId] = {
         status: summary.status,
         features: prototypeFreeRecord({ ...summary.features }),
+        loadFailed: false,
+      };
+    },
+
+    /**
+     * Record that a summary read for this calendar failed.
+     *
+     * Nothing else moves: a status or feature decision already held stays
+     * held, because a read that produced no answer cannot contradict one. The
+     * next successful `setSummary` clears the flag.
+     *
+     * @param {string} calendarId - The calendar whose read failed
+     */
+    markLoadFailed(calendarId: string) {
+      const cached = cacheEntry(this.calendars, calendarId);
+      if (cached) {
+        cached.loadFailed = true;
+        return;
+      }
+
+      this.calendars[calendarId] = {
+        status: null,
+        features: prototypeFreeRecord(),
+        loadFailed: true,
       };
     },
 
@@ -175,6 +218,7 @@ export const useFundingStore = defineStore('funding', {
       this.calendars[calendarId] = {
         status: null,
         features: prototypeFreeRecord({ [feature]: false }),
+        loadFailed: false,
       };
     },
   },

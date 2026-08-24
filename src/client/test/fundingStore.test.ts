@@ -68,6 +68,44 @@ describe('FundingStore', () => {
     });
   });
 
+  describe('markLoadFailed', () => {
+    it('reports no failed load for a calendar it has never seen', () => {
+      expect(store.loadFailedFor('cal-1')).toBe(false);
+    });
+
+    it('records a failed read without inventing a status or a feature decision', () => {
+      store.markLoadFailed('cal-1');
+
+      expect(store.loadFailedFor('cal-1')).toBe(true);
+      expect(store.statusFor('cal-1')).toBeNull();
+      expect(store.featureAccess('cal-1', 'widget_embedding')).toBeNull();
+    });
+
+    it('keeps an earlier summary intact when a later read fails', () => {
+      store.setSummary('cal-1', coveredSummary);
+      store.markLoadFailed('cal-1');
+
+      expect(store.loadFailedFor('cal-1')).toBe(true);
+      expect(store.statusFor('cal-1')).toBe('covered');
+      expect(store.featureAccess('cal-1', 'widget_embedding')).toBe(true);
+    });
+
+    it('is cleared by a later successful summary', () => {
+      store.markLoadFailed('cal-1');
+      store.setSummary('cal-1', coveredSummary);
+
+      expect(store.loadFailedFor('cal-1')).toBe(false);
+    });
+
+    it('survives a recorded denial', () => {
+      store.markLoadFailed('cal-1');
+      store.denyFeature('cal-1', 'widget_embedding');
+
+      expect(store.loadFailedFor('cal-1')).toBe(true);
+      expect(store.featureAccess('cal-1', 'widget_embedding')).toBe(false);
+    });
+  });
+
   describe('denyFeature', () => {
     it('closes the gate on one feature without touching the display status', () => {
       // status is a relationship label and features are the entitlement: a
