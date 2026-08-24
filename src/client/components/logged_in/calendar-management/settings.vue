@@ -161,8 +161,7 @@
               {{ t(extendedFeaturesBadgeKey) }}
             </span>
 
-            <!-- A plan is the one funding source with something to cancel. -->
-            <template v-if="fundingStatus === 'covered'">
+            <template v-if="canCancelPlan">
               <template v-if="!state.showDisableConfirm">
                 <button
                   type="button"
@@ -200,7 +199,7 @@
           <FundingUpsellCard
             v-else
             :calendarId="props.calendarId"
-            feature="widget_embedding"
+            :feature="EXTENDED_FEATURE"
             @plan-started="onPlanStarted"
           />
         </div>
@@ -217,14 +216,18 @@
   />
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { reactive, ref, computed, onMounted } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import iso6391 from 'iso-639-1-dir';
 import { DEFAULT_LANGUAGE_CODE } from '@/common/i18n/languages';
-import { CalendarContent } from '@/common/model/calendar';
+import { Calendar, CalendarContent } from '@/common/model/calendar';
+import type { DefaultDateRange } from '@/common/model/calendar';
+import type { Media } from '@/common/model/media';
+import type { FundingGatedFeature } from '@/common/model/funding-plan';
 import CalendarService from '@/client/service/calendar';
 import FundingService from '@/client/service/funding';
+import type { UploadResult } from '@/client/service/media';
 import { useLanguageManagement } from '@/client/composables/useLanguageManagement';
 import LoadingMessage from '@/client/components/common/loading_message.vue';
 import ImageUpload from '@/client/components/common/media/image-upload.vue';
@@ -235,12 +238,9 @@ import FundingUpsellCard from '@/client/components/common/FundingUpsellCard.vue'
 import { useFundingAccess } from '@/client/composables/useFundingAccess';
 
 // Props
-const props = defineProps({
-  calendarId: {
-    type: String,
-    required: true,
-  },
-});
+const props = defineProps<{
+  calendarId: string;
+}>();
 
 // Translations
 const { t } = useTranslation('calendars', {
@@ -262,11 +262,20 @@ const {
 } = useFundingAccess(props.calendarId);
 
 // Local calendar clone for translatable content editing
-const localCalendar = ref(null);
-const contentLangTabs = ref(null);
+const localCalendar = ref<Calendar | null>(null);
+const contentLangTabs = ref<InstanceType<typeof LanguageTabSelector> | null>(null);
 
 // Component state
-const state = reactive({
+const state = reactive<{
+  isLoading: boolean;
+  isSaving: boolean;
+  error: string;
+  success: string;
+  defaultDateRange: DefaultDateRange;
+  defaultEventImage: Media | null;
+  isDisabling: boolean;
+  showDisableConfirm: boolean;
+}>({
   isLoading: false,
   isSaving: false,
   error: '',
@@ -278,26 +287,57 @@ const state = reactive({
 });
 
 /**
+ * The registry key this section gates on and hands to the upsell card.
+ *
+ * Annotated so that the string is checked against `FUNDING_GATED_FEATURES`
+ * here, in the script, rather than only where it is consumed: a renamed or
+ * removed key is a compile error at this line.
+ */
+const EXTENDED_FEATURE: FundingGatedFeature = 'widget_embedding';
+
+/**
  * The gate answer this section is about.
  *
  * "Extended features" is the user-facing name for the funding-gated set, and
  * widget embedding is the whole of that set today. When a second feature is
  * registered this becomes a fold over the registry rather than one key.
  */
-const extendedFeaturesAccess = computed(() => fundingAccessState('widget_embedding'));
+const extendedFeaturesAccess = computed(() => fundingAccessState(EXTENDED_FEATURE));
+
+/**
+ * Whether there is a plan to cancel.
+ *
+ * This is the one place a control's presence follows the display status, and
+ * it is not an entitlement check: what the calendar may do is already settled
+ * by `extendedFeaturesAccess`. The question here is which funding relationship
+ * grants it, because only a plan is something the owner can end — an admin
+ * exemption and a grant have nothing to cancel.
+ */
+const canCancelPlan = computed(() => fundingStatus.value === 'covered');
 
 /**
  * Which badge names the granted state. Display vocabulary only — nothing about
  * what the calendar may do is decided here.
+ *
+ * Every status is listed so that a new `FundingStatus` value fails to compile
+ * here instead of silently inheriting the "enabled" wording. `null` is the
+ * not-yet-loaded value, which the granted branch never renders.
  */
 const extendedFeaturesBadgeKey = computed(() => {
-  switch (fundingStatus.value) {
+  const status = fundingStatus.value;
+  switch (status) {
     case 'admin_exempt':
       return 'extended_features_admin_exempt';
     case 'grant':
       return 'extended_features_grant';
-    default:
+    case 'covered':
+    case 'not_covered':
+    case null:
       return 'extended_features_enabled';
+    default: {
+      const unhandled: never = status;
+      throw new Error(`Unhandled funding status: ${String(unhandled)}`);
+    }
   }
 });
 
@@ -329,8 +369,9 @@ const {
 
 const erroredTabs = computed(() => {
   if (!localCalendar.value) return [];
-  return localCalendar.value.getLanguages().filter(lang => {
-    const content = localCalendar.value.content(lang);
+  const calendar = localCalendar.value;
+  return calendar.getLanguages().filter((lang) => {
+    const content = calendar.content(lang);
     return !content || !content.name || content.name.trim().length === 0;
   });
 });
@@ -390,7 +431,7 @@ const saveSettings = async () => {
     state.error = '';
     state.success = '';
 
-    const contentPayload = {};
+    const contentPayload: Record<string, { name: string; description: string }> = {};
     if (localCalendar.value) {
       for (const lang of localCalendar.value.getLanguages()) {
         const c = localCalendar.value.content(lang);
@@ -424,7 +465,7 @@ const saveSettings = async () => {
  * for state and entity side effects (via onLanguageAdded), then closes
  * the picker modal.
  */
-const handleAddLanguage = (language) => {
+const handleAddLanguage = (language: string) => {
   addLanguage(language);
   closeLanguagePicker();
 };
@@ -432,9 +473,9 @@ const handleAddLanguage = (language) => {
 /**
  * Handle default image upload completion
  */
-const handleDefaultImageUpload = async (results) => {
+const handleDefaultImageUpload = async (results: UploadResult[]) => {
   const successResult = results.find((r) => r.success && r.media);
-  if (!successResult) return;
+  if (!successResult?.media) return;
 
   try {
     state.isSaving = true;

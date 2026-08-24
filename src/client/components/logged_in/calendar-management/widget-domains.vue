@@ -13,7 +13,7 @@
       Funding gate. The card decides for itself whether the widget-embedding
       gate is known to be closed, so nothing here branches on funding state.
     -->
-    <FundingUpsellCard :calendarId="props.calendarId" feature="widget_embedding" />
+    <FundingUpsellCard :calendarId="props.calendarId" :feature="WIDGET_FEATURE" />
 
     <!-- Success Display -->
     <div
@@ -55,7 +55,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { reactive, onMounted } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import axios from 'axios';
@@ -64,14 +64,18 @@ import LoadingMessage from '@/client/components/common/loading_message.vue';
 import FundingUpsellCard from '@/client/components/common/FundingUpsellCard.vue';
 import { useFundingAccess } from '@/client/composables/useFundingAccess';
 import { validateAndEncodeId } from '@/client/service/utils';
+import type { FundingGatedFeature } from '@/common/model/funding-plan';
 
 // Props
-const props = defineProps({
-  calendarId: {
-    type: String,
-    required: true,
-  },
-});
+const props = defineProps<{
+  calendarId: string;
+}>();
+
+/**
+ * The registry key the upsell card is shown for. Annotated so the string is
+ * checked against `FUNDING_GATED_FEATURES` here rather than only at the card.
+ */
+const WIDGET_FEATURE: FundingGatedFeature = 'widget_embedding';
 
 // Translations
 const { t } = useTranslation('calendars', {
@@ -84,7 +88,15 @@ const { t } = useTranslation('calendars', {
 const { recordAccessDenial } = useFundingAccess(props.calendarId);
 
 // Component state
-const state = reactive({
+const state = reactive<{
+  isLoading: boolean;
+  isAdding: boolean;
+  removingId: boolean | null;
+  error: string;
+  success: string;
+  newDomain: string;
+  currentDomain: string | null;
+}>({
   isLoading: false,
   isAdding: false,
   removingId: null,
@@ -97,7 +109,7 @@ const state = reactive({
 /**
  * Validate domain format
  */
-const isValidDomain = (domain) => {
+const isValidDomain = (domain: string) => {
   if (!domain || domain.trim() === '') {
     return false;
   }
@@ -205,7 +217,9 @@ const addDomain = async () => {
       return;
     }
 
-    if (error.response?.data?.errorName === 'InvalidDomainFormatError') {
+    const errorName = (error as { response?: { data?: { errorName?: string } } } | null)
+      ?.response?.data?.errorName;
+    if (errorName === 'InvalidDomainFormatError') {
       state.error = t('error_invalid_domain');
     }
     else {
