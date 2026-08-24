@@ -168,7 +168,7 @@ describe('NotificationEventHandlers', () => {
    * The handler runs an async DB transaction (`recordActivity` uses
    * SERIALIZABLE isolation + a retry loop); dispatching the listeners
    * directly awaits that chain to completion instead of draining for a
-   * fixed budget (the pv-ss0s flake).
+   * fixed budget, which flaked in CI.
    */
   async function emit(event: string, payload: unknown): Promise<void> {
     await dispatchAndAwait(eventBus, event, payload);

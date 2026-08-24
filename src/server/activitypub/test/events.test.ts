@@ -26,7 +26,7 @@ import { setupActivityPubSchema, teardownActivityPubSchema } from '@/server/comm
  * queue tail after the emit settles the full handler chain (errors are caught
  * inside `serialize`), which is deterministic for positive and negative
  * assertions alike — replacing the fixed 100ms sleeps that read stale state
- * on contended runners (pv-ss0s).
+ * on contended runners.
  */
 async function emitAndAwaitDispatch(
   eventBus: EventEmitter,

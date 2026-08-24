@@ -123,7 +123,7 @@ describe('Cancel / Restore Event Occurrence API (date-based)', () => {
       // Settle the async eventCreated listeners (buildEventInstances) kicked
       // off by the final beforeEach before teardown: poll for the actual end
       // state — instance rows for the weekly and monthly fixtures — instead
-      // of sleeping a fixed budget (pv-ss0s). The yearly fixture is excluded
+      // of sleeping a fixed budget. The yearly fixture is excluded
       // on purpose: its next occurrence is ~11 months out, beyond the 6-month
       // materialization horizon, so its listener writes no rows to poll for.
       await waitFor(async () => {

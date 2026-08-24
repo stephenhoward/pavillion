@@ -126,7 +126,7 @@ describe('EventService create/update — transaction-aware emit (integration)', 
 
       // The emit rides afterCommit -> setImmediate and the listener body is
       // async — poll for its arrival instead of guessing how many queue hops
-      // it needs (fixed drains here flaked in CI; pv-ss0s).
+      // it needs (fixed drains here flaked in CI).
       await waitFor(() => observedRows.length === 1);
 
       expect(createdEventId).not.toBeNull();
@@ -186,7 +186,7 @@ describe('EventService create/update — transaction-aware emit (integration)', 
       });
 
       // Same as above: poll for the deferred listener's arrival rather than
-      // draining a fixed number of queue hops (pv-ss0s).
+      // draining a fixed number of queue hops.
       await waitFor(() => observedRows.length === 1);
 
       expect(observedRows).toHaveLength(1);

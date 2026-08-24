@@ -7,7 +7,7 @@
  *
  * This file used to export fixed-budget drain helpers (`emitAndSettle` /
  * `settleAsyncHandlers`: N rounds × M ms, then return regardless). Those were
- * the root cause of a three-month CI flake cluster (pv-ss0s): a contended
+ * the root cause of a three-month CI flake cluster: a contended
  * runner overruns any fixed budget, the handler chain has not committed, and
  * the assertion reads null. They are deliberately gone — do not reintroduce a
  * fixed-duration drain; a bigger budget only moves the cliff.

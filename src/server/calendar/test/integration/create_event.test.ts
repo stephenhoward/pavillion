@@ -98,8 +98,8 @@ describe('Event API', () => {
     let entity = await EventEntity.findOne({ where: { id: response.body.id } });
 
     // Poll for the outbox message to be processed — deterministic condition
-    // wait, not a fixed drain (pv-ss0s; contended CI runners overrun any
-    // fixed budget). Locally-created originals now federate as paired
+    // wait, not a fixed drain (contended CI runners overrun any fixed
+    // budget). Locally-created originals now federate as paired
     // Create(Event) + Create(Note) (Announce is reserved for reposts), so we
     // filter for the Create wrapping the full embedded Event object.
     // Filtering by activity + wrapped-object type protects against future

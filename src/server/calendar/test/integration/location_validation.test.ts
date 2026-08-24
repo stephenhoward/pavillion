@@ -45,7 +45,7 @@ describe('Location Validation - API Integration', () => {
     if (env) {
       // Settle the async eventCreated listener chains before teardown: poll
       // for each created event's processed outbox message instead of sleeping
-      // a fixed budget (pv-ss0s). These fixtures' schedules carry no `start`,
+      // a fixed budget. These fixtures' schedules carry no `start`,
       // so buildEventInstances writes no instance rows to poll for — the
       // observable end state of the chain is the ActivityPub outbox write.
       await waitFor(async () => {

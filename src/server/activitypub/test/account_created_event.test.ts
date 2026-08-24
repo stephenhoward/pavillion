@@ -20,7 +20,7 @@ import db from '@/server/common/entity/db';
  * helper cannot reach the handler promises through the bus. Awaiting the
  * queue tail after the emit settles the full handler chain deterministically
  * for positive and negative assertions alike — replacing the fixed 100ms
- * sleeps that read stale state on contended runners (pv-ss0s).
+ * sleeps that read stale state on contended runners.
  */
 async function emitAndAwaitDispatch(
   eventBus: EventEmitter,

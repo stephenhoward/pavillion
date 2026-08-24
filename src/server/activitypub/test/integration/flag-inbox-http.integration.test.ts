@@ -153,7 +153,7 @@ describe('Inbound Flag over HTTP (integration)', () => {
    * for the handler's terminal write — the Flag activity row — before
    * finishing. Otherwise the tail's transaction can overlap the next test's
    * request on the shared in-memory SQLite connection and corrupt both
-   * (previously mitigated with a fixed-budget drain; see pv-ss0s).
+   * (previously mitigated with a fixed-budget drain, which flaked in CI).
    */
   const awaitNotificationTail = async (reportId: string): Promise<void> => {
     await waitFor(() =>
