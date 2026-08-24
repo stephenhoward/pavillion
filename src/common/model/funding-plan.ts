@@ -115,8 +115,12 @@ export type FundingGatedFeature = keyof typeof FUNDING_GATED_FEATURES;
  * the authoritative answer to "may this calendar do X".
  */
 export type CalendarFundingSummary = {
-  /** How this calendar is covered. Display vocabulary, not an entitlement. */
-  status: FundingStatus;
+  /**
+   * How this calendar is covered. Display vocabulary, not an entitlement.
+   * Null when the status could not be read while `features` could — the
+   * gate's answer is never withheld because a display-only read failed.
+   */
+  status: FundingStatus | null;
   /** Per-feature gate decisions, keyed by FUNDING_GATED_FEATURES. */
   features: Record<FundingGatedFeature, boolean>;
 };

@@ -904,6 +904,66 @@ describe('FundingService - Calendar Funding Plan Methods', () => {
         service.getCalendarFundingSummary(accountId, calendarId),
       ).rejects.toMatchObject({ name: 'FundingAccessIndeterminateError' });
     });
+
+    /**
+     * The gate answer is authoritative and computed in isolation from the
+     * display status, so a read only the display path needs cannot sink it.
+     * Here the grant table is unreadable while the calendar holds a live paid
+     * allocation: checkFundingAccess still allows (a determinate allow beats
+     * an indeterminate sibling read), and the summary must carry that allow
+     * with a null — display-indeterminate — status rather than answer 500
+     * and hide the funding card from a paying owner.
+     */
+    it('should keep the gate answer when a display-only read fails', async () => {
+      const calendarId = uuidv4();
+      const accountId = uuidv4();
+
+      mockCalendarInterface.isCalendarOwnerById.withArgs(accountId, calendarId).resolves(true);
+      mockCalendarInterface.getCalendarOwnerAccountId.withArgs(calendarId).resolves(accountId);
+
+      mockAccountsInterface.accountIsAdmin.withArgs(accountId).resolves(false);
+      sandbox.stub(ComplimentaryGrantEntity, 'findOne').rejects(new Error('grant table unreadable'));
+      sandbox.stub(CalendarFundingPlanEntity, 'findOne').resolves({
+        id: uuidv4(),
+        calendar_id: calendarId,
+        end_time: null,
+        fundingPlan: {
+          status: 'active',
+          cancelled_at: null,
+          current_period_end: new Date(Date.now() + 30 * DAY),
+        },
+      } as any);
+      stubFundingEnabled(true);
+
+      const summary = await service.getCalendarFundingSummary(accountId, calendarId);
+
+      expect(summary.features.widget_embedding).toBe(true);
+      expect(summary.status).toBeNull();
+    });
+
+    /**
+     * The display failure never becomes an access answer in either direction:
+     * with no allow from any readable source the gate closes on its own
+     * terms, and the status stays indeterminate rather than being inferred
+     * as `not_covered` from the closed gate.
+     */
+    it('should not turn a display-only read failure into a gate answer', async () => {
+      const calendarId = uuidv4();
+      const accountId = uuidv4();
+
+      mockCalendarInterface.isCalendarOwnerById.withArgs(accountId, calendarId).resolves(true);
+      mockCalendarInterface.getCalendarOwnerAccountId.withArgs(calendarId).resolves(accountId);
+
+      mockAccountsInterface.accountIsAdmin.withArgs(accountId).resolves(false);
+      sandbox.stub(ComplimentaryGrantEntity, 'findOne').rejects(new Error('grant table unreadable'));
+      sandbox.stub(CalendarFundingPlanEntity, 'findOne').resolves(null);
+      stubFundingEnabled(true);
+
+      const summary = await service.getCalendarFundingSummary(accountId, calendarId);
+
+      expect(summary.features.widget_embedding).toBe(false);
+      expect(summary.status).toBeNull();
+    });
   });
 
 });
