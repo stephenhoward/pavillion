@@ -566,8 +566,9 @@ describe('addToInbox', () => {
     const message = inboxMock.firstCall.args[1] as any;
     expect(message.type).toBe('Ignore');
     expect(message.id).toBe('https://remote.example.com/calendars/remote/ignores/abc-123');
-    // The embedded activity is preserved so the row records what was ignored.
-    expect(message.object).toEqual(embeddedJoin);
+    // Only the ignored activity's identity is kept so the row records what
+    // was ignored without persisting the peer's full embedded payload.
+    expect(message.object).toEqual({ id: embeddedJoin.id, type: embeddedJoin.type, actor: embeddedJoin.actor });
 
     const auth = inboxMock.firstCall.args[2] as any;
     expect(auth.source).toBe('http_signature');

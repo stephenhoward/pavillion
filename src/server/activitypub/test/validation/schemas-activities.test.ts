@@ -20,6 +20,7 @@ import {
   joinActivitySchema,
   flagActivitySchema,
   ignoreActivitySchema,
+  MAX_IGNORED_OBJECT_TYPE_LENGTH,
   MAX_FLAG_TEXT_LENGTH,
   MAX_FLAG_TAGS,
 } from '@/server/activitypub/validation/schemas';
@@ -1892,6 +1893,66 @@ describe('ActivityPub Validation Schemas - Activities', () => {
         actor: 'https://remote.example/calendars/mycal',
       });
       expect(result.success).toBe(false);
+    });
+
+    it('should accept a minimal embedded object carrying only id and type', () => {
+      const result = ignoreActivitySchema.safeParse({
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        id: 'https://remote.example/calendars/mycal/ignores/5',
+        type: 'Ignore',
+        actor: 'https://remote.example/calendars/mycal',
+        object: { id: 'https://remote.example/activities/join/1', type: 'Join' },
+      });
+      expect(result.success).toBe(true);
+    });
+
+    // An Ignore carries nothing Pavillion acts on beyond the ignored
+    // activity's identity, and the row is persisted verbatim, so the
+    // embedded object is bounded to that identity rather than passed through.
+    it('should strip unrecognised keys from the embedded object', () => {
+      const result = ignoreActivitySchema.safeParse({
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        id: 'https://remote.example/calendars/mycal/ignores/6',
+        type: 'Ignore',
+        actor: 'https://remote.example/calendars/mycal',
+        object: { ...embeddedJoin, summary: 'x'.repeat(10_000), nested: { deep: { deeper: 'y' } } },
+      });
+      expect(result.success).toBe(true);
+      if (result.success && typeof result.data.object === 'object') {
+        expect(Object.keys(result.data.object).sort()).toEqual(['actor', 'id', 'type']);
+      }
+    });
+
+    it('should reject an embedded object without an id', () => {
+      const result = ignoreActivitySchema.safeParse({
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        id: 'https://remote.example/calendars/mycal/ignores/7',
+        type: 'Ignore',
+        actor: 'https://remote.example/calendars/mycal',
+        object: { type: 'Join', actor: 'https://remote.example/users/bob' },
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('should reject an embedded object whose type or actor is oversized or malformed', () => {
+      const base = {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        id: 'https://remote.example/calendars/mycal/ignores/8',
+        type: 'Ignore',
+        actor: 'https://remote.example/calendars/mycal',
+      };
+      expect(ignoreActivitySchema.safeParse({
+        ...base,
+        object: { id: 'https://remote.example/activities/join/1', type: 'J'.repeat(MAX_IGNORED_OBJECT_TYPE_LENGTH + 1) },
+      }).success).toBe(false);
+      expect(ignoreActivitySchema.safeParse({
+        ...base,
+        object: { id: 'https://remote.example/activities/join/1', type: 'Join', actor: 'not-a-url' },
+      }).success).toBe(false);
+      expect(ignoreActivitySchema.safeParse({
+        ...base,
+        object: { id: 'https://remote.example/activities/join/1', type: { nested: true } },
+      }).success).toBe(false);
     });
 
     // The whole point of the schema is that the Ignore one Pavillion instance
