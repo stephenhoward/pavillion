@@ -27,6 +27,8 @@ import ModerationInterface from "@/server/moderation/interface";
 import { CalendarEvent } from "@/common/model/events";
 import { ReportCategory } from "@/common/model/report";
 import { FederatedReportRateLimitError } from "@/common/exceptions/report";
+import { EventNotFoundError } from "@/common/exceptions/calendar";
+import expressHelper from "@/server/common/helper/express";
 import { Calendar } from "@/common/model/calendar";
 import { addToOutbox } from "@/server/activitypub/helper/outbox";
 import { fetchRemoteObject } from "@/server/activitypub/helper/remote-fetch";
@@ -647,18 +649,46 @@ class ProcessInboxService {
     }
     const eventId = eventIdMatch[1];
 
-    // Look up the event to verify it exists
-    const event = await this.calendarInterface.getEventById(eventId);
-    if (!event || !event.calendarId) {
-      logger.warn({ eventId }, '[INBOX] Flag activity references unknown event');
-      return;
-    }
-
     // Extract domain from actor URI. Everything logged about a Flag sender is
     // reduced to this host by flagActorHostUri: the per-actor URI is never
     // written durably (see the blocked-instance branch in processInboxMessage).
     const actorUri = message.actor;
     const domain = this.extractDomainFromActorUri(actorUri);
+
+    // A Flag naming an event this instance cannot resolve is a policy outcome,
+    // not a processing failure: it settles the ingest row as ok with a warn-
+    // level rejection, the same way a misdirected Flag does. Letting it throw
+    // would settle as error and hand any unblocked remote an error-log
+    // generator at rate-limit speed. The id is checked before lookup because
+    // the URI regex admits hex-dash strings that are not UUIDs, and those
+    // would fail with a cast error on the UUID column rather than a clean miss.
+    const rejectUnresolvable = (reason: string) => logActivityRejection({
+      rejection_type: 'invalid_object',
+      activity_type: 'Flag',
+      actor_uri: flagActorHostUri(domain),
+      actor_domain: domain,
+      calendar_id: calendar.id,
+      calendar_url_name: calendar.urlName,
+      reason,
+      message_id: message.id,
+    });
+
+    if (!expressHelper.isValidUUID(eventId)) {
+      rejectUnresolvable('Flag object id is not a valid event id');
+      return;
+    }
+
+    let event: CalendarEvent;
+    try {
+      event = await this.calendarInterface.getEventById(eventId);
+    }
+    catch (error) {
+      if (error instanceof EventNotFoundError) {
+        rejectUnresolvable('Flag references an event that does not exist');
+        return;
+      }
+      throw error;
+    }
 
     // The Flag must arrive at the inbox of the calendar that owns the event.
     if (event.calendarId !== calendar.id) {

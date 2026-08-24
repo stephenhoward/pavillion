@@ -911,6 +911,19 @@ describe('ModerationService', () => {
         expect(saveStub.calledOnce).toBe(true);
       });
 
+      it('rejects a missing or empty forwardedFromInstance', async () => {
+        // The per-(event, instance) cap is keyed on this field. An empty
+        // string would pool every unparseable sender into one bucket and
+        // undefined would surface as a raw database error, not a rejection.
+        for (const forwardedFromInstance of ['', undefined]) {
+          await expect(
+            fedService.receiveRemoteReport(remoteReport({ forwardedFromInstance })),
+          ).rejects.toBeInstanceOf(ReportValidationError);
+        }
+
+        expect(saveStub.called).toBe(false);
+      });
+
       it('rejects a category outside the allowlist', async () => {
         await expect(
           fedService.receiveRemoteReport(remoteReport({ category: 'not-a-category' as any })),

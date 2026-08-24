@@ -1986,6 +1986,12 @@ class ModerationService {
   private validateRemoteReportFields(data: ReceiveRemoteReportData): string[] {
     const errors: string[] = [];
 
+    // The per-(event, instance) cap is keyed on this field: an empty value
+    // would pool every such report into one shared bucket.
+    if (typeof data.forwardedFromInstance !== 'string' || data.forwardedFromInstance.length === 0) {
+      errors.push('Forwarding instance is required');
+    }
+
     if (!data.category) {
       errors.push('Category is required');
     }

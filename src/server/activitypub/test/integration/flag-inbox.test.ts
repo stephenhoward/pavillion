@@ -17,6 +17,7 @@ import { CalendarEvent } from '@/common/model/events';
 import { ReportStatus } from '@/common/model/report';
 import type { ReporterType } from '@/common/model/report';
 import { FederatedReportRateLimitError, ReportValidationError } from '@/common/exceptions/report';
+import { EventNotFoundError } from '@/common/exceptions/calendar';
 
 describe('ProcessInboxService - Flag Activity Processing', () => {
   let inboxService: ProcessInboxService;
@@ -160,24 +161,58 @@ describe('ProcessInboxService - Flag Activity Processing', () => {
       );
     });
 
-    it('should handle missing event gracefully', async () => {
-      // Mock event not found
-      (calendarInterface.getEventById as any).mockResolvedValue(null);
+    it('should drop a Flag naming an event that does not exist', async () => {
+      // getEventById throws rather than returning null. An unknown event is
+      // a policy outcome, not a processing failure: the Flag settles as a
+      // quiet rejection, never as an ap_inbox error row, so a remote cannot
+      // manufacture error-level noise at rate-limit speed.
+      const mockLogRejection = logActivityRejection as ReturnType<typeof vi.fn>;
+      mockLogRejection.mockClear();
+      (calendarInterface.getEventById as any).mockRejectedValue(new EventNotFoundError());
 
       const flagActivity = {
         type: 'Flag',
         id: 'https://remote.instance/flags/test-uuid',
         actor: 'https://remote.instance/calendars/reporter',
-        object: 'https://local.instance/events/nonexistent-event',
+        object: `https://local.instance/events/${uuidv4()}`,
         content: 'Report content',
         tag: [{ type: 'Hashtag', name: '#spam' }],
         published: '2026-02-07T12:00:00Z',
       };
 
-      await inboxService.processFlagActivity(testCalendar, flagActivity);
+      await expect(inboxService.processFlagActivity(testCalendar, flagActivity)).resolves.toBeUndefined();
 
-      // Should not create report if event not found
       expect(moderationInterface.receiveRemoteReport).not.toHaveBeenCalled();
+      expect(mockLogRejection).toHaveBeenCalledOnce();
+      const context = mockLogRejection.mock.calls[0][0];
+      expect(context.rejection_type).toBe('invalid_object');
+      expect(context.activity_type).toBe('Flag');
+      expect(context.actor_uri).toBe('https://remote.instance');
+      expect(context.calendar_id).toBe(testCalendar.id);
+    });
+
+    it('should drop a Flag whose object id is not a UUID without looking it up', async () => {
+      // A hex-and-dash string that is not a UUID would otherwise reach a UUID
+      // column and fail with a cast error, again settling the row as an error.
+      const mockLogRejection = logActivityRejection as ReturnType<typeof vi.fn>;
+      mockLogRejection.mockClear();
+
+      const flagActivity = {
+        type: 'Flag',
+        id: 'https://remote.instance/flags/test-uuid',
+        actor: 'https://remote.instance/calendars/reporter',
+        object: 'https://local.instance/events/deadbeef-dead-beef-dead-beef',
+        content: 'Report content',
+        tag: [{ type: 'Hashtag', name: '#spam' }],
+        published: '2026-02-07T12:00:00Z',
+      };
+
+      await expect(inboxService.processFlagActivity(testCalendar, flagActivity)).resolves.toBeUndefined();
+
+      expect(calendarInterface.getEventById).not.toHaveBeenCalled();
+      expect(moderationInterface.receiveRemoteReport).not.toHaveBeenCalled();
+      expect(mockLogRejection).toHaveBeenCalledOnce();
+      expect(mockLogRejection.mock.calls[0][0].rejection_type).toBe('invalid_object');
     });
 
     it('should emit reportReceived event', async () => {
