@@ -414,90 +414,17 @@ export default class AdminReportRoutes {
     }
 
     try {
-      // Get the report
       const report = await this.moderationInterface.getAdminReport(reportId);
 
-      // Get the event to check if it's remote
-      const event = await this.moderationInterface.getEventById(report.eventId);
-
-      // Validate that the event is remote (calendarId is null for remote events)
-      if (!event.isRemote()) {
+      const target = await this.resolveForwardTarget(report.eventId, reportId);
+      if ('error' in target) {
         res.status(400).json({
-          error: 'Cannot forward report: event is not from a remote instance',
+          error: target.error,
           errorName: 'ValidationError',
         });
         return;
       }
-
-      // Extract the remote instance domain from the event source URL
-      // Event source URL format: https://remote.instance/events/uuid
-      let remoteInstanceDomain: string;
-
-      if (event.eventSourceUrl) {
-        try {
-          const url = new URL(event.eventSourceUrl);
-          remoteInstanceDomain = url.hostname;
-        }
-        catch {
-          res.status(400).json({
-            error: 'Cannot determine remote instance from event source URL',
-            errorName: 'ValidationError',
-          });
-          return;
-        }
-      }
-      else {
-        res.status(400).json({
-          error: 'Event is missing source URL',
-          errorName: 'ValidationError',
-        });
-        return;
-      }
-
-      // Resolve the origin calendar's actor URI. A report crossing a
-      // federation boundary is addressed to the calendar that owns the event,
-      // not to an instance-level admin actor (DEC-015).
-      const targetActorUri = await this.moderationInterface.getEventSourceActorUri(report.eventId);
-      if (!targetActorUri) {
-        res.status(400).json({
-          error: 'Cannot forward report: unable to determine remote calendar owner',
-          errorName: 'ValidationError',
-        });
-        return;
-      }
-
-      // Same-origin guard. `attributed_to` is bound to the signature-verified
-      // actor only on the Create ingest path; on the Announce path it comes
-      // from fetched remote content, so a hostile instance could otherwise
-      // aim a signed Flag — carrying the report body and the forwarding
-      // admin's key id — at a host of its choosing.
-      let targetHostname: string;
-      try {
-        targetHostname = new URL(targetActorUri).hostname;
-      }
-      catch {
-        logger.warn(
-          { reportId, targetActorUri },
-          'Refusing to forward report: resolved calendar actor is not a valid URI',
-        );
-        res.status(400).json({
-          error: 'Cannot forward report: calendar owner is not on the event source instance',
-          errorName: 'ValidationError',
-        });
-        return;
-      }
-
-      if (targetHostname !== remoteInstanceDomain) {
-        logger.warn(
-          { reportId, targetActorUri, eventSourceHost: remoteInstanceDomain },
-          'Refusing to forward report: resolved calendar actor is not on the event source instance',
-        );
-        res.status(400).json({
-          error: 'Cannot forward report: calendar owner is not on the event source instance',
-          errorName: 'ValidationError',
-        });
-        return;
-      }
+      const { targetActorUri, targetHostname } = target;
 
       // Forward the report via ActivityPub
       await this.moderationInterface.forwardReport(reportId, targetActorUri);
@@ -541,6 +468,85 @@ export default class AdminReportRoutes {
       res.status(500).json({
         error: 'Failed to forward report',
       });
+    }
+  }
+
+  /**
+   * Resolves the actor a forwarded report is addressed to: the origin
+   * calendar's actor, pinned to the reported event's source host (DEC-015).
+   *
+   * Returns the actor URI and its hostname, or the validation message the
+   * handler sends as a 400. Errors from the underlying lookups propagate.
+   */
+  private async resolveForwardTarget(
+    eventId: string,
+    reportId: string,
+  ): Promise<{ targetActorUri: string; targetHostname: string } | { error: string }> {
+    const event = await this.moderationInterface.getEventById(eventId);
+
+    // calendarId is null for remote events
+    if (!event.isRemote()) {
+      return { error: 'Cannot forward report: event is not from a remote instance' };
+    }
+
+    const eventSourceHost = this.resolveEventSourceHost(event.eventSourceUrl);
+    if ('error' in eventSourceHost) {
+      return eventSourceHost;
+    }
+    const remoteInstanceDomain = eventSourceHost.hostname;
+
+    // A report crossing a federation boundary is addressed to the calendar
+    // that owns the event, not to an instance-level admin actor (DEC-015).
+    const targetActorUri = await this.moderationInterface.getEventSourceActorUri(eventId);
+    if (!targetActorUri) {
+      return { error: 'Cannot forward report: unable to determine remote calendar owner' };
+    }
+
+    // Same-origin guard. `attributed_to` is bound to the signature-verified
+    // actor only on the Create ingest path; on the Announce path it comes
+    // from fetched remote content, so a hostile instance could otherwise
+    // aim a signed Flag — carrying the report body and the forwarding
+    // admin's key id — at a host of its choosing.
+    const mismatch = { error: 'Cannot forward report: calendar owner is not on the event source instance' };
+
+    let targetHostname: string;
+    try {
+      targetHostname = new URL(targetActorUri).hostname;
+    }
+    catch {
+      logger.warn(
+        { reportId, targetActorUri },
+        'Refusing to forward report: resolved calendar actor is not a valid URI',
+      );
+      return mismatch;
+    }
+
+    if (targetHostname !== remoteInstanceDomain) {
+      logger.warn(
+        { reportId, targetActorUri, eventSourceHost: remoteInstanceDomain },
+        'Refusing to forward report: resolved calendar actor is not on the event source instance',
+      );
+      return mismatch;
+    }
+
+    return { targetActorUri, targetHostname };
+  }
+
+  /**
+   * Extracts the remote instance hostname from an event source URL
+   * (format: https://remote.instance/events/uuid).
+   */
+  private resolveEventSourceHost(
+    eventSourceUrl: string | null | undefined,
+  ): { hostname: string } | { error: string } {
+    if (!eventSourceUrl) {
+      return { error: 'Event is missing source URL' };
+    }
+    try {
+      return { hostname: new URL(eventSourceUrl).hostname };
+    }
+    catch {
+      return { error: 'Cannot determine remote instance from event source URL' };
     }
   }
 }
