@@ -1070,33 +1070,10 @@ class ProcessInboxService {
       await this.checkAndPerformAutoRepost(calendar, actorUri, apObjectId, true);
     }
 
-    // FEP-8a8e category fallback (pv-2p29.4): when the payload carries NO
-    // pavillion:categories / bare categories URIs (sourceCategories === null,
-    // i.e. a non-Pavillion peer such as Mobilizon/Gancio), fall back to the bare
-    // FEP-8a8e `category` enum. Resolve those enum values onto this calendar's
-    // EXISTING local categories by name heuristic and assign the matches, so the
-    // federated event lands with usable categories. pavillion:categories always
-    // takes precedence — this path only runs when it is absent. Federation input
-    // NEVER creates categories: only pre-existing local categories can match.
-    // Failure-safe: category assignment must never abort event ingest.
+    // pavillion:categories always takes precedence — the FEP-8a8e fallback
+    // only runs when the payload carried none (sourceCategories === null).
     if (createdEvent && sourceCategories === null) {
-      try {
-        const inboundFep = parseInboundFepCategories((message.object as any)?.category);
-        if (inboundFep.length > 0) {
-          const localCategories = await this.calendarInterface.getCategories(calendar.id);
-          const localIds = resolveFepCategoriesToLocalIds(inboundFep, localCategories);
-          if (localIds.length > 0) {
-            // assignManualRepostCategories assigns the given local category ids
-            // to the event with no permission check; the ids here are resolved
-            // from this calendar's own categories, so they are trusted by
-            // construction.
-            await this.calendarInterface.assignManualRepostCategories(createdEvent.id, localIds);
-          }
-        }
-      }
-      catch (error) {
-        logger.warn({ err: error }, '[INBOX] FEP category fallback mapping failed, proceeding without categories');
-      }
+      await this.assignFepFallbackCategories(calendar, (message.object as any)?.category, createdEvent);
     }
 
     return createdEvent;
@@ -1457,6 +1434,46 @@ class ProcessInboxService {
     if (description !== undefined) result.description = description;
 
     return result;
+  }
+
+  /**
+   * FEP-8a8e category fallback: when an inbound event payload carries NO
+   * pavillion:categories / bare categories URIs (a non-Pavillion peer such as
+   * Mobilizon/Gancio), fall back to the bare FEP-8a8e `category` enum. Resolve
+   * those enum values onto this calendar's EXISTING local categories by name
+   * heuristic and assign the matches, so the federated event lands with usable
+   * categories. Federation input NEVER creates categories: only pre-existing
+   * local categories can match.
+   *
+   * Failure-safe: category assignment must never abort event ingest, so every
+   * error is logged and swallowed.
+   *
+   * @param calendar - The receiving calendar whose local categories are matched
+   * @param categoryRaw - The raw FEP-8a8e `category` field from the AP payload
+   * @param createdEvent - The event just created from the payload
+   */
+  private async assignFepFallbackCategories(
+    calendar: Calendar,
+    categoryRaw: unknown,
+    createdEvent: CalendarEvent,
+  ): Promise<void> {
+    try {
+      const inboundFep = parseInboundFepCategories(categoryRaw);
+      if (inboundFep.length > 0) {
+        const localCategories = await this.calendarInterface.getCategories(calendar.id);
+        const localIds = resolveFepCategoriesToLocalIds(inboundFep, localCategories);
+        if (localIds.length > 0) {
+          // assignManualRepostCategories assigns the given local category ids
+          // to the event with no permission check; the ids here are resolved
+          // from this calendar's own categories, so they are trusted by
+          // construction.
+          await this.calendarInterface.assignManualRepostCategories(createdEvent.id, localIds);
+        }
+      }
+    }
+    catch (error) {
+      logger.warn({ err: error }, '[INBOX] FEP category fallback mapping failed, proceeding without categories');
+    }
   }
 
   /**

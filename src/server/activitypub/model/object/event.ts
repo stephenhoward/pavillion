@@ -216,67 +216,11 @@ class EventObject extends ActivityPubObject {
       }
     }
 
-    // --- FEP-8a8e event extension terms (https://w3id.org/fep/8a8e) ---
-    // Emitted as BARE (unprefixed) keys per the FEP-8a8e spec, which defines
-    // displayEndTime / timezone / eventStatus as top-level Event properties.
-    // The FEP context document IRI is declared in AP_CONTEXT (base.ts) so
-    // JSON-LD peers expand them. (displayEndTime is emitted above, inline with
-    // the synthesized-endTime branch it qualifies.)
-
-    // timezone: the IANA identifier of the first schedule's start zone, so peers
-    // can reconstruct the intended wall-clock time instead of relying on the ISO
-    // offset alone. Omitted when the zone is a fixed offset (e.g. 'UTC+2') rather
-    // than a named IANA zone — a bare offset carries no more than startTime
-    // already does. 'UTC' is itself a valid IANA zone and IS emitted.
-    const scheduleZone = firstSchedule?.startDate?.zoneName;
-    if (scheduleZone && IANAZone.isValidZone(scheduleZone)) {
-      result.timezone = scheduleZone;
-    }
-
-    // eventStatus: Pavillion has no event-level cancellation state (whole-event
-    // removal federates as a Delete activity; per-occurrence cancellation lives
-    // in pavillion:schedules). Every live serialized event is therefore
-    // Scheduled — emitted unconditionally so non-Pavillion peers see a status.
-    result.eventStatus = 'EventScheduled';
-
-    // --- FEP-8a8e event extension terms (continued) ---
-    // organizers / joinMode are bare (unprefixed) FEP-8a8e keys; the FEP context
-    // IRI is already declared in AP_CONTEXT (base.ts), so no @context change is
-    // needed here.
-
-    // organizers: FEP-8a8e's only MUST beyond name/startTime/endTime. The
-    // property must be present on every Event; a null value would signal
-    // intentional non-disclosure of the organizer. Pavillion always discloses
-    // the owning calendar actor, so we emit the Collection form mirroring
-    // attributedTo (the calendar actor URI) as its single member.
-    result.organizers = {
-      type: 'Collection',
-      totalItems: 1,
-      items: [this.attributedTo],
-    };
-
-    // joinMode: 'none' states explicitly that Pavillion has no RSVP/attendance
-    // model (DEC-004: no attendee tracking). 'none' is FEP-8a8e's blessed signal
-    // for "this event cannot be joined", so FEP-aware peers suppress any RSVP UI
-    // and never send a Join they expect us to honour.
-    result.joinMode = 'none';
-
-    // --- FEP-8a8e category (pv-2p29.4) ---
-    // category: the bare FEP-8a8e `category` property, a shared controlled
-    // vocabulary (MUSIC, SPORTS, ...) that non-Pavillion peers (Mobilizon,
-    // Gancio) can interpret. Pavillion categories are instance-defined
-    // TranslatedModels, so we map each category NAME onto the closest FEP enum
-    // value via a keyword heuristic (fep_category_map). Emitted ALONGSIDE the
-    // pavillion:categories URIs below — those still carry full Pavillion↔
-    // Pavillion fidelity; this bare enum is the interop surface. Emitted as an
-    // array per the FEP-8a8e `xsd:string (@list)` range. Categories that do not
-    // map confidently contribute nothing, and the property is omitted entirely
-    // when no category maps. The FEP context IRI is already declared in
-    // AP_CONTEXT (base.ts), so no @context change is needed here.
-    const fepCategories = mapEventCategoriesToFep(event.categories ?? []);
-    if (fepCategories.length > 0) {
-      result.category = fepCategories;
-    }
+    // FEP-8a8e event extension terms (timezone / eventStatus / organizers /
+    // joinMode / category), merged at this position so they serialize between
+    // endTime and location. displayEndTime is not among them — it is emitted
+    // above, inline with the synthesized-endTime branch it qualifies.
+    Object.assign(result, this._buildFepExtensions(event));
 
     // location: emitted as Place with optional PostalAddress; omitted if no location.
     // When a Space is present, the flat `as:Place.name` is concatenated as
@@ -974,6 +918,73 @@ class EventObject extends ActivityPubObject {
         ]),
       ),
     };
+  }
+
+  /**
+   * Builds the FEP-8a8e event extension terms (https://w3id.org/fep/8a8e).
+   *
+   * Emitted as BARE (unprefixed) keys per the FEP-8a8e spec, which defines
+   * timezone / eventStatus / organizers / joinMode / category as top-level
+   * Event properties. The FEP context document IRI is declared in AP_CONTEXT
+   * (base.ts) so JSON-LD peers expand them; no @context change is needed here.
+   * displayEndTime is NOT built here — it is emitted by toActivityPubObject
+   * inline with the synthesized-endTime branch it qualifies.
+   *
+   * @param event - The event being serialized
+   * @returns The FEP-8a8e properties to merge onto the serialized Event
+   */
+  private _buildFepExtensions(event: CalendarEvent): Record<string, any> {
+    const result: Record<string, any> = {};
+
+    // timezone: the IANA identifier of the first schedule's start zone, so peers
+    // can reconstruct the intended wall-clock time instead of relying on the ISO
+    // offset alone. Omitted when the zone is a fixed offset (e.g. 'UTC+2') rather
+    // than a named IANA zone — a bare offset carries no more than startTime
+    // already does. 'UTC' is itself a valid IANA zone and IS emitted.
+    const scheduleZone = event.schedules[0]?.startDate?.zoneName;
+    if (scheduleZone && IANAZone.isValidZone(scheduleZone)) {
+      result.timezone = scheduleZone;
+    }
+
+    // eventStatus: Pavillion has no event-level cancellation state (whole-event
+    // removal federates as a Delete activity; per-occurrence cancellation lives
+    // in pavillion:schedules). Every live serialized event is therefore
+    // Scheduled — emitted unconditionally so non-Pavillion peers see a status.
+    result.eventStatus = 'EventScheduled';
+
+    // organizers: FEP-8a8e's only MUST beyond name/startTime/endTime. The
+    // property must be present on every Event; a null value would signal
+    // intentional non-disclosure of the organizer. Pavillion always discloses
+    // the owning calendar actor, so we emit the Collection form mirroring
+    // attributedTo (the calendar actor URI) as its single member.
+    result.organizers = {
+      type: 'Collection',
+      totalItems: 1,
+      items: [this.attributedTo],
+    };
+
+    // joinMode: 'none' states explicitly that Pavillion has no RSVP/attendance
+    // model (DEC-004: no attendee tracking). 'none' is FEP-8a8e's blessed signal
+    // for "this event cannot be joined", so FEP-aware peers suppress any RSVP UI
+    // and never send a Join they expect us to honour.
+    result.joinMode = 'none';
+
+    // category: the bare FEP-8a8e `category` property, a shared controlled
+    // vocabulary (MUSIC, SPORTS, ...) that non-Pavillion peers (Mobilizon,
+    // Gancio) can interpret. Pavillion categories are instance-defined
+    // TranslatedModels, so we map each category NAME onto the closest FEP enum
+    // value via a keyword heuristic (fep_category_map). Emitted ALONGSIDE the
+    // pavillion:categories URIs — those still carry full Pavillion↔Pavillion
+    // fidelity; this bare enum is the interop surface. Emitted as an array per
+    // the FEP-8a8e `xsd:string (@list)` range. Categories that do not map
+    // confidently contribute nothing, and the property is omitted entirely
+    // when no category maps.
+    const fepCategories = mapEventCategoriesToFep(event.categories ?? []);
+    if (fepCategories.length > 0) {
+      result.category = fepCategories;
+    }
+
+    return result;
   }
 
   /**
