@@ -150,6 +150,9 @@ describe('EmailBlockingService Integration', () => {
       ];
 
       // Block reporters with slight delays to ensure different timestamps
+      // for the ordering assertions below. Not an async-handler drain:
+      // setTimeout guarantees a minimum elapsed time, so this cannot flake
+      // under runner contention.
       for (const { email, reason } of emails) {
         await service.blockReporter(email, adminAccount, reason);
         await new Promise(resolve => setTimeout(resolve, 10));

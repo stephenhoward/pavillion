@@ -5,6 +5,7 @@ import { EventEmitter } from 'events';
 import { Account } from '@/common/model/account';
 import { Calendar } from '@/common/model/calendar';
 import { TestEnvironment } from '@/server/common/test/lib/test_environment';
+import { waitFor } from '@/server/common/test/helpers/emit-and-settle';
 import AccountService from '@/server/accounts/service/account';
 import CalendarInterface from '@/server/calendar/interface';
 import ConfigurationInterface from '@/server/configuration/interface';
@@ -104,7 +105,10 @@ describe('Media Approval Workflow', () => {
 
       // Step 3: Wait for async media approval to complete
       // The mediaAttachedToEvent event handler runs asynchronously
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await waitFor(async () => {
+        const media = await MediaEntity.findByPk(mediaId);
+        return media?.status === 'approved';
+      });
 
       // Step 4: Check media status - should now be 'approved'
       const mediaAfterEvent = await MediaEntity.findByPk(mediaId);
@@ -139,8 +143,11 @@ describe('Media Approval Workflow', () => {
       });
       expect(event1Response.status).toBe(201);
 
-      // Wait for approval
-      await new Promise(resolve => setTimeout(resolve, 500));
+      // Wait for the async mediaAttachedToEvent handler to approve the media
+      await waitFor(async () => {
+        const media = await MediaEntity.findByPk(mediaId);
+        return media?.status === 'approved';
+      });
 
       // Verify media is approved
       const mediaAfterFirst = await MediaEntity.findByPk(mediaId);
@@ -156,7 +163,13 @@ describe('Media Approval Workflow', () => {
       });
       expect(event2Response.status).toBe(201);
 
-      // Media should still be approved (no errors from re-approving)
+      // Media should still be approved (no errors from re-approving).
+      // Negative assertion: the media is already 'approved', so waiting for a
+      // state change is impossible and dispatchAndAwait is unavailable (the
+      // emit happens on the app's internal event bus inside the awaited HTTP
+      // call). A bounded absence window is sound here: if the re-approval
+      // handler has not run yet the assertion still passes, so a contended
+      // runner can only under-detect a regression — it can never flake.
       await new Promise(resolve => setTimeout(resolve, 200));
       const mediaAfterSecond = await MediaEntity.findByPk(mediaId);
       expect(mediaAfterSecond?.status).toBe('approved');

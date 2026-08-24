@@ -19,7 +19,7 @@ import type AccountsInterface from '@/server/accounts/interface';
 import { Account } from '@/common/model/account';
 import { Calendar, CalendarContent } from '@/common/model/calendar';
 import { CalendarEvent, CalendarEventContent } from '@/common/model/events';
-import { emitAndSettle } from '@/server/common/test/helpers/emit-and-settle';
+import { dispatchAndAwait } from '@/server/common/test/helpers/emit-and-settle';
 
 /**
  * Tests for `NotificationEventHandlers` (pv-89mw.5.1).
@@ -161,16 +161,17 @@ describe('NotificationEventHandlers', () => {
   }
 
   /**
-   * Local-scope wrapper around the shared `emitAndSettle` helper. Tests in
-   * this file call `emit(event, payload)` without threading the bus instance
-   * through every call site — close over `eventBus` once here.
+   * Local-scope wrapper around the shared `dispatchAndAwait` helper. Tests
+   * in this file call `emit(event, payload)` without threading the bus
+   * instance through every call site — close over `eventBus` once here.
    *
    * The handler runs an async DB transaction (`recordActivity` uses
-   * SERIALIZABLE isolation + a retry loop). The shared helper's default
-   * drain (5 rounds × 5ms gap) is sufficient.
+   * SERIALIZABLE isolation + a retry loop); dispatching the listeners
+   * directly awaits that chain to completion instead of draining for a
+   * fixed budget, which flaked in CI.
    */
   async function emit(event: string, payload: unknown): Promise<void> {
-    await emitAndSettle(eventBus, event, payload);
+    await dispatchAndAwait(eventBus, event, payload);
   }
 
   /**

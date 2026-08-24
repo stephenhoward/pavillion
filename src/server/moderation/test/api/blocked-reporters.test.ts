@@ -143,7 +143,11 @@ describe('BlockedReportersRoutes API Integration', () => {
     it('should return all blocked reporters', async () => {
       const app = createAppWithAuth(true);
 
-      // Block three reporters
+      // Block three reporters. The sleeps advance the wall clock between
+      // writes so each row gets a distinct created_at for the ordering
+      // assertions below — they are not waiting on any async handler, and
+      // setTimeout guarantees a minimum elapsed time, so this cannot flake
+      // under runner contention.
       const email1 = 'spammer1@example.com';
       const email2 = 'spammer2@example.com';
       const email3 = 'spammer3@example.com';

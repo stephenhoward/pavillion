@@ -16,6 +16,28 @@ import { CalendarEvent, CalendarEventContent } from '@/common/model/events';
 import { EventLocation, EventLocationContent, EventLocationSpace, EventLocationSpaceContent } from '@/common/model/location';
 import { setupActivityPubSchema, teardownActivityPubSchema } from '@/server/common/test/helpers/database';
 
+/**
+ * Emit `event` on the bus, then await the handlers' serialized dispatch chain.
+ *
+ * `ActivityPubEventHandlers.serialize` installs void-returning listeners that
+ * chain each handler onto the private `dispatchQueue` (SQLite serialized
+ * dispatch — the dialect tests run under), so the shared `dispatchAndAwait`
+ * helper cannot reach the handler promises through the bus. Awaiting the
+ * queue tail after the emit settles the full handler chain (errors are caught
+ * inside `serialize`), which is deterministic for positive and negative
+ * assertions alike — replacing the fixed 100ms sleeps that read stale state
+ * on contended runners.
+ */
+async function emitAndAwaitDispatch(
+  eventBus: EventEmitter,
+  handlers: ActivityPubEventHandlers,
+  event: string,
+  payload: unknown,
+): Promise<void> {
+  eventBus.emit(event, payload);
+  await (handlers as any)['dispatchQueue'];
+}
+
 describe('inbox event listener', () => {
   let service: ActivityPubInterface;
   let eventHandler: ActivityPubEventHandlers;
@@ -43,10 +65,7 @@ describe('inbox event listener', () => {
       }),
     );
 
-    eventBus.emit('inboxMessageAdded',{ id: 'testid' });
-
-    // wait for event to propogate:
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await emitAndAwaitDispatch(eventBus, eventHandler, 'inboxMessageAdded', { id: 'testid' });
 
     expect(processorStub.calledOnce).toBe(true);
   });
@@ -57,10 +76,7 @@ describe('inbox event listener', () => {
     let entityStub = sandbox.stub(ActivityPubInboxMessageEntity,'findByPk');
     entityStub.resolves(undefined);
 
-    eventBus.emit('inboxMessageAdded',{ id: 'testid' });
-
-    // wait for event to propogate:
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await emitAndAwaitDispatch(eventBus, eventHandler, 'inboxMessageAdded', { id: 'testid' });
 
     expect(processorStub.calledOnce).toBe(false);
   });
@@ -93,14 +109,11 @@ describe('outbox event listener', () => {
       }),
     );
 
-    eventBus.emit('outboxMessageAdded',{
+    await emitAndAwaitDispatch(eventBus, eventHandler, 'outboxMessageAdded', {
       calendar_id: 'testid',
       type: 'Create',
       message: { object: { id: 'testid' } },
     });
-
-    // wait for event to propogate:
-    await new Promise(resolve => setTimeout(resolve, 100));
 
     expect(processorStub.calledOnce).toBe(true);
   });
@@ -111,14 +124,11 @@ describe('outbox event listener', () => {
     let entityStub = sandbox.stub(ActivityPubOutboxMessageEntity,'findByPk');
     entityStub.resolves(undefined);
 
-    eventBus.emit('outboxMessageAdded',{
+    await emitAndAwaitDispatch(eventBus, eventHandler, 'outboxMessageAdded', {
       calendar_id: 'testid',
       type: 'Create',
       message: { object: { id: 'testid' } },
     });
-
-    // wait for event to propogate:
-    await new Promise(resolve => setTimeout(resolve, 100));
 
     expect(processorStub.calledOnce).toBe(false);
   });
@@ -148,10 +158,7 @@ describe('handleEventUpdated guard', () => {
     const event = CalendarEvent.fromObject({ id: 'remote-event-id' });
 
     // Emit eventUpdated with null calendar (simulates remote event update)
-    eventBus.emit('eventUpdated', { calendar: null, event });
-
-    // Wait for event to propagate
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await emitAndAwaitDispatch(eventBus, eventHandler, 'eventUpdated', { calendar: null, event });
 
     // actorUrl and addToOutbox should never be called
     expect(actorUrlStub.called).toBe(false);
@@ -165,10 +172,7 @@ describe('handleEventUpdated guard', () => {
     const event = CalendarEvent.fromObject({ id: 'remote-event-id' });
 
     // Emit eventUpdated with undefined calendar
-    eventBus.emit('eventUpdated', { calendar: undefined, event });
-
-    // Wait for event to propagate
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await emitAndAwaitDispatch(eventBus, eventHandler, 'eventUpdated', { calendar: undefined, event });
 
     expect(actorUrlStub.called).toBe(false);
     expect(addToOutboxStub.called).toBe(false);
@@ -184,10 +188,7 @@ describe('handleEventUpdated guard', () => {
     const addToOutboxStub = sandbox.stub(service, 'addToOutbox');
     addToOutboxStub.resolves();
 
-    eventBus.emit('eventUpdated', { calendar, event });
-
-    // Wait for event to propagate
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await emitAndAwaitDispatch(eventBus, eventHandler, 'eventUpdated', { calendar, event });
 
     expect(actorUrlStub.calledOnce).toBe(true);
     // Paired emission: Update(Event) + Update(Note) so Mastodon-class peers see

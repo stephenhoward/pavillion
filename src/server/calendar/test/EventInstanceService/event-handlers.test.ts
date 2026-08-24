@@ -6,6 +6,7 @@ import CalendarInterface from '../../interface';
 import { CalendarEvent, CalendarEventSchedule } from '@/common/model/events';
 import { Calendar } from '@/common/model/calendar';
 import { DateTime } from 'luxon';
+import { dispatchAndAwait } from '@/server/common/test/helpers/emit-and-settle';
 
 /**
  * Handler-level tests under the single-producer model (pv-hr72).
@@ -91,9 +92,7 @@ describe('CalendarEventHandlers (single-producer model)', () => {
       const event = createTestEvent('event-1', 'calendar-1');
       const calendar = new Calendar('calendar-1', 'test-calendar');
 
-      eventBus.emit('eventCreated', { event, calendar });
-
-      await new Promise(resolve => setTimeout(resolve, 10));
+      await dispatchAndAwait(eventBus, 'eventCreated', { event, calendar });
 
       expect(mockService.buildEventInstances.calledOnce).toBe(true);
       expect(mockService.buildEventInstances.firstCall.args[0]).toBe(event);
@@ -105,9 +104,7 @@ describe('CalendarEventHandlers (single-producer model)', () => {
       const event = createTestEvent('event-1', 'calendar-1');
       const calendar = new Calendar('calendar-1', 'test-calendar');
 
-      eventBus.emit('eventUpdated', { event, calendar });
-
-      await new Promise(resolve => setTimeout(resolve, 10));
+      await dispatchAndAwait(eventBus, 'eventUpdated', { event, calendar });
 
       expect(mockService.buildEventInstances.calledOnce).toBe(true);
       expect(mockService.buildEventInstances.firstCall.args[0]).toBe(event);
@@ -121,9 +118,7 @@ describe('CalendarEventHandlers (single-producer model)', () => {
       // listing-time union — no per-calendar fan-out.
       const event = createTestEvent('event-1', null);
 
-      eventBus.emit('eventUpdated', { event, calendar: null });
-
-      await new Promise(resolve => setTimeout(resolve, 10));
+      await dispatchAndAwait(eventBus, 'eventUpdated', { event, calendar: null });
 
       expect(mockService.buildEventInstances.calledOnce).toBe(true);
       expect(mockService.buildEventInstances.firstCall.args[0]).toBe(event);
@@ -132,9 +127,7 @@ describe('CalendarEventHandlers (single-producer model)', () => {
     it('should call buildEventInstances when calendar is undefined', async () => {
       const event = createTestEvent('event-1', null);
 
-      eventBus.emit('eventUpdated', { event, calendar: undefined });
-
-      await new Promise(resolve => setTimeout(resolve, 10));
+      await dispatchAndAwait(eventBus, 'eventUpdated', { event, calendar: undefined });
 
       expect(mockService.buildEventInstances.calledOnce).toBe(true);
       expect(mockService.buildEventInstances.firstCall.args[0]).toBe(event);
@@ -148,9 +141,7 @@ describe('CalendarEventHandlers (single-producer model)', () => {
       const event = createTestEvent('event-1', 'calendar-1');
       const calendar = new Calendar('calendar-1', 'test-calendar');
 
-      eventBus.emit('eventUpdated', { event, calendar, skipRebuild: true });
-
-      await new Promise(resolve => setTimeout(resolve, 10));
+      await dispatchAndAwait(eventBus, 'eventUpdated', { event, calendar, skipRebuild: true });
 
       expect(mockService.buildEventInstances.called).toBe(false);
     });
@@ -161,9 +152,7 @@ describe('CalendarEventHandlers (single-producer model)', () => {
       const event = createTestEvent('event-1', 'calendar-1');
       const calendar = new Calendar('calendar-1', 'test-calendar');
 
-      eventBus.emit('eventDeleted', { event, calendar });
-
-      await new Promise(resolve => setTimeout(resolve, 10));
+      await dispatchAndAwait(eventBus, 'eventDeleted', { event, calendar });
 
       expect(mockService.removeEventInstances.calledOnce).toBe(true);
       expect(mockService.removeEventInstances.firstCall.args[0]).toBe(event);
@@ -175,9 +164,7 @@ describe('CalendarEventHandlers (single-producer model)', () => {
       const event = createTestEvent('event-1', 'original-calendar');
       const calendar = new Calendar('repost-calendar', 'repost-cal');
 
-      eventBus.emit('eventReposted', { event, calendar });
-
-      await new Promise(resolve => setTimeout(resolve, 10));
+      await dispatchAndAwait(eventBus, 'eventReposted', { event, calendar });
 
       // Under the single-producer model, reposting a published event creates
       // only the link row (event_repost / ap_shared_event). The originating
@@ -190,11 +177,9 @@ describe('CalendarEventHandlers (single-producer model)', () => {
 
       // Stub-only: the goal is to verify the handler does not throw on the
       // various payload shapes that production code historically guarded.
-      eventBus.emit('eventReposted', { event, calendar: null });
-      eventBus.emit('eventReposted', { event, calendar: {} });
-      eventBus.emit('eventReposted', {});
-
-      await new Promise(resolve => setTimeout(resolve, 10));
+      await dispatchAndAwait(eventBus, 'eventReposted', { event, calendar: null });
+      await dispatchAndAwait(eventBus, 'eventReposted', { event, calendar: {} });
+      await dispatchAndAwait(eventBus, 'eventReposted', {});
 
       expect(mockService.buildEventInstances.called).toBe(false);
     });
@@ -202,9 +187,7 @@ describe('CalendarEventHandlers (single-producer model)', () => {
 
   describe('eventUnreposted handler (signal preservation stub)', () => {
     it('should not call removeEventInstances or any fan-out helper', async () => {
-      eventBus.emit('eventUnreposted', { eventId: 'event-1', calendarId: 'repost-calendar' });
-
-      await new Promise(resolve => setTimeout(resolve, 10));
+      await dispatchAndAwait(eventBus, 'eventUnreposted', { eventId: 'event-1', calendarId: 'repost-calendar' });
 
       // Removing the link row stops the calendar from showing the event via
       // the listing union; no per-calendar instance rows exist to delete.
@@ -212,11 +195,9 @@ describe('CalendarEventHandlers (single-producer model)', () => {
     });
 
     it('should execute without throwing on malformed payloads', async () => {
-      eventBus.emit('eventUnreposted', { eventId: '', calendarId: 'repost-calendar' });
-      eventBus.emit('eventUnreposted', { eventId: 'event-1', calendarId: '' });
-      eventBus.emit('eventUnreposted', {});
-
-      await new Promise(resolve => setTimeout(resolve, 10));
+      await dispatchAndAwait(eventBus, 'eventUnreposted', { eventId: '', calendarId: 'repost-calendar' });
+      await dispatchAndAwait(eventBus, 'eventUnreposted', { eventId: 'event-1', calendarId: '' });
+      await dispatchAndAwait(eventBus, 'eventUnreposted', {});
 
       expect(mockService.removeEventInstances.called).toBe(false);
     });
@@ -230,13 +211,11 @@ describe('CalendarEventHandlers (single-producer model)', () => {
       const eventUpdatedSpy = sandbox.spy();
       eventBus.on('eventUpdated', eventUpdatedSpy);
 
-      eventBus.emit('eventInstanceCancelled', {
+      await dispatchAndAwait(eventBus, 'eventInstanceCancelled', {
         event,
         calendar,
         hideFromPublic: true,
       });
-
-      await new Promise(resolve => setTimeout(resolve, 10));
 
       // Cancellation state lives in EventScheduleEntity exclusion rows
       // (already written by cancelOccurrenceByDate). event_instance has no
@@ -258,13 +237,11 @@ describe('CalendarEventHandlers (single-producer model)', () => {
       const eventUpdatedSpy = sandbox.spy();
       eventBus.on('eventUpdated', eventUpdatedSpy);
 
-      eventBus.emit('eventInstanceCancelled', {
+      await dispatchAndAwait(eventBus, 'eventInstanceCancelled', {
         event,
         calendar: null,
         hideFromPublic: true,
       });
-
-      await new Promise(resolve => setTimeout(resolve, 10));
 
       expect(mockService.buildEventInstances.called).toBe(false);
       // No outbound emission either when payload identity is malformed.
@@ -280,12 +257,10 @@ describe('CalendarEventHandlers (single-producer model)', () => {
       const eventUpdatedSpy = sandbox.spy();
       eventBus.on('eventUpdated', eventUpdatedSpy);
 
-      eventBus.emit('eventInstanceRestored', {
+      await dispatchAndAwait(eventBus, 'eventInstanceRestored', {
         event,
         calendar,
       });
-
-      await new Promise(resolve => setTimeout(resolve, 10));
 
       // Same exclusion-row architecture as eventInstanceCancelled: restore
       // deletes the exclusion row (already done by restoreOccurrenceByDate);
@@ -303,12 +278,10 @@ describe('CalendarEventHandlers (single-producer model)', () => {
       const eventUpdatedSpy = sandbox.spy();
       eventBus.on('eventUpdated', eventUpdatedSpy);
 
-      eventBus.emit('eventInstanceRestored', {
+      await dispatchAndAwait(eventBus, 'eventInstanceRestored', {
         event: { id: null },
         calendar,
       });
-
-      await new Promise(resolve => setTimeout(resolve, 10));
 
       expect(mockService.buildEventInstances.called).toBe(false);
       expect(eventUpdatedSpy.called).toBe(false);

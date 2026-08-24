@@ -4,6 +4,8 @@ import request from 'supertest';
 import { DateTime } from 'luxon';
 
 import { TestEnvironment } from '@/server/common/test/lib/test_environment';
+import { waitFor } from '@/server/common/test/helpers/emit-and-settle';
+import { EventInstanceEntity } from '@/server/calendar/entity/event_instance';
 import AccountService from '@/server/accounts/service/account';
 import ConfigurationInterface from '@/server/configuration/interface';
 import SetupInterface from '@/server/setup/interface';
@@ -118,7 +120,19 @@ describe('Cancel / Restore Event Occurrence API (date-based)', () => {
 
   afterAll(async () => {
     if (env) {
-      await new Promise(resolve => setTimeout(resolve, 500));
+      // Settle the async eventCreated listeners (buildEventInstances) kicked
+      // off by the final beforeEach before teardown: poll for the actual end
+      // state — instance rows for the weekly and monthly fixtures — instead
+      // of sleeping a fixed budget. The yearly fixture is excluded
+      // on purpose: its next occurrence is ~11 months out, beyond the 6-month
+      // materialization horizon, so its listener writes no rows to poll for.
+      await waitFor(async () => {
+        const [weekly, monthly] = await Promise.all([
+          EventInstanceEntity.count({ where: { event_id: recurringEventId } }),
+          EventInstanceEntity.count({ where: { event_id: monthlyEventId } }),
+        ]);
+        return weekly > 0 && monthly > 0;
+      });
       await env.cleanup();
     }
   });

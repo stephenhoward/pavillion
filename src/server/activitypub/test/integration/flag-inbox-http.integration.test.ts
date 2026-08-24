@@ -40,9 +40,10 @@ import ConfigurationInterface from '@/server/configuration/interface';
 import SetupInterface from '@/server/setup/interface';
 import AccountService from '@/server/accounts/service/account';
 import { TestEnvironment } from '@/server/common/test/lib/test_environment';
-import { waitFor, settleAsyncHandlers } from '@/server/common/test/helpers/emit-and-settle';
+import { waitFor } from '@/server/common/test/helpers/emit-and-settle';
 import { EventEntity, EventContentEntity } from '@/server/calendar/entity/event';
 import { ActivityPubInboxMessageEntity } from '@/server/activitypub/entity/activitypub';
+import { NotificationActivityEntity } from '@/server/notifications/entity/notification_activity';
 import { ReportEntity } from '@/server/moderation/entity/report';
 import { BlockedInstanceEntity } from '@/server/moderation/entity/blocked_instance';
 import { ReportCategory } from '@/common/model/report';
@@ -131,11 +132,6 @@ describe('Inbound Flag over HTTP (integration)', () => {
     else {
       process.env.SKIP_SIGNATURES = originalSkipSignatures;
     }
-    // Let the notification tail of the dispatch chain finish before the next
-    // test issues its own request. The suite shares one in-memory SQLite
-    // connection, and sequelize's `findOrCreate` opens a transaction on it —
-    // two overlapping pipelines corrupt each other's transaction state.
-    await settleAsyncHandlers();
   });
 
   /**
@@ -148,6 +144,22 @@ describe('Inbound Flag over HTTP (integration)', () => {
       const found = await ActivityPubInboxMessageEntity.findByPk(activityId);
       return found?.processed_status ? found : null;
     });
+
+  /**
+   * Blocks until the notification tail of the dispatch chain has landed for
+   * a report filed through the pipeline. The `processed_status` stamp lands
+   * before the notifications handler (the only REPORT_FLAGGED subscriber)
+   * finishes its own async writes, so any test that files a report must wait
+   * for the handler's terminal write — the Flag activity row — before
+   * finishing. Otherwise the tail's transaction can overlap the next test's
+   * request on the shared in-memory SQLite connection and corrupt both
+   * (previously mitigated with a fixed-budget drain, which flaked in CI).
+   */
+  const awaitNotificationTail = async (reportId: string): Promise<void> => {
+    await waitFor(() =>
+      NotificationActivityEntity.findOne({ where: { verb: 'Flag', object_id: reportId } }),
+    );
+  };
 
   const buildFlag = (eventId: string, overrides: Record<string, unknown> = {}) => ({
     '@context': 'https://www.w3.org/ns/activitystreams',
@@ -202,6 +214,8 @@ describe('Inbound Flag over HTTP (integration)', () => {
     // Only the reporting instance's host is retained — never the reporter.
     expect(report.forwarded_from_instance).toBe(REPORTING_HOST);
     expect(report.forwarded_report_id).toBe(activity.id);
+
+    await awaitNotificationTail(report.id);
   });
 
   it('defaults to the "other" category when the Flag carries no recognized Hashtag', async () => {
@@ -215,6 +229,8 @@ describe('Inbound Flag over HTTP (integration)', () => {
     const reports = await ReportEntity.findAll({ where: { event_id: eventId } });
     expect(reports).toHaveLength(1);
     expect(reports[0].category).toBe(ReportCategory.OTHER);
+
+    await awaitNotificationTail(reports[0].id);
   });
 
   it('rejects a Flag whose content exceeds the local report description cap', async () => {
@@ -267,9 +283,12 @@ describe('Inbound Flag over HTTP (integration)', () => {
     ).toBe(maxPerInstance);
 
     // The accepted Flag's notification tail runs past the ap_inbox row's
-    // processed_status stamp. Let it drain before the next request opens its
-    // own transaction on the shared in-memory connection (see afterEach).
-    await settleAsyncHandlers();
+    // processed_status stamp. Wait for its terminal write before the next
+    // request opens its own transaction on the shared in-memory connection.
+    const acceptedReport = await ReportEntity.findOne({
+      where: { forwarded_report_id: accepted.id },
+    });
+    await awaitNotificationTail(acceptedReport!.id);
 
     const suppressed = buildFlag(eventId, { content: 'One report too many.' });
     expect((await postFlag(suppressed)).status).toBe(200);

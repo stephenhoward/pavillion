@@ -5,6 +5,7 @@ import { v4 as uuidv4 } from 'uuid';
 import config from 'config';
 
 import ActivityPubEventHandlers from '@/server/activitypub/events';
+import { waitFor } from '@/server/common/test/helpers/emit-and-settle';
 import ActivityPubInterface from '@/server/activitypub/interface';
 import CalendarInterface from '@/server/calendar/interface';
 import UpdateActivity from '@/server/activitypub/model/action/update';
@@ -109,9 +110,12 @@ describe('Place+Spaces atomic save: federation regression', () => {
     // Act — the new atomic-save path, when Place changes a Space, emits one
     // `eventUpdated` per affected event (no new "Place activity" exists per
     // Architectural Decision 6). The handler under test fan-outs that to a
-    // per-event AP Update.
+    // per-event AP Update. The installed listeners are fire-and-forget
+    // (ActivityPubEventHandlers.serialize detaches the handler promise), so
+    // poll for the end-state the assertions below check: both outbox legs
+    // enqueued.
     eventBus.emit('eventUpdated', { calendar, event });
-    await new Promise(resolve => setTimeout(resolve, 50));
+    await waitFor(() => addToOutboxStub.callCount >= 2);
 
     // Assert — paired Update(Event) + Update(Note) enqueued for the event.
     // The first call carries the Pavillion-native Update(Event) (which is the
@@ -198,8 +202,9 @@ describe('Place+Spaces atomic save: federation regression', () => {
     sandbox.stub(service, 'actorUrl').resolves(actorUrl);
     const addToOutboxStub = sandbox.stub(service, 'addToOutbox').resolves();
 
+    // Fire-and-forget listeners (see above) — poll for both outbox legs.
     eventBus.emit('eventUpdated', { calendar, event });
-    await new Promise(resolve => setTimeout(resolve, 50));
+    await waitFor(() => addToOutboxStub.callCount >= 2);
 
     // Paired Update(Event) + Update(Note) emission — filter to the Event leg,
     // which is the one carrying the pavillion:place wire shape this test pins.

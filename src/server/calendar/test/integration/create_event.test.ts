@@ -8,6 +8,7 @@ import { EventEmitter } from 'events';
 import { Account } from '@/common/model/account';
 import { Calendar } from '@/common/model/calendar';
 import { TestEnvironment } from '@/server/common/test/lib/test_environment';
+import { waitFor } from '@/server/common/test/helpers/emit-and-settle';
 import AccountService from '@/server/accounts/service/account';
 import CalendarInterface from '@/server/calendar/interface';
 import { EventEntity } from '@/server/calendar/entity/event';
@@ -96,15 +97,15 @@ describe('Event API', () => {
     });
     let entity = await EventEntity.findOne({ where: { id: response.body.id } });
 
-    // Poll for the outbox message to be processed (ARM CI runners need more time).
-    // Locally-created originals now federate as paired Create(Event) +
-    // Create(Note) (Announce is reserved for reposts), so we filter for the
-    // Create wrapping the full embedded Event object. Filtering by activity +
-    // wrapped-object type protects against future activity additions and
-    // removes order-dependence.
+    // Poll for the outbox message to be processed — deterministic condition
+    // wait, not a fixed drain (contended CI runners overrun any fixed
+    // budget). Locally-created originals now federate as paired
+    // Create(Event) + Create(Note) (Announce is reserved for reposts), so we
+    // filter for the Create wrapping the full embedded Event object.
+    // Filtering by activity + wrapped-object type protects against future
+    // activity additions and removes order-dependence.
     let message: ActivityPubOutboxMessageEntity | null = null;
-    for (let i = 0; i < 20; i++) {
-      await new Promise(resolve => setTimeout(resolve, 100));
+    await waitFor(async () => {
       const messages = await ActivityPubOutboxMessageEntity.findAll({
         where: { calendar_id: calendar.id },
         order: [['message_time', 'ASC']],
@@ -112,8 +113,11 @@ describe('Event API', () => {
       message = messages.find(
         m => (m.message as any)?.type === 'Create' && (m.message as any)?.object?.type === 'Event',
       ) ?? null;
-      if (message?.processed_time) break;
-    }
+      return message?.processed_time != null;
+    }, { timeoutMs: 5000 }).catch(() => {
+      // Timed out: fall through so the labelled assertions below report
+      // whether the Create row is missing entirely or merely unprocessed.
+    });
 
     expect(response.status,"api call succeeded").toBe(201);
     expect(response.body.id,"got back an object with an id").toBeDefined();

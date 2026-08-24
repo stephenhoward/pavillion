@@ -2,6 +2,8 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { EventEmitter } from 'events';
 import request from 'supertest';
 import { TestEnvironment } from '@/server/common/test/lib/test_environment';
+import { waitFor } from '@/server/common/test/helpers/emit-and-settle';
+import { ActivityPubOutboxMessageEntity } from '@/server/activitypub/entity/activitypub';
 import AccountService from '@/server/accounts/service/account';
 import CalendarService from '@/server/calendar/service/calendar';
 import ConfigurationInterface from '@/server/configuration/interface';
@@ -15,6 +17,9 @@ describe('Location Validation - API Integration', () => {
   let authToken: string;
   let account: Account;
   let calendar: Calendar;
+  // Events created successfully during the suite; afterAll waits for their
+  // async eventCreated handler chains to settle before teardown.
+  const createdEventIds: string[] = [];
 
   beforeAll(async () => {
     env = new TestEnvironment();
@@ -38,8 +43,19 @@ describe('Location Validation - API Integration', () => {
 
   afterAll(async () => {
     if (env) {
-      // Wait for async event instance operations to complete before cleanup
-      await new Promise(resolve => setTimeout(resolve, 500));
+      // Settle the async eventCreated listener chains before teardown: poll
+      // for each created event's processed outbox message instead of sleeping
+      // a fixed budget. These fixtures' schedules carry no `start`,
+      // so buildEventInstances writes no instance rows to poll for — the
+      // observable end state of the chain is the ActivityPub outbox write.
+      await waitFor(async () => {
+        const messages = await ActivityPubOutboxMessageEntity.findAll({
+          where: { calendar_id: calendar.id },
+        });
+        return createdEventIds.every(id => messages.some(
+          m => m.processed_time != null && JSON.stringify(m.message).includes(id),
+        ));
+      });
       await env.cleanup();
     }
   });
@@ -141,6 +157,7 @@ describe('Location Validation - API Integration', () => {
 
     expect(response1.status).toBe(201);
     expect(response1.body.id).toBeDefined();
+    createdEventIds.push(response1.body.id);
 
     // Test full valid location
     const response2 = await request(env.app)
@@ -171,6 +188,7 @@ describe('Location Validation - API Integration', () => {
 
     expect(response2.status).toBe(201);
     expect(response2.body.id).toBeDefined();
+    createdEventIds.push(response2.body.id);
   });
 
   it('should return clear error messages for invalid location combinations', async () => {

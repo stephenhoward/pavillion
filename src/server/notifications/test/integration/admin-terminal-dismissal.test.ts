@@ -23,7 +23,7 @@ import {
   ReportCategory,
   ReportStatus,
 } from '@/common/model/report';
-import { settleAsyncHandlers } from '@/server/common/test/helpers/emit-and-settle';
+import { dispatchAndAwait, waitFor } from '@/server/common/test/helpers/emit-and-settle';
 
 /**
  * Integration tests for the admin terminal-decision → notifications-domain
@@ -168,10 +168,13 @@ describe('admin terminal-decision → notifications dismissal (integration)', ()
     });
 
     await moderationService.adminDismissReport(reportId, reviewerId, 'Not actionable');
-    await settleAsyncHandlers();
-
-    const flagRecipients = await NotificationRecipientEntity.findAll({
-      where: { notification_activity_id: flagId },
+    // The REPORT_RESOLVED emit is buried inside the awaited service call, so
+    // wait for the end-state itself: every recipient row stamped dismissed.
+    const flagRecipients = await waitFor(async () => {
+      const rows = await NotificationRecipientEntity.findAll({
+        where: { notification_activity_id: flagId },
+      });
+      return rows.length > 0 && rows.every(r => r.dismissed_at !== null) ? rows : null;
     });
     expect(flagRecipients).toHaveLength(2);
     for (const r of flagRecipients) {
@@ -191,10 +194,12 @@ describe('admin terminal-decision → notifications dismissal (integration)', ()
     });
 
     await moderationService.adminOverrideReport(reportId, reviewerId, 'Reversed owner decision');
-    await settleAsyncHandlers();
-
-    const flagRecipients = await NotificationRecipientEntity.findAll({
-      where: { notification_activity_id: flagId },
+    // See above: condition-wait on the dismissal itself, not a fixed drain.
+    const flagRecipients = await waitFor(async () => {
+      const rows = await NotificationRecipientEntity.findAll({
+        where: { notification_activity_id: flagId },
+      });
+      return rows.length > 0 && rows.every(r => r.dismissed_at !== null) ? rows : null;
     });
     expect(flagRecipients).toHaveLength(1);
     expect(flagRecipients[0].dismissed_at).not.toBeNull();
@@ -216,12 +221,14 @@ describe('admin terminal-decision → notifications dismissal (integration)', ()
     });
 
     await moderationService.adminDismissReport(reportId, reviewerId, 'First run');
-    await settleAsyncHandlers();
-
-    const afterFirst = await NotificationRecipientEntity.findOne({
-      where: { notification_activity_id: flagId, account_id: adminA },
-    });
-    const firstDismissedAt = afterFirst!.dismissed_at;
+    // Condition-wait for the first dismissal to land before capturing its
+    // timestamp — the emit is buried inside the awaited service call.
+    const afterFirst = await waitFor(async () =>
+      NotificationRecipientEntity.findOne({
+        where: { notification_activity_id: flagId, account_id: adminA },
+      }).then(row => (row?.dismissed_at ? row : null)),
+    );
+    const firstDismissedAt = afterFirst.dismissed_at;
     expect(firstDismissedAt).not.toBeNull();
 
     // Wait so a non-idempotent UPDATE would produce a different timestamp.
@@ -230,15 +237,16 @@ describe('admin terminal-decision → notifications dismissal (integration)', ()
     // Re-emit REPORT_RESOLVED directly — we can't call adminDismissReport
     // again because the report is already in a terminal state and the
     // service guards against double-termination. The bus event is what
-    // the notifications handler subscribes to, so emitting it directly
-    // exercises the idempotency invariant the design calls out.
-    eventBus.emit(MODERATION_BUS_EVENTS.REPORT_RESOLVED, {
+    // the notifications handler subscribes to, so dispatching it directly
+    // exercises the idempotency invariant the design calls out. Direct
+    // dispatch (not emit-and-drain) is what makes the negative assertion
+    // below sound: the handler chain has fully completed when this returns.
+    await dispatchAndAwait(eventBus, MODERATION_BUS_EVENTS.REPORT_RESOLVED, {
       reportId,
       eventId: uuidv4(),
       calendarId,
       reviewerId,
     });
-    await settleAsyncHandlers();
 
     const afterSecond = await NotificationRecipientEntity.findOne({
       where: { notification_activity_id: flagId, account_id: adminA },

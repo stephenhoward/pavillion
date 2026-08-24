@@ -18,7 +18,7 @@ import { ReportEntity } from '@/server/moderation/entity/report';
 import { TestEnvironment } from '@/server/common/test/lib/test_environment';
 import NotificationService from '@/server/notifications/service/notification';
 import NotificationEventHandlers from '@/server/notifications/events';
-import { emitAndSettle } from '@/server/common/test/helpers/emit-and-settle';
+import { dispatchAndAwait } from '@/server/common/test/helpers/emit-and-settle';
 import { MODERATION_BUS_EVENTS } from '@/server/moderation/events/types';
 import type { NotificationResponse } from '@/common/model/notification';
 
@@ -124,7 +124,7 @@ describe('notification read path — target derivation (integration)', () => {
     // One real Flag through the real handler: audience resolution, the
     // label snapshot, and `object_calendar_id` persistence all run as they do
     // in production.
-    await emitAndSettle(eventBus, MODERATION_BUS_EVENTS.REPORT_FLAGGED, {
+    await dispatchAndAwait(eventBus, MODERATION_BUS_EVENTS.REPORT_FLAGGED, {
       reportId,
       eventId,
       calendarId: calendar.id,
@@ -262,7 +262,7 @@ describe('notification read path — target derivation (integration)', () => {
     //     resolving a report on their own calendar, for whom the
     //     `owner_report` link is correct.
     const escalatedReportId = uuidv4();
-    await emitAndSettle(eventBus, MODERATION_BUS_EVENTS.REPORT_ESCALATED, {
+    await dispatchAndAwait(eventBus, MODERATION_BUS_EVENTS.REPORT_ESCALATED, {
       reportId: escalatedReportId,
       eventId,
       calendarId: calendar.id,
