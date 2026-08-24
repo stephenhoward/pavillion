@@ -251,11 +251,12 @@ describe('Migration Runner session-timeout wiring', () => {
   const setLocalStatements = [
     'SET LOCAL statement_timeout = 0',
     'SET LOCAL idle_in_transaction_session_timeout = 0',
+    'SET LOCAL lock_timeout = 0',
   ];
 
   const indexOf = (sql: string) => recorded.findIndex((entry) => entry.sql === sql);
 
-  it('clears both session timeouts before the migration body on up()', async () => {
+  it('clears every session timeout before the migration body on up()', async () => {
     await createMigrationRunner(context, probeDir).up();
 
     const sqls = recorded.map((entry) => entry.sql);
@@ -265,7 +266,7 @@ describe('Migration Runner session-timeout wiring', () => {
     }
   });
 
-  it('clears both session timeouts before the migration body on down()', async () => {
+  it('clears every session timeout before the migration body on down()', async () => {
     const runner = createMigrationRunner(context, probeDir);
     await runner.up();
     recorded = [];
@@ -288,7 +289,7 @@ describe('Migration Runner session-timeout wiring', () => {
     await runner.down();
 
     const setLocals = recorded.filter((entry) => entry.sql.startsWith('SET LOCAL'));
-    expect(setLocals).toHaveLength(4);
+    expect(setLocals).toHaveLength(setLocalStatements.length * 2);
     expect(setLocals.every((entry) => entry.inTransaction)).toBe(true);
   });
 });
