@@ -216,7 +216,7 @@ class EventService {
   constructor(eventBus: EventEmitter) {
     this.locationService = new LocationService();
     this.calendarService = new CalendarService();
-    this.categoryService = new CategoryService();
+    this.categoryService = new CategoryService(this.calendarService);
     this.eventBus = eventBus;
   }
 

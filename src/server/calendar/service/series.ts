@@ -28,8 +28,7 @@ class SeriesService {
   private eventBus: EventEmitter;
   private mediaInterface?: MediaInterface;
 
-  constructor(private calendarService?: CalendarService, eventBus?: EventEmitter) {
-    // calendarService is optional for backward compatibility but recommended for proper dependency injection
+  constructor(private calendarService: CalendarService, eventBus?: EventEmitter) {
     // eventBus is optional; when provided, domain events are emitted for media approval pipeline
     this.eventBus = eventBus ?? new EventEmitter();
   }
@@ -553,40 +552,15 @@ class SeriesService {
    * Get a calendar by ID — internal helper method.
    */
   private async getCalendar(id: string): Promise<import('@/common/model/calendar').Calendar | null> {
-    if (this.calendarService) {
-      return await this.calendarService.getCalendar(id);
-    }
-
-    // Fallback to direct entity access if no service injected
-    const { CalendarEntity } = await import('@/server/calendar/entity/calendar');
-    const calendarEntity = await CalendarEntity.findByPk(id);
-    return calendarEntity ? calendarEntity.toModel() : null;
+    return await this.calendarService.getCalendar(id);
   }
 
   /**
    * Check if a user can modify a calendar — internal helper method.
-   * Uses CalendarMemberEntity for unified membership lookup.
+   * Delegates to CalendarService, the owner of the membership rule.
    */
   private async userCanModifyCalendar(account: Account, calendar: import('@/common/model/calendar').Calendar): Promise<boolean> {
-    if (this.calendarService) {
-      return await this.calendarService.userCanModifyCalendar(account, calendar);
-    }
-
-    // Fallback to direct implementation if no service injected
-    if (account.hasRole('admin')) {
-      return true;
-    }
-
-    const { CalendarMemberEntity } = await import('@/server/calendar/entity/calendar_member');
-
-    const membership = await CalendarMemberEntity.findOne({
-      where: {
-        calendar_id: calendar.id,
-        account_id: account.id,
-      },
-    });
-
-    return membership !== null;
+    return await this.calendarService.userCanModifyCalendar(account, calendar);
   }
 }
 
