@@ -11,6 +11,7 @@ import SetupInterface from '@/server/setup/interface';
 import { TestEnvironment } from '@/server/common/test/lib/test_environment';
 import { EventEntity } from '@/server/calendar/entity/event';
 import db from '@/server/common/entity/db';
+import { waitFor } from '@/server/common/test/helpers/emit-and-settle';
 
 /**
  * Integration tests for transaction-aware event bus emits in
@@ -123,11 +124,10 @@ describe('EventService create/update — transaction-aware emit (integration)', 
         expect(observedRows).toHaveLength(0);
       });
 
-      // After commit, drain the microtask + setImmediate queue so the
-      // afterCommit -> setImmediate -> listener chain has a chance to run.
-      await new Promise(resolve => setImmediate(resolve));
-      // Yield once more for the async listener body to settle.
-      await new Promise(resolve => setTimeout(resolve, 10));
+      // The emit rides afterCommit -> setImmediate and the listener body is
+      // async — poll for its arrival instead of guessing how many queue hops
+      // it needs (fixed drains here flaked in CI; pv-ss0s).
+      await waitFor(() => observedRows.length === 1);
 
       expect(createdEventId).not.toBeNull();
       expect(observedRows).toHaveLength(1);
@@ -185,11 +185,9 @@ describe('EventService create/update — transaction-aware emit (integration)', 
         expect(observedRows).toHaveLength(0);
       });
 
-      // After commit, drain the microtask + setImmediate queue so the
-      // afterCommit -> setImmediate -> listener chain has a chance to run.
-      await new Promise(resolve => setImmediate(resolve));
-      // Yield once more for the async listener body to settle.
-      await new Promise(resolve => setTimeout(resolve, 10));
+      // Same as above: poll for the deferred listener's arrival rather than
+      // draining a fixed number of queue hops (pv-ss0s).
+      await waitFor(() => observedRows.length === 1);
 
       expect(observedRows).toHaveLength(1);
       expect(observedRows[0].eventId).toBe(seeded.id);
@@ -229,8 +227,12 @@ describe('EventService create/update — transaction-aware emit (integration)', 
         }),
       ).rejects.toBe(ROLLBACK);
 
-      // Drain microtask + setImmediate queues to make sure no late callback
-      // sneaks in after we observe the count.
+      // Bounded absence window — intentionally a fixed wait, not a condition
+      // poll: the assertion is that NOTHING arrives, which has no completion
+      // signal to poll for. One setImmediate hop covers the deferred-emit
+      // path a regression would take (afterCommit -> setImmediate), plus a
+      // 10ms grace period. A too-short window can only under-detect a
+      // regression, never flake the passing case.
       await new Promise(resolve => setImmediate(resolve));
       await new Promise(resolve => setTimeout(resolve, 10));
 

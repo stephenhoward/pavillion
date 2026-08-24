@@ -9,9 +9,10 @@ import { EventEmitter } from 'events';
 import { Account } from '@/common/model/account';
 import { Calendar } from '@/common/model/calendar';
 import { TestEnvironment } from '@/server/common/test/lib/test_environment';
+import { waitFor } from '@/server/common/test/helpers/emit-and-settle';
 import AccountService from '@/server/accounts/service/account';
 import { EventEntity } from '@/server/calendar/entity/event';
-import { ActivityPubOutboxMessageEntity } from '@/server/activitypub/entity/activitypub';
+import { ActivityPubInboxMessageEntity, ActivityPubOutboxMessageEntity } from '@/server/activitypub/entity/activitypub';
 import CalendarInterface from '@/server/calendar/interface';
 import ConfigurationInterface from '@/server/configuration/interface';
 import SetupInterface from '@/server/setup/interface';
@@ -127,8 +128,14 @@ describe('ActivityPub Create Activity', async () => {
 
     const entity = await EventEntity.findOne({ where: { id: `https://${remoteDomain}/api/v1/events/1` } });
 
-    // wait for create event to propogate to activitypub service:
-    await new Promise(resolve => setTimeout(resolve, 100));
+    // wait for create event to propogate to activitypub service: the emit
+    // happens inside the awaited inbox POST, so poll for the inbox row
+    // reaching a terminal processed state — the pipeline completion the old
+    // fixed sleep approximated — before reading the resulting state.
+    await waitFor(async () => {
+      const inboxRow = await ActivityPubInboxMessageEntity.findByPk(`https://${remoteDomain}/api/v1/events/1`);
+      return inboxRow?.processed_status ? inboxRow : null;
+    });
 
     const message = await ActivityPubOutboxMessageEntity.findOne({ where: { calendar_id: calendar.id } });
 

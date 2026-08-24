@@ -11,6 +11,27 @@ import { UserActorEntity } from '@/server/activitypub/entity/user_actor';
 import { AccountEntity } from '@/server/common/entity/account';
 import db from '@/server/common/entity/db';
 
+/**
+ * Emit `event` on the bus, then await the handlers' serialized dispatch chain.
+ *
+ * `ActivityPubEventHandlers.serialize` installs void-returning listeners that
+ * chain each handler onto the private `dispatchQueue` (SQLite serialized
+ * dispatch — the dialect tests run under), so the shared `dispatchAndAwait`
+ * helper cannot reach the handler promises through the bus. Awaiting the
+ * queue tail after the emit settles the full handler chain deterministically
+ * for positive and negative assertions alike — replacing the fixed 100ms
+ * sleeps that read stale state on contended runners (pv-ss0s).
+ */
+async function emitAndAwaitDispatch(
+  eventBus: EventEmitter,
+  handlers: ActivityPubEventHandlers,
+  event: string,
+  payload: unknown,
+): Promise<void> {
+  eventBus.emit(event, payload);
+  await (handlers as any)['dispatchQueue'];
+}
+
 describe('ActivityPub account.created event handler', () => {
   let sandbox: sinon.SinonSandbox;
   let eventBus: EventEmitter;
@@ -53,11 +74,8 @@ describe('ActivityPub account.created event handler', () => {
       domain: domain,
     };
 
-    // Emit the event
-    eventBus.emit('account.created', accountPayload);
-
-    // Wait a bit for async event handler to complete
-    await new Promise(resolve => setTimeout(resolve, 100));
+    // Emit the event and await the handler chain
+    await emitAndAwaitDispatch(eventBus, eventHandlers, 'account.created', accountPayload);
 
     // Verify UserActor was created
     const userActor = await UserActorEntity.findOne({
@@ -77,11 +95,8 @@ describe('ActivityPub account.created event handler', () => {
 
     const createActorSpy = sandbox.spy(UserActorService.prototype, 'createActor');
 
-    // Emit the event
-    eventBus.emit('account.created', accountPayload);
-
-    // Wait a bit for async event handler to complete
-    await new Promise(resolve => setTimeout(resolve, 100));
+    // Emit the event and await the handler chain
+    await emitAndAwaitDispatch(eventBus, eventHandlers, 'account.created', accountPayload);
 
     // Verify UserActor was NOT created
     expect(createActorSpy.called).toBe(false);
@@ -100,11 +115,8 @@ describe('ActivityPub account.created event handler', () => {
       domain: '', // Missing domain will cause error
     };
 
-    // Emit the event - should not throw
-    eventBus.emit('account.created', accountPayload);
-
-    // Wait a bit for async event handler to complete
-    await new Promise(resolve => setTimeout(resolve, 100));
+    // Emit the event and await the handler chain - should not throw
+    await emitAndAwaitDispatch(eventBus, eventHandlers, 'account.created', accountPayload);
 
     // Verify no UserActor was created (error was handled gracefully)
     const userActor = await UserActorEntity.findOne({
