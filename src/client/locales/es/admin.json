@@ -511,7 +511,7 @@
         "stripe_webhook_url_label": "URL de tu endpoint de webhook:",
         "stripe_webhook_secret_required": "El secreto de firma del webhook es obligatorio",
         "stripe_webhook_secret_format": "El secreto de firma del webhook debe empezar por whsec_",
-        "stripe_webhook_url_copied": "¡Copiado!",
+        "stripe_webhook_url_copy": "Copiar la URL del webhook",
         "paypal_client_id_required": "El ID de cliente es obligatorio",
         "paypal_client_secret_required": "El secreto de cliente es obligatorio",
         "paypal_environment_required": "El entorno es obligatorio",

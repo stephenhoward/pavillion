@@ -2,6 +2,7 @@
 import { ref, computed } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import Modal from '@/client/components/common/modal.vue';
+import CopyButton from '@/client/components/common/CopyButton.vue';
 import FundingService from '@/client/service/funding';
 import type { ProviderConfig, PayPalCredentials, StripeCredentials } from '@/client/service/funding';
 
@@ -50,7 +51,6 @@ const stripeErrors = ref({
   secretKey: '',
   webhookSecret: '',
 });
-const webhookUrlCopied = ref(false);
 
 // Computed
 const totalSteps = computed(() => 3);
@@ -222,25 +222,6 @@ function validateStripeField(field: 'publishableKey' | 'secretKey' | 'webhookSec
   }
   else if (field === 'webhookSecret') {
     stripeErrors.value.webhookSecret = '';
-  }
-}
-
-/**
- * Copy webhook URL to clipboard
- */
-async function copyWebhookUrl() {
-  const url = selectedProviderConfig.value?.webhook_url;
-  if (!url) return;
-
-  try {
-    await navigator.clipboard.writeText(url);
-    webhookUrlCopied.value = true;
-    setTimeout(() => {
-      webhookUrlCopied.value = false;
-    }, 2000);
-  }
-  catch {
-    // Fallback: select text for manual copy
   }
 }
 
@@ -461,12 +442,11 @@ function handleSuccess() {
                 {{ t('step2.stripe_webhook_secret_help') }}
                 <div v-if="selectedProviderConfig?.webhook_url" class="webhook-url-hint">
                   <span class="webhook-url-label">{{ t('step2.stripe_webhook_url_label') }}</span>
-                  <code
-                    class="webhook-url"
-                    :title="t('step2.stripe_webhook_url_label')"
-                    @click="copyWebhookUrl"
-                  >{{ selectedProviderConfig.webhook_url }}</code>
-                  <span v-if="webhookUrlCopied" class="copied-badge">{{ t('step2.stripe_webhook_url_copied') }}</span>
+                  <code class="webhook-url">{{ selectedProviderConfig.webhook_url }}</code>
+                  <CopyButton
+                    :text="selectedProviderConfig.webhook_url"
+                    :aria-label="t('step2.stripe_webhook_url_copy')"
+                  />
                 </div>
               </div>
             </div>
@@ -848,23 +828,8 @@ function handleSuccess() {
           border: 1px solid var(--pav-color-border-primary);
           border-radius: 4px;
           font-size: 0.75rem;
-          cursor: pointer;
           user-select: all;
           word-break: break-all;
-
-          &:hover {
-            background: var(--pav-color-surface-hover, rgba(0, 0, 0, 0.08));
-          }
-        }
-
-        .copied-badge {
-          font-size: 0.75rem;
-          color: #155724;
-          font-weight: var(--pav-font-weight-medium);
-
-          @media (prefers-color-scheme: dark) {
-            color: #7fd68a;
-          }
         }
       }
     }

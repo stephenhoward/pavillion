@@ -4,6 +4,7 @@ import { nextTick } from 'vue';
 import i18next from 'i18next';
 import I18NextVue from 'i18next-vue';
 import AddProviderWizard from '@/client/components/admin/add-provider-wizard.vue';
+import CopyButton from '@/client/components/common/CopyButton.vue';
 import FundingService from '@/client/service/funding';
 import type { ProviderConfig } from '@/client/service/funding';
 import enAdmin from '@/client/locales/en/admin.json';
@@ -529,6 +530,48 @@ describe('AddProviderWizard', () => {
       await nextTick();
 
       expect(wrapper.text()).not.toContain('Publishable Key must start with');
+    });
+
+    it('should render the webhook URL with a CopyButton when webhook_url is present', async () => {
+      const providersWithWebhookUrl: ProviderConfig[] = [
+        {
+          ...mockUnconfiguredProviders[0],
+          webhook_url: 'https://pavillion.example/api/funding/v1/webhooks/stripe',
+        },
+        mockUnconfiguredProviders[1],
+      ];
+
+      const wrapper = mountWithI18n({
+        props: {
+          show: true,
+          unconfiguredProviders: providersWithWebhookUrl,
+        },
+      });
+
+      await navigateToStripeStep(wrapper);
+
+      const urlCode = wrapper.find('.webhook-url');
+      expect(urlCode.exists()).toBe(true);
+      expect(urlCode.text()).toBe('https://pavillion.example/api/funding/v1/webhooks/stripe');
+
+      const copyButton = wrapper.findComponent(CopyButton);
+      expect(copyButton.exists()).toBe(true);
+      expect(copyButton.props('text')).toBe('https://pavillion.example/api/funding/v1/webhooks/stripe');
+      expect(copyButton.attributes('aria-label')).toBe('Copy webhook URL');
+    });
+
+    it('should not render the webhook URL hint when webhook_url is absent', async () => {
+      const wrapper = mountWithI18n({
+        props: {
+          show: true,
+          unconfiguredProviders: mockUnconfiguredProviders,
+        },
+      });
+
+      await navigateToStripeStep(wrapper);
+
+      expect(wrapper.find('.webhook-url-hint').exists()).toBe(false);
+      expect(wrapper.findComponent(CopyButton).exists()).toBe(false);
     });
 
     it('should accept sk_live_ prefix for secret key', async () => {
