@@ -660,6 +660,8 @@ function handleSuccess() {
 </template>
 
 <style scoped lang="scss">
+@use '../../assets/style/components/calendar-admin' as *;
+
 .progress-indicator {
   text-align: center;
   padding: 0 0 1rem 0;
@@ -941,10 +943,7 @@ function handleSuccess() {
 
 // Modal Actions
 .modal-actions {
-  display: flex;
-  gap: 1rem;
-  justify-content: flex-end;
-  margin-top: 1.5rem;
+  @include modal-actions;
 
   button {
     min-width: 100px;

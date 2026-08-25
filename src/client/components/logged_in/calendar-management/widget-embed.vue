@@ -90,6 +90,8 @@ const onCopyError = (err) => {
 </script>
 
 <style scoped lang="scss">
+@use '../../../assets/style/components/forms' as *;
+
 .widget-embed {
   max-width: 800px;
   margin: 0 auto;
@@ -101,21 +103,9 @@ const onCopyError = (err) => {
   }
 
   .embed-code {
-    margin: 0 0 var(--pav-space-4) 0;
-    padding: var(--pav-space-4);
-    background: var(--pav-surface-card);
-    border: 1px solid var(--pav-border-primary);
-    border-radius: 0.75rem;
-    overflow-x: auto;
-    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
-    font-size: 0.8125rem;
-    line-height: 1.6;
-    color: var(--pav-text-primary);
+    @include code-display;
 
-    @media (min-width: 640px) {
-      padding: var(--pav-space-6);
-      font-size: 0.875rem;
-    }
+    margin-block-end: var(--pav-space-4);
 
     code {
       font-family: inherit;
