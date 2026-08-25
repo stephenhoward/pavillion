@@ -30,6 +30,13 @@ export default defineConfig({
   // Federation tests are in a separate directory
   testDir: './tests/e2e/federation',
 
+  // Defensive harness-state reset: signature_strict_receive.spec.ts flips
+  // beta to SKIP_SIGNATURES=false and restores it in afterAll, but afterAll
+  // does not run if the worker is SIGKILLed/OOMed/timed out externally. This
+  // setup makes every run start from the default (SKIP_SIGNATURES=true) so a
+  // leaked strict mode cannot poison subsequent runs.
+  globalSetup: './tests/e2e/federation/global-setup.ts',
+
   // Run tests in files in parallel
   fullyParallel: true,
 

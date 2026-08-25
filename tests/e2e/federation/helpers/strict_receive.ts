@@ -116,6 +116,41 @@ export async function setBetaSkipSignatures(value: 'true' | 'false'): Promise<vo
 }
 
 /**
+ * Ensure beta is in the default SKIP_SIGNATURES=true state, recreating the
+ * container only when a non-default value is detected.
+ *
+ * Intended for the federation globalSetup: afterAll restoration in
+ * signature_strict_receive.spec.ts does not run if the Playwright worker is
+ * SIGKILLed, OOMed, or cut off by an external CI timeout, which would leak
+ * SKIP_SIGNATURES=false into subsequent federation runs. Checking first keeps
+ * the common (non-leaked) path free of a container recreate + health wait.
+ *
+ * @throws Error if beta's env cannot be read (federation environment not
+ *         running) -- recreating beta with --no-deps against a down
+ *         environment would only produce a confusing partial stack.
+ */
+export async function ensureBetaDefaultSignatures(): Promise<void> {
+  let current: string;
+  try {
+    current = execSync(
+      `docker compose -f ${COMPOSE_FILE} exec -T instance_beta printenv SKIP_SIGNATURES`,
+      { stdio: 'pipe' },
+    ).toString().trim();
+  }
+  catch (error) {
+    throw new Error(
+      'Could not read SKIP_SIGNATURES from instance_beta -- is the federation '
+      + 'environment running? Start it with: npm run federation:start '
+      + `(underlying error: ${String(error)})`,
+    );
+  }
+
+  if (current !== 'true') {
+    await restoreBetaDefaultSignatures();
+  }
+}
+
+/**
  * Restore beta to the default SKIP_SIGNATURES=true state (matching the base
  * compose file) and clean up the override file. Safe to call in afterAll even
  * if setBetaSkipSignatures was never called -- it simply recreates beta with
