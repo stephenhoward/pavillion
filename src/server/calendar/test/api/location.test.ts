@@ -46,6 +46,11 @@ describe('Location API Tests', () => {
       reassignEvents: sandbox.stub(),
     } as unknown as CalendarInterface;
 
+    // Every route on this router — reads included — gates on the calendar
+    // modify predicate. Default to an authorized caller; permission-denial
+    // tests override with `.resolves(false)`.
+    (calendarInterface.userCanModifyCalendar as sinon.SinonStub).resolves(true);
+
     locationRoutes = new LocationRoutes(calendarInterface);
     locationRoutes.installHandlers(app, '/api/v1');
   });
@@ -98,6 +103,19 @@ describe('Location API Tests', () => {
 
       expect(response.body.error).toContain('Calendar not found');
       expect(response.body.errorName).toBe('CalendarNotFoundError');
+    });
+
+    it('should return 403 and never read locations when user lacks calendar permissions', async () => {
+      (calendarInterface.getCalendar as sinon.SinonStub).resolves(testCalendar);
+      (calendarInterface.userCanModifyCalendar as sinon.SinonStub).resolves(false);
+
+      const response = await request(app)
+        .get('/api/v1/calendars/cal-123/locations')
+        .expect(403);
+
+      expect(response.body.errorName).toBe('InsufficientCalendarPermissionsError');
+      expect((calendarInterface.userCanModifyCalendar as sinon.SinonStub).calledWith(testAccount, testCalendar)).toBe(true);
+      expect((calendarInterface.getLocationsForCalendar as sinon.SinonStub).called).toBe(false);
     });
 
     it('should return empty array when calendar has no locations', async () => {
@@ -302,6 +320,19 @@ describe('Location API Tests', () => {
 
       expect(response.body.error).toContain('Calendar not found');
       expect(response.body.errorName).toBe('CalendarNotFoundError');
+    });
+
+    it('should return 403 and never read the location when user lacks calendar permissions', async () => {
+      (calendarInterface.getCalendar as sinon.SinonStub).resolves(testCalendar);
+      (calendarInterface.userCanModifyCalendar as sinon.SinonStub).resolves(false);
+
+      const response = await request(app)
+        .get('/api/v1/calendars/cal-123/locations/c3d4e5f6-0001-4000-8000-000000000001')
+        .expect(403);
+
+      expect(response.body.errorName).toBe('InsufficientCalendarPermissionsError');
+      expect((calendarInterface.userCanModifyCalendar as sinon.SinonStub).calledWith(testAccount, testCalendar)).toBe(true);
+      expect((calendarInterface.getLocationById as sinon.SinonStub).called).toBe(false);
     });
 
     it('should return 404 when location does not exist', async () => {

@@ -74,14 +74,23 @@ export default class LocationRoutes {
   /**
    * GET /api/v1/calendars/:calendarId/locations
    * List all locations for a calendar.
+   * Requires authentication and calendar edit permissions — locations are
+   * editor-facing data (federated originUri, per-space eventCount), so reads
+   * gate on the same predicate as the mutating routes.
    */
   async listLocations(req: Request, res: Response): Promise<void> {
     try {
+      const account = req.user as Account;
       const { calendarId } = req.params;
 
       const calendar = await this.service.getCalendar(calendarId);
       if (!calendar) {
         throw new CalendarNotFoundError();
+      }
+
+      const canModify = await this.service.userCanModifyCalendar(account, calendar);
+      if (!canModify) {
+        throw new InsufficientCalendarPermissionsError();
       }
 
       const locations = await this.service.getLocationsForCalendar(calendar);
@@ -90,6 +99,9 @@ export default class LocationRoutes {
     catch (error) {
       if (error instanceof CalendarNotFoundError) {
         res.status(404).json({ error: 'Calendar not found', errorName: 'CalendarNotFoundError' });
+      }
+      else if (error instanceof InsufficientCalendarPermissionsError) {
+        res.status(403).json({ error: 'Insufficient permissions to modify this calendar', errorName: 'InsufficientCalendarPermissionsError' });
       }
       else {
         logError(error, 'Error listing locations');
@@ -149,14 +161,21 @@ export default class LocationRoutes {
   /**
    * GET /api/v1/calendars/:calendarId/locations/:locationId
    * Get a specific location by ID.
+   * Requires authentication and calendar edit permissions (see listLocations).
    */
   async getLocation(req: Request, res: Response): Promise<void> {
     try {
+      const account = req.user as Account;
       const { calendarId, locationId } = req.params;
 
       const calendar = await this.service.getCalendar(calendarId);
       if (!calendar) {
         throw new CalendarNotFoundError();
+      }
+
+      const canModify = await this.service.userCanModifyCalendar(account, calendar);
+      if (!canModify) {
+        throw new InsufficientCalendarPermissionsError();
       }
 
       const location = await this.service.getLocationById(calendar, locationId);
@@ -170,6 +189,9 @@ export default class LocationRoutes {
     catch (error) {
       if (error instanceof CalendarNotFoundError) {
         res.status(404).json({ error: 'Calendar not found', errorName: 'CalendarNotFoundError' });
+      }
+      else if (error instanceof InsufficientCalendarPermissionsError) {
+        res.status(403).json({ error: 'Insufficient permissions to modify this calendar', errorName: 'InsufficientCalendarPermissionsError' });
       }
       else {
         logError(error, 'Error fetching location');
