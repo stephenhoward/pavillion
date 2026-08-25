@@ -10,9 +10,15 @@ import { Account } from '@/common/model/account';
 import { Calendar } from '@/common/model/calendar';
 import { TestEnvironment } from '@/server/common/test/lib/test_environment';
 import { waitFor } from '@/server/common/test/helpers/emit-and-settle';
+import { createFollowingRelationship } from '@/server/common/test/helpers/database';
 import AccountService from '@/server/accounts/service/account';
-import { EventEntity } from '@/server/calendar/entity/event';
-import { ActivityPubInboxMessageEntity, ActivityPubOutboxMessageEntity } from '@/server/activitypub/entity/activitypub';
+import { EventEntity, EventContentEntity } from '@/server/calendar/entity/event';
+import {
+  ActivityPubInboxMessageEntity,
+  ActivityPubOutboxMessageEntity,
+  SharedEventEntity,
+} from '@/server/activitypub/entity/activitypub';
+import { EventObjectEntity } from '@/server/activitypub/entity/event_object';
 import CalendarInterface from '@/server/calendar/interface';
 import ConfigurationInterface from '@/server/configuration/interface';
 import SetupInterface from '@/server/setup/interface';
@@ -89,15 +95,26 @@ describe('ActivityPub Create Activity', async () => {
           },
         },
       });
-    const entity = await EventEntity.findOne({ where: { id: remoteEventUrl } });
+    // Local events get their own UUID; the remote IRI is stored as
+    // event_source_url, so absence of ingestion is checked on that column.
+    const entity = await EventEntity.findOne({ where: { event_source_url: remoteEventUrl } });
 
     expect(response.status).toBe(400);
     expect(entity).toBe(null);
   });
 
-  it('createEvent: should succeed', async () => {
+  it('createEvent: should ingest the remote event and auto-repost it as an Announce', async () => {
     const remoteDomain = 'remotedomain.dev';
     const remoteCalendar = 'testcalendar';
+    const remoteActorUri = `https://${remoteDomain}/calendars/${remoteCalendar}`;
+    const remoteEventUrl = `https://${remoteDomain}/api/v1/events/1`;
+    const activityId = `${remoteEventUrl}/create`;
+
+    // The inbox dispatch gate rejects Create activities from calendar actors
+    // with no follow relationship, so follow the remote calendar first — the
+    // natural reason to receive its Creates. auto_repost_originals=true also
+    // drives the DEC-014 Announce assertions below.
+    await createFollowingRelationship(calendar.id, remoteActorUri, true, false);
 
     const inboxUrl = await findInboxForCalendar(calendarName, env.app);
     const getStub = sandbox.stub(axios, 'get');
@@ -105,18 +122,31 @@ describe('ActivityPub Create Activity', async () => {
     verifyStub.returns(true);
     env.stubRemoteCalendar(getStub, remoteDomain, remoteCalendar);
 
+    // processCreateEvent verifies ownership by re-fetching the object from
+    // its origin and comparing attributedTo with the activity's actor; serve
+    // the remote event document from the axios stub.
+    getStub.withArgs(remoteEventUrl).resolves({
+      status: 200,
+      data: {
+        id: remoteEventUrl,
+        type: 'Event',
+        attributedTo: remoteActorUri,
+      },
+    });
+
     const response = await env.signedPost(
       inboxUrl,
       env.fakeRemoteAuth(remoteDomain, remoteCalendar),
       {
         '@context': 'https://www.w3.org/ns/activitystreams',
-        id: `https://${remoteDomain}/api/v1/events/1`,
+        id: activityId,
         type: 'Create',
-        actor: `https://${remoteDomain}/calendars/testcalendar`,
+        actor: remoteActorUri,
         object: {
           '@context': 'https://www.w3.org/ns/activitystreams',
+          id: remoteEventUrl,
           type: 'Event',
-          attributedTo: `https://${remoteDomain}/calendars/testcalendar`,
+          attributedTo: remoteActorUri,
           content: {
             en: {
               name: 'Test Event',
@@ -126,27 +156,46 @@ describe('ActivityPub Create Activity', async () => {
         },
       });
 
-    const entity = await EventEntity.findOne({ where: { id: `https://${remoteDomain}/api/v1/events/1` } });
-
-    // wait for create event to propogate to activitypub service: the emit
-    // happens inside the awaited inbox POST, so poll for the inbox row
-    // reaching a terminal processed state — the pipeline completion the old
-    // fixed sleep approximated — before reading the resulting state.
-    await waitFor(async () => {
-      const inboxRow = await ActivityPubInboxMessageEntity.findByPk(`https://${remoteDomain}/api/v1/events/1`);
-      return inboxRow?.processed_status ? inboxRow : null;
-    });
-
-    const message = await ActivityPubOutboxMessageEntity.findOne({ where: { calendar_id: calendar.id } });
-
     expect(response.status,"api call succeeded").toBe(200);
     expect(response.body.error,"no error in the response").toBeUndefined();
-    expect(entity,"found the event in the database").toBeDefined();
-    expect(message,"activity message was sent to outbox").toBeDefined();
-    if ( message && entity ) {
-      expect(message.message.type,"proper message type created").toBe('Create');
-      expect(message.message.object.id, "has an appropriate id").toMatch(entity.id);
-      expect(message.processed_time,"message in the outbox was processed").not.toBe(null);
-    }
+
+    // The emit happens inside the awaited inbox POST, so poll for the inbox
+    // row reaching a terminal processed state before reading resulting state.
+    const inboxRow = await waitFor(async () => {
+      const row = await ActivityPubInboxMessageEntity.findByPk(activityId);
+      return row?.processed_status ? row : null;
+    });
+    expect(inboxRow.processed_status,"inbox message admitted and processed").toBe('ok');
+
+    // The remote event was ingested as a local event row keyed by a fresh
+    // UUID, with the remote IRI recorded as event_source_url.
+    const entity = await EventEntity.findOne({ where: { event_source_url: remoteEventUrl } });
+    expect(entity,"found the ingested event in the database").not.toBeNull();
+    expect(entity!.id,"local event has its own id, not the remote IRI").not.toBe(remoteEventUrl);
+    expect(entity!.calendar_id,"remote federated events belong to no local calendar").toBeNull();
+
+    const content = await EventContentEntity.findOne({ where: { event_id: entity!.id, language: 'en' } });
+    expect(content,"event content was ingested").not.toBeNull();
+    expect(content!.name).toBe('Test Event');
+    expect(content!.description).toBe('This is a test event');
+
+    // The AP identity of the event is tracked in EventObjectEntity.
+    const apObject = await EventObjectEntity.findOne({ where: { ap_id: remoteEventUrl } });
+    expect(apObject,"AP object row links the remote IRI to the local event").not.toBeNull();
+    expect(apObject!.event_id).toBe(entity!.id);
+    expect(apObject!.attributed_to).toBe(remoteActorUri);
+
+    // auto_repost_originals on the follow relationship triggers an automatic
+    // repost, which federates as an Announce carrying the canonical event IRI
+    // (DEC-014) — not as a Create.
+    const share = await SharedEventEntity.findOne({ where: { event_id: entity!.id, calendar_id: calendar.id } });
+    expect(share,"auto-repost recorded a shared event").not.toBeNull();
+    expect(share!.auto_posted).toBe(true);
+
+    const announce = await ActivityPubOutboxMessageEntity.findOne({
+      where: { calendar_id: calendar.id, type: 'Announce' },
+    });
+    expect(announce,"repost was queued in the outbox as an Announce").not.toBeNull();
+    expect((announce!.message as any).object,"Announce carries the canonical event IRI").toBe(remoteEventUrl);
   });
 });
