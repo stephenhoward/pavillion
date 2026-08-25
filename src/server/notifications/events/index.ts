@@ -112,11 +112,12 @@ export interface EventRepostedPayload {
  * time, but the snapshot is the unconditional baseline.
  *
  * For Flag / ReportEscalated / ReportResolved, the bus payload carries
- * both `eventId` and `calendarId`. Per
- * ("object_label for a Flag is the event title — most useful for the
- * recipient"), the handler prefers the flagged event's title and falls
- * back to the owning calendar's name when the event lookup fails or
- * returns an empty title. For admin reports against remote events
+ * both `eventId` and `calendarId`. The object-selection rule for these
+ * verbs is that `object_label` is the flagged event's title — the most
+ * useful string for the recipient — and the handler falls back to the
+ * owning calendar's name when the event lookup fails or returns an
+ * empty title (see {@link resolveReportLabel} for the full tier order
+ * and rationale). For admin reports against remote events
  * (`calendarId === null` and the event is not locally resolvable), the
  * generic `Report` fallback is used.
  *
@@ -182,10 +183,18 @@ export default class NotificationEventHandlers implements DomainEventHandlers {
    * Looks up an event by id and returns its title. Returns
    * {@link LABEL_FALLBACK_EVENT} on missing event, lookup failure, or
    * empty title across all populated languages.
+   *
+   * `CalendarInterface.getEventById` currently throws on not-found (the
+   * catch below covers that path); the null guard mirrors
+   * {@link resolveCalendarLabel} and keeps the fallback intact if the
+   * interface contract is ever relaxed to return null.
    */
   private async resolveEventLabel(eventId: string): Promise<string> {
     try {
       const event = await this.calendarInterface.getEventById(eventId);
+      if (!event) {
+        return LABEL_FALLBACK_EVENT;
+      }
       return event.displayName(LABEL_FALLBACK_EVENT);
     }
     catch (error) {
@@ -280,9 +289,9 @@ export default class NotificationEventHandlers implements DomainEventHandlers {
 
   /**
    * Resolves the snapshot label for the Flag / ReportEscalated /
-   * ReportResolved family., the most
-   * useful display string for a recipient is the **event title** — that's
-   * what makes the inbox row meaningful at a glance.
+   * ReportResolved family. The object-selection rule for these verbs:
+   * the most useful display string for a recipient is the **event
+   * title** — that's what makes the inbox row meaningful at a glance.
    *
    * Resolution order:
    *   1. The flagged event's title (via `CalendarInterface.getEventById`).
@@ -295,17 +304,28 @@ export default class NotificationEventHandlers implements DomainEventHandlers {
    *      `calendarId === null` and the event is not locally resolvable
    *      (admin-initiated reports against remote events).
    *
+   * The calendar-name intermediate tier is a deliberate refinement of
+   * the event-title rule, not an accident of implementation: in the
+   * tier-2 scenarios above, "which calendar this report concerns" is
+   * materially more useful to the recipient than the anonymous `Report`
+   * string, so the waterfall tries it before giving up. This doc comment
+   * is the durable record of that decision.
+   *
    * Lookup failures are intentionally silent: notifications is a side-
    * effect consumer, and label resolution is best-effort. The snapshot
    * is persisted with whatever string we can find — empty strings are
    * never written.
    */
   private async resolveReportLabel(eventId: string, calendarId: string | null): Promise<string> {
+    // Unlike the LABEL_FALLBACK_* call sites above, these displayName('')
+    // calls use the empty string as a tier-advance sentinel: '' means "no
+    // language has a populated value", which sends the waterfall to the
+    // next tier instead of persisting a blank label.
     try {
       const event = await this.calendarInterface.getEventById(eventId);
-      const title = event.displayName('');
-      if (title !== '') {
-        return title;
+      const eventTitle = event.displayName('');
+      if (eventTitle !== '') {
+        return eventTitle;
       }
     }
     catch (error) {
@@ -317,9 +337,9 @@ export default class NotificationEventHandlers implements DomainEventHandlers {
     try {
       const calendar = await this.calendarInterface.getCalendar(calendarId);
       if (calendar) {
-        const name = calendar.displayName('');
-        if (name !== '') {
-          return name;
+        const calendarName = calendar.displayName('');
+        if (calendarName !== '') {
+          return calendarName;
         }
       }
     }
