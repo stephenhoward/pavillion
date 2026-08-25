@@ -35,7 +35,7 @@ test.describe.configure({ mode: 'serial' });
  * Mock funding API endpoints to simulate a specific funding state.
  */
 async function mockFundingAPIs(page: import('@playwright/test').Page, options: {
-  subscriptionsEnabled: boolean;
+  fundingPlansEnabled: boolean;
   fundingStatus: 'covered' | 'not_covered' | 'grant' | 'admin_exempt';
   /** The widget gate's answer. Independent of `fundingStatus` on purpose —
    *  the two can legitimately disagree, and only this one is an entitlement. */
@@ -43,12 +43,12 @@ async function mockFundingAPIs(page: import('@playwright/test').Page, options: {
   /** Fail the funding-summary read, leaving the gate answer unknown. */
   fundingUnreadable?: boolean;
 }) {
-  // Mock funding plan status (user's subscription)
+  // Mock funding plan status (the calendar has no plan)
   await page.route('**/api/funding/v1/status', async (route) => {
     await route.fulfill({
       status: 404,
       contentType: 'application/json',
-      body: JSON.stringify({ error: 'No subscription found' }),
+      body: JSON.stringify({ error: 'No funding plan found' }),
     });
   });
 
@@ -58,8 +58,8 @@ async function mockFundingAPIs(page: import('@playwright/test').Page, options: {
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({
-        enabled: options.subscriptionsEnabled,
-        providers: options.subscriptionsEnabled
+        enabled: options.fundingPlansEnabled,
+        providers: options.fundingPlansEnabled
           ? [{ providerType: 'stripe', displayName: 'Stripe' }]
           : [],
         monthlyPrice: 500000,
@@ -153,7 +153,7 @@ test.describe('Calendar Settings — Extended Features (Funding)', () => {
 
   test('shows the funding upsell when the widget gate is shut', async ({ page }) => {
     await mockFundingAPIs(page, {
-      subscriptionsEnabled: true,
+      fundingPlansEnabled: true,
       fundingStatus: 'not_covered',
       widgetEmbedding: false,
     });
@@ -171,7 +171,7 @@ test.describe('Calendar Settings — Extended Features (Funding)', () => {
 
   test('acting on the upsell opens the funding sheet', async ({ page }) => {
     await mockFundingAPIs(page, {
-      subscriptionsEnabled: true,
+      fundingPlansEnabled: true,
       fundingStatus: 'not_covered',
       widgetEmbedding: false,
     });
@@ -192,7 +192,7 @@ test.describe('Calendar Settings — Extended Features (Funding)', () => {
 
   test('shows enabled badge when calendar is covered', async ({ page }) => {
     await mockFundingAPIs(page, {
-      subscriptionsEnabled: true,
+      fundingPlansEnabled: true,
       fundingStatus: 'covered',
       widgetEmbedding: true,
     });
@@ -216,7 +216,7 @@ test.describe('Calendar Settings — Extended Features (Funding)', () => {
     // open, so the section reports the features as available and offers no
     // upsell. No separate "funding disabled" flag is consulted.
     await mockFundingAPIs(page, {
-      subscriptionsEnabled: false,
+      fundingPlansEnabled: false,
       fundingStatus: 'not_covered',
       widgetEmbedding: true,
     });
@@ -233,7 +233,7 @@ test.describe('Calendar Settings — Extended Features (Funding)', () => {
 
   test('shows admin-exempt badge for admin-exempt calendars', async ({ page }) => {
     await mockFundingAPIs(page, {
-      subscriptionsEnabled: true,
+      fundingPlansEnabled: true,
       fundingStatus: 'admin_exempt',
       widgetEmbedding: true,
     });
@@ -249,7 +249,7 @@ test.describe('Calendar Settings — Extended Features (Funding)', () => {
 
   test('shows neither entitlement nor upsell when the funding state is unreadable', async ({ page }) => {
     await mockFundingAPIs(page, {
-      subscriptionsEnabled: true,
+      fundingPlansEnabled: true,
       fundingStatus: 'not_covered',
       widgetEmbedding: false,
       fundingUnreadable: true,

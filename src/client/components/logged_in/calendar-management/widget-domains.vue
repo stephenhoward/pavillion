@@ -12,8 +12,14 @@
     <!--
       Funding gate. The card decides for itself whether the widget-embedding
       gate is known to be closed, so nothing here branches on funding state.
+      Once a plan is started the domain the gate refused is re-issued, so the
+      reader does not have to type it again.
     -->
-    <FundingUpsellCard :calendarId="props.calendarId" :feature="WIDGET_FEATURE" />
+    <FundingUpsellCard
+      :calendarId="props.calendarId"
+      :feature="WIDGET_FEATURE"
+      @plan-started="retryRefusedDomain"
+    />
 
     <!-- Success Display -->
     <div
@@ -105,6 +111,10 @@ const state = reactive<{
   newDomain: '',
   currentDomain: null, // Changed from domains array to single domain
 });
+
+// Whether the last write was refused by the funding gate. The typed domain is
+// left in the input in that case, so the card's plan-started can retry it.
+let domainRefused = false;
 
 /**
  * Validate domain format
@@ -199,6 +209,7 @@ const addDomain = async () => {
 
     state.currentDomain = response.data.domain;
     state.newDomain = '';
+    domainRefused = false;
     state.success = t('add_success');
     clearMessages();
   }
@@ -214,6 +225,7 @@ const addDomain = async () => {
     // gate itself already exempts admins server-side, so a client-side second
     // guess can only disagree with the server about what just happened.
     if (recordAccessDenial(error)) {
+      domainRefused = true;
       return;
     }
 
@@ -230,6 +242,18 @@ const addDomain = async () => {
   finally {
     state.isAdding = false;
   }
+};
+
+/**
+ * Re-issue the write the funding gate refused, now that a plan has been
+ * started and the card has already re-read the calendar's access. Nothing to
+ * retry when no write was refused, or the reader has since cleared the input.
+ */
+const retryRefusedDomain = async () => {
+  if (!domainRefused || !state.newDomain.trim()) {
+    return;
+  }
+  await addDomain();
 };
 
 /**
