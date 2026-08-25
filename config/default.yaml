@@ -200,6 +200,15 @@ rateLimit:
       # realistic legitimate burst from a single Stripe source IP.
       max: 300  # 300 requests per IP per minute
   importSource:
+    createByAccount:
+      windowMs: 3600000  # 1 hour in milliseconds
+      # Each new import source is a fresh outbound-fetch (SSRF-probe) target
+      # and unlocks its own per-source verify/sync budget, so creation is the
+      # pivot that multiplies the per-source limiters. The generic
+      # widgetConfig.byAccount cap (100/15m) left that pivot at ~400 new
+      # targets per account per hour. A legitimate owner migrates a handful of
+      # feeds at a time; 15/hour leaves headroom for that without the ceiling.
+      max: 15  # 15 import-source creations per account per hour
     verifyBySource:
       windowMs: 3600000  # 1 hour in milliseconds
       max: 3  # 3 verify attempts per source per hour

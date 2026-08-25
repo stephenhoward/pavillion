@@ -27,6 +27,10 @@ import {
 } from '@/common/exceptions/import';
 import type { SyncResult } from '@/server/calendar/service/import/sync';
 import { testApp } from '@/server/common/test/lib/express';
+import {
+  limitWidgetConfigByAccount,
+  limitImportSourceCreateByAccount,
+} from '@/server/common/middleware/rate-limiters';
 import ImportSourceRoutes from '@/server/calendar/api/v1/import_source';
 import CalendarInterface from '@/server/calendar/interface';
 
@@ -142,6 +146,46 @@ describe('ImportSourceRoutes', () => {
 
       expect(response.status).toBe(400);
       expect(response.body.errorName).toBe('ValidationError');
+    });
+  });
+
+  /**
+   * The handler tests bind handlers directly, so no limiter is in their path.
+   * This block installs the real router and introspects the route stack so a
+   * route that silently drops its per-account limiter fails here. Create
+   * carries the dedicated limiter because each new source is a fresh
+   * outbound-fetch target; the other account-scoped routes keep the generic
+   * one. Under test config rate limiting is disabled, so every limiter is the
+   * same no-op reference — only presence is asserted, not which limiter.
+   */
+  describe('rate limiter wiring', () => {
+    function routeHandlers(method: string, path: string): unknown[] {
+      const app = express();
+      routes.installHandlers(app, '/api/v1');
+
+      const layers = (app as any)._router.stack
+        .filter((layer: any) => layer.name === 'router')
+        .flatMap((layer: any) => layer.handle.stack)
+        .filter((layer: any) => layer.route?.path === path && layer.route.methods[method]);
+
+      expect(layers.length).toBe(1);
+      return layers[0].route.stack.map((l: any) => l.handle);
+    }
+
+    it('wires limitImportSourceCreateByAccount onto POST /calendars/:calendarId/import-sources', () => {
+      const handlers = routeHandlers('post', '/calendars/:calendarId/import-sources');
+      expect(handlers).toContain(limitImportSourceCreateByAccount);
+    });
+
+    it.each([
+      { method: 'get', path: '/calendars/:calendarId/import-sources' },
+      { method: 'post', path: '/calendars/:calendarId/import-sources/file' },
+      { method: 'get', path: '/calendars/:calendarId/import-sources/:id' },
+      { method: 'delete', path: '/calendars/:calendarId/import-sources/:id' },
+      { method: 'post', path: '/calendars/:calendarId/import-sources/:id/verify-issue' },
+    ])('keeps limitWidgetConfigByAccount on $method $path', ({ method, path }) => {
+      const handlers = routeHandlers(method, path);
+      expect(handlers).toContain(limitWidgetConfigByAccount);
     });
   });
 

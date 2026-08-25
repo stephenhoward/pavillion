@@ -21,6 +21,7 @@ import {
   limitCheckoutSessionByAccount,
   limitImportSourceVerifyBySource,
   limitImportSourceSyncBySource,
+  limitImportSourceCreateByAccount,
   limitConfigSiteByIp,
   limitApplicationByIp,
   limitApplicationByEmail,
@@ -156,6 +157,14 @@ describe('rate-limiters', () => {
       const windowMs = config.get<number>('rateLimit.importSource.syncBySource.windowMs');
 
       expect(maxRequests).toBe(4);
+      expect(windowMs).toBe(3600000); // 1 hour
+    });
+
+    it('should use correct config values for import source create by account', () => {
+      const maxRequests = config.get<number>('rateLimit.importSource.createByAccount.max');
+      const windowMs = config.get<number>('rateLimit.importSource.createByAccount.windowMs');
+
+      expect(maxRequests).toBe(15);
       expect(windowMs).toBe(3600000); // 1 hour
     });
 
@@ -295,6 +304,11 @@ describe('rate-limiters', () => {
       expect(typeof limitImportSourceSyncBySource).toBe('function');
     });
 
+    it('should export limitImportSourceCreateByAccount limiter', () => {
+      expect(limitImportSourceCreateByAccount).toBeDefined();
+      expect(typeof limitImportSourceCreateByAccount).toBe('function');
+    });
+
     it('should export limitConfigSiteByIp limiter', () => {
       expect(limitConfigSiteByIp).toBeDefined();
       expect(typeof limitConfigSiteByIp).toBe('function');
@@ -428,6 +442,27 @@ describe('rate-limiters', () => {
         request(app).post('/test').send({ data: 'test' }),
         request(app).post('/test').send({ data: 'test' }),
         request(app).post('/test').send({ data: 'test' }),
+      ]);
+
+      responses.forEach(response => {
+        expect(response.status).toBe(200);
+        expect(response.body).toEqual({ success: true });
+      });
+    });
+
+    it('should allow import source create limiter to pass through when disabled', async () => {
+      app.post('/test',
+        addRequestUser,
+        limitImportSourceCreateByAccount,
+        (req, res) => {
+          res.json({ success: true });
+        },
+      );
+
+      const responses = await Promise.all([
+        request(app).post('/test').send({ url: 'https://example.com/a.ics' }),
+        request(app).post('/test').send({ url: 'https://example.com/b.ics' }),
+        request(app).post('/test').send({ url: 'https://example.com/c.ics' }),
       ]);
 
       responses.forEach(response => {

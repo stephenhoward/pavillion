@@ -219,6 +219,27 @@ export const limitFundingWebhookByIp: RequestHandler = isRateLimitEnabled()
   : noOpMiddleware;
 
 /**
+ * Import source creation rate limiter by authenticated account.
+ *
+ * Creation is the pivot that multiplies the per-source verify/sync limiters:
+ * every new source is a fresh outbound-fetch target with its own per-source
+ * budget. The generic widget-config cap (100/15m) left that pivot at roughly
+ * 400 new targets per account per hour, so the create route carries this
+ * dedicated, tighter cap instead. Keyed on the authenticated account, so it
+ * must be wired after loggedInOnly. Mounted on create only; list/get/delete/
+ * verify-issue keep the generic account limiter.
+ *
+ * Limits: 15 creations per account per hour (default config).
+ */
+export const limitImportSourceCreateByAccount: RequestHandler = isRateLimitEnabled()
+  ? createAccountRateLimiter(
+    config.get<number>('rateLimit.importSource.createByAccount.max'),
+    config.get<number>('rateLimit.importSource.createByAccount.windowMs'),
+    'import-source-create',
+  )
+  : noOpMiddleware;
+
+/**
  * Import source DNS verification rate limiter, keyed by the source's route
  * param (`id`). Each import source maps to a single hostname, so capping
  * per-source throttles DNS-verification load against the source's hostname
