@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
-import { literal, Transaction } from 'sequelize';
+import { literal, Op, Transaction } from 'sequelize';
 import { Calendar } from '@/common/model/calendar';
 import { EventLocation, EventLocationSpace } from '@/common/model/location';
 import {
@@ -785,5 +785,57 @@ export default class LocationService {
       include: [LocationSpaceContentEntity],
     });
     return fetched!.toModel();
+  }
+
+  /**
+   * Clear the AP dedup stamp (origin_uri) on every Place and Space that a
+   * calendar mirrored from a remote source it has just unfollowed.
+   *
+   * Matching rule: the row belongs to `calendarId` (Spaces via their parent
+   * Place) and its origin_uri host equals the host of `sourceActorUri`.
+   * Inbound validation only stamps origin_uri with ids on the sender's host
+   * (EventObject._validatePavillionId), so host equality identifies the
+   * source calendar's instance. Rows from other hosts, unstamped rows, and
+   * rows owned by other calendars are left untouched. The rows themselves
+   * survive: reposted events may still reference them.
+   *
+   * @param calendarId - The local calendar that unfollowed
+   * @param sourceActorUri - Actor URI of the unfollowed remote calendar
+   */
+  async clearOriginUrisFromSource(calendarId: string, sourceActorUri: string): Promise<void> {
+    let sourceHost: string;
+    try {
+      sourceHost = new URL(sourceActorUri).host;
+    }
+    catch {
+      return;
+    }
+    const fromSource = (row: { origin_uri: string | null }): boolean => {
+      try {
+        return new URL(row.origin_uri!).host === sourceHost;
+      }
+      catch {
+        return false;
+      }
+    };
+
+    const places = await LocationEntity.findAll({
+      attributes: ['id', 'origin_uri'],
+      where: { calendar_id: calendarId, origin_uri: { [Op.ne]: null } },
+    });
+    const placeIds = places.filter(fromSource).map(place => place.id);
+    if (placeIds.length > 0) {
+      await LocationEntity.update({ origin_uri: null }, { where: { id: { [Op.in]: placeIds } } });
+    }
+
+    const spaces = await LocationSpaceEntity.findAll({
+      attributes: ['id', 'origin_uri'],
+      where: { origin_uri: { [Op.ne]: null } },
+      include: [{ model: LocationEntity, attributes: [], required: true, where: { calendar_id: calendarId } }],
+    });
+    const spaceIds = spaces.filter(fromSource).map(space => space.id);
+    if (spaceIds.length > 0) {
+      await LocationSpaceEntity.update({ origin_uri: null }, { where: { id: { [Op.in]: spaceIds } } });
+    }
   }
 }

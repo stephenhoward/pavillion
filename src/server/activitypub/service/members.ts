@@ -38,6 +38,7 @@ import {
   InvalidRepostPolicySettingsError,
 } from '@/common/exceptions/activitypub';
 import { InsufficientCalendarPermissionsError } from '@/common/exceptions/calendar';
+import { ActivityPubCalendarUnfollowedPayload } from '@/server/activitypub/events/types';
 
 /**
  * Converts an ActivityPub actor URI to a human-readable calendar@domain format.
@@ -284,6 +285,16 @@ class ActivityPubService {
 
       this.addToOutbox(calendar, undoActivity);
       await following.destroy();
+    }
+
+    if (followings.length > 0) {
+      // Let the calendar domain clear origin_uri stamps mirrored from the
+      // unfollowed source (see ActivityPubCalendarUnfollowedPayload).
+      const payload: ActivityPubCalendarUnfollowedPayload = {
+        calendarId: calendar.id,
+        sourceActorUri: calendarActor.actor_uri,
+      };
+      this.eventBus.emit('activitypub:calendar:unfollowed', payload);
     }
   }
 

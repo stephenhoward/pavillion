@@ -349,6 +349,10 @@ export default class CalendarInterface {
     return this.locationService.findOrCreateLocation(calendar, locationParams);
   }
 
+  async clearOriginUrisFromSource(calendarId: string, sourceActorUri: string): Promise<void> {
+    return this.locationService.clearOriginUrisFromSource(calendarId, sourceActorUri);
+  }
+
   /**
    * Update an existing location's fields and content.
    *

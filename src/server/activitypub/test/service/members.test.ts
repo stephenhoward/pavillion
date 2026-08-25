@@ -264,6 +264,35 @@ describe("unfollowCalendar", () => {
     }
   });
 
+  it('emits activitypub:calendar:unfollowed so the calendar domain can clear origin_uri stamps', async () => {
+    const eventBus = new EventEmitter();
+    const emitSpy = sandbox.spy(eventBus, 'emit');
+    const busService = new ActivityPubService(eventBus, new CalendarInterface(eventBus));
+    sandbox.stub(busService.calendarService, 'userCanModifyCalendar').resolves(true);
+    sandbox.stub(busService, 'lookupRemoteCalendar').resolves({
+      name: 'Test Calendar',
+      description: undefined,
+      domain: 'testdomain.com',
+      actorUrl: 'https://testdomain.com/calendars/testcalendar',
+      calendarId: undefined,
+    });
+    sandbox.stub(CalendarActorEntity, 'findOne').resolves(mockRemoteCalendar as any);
+    sandbox.stub(FollowingCalendarEntity, 'findAll').resolves([
+      FollowingCalendarEntity.build({ id: 'testfollowid', calendar_actor_id: mockRemoteCalendar.id }),
+    ]);
+    sandbox.stub(busService, 'actorUrl').resolves('https://local.example/calendars/testid');
+    sandbox.stub(FollowingCalendarEntity.prototype, 'destroy').resolves();
+    sandbox.stub(busService, 'addToOutbox').resolves();
+
+    const calendar = Calendar.fromObject({ id: 'testid' });
+    await busService.unfollowCalendar(account, calendar, 'testcalendar@testdomain.com');
+
+    expect(emitSpy.calledWith('activitypub:calendar:unfollowed', {
+      calendarId: 'testid',
+      sourceActorUri: mockRemoteCalendar.actor_uri,
+    })).toBe(true);
+  });
+
   it('does not follow this calendar, do nothing', async () => {
 
     let calendar = Calendar.fromObject({ id: 'testid' });

@@ -114,6 +114,18 @@ export interface EventUpdatedPayload {
   skipRebuild?: boolean;
 }
 
+/**
+ * Payload for the activitypub:calendar:unfollowed event bus emission.
+ * Emitted by the AP members service after a local calendar unfollows a
+ * remote calendar. Mirrors ActivityPubCalendarUnfollowedPayload in the
+ * ActivityPub domain; declared here so the calendar domain does not import
+ * across the boundary.
+ */
+export interface CalendarUnfollowedPayload {
+  calendarId: string;
+  sourceActorUri: string;
+}
+
 export default class CalendarEventHandlers implements DomainEventHandlers {
   private service: CalendarInterface;
 
@@ -171,6 +183,17 @@ export default class CalendarEventHandlers implements DomainEventHandlers {
     // single-producer model.
     eventBus.on('eventUnreposted', async () => {
       /* signal preservation: no instance fan-out under pv-hr72 single-producer */
+    });
+
+    // A follower that unfollows a remote source no longer receives that
+    // source's Place/Space updates, so the origin_uri dedup stamps mirrored
+    // from it are cleared. The Place/Space rows themselves stay — reposted
+    // events still reference them.
+    eventBus.on('activitypub:calendar:unfollowed', async (e: CalendarUnfollowedPayload) => {
+      if (!e?.calendarId || !e?.sourceActorUri) {
+        return;
+      }
+      await this.service.clearOriginUrisFromSource(e.calendarId, e.sourceActorUri);
     });
 
     eventBus.on('eventInstanceCancelled', async (e: EventInstanceCancelledPayload) => {

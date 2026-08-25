@@ -54,3 +54,17 @@ export interface ActivityPubFollowAcceptedPayload {
   calendarActorId: string;
   sourceActorUri: string;
 }
+
+/**
+ * Emitted by `ActivityPubService.unfollowCalendar` after the local follow
+ * row(s) are destroyed and the Undo(Follow) is queued. The calendar domain
+ * consumes it to clear the `origin_uri` dedup stamps on Places/Spaces the
+ * follower mirrored from the unfollowed source.
+ *
+ * - `calendarId`: id of the local Calendar that unfollowed.
+ * - `sourceActorUri`: actor URI of the remote calendar that was unfollowed.
+ */
+export interface ActivityPubCalendarUnfollowedPayload {
+  calendarId: string;
+  sourceActorUri: string;
+}
