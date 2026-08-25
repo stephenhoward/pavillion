@@ -83,7 +83,7 @@ describe('EventService.bulkAssignCategories', () => {
       LOCK: {},
     } as unknown as Transaction;
     const transactionStub = sandbox.stub(db, 'transaction');
-    transactionStub.resolves(mockTransaction);
+    transactionStub.callsFake(async (callback: any) => callback(mockTransaction));
 
     // Mock bulk create
     const bulkCreateStub = sandbox.stub(EventCategoryAssignmentEntity, 'bulkCreate');
@@ -113,7 +113,7 @@ describe('EventService.bulkAssignCategories', () => {
       expect(r.isRepost).toBe(false);
     });
     expect(bulkCreateStub.calledOnce).toBe(true);
-    expect(mockTransaction.commit.calledOnce).toBe(true);
+    expect(transactionStub.calledOnce).toBe(true);
   });
 
   it('should handle events not found error', async () => {
@@ -236,7 +236,7 @@ describe('EventService.bulkAssignCategories', () => {
       LOCK: {},
     } as unknown as Transaction;
     const transactionStub = sandbox.stub(db, 'transaction');
-    transactionStub.resolves(mockTransaction);
+    transactionStub.callsFake(async (callback: any) => callback(mockTransaction));
 
     const bulkCreateStub = sandbox.stub(EventCategoryAssignmentEntity, 'bulkCreate');
     bulkCreateStub.resolves([]);
@@ -256,7 +256,7 @@ describe('EventService.bulkAssignCategories', () => {
     expect(result[0].id).toBe('11111111-1111-4111-8111-111111111111');
     // Owned event: authoritative repostStatus is 'none'.
     expect(result[0].repostStatus).toBe('none');
-    expect(mockTransaction.commit.calledOnce).toBe(true);
+    expect(transactionStub.calledOnce).toBe(true);
     // Only cat2 should be newly assigned (cat1 was already assigned)
   });
 
@@ -306,7 +306,8 @@ describe('EventService.bulkAssignCategories', () => {
       afterCommit: sandbox.stub(),
       LOCK: {},
     } as unknown as Transaction;
-    sandbox.stub(db, 'transaction').resolves(mockTransaction);
+    const transactionStub = sandbox.stub(db, 'transaction');
+    transactionStub.callsFake(async (callback: any) => callback(mockTransaction));
 
     const bulkCreateStub = sandbox.stub(EventCategoryAssignmentEntity, 'bulkCreate').resolves([]);
 
@@ -319,7 +320,7 @@ describe('EventService.bulkAssignCategories', () => {
     expect(Array.isArray(result)).toBe(true);
     expect(result).toHaveLength(1);
     expect(bulkCreateStub.calledOnce).toBe(true);
-    expect(mockTransaction.commit.calledOnce).toBe(true);
+    expect(transactionStub.calledOnce).toBe(true);
     // The event lives in EventRepostEntity (legacy direct-repost link) but not
     // in SharedEventEntity (the AP mock returns an empty status map). The
     // legacy fallback resolves to 'manual'.
@@ -382,7 +383,7 @@ describe('EventService.bulkAssignCategories', () => {
       afterCommit: sandbox.stub(),
       LOCK: {},
     } as unknown as Transaction;
-    sandbox.stub(db, 'transaction').resolves(mockTransaction);
+    sandbox.stub(db, 'transaction').callsFake(async (callback: any) => callback(mockTransaction));
 
     sandbox.stub(EventCategoryAssignmentEntity, 'bulkCreate').resolves([]);
 
@@ -445,7 +446,7 @@ describe('EventService.bulkAssignCategories', () => {
       afterCommit: sandbox.stub(),
       LOCK: {},
     } as unknown as Transaction;
-    sandbox.stub(db, 'transaction').resolves(mockTransaction);
+    sandbox.stub(db, 'transaction').callsFake(async (callback: any) => callback(mockTransaction));
 
     sandbox.stub(EventCategoryAssignmentEntity, 'bulkCreate').resolves([]);
 
@@ -500,7 +501,7 @@ describe('EventService.bulkAssignCategories', () => {
       afterCommit: sandbox.stub(),
       LOCK: {},
     } as unknown as Transaction;
-    sandbox.stub(db, 'transaction').resolves(mockTransaction);
+    sandbox.stub(db, 'transaction').callsFake(async (callback: any) => callback(mockTransaction));
 
     sandbox.stub(EventCategoryAssignmentEntity, 'bulkCreate').resolves([]);
 
@@ -515,7 +516,7 @@ describe('EventService.bulkAssignCategories', () => {
     expect(result[0].isRepost).toBe(false);
   });
 
-  it('should rollback transaction on error', async () => {
+  it('should propagate errors thrown inside the transaction', async () => {
     // Arrange
     const eventIds = ['11111111-1111-4111-8111-111111111111'];
     const categoryIds = ['aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'];
@@ -555,7 +556,7 @@ describe('EventService.bulkAssignCategories', () => {
       LOCK: {},
     } as unknown as Transaction;
     const transactionStub = sandbox.stub(db, 'transaction');
-    transactionStub.resolves(mockTransaction);
+    transactionStub.callsFake(async (callback: any) => callback(mockTransaction));
 
     // Mock bulk create to throw error
     const bulkCreateStub = sandbox.stub(EventCategoryAssignmentEntity, 'bulkCreate');
@@ -565,7 +566,7 @@ describe('EventService.bulkAssignCategories', () => {
     await expect(service.bulkAssignCategories(mockAccount, eventIds, categoryIds))
       .rejects.toThrow('Database error');
 
-    expect((mockTransaction.rollback as sinon.SinonStub).calledOnce).toBe(true);
+    expect(transactionStub.calledOnce).toBe(true);
   });
 });
 

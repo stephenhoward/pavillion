@@ -46,7 +46,8 @@ describe('EventService.replaceEventCategories', () => {
     mockTransaction?: Transaction;
   } = {}) {
     const mockTransaction = options.mockTransaction ?? createMockTransaction();
-    sandbox.stub(db, 'transaction').resolves(mockTransaction);
+    const transactionStub = sandbox.stub(db, 'transaction');
+    transactionStub.callsFake(async (callback: any) => callback(mockTransaction));
 
     if (options.eventEntity !== undefined) {
       sandbox.stub(EventEntity, 'findOne').resolves(options.eventEntity);
@@ -95,7 +96,7 @@ describe('EventService.replaceEventCategories', () => {
       sandbox.stub(EventRepostEntity, 'findAll').resolves(options.repostEntity);
     }
 
-    return mockTransaction;
+    return transactionStub;
   }
 
   beforeEach(() => {
@@ -121,7 +122,7 @@ describe('EventService.replaceEventCategories', () => {
       EventCategoryEntity.build({ id, calendar_id: calendarId }),
     );
 
-    const mockTransaction = stubCommonDependencies({
+    const transactionStub = stubCommonDependencies({
       eventEntity: mockEvent,
       categories: mockCategories,
       userCalendars: [new Calendar(calendarId, 'test-calendar')],
@@ -144,7 +145,7 @@ describe('EventService.replaceEventCategories', () => {
     expect(result.repostStatus).toBe('none');
     expect(destroyStub.calledOnce).toBe(true);
     expect(bulkCreateStub.calledOnce).toBe(true);
-    expect((mockTransaction.commit as sinon.SinonStub).calledOnce).toBe(true);
+    expect(transactionStub.calledOnce).toBe(true);
   });
 
   it('should look up the acting calendar owned categories before destroying (pv-bv78)', async () => {
@@ -222,7 +223,7 @@ describe('EventService.replaceEventCategories', () => {
       account_id: 'test-account-id',
     });
 
-    const mockTransaction = stubCommonDependencies({
+    const transactionStub = stubCommonDependencies({
       eventEntity: mockEvent,
       userCalendars: [new Calendar(calendarId, 'test-calendar')],
       // Acting calendar owns one category, so the scoped destroy runs even
@@ -246,7 +247,7 @@ describe('EventService.replaceEventCategories', () => {
     expect(destroyStub.calledOnce).toBe(true);
     // bulkCreate should NOT be called when categoryIds is empty
     expect(bulkCreateStub.called).toBe(false);
-    expect((mockTransaction.commit as sinon.SinonStub).calledOnce).toBe(true);
+    expect(transactionStub.calledOnce).toBe(true);
   });
 
   it('should throw ValidationError for invalid eventId UUID', async () => {
@@ -262,14 +263,14 @@ describe('EventService.replaceEventCategories', () => {
   });
 
   it('should throw EventNotFoundError when event does not exist', async () => {
-    const mockTransaction = stubCommonDependencies({
+    const transactionStub = stubCommonDependencies({
       eventEntity: null,
     });
 
     await expect(
       service.replaceEventCategories(mockAccount, validEventId, [validCategoryId1]),
     ).rejects.toThrow(EventNotFoundError);
-    expect((mockTransaction.rollback as sinon.SinonStub).calledOnce).toBe(true);
+    expect(transactionStub.calledOnce).toBe(true);
   });
 
   it('should throw CategoriesNotFoundError when categories do not belong to calendar', async () => {
@@ -279,7 +280,7 @@ describe('EventService.replaceEventCategories', () => {
       account_id: 'test-account-id',
     });
 
-    const mockTransaction = stubCommonDependencies({
+    const transactionStub = stubCommonDependencies({
       eventEntity: mockEvent,
       categories: [], // No matching categories found
       userCalendars: [new Calendar(calendarId, 'test-calendar')],
@@ -288,7 +289,7 @@ describe('EventService.replaceEventCategories', () => {
     await expect(
       service.replaceEventCategories(mockAccount, validEventId, [validCategoryId1]),
     ).rejects.toThrow(CategoriesNotFoundError);
-    expect((mockTransaction.rollback as sinon.SinonStub).calledOnce).toBe(true);
+    expect(transactionStub.calledOnce).toBe(true);
   });
 
   it('should throw InsufficientCalendarPermissionsError when user lacks permission', async () => {
@@ -299,7 +300,7 @@ describe('EventService.replaceEventCategories', () => {
       account_id: 'other-account-id',
     });
 
-    const mockTransaction = stubCommonDependencies({
+    const transactionStub = stubCommonDependencies({
       eventEntity: mockEvent,
       userCalendars: [new Calendar(otherCalendarId, 'other-calendar')],
       repostEntity: [], // No repost resolution either
@@ -308,7 +309,7 @@ describe('EventService.replaceEventCategories', () => {
     await expect(
       service.replaceEventCategories(mockAccount, validEventId, [validCategoryId1]),
     ).rejects.toThrow(InsufficientCalendarPermissionsError);
-    expect((mockTransaction.rollback as sinon.SinonStub).calledOnce).toBe(true);
+    expect(transactionStub.calledOnce).toBe(true);
   });
 
   it('should prefer the supplied calendarId over the source calendar when the account owns both', async () => {
@@ -330,7 +331,7 @@ describe('EventService.replaceEventCategories', () => {
       calendar_id: repostTargetCalendarId,
     });
 
-    const mockTransaction = stubCommonDependencies({
+    const transactionStub = stubCommonDependencies({
       eventEntity: mockEvent,
       categories: [repostTargetCategory],
       userCalendars: [
@@ -362,7 +363,7 @@ describe('EventService.replaceEventCategories', () => {
     // and SharedEventEntity has no entry, so the legacy fallback resolves
     // to 'manual'.
     expect(result.repostStatus).toBe('manual');
-    expect((mockTransaction.commit as sinon.SinonStub).calledOnce).toBe(true);
+    expect(transactionStub.calledOnce).toBe(true);
   });
 
   it('should resolve repost events to reposter calendar correctly', async () => {
@@ -386,7 +387,7 @@ describe('EventService.replaceEventCategories', () => {
       calendar_id: reposterCalendarId,
     });
 
-    const mockTransaction = stubCommonDependencies({
+    const transactionStub = stubCommonDependencies({
       eventEntity: mockEvent,
       categories: [mockCategory],
       userCalendars: [new Calendar(reposterCalendarId, 'reposter-calendar')],
@@ -409,17 +410,17 @@ describe('EventService.replaceEventCategories', () => {
     // resolves repostStatus to 'manual'.
     expect(result.repostStatus).toBe('manual');
     expect(result.isRepost).toBe(true);
-    expect((mockTransaction.commit as sinon.SinonStub).calledOnce).toBe(true);
+    expect(transactionStub.calledOnce).toBe(true);
   });
 
-  it('should rollback transaction on error', async () => {
+  it('should propagate errors thrown inside the transaction', async () => {
     const mockEvent = EventEntity.build({
       id: validEventId,
       calendar_id: calendarId,
       account_id: 'test-account-id',
     });
 
-    const mockTransaction = stubCommonDependencies({
+    const transactionStub = stubCommonDependencies({
       eventEntity: mockEvent,
       userCalendars: [new Calendar(calendarId, 'test-calendar')],
       // Acting calendar owns a category so the scoped destroy actually runs
@@ -433,7 +434,7 @@ describe('EventService.replaceEventCategories', () => {
     await expect(
       service.replaceEventCategories(mockAccount, validEventId, []),
     ).rejects.toThrow('Database error');
-    expect((mockTransaction.rollback as sinon.SinonStub).calledOnce).toBe(true);
+    expect(transactionStub.calledOnce).toBe(true);
   });
 
   it('should not set isRepost when event is not a repost', async () => {
@@ -491,7 +492,7 @@ describe('EventService.replaceEventCategories', () => {
       calendar_id: reposterCalendarId,
     });
 
-    const mockTransaction = stubCommonDependencies({
+    const transactionStub = stubCommonDependencies({
       eventEntity: mockEvent,
       categories: [mockCategory],
       userCalendars: [new Calendar(reposterCalendarId, 'reposter-calendar')],
@@ -511,6 +512,6 @@ describe('EventService.replaceEventCategories', () => {
     // SharedEventEntity 'auto' wins over the EventRepostEntity legacy row.
     expect(result.repostStatus).toBe('auto');
     expect(result.isRepost).toBe(true);
-    expect((mockTransaction.commit as sinon.SinonStub).calledOnce).toBe(true);
+    expect(transactionStub.calledOnce).toBe(true);
   });
 });

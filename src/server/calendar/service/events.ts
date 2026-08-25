@@ -1611,8 +1611,7 @@ class EventService {
       throw new EventNotFoundError(`Remote event ${eventId} not found for deletion`);
     }
 
-    const transaction = await db.transaction();
-    try {
+    await db.transaction(async (transaction) => {
       // Delete related records in correct order to satisfy foreign key constraints
       await EventInstanceEntity.destroy({
         where: { event_id: eventId },
@@ -1635,13 +1634,7 @@ class EventService {
       });
 
       await eventEntity.destroy({ transaction });
-
-      await transaction.commit();
-    }
-    catch (error) {
-      await transaction.rollback();
-      throw error;
-    }
+    });
   }
 
   /**
@@ -1853,14 +1846,11 @@ class EventService {
     }
 
 
-    const transaction = await db.transaction();
-
     // The acting calendar id (the reposter for repost events; the source
-    // calendar otherwise) is captured here so the post-commit repostStatus
-    // lookup can target the same calendar that owned the assignment write.
-    let actingCalendarId: string;
-
-    try {
+    // calendar otherwise) is returned from the transaction so the post-commit
+    // repostStatus lookup can target the same calendar that owned the
+    // assignment write.
+    const actingCalendarId = await db.transaction(async (transaction) => {
       // 1. Validate that all events exist
       const events = await EventEntity.findAll({
         where: { id: eventIds },
@@ -1891,7 +1881,6 @@ class EventService {
         userCalendars,
       } = await this.resolveEffectiveCalendarId(account, calendarIds[0] as string, eventIds, transaction);
       let calendarId = effectiveCalendarId;
-      actingCalendarId = effectiveCalendarId;
 
       const calendar = await this.calendarService.getCalendar(calendarId);
 
@@ -1953,12 +1942,8 @@ class EventService {
         await EventCategoryAssignmentEntity.bulkCreate(assignmentsToCreate, { transaction });
       }
 
-      await transaction.commit();
-    }
-    catch (error) {
-      await transaction.rollback();
-      throw error;
-    }
+      return effectiveCalendarId;
+    });
 
     // 8. Build authoritative repostStatus map for the acting calendar.
     // See resolveRepostStatusForCalendar for the SharedEventEntity-first,
@@ -2010,14 +1995,11 @@ class EventService {
     // Deduplicate categoryIds to prevent false count mismatches
     const uniqueCategoryIds = [...new Set(categoryIds)];
 
-    const transaction = await db.transaction();
-
     // The acting calendar id (the reposter for repost events; the source
-    // calendar otherwise) is captured here so the post-commit repostStatus
-    // lookup can target the same calendar that owned the assignment write.
-    let actingCalendarId: string;
-
-    try {
+    // calendar otherwise) is returned from the transaction so the post-commit
+    // repostStatus lookup can target the same calendar that owned the
+    // assignment write.
+    const actingCalendarId = await db.transaction(async (transaction) => {
       // 1. Find the event
       const event = await EventEntity.findOne({
         where: { id: eventId },
@@ -2033,7 +2015,6 @@ class EventService {
         effectiveCalendarId,
         userCalendars,
       } = await this.resolveEffectiveCalendarId(account, event.calendar_id, [eventId], transaction, calendarId);
-      actingCalendarId = effectiveCalendarId;
 
       // 3. Check user has permission
       const hasPermission = userCalendars.some(cal => cal.id === effectiveCalendarId);
@@ -2097,12 +2078,8 @@ class EventService {
         await EventCategoryAssignmentEntity.bulkCreate(assignmentsToCreate, { transaction });
       }
 
-      await transaction.commit();
-    }
-    catch (error) {
-      await transaction.rollback();
-      throw error;
-    }
+      return effectiveCalendarId;
+    });
 
     // 7. Build authoritative repostStatus map for the acting calendar and
     // resolve this event's status from it. See resolveRepostStatusForCalendar
@@ -2184,8 +2161,7 @@ class EventService {
     // Capture the CalendarEvent model before the deletion transaction destroys the entity
     const event = eventEntity.toModel();
 
-    const transaction = await db.transaction();
-    try {
+    await db.transaction(async (transaction) => {
       // Delete related records in correct order to satisfy foreign key constraints
       // 1. Delete event instances first
       await EventInstanceEntity.destroy({
@@ -2213,13 +2189,7 @@ class EventService {
 
       // 5. Finally, delete the main event entity
       await eventEntity.destroy({ transaction });
-
-      await transaction.commit();
-    }
-    catch (error) {
-      await transaction.rollback();
-      throw error;
-    }
+    });
 
     // Emit event for ActivityPub federation. Safe to emit directly here
     // because the internally-managed transaction is already committed above;

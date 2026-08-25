@@ -322,9 +322,7 @@ class SeriesService {
       throw new InsufficientCalendarPermissionsError();
     }
 
-    const transaction = await db.transaction();
-
-    try {
+    await db.transaction(async (transaction) => {
       // Clear series_id from all associated events
       await EventEntity.update(
         { series_id: null },
@@ -342,13 +340,7 @@ class SeriesService {
         where: { id: seriesId },
         transaction,
       });
-
-      await transaction.commit();
-    }
-    catch (error) {
-      await transaction.rollback();
-      throw error;
-    }
+    });
   }
 
   /**

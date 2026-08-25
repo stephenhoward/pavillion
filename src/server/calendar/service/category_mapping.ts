@@ -58,8 +58,7 @@ class CategoryMappingService {
       throw new Error(`Cannot set more than ${MAX_MAPPINGS} category mappings at once`);
     }
 
-    const transaction = await db.transaction();
-    try {
+    await db.transaction(async (transaction) => {
       await CalendarCategoryMappingEntity.destroy({
         where: {
           following_calendar_id: calendarId,
@@ -78,13 +77,7 @@ class CategoryMappingService {
           local_category_id: m.localCategoryId,
         }, { transaction });
       }
-
-      await transaction.commit();
-    }
-    catch (e) {
-      await transaction.rollback();
-      throw e;
-    }
+    });
   }
 
   /**

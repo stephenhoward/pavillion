@@ -34,6 +34,9 @@ backend:
   sequelize-queries:
     description: Eager loading patterns to avoid N+1 queries
     skill: backend-sequelize
+  sequelize-transactions:
+    description: Managed callback db.transaction form for multi-statement writes
+    skill: backend-sequelize
   service-layer:
     description: Services for business logic, API handlers for HTTP only
     skill: backend-domain-structure

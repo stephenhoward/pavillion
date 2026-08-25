@@ -270,10 +270,9 @@ class CategoryService {
       await this.getCategory(targetCategoryId, category.calendarId);
     }
 
-    const transaction = await db.transaction();
-    let affectedEventCount = 0;
+    return db.transaction(async (transaction) => {
+      let affectedEventCount = 0;
 
-    try {
       if (action === 'migrate' && targetCategoryId) {
         // Migration: Update all assignments to point to target category
         const [updateCount] = await EventCategoryAssignmentEntity.update(
@@ -320,13 +319,8 @@ class CategoryService {
         transaction,
       });
 
-      await transaction.commit();
       return affectedEventCount;
-    }
-    catch (error) {
-      await transaction.rollback();
-      throw error;
-    }
+    });
   }
 
   /**
@@ -374,10 +368,9 @@ class CategoryService {
       }
     }
 
-    const transaction = await db.transaction();
-    let totalAffectedEvents = 0;
+    return db.transaction(async (transaction) => {
+      let totalAffectedEvents = 0;
 
-    try {
       // For each source category, migrate assignments and delete
       for (const sourceCategoryId of sourceCategoryIds) {
         // Update assignments to target category
@@ -417,13 +410,8 @@ class CategoryService {
         });
       }
 
-      await transaction.commit();
       return { totalAffectedEvents };
-    }
-    catch (error) {
-      await transaction.rollback();
-      throw error;
-    }
+    });
   }
 
   /**
@@ -641,9 +629,7 @@ class CategoryService {
     }
 
     // Wrap delete-then-create in a transaction to ensure atomicity
-    const transaction = await db.transaction();
-
-    try {
+    await db.transaction(async (transaction) => {
       // Remove all existing assignments
       await EventCategoryAssignmentEntity.destroy({
         where: { event_id: eventId },
@@ -658,13 +644,7 @@ class CategoryService {
           category_id: categoryId,
         }, { transaction });
       }
-
-      await transaction.commit();
-    }
-    catch (error) {
-      await transaction.rollback();
-      throw error;
-    }
+    });
   }
 
   /**
