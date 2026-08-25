@@ -49,6 +49,11 @@ export default defineConfig({
   // already pinned to one worker, never reproduced. Serial execution is what
   // the fixture topology actually supports; `fullyParallel` above still
   // governs ordering within a file.
+  //
+  // The container-recreate hazard specifically is additionally fenced off by
+  // the project split below (`federation-strict-receive` depends on
+  // `federation`), which holds even if this worker pin is overridden on the
+  // command line.
   workers: 1,
 
   // Reporter to use - open: 'never' prevents auto-launching browser after tests
@@ -86,13 +91,36 @@ export default defineConfig({
     timeout: 10000,
   },
 
-  // Configure projects for federation testing
+  // Configure projects for federation testing.
+  //
+  // `signature_strict_receive.spec.ts` is split into its own project that
+  // `dependencies` on the default project, so the scheduler will not start it
+  // until every other federation spec has finished. That spec force-recreates
+  // the beta container and flips SKIP_SIGNATURES for its window; a sibling
+  // spec running during that window fails with connection-refused/502 or hits
+  // strict-mode rejections it does not expect. Unlike the `workers: 1` pin
+  // above, this ordering survives a `--workers N` override. Do not fold the
+  // spec back into the default project or drop the `dependencies` edge.
+  //
+  // Note: `--project=federation-strict-receive` pulls in the full
+  // `federation` project (dependencies ignore test filters); to run the
+  // strict spec alone, add `--no-deps`.
   projects: [
     {
       name: 'federation',
+      testIgnore: '**/signature_strict_receive.spec.ts',
       use: {
         ...devices['Desktop Chrome'],
         // Explicitly ensure headless mode for this project
+        headless: true,
+      },
+    },
+    {
+      name: 'federation-strict-receive',
+      testMatch: '**/signature_strict_receive.spec.ts',
+      dependencies: ['federation'],
+      use: {
+        ...devices['Desktop Chrome'],
         headless: true,
       },
     },
