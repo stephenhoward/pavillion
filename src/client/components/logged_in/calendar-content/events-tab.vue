@@ -73,7 +73,7 @@ const resolveEventImage = (event: any) => {
   if (event.media) {
     return event.media;
   }
-  if (event.isRepost) {
+  if (event.repostStatus !== 'none') {
     return null;
   }
   return props.calendar?.defaultEventImage ?? null;
@@ -195,7 +195,7 @@ const newEvent = async () => {
  * Navigate to or open the editor for an event.
  */
 const navigateToEditEvent = (event, domEvent) => {
-  if (event.isRepost) {
+  if (event.repostStatus !== 'none') {
     repostModalTriggerEl.value = domEvent?.currentTarget ?? null;
     repostEventForModal.value = event;
     return;
@@ -564,7 +564,7 @@ initializeFiltersFromURL();
                   <CalendarX :size="14" aria-hidden="true" />
                   {{ tCancellations('cancelled_badge') }}
                 </span>
-                <span v-if="event.isRepost" class="repost-badge">
+                <span v-if="event.repostStatus !== 'none'" class="repost-badge">
                   <span class="sr-only">{{ tFeed('events.repost_badge_prefix') }}</span>{{ tFeed('events.repost_button') }}
                 </span>
                 <span v-if="event.languages && event.languages.length > 1" class="language-count">
@@ -616,7 +616,7 @@ initializeFiltersFromURL();
               <Copy :size="18" />
             </button>
             <button
-              v-if="event.isRepost"
+              v-if="event.repostStatus !== 'none'"
               type="button"
               class="unpost-btn btn btn--icon btn--subtle"
               @click.stop="handleUnpostButtonClick(event, $event)"

@@ -201,7 +201,7 @@ describe('Widget View Components', () => {
         categories: [],
         location: null,
         isRecurring: false,
-        isRepost: false,
+        repostStatus: 'none',
         sourceCalendar: null,
       },
     });
@@ -292,7 +292,7 @@ describe('Widget View Components', () => {
         categories: [],
         location: null,
         isRecurring: false,
-        isRepost: false,
+        repostStatus: 'none',
         sourceCalendar: null,
       },
     });

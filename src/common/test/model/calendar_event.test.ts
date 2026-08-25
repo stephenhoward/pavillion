@@ -67,24 +67,6 @@ describe('CalendarEvent.repostStatus', () => {
     expect(event.repostStatus).toBe('none');
   });
 
-  it('isRepost getter should return false when repostStatus is "none"', () => {
-    const event = new CalendarEvent('evt-1', 'cal-1');
-    event.repostStatus = 'none';
-    expect(event.isRepost).toBe(false);
-  });
-
-  it('isRepost getter should return true when repostStatus is "manual"', () => {
-    const event = new CalendarEvent('evt-1', 'cal-1');
-    event.repostStatus = 'manual';
-    expect(event.isRepost).toBe(true);
-  });
-
-  it('isRepost getter should return true when repostStatus is "auto"', () => {
-    const event = new CalendarEvent('evt-1', 'cal-1');
-    event.repostStatus = 'auto';
-    expect(event.isRepost).toBe(true);
-  });
-
   it('should include repostStatus in toObject() output', () => {
     const event = new CalendarEvent('evt-1', 'cal-1');
     event.repostStatus = 'auto';
@@ -93,12 +75,12 @@ describe('CalendarEvent.repostStatus', () => {
     expect(obj.repostStatus).toBe('auto');
   });
 
-  it('should keep isRepost in toObject() for backward compatibility', () => {
+  it('should not include the removed legacy isRepost field in toObject()', () => {
     const event = new CalendarEvent('evt-1', 'cal-1');
     event.repostStatus = 'manual';
 
     const obj = event.toObject();
-    expect(obj.isRepost).toBe(true);
+    expect('isRepost' in obj).toBe(false);
   });
 
   it('should deserialize repostStatus from fromObject()', () => {
@@ -110,10 +92,12 @@ describe('CalendarEvent.repostStatus', () => {
 
     const event = CalendarEvent.fromObject(obj);
     expect(event.repostStatus).toBe('auto');
-    expect(event.isRepost).toBe(true);
   });
 
-  it('should fall back to legacy isRepost=true as "manual" in fromObject()', () => {
+  it('should ignore the removed legacy isRepost boolean in fromObject()', () => {
+    // The legacy isRepost -> 'manual' fallback is gone: a payload carrying
+    // only the boolean deserializes as 'none'. Every producer now emits
+    // repostStatus.
     const obj = {
       id: 'evt-1',
       calendarId: 'cal-1',
@@ -121,27 +105,10 @@ describe('CalendarEvent.repostStatus', () => {
     };
 
     const event = CalendarEvent.fromObject(obj);
-    expect(event.repostStatus).toBe('manual');
-    expect(event.isRepost).toBe(true);
-  });
-
-  it('should let an explicit repostStatus="none" win over a conflicting legacy isRepost=true in fromObject()', () => {
-    // Distinct branch: when both an explicit repostStatus and a legacy
-    // isRepost flag are present, the explicit tri-state value takes
-    // precedence over the legacy boolean even when they disagree.
-    const obj = {
-      id: 'evt-1',
-      calendarId: 'cal-1',
-      repostStatus: 'none',
-      isRepost: true,
-    };
-
-    const event = CalendarEvent.fromObject(obj);
     expect(event.repostStatus).toBe('none');
-    expect(event.isRepost).toBe(false);
   });
 
-  it('should default repostStatus to "none" when neither field is present in fromObject()', () => {
+  it('should default repostStatus to "none" when absent in fromObject()', () => {
     const obj = {
       id: 'evt-1',
       calendarId: 'cal-1',
@@ -149,7 +116,6 @@ describe('CalendarEvent.repostStatus', () => {
 
     const event = CalendarEvent.fromObject(obj);
     expect(event.repostStatus).toBe('none');
-    expect(event.isRepost).toBe(false);
   });
 
   it('should round-trip repostStatus through toObject/fromObject', () => {
@@ -158,7 +124,6 @@ describe('CalendarEvent.repostStatus', () => {
 
     const restored = CalendarEvent.fromObject(event.toObject());
     expect(restored.repostStatus).toBe('auto');
-    expect(restored.isRepost).toBe(true);
   });
 });
 

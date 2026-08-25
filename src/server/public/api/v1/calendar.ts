@@ -121,7 +121,8 @@ function toPublicCategoryObject(category: EventCategory | Record<string, any>): 
  * privacy boundary is a property of the audience (Tier 1 anonymous public).
  *
  * Event root allow-list:
- *   id, date, repostStatus, isRepost, sourceCalendar, mediaFocalPointX,
+ *   id, date, repostStatus, isRepost (deprecated; derived here from
+ *   repostStatus for wire-contract stability), sourceCalendar, mediaFocalPointX,
  *   mediaFocalPointY, mediaZoom, eventSourceUrl, externalUrl, urlPrompt,
  *   isRecurring, recurrenceSummary, content, plus projected location, space,
  *   media, series, categories.
@@ -194,7 +195,11 @@ function toPublicEventObject(eventObj: Record<string, any>): Record<string, any>
     id: eventObj.id,
     date: eventObj.date,
     repostStatus: eventObj.repostStatus,
-    isRepost: eventObj.isRepost,
+    // Deprecated wire field retained for external public-API consumers.
+    // CalendarEvent no longer carries isRepost; derive it here so the
+    // public contract is unchanged. Removing it is a separate, deliberate
+    // public-API change.
+    isRepost: eventObj.repostStatus !== 'none',
     sourceCalendar: eventObj.sourceCalendar,
     mediaFocalPointX: eventObj.mediaFocalPointX,
     mediaFocalPointY: eventObj.mediaFocalPointY,

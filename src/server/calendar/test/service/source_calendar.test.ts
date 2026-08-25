@@ -29,7 +29,7 @@ describe('resolveSourceCalendars', () => {
 
     await resolveSourceCalendars([ctx], new Map());
 
-    expect(ctx.event.isRepost).toBe(false);
+    expect(ctx.event.repostStatus).toBe('none');
     expect(ctx.event.sourceCalendar).toBeNull();
   });
 
@@ -43,7 +43,7 @@ describe('resolveSourceCalendars', () => {
 
     await resolveSourceCalendars([ctx], new Map());
 
-    expect(ctx.event.isRepost).toBe(true);
+    expect(ctx.event.repostStatus).toBe('manual');
     expect(ctx.event.sourceCalendar).not.toBeNull();
     expect(ctx.event.sourceCalendar!.urlName).toBe('original-cal');
     expect(ctx.event.sourceCalendar!.host).toBe(TEST_DOMAIN);
@@ -60,7 +60,7 @@ describe('resolveSourceCalendars', () => {
 
     await resolveSourceCalendars([ctx], new Map());
 
-    expect(ctx.event.isRepost).toBe(true);
+    expect(ctx.event.repostStatus).toBe('manual');
     expect(ctx.event.sourceCalendar).toBeNull();
   });
 
@@ -77,7 +77,7 @@ describe('resolveSourceCalendars', () => {
 
     await resolveSourceCalendars([ctx], remoteActorUriMap);
 
-    expect(ctx.event.isRepost).toBe(true);
+    expect(ctx.event.repostStatus).toBe('manual');
     expect(ctx.event.sourceCalendar!.urlName).toBe('remote-cal');
     expect(ctx.event.sourceCalendar!.host).toBe('remote.example.com');
     expect(ctx.event.sourceCalendar!.url).toBe('https://remote.example.com/view/remote-cal');
@@ -92,7 +92,7 @@ describe('resolveSourceCalendars', () => {
 
     await resolveSourceCalendars([ctx], new Map());
 
-    expect(ctx.event.isRepost).toBe(true);
+    expect(ctx.event.repostStatus).toBe('manual');
     expect(ctx.event.sourceCalendar).toBeNull();
   });
 
@@ -120,13 +120,13 @@ describe('resolveSourceCalendars', () => {
 
     await resolveSourceCalendars([nonRepost, localRepost, remoteRepost], remoteActorUriMap);
 
-    expect(nonRepost.event.isRepost).toBe(false);
+    expect(nonRepost.event.repostStatus).toBe('none');
     expect(nonRepost.event.sourceCalendar).toBeNull();
 
-    expect(localRepost.event.isRepost).toBe(true);
+    expect(localRepost.event.repostStatus).toBe('manual');
     expect(localRepost.event.sourceCalendar!.urlName).toBe('source-cal');
 
-    expect(remoteRepost.event.isRepost).toBe(true);
+    expect(remoteRepost.event.repostStatus).toBe('manual');
     expect(remoteRepost.event.sourceCalendar!.urlName).toBe('other-cal');
     expect(remoteRepost.event.sourceCalendar!.host).toBe('other.example.org');
   });

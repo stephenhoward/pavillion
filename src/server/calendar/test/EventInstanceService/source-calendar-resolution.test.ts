@@ -105,7 +105,7 @@ describe('EventInstanceService sourceCalendar resolution', () => {
   });
 
   describe('resolveSourceCalendars (via listEventInstancesForCalendar)', () => {
-    it('should set isRepost=false and sourceCalendar=null for non-reposted events', async () => {
+    it('should keep repostStatus="none" and set sourceCalendar=null for non-reposted events', async () => {
       const instanceEntity = buildMockInstanceEntity({
         instanceId: 'inst-1',
         instanceCalendarId: 'cal-A',
@@ -121,11 +121,11 @@ describe('EventInstanceService sourceCalendar resolution', () => {
       const results = await service.listEventInstancesForCalendar(calendar);
 
       expect(results).toHaveLength(1);
-      expect(results[0].event.isRepost).toBe(false);
+      expect(results[0].event.repostStatus).toBe('none');
       expect(results[0].event.sourceCalendar).toBeNull();
     });
 
-    it('should set isRepost=true and populate sourceCalendar for local reposts', async () => {
+    it('should set repostStatus="manual" and populate sourceCalendar for local reposts', async () => {
       const instanceEntity = buildMockInstanceEntity({
         instanceId: 'inst-2',
         instanceCalendarId: 'cal-B',
@@ -142,14 +142,14 @@ describe('EventInstanceService sourceCalendar resolution', () => {
       const results = await service.listEventInstancesForCalendar(calendar);
 
       expect(results).toHaveLength(1);
-      expect(results[0].event.isRepost).toBe(true);
+      expect(results[0].event.repostStatus).toBe('manual');
       expect(results[0].event.sourceCalendar).not.toBeNull();
       expect(results[0].event.sourceCalendar!.urlName).toBe('original-cal');
       expect(results[0].event.sourceCalendar!.host).toBe(TEST_DOMAIN);
       expect(results[0].event.sourceCalendar!.url).toBe('/view/original-cal');
     });
 
-    it('should set isRepost=true and populate sourceCalendar for remote reposts', async () => {
+    it('should set repostStatus="manual" and populate sourceCalendar for remote reposts', async () => {
       const instanceEntity = buildMockInstanceEntity({
         instanceId: 'inst-3',
         instanceCalendarId: 'cal-B',
@@ -169,7 +169,7 @@ describe('EventInstanceService sourceCalendar resolution', () => {
       const results = await service.listEventInstancesForCalendar(calendar);
 
       expect(results).toHaveLength(1);
-      expect(results[0].event.isRepost).toBe(true);
+      expect(results[0].event.repostStatus).toBe('manual');
       expect(results[0].event.sourceCalendar).not.toBeNull();
       expect(results[0].event.sourceCalendar!.urlName).toBe('remote-cal');
       expect(results[0].event.sourceCalendar!.host).toBe('remote.example.com');
@@ -192,7 +192,7 @@ describe('EventInstanceService sourceCalendar resolution', () => {
       const results = await service.listEventInstancesForCalendar(calendar);
 
       expect(results).toHaveLength(1);
-      expect(results[0].event.isRepost).toBe(true);
+      expect(results[0].event.repostStatus).toBe('manual');
       expect(results[0].event.sourceCalendar).toBeNull();
     });
 
@@ -231,15 +231,15 @@ describe('EventInstanceService sourceCalendar resolution', () => {
       expect(results).toHaveLength(3);
 
       // Non-repost
-      expect(results[0].event.isRepost).toBe(false);
+      expect(results[0].event.repostStatus).toBe('none');
       expect(results[0].event.sourceCalendar).toBeNull();
 
       // Local repost
-      expect(results[1].event.isRepost).toBe(true);
+      expect(results[1].event.repostStatus).toBe('manual');
       expect(results[1].event.sourceCalendar!.urlName).toBe('source-cal');
 
       // Remote repost
-      expect(results[2].event.isRepost).toBe(true);
+      expect(results[2].event.repostStatus).toBe('manual');
       expect(results[2].event.sourceCalendar!.urlName).toBe('other-cal');
       expect(results[2].event.sourceCalendar!.host).toBe('other.example.org');
     });
