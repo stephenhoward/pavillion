@@ -7,6 +7,7 @@ import CalendarInterface from '@/server/calendar/interface';
 import AccountsInterface from '@/server/accounts/interface';
 import { createLogger } from '@/server/common/helper/logger';
 import { CALENDAR_BUS_EVENTS, type EditorInvitedPayload, type EditorRevokedPayload } from '@/server/calendar/events/types';
+import type { ActivityPubEventRepostedPayload } from '@/server/activitypub/events/types';
 import {
   MODERATION_BUS_EVENTS,
   type ReportFlaggedPayload,
@@ -44,28 +45,6 @@ export interface CalendarFollowedPayload {
 }
 
 /**
- * Payload for the `activitypub:event:reposted` event emitted on every
- * repost path (local manual share, local auto-repost following federation,
- * federated inbound Announce). `reposterUrl` is the AP actor URI;
- * nullable purely for defensive payload-construction.
- *
- * `reposterCalendarId` is set when the repost originated from a local
- * calendar (manual or auto). When present, the handler subtracts the
- * reposting calendar's editors from the source calendar's editors so the
- * reposter does not receive their own Announce notification. For purely
- * federated reposts (a remote calendar announces our local event), this
- * field is omitted — the source-calendar editors are addressed as a
- * role with no exclusion.
- */
-export interface EventRepostedPayload {
-  eventId: string;
-  calendarId: string;
-  reposterName: string;
-  reposterUrl: string | null;
-  reposterCalendarId?: string;
-}
-
-/**
  * NotificationEventHandlers — the single subscriber that turns cross-domain
  * bus events into notification activity rows.
  *
@@ -82,6 +61,9 @@ export interface EventRepostedPayload {
  * justification (cases 1–7):
  *   - Cases 1–2 (Follow, Announce) — `audience.kind='role'` with
  *     `calendar-editors`. The role resolver runs inside `recordActivity`.
+ *     Announce additionally passes `excludeAccountIds` (the reposting
+ *     calendar's editors) for local reposts so nobody is notified about
+ *     their own repost.
  *   - Case 3 (Flag) — owners + admins together. Because
  *     `RecordActivityAudience` is single-valued and the Flag dedup key
  *     `(verb, object_type, object_id)` would collapse a second call,
@@ -388,58 +370,71 @@ export default class NotificationEventHandlers implements DomainEventHandlers {
    * `activitypub:event:reposted` → `Announce` activity addressed to the
    * editors of the announced event's calendar. The emitter has already
    * resolved event→calendar before emitting, so the role resolver maps
-   * `calendar-editors` to the calendar editors directly.
+   * `calendar-editors` to the calendar editors directly. This is the only
+   * subscriber to the canonical repost event; `payload.provenance` says
+   * how the Announce reached this instance (local manual share, local
+   * auto-repost, federated inbound).
    *
-   * Local-repost display-name resolution (pv-d84j.2): when the reposter
-   * is a local calendar, the bus payload carries the calendar-actor URI
-   * on `reposterUrl`. Without the local-actor resolution step below the
-   * inbox renders the URI in place of a display name (same regression
-   * class as the Follow bug fixed in pv-d84j.1). When the URI resolves,
-   * the handler overrides `actorDisplayName` with the calendar's display
-   * name; `actor.kind` stays `remote_actor` because the activity still
-   * routed through the AP layer, and the snapshot's identity URI is the
-   * AP actor URL.
+   * The `origin` stays `federated` on every provenance — including local
+   * reposts — mirroring the Follow handler above: the activity originated
+   * from the AP layer even when both ends live on the same instance.
+   * Deliberately NOT split into local/system per provenance, because
+   * notification dedup keys on actor identity `(verb, actor_kind,
+   * actor_uri, object)`: a local manual share emits directly here AND can
+   * round-trip through the DEC-013 local_dispatch inbox path as a
+   * `federated-inbound` emission, and only identical actor tuples let
+   * those two collapse into one row. A `system`-kind actor would also
+   * collapse two different calendars' auto-reposts of the same event
+   * (dedup has no actor key for `system`), and an actor-URI-less row
+   * would sever the latent `Undo(Announce)` reversal that
+   * `dismissForObject` keys on `actor_uri`.
+   *
+   * Local-repost display-name resolution (pv-d84j.2): local emitters pass
+   * `reposterDisplayName` computed from the Calendar they already hold,
+   * which is trusted as-is (same-process, same trust domain). When it is
+   * absent — and always for `federated-inbound` payloads, whose display
+   * name is remote-supplied — the handler resolves `reposterUrl` through
+   * `resolveLocalCalendarActorDisplayName`, whose host check is the
+   * security boundary that stops a remote actor URI from borrowing a
+   * local calendar's name and keeps local_dispatch round-trips from
+   * rendering a URI in place of a display name (regression class
+   * pv-d84j.1). The final fallback is the actor URI itself. `actor.kind`
+   * stays `remote_actor` because the activity routed through the AP
+   * layer and the snapshot's identity URI is the AP actor URL.
    *
    * Self-actor exclusion (pv-d84j.2): when `reposterCalendarId` is
-   * present (local repost), the handler resolves both the source-calendar
-   * editors and the reposting-calendar editors and subtracts the latter
-   * from the former before passing the audience as explicit. This avoids
-   * notifying an editor that their own calendar reposted an event they
-   * also edit on the source calendar. For federated inbound Announces
-   * (remote actor reposts our local event), `reposterCalendarId` is
-   * omitted and the role-based addressing applies unchanged.
+   * present (local repost), the handler enumerates the reposting
+   * calendar's editors and passes them as `excludeAccountIds` on the
+   * role audience — the service subtracts them from the resolved
+   * source-calendar editors. This avoids notifying an editor that their
+   * own calendar reposted an event they also edit on the source
+   * calendar. For federated inbound Announces, `reposterCalendarId` is
+   * omitted and the role addressing applies with no exclusion.
    */
-  private async handleEventReposted(payload: EventRepostedPayload): Promise<void> {
+  private async handleEventReposted(payload: ActivityPubEventRepostedPayload): Promise<void> {
     try {
       const label = await this.resolveEventLabel(payload.eventId);
-      const localDisplayName = payload.reposterUrl
-        ? await this.resolveLocalCalendarActorDisplayName(payload.reposterUrl)
-        : null;
-      const actorDisplayName = localDisplayName ?? payload.reposterName;
 
-      // Self-actor exclusion: for local reposts subtract the reposter's
-      // editors from the source-calendar editors. Explicit audience is the
-      // only single-call shape that lets us deliver the filtered set —
-      // `audience.kind='role'` would re-resolve from scratch in the service
-      // with no exclusion hook.
-      let audience: Parameters<typeof this.service.recordActivity>[0]['audience'];
-      if (payload.reposterCalendarId) {
-        const [sourceEditors, reposterEditors] = await Promise.all([
-          this.calendarInterface.getEditorsForCalendar(payload.calendarId),
-          this.calendarInterface.getEditorsForCalendar(payload.reposterCalendarId),
-        ]);
-        const exclude = new Set(reposterEditors.map(a => a.id));
-        const recipientIds = sourceEditors
-          .map(a => a.id)
-          .filter(id => !exclude.has(id));
-        audience = { kind: 'explicit', accountIds: recipientIds };
+      let actorDisplayName: string | undefined;
+      if (payload.provenance !== 'federated-inbound' && payload.reposterDisplayName) {
+        // Emit-time display name from the AP service's own Calendar object —
+        // no lookup needed.
+        actorDisplayName = payload.reposterDisplayName;
       }
       else {
-        audience = {
-          kind: 'role',
-          role: 'calendar-editors',
-          objectRef: { type: 'calendar', id: payload.calendarId },
-        };
+        const localDisplayName = payload.reposterUrl
+          ? await this.resolveLocalCalendarActorDisplayName(payload.reposterUrl)
+          : null;
+        actorDisplayName = localDisplayName
+          ?? payload.reposterDisplayName
+          ?? payload.reposterUrl
+          ?? undefined;
+      }
+
+      let excludeAccountIds: string[] | undefined;
+      if (payload.reposterCalendarId) {
+        const reposterEditors = await this.calendarInterface.getEditorsForCalendar(payload.reposterCalendarId);
+        excludeAccountIds = reposterEditors.map(a => a.id);
       }
 
       await this.service.recordActivity({
@@ -455,7 +450,12 @@ export default class NotificationEventHandlers implements DomainEventHandlers {
           id: payload.eventId,
           label,
         },
-        audience,
+        audience: {
+          kind: 'role',
+          role: 'calendar-editors',
+          objectRef: { type: 'calendar', id: payload.calendarId },
+          excludeAccountIds,
+        },
       });
     }
     catch (error) {

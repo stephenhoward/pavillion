@@ -88,7 +88,7 @@ describe("ActivityPub Feed Service Methods", () => {
       sandbox.stub(SharedEventEntity, 'findOne').resolves(null);
       sandbox.stub(service, 'actorUrl').resolves('https://local.com/calendars/testcalendar');
       sandbox.stub(service, 'addToOutbox').resolves();
-      // shareEvent now fetches the event after sharing to emit eventReposted.
+      // shareEvent fetches the event after sharing to emit activitypub:event:reposted.
       // Stub getEventById to avoid real DB lookup in this unit test.
       sandbox.stub(service.calendarService, 'getEventById').resolves(null as any);
 
@@ -122,7 +122,7 @@ describe("ActivityPub Feed Service Methods", () => {
       sandbox.stub(SharedEventEntity, 'findOne').resolves(null);
       sandbox.stub(service, 'actorUrl').resolves('https://local.com/calendars/testcalendar');
       sandbox.stub(service, 'addToOutbox').resolves();
-      // shareEvent now fetches the event after sharing to emit eventReposted.
+      // shareEvent fetches the event after sharing to emit activitypub:event:reposted.
       // Stub getEventById to avoid real DB lookup in this unit test.
       sandbox.stub(service.calendarService, 'getEventById').resolves(null as any);
 

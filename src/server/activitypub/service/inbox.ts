@@ -20,6 +20,7 @@ import AnnounceActivity from "@/server/activitypub/model/action/announce";
 import { ActivityPubInboxMessageEntity, EventActivityEntity, FollowerCalendarEntity, FollowingCalendarEntity, RepostDismissalEntity, SharedEventEntity } from "@/server/activitypub/entity/activitypub";
 import { EventObjectEntity } from "@/server/activitypub/entity/event_object";
 import RemoteCalendarService from "@/server/activitypub/service/remote_calendar";
+import { ActivityPubEventRepostedPayload } from "@/server/activitypub/events/types";
 import { EventObject } from "@/server/activitypub/model/object/event";
 import { NoteObject } from "@/server/activitypub/model/object/note";
 import { ActivityPubActivity, ActivityPubActor } from "@/server/activitypub/model/base";
@@ -1232,8 +1233,12 @@ class ProcessInboxService {
       logger.warn({ err: error }, 'Category mapping or assignment failed, proceeding without categories');
     }
 
-    // Emit eventReposted so downstream handlers (e.g. event instance building)
-    // can process the newly auto-reposted event on the reposter's calendar.
+    // Emit the canonical repost signal for the notifications domain so the
+    // source-calendar editors learn about the auto-repost. Only fires when
+    // the auto-reposted event is locally owned — `event.calendarId !== null`
+    // — because remote-origin events have no local source calendar to
+    // address. No instance-row side effects hang off this event (single-
+    // producer model, pv-hr72).
     // Note: Update(Event) / Delete(Event) cascades for SharedEventEntity-bound
     // events do not exist as distinct inbox emission sites — `processUpdateEvent`
     // emits `eventUpdated` with `calendar: null` (which the outbox handler
@@ -1241,27 +1246,19 @@ class ProcessInboxService {
     // The paired Note Update/Delete propagation for locally-owned events lives
     // in the outbox event handlers (handleEventUpdated/handleEventDeleted) and
     // is covered by sibling pv-l35p.2.
-    if (event) {
-      this.eventBus.emit('eventReposted', { event, calendar });
-
-      // Dual-emit for the notifications domain (pv-d84j.2). See
-      // members.ts:441 for the full rationale: the calendar-domain
-      // event-instance pipeline subscribes to `eventReposted`; the
-      // notifications handler subscribes to `activitypub:event:reposted`
-      // with a different payload shape. Only fire the notifications
-      // emission when the auto-reposted event is locally owned —
-      // `event.calendarId !== null` — because the notifications audience
-      // is the source-calendar editors. Remote-origin events have no
-      // local source calendar so no local notification is owed.
-      if (event.calendarId !== null) {
-        this.eventBus.emit('activitypub:event:reposted', {
-          eventId: event.id,
-          calendarId: event.calendarId,
-          reposterName: localActorUrl,
-          reposterUrl: localActorUrl,
-          reposterCalendarId: calendar.id,
-        });
-      }
+    if (event && event.calendarId !== null) {
+      const repostedPayload: ActivityPubEventRepostedPayload = {
+        eventId: event.id,
+        calendarId: event.calendarId,
+        provenance: 'local-auto',
+        // Display name computed here while the reposting Calendar is in
+        // hand; empty (unnamed calendar) collapses to undefined so the
+        // notifications handler falls back to its URI resolution.
+        reposterDisplayName: calendar.displayName('') || undefined,
+        reposterUrl: localActorUrl,
+        reposterCalendarId: calendar.id,
+      };
+      this.eventBus.emit('activitypub:event:reposted', repostedPayload);
     }
 
     logger.info({ eventApId, sourceActorUri, isOriginal }, 'Auto-reposted event');
@@ -2514,12 +2511,18 @@ class ProcessInboxService {
       try {
         const localEvent = await this.calendarInterface.getEventById(apObject.event_id);
         if (localEvent && localEvent.calendarId !== null) {
-          this.eventBus.emit('activitypub:event:reposted', {
+          const repostedPayload: ActivityPubEventRepostedPayload = {
             eventId: localEvent.id,
             calendarId: localEvent.calendarId,
-            reposterName: sharerRemoteCalendar.remoteDisplayName ?? message.actor,
+            provenance: 'federated-inbound',
+            // Cached remote display name when we have one; otherwise omitted
+            // so the notifications handler falls back to its local-actor URI
+            // resolution (which covers DEC-013 local_dispatch round-trips of
+            // a local share) and finally to the actor URI itself.
+            reposterDisplayName: sharerRemoteCalendar.remoteDisplayName ?? undefined,
             reposterUrl: message.actor,
-          });
+          };
+          this.eventBus.emit('activitypub:event:reposted', repostedPayload);
         }
       }
       catch (error) {

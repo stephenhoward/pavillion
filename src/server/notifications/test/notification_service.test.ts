@@ -1028,6 +1028,58 @@ describe('NotificationService.recordActivity', () => {
       // No fan-out attempted at all.
       expect(recipientBulkCreateStub.called).toBe(false);
     });
+
+    it('subtracts excludeAccountIds from the resolved role-holders', async () => {
+      findOneStub.resolves(null);
+      const calendarId = uuidv4();
+      resolveRoleAudienceStub.resolves(['editor-1', 'editor-2', 'editor-3']);
+      activityCreateStub.resolves(buildActivityEntity({ id: 'new-activity' }));
+      recipientBulkCreateStub.resolves([]);
+
+      await service.recordActivity({
+        verb: 'Announce',
+        actor: { kind: 'remote_actor', uri: 'https://example.org/calendars/reposter' },
+        object: { type: 'event', id: uuidv4(), label: 'Event Title' },
+        audience: {
+          kind: 'role',
+          role: 'calendar-editors',
+          objectRef: { type: 'calendar', id: calendarId },
+          excludeAccountIds: ['editor-2', 'not-a-role-holder'],
+        },
+        actorDisplayName: 'Reposter',
+        origin: 'federated',
+      });
+
+      // The subtraction happens after role resolution: excluded ids are
+      // dropped, ids not in the role list are ignored, order is preserved.
+      const recipientRows = recipientBulkCreateStub.firstCall.args[0];
+      expect(recipientRows.map((r: any) => r.account_id)).toEqual(['editor-1', 'editor-3']);
+    });
+
+    it('inserts zero recipients when excludeAccountIds covers every role-holder', async () => {
+      findOneStub.resolves(null);
+      const calendarId = uuidv4();
+      resolveRoleAudienceStub.resolves(['editor-1']);
+      activityCreateStub.resolves(buildActivityEntity({ id: 'new-activity' }));
+
+      await service.recordActivity({
+        verb: 'Announce',
+        actor: { kind: 'remote_actor', uri: 'https://example.org/calendars/reposter' },
+        object: { type: 'event', id: uuidv4(), label: 'Event Title' },
+        audience: {
+          kind: 'role',
+          role: 'calendar-editors',
+          objectRef: { type: 'calendar', id: calendarId },
+          excludeAccountIds: ['editor-1'],
+        },
+        actorDisplayName: 'Reposter',
+        origin: 'federated',
+      });
+
+      // Mirrors the empty-role contract: activity row persists, no fan-out.
+      expect(activityCreateStub.calledOnce).toBe(true);
+      expect(recipientBulkCreateStub.called).toBe(false);
+    });
   });
 });
 

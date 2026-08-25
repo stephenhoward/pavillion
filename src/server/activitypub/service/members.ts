@@ -38,7 +38,7 @@ import {
   InvalidRepostPolicySettingsError,
 } from '@/common/exceptions/activitypub';
 import { InsufficientCalendarPermissionsError } from '@/common/exceptions/calendar';
-import { ActivityPubCalendarUnfollowedPayload } from '@/server/activitypub/events/types';
+import { ActivityPubCalendarUnfollowedPayload, ActivityPubEventRepostedPayload } from '@/server/activitypub/events/types';
 
 /**
  * Converts an ActivityPub actor URI to a human-readable calendar@domain format.
@@ -446,39 +446,30 @@ class ActivityPubService {
       await this.calendarService.assignManualRepostCategories(localEventId, categoryIds);
     }
 
-    // Emit eventReposted so downstream handlers (e.g. event instance building)
-    // can process the newly reposted event on the reposter's calendar.
+    // Emit the canonical repost signal for the notifications domain so the
+    // source-calendar editors learn about the share. Gated on
+    // event.calendarId: a remote-origin event copied locally has no source
+    // calendar on this instance to address. No instance-row side effects
+    // hang off this event — under the single-producer model (pv-hr72) the
+    // originating calendar's rows already exist and listing derives repost
+    // visibility through the visible-id union.
     const event = await this.calendarService.getEventById(localEventId);
-    if (event) {
-      this.eventBus.emit('eventReposted', { event, calendar });
-
-      // Dual-emit for the notifications domain (pv-d84j.2). The
-      // calendar-domain event-instance pipeline subscribes to
-      // `eventReposted` with a `{event, calendar}` payload; the
-      // notifications handler subscribes to `activitypub:event:reposted`
-      // with the flat `{eventId, calendarId, reposter*}` shape used by
-      // the federated-inbound path (inbox.ts:2179). Local reposts must
-      // produce notifications on the same channel so the source-calendar
-      // editors learn about them; emitting both names keeps both
-      // subscribers happy without renaming the calendar-domain event.
-      // Gate on event.calendarId so a remote-origin event copied locally
-      // does not address a non-existent source calendar.
-      if (event.calendarId !== null) {
-        this.eventBus.emit('activitypub:event:reposted', {
-          eventId: event.id,
-          calendarId: event.calendarId,
-          // Pass the reposter's calendar-actor URI as both name and url
-          // so the notifications handler's local-actor resolver overrides
-          // the display name with the calendar's displayName (same
-          // pattern as the Follow fix in pv-d84j.1).
-          reposterName: actor,
-          reposterUrl: actor,
-          // Local-repost discriminator: the handler subtracts the
-          // reposting calendar's editors from the source-calendar
-          // editors so the reposter does not receive their own row.
-          reposterCalendarId: calendar.id,
-        });
-      }
+    if (event && event.calendarId !== null) {
+      const payload: ActivityPubEventRepostedPayload = {
+        eventId: event.id,
+        calendarId: event.calendarId,
+        provenance: autoPosted ? 'local-auto' : 'local-manual',
+        // Display name computed here while the reposting Calendar is in
+        // hand; empty (unnamed calendar) collapses to undefined so the
+        // notifications handler falls back to its URI resolution.
+        reposterDisplayName: calendar.displayName('') || undefined,
+        reposterUrl: actor,
+        // Local-repost discriminator: the notifications handler excludes
+        // the reposting calendar's editors from the source-calendar
+        // audience so the reposter does not receive their own row.
+        reposterCalendarId: calendar.id,
+      };
+      this.eventBus.emit('activitypub:event:reposted', payload);
     }
   }
 
@@ -532,7 +523,7 @@ class ActivityPubService {
     });
     let actorUrl = await this.actorUrl(calendar);
     for (let share of shares) {
-      // Capture event_id before destroy so it survives for the post-commit emit.
+      // Capture event_id before destroy so it survives for the dismissal upsert.
       const eventId = share.event_id;
       const shareActivityId = share.id;
 
@@ -553,9 +544,13 @@ class ActivityPubService {
         });
       });
 
-      // Side effects fire only after the transaction commits — mirrors shareEvent.
+      // Side effects fire only after the transaction commits — mirrors
+      // shareEvent. No bus emission here: the legacy `eventUnreposted`
+      // event was retired with the repost dual-emit collapse (its only
+      // subscriber was a no-op stub). If un-repost ever needs to drive
+      // notification dismissal, introduce a canonical
+      // `activitypub:event:unreposted` payload carrying the actor URI.
       this.addToOutbox(calendar, new UndoActivity(actorUrl, shareActivityId));
-      this.eventBus.emit('eventUnreposted', { eventId, calendarId: calendar.id });
     }
   }
 
