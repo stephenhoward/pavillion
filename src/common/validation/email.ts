@@ -22,6 +22,12 @@ export function isValidEmail(email: string): boolean {
  * than throwing. Callers gate the format upstream via {@link isValidEmail}; an
  * empty-string lookup simply returns no row, which is benign.
  *
+ * Case-folding contract: JS `toLowerCase()` performs full Unicode case
+ * folding, which can fold more than SQL `LOWER` does (ASCII-only on SQLite,
+ * collation-dependent on PostgreSQL) — this function, not the database, is
+ * the case-collapse guarantee. The DB unique index on `account.email`
+ * enforces exact-string uniqueness only (see migration 0037).
+ *
  * @param email - The email string to normalize
  * @returns The trimmed, lowercased email, or `''` for nullish/empty input
  */
