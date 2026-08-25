@@ -493,6 +493,8 @@ export async function updateEvent(
       'Authorization': `Bearer ${token}`,
     },
     body: JSON.stringify(eventData),
+    // @ts-ignore - agent is not in the TypeScript types but works at runtime
+    agent: httpsAgent,
   });
 
   if (!response.ok) {
@@ -785,6 +787,49 @@ export async function shareEvent(
   }
 
   return response;
+}
+
+/**
+ * Unshare (unpost) a reposted event from a calendar
+ *
+ * The inverse of shareEvent: removes a shared/reposted event from the
+ * calendar's event list. This is the endpoint the unpost button in the
+ * calendar event list invokes via `calendarService.unshareReposted`. It
+ * sends an Undo(Announce) activity and writes a sticky per-calendar
+ * dismissal row, so the auto-repost handler will not re-create the share
+ * when the origin calendar re-broadcasts the event.
+ *
+ * @param instance - The instance where the calendar exists
+ * @param token - Authentication token for the calendar owner
+ * @param eventId - ID of the shared event to unpost
+ * @param calendarId - ID of the calendar to remove the share from
+ * @throws Error if the unshare operation fails
+ *
+ * @example
+ * await unshareEvent(INSTANCE_BETA, bobToken, repostedEvent.id, bobCalendar.id);
+ */
+export async function unshareEvent(
+  instance: InstanceConfig,
+  token: string,
+  eventId: string,
+  calendarId: string,
+): Promise<void> {
+  const response = await fetch(
+    `${instance.baseUrl}/api/v1/social/shares/${encodeURIComponent(eventId)}?calendarId=${encodeURIComponent(calendarId)}`,
+    {
+      method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+      // @ts-ignore - agent is not in the TypeScript types but works at runtime
+      agent: httpsAgent,
+    },
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Failed to unshare event: ${response.status} ${errorText}`);
+  }
 }
 
 /**

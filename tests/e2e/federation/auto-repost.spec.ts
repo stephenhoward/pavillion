@@ -33,6 +33,7 @@ import {
   getToken,
   createCalendar,
   createEvent,
+  updateEvent,
   followCalendar,
   getFeed,
   getCalendarEvents,
@@ -648,27 +649,17 @@ test.describe('Auto-Repost Policy Enforcement', () => {
     );
     expect(event1OnAlice).toBeDefined();
 
-    await fetch(
-      `${INSTANCE_ALPHA.baseUrl}/api/v1/events/${encodeURIComponent(event1OnAlice.id)}`,
-      {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${aliceToken}`,
+    await updateEvent(INSTANCE_ALPHA, aliceToken, event1OnAlice.id, {
+      calendarId: aliceCalendar.id,
+      content: {
+        en: {
+          title: event1UpdatedTitle,
+          description: 'Updated event',
         },
-        body: JSON.stringify({
-          calendarId: aliceCalendar.id,
-          content: {
-            en: {
-              title: event1UpdatedTitle,
-              description: 'Updated event',
-            },
-          },
-          startTime: '2025-04-15T10:00:00Z',
-          endTime: '2025-04-15T12:00:00Z',
-        }),
-      }
-    );
+      },
+      startTime: '2025-04-15T10:00:00Z',
+      endTime: '2025-04-15T12:00:00Z',
+    });
 
     // Wait for update to propagate
     await new Promise(resolve => setTimeout(resolve, 10000));
