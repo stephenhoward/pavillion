@@ -71,14 +71,10 @@ const { t } = useTranslation('calendars', {
   display: flex;
   flex-direction: column;
   gap: var(--pav-space-4);
-  background: white;
+  background: var(--pav-surface-primary);
   border-radius: 0.75rem;
   padding: var(--pav-space-6);
   overflow: hidden;
-
-  @media (prefers-color-scheme: dark) {
-    background: var(--pav-color-stone-900);
-  }
 
   h2 {
     @include admin-section-title;
@@ -87,13 +83,9 @@ const { t } = useTranslation('calendars', {
 
   .section-intro {
     margin: 0;
-    color: var(--pav-color-stone-600);
+    color: var(--pav-text-secondary);
     font-size: 0.875rem;
     line-height: 1.5;
-
-    @media (prefers-color-scheme: dark) {
-      color: var(--pav-color-stone-400);
-    }
   }
 }
 </style>

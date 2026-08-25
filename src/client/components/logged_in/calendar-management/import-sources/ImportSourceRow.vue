@@ -208,11 +208,6 @@ const onVerify = () => {
   border: 1px solid var(--pav-border-primary);
   border-radius: 0.75rem;
 
-  @media (prefers-color-scheme: dark) {
-    background: var(--pav-color-stone-900);
-    border-color: var(--pav-color-stone-800);
-  }
-
   &__main {
     flex: 1;
     min-width: 0;
@@ -230,15 +225,11 @@ const onVerify = () => {
 
   &__url {
     font-weight: 500;
-    color: var(--pav-color-stone-900);
+    color: var(--pav-text-primary);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
     max-width: 100%;
-
-    @media (prefers-color-scheme: dark) {
-      color: var(--pav-color-stone-100);
-    }
   }
 
   &__badge {
@@ -253,52 +244,32 @@ const onVerify = () => {
 
     &--unverified,
     &--pending {
-      background-color: rgba(234, 179, 8, 0.1);
-      color: var(--pav-color-yellow-700, #a16207);
-
-      @media (prefers-color-scheme: dark) {
-        color: var(--pav-color-yellow-400, #facc15);
-      }
+      background-color: var(--pav-badge-amber-bg);
+      color: var(--pav-badge-amber-text);
     }
 
     &--verified {
-      background-color: rgba(34, 197, 94, 0.1);
-      color: var(--pav-color-green-700);
-
-      @media (prefers-color-scheme: dark) {
-        color: var(--pav-color-green-400);
-      }
+      background-color: var(--pav-badge-emerald-bg);
+      color: var(--pav-badge-emerald-text);
     }
 
     &--expired {
-      background-color: rgba(239, 68, 68, 0.1);
-      color: var(--pav-color-red-700);
-
-      @media (prefers-color-scheme: dark) {
-        color: var(--pav-color-red-400);
-      }
+      background-color: var(--pav-badge-red-bg);
+      color: var(--pav-badge-red-text);
     }
 
     // File sources are one-shot uploads with no verification lifecycle, so
     // their badge uses a neutral (non-status) tone.
     &--file {
-      background-color: rgba(120, 113, 108, 0.1);
-      color: var(--pav-color-stone-700);
-
-      @media (prefers-color-scheme: dark) {
-        color: var(--pav-color-stone-300);
-      }
+      background-color: var(--pav-badge-neutral-bg);
+      color: var(--pav-badge-neutral-text);
     }
   }
 
   &__last-sync {
     margin: 0;
-    color: var(--pav-color-stone-600);
+    color: var(--pav-text-secondary);
     font-size: 0.875rem;
-
-    @media (prefers-color-scheme: dark) {
-      color: var(--pav-color-stone-400);
-    }
   }
 
   &__actions {

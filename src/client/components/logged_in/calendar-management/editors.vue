@@ -643,12 +643,10 @@ onMounted(loadEditors);
   width: 40px;
   height: 40px;
   border-radius: 50%;
-  background: var(--pav-color-stone-300);
+  // Decorative placeholder gray; the theme-inverted neutral scale keeps it
+  // mid-tone in both themes without a hand-rolled dark override.
+  background: var(--pav-color-neutral-300);
   flex-shrink: 0;
-
-  @media (prefers-color-scheme: dark) {
-    background: var(--pav-color-stone-700);
-  }
 }
 
 .invitation-icon {
@@ -658,14 +656,9 @@ onMounted(loadEditors);
   width: 40px;
   height: 40px;
   border-radius: 50%;
-  background: var(--pav-color-stone-100);
-  color: var(--pav-color-stone-400);
+  background: var(--pav-color-neutral-100);
+  color: var(--pav-color-neutral-400);
   flex-shrink: 0;
-
-  @media (prefers-color-scheme: dark) {
-    background: var(--pav-color-stone-800);
-    color: var(--pav-color-stone-500);
-  }
 }
 
 .editor-info {
@@ -684,20 +677,12 @@ onMounted(loadEditors);
 
 .editor-name {
   font-weight: 500;
-  color: var(--pav-color-stone-900);
-
-  @media (prefers-color-scheme: dark) {
-    color: var(--pav-color-stone-100);
-  }
+  color: var(--pav-text-primary);
 }
 
 .editor-email {
   font-size: 0.875rem;
-  color: var(--pav-color-stone-600);
-
-  @media (prefers-color-scheme: dark) {
-    color: var(--pav-color-stone-400);
-  }
+  color: var(--pav-text-secondary);
 }
 
 .owner-badge {
@@ -713,7 +698,7 @@ onMounted(loadEditors);
 
 .invitation-status {
   font-size: 0.875rem;
-  color: var(--pav-color-stone-500);
+  color: var(--pav-text-muted);
 }
 
 .editor-actions {
@@ -726,18 +711,14 @@ onMounted(loadEditors);
   padding: var(--pav-space-2) var(--pav-space-4);
   background: none;
   border: none;
-  color: var(--pav-color-stone-600);
+  color: var(--pav-text-secondary);
   font-weight: 500;
   cursor: pointer;
   transition: color 0.2s;
   border-radius: 0.375rem;
 
   &:hover {
-    color: var(--pav-color-stone-900);
-
-    @media (prefers-color-scheme: dark) {
-      color: var(--pav-color-stone-100);
-    }
+    color: var(--pav-text-primary);
   }
 
   &:disabled {
@@ -746,14 +727,10 @@ onMounted(loadEditors);
   }
 
   &.btn-ghost--danger {
-    color: var(--pav-color-red-600);
+    color: var(--pav-text-error);
 
     &:hover {
-      color: var(--pav-color-red-700);
-
-      @media (prefers-color-scheme: dark) {
-        color: var(--pav-color-red-400);
-      }
+      color: var(--pav-text-error-hover);
     }
   }
 }
@@ -762,18 +739,14 @@ onMounted(loadEditors);
   padding: var(--pav-space-1) var(--pav-space-2);
   background: none;
   border: none;
-  color: var(--pav-color-stone-600);
+  color: var(--pav-text-secondary);
   font-weight: 500;
   cursor: pointer;
   transition: color 0.2s;
   font-size: 0.875rem;
 
   &:hover {
-    color: var(--pav-color-stone-900);
-
-    @media (prefers-color-scheme: dark) {
-      color: var(--pav-color-stone-100);
-    }
+    color: var(--pav-text-primary);
   }
 
   &:disabled {
@@ -782,14 +755,10 @@ onMounted(loadEditors);
   }
 
   &.btn-text--primary {
-    color: var(--pav-color-orange-600);
+    color: var(--pav-color-interactive-active);
 
     &:hover {
-      color: var(--pav-color-orange-700);
-
-      @media (prefers-color-scheme: dark) {
-        color: var(--pav-color-orange-400);
-      }
+      color: var(--pav-color-interactive-active-text);
     }
   }
 }
@@ -814,11 +783,7 @@ onMounted(loadEditors);
   label {
     font-weight: 500;
     font-size: 0.875rem;
-    color: var(--pav-color-stone-700);
-
-    @media (prefers-color-scheme: dark) {
-      color: var(--pav-color-stone-300);
-    }
+    color: var(--pav-text-secondary);
   }
 
   .form-input {
@@ -827,12 +792,8 @@ onMounted(loadEditors);
 
   .help-text {
     margin: 0;
-    color: var(--pav-color-stone-600);
+    color: var(--pav-text-secondary);
     font-size: 0.875rem;
-
-    @media (prefers-color-scheme: dark) {
-      color: var(--pav-color-stone-400);
-    }
   }
 }
 
@@ -853,30 +814,9 @@ onMounted(loadEditors);
   }
 }
 
+// Error/success variants come from the shared admin-alert mixin
+// (semantic error tokens; the colorblind-safe blue success palette).
 .alert {
-  padding: var(--pav-space-3);
-  margin-bottom: var(--pav-space-4);
-  border-radius: 0.75rem;
-  font-size: 0.875rem;
-
-  &.alert--error {
-    background-color: rgba(239, 68, 68, 0.1);
-    border: 1px solid rgba(239, 68, 68, 0.2);
-    color: var(--pav-color-red-700);
-
-    @media (prefers-color-scheme: dark) {
-      color: var(--pav-color-red-400);
-    }
-  }
-
-  &.alert--success {
-    background-color: rgba(34, 197, 94, 0.1);
-    border: 1px solid rgba(34, 197, 94, 0.2);
-    color: var(--pav-color-green-700);
-
-    @media (prefers-color-scheme: dark) {
-      color: var(--pav-color-green-400);
-    }
-  }
+  @include admin-alert;
 }
 </style>

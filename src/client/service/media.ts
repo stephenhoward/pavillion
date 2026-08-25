@@ -1,6 +1,7 @@
 import { Media } from '@/common/model/media';
 import axios from 'axios';
 import { validateAndEncodeId } from '@/client/service/utils';
+import { formatBytes } from '@/common/utils/format-bytes';
 
 /**
  * Upload progress information
@@ -147,8 +148,8 @@ export default class MediaService {
           parameters: {
             fileSize: file.size,
             maxFileSize: this.config.maxFileSize,
-            fileSizeFormatted: this.formatFileSize(file.size),
-            maxFileSizeFormatted: this.formatFileSize(this.config.maxFileSize),
+            fileSizeFormatted: formatBytes(file.size),
+            maxFileSizeFormatted: formatBytes(this.config.maxFileSize),
           },
         },
       };
@@ -382,18 +383,5 @@ export default class MediaService {
   private getFileExtension(filename: string): string {
     const lastDot = filename.lastIndexOf('.');
     return lastDot !== -1 ? filename.substring(lastDot) : '';
-  }
-
-  /**
-   * Formats file size in human-readable format
-   */
-  private formatFileSize(bytes: number): string {
-    if (bytes === 0) return '0 Bytes';
-
-    const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   }
 }
