@@ -1424,6 +1424,26 @@ describe('NotificationEventHandlers', () => {
       expect(activity!.object_label).toBe('Event');
     });
 
+    it('Announce handler falls back to "Event" when the event lookup resolves null', async () => {
+      // getEventById is declared to throw on not-found, but resolveEventLabel
+      // guards against a null resolution (mirroring resolveCalendarLabel) so
+      // a relaxed interface contract cannot blank the snapshot label.
+      const eventId = uuidv4();
+      getEventByIdStub.withArgs(eventId).resolves(null);
+
+      await emit('activitypub:event:reposted', {
+        eventId,
+        calendarId: uuidv4(),
+        reposterName: 'Bob',
+        reposterUrl: 'https://remote.example/users/bob',
+      });
+
+      const activity = await NotificationActivityEntity.findOne({
+        where: { verb: 'Announce', object_id: eventId },
+      });
+      expect(activity!.object_label).toBe('Event');
+    });
+
     it('Flag handler snapshots the flagged event title into object_label', async () => {
       // Flag/ReportEscalated/ReportResolved
       // labels prefer the event title (most useful for the recipient).
