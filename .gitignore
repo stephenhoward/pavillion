@@ -23,6 +23,10 @@ agent-os/product/*
 !agent-os/product/decisions/
 !agent-os/product/decisions/**
 .beads/
+.beads/proxieddb/
+.dolt/
+*.db
+.beads-credential-key
 .claude/worktrees/
 
 # /plan scratchpad — ephemeral working drafts deleted when their bead is written
