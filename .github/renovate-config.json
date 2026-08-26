@@ -1,0 +1,22 @@
+{
+  "platform": "github",
+  "onboarding": false,
+  "requireConfig": "optional",
+  "repositories": [
+    "stephenhoward/pavillion",
+    "stephenhoward/pavillion-site"
+  ],
+  "extends": ["config:recommended"],
+  "dependencyDashboard": true,
+  "prHourlyLimit": 0,
+  "major": {
+    "dependencyDashboardApproval": true
+  },
+  "packageRules": [
+    {
+      "matchManagers": ["github-actions"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "groupName": "github actions"
+    }
+  ]
+}
