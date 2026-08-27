@@ -356,12 +356,8 @@ describe('CategoryService', () => {
       mockCalendarService.getCalendar.resolves(testCalendar);
       mockCalendarService.userCanModifyCalendar.resolves(true);
 
-      // Stub transaction
-      const mockTransaction = {
-        commit: sandbox.stub(),
-        rollback: sandbox.stub(),
-      };
-      sandbox.stub(db, 'transaction').resolves(mockTransaction as any);
+      // Stub transaction (managed callback form)
+      sandbox.stub(db, 'transaction').callsFake(async (callback: any) => callback({}));
 
       sandbox.stub(EventCategoryAssignmentEntity, 'destroy').resolves(1);
       sandbox.stub(EventCategoryContentEntity, 'destroy').resolves(1);

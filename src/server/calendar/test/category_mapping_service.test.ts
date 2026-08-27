@@ -58,14 +58,11 @@ describe('CategoryMappingService', () => {
   });
 
   describe('setMappings', () => {
-    let mockTransaction: { commit: sinon.SinonStub; rollback: sinon.SinonStub };
+    let transactionStub: sinon.SinonStub;
 
     beforeEach(() => {
-      mockTransaction = {
-        commit: sandbox.stub().resolves(),
-        rollback: sandbox.stub().resolves(),
-      };
-      sandbox.stub(db, 'transaction').resolves(mockTransaction as any);
+      transactionStub = sandbox.stub(db, 'transaction');
+      transactionStub.callsFake(async (callback: any) => callback({}));
     });
 
     it('should throw when mappings array has more than 100 entries', async () => {
@@ -107,8 +104,7 @@ describe('CategoryMappingService', () => {
         },
       });
       expect(createStub.callCount).toBe(2);
-      expect(mockTransaction.commit.calledOnce).toBeTruthy();
-      expect(mockTransaction.rollback.called).toBeFalsy();
+      expect(transactionStub.calledOnce).toBeTruthy();
     });
 
     it('should handle empty mappings array (clears all mappings)', async () => {
@@ -119,7 +115,7 @@ describe('CategoryMappingService', () => {
 
       expect(destroyStub.calledOnce).toBeTruthy();
       expect(createStub.called).toBeFalsy();
-      expect(mockTransaction.commit.calledOnce).toBeTruthy();
+      expect(transactionStub.calledOnce).toBeTruthy();
     });
 
     it('should accept exactly 100 mappings without throwing', async () => {
@@ -135,7 +131,7 @@ describe('CategoryMappingService', () => {
       await expect(service.setMappings(calendarId, sourceActorId, mappings)).resolves.toBeUndefined();
     });
 
-    it('should rollback transaction on error', async () => {
+    it('should propagate errors thrown inside the transaction', async () => {
       sandbox.stub(CalendarCategoryMappingEntity, 'destroy').rejects(new Error('DB error'));
 
       const mappings = [
@@ -143,8 +139,7 @@ describe('CategoryMappingService', () => {
       ];
 
       await expect(service.setMappings(calendarId, sourceActorId, mappings)).rejects.toThrow('DB error');
-      expect(mockTransaction.rollback.calledOnce).toBeTruthy();
-      expect(mockTransaction.commit.called).toBeFalsy();
+      expect(transactionStub.calledOnce).toBeTruthy();
     });
   });
 

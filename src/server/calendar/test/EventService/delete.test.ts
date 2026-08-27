@@ -18,17 +18,16 @@ describe('EventService.deleteEvent', () => {
   let sandbox: sinon.SinonSandbox;
   let eventService: EventService;
   let mockTransaction: any;
+  let transactionStub: sinon.SinonStub;
 
   beforeEach(() => {
     sandbox = sinon.createSandbox();
     eventService = new EventService(new EventEmitter());
 
-    // Mock transaction
-    mockTransaction = {
-      commit: sandbox.stub(),
-      rollback: sandbox.stub(),
-    };
-    sandbox.stub(db, 'transaction').resolves(mockTransaction);
+    // Mock transaction handed to the managed-transaction callback
+    mockTransaction = {};
+    transactionStub = sandbox.stub(db, 'transaction');
+    transactionStub.callsFake(async (callback: any) => callback(mockTransaction));
 
     // Stub destroy methods on the prototype to prevent database writes
     sandbox.stub(EventInstanceEntity, 'destroy').resolves();
@@ -92,7 +91,7 @@ describe('EventService.deleteEvent', () => {
     })).toBe(true);
 
     expect(mockEventEntity.destroy.calledWith({ transaction: mockTransaction })).toBe(true);
-    expect(mockTransaction.commit.calledOnce).toBe(true);
+    expect(transactionStub.calledOnce).toBe(true);
 
     // Verify event bus emission uses camelCase name and correct payload
     expect(eventBusEmitSpy.calledOnce).toBe(true);
@@ -205,7 +204,7 @@ describe('EventService.deleteEvent', () => {
       .rejects.toThrow('Cannot delete remote events through this method - use deleteRemoteEvent');
   });
 
-  it('should rollback transaction on database error', async () => {
+  it('should propagate database errors thrown inside the transaction', async () => {
     const account = new Account('account-123', 'test@example.com', 'test@example.com');
     const calendar = new Calendar('calendar-123', 'test-calendar');
     const eventId = '11111111-1111-4111-8111-111111111111'; // Valid UUID
@@ -223,8 +222,7 @@ describe('EventService.deleteEvent', () => {
     await expect(eventService.deleteEvent(account, eventId))
       .rejects.toThrow('Database error');
 
-    expect(mockTransaction.rollback.calledOnce).toBe(true);
-    expect(mockTransaction.commit.called).toBe(false);
+    expect(transactionStub.calledOnce).toBe(true);
   });
 
   it('should include all related entities when finding the event', async () => {
@@ -261,7 +259,7 @@ describe('EventService.deleteEvent', () => {
 
     // Should still proceed with main event deletion
     expect(mockEventEntity.destroy.calledWith({ transaction: mockTransaction })).toBe(true);
-    expect(mockTransaction.commit.calledOnce).toBe(true);
+    expect(transactionStub.calledOnce).toBe(true);
   });
 
   it('should verify calendar service calls with correct parameters', async () => {

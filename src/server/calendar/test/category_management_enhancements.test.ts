@@ -46,12 +46,9 @@ describe('CategoryService - Management Enhancements', () => {
       mockCalendarService.getCalendar.resolves(testCalendar);
       mockCalendarService.userCanModifyCalendar.resolves(true);
 
-      // Stub transaction
-      const mockTransaction = {
-        commit: sandbox.stub(),
-        rollback: sandbox.stub(),
-      };
-      sandbox.stub(db, 'transaction').resolves(mockTransaction as any);
+      // Stub transaction (managed callback form)
+      const transactionStub = sandbox.stub(db, 'transaction');
+      transactionStub.callsFake(async (callback: any) => callback({}));
 
       // Stub update and delete operations
       const updateStub = sandbox.stub(EventCategoryAssignmentEntity, 'update').resolves([3] as any);
@@ -72,7 +69,7 @@ describe('CategoryService - Management Enhancements', () => {
 
       expect(affectedCount).toBe(3);
       expect(updateStub.calledOnce).toBeTruthy();
-      expect(mockTransaction.commit.calledOnce).toBeTruthy();
+      expect(transactionStub.calledOnce).toBeTruthy();
     });
 
     it('should delete category and remove all event assignments', async () => {
@@ -82,12 +79,9 @@ describe('CategoryService - Management Enhancements', () => {
       mockCalendarService.getCalendar.resolves(testCalendar);
       mockCalendarService.userCanModifyCalendar.resolves(true);
 
-      // Stub transaction
-      const mockTransaction = {
-        commit: sandbox.stub(),
-        rollback: sandbox.stub(),
-      };
-      sandbox.stub(db, 'transaction').resolves(mockTransaction as any);
+      // Stub transaction (managed callback form)
+      const transactionStub = sandbox.stub(db, 'transaction');
+      transactionStub.callsFake(async (callback: any) => callback({}));
 
       // Stub delete operations
       const assignmentDestroyStub = sandbox.stub(EventCategoryAssignmentEntity, 'destroy').resolves(5);
@@ -103,7 +97,7 @@ describe('CategoryService - Management Enhancements', () => {
 
       expect(affectedCount).toBe(5);
       expect(assignmentDestroyStub.calledOnce).toBeTruthy();
-      expect(mockTransaction.commit.calledOnce).toBeTruthy();
+      expect(transactionStub.calledOnce).toBeTruthy();
     });
 
     it('should throw error if target category does not exist', async () => {
@@ -126,19 +120,16 @@ describe('CategoryService - Management Enhancements', () => {
       ).rejects.toThrow(CategoryNotFoundError);
     });
 
-    it('should rollback transaction on error', async () => {
+    it('should propagate errors thrown inside the transaction', async () => {
       const mockCategory = new EventCategory('category-123', 'calendar-123');
       sandbox.stub(categoryService, 'getCategory').resolves(mockCategory);
 
       mockCalendarService.getCalendar.resolves(testCalendar);
       mockCalendarService.userCanModifyCalendar.resolves(true);
 
-      // Stub transaction
-      const mockTransaction = {
-        commit: sandbox.stub(),
-        rollback: sandbox.stub(),
-      };
-      sandbox.stub(db, 'transaction').resolves(mockTransaction as any);
+      // Stub transaction (managed callback form)
+      const transactionStub = sandbox.stub(db, 'transaction');
+      transactionStub.callsFake(async (callback: any) => callback({}));
 
       // Stub to throw error during delete
       sandbox.stub(EventCategoryAssignmentEntity, 'destroy').rejects(new Error('Database error'));
@@ -147,7 +138,7 @@ describe('CategoryService - Management Enhancements', () => {
         categoryService.deleteCategory(testAccount, 'category-123', 'calendar-123', 'remove'),
       ).rejects.toThrow('Database error');
 
-      expect(mockTransaction.rollback.calledOnce).toBeTruthy();
+      expect(transactionStub.calledOnce).toBeTruthy();
     });
   });
 
@@ -165,12 +156,9 @@ describe('CategoryService - Management Enhancements', () => {
       mockCalendarService.getCalendar.resolves(testCalendar);
       mockCalendarService.userCanModifyCalendar.resolves(true);
 
-      // Stub transaction
-      const mockTransaction = {
-        commit: sandbox.stub(),
-        rollback: sandbox.stub(),
-      };
-      sandbox.stub(db, 'transaction').resolves(mockTransaction as any);
+      // Stub transaction (managed callback form)
+      const transactionStub = sandbox.stub(db, 'transaction');
+      transactionStub.callsFake(async (callback: any) => callback({}));
 
       // Stub update and delete operations
       const updateStub = sandbox.stub(EventCategoryAssignmentEntity, 'update');
@@ -192,7 +180,7 @@ describe('CategoryService - Management Enhancements', () => {
 
       expect(result.totalAffectedEvents).toBe(5);
       expect(updateStub.callCount).toBe(2);
-      expect(mockTransaction.commit.calledOnce).toBeTruthy();
+      expect(transactionStub.calledOnce).toBeTruthy();
     });
 
     it('should throw error if target is in source list', async () => {

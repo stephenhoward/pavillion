@@ -546,11 +546,8 @@ describe('SeriesService', () => {
       mockCalendarService.getCalendar.resolves(testCalendar);
       mockCalendarService.userCanModifyCalendar.resolves(true);
 
-      const mockTransaction = {
-        commit: sandbox.stub(),
-        rollback: sandbox.stub(),
-      };
-      sandbox.stub(db, 'transaction').resolves(mockTransaction as any);
+      const transactionStub = sandbox.stub(db, 'transaction');
+      transactionStub.callsFake(async (callback: any) => callback({}));
 
       const eventUpdateStub = sandbox.stub(EventEntity, 'update').resolves([0]);
       const contentDestroyStub = sandbox.stub(EventSeriesContentEntity, 'destroy').resolves(0);
@@ -561,7 +558,7 @@ describe('SeriesService', () => {
       expect(eventUpdateStub.calledOnce).toBeTruthy();
       expect(contentDestroyStub.calledOnce).toBeTruthy();
       expect(seriesDestroyStub.calledOnce).toBeTruthy();
-      expect(mockTransaction.commit.calledOnce).toBeTruthy();
+      expect(transactionStub.calledOnce).toBeTruthy();
 
       expect(mockCalendarService.getCalendar.called).toBeTruthy();
       expect(mockCalendarService.userCanModifyCalendar.called).toBeTruthy();
@@ -595,18 +592,15 @@ describe('SeriesService', () => {
       ).rejects.toThrow(SeriesNotFoundError);
     });
 
-    it('should rollback transaction on error', async () => {
+    it('should propagate errors thrown inside the transaction', async () => {
       const mockSeries = new EventSeries('series-123', 'calendar-123', 'myseries');
       sandbox.stub(seriesService, 'getSeries').resolves(mockSeries);
 
       mockCalendarService.getCalendar.resolves(testCalendar);
       mockCalendarService.userCanModifyCalendar.resolves(true);
 
-      const mockTransaction = {
-        commit: sandbox.stub(),
-        rollback: sandbox.stub(),
-      };
-      sandbox.stub(db, 'transaction').resolves(mockTransaction as any);
+      const transactionStub = sandbox.stub(db, 'transaction');
+      transactionStub.callsFake(async (callback: any) => callback({}));
 
       sandbox.stub(EventEntity, 'update').rejects(new Error('DB error'));
 
@@ -614,7 +608,7 @@ describe('SeriesService', () => {
         seriesService.deleteSeries(testAccount, 'series-123'),
       ).rejects.toThrow('DB error');
 
-      expect(mockTransaction.rollback.calledOnce).toBeTruthy();
+      expect(transactionStub.calledOnce).toBeTruthy();
     });
   });
 
