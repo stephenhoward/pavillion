@@ -8,6 +8,7 @@ import MediaService, {
   ValidationErrorCode,
   UploadErrorCode,
 } from '@/client/service/media';
+import { formatBytes } from '@/common/utils/format-bytes';
 
 const emit = defineEmits(['filesChanged', 'uploadComplete']);
 const mediaService = new MediaService();
@@ -54,15 +55,9 @@ const isFailed = computed(() => currentFile.value?.status === 'failed');
 const isUploading = computed(() => currentFile.value?.status === 'uploading');
 
 /**
- * Formats file size for display
+ * Formats file size for display (shared helper, aliased for the template)
  */
-const formatFileSize = (bytes: number): string => {
-  if (bytes === 0) return '0 Bytes';
-  const k = 1024;
-  const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-};
+const formatFileSize = formatBytes;
 
 /**
  * Auto-upload when files change

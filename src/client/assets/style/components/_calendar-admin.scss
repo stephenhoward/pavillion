@@ -1,5 +1,11 @@
 // Calendar Administration Styles
 // Mixins and styles for calendar management screens
+//
+// Theme support: every color here resolves through a theme-adaptive token
+// (semantic --pav-surface-*/--pav-text-*/--pav-border-*/--pav-badge-*
+// tokens, or the theme-inverted --pav-color-neutral-* scale for decorative
+// grays), so both the manual [data-theme] toggle and the OS preference are
+// honored without any @media (prefers-color-scheme) blocks in this layer.
 
 @use '../mixins/tabs' as *;
 
@@ -26,13 +32,13 @@
   font-weight: var(--pav-font-weight-medium);
   text-transform: uppercase;
   letter-spacing: var(--pav-letter-spacing-wider);
-  color: var(--pav-color-stone-500);
+  color: var(--pav-text-muted);
   margin-bottom: var(--pav-space-4);
 }
 
 // Card pattern (categories, editors)
 @mixin admin-card {
-  background: var(--pav-color-surface-primary);
+  background: var(--pav-surface-primary);
   border: 1px solid var(--pav-border-primary);
   border-radius: 0.75rem; // rounded-xl
   padding: var(--pav-space-4);
@@ -58,24 +64,14 @@
 
 @mixin admin-badge-orange {
   @include admin-badge;
-  background: var(--pav-color-orange-50);
-  color: var(--pav-color-orange-700);
-
-  @media (prefers-color-scheme: dark) {
-    background: oklch(0.705 0.213 47.604 / 0.1);
-    color: var(--pav-color-orange-300);
-  }
+  background: var(--pav-badge-orange-bg);
+  color: var(--pav-badge-orange-text);
 }
 
 @mixin admin-badge-sky {
   @include admin-badge;
-  background: var(--pav-color-sky-50);
-  color: var(--pav-color-sky-700);
-
-  @media (prefers-color-scheme: dark) {
-    background: oklch(0.725 0.143 232.661 / 0.1);
-    color: var(--pav-color-sky-300);
-  }
+  background: var(--pav-badge-sky-bg);
+  color: var(--pav-badge-sky-text);
 }
 
 // Report status badge pattern (moderation views)
@@ -85,53 +81,28 @@
 }
 
 @mixin report-status-badge--submitted {
-  background: var(--pav-color-sky-50);
-  color: var(--pav-color-sky-700);
-
-  @media (prefers-color-scheme: dark) {
-    background: oklch(0.725 0.143 232.661 / 0.15);
-    color: var(--pav-color-sky-300);
-  }
+  background: var(--pav-badge-sky-bg);
+  color: var(--pav-badge-sky-text);
 }
 
 @mixin report-status-badge--under-review {
-  background: var(--pav-color-amber-50);
-  color: var(--pav-color-amber-700);
-
-  @media (prefers-color-scheme: dark) {
-    background: oklch(0.769 0.188 70.08 / 0.15);
-    color: var(--pav-color-amber-300);
-  }
+  background: var(--pav-badge-amber-bg);
+  color: var(--pav-badge-amber-text);
 }
 
 @mixin report-status-badge--resolved {
-  background: var(--pav-color-emerald-50);
-  color: var(--pav-color-emerald-700);
-
-  @media (prefers-color-scheme: dark) {
-    background: oklch(0.765 0.177 163.223 / 0.15);
-    color: var(--pav-color-emerald-300);
-  }
+  background: var(--pav-badge-emerald-bg);
+  color: var(--pav-badge-emerald-text);
 }
 
 @mixin report-status-badge--dismissed {
-  background: var(--pav-color-stone-100);
-  color: var(--pav-color-stone-600);
-
-  @media (prefers-color-scheme: dark) {
-    background: var(--pav-color-stone-800);
-    color: var(--pav-color-stone-400);
-  }
+  background: var(--pav-badge-neutral-bg);
+  color: var(--pav-badge-neutral-text);
 }
 
 @mixin report-status-badge--escalated {
-  background: var(--pav-color-red-50);
-  color: var(--pav-color-red-700);
-
-  @media (prefers-color-scheme: dark) {
-    background: oklch(0.637 0.237 25.331 / 0.15);
-    color: var(--pav-color-red-300);
-  }
+  background: var(--pav-badge-red-bg);
+  color: var(--pav-badge-red-text);
 }
 
 // Icon button pattern (edit/delete action buttons)
@@ -143,18 +114,13 @@
   background: none;
   border: none;
   border-radius: 0.375rem;
-  color: var(--pav-color-stone-500);
+  color: var(--pav-text-muted);
   cursor: pointer;
   transition: color 0.2s, background-color 0.2s;
 
   &:hover {
-    color: var(--pav-color-orange-600);
-    background: var(--pav-color-stone-100);
-
-    @media (prefers-color-scheme: dark) {
-      color: var(--pav-color-orange-400);
-      background: var(--pav-color-stone-800);
-    }
+    color: var(--pav-color-interactive-active);
+    background: var(--pav-interactive-hover);
   }
 
   &:disabled {
@@ -165,11 +131,7 @@
 
 @mixin admin-icon-button--danger {
   &:hover {
-    color: var(--pav-color-red-600);
-
-    @media (prefers-color-scheme: dark) {
-      color: var(--pav-color-red-400);
-    }
+    color: var(--pav-text-error);
   }
 }
 
@@ -195,13 +157,9 @@
 
   .dialog-description {
     margin: 0;
-    color: var(--pav-color-stone-600);
+    color: var(--pav-text-secondary);
     font-size: 0.875rem;
     line-height: 1.5;
-
-    @media (prefers-color-scheme: dark) {
-      color: var(--pav-color-stone-400);
-    }
   }
 
   .dialog-actions {
@@ -216,17 +174,13 @@
     padding: var(--pav-space-2) var(--pav-space-4);
     background: none;
     border: none;
-    color: var(--pav-color-stone-600);
+    color: var(--pav-text-secondary);
     font-weight: 500;
     cursor: pointer;
     transition: color 0.2s;
 
     &:hover {
-      color: var(--pav-color-stone-900);
-
-      @media (prefers-color-scheme: dark) {
-        color: var(--pav-color-stone-100);
-      }
+      color: var(--pav-text-primary);
     }
 
     &:disabled {
@@ -249,18 +203,14 @@
   background: none;
   border: none;
   border-radius: 0.375rem;
-  color: var(--pav-color-stone-600);
+  color: var(--pav-text-secondary);
   font-weight: 500;
   font-size: 0.875rem;
   cursor: pointer;
   transition: color 0.2s;
 
   &:hover:not(:disabled) {
-    color: var(--pav-color-stone-900);
-
-    @media (prefers-color-scheme: dark) {
-      color: var(--pav-color-stone-100);
-    }
+    color: var(--pav-text-primary);
   }
 
   &:disabled {
@@ -269,14 +219,10 @@
   }
 
   &--danger {
-    color: var(--pav-color-red-600);
+    color: var(--pav-text-error);
 
     &:hover:not(:disabled) {
-      color: var(--pav-color-red-700);
-
-      @media (prefers-color-scheme: dark) {
-        color: var(--pav-color-red-400);
-      }
+      color: var(--pav-text-error-hover);
     }
   }
 }
@@ -293,6 +239,12 @@
     border: 1px solid var(--pav-border-error-subtle);
     color: var(--pav-text-error);
   }
+
+  &--success {
+    background-color: var(--pav-color-alert-success-bg);
+    border: 1px solid var(--pav-color-success);
+    color: var(--pav-color-alert-success-text);
+  }
 }
 
 // Item info block pattern (info column with name and meta)
@@ -306,11 +258,7 @@
   &__name {
     font-weight: 500;
     font-size: 1rem;
-    color: var(--pav-color-stone-900);
-
-    @media (prefers-color-scheme: dark) {
-      color: var(--pav-color-stone-100);
-    }
+    color: var(--pav-text-primary);
   }
 
   &__meta {
@@ -318,11 +266,7 @@
     align-items: center;
     gap: var(--pav-space-3);
     font-size: 0.875rem;
-    color: var(--pav-color-stone-600);
-
-    @media (prefers-color-scheme: dark) {
-      color: var(--pav-color-stone-400);
-    }
+    color: var(--pav-text-secondary);
   }
 }
 
@@ -346,7 +290,7 @@
   padding: var(--pav-space-3) var(--pav-space-4);
   border: 1px solid var(--pav-border-primary);
   border-radius: 0.75rem; // rounded-xl
-  background: var(--pav-color-stone-50);
+  background: var(--pav-surface-card);
   color: var(--pav-text-primary);
   font-size: 1rem;
   transition: border-color 0.2s, box-shadow 0.2s;
@@ -354,34 +298,21 @@
   &:focus {
     outline: none;
     box-shadow: var(--pav-shadow-focus-brand);
-    border-color: var(--pav-color-orange-500);
-  }
-
-  @media (prefers-color-scheme: dark) {
-    background: var(--pav-color-stone-800);
+    border-color: var(--pav-color-interactive-active);
   }
 }
 
 // Calendar Management Root Component
 .calendar-management-root {
   min-height: 100vh;
-  background: var(--pav-color-stone-50);
+  background: var(--pav-surface-secondary);
   width: 100%;
   min-width: 0;
 
-  @media (prefers-color-scheme: dark) {
-    background: var(--pav-color-stone-950);
-  }
-
   &__header {
-    background: var(--pav-color-surface-primary);
+    background: var(--pav-surface-primary);
     border-bottom: 1px solid var(--pav-border-primary);
     overflow: hidden;
-
-    @media (prefers-color-scheme: dark) {
-      background: var(--pav-color-stone-900);
-      border-bottom-color: var(--pav-color-stone-800);
-    }
   }
 
   &__header-content {
@@ -403,14 +334,10 @@
     display: flex;
     align-items: center;
     gap: var(--pav-space-2);
-    color: var(--pav-color-stone-500);
+    color: var(--pav-text-muted);
     font-size: 0.875rem;
     margin-bottom: var(--pav-space-2);
     min-width: 0;
-
-    @media (prefers-color-scheme: dark) {
-      color: var(--pav-color-stone-400);
-    }
 
     @media (min-width: 640px) {
       font-size: 0.875rem;
@@ -418,34 +345,26 @@
   }
 
   &__breadcrumb-item {
-    color: var(--pav-color-stone-500);
+    color: var(--pav-text-muted);
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-
-    @media (prefers-color-scheme: dark) {
-      color: var(--pav-color-stone-400);
-    }
   }
 
   &__breadcrumb-separator {
-    color: var(--pav-color-stone-400);
+    color: var(--pav-nav-inactive-icon);
     flex-shrink: 0;
   }
 
   &__title {
     font-size: 1.25rem;
     font-weight: 300;
-    color: var(--pav-color-stone-900);
+    color: var(--pav-text-primary);
     margin: 0;
 
     @media (min-width: 640px) {
       font-size: 1.5rem;
-    }
-
-    @media (prefers-color-scheme: dark) {
-      color: var(--pav-color-stone-100);
     }
   }
 

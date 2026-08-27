@@ -378,23 +378,14 @@ const backToReports = () => {
 
 .calendar-management-root {
   min-height: 100vh;
-  background: var(--pav-color-stone-50);
+  background: var(--pav-surface-secondary);
   width: 100%;
   min-width: 0;
-
-  @media (prefers-color-scheme: dark) {
-    background: var(--pav-color-stone-950);
-  }
 
   &__header {
     background: var(--pav-surface-primary);
     border-bottom: 1px solid var(--pav-border-primary);
     overflow: hidden;
-
-    @media (prefers-color-scheme: dark) {
-      background: var(--pav-color-stone-900);
-      border-bottom-color: var(--pav-color-stone-800);
-    }
   }
 
   &__header-content {
@@ -416,14 +407,10 @@ const backToReports = () => {
     display: flex;
     align-items: center;
     gap: var(--pav-space-2);
-    color: var(--pav-color-stone-500);
+    color: var(--pav-text-muted);
     font-size: 0.875rem;
     margin-bottom: var(--pav-space-2);
     min-width: 0;
-
-    @media (prefers-color-scheme: dark) {
-      color: var(--pav-color-stone-400);
-    }
 
     @media (min-width: 640px) {
       font-size: 0.875rem;
@@ -431,19 +418,15 @@ const backToReports = () => {
   }
 
   &__breadcrumb-item {
-    color: var(--pav-color-stone-500);
+    color: var(--pav-text-muted);
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-
-    @media (prefers-color-scheme: dark) {
-      color: var(--pav-color-stone-400);
-    }
   }
 
   &__breadcrumb-separator {
-    color: var(--pav-color-stone-400);
+    color: var(--pav-nav-inactive-icon);
     flex-shrink: 0;
   }
 
@@ -456,15 +439,11 @@ const backToReports = () => {
   &__title {
     font-size: 1.25rem;
     font-weight: 300;
-    color: var(--pav-color-stone-900);
+    color: var(--pav-text-primary);
     margin: 0;
 
     @media (min-width: 640px) {
       font-size: 1.5rem;
-    }
-
-    @media (prefers-color-scheme: dark) {
-      color: var(--pav-color-stone-100);
     }
   }
 
@@ -496,11 +475,7 @@ const backToReports = () => {
   }
 
   .error-message {
-    color: var(--pav-color-red-600);
-
-    @media (prefers-color-scheme: dark) {
-      color: var(--pav-color-red-400);
-    }
+    color: var(--pav-text-error);
   }
 }
 </style>

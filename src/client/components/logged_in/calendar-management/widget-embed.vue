@@ -103,24 +103,18 @@ const onCopyError = (err) => {
   .embed-code {
     margin: 0 0 var(--pav-space-4) 0;
     padding: var(--pav-space-4);
-    background: var(--pav-color-stone-50);
+    background: var(--pav-surface-card);
     border: 1px solid var(--pav-border-primary);
     border-radius: 0.75rem;
     overflow-x: auto;
     font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
     font-size: 0.8125rem;
     line-height: 1.6;
-    color: var(--pav-color-stone-900);
+    color: var(--pav-text-primary);
 
     @media (min-width: 640px) {
       padding: var(--pav-space-6);
       font-size: 0.875rem;
-    }
-
-    @media (prefers-color-scheme: dark) {
-      background: var(--pav-color-stone-800);
-      border-color: var(--pav-color-stone-700);
-      color: var(--pav-color-stone-100);
     }
 
     code {
@@ -133,20 +127,14 @@ const onCopyError = (err) => {
   .error {
     padding: var(--pav-space-4);
     margin-bottom: var(--pav-space-4);
-    background-color: rgba(239, 68, 68, 0.1);
-    border: 1px solid rgba(239, 68, 68, 0.25);
+    background-color: var(--pav-surface-error);
+    border: 1px solid var(--pav-border-error-subtle);
     border-radius: 6px;
-    color: rgb(153, 27, 27);
+    color: var(--pav-text-error);
     font-size: 14px;
     line-height: 1.4;
-    border-left: 4px solid rgba(239, 68, 68, 0.5);
+    border-left: 4px solid var(--pav-border-error);
     animation: slideIn 0.3s ease;
-
-    @media (prefers-color-scheme: dark) {
-      background-color: rgba(239, 68, 68, 0.15);
-      border-color: rgba(239, 68, 68, 0.3);
-      color: rgb(248, 113, 113);
-    }
 
     &::before {
       content: '⚠️';
@@ -157,20 +145,14 @@ const onCopyError = (err) => {
   .success {
     padding: var(--pav-space-4);
     margin-bottom: var(--pav-space-4);
-    background-color: rgba(34, 197, 94, 0.1);
-    border: 1px solid rgba(34, 197, 94, 0.25);
+    background-color: var(--pav-color-alert-success-bg);
+    border: 1px solid var(--pav-color-success);
     border-radius: 6px;
-    color: rgb(21, 128, 61);
+    color: var(--pav-color-alert-success-text);
     font-size: 14px;
     line-height: 1.4;
-    border-left: 4px solid rgba(34, 197, 94, 0.5);
+    border-left: 4px solid var(--pav-color-success);
     animation: slideIn 0.3s ease;
-
-    @media (prefers-color-scheme: dark) {
-      background-color: rgba(34, 197, 94, 0.15);
-      border-color: rgba(34, 197, 94, 0.3);
-      color: rgb(74, 222, 128);
-    }
 
     &::before {
       content: '✅';

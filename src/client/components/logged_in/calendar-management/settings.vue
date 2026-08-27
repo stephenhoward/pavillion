@@ -589,12 +589,8 @@ onMounted(() => {
 .settings-title {
   font-size: 1.125rem;
   font-weight: 600;
-  color: var(--pav-color-stone-900);
+  color: var(--pav-text-primary);
   margin: 0 0 var(--pav-space-6) 0;
-
-  @media (prefers-color-scheme: dark) {
-    color: var(--pav-color-stone-100);
-  }
 }
 
 .settings-container {
@@ -612,21 +608,13 @@ onMounted(() => {
   @media (min-width: 640px) {
     padding: var(--pav-space-6);
   }
-
-  @media (prefers-color-scheme: dark) {
-    background: var(--pav-color-stone-900);
-  }
 }
 
 .setting-label {
   font-size: 1rem;
   font-weight: 500;
-  color: var(--pav-color-stone-900);
+  color: var(--pav-text-primary);
   margin: 0 0 var(--pav-space-2) 0;
-
-  @media (prefers-color-scheme: dark) {
-    color: var(--pav-color-stone-100);
-  }
 }
 
 .setting-input {
@@ -635,24 +623,19 @@ onMounted(() => {
   padding: 0.75rem 1rem;
   border: 0;
   border-radius: 0.75rem;
-  background: var(--pav-color-stone-100);
-  color: var(--pav-color-stone-900);
+  background: var(--pav-color-neutral-100);
+  color: var(--pav-text-primary);
   font-size: 1rem;
   transition: box-shadow 0.2s;
 
   &:focus {
     outline: none;
-    box-shadow: 0 0 0 2px var(--pav-color-orange-500);
+    box-shadow: var(--pav-shadow-focus-brand);
   }
 
   &:disabled {
     opacity: 0.5;
     cursor: not-allowed;
-  }
-
-  @media (prefers-color-scheme: dark) {
-    background: var(--pav-color-stone-800);
-    color: var(--pav-color-stone-100);
   }
 }
 
@@ -662,8 +645,8 @@ onMounted(() => {
   padding: 0.75rem 1rem;
   border: 0;
   border-radius: 0.75rem;
-  background: var(--pav-color-stone-100);
-  color: var(--pav-color-stone-900);
+  background: var(--pav-color-neutral-100);
+  color: var(--pav-text-primary);
   font-size: 1rem;
   transition: box-shadow 0.2s;
   resize: vertical;
@@ -672,17 +655,12 @@ onMounted(() => {
 
   &:focus {
     outline: none;
-    box-shadow: 0 0 0 2px var(--pav-color-orange-500);
+    box-shadow: var(--pav-shadow-focus-brand);
   }
 
   &:disabled {
     opacity: 0.5;
     cursor: not-allowed;
-  }
-
-  @media (prefers-color-scheme: dark) {
-    background: var(--pav-color-stone-800);
-    color: var(--pav-color-stone-100);
   }
 }
 
@@ -692,25 +670,20 @@ onMounted(() => {
   padding: 0.75rem 1rem;
   border: 0;
   border-radius: 0.75rem;
-  background: var(--pav-color-stone-100);
-  color: var(--pav-color-stone-900);
+  background: var(--pav-color-neutral-100);
+  color: var(--pav-text-primary);
   font-size: 1rem;
   transition: box-shadow 0.2s;
   cursor: pointer;
 
   &:focus {
     outline: none;
-    box-shadow: 0 0 0 2px var(--pav-color-orange-500);
+    box-shadow: var(--pav-shadow-focus-brand);
   }
 
   &:disabled {
     opacity: 0.5;
     cursor: not-allowed;
-  }
-
-  @media (prefers-color-scheme: dark) {
-    background: var(--pav-color-stone-800);
-    color: var(--pav-color-stone-100);
   }
 }
 
@@ -731,23 +704,15 @@ onMounted(() => {
   padding: 0;
   border: none;
   background: none;
-  color: var(--pav-color-red-600);
+  color: var(--pav-text-error);
   font-size: 0.875rem;
   font-weight: 500;
   cursor: pointer;
   transition: color 0.15s ease;
 
   &:hover {
-    color: var(--pav-color-red-700);
+    color: var(--pav-text-error-hover);
     text-decoration: underline;
-  }
-
-  @media (prefers-color-scheme: dark) {
-    color: var(--pav-color-red-400);
-
-    &:hover {
-      color: var(--pav-color-red-300);
-    }
   }
 }
 
@@ -761,33 +726,23 @@ onMounted(() => {
 .remove-image-btn {
   align-self: flex-start;
   padding: 0.5rem 1rem;
-  border: 1px solid var(--pav-color-red-300);
+  border: 1px solid var(--pav-border-error);
   border-radius: 0.5rem;
   background: transparent;
-  color: var(--pav-color-red-600);
+  color: var(--pav-text-error);
   font-size: 0.875rem;
   font-weight: 500;
   cursor: pointer;
   transition: background 0.2s, color 0.2s;
 
   &:hover {
-    background: var(--pav-color-red-50);
-    color: var(--pav-color-red-700);
+    background: var(--pav-surface-error);
+    color: var(--pav-text-error-hover);
   }
 
   &:disabled {
     opacity: 0.5;
     cursor: not-allowed;
-  }
-
-  @media (prefers-color-scheme: dark) {
-    border-color: var(--pav-color-red-700);
-    color: var(--pav-color-red-400);
-
-    &:hover {
-      background: rgba(239, 68, 68, 0.1);
-      color: var(--pav-color-red-300);
-    }
   }
 }
 
@@ -813,74 +768,51 @@ onMounted(() => {
   letter-spacing: 0.05em;
 
   &--enabled {
-    background-color: rgba(34, 197, 94, 0.1);
-    color: var(--pav-color-green-700);
-
-    @media (prefers-color-scheme: dark) {
-      color: var(--pav-color-green-400);
-    }
+    background-color: var(--pav-badge-emerald-bg);
+    color: var(--pav-badge-emerald-text);
   }
 }
 
 .setting-disable-btn {
   padding: 0.5rem 1rem;
-  border: 1px solid var(--pav-color-red-300);
+  border: 1px solid var(--pav-border-error);
   border-radius: 0.5rem;
   background: transparent;
-  color: var(--pav-color-red-600);
+  color: var(--pav-text-error);
   font-size: 0.875rem;
   font-weight: 500;
   cursor: pointer;
   transition: background 0.2s, color 0.2s;
 
   &:hover {
-    background: var(--pav-color-red-50);
-    color: var(--pav-color-red-700);
+    background: var(--pav-surface-error);
+    color: var(--pav-text-error-hover);
   }
 
   &:disabled {
     opacity: 0.5;
     cursor: not-allowed;
   }
-
-  @media (prefers-color-scheme: dark) {
-    border-color: var(--pav-color-red-700);
-    color: var(--pav-color-red-400);
-
-    &:hover {
-      background: rgba(239, 68, 68, 0.1);
-      color: var(--pav-color-red-300);
-    }
-  }
 }
 
 .setting-cancel-btn {
   padding: 0.5rem 1rem;
-  border: 1px solid var(--pav-color-stone-300);
+  border: 1px solid var(--pav-border-primary);
   border-radius: 0.5rem;
   background: transparent;
-  color: var(--pav-color-stone-600);
+  color: var(--pav-text-secondary);
   font-size: 0.875rem;
   font-weight: 500;
   cursor: pointer;
   transition: background 0.2s;
 
   &:hover {
-    background: var(--pav-color-stone-100);
+    background: var(--pav-interactive-hover);
   }
 
   &:disabled {
     opacity: 0.5;
     cursor: not-allowed;
-  }
-
-  @media (prefers-color-scheme: dark) {
-    border-color: var(--pav-color-stone-600);
-    color: var(--pav-color-stone-400);
-
-    &:hover {
-      background: var(--pav-color-stone-800);
-    }
   }
 }
 
@@ -890,12 +822,8 @@ onMounted(() => {
 
 .setting-confirm-message {
   margin: 0 0 var(--pav-space-3) 0;
-  color: var(--pav-color-stone-600);
+  color: var(--pav-text-secondary);
   font-size: 0.875rem;
-
-  @media (prefers-color-scheme: dark) {
-    color: var(--pav-color-stone-400);
-  }
 }
 
 .setting-confirm-actions {
@@ -903,30 +831,9 @@ onMounted(() => {
   gap: var(--pav-space-2);
 }
 
+// Error/success variants come from the shared admin-alert mixin
+// (semantic error tokens; the colorblind-safe blue success palette).
 .alert {
-  padding: var(--pav-space-3);
-  margin-bottom: var(--pav-space-4);
-  border-radius: 0.75rem;
-  font-size: 0.875rem;
-
-  &.alert--error {
-    background-color: rgba(239, 68, 68, 0.1);
-    border: 1px solid rgba(239, 68, 68, 0.2);
-    color: var(--pav-color-red-700);
-
-    @media (prefers-color-scheme: dark) {
-      color: var(--pav-color-red-400);
-    }
-  }
-
-  &.alert--success {
-    background-color: rgba(34, 197, 94, 0.1);
-    border: 1px solid rgba(34, 197, 94, 0.2);
-    color: var(--pav-color-green-700);
-
-    @media (prefers-color-scheme: dark) {
-      color: var(--pav-color-green-400);
-    }
-  }
+  @include admin-alert;
 }
 </style>

@@ -35,7 +35,25 @@
   --pav-border-error-subtle: var(--pav-color-red-200);
   --pav-surface-error: var(--pav-color-red-50);
   --pav-text-error: var(--pav-color-red-600);
+  --pav-text-error-hover: var(--pav-color-red-700);
   --pav-focus-ring-error: 0 0 0 3px var(--pav-color-red-100);
+
+  /* Status badge tint pairs (pill badges in admin/moderation views).
+     Hue-keyed rather than role-keyed because the same tint serves several
+     roles (e.g. sky = both "federated" and "submitted"); the role-to-hue
+     mapping lives at the call site. Dark variants in _dark.scss. */
+  --pav-badge-orange-bg: var(--pav-color-orange-50);
+  --pav-badge-orange-text: var(--pav-color-orange-700);
+  --pav-badge-sky-bg: var(--pav-color-sky-50);
+  --pav-badge-sky-text: var(--pav-color-sky-700);
+  --pav-badge-amber-bg: var(--pav-color-amber-50);
+  --pav-badge-amber-text: var(--pav-color-amber-700);
+  --pav-badge-emerald-bg: var(--pav-color-emerald-50);
+  --pav-badge-emerald-text: var(--pav-color-emerald-700);
+  --pav-badge-red-bg: var(--pav-color-red-50);
+  --pav-badge-red-text: var(--pav-color-red-700);
+  --pav-badge-neutral-bg: var(--pav-color-stone-100);
+  --pav-badge-neutral-text: var(--pav-color-stone-600);
 
   /* Navigation Active States (Orange accent) */
   --pav-nav-active-bg: var(--pav-color-interactive-active-bg);

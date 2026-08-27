@@ -440,12 +440,8 @@ defineExpose({
     .section-description {
       margin: 0 0 var(--pav-space-4) 0;
       font-size: 0.875rem;
-      color: var(--pav-color-stone-600);
+      color: var(--pav-text-secondary);
       line-height: 1.5;
-
-      @media (prefers-color-scheme: dark) {
-        color: var(--pav-color-stone-400);
-      }
     }
   }
 
@@ -456,23 +452,15 @@ defineExpose({
       display: block;
       font-size: 0.875rem;
       font-weight: 500;
-      color: var(--pav-color-stone-700);
+      color: var(--pav-text-secondary);
       margin: 0 0 var(--pav-space-3) 0;
-
-      @media (prefers-color-scheme: dark) {
-        color: var(--pav-color-stone-300);
-      }
     }
 
     .description {
       margin: var(--pav-space-2) 0 0 0;
       font-size: 0.875rem;
-      color: var(--pav-color-stone-600);
+      color: var(--pav-text-secondary);
       line-height: 1.5;
-
-      @media (prefers-color-scheme: dark) {
-        color: var(--pav-color-stone-400);
-      }
     }
 
     select {
@@ -498,23 +486,19 @@ defineExpose({
       flex-direction: column;
       align-items: center;
       padding: var(--pav-space-5);
-      background: var(--pav-color-surface-primary);
+      background: var(--pav-surface-primary);
       border: 2px solid var(--pav-border-primary);
       border-radius: 0.75rem;
       cursor: pointer;
       transition: all 0.2s;
 
       &:hover {
-        border-color: var(--pav-color-stone-400);
+        border-color: var(--pav-color-neutral-400);
       }
 
       &--selected {
-        border-color: var(--pav-color-orange-500);
-        background: oklch(0.705 0.213 47.604 / 0.02);
-
-        @media (prefers-color-scheme: dark) {
-          background: oklch(0.705 0.213 47.604 / 0.05);
-        }
+        border-color: var(--pav-color-interactive-active);
+        background: var(--pav-color-interactive-active-bg);
       }
 
       &__illustration {
@@ -533,28 +517,20 @@ defineExpose({
       &__title {
         font-size: 0.9375rem;
         font-weight: 500;
-        color: var(--pav-color-stone-900);
+        color: var(--pav-text-primary);
         margin-bottom: var(--pav-space-1);
-
-        @media (prefers-color-scheme: dark) {
-          color: var(--pav-color-stone-100);
-        }
       }
 
       &__description {
         font-size: 0.8125rem;
-        color: var(--pav-color-stone-600);
-
-        @media (prefers-color-scheme: dark) {
-          color: var(--pav-color-stone-400);
-        }
+        color: var(--pav-text-secondary);
       }
 
       &__checkmark {
         position: absolute;
         top: var(--pav-space-3);
         right: var(--pav-space-3);
-        color: var(--pav-color-orange-500);
+        color: var(--pav-color-interactive-active);
       }
     }
   }
@@ -567,12 +543,10 @@ defineExpose({
 
     .list-line {
       height: 12px;
-      background: var(--pav-color-stone-300);
+      // Decorative skeleton gray; the theme-inverted neutral scale keeps it
+      // mid-tone in both themes without a hand-rolled dark override.
+      background: var(--pav-color-neutral-300);
       border-radius: 4px;
-
-      @media (prefers-color-scheme: dark) {
-        background: var(--pav-color-stone-700);
-      }
     }
   }
 
@@ -584,19 +558,11 @@ defineExpose({
     .week-day {
       flex: 1;
       height: 60px;
-      background: var(--pav-color-stone-200);
+      background: var(--pav-color-neutral-200);
       border-radius: 4px;
 
-      @media (prefers-color-scheme: dark) {
-        background: var(--pav-color-stone-700);
-      }
-
       &--highlight {
-        background: var(--pav-color-orange-200);
-
-        @media (prefers-color-scheme: dark) {
-          background: oklch(0.705 0.213 47.604 / 0.3);
-        }
+        background: var(--pav-color-interactive-active-border);
       }
     }
   }
@@ -615,19 +581,11 @@ defineExpose({
     .month-cell {
       flex: 1;
       height: 24px;
-      background: var(--pav-color-stone-200);
+      background: var(--pav-color-neutral-200);
       border-radius: 2px;
 
-      @media (prefers-color-scheme: dark) {
-        background: var(--pav-color-stone-700);
-      }
-
       &--highlight {
-        background: var(--pav-color-orange-200);
-
-        @media (prefers-color-scheme: dark) {
-          background: oklch(0.705 0.213 47.604 / 0.3);
-        }
+        background: var(--pav-color-interactive-active-border);
       }
     }
   }
@@ -648,7 +606,7 @@ defineExpose({
       &:focus {
         outline: none;
         box-shadow: var(--pav-shadow-focus-brand);
-        border-color: var(--pav-color-orange-500);
+        border-color: var(--pav-color-interactive-active);
       }
     }
 
@@ -674,50 +632,25 @@ defineExpose({
   .field-error {
     margin-top: var(--pav-space-2);
     font-size: 0.8125rem;
-    color: var(--pav-color-red-700);
-
-    @media (prefers-color-scheme: dark) {
-      color: var(--pav-color-red-400);
-    }
+    color: var(--pav-text-error);
   }
 
+  // Error/success variants come from the shared admin-alert mixin
+  // (semantic error tokens; the colorblind-safe blue success palette).
+  // The mixin's bottom margin is reset because these alerts sit in a
+  // flex column that already provides the gap.
   .alert {
-    padding: var(--pav-space-3);
-    border-radius: 0.75rem;
-    font-size: 0.875rem;
-
-    &.alert--error {
-      background-color: rgba(239, 68, 68, 0.1);
-      border: 1px solid rgba(239, 68, 68, 0.2);
-      color: var(--pav-color-red-700);
-
-      @media (prefers-color-scheme: dark) {
-        color: var(--pav-color-red-400);
-      }
-    }
-
-    &.alert--success {
-      background-color: rgba(34, 197, 94, 0.1);
-      border: 1px solid rgba(34, 197, 94, 0.2);
-      color: var(--pav-color-green-700);
-
-      @media (prefers-color-scheme: dark) {
-        color: var(--pav-color-green-400);
-      }
-    }
+    @include admin-alert;
+    margin-bottom: 0;
   }
 
   .preview-section {
     .preview-container {
       border: 1px solid var(--pav-border-primary);
       border-radius: 0.75rem;
-      background: var(--pav-color-stone-100);
+      background: var(--pav-color-neutral-100);
       padding: var(--pav-space-4);
       min-height: 600px;
-
-      @media (prefers-color-scheme: dark) {
-        background: var(--pav-color-stone-800);
-      }
 
       .widget-preview {
         width: 100%;

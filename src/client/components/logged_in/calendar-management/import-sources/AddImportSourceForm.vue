@@ -172,6 +172,7 @@ import { useTranslation } from 'i18next-vue';
 
 import PillButton from '@/client/components/common/pill-button.vue';
 import { useTabNavigation } from '@/client/composables/useTabNavigation';
+import { formatBytes } from '@/common/utils/format-bytes';
 
 /**
  * The form submits one of two source types. The parent (ImportSourcesSection)
@@ -265,18 +266,6 @@ const { handleTabKeydown } = useTabNavigation(
   activeTab,
   (tab) => selectTab(tab as TabKey),
 );
-
-/** Human-readable byte size using binary units. */
-const formatBytes = (bytes: number): string => {
-  if (bytes < 1024) {
-    return `${bytes} B`;
-  }
-  const kib = bytes / 1024;
-  if (kib < 1024) {
-    return `${kib.toFixed(1)} KiB`;
-  }
-  return `${(kib / 1024).toFixed(1)} MiB`;
-};
 
 /**
  * Validate a selected calendar file. Returns a localized error string, or null
@@ -411,11 +400,9 @@ onMounted(async () => {
     gap: var(--pav-space-3);
     padding: var(--pav-space-2) var(--pav-space-3);
     border-radius: 0.75rem;
-    background: var(--pav-color-stone-100);
-
-    @media (prefers-color-scheme: dark) {
-      background: var(--pav-color-stone-800);
-    }
+    // Theme-inverted neutral scale keeps the chip a subtle tint on both
+    // themes without a hand-rolled dark override.
+    background: var(--pav-color-neutral-100);
   }
 
   &__file-meta {
@@ -428,21 +415,13 @@ onMounted(async () => {
   &__file-name {
     font-weight: 500;
     font-size: 0.875rem;
-    color: var(--pav-color-stone-900);
+    color: var(--pav-text-primary);
     overflow-wrap: anywhere;
-
-    @media (prefers-color-scheme: dark) {
-      color: var(--pav-color-stone-100);
-    }
   }
 
   &__file-size {
     font-size: 0.8125rem;
-    color: var(--pav-color-stone-600);
-
-    @media (prefers-color-scheme: dark) {
-      color: var(--pav-color-stone-400);
-    }
+    color: var(--pav-text-secondary);
   }
 
   &__actions {
@@ -461,11 +440,7 @@ onMounted(async () => {
   &__label {
     font-weight: 500;
     font-size: 0.875rem;
-    color: var(--pav-color-stone-700);
-
-    @media (prefers-color-scheme: dark) {
-      color: var(--pav-color-stone-300);
-    }
+    color: var(--pav-text-secondary);
   }
 
   &__input {
@@ -474,59 +449,42 @@ onMounted(async () => {
     padding: 0.75rem 1rem;
     border: 0;
     border-radius: 0.75rem;
-    background: var(--pav-color-stone-100);
-    color: var(--pav-color-stone-900);
+    background: var(--pav-color-neutral-100);
+    color: var(--pav-text-primary);
     font-size: 1rem;
     transition: box-shadow 0.2s;
 
     &:focus {
       outline: none;
-      box-shadow: 0 0 0 2px var(--pav-color-orange-500);
+      box-shadow: var(--pav-shadow-focus-brand);
     }
 
     &[aria-invalid='true'] {
-      box-shadow: 0 0 0 2px var(--pav-color-red-500);
-    }
-
-    @media (prefers-color-scheme: dark) {
-      background: var(--pav-color-stone-800);
-      color: var(--pav-color-stone-100);
+      box-shadow: 0 0 0 2px var(--pav-border-error);
     }
   }
 
   &__file-input {
     font-size: 0.875rem;
-    color: var(--pav-color-stone-700);
+    color: var(--pav-text-secondary);
 
     &:focus-visible {
-      outline: 2px solid var(--pav-color-orange-500);
+      outline: 2px solid var(--pav-color-interactive-active);
       outline-offset: 2px;
       border-radius: var(--pav-border-radius-xs);
-    }
-
-    @media (prefers-color-scheme: dark) {
-      color: var(--pav-color-stone-300);
     }
   }
 
   &__help {
     margin: 0;
-    color: var(--pav-color-stone-600);
+    color: var(--pav-text-secondary);
     font-size: 0.875rem;
-
-    @media (prefers-color-scheme: dark) {
-      color: var(--pav-color-stone-400);
-    }
   }
 
   &__error {
     margin: 0;
-    color: var(--pav-color-red-600);
+    color: var(--pav-text-error);
     font-size: 0.875rem;
-
-    @media (prefers-color-scheme: dark) {
-      color: var(--pav-color-red-400);
-    }
   }
 }
 

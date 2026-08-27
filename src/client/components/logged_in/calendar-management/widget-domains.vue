@@ -314,23 +314,15 @@ onMounted(loadDomains);
 .form-label {
   font-weight: 500;
   font-size: 0.875rem;
-  color: var(--pav-color-stone-700);
+  color: var(--pav-text-secondary);
   margin: 0;
-
-  @media (prefers-color-scheme: dark) {
-    color: var(--pav-color-stone-300);
-  }
 }
 
 .help-text {
   margin: 0;
-  color: var(--pav-color-stone-600);
+  color: var(--pav-text-secondary);
   font-size: 0.875rem;
   line-height: 1.5;
-
-  @media (prefers-color-scheme: dark) {
-    color: var(--pav-color-stone-400);
-  }
 }
 
 .form-input {
@@ -342,30 +334,9 @@ onMounted(loadDomains);
   width: 100%;
 }
 
+// Error/success variants come from the shared admin-alert mixin
+// (semantic error tokens; the colorblind-safe blue success palette).
 .alert {
-  padding: var(--pav-space-3);
-  margin-bottom: var(--pav-space-4);
-  border-radius: 0.75rem;
-  font-size: 0.875rem;
-
-  &.alert--error {
-    background-color: rgba(239, 68, 68, 0.1);
-    border: 1px solid rgba(239, 68, 68, 0.2);
-    color: var(--pav-color-red-700);
-
-    @media (prefers-color-scheme: dark) {
-      color: var(--pav-color-red-400);
-    }
-  }
-
-  &.alert--success {
-    background-color: rgba(34, 197, 94, 0.1);
-    border: 1px solid rgba(34, 197, 94, 0.2);
-    color: var(--pav-color-green-700);
-
-    @media (prefers-color-scheme: dark) {
-      color: var(--pav-color-green-400);
-    }
-  }
+  @include admin-alert;
 }
 </style>
