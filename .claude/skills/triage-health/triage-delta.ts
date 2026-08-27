@@ -823,6 +823,15 @@ interface RawScanFacts {
    * up the truncation marker, anything `isFindingId` rejects. Such an id cannot
    * be compared against a bead's `CVEs:` line in either direction, so its
    * presence is unknowable and this run must not derive resolution at all.
+   *
+   * Held in the same form `collapse()` emits on `DeltaFinding.id` —
+   * `sanitizeText`, case preserved — not the upper-cased `normalizeId` form.
+   * These are never matching keys (nothing looks an id up in this list; it only
+   * suppresses resolution when non-empty and is reported), and the reader's one
+   * way to tell that an emitted id carries no shape guarantee, and so is barred
+   * from an inline shell argument, is to compare it literally against this list.
+   * Upper-casing here would mean no lower-case id — every Trivy secret rule id —
+   * ever matches its own entry.
    */
   unusableIds: string[];
   /**
@@ -860,7 +869,7 @@ function readRawReports(reports: ReportInput[]): RawScanFacts {
           if (typeof id === 'string' && id.trim().length > 0) {
             const canonical = canonicalizeId(id);
             if (canonical) allIds.add(canonical);
-            else unusable.add(normalizeId(id));
+            else unusable.add(sanitizeText(id));
           }
 
           if (collection === 'Misconfigurations') {
@@ -986,6 +995,12 @@ function categorizeFindings(
       continue;
     }
 
+    // Only vulnerabilities reach here — secrets and misconfigurations returned
+    // above — so every id the agent copies out of this category onto the watch
+    // table is an already-upper-case CVE/GHSA token, and survives
+    // `parseWatchTable`'s upper-casing next week unchanged. Route a
+    // case-sensitive id (a Trivy secret rule id) into `new_no_fix` and that
+    // round trip stops being lossless: the row would never match itself again.
     result.new_no_fix.push(finding);
   }
 
