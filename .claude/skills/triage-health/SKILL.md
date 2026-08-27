@@ -429,7 +429,10 @@ guess an issue number, search for one, or post the comment somewhere else.
 This comment is the audit trail tying scan → decisions. It covers:
 
 - Scan identity: `metadata.sha`, `metadata.runUrl`, `metadata.scanDate`.
-- Beads filed, **by title** (the titles carry the CVE ids).
+- Beads filed, **by title** (the titles carry the CVE ids) — **except a bead filed from a
+  watch-list escalation**, which appears only in the escalation count below. An escalation bead's
+  title carries its CVE id, and naming it here publishes the reachability conclusion by
+  construction, which the rule below forbids.
 - Beads closed and partially cleared, by title.
 - Watch-list adds and prunes, and a bare **count** of escalations.
 - Renovate-covered findings with their PR numbers.
