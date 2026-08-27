@@ -122,7 +122,7 @@ test.describe('Admin Funding Management', () => {
 
   test('should show provider section when funding enabled', async ({ page }) => {
     // Mock the funding settings API to prevent side effects
-    await page.route('**/api/subscription/admin/settings', async (route) => {
+    await page.route('**/api/funding/v1/admin/settings', async (route) => {
       const method = route.request().method();
       if (method === 'GET') {
         await route.fulfill({
@@ -135,10 +135,11 @@ test.describe('Admin Funding Management', () => {
             currency: 'USD',
             payWhatYouCan: false,
             gracePeriodDays: 7,
+            payWhatYouCanYearlyDiscount: 0,
           }),
         });
       }
-      else if (method === 'PUT') {
+      else if (method === 'POST') {
         await route.fulfill({
           status: 200,
           contentType: 'application/json',
@@ -151,7 +152,7 @@ test.describe('Admin Funding Management', () => {
     });
 
     // Mock providers endpoint
-    await page.route('**/api/subscription/admin/providers', async (route) => {
+    await page.route('**/api/funding/v1/admin/providers', async (route) => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -160,11 +161,14 @@ test.describe('Admin Funding Management', () => {
     });
 
     // Mock funding plans list endpoint
-    await page.route('**/api/subscription/admin/subscriptions*', async (route) => {
+    await page.route('**/api/funding/v1/admin/funding-plans*', async (route) => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({ subscriptions: [], total: 0 }),
+        body: JSON.stringify({
+          fundingPlans: [],
+          pagination: { currentPage: 1, totalPages: 0, totalCount: 0, limit: 50 },
+        }),
       });
     });
 
