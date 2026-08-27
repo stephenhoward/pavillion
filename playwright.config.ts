@@ -46,7 +46,10 @@ export default defineConfig({
   retries: process.env.CI ? 2 : 0,
 
   // Opt out of parallel tests on CI
-  // Use 2 workers locally to reduce port allocation race conditions
+  // 2 workers locally is a resource-footprint choice: each worker spawns a
+  // full backend server (see tests/e2e/helpers/test-server.ts). Port
+  // allocation is worker-safe at any worker count — each worker draws from
+  // a disjoint slice of the port range derived from TEST_PARALLEL_INDEX.
   workers: process.env.CI ? 1 : 2,
 
   // Reporter to use - prevent browser from opening after tests

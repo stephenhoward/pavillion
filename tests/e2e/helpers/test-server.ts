@@ -22,7 +22,11 @@ export interface TestEnvironment {
 export interface TestServerOptions {
   /** Specific port to use (auto-allocated if not specified) */
   port?: number;
-  /** Port range start for auto-allocation (default: 3100) */
+  /**
+   * Port range start for auto-allocation (default: 3100). Each Playwright
+   * worker allocates from its own disjoint slice of the range — see
+   * workerPortSlice.
+   */
   portRangeStart?: number;
   /** Port range end for auto-allocation (default: 3200) */
   portRangeEnd?: number;
@@ -39,25 +43,71 @@ export interface TestServerOptions {
 }
 
 /**
- * Find an available port within the specified range
+ * Number of ports reserved for each Playwright worker within a port range.
  *
- * @param startPort - Starting port number (default: 3100)
- * @param endPort - Ending port number (default: 3200)
+ * A worker runs one test server at a time (beforeAll/afterAll), so the extra
+ * ports are headroom for sockets still releasing between spec files and for
+ * orphaned servers left by a crashed worker whose replacement reuses the
+ * same parallel index.
+ */
+const PORTS_PER_WORKER = 10;
+
+/**
+ * Restrict a port range to the slice owned by the current Playwright worker.
+ *
+ * Playwright's `TEST_PARALLEL_INDEX` is unique among concurrently running
+ * workers (a replacement worker reuses the index of the worker it replaced,
+ * never one held by a live worker), so slicing the range by that index makes
+ * it impossible for two workers to select the same port: their candidate
+ * ranges are disjoint by construction. This closes the check-then-bind race
+ * where two workers both saw port 3100 as free and both handed it to their
+ * server process.
+ *
+ * Outside a Playwright worker (no `TEST_PARALLEL_INDEX`) the first slice is
+ * used.
+ */
+function workerPortSlice(
+  startPort: number,
+  endPort: number,
+): { start: number; end: number } {
+  const rawIndex = Number(process.env.TEST_PARALLEL_INDEX);
+  const workerIndex = Number.isInteger(rawIndex) && rawIndex >= 0 ? rawIndex : 0;
+
+  const start = startPort + workerIndex * PORTS_PER_WORKER;
+  const end = Math.min(start + PORTS_PER_WORKER - 1, endPort);
+
+  if (start > endPort) {
+    throw new Error(
+      `Port range ${startPort}-${endPort} has no slice for worker index ${workerIndex} `
+      + `(${PORTS_PER_WORKER} ports per worker). Widen the range or lower the worker count.`,
+    );
+  }
+
+  return { start, end };
+}
+
+/**
+ * Find an available port within the current worker's slice of the range
+ *
+ * @param startPort - Starting port number of the full range (default: 3100)
+ * @param endPort - Ending port number of the full range (default: 3200)
  * @returns Promise resolving to an available port number
  */
 async function findAvailablePort(
   startPort: number = 3100,
   endPort: number = 3200,
 ): Promise<number> {
+  const { start, end } = workerPortSlice(startPort, endPort);
+
   try {
     const port = await getPort({
-      port: portNumbers(startPort, endPort),
+      port: portNumbers(start, end),
     });
     return port;
   }
   catch (error) {
     throw new Error(
-      `Failed to find available port in range ${startPort}-${endPort}: ${error}`,
+      `Failed to find available port in range ${start}-${end}: ${error}`,
     );
   }
 }
