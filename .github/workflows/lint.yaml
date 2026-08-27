@@ -1,0 +1,31 @@
+name: Lint
+on:
+  workflow_call:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: '.node-version'
+          cache: 'npm'
+
+      - run: npm install
+
+      # Each linter reports independently: one failure must not hide the others.
+      - name: ESLint
+        run: npm run lint:js
+        if: ${{ !cancelled() }}
+
+      - name: Stylelint
+        run: npm run lint:style
+        if: ${{ !cancelled() }}
+
+      # Security regression guard: raw SQL must stay static (see scripts/check-raw-sql.ts).
+      - name: Raw SQL guard
+        run: npm run lint:sql
+        if: ${{ !cancelled() }}
