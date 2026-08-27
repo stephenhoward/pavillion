@@ -17,6 +17,11 @@
       "matchManagers": ["github-actions"],
       "matchUpdateTypes": ["minor", "patch"],
       "groupName": "github actions"
+    },
+    {
+      "matchUpdateTypes": ["minor", "patch"],
+      "minimumReleaseAge": "7 days",
+      "internalChecksFilter": "strict"
     }
   ]
 }
