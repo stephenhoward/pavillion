@@ -34,11 +34,16 @@ test.describe.configure({ mode: 'serial' });
 
 const ADMIN_CALENDAR = 'test_calendar';
 const EVENT_TITLE = `Single Cancel Badge E2E ${Date.now()}`;
-// A near-future date keeps the event inside the public upcoming-events window
-// while remaining a single (non-recurring) occurrence.
-const EVENT_DATE = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000)
-  .toISOString()
-  .slice(0, 10);
+// A near-future date keeps the event inside the public view's default date
+// window (today..today+14 in LOCAL time, endpoints inclusive) while remaining
+// a single (non-recurring) occurrence. Compute the date in local time — a UTC
+// slice (toISOString) lands one day ahead of local every evening — and use +7
+// days so the event sits mid-window rather than on its edge.
+const EVENT_DATE = ((): string => {
+  const d = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+})();
 
 /**
  * Create a single (non-recurring) event on the admin's calendar and return to
