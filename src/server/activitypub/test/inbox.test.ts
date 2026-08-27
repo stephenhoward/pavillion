@@ -447,9 +447,11 @@ describe('ProcessInboxService - Follow Activity Processing', () => {
       expect(emittedEvents).toHaveLength(1);
       expect(emittedEvents[0].eventId).toBe(localEventId);
       expect(emittedEvents[0].calendarId).toBe(testCalendar.id);
+      expect(emittedEvents[0].provenance).toBe('federated-inbound');
       expect(emittedEvents[0].reposterUrl).toBe(remoteActorUrl);
-      // reposterName falls back to actor URL when no display name is cached
-      expect(emittedEvents[0].reposterName).toBe(remoteActorUrl);
+      // With no cached display name the payload omits reposterDisplayName so
+      // the notifications handler falls back to its URI resolution.
+      expect(emittedEvents[0].reposterDisplayName).toBeUndefined();
     });
 
     it('should not emit activitypub:event:reposted when a remote (non-local) event is announced', async () => {
@@ -485,7 +487,7 @@ describe('ProcessInboxService - Follow Activity Processing', () => {
       expect(emittedEvents).toHaveLength(0);
     });
 
-    it('should use remoteDisplayName as reposterName when available', async () => {
+    it('should use remoteDisplayName as reposterDisplayName when available', async () => {
       // Arrange: actor and object must be on the same domain (domain-match security check)
       const remoteActorUrl = 'https://remote.instance/calendars/remote-calendar';
       const displayName = 'Remote Calendar Name';
@@ -527,12 +529,12 @@ describe('ProcessInboxService - Follow Activity Processing', () => {
 
       // Assert
       expect(emittedEvents).toHaveLength(1);
-      expect(emittedEvents[0].reposterName).toBe(displayName);
+      expect(emittedEvents[0].reposterDisplayName).toBe(displayName);
     });
   });
 });
 
-describe('ProcessInboxService - checkAndPerformAutoRepost eventReposted emission', () => {
+describe('ProcessInboxService - checkAndPerformAutoRepost repost emission', () => {
   let sandbox: sinon.SinonSandbox;
   let inboxService: ProcessInboxService;
   let eventBus: EventEmitter;
@@ -567,62 +569,7 @@ describe('ProcessInboxService - checkAndPerformAutoRepost eventReposted emission
     await teardownActivityPubSchema();
   });
 
-  it('should emit eventReposted after successful auto-repost', async () => {
-    // Arrange
-    const sourceActorUri = 'https://remote.instance/calendars/source-calendar';
-    const eventId = uuidv4();
-    const eventApId = `https://remote.instance/events/${eventId}`;
-
-    // Create the remote CalendarActorEntity
-    const remoteCalendarActorId = uuidv4();
-    await CalendarActorEntity.create({
-      id: remoteCalendarActorId,
-      actor_type: 'remote',
-      actor_uri: sourceActorUri,
-      remote_display_name: null,
-      remote_domain: 'remote.instance',
-      calendar_id: null,
-      private_key: null,
-    });
-
-    // Create FollowingCalendarEntity with auto_repost_originals enabled
-    await FollowingCalendarEntity.create({
-      id: uuidv4(),
-      calendar_actor_id: remoteCalendarActorId,
-      calendar_id: testCalendar.id,
-      auto_repost_originals: true,
-      auto_repost_reposts: false,
-    });
-
-    // Create EventObjectEntity for the event
-    await EventObjectEntity.create({
-      event_id: eventId,
-      ap_id: eventApId,
-      attributed_to: sourceActorUri,
-    });
-
-    // Stub calendarInterface.getEventById to return the event
-    const event = new CalendarEvent(eventId, null);
-    sandbox.stub(calendarInterface, 'getEventById').resolves(event);
-
-    // Stub category mapping service
-    sandbox.stub(calendarInterface.categoryMappingService, 'assignAutoRepostCategories').resolves();
-
-    const emittedEvents: any[] = [];
-    eventBus.on('eventReposted', (payload) => emittedEvents.push(payload));
-
-    // Act
-    await (inboxService as any).checkAndPerformAutoRepost(
-      testCalendar, sourceActorUri, eventApId, true,
-    );
-
-    // Assert
-    expect(emittedEvents).toHaveLength(1);
-    expect(emittedEvents[0].event).toBe(event);
-    expect(emittedEvents[0].calendar).toBe(testCalendar);
-  });
-
-  it('should dual-emit activitypub:event:reposted for auto-repost of a locally-owned event (pv-d84j.2)', async () => {
+  it('should emit activitypub:event:reposted for auto-repost of a locally-owned event (pv-d84j.2)', async () => {
     // Auto-repost path: a remote calendar's Announce of a locally-owned
     // event triggers our calendar to auto-repost. The notifications
     // emission must fire so source-calendar editors learn about the
@@ -672,18 +619,19 @@ describe('ProcessInboxService - checkAndPerformAutoRepost eventReposted emission
     const payload = repostedPayloads[0];
     expect(payload.eventId).toBe(eventId);
     expect(payload.calendarId).toBe(sourceCalendarId);
+    expect(payload.provenance).toBe('local-auto');
     expect(payload.reposterCalendarId).toBe(testCalendar.id);
-    // Reposter URL is the local actor URL for the reposting calendar; both
-    // name and url carry it so the notifications handler's local-actor
-    // resolver overrides the display name with the calendar's displayName.
-    expect(payload.reposterUrl).toBe(payload.reposterName);
+    // Reposter URL is the local actor URL for the reposting calendar.
     expect(payload.reposterUrl).toMatch(/\/calendars\//);
+    // testCalendar has no populated content name, so the emit-time display
+    // name is omitted and the notifications handler's local-actor resolver
+    // supplies the display name from the URI instead.
+    expect(payload.reposterDisplayName).toBeUndefined();
   });
 
-  it('should not dual-emit activitypub:event:reposted when the auto-reposted event is remote-origin (pv-d84j.2)', async () => {
-    // Mirrors the inbox.ts:2179 gate: only fire the notifications emission
-    // for locally-owned events. Remote-origin events have no local source
-    // calendar editors to notify.
+  it('should not emit activitypub:event:reposted when the auto-reposted event is remote-origin (pv-d84j.2)', async () => {
+    // Only fire the repost emission for locally-owned events. Remote-origin
+    // events have no local source calendar editors to notify.
     const sourceActorUri = 'https://remote.instance/calendars/source-calendar';
     const eventId = uuidv4();
     const eventApId = `https://remote.instance/events/${eventId}`;
@@ -717,21 +665,18 @@ describe('ProcessInboxService - checkAndPerformAutoRepost eventReposted emission
     sandbox.stub(calendarInterface.categoryMappingService, 'assignAutoRepostCategories').resolves();
 
     const repostedPayloads: any[] = [];
-    const eventRepostedPayloads: any[] = [];
     eventBus.on('activitypub:event:reposted', (payload) => repostedPayloads.push(payload));
-    eventBus.on('eventReposted', (payload) => eventRepostedPayloads.push(payload));
 
     await (inboxService as any).checkAndPerformAutoRepost(
       testCalendar, sourceActorUri, eventApId, true,
     );
 
-    // Calendar-domain emission still fires (event-instance pipeline owns it).
-    expect(eventRepostedPayloads).toHaveLength(1);
-    // Notifications-domain emission suppressed for remote-origin events.
+    // Emission suppressed for remote-origin events; the auto-repost itself
+    // (SharedEventEntity + outbox) still happened above.
     expect(repostedPayloads).toHaveLength(0);
   });
 
-  it('should not emit eventReposted when getEventById returns null', async () => {
+  it('should not emit activitypub:event:reposted when getEventById returns null', async () => {
     // Arrange
     const sourceActorUri = 'https://remote.instance/calendars/source-calendar';
     const eventId = uuidv4();
@@ -769,7 +714,7 @@ describe('ProcessInboxService - checkAndPerformAutoRepost eventReposted emission
     sandbox.stub(calendarInterface.categoryMappingService, 'assignAutoRepostCategories').resolves();
 
     const emittedEvents: any[] = [];
-    eventBus.on('eventReposted', (payload) => emittedEvents.push(payload));
+    eventBus.on('activitypub:event:reposted', (payload) => emittedEvents.push(payload));
 
     // Act
     await (inboxService as any).checkAndPerformAutoRepost(
@@ -780,7 +725,7 @@ describe('ProcessInboxService - checkAndPerformAutoRepost eventReposted emission
     expect(emittedEvents).toHaveLength(0);
   });
 
-  it('should not emit eventReposted when auto-repost policy is disabled', async () => {
+  it('should not emit activitypub:event:reposted when auto-repost policy is disabled', async () => {
     // Arrange
     const sourceActorUri = 'https://remote.instance/calendars/source-calendar';
     const eventApId = `https://remote.instance/events/${uuidv4()}`;
@@ -806,7 +751,7 @@ describe('ProcessInboxService - checkAndPerformAutoRepost eventReposted emission
     });
 
     const emittedEvents: any[] = [];
-    eventBus.on('eventReposted', (payload) => emittedEvents.push(payload));
+    eventBus.on('activitypub:event:reposted', (payload) => emittedEvents.push(payload));
 
     // Act
     await (inboxService as any).checkAndPerformAutoRepost(
@@ -916,7 +861,7 @@ describe('ProcessInboxService - checkAndPerformAutoRepost dismissal gating', () 
     const getEventByIdSpy = sandbox.stub(calendarInterface, 'getEventById').resolves(new CalendarEvent(eventId, null));
 
     const emittedEvents: any[] = [];
-    eventBus.on('eventReposted', (payload) => emittedEvents.push(payload));
+    eventBus.on('activitypub:event:reposted', (payload) => emittedEvents.push(payload));
 
     // Act
     await (inboxService as any).checkAndPerformAutoRepost(
@@ -950,7 +895,8 @@ describe('ProcessInboxService - checkAndPerformAutoRepost dismissal gating', () 
     await seedAutoRepostPrerequisites(eventId, eventApId);
 
     sandbox.stub(calendarInterface.categoryMappingService, 'assignAutoRepostCategories').resolves();
-    sandbox.stub(calendarInterface, 'getEventById').resolves(new CalendarEvent(eventId, null));
+    // Locally-owned event so the happy path also fires the repost emission.
+    sandbox.stub(calendarInterface, 'getEventById').resolves(new CalendarEvent(eventId, uuidv4()));
 
     // Counterpart to the skip-path guard: positively assert the outbox WAS
     // written on the non-dismissed happy path, spying on the same
@@ -958,7 +904,7 @@ describe('ProcessInboxService - checkAndPerformAutoRepost dismissal gating', () 
     const outboxSaveSpy = sandbox.spy(ActivityPubOutboxMessageEntity.prototype, 'save');
 
     const emittedEvents: any[] = [];
-    eventBus.on('eventReposted', (payload) => emittedEvents.push(payload));
+    eventBus.on('activitypub:event:reposted', (payload) => emittedEvents.push(payload));
 
     // Act
     await (inboxService as any).checkAndPerformAutoRepost(

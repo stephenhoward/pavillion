@@ -519,7 +519,8 @@ describe('NotificationEventHandlers', () => {
       await emit('activitypub:event:reposted', {
         eventId,
         calendarId,
-        reposterName: 'Bob',
+        provenance: 'federated-inbound',
+        reposterDisplayName: 'Bob',
         reposterUrl,
       });
 
@@ -549,15 +550,16 @@ describe('NotificationEventHandlers', () => {
     // Local-repost paths (pv-d84j.2)
     //
     // When the reposter is a local calendar (manual share or auto-repost),
-    // the emitter passes `reposterCalendarId` and the calendar-actor URI as
-    // both reposterName and reposterUrl. The handler must:
-    //   1. Resolve the URI to the reposter's calendar display name (parallels
-    //      pv-d84j.1).
-    //   2. Subtract the reposter's editors from the source-calendar editors
+    // the emitter passes `reposterCalendarId`, the calendar-actor URI on
+    // `reposterUrl`, and (when the calendar has a populated name) an
+    // emit-time `reposterDisplayName`. The handler must:
+    //   1. Use the emit-time display name when supplied, or resolve the URI
+    //      to the reposter's calendar display name (parallels pv-d84j.1).
+    //   2. Exclude the reposter's editors from the source-calendar editors
     //      so the reposter does not receive their own Announce.
     // -------------------------------------------------------------------------
 
-    it('records an Announce for a local repost with reposter calendar display name (pv-d84j.2)', async () => {
+    it('records an Announce for a local repost, resolving the display name from the actor URI when the payload carries none (pv-d84j.2)', async () => {
       const [editorA] = await seedAccounts(1, 'localrepost-editor');
       const sourceCalendarId = uuidv4();
       const reposterCalendarId = uuidv4();
@@ -577,7 +579,7 @@ describe('NotificationEventHandlers', () => {
       await emit('activitypub:event:reposted', {
         eventId,
         calendarId: sourceCalendarId,
-        reposterName: reposterUrl,
+        provenance: 'local-manual',
         reposterUrl,
         reposterCalendarId,
       });
@@ -595,6 +597,39 @@ describe('NotificationEventHandlers', () => {
         where: { notification_activity_id: activity!.id },
       });
       expect(recipients.map(r => r.account_id)).toEqual([editorA]);
+    });
+
+    it('uses the emit-time reposterDisplayName for a local repost without a calendar lookup', async () => {
+      // The emit sites hold the reposting Calendar object and compute the
+      // display name at emit time; the handler must trust it as-is instead
+      // of re-resolving the actor URI.
+      const [editorA] = await seedAccounts(1, 'localrepost-emitname');
+      const sourceCalendarId = uuidv4();
+      const reposterCalendarId = uuidv4();
+      const reposterUrl = 'https://pavillion.dev/calendars/reposter-cal';
+
+      getEditorsStub.withArgs(sourceCalendarId).resolves([
+        new Account(editorA, 'editorA', 'editorA@pavillion.dev'),
+      ]);
+      getEditorsStub.withArgs(reposterCalendarId).resolves([]);
+
+      const eventId = uuidv4();
+      await emit('activitypub:event:reposted', {
+        eventId,
+        calendarId: sourceCalendarId,
+        provenance: 'local-manual',
+        reposterDisplayName: 'Reposter Calendar',
+        reposterUrl,
+        reposterCalendarId,
+      });
+
+      const activity = await NotificationActivityEntity.findOne({
+        where: { verb: 'Announce', object_id: eventId },
+      });
+      expect(activity).not.toBeNull();
+      expect(activity!.actor_display_name).toBe('Reposter Calendar');
+      // No URI-resolution lookup fired — the emit-time name won directly.
+      expect(getCalendarByNameStub.called).toBe(false);
     });
 
     it('excludes the reposting calendar editors from the source-calendar audience on local repost (pv-d84j.2)', async () => {
@@ -617,7 +652,8 @@ describe('NotificationEventHandlers', () => {
       await emit('activitypub:event:reposted', {
         eventId,
         calendarId: sourceCalendarId,
-        reposterName: reposterUrl,
+        provenance: 'local-manual',
+        reposterDisplayName: 'Reposter Calendar',
         reposterUrl,
         reposterCalendarId,
       });
@@ -631,14 +667,14 @@ describe('NotificationEventHandlers', () => {
         where: { notification_activity_id: activity!.id },
       });
       // Only the source-only editor receives the row; the shared editor
-      // (the reposter) is filtered out.
+      // (the reposter) is filtered out. This pins the delivered recipient
+      // set across the explicit→role+excludeAccountIds audience rework.
       expect(recipients.map(r => r.account_id)).toEqual([sourceOnlyEditor]);
     });
 
     it('leaves federated Announces unchanged when reposterCalendarId is omitted (pv-d84j.2 regression guard)', async () => {
-      // The federated inbound path (inbox.ts:2179) does not pass
-      // reposterCalendarId — the handler must fall through to the
-      // role-based audience and never call getEditorsForCalendar twice.
+      // The federated inbound path does not pass reposterCalendarId — the
+      // handler must address the role audience with no exclusion.
       const [editorA] = await seedAccounts(1, 'fed-repost-regression');
       const calendarId = uuidv4();
       const editorAccount = new Account(editorA, 'editorA', 'editorA@pavillion.dev');
@@ -648,7 +684,8 @@ describe('NotificationEventHandlers', () => {
       await emit('activitypub:event:reposted', {
         eventId,
         calendarId,
-        reposterName: 'Bob',
+        provenance: 'federated-inbound',
+        reposterDisplayName: 'Bob',
         reposterUrl: 'https://remote.example.com/users/bob',
       });
 
@@ -661,9 +698,93 @@ describe('NotificationEventHandlers', () => {
       });
       expect(recipients.map(r => r.account_id)).toEqual([editorA]);
       // Remote actor URI should not match the local pattern, so the
-      // payload-supplied reposterName persists unchanged.
+      // payload-supplied reposterDisplayName persists unchanged.
       expect(activity!.actor_display_name).toBe('Bob');
       expect(getCalendarByNameStub.called).toBe(false);
+    });
+
+    it('resolves a local actor URI on a federated-inbound round-trip so the URI never renders as a name', async () => {
+      // DEC-013 local_dispatch: a local share round-trips through the AP
+      // inbox and re-arrives as a federated-inbound emission whose actor is
+      // a LOCAL calendar URI, usually with no cached display name. The
+      // handler's URI resolver (not the payload) must supply the display
+      // name — this is the pv-d84j.1 URI-as-name regression guard.
+      const [editorA] = await seedAccounts(1, 'roundtrip-repost');
+      const calendarId = uuidv4();
+      getEditorsStub.withArgs(calendarId).resolves([
+        new Account(editorA, 'editorA', 'editorA@pavillion.dev'),
+      ]);
+      getCalendarByNameStub.withArgs('reposter-cal').resolves(
+        makeCalendar(uuidv4(), 'en', 'Reposter Calendar'),
+      );
+
+      const eventId = uuidv4();
+      const reposterUrl = 'https://pavillion.dev/calendars/reposter-cal';
+      await emit('activitypub:event:reposted', {
+        eventId,
+        calendarId,
+        provenance: 'federated-inbound',
+        reposterUrl,
+      });
+
+      const activity = await NotificationActivityEntity.findOne({
+        where: { verb: 'Announce', object_id: eventId },
+      });
+      expect(activity).not.toBeNull();
+      expect(activity!.actor_display_name).toBe('Reposter Calendar');
+      expect(activity!.actor_uri).toBe(reposterUrl);
+    });
+
+    it('collapses a local direct emission and its federated-inbound round-trip into one activity (dedup on actor identity)', async () => {
+      // The reason Announce keeps origin='federated' and actor_kind=
+      // 'remote_actor' on every provenance: dedup keys on (verb,
+      // actor_kind, actor_uri, object). A local manual share emits
+      // directly AND can round-trip through the DEC-013 local_dispatch
+      // inbox path; identical actor tuples are what let the two collapse
+      // into a single notification row.
+      const [sharedEditor, sourceOnlyEditor] = await seedAccounts(2, 'roundtrip-dedup');
+      const sourceCalendarId = uuidv4();
+      const reposterCalendarId = uuidv4();
+      const reposterUrl = 'https://pavillion.dev/calendars/reposter-cal';
+
+      getEditorsStub.withArgs(sourceCalendarId).resolves([
+        new Account(sharedEditor, 'shared', 'shared@pavillion.dev'),
+        new Account(sourceOnlyEditor, 'sourceonly', 'sourceonly@pavillion.dev'),
+      ]);
+      getEditorsStub.withArgs(reposterCalendarId).resolves([
+        new Account(sharedEditor, 'shared', 'shared@pavillion.dev'),
+      ]);
+
+      const eventId = uuidv4();
+      // 1. Direct emission from the local manual share.
+      await emit('activitypub:event:reposted', {
+        eventId,
+        calendarId: sourceCalendarId,
+        provenance: 'local-manual',
+        reposterDisplayName: 'Reposter Calendar',
+        reposterUrl,
+        reposterCalendarId,
+      });
+      // 2. The same share round-tripping through the AP inbox.
+      await emit('activitypub:event:reposted', {
+        eventId,
+        calendarId: sourceCalendarId,
+        provenance: 'federated-inbound',
+        reposterUrl,
+      });
+
+      const activities = await NotificationActivityEntity.findAll({
+        where: { verb: 'Announce', object_id: eventId },
+      });
+      expect(activities).toHaveLength(1);
+
+      // Recipient set stays that of the first (excluding) emission — the
+      // round-trip dedups before audience resolution, so the reposter's
+      // editors never receive a duplicate row.
+      const recipients = await NotificationRecipientEntity.findAll({
+        where: { notification_activity_id: activities[0].id },
+      });
+      expect(recipients.map(r => r.account_id)).toEqual([sourceOnlyEditor]);
     });
 
     it('rejects a federated Announce whose reposterUrl host is not the local instance (impersonation guard)', async () => {
@@ -688,7 +809,7 @@ describe('NotificationEventHandlers', () => {
       await emit('activitypub:event:reposted', {
         eventId,
         calendarId,
-        reposterName: reposterUrl,
+        provenance: 'federated-inbound',
         reposterUrl,
       });
 
@@ -697,7 +818,8 @@ describe('NotificationEventHandlers', () => {
       });
       expect(activity).not.toBeNull();
       // Display name must NOT be overridden to the local calendar's
-      // name — the snapshot keeps whatever the federated payload sent.
+      // name — with no cached remote display name the snapshot falls
+      // back to the actor URI itself.
       expect(activity!.actor_display_name).toBe(reposterUrl);
       expect(getCalendarByNameStub.called).toBe(false);
     });
@@ -1397,7 +1519,8 @@ describe('NotificationEventHandlers', () => {
       await emit('activitypub:event:reposted', {
         eventId,
         calendarId,
-        reposterName: 'Bob',
+        provenance: 'federated-inbound',
+        reposterDisplayName: 'Bob',
         reposterUrl: 'https://remote.example/users/bob',
       });
 
@@ -1414,7 +1537,8 @@ describe('NotificationEventHandlers', () => {
       await emit('activitypub:event:reposted', {
         eventId,
         calendarId: uuidv4(),
-        reposterName: 'Bob',
+        provenance: 'federated-inbound',
+        reposterDisplayName: 'Bob',
         reposterUrl: 'https://remote.example/users/bob',
       });
 

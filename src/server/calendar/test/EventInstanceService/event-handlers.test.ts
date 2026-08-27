@@ -26,10 +26,12 @@ import { dispatchAndAwait } from '@/server/common/test/helpers/emit-and-settle';
  *   - The cancel/restore handlers re-emit eventUpdated with skipRebuild:true
  *     so federation propagation runs but the calendar-domain eventUpdated
  *     handler skips its rebuild for the same race-avoidance reason.
- *   - eventReposted / eventUnreposted are signal-preservation stubs only:
- *     creating or removing a repost link does NOT trigger any instance
- *     materialization, because the originating-calendar row already exists
- *     (or was already removed when the source event was deleted).
+ *   - There are no repost/unrepost subscriptions: creating or removing a
+ *     repost link does NOT trigger any instance materialization, because the
+ *     originating-calendar row already exists (or was already removed when
+ *     the source event was deleted). The former eventReposted /
+ *     eventUnreposted no-op stubs were retired with the repost dual-emit
+ *     collapse.
  *   - The legacy per-calendar fan-out helpers are absent from CalendarInterface;
  *     their absence is verified by inspecting the stubbed interface for the
  *     pre-pv-hr72 method names enumerated in REMOVED_FANOUT_HELPER_NAMES.
@@ -159,47 +161,13 @@ describe('CalendarEventHandlers (single-producer model)', () => {
     });
   });
 
-  describe('eventReposted handler (signal preservation stub)', () => {
-    it('should not call buildEventInstances or any fan-out helper', async () => {
-      const event = createTestEvent('event-1', 'original-calendar');
-      const calendar = new Calendar('repost-calendar', 'repost-cal');
-
-      await dispatchAndAwait(eventBus, 'eventReposted', { event, calendar });
-
-      // Under the single-producer model, reposting a published event creates
-      // only the link row (event_repost / ap_shared_event). The originating
-      // calendar's instance rows already exist; no per-calendar fan-out runs.
-      expect(mockService.buildEventInstances.called).toBe(false);
-    });
-
-    it('should execute without throwing when payload is malformed', async () => {
-      const event = createTestEvent('event-1', 'original-calendar');
-
-      // Stub-only: the goal is to verify the handler does not throw on the
-      // various payload shapes that production code historically guarded.
-      await dispatchAndAwait(eventBus, 'eventReposted', { event, calendar: null });
-      await dispatchAndAwait(eventBus, 'eventReposted', { event, calendar: {} });
-      await dispatchAndAwait(eventBus, 'eventReposted', {});
-
-      expect(mockService.buildEventInstances.called).toBe(false);
-    });
-  });
-
-  describe('eventUnreposted handler (signal preservation stub)', () => {
-    it('should not call removeEventInstances or any fan-out helper', async () => {
-      await dispatchAndAwait(eventBus, 'eventUnreposted', { eventId: 'event-1', calendarId: 'repost-calendar' });
-
-      // Removing the link row stops the calendar from showing the event via
-      // the listing union; no per-calendar instance rows exist to delete.
-      expect(mockService.removeEventInstances.called).toBe(false);
-    });
-
-    it('should execute without throwing on malformed payloads', async () => {
-      await dispatchAndAwait(eventBus, 'eventUnreposted', { eventId: '', calendarId: 'repost-calendar' });
-      await dispatchAndAwait(eventBus, 'eventUnreposted', { eventId: 'event-1', calendarId: '' });
-      await dispatchAndAwait(eventBus, 'eventUnreposted', {});
-
-      expect(mockService.removeEventInstances.called).toBe(false);
+  describe('retired repost/unrepost subscriptions', () => {
+    it('does not subscribe to the legacy eventReposted / eventUnreposted names', () => {
+      // The signal-preservation stubs were retired with the repost
+      // dual-emit collapse; nothing in the calendar domain may quietly
+      // re-subscribe to instance fan-out on repost links.
+      expect(eventBus.listenerCount('eventReposted')).toBe(0);
+      expect(eventBus.listenerCount('eventUnreposted')).toBe(0);
     });
   });
 

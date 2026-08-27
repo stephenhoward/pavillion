@@ -86,9 +86,6 @@ describe('unshareEvent - RepostDismissalEntity upsert', () => {
     const calendar = Calendar.fromObject({ id: calendarId, urlName: 'test-calendar' });
     const account = Account.fromObject({ id: 'test-account-id' });
 
-    // Spy on eventBus.emit to verify exact post-commit payload
-    const emitSpy = sandbox.spy(eventBus, 'emit');
-
     await service.unshareEvent(account, calendar, eventApUrl);
 
     // SharedEventEntity row should be gone
@@ -108,14 +105,6 @@ describe('unshareEvent - RepostDismissalEntity upsert', () => {
     // addToOutbox must fire exactly once per destroyed share, post-commit
     const addToOutboxStub = service.addToOutbox as sinon.SinonStub;
     expect(addToOutboxStub.callCount).toBe(1);
-
-    // eventBus.emit must fire exactly once for eventUnreposted with the exact
-    // payload — captured share.event_id must survive entity destroy.
-    const unrepostEmits = emitSpy.getCalls().filter((c) => c.args[0] === 'eventUnreposted');
-    expect(unrepostEmits).toHaveLength(1);
-    expect(
-      emitSpy.calledWith('eventUnreposted', { eventId: localEventId, calendarId }),
-    ).toBe(true);
   });
 
   it('is idempotent: calling unshareEvent twice does not create duplicate dismissal rows', async () => {
@@ -239,7 +228,7 @@ describe('unshareEvent - RepostDismissalEntity upsert', () => {
     }
   });
 
-  it('does not fire addToOutbox or eventUnreposted emit when the transaction rolls back', async () => {
+  it('does not fire addToOutbox when the transaction rolls back', async () => {
     // Seed the AP URL → local event UUID lookup
     await EventObjectEntity.create({
       event_id: localEventId,
@@ -255,10 +244,9 @@ describe('unshareEvent - RepostDismissalEntity upsert', () => {
       auto_posted: false,
     });
 
-    // Capture the sandbox-stubbed addToOutbox and spy eventBus.emit so we can
-    // assert neither side effect escapes the aborted transaction.
+    // Capture the sandbox-stubbed addToOutbox so we can assert the
+    // post-commit side effect never escapes the aborted transaction.
     const addToOutboxStub = service.addToOutbox as sinon.SinonStub;
-    const emitSpy = sandbox.spy(eventBus, 'emit');
 
     // Force the dismissal write to throw, rolling back the entire transaction.
     // Use sinon.stub directly (not sandbox) so we can restore it in finally
@@ -277,11 +265,6 @@ describe('unshareEvent - RepostDismissalEntity upsert', () => {
       // addToOutbox must NOT have fired — the post-commit side effect should
       // never run when the transaction rolls back.
       expect(addToOutboxStub.called).toBe(false);
-
-      // eventBus.emit must NOT have fired for 'eventUnreposted'. Filter by
-      // channel name so unrelated emits on the shared bus cannot flake this.
-      const unrepostEmits = emitSpy.getCalls().filter((c) => c.args[0] === 'eventUnreposted');
-      expect(unrepostEmits).toHaveLength(0);
 
       // Sanity-check: the SharedEventEntity row still exists, confirming the
       // rollback actually engaged (mirrors the Wave 2 rollback test).

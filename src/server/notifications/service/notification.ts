@@ -128,10 +128,18 @@ export interface RecordActivityObject {
  * emitter-knows-recipient cases (EditorInvited/Revoked, ReportResolved);
  * `role` runs through the role resolver (calendar-editors / calendar-owners
  * / instance-admins).
+ *
+ * `excludeAccountIds` lets a role-addressed activity subtract known
+ * self-actors from the resolved role-holders (e.g. Announce excludes the
+ * reposting calendar's editors from the source-calendar editors so nobody
+ * is notified about their own repost). The subtraction happens after role
+ * resolution, inside `resolveAudience` — keeping role addressing intact
+ * instead of forcing emitters to pre-resolve the role into an explicit
+ * list just to filter it.
  */
 export type RecordActivityAudience =
   | { kind: 'explicit'; accountIds: string[] }
-  | { kind: 'role'; role: NotificationRole; objectRef?: RoleObjectRef };
+  | { kind: 'role'; role: NotificationRole; objectRef?: RoleObjectRef; excludeAccountIds?: string[] };
 
 /**
  * Caller-supplied payload for `recordActivity`. Per
@@ -808,14 +816,23 @@ class NotificationService {
   /**
    * Resolves the `audience` field into the recipient account-id list.
    *
-   * - `kind='role'` delegates to the role resolver (pv-89mw.3.3).
+   * - `kind='role'` delegates to the role resolver (pv-89mw.3.3), then
+   *   subtracts any `excludeAccountIds` from the resolved role-holders.
+   *   The subtraction lives here (not in the injected resolver) so it
+   *   applies uniformly regardless of which resolver implementation is
+   *   injected.
    * - `kind='explicit'` validates each id against the account table and
    *   silently drops ones that don't resolve. The over-50 size check has
    *   already happened in `recordActivity`; this method is the lookup pass.
    */
   private async resolveAudience(audience: RecordActivityAudience): Promise<string[]> {
     if (audience.kind === 'role') {
-      return this.resolveRoleAudience(audience.role, audience.objectRef, this.deps);
+      const roleHolders = await this.resolveRoleAudience(audience.role, audience.objectRef, this.deps);
+      if (audience.excludeAccountIds?.length) {
+        const exclude = new Set(audience.excludeAccountIds);
+        return roleHolders.filter((id) => !exclude.has(id));
+      }
+      return roleHolders;
     }
 
     // Explicit: validate IDs against accounts; drop nonexistent silently.

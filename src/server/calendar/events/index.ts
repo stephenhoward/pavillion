@@ -5,31 +5,6 @@ import { Calendar } from '@/common/model/calendar';
 import CalendarInterface from '../interface';
 
 /**
- * Payload for the eventReposted event bus emission.
- * Emitted by the AP members service when a calendar reposts an event.
- * The calendar property is the REPOSTING calendar, not the original owner.
- */
-export interface EventRepostedPayload {
-  event: CalendarEvent;
-  calendar: Calendar;
-}
-
-/**
- * Payload for the eventUnreposted event bus emission.
- * Emitted by the AP members service when a calendar un-reposts an event.
- *
- * Note: The payload asymmetry with EventRepostedPayload is intentional.
- * eventReposted sends full objects because the event data is needed to generate
- * instances. eventUnreposted sends primitive IDs because only deletion by
- * compound key is needed, and by the time the event fires the share record
- * may already be destroyed.
- */
-export interface EventUnrepostedPayload {
-  eventId: string;
-  calendarId: string;
-}
-
-/**
  * Payload for the eventInstanceCancelled event bus emission.
  * Emitted by EventInstanceService.cancelOccurrenceByDate when a calendar
  * editor cancels a single occurrence of a (possibly recurring) event.
@@ -167,23 +142,13 @@ export default class CalendarEventHandlers implements DomainEventHandlers {
 
     eventBus.on('eventDeleted', async (e) => this.service.removeEventInstances(e.event));
 
-    // Signal preservation only — under the single-producer model the
-    // originating-calendar instance rows already exist; reposting a published
-    // event never adds a new row. Listing for the reposting calendar picks
-    // the event up via the visible-id union driven by the repost link.
-    // Handler retained as a one-line stub so future hooks (analytics,
-    // notifications, etc.) have a documented integration point.
-    eventBus.on('eventReposted', async () => {
-      /* signal preservation: no instance fan-out under pv-hr72 single-producer */
-    });
-
-    // Signal preservation only — un-reposting removes the link row, which is
-    // sufficient to stop the calendar from showing the event via the listing
-    // union. No per-calendar instance rows exist to delete under the
-    // single-producer model.
-    eventBus.on('eventUnreposted', async () => {
-      /* signal preservation: no instance fan-out under pv-hr72 single-producer */
-    });
+    // No repost/unrepost subscriptions: under the single-producer model
+    // (pv-hr72) creating or removing a repost link never touches instance
+    // rows — the originating calendar's rows already exist, and listing
+    // derives repost visibility through the visible-id union. Reposts now
+    // signal solely via `activitypub:event:reposted` (consumed by the
+    // notifications domain); the legacy `eventReposted` / `eventUnreposted`
+    // no-op stubs were retired with the dual-emit collapse.
 
     // A follower that unfollows a remote source no longer receives that
     // source's Place/Space updates, so the origin_uri dedup stamps mirrored
