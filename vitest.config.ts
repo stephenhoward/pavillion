@@ -53,7 +53,15 @@ export default defineConfig({
             },
           },
           teardownTimeout: 15000,
-          include: ['src/**/*.test.ts', 'src/**/*.test.tsx', 'scripts/**/*.test.ts'],
+          // `.claude/skills/**` is scoped narrowly on purpose: skill-bundled
+          // scripts ship colocated tests, but `.claude/worktrees/**` (excluded
+          // below) must never be collected.
+          include: [
+            'src/**/*.test.ts',
+            'src/**/*.test.tsx',
+            'scripts/**/*.test.ts',
+            '.claude/skills/**/*.test.ts',
+          ],
           exclude: [
             ...sharedExclude,
             // Rate-limit coverage guard: transitively imports the full domain
