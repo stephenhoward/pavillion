@@ -1,0 +1,122 @@
+# Weekly test-coverage gap report.
+#
+# The unit and integration suites each run with V8 coverage into their own
+# report directory, and scripts/coverage-summary.ts renders the pair into a
+# worklist of what is untested — which lands in a single rolling GitHub issue
+# labelled `coverage-report` that an agent or a human can pull from.
+#
+# The two tiers stay in separate columns rather than being blended into one
+# percentage: unit coverage says a file's logic has an isolated test,
+# integration coverage says the file is reachable through a real DB/HTTP path,
+# and a file with only one of them is covered against only one class of failure.
+#
+# Gaps therefore do NOT fail this workflow — a failed run means the tooling
+# itself broke, which is what the scheduled-failure email should mean.
+name: Weekly Coverage
+on:
+  schedule:
+    # Mondays 08:00 UTC — after Renovate (06:00) and the health scan (07:00), so
+    # the three weekly jobs don't contend for runners.
+    - cron: '0 8 * * 1'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  coverage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: '.node-version'
+          cache: 'npm'
+
+      - run: npm install
+
+      # Both runs keep going on failure: coverage.reportOnFailure is set, so a
+      # failing test still yields a report, and a tier that produced nothing is
+      # reported as a tier error by coverage-summary.ts, never as 0% coverage.
+      - name: Unit coverage
+        continue-on-error: true
+        run: npm run test:coverage
+
+      - name: Integration coverage
+        continue-on-error: true
+        run: npm run test:coverage:integration
+
+      - name: Build report
+        id: report
+        run: |
+          npx tsx scripts/coverage-summary.ts \
+            unit=coverage/unit/coverage-summary.json \
+            integration=coverage/integration/coverage-summary.json \
+            --root "$GITHUB_WORKSPACE" \
+            --out report.md \
+            --json-out coverage-gaps.json \
+            --sha "$GITHUB_SHA" \
+            --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+
+      - name: Upload coverage gaps
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-gaps
+          path: |
+            coverage-gaps.json
+            coverage/unit/coverage-summary.json
+            coverage/integration/coverage-summary.json
+          if-no-files-found: warn
+          retention-days: 30
+
+      # One rolling issue carries the current worklist. Unlike the health scan,
+      # there is no clean state to close on — a coverage report always has
+      # something in it — so the issue stays open and its body is replaced each
+      # week. The comment (the part that notifies) is posted only when the
+      # actionable set actually changed, so an unchanged report stays quiet.
+      - name: Report to rolling issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          UNTESTED: ${{ steps.report.outputs.untested }}
+          MISSES: ${{ steps.report.outputs.misses }}
+          RUN_ERRORS: ${{ steps.report.outputs.run_errors }}
+          FINGERPRINT: ${{ steps.report.outputs.fingerprint }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          gh label create coverage-report \
+            --description "Rolling weekly test-coverage gap report" \
+            --color 1D76DB --force
+
+          issue=$(gh issue list --label coverage-report --state open --limit 1 --json number --jq '.[0].number // empty')
+
+          if [ -z "$issue" ]; then
+            gh issue create \
+              --title "Weekly coverage report" \
+              --label coverage-report \
+              --body-file report.md
+            exit 0
+          fi
+
+          previous=$(gh issue view "$issue" --json body --jq '.body' \
+            | grep -o 'coverage-fingerprint: [0-9a-f]*' | awk '{print $2}' || true)
+
+          gh issue edit "$issue" --body-file report.md
+
+          # Editing the body sends no notification; the comment is the ping, and
+          # a repeat of last week's worklist does not deserve one.
+          if [ "$RUN_ERRORS" != "0" ]; then
+            gh issue comment "$issue" --body "Report updated, but $RUN_ERRORS tier(s) produced no coverage — the worklist is incomplete. [Run]($RUN_URL)"
+          elif [ "$previous" != "$FINGERPRINT" ]; then
+            gh issue comment "$issue" --body "Worklist changed: $UNTESTED untested file(s), $MISSES below their expected tier, as of \`$GITHUB_SHA\`. [Run]($RUN_URL)"
+          else
+            echo "Worklist unchanged (fingerprint $FINGERPRINT) — body refreshed without a comment."
+          fi

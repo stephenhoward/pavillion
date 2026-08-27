@@ -1,4 +1,4 @@
-import { defineConfig } from 'vitest/config';
+import { defineConfig, coverageConfigDefaults } from 'vitest/config';
 import vue from '@vitejs/plugin-vue';
 
 const sharedExclude = [
@@ -141,6 +141,29 @@ export default defineConfig({
       },
     ],
     coverage: {
+      // Coverage is measured for the weekly report (.github/workflows/
+      // coverage.weekly.yaml), which is a gap list: a file no test ever imports
+      // must show as 0%, not vanish. V8's default is to report only files the
+      // run actually loaded, so `include` below is what makes an untested file
+      // visible at all. Expect a much lower headline number than an
+      // imported-files-only report would show — that is the measurement
+      // working, not a regression.
+      provider: 'v8',
+      include: ['src/**/*.{ts,vue}'],
+      exclude: [
+        ...coverageConfigDefaults.exclude,
+        '**/test/**',
+        '**/test-utils/**',
+        '**/*.test.ts',
+        '**/*.test.tsx',
+        '**/locales/**',
+        'src/**/assets/**',
+      ],
+      reporter: ['text-summary', 'json-summary'],
+      // Each tier writes its own report; scripts/coverage-summary.ts reads both
+      // and keeps the columns separate, because unit and integration coverage
+      // answer different questions about a file.
+      reportsDirectory: './coverage/unit',
       reportOnFailure: true,
     },
   },
