@@ -1,6 +1,6 @@
 ---
 name: triage-health
-description: Use when triaging the weekly health report — the Monday Trivy scan, the rolling health-report GitHub issue, new CVE or vulnerability findings, base-image security advisories, or a request to turn scan output into tracked security work. Also the /triage-health entry point.
+description: Weekly Trivy health-report triage — turns scan findings into tracked security beads and maintains the base-image CVE watch list. Use when triaging the weekly health report, the Monday Trivy scan, the rolling health-report GitHub issue, new CVE or vulnerability findings, base-image security advisories, or a request to turn scan output into tracked security work. Also the /triage-health entry point.
 ---
 
 # Triage the weekly health report
