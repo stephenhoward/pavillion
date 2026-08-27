@@ -66,6 +66,7 @@ Recurring agent time-wasters, verified against session history — read before s
 - `grep` in the Bash tool is a ugrep shim, not `/usr/bin/grep`. `\+` in patterns fails with "invalid syntax" — match a literal leading `+` (e.g. git-diff added lines) with `'^[+]'`. Prefer the Grep tool for searches.
 - A no-match `grep` exits 1, which marks the whole Bash call as an error and skips any later `&&` steps. Append `|| true` when zero matches is an acceptable outcome, or end compound commands with something that always succeeds.
 - `npm run test:e2e` (154 tests) exceeds the default 2-minute Bash timeout; pass a 10-minute timeout when running it.
+- Running a single integration test file requires the integration config: `npx vitest run <file> --config vitest.integration.config.ts`. The default vitest config excludes `src/server/**/test/integration/**`, so without the flag vitest reports "No test files found" and exits 1 — an exclusion, not a failure.
 - Before editing a file, view it with the Read tool, not `sed`/`cat` — the Edit tool refuses files that were only viewed via Bash, and the failed attempt plus forced re-read wastes two calls.
 
 ## Path Aliases

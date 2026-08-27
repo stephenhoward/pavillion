@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { EventEmitter } from 'events';
 import request from 'supertest';
 import { DateTime } from 'luxon';
+import { Op } from 'sequelize';
 
 import { TestEnvironment } from '@/server/common/test/lib/test_environment';
 import { waitFor } from '@/server/common/test/helpers/emit-and-settle';
@@ -41,11 +42,62 @@ describe('Cancel / Restore Event Occurrence API (date-based)', () => {
   // across tests.
   let recurringEventId: string;
 
-  // Separate recurring events exclusively for the monthly / yearly happy-path
-  // assertions on GET /upcoming-occurrences. Created per-test so they start
-  // from a clean exclusion-schedule state.
+  // Separate recurring events exclusively for read-only GET assertions
+  // (monthly / yearly happy paths, limit clamp). No test writes an exclusion
+  // against them, so a single beforeAll copy is test-equivalent to per-test
+  // copies — and avoids re-firing their instance-materialization listener
+  // chains 31 times (see the settle notes in the hooks below).
   let monthlyEventId: string;
   let yearlyEventId: string;
+
+  // Fixtures are anchored relative to the current date. The
+  // upcoming-occurrences endpoint returns only occurrences *after now*, so a
+  // hardcoded absolute window silently ages out: once wall-clock time passes
+  // most of the span, the assertions starve for future occurrences and CI
+  // fails on a date, not a code change. Deriving the windows from `now`
+  // keeps a healthy count of past *and* future occurrences on every run.
+  //
+  // The recurrence anchor day is pinned to ≤28 so monthly/yearly strides
+  // never skip a short month regardless of which calendar day the suite runs
+  // on.
+  function fixtureAnchor(): DateTime {
+    const anchorDay = Math.min(DateTime.now().day, 28);
+    return DateTime.now().set({
+      day: anchorDay, hour: 10, minute: 0, second: 0, millisecond: 0,
+    });
+  }
+
+  const fmt = (d: DateTime) => d.toFormat("yyyy-MM-dd'T'HH:mm:ss");
+
+  /**
+   * Wait until the instance-materialization listener chain for `eventId` has
+   * finished writing.
+   *
+   * POST /events returns before the async `eventCreated` listener
+   * (buildEventInstances) has persisted the event's instance rows; those
+   * writes otherwise keep queuing on the shared sqlite connection while the
+   * test body runs, and on a starved runner whichever test happens to be next
+   * absorbs the drain and blows the 5000ms budget (the failing case migrates
+   * between runs — the signature that got this settle added).
+   *
+   * buildEventInstances sorts instances chronologically before saving them
+   * one by one, so the presence of a row at/after `finalRowFloor` — a bound
+   * strictly between the second-to-last and last expected occurrence — is a
+   * deterministic "chain complete" signal, robust to the exact first-row
+   * boundary (whether today's occurrence counts as upcoming depends on the
+   * time of day the suite runs).
+   */
+  async function settleInstanceMaterialization(eventId: string, finalRowFloor: DateTime): Promise<void> {
+    await waitFor(
+      () => EventInstanceEntity.findOne({
+        where: {
+          event_id: eventId,
+          start_time: { [Op.gte]: finalRowFloor.toJSDate() },
+        },
+      }),
+      { timeoutMs: 8000 },
+    );
+  }
 
   async function createCalendarViaApi(token: string, urlName: string): Promise<{ id: string; urlName: string }> {
     const response = await request(env.app)
@@ -116,55 +168,8 @@ describe('Cancel / Restore Event Occurrence API (date-based)', () => {
     // calendar id is kept around for future cross-calendar probes.
     void ownerCalendarUrlName;
     void attackerCalendarId;
-  });
 
-  afterAll(async () => {
-    if (env) {
-      // Settle the async eventCreated listeners (buildEventInstances) kicked
-      // off by the final beforeEach before teardown: poll for the actual end
-      // state — instance rows for the weekly and monthly fixtures — instead
-      // of sleeping a fixed budget. The yearly fixture is excluded
-      // on purpose: its next occurrence is ~11 months out, beyond the 6-month
-      // materialization horizon, so its listener writes no rows to poll for.
-      await waitFor(async () => {
-        const [weekly, monthly] = await Promise.all([
-          EventInstanceEntity.count({ where: { event_id: recurringEventId } }),
-          EventInstanceEntity.count({ where: { event_id: monthlyEventId } }),
-        ]);
-        return weekly > 0 && monthly > 0;
-      });
-      await env.cleanup();
-    }
-  });
-
-  beforeEach(async () => {
-    // Fixtures are anchored relative to the current date. The
-    // upcoming-occurrences endpoint returns only occurrences *after now*, so a
-    // hardcoded absolute window silently ages out: once wall-clock time passes
-    // most of the span, the assertions starve for future occurrences and CI
-    // fails on a date, not a code change (see pv-p73e). Deriving the windows
-    // from `now` keeps a healthy count of past *and* future occurrences on
-    // every run.
-    const fmt = (d: DateTime) => d.toFormat("yyyy-MM-dd'T'HH:mm:ss");
-    // Pin the recurrence anchor day to ≤28 so monthly/yearly strides never skip
-    // a short month regardless of which calendar day the suite runs on.
-    const anchorDay = Math.min(DateTime.now().day, 28);
-    const anchor = DateTime.now().set({
-      day: anchorDay, hour: 10, minute: 0, second: 0, millisecond: 0,
-    });
-
-    // Weekly: 4 weeks in the past through 20 weeks ahead → ~20 future weekly
-    // occurrences, well clear of the endpoint's default limit of 10.
-    const weeklyStart = anchor.minus({ weeks: 4 });
-    recurringEventId = await createRecurringEventViaApi(
-      ownerToken,
-      ownerCalendarId,
-      fmt(weeklyStart),
-      fmt(anchor.plus({ weeks: 20 })),
-      fmt(weeklyStart.plus({ hours: 1 })),
-      'Weekly Standup',
-      'weekly',
-    );
+    const anchor = fixtureAnchor();
 
     // Monthly: 1 month in the past through ~24 months ahead → ~23 future
     // occurrences. Spans beyond the ~6-month materialization window so a
@@ -182,7 +187,8 @@ describe('Cancel / Restore Event Occurrence API (date-based)', () => {
 
     // Yearly: 1 month in the past through ~9 years ahead. The first *upcoming*
     // occurrence is ~11 months out — beyond the materialization horizon, which
-    // is the motivating case for this endpoint.
+    // is the motivating case for this endpoint. That also means its listener
+    // chain materializes no instance rows, so there is nothing to settle on.
     const yearlyStart = anchor.minus({ months: 1 });
     yearlyEventId = await createRecurringEventViaApi(
       ownerToken,
@@ -193,6 +199,52 @@ describe('Cancel / Restore Event Occurrence API (date-based)', () => {
       'Yearly Retrospective',
       'yearly',
     );
+
+    // Monthly materialization is truncated by the ~6-month horizon: the
+    // anchor+5-months occurrence is always strictly inside it, while whether
+    // the anchor+6-months row lands depends on the hour the suite runs. Wait
+    // for the +5-months row (floor at +4.5 months); at most one straggler
+    // write can remain, which drains ahead of the first beforeEach's queries
+    // on the FIFO connection.
+    await settleInstanceMaterialization(monthlyEventId, anchor.plus({ months: 4, days: 15 }));
+  });
+
+  afterAll(async () => {
+    if (env) {
+      // The eventCreated materialization chains are already settled
+      // deterministically inside beforeAll/beforeEach (see
+      // settleInstanceMaterialization), so unlike the previous shape of this
+      // hook there is no listener backlog to poll for here. Keep one query
+      // before teardown anyway: it queues behind any write still pending on
+      // the FIFO sqlite connection (e.g. the possible monthly straggler row),
+      // so the fork never tears down under a pending native-module write.
+      await EventInstanceEntity.count();
+      await env.cleanup();
+    }
+  });
+
+  beforeEach(async () => {
+    const anchor = fixtureAnchor();
+
+    // Weekly: 4 weeks in the past through 20 weeks ahead → ~20 future weekly
+    // occurrences, well clear of the endpoint's default limit of 10. The
+    // 20-week bound sits inside the ~6-month materialization horizon, so the
+    // final materialized row is always the anchor+20-weeks occurrence.
+    const weeklyStart = anchor.minus({ weeks: 4 });
+    recurringEventId = await createRecurringEventViaApi(
+      ownerToken,
+      ownerCalendarId,
+      fmt(weeklyStart),
+      fmt(anchor.plus({ weeks: 20 })),
+      fmt(weeklyStart.plus({ hours: 1 })),
+      'Weekly Standup',
+      'weekly',
+    );
+
+    // Settle the materialization chain inside the hook budget so its writes
+    // cannot race the test body. Floor between the anchor+19-weeks and
+    // anchor+20-weeks occurrences (margin ≫ any DST skew).
+    await settleInstanceMaterialization(recurringEventId, anchor.plus({ weeks: 19, days: 3 }));
   });
 
   describe('GET /events/:eventId/upcoming-occurrences', () => {
