@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import type { ReportInput } from '../../../scripts/trivy-summary.js';
 import {
+  checkReportUsability,
   computeDelta,
   parseCvesLine,
   parseWatchTable,
@@ -1013,5 +1014,82 @@ describe('parseWatchTable', () => {
     ].join('\n');
 
     expect(parseWatchTable(design)).toEqual(['CVE-2026-9999']);
+  });
+});
+
+/**
+ * The usability guard is the third leg of the "absence is not evidence" rule,
+ * alongside `scan_errors` (the scan failed) and `missingScans` (the scan never
+ * ran). It covers the case both of those miss: a report file that is present
+ * and parses, but names no scan target at all. Resolution is derived from
+ * absence, so an empty report otherwise reads as "every CVE is fixed" and
+ * closes every open bead.
+ */
+describe('checkReportUsability', () => {
+  const usable: ReportInput = {
+    label: 'repository',
+    json: { Results: [{ Target: 'package-lock.json', Vulnerabilities: [vuln()] }] },
+  };
+
+  it('passes a report that names at least one scan target through untouched', () => {
+    expect(checkReportUsability([usable])).toEqual([usable]);
+  });
+
+  it('passes a scanned target that found nothing — an empty target list is clean', () => {
+    const clean: ReportInput = { label: 'image', json: { Results: [{ Target: 'debian 12.5 (bookworm)' }] } };
+
+    expect(checkReportUsability([clean])).toEqual([clean]);
+  });
+
+  it.each([
+    ['a null Results field', { Results: null }],
+    ['a Results field that is not an array', { Results: { Target: 'package-lock.json' } }],
+    ['no Results field at all', { SchemaVersion: 2, ArtifactName: '.' }],
+    ['an empty Results array', { Results: [] }],
+    ['a body that is not an object', 'not a report'],
+    ['a null body', null],
+  ])('marks a report with %s as a failed scan', (_label, json) => {
+    const [checked] = checkReportUsability([{ label: 'repository', json }]);
+
+    expect(checked.error).toMatch(/no scan results/);
+    expect(checked.label).toBe('repository');
+  });
+
+  it('leaves an existing read error as the reported cause', () => {
+    const unread: ReportInput = { label: 'image', json: null, error: 'could not read trivy-image.json (ENOENT)' };
+
+    expect(checkReportUsability([unread])).toEqual([unread]);
+  });
+
+  it('keeps an unusable report from resolving beads that the scan never re-examined', () => {
+    const cveBeads = [{ id: 'pv-aaaa', title: 'bump undici', status: 'open', notes: 'CVEs: CVE-2026-0001' }];
+    const watchBeads = [{ id: 'pv-bbbb', design: '| CVE-2026-9999 | HIGH | perl | image | 2026-08-01 | none |' }];
+    const empty: ReportInput[] = [
+      { label: 'repository', json: { Results: null } },
+      { label: 'image', json: { Results: null } },
+    ];
+
+    const unguarded = computeDelta(inputs({
+      reports: empty,
+      expectedScans: ['repository', 'image'],
+      cveBeads,
+      watchBeads,
+    }));
+    // Without the guard the core has nothing to object to: both labels are
+    // present and neither report carries an error, so absence reads as fixed.
+    expect(unguarded.resolved.beads).toHaveLength(1);
+    expect(unguarded.resolved.watchEntries).toEqual(['CVE-2026-9999']);
+
+    const guarded = computeDelta(inputs({
+      reports: checkReportUsability(empty),
+      expectedScans: ['repository', 'image'],
+      cveBeads,
+      watchBeads,
+    }));
+
+    expect(guarded.resolution_suppressed).toBe(true);
+    expect(guarded.resolved).toEqual({ beads: [], watchEntries: [] });
+    expect(guarded.scan_errors).toHaveLength(2);
+    expect(guarded.scan_errors[0]).toMatch(/^repository: /);
   });
 });

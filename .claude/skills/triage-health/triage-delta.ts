@@ -3,15 +3,19 @@
  * a categorized delta the /triage-health agent can act on without re-deriving
  * anything.
  *
- * This module is the deterministic half of the skill. Everything here is pure:
- * scan reports, filed CVE beads, the rolling watch bead, and open Renovate PRs
- * all arrive as data. The CLI shell (separate file) owns the `gh` / `bd` IO.
+ * This module is the deterministic half of the skill. Everything above the CLI
+ * shell divider is pure: scan reports, filed CVE beads, the rolling watch bead,
+ * and open Renovate PRs all arrive as data. The shell at the bottom of the file
+ * is the only part that runs `gh` or `bd`.
  *
  * Design mirrors scripts/trivy-summary.ts:
  *   - Pure core split from the IO shell so the categorization is unit-tested
  *     against fixtures rather than against a live GitHub run.
  *   - No new dependencies; Trivy JSON is parsed by `summarize()` from
  *     scripts/trivy-summary.ts rather than re-implemented here.
+ *
+ * Usage:
+ *   npx tsx .claude/skills/triage-health/triage-delta.ts [--out FILE]
  *
  * Triage contract:
  *   - Scope follows the health report itself: CRITICAL/HIGH vulnerabilities,
@@ -37,8 +41,15 @@
  *   - Prose belongs to the agent. Everything this module narrows away is
  *     reported as structured data; SKILL.md turns it into sentences.
  */
+import { execFileSync } from 'node:child_process';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
+
 import {
   SEVERITIES,
+  readReports,
   summarize,
   type Finding,
   type ReportInput,
@@ -951,4 +962,311 @@ export function computeDelta(inputs: DeltaInputs): Delta {
     scan_errors: summary.errors,
     scope_notes: { untriagedMisconfigurations: raw.untriagedMisconfigurations, missingScans },
   };
+}
+
+// ---------------------------------------------------------------------------
+// CLI shell — the only IO in this file. It gathers the four inputs
+// `computeDelta()` needs and prints the result; it decides nothing.
+// ---------------------------------------------------------------------------
+
+/**
+ * The files `health.weekly.yaml` uploads in its `trivy-reports` artifact, and
+ * the scan label each one carries into the delta.
+ *
+ * This list is also `expectedScans`: it is what the run *intends* to read, so a
+ * file that never arrives is reported as a missing scan rather than being
+ * invisible. It must stay in step with the workflow's Trivy steps — a scan
+ * added there and not here is triaged by nobody.
+ */
+const SCAN_FILES = [
+  ['repository', 'trivy-fs.json'],
+  ['image', 'trivy-image.json'],
+] as const;
+
+const EXPECTED_SCANS: string[] = SCAN_FILES.map(([label]) => label);
+const SCAN_ARTIFACT = 'trivy-reports';
+const HEALTH_WORKFLOW = 'health.weekly.yaml';
+const HEALTH_REPORT_LABEL = 'health-report';
+
+/**
+ * Cap on every `bd list` read. bd truncates at its own default of 50 without
+ * saying so, so the limit is always explicit — and a read that comes back *at*
+ * the cap is treated as truncated rather than complete, because triaging
+ * against a partial view of the filed beads re-files work already tracked.
+ */
+const BEAD_LIMIT = 400;
+
+/**
+ * Reject a report that was present and parsed but named no scan target at all.
+ *
+ * This is the third leg of "absence is not evidence", alongside the two the
+ * core already has: `scan_errors` covers a scan that failed, `missingScans`
+ * covers a scan that never ran, and this covers a scan whose report arrived
+ * empty — `Results: null`, `Results: []`, a truncated file, an error page.
+ * `summarize()` and `readRawReports()` both skip a non-array `Results` quietly,
+ * so without this an empty report resolves every CVE bead and prunes every
+ * watch entry.
+ *
+ * A report that scanned a target and found nothing in it is a different thing
+ * and stays usable: the target row is the evidence that the scanner looked.
+ *
+ * Pure and exported so the guard is unit-tested rather than resting on a live
+ * `gh run download`; the shell applies it to everything it reads.
+ */
+export function checkReportUsability(reports: ReportInput[]): ReportInput[] {
+  return reports.map(report => {
+    if (report.error) return report;
+
+    const results = (report.json as { Results?: unknown } | null)?.Results;
+    if (Array.isArray(results) && results.length > 0) return report;
+
+    return {
+      ...report,
+      error: 'report parsed but listed no scan results — a scanner that examined nothing '
+        + 'is a failed scan, not a clean one',
+    };
+  });
+}
+
+/**
+ * Run a command with an argument array — never a shell string, so no external
+ * value is ever interpolated into a command line.
+ */
+function capture(command: string, args: string[]): string {
+  try {
+    return execFileSync(command, args, { encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 });
+  }
+  catch (err) {
+    const stderr = (err as { stderr?: string }).stderr;
+    throw new Error(`\`${command} ${args.join(' ')}\` failed: ${stderr?.trim() || (err as Error).message}`);
+  }
+}
+
+function captureJson<T>(command: string, args: string[]): T {
+  const out = capture(command, args);
+  try {
+    return JSON.parse(out) as T;
+  }
+  catch {
+    throw new Error(`\`${command} ${args.join(' ')}\` did not return JSON: ${out.slice(0, 200)}`);
+  }
+}
+
+function optionalString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+interface BeadRow {
+  id?: unknown;
+  title?: unknown;
+  status?: unknown;
+  notes?: unknown;
+  design?: unknown;
+}
+
+/**
+ * One `bd list` read, with the shape and cardinality asserted rather than
+ * assumed. An unparseable, non-array, or truncated read aborts: bead state is
+ * what stops this run re-filing work, and a silently short list looks exactly
+ * like "nothing is tracked yet".
+ */
+function listBeads(filters: string[]): BeadRow[] {
+  const args = ['list', ...filters, '-n', String(BEAD_LIMIT), '--json'];
+  const rows = captureJson<unknown>('bd', args);
+
+  if (!Array.isArray(rows)) {
+    throw new Error(`\`bd ${args.join(' ')}\` returned ${typeof rows}, expected an array of beads`);
+  }
+  if (rows.length >= BEAD_LIMIT) {
+    throw new Error(
+      `\`bd ${args.join(' ')}\` returned ${rows.length} beads, at the -n ${BEAD_LIMIT} cap — the read is `
+      + 'truncated, and triaging against a partial bead list re-files work that is already tracked. '
+      + 'Raise BEAD_LIMIT and re-run.',
+    );
+  }
+  for (const row of rows as BeadRow[]) {
+    if (!optionalString(row.id)) {
+      throw new Error(`\`bd ${args.join(' ')}\` returned a bead with no id: ${JSON.stringify(row).slice(0, 200)}`);
+    }
+  }
+  return rows as BeadRow[];
+}
+
+/** One row of `gh pr list --json number,title,headRefName,state,author`. */
+interface GhPrRow {
+  number: number;
+  title?: string;
+  headRefName?: string;
+  state?: string;
+  author?: { login?: string; is_bot?: boolean };
+}
+
+/**
+ * Open Renovate PRs, forwarded whole.
+ *
+ * `--author app/renovate` is a filter, not a guarantee: the trust check that
+ * decides whether a PR may suppress a security finding lives in `computeDelta`,
+ * where it is unit-tested, so `state` and the author's login and bot flag are
+ * carried through rather than dropped once the flag has been passed.
+ */
+function fetchRenovatePrs(): RenovatePr[] {
+  const args = [
+    'pr', 'list',
+    '--author', 'app/renovate',
+    '--state', 'open',
+    '--json', 'number,title,headRefName,state,author',
+  ];
+  const rows = captureJson<GhPrRow[]>('gh', args);
+  if (!Array.isArray(rows)) {
+    throw new Error(`\`gh ${args.join(' ')}\` returned ${typeof rows}, expected an array of pull requests`);
+  }
+
+  return rows.map(row => ({
+    number: row.number,
+    title: row.title ?? '',
+    headRefName: row.headRefName ?? '',
+    state: row.state ?? '',
+    author: row.author?.login,
+    authorIsBot: row.author?.is_bot,
+  }));
+}
+
+interface GhRunRow {
+  databaseId?: number;
+  headSha?: string;
+  url?: string;
+  createdAt?: string;
+}
+
+interface Scan {
+  reports: ReportInput[];
+  metadata: DeltaMetadata;
+}
+
+/** Every expected scan, marked failed for one shared reason. */
+function scanFailure(reason: string): ReportInput[] {
+  return SCAN_FILES.map(([label]) => ({ label, json: null, error: reason }));
+}
+
+/**
+ * Download the newest successful weekly scan.
+ *
+ * Every failure here is *represented* rather than thrown: no successful run, an
+ * expired artifact, and an unreadable report all become per-scan errors, so the
+ * delta says "the scan did not happen" — which suppresses resolution — instead
+ * of an empty delta that reads as "nothing was found".
+ */
+function fetchScan(dir: string): Scan {
+  let run: GhRunRow | undefined;
+  try {
+    const runs = captureJson<GhRunRow[]>('gh', [
+      'run', 'list',
+      '--workflow', HEALTH_WORKFLOW,
+      '--status', 'success',
+      '--limit', '1',
+      '--json', 'databaseId,headSha,url,createdAt',
+    ]);
+    run = Array.isArray(runs) ? runs[0] : undefined;
+  }
+  catch (err) {
+    return { reports: scanFailure(`could not list ${HEALTH_WORKFLOW} runs (${(err as Error).message})`), metadata: {} };
+  }
+
+  if (!run?.databaseId) {
+    return { reports: scanFailure(`no successful ${HEALTH_WORKFLOW} run to triage`), metadata: {} };
+  }
+
+  const metadata: DeltaMetadata = {
+    sha: run.headSha,
+    runUrl: run.url,
+    scanDate: run.createdAt?.slice(0, 10),
+  };
+
+  try {
+    capture('gh', ['run', 'download', String(run.databaseId), '-n', SCAN_ARTIFACT, '-D', dir]);
+  }
+  catch (err) {
+    return {
+      reports: scanFailure(
+        `could not download the ${SCAN_ARTIFACT} artifact from run ${run.databaseId} — `
+        + `artifacts expire after 30 days (${(err as Error).message})`,
+      ),
+      metadata,
+    };
+  }
+
+  const reports = readReports(SCAN_FILES.map(([label, file]) => `${label}=${path.join(dir, file)}`));
+  return { reports: checkReportUsability(reports), metadata };
+}
+
+/** The open rolling health-report issue the agent comments its summary on. */
+function fetchHealthReportIssue(): number | undefined {
+  const rows = captureJson<{ number?: number }[]>('gh', [
+    'issue', 'list',
+    '--label', HEALTH_REPORT_LABEL,
+    '--state', 'open',
+    '--limit', '1',
+    '--json', 'number',
+  ]);
+  return Array.isArray(rows) ? rows[0]?.number : undefined;
+}
+
+export function main(argv: string[] = process.argv.slice(2)): number {
+  const flags: Record<string, string> = {};
+  for (let i = 0; i < argv.length; i++) {
+    if (!argv[i].startsWith('--')) {
+      process.stderr.write('usage: triage-delta.ts [--out FILE]\n');
+      return 1;
+    }
+    flags[argv[i].slice(2)] = argv[++i] ?? '';
+  }
+
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'triage-health-'));
+  let delta: Delta;
+  try {
+    const scan = fetchScan(dir);
+    delta = computeDelta({
+      reports: scan.reports,
+      expectedScans: EXPECTED_SCANS,
+      // All statuses: `computeDelta` keeps only the open ones, and a closed
+      // bead deliberately does not suppress a CVE that came back.
+      cveBeads: listBeads(['--label', 'cve', '--all']).map(row => ({
+        id: String(row.id),
+        title: optionalString(row.title),
+        status: optionalString(row.status),
+        notes: optionalString(row.notes),
+      })),
+      // Open only, and passed through however many there are: zero is a valid
+      // first run and more than one is an abort, both decided by the core.
+      watchBeads: listBeads(['--label', 'cve-watch']).map(row => ({
+        id: String(row.id),
+        design: optionalString(row.design),
+      })),
+      renovatePrs: fetchRenovatePrs(),
+      metadata: { ...scan.metadata, healthReportIssue: fetchHealthReportIssue() },
+    });
+  }
+  finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+
+  const json = JSON.stringify(delta, null, 2) + '\n';
+  if (flags.out) fs.writeFileSync(flags.out, json);
+  else process.stdout.write(json);
+
+  // Findings are the output, not the exit status: a delta full of new CVEs is a
+  // successful run. Non-zero is reserved for a failure the delta cannot carry —
+  // unreadable bead state, or a watch list split across several beads.
+  return 0;
+}
+
+// Run only when invoked directly (not when imported by the test).
+if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
+  try {
+    process.exit(main());
+  }
+  catch (err) {
+    process.stderr.write(`triage-delta: ${(err as Error).message}\n`);
+    process.exit(1);
+  }
 }
