@@ -24,11 +24,18 @@
  *     idempotency invariant the whole weekly workflow rests on.
  *   - Secrets and misconfigurations are always actionable: "no fixed version"
  *     is meaningless for them, so they never reach the watch list.
- *   - A failed scan surfaces as `scan_errors`, never as a clean delta, and
- *     never as a resolution: absence from a partial scan is not evidence.
+ *   - A failed, missing, or absent scan surfaces as `scan_errors` /
+ *     `scope_notes.missingScans` and suppresses resolution entirely: absence
+ *     from a scan that did not run is not evidence a finding is gone.
+ *   - Resolution is decided against every id the scan named at *any* severity,
+ *     not against the CRITICAL/HIGH subset triaged here. A CVE re-rated down is
+ *     still present, so it must not read as fixed.
  *   - Uncertainty always fails toward "file a bead". A Renovate match that
- *     cannot be proven to reach the fixed version, or a bead whose status
- *     cannot be read as open, produces work rather than suppressing it.
+ *     cannot be proven to reach the fixed version, that cannot be tied to this
+ *     package by *both* branch and title, or that leaves any package of a
+ *     collapsed finding uncovered, produces work rather than suppressing it.
+ *   - Prose belongs to the agent. Everything this module narrows away is
+ *     reported as structured data; SKILL.md turns it into sentences.
  */
 import {
   SEVERITIES,
@@ -60,27 +67,47 @@ export interface DeltaFinding {
   installed?: string;
   /** Undefined when no fixed version is published — the watch-list trigger. */
   fixedVersion?: string;
+  /**
+   * The fixed version published for each individual package, keyed by package
+   * name. `fixedVersion` above is the flattened display value; coverage
+   * decisions read this map, because comparing a PR's target against a *different*
+   * package's fix compares numbers from unrelated version spaces.
+   */
+  fixedVersions?: Record<string, string>;
   fixable: boolean;
   url?: string;
   /**
-   * An open Renovate PR that names this package but could not be proven to
-   * reach `fixedVersion`. The finding is still filed — the hint only saves the
-   * agent from re-deriving the link.
+   * Open Renovate PRs that named a package of this finding but did not earn
+   * suppression. The finding is still filed — the hints only save the agent from
+   * re-deriving the links.
    */
-  renovateHint?: RenovateHint;
+  renovateHints?: RenovateHint[];
 }
 
 /** A Renovate PR that matched a package but did not earn suppression. */
 export interface RenovateHint {
   number: number;
   title: string;
+  /** The finding package this PR was matched against. */
+  pkg: string;
   /** Why the match was not treated as coverage. */
   reason: string;
 }
 
-/** A finding an open Renovate PR already carries the upgrade for. */
+/** The identifying half of a `RenovatePr`, as carried in the delta output. */
+export interface RenovatePrRef {
+  number: number;
+  title: string;
+}
+
+/**
+ * A finding whose every package is provably carried by an open Renovate PR.
+ *
+ * Plural because one collapsed finding can span several packages, and Renovate
+ * opens one PR per dependency: `prs` lists every PR the coverage rests on.
+ */
 export interface CoveredFinding extends DeltaFinding {
-  pr: { number: number; title: string };
+  prs: RenovatePrRef[];
 }
 
 /** Findings this scan repeats that are already recorded somewhere. */
@@ -149,10 +176,23 @@ export interface RenovatePr {
   state: string;
   /** PR author login (`gh pr list --json author` → `.author.login`). */
   author?: string;
+  /** `gh pr list --json author` → `.author.is_bot`; a human is never Renovate. */
+  authorIsBot?: boolean;
 }
 
 export interface DeltaInputs {
   reports: ReportInput[];
+  /**
+   * The scan labels this run must see before it may treat absence as
+   * resolution — the same labels the CLI shell passes to `readReports()`
+   * (`repository`, `image`).
+   *
+   * A scan that failed shows up in `scan_errors`; a scan that was never
+   * attempted shows up nowhere at all, which is why the expected set has to be
+   * stated rather than inferred from what arrived. Any expected label with no
+   * report suppresses resolution wholesale.
+   */
+  expectedScans: string[];
   cveBeads: CveBead[];
   /**
    * Every open bead labelled `cve-watch`, passed through unfiltered: the
@@ -165,20 +205,22 @@ export interface DeltaInputs {
 }
 
 /**
- * What this run deliberately did not triage, as data rather than as silence.
+ * What this run deliberately did not triage, as structured data rather than as
+ * silence — and deliberately not as prose. Composing these fields into the
+ * sentences the triage summary carries is the agent's job (SKILL.md), per the
+ * spec's "script for determinism, agent for judgment (including wording)".
  *
- * The spec puts *all* misconfigurations in scope regardless of severity, while
- * also forbidding any change to `trivy-summary.ts`, whose `summarize()`
- * itemizes only CRITICAL/HIGH misconfigurations. Those two rules cannot both
- * hold, so the narrowing is reported instead of hidden: the agent's summary
- * says "N MEDIUM misconfigurations counted but not triaged" and a human decides
- * whether that warrants widening `summarize()`.
+ * `untriagedMisconfigurations` exists because the spec contradicts itself: it
+ * puts *all* misconfigurations in scope regardless of severity while forbidding
+ * any change to `trivy-summary.ts`, whose `summarize()` itemizes only
+ * CRITICAL/HIGH. The narrowing is reported instead of hidden, and a human
+ * decides whether it warrants widening `summarize()`.
  */
 export interface ScopeNotes {
   /** Misconfigurations counted by the scan but below the itemization cut. */
   untriagedMisconfigurations: Record<Severity, number>;
-  /** Human-readable statements the agent repeats in its triage summary. */
-  notes: string[];
+  /** Expected scan labels with no report at all this run (see `expectedScans`). */
+  missingScans: string[];
 }
 
 export interface Delta {
@@ -191,6 +233,14 @@ export interface Delta {
   new_no_fix: DeltaFinding[];
   already_tracked: AlreadyTracked;
   resolved: Resolved;
+  /**
+   * True when this run refused to derive resolution at all — a failed scan, an
+   * expected scan that never arrived, or no usable report. `resolved` is then
+   * empty because nothing could be *proven* gone, which is a different claim
+   * from "nothing was resolved", and the agent must not close beads or prune
+   * watch entries on it.
+   */
+  resolution_suppressed: boolean;
   scan_errors: string[];
   scope_notes: ScopeNotes;
 }
@@ -223,24 +273,30 @@ function dedupe(ids: string[]): string[] {
 }
 
 /**
- * Extract the finding ids from the machine-readable `CVEs:` line a triage bead
- * carries in its notes. The line must start its own line — a mid-sentence
- * mention is prose, not state. Ids come back upper-cased and de-duplicated so
- * they compare directly against scan ids.
+ * Extract the finding ids from the machine-readable `CVEs:` lines a triage bead
+ * carries in its notes. Each must start its own line — a mid-sentence mention is
+ * prose, not state. Ids come back upper-cased and de-duplicated so they compare
+ * directly against scan ids.
+ *
+ * The union of *every* matching line is taken, not the first. `bd note` appends,
+ * so an amended list lands below the original; reading only the topmost one
+ * would judge a bead against a stale set and could close it on a CVE it never
+ * covered.
  */
 export function parseCvesLine(notes: string | null | undefined): string[] {
   if (!notes) return [];
 
-  const match = /^[ \t]*CVEs:[ \t]*(.*)$/im.exec(notes);
-  if (!match) return [];
-
-  return dedupe(
-    match[1]
-      .split(/[,;\s]+/)
-      .map(token => token.trim())
-      .filter(isFindingId)
-      .map(normalizeId),
-  );
+  const ids: string[] = [];
+  for (const match of notes.matchAll(/^[ \t]*CVEs:[ \t]*(.*)$/gim)) {
+    ids.push(
+      ...match[1]
+        .split(/[,;\s]+/)
+        .map(token => token.trim())
+        .filter(isFindingId)
+        .map(normalizeId),
+    );
+  }
+  return dedupe(ids);
 }
 
 /**
@@ -281,7 +337,11 @@ function hasFix(value: string | undefined): boolean {
  * perl-modules-5.40 is one upgrade decision, not four.
  */
 function collapse(findings: Finding[]): DeltaFinding[] {
-  const byKey = new Map<string, DeltaFinding & { _installed: string[]; _fixed: string[] }>();
+  // `_fixed` is keyed by package rather than flattened, so that a later coverage
+  // check compares a PR's target against the fix for the package that PR
+  // actually upgrades. Flattening loses that binding, and two packages on one
+  // CVE do not share a version space.
+  const byKey = new Map<string, DeltaFinding & { _installed: string[]; _fixed: Map<string, string[]> }>();
 
   // The collapse key is NUL-separated, written as a `\u0000` escape so the
   // separator is visible in the source. Trivy targets carry spaces
@@ -304,19 +364,22 @@ function collapse(findings: Finding[]): DeltaFinding[] {
         fixable: false,
         url: finding.url,
         _installed: [],
-        _fixed: [],
+        _fixed: new Map(),
       };
       byKey.set(key, entry);
     }
 
-    if (finding.pkg && finding.pkg !== 'unknown' && !entry.packages.includes(finding.pkg)) {
-      entry.packages.push(finding.pkg);
+    const pkg = finding.pkg && finding.pkg !== 'unknown' ? finding.pkg : undefined;
+    if (pkg && !entry.packages.includes(pkg)) {
+      entry.packages.push(pkg);
     }
     if (finding.installed && finding.installed !== 'unknown' && !entry._installed.includes(finding.installed)) {
       entry._installed.push(finding.installed);
     }
-    if (hasFix(finding.fixedVersion) && !entry._fixed.includes(finding.fixedVersion!)) {
-      entry._fixed.push(finding.fixedVersion!);
+    if (hasFix(finding.fixedVersion)) {
+      const versions = entry._fixed.get(pkg ?? '') ?? [];
+      if (!versions.includes(finding.fixedVersion!)) versions.push(finding.fixedVersion!);
+      entry._fixed.set(pkg ?? '', versions);
     }
     // The most severe row wins: a CVE rated differently per package is triaged
     // at its worst rating.
@@ -326,13 +389,20 @@ function collapse(findings: Finding[]): DeltaFinding[] {
     entry.url ??= finding.url;
   }
 
-  return [...byKey.values()].map(({ _installed, _fixed, ...entry }) => ({
-    ...entry,
-    packages: [...entry.packages].sort(),
-    installed: _installed.length > 0 ? _installed.join(', ') : undefined,
-    fixedVersion: _fixed.length > 0 ? _fixed.join(', ') : undefined,
-    fixable: _fixed.length > 0,
-  }));
+  return [...byKey.values()].map(({ _installed, _fixed, ...entry }) => {
+    const fixedVersions: Record<string, string> = {};
+    for (const [pkg, versions] of _fixed) fixedVersions[pkg] = versions.join(', ');
+    const allFixed = dedupe([..._fixed.values()].flat());
+
+    return {
+      ...entry,
+      packages: [...entry.packages].sort(),
+      installed: _installed.length > 0 ? _installed.join(', ') : undefined,
+      fixedVersion: allFixed.length > 0 ? allFixed.join(', ') : undefined,
+      fixedVersions: allFixed.length > 0 ? fixedVersions : undefined,
+      fixable: allFixed.length > 0,
+    };
+  });
 }
 
 const RENOVATE_BRANCH_PREFIX = /^renovate\//i;
@@ -352,9 +422,20 @@ function packageSlug(pkg: string): string {
 }
 
 /**
+ * The dependency a Renovate PR title names. Renovate's conventional title is
+ * `update dependency <name> to v<x>`; a grouped, monorepo, or hand-retitled PR
+ * matches nothing, which reads as "cannot prove" rather than as a match.
+ */
+const RENOVATE_TITLE_DEPENDENCY = /\bupdate\s+dependency\s+(\S+)\s+to\b/i;
+
+/**
  * True when the branch follows `renovate/<package-slug>-<version-or-keyword>`
- * for this package. Matching the branch rather than the free-text title keeps
- * the check on the one string Renovate generates to a fixed convention.
+ * for this package.
+ *
+ * This is only half the identity check — see `prNamesPackage`. The branch alone
+ * is not sufficient, because the *version* that decides coverage is read from
+ * the title, and Renovate's grouped and retitled PRs routinely carry a branch
+ * and a title naming different dependencies.
  */
 function branchNamesPackage(headRefName: string, pkg: string): boolean {
   if (!RENOVATE_BRANCH_PREFIX.test(headRefName)) return false;
@@ -375,6 +456,30 @@ function branchNamesPackage(headRefName: string, pkg: string): boolean {
 }
 
 /**
+ * True when the title's `update dependency <name>` clause resolves to this same
+ * package. This is the half that binds identity to the decisive value: the
+ * target version is parsed out of the title, so unless the title names *this*
+ * package the comparison is against an unrelated dependency's release line.
+ */
+function titleNamesPackage(title: string, pkg: string): boolean {
+  const named = RENOVATE_TITLE_DEPENDENCY.exec(title ?? '')?.[1];
+  if (!named) return false;
+
+  const slug = packageSlug(named);
+  return slug.length > 0 && slug === packageSlug(pkg);
+}
+
+/**
+ * A PR may be matched to a package only when its branch *and* its title both
+ * name that package. Either string alone has produced false coverage: the
+ * branch suffix rule alone lets `base` claim `renovate/base-64-1.x`, and the
+ * title alone is not tied to Renovate's branch convention at all.
+ */
+function prNamesPackage(pr: RenovatePr, pkg: string): boolean {
+  return branchNamesPackage(pr.headRefName ?? '', pkg) && titleNamesPackage(pr.title ?? '', pkg);
+}
+
+/**
  * Only an open PR Renovate itself opened may suppress a finding. This repo is
  * public, so anyone can open a PR on a `renovate/`-shaped branch; the author
  * check is what stops that from silencing a CVE. An absent `author` disables
@@ -384,6 +489,10 @@ function branchNamesPackage(headRefName: string, pkg: string): boolean {
 function isTrustedRenovatePr(pr: RenovatePr): boolean {
   if ((pr.state ?? '').toUpperCase() !== 'OPEN') return false;
   if (!RENOVATE_BRANCH_PREFIX.test(pr.headRefName ?? '')) return false;
+  // `gh pr list --json author` reports `is_bot`. A human account is never
+  // Renovate whatever it renames itself to; when the field is absent (older gh,
+  // a hand-built input) the login check stands on its own.
+  if (pr.authorIsBot === false) return false;
   return /^renovate(\[bot\])?$/i.test((pr.author ?? '').replace(/^app\//, ''));
 }
 
@@ -416,60 +525,129 @@ function prTargetVersion(pr: RenovatePr): string | undefined {
   return /\bto\s+v?(\d+(?:\.\d+)*(?:[-+][0-9A-Za-z.]+)?)(?![\w.-])/i.exec(pr.title)?.[1];
 }
 
-/** The outcome of matching one finding against the open Renovate PR list. */
-interface RenovateMatch {
+/** The outcome of evaluating one PR against one package of a finding. */
+interface PrEvaluation {
   pr: RenovatePr;
-  /** True only when the PR provably reaches every published fixed version. */
+  /** True only when the PR provably reaches that package's fixed version. */
   covered: boolean;
   /** Populated when `covered` is false: why the match did not suppress. */
   reason: string;
 }
 
+/** How one package of a finding relates to the open Renovate PR list. */
+interface PackageCoverage {
+  pkg: string;
+  /** The PR proven to reach this package's fixed version, when one exists. */
+  pr?: RenovatePr;
+  /** PRs that named the package without proving the upgrade. */
+  hints: RenovateHint[];
+}
+
+/** What the open Renovate PR list does, collectively, for one finding. */
+interface RenovateCoverage {
+  /** True only when *every* package of the finding is provably covered. */
+  covered: boolean;
+  /** The PRs the coverage rests on; empty unless `covered`. */
+  prs: RenovatePrRef[];
+  /** Everything that matched without earning suppression. */
+  hints: RenovateHint[];
+}
+
 /**
  * Match a fixable finding against the open Renovate PRs.
  *
- * Three deliberate narrowings, each of which turns a would-be silent drop into
+ * Four deliberate narrowings, each of which turns a would-be silent drop into
  * an extra bead a human closes as a duplicate:
  *   - Node.js dependencies only. Renovate does not upgrade OS packages, so an
  *     `image` CVE on `node` must never be claimed by a `node-forge` PR.
- *   - Branch convention, not title text (see `branchNamesPackage`).
- *   - The PR must provably reach the fixed version. A pinned or stalled PR
- *     otherwise suppresses the CVE for as long as it stays open, so anything
- *     unproven comes back as a hint on a filed finding instead.
+ *   - Branch convention *and* title dependency name must agree (`prNamesPackage`).
+ *   - The PR must provably reach the fixed version published for that same
+ *     package. A pinned or stalled PR otherwise suppresses the CVE for as long
+ *     as it stays open.
+ *   - Every package of a collapsed finding must be covered. One CVE against
+ *     `foo` and `bar` is not handled by a PR that upgrades only `foo`; partial
+ *     coverage files the whole finding, carrying the matched PRs as hints.
  */
-function matchRenovatePr(finding: DeltaFinding, prs: RenovatePr[]): RenovateMatch | undefined {
+function matchRenovate(finding: DeltaFinding, prs: RenovatePr[]): RenovateCoverage | undefined {
   if (finding.targetClass !== 'node') return undefined;
   if (finding.packages.length === 0) return undefined;
 
-  const candidates = prs.filter(pr => isTrustedRenovatePr(pr)
-    && finding.packages.some(pkg => branchNamesPackage(pr.headRefName, pkg)));
-  if (candidates.length === 0) return undefined;
+  const coverages = finding.packages.map(pkg => coverPackage(finding, pkg, prs));
+  if (coverages.every(coverage => !coverage.pr && coverage.hints.length === 0)) return undefined;
 
-  // Renovate can have several open branches for one package (a v6 line and a
-  // v7 major, say). A PR that reaches the fix wins over one that does not.
-  const matches = candidates.map(pr => evaluateRenovatePr(pr, finding));
-  return matches.find(match => match.covered) ?? matches[0];
-}
-
-/** Decide whether one matched PR provably carries this finding's fix. */
-function evaluateRenovatePr(pr: RenovatePr, finding: DeltaFinding): RenovateMatch {
-  const target = prTargetVersion(pr);
-  if (!target) {
-    return { pr, covered: false, reason: `PR #${pr.number} names the package but its target version could not be read from the title` };
+  const uncovered = coverages.filter(coverage => !coverage.pr).map(coverage => coverage.pkg);
+  if (uncovered.length === 0) {
+    return { covered: true, prs: dedupePrRefs(coverages.map(coverage => coverage.pr!)), hints: [] };
   }
 
-  const fixedVersions = (finding.fixedVersion ?? '').split(',').map(v => v.trim()).filter(Boolean);
+  return {
+    covered: false,
+    prs: [],
+    hints: coverages.flatMap(coverage => (coverage.pr
+      ? [{
+        number: coverage.pr.number,
+        title: coverage.pr.title,
+        pkg: coverage.pkg,
+        reason: `PR #${coverage.pr.number} reaches the fixed version for ${coverage.pkg}, `
+          + `but no open Renovate PR covers ${uncovered.join(', ')}`,
+      }]
+      : coverage.hints)),
+  };
+}
+
+/** Find the PR, if any, that provably upgrades one package past its fix. */
+function coverPackage(finding: DeltaFinding, pkg: string, prs: RenovatePr[]): PackageCoverage {
+  const candidates = prs.filter(pr => isTrustedRenovatePr(pr) && prNamesPackage(pr, pkg));
+  // Renovate can have several open branches for one package (a v6 line and a
+  // v7 major, say). A PR that reaches the fix wins over one that does not.
+  const evaluations = candidates.map(pr => evaluateRenovatePr(pr, pkg, finding));
+  const covering = evaluations.find(evaluation => evaluation.covered);
+
+  if (covering) return { pkg, pr: covering.pr, hints: [] };
+  return {
+    pkg,
+    hints: evaluations.map(({ pr, reason }) => ({ number: pr.number, title: pr.title, pkg, reason })),
+  };
+}
+
+function dedupePrRefs(prs: RenovatePr[]): RenovatePrRef[] {
+  const seen = new Set<number>();
+  const refs: RenovatePrRef[] = [];
+  for (const pr of prs) {
+    if (seen.has(pr.number)) continue;
+    seen.add(pr.number);
+    refs.push({ number: pr.number, title: pr.title });
+  }
+  return refs;
+}
+
+/**
+ * Decide whether one matched PR provably carries the fix for one package.
+ *
+ * The fixed version comes from `fixedVersions[pkg]`, never from the finding's
+ * flattened list: comparing this PR's target against a sibling package's fix
+ * compares numbers from unrelated version spaces and passes by coincidence.
+ */
+function evaluateRenovatePr(pr: RenovatePr, pkg: string, finding: DeltaFinding): PrEvaluation {
+  const target = prTargetVersion(pr);
+  if (!target) {
+    return { pr, covered: false, reason: `PR #${pr.number} names ${pkg} but its target version could not be read from the title` };
+  }
+
+  // A comma-separated FixedVersion is treated as "must clear all of them",
+  // which over-files rather than under-files when Trivy lists alternatives.
+  const fixedVersions = (finding.fixedVersions?.[pkg] ?? '').split(',').map(v => v.trim()).filter(Boolean);
   if (fixedVersions.length === 0) {
-    return { pr, covered: false, reason: `PR #${pr.number} names the package but the finding publishes no fixed version` };
+    return { pr, covered: false, reason: `PR #${pr.number} names ${pkg} but no fixed version is published for that package` };
   }
 
   for (const fixed of fixedVersions) {
     const order = compareVersions(target, fixed);
     if (order === undefined) {
-      return { pr, covered: false, reason: `PR #${pr.number} targets ${target}, which cannot be compared against fixed version ${fixed}` };
+      return { pr, covered: false, reason: `PR #${pr.number} targets ${target}, which cannot be compared against fixed version ${fixed} for ${pkg}` };
     }
     if (order < 0) {
-      return { pr, covered: false, reason: `PR #${pr.number} targets ${target}, below the fixed version ${fixed}` };
+      return { pr, covered: false, reason: `PR #${pr.number} targets ${target}, below the fixed version ${fixed} for ${pkg}` };
     }
   }
 
@@ -504,14 +682,37 @@ function asSeverity(value: unknown): Severity {
   return (SEVERITIES as readonly string[]).includes(upper) ? upper as Severity : 'UNKNOWN';
 }
 
+/** The raw-row collections Trivy emits, with the field carrying each id. */
+const RAW_ID_FIELDS = [
+  ['Vulnerabilities', 'VulnerabilityID'],
+  ['Misconfigurations', 'ID'],
+  ['Secrets', 'RuleID'],
+] as const;
+
+/** What one severity-blind pass over the raw Trivy JSON yields. */
+interface RawScanFacts {
+  /**
+   * Every finding id the scan named, at *any* severity. Presence, unlike
+   * triage, is severity-blind: a CVE re-rated from HIGH to MEDIUM drops out of
+   * `summarize()`'s itemized list while still being present in the image, and
+   * deriving resolution from that list would report it as fixed.
+   */
+  allIds: Set<string>;
+  /**
+   * Misconfigurations the spec puts in scope but `summarize()` does not
+   * itemize — see `ScopeNotes`.
+   */
+  untriagedMisconfigurations: Record<Severity, number>;
+}
+
 /**
- * Count the misconfigurations the spec puts in scope but `summarize()` does not
- * itemize. This is the one place the module looks at raw Trivy JSON, and it
- * reads a single field per row rather than re-implementing the parse — the
- * alternative is widening `summarize()`, which the spec forbids.
+ * The one place this module looks at raw Trivy JSON. It reads a couple of
+ * fields per row rather than re-implementing the parse; the alternative is
+ * widening `summarize()`, which the spec forbids.
  */
-function countUntriagedMisconfigurations(reports: ReportInput[]): Record<Severity, number> {
-  const counts = emptyCounts();
+function readRawReports(reports: ReportInput[]): RawScanFacts {
+  const allIds = new Set<string>();
+  const untriagedMisconfigurations = emptyCounts();
 
   for (const report of reports) {
     if (report.error) continue;
@@ -520,16 +721,36 @@ function countUntriagedMisconfigurations(reports: ReportInput[]): Record<Severit
     if (!Array.isArray(results)) continue;
 
     for (const result of results) {
-      const misconfigurations = (result as { Misconfigurations?: unknown } | null)?.Misconfigurations;
-      if (!Array.isArray(misconfigurations)) continue;
+      for (const [collection, idField] of RAW_ID_FIELDS) {
+        const rows = (result as Record<string, unknown> | null)?.[collection];
+        if (!Array.isArray(rows)) continue;
 
-      for (const misconfiguration of misconfigurations) {
-        const severity = asSeverity((misconfiguration as { Severity?: unknown } | null)?.Severity);
-        if (!ITEMIZED.includes(severity)) counts[severity]++;
+        for (const row of rows) {
+          const record = row as Record<string, unknown> | null;
+
+          const id = record?.[idField];
+          if (typeof id === 'string' && id.trim().length > 0) allIds.add(normalizeId(id));
+
+          if (collection === 'Misconfigurations') {
+            const severity = asSeverity(record?.Severity);
+            if (!ITEMIZED.includes(severity)) untriagedMisconfigurations[severity]++;
+          }
+        }
       }
     }
   }
-  return counts;
+  return { allIds, untriagedMisconfigurations };
+}
+
+/**
+ * Expected scan labels with no report at all. A scan that failed arrives with
+ * an `error` and is reported through `scan_errors`; a scan that was never
+ * attempted arrives as nothing, which is why the expected set has to be stated
+ * rather than inferred. The two lists stay disjoint.
+ */
+function missingScanLabels(expected: string[], reports: ReportInput[]): string[] {
+  const present = new Set(reports.map(report => report.label));
+  return expected.filter(label => !present.has(label));
 }
 
 /** Open beads plus the CVE lookups derived from their `CVEs:` lines. */
@@ -609,16 +830,16 @@ function categorizeFindings(
     }
 
     if (finding.fixable) {
-      const match = matchRenovatePr(finding, renovatePrs);
-      if (match?.covered) {
-        result.covered_by_renovate.push({ ...finding, pr: { number: match.pr.number, title: match.pr.title } });
+      const coverage = matchRenovate(finding, renovatePrs);
+      if (coverage?.covered) {
+        result.covered_by_renovate.push({ ...finding, prs: coverage.prs });
         continue;
       }
 
-      // An unproven match still files the finding; the hint only carries the
-      // link forward so the agent does not re-derive it.
-      const filed: DeltaFinding = match
-        ? { ...finding, renovateHint: { number: match.pr.number, title: match.pr.title, reason: match.reason } }
+      // An unproven or partial match still files the finding; the hints only
+      // carry the links forward so the agent does not re-derive them.
+      const filed: DeltaFinding = coverage && coverage.hints.length > 0
+        ? { ...finding, renovateHints: coverage.hints }
         : finding;
 
       if (watchSet.has(id)) result.newly_fixable.push(filed);
@@ -648,6 +869,9 @@ function categorizeFindings(
  * Callers must only reach this on a complete scan. Resolution is derived purely
  * from absence, and absence from a scan that did not finish means nothing —
  * acting on it would close live CVE beads and prune live watch entries.
+ *
+ * `scanIds` must be the severity-blind id set (`RawScanFacts.allIds`), not the
+ * triaged findings: a CVE downgraded to MEDIUM is still there.
  */
 function computeResolved(
   index: BeadIndex,
@@ -677,37 +901,6 @@ function computeResolved(
 }
 
 /**
- * Build the notes the agent repeats verbatim in its triage summary, so that
- * everything this run narrowed away is stated rather than dropped.
- */
-function buildScopeNotes(reports: ReportInput[], scanErrors: string[]): ScopeNotes {
-  const untriagedMisconfigurations = countUntriagedMisconfigurations(reports);
-  const notes: string[] = [];
-
-  const untriagedTotal = SEVERITIES.reduce((sum, severity) => sum + untriagedMisconfigurations[severity], 0);
-  if (untriagedTotal > 0) {
-    const breakdown = SEVERITIES
-      .filter(severity => untriagedMisconfigurations[severity] > 0)
-      .map(severity => `${untriagedMisconfigurations[severity]} ${severity}`)
-      .join(', ');
-    notes.push(
-      `${untriagedTotal} misconfiguration(s) (${breakdown}) were counted but not triaged: `
-      + 'trivy-summary.ts itemizes only CRITICAL/HIGH misconfigurations and this skill may not change its output. '
-      + 'Widening that cut is a human call.',
-    );
-  }
-
-  if (scanErrors.length > 0) {
-    notes.push(
-      `${scanErrors.length} scan(s) failed, so resolution was suppressed: absence from a partial scan is not `
-      + 'evidence a CVE is gone. No bead may be closed and no watch entry pruned from this run.',
-    );
-  }
-
-  return { untriagedMisconfigurations, notes };
-}
-
-/**
  * Categorize one scan against current triage state.
  *
  * Throws when more than one open `cve-watch` bead exists: the watch list is a
@@ -729,8 +922,8 @@ export function computeDelta(inputs: DeltaInputs): Delta {
     for (const severity of SEVERITIES) counts[severity] += scan.counts[severity];
   }
 
+  const raw = readRawReports(inputs.reports);
   const findings = collapse(summary.findings);
-  const scanIds = new Set(findings.map(finding => normalizeId(finding.id)));
 
   const watchList = parseWatchTable(inputs.watchBeads[0]?.design);
   const index = buildBeadIndex(inputs.cveBeads);
@@ -738,17 +931,24 @@ export function computeDelta(inputs: DeltaInputs): Delta {
   const categorized = categorizeFindings(findings, index.beadsByCve, new Set(watchList), inputs.renovatePrs);
 
   // Resolution is the one destructive signal in the delta — it closes beads and
-  // prunes watch entries. It is computed only from a scan that completed.
-  const resolved = summary.errors.length > 0
-    ? { beads: [], watchEntries: [] }
-    : computeResolved(index, watchList, scanIds);
+  // prunes watch entries — and it is derived purely from absence. It is
+  // therefore computed only from a run where every expected scan arrived and
+  // completed. `every()` on an empty array is true, so zero reports suppresses
+  // too: nothing scanned can never mean everything is fixed.
+  const missingScans = missingScanLabels(inputs.expectedScans ?? [], inputs.reports);
+  const resolutionSuppressed = summary.errors.length > 0
+    || missingScans.length > 0
+    || inputs.reports.every(report => !!report.error);
 
   return {
     metadata: inputs.metadata ?? {},
     counts,
     ...categorized,
-    resolved,
+    resolved: resolutionSuppressed
+      ? { beads: [], watchEntries: [] }
+      : computeResolved(index, watchList, raw.allIds),
+    resolution_suppressed: resolutionSuppressed,
     scan_errors: summary.errors,
-    scope_notes: buildScopeNotes(inputs.reports, summary.errors),
+    scope_notes: { untriagedMisconfigurations: raw.untriagedMisconfigurations, missingScans },
   };
 }
