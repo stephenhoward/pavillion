@@ -48,6 +48,23 @@
  *   coverage lives in
  *   `src/server/activitypub/test/helper/http_signature.test.ts`.
  *
+ * Isolation from sibling specs:
+ *   This spec runs in its own Playwright project, `federation-strict-receive`
+ *   (see playwright.federation.config.ts), which `dependencies` on the
+ *   default `federation` project. The scheduler therefore never starts these
+ *   tests until every other federation spec has finished, no matter how many
+ *   workers are in play. That matters because the beta container recreate and
+ *   the SKIP_SIGNATURES flip are instance-wide: a sibling spec caught inside
+ *   the window fails with connection-refused/502 during the recreate, or hits
+ *   strict-mode signature rejections it was never written to expect. Do not
+ *   move this spec back into the default project, and do not remove the
+ *   `dependencies` edge — `workers: 1` alone can be overridden from the
+ *   command line. Because dependency projects ignore test filters, running
+ *   this spec directly pulls in the whole default project first; to run it
+ *   alone use:
+ *     npx playwright test --config=playwright.federation.config.ts \
+ *       --project=federation-strict-receive --no-deps
+ *
  * Prerequisites:
  *   - Federation environment running: npm run federation:start
  *   - /etc/hosts entries for alpha.federation.local and beta.federation.local
