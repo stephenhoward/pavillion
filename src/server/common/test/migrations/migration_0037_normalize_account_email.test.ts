@@ -76,6 +76,24 @@ describe('Migration 0037: normalize account email + unique index', () => {
     expect(await uniqueIndexExists()).toBe(true);
   });
 
+  it('rejects an exact-duplicate email insert via the unique index after up()', async () => {
+    await insertRow('account', 'a1', 'victim@x.com');
+
+    await migration.up({ context: sequelize });
+
+    // The index itself must reject an exact-string duplicate, even for a
+    // writer that bypasses application-level dedup.
+    let error: unknown;
+    try {
+      await insertRow('account', 'a2', 'victim@x.com');
+    }
+    catch (caught) {
+      error = caught;
+    }
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).name).toBe('SequelizeUniqueConstraintError');
+  });
+
   it('leaves NULL emails untouched and does not collide them', async () => {
     await insertRow('account', 'n1', null);
     await insertRow('account', 'n2', null);

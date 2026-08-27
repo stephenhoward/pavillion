@@ -23,6 +23,17 @@ import { addIndexIfNotExists, removeIndexIfExists } from '../src/server/common/m
  * bypassed `normalizeEmail` could still persist a mixed-case duplicate — the
  * write boundary, not the index, is the case-collapse guarantee.
  *
+ * Case-folding divergence (accepted): the backfill lowercases with the
+ * dialect's SQL `LOWER`, which folds only ASCII on SQLite and folds per the
+ * database collation on PostgreSQL, while `normalizeEmail` uses JS
+ * `toLowerCase()` (full Unicode case folding). For local parts containing
+ * uppercase non-ASCII letters the two can disagree, so a row written before
+ * `normalizeEmail` existed may retain casing the application would have
+ * lowered, and a JS-normalized lookup can miss it. This divergence is
+ * accepted as latent: every live writer funnels through `normalizeEmail`, so
+ * full Unicode case folding is guaranteed only at that write boundary — the
+ * backfill folds only as far as the dialect's `LOWER` reaches.
+ *
  * Order matters:
  *   1. Collision pre-check on `account` BEFORE any mutation. If two or more
  *      account rows normalize to the same value the migration throws and leaves
