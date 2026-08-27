@@ -53,14 +53,15 @@ export default defineConfig({
             },
           },
           teardownTimeout: 15000,
-          // `.claude/skills/**` is scoped narrowly on purpose: skill-bundled
-          // scripts ship colocated tests, but `.claude/worktrees/**` (excluded
-          // below) must never be collected.
+          // Skill-bundled tests are opted in one skill at a time, never by a
+          // blanket `.claude/skills/**`: some skills ship integration-tier
+          // tests (git-cleanup spawns a real `git` binary) that belong outside
+          // the unit run, and `.claude/worktrees/**` must never be collected.
           include: [
             'src/**/*.test.ts',
             'src/**/*.test.tsx',
             'scripts/**/*.test.ts',
-            '.claude/skills/**/*.test.ts',
+            '.claude/skills/triage-health/**/*.test.ts',
           ],
           exclude: [
             ...sharedExclude,

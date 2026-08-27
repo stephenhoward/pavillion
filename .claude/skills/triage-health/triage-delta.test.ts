@@ -5,6 +5,7 @@ import {
   parseCvesLine,
   parseWatchTable,
   type DeltaInputs,
+  type RenovatePr,
 } from './triage-delta.js';
 
 /**
@@ -45,6 +46,20 @@ const imageReport = (results: Record<string, unknown>[]): ReportInput => ({
 const nodeResult = (vulnerabilities: Record<string, unknown>[]) => ({
   Target: 'package-lock.json',
   Vulnerabilities: vulnerabilities,
+});
+
+/**
+ * Renovate PRs arrive from `gh pr list --json number,title,headRefName,state,author`.
+ * The helper supplies the trust fields (open, authored by Renovate) so each test
+ * states only what it is actually varying.
+ */
+const renovatePr = (over: Partial<RenovatePr> = {}): RenovatePr => ({
+  number: 561,
+  title: 'chore(deps): update dependency undici to v6.27.0',
+  headRefName: 'renovate/undici-6.x',
+  state: 'OPEN',
+  author: 'renovate',
+  ...over,
 });
 
 const inputs = (over: Partial<DeltaInputs> = {}): DeltaInputs => ({
@@ -233,15 +248,65 @@ describe('computeDelta: resolution', () => {
 
     expect(delta.resolved.beads).toEqual([]);
   });
+
+  it('suppresses every resolution when a scan failed, so a partial scan never closes live work', () => {
+    const delta = computeDelta(inputs({
+      reports: [
+        { label: 'image', json: null, error: 'could not read trivy-image.json' },
+        repoReport([nodeResult([vuln()])]),
+      ],
+      cveBeads: [{ id: 'pv-img', status: 'open', notes: 'CVEs: CVE-2026-8001, CVE-2026-8002' }],
+      watchBeads: [{ id: 'pv-watch', design: '| CVE-2026-9999 | HIGH | perl | image | 2026-08-01 | none |' }],
+    }));
+
+    expect(delta.scan_errors).toHaveLength(1);
+    expect(delta.resolved.beads).toEqual([]);
+    expect(delta.resolved.watchEntries).toEqual([]);
+    expect(delta.scope_notes.notes.join(' ')).toMatch(/resolution/i);
+  });
+});
+
+describe('computeDelta: bead status handling', () => {
+  it('treats a bead with no status as untracked rather than assuming it is open', () => {
+    const delta = computeDelta(inputs({
+      reports: [repoReport([nodeResult([vuln()])])],
+      cveBeads: [{ id: 'pv-abc1', notes: 'CVEs: CVE-2026-0001' }],
+    }));
+
+    expect(delta.already_tracked.count).toBe(0);
+    expect(delta.new_actionable.map(f => f.id)).toEqual(['CVE-2026-0001']);
+    expect(delta.resolved.beads).toEqual([]);
+  });
+
+  it('treats a bead with an unrecognized status as untracked', () => {
+    const delta = computeDelta(inputs({
+      reports: [repoReport([nodeResult([vuln()])])],
+      cveBeads: [{ id: 'pv-abc1', status: 'wontfix', notes: 'CVEs: CVE-2026-0001' }],
+    }));
+
+    expect(delta.already_tracked.count).toBe(0);
+    expect(delta.new_actionable).toHaveLength(1);
+  });
+
+  it('still tracks a bead in any bd status other than closed', () => {
+    for (const status of ['open', 'in_progress', 'blocked', 'deferred', 'pinned', 'hooked']) {
+      const delta = computeDelta(inputs({
+        reports: [repoReport([nodeResult([vuln()])])],
+        cveBeads: [{ id: 'pv-abc1', status, notes: 'CVEs: CVE-2026-0001' }],
+      }));
+
+      expect(delta.already_tracked.count, status).toBe(1);
+    }
+  });
 });
 
 describe('computeDelta: Renovate coverage', () => {
-  it('attributes a fixable finding to a matching open Renovate PR', () => {
+  it('attributes a fixable finding to a matching open Renovate PR that reaches the fixed version', () => {
     const delta = computeDelta(inputs({
       reports: [repoReport([nodeResult([vuln()])])],
       renovatePrs: [
-        { number: 561, title: 'chore(deps): update dependency undici to v6.27.0', headRefName: 'renovate/undici-6.x' },
-        { number: 562, title: 'chore(deps): update dependency marked to v18.0.11', headRefName: 'renovate/marked-18.x' },
+        renovatePr(),
+        renovatePr({ number: 562, title: 'chore(deps): update dependency marked to v18.0.11', headRefName: 'renovate/marked-18.x' }),
       ],
     }));
 
@@ -256,21 +321,116 @@ describe('computeDelta: Renovate coverage', () => {
   it('does not attribute a finding to a PR that merely contains the package name as a substring', () => {
     const delta = computeDelta(inputs({
       reports: [repoReport([nodeResult([vuln({ PkgName: 'ms' })])])],
-      renovatePrs: [{ number: 570, title: 'chore(deps): update dependency msgpack to v1', headRefName: 'renovate/msgpack-1.x' }],
+      renovatePrs: [renovatePr({ number: 570, title: 'chore(deps): update dependency msgpack to v1', headRefName: 'renovate/msgpack-1.x' })],
+    }));
+
+    expect(delta.covered_by_renovate).toHaveLength(0);
+    expect(delta.new_actionable).toHaveLength(1);
+    expect(delta.new_actionable[0].renovateHint).toBeUndefined();
+  });
+
+  it('does not let a hyphen-adjacent package name claim an unrelated Renovate PR', () => {
+    const delta = computeDelta(inputs({
+      reports: [repoReport([nodeResult([vuln({ VulnerabilityID: 'CVE-2026-1111', PkgName: 'git', FixedVersion: '2.45.0', Severity: 'CRITICAL' })])])],
+      renovatePrs: [renovatePr({ number: 580, title: 'chore(deps): update dependency git-url-parse to v14', headRefName: 'renovate/git-url-parse-14.x' })],
+    }));
+
+    expect(delta.covered_by_renovate).toHaveLength(0);
+    expect(delta.new_actionable.map(f => f.id)).toEqual(['CVE-2026-1111']);
+    expect(delta.new_actionable[0].renovateHint).toBeUndefined();
+  });
+
+  it('does not treat a PR targeting a version below the fixed version as coverage', () => {
+    const delta = computeDelta(inputs({
+      reports: [repoReport([nodeResult([vuln()])])],
+      renovatePrs: [renovatePr({ number: 590, title: 'chore(deps): update dependency undici to v6.1.0', headRefName: 'renovate/undici-6.x' })],
+    }));
+
+    expect(delta.covered_by_renovate).toHaveLength(0);
+    expect(delta.new_actionable).toHaveLength(1);
+    expect(delta.new_actionable[0].renovateHint).toMatchObject({ number: 590 });
+    expect(delta.new_actionable[0].renovateHint?.reason).toMatch(/6\.1\.0.*6\.27\.0/);
+  });
+
+  it('demotes a match whose target version cannot be read to new_actionable with a PR hint', () => {
+    const delta = computeDelta(inputs({
+      reports: [repoReport([nodeResult([vuln()])])],
+      renovatePrs: [renovatePr({ number: 591, title: 'chore(deps): update dependency undici to v6.x', headRefName: 'renovate/undici-6.x' })],
+    }));
+
+    expect(delta.covered_by_renovate).toHaveLength(0);
+    expect(delta.new_actionable).toHaveLength(1);
+    expect(delta.new_actionable[0].renovateHint).toMatchObject({ number: 591 });
+  });
+
+  it('never attributes an image or repo finding to an npm Renovate PR', () => {
+    const delta = computeDelta(inputs({
+      reports: [imageReport([{
+        Target: 'debian 12.5 (bookworm)',
+        Vulnerabilities: [vuln({ VulnerabilityID: 'CVE-2026-2222', PkgName: 'node', InstalledVersion: '20.11.0', FixedVersion: '20.11.1', Severity: 'CRITICAL' })],
+      }])],
+      renovatePrs: [renovatePr({ number: 592, title: 'chore(deps): update dependency node-forge to v1.3.2', headRefName: 'renovate/node-forge-1.x' })],
+    }));
+
+    expect(delta.covered_by_renovate).toHaveLength(0);
+    expect(delta.new_actionable.map(f => f.targetClass)).toEqual(['image']);
+    expect(delta.new_actionable[0].renovateHint).toBeUndefined();
+  });
+
+  it('ignores a Renovate-shaped PR that is not open', () => {
+    const delta = computeDelta(inputs({
+      reports: [repoReport([nodeResult([vuln()])])],
+      renovatePrs: [renovatePr({ state: 'MERGED' })],
+    }));
+
+    expect(delta.covered_by_renovate).toHaveLength(0);
+    expect(delta.new_actionable).toHaveLength(1);
+    expect(delta.new_actionable[0].renovateHint).toBeUndefined();
+  });
+
+  it('ignores an open PR on a renovate-shaped branch that Renovate did not author', () => {
+    const delta = computeDelta(inputs({
+      reports: [repoReport([nodeResult([vuln()])])],
+      renovatePrs: [renovatePr({ author: 'drive-by-contributor' })],
     }));
 
     expect(delta.covered_by_renovate).toHaveLength(0);
     expect(delta.new_actionable).toHaveLength(1);
   });
 
+  it('prefers the matching PR that reaches the fix when several are open for one package', () => {
+    const delta = computeDelta(inputs({
+      reports: [repoReport([nodeResult([vuln()])])],
+      renovatePrs: [
+        renovatePr({ number: 594, title: 'chore(deps): update dependency undici to v6.1.0', headRefName: 'renovate/undici-6.x' }),
+        renovatePr({ number: 595, title: 'chore(deps): update dependency undici to v7.0.0', headRefName: 'renovate/undici-7.x' }),
+      ],
+    }));
+
+    expect(delta.covered_by_renovate.map(f => f.pr.number)).toEqual([595]);
+    expect(delta.new_actionable).toHaveLength(0);
+  });
+
   it('never attributes an unfixable finding to Renovate', () => {
     const delta = computeDelta(inputs({
       reports: [repoReport([nodeResult([vuln({ FixedVersion: '' })])])],
-      renovatePrs: [{ number: 561, title: 'chore(deps): update dependency undici to v6.27.0' }],
+      renovatePrs: [renovatePr()],
     }));
 
     expect(delta.covered_by_renovate).toHaveLength(0);
     expect(delta.new_no_fix).toHaveLength(1);
+  });
+
+  it('keeps a watch-listed CVE in newly_fixable rather than new_actionable when its PR match is uncertain', () => {
+    const delta = computeDelta(inputs({
+      reports: [repoReport([nodeResult([vuln()])])],
+      watchBeads: [{ id: 'pv-watch', design: '| CVE-2026-0001 | HIGH | undici | node | 2026-08-01 | none |' }],
+      renovatePrs: [renovatePr({ number: 593, title: 'chore(deps): update dependency undici to v6.x' })],
+    }));
+
+    expect(delta.newly_fixable.map(f => f.id)).toEqual(['CVE-2026-0001']);
+    expect(delta.newly_fixable[0].renovateHint).toMatchObject({ number: 593 });
+    expect(delta.new_actionable).toHaveLength(0);
   });
 });
 
@@ -317,6 +477,60 @@ describe('computeDelta: scope and normalization', () => {
     expect(delta.covered_by_renovate).toHaveLength(0);
     expect(delta.newly_fixable).toHaveLength(0);
     expect(delta.already_tracked.count).toBe(0);
+  });
+
+  it('surfaces MEDIUM/LOW misconfigurations as an explicit out-of-scope count rather than dropping them', () => {
+    const delta = computeDelta(inputs({
+      reports: [repoReport([{
+        Target: 'Dockerfile',
+        Misconfigurations: [
+          { ID: 'DS002', Severity: 'HIGH', Title: 'Image runs as root' },
+          { ID: 'DS013', Severity: 'MEDIUM', Title: 'No health check' },
+          { ID: 'DS029', Severity: 'LOW', Title: 'apt-get without --no-install-recommends' },
+        ],
+      }])],
+    }));
+
+    expect(delta.new_actionable.map(f => f.id)).toEqual(['DS002']);
+    expect(delta.scope_notes.untriagedMisconfigurations).toMatchObject({ MEDIUM: 1, LOW: 1, CRITICAL: 0, HIGH: 0 });
+    expect(delta.scope_notes.notes.join(' ')).toMatch(/misconfiguration/i);
+  });
+
+  it('reports no untriaged misconfigurations when every misconfiguration is itemized', () => {
+    const delta = computeDelta(inputs({
+      reports: [repoReport([{
+        Target: 'Dockerfile',
+        Misconfigurations: [{ ID: 'DS002', Severity: 'HIGH', Title: 'Image runs as root' }],
+      }])],
+    }));
+
+    expect(delta.scope_notes.untriagedMisconfigurations)
+      .toEqual({ CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0, UNKNOWN: 0 });
+    expect(delta.scope_notes.notes).toEqual([]);
+  });
+
+  it('keeps one CVE separate across two space-containing targets of the same scan', () => {
+    const delta = computeDelta(inputs({
+      reports: [imageReport([
+        { Target: 'debian 12.5', Vulnerabilities: [vuln({ VulnerabilityID: 'CVE-2026-4444', FixedVersion: '' })] },
+        { Target: 'debian 12.5 (bookworm)', Vulnerabilities: [vuln({ VulnerabilityID: 'CVE-2026-4444', FixedVersion: '' })] },
+      ])],
+    }));
+
+    expect(delta.new_no_fix).toHaveLength(2);
+  });
+
+  it('normalizes already_tracked ids so a mixed-case scan id matches its bead entry once', () => {
+    const delta = computeDelta(inputs({
+      reports: [repoReport([nodeResult([
+        vuln({ VulnerabilityID: 'cve-2026-0001' }),
+        vuln({ VulnerabilityID: 'CVE-2026-0001', PkgName: 'undici-2' }),
+      ])])],
+      cveBeads: [{ id: 'pv-abc1', status: 'open', notes: 'CVEs: CVE-2026-0001' }],
+    }));
+
+    expect(delta.already_tracked.cves).toEqual(['CVE-2026-0001']);
+    expect(delta.already_tracked.count).toBe(2);
   });
 
   it('collapses per-package rows for one CVE on one target into a single finding', () => {
