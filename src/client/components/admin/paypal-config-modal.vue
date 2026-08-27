@@ -242,6 +242,8 @@ function validateField(field) {
 </template>
 
 <style scoped lang="scss">
+@use '../../assets/style/components/calendar-admin' as *;
+
 .paypal-config-body {
   .modal-description {
     margin: 0 0 1.5rem 0;
@@ -318,12 +320,7 @@ function validateField(field) {
 }
 
 .modal-actions {
-  display: flex;
-  gap: 1rem;
-  justify-content: flex-end;
-  margin-top: 2rem;
-  padding-top: 1.5rem;
-  border-top: 1px solid var(--pav-color-border-primary);
+  @include modal-actions;
 
   button {
     min-width: 100px;

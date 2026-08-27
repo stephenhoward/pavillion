@@ -148,6 +148,8 @@ function resetState() {
 </template>
 
 <style scoped lang="scss">
+@use '../../assets/style/components/calendar-admin' as *;
+
 .disconnect-body {
   .warning-icon {
     display: flex;
@@ -216,11 +218,7 @@ function resetState() {
 }
 
 .modal-actions {
-  display: flex;
-  gap: 1rem;
-  justify-content: flex-end;
-  padding-top: 1.5rem;
-  border-top: 1px solid var(--pav-color-border-primary);
+  @include modal-actions;
 
   button {
     min-width: 120px;
