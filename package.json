@@ -24,6 +24,7 @@
     "test": "npx vitest run",
     "test:unit": "npx vitest run --exclude='**/integration/** --silent'",
     "test:coverage": "npx vitest run --exclude='**/integration/**' --coverage",
+    "test:coverage:integration": "npx vitest run --config vitest.integration.config.ts --coverage",
     "test:integration": "npx vitest run --config vitest.integration.config.ts --silent",
     "test:ratelimiting": "npx vitest run --config vitest.ratelimiting.config.ts --silent",
     "test:watch": "npx vitest --ui",
