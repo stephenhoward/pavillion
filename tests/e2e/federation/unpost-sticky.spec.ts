@@ -27,7 +27,6 @@
  */
 
 import { test, expect } from '@playwright/test';
-import https from 'https';
 import {
   INSTANCE_ALPHA,
   INSTANCE_BETA,
@@ -38,15 +37,14 @@ import {
   getToken,
   createCalendar,
   createEvent,
+  updateEvent,
   followCalendar,
   getFeed,
   getCalendarEvents,
   getFollows,
   updateFollowPolicy,
+  unshareEvent,
 } from './helpers/api';
-
-// Accept self-signed certificates for the local federation instances
-const httpsAgent = new https.Agent({ rejectUnauthorized: false });
 
 test.describe('Sticky Unpost of Auto-Reposted Events', () => {
   let aliceToken: string;
@@ -157,18 +155,7 @@ test.describe('Sticky Unpost of Auto-Reposted Events', () => {
     // The new Link2Off button in events-tab.vue calls
     // calendarService.unshareReposted(calendarId, eventId), which hits:
     //   DELETE /api/v1/social/shares/:eventId?calendarId=...
-    const unpostResponse = await fetch(
-      `${INSTANCE_BETA.baseUrl}/api/v1/social/shares/${encodeURIComponent(autoRepostedEvent.id)}?calendarId=${encodeURIComponent(bobCalendar.id)}`,
-      {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${bobToken}`,
-        },
-        // @ts-ignore - agent is not in the TypeScript types but works at runtime
-        agent: httpsAgent,
-      },
-    );
-    expect(unpostResponse.ok).toBe(true);
+    await unshareEvent(INSTANCE_BETA, bobToken, autoRepostedEvent.id, bobCalendar.id);
 
     // Give the Undo(Announce) + dismissal write time to settle
     await new Promise(resolve => setTimeout(resolve, 2000));
@@ -199,30 +186,17 @@ test.describe('Sticky Unpost of Auto-Reposted Events', () => {
     expect(aliceOriginalEvent).toBeDefined();
 
     const updatedTitle = `${originalTitle} - UPDATED`;
-    const updateResponse = await fetch(
-      `${INSTANCE_ALPHA.baseUrl}/api/v1/events/${encodeURIComponent(aliceOriginalEvent.id)}`,
-      {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${aliceToken}`,
+    await updateEvent(INSTANCE_ALPHA, aliceToken, aliceOriginalEvent.id, {
+      calendarId: aliceCalendar.id,
+      content: {
+        en: {
+          title: updatedTitle,
+          description: 'Re-broadcast after unpost',
         },
-        body: JSON.stringify({
-          calendarId: aliceCalendar.id,
-          content: {
-            en: {
-              title: updatedTitle,
-              description: 'Re-broadcast after unpost',
-            },
-          },
-          startTime: '2026-05-01T18:00:00Z',
-          endTime: '2026-05-01T20:00:00Z',
-        }),
-        // @ts-ignore - agent is not in the TypeScript types but works at runtime
-        agent: httpsAgent,
       },
-    );
-    expect(updateResponse.ok).toBe(true);
+      startTime: '2026-05-01T18:00:00Z',
+      endTime: '2026-05-01T20:00:00Z',
+    });
 
     // Wait for Update(Event) to federate to Beta
     await new Promise(resolve => setTimeout(resolve, 10000));
