@@ -110,7 +110,6 @@ describe('EventService.bulkAssignCategories', () => {
     // or EventRepostEntity row matching the acting calendar).
     result.forEach(r => {
       expect(r.repostStatus).toBe('none');
-      expect(r.isRepost).toBe(false);
     });
     expect(bulkCreateStub.calledOnce).toBe(true);
     expect(transactionStub.calledOnce).toBe(true);
@@ -325,7 +324,6 @@ describe('EventService.bulkAssignCategories', () => {
     // in SharedEventEntity (the AP mock returns an empty status map). The
     // legacy fallback resolves to 'manual'.
     expect(result[0].repostStatus).toBe('manual');
-    expect(result[0].isRepost).toBe(true);
   });
 
   it('should set repostStatus="auto" when SharedEventEntity reports auto_posted (pv-7kxw.1)', async () => {
@@ -396,7 +394,6 @@ describe('EventService.bulkAssignCategories', () => {
     // SharedEventEntity takes precedence over EventRepostEntity legacy fallback.
     expect(result).toHaveLength(1);
     expect(result[0].repostStatus).toBe('auto');
-    expect(result[0].isRepost).toBe(true);
   });
 
   it('should set repostStatus="manual" via EventRepostEntity legacy fallback (pv-7kxw.1)', async () => {
@@ -458,7 +455,6 @@ describe('EventService.bulkAssignCategories', () => {
 
     expect(result).toHaveLength(1);
     expect(result[0].repostStatus).toBe('manual');
-    expect(result[0].isRepost).toBe(true);
   });
 
   it('should set repostStatus="none" for owned events with no repost rows (pv-7kxw.1)', async () => {
@@ -513,7 +509,6 @@ describe('EventService.bulkAssignCategories', () => {
 
     expect(result).toHaveLength(1);
     expect(result[0].repostStatus).toBe('none');
-    expect(result[0].isRepost).toBe(false);
   });
 
   it('should propagate errors thrown inside the transaction', async () => {

@@ -9,7 +9,7 @@
  * - Category badges are rendered for each assigned category.
  * - Recurrence badge shows when isRecurring is true; hidden when false.
  * - No-image fallback renders when event has no media.
- * - Default image fallback: event.media ?? (isRepost ? null : defaultImage) ?? null
+ * - Default image fallback: event.media ?? (repostStatus !== 'none' ? null : defaultImage) ?? null
  * - Source calendar pill renders for reposted events with sourceCalendar data.
  * - Source calendar pill does NOT render when sourceCalendar is null.
  * - Source calendar pill displays urlName@host format.
@@ -83,7 +83,7 @@ function makeEvent(overrides: Record<string, any> = {}): CalendarEvent {
     mediaZoom: overrides.mediaZoom ?? 1.0,
     categories: overrides.categories ?? [],
     isRecurring: overrides.isRecurring ?? false,
-    isRepost: overrides.isRepost ?? false,
+    repostStatus: overrides.repostStatus ?? 'none',
     sourceCalendar: overrides.sourceCalendar ?? null,
     series: null,
   };
@@ -480,7 +480,7 @@ describe('EventCard', () => {
     });
 
     it('should use defaultImage when event has no media and is not a repost', async () => {
-      const event = makeEvent({ media: null, isRepost: false });
+      const event = makeEvent({ media: null, repostStatus: 'none' });
       const instance = makeInstance(event, '2026-07-15T19:00:00');
       const wrapper = await mountEventCard(instance, 'test-calendar', { defaultImage });
 
@@ -492,7 +492,7 @@ describe('EventCard', () => {
     });
 
     it('should NOT use defaultImage when event is a repost without media', async () => {
-      const event = makeEvent({ media: null, isRepost: true });
+      const event = makeEvent({ media: null, repostStatus: 'manual' });
       const instance = makeInstance(event, '2026-07-15T19:00:00');
       const wrapper = await mountEventCard(instance, 'test-calendar', { defaultImage });
 
@@ -502,7 +502,7 @@ describe('EventCard', () => {
     });
 
     it('should show no-image fallback when no media and no defaultImage provided', async () => {
-      const event = makeEvent({ media: null, isRepost: false });
+      const event = makeEvent({ media: null, repostStatus: 'none' });
       const instance = makeInstance(event, '2026-07-15T19:00:00');
       const wrapper = await mountEventCard(instance, 'test-calendar');
 
@@ -513,7 +513,7 @@ describe('EventCard', () => {
 
     it('should use event media even when event is a repost with its own media', async () => {
       const eventMedia = { id: 'repost-media-1', originalFilename: 'repost-photo.jpg' };
-      const event = makeEvent({ media: eventMedia, isRepost: true });
+      const event = makeEvent({ media: eventMedia, repostStatus: 'auto' });
       const instance = makeInstance(event, '2026-07-15T19:00:00');
       const wrapper = await mountEventCard(instance, 'test-calendar', { defaultImage });
 

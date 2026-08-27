@@ -34,7 +34,7 @@ describe('Repost modal focus return logic', () => {
 
   describe('handleEditEvent (opening the modal)', () => {
     it('saves the trigger element when opening modal for a repost event', () => {
-      const mockEvent = { isRepost: true, id: 'event-1' };
+      const mockEvent = { repostStatus: 'manual', id: 'event-1' };
       const mockDomEvent = { currentTarget: triggerEl } as unknown as MouseEvent;
 
       // Simulate handleEditEvent for a repost event
@@ -57,7 +57,7 @@ describe('Repost modal focus return logic', () => {
   describe('cancel handler (modal dismissed)', () => {
     it('returns focus to the trigger element after modal cancel', async () => {
       // Setup: modal is open with a saved trigger
-      repostEventForModal.value = { isRepost: true, id: 'event-1' };
+      repostEventForModal.value = { repostStatus: 'manual', id: 'event-1' };
       repostModalTriggerEl.value = triggerEl;
 
       const focusSpy = vi.spyOn(triggerEl, 'focus');
@@ -72,7 +72,7 @@ describe('Repost modal focus return logic', () => {
     });
 
     it('does not throw when trigger ref is null on cancel', async () => {
-      repostEventForModal.value = { isRepost: true, id: 'event-1' };
+      repostEventForModal.value = { repostStatus: 'manual', id: 'event-1' };
       repostModalTriggerEl.value = null;
 
       // Should not throw even if trigger ref is null
@@ -85,7 +85,7 @@ describe('Repost modal focus return logic', () => {
     });
 
     it('focus is called on the saved trigger element', async () => {
-      repostEventForModal.value = { isRepost: true, id: 'event-1' };
+      repostEventForModal.value = { repostStatus: 'manual', id: 'event-1' };
       repostModalTriggerEl.value = triggerEl;
 
       const focusSpy = vi.spyOn(triggerEl, 'focus');
@@ -101,7 +101,7 @@ describe('Repost modal focus return logic', () => {
 
   describe('confirm handler (handleRepostCategoryUpdate)', () => {
     it('returns focus to the trigger element after successful category update', async () => {
-      repostEventForModal.value = { isRepost: true, id: 'event-1', categories: [] };
+      repostEventForModal.value = { repostStatus: 'manual', id: 'event-1', categories: [] };
       repostModalTriggerEl.value = triggerEl;
 
       const focusSpy = vi.spyOn(triggerEl, 'focus');
@@ -116,7 +116,7 @@ describe('Repost modal focus return logic', () => {
     });
 
     it('returns focus to the trigger element even after an API error', async () => {
-      repostEventForModal.value = { isRepost: true, id: 'event-1', categories: [] };
+      repostEventForModal.value = { repostStatus: 'manual', id: 'event-1', categories: [] };
       repostModalTriggerEl.value = triggerEl;
 
       const focusSpy = vi.spyOn(triggerEl, 'focus');
@@ -130,7 +130,7 @@ describe('Repost modal focus return logic', () => {
     });
 
     it('does not throw when trigger ref is null on confirm', async () => {
-      repostEventForModal.value = { isRepost: true, id: 'event-1', categories: [] };
+      repostEventForModal.value = { repostStatus: 'manual', id: 'event-1', categories: [] };
       repostModalTriggerEl.value = null;
 
       repostEventForModal.value = null;
@@ -144,7 +144,7 @@ describe('Repost modal focus return logic', () => {
 
   describe('nextTick requirement', () => {
     it('focus is called after nextTick to ensure DOM is updated', async () => {
-      repostEventForModal.value = { isRepost: true, id: 'event-1' };
+      repostEventForModal.value = { repostStatus: 'manual', id: 'event-1' };
       repostModalTriggerEl.value = triggerEl;
 
       const callOrder: string[] = [];

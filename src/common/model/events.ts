@@ -120,13 +120,6 @@ class CalendarEvent extends TranslatedModel<CalendarEventContent> {
   createdAt: Date | null = null;
 
   /**
-   * Derived flag: true when this event was obtained via a repost (auto or manual)
-   * rather than direct ownership. Backed by {@link repostStatus}.
-   */
-  get isRepost(): boolean {
-    return this.repostStatus !== 'none';
-  }
-  /**
    * Source calendar information for reposted events.
    * Contains the originating calendar's urlName, host, and URL.
    * Null for locally-owned events or when source is unknown.
@@ -233,13 +226,8 @@ class CalendarEvent extends TranslatedModel<CalendarEventContent> {
     event.mediaFocalPointX = obj.mediaFocalPointX ?? 0.5;
     event.mediaFocalPointY = obj.mediaFocalPointY ?? 0.5;
     event.mediaZoom = obj.mediaZoom ?? 1.0;
-    // Prefer repostStatus when present; fall back to legacy isRepost boolean for
-    // backward compatibility with older serialized payloads.
     if (obj.repostStatus === 'manual' || obj.repostStatus === 'auto' || obj.repostStatus === 'none') {
       event.repostStatus = obj.repostStatus;
-    }
-    else if (obj.isRepost === true) {
-      event.repostStatus = 'manual';
     }
     else {
       event.repostStatus = 'none';
@@ -291,8 +279,6 @@ class CalendarEvent extends TranslatedModel<CalendarEventContent> {
       date: this.date,
       calendarId: this.calendarId,
       repostStatus: this.repostStatus,
-      // Kept for backward compatibility with frontend code still reading isRepost.
-      isRepost: this.isRepost,
       sourceCalendar: this.sourceCalendar,
       locationId: this.locationId,
       location: this.location?.toObject(),

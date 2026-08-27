@@ -409,7 +409,6 @@ describe('EventService.replaceEventCategories', () => {
     // calendar and SharedEventEntity has no entry, so the legacy fallback
     // resolves repostStatus to 'manual'.
     expect(result.repostStatus).toBe('manual');
-    expect(result.isRepost).toBe(true);
     expect(transactionStub.calledOnce).toBe(true);
   });
 
@@ -437,7 +436,7 @@ describe('EventService.replaceEventCategories', () => {
     expect(transactionStub.calledOnce).toBe(true);
   });
 
-  it('should not set isRepost when event is not a repost', async () => {
+  it('should resolve repostStatus to "none" when event is not a repost', async () => {
     const mockEvent = EventEntity.build({
       id: validEventId,
       calendar_id: calendarId,
@@ -461,7 +460,6 @@ describe('EventService.replaceEventCategories', () => {
     // pv-7kxw.1 (option b): repostStatus is populated authoritatively from
     // SharedEventEntity + EventRepostEntity. Owned events resolve to 'none'.
     expect(result.repostStatus).toBe('none');
-    expect(result.isRepost).toBe(false);
   });
 
   it('should set repostStatus="auto" when SharedEventEntity reports auto_posted (pv-7kxw.1)', async () => {
@@ -511,7 +509,6 @@ describe('EventService.replaceEventCategories', () => {
 
     // SharedEventEntity 'auto' wins over the EventRepostEntity legacy row.
     expect(result.repostStatus).toBe('auto');
-    expect(result.isRepost).toBe(true);
     expect(transactionStub.calledOnce).toBe(true);
   });
 });

@@ -301,7 +301,7 @@ describe('Widget Integration Tests', () => {
             categories: [],
             location: null,
             isRecurring: false,
-            isRepost: false,
+            repostStatus: 'none',
             sourceCalendar: null,
           },
         },

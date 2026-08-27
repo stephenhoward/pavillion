@@ -50,54 +50,6 @@ describe('listEvents', () => {
     expect(events[0].content("en").name).toBe('testName');
   });
 
-  describe('isRepost flag', () => {
-    it('should mark events as isRepost=false when they are owned by the calendar', async () => {
-      const entity = EventEntity.build({ id: 'owned-event-id', calendar_id: 'cal-id' });
-      sandbox.stub(EventEntity, 'findAll').resolves([entity]);
-
-      const events = await service.listEvents(new Calendar('cal-id', 'testcal'));
-      expect(events[0].isRepost).toBe(false);
-    });
-
-    it('should mark events as isRepost=true when they are in EventRepostEntity', async () => {
-      (EventRepostEntity.findAll as sinon.SinonStub).resolves([
-        { event_id: 'reposted-event-id' },
-      ]);
-      const entity = EventEntity.build({ id: 'reposted-event-id' });
-      sandbox.stub(EventEntity, 'findAll').resolves([entity]);
-
-      const events = await service.listEvents(new Calendar('cal-id', 'testcal'));
-      expect(events[0].isRepost).toBe(true);
-    });
-
-    it('should mark events as isRepost=true when they are in SharedEventEntity (auto-repost)', async () => {
-      const autoRepostId = '550e8400-e29b-41d4-a716-446655440000';
-      // Provide shared event IDs via the mock AP interface
-      service.setActivityPubInterface(buildMockApInterface([autoRepostId]));
-
-      const entity = EventEntity.build({ id: autoRepostId });
-      sandbox.stub(EventEntity, 'findAll').resolves([entity]);
-
-      const events = await service.listEvents(new Calendar('cal-id', 'testcal'));
-      expect(events[0].isRepost).toBe(true);
-    });
-
-    it('should correctly distinguish owned and reposted events in the same result', async () => {
-      (EventRepostEntity.findAll as sinon.SinonStub).resolves([
-        { event_id: 'reposted-id' },
-      ]);
-      const ownedEntity = EventEntity.build({ id: 'owned-id', calendar_id: 'cal-id' });
-      const repostedEntity = EventEntity.build({ id: 'reposted-id' });
-      sandbox.stub(EventEntity, 'findAll').resolves([ownedEntity, repostedEntity]);
-
-      const events = await service.listEvents(new Calendar('cal-id', 'testcal'));
-      const owned = events.find(e => e.id === 'owned-id');
-      const reposted = events.find(e => e.id === 'reposted-id');
-      expect(owned?.isRepost).toBe(false);
-      expect(reposted?.isRepost).toBe(true);
-    });
-  });
-
   describe('repostStatus field', () => {
     it('should set repostStatus="none" for events owned by the calendar', async () => {
       const entity = EventEntity.build({ id: 'owned-event-id', calendar_id: 'cal-id' });
@@ -105,7 +57,6 @@ describe('listEvents', () => {
 
       const events = await service.listEvents(new Calendar('cal-id', 'testcal'));
       expect(events[0].repostStatus).toBe('none');
-      expect(events[0].isRepost).toBe(false);
     });
 
     it('should set repostStatus="manual" for events shared with auto_posted=false', async () => {
@@ -119,7 +70,6 @@ describe('listEvents', () => {
 
       const events = await service.listEvents(new Calendar('cal-id', 'testcal'));
       expect(events[0].repostStatus).toBe('manual');
-      expect(events[0].isRepost).toBe(true);
     });
 
     it('should set repostStatus="auto" for events shared with auto_posted=true', async () => {
@@ -133,7 +83,6 @@ describe('listEvents', () => {
 
       const events = await service.listEvents(new Calendar('cal-id', 'testcal'));
       expect(events[0].repostStatus).toBe('auto');
-      expect(events[0].isRepost).toBe(true);
     });
 
     it('should prefer SharedEventEntity status over legacy EventRepostEntity', async () => {
@@ -152,8 +101,6 @@ describe('listEvents', () => {
 
       const events = await service.listEvents(new Calendar('cal-id', 'testcal'));
       expect(events[0].repostStatus).toBe('auto');
-      // Pin down the derived getter as well: an auto repost is still a repost.
-      expect(events[0].isRepost).toBe(true);
     });
 
     it('should resolve owned, manual, and auto repostStatus values in a single listEvents call', async () => {
@@ -182,11 +129,8 @@ describe('listEvents', () => {
       const auto = events.find(e => e.id === autoId);
 
       expect(owned?.repostStatus).toBe('none');
-      expect(owned?.isRepost).toBe(false);
       expect(manual?.repostStatus).toBe('manual');
-      expect(manual?.isRepost).toBe(true);
       expect(auto?.repostStatus).toBe('auto');
-      expect(auto?.isRepost).toBe(true);
     });
 
     it('should default legacy EventRepostEntity-only events to "manual"', async () => {
@@ -200,7 +144,6 @@ describe('listEvents', () => {
 
       const events = await service.listEvents(new Calendar('cal-id', 'testcal'));
       expect(events[0].repostStatus).toBe('manual');
-      expect(events[0].isRepost).toBe(true);
     });
 
     it('should resolve repost status via exactly two SharedEventEntity queries (no N+1)', async () => {

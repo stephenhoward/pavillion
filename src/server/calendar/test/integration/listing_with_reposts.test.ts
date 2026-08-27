@@ -12,15 +12,15 @@
  *
  * Scenarios covered:
  *   1. event_repost (local repost link): event on Calendar A, EventRepostEntity
- *      pointing at Calendar B. Listing B returns the event with isRepost=true
+ *      pointing at Calendar B. Listing B returns the event with a repost status
  *      and sourceCalendar pointing at A's url_name.
  *   2. ap_shared_event (federated share link): event on Calendar A,
  *      SharedEventEntity for Calendar B. Listing B returns the event with
- *      isRepost=true and sourceCalendar pointing at A's url_name.
+ *      a repost status and sourceCalendar pointing at A's url_name.
  *   3. Both link types pointing at the same event still yield exactly one
  *      listing row, proving the visible-id union dedupes ids before fetch.
  *   4. Listing the originating calendar (A) shows the event with
- *      isRepost=false — the displayCalendarId tag is correctly derived from
+ *      repostStatus='none' — the displayCalendarId tag is correctly derived from
  *      the listing call in every direction.
  *
  * Each scenario asserts that exactly one `event_instance` row exists
@@ -133,7 +133,7 @@ describe('Listing union for reposted events (pv-hr72.4)', () => {
     return { eventId: event.id, startTime };
   }
 
-  it('returns the canonical instance for an event_repost link with isRepost=true and source=A', async () => {
+  it('returns the canonical instance for an event_repost link with a repost status and source=A', async () => {
     const { eventId, startTime } = await createEventOnAWithInstance(
       'Repost Listing Event',
       '2026-10-01T10:00:00Z',
@@ -156,7 +156,7 @@ describe('Listing union for reposted events (pv-hr72.4)', () => {
     expect(matching).toHaveLength(1);
 
     const listed = matching[0];
-    expect(listed.event.isRepost).toBe(true);
+    expect(listed.event.repostStatus).not.toBe('none');
     expect(listed.event.sourceCalendar).not.toBeNull();
     expect(listed.event.sourceCalendar!.urlName).toBe(calendarA.urlName);
 
@@ -178,7 +178,7 @@ describe('Listing union for reposted events (pv-hr72.4)', () => {
     expect(canonicalRow!.calendar_id).toBe(calendarA.id);
   });
 
-  it('returns the canonical instance for an ap_shared_event link with isRepost=true and source=A', async () => {
+  it('returns the canonical instance for an ap_shared_event link with a repost status and source=A', async () => {
     const { eventId, startTime } = await createEventOnAWithInstance(
       'Federated Share Listing Event',
       '2026-11-01T14:00:00Z',
@@ -201,7 +201,7 @@ describe('Listing union for reposted events (pv-hr72.4)', () => {
     expect(matching).toHaveLength(1);
 
     const listed = matching[0];
-    expect(listed.event.isRepost).toBe(true);
+    expect(listed.event.repostStatus).not.toBe('none');
     expect(listed.event.sourceCalendar).not.toBeNull();
     expect(listed.event.sourceCalendar!.urlName).toBe(calendarA.urlName);
 
@@ -252,7 +252,7 @@ describe('Listing union for reposted events (pv-hr72.4)', () => {
     expect(globalCount).toBe(1);
   });
 
-  it('lists the event on the originating calendar (A) with isRepost=false', async () => {
+  it('lists the event on the originating calendar (A) with repostStatus="none"', async () => {
     // Sanity check that the listing for A (the originating calendar) sees
     // each event without the repost flag inflated by B's link rows. Proves
     // that displayCalendarId is correctly derived from the LISTING call —
@@ -273,14 +273,14 @@ describe('Listing union for reposted events (pv-hr72.4)', () => {
     const instancesOnA = await calendarInterface.listEventInstancesForCalendar(calendarA);
     const matchingOnA = instancesOnA.filter(i => i.event.id === eventId);
     expect(matchingOnA).toHaveLength(1);
-    expect(matchingOnA[0].event.isRepost).toBe(false);
+    expect(matchingOnA[0].event.repostStatus).toBe('none');
     expect(matchingOnA[0].event.sourceCalendar).toBeNull();
 
     // And the same row, listed on B, IS flagged as a repost.
     const instancesOnB = await calendarInterface.listEventInstancesForCalendar(calendarB);
     const matchingOnB = instancesOnB.filter(i => i.event.id === eventId);
     expect(matchingOnB).toHaveLength(1);
-    expect(matchingOnB[0].event.isRepost).toBe(true);
+    expect(matchingOnB[0].event.repostStatus).not.toBe('none');
     expect(matchingOnB[0].event.sourceCalendar!.urlName).toBe(calendarA.urlName);
   });
 
@@ -384,7 +384,7 @@ describe('Listing union for reposted events (pv-hr72.4)', () => {
       const instances = await calendarInterface.listEventInstancesForCalendar(calendarB);
       const matching = instances.filter(i => i.event.id === remoteEventId);
       expect(matching).toHaveLength(1);
-      expect(matching[0].event.isRepost).toBe(true);
+      expect(matching[0].event.repostStatus).not.toBe('none');
     }
     finally {
       // Tear down any residual eventCreated listeners so they don't leak

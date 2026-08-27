@@ -98,12 +98,13 @@ const isCancelled = computed(() => {
 
 /**
  * Returns the effective media for the event card.
- * Fallback logic: event.media ?? (isRepost ? null : defaultImage) ?? null
- * Reposted events do NOT get the local calendar's default image.
+ * Fallback logic: event.media ?? (reposted ? null : defaultImage) ?? null
+ * Reposted events (any repostStatus other than 'none') do NOT get the
+ * local calendar's default image.
  */
 const media = computed(() => {
   return props.instance.event.media
-    ?? (props.instance.event.isRepost ? null : props.defaultImage)
+    ?? (props.instance.event.repostStatus !== 'none' ? null : props.defaultImage)
     ?? null;
 });
 

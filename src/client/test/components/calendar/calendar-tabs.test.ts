@@ -46,7 +46,7 @@ const mockEvent = {
   categories: [],
   languages: ['en'],
   media: null,
-  isRepost: false,
+  repostStatus: 'none',
 };
 
 const createWrapper = async (
