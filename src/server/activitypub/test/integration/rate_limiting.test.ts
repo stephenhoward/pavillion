@@ -1,10 +1,13 @@
-import { describe, it, expect, beforeEach, afterEach, beforeAll, afterAll } from 'vitest';
-import express, { Application } from 'express';
+import { describe, it, expect, beforeEach, beforeAll, afterAll } from 'vitest';
+import http from 'http';
+import express from 'express';
 import request from 'supertest';
 import config from 'config';
 
 import UserActorRoutes from '@/server/activitypub/api/v1/user-actor';
 import {
+  getActorRateLimitStore,
+  getUserRateLimitStore,
   resetActorRateLimitStore,
   resetUserRateLimitStore,
 } from '@/server/activitypub/middleware/rate-limit';
@@ -51,36 +54,58 @@ function createStubUserActorService(): any {
   };
 }
 
-function buildApp(): Application {
+function buildServer(): http.Server {
   const app = express();
   const routes = new UserActorRoutes(createStubUserActorService());
   routes.installHandlers(app, '/');
-  return app;
+  return http.createServer(app);
 }
 
 describeOrSkip('ActivityPub User Inbox Rate Limiting Integration Tests', () => {
-  let app: Application;
+  // One listen()ed server serves the entire suite, reused by every supertest
+  // request. Passing a bare Express app to request() makes supertest create
+  // and tear down an ephemeral server per request; at 120+ sequential requests
+  // that per-request server churn intermittently races on Node 25 ('Parse
+  // Error: Expected HTTP/' client failures, or a lost request body that makes
+  // the limiter under-count so the over-limit request sees 200 instead of
+  // 429). A per-test server is not enough either: Node's default global agent
+  // keeps connections alive keyed by host:port, so when a closed test server's
+  // ephemeral port is quickly reassigned to the next test's server, a stale
+  // pooled socket can be reused against the new server and the same parse
+  // error appears. A suite-lifetime server keeps one stable port, so pooled
+  // keep-alive sockets stay valid for every request. Limiter state is cleared
+  // between tests through the shared stores rather than by rebuilding the app,
+  // because the route middleware captures its store instance at build time.
+  let server: http.Server;
 
-  beforeAll(() => {
+  beforeAll(async () => {
     // Bypass HTTP signature verification so requests reach the limiters and the
     // terminal handler. The limiters run before verifyHttpSignature, so this
     // lets us assert end-to-end limiter behavior without valid signatures.
     process.env.SKIP_SIGNATURES = 'true';
+
+    server = buildServer();
+    await new Promise<void>((resolve) => server.listen(0, resolve));
   });
 
-  afterAll(() => {
+  afterAll(async () => {
+    await new Promise<void>((resolve, reject) => {
+      server.close((err) => (err ? reject(err) : resolve()));
+      // Unblock close(): destroy pooled keep-alive sockets still held open by
+      // the client agent.
+      server.closeAllConnections();
+    });
+
     delete process.env.SKIP_SIGNATURES;
+    resetActorRateLimitStore();
+    resetUserRateLimitStore();
   });
 
   beforeEach(() => {
-    resetActorRateLimitStore();
-    resetUserRateLimitStore();
-    app = buildApp();
-  });
-
-  afterEach(() => {
-    resetActorRateLimitStore();
-    resetUserRateLimitStore();
+    // Same store instances the route middleware captured at build time; clear
+    // entries so each test starts with fresh counters.
+    getActorRateLimitStore().clear();
+    getUserRateLimitStore().clear();
   });
 
   describe('per-user limiter', () => {
@@ -91,14 +116,14 @@ describeOrSkip('ActivityPub User Inbox Rate Limiting Integration Tests', () => {
       // Vary the actor each request so the actor limiter (max 60) does not fire
       // first; this isolates the per-user limiter as the cause of the 429.
       for (let i = 0; i < max; i++) {
-        const response = await request(app)
+        const response = await request(server)
           .post('/users/alice/inbox')
           .send({ type: 'Add', actor: `https://remote.example/users/sender${i}` });
 
         expect(response.status).toBe(200);
       }
 
-      const blocked = await request(app)
+      const blocked = await request(server)
         .post('/users/alice/inbox')
         .send({ type: 'Add', actor: 'https://remote.example/users/senderN' });
 
@@ -111,21 +136,21 @@ describeOrSkip('ActivityPub User Inbox Rate Limiting Integration Tests', () => {
 
       // Exhaust user A's per-user budget, varying actors to avoid the actor cap.
       for (let i = 0; i < max; i++) {
-        const response = await request(app)
+        const response = await request(server)
           .post('/users/alice/inbox')
           .send({ type: 'Add', actor: `https://remote.example/users/sender${i}` });
 
         expect(response.status).toBe(200);
       }
 
-      const aBlocked = await request(app)
+      const aBlocked = await request(server)
         .post('/users/alice/inbox')
         .send({ type: 'Add', actor: 'https://remote.example/users/senderN' });
 
       expect(aBlocked.status).toBe(429);
 
       // User B is unaffected by user A's exhaustion.
-      const bAllowed = await request(app)
+      const bAllowed = await request(server)
         .post('/users/bob/inbox')
         .send({ type: 'Add', actor: 'https://remote.example/users/fresh' });
 
@@ -136,12 +161,12 @@ describeOrSkip('ActivityPub User Inbox Rate Limiting Integration Tests', () => {
       const max = config.get<number>('rateLimit.activitypub.user.max');
 
       for (let i = 0; i < max; i++) {
-        await request(app)
+        await request(server)
           .post('/users/secret-user/inbox')
           .send({ type: 'Add', actor: `https://remote.example/users/sender${i}` });
       }
 
-      const blocked = await request(app)
+      const blocked = await request(server)
         .post('/users/secret-user/inbox')
         .send({ type: 'Add', actor: 'https://remote.example/users/senderN' });
 
@@ -159,14 +184,14 @@ describeOrSkip('ActivityPub User Inbox Rate Limiting Integration Tests', () => {
       // Vary the username each request so the per-user limiter (max 120) does
       // not fire first; this isolates the actor limiter as the cause of the 429.
       for (let i = 0; i < max; i++) {
-        const response = await request(app)
+        const response = await request(server)
           .post(`/users/target${i}/inbox`)
           .send({ type: 'Add', actor });
 
         expect(response.status).toBe(200);
       }
 
-      const blocked = await request(app)
+      const blocked = await request(server)
         .post('/users/targetN/inbox')
         .send({ type: 'Add', actor });
 
@@ -181,21 +206,21 @@ describeOrSkip('ActivityPub User Inbox Rate Limiting Integration Tests', () => {
 
       // Exhaust actor A across distinct usernames to avoid the per-user cap.
       for (let i = 0; i < max; i++) {
-        const response = await request(app)
+        const response = await request(server)
           .post(`/users/target${i}/inbox`)
           .send({ type: 'Add', actor: actorA });
 
         expect(response.status).toBe(200);
       }
 
-      const aBlocked = await request(app)
+      const aBlocked = await request(server)
         .post('/users/targetN/inbox')
         .send({ type: 'Add', actor: actorA });
 
       expect(aBlocked.status).toBe(429);
 
       // Actor B is unaffected by actor A's exhaustion.
-      const bAllowed = await request(app)
+      const bAllowed = await request(server)
         .post('/users/freshtarget/inbox')
         .send({ type: 'Add', actor: actorB });
 
@@ -207,12 +232,12 @@ describeOrSkip('ActivityPub User Inbox Rate Limiting Integration Tests', () => {
       const actor = 'https://remote.example/users/secret-actor';
 
       for (let i = 0; i < max; i++) {
-        await request(app)
+        await request(server)
           .post(`/users/target${i}/inbox`)
           .send({ type: 'Add', actor });
       }
 
-      const blocked = await request(app)
+      const blocked = await request(server)
         .post('/users/targetN/inbox')
         .send({ type: 'Add', actor });
 
@@ -230,14 +255,14 @@ describeOrSkip('ActivityPub User Inbox Rate Limiting Integration Tests', () => {
       const actor = 'https://remote.example/users/steady';
 
       for (let i = 0; i < actorMax; i++) {
-        const response = await request(app)
+        const response = await request(server)
           .post('/users/alice/inbox')
           .send({ type: 'Add', actor });
 
         expect(response.status).toBe(200);
       }
 
-      const blocked = await request(app)
+      const blocked = await request(server)
         .post('/users/alice/inbox')
         .send({ type: 'Add', actor });
 

@@ -1,6 +1,7 @@
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import config from 'config';
-import express, { Express } from 'express';
+import http from 'http';
+import express from 'express';
 import request from 'supertest';
 
 import { limitFundingWebhookByIp } from '@/server/common/middleware/rate-limiters';
@@ -27,14 +28,30 @@ const rateLimitEnabled = config.get<boolean>('rateLimit.enabled');
 const describeOrSkip = rateLimitEnabled ? describe : describe.skip;
 
 describeOrSkip('Funding Webhook Rate Limiting Integration Tests', () => {
-  let app: Express;
+  // A single listen()ed server reused by every supertest request in the
+  // exhaustion loop. Passing a bare Express app to request() makes supertest
+  // create and tear down an ephemeral server per request; at 300+ sequential
+  // requests that per-request server churn intermittently races on Node 25
+  // ('Parse Error: Expected HTTP/' client failures). supertest reuses an
+  // already-listening server without closing it, so one stable port serves
+  // the whole loop.
+  let server: http.Server;
 
-  beforeAll(() => {
-    app = express();
+  beforeAll(async () => {
+    const app = express();
     app.use(express.json());
 
     app.post('/webhook-ip-only', limitFundingWebhookByIp, (req, res) => {
       res.json({ route: 'funding-webhook-ip' });
+    });
+
+    server = http.createServer(app);
+    await new Promise<void>((resolve) => server.listen(0, resolve));
+  });
+
+  afterAll(async () => {
+    await new Promise<void>((resolve, reject) => {
+      server.close((err) => (err ? reject(err) : resolve()));
     });
   });
 
@@ -45,7 +62,7 @@ describeOrSkip('Funding Webhook Rate Limiting Integration Tests', () => {
       const responses = [];
       for (let i = 0; i < ipMax + 1; i++) {
         responses.push(
-          await request(app)
+          await request(server)
             .post('/webhook-ip-only')
             .send({ event: `funding-webhook-${i}` }),
         );
