@@ -1,0 +1,127 @@
+# Weekly project-health scan.
+#
+# Trivy scans this repository (dependency CVEs, leaked secrets, IaC
+# misconfigurations) and the published container image, and the findings land in
+# a single rolling GitHub issue labelled `health-report` rather than in a red X
+# nobody opens. Findings therefore do NOT fail this workflow — a failed run means
+# the tooling itself broke, which is what the scheduled-failure email should mean.
+name: Weekly Health
+on:
+  schedule:
+    # Mondays 07:00 UTC — an hour after the Renovate run, so the two weekly
+    # jobs don't contend and the scan sees the pre-update dependency state.
+    - cron: '0 7 * * 1'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: read
+  issues: write
+
+env:
+  IMAGE: ghcr.io/stephenhoward/pavillion:main
+  # Vendored code, build output, and agent worktrees are not this project's
+  # attack surface; scanning them buys noise. Mirrors the skip list used by the
+  # /trivy-scan command in the pavillion-security repo.
+  SKIP_DIRS: node_modules,dist,coverage,playwright-report,test-results,.playwright-mcp,.claude/worktrees,.serena,.tmp,.beads/backup
+
+jobs:
+  trivy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: '.node-version'
+          cache: 'npm'
+
+      - run: npm install
+
+      - name: Install Trivy
+        uses: aquasecurity/setup-trivy@v0.3.1
+
+      # Both scans keep going on failure: a scan that produced no report is
+      # reported as a scan error by trivy-summary.ts, never as a clean result.
+      - name: Scan repository
+        continue-on-error: true
+        run: |
+          trivy fs . \
+            --scanners vuln,secret,misconfig \
+            --secret-config .trivy/secret.yaml \
+            --skip-dirs "$SKIP_DIRS" \
+            --format json \
+            --output trivy-fs.json
+
+      - name: Scan container image
+        continue-on-error: true
+        env:
+          TRIVY_USERNAME: ${{ github.actor }}
+          TRIVY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          trivy image "$IMAGE" \
+            --scanners vuln,secret \
+            --secret-config .trivy/secret.yaml \
+            --format json \
+            --output trivy-image.json
+
+      - name: Build report
+        id: report
+        run: |
+          npx tsx scripts/trivy-summary.ts \
+            repository=trivy-fs.json \
+            image=trivy-image.json \
+            --out report.md \
+            --sha "$GITHUB_SHA" \
+            --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+
+      - name: Upload raw scan output
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-reports
+          path: |
+            trivy-fs.json
+            trivy-image.json
+          if-no-files-found: warn
+          retention-days: 30
+
+      # One rolling issue carries the current state: updated while findings
+      # stand, closed once a scan comes back clean, recreated when they return.
+      - name: Report to rolling issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ACTIONABLE: ${{ steps.report.outputs.actionable }}
+          SCAN_ERRORS: ${{ steps.report.outputs.scan_errors }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          gh label create health-report \
+            --description "Rolling weekly health scan report" \
+            --color 0E8A16 --force
+
+          issue=$(gh issue list --label health-report --state open --limit 1 --json number --jq '.[0].number // empty')
+
+          if [ "$ACTIONABLE" = "0" ] && [ "$SCAN_ERRORS" = "0" ]; then
+            if [ -n "$issue" ]; then
+              gh issue comment "$issue" --body "Clean as of \`$GITHUB_SHA\`. Closing — a new issue opens if findings return. [Run]($RUN_URL)"
+              gh issue close "$issue"
+            fi
+            echo "No actionable findings."
+            exit 0
+          fi
+
+          if [ -n "$issue" ]; then
+            gh issue edit "$issue" --body-file report.md
+            # Editing the body sends no notification; the comment is the ping.
+            gh issue comment "$issue" --body "Report updated: $ACTIONABLE actionable finding(s) as of \`$GITHUB_SHA\`. [Run]($RUN_URL)"
+          else
+            gh issue create \
+              --title "Weekly health report" \
+              --label health-report \
+              --body-file report.md
+          fi
