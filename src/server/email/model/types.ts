@@ -22,14 +22,10 @@ export interface MailConfig {
 }
 
 /**
- * Data structure for email content
+ * MailData is shared composition state and lives in common; re-exported here
+ * for the email domain's own use.
  */
-export interface MailData {
-  emailAddress: string;
-  subject: string;
-  textMessage: string;
-  htmlMessage?: string;
-}
+export type { MailData } from '@/server/common/email/types';
 
 /**
  * Type guard to validate MailConfig objects

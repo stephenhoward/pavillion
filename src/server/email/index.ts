@@ -9,8 +9,8 @@
  * Usage:
  * - For domain initialization: import EmailDomain from '@/server/email'
  * - For cross-domain communication: import EmailInterface from '@/server/email/interface'
- * - For types: import { MailData } from '@/server/email/model/types'
- * - For message templates: import { EmailMessage, compileTemplate } from '@/server/email/model/message'
+ * - For types: import { MailData } from '@/server/common/email/types'
+ * - For message templates: import { EmailMessage, compileTemplate } from '@/server/common/email/message'
  */
 
 import EmailInterface from './interface';

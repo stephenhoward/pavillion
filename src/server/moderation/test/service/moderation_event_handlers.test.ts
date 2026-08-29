@@ -11,7 +11,7 @@ import ModerationInterface from '@/server/moderation/interface';
 import CalendarInterface from '@/server/calendar/interface';
 import AccountsInterface from '@/server/accounts/interface';
 import EmailInterface from '@/server/email/interface';
-import { MailData } from '@/server/email/model/types';
+import { MailData } from '@/server/common/email/types';
 import { initI18Next } from '@/server/common/test/lib/i18next';
 
 initI18Next();

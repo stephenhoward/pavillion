@@ -1,7 +1,7 @@
 import config from 'config';
 import { Account } from '@/common/model/account';
-import { MailData } from '@/server/email/model/types';
-import { EmailMessage, compileTemplate } from '@/server/email/model/message';
+import { MailData } from '@/server/common/email/types';
+import { EmailMessage, compileTemplate } from '@/server/common/email/message';
 
 const textTemplate = compileTemplate('src/server/authentication', 'email_change_confirmation_email.text.hbs');
 const htmlTemplate = compileTemplate('src/server/authentication', 'email_change_confirmation_email.html.hbs');
