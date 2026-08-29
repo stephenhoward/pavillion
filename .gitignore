@@ -65,3 +65,6 @@ caddy-extras.d/*.caddyfile
 # output from the deploy hook (written to /opt/pavillion/deploy.log).
 docker/staging/hooks.json
 /deploy.log
+
+# local per-run reports from /clear-backlog --scheduled; never shipped
+/reports/

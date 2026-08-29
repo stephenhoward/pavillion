@@ -7,6 +7,10 @@ Reports what shipped and surfaces the beads that need a human decision.
 
 Use it to drain the long tail of small, well-scoped chores quickly.
 
+Tier B runs only with `--include-b` (or `--scheduled`, which implies it), and
+**every Tier-B judgment is made by the advisor agent** — see "The Tier-B
+advisor" below. The orchestrator never makes a Tier-B call itself.
+
 Beads that are **not** small leaf chores (decision-spikes, features, large
 rippling refactors, structured epics) are explicitly **excluded** here and left
 for the `/plan` → `/analyze-bead` → `/spawn-bead-workers` pipeline or
@@ -21,7 +25,16 @@ human-in-loop work. Do not force them through this command.
 - `--triage-only` / `--dry-run` — produce the tiered triage report and stop.
   Zero changes.
 - `--include-b` — after Tier A completes, also run Tier B (small + one
-  decision). Implies the same per-bead dispatch flow.
+  decision). Implies the same per-bead dispatch flow, with the advisor gate:
+  each Tier-B bead's decision is made by the advisor agent, the PR title
+  carries a `[Tier B]` prefix, and at most **3 Tier-B PRs** ship per run.
+- `--scheduled` — unattended weekly mode. Implies `--include-b`; asks no
+  questions and never waits on a human (anything that would have been a
+  confirmation or a "needs your decision" prompt goes into the report
+  instead); runs the **queue gate** before dispatching anything and writes the
+  per-run **report file** — see "Scheduled mode" below. Mutually exclusive
+  with `--confirm`. The queue gate runs ONLY in this mode: a manual
+  invocation (any other argument combination) never checks the queue.
 - `--bead-ids <id>[,<id>...]` — skip selection/triage; run exactly these beads
   through preflight + dispatch. Use for a curated set you already chose.
 - `--parallel` — dispatch up to **3** implementers concurrently (default:
@@ -124,6 +137,10 @@ Pull a candidate OUT of the executable batch if any of these hold:
 4. It has a genuine **design fork** where the right answer depends on a
    consumer/impact audit — route to Phase 4, do not guess.
 
+If a preflight call is genuinely borderline — dud-vs-viable, or Tier B vs
+Tier C — consult the Tier-B advisor rather than guessing. Misclassifying into
+Tier C silently parks work, which the run's own report cannot surface.
+
 Everything pulled goes into the **"needs your decision"** list for the final
 report (with the reason). Do not silently skip — surface it.
 
@@ -142,8 +159,22 @@ Dispatch one **lightweight implementer** subagent per surviving Tier A bead.
 Render the lightweight-implementer prompt below for each bead, substituting the
 bead id and a one-paragraph scope summary drawn from the bead.
 
-After all Tier A beads resolve, if `--include-b` was passed, repeat Phase 2 +
-Phase 3 for the Tier B set.
+After all Tier A beads resolve, if `--include-b` (or `--scheduled`) was
+passed, repeat Phase 2 + Phase 3 for the Tier B set, with three additions:
+
+1. **Advisor first.** Before dispatching a Tier-B implementer, send the bead's
+   real decision (the naming/scoping call, caller-migration pattern, or
+   interface shape) to the Tier-B advisor. The implementer receives the
+   advisor's decision baked into its scope — it executes the choice, it does
+   not re-open it.
+2. **`[Tier B]` PR convention.** The PR title carries a `[Tier B]` prefix, and
+   the PR description includes the advisor's rationale **verbatim** under a
+   `## Decision made on your behalf` heading, so the reviewer can re-derive
+   the call at merge time.
+3. **Hard cap: 3 Tier-B PRs per run.** Tier-B beads beyond the cap are not
+   dispatched; list them in the report as *deferred (Tier-B cap)* with their
+   advisor verdicts if already obtained, so a future run or a human can pick
+   them up.
 
 ### PHASE 4: Design-fork analysis path
 
@@ -166,7 +197,8 @@ Tier A implementer with the chosen option baked into its scope.
 
 ### PHASE 5: Report & surface decisions
 
-Emit a final report:
+Emit a final report (in `--scheduled` mode, written to the report file — see
+"Scheduled mode" — instead of awaiting a human):
 
 - **Shipped** table: `bead | PR # | one-line what`. Note each bead was closed.
 - **Needs your decision** list: every dud/blocked/needs-human bead (with the
@@ -176,6 +208,60 @@ Emit a final report:
 - **Tally**: open beads before → after; PRs opened (and how many already
   merged, if the user merged as you went).
 - **Suggested next**: what's left and why it's not for this command.
+
+## The Tier-B advisor
+
+A dedicated subagent that makes every judgment call the orchestrator is not
+allowed to make itself. Dispatch it on the **strongest available model**
+(currently `claude-fable-5`); the orchestrator itself runs on an Opus-class
+model — orchestration is procedural, the advisor moments are the only genuine
+judgment in the sweep, and isolating them produces a discrete, auditable
+decision artifact instead of an orchestrator grading its own homework.
+
+Consulted at exactly two points:
+
+1. **Each Tier-B bead's real decision** (Phase 3, `--include-b`): the
+   naming/scoping call, caller-migration pattern, or interface shape the bead
+   leaves open.
+2. **Borderline Phase 2 preflight calls**: dud-vs-viable, or Tier B vs Tier C.
+
+Contract:
+
+- **Read-only plus bead-read.** No code changes, no branch, no PR, no bead
+  writes. It reads the bead (`bd show <id>`) and the code on `origin/main`.
+- Returns a **decision plus a compact rationale tied to `file:line`
+  findings** — written to be pasted verbatim into a PR description, so it must
+  stand alone for a reviewer who has not seen the bead.
+- The orchestrator applies the decision (bakes it into the implementer's
+  scope, or re-tiers the bead) and carries the rationale into the `[Tier B]`
+  PR. It does not edit, soften, or summarize the advisor's rationale.
+
+## Scheduled mode (`--scheduled`)
+
+Unattended weekly run. Everything above applies, plus:
+
+**Queue gate — before any dispatch.** Using `gh pr list`, count open non-draft
+PRs that are passing CI and have no unresolved change request. If that count
+is **6 or more**, or the **oldest** such PR is **older than 7 days**, stand
+down: dispatch nothing and write a short report recording the gate reading.
+The two values are fixed constants sized to the maintainer's review capacity —
+they change only by a deliberate edit to this command, never inline by a
+running agent. The gate exists so an unattended run cannot pile PRs onto an
+already-full review queue; a human running this command by hand is making that
+call themselves, which is why manual invocations skip the gate entirely.
+
+**Per-run report.** Write `reports/clear-backlog/<YYYY-MM-DD>.md` in the
+workspace (`reports/` is gitignored — verify, and add the pattern if
+missing). Contents:
+
+- the queue-gate reading (counts and verdict, even when the run proceeded)
+- the **shipped** table: PR number and a one-line what
+- every **Tier-B decision** with the advisor's rationale
+- the **needs-decision** and **deferred (Tier-B cap)** lists, with reasons
+- the before/after open-bead tally
+
+The report is local and gitignored, so bead IDs are allowed there — they
+remain forbidden in branches, commits, and PRs.
 
 ## The lightweight implementer (variant of `implementer-prompt-template`)
 
@@ -243,3 +329,10 @@ This command has no automated tests. To sanity-check after an edit:
    commit/branch/PR carry **no bead ID**.
 3. Confirm a deliberately-stale or `needs-human` bead is pulled by Phase 2 into
    the "needs your decision" list rather than dispatched.
+4. `/clear-backlog --include-b --triage-only` — confirm the triage names which
+   Tier-B beads would go to the advisor and what each one's open decision is,
+   with zero changes made.
+5. For `--scheduled`: with 6+ qualifying PRs open (or a stale one), confirm the
+   run stands down and writes a gate-reading report with zero dispatches; and
+   confirm a normal run writes `reports/clear-backlog/<date>.md` and that the
+   path is gitignored (`git check-ignore reports/clear-backlog/x.md`).
