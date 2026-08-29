@@ -1,0 +1,149 @@
+{
+  "id": "evt_1U9qOaLM7gkEdqMfm3WNk9Ag",
+  "object": "event",
+  "api_version": "2026-02-25.clover",
+  "created": 1788025823,
+  "data": {
+    "object": {
+      "id": "cs_test_a1T7txURgXtFMtuhT5nZeTZxSA0bSe5aCPAAB9yL5zFlp7e5rnHsXefVkA",
+      "object": "checkout.session",
+      "adaptive_pricing": {
+        "enabled": true
+      },
+      "after_expiration": null,
+      "allow_promotion_codes": null,
+      "amount_subtotal": 500,
+      "amount_total": 500,
+      "automatic_tax": {
+        "enabled": false,
+        "liability": null,
+        "provider": null,
+        "status": null
+      },
+      "billing_address_collection": null,
+      "branding_settings": {
+        "background_color": "#1c1917",
+        "border_style": "rounded",
+        "button_color": "#f97316",
+        "display_name": "Pavillion sandbox",
+        "font_family": "default",
+        "icon": null,
+        "logo": null
+      },
+      "cancel_url": null,
+      "client_reference_id": null,
+      "client_secret": null,
+      "collected_information": {
+        "business_name": null,
+        "individual_name": null,
+        "shipping_details": null
+      },
+      "consent": null,
+      "consent_collection": null,
+      "created": 1788025700,
+      "currency": "usd",
+      "currency_conversion": null,
+      "custom_fields": [],
+      "custom_text": {
+        "after_submit": null,
+        "shipping_address": null,
+        "submit": null,
+        "terms_of_service_acceptance": null
+      },
+      "customer": "cus_VAAjKPe5TGoA44",
+      "customer_account": "acct_1U9qOVLM7g3w0vCL",
+      "customer_creation": "always",
+      "customer_details": {
+        "address": {
+          "city": null,
+          "country": "US",
+          "line1": null,
+          "line2": null,
+          "postal_code": "00000",
+          "state": null
+        },
+        "business_name": null,
+        "email": "funding+capture@example.com",
+        "individual_name": null,
+        "name": "Capture Test",
+        "phone": null,
+        "tax_exempt": "none",
+        "tax_ids": []
+      },
+      "customer_email": null,
+      "discounts": [],
+      "expires_at": 1788112099,
+      "integration_identifier": null,
+      "invoice": "in_1U9qOWLM7gkEdqMfS7vVEJuE",
+      "invoice_creation": null,
+      "livemode": false,
+      "locale": null,
+      "managed_payments": {
+        "enabled": false
+      },
+      "metadata": {
+        "pavillion_account_id": "6e87d5ca-4d89-42c1-aa9d-5ef437fe1111",
+        "pavillion_calendar_ids": "[\"cbe74815-939e-48b3-af44-1cd4eb3671bb\"]"
+      },
+      "mode": "subscription",
+      "origin_context": null,
+      "payment_intent": null,
+      "payment_link": null,
+      "payment_method_collection": "always",
+      "payment_method_configuration_details": {
+        "id": "pmc_1TBKQiLM7gkEdqMfRTUdSleo",
+        "parent": null
+      },
+      "payment_method_options": {
+        "card": {
+          "request_three_d_secure": "automatic"
+        }
+      },
+      "payment_method_types": [
+        "card",
+        "klarna",
+        "link",
+        "cashapp",
+        "amazon_pay"
+      ],
+      "payment_status": "paid",
+      "permissions": null,
+      "phone_number_collection": {
+        "enabled": false
+      },
+      "recovered_from": null,
+      "redirect_on_completion": "if_required",
+      "return_url": "http://localhost:3000/calendar/testuser_calendar/manage?tab=settings&session_id=%7BCHECKOUT_SESSION_ID%7D",
+      "saved_payment_method_options": {
+        "allow_redisplay_filters": [
+          "always"
+        ],
+        "payment_method_remove": "disabled",
+        "payment_method_save": null
+      },
+      "setup_intent": null,
+      "shipping_address_collection": null,
+      "shipping_cost": null,
+      "shipping_options": [],
+      "status": "complete",
+      "submit_type": null,
+      "subscription": "sub_1U9qOYLM7gkEdqMfd7WoHNz7",
+      "success_url": null,
+      "total_details": {
+        "amount_discount": 0,
+        "amount_shipping": 0,
+        "amount_tax": 0
+      },
+      "ui_mode": "embedded",
+      "url": null,
+      "wallet_options": null
+    }
+  },
+  "livemode": false,
+  "pending_webhooks": 0,
+  "request": {
+    "id": null,
+    "idempotency_key": null
+  },
+  "type": "checkout.session.completed"
+}

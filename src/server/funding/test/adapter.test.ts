@@ -30,6 +30,7 @@ vi.mock('@/server/common/helper/logger', () => ({
 }));
 
 import { StripeAdapter } from '../service/provider/stripe';
+import { capturedStripeEvent, capturedStripeEventPayload } from './fixtures/stripe';
 import { buildProviderIdempotencyKey } from '../service/provider/idempotency';
 import { PayPalAdapter } from '../service/provider/paypal';
 import { MockStripeAdapter, MockPayPalAdapter } from '../service/provider/mock_adapters';
@@ -278,56 +279,162 @@ describe('Payment Provider Adapters', () => {
     });
 
     describe('parseWebhookEvent', () => {
-      it('should parse checkout.session.completed with metadata', () => {
-        const payload = JSON.stringify({
-          id: 'evt_checkout_123',
-          type: 'checkout.session.completed',
-          data: {
-            object: {
-              subscription: 'sub_checkout_abc',
-              customer: 'cus_checkout_xyz',
-              metadata: {
-                pavillion_account_id: 'acc_parse_test',
-                pavillion_calendar_ids: JSON.stringify(['cal_1', 'cal_2']),
-              },
-            },
-          },
+      // ---------------------------------------------------------------------
+      // Captured payloads — one per handled event type, replayed byte-for-byte
+      // from a real test-mode Stripe delivery at the API version the adapter
+      // pins (src/server/funding/test/fixtures/stripe). These are the tests
+      // that detect Stripe API-shape drift; a hand-written payload can only
+      // ever re-assert the author's belief about the shape, which is precisely
+      // what drifted before pv-jdot.2.1. The hand-built cases further down
+      // cover shapes no capture at this API version can produce, and each says
+      // why it has to be hand-built.
+      // ---------------------------------------------------------------------
+      describe('captured Stripe test-mode payloads', () => {
+        it('should parse a captured checkout.session.completed', () => {
+          const fixture = capturedStripeEvent('checkout.session.completed');
+
+          const event = stripeAdapter.parseWebhookEvent(JSON.stringify(fixture));
+
+          expect(event.eventId).toBe('evt_1U9qOaLM7gkEdqMfm3WNk9Ag');
+          expect(event.eventType).toBe('checkout.session.completed');
+          expect(event.subscriptionId).toBe('sub_1U9qOYLM7gkEdqMfd7WoHNz7');
+          expect(event.customerId).toBe('cus_VAAjKPe5TGoA44');
+          expect(event.status).toBe('active');
+          expect(event.accountId).toBe('6e87d5ca-4d89-42c1-aa9d-5ef437fe1111');
+
+          // Stripe metadata values are strings, so the calendar list arrives
+          // JSON-encoded rather than as an array. Downstream parses it; the
+          // adapter must pass the string through untouched.
+          expect(event.calendarIds).toBe('["cbe74815-939e-48b3-af44-1cd4eb3671bb"]');
+          expect(typeof event.calendarIds).toBe('string');
         });
 
-        const event = stripeAdapter.parseWebhookEvent(payload);
+        it('should parse a captured invoice.paid from the parent subscription reference', () => {
+          const fixture = capturedStripeEvent('invoice.paid');
 
-        expect(event.eventId).toBe('evt_checkout_123');
-        expect(event.eventType).toBe('checkout.session.completed');
-        expect(event.subscriptionId).toBe('sub_checkout_abc');
-        expect(event.customerId).toBe('cus_checkout_xyz');
-        expect(event.status).toBe('active');
-        expect(event.accountId).toBe('acc_parse_test');
-        expect(event.calendarIds).toBe(JSON.stringify(['cal_1', 'cal_2']));
+          // Shape guard: at this API version the pre-Basil top-level field is
+          // not merely null but absent, so the id below can only have come
+          // from parent.subscription_details.subscription.
+          expect(fixture.data.object).not.toHaveProperty('subscription');
+
+          const event = stripeAdapter.parseWebhookEvent(JSON.stringify(fixture));
+
+          expect(event.eventId).toBe('evt_1U9qOaLM7gkEdqMfdMhGZ0ga');
+          expect(event.eventType).toBe('invoice.paid');
+          expect(event.subscriptionId).toBe('sub_1U9qOYLM7gkEdqMfd7WoHNz7');
+          expect(event.customerId).toBe('cus_VAAjKPe5TGoA44');
+          expect(event.status).toBe('active');
+
+          // Invoice events carry no Pavillion metadata at all.
+          expect(event.accountId).toBeUndefined();
+          expect(event.calendarIds).toBeUndefined();
+        });
+
+        it('should parse a captured invoice.payment_succeeded from the parent subscription reference', () => {
+          const fixture = capturedStripeEvent('invoice.payment_succeeded');
+
+          expect(fixture.data.object).not.toHaveProperty('subscription');
+
+          const event = stripeAdapter.parseWebhookEvent(JSON.stringify(fixture));
+
+          expect(event.eventId).toBe('evt_1U9qOaLM7gkEdqMfoyJPWt5m');
+          expect(event.subscriptionId).toBe('sub_1U9qOYLM7gkEdqMfd7WoHNz7');
+          expect(event.customerId).toBe('cus_VAAjKPe5TGoA44');
+          expect(event.status).toBe('active');
+        });
+
+        it('should parse a captured invoice.payment_failed as past_due', () => {
+          const fixture = capturedStripeEvent('invoice.payment_failed');
+
+          expect(fixture.data.object).not.toHaveProperty('subscription');
+
+          const event = stripeAdapter.parseWebhookEvent(JSON.stringify(fixture));
+
+          expect(event.eventId).toBe('evt_1U9qmDLM7gkEdqMfoSuJXlcw');
+          expect(event.subscriptionId).toBe('sub_1U9qmALM7gkEdqMfrOrCZcve');
+          expect(event.customerId).toBe('cus_VAB6DlQZRO3Ni2');
+          expect(event.status).toBe('past_due');
+        });
+
+        it('should read the billing period from the items of a captured customer.subscription.updated', () => {
+          const fixture = capturedStripeEvent('customer.subscription.updated');
+
+          // Shape guard: the pre-Basil top-level period fields are absent, so
+          // the period below can only have come from items.data[0].
+          expect(fixture.data.object).not.toHaveProperty('current_period_start');
+          expect(fixture.data.object).not.toHaveProperty('current_period_end');
+
+          const event = stripeAdapter.parseWebhookEvent(JSON.stringify(fixture));
+
+          expect(event.eventId).toBe('evt_1U9qPDLM7gkEdqMfo8qMLJSQ');
+          expect(event.subscriptionId).toBe('sub_1U9qOYLM7gkEdqMfd7WoHNz7');
+          expect(event.customerId).toBe('cus_VAAjKPe5TGoA44');
+          expect(event.currentPeriodStart).toEqual(new Date(1788025820 * 1000));
+          expect(event.currentPeriodEnd).toEqual(new Date(1790704220 * 1000));
+        });
+
+        it('should map a captured period-end cancellation to active, because Stripe still calls it active', () => {
+          // This capture is a cancel-at-period-end: Stripe reports
+          // status "active" and records the cancellation only in
+          // cancel_at_period_end / cancel_at / canceled_at. The adapter reads
+          // status alone, so it reports active — the behaviour pv-jdot.3.1
+          // exists to change. Pinning it here means that fix cannot land
+          // silently.
+          const fixture = capturedStripeEvent('customer.subscription.updated');
+          expect(fixture.data.object.status).toBe('active');
+          expect(fixture.data.object.cancel_at_period_end).toBe(true);
+
+          const event = stripeAdapter.parseWebhookEvent(JSON.stringify(fixture));
+
+          expect(event.status).toBe('active');
+        });
+
+        it('should parse a captured customer.subscription.deleted as cancelled', () => {
+          const fixture = capturedStripeEvent('customer.subscription.deleted');
+
+          // Stripe spells the wire value with one L; the adapter maps it to
+          // Pavillion's two-L internal status.
+          expect(fixture.data.object.status).toBe('canceled');
+
+          const event = stripeAdapter.parseWebhookEvent(JSON.stringify(fixture));
+
+          expect(event.eventId).toBe('evt_1U9qcvLM7gkEdqMfiOeIwqzV');
+          expect(event.subscriptionId).toBe('sub_1U9qOYLM7gkEdqMfd7WoHNz7');
+          expect(event.customerId).toBe('cus_VAAjKPe5TGoA44');
+          expect(event.status).toBe('cancelled');
+        });
+
+        it('should raise no drift warning for any captured payload', () => {
+          // The warning is reserved for genuine API-shape drift, so a payload
+          // Stripe actually sent must never trigger one.
+          const captured = [
+            'checkout.session.completed',
+            'customer.subscription.deleted',
+            'customer.subscription.updated',
+            'invoice.paid',
+            'invoice.payment_failed',
+            'invoice.payment_succeeded',
+          ] as const;
+
+          for (const type of captured) {
+            stripeAdapter.parseWebhookEvent(capturedStripeEventPayload(type));
+          }
+
+          expect(warnStub).not.toHaveBeenCalled();
+        });
       });
 
       it('should parse checkout.session.completed without calendarIds', () => {
-        const payload = JSON.stringify({
-          id: 'evt_checkout_no_cals',
-          type: 'checkout.session.completed',
-          data: {
-            object: {
-              subscription: 'sub_no_cals',
-              customer: 'cus_no_cals',
-              metadata: {
-                pavillion_account_id: 'acc_no_cals',
-              },
-            },
-          },
-        });
+        // Derived from the real capture by removing the one key under test, so
+        // everything else stays the shape Stripe actually sends.
+        const fixture = capturedStripeEvent('checkout.session.completed');
+        delete (fixture.data.object.metadata as Record<string, string>).pavillion_calendar_ids;
 
-        const event = stripeAdapter.parseWebhookEvent(payload);
+        const event = stripeAdapter.parseWebhookEvent(JSON.stringify(fixture));
 
-        expect(event.eventId).toBe('evt_checkout_no_cals');
-        expect(event.eventType).toBe('checkout.session.completed');
-        expect(event.subscriptionId).toBe('sub_no_cals');
-        expect(event.customerId).toBe('cus_no_cals');
+        expect(event.subscriptionId).toBe('sub_1U9qOYLM7gkEdqMfd7WoHNz7');
         expect(event.status).toBe('active');
-        expect(event.accountId).toBe('acc_no_cals');
+        expect(event.accountId).toBe('6e87d5ca-4d89-42c1-aa9d-5ef437fe1111');
         expect(event.calendarIds).toBeUndefined();
       });
 
@@ -372,87 +479,6 @@ describe('Payment Provider Adapters', () => {
         expect(warnStub).toHaveBeenCalled();
       });
 
-      it('should parse invoice.paid event', () => {
-        const payload = JSON.stringify({
-          id: 'evt_invoice_paid',
-          type: 'invoice.paid',
-          data: {
-            object: {
-              customer: 'cus_inv_123',
-              parent: {
-                type: 'subscription_details',
-                quote_details: null,
-                subscription_details: {
-                  subscription: 'sub_inv_123',
-                  metadata: null,
-                },
-              },
-            },
-          },
-        });
-
-        const event = stripeAdapter.parseWebhookEvent(payload);
-
-        expect(event.eventId).toBe('evt_invoice_paid');
-        expect(event.eventType).toBe('invoice.paid');
-        expect(event.subscriptionId).toBe('sub_inv_123');
-        expect(event.customerId).toBe('cus_inv_123');
-        expect(event.status).toBe('active');
-        expect(event.accountId).toBeUndefined();
-        expect(event.calendarIds).toBeUndefined();
-      });
-
-      it('should parse invoice.payment_succeeded event', () => {
-        const payload = JSON.stringify({
-          id: 'evt_invoice_succeeded',
-          type: 'invoice.payment_succeeded',
-          data: {
-            object: {
-              customer: 'cus_succ_123',
-              parent: {
-                type: 'subscription_details',
-                quote_details: null,
-                subscription_details: {
-                  subscription: 'sub_succ_123',
-                  metadata: null,
-                },
-              },
-            },
-          },
-        });
-
-        const event = stripeAdapter.parseWebhookEvent(payload);
-
-        expect(event.subscriptionId).toBe('sub_succ_123');
-        expect(event.status).toBe('active');
-      });
-
-      it('should parse invoice.payment_failed event', () => {
-        const payload = JSON.stringify({
-          id: 'evt_inv_failed',
-          type: 'invoice.payment_failed',
-          data: {
-            object: {
-              customer: 'cus_fail_123',
-              parent: {
-                type: 'subscription_details',
-                quote_details: null,
-                subscription_details: {
-                  subscription: 'sub_fail_123',
-                  metadata: null,
-                },
-              },
-            },
-          },
-        });
-
-        const event = stripeAdapter.parseWebhookEvent(payload);
-
-        expect(event.subscriptionId).toBe('sub_fail_123');
-        expect(event.customerId).toBe('cus_fail_123');
-        expect(event.status).toBe('past_due');
-      });
-
       it('should resolve the invoice subscription when it is expanded to an object', () => {
         const payload = JSON.stringify({
           id: 'evt_inv_expanded',
@@ -478,6 +504,10 @@ describe('Payment Provider Adapters', () => {
       });
 
       it('should fall back to the legacy top-level invoice subscription field', () => {
+        // Necessarily hand-built: at the pinned API version Stripe leaves the
+        // top-level field null on every invoice, so no capture can reach this
+        // branch. It stays covered because an endpoint's serialization version
+        // is set by the instance admin, independently of the adapter's pin.
         const payload = JSON.stringify({
           id: 'evt_inv_legacy',
           type: 'invoice.paid',
@@ -638,58 +668,24 @@ describe('Payment Provider Adapters', () => {
         expect(warnStub).not.toHaveBeenCalled();
       });
 
-      it('should parse customer.subscription.deleted event', () => {
-        const payload = JSON.stringify({
-          id: 'evt_sub_deleted',
-          type: 'customer.subscription.deleted',
-          data: {
-            object: {
-              id: 'sub_del_123',
-              customer: 'cus_del_123',
-            },
-          },
-        });
+      it('should map a past_due subscription status', () => {
+        // Derived from the real capture with only the status changed: no
+        // captured payload carries past_due, but every other field stays the
+        // shape Stripe sends so the mapping is exercised in context.
+        const fixture = capturedStripeEvent('customer.subscription.updated');
+        fixture.data.object.status = 'past_due';
 
-        const event = stripeAdapter.parseWebhookEvent(payload);
+        const event = stripeAdapter.parseWebhookEvent(JSON.stringify(fixture));
 
-        expect(event.subscriptionId).toBe('sub_del_123');
-        expect(event.status).toBe('cancelled');
-      });
-
-      it('should parse customer.subscription.updated with status mapping', () => {
-        const now = Math.floor(Date.now() / 1000);
-        const periodEnd = now + 30 * 24 * 60 * 60;
-        const payload = JSON.stringify({
-          id: 'evt_sub_updated',
-          type: 'customer.subscription.updated',
-          data: {
-            object: {
-              id: 'sub_upd_123',
-              customer: 'cus_upd_123',
-              status: 'past_due',
-              items: {
-                object: 'list',
-                data: [
-                  {
-                    id: 'si_upd_123',
-                    current_period_start: now,
-                    current_period_end: periodEnd,
-                  },
-                ],
-              },
-            },
-          },
-        });
-
-        const event = stripeAdapter.parseWebhookEvent(payload);
-
-        expect(event.subscriptionId).toBe('sub_upd_123');
+        expect(event.subscriptionId).toBe('sub_1U9qOYLM7gkEdqMfd7WoHNz7');
         expect(event.status).toBe('past_due');
-        expect(event.currentPeriodStart).toEqual(new Date(now * 1000));
-        expect(event.currentPeriodEnd).toEqual(new Date(periodEnd * 1000));
+        expect(event.currentPeriodStart).toEqual(new Date(1788025820 * 1000));
+        expect(event.currentPeriodEnd).toEqual(new Date(1790704220 * 1000));
       });
 
       it('should fall back to legacy top-level subscription period fields', () => {
+        // Necessarily hand-built: Stripe moved these fields onto the items in
+        // the Basil API, so no capture at the pinned version carries them.
         const now = Math.floor(Date.now() / 1000);
         const periodEnd = now + 30 * 24 * 60 * 60;
         const payload = JSON.stringify({

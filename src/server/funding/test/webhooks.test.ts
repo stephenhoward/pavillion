@@ -6,7 +6,6 @@ import { EventEmitter } from 'events';
 import { v4 as uuidv4 } from 'uuid';
 import db from '@/server/common/entity/db';
 import FundingService from '@/server/funding/service/funding';
-import WebhookRoutes from '@/server/funding/api/v1/webhooks';
 import FundingApiV1 from '@/server/funding/api/v1';
 import AccountApiV1 from '@/server/accounts/api/v1';
 import { FundingPlanEntity } from '@/server/funding/entity/funding_plan';
@@ -38,6 +37,29 @@ vi.mock('stripe', () => {
 });
 
 import Stripe from 'stripe';
+import { capturedStripeEvent, capturedStripeEventPayload } from './fixtures/stripe';
+
+/**
+ * INVARIANT (pv-ufag): every test in this file mounts the webhook route
+ * through FundingApiV1.install, never by constructing WebhookRoutes and
+ * calling installHandlers directly.
+ *
+ * The production bug was a middleware-ordering bug, not a handler bug: a
+ * global express.json() registered ahead of the raw webhook route consumed and
+ * parsed the body, so the handler received "[object Object]" instead of the
+ * bytes Stripe signed, and every signature check failed. FundingApiV1.install
+ * is where the compensating scope lives — it applies express.json() to
+ * /api/funding/v1 only (api/v1.ts) and mounts the webhook route outside it. A
+ * test that mounts an isolated router builds an app that has no JSON parser at
+ * all, so it passes whether or not that scoping survives, and the regression
+ * can return unnoticed.
+ *
+ * All Stripe payloads here come from src/server/funding/test/fixtures/stripe:
+ * real test-mode deliveries at the API version the adapter pins. Identity
+ * fields (event, subscription, customer, account, calendar ids) are rebound so
+ * a payload can line up with a locally-seeded plan; field placement is left
+ * exactly as Stripe sent it.
+ */
 
 /**
  * Create a parseWebhookEvent function that matches StripeAdapter behavior.
@@ -73,8 +95,7 @@ describe('Webhook Handling', () => {
       mockInterface = buildMockInterface(sandbox);
 
       app = express();
-      const webhookRoutes = new WebhookRoutes(mockInterface as any);
-      webhookRoutes.installHandlers(app, '/api/funding');
+      FundingApiV1.install(app, mockInterface as any);
     });
 
     afterEach(() => {
@@ -84,7 +105,7 @@ describe('Webhook Handling', () => {
 
     describe('Stripe webhook handler', () => {
       it('should delegate to service and return 200 on success', async () => {
-        const webhookPayload = JSON.stringify({ id: 'evt_ok', type: 'invoice.paid' });
+        const webhookPayload = capturedStripeEventPayload('invoice.paid', { eventId: 'evt_ok' });
 
         const response = await request(app)
           .post('/api/funding/webhooks/stripe')
@@ -105,7 +126,7 @@ describe('Webhook Handling', () => {
         const response = await request(app)
           .post('/api/funding/webhooks/stripe')
           .set('Content-Type', 'application/json')
-          .send(JSON.stringify({ id: 'evt_nosig', type: 'invoice.paid' }));
+          .send(capturedStripeEventPayload('invoice.paid', { eventId: 'evt_nosig' }));
 
         expect(response.status).toBe(400);
         expect(response.body.error).toContain('Missing Stripe signature');
@@ -119,7 +140,7 @@ describe('Webhook Handling', () => {
           .post('/api/funding/webhooks/stripe')
           .set('stripe-signature', 'some_signature')
           .set('Content-Type', 'application/json')
-          .send(JSON.stringify({ id: 'evt_noconfig', type: 'invoice.paid' }));
+          .send(capturedStripeEventPayload('invoice.paid', { eventId: 'evt_noconfig' }));
 
         // Returns 200 so Stripe stops retrying — event has no handler on this instance
         expect(response.status).toBe(200);
@@ -135,7 +156,7 @@ describe('Webhook Handling', () => {
           .post('/api/funding/webhooks/stripe')
           .set('stripe-signature', 'bad_signature')
           .set('Content-Type', 'application/json')
-          .send(JSON.stringify({ id: 'evt_badsig', type: 'invoice.paid' }));
+          .send(capturedStripeEventPayload('invoice.paid', { eventId: 'evt_badsig' }));
 
         expect(response.status).toBe(400);
         // Must return a generic message — must NOT echo the Stripe SDK error detail
@@ -151,7 +172,7 @@ describe('Webhook Handling', () => {
           .post('/api/funding/webhooks/stripe')
           .set('stripe-signature', 'some_signature')
           .set('Content-Type', 'application/json')
-          .send(JSON.stringify({ id: 'evt_err', type: 'invoice.paid' }));
+          .send(capturedStripeEventPayload('invoice.paid', { eventId: 'evt_err' }));
 
         expect(response.status).toBe(500);
         expect(response.body.error).toBe('Internal server error');
@@ -188,7 +209,7 @@ describe('Webhook Handling', () => {
     });
 
     it('delivers the exact raw JSON body to the service for signature verification', async () => {
-      const webhookPayload = JSON.stringify({ id: 'evt_raw_body', type: 'invoice.paid' });
+      const webhookPayload = capturedStripeEventPayload('invoice.paid', { eventId: 'evt_raw_body' });
 
       const response = await request(app)
         .post('/api/funding/webhooks/stripe')
@@ -220,7 +241,7 @@ describe('Webhook Handling', () => {
         handleStripeWebhook,
       } as any);
 
-      const webhookPayload = JSON.stringify({ id: 'evt_boot_order', type: 'invoice.paid' });
+      const webhookPayload = capturedStripeEventPayload('invoice.paid', { eventId: 'evt_boot_order' });
 
       const response = await request(bootApp)
         .post('/api/funding/webhooks/stripe')
@@ -294,10 +315,10 @@ describe('Webhook Handling', () => {
       const app = express();
       FundingApiV1.install(app, service as any);
 
-      const webhookPayload = JSON.stringify({
-        id: 'evt_forged_no_secret',
-        type: 'invoice.payment_failed',
-        data: { object: { subscription: 'sub_forged', customer: 'cus_forged' } },
+      const webhookPayload = capturedStripeEventPayload('invoice.payment_failed', {
+        eventId: 'evt_forged_no_secret',
+        subscriptionId: 'sub_forged',
+        customerId: 'cus_forged',
       });
 
       const response = await request(app)
@@ -346,8 +367,7 @@ describe('Webhook Handling', () => {
       await stripeConfig.save();
 
       app = express();
-      const webhookRoutes = new WebhookRoutes(service as any);
-      webhookRoutes.installHandlers(app, '/api/funding');
+      FundingApiV1.install(app, service as any);
     });
 
     afterEach(() => {
@@ -373,15 +393,10 @@ describe('Webhook Handling', () => {
         plan.current_period_end = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
         await plan.save();
 
-        const webhookPayload = JSON.stringify({
-          id: 'evt_payment_failed',
-          type: 'invoice.payment_failed',
-          data: {
-            object: {
-              subscription: 'sub_test_123',
-              customer: 'cus_test_123',
-            },
-          },
+        const webhookPayload = capturedStripeEventPayload('invoice.payment_failed', {
+          eventId: 'evt_payment_failed',
+          subscriptionId: 'sub_test_123',
+          customerId: 'cus_test_123',
         });
 
         vi.mocked(Stripe.Webhook.constructEvent).mockReturnValue(JSON.parse(webhookPayload) as any);
@@ -415,18 +430,10 @@ describe('Webhook Handling', () => {
         plan.current_period_end = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
         await plan.save();
 
-        const webhookPayload = JSON.stringify({
-          id: 'evt_fk_test',
-          type: 'customer.subscription.updated',
-          data: {
-            object: {
-              id: 'sub_fk_test_456',
-              customer: 'cus_fk_test_456',
-              status: 'active',
-              current_period_start: Math.floor(Date.now() / 1000),
-              current_period_end: Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60,
-            },
-          },
+        const webhookPayload = capturedStripeEventPayload('customer.subscription.updated', {
+          eventId: 'evt_fk_test',
+          subscriptionId: 'sub_fk_test_456',
+          customerId: 'cus_fk_test_456',
         });
 
         vi.mocked(Stripe.Webhook.constructEvent).mockReturnValue(JSON.parse(webhookPayload) as any);
@@ -448,15 +455,10 @@ describe('Webhook Handling', () => {
       });
 
       it('should log event with null funding_plan_id when no matching FundingPlan exists', async () => {
-        const webhookPayload = JSON.stringify({
-          id: 'evt_unknown_sub',
-          type: 'invoice.paid',
-          data: {
-            object: {
-              subscription: 'sub_nonexistent_999',
-              customer: 'cus_nonexistent_999',
-            },
-          },
+        const webhookPayload = capturedStripeEventPayload('invoice.paid', {
+          eventId: 'evt_unknown_sub',
+          subscriptionId: 'sub_nonexistent_999',
+          customerId: 'cus_nonexistent_999',
         });
 
         vi.mocked(Stripe.Webhook.constructEvent).mockReturnValue(JSON.parse(webhookPayload) as any);
@@ -480,15 +482,10 @@ describe('Webhook Handling', () => {
       });
 
       it('should dedupe a redelivered event that has no matching FundingPlan', async () => {
-        const webhookPayload = JSON.stringify({
-          id: 'evt_unknown_sub_redelivered',
-          type: 'invoice.paid',
-          data: {
-            object: {
-              subscription: 'sub_nonexistent_redelivered',
-              customer: 'cus_nonexistent_redelivered',
-            },
-          },
+        const webhookPayload = capturedStripeEventPayload('invoice.paid', {
+          eventId: 'evt_unknown_sub_redelivered',
+          subscriptionId: 'sub_nonexistent_redelivered',
+          customerId: 'cus_nonexistent_redelivered',
         });
 
         vi.mocked(Stripe.Webhook.constructEvent).mockReturnValue(JSON.parse(webhookPayload) as any);
@@ -526,15 +523,10 @@ describe('Webhook Handling', () => {
         plan.current_period_end = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
         await plan.save();
 
-        const webhookPayload = JSON.stringify({
-          id: 'evt_duplicate_test',
-          type: 'invoice.paid',
-          data: {
-            object: {
-              subscription: 'sub_test_dup',
-              customer: 'cus_test_dup',
-            },
-          },
+        const webhookPayload = capturedStripeEventPayload('invoice.paid', {
+          eventId: 'evt_duplicate_test',
+          subscriptionId: 'sub_test_dup',
+          customerId: 'cus_test_dup',
         });
 
         vi.mocked(Stripe.Webhook.constructEvent).mockReturnValue(JSON.parse(webhookPayload) as any);
@@ -606,19 +598,12 @@ describe('Webhook Handling', () => {
       });
 
       it('should create a funding plan from completed checkout session', async () => {
-        const webhookPayload = JSON.stringify({
-          id: 'evt_checkout_complete',
-          type: 'checkout.session.completed',
-          data: {
-            object: {
-              subscription: 'sub_checkout_123',
-              customer: 'cus_checkout_123',
-              metadata: {
-                pavillion_account_id: testAccountId,
-                pavillion_calendar_ids: JSON.stringify([testCalendarId1]),
-              },
-            },
-          },
+        const webhookPayload = capturedStripeEventPayload('checkout.session.completed', {
+          eventId: 'evt_checkout_complete',
+          subscriptionId: 'sub_checkout_123',
+          customerId: 'cus_checkout_123',
+          accountId: testAccountId,
+          calendarIds: [testCalendarId1],
         });
 
         vi.mocked(Stripe.Webhook.constructEvent).mockReturnValue(JSON.parse(webhookPayload) as any);
@@ -644,19 +629,12 @@ describe('Webhook Handling', () => {
       });
 
       it('should allocate funding to validated calendars', async () => {
-        const webhookPayload = JSON.stringify({
-          id: 'evt_checkout_with_calendars',
-          type: 'checkout.session.completed',
-          data: {
-            object: {
-              subscription: 'sub_checkout_cal',
-              customer: 'cus_checkout_cal',
-              metadata: {
-                pavillion_account_id: testAccountId,
-                pavillion_calendar_ids: JSON.stringify([testCalendarId1, testCalendarId2]),
-              },
-            },
-          },
+        const webhookPayload = capturedStripeEventPayload('checkout.session.completed', {
+          eventId: 'evt_checkout_with_calendars',
+          subscriptionId: 'sub_checkout_cal',
+          customerId: 'cus_checkout_cal',
+          accountId: testAccountId,
+          calendarIds: [testCalendarId1, testCalendarId2],
         });
 
         const now = new Date();
@@ -702,19 +680,12 @@ describe('Webhook Handling', () => {
         mockCalendarInterface.isCalendarOwnerById
           .withArgs(testAccountId, testCalendarId2).resolves(false);
 
-        const webhookPayload = JSON.stringify({
-          id: 'evt_checkout_revalidate',
-          type: 'checkout.session.completed',
-          data: {
-            object: {
-              subscription: 'sub_checkout_reval',
-              customer: 'cus_checkout_reval',
-              metadata: {
-                pavillion_account_id: testAccountId,
-                pavillion_calendar_ids: JSON.stringify([testCalendarId1, testCalendarId2]),
-              },
-            },
-          },
+        const webhookPayload = capturedStripeEventPayload('checkout.session.completed', {
+          eventId: 'evt_checkout_revalidate',
+          subscriptionId: 'sub_checkout_reval',
+          customerId: 'cus_checkout_reval',
+          accountId: testAccountId,
+          calendarIds: [testCalendarId1, testCalendarId2],
         });
 
         const now = new Date();
@@ -753,19 +724,12 @@ describe('Webhook Handling', () => {
       });
 
       it('should handle duplicate checkout.session.completed events idempotently', async () => {
-        const webhookPayload = JSON.stringify({
-          id: 'evt_checkout_dup',
-          type: 'checkout.session.completed',
-          data: {
-            object: {
-              subscription: 'sub_checkout_dup',
-              customer: 'cus_checkout_dup',
-              metadata: {
-                pavillion_account_id: testAccountId,
-                pavillion_calendar_ids: JSON.stringify([testCalendarId1]),
-              },
-            },
-          },
+        const webhookPayload = capturedStripeEventPayload('checkout.session.completed', {
+          eventId: 'evt_checkout_dup',
+          subscriptionId: 'sub_checkout_dup',
+          customerId: 'cus_checkout_dup',
+          accountId: testAccountId,
+          calendarIds: [testCalendarId1],
         });
 
         const now = new Date();
@@ -809,19 +773,15 @@ describe('Webhook Handling', () => {
       });
 
       it('should handle checkout without calendarIds metadata', async () => {
-        const webhookPayload = JSON.stringify({
-          id: 'evt_checkout_no_cals',
-          type: 'checkout.session.completed',
-          data: {
-            object: {
-              subscription: 'sub_checkout_nocals',
-              customer: 'cus_checkout_nocals',
-              metadata: {
-                pavillion_account_id: testAccountId,
-              },
-            },
-          },
+        // Derived from the capture by removing the one key under test.
+        const checkoutEvent = capturedStripeEvent('checkout.session.completed', {
+          eventId: 'evt_checkout_no_cals',
+          subscriptionId: 'sub_checkout_nocals',
+          customerId: 'cus_checkout_nocals',
+          accountId: testAccountId,
         });
+        delete (checkoutEvent.data.object.metadata as Record<string, string>).pavillion_calendar_ids;
+        const webhookPayload = JSON.stringify(checkoutEvent);
 
         const now = new Date();
         const periodEnd = new Date(now);
@@ -859,19 +819,14 @@ describe('Webhook Handling', () => {
       });
 
       it('should detect yearly billing cycle from subscription period', async () => {
-        const webhookPayload = JSON.stringify({
-          id: 'evt_checkout_yearly',
-          type: 'checkout.session.completed',
-          data: {
-            object: {
-              subscription: 'sub_checkout_yearly',
-              customer: 'cus_checkout_yearly',
-              metadata: {
-                pavillion_account_id: testAccountId,
-              },
-            },
-          },
+        const yearlyEvent = capturedStripeEvent('checkout.session.completed', {
+          eventId: 'evt_checkout_yearly',
+          subscriptionId: 'sub_checkout_yearly',
+          customerId: 'cus_checkout_yearly',
+          accountId: testAccountId,
         });
+        delete (yearlyEvent.data.object.metadata as Record<string, string>).pavillion_calendar_ids;
+        const webhookPayload = JSON.stringify(yearlyEvent);
 
         const now = new Date();
         const periodEnd = new Date(now);
@@ -904,17 +859,15 @@ describe('Webhook Handling', () => {
       });
 
       it('should handle missing accountId in metadata gracefully', async () => {
-        const webhookPayload = JSON.stringify({
-          id: 'evt_checkout_no_account',
-          type: 'checkout.session.completed',
-          data: {
-            object: {
-              subscription: 'sub_checkout_noaccount',
-              customer: 'cus_checkout_noaccount',
-              metadata: {},
-            },
-          },
+        // A checkout session created outside Pavillion carries no Pavillion
+        // metadata, so the capture is stripped of it rather than rebound.
+        const unattributedEvent = capturedStripeEvent('checkout.session.completed', {
+          eventId: 'evt_checkout_no_account',
+          subscriptionId: 'sub_checkout_noaccount',
+          customerId: 'cus_checkout_noaccount',
         });
+        unattributedEvent.data.object.metadata = {};
+        const webhookPayload = JSON.stringify(unattributedEvent);
 
         vi.mocked(Stripe.Webhook.constructEvent).mockReturnValue(JSON.parse(webhookPayload) as any);
 
@@ -941,18 +894,11 @@ describe('Webhook Handling', () => {
           new Error('Stripe subscription sub_checkout_throw has no billing period'),
         );
 
-        const webhookPayload = JSON.stringify({
-          id: 'evt_checkout_throw',
-          type: 'checkout.session.completed',
-          data: {
-            object: {
-              subscription: 'sub_checkout_throw',
-              customer: 'cus_checkout_throw',
-              metadata: {
-                pavillion_account_id: testAccountId,
-              },
-            },
-          },
+        const webhookPayload = capturedStripeEventPayload('checkout.session.completed', {
+          eventId: 'evt_checkout_throw',
+          subscriptionId: 'sub_checkout_throw',
+          customerId: 'cus_checkout_throw',
+          accountId: testAccountId,
         });
 
         vi.mocked(Stripe.Webhook.constructEvent).mockReturnValue(JSON.parse(webhookPayload) as any);
@@ -998,17 +944,13 @@ describe('Webhook Handling', () => {
           currency: 'USD',
         });
 
-        const buildPayload = (eventId: string, subscriptionId: string) => JSON.stringify({
-          id: eventId,
-          type: 'checkout.session.completed',
-          data: {
-            object: {
-              subscription: subscriptionId,
-              customer: `cus_${subscriptionId}`,
-              metadata: { pavillion_account_id: testAccountId },
-            },
-          },
-        });
+        const buildPayload = (eventId: string, subscriptionId: string) =>
+          capturedStripeEventPayload('checkout.session.completed', {
+            eventId,
+            subscriptionId,
+            customerId: `cus_${subscriptionId}`,
+            accountId: testAccountId,
+          });
 
         const brokenPayload = buildPayload('evt_checkout_broken', 'sub_checkout_broken');
         vi.mocked(Stripe.Webhook.constructEvent).mockReturnValue(JSON.parse(brokenPayload) as any);
@@ -1051,19 +993,20 @@ describe('Webhook Handling', () => {
         plan.current_period_end = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
         await plan.save();
 
-        const webhookPayload = JSON.stringify({
-          id: 'evt_minimization',
-          type: 'invoice.payment_failed',
-          data: {
-            object: {
-              subscription: 'sub_minimization',
-              customer: 'cus_minimization',
-              customer_email: 'payer@example.com',
-              customer_name: 'A Payer',
-              payment_method_details: { card: { last4: '4242', brand: 'visa' } },
-            },
-          },
+        // The capture is the point here: a real failed invoice carries the
+        // payer's email, name and a hosted invoice URL, so this asserts against
+        // the fields Stripe actually sends rather than an author's guess.
+        const failedInvoice = capturedStripeEvent('invoice.payment_failed', {
+          eventId: 'evt_minimization',
+          subscriptionId: 'sub_minimization',
+          customerId: 'cus_minimization',
         });
+        const invoiceObject = failedInvoice.data.object;
+        expect(invoiceObject.customer_email).toBe('funding+capture@example.com');
+        expect(invoiceObject.customer_name).toBe('Capture Test');
+        const hostedInvoiceUrl = invoiceObject.hosted_invoice_url as string;
+        expect(hostedInvoiceUrl).toBeTruthy();
+        const webhookPayload = JSON.stringify(failedInvoice);
 
         vi.mocked(Stripe.Webhook.constructEvent).mockReturnValue(JSON.parse(webhookPayload) as any);
 
@@ -1081,17 +1024,20 @@ describe('Webhook Handling', () => {
         expect(loggedEvent).not.toBeNull();
 
         const storedPayload = loggedEvent!.toModel().payload;
-        expect(storedPayload).not.toContain('payer@example.com');
-        expect(storedPayload).not.toContain('A Payer');
-        expect(storedPayload).not.toContain('4242');
+        expect(storedPayload).not.toContain('funding+capture@example.com');
+        expect(storedPayload).not.toContain('Capture Test');
+        expect(storedPayload).not.toContain(hostedInvoiceUrl);
         expect(storedPayload).not.toContain('cus_minimization');
         expect(JSON.parse(storedPayload)).toEqual({ status: 'past_due' });
       });
 
       it('should record a null status for an event type the adapter does not parse', async () => {
-        // The adapter only sets a status for the five lifecycle event types it
+        // The adapter only sets a status for the six lifecycle event types it
         // switches on. Endpoints are often subscribed to more than that, so
         // any other delivery lands here carrying no status at all.
+        //
+        // Hand-built by necessity: the fixture set covers exactly the types the
+        // adapter handles, and this test needs one it does not.
         const webhookPayload = JSON.stringify({
           id: 'evt_unparsed_type',
           type: 'payment_intent.succeeded',
@@ -1149,18 +1095,21 @@ describe('Webhook Handling', () => {
           }),
         } as any);
 
-        const webhookPayload = JSON.stringify({
-          id: 'evt_min_checkout',
-          type: 'checkout.session.completed',
-          data: {
-            object: {
-              subscription: 'sub_min_checkout',
-              customer: 'cus_min_checkout',
-              customer_details: { email: 'payer@example.com', name: 'A Payer' },
-              metadata: { pavillion_account_id: accountId },
-            },
-          },
+        // A real completed checkout session carries customer_details.email and
+        // .name; none of it may reach the funding event log.
+        const checkoutEvent = capturedStripeEvent('checkout.session.completed', {
+          eventId: 'evt_min_checkout',
+          subscriptionId: 'sub_min_checkout',
+          customerId: 'cus_min_checkout',
+          accountId,
         });
+        const customerDetails = checkoutEvent.data.object.customer_details as {
+          email: string;
+          name: string;
+        };
+        expect(customerDetails.email).toBe('funding+capture@example.com');
+        expect(customerDetails.name).toBe('Capture Test');
+        const webhookPayload = JSON.stringify(checkoutEvent);
 
         vi.mocked(Stripe.Webhook.constructEvent).mockReturnValue(JSON.parse(webhookPayload) as any);
 
@@ -1178,8 +1127,8 @@ describe('Webhook Handling', () => {
         expect(loggedEvent).not.toBeNull();
 
         const storedPayload = loggedEvent!.toModel().payload;
-        expect(storedPayload).not.toContain('payer@example.com');
-        expect(storedPayload).not.toContain('A Payer');
+        expect(storedPayload).not.toContain(customerDetails.email);
+        expect(storedPayload).not.toContain(customerDetails.name);
         expect(storedPayload).not.toContain('cus_min_checkout');
         expect(JSON.parse(storedPayload)).toEqual({ status: 'active' });
       });
