@@ -24,6 +24,14 @@ path now, once, and record that path in your working notes for the run.**
   convention, and it already exists.
 - If the environment names none, run `mktemp -d` and copy the absolute path it prints.
 
+**Whichever you resolve, the directory must be owner-only before you write anything into it.** It
+holds `watch-before.json` — the reachability analysis for every accepted-risk CVE — and the body of
+the public comment before anyone has reviewed it. `mktemp -d` already gives mode `0700`; an
+environment-named directory asserts nothing about its mode, so run `chmod 700` on the resolved
+literal path before step 4. (This is a separate concern from the symlink exposure that
+[the file rule](#never-put-delta-text-on-a-command-line) addresses: a session-scoped path is not
+predictable enough to pre-create, but it can still be world-readable to another local user.)
+
 Then use that literal path verbatim, in Write calls and in shell arguments alike. **Never reference
 it through a shell variable.** Shell state does not persist between Bash tool calls, so
 `SCRATCH=$(mktemp -d)` in one call leaves `"$SCRATCH/summary.md"` in a later call expanding to
@@ -95,6 +103,13 @@ like any other failure, and you stop here rather than at the gate below.
 Whether a recurring tooling error deserves a bead of its own is a human call made from the
 reported errors. You have no cross-run error history and must not invent one.
 
+**If `metadata.healthReportIssue` is absent or does not match `^[0-9]+$`: report and stop.** It is
+optional in the delta, and step 7's comment is this workflow's only durable audit trail. Every step
+between here and there mutates state — beads created, notes appended, beads closed, the watch table
+replaced wholesale — so discovering at step 7 that the comment has nowhere to go leaves all of that
+applied with the record sitting in a scratch file nobody will read. Check it here, before anything
+is written. Never guess an issue number or go looking for one.
+
 **If `resolution_suppressed` is `true` (with `scan_errors` empty):** the run refused to derive
 resolution at all, because an expected scan never arrived (`scope_notes.missingScans`) or an id
 would not canonicalize (`scope_notes.unusableIds`). `resolved` is then empty — which means
@@ -108,9 +123,10 @@ In that state:
   layer; it rewrites the whole table, under the rules step 4 sets out. Follow them with particular
   care here: a suppressed run is exactly when you have least evidence about which rows are stale.
 - **Skip the close-resolved step (step 5) entirely.** Close no bead, and prune no watch row *on
-  the strength of an absence*. A `newly_fixable` row still comes off in step 4: that removal is
-  driven by a finding this scan positively observed, not by something failing to appear. Step 6
-  (Renovate coverage) and step 7 (the summary comment) still run.
+  the strength of an absence*. The two watch-table changes step 4 drives from findings this scan
+  positively observed still happen: a `newly_fixable` row still comes off, and a
+  `covered_by_renovate` row still gets its note rewritten. Neither is driven by something failing
+  to appear. Step 6 (Renovate coverage) and step 7 (the summary comment) still run.
 - Say so in the summary, naming the cause. Never report a clean week off a suppressed run.
 
 ## Never put delta text on a command line
@@ -175,12 +191,15 @@ Three slots have no file variant, and all three are handled by shape, not by tru
   the title does not, **do not sanitize it yourself**: fall back to a title built entirely from
   fixed vocabulary and ids — `security: fix CVE-2026-59873 (image target)` — and put the package
   name and version in the body file, where they are just text.
-- **Identifiers minted by `bd` and `gh`** — a bead id from `resolved.beads[].beadId`, an issue
-  number from `metadata.healthReportIssue` — are structural addresses, not delta prose, and may be
-  interpolated: `bd close <beadId>`, `gh issue comment <issue>`. They still ride through the delta
-  under nothing stronger than `sanitizeText`, so assert the shape before use:
-  `^[A-Za-z][A-Za-z0-9-]*$` for a bead id, `^[0-9]+$` for an issue number. A value that does not
-  match is not an identifier — **stop and report** rather than repairing it or using it anyway.
+- **Identifiers minted by `bd` and `gh`** — a bead id from `resolved.beads[].beadId` or from a
+  `bd list --json` read (that is where step 4 gets the watch bead's id), an issue number from
+  `metadata.healthReportIssue` — are structural addresses, not delta prose, and may be
+  interpolated: `bd close <beadId>`, `bd show <id>`, `bd update <id> --design-file …`,
+  `gh issue comment <issue>`. The delta-borne ones ride through under nothing stronger than
+  `sanitizeText`, and one read straight out of `bd list --json` has passed through no guard at all,
+  so assert the shape before use either way: `^[A-Za-z][A-Za-z0-9-]*$` for a bead id, `^[0-9]+$`
+  for an issue number. A value that does not match is not an identifier — **stop and report**
+  rather than repairing it or using it anyway.
 
 ## Step 3 — file actionable beads for `new_actionable` + `newly_fixable`
 
@@ -347,6 +366,8 @@ irreversible operation in the workflow, so all four of these hold:
   you can undo and one you cannot.
 - **Reproduce every row you are not deliberately removing**, including its original **First seen**
   date and its exploitability note. A dropped row silently un-accepts a risk someone already judged.
+  The one note rewrite below is not an exception to this: that row keeps its **First seen** date,
+  and the note it had is carried forward inside the new one rather than replaced.
 - **The design field, never `--notes`.** Design is understood to be regenerated; notes append, so
   the table would double.
 - **`--design-file`, never `--design`** — the table carries package and target names straight out
@@ -357,27 +378,43 @@ bd show <id> --json > "<scratch>/watch-before.json"   # snapshot, then read the 
 bd update <id> --design-file "<scratch>/watch.md"
 ```
 
-Exactly three classes of row are deliberately removed in this rewrite. The first is driven by an
-absence; the second and third by findings this scan positively observed, which is why they survive
-a suppressed run:
+Exactly three classes of row change in this rewrite: two are removed and one is rewritten in place.
+The first removal is driven by an absence; the second removal and the rewrite by findings this scan
+positively observed, which is why those two survive a suppressed run:
 
-- every CVE in `resolved.watchEntries[]` — gone from the scan entirely;
-- every CVE in this run's `newly_fixable[]` — still in the scan, but it now has a fix and you filed
-  a bead for it in step 3;
-- every CVE in this run's `covered_by_renovate[]` **that already has a row on the watch table**.
-  This one is easy to miss, because nothing in the delta flags it: a watch-listed CVE that gains a
-  fix an open Renovate PR provably covers is routed to `covered_by_renovate` before the script ever
-  checks the watch list, so it never lands in `newly_fixable`. Cross-check `covered_by_renovate[]`
-  ids against the current table by hand.
+- **Remove** every CVE in `resolved.watchEntries[]` — gone from the scan entirely.
+- **Remove** every CVE in this run's `newly_fixable[]` — still in the scan, but it now has a fix and
+  you filed a bead for it in step 3.
+- **Rewrite the note of** every CVE in this run's `covered_by_renovate[]` **that already has a row
+  on the watch table**. Keep the row, keep its original **First seen** date, and change only the
+  exploitability cell, to `Covered by Renovate PR #N — was: <original note>` (every PR number the
+  entry carries, if there is more than one). This class is easy to miss, because nothing in the
+  delta flags it: a watch-listed CVE that gains a fix an open Renovate PR provably covers is routed
+  to `covered_by_renovate` before the script ever checks the watch list, so it never lands in
+  `newly_fixable`. Cross-check `covered_by_renovate[]` ids against the current table by hand. If a
+  row's note already reads `Covered by Renovate PR #N — was: …` from an earlier run, correct the PR
+  numbers if they changed and leave the rest alone — never nest a second `was:` clause inside the
+  first.
+
+**Do not delete that third row instead.** The fix backing it sits in a PR that has not merged. The
+note is a human's accepted-risk judgment and the date is when they made it, and deleting both on
+the strength of unlanded work is exactly what the "dropped row" rule above forbids. The rewrite
+gets the same outcome without the loss, and it clears itself either way the PR goes:
+
+- **PR merges** → the CVE leaves the scan, `resolved.watchEntries[]` carries it, and the row comes
+  off through the first class above.
+- **PR is closed unmerged** → the CVE is still fixable and no longer covered, and because you kept
+  the row it now matches the watch list, so it arrives as `newly_fixable`: a real bead in step 3,
+  and the row comes off through the second class. Had you deleted the row, it would have arrived as
+  `new_actionable` with the judgment and the original **First seen** date gone for good.
 
 None of the three appears in `resolved.watchEntries[]` except the first — the other two are still
-present in the scan, so nothing else in this workflow will drop them, and a survivor becomes
-permanent. A stale `newly_fixable` row is invisible from then on: next week that CVE matches the new
-bead's `CVEs:` line, lands in `already_tracked`, and is never revisited. A stale
-`covered_by_renovate` row is worse, because it *contradicts* live state — it reads "no known fix" to
-whoever is auditing accepted risk while the fix is already in flight, and it clears only if the PR
-merges. If the PR is instead closed unmerged, next week files a real `new_actionable` bead for a CVE
-the watch table still claims has no fix.
+present in the scan, so nothing else in this workflow will touch those rows, and whatever you leave
+behind is permanent. A stale `newly_fixable` row is invisible from then on: next week that CVE
+matches the new bead's `CVEs:` line, lands in `already_tracked`, and is never revisited. A
+`covered_by_renovate` row whose note you did not rewrite is worse, because it *contradicts* live
+state — it reads "no known fix" to whoever is auditing accepted risk while the fix is already in
+flight.
 
 Format — the first column is what the script parses:
 
@@ -385,10 +422,14 @@ Format — the first column is what the script parses:
 | CVE | Severity | Packages | Target | First seen | Exploitability note |
 | --- | --- | --- | --- | --- | --- |
 | CVE-2026-13221 | CRITICAL | libperl5.40, perl, perl-base, perl-modules-5.40 | image | 2026-08-27 | Perl is present in the base image but Pavillion runs no Perl; not reachable from the app. |
+| CVE-2026-14002 | HIGH | zlib1g | image | 2026-07-14 | Covered by Renovate PR #4412 — was: zlib is linked by sharp, so the decode path is reachable; no fix published. |
 ```
 
-Keep every note on one line. A row whose first cell is not a finding id is invisible to the
-script; a row that accidentally starts with one is a phantom watch entry.
+The second row is the note-rewrite form: same id, same **First seen**, the old judgment intact
+behind the `was:`.
+
+Keep every note on one line, a rewritten one included. A row whose first cell is not a finding id
+is invisible to the script; a row that accidentally starts with one is a phantom watch entry.
 
 ## Step 5 — close resolved work
 
@@ -411,8 +452,8 @@ and `remainingCves[]`.
   **Leave it open.**
 
 `resolved.watchEntries[]` lists watch-list ids absent from this scan. Prune those rows in the
-step 4 rewrite, together with the other two removal classes step 4 names — all of it is one rewrite
-of the design field, not several.
+step 4 rewrite, together with the other removal class and the note rewrite step 4 names — all of it
+is one rewrite of the design field, not several.
 
 ## Step 6 — Renovate coverage files nothing
 
@@ -422,9 +463,11 @@ packages and Renovate opens one PR per dependency. List every finding with all i
 the summary. That listing is what keeps the "nothing silently dropped" principle true for them.
 
 **Files nothing is not the same as changes nothing.** Any of these findings that already has a row
-on the watch table loses that row in the step 4 rewrite — the CVE has a fix now, and the row would
-otherwise sit there reading "no known fix" indefinitely. Check `covered_by_renovate[]` against the
-current table before composing the rewrite; the delta will not flag the overlap for you.
+on the watch table has that row's note rewritten in the step 4 rewrite — the row stays, with its
+**First seen** date and the substance of the note it had, but it stops reading "no known fix" while
+the fix is sitting in an open PR. The row itself comes off only when the fix lands and the CVE
+leaves the scan. Check `covered_by_renovate[]` against the current table before composing the
+rewrite; the delta will not flag the overlap for you.
 
 ## Step 7 — comment the triage summary on the health issue
 
@@ -432,9 +475,10 @@ current table before composing the rewrite; the delta will not flag the overlap 
 gh issue comment <metadata.healthReportIssue> --body-file "<scratch>/summary.md"
 ```
 
-`metadata.healthReportIssue` is optional in the delta. **If it is absent, stop and report** —
-say the comment could not be posted and why, and leave the summary file on disk for a human. Never
-guess an issue number, search for one, or post the comment somewhere else.
+`metadata.healthReportIssue` is optional in the delta, but
+[step 2](#step-2--gate-on-scan-health) already asserted it present and shaped `^[0-9]+$` — a run
+without it never reaches this step, so nothing has been mutated when it is missing. Never guess an
+issue number, search for one, or post the comment somewhere else.
 
 **This issue is public.** Everything below is written with that in mind.
 
@@ -514,7 +558,7 @@ Do not render the summary a second time.
 | `metadata` | `sha`, `runUrl`, `scanDate`, `healthReportIssue` |
 | `counts` | Every severity counted, MEDIUM/LOW included |
 | `new_actionable[]` | No covering bead → file a bead. Either a vulnerability with a fix available and no proven Renovate PR, or any secret or misconfiguration, which land here with no fix at all (step 3) |
-| `covered_by_renovate[]` | Every package carried by an open Renovate PR → no bead, summary only, `prs[]` — **and drop the watch row in step 4** for any of these already on the watch table; the script routes here before it checks the watch list, so it never flags the overlap |
+| `covered_by_renovate[]` | Every package carried by an open Renovate PR → no bead, summary only, `prs[]` — **and rewrite the watch row's note in step 4** (keeping the row and its First seen date) for any of these already on the watch table; the script routes here before it checks the watch list, so it never flags the overlap |
 | `newly_fixable[]` | Was on the watch list, now has a fix → file a bead (step 3) **and drop the watch row in step 4** — these never appear in `resolved.watchEntries[]` |
 | `new_no_fix[]` | No fix published, not yet on the watch list → watch bead or escalate |
 | `already_tracked` | `{ count, cves[], beadIds[], onWatchList[] }` — do nothing, the point of idempotency |
@@ -546,7 +590,8 @@ one, stop and re-read the step it belongs to.
 | "Same package, but different fixed versions, so different beads." | It is one bump to the highest version. Splitting it files work nobody will do twice. |
 | "That CVE is obvious from the title, I can leave it off the `CVEs:` line." | Next week re-files it as new. |
 | "It's on the watch list *and* it just got a bead — the prune will sort itself out." | It will not. `resolved.watchEntries[]` never carries `newly_fixable` ids; you drop that row in step 4 or it is there forever. |
-| "Renovate has it covered, so there's nothing for me to do on that one." | If it is also on the watch table, the row now contradicts live state: "no known fix" while the fix is in an open PR. It never reaches `newly_fixable` and it is never in `resolved.watchEntries[]`. Drop it in step 4. |
+| "Renovate has it covered, so there's nothing for me to do on that one." | If it is also on the watch table, the row now contradicts live state: "no known fix" while the fix is in an open PR. It never reaches `newly_fixable` and it is never in `resolved.watchEntries[]`. Rewrite its note in step 4. |
+| "Renovate covers it, so I'll drop the watch row while I'm in there." | That PR has not merged. Deleting the row destroys an accepted-risk judgment and its First seen date on the strength of unlanded work, and re-watch-listing later restarts the clock. Rewrite the note; the row comes off by itself once the fix ships. |
 | "The advisory calls this trivially exploitable, so it escalates." | Accepts an attacker-authored claim as evidence in the other direction. Escalating on advisory text alone floods the queue and buries the real findings; reachability comes from this repository or the row stays on the watch list. |
 | "`--notes` is fine, it's only a small edit to the watch table." | Notes append instead of replacing; the table doubles and rows go stale. |
 | "I'll just rewrite the watch table from what's in the delta." | Destroys every existing row, its First seen date, and its accepted-risk judgment. |
