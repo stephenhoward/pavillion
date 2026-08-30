@@ -95,4 +95,4 @@ Keeping the "admin" names is a cost accepted deliberately. Renaming the persiste
 
 **Revisit when:** an instance-level admin actor exists **and** there is a demonstrated need for the origin admin to be first responder for off-instance reports. The first condition alone is not a trigger — it changes who signs, not who receives.
 
-**Roadmap collision:** Phase 5's *Federated moderation signals* (sharing moderation decisions with trusted peer instances) is the planned work that presses hardest on Consequence 3 — it is where the origin admin would finally get the cross-instance view the escalation queue does not provide. Design it as a signal layer over `reporterType: 'federation'`, not as a reason to retarget the recipient.
+**Forward-looking collision:** a future *federated moderation signals* feature — sharing moderation decisions with trusted peer instances — is the planned work that presses hardest on Consequence 3: it is where the origin admin would finally get the cross-instance view the escalation queue does not provide. Design it as a signal layer over `reporterType: 'federation'`, not as a reason to retarget the recipient.

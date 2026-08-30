@@ -83,16 +83,6 @@ Testing uses Vitest for unit/integration, Playwright for e2e, and Playwright MCP
 
 **For detailed patterns, use the appropriate skill** (e.g., `backend-domain-structure`, `backend-entity-model`, `frontend-i18n`).
 
-## Agent OS Documentation
+## Product Decisions
 
-- **Mission & Vision:** @agent-os/product/mission.md
-- **Technical Architecture:** @agent-os/product/tech-stack.md
-- **Development Roadmap:** @agent-os/product/roadmap.md
-- **Decision History:** @agent-os/product/decisions.md
-- **Active Specs:** @agent-os/specs/
-
-## Important Notes
-
-- Check @agent-os/product/roadmap.md for current priorities
-- Product-specific files in `agent-os/product/` override global standards
-- User instructions override specs in `.agent-os/specs/`
+Architectural and product decisions live in @agent-os/product/decisions.md — an index of individual decision files under `agent-os/product/decisions/`. Load a decision when its **Consult when** triggers match the work at hand; decision text overrides conflicting guidance elsewhere.

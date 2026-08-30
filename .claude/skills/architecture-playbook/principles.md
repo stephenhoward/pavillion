@@ -11,11 +11,7 @@ If someone reading the codebase or using the product would be surprised that thi
 
 ## Product Documents
 
-These principles reference product-level documents, not code-level conventions:
-
-- `agent-os/product/mission.md` — Product vision, users, differentiators
-- `agent-os/product/decisions.md` — Documented architectural decisions (DEC-001 through DEC-006+)
-- `agent-os/product/roadmap.md` — Phased development plan and priorities
+These principles reference a product-level document, not code-level conventions: `agent-os/product/decisions.md` — the index of documented architectural decisions, each linking to a file under `agent-os/product/decisions/`.
 
 ---
 
@@ -36,7 +32,7 @@ Does this feature fit the product's mental model? Would a user or developer be s
 - Features that require explaining "why this belongs in a calendar product"
 - New domain concepts that don't relate to events, calendars, organizations, or federation
 - Terminology that conflicts with existing terms (e.g., "subscription" meaning something different from federation follows)
-- Features aimed at a user persona not described in `mission.md`
+- Features aimed at a user persona the product does not serve
 
 **In code:**
 - New domains that don't clearly connect to the product's core concepts
@@ -200,7 +196,7 @@ Does this move toward the roadmap's stated goals, or does it pull in a tangentia
 **In specs:**
 - Features from Phase 4-5 being built during Phase 1-2 without justification
 - "Nice to have" features that consume capacity needed for must-have items
-- Features that serve a different product vision than the one in `mission.md`
+- Features that serve a different product vision than Pavillion's
 - Infrastructure work that doesn't unblock any current roadmap item
 
 **In code:**

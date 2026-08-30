@@ -93,7 +93,7 @@ Then walk:
 1. **Clarify scope** — what we're building, in/out of scope, user stories, success criteria
 2. **Visuals** — mockups, screenshots, references
 3. **Reference implementations** — similar code in this codebase
-4. **Product context** — read `agent-os/product/mission.md`, `roadmap.md`; check alignment
+4. **Product context** — read `agent-os/product/decisions.md`; check alignment
 5. **Standards** — read `.claude/skills/standards-routing/index.yml`; confirm applicable ones
 6. **Technical design** — approach, key files, patterns, integration points
 7. **Acceptance criteria** — testable checklist
