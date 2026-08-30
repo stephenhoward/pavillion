@@ -68,6 +68,13 @@ const singleProvider = computed(() =>
   availableProviders.value.length === 1,
 );
 
+// An instance can open this dialog with nothing to offer: funding is enabled
+// but no supported provider is live. There is nothing to configure, so the
+// form says so instead of rendering an empty picker the user cannot satisfy.
+const hasProviders = computed(() =>
+  availableProviders.value.length > 0,
+);
+
 const selectedProviderInfo = computed<FundingProvider | undefined>(() =>
   options.value?.providers.find(p => p.providerType === selectedProvider.value),
 );
@@ -381,106 +388,113 @@ onBeforeUnmount(() => {
 
     <!-- Configure state: select billing cycle, amount, provider -->
     <template v-if="!loading && formState === 'configure' && options">
-      <!-- Provider selection (skip when only one) -->
-      <div v-if="!singleProvider" class="form-group">
-        <label class="form-label">{{ t("select_provider") }}</label>
-        <div class="provider-options">
-          <label
-            v-for="provider in availableProviders"
-            :key="provider.providerType"
-            class="provider-option"
-          >
-            <input
-              type="radio"
-              :value="provider.providerType"
-              v-model="selectedProvider"
-              :disabled="processing"
-            />
-            <span>{{ provider.displayName }}</span>
-          </label>
-        </div>
+      <!-- Nothing to offer: no supported provider is enabled on this instance -->
+      <div v-if="!hasProviders" class="no-providers-message" role="status">
+        {{ t("no_providers_available") }}
       </div>
 
-      <!-- PWYC mode: monthly amount input + yearly opt-in checkbox -->
-      <template v-if="isPwyc">
-        <div class="form-group">
-          <label class="form-label" for="pwyc-monthly-amount">
-            {{ t("monthly_amount_label") }}
-          </label>
-          <div class="form-field">
-            <div class="currency-input">
-              <span class="currency-symbol">{{ currencySymbol }}</span>
-              <input
-                id="pwyc-monthly-amount"
-                type="number"
-                v-model.number="monthlyAmount"
-                step="0.01"
-                min="1"
-                :disabled="processing"
-              />
-            </div>
-            <div class="description">
-              {{ t("suggested_amount", { amount: suggestedAmountDisplay }) }}
-            </div>
-          </div>
-        </div>
-
-        <div class="form-group">
-          <label class="yearly-opt-in">
-            <input
-              type="checkbox"
-              v-model="yearlyOptIn"
-              :disabled="processing"
-            />
-            <span>{{ t("yearly_opt_in_label", { amount: pwycYearlyDisplay }) }}</span>
-          </label>
-          <div
-            v-if="options.payWhatYouCanYearlyDiscount > 0"
-            class="description yearly-discount-note"
-          >
-            {{ t("yearly_discount_note", { percent: options.payWhatYouCanYearlyDiscount }) }}
-          </div>
-        </div>
-      </template>
-
-      <!-- Non-PWYC mode: billing cycle radios with fixed prices -->
       <template v-else>
-        <div class="form-group">
-          <label class="form-label">{{ t("select_cycle") }}</label>
-          <div class="cycle-options">
-            <label class="cycle-option">
+        <!-- Provider selection (skip when only one) -->
+        <div v-if="!singleProvider" class="form-group">
+          <label class="form-label">{{ t("select_provider") }}</label>
+          <div class="provider-options">
+            <label
+              v-for="provider in availableProviders"
+              :key="provider.providerType"
+              class="provider-option"
+            >
               <input
                 type="radio"
-                value="monthly"
-                v-model="selectedCycle"
+                :value="provider.providerType"
+                v-model="selectedProvider"
                 :disabled="processing"
               />
-              <span>{{ t("billing_cycle_monthly") }} - {{ monthlyPriceDisplay }}</span>
-            </label>
-            <label class="cycle-option">
-              <input
-                type="radio"
-                value="yearly"
-                v-model="selectedCycle"
-                :disabled="processing"
-              />
-              <span>{{ t("billing_cycle_yearly") }} - {{ yearlyPriceDisplay }}</span>
+              <span>{{ provider.displayName }}</span>
             </label>
           </div>
         </div>
-      </template>
 
-      <!-- Submit -->
-      <div class="form-actions">
-        <button
-          type="button"
-          class="btn btn--primary"
-          :disabled="processing"
-          @click="submitContribution"
-        >
-          {{ t("confirm_contribution_button") }}
-        </button>
-      </div>
+        <!-- PWYC mode: monthly amount input + yearly opt-in checkbox -->
+        <template v-if="isPwyc">
+          <div class="form-group">
+            <label class="form-label" for="pwyc-monthly-amount">
+              {{ t("monthly_amount_label") }}
+            </label>
+            <div class="form-field">
+              <div class="currency-input">
+                <span class="currency-symbol">{{ currencySymbol }}</span>
+                <input
+                  id="pwyc-monthly-amount"
+                  type="number"
+                  v-model.number="monthlyAmount"
+                  step="0.01"
+                  min="1"
+                  :disabled="processing"
+                />
+              </div>
+              <div class="description">
+                {{ t("suggested_amount", { amount: suggestedAmountDisplay }) }}
+              </div>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="yearly-opt-in">
+              <input
+                type="checkbox"
+                v-model="yearlyOptIn"
+                :disabled="processing"
+              />
+              <span>{{ t("yearly_opt_in_label", { amount: pwycYearlyDisplay }) }}</span>
+            </label>
+            <div
+              v-if="options.payWhatYouCanYearlyDiscount > 0"
+              class="description yearly-discount-note"
+            >
+              {{ t("yearly_discount_note", { percent: options.payWhatYouCanYearlyDiscount }) }}
+            </div>
+          </div>
+        </template>
+
+        <!-- Non-PWYC mode: billing cycle radios with fixed prices -->
+        <template v-else>
+          <div class="form-group">
+            <label class="form-label">{{ t("select_cycle") }}</label>
+            <div class="cycle-options">
+              <label class="cycle-option">
+                <input
+                  type="radio"
+                  value="monthly"
+                  v-model="selectedCycle"
+                  :disabled="processing"
+                />
+                <span>{{ t("billing_cycle_monthly") }} - {{ monthlyPriceDisplay }}</span>
+              </label>
+              <label class="cycle-option">
+                <input
+                  type="radio"
+                  value="yearly"
+                  v-model="selectedCycle"
+                  :disabled="processing"
+                />
+                <span>{{ t("billing_cycle_yearly") }} - {{ yearlyPriceDisplay }}</span>
+              </label>
+            </div>
+          </div>
+        </template>
+
+        <!-- Submit -->
+        <div class="form-actions">
+          <button
+            type="button"
+            class="btn btn--primary"
+            :disabled="processing"
+            @click="submitContribution"
+          >
+            {{ t("confirm_contribution_button") }}
+          </button>
+        </div>
+      </template>
     </template>
 
     <!-- Checkout state: embedded Stripe checkout iframe -->
@@ -641,7 +655,8 @@ onBeforeUnmount(() => {
   }
 }
 
-.loading {
+.loading,
+.no-providers-message {
   padding: var(--pav-space-4);
   text-align: center;
   color: var(--pav-color-text-secondary);

@@ -20,6 +20,7 @@
   "yearly_discount_note": "Économisez {{percent}} % avec la facturation annuelle",
   "suggested_amount": "Suggéré : {{amount}}",
   "select_provider_error": "Veuillez sélectionner un mode de paiement.",
+  "no_providers_available": "Cette instance n'accepte pas de contributions pour le moment. Veuillez revenir plus tard.",
   "confirm_contribution_button": "Confirmer la contribution",
   "cancel_button": "Annuler",
 

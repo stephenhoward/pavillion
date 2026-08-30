@@ -20,6 +20,7 @@
   "yearly_discount_note": "Save {{percent}}% with annual billing",
   "suggested_amount": "Suggested: {{amount}}",
   "select_provider_error": "Please select a payment method.",
+  "no_providers_available": "This instance is not currently accepting contributions. Please check back later.",
   "confirm_contribution_button": "Confirm Contribution",
   "cancel_button": "Cancel",
 
