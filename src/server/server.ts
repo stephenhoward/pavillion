@@ -153,6 +153,12 @@ async function checkDatabaseHealth(): Promise<boolean> {
  * Sets up the health check endpoint for container orchestration.
  * This endpoint is used by Docker/Kubernetes to determine if the application is ready.
  *
+ * The endpoint is unauthenticated, so the payload carries liveness only — the
+ * overall status and nothing about which internal check decided it. Callers
+ * that need per-check detail use the admin-only status endpoint. Orchestration
+ * consumers (the compose healthchecks, autoheal, the e2e readiness polls) key
+ * on the 200/503 status code, never on the body.
+ *
  * @param app - Express application instance
  */
 function setupHealthCheck(app: express.Application): void {
@@ -162,17 +168,9 @@ function setupHealthCheck(app: express.Application): void {
     const healthStatus = {
       status: dbHealthy ? 'healthy' : 'unhealthy',
       timestamp: new Date().toISOString(),
-      checks: {
-        database: dbHealthy ? 'connected' : 'disconnected',
-      },
     };
 
-    if (dbHealthy) {
-      res.status(200).json(healthStatus);
-    }
-    else {
-      res.status(503).json(healthStatus);
-    }
+    res.status(dbHealthy ? 200 : 503).json(healthStatus);
   });
 }
 
