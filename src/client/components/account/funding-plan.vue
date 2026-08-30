@@ -35,7 +35,29 @@ const isSuspended = computed(() => status.value?.status === 'suspended');
 
 const isCancelled = computed(() => status.value?.status === 'cancelled');
 
-const canCancel = computed(() => hasFundingPlan.value && (isActive.value || isPastDue.value));
+/**
+ * A cancellation is scheduled but has not taken effect yet.
+ *
+ * The plan is still 'active' in this state, and legitimately so — it is paid
+ * through the boundary — so `isCancelled` says nothing about it.
+ */
+const pendingCancellation = computed(() => Boolean(status.value?.cancelAt) && !isCancelled.value);
+
+/**
+ * The date coverage runs to, once anything has ended it. Null while the plan
+ * is simply continuing.
+ */
+const accessEndsAt = computed(() => {
+  if (pendingCancellation.value) {
+    return status.value?.cancelAt ?? null;
+  }
+  return isCancelled.value ? status.value?.currentPeriodEnd ?? null : null;
+});
+
+// Nothing left to cancel once a cancellation is already scheduled.
+const canCancel = computed(() =>
+  hasFundingPlan.value && (isActive.value || isPastDue.value) && !pendingCancellation.value,
+);
 
 const currentAmountDisplay = computed(() => {
   if (!status.value) return '';
@@ -188,7 +210,7 @@ onMounted(async () => {
 
           <div class="status-row">
             <span class="label">{{ t("billing_cycle_label") }}</span>
-            <span>{{ t(`billing_cycle_${status.billing_cycle}`) }}</span>
+            <span>{{ t(`billing_cycle_${status.billingCycle}`) }}</span>
           </div>
 
           <div class="status-row">
@@ -198,16 +220,16 @@ onMounted(async () => {
 
           <div class="status-row">
             <span class="label">{{ t("current_period_label") }}</span>
-            <span>{{ formatDate(status.current_period_start) }} - {{ formatDate(status.current_period_end) }}</span>
+            <span>{{ formatDate(status.currentPeriodStart) }} - {{ formatDate(status.currentPeriodEnd) }}</span>
           </div>
 
-          <div v-if="status.cancelled_at" class="status-row">
+          <div v-if="status.cancelledAt" class="status-row">
             <span class="label">{{ t("cancelled_at_label") }}</span>
-            <span>{{ formatDate(status.cancelled_at) }}</span>
+            <span>{{ formatDate(status.cancelledAt) }}</span>
           </div>
 
-          <div v-if="isCancelled" class="status-message info">
-            {{ t("cancellation_info", { date: formatDate(status.current_period_end) }) }}
+          <div v-if="accessEndsAt" class="status-message info">
+            {{ t("cancellation_info", { date: formatDate(accessEndsAt) }) }}
           </div>
 
           <div v-if="isPastDue" class="status-message warning">

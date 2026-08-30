@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import express from 'express';
 import request from 'supertest';
 import sinon from 'sinon';
+import { UniqueConstraintError } from 'sequelize';
 import CalendarFundingPlanRoutes from '@/server/funding/api/v1/calendar-funding-plan';
 import FundingInterface from '@/server/funding/interface';
 import { Account } from '@/common/model/account';
@@ -197,6 +198,31 @@ describe('CalendarFundingPlanRoutes API', () => {
         .expect(409);
 
       expect(response.body.errorName).toBe('DuplicateCalendarFundingPlanError');
+    });
+
+    it('should answer 409, never 500, when the open-allocation index rejects the insert', async () => {
+      // The service closes any superseded allocation before inserting, so this
+      // is the backstop for a concurrent request that wins the race, or for a
+      // path the service check does not cover. "Already covered" is something
+      // the caller can act on; a 500 reads as an outage and tells them nothing.
+      mockInterface.addCalendarToFundingPlan.rejects(
+        new UniqueConstraintError({
+          errors: [],
+          fields: { calendar_id: 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d' },
+        }),
+      );
+
+      bindAddCalendar();
+
+      const response = await request(testApp(router))
+        .post('/handler')
+        .send({ calendarId: 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d', amount: 500000 })
+        .expect(409);
+
+      expect(response.body.errorName).toBe('DuplicateCalendarFundingPlanError');
+      // The constraint name and column list are internals; the caller gets the
+      // fact, not the schema.
+      expect(JSON.stringify(response.body)).not.toContain('calendar_subscription');
     });
 
     it('should return 404 when calendar does not exist', async () => {

@@ -506,6 +506,120 @@ describe('Webhook Handling', () => {
       });
     });
 
+    describe('Cancellation lifecycle', () => {
+      const periodEnd = new Date(1790704220 * 1000);
+
+      /**
+       * Seed a funding plan matching the captured subscription, covering one
+       * calendar, in whatever lifecycle state a test needs.
+       *
+       * The identity fields line up with the captures' own subscription and
+       * customer ids so the payloads need no rebinding beyond the event id —
+       * everything else stays exactly as Stripe sent it.
+       *
+       * @param overrides - Plan fields to vary
+       * @returns The seeded plan and its calendar allocation
+       */
+      async function seedPlan(overrides: Record<string, unknown> = {}) {
+        const plan = FundingPlanEntity.build({
+          id: uuidv4(),
+          account_id: uuidv4(),
+          provider_config_id: stripeConfig.id,
+          provider_subscription_id: 'sub_1U9qOYLM7gkEdqMfd7WoHNz7',
+          provider_customer_id: 'cus_VAAjKPe5TGoA44',
+          status: 'active',
+          billing_cycle: 'monthly',
+          amount: 1000000,
+          currency: 'USD',
+          current_period_start: new Date(1788025820 * 1000),
+          current_period_end: periodEnd,
+          cancelled_at: null,
+          cancel_at: null,
+          suspended_at: null,
+          ...overrides,
+        });
+        await plan.save();
+
+        const allocation = CalendarFundingPlanEntity.build({
+          id: uuidv4(),
+          funding_plan_id: plan.id,
+          calendar_id: uuidv4(),
+          amount: 1000000,
+          end_time: null,
+        });
+        await allocation.save();
+
+        return { plan, allocation };
+      }
+
+      /**
+       * Deliver a captured Stripe event through the mounted webhook route.
+       *
+       * @param type - Captured event type to deliver
+       * @param eventId - Event id to rebind, keeping deliveries distinct
+       */
+      async function deliver(
+        type: 'customer.subscription.updated' | 'customer.subscription.deleted',
+        eventId: string,
+      ) {
+        const webhookPayload = capturedStripeEventPayload(type, { eventId });
+        vi.mocked(Stripe.Webhook.constructEvent).mockReturnValue(JSON.parse(webhookPayload) as any);
+
+        const response = await request(app)
+          .post('/api/funding/webhooks/stripe')
+          .set('stripe-signature', 'valid_signature')
+          .set('Content-Type', 'application/json')
+          .send(webhookPayload);
+
+        expect(response.status).toBe(200);
+      }
+
+      it('should record the boundary from a captured period-end cancellation and keep the plan active', async () => {
+        // The capture is a genuine cancel-at-period-end: status "active" with
+        // cancel_at_period_end true. Reading status alone reports nothing has
+        // changed, which is how a cancellation used to disappear.
+        const { plan } = await seedPlan();
+
+        await deliver('customer.subscription.updated', 'evt_capture_period_end_cancel');
+
+        await plan.reload();
+        expect(plan.status).toBe('active');
+        expect(plan.cancel_at).toEqual(periodEnd);
+        expect(plan.cancelled_at).toBeNull();
+      });
+
+      it('should finalize a captured deletion and close the calendar allocations at the boundary', async () => {
+        const { plan, allocation } = await seedPlan({ cancel_at: periodEnd });
+
+        await deliver('customer.subscription.deleted', 'evt_capture_deleted');
+
+        await plan.reload();
+        await allocation.reload();
+        expect(plan.status).toBe('cancelled');
+        expect(plan.cancelled_at).not.toBeNull();
+        expect(allocation.end_time).toEqual(periodEnd);
+      });
+
+      it('should refuse to revive a cancelled plan from a captured status-active update', async () => {
+        // The exact payload that reproduced the defect: a real
+        // customer.subscription.updated carrying status "active", delivered
+        // against a plan that is already cancelled. Applying it resurrected
+        // the plan and the entity hook then wiped its cancelled_at.
+        const cancelledAt = new Date('2026-08-01T00:00:00Z');
+        const { plan } = await seedPlan({ status: 'cancelled', cancelled_at: cancelledAt });
+
+        const reactivated = sandbox.stub();
+        eventBus.on('funding:plan:reactivated', reactivated);
+
+        await deliver('customer.subscription.updated', 'evt_capture_zombie_active');
+
+        await plan.reload();
+        expect(plan.status).toBe('cancelled');
+        expect(plan.cancelled_at).toEqual(cancelledAt);
+        expect(reactivated.called).toBe(false);
+      });
+    });
+
     describe('Webhook event deduplication', () => {
       it('should handle duplicate webhook events idempotently', async () => {
         const fundingPlanId = uuidv4();

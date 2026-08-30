@@ -227,8 +227,12 @@ describe('FundingService allocation transactions', () => {
     // the lock is taken before it rather than only before the status write
     expect(planFindByPk.firstCall.calledBefore(cancelSubscription.firstCall)).toBe(true);
 
+    // A period-end cancellation records its boundary and leaves the plan
+    // active until it; the point of this test is the lock ordering, and the
+    // write it guards is the boundary.
     const plan = await FundingPlanEntity.findByPk(fundingPlanId);
-    expect(plan!.status).toBe('cancelled');
+    expect(plan!.status).toBe('active');
+    expect(plan!.cancel_at).toEqual(periodEnd);
   });
 
   it('should resolve the plan under a FOR UPDATE lock in the caller-owned transaction on cancel', async () => {
@@ -326,6 +330,10 @@ describe('FundingService allocation transactions', () => {
     const plan = await FundingPlanEntity.findByPk(fundingPlanId);
     expect(plan!.status).toBe('active');
     expect(plan!.cancelled_at).toBeNull();
+    // The cancellation boundary is what this path writes, so it is what must
+    // not survive a provider rejection — a plan left with a cancel_at Stripe
+    // never accepted would stop granting access it is still being billed for.
+    expect(plan!.cancel_at).toBeNull();
   });
 
   it('should roll back the funding plan and event rows when a calendar allocation write fails on checkout completion', async () => {

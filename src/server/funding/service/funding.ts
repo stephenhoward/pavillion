@@ -52,9 +52,12 @@ import { ValidationError } from '@/common/exceptions/base';
 import { buildProviderIdempotencyKey } from '@/server/funding/service/provider/idempotency';
 import { CalendarNotFoundError } from '@/common/exceptions/calendar';
 import { logError } from '@/server/common/helper/error-logger';
+import { createLogger } from '@/server/common/helper/logger';
 import { isValidUuidV4 as isValidUUID } from '@/server/common/helper/uuid';
 import type CalendarInterface from '@/server/calendar/interface';
 import type AccountsInterface from '@/server/accounts/interface';
+
+const logger = createLogger('funding');
 
 // Maximum number of calendar IDs allowed in a single coverage-change call
 export const MAX_CALENDAR_IDS = 50;
@@ -687,18 +690,54 @@ export default class FundingService {
       // Verify account owns the calendar
       await this.verifyCalendarOwnership(accountId, calendarId);
 
-      // Check for existing active calendar funding plan
-      const existing = await CalendarFundingPlanEntity.findOne({
+      // Scoped to the calendar, not to this plan. The invariant, and the unique
+      // index that now carries it, are that a calendar has one open allocation
+      // anywhere — so a check scoped to `funding_plan_id` would pass on a
+      // calendar already open under a *different* plan and hand the index an
+      // insert it must reject.
+      //
+      // That is a reachable purchase, not a corrupt-database hypothetical: a
+      // plan that goes `suspended` keeps its allocations open, and a suspended
+      // plan neither blocks a fresh checkout nor gets its calendars closed. So
+      // an account can hold a live plan while a stranded row from the suspended
+      // one still covers the calendar it is now trying to add.
+      const openElsewhere = await CalendarFundingPlanEntity.findOne({
         where: {
-          funding_plan_id: fundingPlanEntity.id,
           calendar_id: calendarId,
           end_time: { [Op.is]: null as any },
         },
         transaction: tx,
       });
 
-      if (existing) {
+      if (openElsewhere?.funding_plan_id === fundingPlanEntity.id) {
+        // Already covered by the plan being added to: the caller's request is
+        // genuinely a duplicate.
         throw new DuplicateCalendarFundingPlanError(fundingPlanEntity.id, calendarId);
+      }
+
+      if (openElsewhere) {
+        // Coverage moves to the plan the account actually holds, the same way
+        // it moves on a fresh checkout (processCheckoutCompleted). Refusing
+        // instead would be a dead end rather than a safeguard: the calendar
+        // would be uncoverable by any plan, because removeCalendarFromFundingPlan
+        // only looks under the *active* plan and would answer 404 for a row
+        // stranded on the old one.
+        //
+        // Deliberately local. The superseded plan's provider-side total is not
+        // adjusted from here: this transaction does not hold its row, and it is
+        // a plan already in a failed billing state whose provider reconciliation
+        // belongs to pv-ez63. What is fixed here is that the local record stops
+        // claiming two plans cover one calendar.
+        //
+        // Close-and-insert, never re-parent — and that is a lock-ordering
+        // constraint, not a style choice. Writing only `end_time` leaves the
+        // funding_plan_id FK untouched, so Postgres never re-checks it and never
+        // takes FOR KEY SHARE on the superseded plan's row. Re-parenting this row
+        // instead would take that lock, and this path already holds its own plan
+        // row FOR UPDATE — giving a genuine cycle against cancel() and
+        // processWebhookEvent, which lock a plan row and then its allocations.
+        openElsewhere.end_time = new Date();
+        await openElsewhere.save({ transaction: tx });
       }
 
       // Create the calendar funding plan row
@@ -776,8 +815,12 @@ export default class FundingService {
         throw new CalendarFundingPlanNotFoundError(fundingPlanEntity.id, calendarId);
       }
 
-      // Set end_time to funding plan's current_period_end
-      calendarSub.end_time = fundingPlanEntity.current_period_end;
+      // Covered through the date already paid for. `?? new Date()` for the same
+      // reason cancel() needs it: current_period_end is nullable, and a null
+      // written here would leave the row open — the removal would report
+      // success while the calendar stayed covered, still counted towards the
+      // plan's total, and still blocking the calendar from any other plan.
+      calendarSub.end_time = fundingPlanEntity.current_period_end ?? new Date();
       await calendarSub.save({ transaction: tx });
 
       // Check remaining active calendar funding plans
@@ -1000,11 +1043,15 @@ export default class FundingService {
    * The summary deliberately carries no plan dates. `currentPeriodEnd` and
    * `accessExpiresAt` were once reported here, but nothing client-side ever
    * read them, and unread wire surface sits against DEC-004's send-what-is-
-   * needed posture while drifting untested. When lifecycle work
-   * (cancel-at-period-end) gives the client a reason to display an access
-   * boundary, reintroduce the fields together with their consumer — the plan
-   * lookup they need is qualifyingFundingPlan plus planAccessExpiry, both
-   * still exercised by checkFundingAccess.
+   * needed posture while drifting untested. Cancel-at-period-end gave the
+   * client its first reason to display an access boundary, and that boundary
+   * is surfaced on the *account-level* plan status (GET /v1/status, which
+   * carries `cancelAt`) rather than being reintroduced here: it is a property
+   * of the plan the account holds, and the calendar screen has no question it
+   * answers. Should a per-calendar consumer ever appear, reintroduce the
+   * fields together with it — the plan lookup they need is
+   * qualifyingFundingPlan plus planAccessExpiry, both still exercised by
+   * checkFundingAccess.
    *
    * @param accountId - Account ID requesting the summary (must own the calendar)
    * @param calendarId - Calendar ID to describe
@@ -1088,7 +1135,30 @@ export default class FundingService {
     // Validate return URL origin (defense in depth)
     this.validateReturnUrlOrigin(returnUrl);
 
-    // Check if user already has an active funding plan
+    // One account, one plan. A plan that is winding down towards its `cancel_at`
+    // boundary is still that one plan and still blocks a second: it is active,
+    // it is being honoured, and its calendars are covered by it.
+    //
+    // Which leaves the resubscribe-during-the-cancellation-window case, and the
+    // answer to that is NOT to relax this gate. A customer who changes their
+    // mind before the boundary should have the pending cancellation *reversed*
+    // on the plan they already hold — clear `cancel_at` and send
+    // `cancel_at_period_end: false` to the provider — so they resume rather than
+    // accumulate a second subscription. That path belongs to pv-jdot.3.3; this
+    // gate is what holds the invariant until it lands.
+    //
+    // What this gate actually provides is the common case, and no more. It is
+    // an unlocked read one or more HTTP round trips before the only site that
+    // creates a plan (processCheckoutCompleted), and `funding_plan` carries no
+    // unique constraint on account_id, provider_subscription_id or
+    // provider_event_id to catch what slips past. At least three routes reach
+    // two plans on one account anyway: concurrent creation for a single
+    // subscription, two checkout sessions paid in parallel, and a suspended
+    // plan revived through the billing portal after a second was bought — the
+    // terminal-status guard in processWebhookEvent does not cover that last one
+    // because it only pins 'cancelled'. Closing those needs a database-level
+    // constraint and a decision about what to do with the loser; pv-ez63 owns
+    // it.
     const existingPlan = await FundingPlanEntity.findOne({
       where: { account_id: accountId, status: 'active' },
     });
@@ -1230,6 +1300,41 @@ export default class FundingService {
   /**
    * Cancel a funding plan
    *
+   * The two modes end entitlement at different instants, and the local row has
+   * to say which:
+   *
+   *  - `immediate` — access ends now. Status goes to 'cancelled', `cancelled_at`
+   *    records it, and the plan's open calendar allocations are closed in the
+   *    same transaction. The allocation close has to happen here rather than
+   *    waiting for `customer.subscription.deleted`, because that event arrives
+   *    to find the plan already 'cancelled' and so cannot be what finalizes it.
+   *  - period-end (the default, and what the user-facing cancel button does) —
+   *    the customer has paid through `current_period_end` and keeps every
+   *    entitlement until then. The status therefore stays 'active' and the
+   *    boundary is recorded in `cancel_at`. Writing 'cancelled' here instead
+   *    revoked access the customer had paid for, and did not even stick: the
+   *    provider's next `customer.subscription.updated` reports a period-end
+   *    cancellation as status "active" (that is what one looks like on the
+   *    wire), so processWebhookEvent copied 'active' back over it and the
+   *    entity hook then cleared `cancelled_at`, leaving a row identical to one
+   *    that was never cancelled.
+   *
+   * `cancelled_at` is deliberately NOT written for a period-end cancellation.
+   * It is a request timestamp, and planAccessExpiry would read one on an
+   * 'active' plan as an access boundary — revoking at the instant the customer
+   * clicked cancel, which is precisely what this mode exists to avoid.
+   *
+   * Finalization to 'cancelled' is the provider's to report: it arrives as
+   * `customer.subscription.deleted` and is applied by processWebhookEvent.
+   *
+   * A lost deletion event costs the customer no access they paid for — the
+   * `cancel_at` boundary bounds that on its own, with no webhook involved — but
+   * it is not free. The plan is left `active` forever with an elapsed boundary,
+   * and nothing reaps that: the checkout gate keys on status, so the account
+   * cannot buy a replacement plan, and its calendars are covered by nothing.
+   * A sweep that finalizes plans whose `cancel_at` has passed is the missing
+   * half; pv-6g42 owns it.
+   *
    * @param fundingPlanId - Funding plan ID
    * @param immediate - If true, cancel immediately; otherwise at period end
    * @param tx - Optional caller-owned transaction to enlist the status write in.
@@ -1274,10 +1379,26 @@ export default class FundingService {
         idempotencyKey: buildProviderIdempotencyKey('plan-cancel', entity.id),
       });
 
-      // Update status
-      entity.status = 'cancelled';
-      entity.cancelled_at = new Date();
+      if (immediate) {
+        entity.status = 'cancelled';
+        entity.cancelled_at = new Date();
+      }
+      else {
+        // Paid through the period end, so that is when access stops. A plan
+        // with no recorded period end has no paid-through date to run to, so
+        // the cancellation takes effect now rather than never.
+        entity.cancel_at = entity.current_period_end ?? new Date();
+      }
+
       await entity.save({ transaction: t });
+
+      if (immediate) {
+        // An immediate cancellation ends here, not at a later provider event:
+        // the plan is already 'cancelled', so the deletion webhook that
+        // eventually arrives finds nothing to transition and would leave every
+        // allocation open forever. Coverage ended now, so that is the end_time.
+        await this.endCalendarAllocations(entity.id, null, t);
+      }
 
       // Emit event
       emitAfterTx(this.eventBus, 'funding:plan:cancelled', {
@@ -1453,6 +1574,41 @@ export default class FundingService {
   /**
    * Process webhook event from payment provider
    *
+   * Two rules govern how a provider event may move a local plan:
+   *
+   *  - 'cancelled' is terminal here. A provider that reports any other status
+   *    for a plan already cancelled locally is ignored, not applied. The
+   *    provider genuinely sends such events — a period-end cancellation is
+   *    reported as status "active" — and applying one would resurrect a
+   *    cancelled plan and, through the entity's status-transition hook, wipe
+   *    its `cancelled_at` as well. Resubscribing creates a new plan
+   *    (processCheckoutCompleted); it never revives a cancelled one, so
+   *    nothing legitimate needs this transition.
+   *  - A plan that is 'cancelled' once the event has been applied is finalized:
+   *    the calendar allocations it was paying for get their `end_time` written,
+   *    so the coverage record shows when it actually ended rather than staying
+   *    open forever behind a plan that no longer grants anything. Keyed on the
+   *    resulting status rather than on the transition into it, so the write is
+   *    idempotent (it matches only allocations still open) and so a plan
+   *    cancelled by some path that left its allocations open is repaired by the
+   *    next event it receives.
+   *
+   * Everything after the dedupe check runs in ONE transaction, including the
+   * plan read. The read takes `FOR UPDATE`, because the guard above is a
+   * read-then-write on a contended row: the provider delivers concurrently, and
+   * a handler that evaluated `previousStatus` against a snapshot taken before a
+   * sibling handler committed a cancellation would write its own stale status
+   * straight over that cancellation — Sequelize marks the column dirty against
+   * the snapshot it loaded, so the UPDATE lands. `cancel()` locks this row for
+   * the same reason.
+   *
+   * The `funding_event` dedupe row is enlisted in that transaction rather than
+   * committed ahead of it. Committed first, a mutation that then failed would
+   * be unrecoverable: the provider's retry would match the dedupe row, return
+   * early, and the cancellation would never be applied — no status change, no
+   * `end_time`, and nothing to reconcile from. Sharing the transaction means a
+   * failed mutation takes the dedupe row with it and the retry does the work.
+   *
    * @param event - Webhook event data
    * @param providerConfigId - Provider configuration ID
    */
@@ -1475,66 +1631,133 @@ export default class FundingService {
       return;
     }
 
-    // Find the local FundingPlan by provider subscription ID before logging,
-    // so we can store the local UUID (not the Stripe sub_xxx ID) in funding_plan_id FK
-    const fundingPlanRecord = event.subscriptionId
-      ? await FundingPlanEntity.findOne({
+    await db.transaction(async (t: Transaction) => {
+      // Find the local FundingPlan by provider subscription ID before logging,
+      // so we can store the local UUID (not the Stripe sub_xxx ID) in the
+      // funding_plan_id FK. Locked, so the status guard below decides on state
+      // no concurrent handler can move underneath it.
+      const fundingPlanRecord = event.subscriptionId
+        ? await FundingPlanEntity.findOne({
+          where: {
+            provider_subscription_id: event.subscriptionId,
+            provider_config_id: providerConfigId,
+          },
+          transaction: t,
+          lock: Transaction.LOCK.UPDATE,
+        })
+        : null;
+
+      // Log event for funding plan lifecycle events. When no local plan matches,
+      // funding_plan_id is NULL (never '' — Postgres rejects '' for a UUID column,
+      // which would abort this insert and leave the provider retrying forever).
+      // The row is still written so provider_event_id dedupe ends the retry loop.
+      const eventEntity = new FundingEventEntity();
+      eventEntity.id = uuidv4();
+      eventEntity.funding_plan_id = fundingPlanRecord?.id ?? null;
+      eventEntity.event_type = event.eventType;
+      eventEntity.provider_event_id = event.eventId;
+      eventEntity.payload = this.summarizeProviderEvent(event.status ?? null);
+      eventEntity.processed_at = new Date();
+      await eventEntity.save({ transaction: t });
+
+      if (!fundingPlanRecord) {
+        return;
+      }
+
+      // The cancellation boundary as it stood before this event, read before
+      // any of the writes below can overwrite it. It is what the allocations
+      // were covered through, so finalization has to date them from it.
+      const scheduledCancelAt = fundingPlanRecord.cancel_at;
+
+      if (event.status) {
+        const previousStatus = fundingPlanRecord.status;
+
+        if (previousStatus === 'cancelled' && event.status !== 'cancelled') {
+          logger.warn({
+            eventId: event.eventId,
+            eventType: event.eventType,
+            fundingPlanId: fundingPlanRecord.id,
+            reportedStatus: event.status,
+          }, 'Ignoring provider status for a funding plan that is already cancelled');
+        }
+        else {
+          fundingPlanRecord.status = event.status;
+
+          // Emitted after commit: a listener must never act on a lifecycle
+          // change the transaction went on to roll back.
+          if (previousStatus === 'active' && event.status === 'past_due') {
+            emitAfterTx(this.eventBus, 'funding:plan:payment_failed', {
+              fundingPlan: fundingPlanRecord.toModel(),
+            }, t);
+          }
+          else if (previousStatus === 'past_due' && event.status === 'suspended') {
+            emitAfterTx(this.eventBus, 'funding:plan:suspended', {
+              fundingPlan: fundingPlanRecord.toModel(),
+            }, t);
+          }
+          else if (event.status === 'active' && previousStatus !== 'active') {
+            emitAfterTx(this.eventBus, 'funding:plan:reactivated', {
+              fundingPlan: fundingPlanRecord.toModel(),
+            }, t);
+          }
+        }
+      }
+
+      // Tri-state: absent leaves the stored boundary alone, null clears it (a
+      // pending cancellation the customer reversed), a date schedules one.
+      if (event.cancelAt !== undefined) {
+        fundingPlanRecord.cancel_at = event.cancelAt;
+      }
+
+      if (event.currentPeriodStart) {
+        fundingPlanRecord.current_period_start = event.currentPeriodStart;
+      }
+
+      if (event.currentPeriodEnd) {
+        fundingPlanRecord.current_period_end = event.currentPeriodEnd;
+      }
+
+      await fundingPlanRecord.save({ transaction: t });
+
+      if (fundingPlanRecord.status === 'cancelled') {
+        await this.endCalendarAllocations(fundingPlanRecord.id, scheduledCancelAt, t);
+      }
+    });
+  }
+
+  /**
+   * Close out the calendar allocations of a funding plan that has just ended
+   *
+   * `end_time` is the date each calendar was covered through, so it takes the
+   * cancellation boundary the plan was running to when one was scheduled — the
+   * customer paid through it, and dating the allocation from the moment the
+   * provider got around to sending its deletion event would understate what
+   * they bought. An immediate cancellation has no such boundary and ends now.
+   *
+   * Only open allocations are touched. One already closed carries its own
+   * earlier end date (a calendar removed from the plan mid-period keeps it),
+   * and that date is the more specific answer.
+   *
+   * @param fundingPlanId - Plan whose allocations are ending
+   * @param scheduledCancelAt - Boundary the plan was cancelling at, if any
+   * @param tx - Transaction the plan's own status write is enlisted in
+   * @private
+   */
+  private async endCalendarAllocations(
+    fundingPlanId: string,
+    scheduledCancelAt: Date | null,
+    tx: Transaction,
+  ): Promise<void> {
+    await CalendarFundingPlanEntity.update(
+      { end_time: scheduledCancelAt ?? new Date() },
+      {
         where: {
-          provider_subscription_id: event.subscriptionId,
-          provider_config_id: providerConfigId,
+          funding_plan_id: fundingPlanId,
+          end_time: { [Op.is]: null as any },
         },
-      })
-      : null;
-
-    // Log event for funding plan lifecycle events. When no local plan matches,
-    // funding_plan_id is NULL (never '' — Postgres rejects '' for a UUID column,
-    // which would abort this insert and leave the provider retrying forever).
-    // The row is still written so provider_event_id dedupe ends the retry loop.
-    const eventEntity = new FundingEventEntity();
-    eventEntity.id = uuidv4();
-    eventEntity.funding_plan_id = fundingPlanRecord?.id ?? null;
-    eventEntity.event_type = event.eventType;
-    eventEntity.provider_event_id = event.eventId;
-    eventEntity.payload = this.summarizeProviderEvent(event.status ?? null);
-    eventEntity.processed_at = new Date();
-    await eventEntity.save();
-
-    if (!fundingPlanRecord) {
-      return;
-    }
-
-    // Update funding plan based on event
-    if (event.status) {
-      const previousStatus = fundingPlanRecord.status;
-      fundingPlanRecord.status = event.status;
-
-      // Emit appropriate event based on status transition
-      if (previousStatus === 'active' && event.status === 'past_due') {
-        this.eventBus.emit('funding:plan:payment_failed', {
-          fundingPlan: fundingPlanRecord.toModel(),
-        });
-      }
-      else if (previousStatus === 'past_due' && event.status === 'suspended') {
-        this.eventBus.emit('funding:plan:suspended', {
-          fundingPlan: fundingPlanRecord.toModel(),
-        });
-      }
-      else if (event.status === 'active' && previousStatus !== 'active') {
-        this.eventBus.emit('funding:plan:reactivated', {
-          fundingPlan: fundingPlanRecord.toModel(),
-        });
-      }
-    }
-
-    if (event.currentPeriodStart) {
-      fundingPlanRecord.current_period_start = event.currentPeriodStart;
-    }
-
-    if (event.currentPeriodEnd) {
-      fundingPlanRecord.current_period_end = event.currentPeriodEnd;
-    }
-
-    await fundingPlanRecord.save();
+        transaction: tx,
+      },
+    );
   }
 
   /**
@@ -1647,6 +1870,12 @@ export default class FundingService {
       plan.currency = providerSubscription.currency;
       plan.currentPeriodStart = providerSubscription.currentPeriodStart;
       plan.currentPeriodEnd = providerSubscription.currentPeriodEnd;
+      // A subscription can arrive already carrying a cancellation schedule —
+      // one created through the provider's own surfaces, or a checkout the
+      // customer cancelled between paying and our seeing it. Dropping it would
+      // give the new plan no boundary at all, so access would run to the period
+      // end plus grace on a subscription the provider is about to delete.
+      plan.cancelAt = providerSubscription.cancelAt ?? null;
 
       const entity = FundingPlanEntity.fromModel(plan);
       await entity.save({ transaction: t });
@@ -1663,6 +1892,37 @@ export default class FundingService {
 
       // Allocate funding to validated calendars
       if (ownedCalendarIds.length > 0) {
+        // A calendar belongs to one plan at a time, so coverage moving to this
+        // plan closes whatever allocation was still open for the same calendar
+        // under an earlier one.
+        //
+        // Not defensive tidying — without it this insert fails. A plan that
+        // went `suspended` keeps its allocations open (it may yet be revived)
+        // and does not block a fresh checkout, so buying a new plan for the
+        // same calendar is an ordinary, reachable sequence that would otherwise
+        // present the unique index on (calendar_id) WHERE end_time IS NULL with
+        // a second open row. The webhook would then fail, and the provider
+        // would retry it forever.
+        //
+        // addCalendarToFundingPlan carries the matching close for the same
+        // reason. The two must stay symmetric: every path that opens an
+        // allocation has to close whatever it supersedes, or the index turns a
+        // reachable purchase into a hard failure.
+        //
+        // In the same transaction as the insert, so the two rows can never be
+        // observed open at once.
+        await CalendarFundingPlanEntity.update(
+          { end_time: new Date() },
+          {
+            where: {
+              calendar_id: { [Op.in]: ownedCalendarIds },
+              funding_plan_id: { [Op.ne]: plan.id },
+              end_time: { [Op.is]: null as any },
+            },
+            transaction: t,
+          },
+        );
+
         const perCalendarAmount = Math.floor(plan.amount / ownedCalendarIds.length);
 
         for (const calendarId of ownedCalendarIds) {
@@ -1756,8 +2016,10 @@ export default class FundingService {
    *
    * @deprecated Use {@link checkFundingAccess}. This reports only the plan's
    * status, so it keeps granting access to a plan whose cancellation was never
-   * reported to us, and it knows nothing about instance-level funding settings
-   * or admin exemption. It survives only as part of the legacy baseline that
+   * reported to us — and, since a cancel-at-period-end deliberately leaves the
+   * status 'active', to one past its own `cancel_at` boundary as well. It also
+   * knows nothing about instance-level funding settings or admin exemption.
+   * It survives only as part of the legacy baseline that
    * the parity test in service.test.ts measures checkFundingAccess against —
    * that is the reason not to delete it, not a reason to call it. Do not add
    * callers.
@@ -2270,9 +2532,11 @@ export default class FundingService {
    * Two candidate boundaries are considered and the EARLIEST wins, because a
    * gate helper must never round permissive:
    *
-   *  - cancelled_at, the recorded cancellation. An immediate cancellation ends
-   *    access when it happens, even though the interrupted billing period may
-   *    still have weeks to run.
+   *  - cancel_at, the instant a scheduled cancellation takes effect. A
+   *    cancel-at-period-end leaves the plan 'active' — the customer is paid up
+   *    and fully entitled until the boundary — so this is the only marker that
+   *    reveals it. It is what makes the missed-webhook case harmless: access
+   *    ends here whether or not the provider's deletion event ever arrives.
    *  - current_period_end plus the instance grace period. This is the boundary
    *    written on the happy path, on every renewal, so it is the one that
    *    still applies when a cancellation is never reported to us at all — the
@@ -2283,16 +2547,36 @@ export default class FundingService {
    *    suspendExpiredFundingPlans measures its own grace from updatedAt on
    *    past_due rows, and those rows never reach this helper.
    *
-   * pv-jdot.3.1 adds cancel_at for cancel-at-period-end plans. Adding it here
-   * is not the whole of that work: by then there are three markers that can
-   * end access (cancelled_at, cancel_at, current_period_end) against the
-   * predicates that read them. getFundingStatusForCalendar no longer reads
-   * them independently — it goes through qualifyingFundingPlan, so it inherits
-   * whatever this helper decides — but hasActiveFundingPlan (deprecated) and
-   * getPlanStatusForCalendars (the un-migrated bulk vocabulary) still consult
-   * plan status without any boundary. Which marker governs which of those
-   * needs one ruling recorded on that bead rather than another reading
-   * invented at a call site.
+   * ## Precedence among the end-of-entitlement markers
+   *
+   * Four stored values can end a calendar's coverage. They are not competing
+   * answers to one question; each answers a different one, and only two are
+   * read here:
+   *
+   *  1. CalendarFundingPlanEntity.end_time — when THIS CALENDAR's allocation
+   *     ends, whatever the plan goes on to do. Applied by qualifyingFundingPlan's
+   *     allocation query before this helper is reached, so it wins outright: a
+   *     calendar removed from a plan mid-period loses coverage on its own date
+   *     while the plan keeps covering the others.
+   *  2. FundingPlanEntity.cancel_at — when the PLAN stops granting. Read here.
+   *  3. FundingPlanEntity.current_period_end + grace — the paid-through
+   *     backstop. Read here.
+   *  4. FundingPlanEntity.cancelled_at — when cancellation was REQUESTED.
+   *     Deliberately not read here. It is a request timestamp, not an
+   *     effective-end one, and it is only ever written together with
+   *     status 'cancelled', which the caller's join has already denied. Adding
+   *     it back would be actively wrong rather than merely redundant: on a
+   *     period-end cancellation the request instant is the moment the customer
+   *     clicked cancel, so an earliest-wins reduce would revoke access they
+   *     had paid weeks ahead for — the exact outcome cancel_at exists to
+   *     prevent.
+   *
+   * Two predicates still read plan status with no boundary at all, and both
+   * are documented as such where they are defined: hasActiveFundingPlan
+   * (deprecated, retained only for the parity test) and
+   * getPlanStatusForCalendars (the un-migrated bulk admin vocabulary, deferred
+   * to pv-1u3s). Neither is an entitlement decision. Every gate and every
+   * single-calendar display status goes through this helper.
    *
    * @param plan - Funding plan the allocation belongs to
    * @param gracePeriodDays - Instance grace period applied after the paid-through date
@@ -2302,7 +2586,7 @@ export default class FundingService {
     const graceMs = Math.max(gracePeriodDays, 0) * 24 * 60 * 60 * 1000;
 
     const boundaries = [
-      plan.cancelled_at,
+      plan.cancel_at,
       plan.current_period_end
         ? new Date(plan.current_period_end.getTime() + graceMs)
         : null,
@@ -2328,8 +2612,9 @@ export default class FundingService {
    * for the same calendar, which is the same ordering the single-calendar
    * predicates use — but only the ordering. This method is NOT in parity with
    * getFundingStatusForCalendar: it reads plan status alone, with no access
-   * boundary and no admin exemption, so a calendar whose plan was cancelled or
-   * has run past its paid-through date is still reported 'subscribed' here
+   * boundary and no admin exemption, so a calendar whose plan was cancelled,
+   * has passed the `cancel_at` boundary of a period-end cancellation, or has
+   * run past its paid-through date is still reported 'subscribed' here
    * while the single-calendar path reports it not_covered and every gate refuses
    * it. That is tolerable only because this vocabulary feeds admin listings,
    * never an entitlement decision. Migrating it is deferred to pv-1u3s.

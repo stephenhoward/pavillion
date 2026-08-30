@@ -80,6 +80,10 @@ export default class FundingPlanRoutes {
         currentPeriodStart: fundingPlan.currentPeriodStart,
         currentPeriodEnd: fundingPlan.currentPeriodEnd,
         cancelledAt: fundingPlan.cancelledAt,
+        // The boundary a period-end cancellation runs to. Without it the
+        // client cannot tell a continuing plan from one that is ending, since
+        // both report status 'active' until the boundary is reached.
+        cancelAt: fundingPlan.cancelAt,
         suspendedAt: fundingPlan.suspendedAt,
       });
     }
