@@ -147,11 +147,12 @@ export default class FundingService {
    *
    * Routing all of these reads through one helper is what keeps the error
    * identity independent of ordering. getCalendarFundingSummary reads the
-   * settings three times over — once for the display status, once for the
-   * dates, once per gated feature inside checkFundingAccess — and before this
-   * existed only the checkFundingAccess read produced the declared class, so
-   * which error a consumer saw depended on which identical read happened to
-   * run first.
+   * settings once per request and threads the same value into
+   * checkFundingAccessWithSettings (once per gated feature) and
+   * resolveFundingStatus, rather than each of them reading its own copy —
+   * before that threading existed only the checkFundingAccess read produced
+   * the declared class, so which error a consumer saw depended on which
+   * identical read happened to run first.
    *
    * @param context - Log context describing the decision that needed settings
    * @returns The instance funding settings
@@ -927,7 +928,11 @@ export default class FundingService {
     // Verify ownership - throws ValidationError if not owner
     await this.verifyCalendarOwnership(accountId, calendarId);
 
-    return this.resolveFundingStatus(calendarId);
+    const settings = await this.settingsForFundingDecision(
+      'getFundingStatusForCalendar: instance funding settings unreadable',
+    );
+
+    return this.resolveFundingStatus(calendarId, settings);
   }
 
   /**
@@ -936,12 +941,16 @@ export default class FundingService {
    * verify ownership once, take the gate's answer first, and then run these
    * reads in isolation — see the third divergence in that method's note.
    *
+   * Takes the instance funding settings as a parameter, already read by the
+   * caller, rather than reading its own copy — see
+   * {@link checkFundingAccessWithSettings} for the same split applied to the
+   * gate, done for the same reason.
+   *
    * @param calendarId - Calendar ID to check (already validated and owned)
+   * @param settings - Instance funding settings, already read by the caller
    * @returns Funding status: 'admin_exempt' | 'grant' | 'covered' | 'not_covered'
-   * @throws FundingAccessIndeterminateError if the instance funding settings
-   *   could not be read
    */
-  private async resolveFundingStatus(calendarId: string): Promise<FundingStatus> {
+  private async resolveFundingStatus(calendarId: string, settings: FundingSettings): Promise<FundingStatus> {
     // Neither guard below is reachable, and neither is a funding decision:
     // verifyCalendarOwnership has already thrown if calendarInterface is
     // absent, and it only returns having found an owner membership row — the
@@ -973,10 +982,6 @@ export default class FundingService {
 
     // Same predicate the gate applies, so a plan past its access boundary is
     // not displayed as covered while every feature refuses it.
-    const settings = await this.settingsForFundingDecision(
-      'getFundingStatusForCalendar: instance funding settings unreadable',
-    );
-
     if (await this.hasQualifyingFundingPlan(calendarId, settings.gracePeriodDays)) {
       return 'covered';
     }
@@ -1026,12 +1031,23 @@ export default class FundingService {
     // Verify ownership - throws ValidationError if not owner
     await this.verifyCalendarOwnership(accountId, calendarId);
 
+    // Read once and thread into both halves below, instead of each of them
+    // reading its own copy — see checkFundingAccessWithSettings and
+    // resolveFundingStatus. An unreadable settings row still throws
+    // FundingAccessIndeterminateError here, exactly where the gate's own
+    // read used to throw first, so "the gate goes first and alone" below
+    // still holds: nothing the display path reads may run before the gate
+    // or throw over it.
+    const settings = await this.settingsForFundingDecision(
+      'getCalendarFundingSummary: instance funding settings unreadable',
+    );
+
     // The gate goes first and alone. Its answer is the authoritative half of
     // this response and it carries its own partial-failure tolerance, so
     // nothing the display path reads may run before it or throw over it.
     const featureKeys = Object.keys(FUNDING_GATED_FEATURES) as FundingGatedFeature[];
     const decisions = await Promise.all(
-      featureKeys.map((feature) => this.checkFundingAccess(calendarId, feature)),
+      featureKeys.map((feature) => this.checkFundingAccessWithSettings(calendarId, feature, settings)),
     );
 
     // The display status is read in isolation: a failure here withholds the
@@ -1040,7 +1056,7 @@ export default class FundingService {
     // as `not_covered`, which divergence 2 rejects.
     let status: FundingStatus | null;
     try {
-      status = await this.resolveFundingStatus(calendarId);
+      status = await this.resolveFundingStatus(calendarId, settings);
     }
     catch (error) {
       logError(error, 'getCalendarFundingSummary: coverage status unreadable, withholding it');
@@ -2124,6 +2140,45 @@ export default class FundingService {
     const settings = await this.settingsForFundingDecision(
       'checkFundingAccess: instance funding settings unreadable, closing gate',
     );
+
+    return this.checkFundingAccessWithSettings(calendarId, feature, settings);
+  }
+
+  /**
+   * The gate logic behind {@link checkFundingAccess}, taking the instance
+   * funding settings as a parameter instead of reading them itself.
+   *
+   * Split out so a caller that already needs the settings row for another
+   * decision in the same request — {@link getCalendarFundingSummary}, which
+   * also reads it for {@link resolveFundingStatus} — can read it once and
+   * pass it to both instead of this method reading its own copy per feature
+   * checked. Input validation stays in the public method (run before the
+   * settings read there, matching this gate's pre-refactor order) as well as
+   * here, since {@link getCalendarFundingSummary} calls this method directly
+   * with a calendarId it has already validated and feature keys drawn from
+   * the registry itself — but a defensive check costs nothing and keeps this
+   * method safe to call on its own.
+   *
+   * @param calendarId - Calendar the feature would be used on
+   * @param feature - Key from FUNDING_GATED_FEATURES naming the gated feature
+   * @param settings - Instance funding settings, already read by the caller
+   * @returns True if the gate is open for this calendar, false if this
+   *   calendar is determinately not covered
+   * @throws ValidationError if calendarId is not a UUID or feature is not a
+   *   registered funding-gated feature
+   */
+  private async checkFundingAccessWithSettings(
+    calendarId: string,
+    feature: FundingGatedFeature,
+    settings: FundingSettings,
+  ): Promise<boolean> {
+    if (!isValidUUID(calendarId)) {
+      throw new ValidationError('Invalid calendarId: must be a valid UUID');
+    }
+
+    if (!Object.prototype.hasOwnProperty.call(FUNDING_GATED_FEATURES, feature)) {
+      throw new ValidationError('Unknown funding-gated feature');
+    }
 
     if (!settings.enabled) {
       return true;
