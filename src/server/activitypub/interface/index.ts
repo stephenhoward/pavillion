@@ -1,6 +1,4 @@
 import { EventEmitter } from 'events';
-import { Op } from 'sequelize';
-import { v4 as uuidv4 } from 'uuid';
 import { Account } from '@/common/model/account';
 import { Calendar } from '@/common/model/calendar';
 import { Report } from '@/common/model/report';
@@ -11,16 +9,16 @@ import { UserProfileResponse } from '@/server/activitypub/model/userprofile';
 import { FollowingCalendar, FollowerCalendar } from '@/common/model/follow';
 import ActivityPubMemberService from '@/server/activitypub/service/members';
 import ActivityPubServerService, { InboxAuthContext, InboxRowInput } from '@/server/activitypub/service/server';
+import UserActorService from '@/server/activitypub/service/user_actor';
+import CalendarActorService from '@/server/activitypub/service/calendar_actor';
 import ProcessInboxService from '../service/inbox';
 import ProcessOutboxService from '../service/outbox';
 import FederationPublisher, {
   FederationEventInput,
   FederationRemoteUserActor,
 } from '@/server/activitypub/service/federation_publisher';
-import { ActivityPubOutboxMessageEntity, ActivityPubInboxMessageEntity, FollowingCalendarEntity, SharedEventEntity } from '@/server/activitypub/entity/activitypub';
-import { EventObjectEntity } from '@/server/activitypub/entity/event_object';
-import { CalendarActorEntity, CalendarActor } from '@/server/activitypub/entity/calendar_actor';
-import { UserActorEntity } from '@/server/activitypub/entity/user_actor';
+import { ActivityPubOutboxMessageEntity, ActivityPubInboxMessageEntity } from '@/server/activitypub/entity/activitypub';
+import { CalendarActor } from '@/server/activitypub/entity/calendar_actor';
 import CalendarInterface from '@/server/calendar/interface';
 import AccountsInterface from '@/server/accounts/interface';
 
@@ -38,6 +36,8 @@ import FlagActivityBuilder from '@/server/activitypub/service/flag-activity-buil
 export default class ActivityPubInterface {
   private memberService: ActivityPubMemberService;
   private serverService: ActivityPubServerService;
+  private userActorService: UserActorService;
+  private calendarActorService: CalendarActorService;
   private inboxService: ProcessInboxService;
   private outboxService: ProcessOutboxService;
   private federationPublisher: FederationPublisher;
@@ -52,6 +52,8 @@ export default class ActivityPubInterface {
     this.calendarInterface = calendarInterface;
     this.memberService = new ActivityPubMemberService(eventBus, calendarInterface);
     this.serverService = new ActivityPubServerService(eventBus, calendarInterface, accountsInterface);
+    this.userActorService = new UserActorService(calendarInterface);
+    this.calendarActorService = new CalendarActorService(calendarInterface);
     this.inboxService = new ProcessInboxService(eventBus, this.calendarInterface, moderationInterface);
     this.outboxService = new ProcessOutboxService(eventBus, this.inboxService);
     this.federationPublisher = new FederationPublisher(eventBus, calendarInterface, this.outboxService);
@@ -441,8 +443,7 @@ export default class ActivityPubInterface {
    * @returns The actor URI string, or null if no AP identity exists for this event
    */
   async getEventSourceActorUri(eventId: string): Promise<string | null> {
-    const eventObject = await EventObjectEntity.findOne({ where: { event_id: eventId } });
-    return eventObject?.attributed_to ?? null;
+    return this.serverService.getEventSourceActorUri(eventId);
   }
 
   /**
@@ -454,17 +455,7 @@ export default class ActivityPubInterface {
    * @returns The CalendarActor model, or null if not found
    */
   async findCalendarActorByCalendarId(calendarId: string): Promise<CalendarActor | null> {
-    const byRemoteId = await CalendarActorEntity.findOne({
-      where: { remote_calendar_id: calendarId },
-    });
-    if (byRemoteId) {
-      return byRemoteId.toModel();
-    }
-
-    const byLocalId = await CalendarActorEntity.findOne({
-      where: { calendar_id: calendarId },
-    });
-    return byLocalId?.toModel() ?? null;
+    return this.calendarActorService.findCalendarActorByCalendarId(calendarId);
   }
 
   /**
@@ -489,10 +480,7 @@ export default class ActivityPubInterface {
    * @returns Array of calendar ID strings
    */
   async getCalendarIdsForSharedEvent(eventId: string): Promise<string[]> {
-    const sharedEvents = await SharedEventEntity.findAll({
-      where: { event_id: eventId },
-    });
-    return sharedEvents.map((se) => se.calendar_id);
+    return this.memberService.getCalendarIdsForSharedEvent(eventId);
   }
 
   /**
@@ -502,10 +490,8 @@ export default class ActivityPubInterface {
    * @returns The actor URI string, or null if no user actor exists
    */
   async getUserActorUri(accountId: string): Promise<string | null> {
-    const userActor = await UserActorEntity.findOne({
-      where: { account_id: accountId },
-    });
-    return userActor?.actor_uri ?? null;
+    const userActor = await this.userActorService.getActorByAccountId(accountId);
+    return userActor?.actorUri ?? null;
   }
 
   /**
@@ -515,13 +501,11 @@ export default class ActivityPubInterface {
    * @returns Plain object with id and actorUri, or null if not found
    */
   async findUserActorByUri(actorUri: string): Promise<{ id: string; actorUri: string } | null> {
-    const userActor = await UserActorEntity.findOne({
-      where: { actor_uri: actorUri },
-    });
+    const userActor = await this.userActorService.getActorByUri(actorUri);
     if (!userActor) {
       return null;
     }
-    return { id: userActor.id, actorUri: userActor.actor_uri };
+    return { id: userActor.id, actorUri: userActor.actorUri };
   }
 
   /**
@@ -540,20 +524,8 @@ export default class ActivityPubInterface {
     domain: string,
     publicKey?: string,
   ): Promise<{ id: string }> {
-    const [entity] = await UserActorEntity.findOrCreate({
-      where: { actor_uri: actorUri },
-      defaults: {
-        id: uuidv4(),
-        actor_type: 'remote',
-        account_id: null,
-        actor_uri: actorUri,
-        remote_username: preferredUsername,
-        remote_domain: domain,
-        public_key: publicKey || null,
-        private_key: null,
-      },
-    });
-    return { id: entity.id };
+    const userActor = await this.userActorService.findOrCreateRemoteActor(actorUri, preferredUsername, domain, publicKey);
+    return { id: userActor.id };
   }
 
   /**
@@ -566,19 +538,7 @@ export default class ActivityPubInterface {
    * @throws Error if actor not found or not in following list
    */
   async getActorInFollowing(calendarId: string, actorId: string): Promise<CalendarActor> {
-    const actor = await CalendarActorEntity.findByPk(actorId);
-    if (!actor) {
-      throw new Error('actor not found');
-    }
-
-    const follow = await FollowingCalendarEntity.findOne({
-      where: { calendar_actor_id: actorId, calendar_id: calendarId },
-    });
-    if (!follow) {
-      throw new Error('actor is not in the following list for this calendar');
-    }
-
-    return actor.toModel();
+    return this.memberService.getActorInFollowing(calendarId, actorId);
   }
 
   /**
@@ -589,20 +549,6 @@ export default class ActivityPubInterface {
    * @returns Map from event ID to attributed_to actor URI
    */
   async getEventSourceActorUris(eventIds: string[]): Promise<Map<string, string>> {
-    if (eventIds.length === 0) {
-      return new Map();
-    }
-
-    const eventObjects = await EventObjectEntity.findAll({
-      where: { event_id: { [Op.in]: eventIds } },
-    });
-
-    const result = new Map<string, string>();
-    for (const obj of eventObjects) {
-      if (obj.attributed_to) {
-        result.set(obj.event_id, obj.attributed_to);
-      }
-    }
-    return result;
+    return this.serverService.getEventSourceActorUris(eventIds);
   }
 }

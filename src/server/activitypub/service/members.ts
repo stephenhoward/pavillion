@@ -13,7 +13,7 @@ import { ActivityPubActivity } from "@/server/activitypub/model/base";
 import FollowActivity from "@/server/activitypub/model/action/follow";
 import AnnounceActivity from "@/server/activitypub/model/action/announce";
 import { FollowingCalendarEntity, FollowerCalendarEntity, SharedEventEntity, RepostDismissalEntity } from "@/server/activitypub/entity/activitypub";
-import { CalendarActorEntity } from "@/server/activitypub/entity/calendar_actor";
+import { CalendarActorEntity, CalendarActor } from "@/server/activitypub/entity/calendar_actor";
 import { EventObjectEntity } from "@/server/activitypub/entity/event_object";
 import RemoteCalendarService from "@/server/activitypub/service/remote_calendar";
 import UndoActivity from "../model/action/undo";
@@ -578,6 +578,19 @@ class ActivityPubService {
   }
 
   /**
+   * Gets the IDs of all calendars that have shared (reposted) a given event.
+   *
+   * @param eventId - The event UUID
+   * @returns Array of calendar ID strings
+   */
+  async getCalendarIdsForSharedEvent(eventId: string): Promise<string[]> {
+    const sharedEvents = await SharedEventEntity.findAll({
+      where: { event_id: eventId },
+    });
+    return sharedEvents.map((se) => se.calendar_id);
+  }
+
+  /**
    * Get list of calendars that this calendar is following
    * @param calendar The calendar whose followings to retrieve
    * @returns Array of FollowingCalendar objects with human-readable calendarActorId
@@ -628,6 +641,31 @@ class ActivityPubService {
         entity.calendar_id,
       );
     });
+  }
+
+  /**
+   * Validates that a calendar actor exists and is in the following list for a calendar.
+   * Throws if the actor is not found or is not being followed.
+   *
+   * @param calendarId - The calendar UUID
+   * @param actorId - The calendar actor UUID
+   * @returns The CalendarActor model
+   * @throws Error if actor not found or not in following list
+   */
+  async getActorInFollowing(calendarId: string, actorId: string): Promise<CalendarActor> {
+    const actor = await CalendarActorEntity.findByPk(actorId);
+    if (!actor) {
+      throw new Error('actor not found');
+    }
+
+    const follow = await FollowingCalendarEntity.findOne({
+      where: { calendar_actor_id: actorId, calendar_id: calendarId },
+    });
+    if (!follow) {
+      throw new Error('actor is not in the following list for this calendar');
+    }
+
+    return actor.toModel();
   }
 
   /**
