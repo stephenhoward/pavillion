@@ -27,6 +27,9 @@ import { ValidationError } from '@/common/exceptions/base';
 import { v4 as uuidv4 } from 'uuid';
 import config from 'config';
 
+const HOUR = 60 * 60 * 1000;
+const DAY = 24 * HOUR;
+
 describe('FundingService', () => {
   let sandbox: sinon.SinonSandbox;
   let eventBus: EventEmitter;
@@ -140,10 +143,18 @@ describe('FundingService', () => {
   });
 
   describe('cancel', () => {
-    it('should mark funding plan for end-of-period cancellation', async () => {
-      const fundingPlanId = uuidv4();
+    const periodEnd = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+
+    /**
+     * Seed a cancellable plan and the provider plumbing behind it, returning
+     * the row so a test can assert what cancel() wrote to it.
+     *
+     * @param overrides - Plan fields to vary (period end, prior markers)
+     * @returns The plan row and the adapter its cancellation is issued through
+     */
+    function stubCancellablePlan(overrides: Record<string, unknown> = {}) {
       const mockEntity = {
-        id: fundingPlanId,
+        id: uuidv4(),
         account_id: uuidv4(),
         provider_config_id: uuidv4(),
         provider_subscription_id: 'sub_123',
@@ -153,8 +164,9 @@ describe('FundingService', () => {
         amount: 1000000,
         currency: 'USD',
         current_period_start: new Date(),
-        current_period_end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-        cancelled_at: null,
+        current_period_end: periodEnd,
+        cancelled_at: null as Date | null,
+        cancel_at: null as Date | null,
         suspended_at: null,
         save: sandbox.stub().resolves(),
         toModel: function() {
@@ -162,10 +174,7 @@ describe('FundingService', () => {
           sub.status = this.status;
           return sub;
         },
-      };
-
-      const mockProviderConfig = {
-        toModel: () => new ProviderConfig(uuidv4(), 'stripe'),
+        ...overrides,
       };
 
       const mockAdapter = {
@@ -173,14 +182,68 @@ describe('FundingService', () => {
       };
 
       sandbox.stub(FundingPlanEntity, 'findByPk').resolves(mockEntity as any);
-      sandbox.stub(ProviderConfigEntity, 'findByPk').resolves(mockProviderConfig as any);
+      sandbox.stub(ProviderConfigEntity, 'findByPk').resolves({
+        toModel: () => new ProviderConfig(uuidv4(), 'stripe'),
+      } as any);
       sandbox.stub(ProviderFactory, 'getAdapter').returns(mockAdapter as any);
 
-      await service.cancel(fundingPlanId, false);
+      return { mockEntity, mockAdapter };
+    }
 
-      expect(mockAdapter.cancelSubscription.calledWith('sub_123', false)).toBe(true);
-      expect(mockEntity.status).toBe('cancelled');
-      expect(mockEntity.save.called).toBe(true);
+    describe('at period end', () => {
+      it('should record the paid-through boundary and leave the plan active', async () => {
+        const { mockEntity, mockAdapter } = stubCancellablePlan();
+
+        await service.cancel(mockEntity.id, false);
+
+        expect(mockAdapter.cancelSubscription.calledWith(mockEntity.provider_subscription_id, false)).toBe(true);
+        // The customer paid through the period end and keeps every
+        // entitlement until it. Flipping the status to 'cancelled' here
+        // revoked access that had been paid for.
+        expect(mockEntity.status).toBe('active');
+        expect(mockEntity.cancel_at).toEqual(periodEnd);
+        expect(mockEntity.save.called).toBe(true);
+      });
+
+      it('should leave cancelled_at unwritten', async () => {
+        const { mockEntity } = stubCancellablePlan();
+
+        await service.cancel(mockEntity.id, false);
+
+        // cancelled_at is a request timestamp — the instant the customer
+        // clicked cancel. planAccessExpiry would have to ignore it on an
+        // active plan or revoke immediately; not writing it at all is what
+        // keeps that trap shut.
+        expect(mockEntity.cancelled_at).toBeNull();
+      });
+
+      it('should take effect immediately when the plan has no paid-through date', async () => {
+        const before = Date.now();
+        const { mockEntity } = stubCancellablePlan({ current_period_end: null });
+
+        await service.cancel(mockEntity.id, false);
+
+        // No period end means no paid-through date to run to. The boundary
+        // has to be now rather than never, or the cancellation would never
+        // take effect at all.
+        expect(mockEntity.status).toBe('active');
+        expect(mockEntity.cancel_at!.getTime()).toBeGreaterThanOrEqual(before);
+      });
+    });
+
+    describe('immediately', () => {
+      it('should cancel the plan outright', async () => {
+        const { mockEntity, mockAdapter } = stubCancellablePlan();
+
+        await service.cancel(mockEntity.id, true);
+
+        expect(mockAdapter.cancelSubscription.calledWith(mockEntity.provider_subscription_id, true)).toBe(true);
+        expect(mockEntity.status).toBe('cancelled');
+        expect(mockEntity.cancelled_at).toBeInstanceOf(Date);
+        // No boundary to run to: the status join is what denies from here.
+        expect(mockEntity.cancel_at).toBeNull();
+        expect(mockEntity.save.called).toBe(true);
+      });
     });
   });
 
@@ -226,6 +289,217 @@ describe('FundingService', () => {
 
       expect(mockEntity.status).toBe('past_due');
       expect(mockEntity.save.called).toBe(true);
+    });
+
+    /**
+     * Seed the plan a provider event will be matched against, plus the event
+     * log write that precedes any plan update.
+     *
+     * @param overrides - Plan fields to vary
+     * @returns The plan row the event will be applied to
+     */
+    function stubWebhookTarget(overrides: Record<string, unknown> = {}) {
+      const mockEntity = {
+        id: uuidv4(),
+        account_id: uuidv4(),
+        provider_config_id: uuidv4(),
+        provider_subscription_id: 'sub_lifecycle',
+        status: 'active',
+        current_period_start: new Date(Date.now() - 30 * DAY),
+        current_period_end: new Date(Date.now() + DAY),
+        cancelled_at: null as Date | null,
+        cancel_at: null as Date | null,
+        save: sandbox.stub().resolves(),
+        toModel: function() {
+          const plan = new FundingPlan(this.id);
+          plan.status = this.status;
+          return plan;
+        },
+        ...overrides,
+      };
+
+      sandbox.stub(FundingPlanEntity, 'findOne').resolves(mockEntity as any);
+      sandbox.stub(FundingEventEntity, 'findOne').resolves(null);
+      sandbox.stub(FundingEventEntity.prototype, 'save').resolves({} as any);
+
+      return mockEntity;
+    }
+
+    describe('cancellation lifecycle', () => {
+      it('should record the boundary a period-end cancellation reports while leaving the plan active', async () => {
+        // What Stripe actually sends for a cancel-at-period-end: status
+        // "active" — the subscription is paid through the period — with the
+        // cancellation carried only in cancel_at. Copying the status alone is
+        // what used to erase a locally-recorded cancellation.
+        const cancelAt = new Date(Date.now() + DAY);
+        const plan = stubWebhookTarget();
+
+        await service.processWebhookEvent({
+          eventId: 'evt_period_end_cancel',
+          eventType: 'customer.subscription.updated',
+          subscriptionId: plan.provider_subscription_id,
+          status: 'active',
+          cancelAt,
+          rawPayload: {},
+        }, plan.provider_config_id);
+
+        expect(plan.status).toBe('active');
+        expect(plan.cancel_at).toEqual(cancelAt);
+      });
+
+      it('should clear a scheduled cancellation the provider reports as reversed', async () => {
+        // A customer who resumes their plan in the billing portal. null is
+        // not "no information" here — it is Stripe saying there is no longer a
+        // cancellation, and leaving the boundary standing would cut off a
+        // paying customer at it.
+        const plan = stubWebhookTarget({ cancel_at: new Date(Date.now() + DAY) });
+
+        await service.processWebhookEvent({
+          eventId: 'evt_cancel_reversed',
+          eventType: 'customer.subscription.updated',
+          subscriptionId: plan.provider_subscription_id,
+          status: 'active',
+          cancelAt: null,
+          rawPayload: {},
+        }, plan.provider_config_id);
+
+        expect(plan.cancel_at).toBeNull();
+      });
+
+      it('should leave the boundary alone for an event type that carries no cancellation schedule', async () => {
+        // Invoice events say nothing about cancellation. Absent must mean
+        // "unchanged", not "cleared", or every renewal invoice would silently
+        // undo a pending cancellation.
+        const cancelAt = new Date(Date.now() + DAY);
+        const plan = stubWebhookTarget({ cancel_at: cancelAt });
+
+        await service.processWebhookEvent({
+          eventId: 'evt_invoice_paid_pending_cancel',
+          eventType: 'invoice.paid',
+          subscriptionId: plan.provider_subscription_id,
+          status: 'active',
+          rawPayload: {},
+        }, plan.provider_config_id);
+
+        expect(plan.cancel_at).toEqual(cancelAt);
+      });
+
+      it('should finalize to cancelled and end the calendar allocations at the boundary', async () => {
+        const cancelAt = new Date(Date.now() - 60 * 1000);
+        const plan = stubWebhookTarget({ cancel_at: cancelAt });
+        const allocationUpdate = sandbox.stub(CalendarFundingPlanEntity, 'update').resolves([0] as any);
+
+        await service.processWebhookEvent({
+          eventId: 'evt_sub_deleted',
+          eventType: 'customer.subscription.deleted',
+          subscriptionId: plan.provider_subscription_id,
+          status: 'cancelled',
+          cancelAt: null,
+          rawPayload: {},
+        }, plan.provider_config_id);
+
+        expect(plan.status).toBe('cancelled');
+        expect(allocationUpdate.calledOnce).toBe(true);
+
+        const [values, options] = allocationUpdate.firstCall.args as [any, any];
+        // Dated from the boundary the customer paid through, not from
+        // whenever the provider got around to sending the deletion.
+        expect(values.end_time).toEqual(cancelAt);
+        expect(options.where.funding_plan_id).toBe(plan.id);
+      });
+
+      it('should end the calendar allocations now when the cancellation had no scheduled boundary', async () => {
+        const before = Date.now();
+        const plan = stubWebhookTarget({ cancel_at: null });
+        const allocationUpdate = sandbox.stub(CalendarFundingPlanEntity, 'update').resolves([0] as any);
+
+        await service.processWebhookEvent({
+          eventId: 'evt_sub_deleted_immediate',
+          eventType: 'customer.subscription.deleted',
+          subscriptionId: plan.provider_subscription_id,
+          status: 'cancelled',
+          cancelAt: null,
+          rawPayload: {},
+        }, plan.provider_config_id);
+
+        const [values] = allocationUpdate.firstCall.args as [any, any];
+        expect(values.end_time.getTime()).toBeGreaterThanOrEqual(before);
+      });
+
+      it('should repair a cancelled plan whose allocations were left open', async () => {
+        // Keying finalization on the resulting status rather than the
+        // transition makes the next event a cancelled plan receives repair a
+        // row set that some earlier path left open. Keying it on the
+        // transition would have frozen that state in place forever, and the
+        // unique index on open allocations would then trip the next time the
+        // calendar was bought.
+        const plan = stubWebhookTarget({ status: 'cancelled', cancelled_at: new Date(Date.now() - DAY) });
+        const allocationUpdate = sandbox.stub(CalendarFundingPlanEntity, 'update').resolves([1] as any);
+
+        await service.processWebhookEvent({
+          eventId: 'evt_invoice_after_cancel',
+          eventType: 'invoice.paid',
+          subscriptionId: plan.provider_subscription_id,
+          status: 'active',
+          rawPayload: {},
+        }, plan.provider_config_id);
+
+        // The status is ignored (the plan stays cancelled) and the allocations
+        // are closed anyway.
+        expect(plan.status).toBe('cancelled');
+        expect(allocationUpdate.calledOnce).toBe(true);
+      });
+
+      it('should refuse to move a cancelled plan back to active on a status-only update', async () => {
+        // The event a cancelled subscription's later updates carry. Applying
+        // it would resurrect the plan and, through the entity's transition
+        // hook, wipe its cancelled_at as well — leaving a row identical to one
+        // that was never cancelled.
+        //
+        // A real entity with a real save-time hook, not a plain object: the
+        // claim under test is that cancelled_at survives, and only the
+        // production hook can falsify that.
+        const cancelledAt = new Date(Date.now() - DAY);
+        const plan = FundingPlanEntity.build({
+          id: uuidv4(),
+          account_id: uuidv4(),
+          provider_config_id: uuidv4(),
+          provider_subscription_id: 'sub_zombie',
+          provider_customer_id: 'cus_zombie',
+          status: 'cancelled',
+          billing_cycle: 'monthly',
+          amount: 1000000,
+          currency: 'USD',
+          current_period_start: new Date(Date.now() - 30 * DAY),
+          current_period_end: new Date(Date.now() + DAY),
+          cancelled_at: cancelledAt,
+          cancel_at: null,
+          suspended_at: null,
+        }, { isNewRecord: false, raw: true });
+        sandbox.stub(plan, 'save').callsFake(async () => {
+          FundingPlanEntity.validateStatusTransition(plan);
+          return plan;
+        });
+
+        sandbox.stub(FundingPlanEntity, 'findOne').resolves(plan);
+        sandbox.stub(FundingEventEntity, 'findOne').resolves(null);
+        sandbox.stub(FundingEventEntity.prototype, 'save').resolves({} as any);
+
+        const reactivated = sandbox.stub();
+        eventBus.on('funding:plan:reactivated', reactivated);
+
+        await service.processWebhookEvent({
+          eventId: 'evt_zombie_active',
+          eventType: 'customer.subscription.updated',
+          subscriptionId: plan.provider_subscription_id,
+          status: 'active',
+          rawPayload: {},
+        }, plan.provider_config_id);
+
+        expect(plan.status).toBe('cancelled');
+        expect(plan.cancelled_at).toBe(cancelledAt);
+        expect(reactivated.called).toBe(false);
+      });
     });
   });
 
@@ -951,8 +1225,6 @@ describe('FundingService', () => {
 
   describe('checkFundingAccess', () => {
     const feature = 'widget_embedding';
-    const HOUR = 60 * 60 * 1000;
-    const DAY = 24 * HOUR;
     let calendarId: string;
     let ownerId: string;
 
@@ -1010,11 +1282,27 @@ describe('FundingService', () => {
      * the allocation row, whatever state its plan is in. That asymmetry is
      * what lets the non-active-status tests below fail if the join filter is
      * ever dropped from qualifyingFundingPlan.
+     *
+     * Two query shapes read this table and both land here, because sinon can
+     * only stub a method once:
+     *  - `findOne` — the gate (qualifyingFundingPlan) and the deprecated
+     *    hasActiveFundingPlan baseline.
+     *  - `findAll` — the bulk admin vocabulary (getPlanStatusForCalendars),
+     *    which selects calendar ids only.
+     *
+     * @param plan - Funding plan overrides, or null for no allocation at all
+     * @returns The findOne stub, for tests asserting the gate consulted it
      */
     function stubAllocation(
-      plan: { status?: string; cancelled_at?: Date | null; current_period_end?: Date | null } | null,
+      plan: {
+        status?: string;
+        cancelled_at?: Date | null;
+        cancel_at?: Date | null;
+        current_period_end?: Date | null;
+      } | null,
     ): sinon.SinonStub {
-      return sandbox.stub(CalendarFundingPlanEntity, 'findOne').callsFake(async (options?: any) => {
+      /** The allocation row as the query in `options` would see it, or null. */
+      const visibleRow = (options?: any) => {
         if (plan === null) {
           return null;
         }
@@ -1022,6 +1310,7 @@ describe('FundingService', () => {
         const fundingPlan = {
           status: 'active',
           cancelled_at: null,
+          cancel_at: null,
           current_period_end: new Date(Date.now() + 30 * DAY),
           ...plan,
         };
@@ -1036,7 +1325,20 @@ describe('FundingService', () => {
           end_time: null,
           fundingPlan,
         } as any;
+      };
+
+      sandbox.stub(CalendarFundingPlanEntity, 'findAll').callsFake(async (options?: any) => {
+        const row = visibleRow(options);
+        if (!row) {
+          return [];
+        }
+
+        // The bulk vocabulary selects calendar_id only and never reads the
+        // joined plan, so hand it the shape it actually consumes.
+        return options?.attributes ? [{ calendar_id: calendarId } as any] : [row];
       });
+
+      return sandbox.stub(CalendarFundingPlanEntity, 'findOne').callsFake(async (options?: any) => visibleRow(options));
     }
 
     describe('invariant 1: funding not enabled on the instance', () => {
@@ -1208,23 +1510,56 @@ describe('FundingService', () => {
       });
 
       /**
-       * The three cases below pair a past or future cancelled_at with an
-       * active status to characterise planAccessExpiry as a pure function of
-       * the plan's dates. That combination is not reachable through today's
-       * writers — cancel() and the status-transition hook only ever write
-       * cancelled_at together with status 'cancelled' — so these pin the
-       * helper's arithmetic, not a live path. They become live when
-       * pv-jdot.3.1 lands a cancellation marker that leaves the plan active.
+       * The cases below are the cancel-at-period-end states: an 'active' plan
+       * carrying a cancel_at boundary, which is exactly what cancel(id, false)
+       * now writes. Access has to survive right up to the boundary and stop at
+       * it, whether or not the provider's deletion event ever arrives.
        */
-      it('should close the gate once a recorded cancellation has passed, however long the period runs', async () => {
+      it('should keep the gate open until a scheduled cancellation is reached', async () => {
         stubFundingEnabled(true);
         stubOwnerIsAdmin(false);
         stubGrant(false);
-        // An immediate cancellation ends access when it is recorded, even
-        // though the billing period it interrupted still has weeks to run.
+        // Cancelled, but paid through a boundary still an hour away: the
+        // customer bought this time and must keep it.
         stubAllocation({
           status: 'active',
-          cancelled_at: new Date(Date.now() - HOUR),
+          cancel_at: new Date(Date.now() + HOUR),
+          current_period_end: new Date(Date.now() + HOUR),
+        });
+
+        const allowed = await service.checkFundingAccess(calendarId, feature);
+
+        expect(allowed).toBe(true);
+      });
+
+      it('should close the gate once a scheduled cancellation has passed, with no deletion webhook', async () => {
+        stubFundingEnabled(true);
+        stubOwnerIsAdmin(false);
+        stubGrant(false);
+        // The missed-webhook path: customer.subscription.deleted never
+        // arrived, so the plan still says 'active' and its period end is
+        // inside the grace window. Only cancel_at reveals that access ended.
+        stubAllocation({
+          status: 'active',
+          cancel_at: new Date(Date.now() - HOUR),
+          current_period_end: new Date(Date.now() - HOUR),
+        });
+
+        const allowed = await service.checkFundingAccess(calendarId, feature);
+
+        expect(allowed).toBe(false);
+      });
+
+      it('should close the gate on a passed cancellation however long the period runs', async () => {
+        stubFundingEnabled(true);
+        stubOwnerIsAdmin(false);
+        stubGrant(false);
+        // Cancelling earlier than the period end is a shape Stripe supports
+        // (cancel_at set to an arbitrary date). Earliest-wins means the
+        // cancellation governs, not the weeks of period still on the row.
+        stubAllocation({
+          status: 'active',
+          cancel_at: new Date(Date.now() - HOUR),
           current_period_end: new Date(Date.now() + 30 * DAY),
         });
 
@@ -1233,34 +1568,40 @@ describe('FundingService', () => {
         expect(allowed).toBe(false);
       });
 
-      it('should keep the gate open until a scheduled cancellation is reached', async () => {
-        stubFundingEnabled(true);
-        stubOwnerIsAdmin(false);
-        stubGrant(false);
-        stubAllocation({
-          status: 'active',
-          cancelled_at: new Date(Date.now() + HOUR),
-          current_period_end: null,
-        });
-
-        const allowed = await service.checkFundingAccess(calendarId, feature);
-
-        expect(allowed).toBe(true);
-      });
-
       it('should close the gate on a passed cancellation with no period end recorded', async () => {
         stubFundingEnabled(true);
         stubOwnerIsAdmin(false);
         stubGrant(false);
         stubAllocation({
           status: 'active',
-          cancelled_at: new Date(Date.now() - HOUR),
+          cancel_at: new Date(Date.now() - HOUR),
           current_period_end: null,
         });
 
         const allowed = await service.checkFundingAccess(calendarId, feature);
 
         expect(allowed).toBe(false);
+      });
+
+      it('should ignore cancelled_at on an active plan, which records a request rather than an end', async () => {
+        stubFundingEnabled(true);
+        stubOwnerIsAdmin(false);
+        stubGrant(false);
+        // cancelled_at is written the instant the customer clicks cancel. If
+        // planAccessExpiry read it, a cancel-at-period-end would revoke
+        // access on the spot — the exact defect cancel_at exists to fix. No
+        // writer produces this combination today; the assertion is here so
+        // that stays true.
+        stubAllocation({
+          status: 'active',
+          cancelled_at: new Date(Date.now() - HOUR),
+          cancel_at: null,
+          current_period_end: new Date(Date.now() + 30 * DAY),
+        });
+
+        const allowed = await service.checkFundingAccess(calendarId, feature);
+
+        expect(allowed).toBe(true);
       });
     });
 
@@ -1389,7 +1730,12 @@ describe('FundingService', () => {
        * asserting what we imagine that hook writes. Assigning .status is what
        * populates previous('status'), which is what the hook reads.
        */
-      function buildReactivatedPlan(): { status: string; cancelled_at: Date | null; current_period_end: Date | null } {
+      function buildReactivatedPlan(): {
+        status: string;
+        cancelled_at: Date | null;
+        cancel_at: Date | null;
+        current_period_end: Date | null;
+      } {
         const plan = FundingPlanEntity.build({
           id: uuidv4(),
           account_id: uuidv4(),
@@ -1403,6 +1749,7 @@ describe('FundingService', () => {
           current_period_start: new Date(Date.now() - DAY),
           current_period_end: new Date(Date.now() + 30 * DAY),
           cancelled_at: new Date(Date.now() - 10 * DAY),
+          cancel_at: new Date(Date.now() - 10 * DAY),
           suspended_at: null,
         });
 
@@ -1412,6 +1759,7 @@ describe('FundingService', () => {
         return {
           status: plan.status,
           cancelled_at: plan.cancelled_at,
+          cancel_at: plan.cancel_at,
           current_period_end: plan.current_period_end,
         };
       }
@@ -1502,18 +1850,36 @@ describe('FundingService', () => {
           legacyAllowed: false,
         },
         {
-          // Cancellation recorded on a plan Stripe never moved off 'active' —
-          // the missed customer.subscription.deleted case. The allocation row
-          // is untouched, so nothing but cancelled_at ends access.
-          name: 'calendar whose funding plan cancellation was recorded but never applied to its status',
+          // A cancel-at-period-end whose boundary has passed while the
+          // provider's customer.subscription.deleted never arrived. The plan
+          // still says 'active' — deliberately, that is what this cancellation
+          // mode writes — and the allocation row is untouched, so cancel_at is
+          // the only thing that ends access.
+          name: 'calendar whose funding plan passed its scheduled cancellation with no deletion webhook',
           isAdmin: false,
           hasGrant: false,
           hasAllocation: true,
           reactivated: false,
-          plan: { cancelled_at: new Date(Date.now() - DAY) },
+          plan: { cancel_at: new Date(Date.now() - DAY) },
           calendarStatus: 'not_covered',
           legacyPlanStatus: 'subscribed',
           allowed: false,
+          legacyAllowed: true,
+        },
+        {
+          // The same cancellation before its boundary. Still fully entitled:
+          // the customer paid through it. Nothing in the legacy vocabularies
+          // disagrees here, which is the point — a scheduled cancellation must
+          // cost nothing until it lands.
+          name: 'calendar whose funding plan is cancelling at a boundary still ahead of it',
+          isAdmin: false,
+          hasGrant: false,
+          hasAllocation: true,
+          reactivated: false,
+          plan: { cancel_at: new Date(Date.now() + 10 * DAY) },
+          calendarStatus: 'covered',
+          legacyPlanStatus: 'subscribed',
+          allowed: true,
           legacyAllowed: true,
         },
         {
@@ -1543,9 +1909,8 @@ describe('FundingService', () => {
           sandbox.stub(ComplimentaryGrantEntity, 'findAll').resolves(
             world.hasGrant ? [{ calendar_id: calendarId } as any] : [],
           );
-          sandbox.stub(CalendarFundingPlanEntity, 'findAll').resolves(
-            world.hasAllocation ? [{ calendar_id: calendarId } as any] : [],
-          );
+          // The bulk allocation read is served by stubAllocation above — it
+          // owns CalendarFundingPlanEntity.findAll for every query shape.
 
           // Unified single-calendar vocabulary. No longer "legacy": this and
           // the gate now share one predicate, so this assertion is a check
@@ -1690,6 +2055,7 @@ describe('FundingService', () => {
         service.createCheckoutSession(accountId, 'monthly', returnUrl),
       ).rejects.toThrow(ActiveFundingPlanExistsError);
     });
+
 
     it('should reject if no Stripe provider is configured', async () => {
       sandbox.stub(FundingPlanEntity, 'findOne').resolves(null);

@@ -221,7 +221,20 @@ export class FundingPlan extends PrimaryModel {
   currency: string = 'USD';
   currentPeriodStart: Date | null = null;
   currentPeriodEnd: Date | null = null;
+  /**
+   * When cancellation was *requested*. Only ever written together with
+   * status 'cancelled', so it records history and never bounds access — see
+   * FundingService.planAccessExpiry for why the two are not interchangeable.
+   */
   cancelledAt: Date | null = null;
+  /**
+   * When a scheduled cancellation *takes effect* — the paid-through boundary a
+   * cancel-at-period-end runs to. Set while the plan is still 'active': a plan
+   * with cancelAt in the future is paid up and fully entitled, and stops
+   * granting access at that instant whether or not the provider's final
+   * deletion event ever reaches us.
+   */
+  cancelAt: Date | null = null;
   suspendedAt: Date | null = null;
   accountEmail?: string; // display-only, populated by admin listings
 
@@ -241,6 +254,7 @@ export class FundingPlan extends PrimaryModel {
       currentPeriodStart: this.currentPeriodStart,
       currentPeriodEnd: this.currentPeriodEnd,
       cancelledAt: this.cancelledAt,
+      cancelAt: this.cancelAt,
       suspendedAt: this.suspendedAt,
     };
   }
@@ -259,6 +273,7 @@ export class FundingPlan extends PrimaryModel {
     plan.currentPeriodStart = obj.currentPeriodStart ? new Date(obj.currentPeriodStart) : null;
     plan.currentPeriodEnd = obj.currentPeriodEnd ? new Date(obj.currentPeriodEnd) : null;
     plan.cancelledAt = obj.cancelledAt ? new Date(obj.cancelledAt) : null;
+    plan.cancelAt = obj.cancelAt ? new Date(obj.cancelAt) : null;
     plan.suspendedAt = obj.suspendedAt ? new Date(obj.suspendedAt) : null;
     return plan;
   }

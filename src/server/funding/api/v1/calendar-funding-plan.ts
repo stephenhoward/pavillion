@@ -1,4 +1,5 @@
 import express, { Request, Response } from 'express';
+import { UniqueConstraintError } from 'sequelize';
 import ExpressHelper from '@/server/common/helper/express';
 import FundingInterface from '@/server/funding/interface';
 import { Account } from '@/common/model/account';
@@ -119,6 +120,19 @@ export default class CalendarFundingPlanRoutes {
       }
       else if (error instanceof DuplicateCalendarFundingPlanError) {
         res.status(409).json({ error: error.message, errorName: 'DuplicateCalendarFundingPlanError' });
+      }
+      else if (error instanceof UniqueConstraintError) {
+        // Backstop for the partial unique index on open allocations. The
+        // service closes any superseded row before inserting, so reaching here
+        // means either a concurrent request won the race or some path exists
+        // that the service check does not cover. Either way the honest answer
+        // is "this calendar is already covered" — a conflict the caller can
+        // act on — and never a 500, which tells the user nothing and reads as
+        // an outage.
+        res.status(409).json({
+          error: 'Calendar is already in a funding plan',
+          errorName: 'DuplicateCalendarFundingPlanError',
+        });
       }
       else {
         res.status(500).json({ error: 'Internal server error' });
