@@ -373,13 +373,13 @@ describe('Payment Provider Adapters', () => {
           expect(event.currentPeriodEnd).toEqual(new Date(1790704220 * 1000));
         });
 
-        it('should map a captured period-end cancellation to active, because Stripe still calls it active', () => {
+        it('should carry a captured period-end cancellation in cancelAt while still reporting status active', () => {
           // This capture is a cancel-at-period-end: Stripe reports
-          // status "active" and records the cancellation only in
-          // cancel_at_period_end / cancel_at / canceled_at. The adapter reads
-          // status alone, so it reports active — the behaviour pv-jdot.3.1
-          // exists to change. Pinning it here means that fix cannot land
-          // silently.
+          // status "active" — correctly, the subscription is paid through the
+          // period — and records the cancellation only in
+          // cancel_at_period_end / cancel_at / canceled_at. Status therefore
+          // stays 'active' here, and cancelAt is the field that reveals the
+          // cancellation. Reading status alone is what used to lose it.
           const fixture = capturedStripeEvent('customer.subscription.updated');
           expect(fixture.data.object.status).toBe('active');
           expect(fixture.data.object.cancel_at_period_end).toBe(true);
@@ -387,6 +387,93 @@ describe('Payment Provider Adapters', () => {
           const event = stripeAdapter.parseWebhookEvent(JSON.stringify(fixture));
 
           expect(event.status).toBe('active');
+          expect(event.cancelAt).toEqual(new Date(1790704220 * 1000));
+          // The boundary is the period end, not the moment the customer asked:
+          // canceled_at on this capture is 1788025863, already in the past.
+          expect(event.cancelAt).toEqual(event.currentPeriodEnd);
+        });
+
+        it('should report no cancelAt for a subscription with no scheduled cancellation', () => {
+          // Derived from the capture by undoing the cancellation, which is the
+          // shape Stripe sends when a pending cancellation is reversed in the
+          // billing portal. null, not undefined: it has to clear a stored
+          // boundary rather than leave it standing.
+          const fixture = capturedStripeEvent('customer.subscription.updated');
+          fixture.data.object.cancel_at = null;
+          fixture.data.object.cancel_at_period_end = false;
+
+          const event = stripeAdapter.parseWebhookEvent(JSON.stringify(fixture));
+
+          expect(event.cancelAt).toBeNull();
+        });
+
+        it('should withhold cancelAt rather than report null when the field is unusable', () => {
+          // Not a shape Stripe sends — which is the point. `null` downstream is
+          // an instruction to clear a stored cancellation, so collapsing an
+          // unreadable value into it would let one malformed payload un-cancel
+          // a plan and hand back access nobody is paying for. `undefined` says
+          // "this payload knows nothing", and the stored boundary survives.
+          // NaN is deliberately absent: JSON has no such literal, so it
+          // serializes to null and cannot reach the parser through a webhook
+          // body at all. It is covered on getSubscription below, where the
+          // value comes from the SDK rather than from JSON.
+          for (const unusable of ['not-a-timestamp', {}]) {
+            const fixture = capturedStripeEvent('customer.subscription.updated');
+            fixture.data.object.cancel_at = unusable;
+
+            const event = stripeAdapter.parseWebhookEvent(JSON.stringify(fixture));
+
+            expect(event.cancelAt).toBeUndefined();
+          }
+
+          expect(warnStub).toHaveBeenCalled();
+        });
+
+        it('should withhold cancelAt when the field is missing altogether', () => {
+          const fixture = capturedStripeEvent('customer.subscription.updated');
+          delete (fixture.data.object as Record<string, unknown>).cancel_at;
+
+          const event = stripeAdapter.parseWebhookEvent(JSON.stringify(fixture));
+
+          expect(event.cancelAt).toBeUndefined();
+        });
+
+        it('should not map an incomplete subscription to the terminal cancelled status', () => {
+          // 'cancelled' is terminal downstream — the plan can never leave it and
+          // its allocations are closed — so only a genuinely finished
+          // subscription may produce it. 'incomplete' means the first payment
+          // has not confirmed yet, which is the ordinary state of an SCA
+          // checkout, and the session-return path can create the local plan
+          // before it clears.
+          const fixture = capturedStripeEvent('customer.subscription.updated');
+          fixture.data.object.status = 'incomplete';
+
+          const event = stripeAdapter.parseWebhookEvent(JSON.stringify(fixture));
+
+          expect(event.status).toBe('past_due');
+        });
+
+        it('should map an expired incomplete subscription to cancelled', () => {
+          // The one incomplete-family status that is genuinely terminal.
+          const fixture = capturedStripeEvent('customer.subscription.updated');
+          fixture.data.object.status = 'incomplete_expired';
+
+          const event = stripeAdapter.parseWebhookEvent(JSON.stringify(fixture));
+
+          expect(event.status).toBe('cancelled');
+        });
+
+        it('should withhold a status Stripe has added since this adapter was written', () => {
+          // A `default:` arm that fell through to 'cancelled' would let a future
+          // Stripe status destroy paid plans on arrival. Undefined leaves the
+          // local status untouched.
+          const fixture = capturedStripeEvent('customer.subscription.updated');
+          fixture.data.object.status = 'some_future_status';
+
+          const event = stripeAdapter.parseWebhookEvent(JSON.stringify(fixture));
+
+          expect(event.status).toBeUndefined();
+          expect(warnStub).toHaveBeenCalled();
         });
 
         it('should parse a captured customer.subscription.deleted as cancelled', () => {
@@ -395,6 +482,8 @@ describe('Payment Provider Adapters', () => {
           // Stripe spells the wire value with one L; the adapter maps it to
           // Pavillion's two-L internal status.
           expect(fixture.data.object.status).toBe('canceled');
+          // Stripe clears the schedule once it has acted on it.
+          expect(fixture.data.object.cancel_at).toBeNull();
 
           const event = stripeAdapter.parseWebhookEvent(JSON.stringify(fixture));
 
@@ -402,6 +491,7 @@ describe('Payment Provider Adapters', () => {
           expect(event.subscriptionId).toBe('sub_1U9qOYLM7gkEdqMfd7WoHNz7');
           expect(event.customerId).toBe('cus_VAAjKPe5TGoA44');
           expect(event.status).toBe('cancelled');
+          expect(event.cancelAt).toBeNull();
         });
 
         it('should raise no drift warning for any captured payload', () => {
@@ -773,6 +863,7 @@ describe('Payment Provider Adapters', () => {
           id: 'sub_conv_123',
           customer: 'cus_conv_123',
           status: 'active',
+          cancel_at: null,
           items: {
             data: [
               {
@@ -794,6 +885,66 @@ describe('Payment Provider Adapters', () => {
         expect(subscription.currentPeriodEnd).toEqual(new Date(end * 1000));
         expect(subscription.amount).toBe(1500000);
         expect(subscription.currency).toBe('USD');
+        expect(subscription.cancelAt).toBeNull();
+      });
+
+      it('should report a scheduled cancellation that the status does not reveal', async () => {
+        // Hand-built rather than captured: the retrieve endpoint's response is
+        // a subscription resource, not an event envelope, so no webhook
+        // capture can stand in for it. The field placement mirrors the
+        // customer.subscription.updated capture, where cancel_at sits beside a
+        // status of "active".
+        const start = Math.floor(Date.now() / 1000);
+        const end = start + 30 * 24 * 60 * 60;
+        mockStripe.subscriptions.retrieve.resolves({
+          id: 'sub_pending_cancel',
+          customer: 'cus_pending_cancel',
+          status: 'active',
+          cancel_at: end,
+          cancel_at_period_end: true,
+          items: {
+            data: [
+              {
+                id: 'si_pending_cancel',
+                current_period_start: start,
+                current_period_end: end,
+                price: { unit_amount: 1500, currency: 'usd' },
+              },
+            ],
+          },
+        });
+
+        const subscription = await stripeAdapter.getSubscription('sub_pending_cancel');
+
+        expect(subscription.status).toBe('active');
+        expect(subscription.cancelAt).toEqual(new Date(end * 1000));
+      });
+
+      it('should withhold cancelAt rather than report null for a non-finite value', async () => {
+        // Reachable here and not through a webhook body: this value comes from
+        // the SDK, and JSON has no NaN literal.
+        const start = Math.floor(Date.now() / 1000);
+        const end = start + 30 * 24 * 60 * 60;
+        mockStripe.subscriptions.retrieve.resolves({
+          id: 'sub_nan_cancel_at',
+          customer: 'cus_nan_cancel_at',
+          status: 'active',
+          cancel_at: Number.NaN,
+          items: {
+            data: [
+              {
+                id: 'si_nan_cancel_at',
+                current_period_start: start,
+                current_period_end: end,
+                price: { unit_amount: 1500, currency: 'usd' },
+              },
+            ],
+          },
+        });
+
+        const subscription = await stripeAdapter.getSubscription('sub_nan_cancel_at');
+
+        expect(subscription.cancelAt).toBeUndefined();
       });
 
       it('should throw rather than build an invalid date from a non-finite bound', async () => {

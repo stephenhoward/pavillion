@@ -97,6 +97,7 @@ describe('Funding Plan Entities', () => {
         current_period_start: new Date(),
         current_period_end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
         cancelled_at: null,
+        cancel_at: new Date(Date.now() + 20 * 24 * 60 * 60 * 1000),
         suspended_at: null,
       };
 
@@ -107,11 +108,15 @@ describe('Funding Plan Entities', () => {
       expect(model.status).toBe('active');
       expect(model.billingCycle).toBe('monthly');
       expect(model.amount).toBe(1000000);
+      // The scheduled cancellation has to survive the round trip: it is the
+      // only thing distinguishing this plan from one that is simply running.
+      expect(model.cancelAt).toEqual(entityData.cancel_at);
 
       // Test fromModel
       const newEntity = FundingPlanEntity.fromModel(model);
       expect(newEntity.get('status')).toBe('active');
       expect(newEntity.get('billing_cycle')).toBe('monthly');
+      expect(newEntity.get('cancel_at')).toEqual(entityData.cancel_at);
     });
 
     describe('status transition hook', () => {
@@ -128,6 +133,7 @@ describe('Funding Plan Entities', () => {
         current_period_start: new Date(),
         current_period_end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
         cancelled_at: new Date(Date.now() - 24 * 60 * 60 * 1000),
+        cancel_at: new Date(Date.now() + 24 * 60 * 60 * 1000),
         suspended_at: new Date(Date.now() - 24 * 60 * 60 * 1000),
       });
 
@@ -140,15 +146,18 @@ describe('Funding Plan Entities', () => {
         return FundingPlanEntity.build(planRow(status));
       }
 
-      it('should clear cancelled_at when a cancelled plan is resubscribed', () => {
+      it('should clear both cancellation markers when a cancelled plan is resubscribed', () => {
         const entity = buildPlan('cancelled');
 
         entity.status = 'active';
         FundingPlanEntity.validateStatusTransition(entity);
 
         // A stale cancellation marker on a paying plan would read as an
-        // expired plan to the funding-access check
+        // expired plan to the funding-access check. cancel_at matters more
+        // than cancelled_at here: it is the one planAccessExpiry reads, so a
+        // stale one actively denies a paying customer.
         expect(entity.cancelled_at).toBeNull();
+        expect(entity.cancel_at).toBeNull();
       });
 
       it('should clear suspended_at when a suspended plan is reactivated', () => {
@@ -183,7 +192,21 @@ describe('Funding Plan Entities', () => {
         FundingPlanEntity.validateStatusTransition(entity);
 
         expect(entity.cancelled_at).toBe(row.cancelled_at);
+        expect(entity.cancel_at).toBe(row.cancel_at);
         expect(entity.suspended_at).toBe(row.suspended_at);
+      });
+
+      it('should leave a scheduled cancellation alone while the plan is still active', () => {
+        // The state a cancel-at-period-end produces: 'active' with cancel_at
+        // set. Every later save of that row — a period roll, an amount change
+        // — passes through this hook without a status change, and none of them
+        // may drop the boundary.
+        const row = planRow('active');
+        const entity = FundingPlanEntity.build(row, { isNewRecord: false, raw: true });
+
+        FundingPlanEntity.validateStatusTransition(entity);
+
+        expect(entity.cancel_at).toBe(row.cancel_at);
       });
     });
   });

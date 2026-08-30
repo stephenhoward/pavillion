@@ -361,6 +361,76 @@ describe('User Funding Plan API Routes', () => {
         currency: 'USD',
       });
     });
+
+    it('should report a scheduled cancellation the status cannot express', async () => {
+      // A cancel-at-period-end stays 'active' until its boundary, so without
+      // cancelAt the client has no way to tell a continuing plan from one that
+      // is ending — which is exactly what the account screen has to display.
+      const cancelAt = new Date('2026-01-01T00:00:00.000Z');
+      const mockPlan = new FundingPlan('sub-1');
+      mockPlan.accountId = 'test-account-id';
+      mockPlan.status = 'active';
+      mockPlan.cancelAt = cancelAt;
+
+      sandbox.stub(service, 'getStatus').resolves(mockPlan);
+
+      router.get('/handler', (req: Request, res: Response, next) => {
+        req.user = mockAccount;
+        next();
+      }, fundingPlanHandlers.getStatus.bind(fundingPlanHandlers));
+
+      const response = await request(testApp(router))
+        .get('/handler')
+        .expect(200);
+
+      expect(response.body.status).toBe('active');
+      expect(response.body.cancelAt).toBe(cancelAt.toISOString());
+    });
+
+    it('should send exactly the allowlisted fields and no provider identifiers', async () => {
+      // The sibling calendar endpoint has an allowlist test and this one did
+      // not, so the field set here was free to grow. FundingPlan carries the
+      // account id and the Stripe customer and subscription ids; none of them
+      // answers a question this screen asks, and the last two identify objects
+      // in the operator's Stripe account (DEC-004).
+      const mockPlan = new FundingPlan('sub-1');
+      mockPlan.accountId = 'test-account-id';
+      mockPlan.providerConfigId = 'provider-config-id';
+      mockPlan.providerCustomerId = 'cus_secret';
+      mockPlan.providerSubscriptionId = 'sub_secret';
+      mockPlan.status = 'active';
+      mockPlan.accountEmail = 'owner@example.com';
+
+      sandbox.stub(service, 'getStatus').resolves(mockPlan);
+
+      router.get('/handler', (req: Request, res: Response, next) => {
+        req.user = mockAccount;
+        next();
+      }, fundingPlanHandlers.getStatus.bind(fundingPlanHandlers));
+
+      const response = await request(testApp(router))
+        .get('/handler')
+        .expect(200);
+
+      expect(Object.keys(response.body).sort()).toEqual([
+        'amount',
+        'billingCycle',
+        'cancelAt',
+        'cancelledAt',
+        'currency',
+        'currentPeriodEnd',
+        'currentPeriodStart',
+        'id',
+        'status',
+        'suspendedAt',
+      ]);
+
+      const serialized = JSON.stringify(response.body);
+      expect(serialized).not.toContain('cus_secret');
+      expect(serialized).not.toContain('sub_secret');
+      expect(serialized).not.toContain('test-account-id');
+      expect(serialized).not.toContain('owner@example.com');
+    });
   });
 
   describe('POST /cancel', () => {

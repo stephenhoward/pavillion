@@ -2,6 +2,7 @@ import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import axios from 'axios';
 import { createPinia, setActivePinia } from 'pinia';
 import FundingService, { fundingGateDenial } from '@/client/service/funding';
+import type { FundingPlanStatus } from '@/client/service/funding';
 import { useFundingStore } from '@/client/stores/fundingStore';
 import { ComplimentaryGrant } from '@/common/model/complimentary_grant';
 
@@ -355,6 +356,60 @@ describe('FundingService.getFundingStatus', () => {
 
     // Act & Assert
     await expect(service.getFundingStatus('cal123')).rejects.toThrow('Server error');
+  });
+});
+
+describe('FundingService.getStatus', () => {
+  const service = new FundingService();
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  /**
+   * The exact body GET /api/funding/v1/status sends, keyed as the endpoint
+   * keys it (src/server/funding/api/v1/funding-plan.ts), annotated with the
+   * type the client declares for it.
+   *
+   * The annotation is the assertion. getStatus is a passthrough — it returns
+   * `response.data` untouched — so a runtime check that the keys survive it
+   * would only prove an identity function works, with the mock defining both
+   * sides. What can actually go wrong is the type drifting from the wire, which
+   * is precisely what happened: this type named its fields in snake_case for
+   * long enough that the plan screen rendered "Invalid Date" for every date and
+   * resolved no billing-cycle label at all. That is a compile-time mismatch,
+   * and this is where it fails.
+   *
+   * The two runtime halves of the same contract are covered where they are
+   * real: the server's field set by the allowlist test in
+   * src/server/funding/test/api/v1/funding-plan.test.ts, and the component's
+   * reads by src/client/test/components/funding-plan-cancellation.test.ts.
+   */
+  const wireStatus: FundingPlanStatus = {
+    id: 'plan-1',
+    status: 'active',
+    billingCycle: 'monthly',
+    amount: 1000000,
+    currency: 'USD',
+    currentPeriodStart: '2026-01-01T00:00:00.000Z',
+    currentPeriodEnd: '2026-02-01T00:00:00.000Z',
+    cancelledAt: null,
+    cancelAt: '2026-02-01T00:00:00.000Z',
+    suspendedAt: null,
+  };
+
+  it('should request the account status endpoint', async () => {
+    vi.mocked(axios.get).mockResolvedValue({ data: wireStatus });
+
+    await service.getStatus();
+
+    expect(vi.mocked(axios.get)).toHaveBeenCalledWith('/api/funding/v1/status');
+  });
+
+  it('should answer null rather than throwing when the account has no plan', async () => {
+    vi.mocked(axios.get).mockRejectedValue({ response: { status: 404 } });
+
+    await expect(service.getStatus()).resolves.toBeNull();
   });
 });
 

@@ -50,8 +50,25 @@ class FundingPlanEntity extends Model {
   @Column({ type: DataType.DATE })
   declare current_period_end: Date;
 
+  /**
+   * When cancellation was requested. Written only on the transition into
+   * status 'cancelled', so it is history, never an access boundary.
+   */
   @Column({ type: DataType.DATE, allowNull: true })
   declare cancelled_at: Date | null;
+
+  /**
+   * When a scheduled cancellation takes effect, or null if none is scheduled.
+   *
+   * Set by a cancel-at-period-end while the plan stays 'active': the customer
+   * has paid through this instant and keeps every entitlement until it. Read
+   * as an access boundary by FundingService.planAccessExpiry, so the plan stops
+   * granting at the boundary even if the provider's final deletion event is
+   * lost. Cleared when the plan is resubscribed, for the same reason
+   * cancelled_at is.
+   */
+  @Column({ type: DataType.DATE, allowNull: true })
+  declare cancel_at: Date | null;
 
   @Column({ type: DataType.DATE, allowNull: true })
   declare suspended_at: Date | null;
@@ -72,6 +89,7 @@ class FundingPlanEntity extends Model {
     plan.currentPeriodStart = this.current_period_start;
     plan.currentPeriodEnd = this.current_period_end;
     plan.cancelledAt = this.cancelled_at;
+    plan.cancelAt = this.cancel_at;
     plan.suspendedAt = this.suspended_at;
     return plan;
   }
@@ -93,6 +111,7 @@ class FundingPlanEntity extends Model {
       current_period_start: plan.currentPeriodStart,
       current_period_end: plan.currentPeriodEnd,
       cancelled_at: plan.cancelledAt,
+      cancel_at: plan.cancelAt,
       suspended_at: plan.suspendedAt,
     });
   }
@@ -130,11 +149,15 @@ class FundingPlanEntity extends Model {
       instance.suspended_at = null;
     }
 
-    // Clear cancelled_at when resubscribing. A stale cancellation marker on a
+    // Clear both cancellation markers when resubscribing. A stale marker on a
     // plan that is active again reads as a lapsed plan to the funding-access
-    // check, which would deny a customer who is paying.
+    // check, which would deny a customer who is paying. cancel_at is cleared
+    // alongside cancelled_at rather than left behind: it is the marker the
+    // access boundary actually reads, so a stale one denies where a stale
+    // cancelled_at merely misinforms.
     if (newStatus === 'active' && previousStatus === 'cancelled') {
       instance.cancelled_at = null;
+      instance.cancel_at = null;
     }
   }
 }
