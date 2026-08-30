@@ -1,5 +1,6 @@
 import { EventEmitter } from "events";
 import config from 'config';
+import { Op } from 'sequelize';
 
 import { createLogger } from '@/server/common/helper/logger';
 import { Calendar } from "@/common/model/calendar";
@@ -7,6 +8,7 @@ import { WebFingerResponse } from "@/server/activitypub/model/webfinger";
 import { UserProfileResponse } from "@/server/activitypub/model/userprofile";
 import { ActivityPubActivity } from "@/server/activitypub/model/base";
 import { ActivityPubInboxMessageEntity, ActivityPubOutboxMessageEntity, FollowerCalendarEntity } from "@/server/activitypub/entity/activitypub";
+import { EventObjectEntity } from "@/server/activitypub/entity/event_object";
 import CalendarInterface from "@/server/calendar/interface";
 import AccountsInterface from "@/server/accounts/interface";
 import CalendarActorService from "@/server/activitypub/service/calendar_actor";
@@ -393,6 +395,44 @@ export default class ActivityPubService {
     ]);
 
     return { items, totalItems };
+  }
+
+  /**
+   * Looks up the ActivityPub actor URI that owns a given event.
+   * Returns the attributed_to field from the EventObjectEntity, which is
+   * the authoritative source for the calendar actor that created/owns the event.
+   *
+   * @param eventId - The local event UUID
+   * @returns The actor URI string, or null if no AP identity exists for this event
+   */
+  async getEventSourceActorUri(eventId: string): Promise<string | null> {
+    const eventObject = await EventObjectEntity.findOne({ where: { event_id: eventId } });
+    return eventObject?.attributed_to ?? null;
+  }
+
+  /**
+   * Batch-resolves the source actor URIs for a set of event IDs.
+   * Returns a map from event ID to the attributed_to actor URI.
+   *
+   * @param eventIds - Array of event UUIDs to look up
+   * @returns Map from event ID to attributed_to actor URI
+   */
+  async getEventSourceActorUris(eventIds: string[]): Promise<Map<string, string>> {
+    if (eventIds.length === 0) {
+      return new Map();
+    }
+
+    const eventObjects = await EventObjectEntity.findAll({
+      where: { event_id: { [Op.in]: eventIds } },
+    });
+
+    const result = new Map<string, string>();
+    for (const obj of eventObjects) {
+      if (obj.attributed_to) {
+        result.set(obj.event_id, obj.attributed_to);
+      }
+    }
+    return result;
   }
 
 }

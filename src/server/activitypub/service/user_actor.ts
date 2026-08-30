@@ -127,26 +127,26 @@ export default class UserActorService {
 
   /**
    * Finds an existing remote actor by URI, or creates a new one.
-   * Used when granting remote editor access via federation.
+   * Used when granting remote editor access via federation, and when
+   * processing federation activities from remote Person actors.
+   *
+   * Uses `findOrCreate` for atomicity: two concurrent callers racing to
+   * find-or-create the same `actorUri` collapse to a single insert rather
+   * than risking a duplicate-row race between a find and a separate create.
    */
   async findOrCreateRemoteActor(actorUri: string, remoteUsername: string, remoteDomain: string, publicKey?: string): Promise<UserActor> {
-    const existing = await UserActorEntity.findOne({
+    const [entity] = await UserActorEntity.findOrCreate({
       where: { actor_uri: actorUri },
-    });
-
-    if (existing) {
-      return existing.toModel();
-    }
-
-    const entity = await UserActorEntity.create({
-      id: uuidv4(),
-      actor_type: 'remote',
-      account_id: null,
-      actor_uri: actorUri,
-      remote_username: remoteUsername,
-      remote_domain: remoteDomain,
-      public_key: publicKey || null,
-      private_key: null,
+      defaults: {
+        id: uuidv4(),
+        actor_type: 'remote',
+        account_id: null,
+        actor_uri: actorUri,
+        remote_username: remoteUsername,
+        remote_domain: remoteDomain,
+        public_key: publicKey || null,
+        private_key: null,
+      },
     });
 
     return entity.toModel();

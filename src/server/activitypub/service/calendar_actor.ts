@@ -98,6 +98,28 @@ export default class CalendarActorService {
   }
 
   /**
+   * Finds the CalendarActor for a given calendar ID.
+   * Checks remote_calendar_id first (for remote calendars whose UUID was sent
+   * in an Add activity), then falls back to calendar_id (for local actors).
+   *
+   * @param calendarId - The calendar UUID to look up
+   * @returns The CalendarActor model, or null if not found
+   */
+  async findCalendarActorByCalendarId(calendarId: string): Promise<CalendarActor | null> {
+    const byRemoteId = await CalendarActorEntity.findOne({
+      where: { remote_calendar_id: calendarId },
+    });
+    if (byRemoteId) {
+      return byRemoteId.toModel();
+    }
+
+    const byLocalId = await CalendarActorEntity.findOne({
+      where: { calendar_id: calendarId },
+    });
+    return byLocalId?.toModel() ?? null;
+  }
+
+  /**
    * Retrieves a CalendarActor by actor URI
    *
    * @param actorUri - The actor URI to look up
