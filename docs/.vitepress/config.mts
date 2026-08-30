@@ -42,6 +42,7 @@ export default defineConfig({
     'federation-testing.md',
     'internationalization.md',
     'secret-rotation.md',
+    'stripe-fixture-maintenance.md',
     'upgrading.md',
   ],
   themeConfig: {
