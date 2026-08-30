@@ -541,11 +541,67 @@ function packageSlug(pkg: string): string {
 }
 
 /**
- * The dependency a Renovate PR title names. Renovate's conventional title is
- * `update dependency <name> to v<x>`; a grouped, monorepo, or hand-retitled PR
- * matches nothing, which reads as "cannot prove" rather than as a match.
+ * Renovate's conventional title clause, `update dependency <name> to v<x>`,
+ * captured as one match: the dependency name *and* the version it is upgraded
+ * to come out of the same clause, at the same position, or neither does.
+ *
+ * The binding is the point. Resolving the two halves with separate expressions
+ * over the same string lets a version from elsewhere in the title stand in for
+ * the one this dependency actually reaches — `Bump base image to v99.0.0:
+ * update dependency undici to v5.0.0` reads as undici@99.0.0 and suppresses
+ * every undici CVE fixed below it.
+ *
+ * The version group is optional so that a range (`to v6.x`) still identifies
+ * the dependency while proving no target: that PR becomes a hint, not coverage.
+ * A grouped, monorepo, or hand-retitled PR matches nothing, which reads as
+ * "cannot prove" rather than as a match.
  */
-const RENOVATE_TITLE_DEPENDENCY = /\bupdate\s+dependency\s+(\S+)\s+to\b/i;
+const RENOVATE_TITLE_DEPENDENCY =
+  /\bupdate\s+dependency\s+(\S+)\s+to\s+(?:v?(\d+(?:\.\d+)*(?:[-+][0-9A-Za-z.]+)?)(?![\w.-]))?/i;
+
+/** The opener of that clause, counted to recognise a grouped title. */
+const RENOVATE_TITLE_DEPENDENCY_CLAUSE = /\bupdate\s+dependency\b/i;
+
+/** One Renovate title's dependency clause, parsed as an indivisible pair. */
+interface TitleDependencyUpdate {
+  /** The dependency the clause names. */
+  name: string;
+  /** The concrete version that same clause upgrades to; absent for a range. */
+  version?: string;
+}
+
+/**
+ * The single dependency update a Renovate title states, or undefined when it
+ * states none — or more than one.
+ *
+ * A title carrying a second `update dependency` clause is grouped: which clause
+ * a version belongs to is no longer decidable from the string, so the title
+ * stops being usable identity evidence altogether rather than being read as its
+ * first clause.
+ */
+function parseTitleDependencyUpdate(title: string): TitleDependencyUpdate | undefined {
+  // `split` matches every occurrence regardless of the regex's flags, and keeps
+  // no `lastIndex` state between calls the way a global regex would.
+  if (title.split(RENOVATE_TITLE_DEPENDENCY_CLAUSE).length !== 2) return undefined;
+
+  const match = RENOVATE_TITLE_DEPENDENCY.exec(title);
+  if (!match) return undefined;
+
+  return { name: match[1], version: match[2] };
+}
+
+/**
+ * The title's dependency clause when it names this package — the only route to
+ * a PR's target version, so identity is always checked before the version it
+ * guards is readable.
+ */
+function titleUpdateForPackage(title: string, pkg: string): TitleDependencyUpdate | undefined {
+  const update = parseTitleDependencyUpdate(title ?? '');
+  if (!update) return undefined;
+
+  const slug = packageSlug(update.name);
+  return slug.length > 0 && slug === packageSlug(pkg) ? update : undefined;
+}
 
 /**
  * True when the branch follows `renovate/<package-slug>-<version-or-keyword>`
@@ -553,8 +609,8 @@ const RENOVATE_TITLE_DEPENDENCY = /\bupdate\s+dependency\s+(\S+)\s+to\b/i;
  *
  * This is only half the identity check — see `prNamesPackage`. The branch alone
  * is not sufficient, because the *version* that decides coverage is read from
- * the title, and Renovate's grouped and retitled PRs routinely carry a branch
- * and a title naming different dependencies.
+ * the title's dependency clause, and Renovate's grouped and retitled PRs
+ * routinely carry a branch and a title naming different dependencies.
  */
 function branchNamesPackage(headRefName: string, pkg: string): boolean {
   if (!RENOVATE_BRANCH_PREFIX.test(headRefName)) return false;
@@ -577,15 +633,11 @@ function branchNamesPackage(headRefName: string, pkg: string): boolean {
 /**
  * True when the title's `update dependency <name>` clause resolves to this same
  * package. This is the half that binds identity to the decisive value: the
- * target version is parsed out of the title, so unless the title names *this*
- * package the comparison is against an unrelated dependency's release line.
+ * target version comes out of that clause and no other, so unless the title
+ * names *this* package there is no version to compare at all.
  */
 function titleNamesPackage(title: string, pkg: string): boolean {
-  const named = RENOVATE_TITLE_DEPENDENCY.exec(title ?? '')?.[1];
-  if (!named) return false;
-
-  const slug = packageSlug(named);
-  return slug.length > 0 && slug === packageSlug(pkg);
+  return titleUpdateForPackage(title, pkg) !== undefined;
 }
 
 /**
@@ -636,12 +688,18 @@ function compareVersions(a: string, b: string): number | undefined {
 }
 
 /**
- * The concrete version a Renovate PR title upgrades to. Ranges (`to v6.x`) and
- * grouped/monorepo titles yield nothing, which is treated as uncertainty rather
- * than as coverage.
+ * The concrete version a Renovate PR upgrades **this package** to, read out of
+ * the same title clause that names it. Ranges (`to v6.x`) and grouped/monorepo
+ * titles yield nothing, which is treated as uncertainty rather than as coverage.
+ *
+ * Taking `pkg` is the whole point: a title states one version per dependency
+ * clause, so a version can only be attributed to the dependency whose clause
+ * produced it. Scanning the title as a whole let an unrelated version — a base
+ * image bump, a number quoted in prose — stand in as this package's target and
+ * clear a fix it never reaches.
  */
-function prTargetVersion(pr: RenovatePr): string | undefined {
-  return /\bto\s+v?(\d+(?:\.\d+)*(?:[-+][0-9A-Za-z.]+)?)(?![\w.-])/i.exec(pr.title)?.[1];
+function prTargetVersion(pr: RenovatePr, pkg: string): string | undefined {
+  return titleUpdateForPackage(pr.title ?? '', pkg)?.version;
 }
 
 /** The outcome of evaluating one PR against one package of a finding. */
@@ -748,7 +806,7 @@ function dedupePrRefs(prs: RenovatePr[]): RenovatePrRef[] {
  * compares numbers from unrelated version spaces and passes by coincidence.
  */
 function evaluateRenovatePr(pr: RenovatePr, pkg: string, finding: DeltaFinding): PrEvaluation {
-  const target = prTargetVersion(pr);
+  const target = prTargetVersion(pr, pkg);
   if (!target) {
     return { pr, covered: false, reason: `PR #${pr.number} names ${pkg} but its target version could not be read from the title` };
   }

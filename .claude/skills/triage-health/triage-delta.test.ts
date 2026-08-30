@@ -605,6 +605,62 @@ describe('computeDelta: Renovate coverage', () => {
     expect(delta.new_actionable[0].renovateHints?.[0]).toMatchObject({ number: 591, pkg: 'undici' });
   });
 
+  it('reads the target version out of the same title clause that names the package', () => {
+    // A version elsewhere in the title must never stand in for the one this
+    // dependency is actually being upgraded to. Here the leading `v99.0.0`
+    // clears undici's 6.27.0 fix while the dependency clause only reaches
+    // 5.0.0, so reading the two halves independently suppresses a live CVE.
+    const delta = computeDelta(inputs({
+      reports: [repoReport([nodeResult([vuln()])])],
+      renovatePrs: [renovatePr({
+        number: 597,
+        title: 'Bump base image to v99.0.0: update dependency undici to v5.0.0',
+        headRefName: 'renovate/undici-5.x',
+      })],
+    }));
+
+    expect(delta.covered_by_renovate).toHaveLength(0);
+    expect(delta.new_actionable.map(f => f.id)).toEqual(['CVE-2026-0001']);
+    expect(delta.new_actionable[0].renovateHints?.[0]).toMatchObject({ number: 597, pkg: 'undici' });
+    expect(delta.new_actionable[0].renovateHints?.[0].reason).toMatch(/5\.0\.0.*6\.27\.0/);
+  });
+
+  it('ignores a version that trails the dependency clause rather than completing it', () => {
+    // `to v6.x` is a range, so this PR proves nothing — and the `9.9.9` that
+    // follows belongs to a different sentence. A scan of the whole title reads
+    // it as the target and manufactures coverage.
+    const delta = computeDelta(inputs({
+      reports: [repoReport([nodeResult([vuln()])])],
+      renovatePrs: [renovatePr({
+        number: 598,
+        title: 'chore(deps): update dependency undici to v6.x (was pinned to v9.9.9)',
+        headRefName: 'renovate/undici-6.x',
+      })],
+    }));
+
+    expect(delta.covered_by_renovate).toHaveLength(0);
+    expect(delta.new_actionable.map(f => f.id)).toEqual(['CVE-2026-0001']);
+    expect(delta.new_actionable[0].renovateHints?.[0]).toMatchObject({ number: 598, pkg: 'undici' });
+  });
+
+  it('never covers a finding from a title carrying more than one dependency clause', () => {
+    // A grouped or hand-retitled PR names several dependencies in one string.
+    // Which clause the version belongs to is no longer decidable from the
+    // title, so the whole title stops being usable identity evidence.
+    const delta = computeDelta(inputs({
+      reports: [repoReport([nodeResult([vuln()])])],
+      renovatePrs: [renovatePr({
+        number: 599,
+        title: 'chore(deps): update dependency undici to v6.27.0, update dependency lodash to v4.17.21',
+        headRefName: 'renovate/undici-6.x',
+      })],
+    }));
+
+    expect(delta.covered_by_renovate).toHaveLength(0);
+    expect(delta.new_actionable.map(f => f.id)).toEqual(['CVE-2026-0001']);
+    expect(delta.new_actionable[0].renovateHints).toBeUndefined();
+  });
+
   it('never attributes an image finding to a Renovate PR that names the very same package', () => {
     // `renovate/node-20.x` + "update dependency node to v20.11.1" satisfies the
     // branch rule, the title rule, and the version comparison for this image
