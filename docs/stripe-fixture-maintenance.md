@@ -154,6 +154,25 @@ a synthetic value, and keep object ids in the existing `sub_`/`cus_`/`evt_`
 placeholder style used by the surrounding fixtures. Commit only the fields the
 parser reads.
 
+### 5. Verify the scrub against what you actually committed
+
+The judgement half of the scrub — *is this free-text field identifying?* — is
+yours, and the sweeps documented alongside the fixture module are how you make
+it. Run them, and the automated redaction guard, against the **committed**
+files, never against the raw harvest. A capture that is clean in your working
+tree and dirty in the commit is the failure this step exists to catch.
+
+The guard is enforced by PR CI. This repository has no git hooks, so nothing
+stops the bad commit locally — it blocks the merge instead. That ordering
+matters for how you fix a hit: an unscrubbed capture already in a commit has to
+be corrected by amending or rewriting that commit, not by adding a scrubbing
+commit on top, because the secret stays readable in the branch history either
+way.
+
+For the same reason the guard reports only a boolean and the offending
+filename, never the matched value: a failing run is published to a public
+Actions log, which — unlike a local commit — cannot be amended away.
+
 ## If test-clock automation is ever built
 
 Stripe test clocks would let a scheduled job advance a subscription through
