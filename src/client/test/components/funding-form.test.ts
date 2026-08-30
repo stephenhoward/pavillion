@@ -73,6 +73,19 @@ function makePayPalOptions() {
   };
 }
 
+function makeNoProviderOptions(overrides: Record<string, any> = {}) {
+  return {
+    enabled: true,
+    providers: [],
+    monthlyPrice: 1000000,
+    yearlyPrice: 10000000,
+    currency: 'USD',
+    payWhatYouCan: false,
+    payWhatYouCanYearlyDiscount: 0,
+    ...overrides,
+  };
+}
+
 function makeMultiProviderOptions() {
   return {
     enabled: true,
@@ -224,6 +237,70 @@ describe('FundingForm', () => {
       currentWrapper = wrapper;
 
       expect(wrapper.find('.error-message').exists()).toBe(true);
+    });
+  });
+
+  describe('No available providers', () => {
+    it('explains that the instance is not accepting contributions', async () => {
+      mockGetOptions.mockResolvedValue(makeNoProviderOptions());
+
+      const wrapper = await mountFundingForm();
+      currentWrapper = wrapper;
+
+      const message = wrapper.find('.no-providers-message');
+      expect(message.exists()).toBe(true);
+      expect(message.text()).toContain('not currently accepting contributions');
+    });
+
+    it('renders no provider picker rather than an empty one', async () => {
+      mockGetOptions.mockResolvedValue(makeNoProviderOptions());
+
+      const wrapper = await mountFundingForm();
+      currentWrapper = wrapper;
+
+      expect(wrapper.find('.provider-options').exists()).toBe(false);
+      expect(wrapper.find('.form-label').exists()).toBe(false);
+    });
+
+    it('hides the contribution controls', async () => {
+      mockGetOptions.mockResolvedValue(makeNoProviderOptions());
+
+      const wrapper = await mountFundingForm();
+      currentWrapper = wrapper;
+
+      expect(wrapper.findAll('.cycle-option')).toHaveLength(0);
+      expect(wrapper.find('#pwyc-monthly-amount').exists()).toBe(false);
+      expect(wrapper.find('.yearly-opt-in').exists()).toBe(false);
+    });
+
+    it('hides the contribution controls in PWYC mode too', async () => {
+      mockGetOptions.mockResolvedValue(makeNoProviderOptions({ payWhatYouCan: true }));
+
+      const wrapper = await mountFundingForm();
+      currentWrapper = wrapper;
+
+      expect(wrapper.find('.no-providers-message').exists()).toBe(true);
+      expect(wrapper.find('#pwyc-monthly-amount').exists()).toBe(false);
+      expect(wrapper.find('.yearly-opt-in').exists()).toBe(false);
+    });
+
+    it('cannot reach the select-a-payment-method error because no submit is offered', async () => {
+      mockGetOptions.mockResolvedValue(makeNoProviderOptions());
+
+      const wrapper = await mountFundingForm();
+      currentWrapper = wrapper;
+
+      expect(wrapper.find('button.btn--primary').exists()).toBe(false);
+      expect(wrapper.text()).not.toContain('Please select a payment method');
+    });
+
+    it('does not start a checkout session', async () => {
+      mockGetOptions.mockResolvedValue(makeNoProviderOptions());
+
+      const wrapper = await mountFundingForm();
+      currentWrapper = wrapper;
+
+      expect(mockCreateCheckoutSession).not.toHaveBeenCalled();
     });
   });
 
@@ -515,17 +592,19 @@ describe('FundingForm', () => {
     });
   });
 
-  describe('PayPal checkout (stub)', () => {
-    it('shows error when PayPal provider is selected — not yet implemented', async () => {
+  describe('PayPal (inert in v1)', () => {
+    // DEC-007 keeps PayPal out of SUPPORTED_PROVIDER_TYPES, so a PayPal-only
+    // instance offers nothing this release can charge against. The form treats
+    // that as the zero-provider state rather than offering a submit that
+    // cannot succeed.
+    it('shows the no-providers message when PayPal is the only provider', async () => {
       mockGetOptions.mockResolvedValue(makePayPalOptions());
 
       const wrapper = await mountFundingForm();
       currentWrapper = wrapper;
 
-      await wrapper.find('button.btn--primary').trigger('click');
-      await flushPromises();
-
-      expect(wrapper.find('.error-message').exists()).toBe(true);
+      expect(wrapper.find('.no-providers-message').exists()).toBe(true);
+      expect(wrapper.find('button.btn--primary').exists()).toBe(false);
     });
   });
 
