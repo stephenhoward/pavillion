@@ -45,7 +45,7 @@
  *   - Prose belongs to the agent. Everything this module narrows away is
  *     reported as structured data; SKILL.md turns it into sentences.
  */
-import { execFileSync } from 'node:child_process';
+import { spawnSync as nodeSpawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -59,6 +59,7 @@ import {
   type ReportInput,
   type Severity,
 } from '../../../scripts/trivy-summary.js';
+import { run, type SpawnFn } from './run.js';
 
 /**
  * Where a finding lives, which decides the fix strategy the agent writes:
@@ -1236,21 +1237,32 @@ const HEALTH_REPORT_LABEL = 'health-report';
 const BEAD_LIMIT = 400;
 
 /**
- * Run a command with an argument array — never a shell string, so no external
- * value is ever interpolated into a command line.
+ * A whole Trivy report arrives on one stdout, so the buffer is sized for the
+ * largest scan rather than left at Node's 1 MiB default, where an overflow
+ * surfaces as a parse error indistinguishable from a corrupt report.
  */
-function capture(command: string, args: string[]): string {
-  try {
-    return execFileSync(command, args, { encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 });
+const SUBPROCESS_MAX_BUFFER = 256 * 1024 * 1024;
+
+/**
+ * Run a command with an argument array — never a shell string, so no external
+ * value is ever interpolated into a command line. `run()` hard-codes
+ * `shell: false` for that reason; see ./run.ts.
+ *
+ * `run()` reports a failure rather than throwing, but every caller below is
+ * written against a throw — `fetchScan` turns two of them into `ScanOutcome`
+ * values and the rest abort the run — so the non-zero exit is raised here, at
+ * the one place that knows the command and its arguments.
+ */
+function capture(command: string, args: string[], spawnFn: SpawnFn): string {
+  const { stdout, stderr, exitCode } = run(command, args, spawnFn, { maxBuffer: SUBPROCESS_MAX_BUFFER });
+  if (exitCode !== 0) {
+    throw new Error(`\`${command} ${args.join(' ')}\` failed: ${stderr || `exited with status ${exitCode}`}`);
   }
-  catch (err) {
-    const stderr = (err as { stderr?: string }).stderr;
-    throw new Error(`\`${command} ${args.join(' ')}\` failed: ${stderr?.trim() || (err as Error).message}`);
-  }
+  return stdout;
 }
 
-function captureJson<T>(command: string, args: string[]): T {
-  const out = capture(command, args);
+function captureJson<T>(command: string, args: string[], spawnFn: SpawnFn): T {
+  const out = capture(command, args, spawnFn);
   try {
     return JSON.parse(out) as T;
   }
@@ -1348,10 +1360,16 @@ export function toWatchBeads(rows: BeadRow[]): WatchBead[] {
   });
 }
 
-/** One `bd list` read, validated. */
-function listBeads(filters: string[]): BeadRow[] {
+/**
+ * One `bd list` read, validated.
+ *
+ * Exported with its `spawnFn` seam so the read and its assertions are tested
+ * against a fake `bd` rather than against whatever the developer's own bead
+ * database happens to hold.
+ */
+export function listBeads(filters: string[], spawnFn: SpawnFn = nodeSpawnSync): BeadRow[] {
   const args = ['list', ...filters, '-n', String(BEAD_LIMIT), '--json'];
-  return validateBeadRows(captureJson<unknown>('bd', args), BEAD_LIMIT, `bd ${args.join(' ')}`);
+  return validateBeadRows(captureJson<unknown>('bd', args, spawnFn), BEAD_LIMIT, `bd ${args.join(' ')}`);
 }
 
 /** One row of `gh pr list --json number,title,headRefName,state,author`. */
@@ -1371,14 +1389,14 @@ interface GhPrRow {
  * where it is unit-tested, so `state` and the author's login and bot flag are
  * carried through rather than dropped once the flag has been passed.
  */
-function fetchRenovatePrs(): RenovatePr[] {
+function fetchRenovatePrs(spawnFn: SpawnFn): RenovatePr[] {
   const args = [
     'pr', 'list',
     '--author', 'app/renovate',
     '--state', 'open',
     '--json', 'number,title,headRefName,state,author',
   ];
-  const rows = captureJson<GhPrRow[]>('gh', args);
+  const rows = captureJson<GhPrRow[]>('gh', args, spawnFn);
   if (!Array.isArray(rows)) {
     throw new Error(`\`gh ${args.join(' ')}\` returned ${typeof rows}, expected an array of pull requests`);
   }
@@ -1472,8 +1490,12 @@ export function interpretScan(outcome: ScanOutcome): Scan {
 /**
  * Download the newest successful weekly scan. The IO lives here; what each
  * outcome *means* lives in `interpretScan()`, which is where it can be tested.
+ *
+ * Exported with its `spawnFn` seam so the branch *selection* — which failing
+ * subprocess produces which `ScanOutcome` — is tested alongside
+ * `interpretScan()`, which only covers what each outcome then means.
  */
-function fetchScan(dir: string): Scan {
+export function fetchScan(dir: string, spawnFn: SpawnFn = nodeSpawnSync): Scan {
   let runs: unknown;
   try {
     runs = captureJson<unknown>('gh', [
@@ -1482,7 +1504,7 @@ function fetchScan(dir: string): Scan {
       '--status', 'success',
       '--limit', '1',
       '--json', 'databaseId,headSha,url,createdAt',
-    ]);
+    ], spawnFn);
   }
   catch (err) {
     return interpretScan({ kind: 'run-list-failed', message: (err as Error).message });
@@ -1500,7 +1522,7 @@ function fetchScan(dir: string): Scan {
   }
 
   try {
-    capture('gh', ['run', 'download', String(runId), '-n', SCAN_ARTIFACT, '-D', dir]);
+    capture('gh', ['run', 'download', String(runId), '-n', SCAN_ARTIFACT, '-D', dir], spawnFn);
   }
   catch (err) {
     return interpretScan({ kind: 'download-failed', run, runId, message: (err as Error).message });
@@ -1514,9 +1536,9 @@ function fetchScan(dir: string): Scan {
 }
 
 /** The open rolling health-report issue the agent comments its summary on. */
-function fetchHealthReportIssue(): number | undefined {
+function fetchHealthReportIssue(spawnFn: SpawnFn): number | undefined {
   const args = ['issue', 'list', '--label', HEALTH_REPORT_LABEL, '--state', 'open', '--limit', '1', '--json', 'number'];
-  const rows = captureJson<{ number?: unknown }[]>('gh', args);
+  const rows = captureJson<{ number?: unknown }[]>('gh', args, spawnFn);
   if (!Array.isArray(rows) || rows.length === 0) return undefined;
 
   const number = positiveInteger(rows[0]?.number);
@@ -1712,7 +1734,7 @@ export function sanitizeDelta(delta: Delta): SanitizedDelta {
 /** The only flag this script accepts; anything else is a typo, not a request. */
 const KNOWN_FLAGS = new Set(['out']);
 
-export function main(argv: string[] = process.argv.slice(2)): number {
+export function main(argv: string[] = process.argv.slice(2), spawnFn: SpawnFn = nodeSpawnSync): number {
   // Null-prototype so a flag named `__proto__` or `constructor` is a key rather
   // than a mutation, and unknown flags are rejected rather than ignored: a
   // mistyped `--outt path` would otherwise fall through to stdout and print
@@ -1730,13 +1752,13 @@ export function main(argv: string[] = process.argv.slice(2)): number {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'triage-health-'));
   let delta: Delta;
   try {
-    const scan = fetchScan(dir);
+    const scan = fetchScan(dir, spawnFn);
     delta = computeDelta({
       reports: scan.reports,
       expectedScans: EXPECTED_SCANS,
       // All statuses: `computeDelta` keeps only the open ones, and a closed
       // bead deliberately does not suppress a CVE that came back.
-      cveBeads: listBeads(['--label', 'cve', '--all']).map(row => ({
+      cveBeads: listBeads(['--label', 'cve', '--all'], spawnFn).map(row => ({
         id: String(row.id),
         title: optionalString(row.title),
         status: optionalString(row.status),
@@ -1746,9 +1768,9 @@ export function main(argv: string[] = process.argv.slice(2)): number {
       // first run and more than one is an abort, both decided by the core. The
       // design field is asserted here (`toWatchBeads`) because an empty read is
       // indistinguishable downstream from an empty watch list.
-      watchBeads: toWatchBeads(listBeads(['--label', 'cve-watch'])),
-      renovatePrs: fetchRenovatePrs(),
-      metadata: { ...scan.metadata, healthReportIssue: fetchHealthReportIssue() },
+      watchBeads: toWatchBeads(listBeads(['--label', 'cve-watch'], spawnFn)),
+      renovatePrs: fetchRenovatePrs(spawnFn),
+      metadata: { ...scan.metadata, healthReportIssue: fetchHealthReportIssue(spawnFn) },
     });
   }
   finally {
