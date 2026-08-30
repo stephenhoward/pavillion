@@ -1,9 +1,13 @@
 import { describe, it, expect } from 'vitest';
+import type { SpawnSyncReturns } from 'node:child_process';
 import type { ReportInput } from '../../../scripts/trivy-summary.js';
+import type { SpawnFn } from './run.js';
 import {
   checkReportUsability,
   computeDelta,
+  fetchScan,
   interpretScan,
+  listBeads,
   main,
   parseCvesLine,
   parseWatchTable,
@@ -1591,5 +1595,194 @@ describe('main', () => {
     // `flags.out` unset and print several megabytes of JSON where a file was
     // wanted — and the caller would find no file and no error.
     expect(main(['--outt', '/tmp/delta.json'])).toBe(1);
+  });
+});
+
+// =============================================================================
+// CLI shell: the subprocess seam
+//
+// `listBeads` and `fetchScan` take an injectable `spawnFn` (see ./run.ts), so
+// the decisions they make about what `bd` and `gh` returned are ordinary unit
+// tests rather than something that needs those commands stubbed on PATH.
+// fakeSpawn/recordingSpawn follow the canonical shapes in
+// .claude/tools/test/stack.test.ts.
+// =============================================================================
+
+function fakeSpawn(stdout: string, stderr = '', status: number | null = 0): SpawnSyncReturns<Buffer> {
+  return {
+    stdout: Buffer.from(stdout, 'utf-8'),
+    stderr: Buffer.from(stderr, 'utf-8'),
+    status,
+    signal: null,
+    pid: 1234,
+    output: [null, Buffer.from(stdout), Buffer.from(stderr)],
+  };
+}
+
+/**
+ * A spawn fake that answers in order and records what it was asked to run, so
+ * a test can assert both the outcome and the argv that produced it. An
+ * unexpected extra call fails rather than returning something usable.
+ */
+function recordingSpawn(...results: SpawnSyncReturns<Buffer>[]) {
+  const calls: { cmd: string; args: string[] }[] = [];
+  const fn = (cmd: string, args: string[]) => {
+    calls.push({ cmd, args });
+    return results[calls.length - 1] ?? fakeSpawn('', 'unexpected call', 1);
+  };
+  return { spawnFn: fn as unknown as SpawnFn, calls };
+}
+
+describe('fetchScan: which failing subprocess produces which outcome', () => {
+  const runRow = {
+    databaseId: 42,
+    headSha: 'abc1234',
+    url: 'https://github.com/stephenhoward/pavillion/actions/runs/42',
+    createdAt: '2026-08-24T06:03:11Z',
+  };
+
+  it('turns a failed `gh run list` into a run-list failure on every expected scan', () => {
+    const { spawnFn, calls } = recordingSpawn(fakeSpawn('', 'gh: not authenticated', 1));
+
+    const scan = fetchScan('/tmp/does-not-matter', spawnFn);
+
+    expect(scan.reports.map(report => report.label)).toEqual(['repository', 'image']);
+    for (const report of scan.reports) {
+      expect(report.json).toBeNull();
+      expect(report.error).toContain('could not list health.weekly.yaml runs');
+      expect(report.error).toContain('gh: not authenticated');
+    }
+    // No run was identified, so nothing may be attributed to one.
+    expect(scan.metadata).toEqual({});
+    // And the download is never attempted off a failed listing.
+    expect(calls).toHaveLength(1);
+    expect(calls[0].cmd).toBe('gh');
+    expect(calls[0].args).toEqual([
+      'run', 'list',
+      '--workflow', 'health.weekly.yaml',
+      '--status', 'success',
+      '--limit', '1',
+      '--json', 'databaseId,headSha,url,createdAt',
+    ]);
+  });
+
+  it('turns an empty run list into "no successful run" rather than a clean scan', () => {
+    const { spawnFn, calls } = recordingSpawn(fakeSpawn('[]'));
+
+    const scan = fetchScan('/tmp/does-not-matter', spawnFn);
+
+    expect(scan.reports).toHaveLength(2);
+    for (const report of scan.reports) {
+      expect(report.json).toBeNull();
+      expect(report.error).toBe('no successful health.weekly.yaml run to triage');
+    }
+    expect(scan.metadata).toEqual({});
+    expect(calls).toHaveLength(1);
+  });
+
+  it('refuses a run id that is not a positive integer instead of putting it on a command line', () => {
+    // `gh run download <id>` takes the id as argv; a string beginning `-`
+    // would be read as a flag. The guard aborts before the download runs.
+    const { spawnFn, calls } = recordingSpawn(fakeSpawn(JSON.stringify([{ ...runRow, databaseId: '--help' }])));
+
+    const scan = fetchScan('/tmp/does-not-matter', spawnFn);
+
+    expect(scan.reports).toHaveLength(2);
+    expect(scan.reports[0].error).toContain('newest successful run has no usable databaseId');
+    expect(scan.reports[0].error).toContain('"--help"');
+    expect(scan.metadata).toEqual({});
+    expect(calls).toHaveLength(1);
+  });
+
+  it('turns a failed artifact download into a download failure that keeps the run metadata', () => {
+    const { spawnFn, calls } = recordingSpawn(
+      fakeSpawn(JSON.stringify([runRow])),
+      fakeSpawn('', 'no artifact matches trivy-reports', 1),
+    );
+
+    const scan = fetchScan('/tmp/scan-dir', spawnFn);
+
+    expect(scan.reports).toHaveLength(2);
+    for (const report of scan.reports) {
+      expect(report.json).toBeNull();
+      expect(report.error).toContain('could not download the trivy-reports artifact from run 42');
+      expect(report.error).toContain('artifacts expire after 30 days');
+      expect(report.error).toContain('no artifact matches trivy-reports');
+    }
+    // The run is known here, so the delta can still say which scan failed.
+    expect(scan.metadata).toEqual({
+      sha: 'abc1234',
+      runUrl: runRow.url,
+      scanDate: '2026-08-24',
+    });
+    expect(calls).toHaveLength(2);
+    expect(calls[1].args).toEqual(['run', 'download', '42', '-n', 'trivy-reports', '-D', '/tmp/scan-dir']);
+  });
+});
+
+describe('listBeads: cardinality and shape of one `bd list` read', () => {
+  const beads = (count: number) => JSON.stringify(
+    Array.from({ length: count }, (_unused, index) => ({ id: `pv-${index}`, title: 'bump undici' })),
+  );
+
+  it('passes the explicit -n cap and returns the parsed rows', () => {
+    const { spawnFn, calls } = recordingSpawn(fakeSpawn(beads(2)));
+
+    const rows = listBeads(['--label', 'cve', '--all'], spawnFn);
+
+    expect(rows.map(row => row.id)).toEqual(['pv-0', 'pv-1']);
+    expect(calls[0].cmd).toBe('bd');
+    // The `-n` is always explicit: bd truncates at its own default of 50
+    // without saying so.
+    expect(calls[0].args).toEqual(['list', '--label', 'cve', '--all', '-n', '400', '--json']);
+  });
+
+  it('aborts on a read that lands exactly on the cap, which is indistinguishable from truncation', () => {
+    const { spawnFn } = recordingSpawn(fakeSpawn(beads(400)));
+
+    expect(() => listBeads(['--label', 'cve'], spawnFn)).toThrow(/at the -n 400 cap/);
+  });
+
+  it('aborts when the read is not an array, rather than treating it as no beads', () => {
+    const { spawnFn } = recordingSpawn(fakeSpawn('{"beads":[]}'));
+
+    expect(() => listBeads(['--label', 'cve'], spawnFn)).toThrow(/returned object, expected an array of beads/);
+  });
+
+  it('aborts on a bead with no id', () => {
+    const { spawnFn } = recordingSpawn(fakeSpawn('[{"title":"bump undici"}]'));
+
+    expect(() => listBeads(['--label', 'cve'], spawnFn)).toThrow(/returned a bead with no id/);
+  });
+
+  it('reports a non-zero exit with the command and its stderr', () => {
+    const { spawnFn } = recordingSpawn(fakeSpawn('', 'bd: unknown label', 1));
+
+    expect(() => listBeads(['--label', 'cve'], spawnFn))
+      .toThrow(/`bd list --label cve -n 400 --json` failed: bd: unknown label/);
+  });
+
+  it('reports a non-zero exit that said nothing on stderr by its status', () => {
+    const { spawnFn } = recordingSpawn(fakeSpawn('', '', 2));
+
+    expect(() => listBeads(['--label', 'cve'], spawnFn)).toThrow(/failed: exited with status 2/);
+  });
+
+  it('reports a command that never started, rather than a bare exit code', () => {
+    // spawnSync sets `error` and leaves `status` null when the command is
+    // missing; ./run.ts folds that message into stderr so the diagnostic still
+    // names the cause.
+    const { spawnFn } = recordingSpawn({
+      ...fakeSpawn('', '', null),
+      error: Object.assign(new Error('spawnSync bd ENOENT'), { code: 'ENOENT' }),
+    });
+
+    expect(() => listBeads(['--label', 'cve'], spawnFn)).toThrow(/failed: spawnSync bd ENOENT/);
+  });
+
+  it('aborts when the read is not JSON at all', () => {
+    const { spawnFn } = recordingSpawn(fakeSpawn('bd: database is locked'));
+
+    expect(() => listBeads(['--label', 'cve'], spawnFn)).toThrow(/did not return JSON: bd: database is locked/);
   });
 });
