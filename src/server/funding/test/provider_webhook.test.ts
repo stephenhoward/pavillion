@@ -4,7 +4,7 @@ import express from 'express';
 import request from 'supertest';
 import config from 'config';
 import { WebhookManager } from '../service/provider/webhook_manager';
-import WebhookRoutes from '../api/v1/webhooks';
+import FundingApiV1 from '../api/v1';
 
 /**
  * Tests for WebhookManager Utility Service
@@ -76,10 +76,13 @@ describe('WebhookManager Utility Service', () => {
     expect(pathMatch, `generated URL has no /api/funding path: ${generatedUrl}`).not.toBeNull();
     const pathname = pathMatch![0];
 
+    // Mounted through FundingApiV1.install, as the running app does, so the
+    // path is checked against the real installer rather than against a router
+    // this test wired up itself (see the invariant note in webhooks.test.ts,
+    // pv-ufag).
     const handleStripeWebhook = sandbox.stub().resolves();
     const app = express();
-    const webhookRoutes = new WebhookRoutes({ handleStripeWebhook } as any);
-    webhookRoutes.installHandlers(app, '/api/funding');
+    FundingApiV1.install(app, { handleStripeWebhook } as any);
 
     // A request without a Stripe-Signature header reaches the handler and gets
     // 400. A 404 means the generated path does not match the mounted route.
