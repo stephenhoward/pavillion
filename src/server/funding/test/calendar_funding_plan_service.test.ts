@@ -877,12 +877,12 @@ describe('FundingService - Calendar Funding Plan Methods', () => {
     });
 
     /**
-     * The instance settings are read twice over on this path — once for the
-     * display status and once inside every gate decision — and neither can
-     * answer without it. An unreadable row is therefore the indeterminate
-     * case, and it must arrive as the class consumers branch on rather than
-     * as whatever the driver happened to throw: CalendarService keys on it to
-     * keep this out of the 402 path, and it would silently miss a raw Error.
+     * The settings row answers both the gate decision and the display status,
+     * and neither can proceed without it. An unreadable row is therefore the
+     * indeterminate case, and it must arrive as the class consumers branch on
+     * rather than as whatever the driver happened to throw: CalendarService
+     * keys on it to keep this out of the 402 path, and it would silently miss
+     * a raw Error.
      */
     it('should raise the indeterminate error when the instance settings cannot be read', async () => {
       const calendarId = uuidv4();
@@ -963,6 +963,50 @@ describe('FundingService - Calendar Funding Plan Methods', () => {
 
       expect(summary.features.widget_embedding).toBe(false);
       expect(summary.status).toBeNull();
+    });
+
+    /**
+     * The gate decision and the display status both need the instance
+     * settings row, but they must share one read rather than each fetching
+     * its own copy — otherwise every future FUNDING_GATED_FEATURES entry
+     * adds another read of the same row on top of the display path's own.
+     * Asserting the exact call count, not just "at most N", is what keeps
+     * that growth visible instead of silently regressing back to per-feature
+     * reads.
+     */
+    it('should read the instance settings row exactly once per summary', async () => {
+      const calendarId = uuidv4();
+      const accountId = uuidv4();
+
+      mockCalendarInterface.isCalendarOwnerById.withArgs(accountId, calendarId).resolves(true);
+      mockCalendarInterface.getCalendarOwnerAccountId.withArgs(calendarId).resolves(accountId);
+
+      mockAccountsInterface.accountIsAdmin.withArgs(accountId).resolves(false);
+      sandbox.stub(ComplimentaryGrantEntity, 'findOne').resolves(null);
+      sandbox.stub(CalendarFundingPlanEntity, 'findOne').resolves({
+        id: uuidv4(),
+        calendar_id: calendarId,
+        end_time: null,
+        fundingPlan: {
+          status: 'active',
+          cancelled_at: null,
+          current_period_end: new Date(Date.now() + 30 * DAY),
+        },
+      } as any);
+
+      const settingsFindOne = sandbox.stub(FundingSettingsEntity, 'findOne').resolves({
+        id: uuidv4(),
+        toModel: () => {
+          const settings = new FundingSettings();
+          settings.enabled = true;
+          settings.gracePeriodDays = GRACE_DAYS;
+          return settings;
+        },
+      } as any);
+
+      await service.getCalendarFundingSummary(accountId, calendarId);
+
+      expect(settingsFindOne.callCount).toBe(1);
     });
   });
 
