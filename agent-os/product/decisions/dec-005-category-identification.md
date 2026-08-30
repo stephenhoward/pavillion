@@ -4,7 +4,6 @@
 > Status: Accepted
 > Category: Technical
 > Stakeholders: Development Team, Frontend Developers
-> Related Spec: @.agent-os/specs/2025-07-30-public-category-filtering/
 
 ## Decision
 

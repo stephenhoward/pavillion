@@ -35,15 +35,7 @@ Read `.claude/skills/review-mode-advisor/SKILL.md` — resolved from the root of
 
 ### Step 2: Load Architecture Context
 
-Read `.claude/skills/architecture-playbook/SKILL.md` to understand what dimensions are available. Then read the three product documents:
-- `agent-os/product/mission.md`
-- `agent-os/product/decisions.md`
-- `agent-os/product/roadmap.md`
-
-`mission.md` and `roadmap.md` are gitignored and exist only in the main
-checkout. If they are missing from the checkout under review (a worktree),
-read them from `/Users/stephen/pavillion/code/agent-os/product/` — do not
-spend calls searching for them locally.
+Read `.claude/skills/architecture-playbook/SKILL.md` to understand what dimensions are available. Then read `agent-os/product/decisions.md` and the decision files it indexes that are relevant to the spec under review.
 
 ### Step 3: Read the Spec
 

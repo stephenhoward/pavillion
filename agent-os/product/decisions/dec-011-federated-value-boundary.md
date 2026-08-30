@@ -4,7 +4,6 @@
 > Status: Accepted
 > Category: Product
 > Stakeholders: Product Owner, Tech Lead
-> Related Spec: Cited by roadmap v5.0.0 (`agent-os/product/roadmap.md`)
 > Partially supersedes: [DEC-009](dec-009-ics-import-funding-gate-posture.md) — the comparative ICS-vs-Facebook framing and the operational-cost rationale for advanced-sync funding gating
 
 ## Decision
@@ -27,7 +26,7 @@ The funding domain owns both the gate decision and the vocabulary of feature key
 
 DEC-009 was written when Facebook event import was the planned vector for community aggregation from non-federated platforms. Subsequent investigation has confirmed Facebook import is infeasible due to platform constraints Facebook has imposed. This invalidates DEC-009's comparative framing, which positioned ICS import (free, personal migration) against Facebook import (funding-gated, community aggregation) as two ends of a use-case spectrum. With Facebook removed, that spectrum collapses, and the curator aggregation model needs to be restated without reference to non-federated platforms.
 
-In parallel, roadmap v5.0.0 introduced an explicit operating principle — the *federated value boundary* — that separates in-network features (free) from outside-network features (funding-gated). This principle is more mission-coherent than DEC-009's operational-cost framing because it maps directly to the federation differentiator in `mission.md`: the federated network is what Pavillion exists to enhance, and features that step outside the federated paradigm are value-add platform-bridge services with a different cost and incentive structure.
+In parallel, roadmap v5.0.0 introduced an explicit operating principle — the *federated value boundary* — that separates in-network features (free) from outside-network features (funding-gated). This principle is more mission-coherent than DEC-009's operational-cost framing because it maps directly to Pavillion's federation differentiator: the federated network is what Pavillion exists to enhance, and features that step outside the federated paradigm are value-add platform-bridge services with a different cost and incentive structure.
 
 The mission's "Community Curators ... aggregate and curate events from multiple sources" language has been read ambiguously over time. Read in context with the rest of the Problem section ("organizations maintain their own calendars while enabling community curators to create comprehensive, unified views"), "multiple sources" unambiguously means multiple federated calendars maintained by the organizations themselves. The alternate reading — that "multiple sources" could include non-federated platforms (Facebook pages, Eventbrite listings, individual websites) — is a misreading: those external platforms are named in the *problem statement* as the fragmentation Pavillion solves, not in the *solution architecture* as inputs to curator aggregation. The solution is to bring organizations onto Pavillion (where they maintain their own calendars) and federate.
 

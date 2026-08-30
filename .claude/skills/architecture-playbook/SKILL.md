@@ -9,7 +9,7 @@ This Skill provides Claude Code with architectural clarity standards specific to
 
 ## Context
 
-Pavillion is a federated events calendar with a clear product mission, documented architectural decisions, and a phased roadmap. These standards evaluate whether specs and code maintain the product's **conceptual integrity** -- whether the system reads as one coherent product or a collection of well-built but disconnected pieces.
+Pavillion is a federated events calendar with a clear product mission and a body of documented architectural decisions. These standards evaluate whether specs and code maintain the product's **conceptual integrity** -- whether the system reads as one coherent product or a collection of well-built but disconnected pieces.
 
 These standards complement (but do not replace) the other playbook skills:
 - `consistency-playbook` -- "Does this match what we do elsewhere?" (convention-level)
@@ -20,13 +20,7 @@ Where those skills check code-level patterns, architecture standards check **pro
 
 ## Product Documents Referenced
 
-Architecture review is grounded in three product-level documents:
-
-| Document | What it tells us |
-|----------|-----------------|
-| `agent-os/product/mission.md` | Product vision, target users, differentiators, key features |
-| `agent-os/product/decisions.md` | Documented architectural decisions with rationale and consequences |
-| `agent-os/product/roadmap.md` | Development phases, priorities, and current implementation status |
+Architecture review is grounded in `agent-os/product/decisions.md` — the canonical record of documented architectural decisions with rationale and consequences.
 
 ## Routing Guide
 
@@ -48,7 +42,7 @@ The principles file covers: conceptual integrity, decision adherence, narrative 
 
 When reviewing:
 
-1. Read the product documents (mission, decisions, roadmap) for context
+1. Read `agent-os/product/decisions.md` for context
 2. Identify which architecture dimensions are relevant to the spec or code under review
 3. Read the relevant sections of `./principles.md`
 4. Evaluate whether the spec/code maintains the product's conceptual integrity
