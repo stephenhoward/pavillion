@@ -57,6 +57,23 @@ export interface JobPublishOptions {
 export type JobHandler<T = any> = (data: T, meta?: JobMeta) => Promise<void>;
 
 /**
+ * Aggregate job counts for one queue.
+ *
+ * Counts only. No job id, payload, or error text is read out of pg-boss —
+ * a job payload can carry account- or calendar-scoped data, and these numbers
+ * are consumed by an operational-telemetry surface that must describe the
+ * instance's operation and never its audience.
+ */
+export interface QueueJobStats {
+  /** pg-boss queue name. */
+  queue: string;
+  /** Jobs waiting or running (states created, retry, active). */
+  depth: number;
+  /** Jobs in the failed state within the requested window. */
+  failed: number;
+}
+
+/**
  * Job queue service using pg-boss for PostgreSQL-native job scheduling.
  *
  * Provides methods for publishing jobs (web mode), subscribing to jobs (worker mode),
@@ -65,6 +82,7 @@ export type JobHandler<T = any> = (data: T, meta?: JobMeta) => Promise<void>;
 export default class JobQueueService {
   private boss: PgBoss | null = null;
   private connectionString: string;
+  private dialect: string;
   private started: boolean = false;
 
   /**
@@ -74,6 +92,7 @@ export default class JobQueueService {
    */
   constructor(dbConfig?: DatabaseConfig) {
     const actualConfig = dbConfig || config.get<DatabaseConfig>('database');
+    this.dialect = actualConfig.dialect || 'postgres';
     this.connectionString = this.buildConnectionString(actualConfig);
   }
 
@@ -305,6 +324,66 @@ export default class JobQueueService {
     // Schedule the job with cron expression
     await this.boss.schedule(jobName, cronExpression, data || {} as T);
     logger.info({ jobName, cronExpression }, 'Scheduled job');
+  }
+
+  /**
+   * Reads aggregate job counts for a fixed set of queues.
+   *
+   * Queries `pgboss.job` directly rather than through pg-boss's API: the
+   * library exposes no batched multi-queue count, and there is deliberately no
+   * Sequelize entity for a schema the library owns and migrates.
+   *
+   * The SQL is a static string; both the queue-name list and the failed-job
+   * cutoff are bind parameters, per the raw-SQL contract (scripts/check-raw-sql.ts).
+   * Only aggregate counts are selected — never a job id, payload, or error.
+   *
+   * Does not depend on `start()`: it opens its own short-lived connection, so
+   * the web process can read queue health without owning a pg-boss instance.
+   *
+   * @param queueNames - Queues to report on. A statically enumerated set from
+   *   the caller; never derived from user data or per-entity values.
+   * @param failedSince - Lower bound for counting failed jobs. pg-boss deletes
+   *   jobs a day after creation, so a window wider than that reports nothing
+   *   extra.
+   * @returns One entry per queue that has at least one job row. A queue with
+   *   no rows is absent from the result; the caller decides whether that means
+   *   zero or unknown.
+   * @throws Error if the deployment is not PostgreSQL-backed, or the query fails
+   */
+  async getQueueStats(queueNames: string[], failedSince: Date): Promise<QueueJobStats[]> {
+    if (this.dialect === 'sqlite') {
+      throw new Error('Queue statistics require a PostgreSQL-backed pg-boss installation');
+    }
+
+    const client = new Client(this.connectionString);
+
+    try {
+      await client.connect();
+
+      // Distinct name from `ensureQueue`'s local: the raw-SQL guard resolves a
+      // one-hop const binding and fails closed when the identifier is declared
+      // more than once in a file.
+      const queueStatsQuery = `
+        SELECT name,
+               COUNT(*) FILTER (WHERE state IN ('created', 'retry', 'active')) AS depth,
+               COUNT(*) FILTER (WHERE state = 'failed' AND created_on >= $2) AS failed
+        FROM pgboss.job
+        WHERE name = ANY($1::text[])
+        GROUP BY name;
+      `;
+
+      const result = await client.query(queueStatsQuery, [queueNames, failedSince]);
+
+      return result.rows.map((row: { name: string, depth: string | number, failed: string | number }) => ({
+        queue: row.name,
+        // COUNT() comes back as a BIGINT string from the pg driver.
+        depth: Number(row.depth),
+        failed: Number(row.failed),
+      }));
+    }
+    finally {
+      await client.end();
+    }
   }
 
   /**

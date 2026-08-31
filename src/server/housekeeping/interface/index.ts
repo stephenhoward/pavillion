@@ -3,6 +3,7 @@ import AccountsInterface from '@/server/accounts/interface';
 import StorageService, { StorageStats } from '@/server/housekeeping/service/storage';
 import StatusService, { HousekeepingStatus } from '@/server/housekeeping/service/status';
 import JobQueueService, { JobPublishOptions } from '@/server/housekeeping/service/job-queue';
+import MetricsService, { OperationalMetrics } from '@/server/housekeeping/service/metrics';
 import { BackupEntity } from '@/server/housekeeping/entity/backup';
 
 // Re-exported so other domains set a job's retry/expiry policy via the
@@ -16,6 +17,19 @@ export type { StorageStats } from '@/server/housekeeping/service/storage';
 // Re-exported so callers can type the admin dashboard status payload without
 // importing the StatusService internal.
 export type { HousekeepingStatus } from '@/server/housekeeping/service/status';
+
+// Re-exported so the metrics exposition can name the operational values it
+// renders without importing the MetricsService internal. These are plain typed
+// objects rather than TranslatedModel domain models: they never cross the
+// client/server JSON boundary, so `toObject`/`fromObject` would be ceremony
+// with no consumer.
+export type {
+  OperationalMetrics,
+  BackupMetrics,
+  BackupVolumeMetrics,
+  VolumeMetrics,
+  QueueMetrics,
+} from '@/server/housekeeping/service/metrics';
 
 /**
  * Backup metadata exposed across the housekeeping domain boundary.
@@ -64,6 +78,7 @@ export default class HousekeepingInterface {
   private accountsInterface: AccountsInterface;
   private storageService: StorageService;
   private statusService: StatusService;
+  private metricsService: MetricsService;
   private jobQueueService: JobQueueService | null = null;
 
   constructor(emailInterface: EmailInterface, accountsInterface: AccountsInterface) {
@@ -71,6 +86,7 @@ export default class HousekeepingInterface {
     this.accountsInterface = accountsInterface;
     this.storageService = new StorageService();
     this.statusService = new StatusService();
+    this.metricsService = new MetricsService();
   }
 
   /**
@@ -116,6 +132,22 @@ export default class HousekeepingInterface {
    */
   async getStatus(): Promise<HousekeepingStatus> {
     return this.statusService.getStatus();
+  }
+
+  /**
+   * Gets the operational values exposed by the metrics endpoint.
+   *
+   * The single read path for every metric family, so the exposition layer
+   * never reaches past the domain boundary into a housekeeping service or
+   * entity (DEC-003). Each family is independently nullable; null means the
+   * value has no data or could not be read, and the caller must emit no series
+   * rather than a defaulted zero.
+   *
+   * @param now - Reference time for time-windowed counts; defaults to now
+   * @returns The operational metric values
+   */
+  async getOperationalMetrics(now?: Date): Promise<OperationalMetrics> {
+    return this.metricsService.collect(now);
   }
 
   /**
