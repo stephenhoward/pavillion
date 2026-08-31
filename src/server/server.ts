@@ -203,6 +203,13 @@ function startMetricsListener(housekeepingInterface: HousekeepingInterface): Ser
   const port = config.get<number>('housekeeping.monitoring.metrics.port');
   const server = new MetricsRoutes(housekeepingInterface).createServer();
 
+  // Telemetry is never worth the application. A bind failure — a port already
+  // taken, a second instance on one host — must degrade to "no metrics", not
+  // take down an unhandled 'error' event with the process.
+  server.on('error', (error) => {
+    logger.error({ err: error, port }, 'Metrics listener failed; serving no metrics');
+  });
+
   server.listen(port, '0.0.0.0', () => {
     logger.info({ port }, 'Metrics listener listening (not published to the host by default)');
   });
