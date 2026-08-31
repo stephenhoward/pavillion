@@ -23,6 +23,7 @@ export default defineConfig({
     exclude: [
       '**/node_modules/**',
       '**/dist/**',
+      '**/.agents/worktrees/**',
       '**/.claude/worktrees/**',
       '**/cypress/**',
       '**/.{idea,git,cache,output,temp}/**',

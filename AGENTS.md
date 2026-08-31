@@ -6,6 +6,27 @@ This file provides guidance to AI coding agents (Claude Code, and any other agen
 
 Pavillion is a federated events calendar built with Vue.js 3 frontend and Express.js backend. It uses ActivityPub for federation, allowing organizations to share events across multiple instances. The application supports multilingual content and emphasizes accessibility and community building.
 
+## Agent Configuration Layout
+
+Agent configuration lives in `.agents/`, with `.claude` as a symlink pointing at it:
+
+```
+.agents/
+  skills/     # SKILL.md skills — read natively by Codex, Cursor, Gemini CLI,
+              # Copilot, opencode, Amp, Cline; reached by Claude Code through
+              # the .claude symlink
+  agents/     # Claude Code subagent definitions (Claude-specific)
+  commands/   # Claude Code slash commands (Claude-specific)
+  tools/      # Deterministic CLIs the skills shell out to
+.claude -> .agents
+```
+
+`.agents/skills/` is the cross-tool convention; Claude Code only scans `.claude/`, which is why the symlink exists rather than the reverse. Every `SKILL.md` must carry `name` and `description` frontmatter — Claude Code will infer them from the body, but Codex requires both. `name` and `description` are the only fields Codex documents, so treat any other key as Claude-only and don't rely on it being portable.
+
+Write repo-relative paths as `.agents/...`. A `~/.claude/...` path means the user's personal directory and is genuinely Claude-specific — leave those alone.
+
+**Cloning on Windows** requires `core.symlinks=true` (or Developer Mode). Without it git materializes `.claude` as a 7-byte text file and Claude Code silently finds no skills, agents, or commands.
+
 ## Development Commands
 
 ```bash

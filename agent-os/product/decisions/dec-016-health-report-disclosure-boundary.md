@@ -27,7 +27,7 @@ The exploitability analysis lives on the bead. Escalated CVE ids are named in th
 
 This decision also names the maintainer concept the workflow introduced and left unnamed: an **accepted security risk, recorded on a rolling watch bead**. A no-fix CVE that has been assessed as not reachable in Pavillion's container is not ignored and not tracked as actionable work — it is a risk knowingly carried, with the assessment and its evidence recorded on the single rolling "Base-image CVE watch" bead, re-examined every week until a fix ships or the finding is pruned.
 
-The operational procedure that implements this decision is step 7 of the `triage-health` skill (`.claude/skills/triage-health/SKILL.md`). This file records **why** the boundary sits where it does; the skill records how to apply it.
+The operational procedure that implements this decision is step 7 of the `triage-health` skill (`.agents/skills/triage-health/SKILL.md`). This file records **why** the boundary sits where it does; the skill records how to apply it.
 
 ## Context
 
