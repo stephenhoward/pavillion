@@ -109,10 +109,10 @@ describe('Operational metrics endpoint', () => {
 
     const parsed = samples(await (await fetch(`${baseUrl}/metrics`)).text());
 
-    expect(parsed['pavillion_backup_volume_total_bytes']).toBe(1000);
-    expect(parsed['pavillion_backup_volume_free_bytes']).toBe(600);
-    expect(parsed['pavillion_backup_volume_used_bytes']).toBe(400);
-    expect(parsed['pavillion_disk_snapshot_timestamp_seconds'])
+    expect(parsed['pavillion_disk_total_bytes{stat_key="backup_path"}']).toBe(1000);
+    expect(parsed['pavillion_disk_free_bytes{stat_key="backup_path"}']).toBe(600);
+    expect(parsed['pavillion_disk_used_bytes{stat_key="backup_path"}']).toBe(400);
+    expect(parsed['pavillion_disk_snapshot_timestamp_seconds{stat_key="backup_path"}'])
       .toBe(Math.floor(snapshotWrittenAt.getTime() / 1000));
   });
 
@@ -120,7 +120,7 @@ describe('Operational metrics endpoint', () => {
     const body = await (await fetch(`${baseUrl}/metrics`)).text();
 
     expect(body).not.toContain('pavillion_backup_last_success_timestamp_seconds');
-    expect(body).not.toContain('pavillion_backup_volume_total_bytes');
+    expect(body).not.toContain('pavillion_disk_total_bytes');
     // The document stays well formed with nothing in it.
     expect(body).toBe('# EOF\n');
   });
@@ -140,7 +140,7 @@ describe('Operational metrics endpoint', () => {
     const parsed = samples(await (await fetch(`${baseUrl}/metrics`)).text());
 
     // No worker snapshot exists, but the backup series still reports.
-    expect(parsed['pavillion_backup_volume_total_bytes']).toBeUndefined();
+    expect(parsed['pavillion_disk_total_bytes{stat_key="backup_path"}']).toBeUndefined();
     expect(parsed['pavillion_backup_last_success_size_bytes']).toBe(99);
   });
 
@@ -201,12 +201,35 @@ describe('Operational metrics endpoint', () => {
     }
   });
 
+  it('sets nosniff on every response', async () => {
+    // helmet fronts the Express app, not this listener, so the header has to
+    // be set here or it is simply absent.
+    const ok = await fetch(`${baseUrl}/metrics`);
+    const notFound = await fetch(`${baseUrl}/nope`);
+    const notAllowed = await fetch(`${baseUrl}/metrics`, { method: 'POST' });
+
+    for (const response of [ok, notFound, notAllowed]) {
+      expect(response.headers.get('x-content-type-options')).toBe('nosniff');
+    }
+  });
+
+  it('emits the snapshot key but never the filesystem path', async () => {
+    await seedHousekeepingData();
+
+    const body = await (await fetch(`${baseUrl}/metrics`)).text();
+
+    // The snapshot row persists `path` and DiskSnapshot carries it into the
+    // web process; the exposition must stop it at the boundary.
+    expect(body).toContain('stat_key="backup_path"');
+    expect(body).not.toContain('/backups');
+  });
+
   it('serves a cached render within the TTL rather than re-querying', async () => {
     let collections = 0;
     const counting = {
       getOperationalMetrics: async () => {
         collections++;
-        return { backup: null, backupVolume: null, databaseSizeBytes: 1, mediaVolume: null, queues: null };
+        return { backup: null, workerVolume: null, databaseSizeBytes: 1, mediaVolume: null, queues: null };
       },
     } as unknown as HousekeepingInterface;
 
@@ -223,6 +246,68 @@ describe('Operational metrics endpoint', () => {
     }
     finally {
       await new Promise<void>((resolve) => cachedServer.close(() => resolve()));
+    }
+  });
+
+  it('coalesces concurrent scrapes into a single collection', async () => {
+    let collections = 0;
+    const slow = {
+      getOperationalMetrics: async () => {
+        collections++;
+        // Long enough that every request below arrives before this resolves.
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        return { backup: null, workerVolume: null, databaseSizeBytes: 1, mediaVolume: null, queues: null };
+      },
+    } as unknown as HousekeepingInterface;
+
+    const slowServer = new MetricsRoutes(slow, 10_000).createServer();
+    await new Promise<void>((resolve) => slowServer.listen(0, '127.0.0.1', resolve));
+    const port = (slowServer.address() as AddressInfo).port;
+
+    try {
+      const responses = await Promise.all(
+        Array.from({ length: 20 }, () => fetch(`http://127.0.0.1:${port}/metrics`)),
+      );
+
+      // Caching only the settled value would let all twenty run their own
+      // collection — and a collection opens a raw, unpooled PostgreSQL
+      // connection, so this is what keeps a scrape loop from exhausting
+      // max_connections and starving the main application.
+      expect(collections).toBe(1);
+      expect(responses.every((response) => response.status === 200)).toBe(true);
+    }
+    finally {
+      await new Promise<void>((resolve) => slowServer.close(() => resolve()));
+    }
+  });
+
+  it('retries collection after a failure instead of caching the error', async () => {
+    let attempts = 0;
+    const flaky = {
+      getOperationalMetrics: async () => {
+        attempts++;
+        if (attempts === 1) {
+          throw new Error('transient');
+        }
+        return { backup: null, workerVolume: null, databaseSizeBytes: 7, mediaVolume: null, queues: null };
+      },
+    } as unknown as HousekeepingInterface;
+
+    const flakyServer = new MetricsRoutes(flaky, 10_000).createServer();
+    await new Promise<void>((resolve) => flakyServer.listen(0, '127.0.0.1', resolve));
+    const port = (flakyServer.address() as AddressInfo).port;
+
+    try {
+      const first = await fetch(`http://127.0.0.1:${port}/metrics`);
+      const second = await fetch(`http://127.0.0.1:${port}/metrics`);
+
+      expect(first.status).toBe(500);
+      // A cached rejection would keep answering 500 for the whole TTL.
+      expect(second.status).toBe(200);
+      expect(await second.text()).toContain('pavillion_db_size_bytes 7');
+    }
+    finally {
+      await new Promise<void>((resolve) => flakyServer.close(() => resolve()));
     }
   });
 });

@@ -34,6 +34,23 @@ export const MONITORED_QUEUES = [
  */
 export const FAILED_JOB_WINDOW_HOURS = 24;
 
+/**
+ * The metric families the project has declared (DEC-017 rule 4), reserving
+ * `pavillion_federation_` for future work.
+ *
+ * Every published series name must sit inside one of these. The families are
+ * the operator contract, not merely the `pavillion_` prefix: a name outside
+ * them is a family nobody agreed to, and renaming it after publication costs
+ * a deprecation note plus an alert that quietly stops firing.
+ */
+export const METRIC_FAMILY_PREFIXES = [
+  'pavillion_backup_',
+  'pavillion_disk_',
+  'pavillion_db_',
+  'pavillion_media_',
+  'pavillion_queue_',
+] as const;
+
 /** Last verified backup. Absent when no verified backup exists yet. */
 export interface BackupMetrics {
   /** Unix seconds at which the backup was created. */
@@ -48,8 +65,19 @@ export interface VolumeMetrics {
   usedBytes: number;
 }
 
-/** Backup-volume usage plus the age of the worker snapshot it came from. */
-export interface BackupVolumeMetrics extends VolumeMetrics {
+/**
+ * Usage for a filesystem the worker measured on the web process's behalf,
+ * plus the age of the snapshot it came from.
+ *
+ * `statKey` becomes the series label, so measuring a second filesystem
+ * worker-side adds label values rather than changing the identity of an
+ * already-published series. Only one filesystem is measured today; when a
+ * second appears this field becomes a list, which does not change the wire
+ * contract.
+ */
+export interface WorkerVolumeMetrics extends VolumeMetrics {
+  /** Snapshot key, exposed as the series label (e.g. 'backup_path'). */
+  statKey: string;
   /** Unix seconds at which the worker measured these values. */
   snapshotTimestampSeconds: number;
 }
@@ -71,7 +99,7 @@ export interface QueueMetrics {
  */
 export interface OperationalMetrics {
   backup: BackupMetrics | null;
-  backupVolume: BackupVolumeMetrics | null;
+  workerVolume: WorkerVolumeMetrics | null;
   databaseSizeBytes: number | null;
   mediaVolume: VolumeMetrics | null;
   /** Null when queue state could not be read at all; never a partial list. */
@@ -103,15 +131,15 @@ export default class MetricsService {
    * @returns The operational metric values, with an absent family as null
    */
   async collect(now: Date = new Date()): Promise<OperationalMetrics> {
-    const [backup, backupVolume, databaseSizeBytes, mediaVolume, queues] = await Promise.all([
+    const [backup, workerVolume, databaseSizeBytes, mediaVolume, queues] = await Promise.all([
       this.isolate('backup', () => this.getBackupMetrics()),
-      this.isolate('backupVolume', () => this.getBackupVolumeMetrics()),
+      this.isolate('workerVolume', () => this.getWorkerVolumeMetrics()),
       this.isolate('databaseSize', () => this.getDatabaseSizeBytes()),
       this.isolate('mediaVolume', () => this.getMediaVolumeMetrics()),
       this.isolate('queues', () => this.getQueueMetrics(now)),
     ]);
 
-    return { backup, backupVolume, databaseSizeBytes, mediaVolume, queues };
+    return { backup, workerVolume, databaseSizeBytes, mediaVolume, queues };
   }
 
   /**
@@ -162,13 +190,17 @@ export default class MetricsService {
    * The web process cannot statfs the backup path — the volume is mounted
    * into the worker container only — so the snapshot table is the only source.
    */
-  private async getBackupVolumeMetrics(): Promise<BackupVolumeMetrics | null> {
+  private async getWorkerVolumeMetrics(): Promise<WorkerVolumeMetrics | null> {
     const snapshot = await this.diskSnapshots.getSnapshot(BACKUP_PATH_STAT_KEY);
     if (!snapshot) {
       return null;
     }
 
     return {
+      // Deliberately the snapshot key, not `snapshot.path`: the key is a
+      // stable in-code identifier, while the path is host filesystem layout
+      // that has no business in a scrapeable series.
+      statKey: snapshot.statKey,
       totalBytes: snapshot.totalBytes,
       freeBytes: snapshot.freeBytes,
       usedBytes: snapshot.usedBytes,

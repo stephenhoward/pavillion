@@ -20,6 +20,24 @@ export const METRICS_PATH = '/metrics';
 export const DEFAULT_CACHE_TTL_MS = 10_000;
 
 /**
+ * Ceiling on simultaneous connections to the metrics listener. helmet fronts
+ * the Express app, not this server, and nothing else bounds a caller here; a
+ * scraper needs one connection, so this is generous for every legitimate use
+ * while capping how much socket state an unauthenticated caller can pin.
+ */
+export const MAX_CONNECTIONS = 32;
+
+/**
+ * Sent on every response. helmet does not reach this listener, so the one
+ * header that matters for a text/plain body a browser might be tricked into
+ * interpreting is set explicitly. Deliberately excludes CORS headers:
+ * default-deny is achieved by never sending them.
+ */
+const SECURITY_HEADERS = {
+  'X-Content-Type-Options': 'nosniff',
+} as const;
+
+/**
  * Escapes a label value per the OpenMetrics text grammar. Queue labels come
  * from a fixed in-code list, so this can never fire today — it is here so a
  * future label source cannot produce an unparseable document.
@@ -64,13 +82,28 @@ function scalarGauge(name: string, help: string, value: number | null | undefine
  * consumer cannot silently become a published series — someone has to come
  * here and add it deliberately.
  *
+ * Every name sits inside one of the families declared by
+ * `METRIC_FAMILY_PREFIXES` (see the metrics service), which is the operator
+ * contract these names freeze into once the guide publishes them.
+ *
  * Nothing here reads calendars, events, accounts, or visitors. Every series
- * describes the instance's own operation.
+ * describes the instance's own operation. No filesystem path is emitted
+ * either: worker-measured volumes are identified by snapshot key.
  *
  * @param metrics - Collected operational values
  * @returns A complete OpenMetrics text document, terminated by `# EOF`
  */
 export function renderOpenMetrics(metrics: OperationalMetrics): string {
+  // Worker-measured filesystems are labelled by their snapshot key so a second
+  // one is additive — a new label value, not a new series name.
+  const workerVolume = metrics.workerVolume;
+  const workerVolumeLabels = workerVolume ? { stat_key: workerVolume.statKey } : undefined;
+  const workerVolumeSample = (value: number | undefined) => (
+    value === undefined || workerVolumeLabels === undefined
+      ? []
+      : [{ labels: workerVolumeLabels, value }]
+  );
+
   const families = [
     scalarGauge(
       'pavillion_backup_last_success_timestamp_seconds',
@@ -82,28 +115,28 @@ export function renderOpenMetrics(metrics: OperationalMetrics): string {
       'Size in bytes of the most recent verified database backup.',
       metrics.backup?.lastSuccessSizeBytes,
     ),
-    scalarGauge(
-      'pavillion_backup_volume_total_bytes',
-      'Total size in bytes of the filesystem holding database backups.',
-      metrics.backupVolume?.totalBytes,
+    gauge(
+      'pavillion_disk_total_bytes',
+      'Total size in bytes of a filesystem the worker measures for the web process, by snapshot key.',
+      workerVolumeSample(workerVolume?.totalBytes),
     ),
-    scalarGauge(
-      'pavillion_backup_volume_free_bytes',
-      'Bytes available to unprivileged users on the filesystem holding database backups.',
-      metrics.backupVolume?.freeBytes,
+    gauge(
+      'pavillion_disk_free_bytes',
+      'Bytes available to unprivileged users on a worker-measured filesystem, by snapshot key.',
+      workerVolumeSample(workerVolume?.freeBytes),
     ),
-    scalarGauge(
-      'pavillion_backup_volume_used_bytes',
-      'Bytes used on the filesystem holding database backups.',
-      metrics.backupVolume?.usedBytes,
+    gauge(
+      'pavillion_disk_used_bytes',
+      'Bytes used on a worker-measured filesystem, by snapshot key.',
+      workerVolumeSample(workerVolume?.usedBytes),
     ),
-    scalarGauge(
+    gauge(
       'pavillion_disk_snapshot_timestamp_seconds',
-      'Unix timestamp at which the worker last measured the backup volume. Alert on this going stale: the backup volume figures are only as current as this value.',
-      metrics.backupVolume?.snapshotTimestampSeconds,
+      'Unix timestamp at which the worker last measured the filesystem with this snapshot key. The other pavillion_disk_* series for the same stat_key are only as current as this value — alert on it going stale.',
+      workerVolumeSample(workerVolume?.snapshotTimestampSeconds),
     ),
     scalarGauge(
-      'pavillion_database_size_bytes',
+      'pavillion_db_size_bytes',
       'On-disk size in bytes of the application database.',
       metrics.databaseSizeBytes,
     ),
@@ -146,14 +179,22 @@ export function renderOpenMetrics(metrics: OperationalMetrics): string {
  * publish, which makes "private by default" a property of the code rather than
  * of a proxy configuration an operator may or may not be running.
  *
- * The listener binds 0.0.0.0 inside the container — the boundary is compose
- * non-publication, not the bind address, so a companion monitoring container on
- * the same network can still reach it.
+ * The listener binds the configured address (0.0.0.0 inside the container) —
+ * the boundary is compose non-publication, not the bind address, so a
+ * companion monitoring container on the same network can still reach it.
+ *
+ * The surface is versionless (`api/metrics.ts`, not `api/v1/`) on purpose.
+ * What an operator's alert rules bind to is the metric names, not the URL:
+ * scrapers configure a path once and key everything on series identity, so
+ * versioning the path would move the contract to where nothing reads it while
+ * leaving the names — the thing that actually cannot change — unversioned.
  */
 export default class MetricsRoutes {
   private housekeepingInterface: HousekeepingInterface;
   private cacheTtlMs: number;
-  private cached: { body: string, expiresAt: number } | null = null;
+  // Holds the in-flight render, not the finished string, so concurrent misses
+  // share one collection. See renderCached.
+  private cached: { body: Promise<string>, expiresAt: number } | null = null;
 
   constructor(housekeepingInterface: HousekeepingInterface, cacheTtlMs: number = DEFAULT_CACHE_TTL_MS) {
     this.housekeepingInterface = housekeepingInterface;
@@ -168,7 +209,9 @@ export default class MetricsRoutes {
    * @returns An unstarted HTTP server bound to this handler
    */
   createServer(): http.Server {
-    return http.createServer(this.handleRequest);
+    const server = http.createServer(this.handleRequest);
+    server.maxConnections = MAX_CONNECTIONS;
+    return server;
   }
 
   /**
@@ -185,13 +228,17 @@ export default class MetricsRoutes {
     try {
       const method = req.method ?? '';
       if (method !== 'GET' && method !== 'HEAD') {
-        res.writeHead(405, { 'Allow': 'GET, HEAD', 'Content-Type': 'text/plain; charset=utf-8' });
+        res.writeHead(405, {
+          'Allow': 'GET, HEAD',
+          'Content-Type': 'text/plain; charset=utf-8',
+          ...SECURITY_HEADERS,
+        });
         res.end('Method Not Allowed\n');
         return;
       }
 
       if ((req.url ?? '').split('?')[0] !== METRICS_PATH) {
-        res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+        res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8', ...SECURITY_HEADERS });
         res.end('Not Found\n');
         return;
       }
@@ -202,6 +249,7 @@ export default class MetricsRoutes {
         'Content-Type': METRICS_CONTENT_TYPE,
         'Content-Length': Buffer.byteLength(body),
         'Cache-Control': 'no-store',
+        ...SECURITY_HEADERS,
       });
       res.end(method === 'HEAD' ? undefined : body);
     }
@@ -210,7 +258,7 @@ export default class MetricsRoutes {
       // response to a caller this endpoint cannot authenticate.
       logger.error({ err: error }, 'Failed to serve operational metrics');
       if (!res.headersSent) {
-        res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
+        res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8', ...SECURITY_HEADERS });
       }
       res.end('Internal Server Error\n');
     }
@@ -219,16 +267,39 @@ export default class MetricsRoutes {
   /**
    * Renders the exposition, reusing a recent render within the cache TTL.
    *
+   * The cache slot holds the in-flight promise rather than the finished
+   * string, so concurrent scrapes that arrive during a miss all await one
+   * collection. Caching only the settled value would let N simultaneous
+   * requests each run a full collection — and a collection opens a raw,
+   * unpooled PostgreSQL connection for the pg-boss counts, so enough parallel
+   * scrapes could exhaust max_connections and starve the main application.
+   * That is the cheaper version of exactly the abuse this cache exists to
+   * prevent.
+   *
+   * A failed collection clears the slot rather than being cached: a stale
+   * render served as if current would defeat the snapshot-staleness signal
+   * this endpoint publishes.
+   *
    * @returns The exposition document
    */
-  private async renderCached(): Promise<string> {
+  private renderCached(): Promise<string> {
     const now = Date.now();
     if (this.cached && this.cached.expiresAt > now) {
       return this.cached.body;
     }
 
-    const body = renderOpenMetrics(await this.housekeepingInterface.getOperationalMetrics());
-    this.cached = { body, expiresAt: now + this.cacheTtlMs };
+    const body = this.housekeepingInterface.getOperationalMetrics().then(renderOpenMetrics);
+    const slot = { body, expiresAt: now + this.cacheTtlMs };
+    this.cached = slot;
+
+    // Do not let a failure stick around until the TTL expires. The rejection
+    // is still delivered to every awaiting caller; this handler only evicts.
+    body.catch(() => {
+      if (this.cached === slot) {
+        this.cached = null;
+      }
+    });
+
     return body;
   }
 }

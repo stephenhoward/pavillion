@@ -50,3 +50,12 @@ rateLimit:
 calendar:
   import:
     hmacSecret: 'development-only-hmac-secret-do-not-use-in-production'
+
+# `npm run dev` runs the server directly on the developer's machine, not in a
+# container, so the compose-non-publication boundary does not apply. Bind the
+# unauthenticated metrics listener to loopback rather than putting it on
+# whatever network the laptop is attached to.
+housekeeping:
+  monitoring:
+    metrics:
+      bindAddress: '127.0.0.1'

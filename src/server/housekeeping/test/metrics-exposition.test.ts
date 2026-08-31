@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 
 import { renderOpenMetrics } from '@/server/housekeeping/api/metrics';
-import { OperationalMetrics } from '@/server/housekeeping/service/metrics';
+import { OperationalMetrics, METRIC_FAMILY_PREFIXES } from '@/server/housekeeping/service/metrics';
 
 /**
  * Parses an exposition document into the sample lines it declares, so tests
@@ -27,7 +27,8 @@ function declaredFamilies(document: string): string[] {
 
 const fullMetrics: OperationalMetrics = {
   backup: { lastSuccessTimestampSeconds: 1756000000, lastSuccessSizeBytes: 5242880 },
-  backupVolume: {
+  workerVolume: {
+    statKey: 'backup_path',
     totalBytes: 1000, freeBytes: 600, usedBytes: 400, snapshotTimestampSeconds: 1756003600,
   },
   databaseSizeBytes: 78901234,
@@ -40,7 +41,7 @@ const fullMetrics: OperationalMetrics = {
 
 const emptyMetrics: OperationalMetrics = {
   backup: null,
-  backupVolume: null,
+  workerVolume: null,
   databaseSizeBytes: null,
   mediaVolume: null,
   queues: null,
@@ -63,12 +64,53 @@ describe('OpenMetrics exposition', () => {
     }
   });
 
-  it('names every series under the pavillion_ prefix', () => {
+  it('names every series inside a declared metric family', () => {
     const document = renderOpenMetrics(fullMetrics);
 
+    // The `pavillion_` prefix alone is too weak an anchor: a name can carry it
+    // and still invent a family nobody declared, which is how
+    // pavillion_database_size_bytes drifted out of pavillion_db_*. The
+    // families are the operator contract, so assert against them.
     const families = declaredFamilies(document);
     expect(families.length).toBeGreaterThan(0);
-    expect(families.every((family) => family.startsWith('pavillion_'))).toBe(true);
+    for (const family of families) {
+      const prefix = METRIC_FAMILY_PREFIXES.find((candidate) => family.startsWith(candidate));
+      expect(prefix, `${family} belongs to no declared metric family`).toBeDefined();
+      // A bare prefix with nothing after it is not a metric name.
+      expect(family.length).toBeGreaterThan(prefix!.length);
+    }
+  });
+
+  it('certifies the worker-measured volume series with a matching stat_key', () => {
+    const parsed = samples(renderOpenMetrics(fullMetrics));
+
+    // The staleness series must be joinable to what it certifies: same family
+    // prefix, same label, so the operator's alert is a label match rather than
+    // a memorised pairing of unrelated names.
+    expect(parsed['pavillion_disk_snapshot_timestamp_seconds{stat_key="backup_path"}']).toBeDefined();
+    expect(parsed['pavillion_disk_free_bytes{stat_key="backup_path"}']).toBeDefined();
+  });
+
+  it('labels worker-measured volumes so a second filesystem is additive', () => {
+    const document = renderOpenMetrics({
+      ...fullMetrics,
+      workerVolume: { ...fullMetrics.workerVolume!, statKey: 'archive_path' },
+    });
+
+    // A different filesystem changes only the label value, never the series
+    // name — so measuring a second one cannot alter the identity of an
+    // already-published series.
+    expect(declaredFamilies(document)).toContain('pavillion_disk_total_bytes');
+    expect(samples(document)['pavillion_disk_total_bytes{stat_key="archive_path"}']).toBe(1000);
+  });
+
+  it('emits no filesystem path, only the snapshot key', () => {
+    const document = renderOpenMetrics(fullMetrics);
+
+    // DiskSnapshot carries `path` into the web process; it must never reach a
+    // scrape. Host filesystem layout is not operational telemetry.
+    expect(document).not.toContain('/backups');
+    expect(document).not.toContain('path="');
   });
 
   it('renders the collected values as their declared series', () => {
@@ -76,11 +118,11 @@ describe('OpenMetrics exposition', () => {
 
     expect(parsed['pavillion_backup_last_success_timestamp_seconds']).toBe(1756000000);
     expect(parsed['pavillion_backup_last_success_size_bytes']).toBe(5242880);
-    expect(parsed['pavillion_backup_volume_total_bytes']).toBe(1000);
-    expect(parsed['pavillion_backup_volume_free_bytes']).toBe(600);
-    expect(parsed['pavillion_backup_volume_used_bytes']).toBe(400);
-    expect(parsed['pavillion_disk_snapshot_timestamp_seconds']).toBe(1756003600);
-    expect(parsed['pavillion_database_size_bytes']).toBe(78901234);
+    expect(parsed['pavillion_disk_total_bytes{stat_key="backup_path"}']).toBe(1000);
+    expect(parsed['pavillion_disk_free_bytes{stat_key="backup_path"}']).toBe(600);
+    expect(parsed['pavillion_disk_used_bytes{stat_key="backup_path"}']).toBe(400);
+    expect(parsed['pavillion_disk_snapshot_timestamp_seconds{stat_key="backup_path"}']).toBe(1756003600);
+    expect(parsed['pavillion_db_size_bytes']).toBe(78901234);
     expect(parsed['pavillion_media_volume_total_bytes']).toBe(500);
     expect(parsed['pavillion_media_volume_free_bytes']).toBe(300);
     expect(parsed['pavillion_media_volume_used_bytes']).toBe(200);
@@ -105,20 +147,20 @@ describe('OpenMetrics exposition', () => {
   });
 
   it('omits a family whose source failed without defaulting it to zero', () => {
-    const document = renderOpenMetrics({ ...fullMetrics, backupVolume: null, queues: null });
+    const document = renderOpenMetrics({ ...fullMetrics, workerVolume: null, queues: null });
     const parsed = samples(document);
 
-    expect(parsed['pavillion_backup_volume_total_bytes']).toBeUndefined();
-    expect(parsed['pavillion_disk_snapshot_timestamp_seconds']).toBeUndefined();
+    expect(parsed['pavillion_disk_total_bytes{stat_key="backup_path"}']).toBeUndefined();
+    expect(parsed['pavillion_disk_snapshot_timestamp_seconds{stat_key="backup_path"}']).toBeUndefined();
     expect(declaredFamilies(document)).not.toContain('pavillion_queue_depth');
     expect(declaredFamilies(document)).not.toContain('pavillion_queue_failed_jobs');
   });
 
   it('keeps sibling metrics intact when one family is absent', () => {
-    const parsed = samples(renderOpenMetrics({ ...fullMetrics, backupVolume: null, queues: null }));
+    const parsed = samples(renderOpenMetrics({ ...fullMetrics, workerVolume: null, queues: null }));
 
     expect(parsed['pavillion_backup_last_success_size_bytes']).toBe(5242880);
-    expect(parsed['pavillion_database_size_bytes']).toBe(78901234);
+    expect(parsed['pavillion_db_size_bytes']).toBe(78901234);
     expect(parsed['pavillion_media_volume_used_bytes']).toBe(200);
   });
 

@@ -135,7 +135,7 @@ describe('Admin status disk panel reads the worker snapshot', () => {
       series[line.slice(0, separator)] = line.slice(separator + 1);
     }
 
-    expect(series['pavillion_backup_volume_total_bytes']).toBe(status.body.diskUsage.totalBytes);
-    expect(series['pavillion_backup_volume_free_bytes']).toBe(status.body.diskUsage.freeBytes);
+    expect(series['pavillion_disk_total_bytes{stat_key="backup_path"}']).toBe(status.body.diskUsage.totalBytes);
+    expect(series['pavillion_disk_free_bytes{stat_key="backup_path"}']).toBe(status.body.diskUsage.freeBytes);
   });
 });

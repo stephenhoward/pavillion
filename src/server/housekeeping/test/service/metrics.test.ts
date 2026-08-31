@@ -45,7 +45,7 @@ describe('MetricsService', () => {
     const metrics = await new MetricsService().collect();
 
     expect(metrics.backup).toBeNull();
-    expect(metrics.backupVolume).toBeNull();
+    expect(metrics.workerVolume).toBeNull();
     expect(metrics.databaseSizeBytes).toBeNull();
     expect(metrics.mediaVolume).toBeNull();
     // The queue query succeeded and found no rows, which is a real zero.
@@ -82,7 +82,8 @@ describe('MetricsService', () => {
 
     const metrics = await new MetricsService().collect();
 
-    expect(metrics.backupVolume).toEqual({
+    expect(metrics.workerVolume).toEqual({
+      statKey: BACKUP_PATH_STAT_KEY,
       totalBytes: 1000,
       freeBytes: 600,
       usedBytes: 400,
@@ -131,7 +132,7 @@ describe('MetricsService', () => {
 
     const metrics = await new MetricsService().collect();
 
-    expect(metrics.backupVolume).toBeNull();
+    expect(metrics.workerVolume).toBeNull();
     expect(metrics.databaseSizeBytes).toBeNull();
     expect(metrics.queues).toBeNull();
     // The one healthy source still reports.

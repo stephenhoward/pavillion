@@ -313,6 +313,13 @@ housekeeping:
     metrics:
       enabled: true
       port: 9464
+      # 0.0.0.0 is correct inside a container, where compose non-publication is
+      # the boundary and a companion monitoring container on the compose
+      # network must be able to reach the port. An operator running the process
+      # directly on a host should pin this to 127.0.0.1 — there, 0.0.0.0 would
+      # put an unauthenticated endpoint on the LAN. config/development.yaml
+      # does exactly that.
+      bindAddress: '0.0.0.0'
   inbox:
     retentionDays: 30
     batchSize: 1000
