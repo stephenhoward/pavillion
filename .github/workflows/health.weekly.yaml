@@ -27,7 +27,7 @@ env:
   # Vendored code, build output, and agent worktrees are not this project's
   # attack surface; scanning them buys noise. Mirrors the skip list used by the
   # /trivy-scan command in the pavillion-security repo.
-  SKIP_DIRS: node_modules,dist,coverage,playwright-report,test-results,.playwright-mcp,.claude/worktrees,.serena,.tmp,.beads/backup
+  SKIP_DIRS: node_modules,dist,coverage,playwright-report,test-results,.playwright-mcp,.agents/worktrees,.serena,.tmp,.beads/backup
 
 jobs:
   trivy:

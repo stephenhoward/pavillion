@@ -27,7 +27,7 @@ agent-os/product/*
 .dolt/
 *.db
 .beads-credential-key
-.claude/worktrees/
+.agents/worktrees/
 
 # /plan scratchpad — ephemeral working drafts deleted when their bead is written
 docs/.scratch/

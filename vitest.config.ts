@@ -15,6 +15,7 @@ const sharedExclude = [
   '**/server/**/test/integration/**',
   // Exclude git worktrees used by subagents — stale tests from old worktrees
   // should never be collected in the main project's test run.
+  '**/.agents/worktrees/**',
   '**/.claude/worktrees/**',
 ];
 
@@ -54,14 +55,14 @@ export default defineConfig({
           },
           teardownTimeout: 15000,
           // Skill-bundled tests are opted in one skill at a time, never by a
-          // blanket `.claude/skills/**`: some skills ship integration-tier
+          // blanket `.agents/skills/**`: some skills ship integration-tier
           // tests (git-cleanup spawns a real `git` binary) that belong outside
-          // the unit run, and `.claude/worktrees/**` must never be collected.
+          // the unit run, and `.agents/worktrees/**` must never be collected.
           include: [
             'src/**/*.test.ts',
             'src/**/*.test.tsx',
             'scripts/**/*.test.ts',
-            '.claude/skills/triage-health/**/*.test.ts',
+            '.agents/skills/triage-health/**/*.test.ts',
           ],
           exclude: [
             ...sharedExclude,
