@@ -303,6 +303,16 @@ housekeeping:
       warning_threshold: 80
       critical_threshold: 90
       check_interval: '0 * * * *'  # Hourly
+    # OpenMetrics endpoint for operational monitoring. Served on its own HTTP
+    # listener, never on the main application port: the app service publishes
+    # its port on the host in the default deployment, so anything on the main
+    # listener is public. This port is deliberately NOT published by
+    # docker-compose.yml — reachable from the compose network (a companion
+    # monitoring container) but not from the host. The endpoint has no
+    # authentication of its own; exposing it is an operator's deliberate act.
+    metrics:
+      enabled: true
+      port: 9464
   inbox:
     retentionDays: 30
     batchSize: 1000

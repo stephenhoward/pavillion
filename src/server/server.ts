@@ -1,6 +1,7 @@
 import express, { Request, Response } from 'express';
 import { Server } from 'http';
 import path from "path";
+import config from 'config';
 import helmet from 'helmet';
 import handlebars from 'handlebars';
 import i18next from 'i18next';
@@ -19,6 +20,8 @@ import CalendarDomain from '@/server/calendar';
 import ConfigurationDomain from './configuration';
 import EmailDomain from './email';
 import HousekeepingDomain from './housekeeping';
+import HousekeepingInterface from '@/server/housekeeping/interface';
+import MetricsRoutes from '@/server/housekeeping/api/metrics';
 import ModerationDomain from './moderation';
 import NotificationsDomain from './notifications';
 import PublicCalendarDomain from './public';
@@ -172,6 +175,39 @@ function setupHealthCheck(app: express.Application): void {
 
     res.status(dbHealthy ? 200 : 503).json(healthStatus);
   });
+}
+
+/**
+ * Starts the operational metrics listener on its own HTTP server.
+ *
+ * Deliberately not a route on `app`: the app service publishes its port on the
+ * host in the default deployment, so a /metrics route there would be public on
+ * every instance that has not put a proxy in front of it. A separate listener
+ * that docker-compose.yml does not publish makes privacy a property of this
+ * code rather than of an operator's proxy configuration.
+ *
+ * Binds 0.0.0.0 inside the container on purpose. The boundary is compose
+ * non-publication; binding loopback would also cut off a companion monitoring
+ * container on the compose network, which is the pattern this endpoint exists
+ * to serve.
+ *
+ * @param housekeepingInterface - Source of the metric values
+ * @returns The listening server, or null when metrics are disabled
+ */
+function startMetricsListener(housekeepingInterface: HousekeepingInterface): Server | null {
+  if (!config.get<boolean>('housekeeping.monitoring.metrics.enabled')) {
+    logger.info('Metrics listener disabled by configuration');
+    return null;
+  }
+
+  const port = config.get<number>('housekeeping.monitoring.metrics.port');
+  const server = new MetricsRoutes(housekeepingInterface).createServer();
+
+  server.listen(port, '0.0.0.0', () => {
+    logger.info({ port }, 'Metrics listener listening (not published to the host by default)');
+  });
+
+  return server;
 }
 
 /**
@@ -391,11 +427,14 @@ const initPavillionServer = async (app: express.Application, port: number): Prom
         logger.info({ port }, 'Pavillion listening');
       });
 
+      const metricsServer = startMetricsListener(housekeepingDomain.interface);
+
       // Add graceful shutdown handlers for clean server termination
       if (process.env.NODE_ENV === 'e2e') {
         // Lightweight shutdown for e2e: close server and exit immediately
         // The test helper sends SIGTERM and waits 5s before SIGKILL
         const shutdownE2e = () => {
+          metricsServer?.close();
           server.close(() => process.exit(0));
           setTimeout(() => process.exit(0), 2000).unref();
         };
@@ -407,6 +446,10 @@ const initPavillionServer = async (app: express.Application, port: number): Prom
           logger.info({ signal }, 'Received signal, starting graceful shutdown');
 
           try {
+            // Stop accepting scrapes before the database goes away, so a
+            // request in flight cannot outlive its data source.
+            metricsServer?.close(() => logger.info('Metrics listener closed.'));
+
             // Close database connections first
             await db.close();
             logger.info('Database connection closed.');
@@ -445,4 +488,4 @@ const initPavillionServer = async (app: express.Application, port: number): Prom
 };
 
 export default initPavillionServer;
-export { checkDatabaseHealth, setupHealthCheck, validateProductionEnvironment, configureProxy };
+export { checkDatabaseHealth, setupHealthCheck, validateProductionEnvironment, configureProxy, startMetricsListener };
