@@ -87,6 +87,63 @@ describe('Docker Configuration', () => {
     });
   });
 
+  describe('docker-compose.yml metrics listener exposure', () => {
+    /** The port the app process serves OpenMetrics on, from shipped config. */
+    function configuredMetricsPort(): string {
+      const defaults = parseYaml(readFileSync('config/default.yaml', 'utf-8'));
+      return String(defaults.housekeeping.monitoring.metrics.port);
+    }
+
+    it('should not publish the metrics port from any service', () => {
+      const config = parseYaml(readFileSync('docker-compose.yml', 'utf-8'));
+      const metricsPort = configuredMetricsPort();
+
+      // Privacy of the metrics endpoint rests on this: the listener binds
+      // 0.0.0.0 inside the container so a companion monitoring container can
+      // reach it, and nothing but non-publication keeps it off the host.
+      const published: string[] = Object.values(config.services)
+        .flatMap((service: any) => service.ports ?? [])
+        .map((mapping: unknown) => String(mapping));
+
+      // Guard against the assertion passing because nothing is published at all.
+      expect(published.length).toBeGreaterThan(0);
+      for (const mapping of published) {
+        expect(mapping).not.toContain(metricsPort);
+      }
+    });
+
+    it('should publish only the application port from the app service', () => {
+      const config = parseYaml(readFileSync('docker-compose.yml', 'utf-8'));
+
+      // The app container runs the metrics listener alongside the web server;
+      // only the web port may reach the host.
+      expect(config.services.app.ports).toEqual(['${APP_PORT:-3000}:3000']);
+    });
+
+    it('should not publish the metrics port from the development compose file', () => {
+      const config = parseYaml(readFileSync('docker-compose.dev.yml', 'utf-8'));
+      const metricsPort = configuredMetricsPort();
+
+      const published: string[] = Object.values(config.services ?? {})
+        .flatMap((service: any) => service.ports ?? [])
+        .map((mapping: unknown) => String(mapping));
+
+      for (const mapping of published) {
+        expect(mapping).not.toContain(metricsPort);
+      }
+    });
+
+    it('should not route the metrics path through the bundled reverse proxy', () => {
+      const caddyfile = readFileSync('Caddyfile', 'utf-8');
+      const metricsPort = configuredMetricsPort();
+
+      // Standalone deployments front the app with Caddy; it must not become
+      // the thing that publishes what compose deliberately withheld.
+      expect(caddyfile).not.toContain('/metrics');
+      expect(caddyfile).not.toContain(metricsPort);
+    });
+  });
+
   describe('docker-compose.yml autoheal service', () => {
     it('should pin the autoheal image by digest', () => {
       const composeContent = readFileSync('docker-compose.yml', 'utf-8');
