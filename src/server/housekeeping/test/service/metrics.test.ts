@@ -7,7 +7,12 @@ import { BackupEntity } from '@/server/housekeeping/entity/backup';
 import DiskMonitorService from '@/server/housekeeping/service/disk-monitor';
 import DiskSnapshotService, { BACKUP_PATH_STAT_KEY } from '@/server/housekeeping/service/disk-snapshot';
 import JobQueueService from '@/server/housekeeping/service/job-queue';
-import MetricsService, { MONITORED_QUEUES, FAILED_JOB_WINDOW_HOURS } from '@/server/housekeeping/service/metrics';
+import MetricsService, {
+  MONITORED_QUEUES,
+  FAILED_JOB_WINDOW_HOURS,
+  BACKUP_VOLUME_LABEL,
+  MEDIA_VOLUME_LABEL,
+} from '@/server/housekeeping/service/metrics';
 
 /**
  * Unit coverage for the metric collector's two absence causes and its failure
@@ -45,7 +50,7 @@ describe('MetricsService', () => {
     const metrics = await new MetricsService().collect();
 
     expect(metrics.backup).toBeNull();
-    expect(metrics.workerVolume).toBeNull();
+    expect(metrics.backupVolume).toBeNull();
     expect(metrics.databaseSizeBytes).toBeNull();
     expect(metrics.mediaVolume).toBeNull();
     // The queue query succeeded and found no rows, which is a real zero.
@@ -82,8 +87,8 @@ describe('MetricsService', () => {
 
     const metrics = await new MetricsService().collect();
 
-    expect(metrics.workerVolume).toEqual({
-      statKey: BACKUP_PATH_STAT_KEY,
+    expect(metrics.backupVolume).toEqual({
+      volume: BACKUP_VOLUME_LABEL,
       totalBytes: 1000,
       freeBytes: 600,
       usedBytes: 400,
@@ -117,7 +122,9 @@ describe('MetricsService', () => {
     const metrics = await new MetricsService().collect();
 
     expect(statfs.calledWith('/app/storage/media')).toBe(true);
-    expect(metrics.mediaVolume).toEqual({ totalBytes: 500, freeBytes: 300, usedBytes: 200 });
+    expect(metrics.mediaVolume).toEqual({
+      volume: MEDIA_VOLUME_LABEL, totalBytes: 500, freeBytes: 300, usedBytes: 200,
+    });
   });
 
   it('omits only the failing family and leaves its siblings intact', async () => {
@@ -132,7 +139,7 @@ describe('MetricsService', () => {
 
     const metrics = await new MetricsService().collect();
 
-    expect(metrics.workerVolume).toBeNull();
+    expect(metrics.backupVolume).toBeNull();
     expect(metrics.databaseSizeBytes).toBeNull();
     expect(metrics.queues).toBeNull();
     // The one healthy source still reports.

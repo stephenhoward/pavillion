@@ -35,21 +35,16 @@ export const MONITORED_QUEUES = [
 export const FAILED_JOB_WINDOW_HOURS = 24;
 
 /**
- * The metric families the project has declared (DEC-017 rule 4), reserving
- * `pavillion_federation_` for future work.
+ * Label values for the `volume` dimension of the `pavillion_disk_*` family.
  *
- * Every published series name must sit inside one of these. The families are
- * the operator contract, not merely the `pavillion_` prefix: a name outside
- * them is a family nobody agreed to, and renaming it after publication costs
- * a deprecation note plus an alert that quietly stops firing.
+ * Fixed constants emitted directly into the exposition, never values read
+ * back from storage. That is what keeps "every label value comes from a set
+ * enumerable in the code" literally true rather than transitively true, and it
+ * keeps the snapshot table's `stat_key` column vocabulary out of a frozen
+ * operator contract.
  */
-export const METRIC_FAMILY_PREFIXES = [
-  'pavillion_backup_',
-  'pavillion_disk_',
-  'pavillion_db_',
-  'pavillion_media_',
-  'pavillion_queue_',
-] as const;
+export const BACKUP_VOLUME_LABEL = 'backups';
+export const MEDIA_VOLUME_LABEL = 'media';
 
 /** Last verified backup. Absent when no verified backup exists yet. */
 export interface BackupMetrics {
@@ -58,28 +53,27 @@ export interface BackupMetrics {
   lastSuccessSizeBytes: number;
 }
 
-/** Filesystem usage for one volume. */
+/**
+ * Usage for one filesystem.
+ *
+ * `volume` becomes the series label, so monitoring another filesystem adds a
+ * label value rather than changing the identity of an already-published
+ * series. The shape is the same whichever process took the reading: family
+ * membership follows what a series measures, never who measured it, so a
+ * volume that later moves worker-side keeps its series names.
+ */
 export interface VolumeMetrics {
+  /** Volume label value, from the fixed set of `*_VOLUME_LABEL` constants. */
+  volume: string;
   totalBytes: number;
   freeBytes: number;
   usedBytes: number;
-}
-
-/**
- * Usage for a filesystem the worker measured on the web process's behalf,
- * plus the age of the snapshot it came from.
- *
- * `statKey` becomes the series label, so measuring a second filesystem
- * worker-side adds label values rather than changing the identity of an
- * already-published series. Only one filesystem is measured today; when a
- * second appears this field becomes a list, which does not change the wire
- * contract.
- */
-export interface WorkerVolumeMetrics extends VolumeMetrics {
-  /** Snapshot key, exposed as the series label (e.g. 'backup_path'). */
-  statKey: string;
-  /** Unix seconds at which the worker measured these values. */
-  snapshotTimestampSeconds: number;
+  /**
+   * Unix seconds at which a worker snapshot measured this volume. Absent for
+   * a volume the web process measures live, which simply has no timestamp
+   * series for its label value — the ordinary absent-series rule.
+   */
+  snapshotTimestampSeconds?: number;
 }
 
 /** Aggregate job counts for one queue. Counts only, never job detail. */
@@ -99,9 +93,14 @@ export interface QueueMetrics {
  */
 export interface OperationalMetrics {
   backup: BackupMetrics | null;
-  workerVolume: WorkerVolumeMetrics | null;
-  databaseSizeBytes: number | null;
+  /**
+   * Volumes are separate fields rather than one list so a failure in either
+   * source stays isolated to its own label value; the exposition joins them
+   * into a single labelled family.
+   */
+  backupVolume: VolumeMetrics | null;
   mediaVolume: VolumeMetrics | null;
+  databaseSizeBytes: number | null;
   /** Null when queue state could not be read at all; never a partial list. */
   queues: QueueMetrics[] | null;
 }
@@ -131,15 +130,15 @@ export default class MetricsService {
    * @returns The operational metric values, with an absent family as null
    */
   async collect(now: Date = new Date()): Promise<OperationalMetrics> {
-    const [backup, workerVolume, databaseSizeBytes, mediaVolume, queues] = await Promise.all([
+    const [backup, backupVolume, databaseSizeBytes, mediaVolume, queues] = await Promise.all([
       this.isolate('backup', () => this.getBackupMetrics()),
-      this.isolate('workerVolume', () => this.getWorkerVolumeMetrics()),
+      this.isolate('backupVolume', () => this.getBackupVolumeMetrics()),
       this.isolate('databaseSize', () => this.getDatabaseSizeBytes()),
       this.isolate('mediaVolume', () => this.getMediaVolumeMetrics()),
       this.isolate('queues', () => this.getQueueMetrics(now)),
     ]);
 
-    return { backup, workerVolume, databaseSizeBytes, mediaVolume, queues };
+    return { backup, backupVolume, mediaVolume, databaseSizeBytes, queues };
   }
 
   /**
@@ -190,17 +189,18 @@ export default class MetricsService {
    * The web process cannot statfs the backup path — the volume is mounted
    * into the worker container only — so the snapshot table is the only source.
    */
-  private async getWorkerVolumeMetrics(): Promise<WorkerVolumeMetrics | null> {
+  private async getBackupVolumeMetrics(): Promise<VolumeMetrics | null> {
     const snapshot = await this.diskSnapshots.getSnapshot(BACKUP_PATH_STAT_KEY);
     if (!snapshot) {
       return null;
     }
 
     return {
-      // Deliberately the snapshot key, not `snapshot.path`: the key is a
-      // stable in-code identifier, while the path is host filesystem layout
-      // that has no business in a scrapeable series.
-      statKey: snapshot.statKey,
+      // The in-code constant, not anything read back from the row. Neither
+      // `snapshot.statKey` (storage vocabulary that would leak a column name
+      // into a frozen contract) nor `snapshot.path` (host filesystem layout,
+      // which is not telemetry) belongs in a published label.
+      volume: BACKUP_VOLUME_LABEL,
       totalBytes: snapshot.totalBytes,
       freeBytes: snapshot.freeBytes,
       usedBytes: snapshot.usedBytes,
@@ -224,8 +224,14 @@ export default class MetricsService {
   /**
    * Measures the media volume, which does mount on the app container.
    *
+   * Read live here rather than from a snapshot, which is why this volume
+   * carries no `snapshotTimestampSeconds` — an implementation difference that
+   * deliberately does not reach the series names. Should media ever move
+   * worker-side it keeps its series and gains a timestamp for its label value.
+   *
    * Returns null for object-storage deployments: there is no local volume to
-   * report on, and a zero would misrepresent that as an empty disk.
+   * report on, and a zero would misrepresent that as an empty disk. The
+   * `volume="media"` label value simply does not appear.
    */
   private async getMediaVolumeMetrics(): Promise<VolumeMetrics | null> {
     if (config.get<string>('media.storage.driver') !== 'local') {
@@ -237,6 +243,7 @@ export default class MetricsService {
     const usage = await this.diskMonitor.checkDiskUsage(resolved);
 
     return {
+      volume: MEDIA_VOLUME_LABEL,
       totalBytes: Number(usage.totalBytes),
       freeBytes: Number(usage.freeBytes),
       usedBytes: Number(usage.usedBytes),

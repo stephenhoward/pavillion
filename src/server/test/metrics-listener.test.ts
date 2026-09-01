@@ -22,7 +22,7 @@ describe('startMetricsListener', () => {
 
   const housekeepingInterface = {
     getOperationalMetrics: async () => ({
-      backup: null, workerVolume: null, databaseSizeBytes: 42, mediaVolume: null, queues: null,
+      backup: null, backupVolume: null, mediaVolume: null, databaseSizeBytes: 42, mediaVolume: null, queues: null,
     }),
   } as unknown as HousekeepingInterface;
 

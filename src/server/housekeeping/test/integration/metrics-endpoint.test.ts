@@ -109,10 +109,10 @@ describe('Operational metrics endpoint', () => {
 
     const parsed = samples(await (await fetch(`${baseUrl}/metrics`)).text());
 
-    expect(parsed['pavillion_disk_total_bytes{stat_key="backup_path"}']).toBe(1000);
-    expect(parsed['pavillion_disk_free_bytes{stat_key="backup_path"}']).toBe(600);
-    expect(parsed['pavillion_disk_used_bytes{stat_key="backup_path"}']).toBe(400);
-    expect(parsed['pavillion_disk_snapshot_timestamp_seconds{stat_key="backup_path"}'])
+    expect(parsed['pavillion_disk_total_bytes{volume="backups"}']).toBe(1000);
+    expect(parsed['pavillion_disk_free_bytes{volume="backups"}']).toBe(600);
+    expect(parsed['pavillion_disk_used_bytes{volume="backups"}']).toBe(400);
+    expect(parsed['pavillion_disk_snapshot_timestamp_seconds{volume="backups"}'])
       .toBe(Math.floor(snapshotWrittenAt.getTime() / 1000));
   });
 
@@ -140,7 +140,7 @@ describe('Operational metrics endpoint', () => {
     const parsed = samples(await (await fetch(`${baseUrl}/metrics`)).text());
 
     // No worker snapshot exists, but the backup series still reports.
-    expect(parsed['pavillion_disk_total_bytes{stat_key="backup_path"}']).toBeUndefined();
+    expect(parsed['pavillion_disk_total_bytes{volume="backups"}']).toBeUndefined();
     expect(parsed['pavillion_backup_last_success_size_bytes']).toBe(99);
   });
 
@@ -220,7 +220,7 @@ describe('Operational metrics endpoint', () => {
 
     // The snapshot row persists `path` and DiskSnapshot carries it into the
     // web process; the exposition must stop it at the boundary.
-    expect(body).toContain('stat_key="backup_path"');
+    expect(body).toContain('volume="backups"');
     expect(body).not.toContain('/backups');
   });
 
@@ -229,7 +229,7 @@ describe('Operational metrics endpoint', () => {
     const counting = {
       getOperationalMetrics: async () => {
         collections++;
-        return { backup: null, workerVolume: null, databaseSizeBytes: 1, mediaVolume: null, queues: null };
+        return { backup: null, backupVolume: null, databaseSizeBytes: 1, mediaVolume: null, queues: null };
       },
     } as unknown as HousekeepingInterface;
 
@@ -256,7 +256,7 @@ describe('Operational metrics endpoint', () => {
         collections++;
         // Long enough that every request below arrives before this resolves.
         await new Promise((resolve) => setTimeout(resolve, 50));
-        return { backup: null, workerVolume: null, databaseSizeBytes: 1, mediaVolume: null, queues: null };
+        return { backup: null, backupVolume: null, databaseSizeBytes: 1, mediaVolume: null, queues: null };
       },
     } as unknown as HousekeepingInterface;
 
@@ -289,7 +289,7 @@ describe('Operational metrics endpoint', () => {
         if (attempts === 1) {
           throw new Error('transient');
         }
-        return { backup: null, workerVolume: null, databaseSizeBytes: 7, mediaVolume: null, queues: null };
+        return { backup: null, backupVolume: null, databaseSizeBytes: 7, mediaVolume: null, queues: null };
       },
     } as unknown as HousekeepingInterface;
 

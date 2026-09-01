@@ -38,9 +38,42 @@ const SECURITY_HEADERS = {
 } as const;
 
 /**
- * Escapes a label value per the OpenMetrics text grammar. Queue labels come
- * from a fixed in-code list, so this can never fire today — it is here so a
- * future label source cannot produce an unparseable document.
+ * The metric families this project has declared (DEC-017 rule 4).
+ *
+ * Every published series name must sit inside one of these. The families are
+ * the operator contract, not merely the `pavillion_` prefix: a name outside
+ * them is a family nobody agreed to, and renaming it after publication costs
+ * a deprecation note plus an alert that quietly stops firing.
+ *
+ * Family membership follows what a series measures, never which process
+ * measured it — so every filesystem is `pavillion_disk_*` whether the reading
+ * came from a worker snapshot or a live statfs, and `pavillion_media_*` is
+ * reserved for non-filesystem media quantities.
+ *
+ * `pavillion_federation_` is deliberately absent though DEC-017 reserves the
+ * name: a future federation series should have to amend this declaration
+ * rather than inherit permission from a reservation.
+ *
+ * Enforced at build time by the exposition test rather than at runtime. Every
+ * name below is a static literal and no input can produce an undeclared one,
+ * so a runtime check would re-validate a constant on every scrape.
+ */
+export const METRIC_FAMILY_PREFIXES = [
+  'pavillion_backup_',
+  'pavillion_disk_',
+  'pavillion_db_',
+  'pavillion_media_',
+  'pavillion_queue_',
+] as const;
+
+/**
+ * Escapes a label value per the OpenMetrics text grammar.
+ *
+ * Cannot fire today: both label sources are fixed in-code constants — queue
+ * names from `MONITORED_QUEUES`, volume names from the `*_VOLUME_LABEL`
+ * constants the collector emits directly. Nothing read back from the database
+ * reaches a label. This exists so a future label source cannot produce an
+ * unparseable document.
  */
 function escapeLabelValue(value: string): string {
   return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n');
@@ -82,27 +115,32 @@ function scalarGauge(name: string, help: string, value: number | null | undefine
  * consumer cannot silently become a published series — someone has to come
  * here and add it deliberately.
  *
- * Every name sits inside one of the families declared by
- * `METRIC_FAMILY_PREFIXES` (see the metrics service), which is the operator
- * contract these names freeze into once the guide publishes them.
+ * Every name sits inside one of the {@link METRIC_FAMILY_PREFIXES} families,
+ * which is the operator contract these names freeze into once the guide
+ * publishes them.
  *
  * Nothing here reads calendars, events, accounts, or visitors. Every series
  * describes the instance's own operation. No filesystem path is emitted
- * either: worker-measured volumes are identified by snapshot key.
+ * either: volumes carry a fixed in-code label name.
  *
  * @param metrics - Collected operational values
  * @returns A complete OpenMetrics text document, terminated by `# EOF`
  */
 export function renderOpenMetrics(metrics: OperationalMetrics): string {
-  // Worker-measured filesystems are labelled by their snapshot key so a second
-  // one is additive — a new label value, not a new series name.
-  const workerVolume = metrics.workerVolume;
-  const workerVolumeLabels = workerVolume ? { stat_key: workerVolume.statKey } : undefined;
-  const workerVolumeSample = (value: number | undefined) => (
-    value === undefined || workerVolumeLabels === undefined
-      ? []
-      : [{ labels: workerVolumeLabels, value }]
-  );
+  // Every filesystem lands in one labelled family regardless of which process
+  // read it, so monitoring another one is additive — a new label value, not a
+  // new series name. Naming both fields here keeps the allow-list explicit: a
+  // third volume has to be added deliberately.
+  // Nullish rather than strictly null: a caller handing over a partial object
+  // should lose one label value, not the whole scrape.
+  const volumes = [metrics.backupVolume, metrics.mediaVolume]
+    .filter((volume): volume is NonNullable<typeof volume> => volume != null);
+
+  const volumeSamples = (read: (volume: (typeof volumes)[number]) => number | undefined) =>
+    volumes.flatMap((volume) => {
+      const value = read(volume);
+      return value === undefined ? [] : [{ labels: { volume: volume.volume }, value }];
+    });
 
   const families = [
     scalarGauge(
@@ -117,43 +155,28 @@ export function renderOpenMetrics(metrics: OperationalMetrics): string {
     ),
     gauge(
       'pavillion_disk_total_bytes',
-      'Total size in bytes of a filesystem the worker measures for the web process, by snapshot key.',
-      workerVolumeSample(workerVolume?.totalBytes),
+      'Total size in bytes of a monitored filesystem, by volume.',
+      volumeSamples((volume) => volume.totalBytes),
     ),
     gauge(
       'pavillion_disk_free_bytes',
-      'Bytes available to unprivileged users on a worker-measured filesystem, by snapshot key.',
-      workerVolumeSample(workerVolume?.freeBytes),
+      'Bytes available to unprivileged users on a monitored filesystem, by volume.',
+      volumeSamples((volume) => volume.freeBytes),
     ),
     gauge(
       'pavillion_disk_used_bytes',
-      'Bytes used on a worker-measured filesystem, by snapshot key.',
-      workerVolumeSample(workerVolume?.usedBytes),
+      'Bytes used on a monitored filesystem, by volume.',
+      volumeSamples((volume) => volume.usedBytes),
     ),
     gauge(
       'pavillion_disk_snapshot_timestamp_seconds',
-      'Unix timestamp at which the worker last measured the filesystem with this snapshot key. The other pavillion_disk_* series for the same stat_key are only as current as this value — alert on it going stale.',
-      workerVolumeSample(workerVolume?.snapshotTimestampSeconds),
+      'Unix timestamp at which a background worker last measured this volume. The other pavillion_disk_* series for the same volume are only as current as this value — alert on it going stale. Absent for a volume the application measures live at scrape time, whose figures are always current.',
+      volumeSamples((volume) => volume.snapshotTimestampSeconds),
     ),
     scalarGauge(
       'pavillion_db_size_bytes',
       'On-disk size in bytes of the application database.',
       metrics.databaseSizeBytes,
-    ),
-    scalarGauge(
-      'pavillion_media_volume_total_bytes',
-      'Total size in bytes of the filesystem holding uploaded media.',
-      metrics.mediaVolume?.totalBytes,
-    ),
-    scalarGauge(
-      'pavillion_media_volume_free_bytes',
-      'Bytes available to unprivileged users on the filesystem holding uploaded media.',
-      metrics.mediaVolume?.freeBytes,
-    ),
-    scalarGauge(
-      'pavillion_media_volume_used_bytes',
-      'Bytes used on the filesystem holding uploaded media.',
-      metrics.mediaVolume?.usedBytes,
     ),
     gauge(
       'pavillion_queue_depth',

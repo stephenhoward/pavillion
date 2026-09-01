@@ -26,7 +26,6 @@ export type { HousekeepingStatus } from '@/server/housekeeping/service/status';
 export type {
   OperationalMetrics,
   BackupMetrics,
-  WorkerVolumeMetrics,
   VolumeMetrics,
   QueueMetrics,
 } from '@/server/housekeeping/service/metrics';
