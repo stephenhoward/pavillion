@@ -8,6 +8,7 @@ import NotificationRetentionCleanupService from '@/server/notifications/service/
 import DiskMonitorService from '@/server/housekeeping/service/disk-monitor';
 import { BackupCreateError } from '@/common/exceptions/housekeeping';
 import { JobHandler, JobMeta } from '@/server/housekeeping/service/job-queue';
+import { MONITORED_QUEUES } from '@/server/housekeeping/service/metrics';
 import { registerJobHandlers } from '@/server/worker';
 
 /**
@@ -184,6 +185,18 @@ describe('Worker backup-job retry-storm alerting', () => {
       await expect(handler({ type: 'manual' }, { retryCount: 1, retryLimit: 2 })).rejects.toBe(failure);
 
       expect(sendBackupFailedStub.callCount).toBe(0);
+    });
+  });
+
+  describe('monitored queue inventory', () => {
+    it('reports exactly the queues the worker registers', () => {
+      // MONITORED_QUEUES is a hand-maintained copy of the worker's
+      // registrations, and the metrics endpoint zero-fills any queue in it
+      // that pg-boss has no rows for. A queue dropped from the worker but left
+      // in the list would therefore publish `failed_jobs 0` forever and the
+      // operator's alert would never fire — the one case where zero-filling
+      // becomes a genuinely fake zero. Anchor the copy to its source.
+      expect([...MONITORED_QUEUES].sort()).toEqual(Object.keys(queue.handlers).sort());
     });
   });
 });

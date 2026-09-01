@@ -1,6 +1,7 @@
 import config from 'config';
 import { DateTime } from 'luxon';
 import DiskMonitorService from '@/server/housekeeping/service/disk-monitor';
+import DiskSnapshotService, { BACKUP_PATH_STAT_KEY } from '@/server/housekeeping/service/disk-snapshot';
 import { BackupEntity } from '@/server/housekeeping/entity/backup';
 import { createLogger } from '@/server/common/helper/logger';
 
@@ -37,9 +38,11 @@ export interface HousekeepingStatus {
  */
 export default class StatusService {
   private diskMonitor: DiskMonitorService;
+  private diskSnapshots: DiskSnapshotService;
 
   constructor() {
     this.diskMonitor = new DiskMonitorService();
+    this.diskSnapshots = new DiskSnapshotService();
   }
 
   /**
@@ -150,9 +153,16 @@ export default class StatusService {
   /**
    * Gets disk usage information for the backup volume.
    *
-   * Returns null when the backup path does not exist (e.g., in local
-   * development without a /backups mount), allowing the dashboard to
-   * display a graceful "not configured" state instead of failing.
+   * Reads the worker-written snapshot rather than calling statfs here. The
+   * backup volume is mounted into the worker container only, so statfs of the
+   * backup path always fails in the production compose topology — this panel
+   * showed "not configured" on every real deployment. The snapshot is the one
+   * read path for backup-volume usage, shared with the metrics endpoint, so
+   * the two cannot report different numbers.
+   *
+   * Returns null when the worker has not written a snapshot yet (a fresh
+   * install, before the first hourly disk check), which the dashboard renders
+   * as a graceful "not configured" state.
    *
    * @returns Disk usage statistics or null if unavailable
    */
@@ -162,13 +172,16 @@ export default class StatusService {
     freeBytes: string;
   } | null> {
     try {
-      const backupPath = config.get<string>('housekeeping.backup.path');
-      const usage = await this.diskMonitor.checkDiskUsage(backupPath);
+      const snapshot = await this.diskSnapshots.getSnapshot(BACKUP_PATH_STAT_KEY);
+
+      if (!snapshot) {
+        return null;
+      }
 
       return {
-        percentageUsed: usage.percentageUsed,
-        totalBytes: usage.totalBytes.toString(),
-        freeBytes: usage.freeBytes.toString(),
+        percentageUsed: snapshot.percentageUsed,
+        totalBytes: snapshot.totalBytes.toString(),
+        freeBytes: snapshot.freeBytes.toString(),
       };
     }
     catch (error) {

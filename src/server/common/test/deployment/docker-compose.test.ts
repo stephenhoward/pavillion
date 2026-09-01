@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { execSync } from 'child_process';
+import { parse as parseYaml } from 'yaml';
 import path from 'path';
 import fs from 'fs';
 
@@ -134,6 +135,27 @@ describe('Docker Compose Configuration', () => {
 
       // Worker healthcheck should point to port 3001
       expect(content).toMatch(/localhost:3001\/health/);
+    });
+
+    it('should publish no metrics port in a fresh default deployment', () => {
+      const composePath = path.join(PROJECT_ROOT, 'docker-compose.yml');
+      const compose = parseYaml(fs.readFileSync(composePath, 'utf8'));
+
+      const defaultsPath = path.join(PROJECT_ROOT, 'config/default.yaml');
+      const metricsPort = String(
+        parseYaml(fs.readFileSync(defaultsPath, 'utf8')).housekeeping.monitoring.metrics.port,
+      );
+
+      // The OpenMetrics listener binds 0.0.0.0 inside the app container so a
+      // companion monitoring container on the compose network can scrape it.
+      // Nothing but this non-publication keeps it off the host, so an operator
+      // who wants it exposed has to add the mapping deliberately.
+      const published: string[] = Object.values(compose.services)
+        .flatMap((service: any) => service.ports ?? [])
+        .map((mapping: unknown) => String(mapping));
+
+      expect(published.length).toBeGreaterThan(0);
+      expect(published.some((mapping) => mapping.includes(metricsPort))).toBe(false);
     });
   });
 

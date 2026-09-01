@@ -78,6 +78,7 @@ export default defineConfig({
             // renderPolicyMarkdown → isomorphic-dompurify.
             'src/server/test/configure-proxy.test.ts',
             'src/server/test/health-endpoint.test.ts',
+            'src/server/test/metrics-listener.test.ts',
             // Tests that transitively import ServiceSettings (which depends on renderPolicyMarkdown)
             'src/server/accounts/test/account_service.test.ts',
             'src/server/accounts/test/admin_pagination.test.ts',
@@ -115,6 +116,7 @@ export default defineConfig({
             // renderPolicyMarkdown → isomorphic-dompurify.
             'src/server/test/configure-proxy.test.ts',
             'src/server/test/health-endpoint.test.ts',
+            'src/server/test/metrics-listener.test.ts',
             // Tests that transitively import ServiceSettings (which depends on renderPolicyMarkdown)
             'src/server/accounts/test/account_service.test.ts',
             'src/server/accounts/test/admin_pagination.test.ts',
