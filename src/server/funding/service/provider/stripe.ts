@@ -384,6 +384,10 @@ export class StripeAdapter implements PaymentProviderAdapter {
         webhookEvent.subscriptionId = subscription.id;
         webhookEvent.customerId = subscription.customer as string;
         webhookEvent.status = this.mapStripeStatus(subscription.status);
+        webhookEvent.cancelAt = this.extractCancelAt(subscription, {
+          eventId: event.id,
+          eventType: event.type,
+        });
 
         const period = this.extractBillingPeriod(subscription);
         if (period) {
@@ -406,6 +410,14 @@ export class StripeAdapter implements PaymentProviderAdapter {
         webhookEvent.subscriptionId = subscription.id;
         webhookEvent.customerId = subscription.customer as string;
         webhookEvent.status = 'cancelled';
+        // Stripe clears cancel_at once the deletion it scheduled has happened,
+        // so this is normally null. Carried anyway rather than left undefined:
+        // the schedule is over either way, and a stale marker must not outlive
+        // the subscription it was scheduled on.
+        webhookEvent.cancelAt = this.extractCancelAt(subscription, {
+          eventId: event.id,
+          eventType: event.type,
+        });
         break;
       }
     }
@@ -544,6 +556,61 @@ export class StripeAdapter implements PaymentProviderAdapter {
 
     return this.toBillingPeriod(item?.current_period_start, item?.current_period_end)
       ?? this.toBillingPeriod(legacy.current_period_start, legacy.current_period_end);
+  }
+
+  /**
+   * Resolve the instant a subscription's scheduled cancellation takes effect
+   *
+   * Stripe keeps a period-end cancellation entirely out of `status`: the
+   * subscription reports "active" — correctly, it is paid through the period —
+   * and records the cancellation in `cancel_at_period_end` and `cancel_at`.
+   * Reading status alone therefore cannot see a pending cancellation at all,
+   * which is exactly how one used to vanish on the way into Pavillion.
+   *
+   * `cancel_at` is preferred over deriving the boundary from
+   * `cancel_at_period_end` plus the period end, because Stripe also supports
+   * cancelling at an arbitrary future date, and in both cases `cancel_at` is
+   * the instant Stripe will actually act on. `canceled_at` is deliberately not
+   * consulted: it records when the cancellation was *requested*, which for a
+   * period-end cancellation is already in the past.
+   *
+   * Three outcomes, because downstream `null` is not a neutral value — it is an
+   * instruction to clear a stored cancellation, which is how a customer
+   * resuming their plan in the billing portal reaches us:
+   *
+   *  - a Date — Stripe reports a scheduled cancellation.
+   *  - `null`  — Stripe explicitly reports none. Clears any stored boundary.
+   *  - `undefined` — the field is missing or is not a usable timestamp. Read
+   *    as "this payload says nothing", so the stored boundary is left alone.
+   *    Collapsing an unreadable value into `null` would let one malformed
+   *    payload silently un-cancel a plan, which is the one direction that
+   *    grants access nobody is paying for.
+   *
+   * @param subscription - Stripe subscription object
+   * @param logContext - Diagnostic markers identifying the calling context
+   * @returns The scheduled cancellation instant, null if none, undefined if unreadable
+   * @private
+   */
+  private extractCancelAt(
+    subscription: Stripe.Subscription,
+    logContext: Record<string, unknown>,
+  ): Date | null | undefined {
+    const cancelAt = subscription.cancel_at;
+
+    if (cancelAt === null) {
+      return null;
+    }
+
+    if (typeof cancelAt !== 'number' || !Number.isFinite(cancelAt)) {
+      logger.warn({
+        ...logContext,
+        subscriptionId: subscription.id,
+        cancelAtType: cancelAt === undefined ? 'undefined' : typeof cancelAt,
+      }, 'Stripe subscription carries no usable cancel_at; leaving the stored cancellation boundary unchanged');
+      return undefined;
+    }
+
+    return new Date(cancelAt * 1000);
   }
 
   /**
@@ -709,39 +776,70 @@ export class StripeAdapter implements PaymentProviderAdapter {
     return {
       providerSubscriptionId: subscription.id,
       providerCustomerId: subscription.customer as string,
-      status: this.mapStripeStatus(subscription.status),
+      // ProviderSubscription.status is not optional — this feeds the status a
+      // brand-new local plan is created with, and there is no prior value to
+      // leave alone. An unrecognised Stripe status therefore falls back to
+      // `past_due`: it withholds access without being terminal, so a plan
+      // created during a status we do not yet understand can still recover
+      // when the next event names one we do.
+      status: this.mapStripeStatus(subscription.status) ?? 'past_due',
       currentPeriodStart: period.start,
       currentPeriodEnd: period.end,
       amount: amount * 1000, // Convert cents to millicents
       currency: subscription.items.data[0]?.price?.currency?.toUpperCase() || 'USD',
+      cancelAt: this.extractCancelAt(subscription, { source: 'subscription.retrieve' }),
     };
   }
 
   /**
    * Map Stripe subscription status to our internal status
    *
+   * `'cancelled'` is terminal downstream: FundingService refuses to move a plan
+   * out of it, and reaching it closes the plan's calendar allocations. So only
+   * the two Stripe statuses that genuinely mean "this subscription is over"
+   * may produce it — `canceled` and `incomplete_expired`. Everything else has
+   * to stay recoverable.
+   *
+   * `incomplete` in particular must not: it means the first payment has not
+   * confirmed yet, which is the ordinary state of an SCA or async-payment
+   * checkout. The session-return path creates the local plan as soon as the
+   * session reads `complete`, which can precede the subscription leaving
+   * `incomplete`, so mapping it to `cancelled` would kill a plan the customer
+   * is in the middle of paying for and leave no way back. `past_due` says the
+   * same thing — payment outstanding, access withheld — without being terminal,
+   * and the dunning job already understands it.
+   *
+   * An unrecognised status returns undefined rather than guessing. Stripe adds
+   * statuses; a `default:` that fed the terminal state would let a future one
+   * silently destroy paid plans. Undefined means "this payload carries no
+   * status I understand", and every consumer leaves the stored status alone.
+   *
    * @param stripeStatus - Stripe subscription status
-   * @returns Internal subscription status
+   * @returns Internal subscription status, or undefined if unrecognised
    * @private
    */
   private mapStripeStatus(
     stripeStatus: Stripe.Subscription.Status,
-  ): 'active' | 'past_due' | 'suspended' | 'cancelled' {
+  ): 'active' | 'past_due' | 'suspended' | 'cancelled' | undefined {
     switch (stripeStatus) {
       case 'active':
       case 'trialing':
         return 'active';
       case 'past_due':
+      case 'incomplete':
         return 'past_due';
       case 'unpaid':
       case 'paused':
         return 'suspended';
       case 'canceled':
-      case 'incomplete':
       case 'incomplete_expired':
         return 'cancelled';
       default:
-        return 'cancelled';
+        logger.warn({
+          providerType: this.providerType,
+          stripeStatus,
+        }, 'Unrecognised Stripe subscription status; leaving the local funding plan status unchanged');
+        return undefined;
     }
   }
 }

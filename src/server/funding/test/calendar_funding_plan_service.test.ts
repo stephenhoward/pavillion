@@ -171,8 +171,11 @@ describe('FundingService - Calendar Funding Plan Methods', () => {
         .withArgs(accountId, calendarId)
         .resolves(true);
 
+      // The open allocation belongs to the plan being added to, which is what
+      // makes this a duplicate rather than a calendar to be moved across.
       sandbox.stub(CalendarFundingPlanEntity, 'findOne').resolves({
         id: uuidv4(),
+        funding_plan_id: fundingPlanId,
         end_time: null,
       } as any);
 
@@ -351,6 +354,7 @@ describe('FundingService - Calendar Funding Plan Methods', () => {
         status: 'active',
         current_period_end: periodEnd,
         cancelled_at: null as Date | null,
+        cancel_at: null as Date | null,
         save: sandbox.stub().resolves(),
         toModel: function() {
           const sub = new FundingPlan(this.id);
@@ -397,7 +401,11 @@ describe('FundingService - Calendar Funding Plan Methods', () => {
 
       expect(mockCalendarSub.end_time).toEqual(periodEnd);
       expect(mockAdapter.cancelSubscription.called).toBe(true);
-      expect(mockFundingPlanEntity.status).toBe('cancelled');
+      // Cancelled at the period end, not immediately: the allocation's own
+      // end_time and the plan's boundary are the same paid-through date, so
+      // the calendar keeps its coverage for the period already paid for.
+      expect(mockFundingPlanEntity.status).toBe('active');
+      expect(mockFundingPlanEntity.cancel_at).toEqual(periodEnd);
     });
 
     it('should throw FundingPlanNotFoundError if no active plan exists', async () => {
@@ -526,9 +534,15 @@ describe('FundingService - Calendar Funding Plan Methods', () => {
      */
     function stubAllocation(
       calendarId: string,
-      plan: { status?: string; cancelled_at?: Date | null; current_period_end?: Date | null } | null,
+      plan: {
+        status?: string;
+        cancelled_at?: Date | null;
+        cancel_at?: Date | null;
+        current_period_end?: Date | null;
+      } | null,
     ): void {
-      sandbox.stub(CalendarFundingPlanEntity, 'findOne').callsFake(async (options?: any) => {
+      /** The allocation row as the query in `options` would see it, or null. */
+      const visibleRow = (options?: any) => {
         if (plan === null) {
           return null;
         }
@@ -536,6 +550,7 @@ describe('FundingService - Calendar Funding Plan Methods', () => {
         const fundingPlan = {
           status: 'active',
           cancelled_at: null,
+          cancel_at: null,
           current_period_end: new Date(Date.now() + 30 * DAY),
           ...plan,
         };
@@ -551,7 +566,9 @@ describe('FundingService - Calendar Funding Plan Methods', () => {
           end_time: null,
           fundingPlan,
         } as any;
-      });
+      };
+
+      sandbox.stub(CalendarFundingPlanEntity, 'findOne').callsFake(async (options?: any) => visibleRow(options));
     }
 
     it('should return covered when calendar has an active calendar plan', async () => {
@@ -585,15 +602,28 @@ describe('FundingService - Calendar Funding Plan Methods', () => {
         expect(status).toBe('not_covered');
       });
 
-      it('should return not_covered when an active plan recorded a cancellation date in the past', async () => {
+      it('should return not_covered when an active plan passed its scheduled cancellation', async () => {
         const calendarId = uuidv4();
         const accountId = uuidv4();
 
         await onlyThePlanDecides(accountId, calendarId);
-        stubAllocation(calendarId, { cancelled_at: new Date(Date.now() - DAY) });
+        // A cancel-at-period-end whose deletion webhook never arrived: the
+        // plan still says 'active' and only cancel_at reveals the end.
+        stubAllocation(calendarId, { cancel_at: new Date(Date.now() - DAY) });
 
         const status = await service.getFundingStatusForCalendar(accountId, calendarId);
         expect(status).toBe('not_covered');
+      });
+
+      it('should still return covered while a scheduled cancellation is ahead of it', async () => {
+        const calendarId = uuidv4();
+        const accountId = uuidv4();
+
+        await onlyThePlanDecides(accountId, calendarId);
+        stubAllocation(calendarId, { cancel_at: new Date(Date.now() + DAY) });
+
+        const status = await service.getFundingStatusForCalendar(accountId, calendarId);
+        expect(status).toBe('covered');
       });
 
       it('should return not_covered when the paid-through date plus grace has passed', async () => {

@@ -60,6 +60,20 @@ export interface ProviderSubscription {
   currentPeriodEnd: Date;
   amount: number; // in millicents
   currency: string;
+  /**
+   * When a scheduled cancellation takes effect, or null if none is scheduled.
+   *
+   * Separate from `status` because a provider reports a subscription that is
+   * cancelling at the period end as still active — which it is: it is paid
+   * through that date. `status` alone therefore cannot distinguish "continuing"
+   * from "ending on a known date", and reading it as if it could is what made
+   * a period-end cancellation invisible to Pavillion.
+   *
+   * `undefined` means the provider payload carried nothing usable, which is not
+   * the same as `null` ("no cancellation scheduled"); a consumer storing this
+   * must not collapse the two.
+   */
+  cancelAt?: Date | null;
 }
 
 /**
@@ -82,6 +96,20 @@ export interface WebhookEvent {
   currentPeriodEnd?: Date;
   amount?: number; // in millicents
   currency?: string;
+  /**
+   * When a scheduled cancellation takes effect, as this event reports it.
+   *
+   * Three states, and consumers must keep them apart:
+   *  - `undefined` — this event type carries no cancellation schedule at all
+   *    (an invoice event, a checkout completion), or the field it should have
+   *    carried was unreadable. Leave the stored value alone. Never widen this
+   *    to `null`: that would let a malformed payload un-cancel a plan.
+   *  - `null` — the subscription has no scheduled cancellation. A pending
+   *    cancellation that the customer reversed in the billing portal arrives
+   *    this way, so it must clear the stored value rather than be ignored.
+   *  - a Date — the subscription ends then.
+   */
+  cancelAt?: Date | null;
   rawPayload: any; // Provider-specific event data
   /** Account ID from checkout session metadata (checkout.session.completed only) */
   accountId?: string;

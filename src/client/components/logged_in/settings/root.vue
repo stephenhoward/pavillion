@@ -46,7 +46,7 @@ const fundingStatusSummary = computed(() => {
 
   if (status && status.status === 'active') {
     const formattedAmount = FundingService.formatCurrency(status.amount, status.currency);
-    const cycle = status.billing_cycle === 'yearly'
+    const cycle = status.billingCycle === 'yearly'
       ? t('funding_card_cycle_year', { defaultValue: '/yr' })
       : t('funding_card_cycle_month', { defaultValue: '/mo' });
     return `${t('funding_card_status_active', { defaultValue: 'Active' })} - ${formattedAmount}${cycle}`;

@@ -59,19 +59,32 @@ export type DisconnectResponse = {
 };
 
 /**
- * Funding plan status for a user
+ * Body of GET /api/funding/v1/status — the account's own funding plan.
+ *
+ * camelCase throughout, because that is what the endpoint sends
+ * (server/funding/api/v1/funding-plan.ts). This type used to describe the
+ * fields in snake_case, so every one of them but `id` and `status` read back
+ * `undefined` at runtime and the page rendered "Invalid Date" for its dates —
+ * a drift only a hand-written envelope type can produce, and the reason the
+ * shape is now stated in the same spelling the wire uses.
+ *
+ * `status` alone does not tell a continuing plan from a cancelling one: a
+ * cancel-at-period-end stays 'active' until its boundary. `cancelAt` is what
+ * distinguishes them.
  */
 export type FundingPlanStatus = {
   id: string;
   status: 'active' | 'past_due' | 'suspended' | 'cancelled';
-  billing_cycle: 'monthly' | 'yearly';
+  billingCycle: 'monthly' | 'yearly';
   amount: number;
   currency: string;
-  current_period_start: string;
-  current_period_end: string;
-  cancelled_at?: string;
-  suspended_at?: string;
-  provider_type: string;
+  currentPeriodStart: string | null;
+  currentPeriodEnd: string | null;
+  /** When cancellation was requested; set only once the plan is cancelled. */
+  cancelledAt?: string | null;
+  /** When a scheduled cancellation takes effect, or null if none is scheduled. */
+  cancelAt?: string | null;
+  suspendedAt?: string | null;
 };
 
 /**
