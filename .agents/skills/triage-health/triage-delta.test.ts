@@ -1661,7 +1661,7 @@ describe('main', () => {
 // the decisions they make about what `bd` and `gh` returned are ordinary unit
 // tests rather than something that needs those commands stubbed on PATH.
 // fakeSpawn/recordingSpawn follow the canonical shapes in
-// .agents/tools/test/stack.test.ts.
+// .agents/skills/bead-branch-and-pr/scripts/test/stack.test.ts.
 // =============================================================================
 
 function fakeSpawn(stdout: string, stderr = '', status: number | null = 0): SpawnSyncReturns<Buffer> {

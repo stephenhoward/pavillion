@@ -10,15 +10,16 @@ or drive a merge session.
 
 Conventions and command semantics live in the `git-workflow` skill's
 `stacking.md` — that file is the source of truth; this command is a thin
-wrapper over the stack sync tool in `.agents/tools/stack.ts`. It does not
-restate `gh stack` syntax.
+wrapper over the stack sync tool in
+`.agents/skills/bead-branch-and-pr/scripts/stack.ts`. It does not restate
+`gh stack` syntax.
 
 ## Steps
 
 1. **Sync.** Run the sync tool:
 
    ```bash
-   npx tsx .agents/tools/stack.ts sync
+   npx tsx .agents/skills/bead-branch-and-pr/scripts/stack.ts sync
    ```
 
 2. **Report what moved and what conflicted**, from the structured result:

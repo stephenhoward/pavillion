@@ -104,7 +104,7 @@ Write the full plan to `docs/.scratch/<timestamp>-<slug>/draft.md` as a single r
 
 ### Phase ADVISE
 
-Pick advisors via the [`agent-discovery`](../skills/agent-discovery/SKILL.md) skill: enumerate candidates with `npx tsx .agents/tools/bead.ts agents advisor`, then select the applicable subset yourself using the drafted plan (Key Files, scope, concerns) against each candidate's description — default toward inclusion, per the skill. If no advisor plausibly applies, ask the user whether to proceed without advisory review or revisit the design.
+Pick advisors via the [`agent-discovery`](../skills/agent-discovery/SKILL.md) skill: enumerate candidates with `npx tsx .agents/skills/agent-discovery/scripts/agents.ts advisor`, then select the applicable subset yourself using the drafted plan (Key Files, scope, concerns) against each candidate's description — default toward inclusion, per the skill. If no advisor plausibly applies, ask the user whether to proceed without advisory review or revisit the design.
 
 Spawn every matched advisor **in a single Task tool batch**. Provide the full plan inline using this template, adapted per advisor:
 

@@ -1,30 +1,21 @@
 /**
- * Agent-facing CLI for deterministic bead operations. JSON to stdout.
+ * Agent-facing CLI for bead escalation. JSON to stdout.
  *
  * Usage:
- *   npx tsx .agents/tools/bead.ts state <bead-id>
- *   npx tsx .agents/tools/bead.ts sizing-check <bead-id>
- *   npx tsx .agents/tools/bead.ts enrichment-check <bead-id>   # exit 0 enriched, 1 not
  *   npx tsx .agents/tools/bead.ts escalate <bead-id> <reason> [phase]
- *   npx tsx .agents/tools/bead.ts agents <suffix>              # advisor | auditor | verifier
+ *
+ * The other bead subcommands moved to the skills that own them:
+ *   state / sizing-check / enrichment-check
+ *     -> npx tsx .agents/skills/bead-state-assessment/scripts/bead.ts
+ *   agents <suffix>
+ *     -> npx tsx .agents/skills/agent-discovery/scripts/agents.ts
  */
 
-import {
-  bdState,
-  bdSizingCheck,
-  bdEnrichmentCheck,
-  bdEscalate,
-  discoverAgents,
-} from './lib/bead.js';
+import { bdEscalate } from './lib/bead.js';
 
-const USAGE = `usage: bead.ts <command> [args]
+const USAGE = `usage: bead.ts escalate <bead-id> <reason> [phase]
 
-commands:
-  state <bead-id>                    lifecycle state verdict (JSON)
-  sizing-check <bead-id>             2-of-3 decomposition heuristic (JSON)
-  enrichment-check <bead-id>         exit 0 if notes contain Implementation Context, else 1
   escalate <bead-id> <reason> [phase]  add needs-human label + idempotent Escalation note
-  agents <suffix>                    list .agents/agents/*-<suffix>.md with descriptions (JSON)
 `;
 
 function fail(message: string): never {
@@ -34,40 +25,10 @@ function fail(message: string): never {
 
 const [command, ...args] = process.argv.slice(2);
 
-switch (command) {
-  case 'state': {
-    const [beadId] = args;
-    if (!beadId) fail(USAGE);
-    console.log(JSON.stringify(bdState(beadId), null, 2));
-    break;
-  }
-  case 'sizing-check': {
-    const [beadId] = args;
-    if (!beadId) fail(USAGE);
-    console.log(JSON.stringify(bdSizingCheck(beadId), null, 2));
-    break;
-  }
-  case 'enrichment-check': {
-    const [beadId] = args;
-    if (!beadId) fail(USAGE);
-    const enriched = bdEnrichmentCheck(beadId);
-    console.log(JSON.stringify({ enriched }));
-    process.exit(enriched ? 0 : 1);
-    break;
-  }
-  case 'escalate': {
-    const [beadId, reason, phase] = args;
-    if (!beadId || !reason) fail(USAGE);
-    bdEscalate(beadId, reason, phase ?? 'unspecified');
-    console.log(JSON.stringify({ ok: true, beadId, label: 'needs-human' }));
-    break;
-  }
-  case 'agents': {
-    const [suffix] = args;
-    if (!suffix) fail(USAGE);
-    console.log(JSON.stringify(discoverAgents(suffix), null, 2));
-    break;
-  }
-  default:
-    fail(USAGE);
-}
+if (command !== 'escalate') fail(USAGE);
+
+const [beadId, reason, phase] = args;
+if (!beadId || !reason) fail(USAGE);
+
+bdEscalate(beadId, reason, phase ?? 'unspecified');
+console.log(JSON.stringify({ ok: true, beadId, label: 'needs-human' }));

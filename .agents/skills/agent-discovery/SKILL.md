@@ -17,7 +17,7 @@ rather than a mechanical tag table.
 1. **Enumerate candidates.** Run the enumeration tool:
 
    ```bash
-   npx tsx .agents/tools/bead.ts agents <role>
+   npx tsx .agents/skills/agent-discovery/scripts/agents.ts <role>
    ```
 
    It lists every `.agents/agents/*-<role>.md` and parses name + description
@@ -131,6 +131,8 @@ the file types, domains, and concerns you review.
 
 ## Tests
 
-The enumeration tool is covered in `.agents/tools/test/bead.test.ts`
+The enumeration tool is covered in `scripts/test/agents.test.ts`
 (`discoverAgents`: suffix matching, frontmatter parsing, missing-directory
-handling). Selection is agent judgment and has no automated tests.
+handling); run with
+`npx vitest run --config .agents/tools/vitest.config.ts`. Selection is agent
+judgment and has no automated tests.

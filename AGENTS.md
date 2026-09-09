@@ -15,11 +15,18 @@ Agent configuration lives in `.agents/`, with `.claude` as a symlink pointing at
   skills/     # SKILL.md skills — read natively by Codex, Cursor, Gemini CLI,
               # Copilot, opencode, Amp, Cline; reached by Claude Code through
               # the .claude symlink
+    <skill>/
+      SKILL.md
+      scripts/  # deterministic CLIs this skill owns (lib/, test/ beside them)
   agents/     # Claude Code subagent definitions (Claude-specific)
   commands/   # Claude Code slash commands (Claude-specific)
-  tools/      # Deterministic CLIs the skills shell out to
+  tools/      # shared vitest config + the few CLIs no single skill owns
 .claude -> .agents
 ```
+
+A deterministic CLI belongs in `scripts/` under the skill that owns it, not
+in `.agents/tools/` — see `.agents/tools/README.md` for the current split and
+how to run the tests, which cover both locations.
 
 `.agents/skills/` is the cross-tool convention; Claude Code only scans `.claude/`, which is why the symlink exists rather than the reverse. Every `SKILL.md` must carry `name` and `description` frontmatter — Claude Code will infer them from the body, but Codex requires both. `name` and `description` are the only fields Codex documents, so treat any other key as Claude-only and don't rely on it being portable.
 

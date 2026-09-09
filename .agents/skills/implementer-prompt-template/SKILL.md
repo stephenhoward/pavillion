@@ -112,12 +112,13 @@ codebase, fabricate files-to-modify, or guess at standards — doing so
 skips the analysis phase and produces work the advisors never reviewed.
 
 The deterministic check for enrichment is
-[`bead-state-assessment`](../bead-state-assessment/SKILL.md)'s
-`npx tsx .agents/tools/bead.ts enrichment-check <id>` command: exit 0 means
-enriched, exit 1 means not. The implementer may run it as a first step, but
-the `/spawn-bead-workers` Phase 2 enrichment check normally guarantees that
-any bead reaching the implementer is already enriched. The refusal protocol
-exists as a defence-in-depth backstop for the case where the gate missed it.
+[`bead-state-assessment`](../bead-state-assessment/SKILL.md)'s `npx tsx
+.agents/skills/bead-state-assessment/scripts/bead.ts enrichment-check <id>`
+command: exit 0 means enriched, exit 1 means not. The implementer may run it
+as a first step, but the `/spawn-bead-workers` Phase 2 enrichment check
+normally guarantees that any bead reaching the implementer is already
+enriched. The refusal protocol exists as a defence-in-depth backstop for the
+case where the gate missed it.
 
 ### 3. TDD is the expected workflow
 
