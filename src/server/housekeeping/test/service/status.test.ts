@@ -1,17 +1,22 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import config from 'config';
 import StatusService from '@/server/housekeeping/service/status';
-import DiskMonitorService from '@/server/housekeeping/service/disk-monitor';
+import DiskSnapshotService, { BACKUP_PATH_STAT_KEY } from '@/server/housekeeping/service/disk-snapshot';
 import { BackupEntity } from '@/server/housekeeping/entity/backup';
 
 vi.mock('@/server/housekeeping/entity/backup');
 
-const healthyDiskUsage = {
-  totalBytes: BigInt(100000000000),
-  usedBytes: BigInt(50000000000),
-  freeBytes: BigInt(50000000000),
-  percentageUsed: 50.0,
+// Disk usage reaches the dashboard through the worker-written snapshot, not
+// through a statfs in this process: the app container does not mount the
+// backup volume.
+const healthySnapshot = {
+  statKey: BACKUP_PATH_STAT_KEY,
   path: '/backups',
+  totalBytes: 100000000000,
+  usedBytes: 50000000000,
+  freeBytes: 50000000000,
+  percentageUsed: 50.0,
+  writtenAt: new Date('2026-01-13T03:00:00.000Z'),
 };
 
 describe('StatusService', () => {
@@ -33,7 +38,7 @@ describe('StatusService', () => {
       type: 'scheduled',
     } as any);
     vi.mocked(BackupEntity.count).mockResolvedValue(3);
-    vi.spyOn(DiskMonitorService.prototype, 'checkDiskUsage').mockResolvedValue(healthyDiskUsage);
+    vi.spyOn(DiskSnapshotService.prototype, 'getSnapshot').mockResolvedValue(healthySnapshot);
 
     const status = await service.getStatus();
 
@@ -57,11 +62,10 @@ describe('StatusService', () => {
     expect(status.nextBackup).toMatch(/T02:00:00/);
   });
 
-  it('reports a null disk usage and an ok alert when the backup path is unreadable', async () => {
+  it('reports a null disk usage and an ok alert before the worker writes a snapshot', async () => {
     vi.mocked(BackupEntity.findOne).mockResolvedValue(null);
     vi.mocked(BackupEntity.count).mockResolvedValue(0);
-    vi.spyOn(DiskMonitorService.prototype, 'checkDiskUsage')
-      .mockRejectedValue(new Error('ENOENT: no such file or directory'));
+    vi.spyOn(DiskSnapshotService.prototype, 'getSnapshot').mockResolvedValue(null);
 
     const status = await service.getStatus();
 
@@ -73,7 +77,7 @@ describe('StatusService', () => {
   it('reports a null last backup when the backup lookup fails', async () => {
     vi.mocked(BackupEntity.findOne).mockRejectedValue(new Error('connection refused'));
     vi.mocked(BackupEntity.count).mockResolvedValue(0);
-    vi.spyOn(DiskMonitorService.prototype, 'checkDiskUsage').mockResolvedValue(healthyDiskUsage);
+    vi.spyOn(DiskSnapshotService.prototype, 'getSnapshot').mockResolvedValue(healthySnapshot);
 
     const status = await service.getStatus();
 
@@ -84,7 +88,7 @@ describe('StatusService', () => {
   it('falls back to zeroed retention counts when the count query fails', async () => {
     vi.mocked(BackupEntity.findOne).mockResolvedValue(null);
     vi.mocked(BackupEntity.count).mockRejectedValue(new Error('connection refused'));
-    vi.spyOn(DiskMonitorService.prototype, 'checkDiskUsage').mockResolvedValue(healthyDiskUsage);
+    vi.spyOn(DiskSnapshotService.prototype, 'getSnapshot').mockResolvedValue(healthySnapshot);
 
     const status = await service.getStatus();
 
@@ -98,10 +102,10 @@ describe('StatusService', () => {
   it('raises a critical alert when disk usage passes the critical threshold', async () => {
     vi.mocked(BackupEntity.findOne).mockResolvedValue(null);
     vi.mocked(BackupEntity.count).mockResolvedValue(0);
-    vi.spyOn(DiskMonitorService.prototype, 'checkDiskUsage').mockResolvedValue({
-      ...healthyDiskUsage,
-      usedBytes: BigInt(92000000000),
-      freeBytes: BigInt(8000000000),
+    vi.spyOn(DiskSnapshotService.prototype, 'getSnapshot').mockResolvedValue({
+      ...healthySnapshot,
+      usedBytes: 92000000000,
+      freeBytes: 8000000000,
       percentageUsed: 92.0,
     });
 

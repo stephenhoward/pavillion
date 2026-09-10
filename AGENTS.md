@@ -96,7 +96,7 @@ Recurring agent time-wasters, verified against session history — read before s
 
 ## Architecture Overview
 
-Backend uses domain-driven design with domains: Accounts, Authentication, Calendar, ActivityPub, Configuration, Media, Public. Each domain has: `api/v1/`, `entity/`, `model/` (server-only business models), `service/`, `interface/`, `events/`, `test/`. Multilingual content uses a `TranslatedModel` base class. TypeScript experimental decorators are enabled for Sequelize entities.
+Backend uses domain-driven design with domains: Accounts, Authentication, Calendar, ActivityPub, Configuration, Housekeeping, Media, Public. Each domain has: `api/v1/`, `entity/`, `model/` (server-only business models), `service/`, `interface/`, `events/`, `test/`. Multilingual content uses a `TranslatedModel` base class. TypeScript experimental decorators are enabled for Sequelize entities.
 
 Frontend has two apps: Client (authenticated) and Site (public views), using Vue 3 composition API, Pinia stores, and SCSS.
 

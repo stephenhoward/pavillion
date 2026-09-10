@@ -7,10 +7,30 @@ import HousekeepingStatusRoutes from '@/server/housekeeping/api/v1/status';
 import HousekeepingInterface from '@/server/housekeeping/interface';
 import EmailInterface from '@/server/email/interface';
 import AccountsInterface from '@/server/accounts/interface';
-import DiskMonitorService from '@/server/housekeeping/service/disk-monitor';
+import DiskSnapshotService, { BACKUP_PATH_STAT_KEY } from '@/server/housekeeping/service/disk-snapshot';
 import { BackupEntity } from '@/server/housekeeping/entity/backup';
 import { Account } from '@/common/model/account';
 import ExpressHelper from '@/server/common/helper/express';
+
+/**
+ * Disk usage reaches the dashboard through the worker-written snapshot, not a
+ * statfs in the web process: the app container does not mount the backup
+ * volume, so the old statfs path returned null on every real deployment.
+ */
+function stubDiskSnapshot(sandbox: sinon.SinonSandbox, percentageUsed: number) {
+  const totalBytes = 100000000000;
+  const usedBytes = Math.round(totalBytes * percentageUsed / 100);
+
+  sandbox.stub(DiskSnapshotService.prototype, 'getSnapshot').resolves({
+    statKey: BACKUP_PATH_STAT_KEY,
+    path: '/backups',
+    totalBytes,
+    usedBytes,
+    freeBytes: totalBytes - usedBytes,
+    percentageUsed,
+    writtenAt: new Date('2026-01-13T03:00:00.000Z'),
+  });
+}
 
 describe('Housekeeping Dashboard Status', () => {
   let sandbox: sinon.SinonSandbox;
@@ -90,14 +110,7 @@ describe('Housekeeping Dashboard Status', () => {
       sandbox.stub(BackupEntity, 'findOne').resolves(mockBackup as any);
       sandbox.stub(BackupEntity, 'count').resolves(5);
 
-      // Stub DiskMonitorService to avoid filesystem access
-      sandbox.stub(DiskMonitorService.prototype, 'checkDiskUsage').resolves({
-        totalBytes: BigInt(100000000000),
-        usedBytes: BigInt(50000000000),
-        freeBytes: BigInt(50000000000),
-        percentageUsed: 50.0,
-        path: '/backups',
-      });
+      stubDiskSnapshot(sandbox, 50.0);
 
       // Create app with admin auth
       const testApp = createAppWithAuth(true);
@@ -119,15 +132,7 @@ describe('Housekeeping Dashboard Status', () => {
       sandbox.stub(BackupEntity, 'findOne').resolves(null);
       sandbox.stub(BackupEntity, 'count').resolves(0);
 
-      // Stub DiskMonitorService
-      const diskMonitorStub = sandbox.stub(DiskMonitorService.prototype, 'checkDiskUsage');
-      diskMonitorStub.resolves({
-        totalBytes: BigInt(100000000000), // 100 GB
-        usedBytes: BigInt(75000000000),   // 75 GB
-        freeBytes: BigInt(25000000000),   // 25 GB
-        percentageUsed: 75.0,
-        path: '/backups',
-      });
+      stubDiskSnapshot(sandbox, 75.0);
 
       // Create app with admin auth
       const testApp = createAppWithAuth(true);
@@ -149,14 +154,7 @@ describe('Housekeeping Dashboard Status', () => {
       sandbox.stub(BackupEntity, 'findOne').resolves(null);
       sandbox.stub(BackupEntity, 'count').resolves(0);
 
-      // Stub DiskMonitorService
-      sandbox.stub(DiskMonitorService.prototype, 'checkDiskUsage').resolves({
-        totalBytes: BigInt(100000000000),
-        usedBytes: BigInt(50000000000),
-        freeBytes: BigInt(50000000000),
-        percentageUsed: 50.0,
-        path: '/backups',
-      });
+      stubDiskSnapshot(sandbox, 50.0);
 
       // Create app with non-admin user
       const testApp = createAppWithAuth(false);
@@ -173,15 +171,7 @@ describe('Housekeeping Dashboard Status', () => {
       sandbox.stub(BackupEntity, 'findOne').resolves(null);
       sandbox.stub(BackupEntity, 'count').resolves(0);
 
-      // Stub DiskMonitorService with high usage
-      const diskMonitorStub = sandbox.stub(DiskMonitorService.prototype, 'checkDiskUsage');
-      diskMonitorStub.resolves({
-        totalBytes: BigInt(100000000000),
-        usedBytes: BigInt(85000000000),   // 85% used - warning level
-        freeBytes: BigInt(15000000000),
-        percentageUsed: 85.0,
-        path: '/backups',
-      });
+      stubDiskSnapshot(sandbox, 85.0);
 
       // Create app with admin auth
       const testApp = createAppWithAuth(true);
@@ -200,15 +190,7 @@ describe('Housekeeping Dashboard Status', () => {
       sandbox.stub(BackupEntity, 'findOne').resolves(null);
       sandbox.stub(BackupEntity, 'count').resolves(0);
 
-      // Stub DiskMonitorService with critical usage
-      const diskMonitorStub = sandbox.stub(DiskMonitorService.prototype, 'checkDiskUsage');
-      diskMonitorStub.resolves({
-        totalBytes: BigInt(100000000000),
-        usedBytes: BigInt(92000000000),   // 92% used - critical level
-        freeBytes: BigInt(8000000000),
-        percentageUsed: 92.0,
-        path: '/backups',
-      });
+      stubDiskSnapshot(sandbox, 92.0);
 
       // Create app with admin auth
       const testApp = createAppWithAuth(true);
@@ -227,14 +209,7 @@ describe('Housekeeping Dashboard Status', () => {
       sandbox.stub(BackupEntity, 'findOne').resolves(null);
       sandbox.stub(BackupEntity, 'count').resolves(0);
 
-      // Stub DiskMonitorService
-      sandbox.stub(DiskMonitorService.prototype, 'checkDiskUsage').resolves({
-        totalBytes: BigInt(100000000000),
-        usedBytes: BigInt(50000000000),
-        freeBytes: BigInt(50000000000),
-        percentageUsed: 50.0,
-        path: '/backups',
-      });
+      stubDiskSnapshot(sandbox, 50.0);
 
       // Create app with admin auth
       const testApp = createAppWithAuth(true);

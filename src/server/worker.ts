@@ -7,6 +7,7 @@ import JobQueueService from '@/server/housekeeping/service/job-queue';
 import BackupService from '@/server/housekeeping/service/backup';
 import RetentionService from '@/server/housekeeping/service/retention';
 import DiskMonitorService from '@/server/housekeeping/service/disk-monitor';
+import DiskSnapshotService, { BACKUP_PATH_STAT_KEY } from '@/server/housekeeping/service/disk-snapshot';
 import AlertsService from '@/server/housekeeping/service/alerts';
 import EmailInterface from '@/server/email/interface';
 import AccountsInterface from '@/server/accounts/interface';
@@ -67,6 +68,7 @@ async function registerJobHandlers(queue: JobQueueService): Promise<void> {
   const backupService = new BackupService();
   const retentionService = new RetentionService();
   const diskMonitorService = new DiskMonitorService();
+  const diskSnapshotService = new DiskSnapshotService();
   const emailInterface = new EmailInterface();
   const accountsInterface = new AccountsInterface();
   const alertsService = new AlertsService(emailInterface, accountsInterface);
@@ -142,6 +144,13 @@ async function registerJobHandlers(queue: JobQueueService): Promise<void> {
       const usage = await diskMonitorService.checkDiskUsage(backupPath);
 
       logger.info({ percentageUsed: usage.percentageUsed.toFixed(1), backupPath, freeBytes: diskMonitorService.formatBytes(usage.freeBytes) }, 'Disk usage check');
+
+      // Persist the measurement for the web process. The app container does
+      // not mount the backup volume, so this table is the only way the admin
+      // status panel and the metrics endpoint can see backup-volume usage.
+      // Written before the threshold checks so an alert failure cannot cost
+      // the instance its disk telemetry.
+      await diskSnapshotService.recordSnapshot(BACKUP_PATH_STAT_KEY, usage);
 
       // Check thresholds and send alerts
       if (diskMonitorService.isCriticalThreshold(usage.percentageUsed, criticalThreshold)) {

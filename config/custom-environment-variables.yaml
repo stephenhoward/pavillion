@@ -87,6 +87,19 @@ mail:
     pass: SMTP_PASSWORD
     secure: SMTP_SECURE
 
+# Housekeeping configuration overrides
+# METRICS_PORT: Port for the private OpenMetrics listener (default 9464).
+# Changing it does not make the endpoint public — publication is controlled by
+# the compose file, which does not map this port to the host.
+# METRICS_BIND_ADDRESS: Interface the metrics listener binds (default 0.0.0.0,
+# which is correct inside a container). Pin to 127.0.0.1 when running the
+# process directly on a host.
+housekeeping:
+  monitoring:
+    metrics:
+      port: METRICS_PORT
+      bindAddress: METRICS_BIND_ADDRESS
+
 # Federation testing configuration overrides
 # SKIP_SIGNATURES=true disables HTTP signature verification for local testing
 federation:

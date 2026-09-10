@@ -24,3 +24,11 @@ rateLimit:
 calendar:
   import:
     hmacSecret: 'e2e-hmac-secret-stable-value'
+
+# E2E specs spawn several application processes on one host, each on its own
+# app port. A single fixed metrics port cannot be shared between them, and the
+# endpoint is not what these specs test.
+housekeeping:
+  monitoring:
+    metrics:
+      enabled: false
