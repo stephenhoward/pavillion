@@ -812,6 +812,21 @@ restore_stderr=$(for i in $(seq 1 60); do echo "pg_restore: error: line ${i}"; d
 redacted=$(redact_restore_output "${restore_stderr}")
 assert_eq "20" "$(printf '%s\n' "${redacted}" | grep -c 'pg_restore: error:')" "at most 20 error lines are echoed"
 
+echo "test: every regex command in the redaction pipeline is locale-pinned"
+# Not style. On BSD sed an unpinned substitution given invalid UTF-8 — which a
+# corrupt dump can put into this text — aborts with "RE error: illegal byte
+# sequence" and passes the line through UNMODIFIED. That is a fail-open in the
+# one function whose job is to fail closed. Asserted as an invariant over the
+# whole pipeline rather than per-command, so a future stage added here has to
+# arrive pinned too; the indent sed was the one command left unpinned and
+# survived only because `^` evaluates no character class.
+redact_body=$(sed -n '/^redact_restore_output() {/,/^}/p' "${DRILL}")
+unpinned=$(printf '%s\n' "${redact_body}" \
+  | tr '|' '\n' \
+  | grep -E '(^|[[:space:]])(grep|sed|cut)[[:space:]]' \
+  | grep -vE 'LC_ALL=C[[:space:]]+(grep|sed|cut)[[:space:]]')
+assert_eq "" "${unpinned}" "no grep/sed/cut in redact_restore_output runs in the host's locale"
+
 echo "test: check_tables_present passes when every required table exists"
 present=$(printf '%s\n' 'SequelizeMeta' 'account' 'calendar' 'event' 'media')
 check_tables_present "${present}" >/dev/null 2>&1
