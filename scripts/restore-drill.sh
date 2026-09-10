@@ -27,6 +27,8 @@
 #                             match the deployed db service. Default: postgres:17
 #   PAVILLION_DRILL_TIMEOUT   Seconds to wait for the scratch database to accept
 #                             connections. Default: 90
+#   PAVILLION_MIGRATIONS_DIR  Directory holding the migration files the dump is
+#                             compared against. Default: <repo>/migrations
 #
 # Examples:
 #   ./scripts/restore-drill.sh
@@ -36,12 +38,18 @@
 # Exit codes:
 #   0  every check passed
 #   1  a check failed, or a prerequisite was missing; the reason is on stderr
+#   130  interrupted (SIGINT/SIGTERM); the container is torn down first
 #
 # Safety properties, all of them mechanically visible in the docker run below:
 #   - The scratch container runs with --network none, so it cannot reach the
 #     compose project network or the live db service even by accident.
 #   - The backup source is mounted at /backup with an explicit :ro suffix, so
 #     the drill cannot modify or delete a backup.
+#   - pg_restore executes the archive's SQL as the scratch superuser, and the
+#     archive may come from outside this deployment, so the container is
+#     additionally capped with --security-opt no-new-privileges, --pids-limit
+#     and --memory. A hostile archive gets no network, a read-only view of the
+#     backups, and a bounded, disposable container.
 #   - The container is created with --rm and torn down, together with its
 #     anonymous PGDATA volume, by an EXIT/INT/TERM trap installed before it is
 #     created, so an interrupted run leaves nothing behind.
@@ -103,13 +111,41 @@ cleanup_drill() {
     return 0
   fi
   _CLEANED_UP=1
-  if [[ -n "${CONTAINER_NAME}" ]]; then
-    # -v is load-bearing: the postgres image declares a VOLUME at PGDATA, so
-    # every run creates an anonymous volume. Without -v the container goes but
-    # the volume stays behind, one per drill.
+  if [[ -z "${CONTAINER_NAME}" ]]; then
+    return 0
+  fi
+
+  # -v is load-bearing: the postgres image declares a VOLUME at PGDATA, so
+  # every run creates an anonymous volume. Without -v the container goes but
+  # the volume stays behind, one per drill.
+  docker rm --force --volumes "${CONTAINER_NAME}" >/dev/null 2>&1 || true
+
+  # A signal delivered between `docker run` returning and the daemon finishing
+  # create+start can let the rm above fire before the container is registered,
+  # in which case it removes nothing and the container appears a moment later.
+  # Retry once before deciding the removal really failed.
+  if [[ -n "$(drill_container_ids)" ]]; then
+    sleep 2
     docker rm --force --volumes "${CONTAINER_NAME}" >/dev/null 2>&1 || true
   fi
+
+  # The exit status of `docker rm` is deliberately ignored — cleanup must never
+  # be the thing that fails a drill — but a surviving container is not silent:
+  # it is a running postgres holding a full unencrypted copy of the production
+  # database, so the operator is told how to remove it by hand.
+  if [[ -n "$(drill_container_ids)" ]]; then
+    err ""
+    err "WARNING: the drill container ${CONTAINER_NAME} could not be removed."
+    err "         It still holds a full copy of the restored database. Remove it with:"
+    err "           docker rm -fv ${CONTAINER_NAME}"
+  fi
   return 0
+}
+
+# Reports the drill container's id if the daemon still knows about it. Anchored
+# so a container whose name merely contains this one's cannot mask a leak.
+drill_container_ids() {
+  docker ps -aq --filter "name=^${CONTAINER_NAME}$" 2>/dev/null || true
 }
 
 on_signal() {
@@ -133,6 +169,13 @@ normalize_list() {
 # assumption to the volume name, which docker-compose.yml pins.
 backup_mount_spec() {
   if [[ -n "${BACKUP_DIR}" ]]; then
+    # A relative path passes the -d test below and then fails inside Docker
+    # with an opaque mount error, because the daemon resolves it against its
+    # own root rather than this shell's working directory.
+    if [[ "${BACKUP_DIR}" != /* ]]; then
+      err "Error: PAVILLION_BACKUP_DIR must be an absolute path: ${BACKUP_DIR}"
+      return 1
+    fi
     if [[ ! -d "${BACKUP_DIR}" ]]; then
       err "Error: backup directory not found: ${BACKUP_DIR}"
       return 1
@@ -140,6 +183,22 @@ backup_mount_spec() {
     echo "${BACKUP_DIR}:/backup:ro"
     return 0
   fi
+
+  if [[ -z "${BACKUP_VOLUME}" ]]; then
+    err "Error: PAVILLION_BACKUP_VOLUME is empty. Set it to a docker volume name,"
+    err "       or set PAVILLION_BACKUP_DIR to a host directory."
+    return 1
+  fi
+
+  # This is a volume name, not a path. A value containing / silently becomes a
+  # bind mount that the daemon creates as root; a value containing : rewrites
+  # the mount options, including the :ro suffix. Both fail open, so reject them.
+  if [[ "${BACKUP_VOLUME}" == */* || "${BACKUP_VOLUME}" == *:* ]]; then
+    err "Error: PAVILLION_BACKUP_VOLUME must be a docker volume name, not a path: ${BACKUP_VOLUME}"
+    err "       Use PAVILLION_BACKUP_DIR to drill a dump from a host directory."
+    return 1
+  fi
+
   echo "${BACKUP_VOLUME}:/backup:ro"
 }
 
@@ -178,7 +237,9 @@ resolve_requested_backup() {
     return 1
   fi
 
-  if ! normalize_list "${listing}" | grep -qxF "${requested}"; then
+  # -- so a requested name beginning with - is matched as a pattern rather than
+  # read as a grep option.
+  if ! normalize_list "${listing}" | grep -qxF -- "${requested}"; then
     err "Error: backup file not found in the backup source: ${requested}"
     return 1
   fi
@@ -239,14 +300,18 @@ compare_migration_sets() {
     return 0
   fi
 
+  # Quoted and indented by sed rather than by printf's format-reuse: the extra
+  # set comes from the dump's "SequelizeMeta" table, which is untrusted input
+  # when drilling a foreign dump. Unquoted, a stored name of * would glob against
+  # the working directory and a name with spaces would mis-split.
   err "FAIL: migration mismatch between the dump and migrations/"
   if [[ -n "${missing}" ]]; then
     err "      Applied in migrations/ but absent from the dump (dump predates this checkout):"
-    printf '        %s\n' ${missing} >&2
+    printf '%s\n' "${missing}" | sed 's/^/        /' >&2
   fi
   if [[ -n "${extra}" ]]; then
     err "      Present in the dump but absent from migrations/ (dump is newer than this checkout):"
-    printf '        %s\n' ${extra} >&2
+    printf '%s\n' "${extra}" | sed 's/^/        /' >&2
   fi
   return 1
 }
@@ -257,7 +322,7 @@ check_tables_present() {
   present=$(normalize_list "$1")
 
   for required in "SequelizeMeta" "${CORE_TABLES[@]}"; do
-    if ! printf '%s\n' "${present}" | grep -qxF "${required}"; then
+    if ! printf '%s\n' "${present}" | grep -qxF -- "${required}"; then
       missing+=("${required}")
     fi
   done
@@ -271,6 +336,11 @@ check_tables_present() {
 
 # Takes "table|count" lines and fails naming every empty core table, not just
 # the first — an operator fixing one wants to see the rest in the same run.
+#
+# The test is "prove this count is a positive integer", not "prove it is the
+# string 0". A silent pass is this script's worst possible outcome, so an empty
+# or unparseable count — a query that failed, a truncated result — is a failure
+# rather than a table scored as populated.
 evaluate_core_table_counts() {
   local line table count empty=()
 
@@ -278,18 +348,35 @@ evaluate_core_table_counts() {
     [[ -z "${line}" ]] && continue
     table="${line%%|*}"
     count="${line##*|}"
-    if [[ "${count}" == "0" ]]; then
+    if [[ ! "${count}" =~ ^[1-9][0-9]*$ ]]; then
       empty+=("${table}")
     fi
   done <<< "$(normalize_list "$1")"
 
   if (( ${#empty[@]} > 0 )); then
-    err "FAIL: core tables are empty in the restored database: ${empty[*]}"
+    err "FAIL: core tables are empty or unreadable in the restored database: ${empty[*]}"
     err "      An empty ${empty[0]} table in a live instance's backup means the"
     err "      dump does not hold the data the operator expects."
     return 1
   fi
   return 0
+}
+
+# Reduces pg_restore's own output to the part that is safe to print.
+#
+# pg_restore's "pg_restore: error:" lines name the failing operation — which
+# table, which archive member — and nothing else. The CONTEXT: and DETAIL:
+# lines Postgres appends to them quote the offending row verbatim
+# ("DETAIL: Key (email)=(someone@example.com) already exists"), and those are
+# exactly the failures a restore drill provokes. This is a monthly cron job, so
+# that text would land in a log; only the operation names are echoed, capped so
+# a dump with thousands of bad rows cannot flood the report either.
+redact_restore_output() {
+  printf '%s\n' "$1" \
+    | grep '^pg_restore: error:' \
+    | sed -E 's/(DETAIL|CONTEXT):.*//' \
+    | head -n 20 \
+    | sed 's/^/        /'
 }
 
 # --- Docker-dependent phases -------------------------------------------------
@@ -318,7 +405,7 @@ wait_for_scratch_db() {
 }
 
 main() {
-  local requested="" listing backup mount_spec expected applied present counts
+  local requested="" listing backup mount_spec expected applied present counts restore_output
   local -a failures=()
 
   case "${1:-}" in
@@ -363,11 +450,19 @@ main() {
   echo ""
 
   echo "Starting the throwaway database..."
+  # --security-opt/--pids-limit/--memory: pg_restore runs the archive's SQL as
+  # the scratch superuser, and a -Fc archive can carry COPY ... FROM PROGRAM, so
+  # the container is treated as if the dump were hostile. --cap-drop ALL is
+  # deliberately absent: the postgres entrypoint gosu's from root to postgres
+  # and needs CAP_SETUID/CAP_SETGID to do it.
   if ! docker run \
     --detach \
     --rm \
     --name "${CONTAINER_NAME}" \
     --network none \
+    --security-opt no-new-privileges \
+    --pids-limit 512 \
+    --memory 2g \
     --env POSTGRES_PASSWORD \
     --env POSTGRES_DB=postgres \
     --volume "${mount_spec}" \
@@ -375,6 +470,11 @@ main() {
     err "FAIL: could not start the scratch database container."
     return 1
   fi
+
+  # The container has the password now, and verification connects over its unix
+  # socket, so nothing on this side needs the value again. Dropping it here keeps
+  # it out of every subsequent docker exec client's environment.
+  unset POSTGRES_PASSWORD
 
   wait_for_scratch_db || return 1
 
@@ -390,20 +490,28 @@ main() {
   echo ""
 
   echo "Restoring into the scratch database..."
-  drill_exec createdb -U postgres "${SCRATCH_DB}" >/dev/null
+  if ! drill_exec createdb -U postgres "${SCRATCH_DB}" >/dev/null 2>&1; then
+    err "FAIL: could not create the scratch database ${SCRATCH_DB} in the container."
+    return 1
+  fi
 
   # No -c: the target is a database created moments ago, so there is nothing to
   # drop. --exit-on-error makes any restore error fatal rather than leaving the
   # operator to judge an ignorable-vs-fatal line for themselves.
-  if ! drill_exec pg_restore \
+  #
+  # The child's output is CAPTURED, not inherited, and passes through
+  # redact_restore_output before any of it reaches a terminal or a cron log.
+  if ! restore_output=$(drill_exec pg_restore \
     --username postgres \
     --dbname "${SCRATCH_DB}" \
     --no-owner \
     --no-privileges \
     --exit-on-error \
-    "/backup/${backup}"; then
+    "/backup/${backup}" 2>&1); then
     err "FAIL: pg_restore could not restore ${backup} into the scratch database."
     err "      The dump is corrupt, truncated, or not a pg_dump -Fc archive."
+    err "      pg_restore reported:"
+    redact_restore_output "${restore_output}" >&2 || true
     return 1
   fi
   echo "  restore completed"
@@ -411,8 +519,15 @@ main() {
 
   echo "Checking the restored database..."
 
-  present=$(drill_psql "${SCRATCH_DB}" \
-    "SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename;")
+  # stderr is left visible on this query alone: it has no fallback value, so its
+  # own error text is the operator's only diagnosis, and a pg_tables listing
+  # cannot echo row data. The two queries below suppress stderr because each
+  # falls back to a value the checks below treat as a failure.
+  if ! present=$(drill_psql "${SCRATCH_DB}" \
+    "SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename;"); then
+    err "FAIL: could not list the tables in the restored database."
+    return 1
+  fi
   if check_tables_present "${present}"; then
     echo "  PASS  schema present"
   else
