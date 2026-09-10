@@ -770,12 +770,28 @@ assert_eq "$(printf '%s\n' \
   '        pg_restore: error: could not read from input file: [redacted]')" \
   "$(redact_restore_output "${forged}")" \
   "the forged diagnostic is redacted, so it no longer reads as the genuine one"
-# The co-occurrence half of the gate, exercised on its own. Every injection
-# shape seen so far puts the COPY error first, so the position half alone would
-# stop them; this asserts the other half really is checked, rather than being a
-# clause that could be deleted without a test noticing. A batch whose first line
-# is the literal and whose second is a table-scoped failure is not an archive
-# failure whatever order the lines arrived in.
+# The gate has two halves — "first surviving line" and "no COPY failed for table
+# anywhere" — and the payload above is stopped by the second one alone, so
+# deleting the first would not fail a single assertion. Each half therefore gets
+# a payload only it can stop.
+#
+# Position half: pg_restore says "could not execute query" rather than "COPY
+# failed for table" when the failure is an index or constraint, and that message
+# quotes a value too. Nothing in this batch mentions COPY, so the allow-list is
+# live and only the line number keeps the injected literal off it.
+non_copy_forgery=$(printf '%s\n' \
+  'pg_restore: error: could not execute query: ERROR:  invalid input syntax for type integer: "x' \
+  'pg_restore: error: did not find magic string in file header' \
+  'tail"')
+assert_eq "$(printf '%s\n' \
+  '        pg_restore: error: could not execute query: [redacted]' \
+  '        pg_restore: error: [redacted]')" \
+  "$(redact_restore_output "${non_copy_forgery}")" \
+  "a literal injected below the first line is not exempted, COPY or no COPY"
+# Co-occurrence half: the literal IS the first line here, so only the presence of
+# a table-scoped failure elsewhere in the batch can deny it the exemption. An
+# archive pg_restore could not read is not an archive it then failed to COPY out
+# of, whatever order the two lines arrived in.
 co_occurring=$(printf '%s\n' \
   'pg_restore: error: could not read from input file: end of file' \
   'pg_restore: error: COPY failed for table "account": ERROR:  nope')
@@ -783,7 +799,7 @@ assert_eq "$(printf '%s\n' \
   '        pg_restore: error: could not read from input file: [redacted]' \
   '        pg_restore: error: COPY failed for table "account": [redacted]')" \
   "$(redact_restore_output "${co_occurring}")" \
-  "a literal sharing a batch with a COPY failure is not exempted, wherever it sits"
+  "a literal sharing a batch with a COPY failure is not exempted either"
 
 echo "test: redact_restore_output drops a value that is split across physical lines"
 # Round-3 defeat, captured live from postgres:17. The value wraps, so its closing
@@ -835,10 +851,22 @@ echo "test: every regex command in the redaction pipeline is locale-pinned"
 # arrive pinned too; the indent sed was the one command left unpinned and
 # survived only because `^` evaluates no character class.
 redact_body=$(sed -n '/^redact_restore_output() {/,/^}/p' "${DRILL}")
+# Comment lines are dropped first — the function's own header prose names sed
+# more than once — and the remainder is split on the pipes so each stage is
+# judged on its own text rather than by where a line happens to break.
 unpinned=$(printf '%s\n' "${redact_body}" \
+  | grep -vE '^[[:space:]]*#' \
   | tr '|' '\n' \
   | grep -E '(^|[[:space:]])(grep|sed|cut)[[:space:]]' \
   | grep -vE 'LC_ALL=C[[:space:]]+(grep|sed|cut)[[:space:]]')
+# The extraction ends at the first `}` in the first column, and this function
+# embeds a sed block that has a closing brace of its own — written flush-left it
+# would cut the body off above the pipeline and leave the check above vacuous,
+# which is how it first passed against an unpinned indent sed. Folded into the
+# same assertion so a truncated extraction reports as a failure, not a pass.
+if ! printf '%s\n' "${redact_body}" | grep -qF 'cut -c 1-200'; then
+  unpinned="the extracted function body stops before the end of the pipeline"
+fi
 assert_eq "" "${unpinned}" "no grep/sed/cut in redact_restore_output runs in the host's locale"
 
 echo "test: check_tables_present passes when every required table exists"

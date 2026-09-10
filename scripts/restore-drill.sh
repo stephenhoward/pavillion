@@ -544,12 +544,16 @@ redact_restore_output() {
   # `1{...}` is the position half of the gate and the absent "COPY failed for
   # table" is the co-occurrence half; when either fails the block is simply not
   # part of the script and every line goes through the redaction below.
+  #
+  # The block's closing brace is indented, which sed accepts, so that it is not
+  # a `}` in the first column: that is where a shell function body ends, and the
+  # suite extracts this one with sed to assert over the whole pipeline.
   if ! printf '%s\n' "${kept}" | LC_ALL=C grep -qF 'COPY failed for table'; then
     exemptions='1{
 /^pg_restore: error: could not read from input file: end of file$/b
 /^pg_restore: error: did not find magic string in file header$/b
 /^pg_restore: error: (input file )?does not appear to be a valid archive \(too short\?\)$/b
-}
+  }
 '
   fi
 
