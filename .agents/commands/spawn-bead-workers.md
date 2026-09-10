@@ -14,7 +14,7 @@ This command orchestrates around three skills that hold the authoritative prose.
 
 - [`bead-wave-orchestration`](../skills/bead-wave-orchestration/SKILL.md) — wave lifecycle: the 3-implementer cap, per-bead auditor cascade, wave-end verification chain (cross-bead-integration-verifier → architecture-auditor → build-guardian), failure handling, retry rules, epic completion sweep.
 - [`implementer-prompt-template`](../skills/implementer-prompt-template/SKILL.md) — canonical implementer subagent prompt: bead-first read, refusal protocol for unenriched beads, TDD, pre-close checklist (kill vitest, lint, targeted tests, `bd close`).
-- [`agent-discovery`](../skills/agent-discovery/SKILL.md) — dynamic discovery and selection of auditor/verifier agents. Enumerate candidates with `npx tsx .agents/tools/bead.ts agents {auditor,verifier}`; the orchestrating agent selects the applicable subset per the skill's guidance.
+- [`agent-discovery`](../skills/agent-discovery/SKILL.md) — dynamic discovery and selection of auditor/verifier agents. Enumerate candidates with `npx tsx .agents/skills/agent-discovery/scripts/agents.ts {auditor,verifier}`; the orchestrating agent selects the applicable subset per the skill's guidance.
 
 ## Overview
 
@@ -50,7 +50,7 @@ bd show <epic-id>   # hierarchy
 bd ready            # unblocked beads
 ```
 
-For each ready leaf bead, run `bd show <bead-id>` and sort into **enriched** (notes contain `Implementation Context`) vs. **unenriched** (missing). The deterministic check is `npx tsx .agents/tools/bead.ts enrichment-check <bead-id>` — exit 0 means enriched, exit 1 means not.
+For each ready leaf bead, run `bd show <bead-id>` and sort into **enriched** (notes contain `Implementation Context`) vs. **unenriched** (missing). The deterministic check is `npx tsx .agents/skills/bead-state-assessment/scripts/bead.ts enrichment-check <bead-id>` — exit 0 means enriched, exit 1 means not.
 
 **Enrichment gate (REFUSE to start if any targeted bead lacks Implementation Context).** If any ready or user-selected bead is unenriched:
 
@@ -77,7 +77,7 @@ Spawning rules (invariants):
 As each implementer closes (via `bd close`):
 
 1. Collect the bead's changed file list (typically `git diff --name-only` over the implementer's commit, falling back to the bead's `Files to Modify`).
-2. Enumerate candidates with `npx tsx .agents/tools/bead.ts agents auditor` and select the applicable subset yourself by matching the changed files against each candidate's description (per [`agent-discovery`](../skills/agent-discovery/SKILL.md); default toward inclusion). The enumeration tool is the ONLY source of candidates — do not maintain a hardcoded list.
+2. Enumerate candidates with `npx tsx .agents/skills/agent-discovery/scripts/agents.ts auditor` and select the applicable subset yourself by matching the changed files against each candidate's description (per [`agent-discovery`](../skills/agent-discovery/SKILL.md); default toward inclusion). The enumeration tool is the ONLY source of candidates — do not maintain a hardcoded list.
 3. Spawn every matched auditor in a single parallel Task batch. If an auditor's description accepts a spec path, pass `Spec: {spec_path}`.
 4. Auditors are read-only and run concurrently with other implementers and each other; they do NOT count against the 3-slot implementer budget.
 5. Apply auditor verdicts per [`review-mode-auditor`](../skills/review-mode-auditor/SKILL.md): PASS proceeds; PASS WITH WARNINGS is recorded in the wave summary; FAIL returns findings to the implementer for a single retry round.
@@ -114,8 +114,8 @@ When every wave has closed and every bead is complete:
 1. Verify epic status: `bd show <epic-id>`.
 2. Discover comprehensive agents via `agent-discovery`:
    ```bash
-   npx tsx .agents/tools/bead.ts agents auditor
-   npx tsx .agents/tools/bead.ts agents verifier
+   npx tsx .agents/skills/agent-discovery/scripts/agents.ts auditor
+   npx tsx .agents/skills/agent-discovery/scripts/agents.ts verifier
    ```
 3. Filter matches against the epic's full changed file set (union across waves: `git diff --name-only main...HEAD`).
 4. Always include `implementation-verifier` if present (full spec verification: lint, full suite, e2e, acceptance criteria). If absent, log the absence; do not substitute a different agent.

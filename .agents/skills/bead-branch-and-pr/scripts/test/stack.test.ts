@@ -1,5 +1,5 @@
 /**
- * Unit tests for .agents/tools/lib/stack.ts
+ * Unit tests for .agents/skills/bead-branch-and-pr/scripts/lib/stack.ts
  *
  * The pure function (stackPlan) is tested directly with inputs. CLI-calling
  * functions (gitSafeToStart, stackCreate, stackSubmit, syncAndRestack)

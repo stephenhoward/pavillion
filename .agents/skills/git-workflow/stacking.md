@@ -11,8 +11,8 @@ This file is the **sole source of truth** for `gh stack` command patterns and
 stacking rules. Other skills (`bead-branch-and-pr`,
 `bead-wave-orchestration`, etc.) cross-reference this file; they do not
 restate its contents. The corresponding operations for orchestrators are
-implemented only in `.agents/tools/stack.ts` (`create`,
-`submit`, `sync`).
+implemented only in `.agents/skills/bead-branch-and-pr/scripts/stack.ts`
+(`create`, `submit`, `sync`).
 
 ## When a stack exists
 
@@ -72,9 +72,10 @@ Rules:
   cannot violate the no-draft invariant, only backstop it. This converges to
   reserve-only (sweep only if a PR surfaces as draft despite `--open`) once
   `--open` is proven reliable on re-submits — see the docstring on
-  `stackSubmit` in `.agents/tools/lib/stack.ts` for the exact trim condition. `submit` is
-  confirmed idempotent on re-submit (no new commits, or new commits pushed)
-  and never clobbers a title/body already set via `gh pr edit`.
+  `stackSubmit` in `.agents/skills/bead-branch-and-pr/scripts/lib/stack.ts` for
+  the exact trim condition. `submit` is confirmed idempotent on re-submit
+  (no new commits, or new commits pushed) and never clobbers a title/body
+  already set via `gh pr edit`.
 - `gh stack view` / `gh stack view --json` / `gh stack view --short` inspect
   the current checkout's stack — local-only, they do not touch the network or
   prove repo enablement (see Preflight below).

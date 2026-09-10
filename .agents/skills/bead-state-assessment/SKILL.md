@@ -7,7 +7,7 @@ description: Classify a bead's lifecycle state and decide the next phase. Use th
 
 This skill classifies any bead into one of seven lifecycle states and recommends
 the next phase. Its prose documents the state machine for humans; the
-deterministic JSON verdicts come from the `.agents/tools/bead.ts` CLI.
+deterministic JSON verdicts come from this skill's `scripts/bead.ts` CLI.
 
 Consumers: `/plan`, `/spawn-bead-workers`, `/analyze-bead`,
 `/clear-backlog`.
@@ -98,13 +98,13 @@ can complete in a single session without running out of context.
 
 ## Implementation
 
-The deterministic checks live in `.agents/tools/lib/bead.ts` and are invoked
-via the CLI:
+The deterministic checks live in `scripts/lib/bead.ts` and are invoked via
+the CLI:
 
 ```bash
-npx tsx .agents/tools/bead.ts state <bead-id>
-npx tsx .agents/tools/bead.ts sizing-check <bead-id>
-npx tsx .agents/tools/bead.ts enrichment-check <bead-id>
+npx tsx .agents/skills/bead-state-assessment/scripts/bead.ts state <bead-id>
+npx tsx .agents/skills/bead-state-assessment/scripts/bead.ts sizing-check <bead-id>
+npx tsx .agents/skills/bead-state-assessment/scripts/bead.ts enrichment-check <bead-id>
 ```
 
 ### `bead.ts state <bead-id>`
@@ -139,7 +139,7 @@ recommended.
 
 ## Tests
 
-Tests live at `.agents/tools/test/bead.test.ts` (run with
+Tests live at `scripts/test/bead.test.ts` (run with
 `npx vitest run --config .agents/tools/vitest.config.ts`). Fixtures capture
 `bd show` output for various bead states; the suite verifies that each
 function correctly classifies state, identifies missing phases, detects

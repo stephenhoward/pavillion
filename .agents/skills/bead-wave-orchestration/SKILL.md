@@ -23,7 +23,7 @@ Depends on / cross-references:
 
 - [`agent-discovery`](../agent-discovery/SKILL.md) — per-bead auditor
   selection and epic-completion discovery (candidates enumerated via
-  `npx tsx .agents/tools/bead.ts agents <role>`).
+  `npx tsx .agents/skills/agent-discovery/scripts/agents.ts <role>`).
 - [`implementer-prompt-template`](../implementer-prompt-template/SKILL.md) —
   the canonical prompt every implementer in a wave receives, and the
   pre-close discipline (kill stale vitest, lint, targeted tests) the wave
@@ -42,10 +42,11 @@ These invariants hold across every wave, every run, every consumer. Breaking
 any of them corrupts the orchestration contract.
 
 1. **Maximum 3 parallel implementers — and the cap applies to CHAINS.**
-   Waves are built from dependency chains (`npx tsx .agents/tools/stack.ts
-   plan`), not individual beads. Within a
-   chain, beads run strictly sequentially (each level's branch stacks on
-   its predecessor per `git-workflow/stacking.md`), so a chain occupies
+   Waves are built from dependency chains
+   (`npx tsx .agents/skills/bead-branch-and-pr/scripts/stack.ts plan`), not
+   individual beads. Within a chain, beads run strictly sequentially (each
+   level's branch stacks on its predecessor per
+   `git-workflow/stacking.md`), so a chain occupies
    one implementer slot for its whole duration. Never run a 4th chain
    while three are still in flight; extras queue for the next free slot.
 2. **Per-bead auditors do NOT count against the 3-slot implementer budget.**
@@ -86,11 +87,11 @@ any of them corrupts the orchestration contract.
 ## Wave lifecycle
 
 A wave is a set of ready, enriched dependency CHAINS that the orchestrator
-runs together. Chains come from the plan tool
-(`npx tsx .agents/tools/stack.ts plan`), which turns an epic's full child
-set plus the bd "blocks" edges among them into an ordered forest of chains;
-non-linear graphs (cycles, forks, joins) fall back to a flat plan of
-singleton chains with a warning. Branch/stack conventions the chains
+runs together. Chains come from the plan tool (`npx tsx
+.agents/skills/bead-branch-and-pr/scripts/stack.ts plan`), which turns an
+epic's full child set plus the bd "blocks" edges among them into an ordered
+forest of chains; non-linear graphs (cycles, forks, joins) fall back to a flat
+plan of singleton chains with a warning. Branch/stack conventions the chains
 follow: `git-workflow/stacking.md`.
 
 ### 1. Identify ready + enriched chains
@@ -116,8 +117,8 @@ Before spawning anything, the orchestrator:
 The orchestrator runs ready chains under the 3-slot cap; independent
 chains run in parallel, and within a chain beads run strictly
 sequentially, each level's branch stacking on its predecessor
-(operations: `npx tsx .agents/tools/stack.ts create` / `submit`;
-conventions: `git-workflow/stacking.md`).
+(operations: `npx tsx .agents/skills/bead-branch-and-pr/scripts/stack.ts
+create` / `submit`; conventions: `git-workflow/stacking.md`).
 
 Concurrency model (hybrid): the first chain of a wave runs in the main
 checkout; each ADDITIONAL concurrent chain gets its own git worktree,
@@ -145,8 +146,9 @@ spawns that bead's matched auditors:
    `git diff --name-only <merge-base>...HEAD` over that implementer's
    commit, or the bead's `Files to Modify` list if no commit lookup is
    available).
-2. Enumerate auditor candidates with `npx tsx .agents/tools/bead.ts agents
-   auditor` and select the applicable subset yourself per
+2. Enumerate auditor candidates with
+   `npx tsx .agents/skills/agent-discovery/scripts/agents.ts auditor` and
+   select the applicable subset yourself per
    [`agent-discovery`](../agent-discovery/SKILL.md) — match the changed
    files against each candidate's description, defaulting toward
    inclusion.
@@ -256,7 +258,7 @@ pre-spawn enrichment check missed it. Recover:
 1. Spawn a **general-purpose enrichment subagent** scoped to just that
    bead, following the `/analyze-bead` Phase 4 enrichment flow.
 2. Wait for enrichment to complete. Verify via
-   `npx tsx .agents/tools/bead.ts enrichment-check <id>`.
+   `npx tsx .agents/skills/bead-state-assessment/scripts/bead.ts enrichment-check <id>`.
 3. Re-spawn the implementer with the same prompt.
 
 **Enrichment-then-retry does NOT count toward the retry limit.** It is
@@ -340,11 +342,11 @@ a final comprehensive sweep before declaring the epic done.
 
 1. **Discover applicable comprehensive agents** via
    [`agent-discovery`](../agent-discovery/SKILL.md):
-   - `npx tsx .agents/tools/bead.ts agents auditor` — all `*-auditor`
-     agents; keep those whose descriptions indicate comprehensive /
+   - `npx tsx .agents/skills/agent-discovery/scripts/agents.ts auditor` — all
+     `*-auditor` agents; keep those whose descriptions indicate comprehensive /
      final-pass scope.
-   - `npx tsx .agents/tools/bead.ts agents verifier` — all `*-verifier`
-     agents.
+   - `npx tsx .agents/skills/agent-discovery/scripts/agents.ts verifier` — all
+     `*-verifier` agents.
 2. **Filter matches** against the epic's full changed file set (union of
    all waves' changes: `git diff --name-only main...HEAD`).
 3. **Always include `implementation-verifier`** if present, regardless
@@ -400,5 +402,5 @@ is a bug; the skill is authoritative.
 The skill is deliberately NOT the source of truth for two adjacent
 layers: stacking conventions live in `git-workflow/stacking.md`, and the
 executable chain/`gh stack` operations (`plan`, `create`, `submit`,
-`sync`) live in `.agents/tools/stack.ts` — this skill cross-references
-both and restates neither.
+`sync`) live in `.agents/skills/bead-branch-and-pr/scripts/stack.ts` — this
+skill cross-references both and restates neither.

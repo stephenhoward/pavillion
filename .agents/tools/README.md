@@ -5,33 +5,38 @@ judgment (selection, triage, review); these scripts do the mechanical work
 (parsing `bd` output, git checks, gh-stack operations) so results are
 consistent and testable.
 
-This replaces the retired script-launches-agent orchestrator that lived at
-`.agents/orchestrators/` — the surviving deterministic logic moved here as
-agent-callable CLIs (agent-uses-script).
+Tooling owned by a single skill lives with that skill, in a `scripts/`
+subdirectory beside its `SKILL.md`. What remains here is the residue: work
+that has no single owning skill, plus the shared test config.
 
 ## Tools
 
 All commands print JSON to stdout. Run from the repo root.
 
 ```bash
-# Bead classifiers and utilities
-npx tsx .agents/tools/bead.ts state <bead-id>            # lifecycle state verdict
-npx tsx .agents/tools/bead.ts sizing-check <bead-id>     # 2-of-3 decomposition heuristic
-npx tsx .agents/tools/bead.ts enrichment-check <bead-id> # exit 0 enriched, 1 not
 npx tsx .agents/tools/bead.ts escalate <id> <reason> [phase]  # needs-human label + note
-npx tsx .agents/tools/bead.ts agents <suffix>            # list *-advisor/-auditor/-verifier agents
-
-# Git / gh-stack operations (conventions: git-workflow skill, stacking.md)
-npx tsx .agents/tools/stack.ts safe-to-start [parent]    # clean tree + HEAD-at-base check
-npx tsx .agents/tools/stack.ts plan '<json>'             # dependency-chain plan for an epic
-npx tsx .agents/tools/stack.ts create <branch> <parent> --chained|--single
-npx tsx .agents/tools/stack.ts submit <branch> --chained|--single
-npx tsx .agents/tools/stack.ts sync                      # gh stack sync --prune
 ```
 
-Local branch/worktree cleanup lives with its skill rather than here: the CLI
-is `.agents/skills/git-cleanup/scripts/git-cleanup.ts` and the flow that
-drives it is `.agents/skills/git-cleanup/SKILL.md`.
+`escalate` is called by `agent-discovery`, `epic-bead-workflow`,
+`bead-wave-orchestration`, `implementer-prompt-template`, `/clear-backlog`
+and `/spawn-bead-workers` — it is a shared orchestration primitive rather
+than one skill's tooling, so it has not been rehoused. Finding it a home
+(most likely `epic-bead-workflow`, which documents the escalation protocol)
+is the remaining cleanup.
+
+## Tooling that lives with its skill
+
+| Skill | CLI | Commands |
+|---|---|---|
+| `bead-state-assessment` | `.agents/skills/bead-state-assessment/scripts/bead.ts` | `state`, `sizing-check`, `enrichment-check` |
+| `agent-discovery` | `.agents/skills/agent-discovery/scripts/agents.ts` | `<suffix>` — list `*-advisor`/`-auditor`/`-verifier` agents |
+| `bead-branch-and-pr` | `.agents/skills/bead-branch-and-pr/scripts/stack.ts` | `safe-to-start`, `plan`, `create`, `submit`, `sync` |
+| `git-cleanup` | `.agents/skills/git-cleanup/scripts/git-cleanup.ts` | `classify`, `execute` |
+
+Each of those directories is self-contained: the CLI, its `lib/`, its
+`test/`, and a local copy of the `run()` helper in `lib/shared.ts` here.
+The SKILL.md beside it is the operator-facing flow; git/PR conventions
+remain the `git-workflow` skill's to define.
 
 ## Tests
 
@@ -39,5 +44,6 @@ drives it is `.agents/skills/git-cleanup/SKILL.md`.
 npx vitest run --config .agents/tools/vitest.config.ts
 ```
 
-That config covers both `.agents/tools/test/` and the `scripts/test/`
-directory of any skill that ships its own tooling.
+That config covers `.agents/tools/test/` and the `scripts/test/` directory
+of every skill that ships its own tooling. The root `vitest.config.ts` only
+includes `src/**`, so a bare `npx vitest run` does not see these.

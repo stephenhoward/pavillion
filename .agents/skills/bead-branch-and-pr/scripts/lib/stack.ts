@@ -19,7 +19,7 @@
  */
 
 import { spawnSync as nodeSpawnSync } from 'node:child_process';
-import { run, type SpawnDeps } from './shared.js';
+import { run, type SpawnDeps } from './run.js';
 
 export interface GitSafeResult {
   ok: boolean;

@@ -2,11 +2,11 @@
  * Agent-facing CLI for git / gh-stack operations. JSON to stdout.
  *
  * Usage:
- *   npx tsx .agents/tools/stack.ts safe-to-start [parent-branch]   # exit 0 ok, 1 not
- *   npx tsx .agents/tools/stack.ts plan '<json>'                   # {"beads":[...],"edges":[{"blocker","blocked"}]}
- *   npx tsx .agents/tools/stack.ts create <branch> <parent> --chained|--single
- *   npx tsx .agents/tools/stack.ts submit <branch> --chained|--single
- *   npx tsx .agents/tools/stack.ts sync
+ *   npx tsx .agents/skills/bead-branch-and-pr/scripts/stack.ts safe-to-start [parent-branch]   # exit 0 ok, 1 not
+ *   npx tsx .agents/skills/bead-branch-and-pr/scripts/stack.ts plan '<json>'                   # {"beads":[...],"edges":[{"blocker","blocked"}]}
+ *   npx tsx .agents/skills/bead-branch-and-pr/scripts/stack.ts create <branch> <parent> --chained|--single
+ *   npx tsx .agents/skills/bead-branch-and-pr/scripts/stack.ts submit <branch> --chained|--single
+ *   npx tsx .agents/skills/bead-branch-and-pr/scripts/stack.ts sync
  *
  * Conventions live in git-workflow/stacking.md; these commands are the only
  * implementation of gh-stack operations (anti-drift rule).

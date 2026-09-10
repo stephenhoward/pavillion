@@ -36,10 +36,19 @@ tool for them.
 
 ## The tool
 
-Commands live in `.agents/tools/stack.ts` (implementation:
-`.agents/tools/lib/stack.ts`). All emit JSON to stdout. This is the ONLY
-place gh-stack operations are implemented (anti-drift rule); command shapes
-are pinned to gh-stack 0.0.8 spike-verified behavior.
+Everything the tool needs lives in this directory:
+
+| Path | What it is |
+|---|---|
+| `scripts/stack.ts` | the CLI documented below |
+| `scripts/lib/stack.ts` | planner, git checks, and gh-stack operations |
+| `scripts/lib/run.ts` | command plumbing, with `cwd` forwarding for worktree-hosted chains |
+| `scripts/test/` | unit tests over stubbed spawn |
+
+Invoke it as `npx tsx .agents/skills/bead-branch-and-pr/scripts/stack.ts
+<command>`. All commands emit JSON to stdout. This is the ONLY place
+gh-stack operations are implemented (anti-drift rule); command shapes are
+pinned to gh-stack 0.0.8 spike-verified behavior.
 
 ### `stack.ts safe-to-start [parent-branch]`
 
@@ -104,7 +113,7 @@ build-guardian, and submit only once it passes.
 
 ## Testing
 
-Tests live at `.agents/tools/test/stack.test.ts` (run with
+Tests live at `scripts/test/stack.test.ts` (run with
 `npx vitest run --config .agents/tools/vitest.config.ts`). The suite covers
 the pure planner, the spawn-mocked CLI wrappers, and cwd forwarding for
 worktree-hosted chains.
