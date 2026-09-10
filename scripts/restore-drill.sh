@@ -496,14 +496,30 @@ evaluate_core_table_counts() {
 # injected line, and an exemption keyed on the text alone would then hand the
 # operator a false "truncated archive" diagnosis for what was really a row or
 # type error. Verified live against postgres:17. So the exemption is gated on
-# POSITION as well as text: a genuine archive-level failure is the only error
-# pg_restore emits, and never co-occurs with a table-scoped "COPY failed for
-# table" line. A literal is therefore exempt only when it is the FIRST surviving
-# line of a batch that contains no "COPY failed for table" line anywhere — which
-# an injected line cannot be, because the COPY error whose message carried it
-# always precedes it. Off the allow-list, such a line is redacted like any
-# other, so a forgery still costs the attacker the ": [redacted]" that a genuine
-# diagnostic does not carry.
+# the SHAPE OF THE BATCH as well as the text: a genuine archive-level failure is
+# the only error pg_restore emits, because it stops before reading any table's
+# data. A literal is therefore exempt ONLY WHEN THE SURVIVING BATCH IS EXACTLY
+# ONE LINE. An injected literal arrives underneath the error line whose message
+# carried it, so it is never alone. Off the allow-list, such a line is redacted
+# like any other, so a forgery still costs the attacker the ": [redacted]" that a
+# genuine diagnostic does not carry.
+#
+# One line, rather than the earlier "first line of a batch carrying no COPY
+# failure": that two-part rule could be re-enabled by flooding. `head -n 20`
+# truncates the batch before the gate reads it, so 25 filler error lines pushed
+# the disabling COPY line off the end and an injected literal on line 1 was
+# exempted again. The one-line rule is strictly tighter and has nothing to flood.
+# It costs the drill nothing: a truncated archive, a bad header and a non-archive
+# each produce a one-line batch, which is the case the acceptance criteria ask
+# this function to name.
+#
+# The residue it does not close: the gate sees only the lines the filter kept, so
+# a carrier line wearing some OTHER prefix — `pg_restore: warning: ...` — would be
+# dropped and leave an injected literal alone in a one-line batch, byte-identical
+# to the genuine diagnostic. Once the filter has run the two batches are the same
+# text, so nothing at this layer can tell them apart. No capture of real
+# pg_restore quoting a row value under a non-error prefix exists; this is
+# residual rather than exploited.
 #
 # The cheap bounds around all of that, none of which has ever been defeated:
 # only "pg_restore: error:" lines are kept at all (which is also what drops
@@ -511,12 +527,17 @@ evaluate_core_table_counts() {
 # lines, along with progress chatter), at most 20 lines, at most 200 bytes each.
 #
 # LC_ALL=C here is byte semantics for the host's own grep/sed/cut, not a
-# language assumption: a corrupt dump can put invalid UTF-8 into this text, and
-# a multibyte locale can refuse to match a line containing it — on BSD sed an
-# unpinned substitution given invalid UTF-8 aborts with "RE error: illegal byte
-# sequence" and passes the line through UNMODIFIED, which is a fail-open. It is
-# on every command in the pipeline for that reason, the indent included, even
-# where the current regex would not evaluate a character class.
+# language assumption: a corrupt dump can put invalid UTF-8 into this text, and a
+# multibyte locale mishandles it in one of two ways, neither acceptable. GNU sed
+# — the one that matters most, since the drill is documented as a Linux cron job
+# — treats an invalid byte as matching nothing, so an unpinned `s/^.*$/…/` can
+# FAIL TO MATCH a line containing one and pass that line through UNMODIFIED. That
+# defeats the catch-all itself, and it is a fail-OPEN in the one function whose
+# job is to fail closed. BSD sed instead aborts the stream with "RE error:
+# illegal byte sequence", so the diagnostics are lost rather than leaked —
+# fail-closed, but a broken drill. The pin removes both. It is on every command
+# in the pipeline for that reason, the indent included, even where the current
+# regex would not evaluate a character class.
 #
 # The 200-byte bound is bytes, not characters, so a kept prefix longer than that
 # can be cut mid-UTF-8-sequence and emit an invalid byte. That is cosmetic and
@@ -537,23 +558,25 @@ redact_restore_output() {
   # because the allow-list gate below is a property of the surviving BATCH
   # rather than of any line read on its own.
   kept=$(printf '%s\n' "$1" | LC_ALL=C grep '^pg_restore: error:' | head -n 20) || true
+  # An empty batch means nothing here came from pg_restore at all, and it must
+  # leave with nothing. restore_output is `docker exec ... 2>&1`, so a
+  # daemon-level failure ("Error response from daemon: ...", "OCI runtime exec
+  # failed: ...") really does arrive with zero matching lines. Without this
+  # return the catch-all below matches the one empty line the printf produces
+  # and FABRICATES `pg_restore: error: [redacted]`, reporting a pg_restore
+  # failure for what was a Docker problem.
   if [[ -z "${kept}" ]]; then
     return 0
   fi
 
-  # `1{...}` is the position half of the gate and the absent "COPY failed for
-  # table" is the co-occurrence half; when either fails the block is simply not
-  # part of the script and every line goes through the redaction below.
-  #
-  # The block's closing brace is indented, which sed accepts, so that it is not
-  # a `}` in the first column: that is where a shell function body ends, and the
-  # suite extracts this one with sed to assert over the whole pipeline.
-  if ! printf '%s\n' "${kept}" | LC_ALL=C grep -qF 'COPY failed for table'; then
-    exemptions='1{
-/^pg_restore: error: could not read from input file: end of file$/b
+  # The gate: the allow-list is part of the sed script only for a ONE-LINE batch,
+  # which is the only shape a genuine archive-level failure produces. For any
+  # longer batch the block is simply not there and every line, literal or not,
+  # goes through the redaction below.
+  if [[ "${kept}" != *$'\n'* ]]; then
+    exemptions='/^pg_restore: error: could not read from input file: end of file$/b
 /^pg_restore: error: did not find magic string in file header$/b
 /^pg_restore: error: (input file )?does not appear to be a valid archive \(too short\?\)$/b
-  }
 '
   fi
 
@@ -617,17 +640,23 @@ validate_drill_settings() {
 
 # Every command the drill runs inside the scratch container goes through here.
 #
-# LC_ALL=C pins the CLIENT-side message catalog of the tool being exec'd, so
-# pg_restore's own prefix is the ASCII "pg_restore: error:" that
-# redact_restore_output's line filter keys on, rather than a translated one, on
-# every image an operator can point PAVILLION_DRILL_IMAGE at. That is the whole of
-# what it buys, and redaction does not depend on it: it does NOT reach the severity
-# label or the quoting glyphs inside the message body, because those are the
-# SERVER's, printed in its lc_messages, fixed when the postmaster started from the
-# image's baked-in LANG — no client-side variable can change an already-running
-# server's message language. redact_restore_output therefore assumes nothing about
-# the message body and does not parse it at all; see its header. This pin is a
-# cheap stabiliser for the line filter, not the reason the redaction holds.
+# LC_ALL=C pins the CLIENT-side message catalog of the tool being exec'd, so the
+# text pg_restore writes itself is the ASCII an English capture would show, on
+# every image an operator can point PAVILLION_DRILL_IMAGE at. Two things in
+# redact_restore_output read that text as English literals: the line filter, which
+# keys on the "pg_restore: error:" prefix, and the three archive-level diagnostics
+# its allow-list matches exactly. Those two are the whole of what this pin buys,
+# and neither is what makes the redaction safe — unpinned, a translated pg_restore
+# writes a prefix the filter does not recognise and a diagnostic the allow-list
+# does not match, so its lines are dropped or redacted whole. The operator loses
+# the archive-level diagnosis; no row value is exposed by losing it. What the pin
+# does NOT reach is the severity label and the quoting glyphs inside the message
+# body, because those are the SERVER's, printed in its lc_messages, fixed when the
+# postmaster started from the image's baked-in LANG — no client-side variable can
+# change an already-running server's message language. redact_restore_output
+# therefore assumes nothing about the message body and does not parse it at all;
+# see its header. This pin buys the operator a readable diagnosis, not the
+# redaction's safety.
 # It is applied to every exec rather than to pg_restore alone: the psql calls'
 # diagnostics reach the operator too, one of them deliberately unfiltered, and one
 # pinned wrapper is one invariant to hold rather than two paths to keep in step.

@@ -696,9 +696,10 @@ echo "test: redact_restore_output keeps the archive-level diagnostics whole"
 # them on purpose.
 #
 # Each fixture is a one-line batch, which is what a genuine archive-level
-# failure looks like: pg_restore stops there, so the diagnostic is the only
-# error it emits. That is also what qualifies it for the exemption, which is
-# gated on position — see the forgery test below for the other side of it.
+# failure looks like: pg_restore stops before it reads any table's data, so the
+# diagnostic is the only error it emits. Being alone in the batch is also what
+# qualifies it for the exemption — see the forgery tests below for the other
+# side of it.
 while IFS='|' read -r shape line; do
   [[ -z "${shape}" ]] && continue
   assert_eq "        ${line}" "$(redact_restore_output "${line}")" \
@@ -759,8 +760,9 @@ echo "test: an injected line cannot forge an archive-level diagnostic"
 # print that literal on a line of its own, where the text-only allow-list
 # exempted it byte-for-byte — showing the operator a false "truncated archive"
 # diagnosis for what was really a row/type error. The allow-list is now gated on
-# position: exempt only as the first surviving line of a batch with no "COPY
-# failed for table" line in it, which an injected line can never be.
+# the batch: exempt only when the surviving batch is exactly one line, which an
+# injected literal never is — it arrives underneath the error line whose message
+# carried it.
 forged=$(printf '%s\n' \
   'pg_restore: error: COPY failed for table "account": ERROR:  invalid input syntax for type integer: "x' \
   'pg_restore: error: could not read from input file: end of file' \
@@ -770,15 +772,16 @@ assert_eq "$(printf '%s\n' \
   '        pg_restore: error: could not read from input file: [redacted]')" \
   "$(redact_restore_output "${forged}")" \
   "the forged diagnostic is redacted, so it no longer reads as the genuine one"
-# The gate has two halves — "first surviving line" and "no COPY failed for table
-# anywhere" — and the payload above is stopped by the second one alone, so
-# deleting the first would not fail a single assertion. Each half therefore gets
-# a payload only it can stop.
+# Two more shapes, kept from when the gate had two halves ("first surviving line"
+# AND "no COPY failed for table anywhere") and each needed a payload only it could
+# stop. There is one rule now — the batch is one line, or the allow-list is not
+# live — so all three payloads exercise it, and they are kept because each is a
+# distinct way an injected literal reaches the batch. What they assert is the
+# outcome: a forged literal is not exempted.
 #
-# Position half: pg_restore says "could not execute query" rather than "COPY
-# failed for table" when the failure is an index or constraint, and that message
-# quotes a value too. Nothing in this batch mentions COPY, so the allow-list is
-# live and only the line number keeps the injected literal off it.
+# The failure is not always a COPY: pg_restore says "could not execute query" for
+# an index or constraint, and that message quotes a value too. Nothing in this
+# batch mentions COPY, which under the old rule was what made the allow-list live.
 non_copy_forgery=$(printf '%s\n' \
   'pg_restore: error: could not execute query: ERROR:  invalid input syntax for type integer: "x' \
   'pg_restore: error: did not find magic string in file header' \
@@ -788,10 +791,10 @@ assert_eq "$(printf '%s\n' \
   '        pg_restore: error: [redacted]')" \
   "$(redact_restore_output "${non_copy_forgery}")" \
   "a literal injected below the first line is not exempted, COPY or no COPY"
-# Co-occurrence half: the literal IS the first line here, so only the presence of
-# a table-scoped failure elsewhere in the batch can deny it the exemption. An
-# archive pg_restore could not read is not an archive it then failed to COPY out
-# of, whatever order the two lines arrived in.
+# And the literal is not always second: here it IS the first line, which under
+# the old rule was what made it eligible. An archive pg_restore could not read is
+# not an archive it then failed to COPY out of, whatever order the lines arrived
+# in, and either way the batch is two lines.
 co_occurring=$(printf '%s\n' \
   'pg_restore: error: could not read from input file: end of file' \
   'pg_restore: error: COPY failed for table "account": ERROR:  nope')
@@ -799,7 +802,7 @@ assert_eq "$(printf '%s\n' \
   '        pg_restore: error: could not read from input file: [redacted]' \
   '        pg_restore: error: COPY failed for table "account": [redacted]')" \
   "$(redact_restore_output "${co_occurring}")" \
-  "a literal sharing a batch with a COPY failure is not exempted either"
+  "a literal first in a batch that carries a COPY failure is not exempted either"
 
 echo "test: redact_restore_output drops a value that is split across physical lines"
 # Round-3 defeat, captured live from postgres:17. The value wraps, so its closing
@@ -842,6 +845,21 @@ restore_stderr=$(for i in $(seq 1 60); do echo "pg_restore: error: line ${i}"; d
 redacted=$(redact_restore_output "${restore_stderr}")
 assert_eq "20" "$(printf '%s\n' "${redacted}" | grep -c 'pg_restore: error:')" "at most 20 error lines are echoed"
 
+echo "test: redact_restore_output invents no diagnostic when nothing came from pg_restore"
+# The empty-batch guard, which the rest of the suite never touched: deleting
+# `if [[ -z "${kept}" ]]; then return 0; fi` passed every other assertion here.
+# Without it the printf that feeds the pipeline emits one empty line, the
+# catch-all substitution matches it, and the function fabricates
+# `pg_restore: error: [redacted]` out of a stream pg_restore never wrote.
+#
+# That is reachable, not theoretical: restore_output is `docker exec ... 2>&1`,
+# so a daemon-level failure arrives with no pg_restore line in it at all and the
+# drill would blame the dump for what was a Docker problem.
+assert_eq "" "$(redact_restore_output 'Error response from daemon: container not running')" \
+  "a Docker daemon message is not reissued as a pg_restore error"
+assert_eq "" "$(redact_restore_output '')" \
+  "an empty restore output produces no output at all"
+
 echo "test: every regex command in the redaction pipeline is locale-pinned"
 # Not style. On BSD sed an unpinned substitution given invalid UTF-8 — which a
 # corrupt dump can put into this text — aborts with "RE error: illegal byte
@@ -859,12 +877,18 @@ unpinned=$(printf '%s\n' "${redact_body}" \
   | tr '|' '\n' \
   | grep -E '(^|[[:space:]])(grep|sed|cut)[[:space:]]' \
   | grep -vE 'LC_ALL=C[[:space:]]+(grep|sed|cut)[[:space:]]')
-# The extraction ends at the first `}` in the first column, and this function
-# embeds a sed block that has a closing brace of its own — written flush-left it
-# would cut the body off above the pipeline and leave the check above vacuous,
-# which is how it first passed against an unpinned indent sed. Folded into the
-# same assertion so a truncated extraction reports as a failure, not a pass.
-if ! printf '%s\n' "${redact_body}" | grep -qF 'cut -c 1-200'; then
+# The extraction ends at the first `}` in the first column, so anything that puts
+# one inside this function — an embedded sed block, a brace-expansion — cuts the
+# body off above the pipeline and leaves the check above vacuous, which is how it
+# first passed against an unpinned indent sed. Folded into the same assertion so a
+# truncated extraction reports as a failure rather than a pass. Anchored on the
+# presence of the `cut` STAGE, independently of both its byte bound and its
+# locale pin, so that the only thing able to fire it is a body that really stops
+# early. Pinned to `cut -c 1-200` it would fire on a changed bound, and pinned to
+# `LC_ALL=C cut` it would fire on an unpinned cut — in each case reporting a
+# truncated extraction that had not happened and sending a maintainer to the
+# wrong place. An unpinned cut is the scan's finding above, not this one's.
+if ! printf '%s\n' "${redact_body}" | grep -qE '\|[[:space:]]*(LC_ALL=C[[:space:]]+)?cut[[:space:]]'; then
   unpinned="the extracted function body stops before the end of the pipeline"
 fi
 assert_eq "" "${unpinned}" "no grep/sed/cut in redact_restore_output runs in the host's locale"
