@@ -26,7 +26,11 @@
 #   PAVILLION_DRILL_IMAGE     Postgres image for the scratch database. Must
 #                             match the deployed db service. Default: postgres:17
 #   PAVILLION_DRILL_TIMEOUT   Seconds to wait for the scratch database to accept
-#                             connections. Default: 90
+#                             connections. Default: 90. Capped at 3600: the
+#                             container is holding a full unencrypted copy of
+#                             production for the whole wait, so an unbounded
+#                             timeout is a longer exposure rather than a
+#                             kindness. A larger value is rejected, not clamped.
 #   PAVILLION_MIGRATIONS_DIR  Directory holding the migration files the dump is
 #                             compared against. Default: <repo>/migrations
 #
@@ -89,6 +93,11 @@ BACKUP_DIR="${PAVILLION_BACKUP_DIR:-}"
 DRILL_IMAGE="${PAVILLION_DRILL_IMAGE:-postgres:17}"
 DRILL_TIMEOUT="${PAVILLION_DRILL_TIMEOUT:-90}"
 MIGRATIONS_DIR="${PAVILLION_MIGRATIONS_DIR:-${REPO_ROOT}/migrations}"
+
+# Upper bound on PAVILLION_DRILL_TIMEOUT. An hour is far longer than any real
+# postgres start-up and short enough that a mistyped value cannot leave a
+# container holding a copy of production alive overnight.
+DRILL_TIMEOUT_MAX=3600
 
 # The scratch database name. Deliberately not the production database name, so
 # a mistyped connection string cannot resolve to anything real.
@@ -480,6 +489,16 @@ validate_drill_settings() {
     err "Error: PAVILLION_DRILL_TIMEOUT must be at least 1 second."
     return 1
   fi
+  # The digit-count test is not decoration: bash arithmetic is 64-bit and wraps,
+  # so a 20-digit value compared against the cap can come out negative and pass.
+  # Bounding the length first is what makes the numeric comparison mean anything.
+  # A too-large value is rejected rather than clamped — silently drilling for an
+  # hour when the operator asked for a year is its own surprise.
+  if (( ${#DRILL_TIMEOUT} > 4 )) || (( 10#${DRILL_TIMEOUT} > DRILL_TIMEOUT_MAX )); then
+    err "Error: PAVILLION_DRILL_TIMEOUT must be at most ${DRILL_TIMEOUT_MAX} seconds: ${DRILL_TIMEOUT}"
+    err "       The scratch container holds a full copy of production while it waits."
+    return 1
+  fi
   if [[ -z "${DRILL_IMAGE}" ]]; then
     err "Error: PAVILLION_DRILL_IMAGE is empty. Set it to a Postgres image reference."
     return 1
@@ -528,7 +547,11 @@ wait_for_scratch_db() {
   # DRILL_TIMEOUT into an arithmetic context — so the guard lives with the
   # hazard rather than depending on a caller having run it first.
   validate_drill_settings || return 1
-  while (( waited < DRILL_TIMEOUT )); do
+  # 10# to match the validator. Without it the two arithmetic sites disagree
+  # about the same string: the validator reads 010 as ten and this loop would
+  # read it as eight, and 008 would abort here with a raw bash "value too great
+  # for base" after the validator had already called it acceptable.
+  while (( waited < 10#${DRILL_TIMEOUT} )); do
     if drill_exec pg_isready -q -U postgres >/dev/null 2>&1; then
       return 0
     fi

@@ -331,7 +331,13 @@ echo "test: validate_drill_settings rejects a timeout that is not a plain number
 # so the attacker here is whoever can write an EnvironmentFile without being
 # able to touch the script — and they would land as a user with Docker socket
 # access.
-for bad_timeout in 'waited[$(echo PWNED)]' 'abc' '' '9 9' '-5' '1e3' '0x10' '0'; do
+#
+# The last two are the upper bound. Without one, 99999999999999999999 passed
+# validation and then wrapped in 64-bit arithmetic, hanging the drill for as long
+# as it liked while a container held a copy of production — so the cap is checked
+# on the digit count before the comparison, which is what the 20-digit case here
+# exercises and the 3601 case does not.
+for bad_timeout in 'waited[$(echo PWNED)]' 'abc' '' '9 9' '-5' '1e3' '0x10' '0' '3601' '99999999999999999999'; do
   err_out=$(DRILL_TIMEOUT="${bad_timeout}" DRILL_IMAGE="postgres:17" validate_drill_settings 2>&1; echo "EXIT:$?")
   assert_exit_code "1" "${err_out##*EXIT:}" "timeout '${bad_timeout}' is rejected"
 done
