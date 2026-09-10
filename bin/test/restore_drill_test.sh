@@ -81,14 +81,49 @@ if printf '%s\n' "${run_last}" | grep -qE '\$\{?DRILL_IMAGE\}?'; then
 else
   fail "the extracted block does not end at the image argument (got: ${run_last})"
 fi
-assert_contains "$run_block" '--network none' "docker run uses --network none"
-assert_contains "$run_block" '--rm' "docker run creates a self-removing container"
-assert_contains "$run_block" '--volume "${mount_spec}"' "docker run mounts the validated backup spec"
+
+# Docker reads --flag=value and --flag value identically, and every extraction
+# here originally saw only the second spelling: --cap-add=SYS_ADMIN,
+# --network=host, --user=root and --volume=/:/host all survived the suite, as did
+# a --cap-add tucked mid-line where a line-anchored sed never looks. Normalising
+# `=` to a space once, and tokenising the result on whitespace, collapses both
+# spellings into the one the assertions below already understand. Deny-list
+# needles are therefore written in the space form even where Docker only accepts
+# the `=` one.
+run_norm=$(printf '%s\n' "${run_block}" | tr '=' ' ')
+run_tokens=$(printf '%s\n' "${run_norm}" | tr '[:space:]' '\n' | sed '/^[[:space:]]*$/d')
+
+assert_contains "$run_norm" '--network none' "docker run uses --network none"
+assert_contains "$run_norm" '--rm' "docker run creates a self-removing container"
+assert_contains "$run_norm" '--volume "${mount_spec}"' "docker run mounts the validated backup spec"
+
+echo "test: docker run carries exactly the reviewed set of flags"
+# Set equality, not a deny-list. A deny-list only ever forbids what someone
+# thought of; this fails on any flag that was not reviewed, whichever spelling it
+# arrives in — and it fails on a deletion too, so it does not need pairing with a
+# presence assertion for each name.
+run_flags=$(printf '%s\n' "${run_tokens}" \
+  | grep -E '^--[a-z][a-z-]*$' \
+  | LC_ALL=C sort -u | tr '\n' ' ' | sed 's/[[:space:]]*$//')
+assert_eq "--cap-add --cap-drop --detach --env --memory --name --network --pids-limit --rm --security-opt --volume" \
+  "$run_flags" "no flag has been added to or removed from the docker run"
 
 echo "test: the scratch container is capped while it parses an untrusted archive"
-assert_contains "$run_block" '--security-opt no-new-privileges' "no-new-privileges is set"
-assert_contains "$run_block" '--pids-limit' "the container has a pid cap"
-assert_contains "$run_block" '--memory' "the container has a memory cap"
+# no-new-privileges is asserted by VALUE. Docker parses it with strconv.ParseBool,
+# so `:false` is one spelling out of many — `:0`, `=0`, `:f`, `:FALSE` and
+# `=False` all disable it and a deny-list caught none of them. This is the same
+# value-blindness already fixed for --pids-limit and --memory below, so it gets
+# the same treatment: state what the value must be, rather than one thing it
+# must not be.
+nnp_value=$(printf '%s\n' "${run_block}" | sed -nE 's/.*--security-opt[[:space:]=]+([^[:space:]\\]+).*/\1/p')
+if [[ "${nnp_value}" =~ ^no-new-privileges([=:]true)?$ ]]; then
+  echo "  PASS: no-new-privileges is set to a value Docker reads as true (${nnp_value})"
+  _TESTS=$((_TESTS+1))
+else
+  fail "--security-opt does not positively enable no-new-privileges (got: ${nnp_value:-none})"
+fi
+assert_contains "$run_norm" '--pids-limit' "the container has a pid cap"
+assert_contains "$run_norm" '--memory' "the container has a memory cap"
 
 echo "test: the container keeps only the capabilities the postgres entrypoint needs"
 # The entrypoint gosu's from root to postgres (SETGID/SETUID) and fixes up PGDATA
@@ -96,9 +131,12 @@ echo "test: the container keeps only the capabilities the postgres entrypoint ne
 # CAP_NET_RAW, CAP_SETFCAP, CAP_SETPCAP among them — is dropped, because
 # execution inside this container is the assumed starting point of the threat
 # model, not the end of it. An allow-list: a fourth --cap-add is a failure.
-assert_contains "$run_block" '--cap-drop ALL' "every capability is dropped first"
-cap_adds=$(printf '%s\n' "${run_block}" \
-  | sed -nE 's/^[[:space:]]*--cap-add[[:space:]]+([A-Za-z_]+).*/\1/p' \
+assert_contains "$run_norm" '--cap-drop ALL' "every capability is dropped first"
+# Read off the token stream rather than with a line-anchored sed: --cap-add=SYS_ADMIN
+# and a second --cap-add sharing a line with the first were both invisible to the
+# anchored form, so the allow-list passed while a capability was added.
+cap_adds=$(printf '%s\n' "${run_tokens}" \
+  | awk '/^--cap-add$/ { getline value; print value }' \
   | LC_ALL=C sort | tr '\n' ' ' | sed 's/[[:space:]]*$//')
 assert_eq "DAC_OVERRIDE SETGID SETUID" "$cap_adds" \
   "exactly the three needed capabilities are re-added, and no others"
@@ -106,37 +144,38 @@ assert_eq "DAC_OVERRIDE SETGID SETUID" "$cap_adds" \
 echo "test: no dangerous flag has been added to the docker run"
 # The assertions above all guard against deletion. These guard against addition:
 # every one of them passed against the invocation before they were written.
-assert_absent "$run_block" '--privileged' "the container is not privileged"
-assert_absent "$run_block" '--network host' "the container does not join the host network"
-assert_absent "$run_block" '--pid host' "the container does not share the host pid namespace"
-assert_absent "$run_block" '--ipc host' "the container does not share the host ipc namespace"
-assert_absent "$run_block" '--user root' "the container does not force the root user"
-assert_absent "$run_block" '--user 0' "the container does not force uid 0"
-assert_absent "$run_block" 'no-new-privileges=false' "no-new-privileges is not disabled (= form)"
-assert_absent "$run_block" 'no-new-privileges:false' "no-new-privileges is not disabled (: form)"
-assert_absent "$run_block" 'seccomp=unconfined' "the seccomp profile is not disabled"
-assert_absent "$run_block" 'apparmor=unconfined' "the apparmor profile is not disabled"
-assert_absent "$run_block" '--device' "no host device is passed through"
-assert_absent "$run_block" '--cap-add ALL' "capabilities are not re-added wholesale"
+# Read against the normalised block, so `--network=host` and `--network host` are
+# the same string here — which is why the needles are written in the space form
+# even for `seccomp=unconfined`, which Docker only spells with an `=`.
+assert_absent "$run_norm" '--privileged' "the container is not privileged"
+assert_absent "$run_norm" '--network host' "the container does not join the host network"
+assert_absent "$run_norm" '--pid host' "the container does not share the host pid namespace"
+assert_absent "$run_norm" '--ipc host' "the container does not share the host ipc namespace"
+assert_absent "$run_norm" '--user root' "the container does not force the root user"
+assert_absent "$run_norm" '--user 0' "the container does not force uid 0"
+assert_absent "$run_norm" 'seccomp unconfined' "the seccomp profile is not disabled"
+assert_absent "$run_norm" 'apparmor unconfined' "the apparmor profile is not disabled"
+assert_absent "$run_norm" '--device' "no host device is passed through"
+assert_absent "$run_norm" '--cap-add ALL' "capabilities are not re-added wholesale"
 
 echo "test: the backup mount is the only mount, and it is read-only"
 # A second --volume is how a drill container would acquire a writable view of
 # the host while every existing assertion still passed.
-mount_count=$(printf '%s\n' "${run_block}" | grep -cE '(^|[[:space:]])(--volume|--mount|-v)[[:space:]]')
+mount_count=$(printf '%s\n' "${run_norm}" | grep -cE '(^|[[:space:]])(--volume|--mount|-v)[[:space:]]')
 assert_eq "1" "$mount_count" "exactly one mount is passed to docker run"
 assert_contains "$(grep -n 'echo "${BACKUP_VOLUME}:/backup:ro"' "${DRILL}")" ':ro' "the volume spec is built read-only"
 
 echo "test: the pid and memory caps carry real values, not just the flag names"
 # Presence-only assertions passed against --pids-limit 999999999 and --memory 0
 # (which means "unlimited"), so the values themselves are asserted.
-pids_value=$(printf '%s\n' "${run_block}" | sed -nE 's/^[[:space:]]*--pids-limit[[:space:]]+([^[:space:]\\]+).*/\1/p')
+pids_value=$(printf '%s\n' "${run_norm}" | sed -nE 's/^[[:space:]]*--pids-limit[[:space:]]+([^[:space:]\\]+).*/\1/p')
 if [[ "${pids_value}" =~ ^[0-9]+$ ]] && (( pids_value > 0 && pids_value <= 4096 )); then
   echo "  PASS: --pids-limit is a real bound (${pids_value})"
   _TESTS=$((_TESTS+1))
 else
   fail "--pids-limit is not a real bound (got: ${pids_value:-none}); 0 and -1 mean unlimited"
 fi
-mem_value=$(printf '%s\n' "${run_block}" | sed -nE 's/^[[:space:]]*--memory[[:space:]]+([^[:space:]\\]+).*/\1/p')
+mem_value=$(printf '%s\n' "${run_norm}" | sed -nE 's/^[[:space:]]*--memory[[:space:]]+([^[:space:]\\]+).*/\1/p')
 if [[ "${mem_value}" =~ ^([0-9]+)([mMgG])$ ]]; then
   mem_mb="${BASH_REMATCH[1]}"
   [[ "${BASH_REMATCH[2]}" == [gG] ]] && mem_mb=$(( mem_mb * 1024 ))
@@ -214,7 +253,13 @@ fi
 
 echo "test: cleanup verifies the removal instead of discarding its outcome"
 cleanup_body=$(sed -n '/^cleanup_drill() {/,/^}/p' "${DRILL}")
-assert_contains "$cleanup_body" 'docker rm --force --volumes' "cleanup removes the anonymous PGDATA volume too"
+# Counted, not merely present. cleanup_drill has two rm call sites — the first
+# attempt and the retry — and presence passed with --volumes dropped from the
+# first. If that regressed and the first rm succeeded, the anonymous PGDATA
+# volume (a full unencrypted copy of production) would be orphaned on the host
+# while the drill printed PASSED and exited 0.
+assert_eq "2" "$(printf '%s\n' "${cleanup_body}" | grep -c 'docker rm --force --volumes')" \
+  "both removal call sites take the anonymous PGDATA volume with them"
 assert_contains "$cleanup_body" 'drill_container_ids' "cleanup checks whether the container survived"
 ids_body=$(sed -n '/^drill_container_ids() {/,/^}/p' "${DRILL}")
 assert_contains "$ids_body" 'docker ps -aq --filter "name=^${CONTAINER_NAME}$"' "the survivor check is name-anchored"
@@ -235,18 +280,52 @@ docker() {
   for a in "$@"; do printf '[%s]\n' "$a"; done
 }
 CONTAINER_NAME="drill-argv-probe"
-argv_out=$(drill_exec psql -c 'SELECT * FROM "a b"; $(touch /tmp/pv-drill-pwned) *')
-assert_contains "$argv_out" '[drill-argv-probe]' "the container name is its own argv element"
+# The canary lives under the per-run work directory, not at a fixed /tmp path: on
+# a shared host anyone can plant a symlink at a name they can predict, and the
+# test would then either report a leak that did not happen or overwrite something
+# that is not its own.
+argv_canary="${WORK}/pv-drill-pwned"
+rm -f "${argv_canary}"
+argv_payload="SELECT * FROM \"a b\"; \$(touch ${argv_canary}) *"
+argv_out=$(drill_exec psql -c "${argv_payload}")
+
+# The container name must be the FIRST argv element after `exec`, allowing only
+# the flags below in front of it. Presence alone was not the invariant: `docker
+# exec --privileged "${CONTAINER_NAME}" "$@"` puts the name in the argv too, and
+# it takes the exec'd process from CapEff 00000000000000c2 to 0000003fffffffff —
+# silently undoing --cap-drop for pg_restore, the one process here that parses the
+# untrusted archive. `--user root` and `--env PGPASSWORD=...` sit in the same
+# position and were equally invisible. The allow-list is exactly the locale pin
+# redaction rule 2 depends on, plus a bare `--` separator, so a reformat stays
+# tolerated and anything else in front of the name is a failure.
+argv_elems=()
+while IFS= read -r argv_line; do
+  argv_elems+=("${argv_line}")
+done <<< "${argv_out}"
+assert_eq '[exec]' "${argv_elems[0]:-none}" "docker is invoked as docker exec"
+argv_i=1
+while (( argv_i < ${#argv_elems[@]} )); do
+  if [[ "${argv_elems[argv_i]}" == '[--env]' && "${argv_elems[argv_i+1]:-}" == '[LC_ALL=C]' ]]; then
+    argv_i=$((argv_i + 2))
+  elif [[ "${argv_elems[argv_i]}" == '[--]' ]]; then
+    argv_i=$((argv_i + 1))
+  else
+    break
+  fi
+done
+assert_eq '[drill-argv-probe]' "${argv_elems[argv_i]:-none}" \
+  "the container name is the first argv element after exec and the allowed flags"
+assert_contains "$argv_out" '[LC_ALL=C]' "every exec carries the locale pin redaction rule 2 depends on"
 # Asserted on the tail rather than on a total count, so inserting a `--`
 # separator stays a tolerated reformat while any re-splitting, globbing or
 # re-joining of the three arguments is not.
-assert_eq "$(printf '%s\n' '[psql]' '[-c]' '[SELECT * FROM "a b"; $(touch /tmp/pv-drill-pwned) *]')" \
+assert_eq "$(printf '%s\n' '[psql]' '[-c]' "[${argv_payload}]")" \
   "$(printf '%s\n' "${argv_out}" | tail -n 3)" \
   "the three arguments arrive as three elements, spaces and metacharacters unexpanded"
 unset -f docker
 CONTAINER_NAME=""
-if [[ -e /tmp/pv-drill-pwned ]]; then
-  rm -f /tmp/pv-drill-pwned
+if [[ -e "${argv_canary}" ]]; then
+  rm -f "${argv_canary}"
   fail "drill_exec let a command substitution in an argument execute"
 else
   echo "  PASS: the command substitution in the argument never executed"
