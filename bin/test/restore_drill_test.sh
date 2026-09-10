@@ -770,6 +770,20 @@ assert_eq "$(printf '%s\n' \
   '        pg_restore: error: could not read from input file: [redacted]')" \
   "$(redact_restore_output "${forged}")" \
   "the forged diagnostic is redacted, so it no longer reads as the genuine one"
+# The co-occurrence half of the gate, exercised on its own. Every injection
+# shape seen so far puts the COPY error first, so the position half alone would
+# stop them; this asserts the other half really is checked, rather than being a
+# clause that could be deleted without a test noticing. A batch whose first line
+# is the literal and whose second is a table-scoped failure is not an archive
+# failure whatever order the lines arrived in.
+co_occurring=$(printf '%s\n' \
+  'pg_restore: error: could not read from input file: end of file' \
+  'pg_restore: error: COPY failed for table "account": ERROR:  nope')
+assert_eq "$(printf '%s\n' \
+  '        pg_restore: error: could not read from input file: [redacted]' \
+  '        pg_restore: error: COPY failed for table "account": [redacted]')" \
+  "$(redact_restore_output "${co_occurring}")" \
+  "a literal sharing a batch with a COPY failure is not exempted, wherever it sits"
 
 echo "test: redact_restore_output drops a value that is split across physical lines"
 # Round-3 defeat, captured live from postgres:17. The value wraps, so its closing
