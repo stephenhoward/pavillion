@@ -47,7 +47,10 @@
 #      copy of the production database is still running and needs removing by
 #      hand — the WARNING on stderr names it. Split out from 0 so a monitor
 #      watching exit codes cannot read this as an unqualified pass.
-#   130  interrupted (SIGINT/SIGTERM); the container is torn down first
+#   130  interrupted (SIGINT/SIGTERM); teardown is attempted first, and a leak
+#        is reported on stderr. There is no 3-style split here: an interrupted
+#        run exits 130 whether or not the container survived, so a monitor
+#        watching exit codes must read the stderr to learn which it was.
 #
 # Safety properties, all of them mechanically visible in the docker run below:
 #   - The scratch container runs with --network none, so it cannot reach the
