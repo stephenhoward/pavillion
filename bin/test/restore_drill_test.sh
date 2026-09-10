@@ -639,6 +639,29 @@ else
 fi
 assert_contains "$redacted" 'COPY failed for table "account"' "the table name is kept — it does not follow a colon"
 
+echo "test: redact_restore_output drops a value that is split across physical lines"
+# The shape two audits landed on independently, and the one that actually leaked.
+# Both halves are real: the multi-line value was captured live from postgres:17,
+# and a severity label that is not ASCII-uppercase is what every server whose
+# locale is not C prints (ОШИБКА:, a lowercased erreur:, or — in ja/ko/zh — a
+# label with no case distinction at all). Together they defeat both rules: rule 2
+# has no ALL-CAPS label to truncate at, and the value's closing quote is on a
+# physical line rule 1 drops, so rule 4 was left an opening quote with no partner
+# and a fragment of a production row reached output the header calls safe to paste
+# into an issue. The drill now pins LC_ALL=C so the label is always ERROR: and
+# rule 2 fires; this fixture is the belt to that pair of braces.
+multiline_leak=$(printf '%s\n' \
+  'pg_restore: error: COPY failed for table "account": erreur: syntaxe invalide pour le type integer : "multi@' \
+  'example.com"')
+redacted=$(redact_restore_output "${multiline_leak}")
+if printf '%s\n' "${redacted}" | grep -qF 'multi@'; then
+  fail "a fragment of the row value survived a multi-line value behind an unrecognised label"
+else
+  echo "  PASS: the orphaned fragment of a multi-line value is redacted"
+  _TESTS=$((_TESTS+1))
+fi
+assert_contains "$redacted" 'COPY failed for table "account"' "the failing operation and table are still named"
+
 echo "test: redact_restore_output bounds the length of a single line"
 # A pathological single line cannot dump the archive into a cron log.
 long_line="pg_restore: error: $(printf 'x%.0s' $(seq 1 4000))"

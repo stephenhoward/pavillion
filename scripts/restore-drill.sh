@@ -420,14 +420,26 @@ evaluate_core_table_counts() {
 #      them, along with progress chatter.
 #   2. The retained line is truncated at the first whitespace-preceded ALL-CAPS
 #      label ("ERROR:", "DETAIL:", "DETALLE:", "FEHLER:"), which is where the
-#      server's own message — the part that quotes data — begins.
+#      server's own message — the part that quotes data — begins. This is the
+#      load-bearing rule, and it is reliable only because drill_exec pins
+#      LC_ALL=C: the label pg_restore prints is then always the ASCII "ERROR:".
+#      Unpinned it is whatever the server's locale says, and a Russian
+#      ("ОШИБКА:"), lowercase French ("erreur:") or CJK label matches nothing
+#      here. Rule 4 is not the safety net for that case — see its note.
 #   3. DETAIL:/CONTEXT: are stripped case-insensitively as well, in case a build
 #      emits one inline or lowercased.
 #   4. Whatever survives has any double-quoted or parenthesised literal that
-#      follows a colon replaced, catching a localised message whose label did
-#      not match rule 2. A table name is kept because it does not follow a colon.
+#      follows a colon replaced, terminated or running to end of line. This is
+#      best-effort defence in depth against something unanticipated, NOT the
+#      documented fallback for a label rule 2 missed: when rule 2 fires inside a
+#      value instead of before it, what is left is a fragment whose delimiters
+#      no longer pair up. Rules 2 and 4 are layers, not alternatives. A table
+#      name is kept because it does not follow a colon.
 #   5. Lines are length-bounded and capped at 20, so a dump with thousands of
 #      bad rows cannot flood a cron log either.
+#
+# All five stay. The locale pin removes rule 2's dependence on the server's
+# language; it does not make the rules around it redundant.
 #
 # The output is therefore safe to paste into an issue: it names operations and
 # table names, not row values.
@@ -436,7 +448,7 @@ redact_restore_output() {
     | grep '^pg_restore: error:' \
     | sed -E 's/[[:space:]][[:upper:]]{3,}:.*$//' \
     | sed -E 's/(DETAIL|CONTEXT|HINT|STATEMENT):.*$//I' \
-    | sed -E 's/:[[:space:]]*"[^"]*"/: [redacted]/g; s/:[[:space:]]*\([^)]*\)/: [redacted]/g' \
+    | sed -E 's/:[[:space:]]*"[^"]*("|$)/: [redacted]/g; s/:[[:space:]]*\([^)]*(\)|$)/: [redacted]/g' \
     | sed -E 's/[[:space:]]+$//' \
     | cut -c 1-200 \
     | head -n 20 \
@@ -481,8 +493,27 @@ validate_drill_settings() {
 
 # --- Docker-dependent phases -------------------------------------------------
 
+# Every command the drill runs inside the scratch container goes through here.
+#
+# LC_ALL=C is a redaction control, not a formatting preference. redact_restore_output's
+# load-bearing rule truncates pg_restore's line at the server's ALL-CAPS severity
+# label, and that label is written in the server's language: a German build says
+# FEHLER:, a Russian one ОШИБКА:, a French one can lowercase it, and ja/ko/zh have
+# no case distinction for the rule to key on at all. In every one of those the rule
+# truncates inside the quoted value rather than before it and a fragment of a
+# production row reaches the operator's terminal. Pinning C makes the label the
+# known ASCII ERROR: on every image an operator can point PAVILLION_DRILL_IMAGE at,
+# which turns the locale from something the redactor has to survive into a
+# precondition it can rely on. It is applied to every exec rather than to pg_restore
+# alone: the psql calls' diagnostics reach the operator too, one of them
+# deliberately unfiltered, and one pinned wrapper is one invariant to hold rather
+# than two paths to keep in step.
+#
+# --env carries a constant, never a credential. The value is on the docker command
+# line, which is fine for a locale and is exactly why POSTGRES_PASSWORD is passed by
+# name to docker run instead and never appears here.
 drill_exec() {
-  docker exec "${CONTAINER_NAME}" "$@"
+  docker exec --env LC_ALL=C "${CONTAINER_NAME}" "$@"
 }
 
 drill_psql() {
@@ -589,8 +620,9 @@ main() {
 
   # The container has the password now, and verification connects over its unix
   # socket, so nothing on this side needs the value again. This is not what keeps
-  # it out of the container's later exec sessions — drill_exec passes no --env, so
-  # docker exec was never forwarding it. It shortens the value's lifetime in this
+  # it out of the container's later exec sessions — the only --env drill_exec
+  # passes is the LC_ALL=C locale pin, so docker exec was never forwarding the
+  # password. It shortens the value's lifetime in this
   # script's own process instead, so it is not sitting in the environment of
   # everything main() shells out to for the rest of the run.
   unset POSTGRES_PASSWORD
