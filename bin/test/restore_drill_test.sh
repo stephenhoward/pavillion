@@ -360,6 +360,21 @@ fi
 assert_absent "$probe" "unbound variable" "the failure is a stated error, not an obscure bash abort"
 assert_contains "$probe" "PAVILLION_DRILL_TIMEOUT" "the error names the variable the operator set"
 
+echo "test: main validates the settings before it starts a container"
+# The guard in wait_for_scratch_db alone would still stop the exploit, but only
+# after docker run has already created a postgres container — which is the
+# obscure late abort the review called out. main() must reject the setting
+# first, so the operator gets a stated error and no container.
+#
+# main() is called in a subshell because it installs its own EXIT trap, which
+# would otherwise replace this suite's cleanup trap and exit the test process.
+docker() { case "$1" in run) echo "DOCKER-CALLED-RUN" ;; esac; return 1; }
+probe=$( (DRILL_TIMEOUT="abc"; main) 2>&1; echo "EXIT:$?")
+unset -f docker
+assert_exit_code "1" "${probe##*EXIT:}" "a bad timeout fails the drill"
+assert_contains "$probe" "PAVILLION_DRILL_TIMEOUT" "the error names the variable the operator set"
+assert_absent "$probe" "DOCKER-CALLED-RUN" "no container was created before the setting was rejected"
+
 echo "test: validate_drill_settings accepts a plain positive timeout"
 DRILL_TIMEOUT="90" DRILL_IMAGE="postgres:17" validate_drill_settings >/dev/null 2>&1
 assert_exit_code "0" "$?" "the documented default passes validation"
