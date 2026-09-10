@@ -236,12 +236,13 @@ docker() {
 }
 CONTAINER_NAME="drill-argv-probe"
 argv_out=$(drill_exec psql -c 'SELECT * FROM "a b"; $(touch /tmp/pv-drill-pwned) *')
-assert_eq "5" "$(printf '%s\n' "${argv_out}" | grep -c '^\[')" \
-  "docker received exactly 5 argv elements (no word-splitting of the query)"
 assert_contains "$argv_out" '[drill-argv-probe]' "the container name is its own argv element"
-assert_eq '[SELECT * FROM "a b"; $(touch /tmp/pv-drill-pwned) *]' \
-  "$(printf '%s\n' "${argv_out}" | tail -n 1)" \
-  "the space, the metacharacters and the glob survive as one unexpanded element"
+# Asserted on the tail rather than on a total count, so inserting a `--`
+# separator stays a tolerated reformat while any re-splitting, globbing or
+# re-joining of the three arguments is not.
+assert_eq "$(printf '%s\n' '[psql]' '[-c]' '[SELECT * FROM "a b"; $(touch /tmp/pv-drill-pwned) *]')" \
+  "$(printf '%s\n' "${argv_out}" | tail -n 3)" \
+  "the three arguments arrive as three elements, spaces and metacharacters unexpanded"
 unset -f docker
 CONTAINER_NAME=""
 if [[ -e /tmp/pv-drill-pwned ]]; then
