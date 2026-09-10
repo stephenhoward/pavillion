@@ -36,8 +36,13 @@
 #   PAVILLION_BACKUP_DIR=/tmp/dumps ./scripts/restore-drill.sh
 #
 # Exit codes:
-#   0  every check passed
+#   0  every check passed and the scratch container was torn down
 #   1  a check failed, or a prerequisite was missing; the reason is on stderr
+#   3  every check passed, but the scratch container could not be removed. The
+#      backup is fine; the host is not. A container holding a full unencrypted
+#      copy of the production database is still running and needs removing by
+#      hand — the WARNING on stderr names it. Split out from 0 so a monitor
+#      watching exit codes cannot read this as an unqualified pass.
 #   130  interrupted (SIGINT/SIGTERM); the container is torn down first
 #
 # Safety properties, all of them mechanically visible in the docker run below:
@@ -47,9 +52,11 @@
 #     the drill cannot modify or delete a backup.
 #   - pg_restore executes the archive's SQL as the scratch superuser, and the
 #     archive may come from outside this deployment, so the container is
-#     additionally capped with --security-opt no-new-privileges, --pids-limit
-#     and --memory. A hostile archive gets no network, a read-only view of the
-#     backups, and a bounded, disposable container.
+#     additionally capped with --cap-drop ALL (re-adding only the three
+#     capabilities the postgres entrypoint needs), --security-opt
+#     no-new-privileges, --pids-limit and --memory. A hostile archive gets no
+#     network, a read-only view of the backups, and a bounded, disposable
+#     container stripped of every capability it does not need.
 #   - The container is created with --rm and torn down, together with its
 #     anonymous PGDATA volume, by an EXIT/INT/TERM trap installed before it is
 #     created, so an interrupted run leaves nothing behind.
@@ -93,6 +100,10 @@ CORE_TABLES=(account calendar event)
 
 CONTAINER_NAME=""
 _CLEANED_UP=0
+# Set when cleanup finished with the container still present. Read by on_exit,
+# which turns it into exit code 3 so a passing drill that leaked a container is
+# not reported to a monitor as an unqualified success.
+_TEARDOWN_LEAKED=0
 
 err() {
   echo "$@" >&2
@@ -134,12 +145,35 @@ cleanup_drill() {
   # it is a running postgres holding a full unencrypted copy of the production
   # database, so the operator is told how to remove it by hand.
   if [[ -n "$(drill_container_ids)" ]]; then
+    _TEARDOWN_LEAKED=1
     err ""
     err "WARNING: the drill container ${CONTAINER_NAME} could not be removed."
     err "         It still holds a full copy of the restored database. Remove it with:"
     err "           docker rm -fv ${CONTAINER_NAME}"
   fi
   return 0
+}
+
+# The EXIT trap. Tears the container down, then decides what the exit status
+# should say about a teardown that did not work.
+#
+# A failed teardown is not a failed backup, so it does not turn a passing drill
+# into exit 1 and does not retract the PASSED verdict on stdout. But it must not
+# be reported as a plain 0 either: the drill is documented as a cron job, and an
+# exit-code-driven monitor seeing 0 would record an unqualified success while a
+# postgres container still holds a full unencrypted copy of production. So the
+# leak gets its own code, and stdout's verdict is qualified on the way out.
+on_exit() {
+  local status=$?
+  cleanup_drill
+  if (( _TEARDOWN_LEAKED == 1 && status == 0 )); then
+    err ""
+    err "The drill itself PASSED — the backup restores. Exiting 3 rather than 0"
+    err "because the scratch container above outlived the drill and still needs"
+    err "removing by hand."
+    exit 3
+  fi
+  exit "${status}"
 }
 
 # Reports the drill container's id if the daemon still knows about it. Anchored
@@ -364,19 +398,85 @@ evaluate_core_table_counts() {
 
 # Reduces pg_restore's own output to the part that is safe to print.
 #
-# pg_restore's "pg_restore: error:" lines name the failing operation — which
-# table, which archive member — and nothing else. The CONTEXT: and DETAIL:
-# lines Postgres appends to them quote the offending row verbatim
-# ("DETAIL: Key (email)=(someone@example.com) already exists"), and those are
-# exactly the failures a restore drill provokes. This is a monthly cron job, so
-# that text would land in a log; only the operation names are echoed, capped so
-# a dump with thousands of bad rows cannot flood the report either.
+# What this guarantees: the operator sees which pg_restore operation failed —
+# the verb and the table or archive member — and never a value that came out of
+# the dump. It does NOT guarantee that on line-prefix alone, because a
+# "pg_restore: error:" line is not self-limiting. pg_restore prepends its own
+# prefix to the whole PostgreSQL server message, and that message quotes the
+# offending value INLINE, on the error line itself, with no labelled clause
+# after it to strip. Verified against a real postgres:17:
+#
+#   pg_restore: error: COPY failed for table "account": ERROR:  invalid input
+#     syntax for type integer: "multi@example.com"
+#
+# and identically for uuid, for "value too long for type character varying(n)",
+# and for "invalid byte sequence for encoding". Those are precisely the failures
+# a corrupt, truncated, or mismatched dump produces — the class this drill
+# exists to provoke — so an allow-list of line prefixes is not a redaction.
+#
+# So values are redacted, not just labelled clauses, in layers:
+#   1. Only "pg_restore: error:" lines survive at all. Real pg_restore puts
+#      DETAIL: and CONTEXT: on their own physical lines, so this alone drops
+#      them, along with progress chatter.
+#   2. The retained line is truncated at the first whitespace-preceded ALL-CAPS
+#      label ("ERROR:", "DETAIL:", "DETALLE:", "FEHLER:"), which is where the
+#      server's own message — the part that quotes data — begins.
+#   3. DETAIL:/CONTEXT: are stripped case-insensitively as well, in case a build
+#      emits one inline or lowercased.
+#   4. Whatever survives has any double-quoted or parenthesised literal that
+#      follows a colon replaced, catching a localised message whose label did
+#      not match rule 2. A table name is kept because it does not follow a colon.
+#   5. Lines are length-bounded and capped at 20, so a dump with thousands of
+#      bad rows cannot flood a cron log either.
+#
+# The output is therefore safe to paste into an issue: it names operations and
+# table names, not row values.
 redact_restore_output() {
   printf '%s\n' "$1" \
     | grep '^pg_restore: error:' \
-    | sed -E 's/(DETAIL|CONTEXT):.*//' \
+    | sed -E 's/[[:space:]][[:upper:]]{3,}:.*$//' \
+    | sed -E 's/(DETAIL|CONTEXT|HINT|STATEMENT):.*$//I' \
+    | sed -E 's/:[[:space:]]*"[^"]*"/: [redacted]/g; s/:[[:space:]]*\([^)]*\)/: [redacted]/g' \
+    | sed -E 's/[[:space:]]+$//' \
+    | cut -c 1-200 \
     | head -n 20 \
     | sed 's/^/        /'
+}
+
+# Validates the two settings that leave the environment and reach a context
+# where a non-value is more than a bad value.
+#
+# PAVILLION_DRILL_TIMEOUT reaches a bash arithmetic context in
+# wait_for_scratch_db. Arithmetic evaluation is recursive, and an array
+# subscript inside it is itself evaluated, so a value like
+# 'waited[$(some-command)]' executes that command. set -u blocks the naive
+# payload but not one naming a variable that is in scope. That matters here
+# because the drill is documented as a cron job: whoever can write a systemd
+# EnvironmentFile, without being able to touch this script, would otherwise get
+# execution as a user who can reach the Docker socket.
+#
+# PAVILLION_DRILL_IMAGE lands in the option-parsing region of a docker run, so a
+# leading dash is read as a flag rather than an image. It is passed as argv, so
+# this is not injection — but it is the same class of unvalidated input, and the
+# guard is a line.
+validate_drill_settings() {
+  if [[ ! "${DRILL_TIMEOUT}" =~ ^[0-9]+$ ]]; then
+    err "Error: PAVILLION_DRILL_TIMEOUT must be a whole number of seconds: ${DRILL_TIMEOUT}"
+    return 1
+  fi
+  if (( 10#${DRILL_TIMEOUT} == 0 )); then
+    err "Error: PAVILLION_DRILL_TIMEOUT must be at least 1 second."
+    return 1
+  fi
+  if [[ -z "${DRILL_IMAGE}" ]]; then
+    err "Error: PAVILLION_DRILL_IMAGE is empty. Set it to a Postgres image reference."
+    return 1
+  fi
+  if [[ "${DRILL_IMAGE}" == -* ]]; then
+    err "Error: PAVILLION_DRILL_IMAGE must be an image reference, not an option: ${DRILL_IMAGE}"
+    return 1
+  fi
+  return 0
 }
 
 # --- Docker-dependent phases -------------------------------------------------
@@ -393,6 +493,10 @@ drill_psql() {
 
 wait_for_scratch_db() {
   local waited=0
+  # Revalidated here, not just in main(), because this is the function that puts
+  # DRILL_TIMEOUT into an arithmetic context — so the guard lives with the
+  # hazard rather than depending on a caller having run it first.
+  validate_drill_settings || return 1
   while (( waited < DRILL_TIMEOUT )); do
     if drill_exec pg_isready -q -U postgres >/dev/null 2>&1; then
       return 0
@@ -428,11 +532,13 @@ main() {
     return 1
   fi
 
+  validate_drill_settings || return 1
+
   mount_spec=$(backup_mount_spec) || return 1
 
   # The trap is installed before the container is created so that an interrupt
   # during docker run still tears down whatever was started.
-  trap cleanup_drill EXIT
+  trap on_exit EXIT
   trap on_signal INT TERM
 
   CONTAINER_NAME="pavillion-restore-drill-$$-${RANDOM}"
@@ -450,16 +556,26 @@ main() {
   echo ""
 
   echo "Starting the throwaway database..."
-  # --security-opt/--pids-limit/--memory: pg_restore runs the archive's SQL as
-  # the scratch superuser, and a -Fc archive can carry COPY ... FROM PROGRAM, so
-  # the container is treated as if the dump were hostile. --cap-drop ALL is
-  # deliberately absent: the postgres entrypoint gosu's from root to postgres
-  # and needs CAP_SETUID/CAP_SETGID to do it.
+  # pg_restore runs the archive's SQL as the scratch superuser, and a -Fc archive
+  # can carry COPY ... FROM PROGRAM, so the container is treated as if the dump
+  # were hostile. Code execution inside the container is the assumed starting
+  # point, which is exactly when the capability set left to it decides how far
+  # that goes — so it is dropped to the three the postgres entrypoint actually
+  # needs: SETGID and SETUID for the gosu from root to postgres, and
+  # DAC_OVERRIDE for the PGDATA permissions it fixes up on the way. That leaves
+  # ~11 defaults dropped, CAP_MKNOD, CAP_SYS_CHROOT, CAP_NET_RAW, CAP_SETFCAP
+  # and CAP_SETPCAP among them. Verified end to end against postgres:17: the
+  # container starts, and createdb, pg_dump -Fc, pg_restore and the verification
+  # queries all succeed under it.
   if ! docker run \
     --detach \
     --rm \
     --name "${CONTAINER_NAME}" \
     --network none \
+    --cap-drop ALL \
+    --cap-add DAC_OVERRIDE \
+    --cap-add SETGID \
+    --cap-add SETUID \
     --security-opt no-new-privileges \
     --pids-limit 512 \
     --memory 2g \
@@ -472,8 +588,11 @@ main() {
   fi
 
   # The container has the password now, and verification connects over its unix
-  # socket, so nothing on this side needs the value again. Dropping it here keeps
-  # it out of every subsequent docker exec client's environment.
+  # socket, so nothing on this side needs the value again. This is not what keeps
+  # it out of the container's later exec sessions — drill_exec passes no --env, so
+  # docker exec was never forwarding it. It shortens the value's lifetime in this
+  # script's own process instead, so it is not sitting in the environment of
+  # everything main() shells out to for the rest of the run.
   unset POSTGRES_PASSWORD
 
   wait_for_scratch_db || return 1
@@ -520,9 +639,11 @@ main() {
   echo "Checking the restored database..."
 
   # stderr is left visible on this query alone: it has no fallback value, so its
-  # own error text is the operator's only diagnosis, and a pg_tables listing
-  # cannot echo row data. The two queries below suppress stderr because each
-  # falls back to a value the checks below treat as a failure.
+  # own error text is the operator's only diagnosis. What it can print is psql's
+  # connection and syntax diagnostics for a query whose result set is table
+  # names from the catalog — unlike pg_restore's COPY failures, there is no row
+  # value for the server to quote back here. The two queries below suppress
+  # stderr because each falls back to a value the checks treat as a failure.
   if ! present=$(drill_psql "${SCRATCH_DB}" \
     "SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename;"); then
     err "FAIL: could not list the tables in the restored database."
