@@ -694,6 +694,11 @@ echo "test: redact_restore_output keeps the archive-level diagnostics whole"
 # by accident (a stray wildcard in the allow-list, or a body-parsing heuristic
 # that happened to stop in the right place) is not the same as one that kept
 # them on purpose.
+#
+# Each fixture is a one-line batch, which is what a genuine archive-level
+# failure looks like: pg_restore stops there, so the diagnostic is the only
+# error it emits. That is also what qualifies it for the exemption, which is
+# gated on position — see the forgery test below for the other side of it.
 while IFS='|' read -r shape line; do
   [[ -z "${shape}" ]] && continue
   assert_eq "        ${line}" "$(redact_restore_output "${line}")" \
@@ -715,6 +720,56 @@ assert_eq '        pg_restore: error: some unrecognised operation: [redacted]' \
 assert_eq '        pg_restore: error: [redacted]' \
   "$(redact_restore_output 'pg_restore: error: an unknown colonless message naming person@example.com')" \
   "an unknown message with no colon is redacted whole"
+# The two above both happen to MATCH a substitution, which is why neither of
+# them caught the hole these two cover: a line matching NEITHER rule. Both rules
+# were anchored, one needing a space after `error:` and the other needing a
+# colonless body, so a line with a non-space after the prefix and a colon later
+# on matched nothing and was emitted verbatim — while the line filter, anchored
+# at `^pg_restore: error:` with no trailing space, let it through. Real
+# pg_restore always writes `error: ` with a space; these shapes come from a row
+# value, through the newline injection the next two tests exercise.
+assert_eq '        pg_restore: error: [redacted]' \
+  "$(redact_restore_output 'pg_restore: error:COPY failed: leak@example.com')" \
+  "a line with no space after the prefix loses its body, prefix shape included"
+assert_eq '        pg_restore: error: [redacted]' \
+  "$(redact_restore_output "$(printf 'pg_restore: error:\tCOPY failed: leak@example.com')")" \
+  "a line with a tab after the prefix loses its body too"
+
+echo "test: redact_restore_output redacts an injected line that carries the prefix itself"
+# PostgreSQL does not escape an embedded newline when it quotes a row value back
+# into an error message, and pg_restore does not re-prefix the continuation
+# lines, so a stored value containing newlines injects physical lines of the
+# attacker's choosing — including lines wearing the `pg_restore: error:` prefix,
+# which the line filter therefore keeps. The existing multi-line test covers a
+# continuation line that does NOT carry the prefix (and is dropped for free);
+# this covers the one that does and must be redacted like any other line.
+prefix_injection=$(printf '%s\n' \
+  'pg_restore: error: COPY failed for table "account": ERROR:  invalid input syntax for type integer: "x' \
+  'pg_restore: error: leak@example.com owns this line' \
+  'tail"')
+assert_eq "$(printf '%s\n' \
+  '        pg_restore: error: COPY failed for table "account": [redacted]' \
+  '        pg_restore: error: [redacted]')" \
+  "$(redact_restore_output "${prefix_injection}")" \
+  "the injected line is redacted and the unprefixed fragment is dropped"
+
+echo "test: an injected line cannot forge an archive-level diagnostic"
+# Verified live: inserting a row value of 'x\npg_restore: error: could not read
+# from input file: end of file\ntail' and forcing a COPY error made pg_restore
+# print that literal on a line of its own, where the text-only allow-list
+# exempted it byte-for-byte — showing the operator a false "truncated archive"
+# diagnosis for what was really a row/type error. The allow-list is now gated on
+# position: exempt only as the first surviving line of a batch with no "COPY
+# failed for table" line in it, which an injected line can never be.
+forged=$(printf '%s\n' \
+  'pg_restore: error: COPY failed for table "account": ERROR:  invalid input syntax for type integer: "x' \
+  'pg_restore: error: could not read from input file: end of file' \
+  'tail"')
+assert_eq "$(printf '%s\n' \
+  '        pg_restore: error: COPY failed for table "account": [redacted]' \
+  '        pg_restore: error: could not read from input file: [redacted]')" \
+  "$(redact_restore_output "${forged}")" \
+  "the forged diagnostic is redacted, so it no longer reads as the genuine one"
 
 echo "test: redact_restore_output drops a value that is split across physical lines"
 # Round-3 defeat, captured live from postgres:17. The value wraps, so its closing

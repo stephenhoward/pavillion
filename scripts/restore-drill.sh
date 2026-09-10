@@ -449,21 +449,61 @@ evaluate_core_table_counts() {
 # So this parses no part of the message body. On a retained line it keeps the
 # text up to the FIRST colon that follows the "pg_restore: error: " prefix — the
 # operation and the table or archive member it names — and replaces everything
-# from that colon onward with [redacted], unconditionally. A line whose body
-# carries no colon at all is redacted whole. Nothing about the server's message
-# language, its quoting glyphs, its capitalisation or its escaping can change
-# what is kept, because none of it is consulted. A table name whose own text
-# contains a colon simply gets cut short: that direction of error redacts more,
-# not less.
+# from that colon onward with [redacted], unconditionally. Nothing about the
+# server's message language, its quoting glyphs, its capitalisation or its
+# escaping can change what is kept, because none of it is consulted. A table
+# name whose own text contains a colon simply gets cut short: that direction of
+# error redacts more, not less.
 #
-# The one exception is an ALLOW-LIST of archive-level diagnostics, matched as
-# fully-anchored exact strings. pg_restore emits these before it reads any
-# table's data, so they carry no row value, and they are the operator's entire
-# diagnosis when the archive itself is the problem — a truncated file, a
-# non-archive, a bad header — which the drill's acceptance criteria require it
-# to be able to name. Matching one means the line IS that literal text, so there
-# is nowhere in it for a value to hide. Anything not on the list is redacted:
-# the default is redact, not pass through.
+# The rule is TWO substitutions and a branch, and the branch is what makes it
+# fail closed:
+#
+#   s/^(pg_restore: error: [^:]*):.*$/\1: [redacted]/
+#   t
+#   s/^.*$/pg_restore: error: [redacted]/
+#
+# `t` branches to the end of the script when the first substitution fired, so
+# the second one only ever sees a line the first did not match — a line with no
+# colon after the prefix, or one whose prefix is not the "error: " shape at all.
+# Such a line loses everything, including whatever prefix shape it arrived with,
+# and is reissued as the fixed string. THIS IS THE CATCH-ALL, and it is not
+# optional decoration: an earlier version had a second anchored substitution
+# here instead, so a line matching neither rule — `pg_restore: error:COPY
+# failed: <value>`, with no space after the prefix, or with a tab there — was
+# emitted verbatim after passing the (space-less) line filter. That is not a
+# shape real pg_restore can produce; it is a shape a ROW VALUE can produce, via
+# the injection described below. With the catch-all, anything reaching this
+# function's sed leaves it as one of exactly two shapes, so the default really
+# is redact rather than pass through.
+#
+# LINE INJECTION FROM A ROW VALUE. PostgreSQL does not escape an embedded
+# newline when it quotes a row value back into an error message, and pg_restore
+# does not re-prefix the continuation lines. A stored value containing newlines
+# therefore injects attacker-chosen PHYSICAL LINES into this stream, and such a
+# line may carry the "pg_restore: error:" prefix itself, so the line filter is
+# no defence against it. It is the reason the catch-all above matters, and the
+# reason the allow-list below is gated on position.
+#
+# The one exception to the redaction is an ALLOW-LIST of archive-level
+# diagnostics, matched as fully-anchored exact strings. pg_restore emits these
+# before it reads any table's data, so they carry no row value, and they are the
+# operator's entire diagnosis when the archive itself is the problem — a
+# truncated file, a non-archive, a bad header — which the drill's acceptance
+# criteria require it to be able to name. Matching one means the line IS that
+# literal text, so there is nowhere in it for a value to hide.
+#
+# But a row value can REPRODUCE one of those literals byte for byte on an
+# injected line, and an exemption keyed on the text alone would then hand the
+# operator a false "truncated archive" diagnosis for what was really a row or
+# type error. Verified live against postgres:17. So the exemption is gated on
+# POSITION as well as text: a genuine archive-level failure is the only error
+# pg_restore emits, and never co-occurs with a table-scoped "COPY failed for
+# table" line. A literal is therefore exempt only when it is the FIRST surviving
+# line of a batch that contains no "COPY failed for table" line anywhere — which
+# an injected line cannot be, because the COPY error whose message carried it
+# always precedes it. Off the allow-list, such a line is redacted like any
+# other, so a forgery still costs the attacker the ": [redacted]" that a genuine
+# diagnostic does not carry.
 #
 # The cheap bounds around all of that, none of which has ever been defeated:
 # only "pg_restore: error:" lines are kept at all (which is also what drops
@@ -472,23 +512,55 @@ evaluate_core_table_counts() {
 #
 # LC_ALL=C here is byte semantics for the host's own grep/sed/cut, not a
 # language assumption: a corrupt dump can put invalid UTF-8 into this text, and
-# a multibyte locale can refuse to match a line containing it.
+# a multibyte locale can refuse to match a line containing it — on BSD sed an
+# unpinned substitution given invalid UTF-8 aborts with "RE error: illegal byte
+# sequence" and passes the line through UNMODIFIED, which is a fail-open. It is
+# on every command in the pipeline for that reason, the indent included, even
+# where the current regex would not evaluate a character class.
 #
-# The output is therefore safe to paste into an issue: it names operations and
-# table names, not row values.
+# The 200-byte bound is bytes, not characters, so a kept prefix longer than that
+# can be cut mid-UTF-8-sequence and emit an invalid byte. That is cosmetic and
+# deliberately left alone: redaction has already run by then, so the only text
+# the cut can mangle is the operation and table name this rule chose to keep,
+# and no row value can be exposed by splitting it. Widening the bound to count
+# characters would mean interpreting the encoding of untrusted text, which is
+# the class of thing this function exists to avoid.
+#
+# The output is safe to paste into an issue in the sense that matters: it names
+# operations and table names, never a row value. One residue remains, and it is
+# a spoofing risk rather than a disclosure one — on an injected line, the text
+# before the first colon is attacker-chosen, so a hostile dump can put a short
+# string of its choosing where an operation name normally sits.
 redact_restore_output() {
-  printf '%s\n' "$1" \
-    | LC_ALL=C grep '^pg_restore: error:' \
-    | head -n 20 \
-    | LC_ALL=C sed -E '
+  local kept exemptions=''
+  # The line filter and the 20-line cap run first and their result is held,
+  # because the allow-list gate below is a property of the surviving BATCH
+  # rather than of any line read on its own.
+  kept=$(printf '%s\n' "$1" | LC_ALL=C grep '^pg_restore: error:' | head -n 20) || true
+  if [[ -z "${kept}" ]]; then
+    return 0
+  fi
+
+  # `1{...}` is the position half of the gate and the absent "COPY failed for
+  # table" is the co-occurrence half; when either fails the block is simply not
+  # part of the script and every line goes through the redaction below.
+  if ! printf '%s\n' "${kept}" | LC_ALL=C grep -qF 'COPY failed for table'; then
+    exemptions='1{
 /^pg_restore: error: could not read from input file: end of file$/b
 /^pg_restore: error: did not find magic string in file header$/b
 /^pg_restore: error: (input file )?does not appear to be a valid archive \(too short\?\)$/b
+}
+'
+  fi
+
+  printf '%s\n' "${kept}" \
+    | LC_ALL=C sed -E "${exemptions}"'
 s/^(pg_restore: error: [^:]*):.*$/\1: [redacted]/
-s/^pg_restore: error:[^:]*$/pg_restore: error: [redacted]/
+t
+s/^.*$/pg_restore: error: [redacted]/
 ' \
     | LC_ALL=C cut -c 1-200 \
-    | sed 's/^/        /'
+    | LC_ALL=C sed 's/^/        /'
 }
 
 # Validates the two settings that leave the environment and reach a context
