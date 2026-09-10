@@ -412,7 +412,7 @@ evaluate_core_table_counts() {
 #
 # What this guarantees: the operator sees which pg_restore operation failed —
 # the verb and the table or archive member — and never a value that came out of
-# the dump. It does NOT guarantee that on line-prefix alone, because a
+# the dump. It does NOT get that from the line-prefix filter alone, because a
 # "pg_restore: error:" line is not self-limiting. pg_restore prepends its own
 # prefix to the whole PostgreSQL server message, and that message quotes the
 # offending value INLINE, on the error line itself, with no labelled clause
@@ -426,44 +426,68 @@ evaluate_core_table_counts() {
 # a corrupt, truncated, or mismatched dump produces — the class this drill
 # exists to provoke — so an allow-list of line prefixes is not a redaction.
 #
-# So values are redacted, not just labelled clauses, in layers:
-#   1. Only "pg_restore: error:" lines survive at all. Real pg_restore puts
-#      DETAIL: and CONTEXT: on their own physical lines, so this alone drops
-#      them, along with progress chatter.
-#   2. The retained line is truncated at the first whitespace-preceded ALL-CAPS
-#      label ("ERROR:", "DETAIL:", "DETALLE:", "FEHLER:"), which is where the
-#      server's own message — the part that quotes data — begins. This is the
-#      load-bearing rule, and it is reliable only because drill_exec pins
-#      LC_ALL=C: the label pg_restore prints is then always the ASCII "ERROR:".
-#      Unpinned it is whatever the server's locale says, and a Russian
-#      ("ОШИБКА:"), lowercase French ("erreur:") or CJK label matches nothing
-#      here. Rule 4 is not the safety net for that case — see its note.
-#   3. DETAIL:/CONTEXT: are stripped case-insensitively as well, in case a build
-#      emits one inline or lowercased.
-#   4. Whatever survives has any double-quoted or parenthesised literal that
-#      follows a colon replaced, terminated or running to end of line. This is
-#      best-effort defence in depth against something unanticipated, NOT the
-#      documented fallback for a label rule 2 missed: when rule 2 fires inside a
-#      value instead of before it, what is left is a fragment whose delimiters
-#      no longer pair up. Rules 2 and 4 are layers, not alternatives. A table
-#      name is kept because it does not follow a colon.
-#   5. Lines are length-bounded and capped at 20, so a dump with thousands of
-#      bad rows cannot flood a cron log either.
+# THE RULE IS COARSE, AND DELIBERATELY SO. Two earlier versions tried to keep
+# more of the message by locating where the row value began: first by truncating
+# at a whitespace-preceded ALL-CAPS severity label, then by matching the quotes
+# around the value. Both were defeated, because both parsed a message written in
+# a language this script does not control:
 #
-# All five stay. The locale pin removes rule 2's dependence on the server's
-# language; it does not make the rules around it redundant.
+#   - The severity label embedded in the message is the SERVER's, printed in the
+#     server's lc_messages, which is fixed when the postmaster starts from the
+#     image's baked-in LANG. `docker exec --env LC_ALL=C` sets pg_restore's own
+#     client-side catalog and nothing else; no client-side variable can
+#     retroactively change an already-running server's message language. A
+#     zh_CN.utf8 image says "错误:", which has no case distinction for an
+#     ALL-CAPS rule to key on at all, and a de/fr/ru image can quote a value
+#     with »…« or « … » rather than "…".
+#   - PostgreSQL does not escape a double quote inside the value it quotes back,
+#     so a "[^"]*" pairing stops at the first embedded quote and leaves the rest
+#     of the value in the log. Any free-text, name or email field containing a "
+#     de-syncs it. So does a value long enough to wrap, whose closing quote
+#     lands on a physical line the line filter drops.
+#
+# So this parses no part of the message body. On a retained line it keeps the
+# text up to the FIRST colon that follows the "pg_restore: error: " prefix — the
+# operation and the table or archive member it names — and replaces everything
+# from that colon onward with [redacted], unconditionally. A line whose body
+# carries no colon at all is redacted whole. Nothing about the server's message
+# language, its quoting glyphs, its capitalisation or its escaping can change
+# what is kept, because none of it is consulted. A table name whose own text
+# contains a colon simply gets cut short: that direction of error redacts more,
+# not less.
+#
+# The one exception is an ALLOW-LIST of archive-level diagnostics, matched as
+# fully-anchored exact strings. pg_restore emits these before it reads any
+# table's data, so they carry no row value, and they are the operator's entire
+# diagnosis when the archive itself is the problem — a truncated file, a
+# non-archive, a bad header — which the drill's acceptance criteria require it
+# to be able to name. Matching one means the line IS that literal text, so there
+# is nowhere in it for a value to hide. Anything not on the list is redacted:
+# the default is redact, not pass through.
+#
+# The cheap bounds around all of that, none of which has ever been defeated:
+# only "pg_restore: error:" lines are kept at all (which is also what drops
+# DETAIL:/CONTEXT:, since real pg_restore puts them on their own physical
+# lines, along with progress chatter), at most 20 lines, at most 200 bytes each.
+#
+# LC_ALL=C here is byte semantics for the host's own grep/sed/cut, not a
+# language assumption: a corrupt dump can put invalid UTF-8 into this text, and
+# a multibyte locale can refuse to match a line containing it.
 #
 # The output is therefore safe to paste into an issue: it names operations and
 # table names, not row values.
 redact_restore_output() {
   printf '%s\n' "$1" \
-    | grep '^pg_restore: error:' \
-    | sed -E 's/[[:space:]][[:upper:]]{3,}:.*$//' \
-    | sed -E 's/(DETAIL|CONTEXT|HINT|STATEMENT):.*$//I' \
-    | sed -E 's/:[[:space:]]*"[^"]*("|$)/: [redacted]/g; s/:[[:space:]]*\([^)]*(\)|$)/: [redacted]/g' \
-    | sed -E 's/[[:space:]]+$//' \
-    | cut -c 1-200 \
+    | LC_ALL=C grep '^pg_restore: error:' \
     | head -n 20 \
+    | LC_ALL=C sed -E '
+/^pg_restore: error: could not read from input file: end of file$/b
+/^pg_restore: error: did not find magic string in file header$/b
+/^pg_restore: error: (input file )?does not appear to be a valid archive \(too short\?\)$/b
+s/^(pg_restore: error: [^:]*):.*$/\1: [redacted]/
+s/^pg_restore: error:[^:]*$/pg_restore: error: [redacted]/
+' \
+    | LC_ALL=C cut -c 1-200 \
     | sed 's/^/        /'
 }
 
@@ -517,19 +541,20 @@ validate_drill_settings() {
 
 # Every command the drill runs inside the scratch container goes through here.
 #
-# LC_ALL=C is a redaction control, not a formatting preference. redact_restore_output's
-# load-bearing rule truncates pg_restore's line at the server's ALL-CAPS severity
-# label, and that label is written in the server's language: a German build says
-# FEHLER:, a Russian one ОШИБКА:, a French one can lowercase it, and ja/ko/zh have
-# no case distinction for the rule to key on at all. In every one of those the rule
-# truncates inside the quoted value rather than before it and a fragment of a
-# production row reaches the operator's terminal. Pinning C makes the label the
-# known ASCII ERROR: on every image an operator can point PAVILLION_DRILL_IMAGE at,
-# which turns the locale from something the redactor has to survive into a
-# precondition it can rely on. It is applied to every exec rather than to pg_restore
-# alone: the psql calls' diagnostics reach the operator too, one of them
-# deliberately unfiltered, and one pinned wrapper is one invariant to hold rather
-# than two paths to keep in step.
+# LC_ALL=C pins the CLIENT-side message catalog of the tool being exec'd, so
+# pg_restore's own prefix is the ASCII "pg_restore: error:" that
+# redact_restore_output's line filter keys on, rather than a translated one, on
+# every image an operator can point PAVILLION_DRILL_IMAGE at. That is the whole of
+# what it buys, and redaction does not depend on it: it does NOT reach the severity
+# label or the quoting glyphs inside the message body, because those are the
+# SERVER's, printed in its lc_messages, fixed when the postmaster started from the
+# image's baked-in LANG — no client-side variable can change an already-running
+# server's message language. redact_restore_output therefore assumes nothing about
+# the message body and does not parse it at all; see its header. This pin is a
+# cheap stabiliser for the line filter, not the reason the redaction holds.
+# It is applied to every exec rather than to pg_restore alone: the psql calls'
+# diagnostics reach the operator too, one of them deliberately unfiltered, and one
+# pinned wrapper is one invariant to hold rather than two paths to keep in step.
 #
 # --env carries a constant, never a credential. The value is on the docker command
 # line, which is fine for a locale and is exactly why POSTGRES_PASSWORD is passed by

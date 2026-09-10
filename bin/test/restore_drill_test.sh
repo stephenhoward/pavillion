@@ -295,9 +295,9 @@ argv_out=$(drill_exec psql -c "${argv_payload}")
 # it takes the exec'd process from CapEff 00000000000000c2 to 0000003fffffffff —
 # silently undoing --cap-drop for pg_restore, the one process here that parses the
 # untrusted archive. `--user root` and `--env PGPASSWORD=...` sit in the same
-# position and were equally invisible. The allow-list is exactly the locale pin
-# redaction rule 2 depends on, plus a bare `--` separator, so a reformat stays
-# tolerated and anything else in front of the name is a failure.
+# position and were equally invisible. The allow-list is exactly the client-side
+# locale pin, plus a bare `--` separator, so a reformat stays tolerated and
+# anything else in front of the name is a failure.
 argv_elems=()
 while IFS= read -r argv_line; do
   argv_elems+=("${argv_line}")
@@ -315,7 +315,7 @@ while (( argv_i < ${#argv_elems[@]} )); do
 done
 assert_eq '[drill-argv-probe]' "${argv_elems[argv_i]:-none}" \
   "the container name is the first argv element after exec and the allowed flags"
-assert_contains "$argv_out" '[LC_ALL=C]' "every exec carries the locale pin redaction rule 2 depends on"
+assert_contains "$argv_out" '[LC_ALL=C]' "every exec carries the client-side locale pin that keeps pg_restore's own prefix ASCII"
 # Asserted on the tail rather than on a total count, so inserting a `--`
 # separator stays a tolerated reformat while any re-splitting, globbing or
 # re-joining of the three arguments is not.
@@ -636,7 +636,11 @@ assert_exit_code "0" "$?" "a count of 1 still passes"
 #     ERROR: line valueless (`value too long for type character varying(8)`).
 #     The fixture below is instead the inline variant the audit reported. Both
 #     are covered: the CONTEXT: line is dropped by the line filter, and the
-#     inline variant by the truncation this fixture exercises.
+#     inline variant by the redaction this fixture exercises.
+#   zh_CN — the fixture in the round-4 test below was captured live from a
+#     zh_CN.utf8 postgres:17 image built for the purpose, not translated by
+#     hand. It is what defeated the two rules this file no longer tests,
+#     because they no longer exist.
 
 echo "test: redact_restore_output drops the value pg_restore quotes inline"
 # The shapes a corrupt, truncated or mismatched dump actually produces — the
@@ -682,82 +686,71 @@ fi
 assert_eq "" "$(printf '%s\n' "${redacted}" | grep -E '(DETAIL|CONTEXT):')" "no DETAIL/CONTEXT line survives"
 assert_eq "" "$(printf '%s\n' "${redacted}" | grep -F 'connecting to database')" "non-error chatter is dropped"
 
-echo "test: redact_restore_output keeps the diagnostics that carry no row data"
-# Redaction that eats the whole line would be safe and useless. Both of these
-# are verbatim captures, and both must survive intact: they are the operator's
-# entire diagnosis when the archive itself is the problem.
-redacted=$(redact_restore_output 'pg_restore: error: could not read from input file: end of file')
-assert_contains "$redacted" 'could not read from input file: end of file' "a truncated-archive error survives whole"
-redacted=$(redact_restore_output 'pg_restore: error: input file does not appear to be a valid archive (too short?)')
-assert_contains "$redacted" 'does not appear to be a valid archive (too short?)' "a bad-archive error survives whole"
-
-echo "test: redact_restore_output strips a DETAIL clause whatever its case or locale"
-# Case-insensitive and not tied to the English label: an operator repointing
-# PAVILLION_DRILL_IMAGE at a localized build gets DETALLE:, and a lowercase
-# detail: passed the previous case-sensitive sed outright.
-while IFS='|' read -r label line; do
-  [[ -z "${label}" ]] && continue
-  redacted=$(redact_restore_output "${line}")
-  if printf '%s\n' "${redacted}" | grep -qF 'person@example.com'; then
-    fail "an inline ${label} clause leaked a row value"
-  else
-    echo "  PASS: an inline ${label} clause is truncated"
-    _TESTS=$((_TESTS+1))
-  fi
-  assert_contains "$redacted" 'COPY failed' "${label}: the operation survives"
+echo "test: redact_restore_output keeps the archive-level diagnostics whole"
+# Redaction that eats the whole line would be safe and useless. These are the
+# allow-list, and they are the operator's entire diagnosis when the archive
+# itself is the problem — the drill's acceptance criteria require a failure to
+# name which step failed. Asserted on the EXACT output, so a rule that kept them
+# by accident (a stray wildcard in the allow-list, or a body-parsing heuristic
+# that happened to stop in the right place) is not the same as one that kept
+# them on purpose.
+while IFS='|' read -r shape line; do
+  [[ -z "${shape}" ]] && continue
+  assert_eq "        ${line}" "$(redact_restore_output "${line}")" \
+    "${shape}: the archive-level diagnostic survives byte-for-byte"
 done <<'FIXTURES'
-DETAIL:|pg_restore: error: COPY failed: DETAIL:  Key (email)=(person@example.com) already exists.
-detail:|pg_restore: error: COPY failed: detail:  Key (email)=(person@example.com) already exists.
-CONTEXT:|pg_restore: error: COPY failed: CONTEXT:  COPY account, line 42: "person@example.com"
-DETALLE:|pg_restore: error: COPY failed: DETALLE:  Llave (email)=(person@example.com) ya existe.
+truncated|pg_restore: error: could not read from input file: end of file
+bad header|pg_restore: error: did not find magic string in file header
+not an archive|pg_restore: error: input file does not appear to be a valid archive (too short?)
 FIXTURES
 
-echo "test: redact_restore_output redacts a quoted value even behind an unrecognised label"
-# The last line of defence: a localized build whose severity label is not
-# ALL-CAPS still must not leave a quoted value in the log.
-redacted=$(redact_restore_output 'pg_restore: error: COPY failed for table "account": erreur: syntaxe invalide pour le type integer : "multi@example.com"')
-if printf '%s\n' "${redacted}" | grep -qF 'multi@example.com'; then
-  fail "a quoted value survived a message with a non-ALL-CAPS label"
-else
-  echo "  PASS: a quoted value following a colon is redacted regardless of label"
-  _TESTS=$((_TESTS+1))
-fi
-assert_contains "$redacted" 'COPY failed for table "account"' "the table name is kept — it does not follow a colon"
+echo "test: redact_restore_output redacts an unrecognised shape rather than passing it through"
+# The fail-closed default, and the reason the allow-list above is an allow-list.
+# A pg_restore message this script has never seen — a future release's wording, a
+# patched build's, a shape no capture covered — must lose its body, not keep it
+# on the strength of not matching anything.
+assert_eq '        pg_restore: error: some unrecognised operation: [redacted]' \
+  "$(redact_restore_output 'pg_restore: error: some unrecognised operation: fatality at "person@example.com"')" \
+  "an unknown message with a colon keeps only the operation"
+assert_eq '        pg_restore: error: [redacted]' \
+  "$(redact_restore_output 'pg_restore: error: an unknown colonless message naming person@example.com')" \
+  "an unknown message with no colon is redacted whole"
 
 echo "test: redact_restore_output drops a value that is split across physical lines"
-# The shape two audits landed on independently, and the one that actually leaked.
-# Both halves are real: the multi-line value was captured live from postgres:17,
-# and a severity label that is not ASCII-uppercase is what every server whose
-# locale is not C prints (ОШИБКА:, a lowercased erreur:, or — in ja/ko/zh — a
-# label with no case distinction at all). Together they defeat both rules: rule 2
-# has no ALL-CAPS label to truncate at, and the value's closing quote is on a
-# physical line rule 1 drops, so rule 4 was left an opening quote with no partner
-# and a fragment of a production row reached output the header calls safe to paste
-# into an issue. The drill now pins LC_ALL=C so the label is always ERROR: and
-# rule 2 fires; this fixture is the belt to that pair of braces.
+# Round-3 defeat, captured live from postgres:17. The value wraps, so its closing
+# quote lands on a physical line the "^pg_restore: error:" filter drops, and the
+# quote-pairing rule that used to run here was left an opening quote with no
+# partner — it matched nothing and a fragment of a production row reached output
+# the header calls safe to paste into an issue. The coarse rule never looks for
+# the quote at all, so where the value ends stopped mattering.
 multiline_leak=$(printf '%s\n' \
   'pg_restore: error: COPY failed for table "account": erreur: syntaxe invalide pour le type integer : "multi@' \
   'example.com"')
-redacted=$(redact_restore_output "${multiline_leak}")
-if printf '%s\n' "${redacted}" | grep -qF 'multi@'; then
-  fail "a fragment of the row value survived a multi-line value behind an unrecognised label"
-else
-  echo "  PASS: the orphaned fragment of a multi-line value is redacted"
-  _TESTS=$((_TESTS+1))
-fi
-assert_contains "$redacted" 'COPY failed for table "account"' "the failing operation and table are still named"
+assert_eq '        pg_restore: error: COPY failed for table "account": [redacted]' \
+  "$(redact_restore_output "${multiline_leak}")" \
+  "the operation and table are named and the orphaned fragment is gone"
+
+echo "test: redact_restore_output drops a value holding a quote, behind a label with no case"
+# Round-4 defeat, captured live against a zh_CN.utf8 postgres image. Two rules
+# died on this one line. The ALL-CAPS truncation no-oped, because 错误: has no
+# case distinction to key on — and LC_ALL=C cannot fix that, since the label is
+# the SERVER's, fixed when the postmaster started from the image's baked-in LANG.
+# The quote pairing then stopped at the " embedded in the value, because
+# PostgreSQL does not escape it, and published the rest.
+zh_leak='pg_restore: error: COPY failed for table "account2": 错误:  无效的类型 integer 输入语法: "quote"embed@example.com"'
+redacted=$(redact_restore_output "${zh_leak}")
+assert_eq '        pg_restore: error: COPY failed for table "account2": [redacted]' "$redacted" \
+  "the operation and table are named and nothing of the message body survives"
+assert_absent "$redacted" 'embed@example.com' "the value behind the embedded quote does not reach the log"
 
 echo "test: redact_restore_output bounds the length of a single line"
-# A pathological single line cannot dump the archive into a cron log.
-long_line="pg_restore: error: $(printf 'x%.0s' $(seq 1 4000))"
+# A pathological single line cannot dump the archive into a cron log. The long
+# part is the archive member's own name, which is the part the rule KEEPS — so
+# this exercises the byte bound rather than being shortened by redaction first.
+long_line="pg_restore: error: COPY failed for table \"$(printf 'x%.0s' $(seq 1 4000))\": ERROR:  nope"
 assert_eq "1" "$(redact_restore_output "${long_line}" | wc -l | tr -d ' ')" "the long line stays one line"
 line_len=$(redact_restore_output "${long_line}" | sed 's/^        //' | awk '{ print length }')
-if (( line_len <= 200 )); then
-  echo "  PASS: a single line is truncated to ${line_len} characters"
-  _TESTS=$((_TESTS+1))
-else
-  fail "a single line was echoed at ${line_len} characters, unbounded"
-fi
+assert_eq "200" "${line_len}" "a single line is truncated to the 200-byte bound"
 
 echo "test: redact_restore_output caps a flood of error lines"
 restore_stderr=$(for i in $(seq 1 60); do echo "pg_restore: error: line ${i}"; done)
