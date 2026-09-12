@@ -319,7 +319,10 @@ async function handleBackupRecordDrill(options: { file: string; result: string; 
     console.log(chalk.green(`[Drill] ✓ Recorded ${options.result} for ${options.file}`));
   }
   catch (error) {
-    console.error(chalk.red('[Drill] Failed to record drill result:'), error);
+    // The message only, never the error object: a Sequelize error carries .sql
+    // and the bound parameters of the failed insert, and this output goes to the
+    // drill's cron log. Same serialization the import:sync handler below uses.
+    console.error(chalk.red('[Drill] Failed to record drill result:'), error instanceof Error ? error.message : String(error));
     process.exit(1);
   }
 }

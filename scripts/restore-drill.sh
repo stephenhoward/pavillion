@@ -675,6 +675,15 @@ s/^.*$/pg_restore: error: [redacted]/
 # leading dash is read as a flag rather than an image. It is passed as argv, so
 # this is not injection — but it is the same class of unvalidated input, and the
 # guard is a line.
+#
+# PAVILLION_CONTAINER is the same hazard one command over: it lands in the
+# option-parsing region of the `docker exec` in record_drill_result, where
+# --privileged, --user and --env all live. Today the existence check in front of
+# it (`docker ps ... grep -q "^${APP_CONTAINER}$"`) happens to stop a dashed
+# value, because Docker's own naming rules forbid a leading dash so no such
+# container can exist — but that is incidental protection resting on a rule
+# documented nowhere in this script, and it evaporates the moment the order of
+# those two steps changes. So the sibling gets the sibling's guard.
 validate_drill_settings() {
   if [[ ! "${DRILL_TIMEOUT}" =~ ^[0-9]+$ ]]; then
     err "Error: PAVILLION_DRILL_TIMEOUT must be a whole number of seconds: ${DRILL_TIMEOUT}"
@@ -700,6 +709,10 @@ validate_drill_settings() {
   fi
   if [[ "${DRILL_IMAGE}" == -* ]]; then
     err "Error: PAVILLION_DRILL_IMAGE must be an image reference, not an option: ${DRILL_IMAGE}"
+    return 1
+  fi
+  if [[ "${APP_CONTAINER}" == -* ]]; then
+    err "Error: PAVILLION_CONTAINER must be a container name, not an option: ${APP_CONTAINER}"
     return 1
   fi
   return 0
