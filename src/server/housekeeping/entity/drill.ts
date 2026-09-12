@@ -6,9 +6,16 @@ import db from '@/server/common/entity/db';
  *
  * Appended by `pavillion backup record-drill`, which scripts/restore-drill.sh
  * invokes once per completed drill. The table is an append log rather than a
- * single upserted row because the history is the point: an operator answering
- * "has a drill passed in the last 30 days" needs the last *passing* run, which a
- * row overwritten by a later failure would have erased.
+ * single upserted row so that a later failure cannot erase an earlier pass: an
+ * operator answering "has a drill passed in the last 30 days" needs the last
+ * *passing* run, which an overwritten row would have destroyed.
+ *
+ * It is not a complete run log. The script records only at its terminal points
+ * and deliberately never from its EXIT trap, so a pre-restore failure — no
+ * backup selected, scratch container start timeout, prerequisite failure,
+ * `docker exec` unavailable — leaves no row at all. These rows reliably answer
+ * one question: when did a restore last actually work. A failure rate or an
+ * attempts-since-last-success count derived from them would be wrong.
  *
  * `backup_filename` deliberately carries no association to {@link BackupEntity}.
  * GFS retention prunes backup_metadata rows, and a drill record must outlive the

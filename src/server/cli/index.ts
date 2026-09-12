@@ -463,7 +463,7 @@ async function main() {
 
   backupCommand
     .command('record-drill')
-    .description('Record the outcome of a restore drill')
+    .description('Record the outcome of a restore drill (written by scripts/restore-drill.sh; not intended for hand invocation)')
     .requiredOption('--file <filename>', 'Backup filename the drill ran against')
     .requiredOption('--result <result>', 'pass or fail')
     .option('--detail <text>', 'Short failure reason (never credentials)')
