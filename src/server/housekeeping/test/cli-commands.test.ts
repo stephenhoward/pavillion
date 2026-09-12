@@ -1,4 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { execFile } from 'child_process';
+import * as path from 'path';
+import { fileURLToPath } from 'url';
 import sinon from 'sinon';
 import HousekeepingInterface from '@/server/housekeeping/interface';
 import EmailInterface from '@/server/email/interface';
@@ -212,6 +215,57 @@ describe('CLI Commands (HousekeepingInterface)', () => {
 
       expect(await housekeeping.getLastSuccessfulDrill()).toBeNull();
     });
+
+    /**
+     * The one test in this file that spawns the CLI.
+     *
+     * The `--result` allowlist lives in handleBackupRecordDrill, above the
+     * interface — commander accepts any string for `--result <result>`, so the
+     * guard is the only thing between a typo and a drill stored under a third
+     * verdict. Every other test here calls HousekeepingInterface directly, which
+     * is deliberately the wrong side of that guard: `passed: options.result ===
+     * 'pass'` means an unrecognised word would silently record as a FAILED
+     * drill, and a run of those reads as "restores are broken" rather than "the
+     * caller is broken". Exercising that needs the real argv path, and the
+     * module runs main() on import, so it has to be a process.
+     *
+     * It is also cheap to keep honest: the rejection happens before
+     * initDatabase, so nothing here touches a database — asserted below, because
+     * a guard that fired after the connection was open would be a different
+     * (and worse) guard.
+     */
+    it('should reject a verdict that is neither pass nor fail, before touching the database', async () => {
+      const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../..');
+
+      const result = await new Promise<{ code: number | null; stdout: string; stderr: string }>(
+        (resolve) => {
+          execFile(
+            path.join(repoRoot, 'node_modules', '.bin', 'tsx'),
+            [
+              path.join('src', 'server', 'cli', 'index.ts'),
+              'backup', 'record-drill',
+              '--file', 'pavillion_20260901_020000_scheduled.dump',
+              '--result', 'maybe',
+            ],
+            { cwd: repoRoot },
+            (error, stdout, stderr) => {
+              resolve({
+                code: error ? ((error as NodeJS.ErrnoException & { code?: number }).code ?? 1) as number : 0,
+                stdout,
+                stderr,
+              });
+            },
+          );
+        },
+      );
+
+      expect(result.code).toBe(1);
+      expect(result.stderr).toContain("--result must be 'pass' or 'fail'");
+      expect(result.stderr).toContain('maybe');
+      // No connection was opened, so no row could have been written.
+      expect(result.stdout).not.toContain('Database connected');
+      expect(result.stdout).not.toContain('Recorded');
+    }, 60000);
   });
 
   describe('backup restore command', () => {
