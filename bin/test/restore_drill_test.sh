@@ -1027,4 +1027,85 @@ unset -f docker
 unset -f sleep
 CONTAINER_NAME=""
 
+# --- Recording the drill outcome ---------------------------------------------
+#
+# The recording is one INSERT into the live database — the drill's only write to
+# it — made through the app container's CLI once the drill is over. Every
+# property that makes that acceptable is a property of the script's text, so the
+# assertions are source-level like the docker-run ones above, and each was shown
+# to fail against a mutated script before being kept.
+
+record_body=$(sed -n '/^record_drill_result() {/,/^}/p' "${DRILL}")
+# Deny-list assertions run against the CODE only. The function's comments explain
+# what it must not do — "scripts/backup.sh uses docker exec -it, this must not" —
+# and a deny-list that reads them fails on the explanation rather than the
+# behaviour, which is the same trap the docker-run block above documents.
+record_code=$(printf '%s\n' "${record_body}" | sed '/^[[:space:]]*#/d')
+main_body=$(sed -n '/^main() {/,/^}/p' "${DRILL}")
+on_exit_body=$(sed -n '/^on_exit() {/,/^}/p' "${DRILL}")
+# The call sites, not the definition: the definition line has no space after the
+# function name.
+record_calls=$(grep -E '^[[:space:]]*record_drill_result ' "${DRILL}")
+
+echo "test: the recording goes to the app container, not the scratch container"
+assert_contains "$record_code" 'docker exec "${APP_CONTAINER}"' \
+  "the recording execs against the app container"
+assert_contains "$(cat "${DRILL}")" 'APP_CONTAINER="${PAVILLION_CONTAINER:-pavillion-app-1}"' \
+  "the app container name reuses the PAVILLION_CONTAINER variable scripts/backup.sh documents"
+# drill_exec targets the --network none scratch container, which holds no
+# Pavillion code and cannot reach the database. Reusing it here would be a silent
+# no-op dressed as a recording.
+assert_absent "$record_code" 'drill_exec' "the recording does not go through drill_exec"
+assert_absent "$record_code" 'CONTAINER_NAME' "the recording does not target the scratch container"
+# The drill is documented as a cron job and has no tty, where -it fails outright.
+assert_absent "$record_code" 'docker exec -it' "the recording does not ask for a tty"
+assert_contains "$(cat "${DRILL}")" '#   PAVILLION_CONTAINER' \
+  "PAVILLION_CONTAINER is documented in the header --help renders"
+
+echo "test: a failed recording cannot change the drill's verdict or exit code"
+# The documented exit contract is 0/1/3/130 and operators' cron monitors consume
+# it. A `return 1` anywhere in here would turn an unreachable app container into
+# a failed backup.
+assert_absent "$record_code" 'return 1' "the recording path never returns a failure"
+assert_eq "2" "$(printf '%s\n' "${record_code}" | grep -c 'return 0')" \
+  "both recording bail-outs return success (container absent, and exec failed)"
+# Counted, not merely present: there are two ways the recording can fail to
+# happen (no app container, and an exec that errored) and a silent one is
+# indistinguishable from a recorded drill until the staleness signal fires weeks
+# later.
+assert_eq "2" "$(printf '%s\n' "${record_code}" | grep -c 'err "WARNING')" \
+  "both ways of not recording are reported on stderr"
+
+echo "test: the recording happens at main()'s terminal points, never in the EXIT trap"
+# The trap fires for --help and for prerequisite failures where no backup was
+# ever selected, and it runs after teardown — which would make a recorded pass
+# contingent on a successful docker rm.
+assert_absent "$on_exit_body" 'record_drill_result' "the EXIT trap does not record"
+assert_absent "$(sed -n '/^on_signal() {/,/^}/p' "${DRILL}")" 'record_drill_result' \
+  "an interrupted drill records nothing"
+assert_absent "$(sed -n '/^cleanup_drill() {/,/^}/p' "${DRILL}")" 'record_drill_result' \
+  "teardown does not record"
+assert_eq "3" "$(printf '%s\n' "${main_body}" | grep -c '^[[:space:]]*record_drill_result ')" \
+  "main() records at exactly its three completed-drill outcomes (pass, failed checks, failed restore)"
+assert_eq "3" "$(printf '%s\n' "${record_calls}" | wc -l | tr -d ' ')" \
+  "there are no recording call sites outside main()"
+assert_eq "1" "$(printf '%s\n' "${record_calls}" | grep -c ' pass$')" \
+  "exactly one outcome is recorded as a pass"
+assert_eq "2" "$(printf '%s\n' "${record_calls}" | grep -c ' fail ')" \
+  "both failure outcomes are recorded as failures"
+
+echo "test: no detail argument can carry anything derived from the dump"
+# redact_restore_output documents a residue — on a line injected by a row value
+# the text before the first colon is attacker-chosen — so no part of pg_restore's
+# output may reach a stored column, redacted or not.
+assert_absent "$record_calls" 'restore_output' "no recorded detail comes from pg_restore's output"
+assert_absent "$record_calls" 'redact' "no recorded detail comes from the redactor"
+# Set subtraction rather than a deny-list: strip the two expansions that are
+# allowed — the resolved backup filename, and the script's own fixed check names
+# in failures[@] — and nothing expandable may remain. Any other interpolation,
+# including one nobody thought to forbid, leaves a $ behind and fails here.
+record_calls_literal=$(printf '%s\n' "${record_calls}" | sed 's/\${backup}//g; s/\${failures\[\*\]}//g')
+assert_absent "$record_calls_literal" '$' \
+  "every recorded detail is a fixed literal of this script's own"
+
 report_results

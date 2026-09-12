@@ -5,7 +5,9 @@ import EmailInterface from '@/server/email/interface';
 import AccountsInterface from '@/server/accounts/interface';
 import JobQueueService from '@/server/housekeeping/service/job-queue';
 import StorageService from '@/server/housekeeping/service/storage';
+import DrillService from '@/server/housekeeping/service/drill';
 import { BackupEntity } from '@/server/housekeeping/entity/backup';
+import { BackupDrillEntity } from '@/server/housekeeping/entity/drill';
 
 /**
  * CLI Commands Test Suite
@@ -161,6 +163,54 @@ describe('CLI Commands (HousekeepingInterface)', () => {
       const lastBackup = await housekeeping.getLastVerifiedBackup();
 
       expect(lastBackup).toBeNull();
+    });
+  });
+
+  describe('backup record-drill command', () => {
+    it('should record a drill outcome through the domain boundary', async () => {
+      const recordStub = sandbox.stub(DrillService.prototype, 'recordResult').resolves();
+
+      await housekeeping.recordDrillResult({
+        backupFilename: 'pavillion_20260901_020000_scheduled.dump',
+        passed: false,
+        detail: 'pg_restore failed',
+      });
+
+      expect(recordStub.calledOnce).toBe(true);
+      expect(recordStub.firstCall.args[0]).toEqual({
+        backupFilename: 'pavillion_20260901_020000_scheduled.dump',
+        passed: false,
+        detail: 'pg_restore failed',
+      });
+    });
+
+    it('should project a drill entity onto a boundary-safe record', async () => {
+      sandbox.stub(BackupDrillEntity, 'findOne').resolves(
+        BackupDrillEntity.build({
+          id: '323e4567-e89b-12d3-a456-426614174002',
+          backup_filename: 'pavillion_20260901_020000_scheduled.dump',
+          ran_at: new Date('2026-09-01T03:00:00Z'),
+          passed: true,
+          detail: null,
+        }),
+      );
+
+      const drill = await housekeeping.getLastSuccessfulDrill();
+
+      // camelCase out of a snake_case entity, as toBackupRecord does above.
+      expect(drill).toEqual({
+        id: '323e4567-e89b-12d3-a456-426614174002',
+        backupFilename: 'pavillion_20260901_020000_scheduled.dump',
+        ranAt: new Date('2026-09-01T03:00:00Z'),
+        passed: true,
+        detail: null,
+      });
+    });
+
+    it('should return null when no drill has ever passed', async () => {
+      sandbox.stub(BackupDrillEntity, 'findOne').resolves(null);
+
+      expect(await housekeeping.getLastSuccessfulDrill()).toBeNull();
     });
   });
 

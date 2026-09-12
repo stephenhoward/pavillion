@@ -5,8 +5,14 @@
 # Proves that a backup can actually be restored. The drill restores the most
 # recent database dump into a throwaway Postgres container, checks that the
 # restored database looks like a real Pavillion instance, prints row counts,
-# and destroys the container. It never touches the live database, and it never
-# writes to the backup directory.
+# and destroys the container. It never writes to the backup directory.
+#
+# The restore and every check run inside a --network none container that cannot
+# reach the live database at all. The one and only thing the drill writes to the
+# live database is a single row recording that the drill happened and what it
+# concluded, appended after all of that is over, through the app's own CLI. A
+# drill nobody can date is operationally a drill that did not happen; see
+# record_drill_result below for why that one append is not a licence for others.
 #
 # Usage:
 #   ./scripts/restore-drill.sh [backup-filename]
@@ -33,6 +39,12 @@
 #                             kindness. A larger value is rejected, not clamped.
 #   PAVILLION_MIGRATIONS_DIR  Directory holding the migration files the dump is
 #                             compared against. Default: <repo>/migrations
+#   PAVILLION_CONTAINER       The running Pavillion app container, used only to
+#                             record the drill's outcome once the drill is over.
+#                             Default: pavillion-app-1. Same variable name
+#                             scripts/backup.sh already documents. If the
+#                             container is not running the outcome is not
+#                             recorded and the drill's verdict is unaffected.
 #
 # Examples:
 #   ./scripts/restore-drill.sh
@@ -96,6 +108,11 @@ BACKUP_DIR="${PAVILLION_BACKUP_DIR:-}"
 DRILL_IMAGE="${PAVILLION_DRILL_IMAGE:-postgres:17}"
 DRILL_TIMEOUT="${PAVILLION_DRILL_TIMEOUT:-90}"
 MIGRATIONS_DIR="${PAVILLION_MIGRATIONS_DIR:-${REPO_ROOT}/migrations}"
+# The running Pavillion app container, used only by record_drill_result. Same
+# variable name scripts/backup.sh documents, rather than a second one meaning
+# the same thing. Not to be confused with CONTAINER_NAME below, which is the
+# throwaway scratch database.
+APP_CONTAINER="${PAVILLION_CONTAINER:-pavillion-app-1}"
 
 # Upper bound on PAVILLION_DRILL_TIMEOUT. An hour is far longer than any real
 # postgres start-up and short enough that a mistyped value cannot leave a
@@ -199,6 +216,58 @@ on_signal() {
   err "Interrupted. Removing the drill container."
   cleanup_drill
   exit 130
+}
+
+# Appends this drill's verdict to the instance's durable drill log.
+#
+# THIS IS THE DRILL'S ONLY WRITE TO THE LIVE DATABASE, and it is a deliberate,
+# recorded exception rather than a precedent. It is one INSERT into one
+# operational table — no UPDATE, no DELETE, nothing that touches backup metadata
+# and in particular nothing that touches backup_metadata.verified, which is a
+# retention policy input and means something narrower. It happens only after the
+# restore and every check are finished, outside the throwaway container, and it
+# goes through the app's own domain interface rather than psql, so no credential
+# is ever assembled on this side: the CLI reads the database config from inside
+# the container. That routing is the whole reason the call is a `docker exec`.
+#
+# Called from main() at its terminal points, NEVER from the EXIT trap. The trap
+# fires for --help and for prerequisite failures where no backup was ever
+# selected and there is nothing truthful to record, and it runs after teardown,
+# which would make a recorded pass contingent on a successful `docker rm`.
+#
+# RECORDING NEVER CHANGES THE DRILL'S VERDICT OR ITS EXIT CODE. A failure here
+# warns on stderr and returns 0. The documented exit contract (0/1/3/130) is
+# consumed by operators' cron monitors, so a fifth code would break them; a drill
+# that stops being recorded shows up instead as the last-successful-drill value
+# going stale, which is the signal built on top of this table.
+record_drill_result() {
+  local filename="$1" result="$2" detail="${3:-}"
+  local -a cmd
+
+  # The laptop case: PAVILLION_BACKUP_DIR pointed at a directory of dumps on a
+  # host where the stack is not up. The drill has still done its job.
+  if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^${APP_CONTAINER}$"; then
+    err ""
+    err "WARNING: the app container ${APP_CONTAINER} is not running, so this drill's"
+    err "         outcome was not recorded. Set PAVILLION_CONTAINER if the container"
+    err "         has a different name. The drill's own verdict above is unaffected."
+    return 0
+  fi
+
+  cmd=(node /app/bin/pavillion backup record-drill --file "${filename}" --result "${result}")
+  if [[ -n "${detail}" ]]; then
+    cmd+=(--detail "${detail}")
+  fi
+
+  # No -it. scripts/backup.sh uses `docker exec -it` because it is an interactive
+  # operator wrapper; this drill is documented as a cron job and has no tty, where
+  # -it fails outright with "the input device is not a TTY". Deliberate divergence.
+  if ! docker exec "${APP_CONTAINER}" "${cmd[@]}" >/dev/null 2>&1; then
+    err ""
+    err "WARNING: could not record this drill's outcome in ${APP_CONTAINER}."
+    err "         The verdict above stands; only the durable record is missing."
+  fi
+  return 0
 }
 
 # Strips blank lines so an empty input is an empty set rather than a set
@@ -819,6 +888,12 @@ main() {
     err "      The dump is corrupt, truncated, or not a pg_dump -Fc archive."
     err "      pg_restore reported:"
     redact_restore_output "${restore_output}" >&2 || true
+    # A fixed literal, never ${restore_output} — redacted or not. The redaction
+    # documents a residue: on a line injected by a row value, the text before the
+    # first colon is attacker-chosen. Nothing derived from the archive may reach
+    # a stored column, so the stored reason says only which phase failed and the
+    # operator reads the detail from the output above.
+    record_drill_result "${backup}" fail "pg_restore failed"
     return 1
   fi
   echo "  restore completed"
@@ -876,6 +951,10 @@ main() {
   echo ""
   if (( ${#failures[@]} > 0 )); then
     err "RESTORE DRILL FAILED: ${#failures[@]} check(s) failed: ${failures[*]}"
+    # failures[@] holds only this script's own fixed literals — "schema present",
+    # "migrations consistent", "core tables non-empty" — so the recorded reason is
+    # the same verdict printed above and carries nothing from the dump.
+    record_drill_result "${backup}" fail "failed checks: ${failures[*]}"
     return 1
   fi
 
@@ -884,6 +963,10 @@ main() {
   echo "Note: this drill covers the database only. Pavillion's backup system"
   echo "runs pg_dump and produces no media archive, so media backup remains"
   echo "an operator-owned volume snapshot and is not verified here."
+  # Recorded here rather than in the EXIT trap, so a teardown that leaks the
+  # scratch container (exit 3) still records the pass it earned: a container the
+  # host could not remove is a host fact, not a fact about the backup.
+  record_drill_result "${backup}" pass
   return 0
 }
 

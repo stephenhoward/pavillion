@@ -286,6 +286,45 @@ async function handleBackupRestore(backupId: string) {
 }
 
 /**
+ * Handles the backup record-drill command.
+ *
+ * Called by scripts/restore-drill.sh (via `docker exec`) once a drill has
+ * completed, because the drill is a host-side shell script with no database
+ * access of its own. This single append is the drill's only write to the live
+ * database; the restore and verification it performs happen inside a throwaway
+ * container that cannot reach this one.
+ *
+ * Deliberately shares nothing with handleBackupRestore: no child process, no
+ * credential on a command line. It is one insert through the housekeeping
+ * domain interface.
+ */
+async function handleBackupRecordDrill(options: { file: string; result: string; detail?: string }) {
+  // commander does not constrain an option's value, so the verdict is validated
+  // here. Anything other than the two documented words is a caller bug, and
+  // recording a drill under a third verdict would quietly corrupt the signal.
+  if (options.result !== 'pass' && options.result !== 'fail') {
+    console.error(chalk.red(`[Drill] --result must be 'pass' or 'fail', got: ${options.result}`));
+    process.exit(1);
+  }
+
+  try {
+    await initDatabase();
+
+    await getHousekeeping().recordDrillResult({
+      backupFilename: options.file,
+      passed: options.result === 'pass',
+      detail: options.detail ?? null,
+    });
+
+    console.log(chalk.green(`[Drill] ✓ Recorded ${options.result} for ${options.file}`));
+  }
+  catch (error) {
+    console.error(chalk.red('[Drill] Failed to record drill result:'), error);
+    process.exit(1);
+  }
+}
+
+/**
  * Handles housekeeping status command.
  */
 async function handleHousekeepingStatus() {
@@ -417,6 +456,16 @@ async function main() {
     .argument('<id>', 'Backup ID to restore')
     .action(async (id: string) => {
       await handleBackupRestore(id);
+    });
+
+  backupCommand
+    .command('record-drill')
+    .description('Record the outcome of a restore drill')
+    .requiredOption('--file <filename>', 'Backup filename the drill ran against')
+    .requiredOption('--result <result>', 'pass or fail')
+    .option('--detail <text>', 'Short failure reason (never credentials)')
+    .action(async (opts: { file: string; result: string; detail?: string }) => {
+      await handleBackupRecordDrill(opts);
     });
 
   // Housekeeping commands
