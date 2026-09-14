@@ -9,7 +9,7 @@
 
 ## Decision
 
-`/apply/confirm/:token` moves from the site SPA shell to the client SPA's logged-out auth flow, with the canonical URL becoming `/auth/apply/confirm/:token`. The `/apply/` top-level reservation in `src/server/app_routes.ts` is removed; that path falls through to the client SPA catch-all like the other `/auth/*` URLs do today. The `/view/` reservation established by [DEC-006](dec-006-view-url-namespace.md) itself remains in force; only the pv-l9wv addendum that extended the reservation to `/apply/` is superseded.
+`/apply/confirm/:token` moves from the site SPA shell to the client SPA's logged-out auth flow, with the canonical URL becoming `/auth/apply/confirm/:token`. The `/apply/` top-level reservation in `src/server/app_routes.ts` is removed; that path falls through to the client SPA catch-all like the other `/auth/*` URLs do today. This decision supersedes only the pv-l9wv addendum that extended the reservation to `/apply/`; the `/view/` reservation established by [DEC-006](dec-006-view-url-namespace.md) itself was untouched here, and was later superseded by [DEC-018](dec-018-root-calendar-urls.md), which moved public calendar URLs to the domain root.
 
 ## Context
 
@@ -41,4 +41,4 @@ The DEC-006 pv-l9wv addendum (committed earlier in this branch) reserved `/apply
 - One conceptual model for the logged-out surface: all routes live under `/auth/*` in the client SPA. The DEC-006 pv-l9wv addendum's separate "public site namespace for anonymous flows" rule no longer needs to exist.
 
 **Negative:**
-- DEC-006 is now split between an original decision (the `/view/` URL convention, still in force) and a superseded addendum (the `/apply/` reservation). The historical record adds noise but is preserved for traceability.
+- DEC-006 is now split between an original decision (the `/view/` URL convention, which was still in force at the time and has since been superseded in turn by [DEC-018](dec-018-root-calendar-urls.md)) and a superseded addendum (the `/apply/` reservation). The historical record adds noise but is preserved for traceability.
