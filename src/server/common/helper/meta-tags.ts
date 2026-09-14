@@ -16,6 +16,7 @@ import { stripLocalePrefix } from '@/common/i18n/locale-url';
 import { isReservedRouteSegment } from '@/common/routing/reserved-segments';
 import { parseInstanceSlug } from '@/common/utils/instance-slug';
 import { createLogger } from '@/server/common/helper/logger';
+import { looksLikeUuid } from '@/server/common/helper/uuid';
 
 const logger = createLogger('meta-tags');
 
@@ -62,10 +63,17 @@ export interface EventPageParams {
  *
  * Segment length caps defend against pathological URLs reaching the lookup
  * layer: calendarUrlName capped at 64 chars (matches calendar.url_name column
- * limit), eventId capped at 36 chars (UUID length). The instance segment,
- * when present, must match the `yyyymmdd-hhmm` slug shape exactly.
+ * limit), eventId capped at 36 chars (UUID length, with the shape itself checked
+ * in parseEventPageParams). The instance segment, when present, must match the
+ * `yyyymmdd-hhmm` slug shape exactly.
+ *
+ * A single trailing slash is accepted. The site SPA's router is not in strict
+ * mode, so `/cal/events/:id/` renders the event page; rejecting it here would
+ * serve that page with no meta tags at all -- silent degradation on a link shape
+ * that copy-paste and link builders produce routinely. The canonical URL built
+ * downstream is always the slash-free form, so the two spellings converge.
  */
-const EVENT_PAGE_RE = /^\/([^/]{1,64})\/events\/([^/]{1,36})(?:\/(\d{8}-\d{4}))?$/i;
+const EVENT_PAGE_RE = /^\/([^/]{1,64})\/events\/([^/]{1,36})(?:\/(\d{8}-\d{4}))?\/?$/i;
 
 /**
  * Parses a public event page URL path into its component parts.
@@ -92,11 +100,23 @@ const EVENT_PAGE_RE = /^\/([^/]{1,64})\/events\/([^/]{1,36})(?:\/(\d{8}-\d{4}))?
  *    lookup gate: calendar resolution still happens in getCalendarByName on the
  *    shape rule alone.
  *
- * The check runs on the raw, undecoded segment, matching Express's own matching
- * order. A percent-encoded segment therefore falls through to the calendar
- * lookup, which finds nothing and yields no meta tags.
+ * At most one locale prefix is removed, so the caller must pass a path that has
+ * not already been stripped -- `req.path`, not a pre-stripped remainder. Two
+ * strips over `/fr/es/cal/events/:id` would yield `cal`'s event page, and a
+ * once-stripped path is indistinguishable here from a legitimate `/es/cal/...`,
+ * so the contract cannot be enforced from inside this function.
  *
- * @param path - The URL path to parse (e.g. from req.path)
+ * Percent-encoding is deliberately not decoded, matching Express, which matches
+ * routes on the raw pathname. `/%61dmin/events/:id` therefore parses -- the
+ * reservation check does not fire on the encoded spelling and this function
+ * returns `calendarUrlName: '%61dmin'` verbatim. What makes that harmless is one
+ * layer up, not here: buildEventMetaTags hands the name to getCalendarByName,
+ * which gates on CALENDAR_URL_NAME_RE and returns null before issuing a query,
+ * so the request emits no meta tags and reaches no row. That regex in
+ * src/server/calendar/service/calendar.ts is load-bearing for this argument;
+ * both halves are pinned by tests.
+ *
+ * @param path - The URL path to parse; pass req.path, not a locale-stripped path
  * @returns Parsed parameters or null if the path does not match
  */
 export function parseEventPageParams(path: string): EventPageParams | null {
@@ -112,9 +132,20 @@ export function parseEventPageParams(path: string): EventPageParams | null {
     return null;
   }
 
+  // The event id addresses a uuid column. Without a shape check a junk id
+  // reaches Postgres as `where: { id: 'zzzz' }`, which raises and unwinds to the
+  // warn-and-degrade handler in buildEventMetaTags -- one DB error and one log
+  // line per request, on a route with no rate limiter. looksLikeUuid rather than
+  // isValidUuidV4: this guards a column, and an id minted by a federated peer
+  // need not carry v4 bits.
+  const eventId = match[2];
+  if (!looksLikeUuid(eventId)) {
+    return null;
+  }
+
   const result: EventPageParams = {
     calendarUrlName,
-    eventId: match[2],
+    eventId,
   };
 
   if (match[3]) {
