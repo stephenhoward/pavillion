@@ -242,7 +242,7 @@ Unattended weekly run. Everything above applies, plus:
 
 **Queue gate — before any dispatch.** Using `gh pr list`, count open non-draft
 PRs that are passing CI and have no unresolved change request. If that count
-is **6 or more**, or the **oldest** such PR is **older than 7 days**, stand
+is **10 or more**, or the **oldest** such PR is **older than 7 days**, stand
 down: dispatch nothing and write a short report recording the gate reading.
 The two values are fixed constants sized to the maintainer's review capacity —
 they change only by a deliberate edit to this command, never inline by a
@@ -332,7 +332,7 @@ This command has no automated tests. To sanity-check after an edit:
 4. `/clear-backlog --include-b --triage-only` — confirm the triage names which
    Tier-B beads would go to the advisor and what each one's open decision is,
    with zero changes made.
-5. For `--scheduled`: with 6+ qualifying PRs open (or a stale one), confirm the
+5. For `--scheduled`: with 10+ qualifying PRs open (or a stale one), confirm the
    run stands down and writes a gate-reading report with zero dispatches; and
    confirm a normal run writes `reports/clear-backlog/<date>.md` and that the
    path is gitignored (`git check-ignore reports/clear-backlog/x.md`).
