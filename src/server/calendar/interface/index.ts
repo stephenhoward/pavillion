@@ -8,7 +8,7 @@ import { EventCategory } from '@/common/model/event_category';
 import { EventCategoryAssignmentModel } from '@/common/model/event_category_assignment';
 import { EventSeries } from '@/common/model/event_series';
 import AccountInvitation from '@/common/model/invitation';
-import CalendarService, { AdminCalendarListFilters, AdminCalendarListResult } from '../service/calendar';
+import CalendarService, { AdminCalendarListFilters, AdminCalendarListResult, ReservedUrlNameCollision } from '../service/calendar';
 import EventService from '../service/events';
 import LocationService from '../service/locations';
 import CategoryService from '../service/categories';
@@ -32,6 +32,10 @@ import type ActivityPubInterface from '@/server/activitypub/interface';
 import type ModerationInterface from '@/server/moderation/interface';
 import { CalendarNotFoundError } from '@/common/exceptions/calendar';
 import { CalendarEditorPermissionError } from '@/common/exceptions/editor';
+
+// Re-exported so callers outside the domain (the server startup path) can name
+// what findReservedUrlNameCollisions returns without importing the service.
+export type { ReservedUrlNameCollision };
 
 export interface CalendarWithRole {
   calendar: Calendar;
@@ -172,11 +176,12 @@ export default class CalendarInterface {
    *
    * Read-only: the caller (the server startup path) reports the collisions so
    * an operator can rename the calendar through its settings; nothing is
-   * renamed or removed on their behalf.
+   * renamed or removed on their behalf. Each collision carries why the url name
+   * is reserved, so the caller never re-derives that classification.
    *
-   * @returns The colliding url names in ascending order; empty when none collide
+   * @returns The collisions in ascending url-name order; empty when none collide
    */
-  async findReservedUrlNameCollisions(): Promise<string[]> {
+  async findReservedUrlNameCollisions(): Promise<ReservedUrlNameCollision[]> {
     return this.calendarService.findReservedUrlNameCollisions();
   }
 
