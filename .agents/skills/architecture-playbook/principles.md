@@ -60,7 +60,7 @@ Are documented architectural decisions being respected? If overridden, is it ack
   - **DEC-003**: Domain-driven design with strict boundaries and interface-based communication
   - **DEC-004**: Anonymous public access — no accounts required for viewing
   - **DEC-005**: Category identification by UUID, not urlName
-  - **DEC-018** (supersedes DEC-006): public calendar URLs at the domain root (`/:calendarName`, `/:lang/:calendarName`), discovery at `/discover`, `/view` permanently redirect-only; `src/common/routing/reserved-segments.ts` is the single definition of what a calendar may not be named, and reservation gates creation, never lookup
+  - **DEC-018** (supersedes DEC-006): public calendar URLs at the domain root (`/:calendarName`, `/:lang/:calendarName`), discovery at `/discover`, `/view` permanently redirect-only; `src/common/routing/reserved-segments.ts` is the single definition of what a calendar may not be named (a server-mounted route must also join `SERVER_OWNED_SEGMENTS` in `src/server/app_routes.ts`), and reservation gates creation, never name resolution
 
 ### Red Flags
 
