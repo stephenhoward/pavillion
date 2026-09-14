@@ -12,7 +12,7 @@ import { startTestServer, TestEnvironment } from './helpers/test-server';
  *      to cancel it (show-as-cancelled; the EventCancelConfirmModal is reused with
  *      its hide-from-public toggle suppressed).
  *   3. Assert the Cancelled badge appears on the event's card in the public view
- *      (/view/<calendar>, rendered by src/site/components/event-card.vue).
+ *      (/<calendar>, rendered by src/site/components/event-card.vue).
  *   4. Restore the event from the editor.
  *   5. Assert the Cancelled badge is gone from the public card.
  *
@@ -94,7 +94,7 @@ async function openEditor(page: Page, title: string): Promise<void> {
  * seeded events the calendar contains.
  */
 async function publicEventCard(page: Page, title: string) {
-  await page.goto(`${env.baseURL}/view/${ADMIN_CALENDAR}`);
+  await page.goto(`${env.baseURL}/${ADMIN_CALENDAR}`);
 
   const search = page.locator('#public-event-search');
   await search.waitFor({ state: 'visible', timeout: 15000 });
