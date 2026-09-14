@@ -63,8 +63,8 @@ describe('MetaTags Helper', () => {
   });
 
   describe('parseEventPageParams', () => {
-    it('should extract params from /view/calendar/events/eventId', () => {
-      const result = parseEventPageParams('/view/my-calendar/events/event-123');
+    it('should extract params from /calendar/events/eventId', () => {
+      const result = parseEventPageParams('/my-calendar/events/event-123');
       expect(result).toEqual({
         calendarUrlName: 'my-calendar',
         eventId: 'event-123',
@@ -72,7 +72,7 @@ describe('MetaTags Helper', () => {
     });
 
     it('parses a path with a timestamp slug as instanceStartTime', () => {
-      const result = parseEventPageParams('/view/my-calendar/events/event-123/20260508-1800');
+      const result = parseEventPageParams('/my-calendar/events/event-123/20260508-1800');
       expect(result).toEqual({
         calendarUrlName: 'my-calendar',
         eventId: 'event-123',
@@ -80,8 +80,8 @@ describe('MetaTags Helper', () => {
       });
     });
 
-    it('should extract params from /en/view/calendar/events/eventId (locale-prefixed)', () => {
-      const result = parseEventPageParams('/en/view/my-calendar/events/event-123');
+    it('should extract params from /en/calendar/events/eventId (locale-prefixed)', () => {
+      const result = parseEventPageParams('/en/my-calendar/events/event-123');
       expect(result).toEqual({
         calendarUrlName: 'my-calendar',
         eventId: 'event-123',
@@ -89,7 +89,7 @@ describe('MetaTags Helper', () => {
     });
 
     it('parses a locale-prefixed path with a timestamp slug', () => {
-      const result = parseEventPageParams('/fr/view/my-calendar/events/event-123/20260508-1800');
+      const result = parseEventPageParams('/fr/my-calendar/events/event-123/20260508-1800');
       expect(result).toEqual({
         calendarUrlName: 'my-calendar',
         eventId: 'event-123',
@@ -97,28 +97,39 @@ describe('MetaTags Helper', () => {
       });
     });
 
+    it('treats a two-letter non-locale first segment as a calendar name', () => {
+      // 'nz' is not a supported language code, so it must be read as a calendar
+      // name rather than stripped as a locale prefix -- which is why the locale
+      // strip validates the code instead of matching a bare two-letter shape.
+      const result = parseEventPageParams('/nz/events/event-123');
+      expect(result).toEqual({
+        calendarUrlName: 'nz',
+        eventId: 'event-123',
+      });
+    });
+
     it('returns null for paths whose instance segment is not a valid slug', () => {
-      expect(parseEventPageParams('/view/my-calendar/events/event-123/not-a-slug')).toBeNull();
+      expect(parseEventPageParams('/my-calendar/events/event-123/not-a-slug')).toBeNull();
       // Per DEC-006, UUID instance slugs are no longer valid.
-      expect(parseEventPageParams('/view/my-calendar/events/event-123/00000000-0000-0000-0000-000000000000')).toBeNull();
+      expect(parseEventPageParams('/my-calendar/events/event-123/00000000-0000-0000-0000-000000000000')).toBeNull();
     });
 
     it('rejects over-long calendarUrlName segments', () => {
       const huge = 'a'.repeat(200);
-      expect(parseEventPageParams(`/view/${huge}/events/event-123`)).toBeNull();
+      expect(parseEventPageParams(`/${huge}/events/event-123`)).toBeNull();
     });
 
     it('rejects over-long eventId segments', () => {
       const huge = 'a'.repeat(100);
-      expect(parseEventPageParams(`/view/my-calendar/events/${huge}`)).toBeNull();
+      expect(parseEventPageParams(`/my-calendar/events/${huge}`)).toBeNull();
     });
 
-    it('should return null for /view/calendar (calendar page)', () => {
-      expect(parseEventPageParams('/view/my-calendar')).toBeNull();
+    it('should return null for /calendar (calendar page)', () => {
+      expect(parseEventPageParams('/my-calendar')).toBeNull();
     });
 
-    it('should return null for /view/calendar/series/seriesName (series page)', () => {
-      expect(parseEventPageParams('/view/my-calendar/series/weekly-meetup')).toBeNull();
+    it('should return null for /calendar/series/seriesName (series page)', () => {
+      expect(parseEventPageParams('/my-calendar/series/weekly-meetup')).toBeNull();
     });
 
     it('should return null for / (root)', () => {
@@ -127,6 +138,30 @@ describe('MetaTags Helper', () => {
 
     it('should return null for /api/public/v1/events/id (API path)', () => {
       expect(parseEventPageParams('/api/public/v1/events/event-123')).toBeNull();
+    });
+
+    it('returns null when the first segment is a reserved route segment', () => {
+      // These are structurally identical to a root event page; only the
+      // reservation check keeps them from resolving as one.
+      expect(parseEventPageParams('/api/events/event-123')).toBeNull();
+      expect(parseEventPageParams('/admin/events/event-123')).toBeNull();
+      expect(parseEventPageParams('/discover/events/event-123')).toBeNull();
+      expect(parseEventPageParams('/view/events/event-123')).toBeNull();
+      expect(parseEventPageParams('/auth/events/event-123/20260508-1800')).toBeNull();
+    });
+
+    it('rejects a reserved first segment behind a locale prefix', () => {
+      // The locale is stripped before the reservation check, so the segment
+      // tested is the calendar slot -- not the locale, which is itself reserved.
+      expect(parseEventPageParams('/fr/admin/events/event-123')).toBeNull();
+    });
+
+    it('returns null for the retired /view/ shape', () => {
+      // DEC-018 retires /view/ as an address; the server 301s it, so meta-tag
+      // resolution must never treat it as a live event page.
+      expect(parseEventPageParams('/view/my-calendar/events/event-123')).toBeNull();
+      expect(parseEventPageParams('/view/my-calendar/events/event-123/20260508-1800')).toBeNull();
+      expect(parseEventPageParams('/fr/view/my-calendar/events/event-123')).toBeNull();
     });
   });
 
@@ -159,7 +194,7 @@ describe('MetaTags Helper', () => {
       expect(result!.title).toBe('Test Event');
       expect(result!.description).toBe('A great event');
       expect(result!.image).toBe('https://example.com/api/v1/media/media-uuid-1');
-      expect(result!.url).toBe('https://example.com/view/my-calendar/events/event-uuid-1');
+      expect(result!.url).toBe('https://example.com/my-calendar/events/event-uuid-1');
       expect(result!.type).toBe('article');
       expect(result!.siteName).toBe('My Calendar');
     });
@@ -187,7 +222,7 @@ describe('MetaTags Helper', () => {
 
       expect(result).not.toBeNull();
       expect(result!.title).toBe('Test Event');
-      expect(result!.url).toBe('https://example.com/view/my-calendar/events/event-uuid-1/20260508-1800');
+      expect(result!.url).toBe('https://example.com/my-calendar/events/event-uuid-1/20260508-1800');
 
       // Verify the interface lookup was performed via findOrMaterializeInstanceWithDetails
       // with a DateTime derived from the slug.
@@ -209,7 +244,7 @@ describe('MetaTags Helper', () => {
       const result = await buildEventMetaTags(iface, params, 'en', baseUrl);
 
       expect(result).not.toBeNull();
-      expect(result!.url).toBe('https://example.com/view/my-calendar/events/event-uuid-1');
+      expect(result!.url).toBe('https://example.com/my-calendar/events/event-uuid-1');
     });
 
     it('returns null when instanceStartTime slug fails to parse', async () => {
