@@ -39,7 +39,12 @@ function installLocaleGuard(router: ReturnType<typeof createRouter>) {
 
 const StubComponent = { template: '<div />' };
 
-const routes: RouteRecordRaw[] = [
+/**
+ * Exact mirror of the shipped route table in src/site/app.ts — nothing more.
+ * Keep this list and app.ts in lockstep; a test-only route must go in
+ * `routes` below, never here.
+ */
+const siteRoutes: RouteRecordRaw[] = [
   { path: '/discover', component: StubComponent, name: 'discovery' },
   { path: '/:calendar', component: StubComponent, name: 'calendar' },
   { path: '/:calendar/events/:event', component: StubComponent, name: 'event' },
@@ -52,7 +57,19 @@ const routes: RouteRecordRaw[] = [
   { path: '/:locale(es|fr)/:calendar/events/:event', component: StubComponent },
   { path: '/:locale(es|fr)/:calendar/events/:event/:startTime(\\d{8}-\\d{4})', component: StubComponent },
   { path: '/:locale(es|fr)/:calendar/series/:series', component: StubComponent },
-  // Catch-all for 404 fall-through tests.
+];
+
+/**
+ * The production table plus a test-only catch-all, so the fall-through cases
+ * below have a named route to assert on.
+ *
+ * app.ts ships no catch-all: 'not-found' exists here and nowhere else. A test
+ * that asserts `name === 'not-found'` is therefore saying "no site route
+ * claims this path", not "the site renders a 404 page" — it does not. See the
+ * unmatched-path test for what production actually does.
+ */
+const routes: RouteRecordRaw[] = [
+  ...siteRoutes,
   { path: '/:pathMatch(.*)*', component: StubComponent, name: 'not-found' },
 ];
 
@@ -131,9 +148,23 @@ describe('Vue Router locale-aware navigation guard', () => {
       expect(router.currentRoute.value.name).toBe('not-found');
     });
 
-    it('should not match the site root as a calendar', async () => {
-      await router.push('/');
-      expect(router.currentRoute.value.name).toBe('not-found');
+    it('should leave the site root unmatched by every shipped route', async () => {
+      // Runs against the production table with no test-only catch-all, so this
+      // pins what the browser really does: '/:calendar' requires a non-empty
+      // segment, so '/' matches nothing and <RouterView /> renders a blank
+      // page. That blank page is a known gap, not a designed 404 — asserting
+      // an empty `matched` keeps this test honest about it. Fixing it means
+      // adding a route to app.ts, which is a product decision tracked
+      // separately; when that lands, this test must change with it.
+      const productionRouter = createRouter({
+        history: createMemoryHistory(),
+        routes: siteRoutes,
+      });
+
+      await productionRouter.push('/');
+
+      expect(productionRouter.currentRoute.value.matched).toHaveLength(0);
+      expect(productionRouter.currentRoute.value.name).toBeUndefined();
     });
 
     it('should not call changeLanguage for unprefixed routes', async () => {
@@ -148,6 +179,11 @@ describe('Vue Router locale-aware navigation guard', () => {
 
   describe('discovery route precedence', () => {
     it('should match /discover as the discovery route, not as a calendar', async () => {
+      // Precedence is a property of the bare segment only: vue-router ranks the
+      // static '/discover' above '/:calendar'. Deeper paths like
+      // '/discover/events/x' are not a precedence question at all — they match
+      // '/:calendar/events/:event' by shape like any other name would, and are
+      // unreachable in practice because 'discover' is a reserved url name.
       await router.push('/discover');
       expect(router.currentRoute.value.name).toBe('discovery');
       expect(router.currentRoute.value.params.calendar).toBeUndefined();
@@ -163,15 +199,6 @@ describe('Vue Router locale-aware navigation guard', () => {
     it('should switch language on a locale-prefixed discovery URL', async () => {
       await router.push('/fr/discover');
       expect(changeLanguageSpy.calledWith('fr')).toBe(true);
-    });
-
-    it('should treat a deeper /discover path as a calendar page', async () => {
-      // Only the bare segment is the discovery page; '/discover/events/x' is not
-      // reachable as a calendar in practice because 'discover' is a reserved
-      // url name, but the route table must still resolve by shape alone.
-      await router.push('/discover/events/event-123');
-      expect(router.currentRoute.value.name).toBe('event');
-      expect(router.currentRoute.value.params.calendar).toBe('discover');
     });
   });
 
