@@ -1,12 +1,12 @@
 /**
- * Integration tests for the /view/ public discovery page (pv-u4ew.4).
+ * Integration tests for the public discovery page at /discover.
  *
  * Full-mount, mocked-HTTP coverage of the five behavioral states:
  *   - loading
  *   - populated (tile list rendered)
  *   - empty
  *   - error
- *   - navigation (tile click resolves to /view/:urlName)
+ *   - navigation (tile click resolves to the calendar route at /:urlName)
  *
  * Plus a per-locale rendering smoke test confirming that a representative
  * discovery.* key renders translated text in en / es / fr — not the literal
@@ -47,16 +47,29 @@ function makeSiteConfig(opts?: { instanceDescription?: Record<string, string>; s
   };
 }
 
+/**
+ * Mirrors the shipped site route table (src/site/app.ts) for the two routes
+ * this page touches: the discovery page itself and the calendar detail page a
+ * tile links to.
+ *
+ * This fixture is load-bearing, not decoration. discovery.vue builds its tile
+ * targets as strings, so no route table can change what the component emits —
+ * but a <RouterLink> whose target matches nothing here resolves to an empty
+ * `matched`, which is exactly the production failure (SPA-internal navigation
+ * renders chrome with no content). Deliberately carries no catch-all, so an
+ * unroutable tile target cannot be absorbed by a 404 route that app.ts does
+ * not ship either.
+ */
 function buildRouter() {
+  const CalendarStub = { template: '<div class="calendar-stub" />' };
   return createRouter({
     history: createMemoryHistory(),
     routes: [
-      { path: '/view', name: 'discovery', component: Discovery },
-      { path: '/view/:calendar', name: 'calendar', component: { template: '<div class="calendar-stub" />' } },
-      { path: '/es/view', component: Discovery },
-      { path: '/es/view/:calendar', component: { template: '<div class="calendar-stub" />' } },
-      { path: '/fr/view', component: Discovery },
-      { path: '/fr/view/:calendar', component: { template: '<div class="calendar-stub" />' } },
+      { path: '/discover', name: 'discovery', component: Discovery },
+      { path: '/:calendar', name: 'calendar', component: CalendarStub },
+      // Locale-prefixed twins — unnamed, as in app.ts.
+      { path: '/:locale(es|fr)/discover', component: Discovery },
+      { path: '/:locale(es|fr)/:calendar', component: CalendarStub },
     ],
   });
 }
@@ -114,7 +127,7 @@ describe('discovery.vue - five behavioral states', () => {
     });
     vi.mocked(ModelService.listModels).mockReturnValue(listPromise);
 
-    await router.push('/view');
+    await router.push('/discover');
     const wrapper = mountDiscovery();
 
     // Synchronous-ish read before flushPromises: the loading state should be
@@ -161,7 +174,7 @@ describe('discovery.vue - five behavioral states', () => {
       ]),
     );
 
-    await router.push('/view');
+    await router.push('/discover');
     const wrapper = mountDiscovery();
     await flushPromises();
 
@@ -199,7 +212,7 @@ describe('discovery.vue - five behavioral states', () => {
   it('renders the empty state when the API returns an empty array', async () => {
     vi.mocked(ModelService.listModels).mockResolvedValue(ListResult.fromArray([]));
 
-    await router.push('/view');
+    await router.push('/discover');
     const wrapper = mountDiscovery();
     await flushPromises();
 
@@ -213,7 +226,7 @@ describe('discovery.vue - five behavioral states', () => {
   it('renders the error state when the request rejects', async () => {
     vi.mocked(ModelService.listModels).mockRejectedValue(new Error('boom'));
 
-    await router.push('/view');
+    await router.push('/discover');
     const wrapper = mountDiscovery();
     await flushPromises();
 
@@ -226,7 +239,7 @@ describe('discovery.vue - five behavioral states', () => {
     expect(wrapper.find('.discovery-empty').exists()).toBe(false);
   });
 
-  it('navigates to /view/:urlName when a calendar tile is clicked', async () => {
+  it('navigates to /:urlName when a calendar tile is clicked', async () => {
     vi.mocked(ModelService.listModels).mockResolvedValue(
       ListResult.fromArray([
         {
@@ -240,7 +253,7 @@ describe('discovery.vue - five behavioral states', () => {
       ]),
     );
 
-    await router.push('/view');
+    await router.push('/discover');
     const wrapper = mountDiscovery();
     await flushPromises();
 
@@ -248,12 +261,18 @@ describe('discovery.vue - five behavioral states', () => {
     expect(tile.exists()).toBe(true);
     // Keyboard-focusable: RouterLink renders an <a> with an href.
     expect(tile.element.tagName).toBe('A');
-    expect(tile.attributes('href')).toBe('/view/alpha');
+    expect(tile.attributes('href')).toBe('/alpha');
 
     await tile.trigger('click');
     await flushPromises();
 
-    expect(router.currentRoute.value.path).toBe('/view/alpha');
+    // The click must land on the calendar route, not merely change the URL.
+    // A RouterLink to an unroutable path still updates currentRoute.path while
+    // matching nothing, so asserting the resolved route name is what separates
+    // a working tile from one that renders empty chrome.
+    expect(router.currentRoute.value.path).toBe('/alpha');
+    expect(router.currentRoute.value.name).toBe('calendar');
+    expect(router.currentRoute.value.params.calendar).toBe('alpha');
   });
 
   it('produces locale-prefixed tile hrefs when the visitor is on a non-default locale', async () => {
@@ -271,7 +290,7 @@ describe('discovery.vue - five behavioral states', () => {
     );
 
     await i18next.changeLanguage('es');
-    await router.push('/es/view');
+    await router.push('/es/discover');
     const wrapper = mountDiscovery();
     await flushPromises();
 
@@ -279,12 +298,62 @@ describe('discovery.vue - five behavioral states', () => {
     expect(tile.exists()).toBe(true);
     // useLocale.localizedPath() should prefix the route with /es because the
     // visitor is on a non-default-locale URL.
-    expect(tile.attributes('href')).toBe('/es/view/alpha');
+    expect(tile.attributes('href')).toBe('/es/alpha');
+    // ...and that prefixed path must be routable too, not just well-shaped.
+    expect(router.resolve('/es/alpha').matched).not.toHaveLength(0);
+  });
+
+  /**
+   * Regression guard for the RouterLink/redirect asymmetry.
+   *
+   * Most stale links in the public site are plain <a :href>, so a full page
+   * load reaches the server and follows its redirect. The discovery tiles are
+   * <RouterLink>s: navigation stays inside the SPA, the server never sees it,
+   * and a target the site router cannot match renders the page chrome with no
+   * content. This asserts every emitted tile target actually resolves against
+   * the shipped route shape — it fails on any path prefix the router dropped,
+   * not just the one that broke here.
+   */
+  it('emits tile targets that the site router can resolve', async () => {
+    vi.mocked(ModelService.listModels).mockResolvedValue(
+      ListResult.fromArray([
+        {
+          id: 'cal-1',
+          urlName: 'alpha',
+          content: [{ language: 'en', name: 'Alpha Calendar', description: '' }],
+          lastEventActivity: '2026-05-01T12:00:00.000Z',
+        },
+        {
+          id: 'cal-2',
+          urlName: 'beta',
+          content: [{ language: 'en', name: 'Beta Calendar', description: '' }],
+          lastEventActivity: null,
+        },
+      ]),
+    );
+
+    await router.push('/discover');
+    const wrapper = mountDiscovery();
+    await flushPromises();
+
+    const targets = wrapper.findAll('.discovery-tile').map((tile) => tile.attributes('href'));
+    expect(targets).toHaveLength(2);
+
+    for (const target of targets) {
+      expect(target).toBeDefined();
+      const resolved = router.resolve(target!);
+      // An unroutable target resolves with an empty `matched` rather than
+      // throwing, so the emptiness check is the assertion that matters.
+      expect(resolved.matched).not.toHaveLength(0);
+      expect(resolved.name).toBe('calendar');
+    }
+
+    expect(targets).toEqual(['/alpha', '/beta']);
   });
 
   it('uses a single <main> landmark and a single <h1> for the page', async () => {
     vi.mocked(ModelService.listModels).mockResolvedValue(ListResult.fromArray([]));
-    await router.push('/view');
+    await router.push('/discover');
     const wrapper = mountDiscovery();
     await flushPromises();
 
@@ -294,7 +363,7 @@ describe('discovery.vue - five behavioral states', () => {
 
   it('shows the instance description from site_config when configured for the visitor locale', async () => {
     vi.mocked(ModelService.listModels).mockResolvedValue(ListResult.fromArray([]));
-    await router.push('/view');
+    await router.push('/discover');
 
     const wrapper = mount(Discovery, {
       global: {
@@ -313,7 +382,7 @@ describe('discovery.vue - five behavioral states', () => {
 
   it('renders the configured siteTitle as the <h1> at the top of the page', async () => {
     vi.mocked(ModelService.listModels).mockResolvedValue(ListResult.fromArray([]));
-    await router.push('/view');
+    await router.push('/discover');
 
     const wrapper = mount(Discovery, {
       global: {
@@ -328,7 +397,7 @@ describe('discovery.vue - five behavioral states', () => {
 
   it('falls back to "Pavillion" in the <h1> when siteTitle is not configured', async () => {
     vi.mocked(ModelService.listModels).mockResolvedValue(ListResult.fromArray([]));
-    await router.push('/view');
+    await router.push('/discover');
     const wrapper = mountDiscovery();
     await flushPromises();
 
@@ -337,7 +406,7 @@ describe('discovery.vue - five behavioral states', () => {
 
   it('renders "Calendars on this instance" as an <h2> subheading after the description', async () => {
     vi.mocked(ModelService.listModels).mockResolvedValue(ListResult.fromArray([]));
-    await router.push('/view');
+    await router.push('/discover');
     const wrapper = mountDiscovery();
     await flushPromises();
 
@@ -348,7 +417,7 @@ describe('discovery.vue - five behavioral states', () => {
 
   it('renders a "Learn more about Pavillion" link pointing to pavillion.social with rel=noopener', async () => {
     vi.mocked(ModelService.listModels).mockResolvedValue(ListResult.fromArray([]));
-    await router.push('/view');
+    await router.push('/discover');
     const wrapper = mountDiscovery();
     await flushPromises();
 
@@ -400,14 +469,14 @@ describe('discovery.vue - per-locale rendering smoke', () => {
     return text;
   }
 
-  it('renders the page_title in English at /view', async () => {
-    const text = await pageTitleFor('en', '/view');
+  it('renders the page_title in English at /discover', async () => {
+    const text = await pageTitleFor('en', '/discover');
     expect(text).toBe(enSystem.discovery.page_title);
     expect(text).not.toBe('discovery.page_title');
   });
 
-  it('renders the page_title in Spanish at /es/view', async () => {
-    const text = await pageTitleFor('es', '/es/view');
+  it('renders the page_title in Spanish at /es/discover', async () => {
+    const text = await pageTitleFor('es', '/es/discover');
     expect(text).toBe(esSystem.discovery.page_title);
     expect(text).not.toBe('discovery.page_title');
     // Sanity: Spanish version must differ from English so we know the
@@ -415,8 +484,8 @@ describe('discovery.vue - per-locale rendering smoke', () => {
     expect(text).not.toBe(enSystem.discovery.page_title);
   });
 
-  it('renders the page_title in French at /fr/view', async () => {
-    const text = await pageTitleFor('fr', '/fr/view');
+  it('renders the page_title in French at /fr/discover', async () => {
+    const text = await pageTitleFor('fr', '/fr/discover');
     expect(text).toBe(frSystem.discovery.page_title);
     expect(text).not.toBe('discovery.page_title');
     expect(text).not.toBe(enSystem.discovery.page_title);
