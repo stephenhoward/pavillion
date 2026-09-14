@@ -397,12 +397,14 @@ class CalendarService {
   /**
    * Finds calendars whose stored url name is reserved for application routing.
    *
-   * Public calendar URLs sit at the site root, so a calendar named after a
-   * routed segment or a supported locale code becomes unreachable there. This
-   * is a read-only diagnostic for the startup log: a collision is reported so
-   * an operator can rename the calendar through its settings. Nothing here
-   * renames or removes a calendar — an automatic rename would silently break
-   * every existing link to it.
+   * Public calendar URLs will move to the site root, where a calendar named
+   * after a routed segment or a supported locale code will be unreachable.
+   * Until then it resolves normally — lookups apply the shape rule only, so
+   * nothing about such a calendar is broken today. This is a read-only
+   * diagnostic for the startup log: a collision is reported so an operator can
+   * rename the calendar through its settings before that change ships. Nothing
+   * here renames or removes a calendar — an automatic rename would silently
+   * break every existing link to it.
    *
    * Stored url names are already percent-decoded and charset-constrained, which
    * satisfies the precondition of {@link isReservedRouteSegment}; it folds case,

@@ -237,8 +237,10 @@ function configureProxy(app: express.Application): void {
 
 /**
  * Reports calendars whose stored url name the reserved-segment list now
- * forbids: public calendar URLs sit at the site root, where such a calendar is
- * unreachable.
+ * forbids. Such a calendar is reachable today — public calendar URLs are still
+ * served under /view/:calendarName, and lookups apply the shape rule only — but
+ * will be shadowed by application routing once those URLs move to the site
+ * root. This is pre-migration housekeeping, not a report of current breakage.
  *
  * Diagnostic only — renaming is the operator's call, since an automatic rename
  * would break every existing link to the calendar. A healthy instance is the
@@ -254,8 +256,29 @@ function reportReservedUrlNameCollisions(collisions: ReservedUrlNameCollision[])
   for (const { urlName, reason } of collisions) {
     logger.warn(
       { urlName, reason },
-      'Calendar url name is reserved for application routing and the calendar will be unreachable at the site root; rename it in the calendar\'s settings',
+      'Calendar url name is reserved for application routing; it resolves normally today, but will be unreachable at the site root once public calendar URLs move there — rename it in the calendar\'s settings before that change ships',
     );
+  }
+}
+
+/**
+ * Runs the startup collision report without letting it become a boot failure.
+ *
+ * The report is read-only diagnostics about a migration that has not happened
+ * yet, so a failing query is never a reason for an instance not to come up.
+ * Left inside the database-initialization try, any throw here would abort boot
+ * under 'Failed to initialize database' — a cause it did not have.
+ *
+ * @param findCollisions - Collision source, normally the calendar domain interface
+ */
+async function reportReservedUrlNameCollisionsSafely(
+  findCollisions: () => Promise<ReservedUrlNameCollision[]>,
+): Promise<void> {
+  try {
+    reportReservedUrlNameCollisions(await findCollisions());
+  }
+  catch (error) {
+    logger.warn({ err: error }, 'Reserved url name collision check failed; reporting no collisions');
   }
 }
 
@@ -450,7 +473,9 @@ const initPavillionServer = async (app: express.Application, port: number): Prom
   try {
     await initializeDatabase();
 
-    reportReservedUrlNameCollisions(await calendarDomain.interface.findReservedUrlNameCollisions());
+    await reportReservedUrlNameCollisionsSafely(
+      () => calendarDomain.interface.findReservedUrlNameCollisions(),
+    );
 
     // Refresh event instances after database is ready (only in development and e2e)
     if (process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'e2e') {
@@ -529,4 +554,4 @@ const initPavillionServer = async (app: express.Application, port: number): Prom
 };
 
 export default initPavillionServer;
-export { checkDatabaseHealth, setupHealthCheck, validateProductionEnvironment, configureProxy, startMetricsListener, reportReservedUrlNameCollisions };
+export { checkDatabaseHealth, setupHealthCheck, validateProductionEnvironment, configureProxy, startMetricsListener, reportReservedUrlNameCollisions, reportReservedUrlNameCollisionsSafely };

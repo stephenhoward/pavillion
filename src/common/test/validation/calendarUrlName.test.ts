@@ -1,7 +1,18 @@
 import { describe, it, expect } from 'vitest';
 import { CALENDAR_URL_NAME_RE, isValidCalendarUrlName } from '@/common/validation/calendarUrlName';
-import { RESERVED_ROUTE_SEGMENTS, isReservedRouteSegment } from '@/common/routing/reserved-segments';
+import { RESERVED_ROUTE_SEGMENTS } from '@/common/routing/reserved-segments';
 
+/**
+ * Composition only. `isValidCalendarUrlName` is shape ∧ ¬reserved, and this
+ * file covers the conjunction: the shape rule, the non-string guard that has to
+ * short-circuit before the reservation check, the invariant that every
+ * shape-valid list entry is refused, and the shape-only regex exported beside
+ * it.
+ *
+ * How the reservation predicate itself behaves — case folding, near misses,
+ * locale delegation, the list's own invariants — belongs to
+ * src/common/test/routing/reserved-segments.test.ts and is not re-asserted here.
+ */
 describe('Calendar URL Name Validation', () => {
   describe('shape rule', () => {
     it.each([
@@ -56,11 +67,6 @@ describe('Calendar URL Name Validation', () => {
       },
     );
 
-    it('rejects a reserved segment regardless of case', () => {
-      expect(isValidCalendarUrlName('Admin')).toBe(false);
-      expect(isValidCalendarUrlName('ADMIN')).toBe(false);
-    });
-
     it('rejects every shape-valid entry in the reserved list', () => {
       // Entries the shape rule already rejects ('.well-known') are excluded so
       // this asserts the reservation check specifically, not the charset one.
@@ -70,21 +76,6 @@ describe('Calendar URL Name Validation', () => {
       for (const segment of shapeValid) {
         expect(isValidCalendarUrlName(segment)).toBe(false);
       }
-    });
-
-    it.each(['admins', 'viewpoint', 'my-admin', 'healthy'])(
-      'leaves the near-miss name %s available',
-      (name) => {
-        expect(isValidCalendarUrlName(name)).toBe(true);
-      },
-    );
-
-    it('reserves supported locale codes', () => {
-      // Every currently supported locale code is two characters, so the shape
-      // rule rejects it before the reservation check is consulted. The
-      // reservation is what would catch a longer code added later.
-      expect(isReservedRouteSegment('es')).toBe(true);
-      expect(isValidCalendarUrlName('es')).toBe(false);
     });
   });
 

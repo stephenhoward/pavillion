@@ -5,9 +5,21 @@ import { isValidLanguageCode } from '@/common/i18n/languages';
  *
  * Public calendar URLs live at the domain root, so any segment already routed
  * by the server or by one of the single-page apps would shadow — or be shadowed
- * by — a calendar of the same name. This set is the single source of truth for
- * that collision list: the url-name validator and the server router both read
- * it rather than keeping lists of their own.
+ * by — a calendar of the same name. This is the single source of truth for one
+ * question only: which names a calendar may not claim. `isValidCalendarUrlName`
+ * is its consumer, and via `SeriesService.isValidUrlName` — which delegates to
+ * that same composite validator — the list gates series url names too, so an
+ * entry added for root-routing reasons silently narrows the series namespace
+ * as well.
+ *
+ * It is **not** a routing table. Membership means one thing to the validator
+ * (reject) and four different things to a router: some segments must not reach
+ * the site SPA because the server serves them, others because the client SPA
+ * shell does, `discover` is a site SPA route, and `view` is neither — it
+ * redirects. A router consuming this list therefore has to decide each
+ * segment's disposition separately; an alternation built straight from the
+ * array would exclude `discover` and `view` from exactly the handler that must
+ * serve them.
  *
  * Entries are lower case; `isReservedRouteSegment` does the case folding, which
  * matches the case-insensitive route regexes in src/server/app_routes.ts. The
@@ -21,6 +33,10 @@ import { isValidLanguageCode } from '@/common/i18n/languages';
  * - client SPA: every top-level route in src/client/app.ts
  * - public site: the discovery page, plus `view`, which stays reserved
  *   permanently so the redirects away from the old URL shape stay unambiguous
+ *
+ * `.well-known` is inert to the validator — `CALENDAR_URL_NAME_RE` rejects a
+ * leading dot whether or not the segment is listed — and is carried here for a
+ * router consumer that does not exist yet.
  *
  * `metrics` was considered and deliberately excluded: per DEC-017 the telemetry
  * exposition is served by a second HTTP listener, so it claims no path on the

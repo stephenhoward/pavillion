@@ -90,6 +90,17 @@ function clientRouterTopLevelSegments(): { segments: string[], unparseable: stri
   return { segments: [...segments], unparseable };
 }
 
+/**
+ * Predicate behaviour and list invariants. `isReservedRouteSegment` and
+ * `RESERVED_ROUTE_SEGMENTS` are the subject: membership, case folding, locale
+ * delegation, the caller precondition, and the structural guarantees a consumer
+ * relies on.
+ *
+ * How `isValidCalendarUrlName` composes this predicate with the shape rule is
+ * src/common/test/validation/calendarUrlName.test.ts's job. The one deliberate
+ * overlap is the precondition block below, which asserts against both
+ * predicates — that pairing is the point of the assertion, not duplication.
+ */
 describe('reserved route segments', () => {
   describe('server-mounted prefixes', () => {
     // Enumerated from the client catch-all exclusions and the asset/coverage
@@ -187,7 +198,7 @@ describe('reserved route segments', () => {
       expect(isReservedRouteSegment(segment)).toBe(true);
     });
 
-    it.each(['my-calendar', 'community_events', 'admins', 'viewpoint'])(
+    it.each(['my-calendar', 'community_events', 'admins', 'viewpoint', 'my-admin', 'healthy'])(
       'leaves the ordinary name %s available',
       (name) => {
         expect(isReservedRouteSegment(name)).toBe(false);
