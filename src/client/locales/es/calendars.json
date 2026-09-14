@@ -6,7 +6,7 @@
     "creating_calendar": "Creando calendario...",
     "error_empty_calendar_name": "El nombre del calendario no puede estar vacío",
     "error_calendar_name_taken": "Este nombre de calendario ya está en uso",
-    "error_invalid_calendar_name": "Nombre de calendario no válido. Debe tener entre 3 y 24 caracteres, comenzar con una letra o número, y puede contener letras, números, guiones bajos y guiones (los guiones no se permiten al principio ni al final)",
+    "error_invalid_calendar_name": "Nombre de calendario no válido. Debe tener entre 3 y 24 caracteres, comenzar con una letra o número, y puede contener letras, números, guiones bajos y guiones (los guiones no se permiten al principio ni al final). Algunos nombres están reservados por el sitio y no se pueden usar.",
     "error_create_calendar": "Error al crear el calendario",
     "calendar_name_placeholder": "nombre-de-tu-calendario",
     "calendar_name_help": "Los nombres de calendario deben tener entre 3 y 24 caracteres, comenzar con una letra o número, y pueden contener letras, números, guiones bajos y guiones (los guiones no se permiten al principio ni al final)",

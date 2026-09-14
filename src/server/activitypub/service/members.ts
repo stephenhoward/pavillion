@@ -24,7 +24,7 @@ import { addToOutbox as addToOutboxHelper } from "@/server/activitypub/helper/ou
 import { validateUrlNotPrivate } from "@/server/common/helper/ip-validation";
 import { looksLikeUuid } from "@/server/common/helper/uuid";
 import { PUBLIC_KEY_FETCH_TIMEOUT_MS } from "@/server/common/constants";
-import { isValidCalendarUrlName } from "@/common/validation/calendarUrlName";
+import { CALENDAR_URL_NAME_RE } from "@/common/validation/calendarUrlName";
 import {
   InvalidRemoteCalendarIdentifierError,
   InvalidSharedEventUrlError,
@@ -116,9 +116,13 @@ class ActivityPubService {
       const [username, domain] = identifier.split('@');
       return `${username.toLowerCase()}@${domain.toLowerCase()}`;
     }
-    // Bare urlName: must satisfy the canonical Calendar urlName rule so the
-    // client and server accept exactly the same set of inputs.
-    if (!isValidCalendarUrlName(identifier)) {
+    // Bare urlName: shape only, deliberately not the composite
+    // isValidCalendarUrlName. This is a lookup of a calendar that already
+    // exists, not a claim on a new name: a calendar created before route
+    // segments were reserved may legitimately be named e.g. `admin`, and it
+    // must stay followable. The client mirrors this in add_calendar_modal.vue
+    // so both ends accept exactly the same set of inputs.
+    if (!CALENDAR_URL_NAME_RE.test(identifier)) {
       return null;
     }
     const localDomain = config.get('domain') as string;
