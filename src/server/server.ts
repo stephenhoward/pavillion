@@ -35,6 +35,7 @@ import { backfillUserActors } from '@/server/activitypub/scripts/backfill-user-a
 import { backfillCalendarActors } from '@/server/activitypub/scripts/backfill-calendar-actors';
 import { globalErrorHandler } from '@/server/common/middleware/error-handler';
 import { createI18nConfig } from '@/common/i18n/config';
+import { isValidLanguageCode } from '@/common/i18n/languages';
 import logger from '@/server/common/helper/logger';
 import { PublicInterfaceHolder } from '@/server/common/helper/meta-tags';
 
@@ -424,6 +425,18 @@ const initPavillionServer = async (app: express.Application, port: number): Prom
   // Initialize database before starting the server
   try {
     await initializeDatabase();
+
+    // Report calendars whose stored url name the reserved-segment list now
+    // forbids: public calendar URLs sit at the site root, where such a calendar
+    // is unreachable. Diagnostic only — renaming is the operator's call, since
+    // an automatic rename would break every existing link to the calendar.
+    // Silent when nothing collides.
+    for (const urlName of await calendarDomain.interface.findReservedUrlNameCollisions()) {
+      logger.warn(
+        { urlName, reason: isValidLanguageCode(urlName.toLowerCase()) ? 'locale_code' : 'reserved_segment' },
+        'Calendar url name is reserved for application routing and the calendar will be unreachable at the site root; rename it in the calendar\'s settings',
+      );
+    }
 
     // Refresh event instances after database is ready (only in development and e2e)
     if (process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'e2e') {

@@ -167,6 +167,19 @@ export default class CalendarInterface {
     return this.calendarService.getCalendarUrlNames(calendarIds);
   }
 
+  /**
+   * Finds calendars whose stored url name is reserved for application routing.
+   *
+   * Read-only: the caller (the server startup path) reports the collisions so
+   * an operator can rename the calendar through its settings; nothing is
+   * renamed or removed on their behalf.
+   *
+   * @returns The colliding url names in ascending order; empty when none collide
+   */
+  async findReservedUrlNameCollisions(): Promise<string[]> {
+    return this.calendarService.findReservedUrlNameCollisions();
+  }
+
   async getCalendarForWidget(urlName: string): Promise<Calendar> {
     return this.calendarService.getCalendarForWidget(urlName);
   }
