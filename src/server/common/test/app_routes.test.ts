@@ -139,6 +139,19 @@ describe('app_routes', () => {
       expect(res.body.template).toBe('site.index.html.ejs');
     });
 
+    // The exclusion alternation escapes each entry before joining. Unescaped,
+    // the '.' in '.well-known' matches any character, so '/awell-known' would
+    // be excluded from the site SPA and an ordinary calendar of that name would
+    // be unreachable. A probe of '/.well-known' cannot catch this: a literal
+    // dot matches either way.
+    it('should serve a calendar whose name only looks like a reserved segment', async () => {
+      const app = buildTestApp('en');
+      const res = await request(app).get('/awell-known');
+
+      expect(res.status).toBe(200);
+      expect(res.body.template).toBe('site.index.html.ejs');
+    });
+
     it('should pass locale from req.locale to the template', async () => {
       const app = buildTestApp('es');
       const res = await request(app).get('/mycalendar');
@@ -425,6 +438,18 @@ describe('app_routes', () => {
       expect(res.headers.location).toBe('/mycalendar?filter=music&page=2');
     });
 
+    // The query string is copied verbatim rather than rebuilt through
+    // URLSearchParams, which is lossy: Express parses a repeated key into an
+    // array, and casting that to Record<string, string> collapses it to
+    // "tag=a,b". A rebuild would pass every single-valued test above.
+    it('should preserve a repeated query parameter verbatim', async () => {
+      const app = buildTestApp('en');
+      const res = await request(app).get('/view/mycalendar?tag=a&tag=b');
+
+      expect(res.status).toBe(301);
+      expect(res.headers.location).toBe('/mycalendar?tag=a&tag=b');
+    });
+
     it('should redirect /:locale/view to that locale discovery page', async () => {
       const mockConfig = buildMockConfigInterface('en');
       const app = buildTestApp('es', mockConfig);
@@ -577,6 +602,21 @@ describe('app_routes', () => {
       expect(res.status).toBe(200);
       expect(res.body.template).toBe('client.index.html.ejs');
     });
+
+    // A locale prefix followed by another locale code falls through three
+    // routes: the locale-prefixed calendar route excludes `fr` (the composed
+    // pattern reserves the locale codes), and the unprefixed one excludes `es`
+    // for the same reason. The client shell is the decided destination — the
+    // requirement it satisfies is that `fr` is never served as a calendar.
+    it('should not serve a locale code under a locale prefix as a calendar', async () => {
+      const mockConfig = buildMockConfigInterface('en');
+      const app = buildTestApp('es', mockConfig);
+      const res = await request(app).get('/es/fr');
+
+      expect(res.status).toBe(200);
+      expect(res.body.template).not.toBe('site.index.html.ejs');
+      expect(res.body.template).toBe('client.index.html.ejs');
+    });
   });
 
   // -----------------------------------------------------------------------
@@ -609,6 +649,23 @@ describe('app_routes', () => {
         expect(RESERVED_ROUTE_SEGMENTS, `${segment} must stay unclaimable by a calendar`)
           .toContain(segment);
       }
+    });
+
+    // The two assertions above both iterate SERVER_OWNED_SEGMENTS, so dropping
+    // an entry makes them pass vacuously — and dropping 'calendars' or 'users'
+    // is exactly the regression that answers a federation request with an HTML
+    // shell. These probes name the paths directly and never read the array.
+    it.each([
+      '/api/probe',
+      '/assets/probe',
+      '/calendars/probe',
+      '/users/probe',
+      '/.well-known/probe',
+    ])('should leave %s to the routers mounted after the page router', async (path) => {
+      const app = buildTestApp('en');
+      const res = await request(app).get(path);
+
+      expect(res.status).toBe(404);
     });
   });
 
