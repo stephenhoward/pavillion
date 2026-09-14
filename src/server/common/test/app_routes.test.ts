@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import express, { Express, Request, Response } from 'express';
+import http from 'http';
+import { AddressInfo } from 'net';
 import request from 'supertest';
 import sinon from 'sinon';
 import config from 'config';
@@ -76,6 +78,54 @@ function buildTestApp(
   return app;
 }
 
+/**
+ * Issues a GET over a real socket with the request target written verbatim.
+ *
+ * supertest routes the path through superagent's URL handling, which normalizes
+ * a literal backslash away — the exact normalization a hostile client declines
+ * to perform. Anything asserting on raw-path handling has to bypass it.
+ *
+ * @param app - Express app to drive
+ * @param rawPath - Request target, sent exactly as written
+ * @returns Status code and Location header of the response
+ */
+async function rawGet(app: Express, rawPath: string): Promise<{ status: number; location?: string }> {
+  const server = app.listen(0);
+
+  try {
+    const { port } = server.address() as AddressInfo;
+
+    return await new Promise((resolve, reject) => {
+      const req = http.request({ host: '127.0.0.1', port, method: 'GET', path: rawPath }, (res) => {
+        res.resume();
+        res.on('end', () => resolve({
+          status: res.statusCode ?? 0,
+          location: res.headers.location,
+        }));
+      });
+      req.on('error', reject);
+      req.end();
+    });
+  }
+  finally {
+    server.close();
+  }
+}
+
+/**
+ * Resolves a Location header the way a WHATWG-conformant client would.
+ *
+ * A string assertion is what let the backslash form through while the
+ * double-slash form was covered, so redirect safety is asserted on the origin
+ * the header actually resolves to.
+ *
+ * @param location - Location header value
+ * @returns The absolute URL a client would navigate to
+ */
+function resolveLocation(location: string | undefined): URL {
+  return new URL(location ?? '', 'https://pavillion.test');
+}
+
 describe('app_routes', () => {
   let sandbox: sinon.SinonSandbox;
 
@@ -150,6 +200,30 @@ describe('app_routes', () => {
 
       expect(res.status).toBe(200);
       expect(res.body.template).toBe('site.index.html.ejs');
+    });
+
+    // The decode seam sits after route matching, as it does in Express itself:
+    // the exclusion alternation is applied to the raw pathname, so a
+    // percent-encoded reserved name misses it and is routed as a calendar name.
+    // That is the deliberate disposition — the lookup behind the site shell
+    // decodes first and no calendar can hold a reserved name, so it resolves to
+    // nothing rather than reaching the client shell's privileged routes.
+    it('should route a percent-encoded reserved name as a calendar, not a client route', async () => {
+      const app = buildTestApp('en');
+      const res = await rawGet(app, '/%61dmin');
+
+      expect(res.status).toBe(200);
+    });
+
+    it('should serve the site shell for a percent-encoded reserved name', async () => {
+      const app = buildTestApp('en');
+      const res = await request(app).get('/%61dmin');
+
+      expect(res.status).toBe(200);
+      expect(res.body.template).toBe('site.index.html.ejs');
+      // Nothing decoded it into the reserved segment on the way in.
+      expect(res.body.data.hreflangLinks.some((l: { href: string }) => l.href.includes('/admin')))
+        .toBe(false);
     });
 
     it('should pass locale from req.locale to the template', async () => {
@@ -345,6 +419,19 @@ describe('app_routes', () => {
     // locale matches no page route (the calendar segment pattern rejects it),
     // so it falls to the client shell — and must never be answered with a
     // protocol-relative Location the browser resolves against another host.
+    // Unlike the doubled slash, a backslash after the locale is an ordinary
+    // path segment to Express's matcher, so this route does redirect — and the
+    // target must still resolve to this origin.
+    it('should keep a backslash-prefixed locale redirect on this origin', async () => {
+      const mockConfig = buildMockConfigInterface('en');
+      const app = buildTestApp('en', mockConfig);
+      const res = await rawGet(app, '/en/\\evil.com');
+
+      expect(res.status).toBe(301);
+      expect(resolveLocation(res.location).origin).toBe('https://pavillion.test');
+      expect(res.location).toBe('/evil.com');
+    });
+
     it('should never answer a doubled-slash locale path with an off-origin redirect', async () => {
       const mockConfig = buildMockConfigInterface('en');
       const app = buildTestApp('en', mockConfig);
@@ -516,6 +603,62 @@ describe('app_routes', () => {
       expect(res.status).toBe(301);
       expect(res.headers.location).toBe('/evil.com');
       expect(res.headers.location.startsWith('//')).toBe(false);
+    });
+
+    // Per the WHATWG URL parser a backslash behaves like a slash in
+    // relative-slash state, so a Location of '/\evil.com' resolves to the
+    // authority evil.com. encodeurl passes 0x5C through untouched, and a
+    // percent-decoding reverse proxy can turn the ordinary-looking
+    // '/view/%5Cevil.com' into the literal form before Express sees it.
+    it.each([
+      ['/view/\\evil.com', '/evil.com'],
+      ['/view//evil.com', '/evil.com'],
+      ['/view/\\\\evil.com', '/evil.com'],
+      ['/view//\\evil.com', '/evil.com'],
+    ])('should keep the redirect for %s on this origin', async (rawPath, expected) => {
+      const app = buildTestApp('en');
+      const res = await rawGet(app, rawPath);
+
+      expect(res.status).toBe(301);
+      expect(resolveLocation(res.location).origin).toBe('https://pavillion.test');
+      expect(res.location).toBe(expected);
+    });
+
+    it('should keep a locale-prefixed backslash redirect on this origin', async () => {
+      const mockConfig = buildMockConfigInterface('en');
+      const app = buildTestApp('en', mockConfig);
+      const res = await rawGet(app, '/en/view/\\evil.com');
+
+      expect(res.status).toBe(301);
+      expect(resolveLocation(res.location).origin).toBe('https://pavillion.test');
+      expect(res.location).toBe('/evil.com');
+    });
+
+    it('should keep a percent-encoded backslash redirect on this origin', async () => {
+      const app = buildTestApp('en');
+      const res = await rawGet(app, '/view/%5Cevil.com');
+
+      expect(res.status).toBe(301);
+      expect(resolveLocation(res.location).origin).toBe('https://pavillion.test');
+    });
+
+    // A fragment is not sent by a browser, but req.originalUrl carries one when
+    // a crafted client sends it while req.path does not — so a '?' inside the
+    // fragment must not be promoted into the redirect's query string.
+    it('should not promote fragment text into the redirect query string', async () => {
+      const app = buildTestApp('en');
+      const res = await rawGet(app, '/view/mycalendar#x?y=1');
+
+      expect(res.status).toBe(301);
+      expect(res.location).toBe('/mycalendar');
+    });
+
+    it('should drop the fragment and keep the query string', async () => {
+      const app = buildTestApp('en');
+      const res = await rawGet(app, '/view/mycalendar?a=1#b');
+
+      expect(res.status).toBe(301);
+      expect(res.location).toBe('/mycalendar?a=1');
     });
 
     it('should ignore a redirect target supplied in the query string', async () => {

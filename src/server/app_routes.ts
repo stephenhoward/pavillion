@@ -85,32 +85,59 @@ const RESERVED_FIRST_SEGMENT_PATTERN = [
 /**
  * Normalizes a redirect target so it can only ever address this origin.
  *
- * Express does not collapse repeated slashes, so '/view//evil.com' would
- * otherwise produce a protocol-relative Location ('//evil.com') that the
- * browser resolves against an attacker's host.
+ * Express does not collapse repeated leading separators, and a Location has to
+ * survive two of them: '//evil.com' is protocol-relative, and per the WHATWG
+ * URL parser a backslash is handled exactly like a slash in relative-slash
+ * state for special schemes, so '/\evil.com' resolves to the authority
+ * evil.com as well. `encodeurl` treats 0x5C as safe and emits it verbatim, so
+ * the backslash reaches the client untouched. Both are stripped here.
+ *
+ * The backslash form is reachable: a percent-decoding reverse proxy turns an
+ * ordinary-looking '/view/%5Cevil.com' into a literal backslash before Express
+ * sees it (per DEC-017 the bundled Caddy is an opt-in profile, so the topology
+ * is not fixed), and clients that resolve a Location per WHATWG rather than
+ * normalizing it first — in-app webviews, unfurlers, scanners — follow it.
+ *
+ * This is the single chokepoint for redirect targets in this router; callers
+ * pass their remainder straight in rather than pre-stripping separators.
  *
  * @param path - A path derived from req.path
- * @returns The same path with its leading slashes collapsed to one
+ * @returns The same path with its leading slashes and backslashes collapsed
+ *   to a single leading slash
  */
 function toSameOriginPath(path: string): string {
-  return `/${path.replace(/^\/+/, '')}`;
+  return `/${path.replace(/^[/\\]+/, '')}`;
 }
 
 /**
  * Re-attaches the request's query string to a redirect target.
  *
- * The target path is always derived from req.path; only the query string comes
- * from the request URL, and it is copied verbatim after the path, so no query
- * parameter or header can steer the redirect elsewhere.
+ * The target path is always derived from req.path, and whatever is appended
+ * here begins with '?', so nothing in the request URL can reach the authority
+ * of the Location. The query is copied verbatim rather than rebuilt through
+ * URLSearchParams, which collapses a repeated key into one comma-joined value.
+ *
+ * `req.originalUrl` keeps the fragment that parseurl strips from `req.path`, so
+ * the split has to respect the fragment boundary: everything after a '#' is
+ * fragment text and is dropped, including a '?' that appears inside it.
+ * Browsers never send a fragment, so only a crafted client reaches that branch.
  *
  * @param targetPath - Same-origin path to redirect to
  * @param req - Express request object
  * @returns The target path with the original query string appended, if any
  */
 function withQueryString(targetPath: string, req: Request): string {
-  const queryStart = req.originalUrl.indexOf('?');
+  const url = req.originalUrl;
+  const queryStart = url.indexOf('?');
+  const fragmentStart = url.indexOf('#');
 
-  return queryStart === -1 ? targetPath : `${targetPath}${req.originalUrl.slice(queryStart)}`;
+  if (queryStart === -1 || (fragmentStart !== -1 && fragmentStart < queryStart)) {
+    return targetPath;
+  }
+
+  const queryEnd = fragmentStart > queryStart ? fragmentStart : url.length;
+
+  return `${targetPath}${url.slice(queryStart, queryEnd)}`;
 }
 
 /**
@@ -272,19 +299,24 @@ export function buildHreflangLinks(
 /**
  * Resolves meta tag data for event pages, returning null for non-event pages.
  *
+ * Takes the request path as received, not a locale-stripped remainder:
+ * parseEventPageParams strips at most one locale prefix itself and documents
+ * that contract, because a path stripped twice would read `/fr/es/cal/events/x`
+ * as `cal`'s event page.
+ *
  * @param publicInterfaceHolder - Holder for the public calendar interface
- * @param canonicalPath - The canonical path without locale prefix
+ * @param requestPath - The request path (req.path), locale prefix included
  * @param locale - The resolved locale for content
  * @param baseUrl - The site base URL
  * @returns MetaTagData or null
  */
 async function resolveMetaTags(
   publicInterfaceHolder: PublicInterfaceHolder,
-  canonicalPath: string,
+  requestPath: string,
   locale: string,
   baseUrl: string,
 ): Promise<MetaTagData | null> {
-  const params = parseEventPageParams(canonicalPath);
+  const params = parseEventPageParams(requestPath);
   if (!params) {
     return null;
   }
@@ -357,7 +389,7 @@ export function createRouter(
       const { path: canonicalPath } = stripLocalePrefix(req.path);
       const baseUrl = getSiteBaseUrl(req);
 
-      const meta = await resolveMetaTags(publicInterfaceHolder, canonicalPath, req.locale, baseUrl);
+      const meta = await resolveMetaTags(publicInterfaceHolder, req.path, req.locale, baseUrl);
       const manifest = await parseManifest();
 
       const data = {
@@ -405,7 +437,7 @@ export function createRouter(
       // Serve site SPA with the locale from the URL prefix
       const baseUrl = getSiteBaseUrl(req);
 
-      const meta = await resolveMetaTags(publicInterfaceHolder, strippedPath, locale, baseUrl);
+      const meta = await resolveMetaTags(publicInterfaceHolder, req.path, locale, baseUrl);
       const manifest = await parseManifest();
 
       const data = {
@@ -434,8 +466,10 @@ export function createRouter(
      */
     legacy_view_redirect: async (req: Request, res: Response) => {
       const { locale, path: unprefixedPath } = stripLocalePrefix(req.path);
-      const rest = unprefixedPath.slice('/view'.length).replace(/^\/+/, '');
-      const canonicalPath = rest.length > 0 ? toSameOriginPath(rest) : '/discover';
+      // toSameOriginPath does the separator stripping, so '/view', '/view/' and
+      // '/view//' all arrive here as '/' — the no-calendar case.
+      const rest = toSameOriginPath(unprefixedPath.slice('/view'.length));
+      const canonicalPath = rest === '/' ? '/discover' : rest;
 
       res.redirect(301, withQueryString(await localizeRedirectTarget(canonicalPath, locale), req));
     },
