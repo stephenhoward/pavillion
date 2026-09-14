@@ -212,6 +212,13 @@ describe('reserved route segments', () => {
   });
 
   describe('the segment list itself', () => {
+    // The module holds two collections: this frozen public array and the
+    // module-private Set copied from it. Driving the predicate from the array is
+    // what catches the two disagreeing.
+    it.each([...RESERVED_ROUTE_SEGMENTS])('reserves the listed segment %s', (segment) => {
+      expect(isReservedRouteSegment(segment)).toBe(true);
+    });
+
     it('holds only lower-case entries', () => {
       const uppercased = RESERVED_ROUTE_SEGMENTS.filter(segment => segment !== segment.toLowerCase());
 

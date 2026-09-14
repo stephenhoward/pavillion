@@ -55,7 +55,7 @@ export const RESERVED_ROUTE_SEGMENTS: readonly string[] = Object.freeze([
 ]);
 
 /** Module-private index over the frozen list, for O(1) membership tests. */
-const RESERVED_SEGMENT_LOOKUP = new Set<string>(RESERVED_ROUTE_SEGMENTS);
+const RESERVED_SEGMENT_LOOKUP: ReadonlySet<string> = new Set<string>(RESERVED_ROUTE_SEGMENTS);
 
 /**
  * Reports whether a single URL path segment is reserved for application routing.
