@@ -9,7 +9,7 @@
     "error_invalid_calendar_name": "Invalid calendar name. Must be 3-24 characters, start with a letter/number, and can contain letters, numbers, underscores, and hyphens (hyphens not allowed at start or end). Some names are reserved by the site and cannot be used.",
     "error_create_calendar": "Error creating calendar",
     "calendar_name_placeholder": "your-calendar-name",
-    "calendar_name_help": "Calendar names must be 3-24 characters long, start with a letter or number, and can contain letters, numbers, underscores, and hyphens (hyphens not allowed at the beginning or end)",
+    "calendar_name_help": "Calendar names must be 3-24 characters long, start with a letter or number, and can contain letters, numbers, underscores, and hyphens (hyphens not allowed at the beginning or end). Some names are reserved by the site and cannot be used.",
     "aria_calendar_management": "Calendar Management",
     "aria_my_calendars_navigation": "My Calendars Navigation",
     "create_new_calendar_header": "Create New Calendar",

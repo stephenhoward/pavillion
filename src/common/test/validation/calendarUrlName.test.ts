@@ -30,6 +30,24 @@ describe('Calendar URL Name Validation', () => {
     });
   });
 
+  describe('non-string input', () => {
+    // Callers hand this untrusted request bodies (CalendarService.createCalendar,
+    // SeriesService.createSeries), where a JSON number or array coerces past the
+    // regex and would throw inside the reservation check's toLowerCase(). It has
+    // to answer false, not blow up into a 500.
+    it.each([
+      [12345],
+      [['admin']],
+      [{}],
+      [null],
+      [undefined],
+      [true],
+    ])('rejects %o without throwing', (value) => {
+      expect(() => isValidCalendarUrlName(value as unknown as string)).not.toThrow();
+      expect(isValidCalendarUrlName(value as unknown as string)).toBe(false);
+    });
+  });
+
   describe('reserved route segments', () => {
     it.each(['admin', 'discover', 'view', 'health', 'api', 'widget'])(
       'rejects the reserved segment %s',

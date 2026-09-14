@@ -121,7 +121,9 @@ class ActivityPubService {
     // exists, not a claim on a new name: a calendar created before route
     // segments were reserved may legitimately be named e.g. `admin`, and it
     // must stay followable. The client mirrors this in add_calendar_modal.vue
-    // so both ends accept exactly the same set of inputs.
+    // so both ends accept exactly the same set of inputs, and the resolver a
+    // bare local name reaches — CalendarService.getCalendarByName — is gated
+    // on the same shape-only rule, so the loosening holds end to end.
     if (!CALENDAR_URL_NAME_RE.test(identifier)) {
       return null;
     }

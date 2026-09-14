@@ -16,7 +16,7 @@ import { CalendarMember } from '@/common/model/calendar_member';
 import { AccountEntity } from '@/server/common/entity/account';
 import AccountInvitation from '@/common/model/invitation';
 import { UrlNameAlreadyExistsError, InvalidUrlNameError, CalendarNotFoundError } from '@/common/exceptions/calendar';
-import { isValidCalendarUrlName } from '@/common/validation/calendarUrlName';
+import { CALENDAR_URL_NAME_RE, isValidCalendarUrlName } from '@/common/validation/calendarUrlName';
 import { isReservedRouteSegment } from '@/common/routing/reserved-segments';
 import { ValidationError } from '@/common/exceptions/base';
 import { MediaNotFoundError } from '@/common/exceptions/media';
@@ -233,8 +233,20 @@ class CalendarService {
     return false;
   }
 
+  /**
+   * Resolve a calendar by its url name.
+   *
+   * Gated on the shape rule only, deliberately not the composite
+   * `isValidUrlName`. This is the single name->calendar resolver behind the
+   * public API, the widget, series and category reads, SSR meta tags and the
+   * whole ActivityPub surface (actor document, WebFinger, inbound inbox
+   * delivery), so it resolves calendars that already exist rather than
+   * policing names being claimed. An instance that issued a calendar named
+   * e.g. `admin` before route segments were reserved keeps serving it; the
+   * startup collision report tells the operator to rename it deliberately.
+   */
   async getCalendarByName(name: string): Promise<Calendar|null> {
-    if (!name || ! this.isValidUrlName(name)) {
+    if (!name || ! CALENDAR_URL_NAME_RE.test(name)) {
       return null;
     }
     let calendar = await CalendarEntity.findOne({ where: { url_name: name }, include: [CalendarContentEntity, { model: MediaEntity, as: 'defaultEventImage', required: false, where: { status: 'approved' } }] });

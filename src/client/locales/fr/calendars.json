@@ -9,7 +9,7 @@
     "error_invalid_calendar_name": "Nom de calendrier invalide. Il doit contenir entre 3 et 24 caractères, commencer par une lettre ou un chiffre, et peut contenir des lettres, des chiffres, des tirets bas et des traits d'union (les traits d'union ne sont pas autorisés au début ni à la fin). Certains noms sont réservés par le site et ne peuvent pas être utilisés.",
     "error_create_calendar": "Erreur lors de la création du calendrier",
     "calendar_name_placeholder": "nom-de-votre-calendrier",
-    "calendar_name_help": "Les noms de calendrier doivent contenir entre 3 et 24 caractères, commencer par une lettre ou un chiffre, et peuvent contenir des lettres, des chiffres, des tirets bas et des traits d'union (les traits d'union ne sont pas autorisés au début ni à la fin)",
+    "calendar_name_help": "Les noms de calendrier doivent contenir entre 3 et 24 caractères, commencer par une lettre ou un chiffre, et peuvent contenir des lettres, des chiffres, des tirets bas et des traits d'union (les traits d'union ne sont pas autorisés au début ni à la fin). Certains noms sont réservés par le site et ne peuvent pas être utilisés.",
     "aria_calendar_management": "Gestion des calendriers",
     "aria_my_calendars_navigation": "Navigation Mes calendriers",
     "create_new_calendar_header": "Créer un nouveau calendrier",

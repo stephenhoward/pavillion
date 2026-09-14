@@ -9,7 +9,7 @@
     "error_invalid_calendar_name": "Nombre de calendario no válido. Debe tener entre 3 y 24 caracteres, comenzar con una letra o número, y puede contener letras, números, guiones bajos y guiones (los guiones no se permiten al principio ni al final). Algunos nombres están reservados por el sitio y no se pueden usar.",
     "error_create_calendar": "Error al crear el calendario",
     "calendar_name_placeholder": "nombre-de-tu-calendario",
-    "calendar_name_help": "Los nombres de calendario deben tener entre 3 y 24 caracteres, comenzar con una letra o número, y pueden contener letras, números, guiones bajos y guiones (los guiones no se permiten al principio ni al final)",
+    "calendar_name_help": "Los nombres de calendario deben tener entre 3 y 24 caracteres, comenzar con una letra o número, y pueden contener letras, números, guiones bajos y guiones (los guiones no se permiten al principio ni al final). Algunos nombres están reservados por el sitio y no se pueden usar.",
     "aria_calendar_management": "Gestión de calendarios",
     "aria_my_calendars_navigation": "Navegación de mis calendarios",
     "create_new_calendar_header": "Crear nuevo calendario",
