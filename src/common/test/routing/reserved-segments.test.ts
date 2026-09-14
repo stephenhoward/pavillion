@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'fs';
 import path from 'path';
 
-import { getDefaultEnabledLanguageCodes } from '@/common/i18n/languages';
+import { getDefaultEnabledLanguageCodes, isValidLanguageCode } from '@/common/i18n/languages';
 import { RESERVED_ROUTE_SEGMENTS, isReservedRouteSegment } from '@/common/routing/reserved-segments';
 import { isValidCalendarUrlName } from '@/common/validation/calendarUrlName';
 
@@ -217,6 +217,20 @@ describe('reserved route segments', () => {
     // what catches the two disagreeing.
     it.each([...RESERVED_ROUTE_SEGMENTS])('reserves the listed segment %s', (segment) => {
       expect(isReservedRouteSegment(segment)).toBe(true);
+    });
+
+    // The module reserves locale codes by delegating to isValidLanguageCode
+    // rather than listing them, so the list cannot drift from the supported
+    // languages. Two call sites now read the two sets as disjoint — the
+    // classifier in CalendarService.findReservedUrlNameCollisions treats a
+    // non-listed reserved name as a locale code. Nothing else enforces it, and
+    // it holds today only incidentally (every supported code is two characters,
+    // every entry three or more), so a longer code such as 'pt-br' could break
+    // it silently.
+    it('names no supported language code, so the two reservation sources stay disjoint', () => {
+      const localeEntries = RESERVED_ROUTE_SEGMENTS.filter(segment => isValidLanguageCode(segment));
+
+      expect(localeEntries).toEqual([]);
     });
 
     it('holds only lower-case entries', () => {

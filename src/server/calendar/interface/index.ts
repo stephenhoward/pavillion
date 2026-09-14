@@ -35,7 +35,7 @@ import { CalendarEditorPermissionError } from '@/common/exceptions/editor';
 
 // Re-exported so callers outside the domain (the server startup path) can name
 // what findReservedUrlNameCollisions returns without importing the service.
-export type { ReservedUrlNameCollision };
+export type { ReservedUrlNameCollision } from '../service/calendar';
 
 export interface CalendarWithRole {
   calendar: Calendar;

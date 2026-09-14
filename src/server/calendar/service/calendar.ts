@@ -409,12 +409,14 @@ class CalendarService {
    * so a row stored as 'Admin' is reported too.
    *
    * Each collision carries why it is reserved, so the caller logs the reason
-   * rather than re-deriving it. The named-segment branch is tested first
-   * because that is the order `isReservedRouteSegment` itself disjoins: once a
-   * url name is known reserved and is not in the frozen list, being a supported
-   * locale code is the only remaining way it could have matched. Asking about
-   * the locale table first would instead assume the two sets never overlap,
-   * which nothing enforces.
+   * rather than re-deriving it. The preceding filter guarantees every url name
+   * reaching the classifier satisfies at least one disjunct, so the two-way
+   * split is exhaustive by construction and either branch order would do. It
+   * lives here rather than in the startup caller for locality: this module
+   * already imports both `isReservedRouteSegment` and `RESERVED_ROUTE_SEGMENTS`
+   * from the file that owns them, so whoever adds a third disjunct is likely to
+   * see this method. That leaves the split with two implementations — here and
+   * inside `isReservedRouteSegment` — tracked as pv-8f9u.
    *
    * @returns The collisions in ascending url-name order; empty when none collide
    */
