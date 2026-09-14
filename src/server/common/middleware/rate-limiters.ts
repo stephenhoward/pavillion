@@ -298,7 +298,7 @@ export const limitConfigSiteByIp: RequestHandler = isRateLimitEnabled()
  * Limits: 60 requests per IP per minute (default config).
  *
  * Caps anonymous traffic to GET /api/public/v1/calendars, which is read by
- * the /view/ discovery landing page. The limit is permissive enough for
+ * the /discover landing page. The limit is permissive enough for
  * legitimate page-render and pagination traffic while preventing scrape-style
  * abuse of the listed-calendar enumeration surface.
  */
