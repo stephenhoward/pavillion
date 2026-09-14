@@ -114,7 +114,7 @@ describe('useLocale', () => {
       const { currentLocale } = useLocale();
 
       // resolvedLanguage ('en') must win over language ('en-US') so that
-      // localizedPath() generates clean /view/... URLs instead of /en-US/view/...
+      // localizedPath() generates clean /mycalendar URLs instead of /en-US/mycalendar
       expect(currentLocale.value).toBe('en');
     });
 

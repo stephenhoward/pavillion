@@ -25,12 +25,17 @@ Config.init().then( async (config) => {
   const app: App = createApp(AppVue);
   const authentication = new Authentication(localStorage);
 
+  // Calendars live at the domain root. '/discover' is a static segment, which
+  // vue-router ranks above the '/:calendar' param regardless of declaration
+  // order, so the discovery page is never swallowed by the calendar route —
+  // and 'discover' is a reserved url name (src/common/routing/reserved-segments.ts)
+  // so no calendar can claim it in the other direction either.
   const routes: RouteRecordRaw[] = [
-    { path: '/view', component: Discovery, name: 'discovery' },
-    { path: '/view/:calendar', component: CalendarView, name: 'calendar' },
-    { path: '/view/:calendar/events/:event', component: EventView, name: 'event' },
-    { path: '/view/:calendar/events/:event/:startTime(\\d{8}-\\d{4})', component: EventInstanceView, name: 'instance' },
-    { path: '/view/:calendar/series/:series', component: SeriesView, name: 'series' },
+    { path: '/discover', component: Discovery, name: 'discovery' },
+    { path: '/:calendar', component: CalendarView, name: 'calendar' },
+    { path: '/:calendar/events/:event', component: EventView, name: 'event' },
+    { path: '/:calendar/events/:event/:startTime(\\d{8}-\\d{4})', component: EventInstanceView, name: 'instance' },
+    { path: '/:calendar/series/:series', component: SeriesView, name: 'series' },
   ];
 
   const nonDefaultLocales = AVAILABLE_LANGUAGES
@@ -42,11 +47,11 @@ Config.init().then( async (config) => {
     // Locale-prefixed variants — unnamed intentionally.
     // Navigation uses the default-locale named routes; useLocale.localizedPath() adds the prefix.
     routes.push(
-      { path: `/:locale(${pattern})/view`, component: Discovery },
-      { path: `/:locale(${pattern})/view/:calendar`, component: CalendarView },
-      { path: `/:locale(${pattern})/view/:calendar/events/:event`, component: EventView },
-      { path: `/:locale(${pattern})/view/:calendar/events/:event/:startTime(\\d{8}-\\d{4})`, component: EventInstanceView },
-      { path: `/:locale(${pattern})/view/:calendar/series/:series`, component: SeriesView },
+      { path: `/:locale(${pattern})/discover`, component: Discovery },
+      { path: `/:locale(${pattern})/:calendar`, component: CalendarView },
+      { path: `/:locale(${pattern})/:calendar/events/:event`, component: EventView },
+      { path: `/:locale(${pattern})/:calendar/events/:event/:startTime(\\d{8}-\\d{4})`, component: EventInstanceView },
+      { path: `/:locale(${pattern})/:calendar/series/:series`, component: SeriesView },
     );
   }
 

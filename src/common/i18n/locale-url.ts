@@ -4,7 +4,7 @@ import { isValidLanguageCode } from '@/common/i18n/languages';
  * Adds a locale prefix to a URL path using the as-needed strategy.
  * The default locale gets no prefix; other locales get a prefix.
  *
- * @param path - The URL path to prefix (e.g., '/@calendar')
+ * @param path - The URL path to prefix (e.g., '/my-calendar')
  * @param locale - The locale code to add (e.g., 'fr')
  * @param defaultLocale - The default locale code (e.g., 'en')
  * @returns The prefixed path, or the original path if locale matches default
@@ -36,7 +36,7 @@ export function addLocalePrefix(path: string, locale: string, defaultLocale: str
  * Returns the locale found (or null if no valid locale prefix) and the remaining path.
  *
  * Locale-prefixed URLs have the form /{lang-code}/rest-of-path
- * (e.g., /es/view/calendar, /fr/view/calendar).
+ * (e.g., /es/my-calendar, /fr/my-calendar/events/some-event).
  *
  * @param path - The URL path to inspect (should start with '/')
  * @returns Object with the detected locale code (or null) and the remaining path

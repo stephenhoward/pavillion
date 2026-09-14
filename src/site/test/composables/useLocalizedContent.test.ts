@@ -16,7 +16,7 @@ import { Calendar, CalendarContent } from '@/common/model/calendar';
 // ---------------------------------------------------------------------------
 
 const mockRoute = {
-  path: '/view/mycalendar',
+  path: '/mycalendar',
   query: {},
   hash: '',
 };
@@ -67,7 +67,7 @@ function makeCalendar(contents: { lang: string; name: string }[]): Calendar {
 
 describe('useLocalizedContent', () => {
   beforeEach(() => {
-    mockRoute.path = '/view/mycalendar';
+    mockRoute.path = '/mycalendar';
     setI18nextLanguage('en');
   });
 
@@ -79,7 +79,7 @@ describe('useLocalizedContent', () => {
       ]);
 
       // Simulate Spanish locale via route prefix
-      mockRoute.path = '/es/view/mycalendar';
+      mockRoute.path = '/es/mycalendar';
       setI18nextLanguage('es');
 
       const { localizedContent } = useLocalizedContent();
@@ -112,7 +112,7 @@ describe('useLocalizedContent', () => {
       ]);
 
       // Request French locale, but only English exists
-      mockRoute.path = '/fr/view/mycalendar';
+      mockRoute.path = '/fr/mycalendar';
       setI18nextLanguage('fr');
 
       const { localizedContent } = useLocalizedContent();
@@ -128,7 +128,7 @@ describe('useLocalizedContent', () => {
       ]);
 
       // Request French locale, no English, only German exists
-      mockRoute.path = '/fr/view/mycalendar';
+      mockRoute.path = '/fr/mycalendar';
       setI18nextLanguage('fr');
 
       const { localizedContent } = useLocalizedContent();
@@ -162,7 +162,7 @@ describe('useLocalizedContent', () => {
         { lang: 'es', name: 'Nombre en Espanol' },
       ]);
 
-      mockRoute.path = '/es/view/mycalendar';
+      mockRoute.path = '/es/mycalendar';
       setI18nextLanguage('es');
 
       const { localizedContent } = useLocalizedContent();
@@ -177,7 +177,7 @@ describe('useLocalizedContent', () => {
         { lang: 'es', name: 'Nombre en Espanol' },
       ]);
 
-      mockRoute.path = '/view/mycalendar';
+      mockRoute.path = '/mycalendar';
       setI18nextLanguage('en');
 
       const { localizedContent } = useLocalizedContent();
