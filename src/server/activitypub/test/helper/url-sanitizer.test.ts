@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   MAX_EXTERNAL_URL_LENGTH,
+  MAX_URL_CANDIDATES,
   sanitizeExternalUrlHref,
   sanitizePeerPageUrl,
 } from '@/server/activitypub/helper/url-sanitizer';
@@ -8,7 +9,7 @@ import {
 // between the rule of record (`sanitizePeerPageUrl`) and its restatement on
 // the calendar domain's render path. Production code may not reach across the
 // DEC-003 boundary, which is exactly why the two checks can drift.
-import { parseAttributedToUri } from '@/server/calendar/helper/source_calendar';
+import { MAX_PAGE_URL_LENGTH, parseAttributedToUri } from '@/server/calendar/helper/source_calendar';
 
 const ACTOR_URI = 'https://remote.example.com/calendars/remote-cal';
 
@@ -85,6 +86,20 @@ describe('sanitizePeerPageUrl', () => {
         'https://remote.example.com/survivor',
       ];
       expect(sanitizePeerPageUrl(raw, ACTOR_URI)).toBe('https://remote.example.com/survivor');
+    });
+
+    /**
+     * `url` is a list of representations of one page, not a collection, so the
+     * candidate count is capped: a hostile peer may not force an unbounded run
+     * of `new URL` parses during an authenticated, user-initiated follow.
+     */
+    it(`examines only the first ${MAX_URL_CANDIDATES} candidates`, () => {
+      const filler = Array(MAX_URL_CANDIDATES - 1).fill('javascript:alert(1)');
+
+      expect(sanitizePeerPageUrl([...filler, 'https://remote.example.com/last'], ACTOR_URI))
+        .toBe('https://remote.example.com/last');
+      expect(sanitizePeerPageUrl([...filler, 'javascript:alert(1)', 'https://remote.example.com/past-the-cap'], ACTOR_URI))
+        .toBeNull();
     });
 
     it('returns null for shapes it does not recognize', () => {
@@ -236,12 +251,43 @@ describe('sanitizePeerPageUrl', () => {
     });
   });
 
+  /**
+   * The "NEVER throws" contract covers inspecting the candidates, not only
+   * parsing them: a candidate whose `href` is a throwing accessor and an
+   * array-like whose `length` is both threw before the loop body was guarded.
+   * Unreachable through today's only caller — `JSON.parse` output has no
+   * accessors — but the next caller reads the contract, not the caller list.
+   */
   it('never throws for arbitrary input', () => {
-    const nasty: unknown[] = [Symbol('x'), () => 'x', new Map(), NaN, [[['nested']]]];
+    const throwingHref = {
+      get href(): string {
+        throw new Error('boom');
+      },
+    };
+    const throwingLength = new Proxy([], {
+      get(target, property, receiver) {
+        if (property === 'length') throw new Error('boom');
+        return Reflect.get(target, property, receiver);
+      },
+    });
+    const nasty: unknown[] = [
+      Symbol('x'),
+      () => 'x',
+      new Map(),
+      NaN,
+      [[['nested']]],
+      throwingHref,
+      [throwingHref],
+      throwingLength,
+    ];
     for (const value of nasty) {
       expect(() => sanitizePeerPageUrl(value, ACTOR_URI)).not.toThrow();
       expect(sanitizePeerPageUrl(value, ACTOR_URI)).toBeNull();
     }
+
+    // A throwing candidate is skipped, not fatal: a usable sibling still wins.
+    expect(sanitizePeerPageUrl([throwingHref, 'https://remote.example.com/x'], ACTOR_URI))
+      .toBe('https://remote.example.com/x');
   });
 });
 
@@ -261,6 +307,49 @@ describe('sanitizePeerPageUrl', () => {
  * comments point here.
  */
 describe('population and render checks agree on every axis', () => {
+  /** `https://remote.example.com/` — 27 characters, none of them re-encoded. */
+  const HOST_PREFIX = 'https://remote.example.com/';
+
+  /**
+   * A `[declared, normalized]` pair whose **normalized** form is exactly
+   * `length` characters. `<` percent-encodes to `%3C` — three characters for
+   * one — so an angle-bracket run plus a plain-character run hits any length
+   * exactly while keeping the declared value comfortably under the pre-parse
+   * cap, which is what forces the *post*-parse cap to be the rule under test.
+   */
+  const pairNormalizingTo = (length: number): [declared: string, normalized: string] => {
+    const angles = Math.floor((length - HOST_PREFIX.length) / 3);
+    const plain = length - HOST_PREFIX.length - angles * 3;
+    return [
+      HOST_PREFIX + '<'.repeat(angles) + 'a'.repeat(plain),
+      HOST_PREFIX + '%3C'.repeat(angles) + 'a'.repeat(plain),
+    ];
+  };
+
+  const [atCapDeclared, atCapNormalized] = pairNormalizingTo(MAX_EXTERNAL_URL_LENGTH);
+  const [overCapDeclared] = pairNormalizingTo(MAX_EXTERNAL_URL_LENGTH + 1);
+
+  /**
+   * The two length constants are deliberate duplicates — DEC-003 forbids the
+   * calendar domain importing the ActivityPub helper — and fixtures alone
+   * detected drift in one direction only: every `accepted` row was short
+   * enough that *lowering* the render cap, or widening it by a little, changed
+   * nothing. Assert the numbers directly, and keep the boundary rows below to
+   * pin the behaviour at the cap rather than only the number.
+   */
+  it('caps both sides at the same length', () => {
+    expect(MAX_PAGE_URL_LENGTH).toBe(MAX_EXTERNAL_URL_LENGTH);
+  });
+
+  it('places the boundary fixtures exactly where the rows below assume', () => {
+    expect(atCapDeclared.length).toBeLessThan(MAX_EXTERNAL_URL_LENGTH);
+    expect(new URL(atCapDeclared).toString()).toBe(atCapNormalized);
+    expect(atCapNormalized).toHaveLength(MAX_EXTERNAL_URL_LENGTH);
+
+    expect(overCapDeclared.length).toBeLessThan(MAX_EXTERNAL_URL_LENGTH);
+    expect(new URL(overCapDeclared).toString()).toHaveLength(MAX_EXTERNAL_URL_LENGTH + 1);
+  });
+
   /** Values both sides must refuse. */
   const rejected: Array<[string, string]> = [
     ['a different host', 'https://phish.example/remote-cal'],
@@ -277,6 +366,7 @@ describe('population and render checks agree on every axis', () => {
     ['a bare userinfo username', 'https://[email protected]/x'],
     ['a value that normalizes past the length cap', 'https://remote.example.com/x' + '<'.repeat(700)],
     ['a pre-parse over-length value', 'https://remote.example.com/' + 'a'.repeat(2048)],
+    ['a value one character past the cap once normalized', overCapDeclared],
   ];
 
   /** Values both sides must accept, normalized identically. */
@@ -316,6 +406,13 @@ describe('population and render checks agree on every axis', () => {
       'https://remote.example.com/en/groups/remote-cal?tab=events',
       'https://remote.example.com/en/groups/remote-cal?tab=events',
     ],
+    // Lowering either cap by a single character turns this row red; nothing
+    // else in the table is long enough to notice.
+    [
+      'a value landing exactly on the length cap once normalized',
+      atCapDeclared,
+      atCapNormalized,
+    ],
   ];
 
   it.each(rejected)('both reject %s', (_label, hostile) => {
@@ -327,5 +424,46 @@ describe('population and render checks agree on every axis', () => {
   it.each(accepted)('both accept %s and normalize it identically', (_label, declared, expected) => {
     expect(sanitizePeerPageUrl(declared, ACTOR_URI)).toBe(expected);
     expect(parseAttributedToUri(ACTOR_URI, declared)!.url).toBe(expected);
+  });
+
+  /**
+   * The table above holds the actor URI constant, so it was structurally blind
+   * to the one axis the two sides were genuinely unequal on: population pinned
+   * against the trimmed actor URI while the render side parsed the raw
+   * `attributed_to`. `trim()` strips NBSP, BOM and the Unicode space
+   * separators that the WHATWG parser does not, so a whitespace-prefixed actor
+   * URI made population accept the declared URL while the render side threw
+   * internally and returned null — dropping the whole attribution pill, not
+   * just the declared link. Both sides trim now, so vary the actor URI too.
+   */
+  describe('with a whitespace-prefixed actor URI', () => {
+    const declared = 'https://remote.example.com/remote-cal';
+
+    it.each([
+      ['a non-breaking space', ' '],
+      ['a BOM', '﻿'],
+      ['a figure space', ' '],
+    ])('both accept an on-host declaration against one prefixed by %s', (_label, prefix) => {
+      const actorUri = `${prefix}${ACTOR_URI}`;
+
+      expect(sanitizePeerPageUrl(declared, actorUri)).toBe(declared);
+
+      const rendered = parseAttributedToUri(actorUri, declared);
+      expect(rendered).not.toBeNull();
+      expect(rendered!.url).toBe(declared);
+      // The label the link carries is derived from the same parse.
+      expect(rendered!.host).toBe('remote.example.com');
+      expect(rendered!.urlName).toBe('remote-cal');
+    });
+
+    it.each([
+      ['a non-breaking space', ' '],
+      ['a BOM', '﻿'],
+    ])('both still refuse an off-host declaration against one prefixed by %s', (_label, prefix) => {
+      const actorUri = `${prefix}${ACTOR_URI}`;
+
+      expect(sanitizePeerPageUrl('https://phish.example/x', actorUri)).toBeNull();
+      expect(parseAttributedToUri(actorUri, 'https://phish.example/x')!.url).toBe(RENDER_FALLBACK_URL);
+    });
   });
 });

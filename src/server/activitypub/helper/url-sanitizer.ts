@@ -22,7 +22,13 @@ export const MAX_EXTERNAL_URL_LENGTH = 2048;
  * matters**: WHATWG normalization percent-encodes, which can expand the input
  * roughly threefold (727 characters of `<` normalize to 2127), so a pre-parse
  * check alone bounds the input and not the value a caller goes on to store.
- * The pre-parse check survives only to reject absurd input cheaply.
+ * The pre-parse check survives to reject absurd input cheaply, and it is not
+ * redundant: normalization can also *shrink* a string, so an input over the cap
+ * is rejected even when it would have normalized under it
+ * (`https://remote.example.com/` + `/a/../` × 400 is 2430 characters in and 430
+ * normalized, and never reaches the parser). That is deliberate, symmetric with
+ * the render-path restatement in the calendar domain, and fails closed — do not
+ * "optimize away" this check as a no-op.
  */
 export function sanitizeExternalUrlHref(raw: unknown): string | null {
   if (typeof raw !== 'string') return null;
@@ -41,13 +47,22 @@ export function sanitizeExternalUrlHref(raw: unknown): string | null {
 }
 
 /**
+ * How many AS2 `url` candidates are examined. The property is a list of
+ * *representations* of one page, not a collection, so anything past a handful is
+ * a malformed document; the cap bounds the `new URL` parses a hostile peer can
+ * force during an authenticated, user-initiated follow.
+ */
+export const MAX_URL_CANDIDATES = 10;
+
+/**
  * Sanitizes the `url` property of a remote actor document into the peer's
  * public page URL, or null when the peer declared nothing usable.
  *
  * AS2 `url` is polymorphic: a bare string, a `{ type: 'Link', href }` object,
  * or an array of either (Mastodon emits a string; Mobilizon has emitted Link
  * objects). The first candidate that survives sanitization wins and the rest
- * are dropped — there is no "best" URL to choose between.
+ * are dropped — there is no "best" URL to choose between. Only the first
+ * `MAX_URL_CANDIDATES` entries of an array are looked at at all.
  *
  * Security-critical. The result is rendered as an `<a href>` on anonymous
  * public event pages and opened in a new tab, so on top of the scheme
@@ -67,11 +82,17 @@ export function sanitizeExternalUrlHref(raw: unknown): string | null {
  * boundary; this function is the rule of record, and
  * `src/server/activitypub/test/helper/url-sanitizer.test.ts` holds the
  * table-driven test that keeps the two in step on every axis — scheme, host,
- * userinfo, normalization and length. NEVER throws — a single bad field must
- * not fail the follow or the activity that carried it, which is why the actor
- * URI is validated and re-read through the same parse rather than trimmed once
- * and parsed raw: `String.prototype.trim()` strips NBSP, BOM and other
- * characters the WHATWG parser does not, so those two disagree.
+ * userinfo, normalization, length, and the hygiene of the actor URI the host is
+ * pinned against. NEVER throws — a single bad field must not fail the follow or
+ * the activity that carried it, which is why the actor URI is validated and
+ * re-read through the same parse rather than trimmed once and parsed raw:
+ * `String.prototype.trim()` strips NBSP, BOM and other characters the WHATWG
+ * parser does not, so those two disagree. For the same reason the candidate
+ * property read and the per-candidate parse sit inside a `try`: `raw` is
+ * peer-controlled and a future caller may hand us an object whose `href` is a
+ * throwing accessor, or an array whose `length` is. Today's only caller feeds
+ * this `JSON.parse` output, which has neither, but the contract is the promise
+ * callers read.
  *
  * @param raw - The actor document's `url` property, in any AS2 shape
  * @param actorUri - The actor URI the document was fetched as; pins the host
@@ -82,16 +103,32 @@ export function sanitizePeerPageUrl(raw: unknown, actorUri: string): string | nu
   if (!sanitizedActorUri) return null;
   const actorHost = new URL(sanitizedActorUri).host;
 
-  for (const candidate of Array.isArray(raw) ? raw : [raw]) {
-    const href = typeof candidate === 'string'
-      ? candidate
-      : (candidate as { href?: unknown } | null)?.href;
-    const sanitized = sanitizeExternalUrlHref(href);
-    if (!sanitized) continue;
-    const parsed = new URL(sanitized);
-    if (parsed.host !== actorHost) continue;
-    if (parsed.username || parsed.password) continue;
-    return sanitized;
+  // Materializing the candidate list can itself throw — an array-like whose
+  // `length` is an accessor — so it is guarded alongside the loop body.
+  let candidates: unknown[];
+  try {
+    candidates = Array.isArray(raw) ? raw.slice(0, MAX_URL_CANDIDATES) : [raw];
+  }
+  catch {
+    return null;
+  }
+
+  for (const candidate of candidates) {
+    try {
+      const href = typeof candidate === 'string'
+        ? candidate
+        : (candidate as { href?: unknown } | null)?.href;
+      const sanitized = sanitizeExternalUrlHref(href);
+      if (!sanitized) continue;
+      const parsed = new URL(sanitized);
+      if (parsed.host !== actorHost) continue;
+      if (parsed.username || parsed.password) continue;
+      return sanitized;
+    }
+    catch {
+      // A candidate that throws on inspection is a candidate we cannot use.
+      continue;
+    }
   }
 
   return null;

@@ -79,6 +79,14 @@ export async function resolveSourceCalendars(
  * the `urlName@host` label — so a peer that declares no page URL still gets its
  * repost attribution shown, just with a guessed link.
  *
+ * The URI is trimmed before it is parsed, for the same reason the ActivityPub
+ * domain trims it before pinning against it: `String.prototype.trim()` strips
+ * NBSP, BOM and the Unicode space separators that the WHATWG parser does not.
+ * Parsing the raw value here while the population side pinned against a trimmed
+ * one made the two disagree on an axis the equivalence table cannot see (it
+ * holds the actor URI constant) — a whitespace-prefixed `attributed_to` threw
+ * internally and dropped the entire attribution, not just the declared link.
+ *
  * @param uri - The attributed_to URI to parse
  * @param declaredPageUrl - The page URL the peer declared in its actor
  *   document, cached by the ActivityPub domain; null when we have none
@@ -89,7 +97,7 @@ export function parseAttributedToUri(
   declaredPageUrl?: string | null,
 ): { urlName: string; host: string; url: string } | null {
   try {
-    const url = new URL(uri);
+    const url = new URL(uri.trim());
 
     // Only allow HTTP(S) schemes — reject javascript:, data:, ftp:, etc.
     // to prevent stored XSS via crafted federation data.
@@ -140,8 +148,12 @@ export function parseAttributedToUri(
  * `MAX_EXTERNAL_URL_LENGTH` in the ActivityPub domain's `url-sanitizer.ts`,
  * duplicated rather than imported because DEC-003 forbids the import — the
  * same reason the whole check below is a restatement rather than a call.
+ *
+ * Exported for the equivalence test alone, which asserts the two numbers are
+ * equal directly rather than inferring it from fixtures. No production code
+ * outside this module reads it.
  */
-const MAX_PAGE_URL_LENGTH = 2048;
+export const MAX_PAGE_URL_LENGTH = 2048;
 
 /**
  * Accepts a peer-declared page URL only if it survives every check the
@@ -161,10 +173,20 @@ const MAX_PAGE_URL_LENGTH = 2048;
  *   - WHATWG normalization: returning the raw stored string instead of
  *     `parsed.toString()` would emit whitespace, quotes, newlines and control
  *     characters verbatim, which the population side percent-encodes away
- *   - length, after normalization (percent-encoding can triple a string)
+ *   - length, after normalization (percent-encoding can triple a string), and
+ *     before it too: normalization can also shrink a string, so an input over
+ *     the cap is refused even where it would have normalized under it. Both
+ *     sides do this, so it is part of the agreement rather than an asymmetry —
+ *     see the `sanitizeExternalUrlHref` doc comment.
+ *   - hygiene of the value the host is pinned against: the actor URI is trimmed
+ *     before it is parsed on both sides, because `trim()` strips characters the
+ *     WHATWG parser does not
  *
  * `src/server/activitypub/test/helper/url-sanitizer.test.ts` holds the
- * table-driven equivalence test that fails if either side drifts.
+ * table-driven equivalence test that fails if either side drifts. It asserts
+ * `MAX_PAGE_URL_LENGTH === MAX_EXTERNAL_URL_LENGTH` directly, and pins the
+ * behaviour at the exact cap from both sides, so drift is caught whichever
+ * constant moves and in whichever direction.
  *
  * @param declared - The cached page URL, or null/undefined when we have none
  * @param actorHost - The host of the actor URI that declared it

@@ -42,6 +42,17 @@ import { InsufficientCalendarPermissionsError } from '@/common/exceptions/calend
 import { ActivityPubCalendarUnfollowedPayload, ActivityPubEventRepostedPayload } from '@/server/activitypub/events/types';
 
 /**
+ * Response-body byte cap for the actor-profile fetch below. An actor document
+ * is a few kilobytes of JSON; 1 MiB is generous for a legitimate peer and stops
+ * a hostile one forcing an unbounded `JSON.parse` during an authenticated,
+ * user-initiated follow. The same number as `MAX_PAGE_BYTES` in
+ * `backfill.ts`, which caps every outbound GET the backfill worker makes;
+ * restated rather than imported so a service does not depend on another
+ * service's module for a constant.
+ */
+const ACTOR_PROFILE_MAX_BYTES = 1_048_576;
+
+/**
  * Converts an ActivityPub actor URI to a human-readable calendar@domain format.
  * Example: https://alpha.federation.local/calendars/my_calendar -> my_calendar@alpha.federation.local
  *
@@ -789,6 +800,9 @@ class ActivityPubService {
         },
         timeout: PUBLIC_KEY_FETCH_TIMEOUT_MS,
         maxRedirects: 0,
+        // Guards the *response* body; axios's `maxBodyLength` guards request
+        // bodies and is irrelevant to a GET.
+        maxContentLength: ACTOR_PROFILE_MAX_BYTES,
       });
     }
     catch (error: any) {
