@@ -20,6 +20,8 @@ Your identity settings serve all three views at once.
 
 Your calendar's URL handle is the short, lowercase, URL-safe name that identifies it across the network. It shows up in two places: the public address `your-instance.example/<handle>` that visitors paste into a chat, and the social handle `<handle>@your-instance.example` that other Pavillion calendars use to follow you.
 
+Because that public address puts your handle at the root of the domain, it can't be a name the instance already routes there — `admin` or `login`, say — or a language code like `es`. The form you name a calendar in won't accept one, so you find out while you're choosing.
+
 You picked a handle when you created the calendar. **Right now, the handle is fixed when you create your calendar.** There's no rename button in the settings panel. If you've outgrown the handle — your "westside-2026" calendar is still going strong in 2027 — the practical move today is to create a new calendar with the new handle and migrate. That's expensive: every link, every bookmark, every reposting calendar's rule, every email signature pointing at the old handle becomes stale. So it's worth picking a handle that ages well *now*.
 
 A short version of the advice — the longer version is in the [Quickstart](./quickstart):

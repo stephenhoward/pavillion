@@ -21,7 +21,7 @@ Public calendar URLs used to carry a `/view/` prefix. Those links all still work
 :::
 
 ::: tip <Lightbulb /> A note on names the instance keeps for itself.
-Because your handle sits at the root, it can't be a word Pavillion already routes there — `admin` and `login`, among others — or a language code like `es`. There's no list to memorize: the form you name a calendar in rejects a reserved name and tells you, so you'll find out while you're choosing rather than afterwards.
+Because your handle sits at the root, it can't be a word Pavillion already routes there — `admin` and `login`, among others — or a language code like `es`. There's no list to memorize: the form you name a calendar in won't accept a reserved name, so you find out while you're choosing rather than afterwards.
 :::
 
 ## Your federation handle
