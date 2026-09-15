@@ -8,6 +8,7 @@ import { WebFingerResponse } from "@/server/activitypub/model/webfinger";
 import { UserProfileResponse } from "@/server/activitypub/model/userprofile";
 import { ActivityPubActivity } from "@/server/activitypub/model/base";
 import { ActivityPubInboxMessageEntity, ActivityPubOutboxMessageEntity, FollowerCalendarEntity } from "@/server/activitypub/entity/activitypub";
+import { CalendarActorEntity } from "@/server/activitypub/entity/calendar_actor";
 import { EventObjectEntity } from "@/server/activitypub/entity/event_object";
 import CalendarInterface from "@/server/calendar/interface";
 import AccountsInterface from "@/server/accounts/interface";
@@ -53,6 +54,32 @@ export interface InboxRowInput {
   messageTime: Date;
   message: object;
   auth: InboxAuthContext;
+}
+
+/**
+ * The ActivityPub identity behind a displayed event, as the calendar domain
+ * receives it across the interface boundary (DEC-003).
+ *
+ * `pageUrl` is the public page the source peer declared in its own actor
+ * document, cached on `calendar_actor.page_url` when we followed it. A peer's
+ * page URL is not ours to construct: since DEC-018 the public URL shape is
+ * version-dependent, so templating our own route shape onto a peer's host is a
+ * guess that can only be right about peers running our version.
+ *
+ * It is `null` whenever the cache has no answer — the peer declared no usable
+ * `url`, or the actor row was created by an inbound activity that never
+ * fetched the document — and the consumer falls back (see
+ * `parseAttributedToUri`). This value is read from the local database and is
+ * never fetched: every consumer is a request-synchronous public page read, and
+ * an outbound fetch there would put an anonymous page's latency under a third
+ * party's control and make one page view into one fetch per remote calendar.
+ *
+ * A display snapshot under DEC-015, never a policy surface: nothing may gate
+ * authorization, trust, or routing on it.
+ */
+export interface EventSourceActor {
+  actorUri: string;
+  pageUrl: string | null;
 }
 
 export default class ActivityPubService {
@@ -411,13 +438,18 @@ export default class ActivityPubService {
   }
 
   /**
-   * Batch-resolves the source actor URIs for a set of event IDs.
-   * Returns a map from event ID to the attributed_to actor URI.
+   * Batch-resolves the source actor for a set of event IDs.
+   *
+   * Two indexed batch queries, never a per-event lookup: this serves public
+   * list endpoints that render N remote events in a single page, so anything
+   * per-event here is an N+1 on an anonymous page render. The page URL is read
+   * from the local `calendar_actor` cache — **no network fetch happens on this
+   * path**, by design (see {@link EventSourceActor}).
    *
    * @param eventIds - Array of event UUIDs to look up
-   * @returns Map from event ID to attributed_to actor URI
+   * @returns Map from event ID to its source actor URI and cached page URL
    */
-  async getEventSourceActorUris(eventIds: string[]): Promise<Map<string, string>> {
+  async getEventSourceActors(eventIds: string[]): Promise<Map<string, EventSourceActor>> {
     if (eventIds.length === 0) {
       return new Map();
     }
@@ -426,10 +458,24 @@ export default class ActivityPubService {
       where: { event_id: { [Op.in]: eventIds } },
     });
 
-    const result = new Map<string, string>();
+    const actorUris = [...new Set(
+      eventObjects.map(obj => obj.attributed_to).filter((uri): uri is string => !!uri),
+    )];
+    const actors = actorUris.length === 0
+      ? []
+      : await CalendarActorEntity.findAll({
+        where: { actor_uri: { [Op.in]: actorUris } },
+        attributes: ['actor_uri', 'page_url'],
+      });
+    const pageUrlByActorUri = new Map(actors.map(actor => [actor.actor_uri, actor.page_url ?? null]));
+
+    const result = new Map<string, EventSourceActor>();
     for (const obj of eventObjects) {
       if (obj.attributed_to) {
-        result.set(obj.event_id, obj.attributed_to);
+        result.set(obj.event_id, {
+          actorUri: obj.attributed_to,
+          pageUrl: pageUrlByActorUri.get(obj.attributed_to) ?? null,
+        });
       }
     }
     return result;

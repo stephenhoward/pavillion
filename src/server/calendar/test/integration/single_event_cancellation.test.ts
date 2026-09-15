@@ -50,7 +50,7 @@ describe('Single-event cancellation (service integration, real DB)', () => {
       getSharedEventIds: async () => [],
       getSharedEventStatusMap: async () => new Map(),
       findCalendarActorByCalendarId: async () => null,
-      getEventSourceActorUris: async () => new Map(),
+      getEventSourceActors: async () => new Map(),
     } as never);
 
     const configurationInterface = new ConfigurationInterface();

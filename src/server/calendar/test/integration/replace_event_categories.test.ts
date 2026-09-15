@@ -59,7 +59,7 @@ describe('replaceEventCategories calendar-scoped destroy (pv-bv78)', () => {
     calendarInterface.setActivityPubInterface({
       getSharedEventStatusMap: async () => new Map<string, 'auto' | 'manual'>(),
       getCalendarIdsForSharedEvent: async () => [],
-      getEventSourceActorUris: async () => new Map<string, string>(),
+      getEventSourceActors: async () => new Map<string, string>(),
       findCalendarActorByCalendarId: async () => null,
     } as never);
 

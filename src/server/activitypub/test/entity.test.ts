@@ -11,6 +11,7 @@ import {
   ActivityPubInboxMessageEntity,
   RepostDismissalEntity,
 } from '@/server/activitypub/entity/activitypub';
+import { CalendarActorEntity, type CalendarActor } from '@/server/activitypub/entity/calendar_actor';
 import { EventEntity } from '@/server/calendar/entity/event';
 import { CalendarEntity } from '@/server/calendar/entity/calendar';
 import db from '@/server/common/entity/db';
@@ -106,6 +107,63 @@ describe('toModel', () => {
     });
 
     assertType<UndoActivity>( testEntity.toModel() );
+  });
+});
+
+/**
+ * The column-name mapping is the one thing nothing else in the peer-page-URL
+ * path exercises: the service tests hand-build a `toModel` stub rather than
+ * calling the prototype method, and the integration test reads `page_url` back
+ * through an explicit `attributes` list. A typo in either direction of this
+ * mapping would survive both, so it is asserted against a real instance.
+ */
+describe('CalendarActorEntity page_url mapping', () => {
+  it('exposes the stored column as pageUrl on the model', () => {
+    const entity = CalendarActorEntity.build({
+      id: uuidv4(),
+      actor_type: 'remote',
+      calendar_id: null,
+      actor_uri: 'https://remote.example/calendars/events',
+      page_url: 'https://remote.example/events',
+    });
+
+    expect(entity.toModel().pageUrl).toBe('https://remote.example/events');
+  });
+
+  it('maps a null column to a null model field', () => {
+    const entity = CalendarActorEntity.build({
+      id: uuidv4(),
+      actor_type: 'remote',
+      calendar_id: null,
+      actor_uri: 'https://remote.example/calendars/events',
+    });
+
+    expect(entity.toModel().pageUrl).toBeNull();
+  });
+
+  it('writes the model field back onto the column', () => {
+    const model: CalendarActor = {
+      id: uuidv4(),
+      actorType: 'remote',
+      calendarId: null,
+      remoteCalendarId: null,
+      actorUri: 'https://remote.example/calendars/events',
+      remoteDisplayName: null,
+      remoteDomain: 'remote.example',
+      inboxUrl: null,
+      sharedInboxUrl: null,
+      pageUrl: 'https://remote.example/events',
+      lastFetched: null,
+      publicKey: null,
+      privateKey: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    const entity = CalendarActorEntity.fromModel(model);
+
+    expect(entity.page_url).toBe('https://remote.example/events');
+    expect(entity.toModel().pageUrl).toBe('https://remote.example/events');
   });
 });
 

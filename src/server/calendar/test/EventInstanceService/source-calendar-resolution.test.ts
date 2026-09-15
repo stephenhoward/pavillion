@@ -9,6 +9,7 @@ import { EventRepostEntity } from '../../entity/event_repost';
 import { CalendarEvent } from '@/common/model/events';
 import CalendarEventInstance from '@/common/model/event_instance';
 import { DateTime } from 'luxon';
+import type { EventSourceActor } from '@/server/activitypub/interface';
 
 const TEST_DOMAIN: string = config.get('domain');
 
@@ -66,13 +67,21 @@ function buildMockInstanceEntity(overrides: {
 }
 
 /**
+ * Builds the source-actor map the AP interface hands back. `pageUrl` null
+ * models a peer whose actor document declared no usable `url`.
+ */
+function actorMap(entries: Array<[string, string, string | null]>): Map<string, EventSourceActor> {
+  return new Map(entries.map(([eventId, actorUri, pageUrl]) => [eventId, { actorUri, pageUrl }]));
+}
+
+/**
  * Creates a mock ActivityPubInterface with the methods needed by both
  * EventInstanceService.listEventInstancesForCalendar and the helper it now
  * delegates the visible-id union to (EventService.listEventIdsForCalendar).
  */
-function buildMockApInterface(sandbox: sinon.SinonSandbox, uriMap: Map<string, string>): any {
+function buildMockApInterface(sandbox: sinon.SinonSandbox, sourceActorMap: Map<string, EventSourceActor>): any {
   return {
-    getEventSourceActorUris: sandbox.stub().resolves(uriMap),
+    getEventSourceActors: sandbox.stub().resolves(sourceActorMap),
     // EventService.listEventIdsForCalendar uses this to enumerate AP-shared ids.
     getSharedEventStatusMap: sandbox.stub().resolves(new Map<string, 'auto' | 'manual'>()),
   };
@@ -149,7 +158,7 @@ describe('EventInstanceService sourceCalendar resolution', () => {
       expect(results[0].event.sourceCalendar!.url).toBe('/view/original-cal');
     });
 
-    it('should set repostStatus="manual" and populate sourceCalendar for remote reposts', async () => {
+    it('should populate sourceCalendar from the page URL the peer declared', async () => {
       const instanceEntity = buildMockInstanceEntity({
         instanceId: 'inst-3',
         instanceCalendarId: 'cal-B',
@@ -160,10 +169,9 @@ describe('EventInstanceService sourceCalendar resolution', () => {
       stubVisibleEventIds(sandbox, ['evt-3']);
       sandbox.stub(EventInstanceEntity, 'findAll').resolves([instanceEntity]);
 
-      const uriMap = new Map<string, string>([
-        ['evt-3', 'https://remote.example.com/calendars/remote-cal'],
-      ]);
-      service.setActivityPubInterface(buildMockApInterface(sandbox, uriMap));
+      service.setActivityPubInterface(buildMockApInterface(sandbox, actorMap([
+        ['evt-3', 'https://remote.example.com/calendars/remote-cal', 'https://remote.example.com/remote-cal'],
+      ])));
 
       const calendar: any = { id: 'cal-B' };
       const results = await service.listEventInstancesForCalendar(calendar);
@@ -173,7 +181,57 @@ describe('EventInstanceService sourceCalendar resolution', () => {
       expect(results[0].event.sourceCalendar).not.toBeNull();
       expect(results[0].event.sourceCalendar!.urlName).toBe('remote-cal');
       expect(results[0].event.sourceCalendar!.host).toBe('remote.example.com');
+      expect(results[0].event.sourceCalendar!.url).toBe('https://remote.example.com/remote-cal');
+    });
+
+    it('should fall back to the /view/ spelling when the peer declared no page URL', async () => {
+      const instanceEntity = buildMockInstanceEntity({
+        instanceId: 'inst-3b',
+        instanceCalendarId: 'cal-B',
+        eventId: 'evt-3b',
+        eventCalendarId: null,
+      });
+
+      stubVisibleEventIds(sandbox, ['evt-3b']);
+      sandbox.stub(EventInstanceEntity, 'findAll').resolves([instanceEntity]);
+
+      service.setActivityPubInterface(buildMockApInterface(sandbox, actorMap([
+        ['evt-3b', 'https://remote.example.com/calendars/remote-cal', null],
+      ])));
+
+      const calendar: any = { id: 'cal-B' };
+      const results = await service.listEventInstancesForCalendar(calendar);
+
+      expect(results).toHaveLength(1);
+      expect(results[0].event.repostStatus).toBe('manual');
       expect(results[0].event.sourceCalendar!.url).toBe('https://remote.example.com/view/remote-cal');
+    });
+
+    /**
+     * The page URL is peer-supplied text that becomes an anchor href on an
+     * anonymous public page, so an off-host declaration must not survive the
+     * trip through the service either.
+     */
+    it('should not render a page URL a peer declared on someone else\'s host', async () => {
+      const instanceEntity = buildMockInstanceEntity({
+        instanceId: 'inst-3c',
+        instanceCalendarId: 'cal-B',
+        eventId: 'evt-3c',
+        eventCalendarId: null,
+      });
+
+      stubVisibleEventIds(sandbox, ['evt-3c']);
+      sandbox.stub(EventInstanceEntity, 'findAll').resolves([instanceEntity]);
+
+      service.setActivityPubInterface(buildMockApInterface(sandbox, actorMap([
+        ['evt-3c', 'https://remote.example.com/calendars/remote-cal', 'https://phish.example/remote-cal'],
+      ])));
+
+      const calendar: any = { id: 'cal-B' };
+      const results = await service.listEventInstancesForCalendar(calendar);
+
+      expect(results[0].event.sourceCalendar!.url).toBe('https://remote.example.com/view/remote-cal');
+      expect(results[0].event.sourceCalendar!.url).not.toContain('phish.example');
     });
 
     it('should gracefully handle remote repost with no entry in actor URI map', async () => {
@@ -220,10 +278,9 @@ describe('EventInstanceService sourceCalendar resolution', () => {
       stubVisibleEventIds(sandbox, ['evt-5', 'evt-6', 'evt-7']);
       sandbox.stub(EventInstanceEntity, 'findAll').resolves([nonRepost, localRepost, remoteRepost]);
 
-      const uriMap = new Map<string, string>([
-        ['evt-7', 'https://other.example.org/calendars/other-cal'],
-      ]);
-      service.setActivityPubInterface(buildMockApInterface(sandbox, uriMap));
+      service.setActivityPubInterface(buildMockApInterface(sandbox, actorMap([
+        ['evt-7', 'https://other.example.org/calendars/other-cal', null],
+      ])));
 
       const calendar: any = { id: 'cal-A' };
       const results = await service.listEventInstancesForCalendar(calendar);

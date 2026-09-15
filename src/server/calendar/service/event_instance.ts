@@ -21,7 +21,9 @@ import CategoryService from "./categories";
 import EventService from "./events";
 import { Op, literal, where, fn, col } from 'sequelize';
 import { resolveSourceCalendars, type RepostContext } from '../helper/source_calendar';
-import type ActivityPubInterface from '@/server/activitypub/interface';
+// The AP interface module is the only door onto ActivityPub state from this
+// domain (DEC-003); `EventSourceActor` is re-exported there for that reason.
+import type { default as ActivityPubInterface, EventSourceActor } from '@/server/activitypub/interface';
 import {
   EventNotFoundError,
   InsufficientCalendarPermissionsError,
@@ -139,17 +141,21 @@ export default class EventInstanceService {
   }
 
   /**
-   * Fetches remote actor URIs for a set of event IDs via the AP interface.
+   * Fetches the source actor — the attributed_to actor URI plus the peer's
+   * cached public page URL — for a set of event IDs via the AP interface.
    * Returns an empty map if no IDs are provided or if the AP interface is not set.
    *
-   * @param remoteEventIds - Event IDs to resolve actor URIs for
-   * @returns Map of eventId to attributed_to actor URI
+   * One batched interface call per request, and the AP side reads cache only:
+   * every caller of this is a request-synchronous public page read.
+   *
+   * @param remoteEventIds - Event IDs to resolve source actors for
+   * @returns Map of eventId to its source actor
    */
-  private async fetchRemoteActorUriMap(remoteEventIds: string[]): Promise<Map<string, string>> {
+  private async fetchRemoteSourceActorMap(remoteEventIds: string[]): Promise<Map<string, EventSourceActor>> {
     if (remoteEventIds.length === 0 || !this.activityPubInterface) {
-      return new Map<string, string>();
+      return new Map<string, EventSourceActor>();
     }
-    return this.activityPubInterface.getEventSourceActorUris(remoteEventIds);
+    return this.activityPubInterface.getEventSourceActors(remoteEventIds);
   }
 
   async listEventInstances(event: CalendarEvent): Promise<CalendarEventInstance[]> {
@@ -221,9 +227,9 @@ export default class EventInstanceService {
     const remoteEventIds = repostContexts
       .filter(ctx => ctx.eventCalendarId === null)
       .map(ctx => ctx.event.id);
-    const remoteActorUriMap = await this.fetchRemoteActorUriMap(remoteEventIds);
+    const remoteSourceActorMap = await this.fetchRemoteSourceActorMap(remoteEventIds);
 
-    await resolveSourceCalendars(repostContexts, remoteActorUriMap);
+    await resolveSourceCalendars(repostContexts, remoteSourceActorMap);
     return instances;
   };
 
@@ -479,9 +485,9 @@ export default class EventInstanceService {
     const remoteEventIds = repostContexts
       .filter(ctx => ctx.eventCalendarId === null)
       .map(ctx => ctx.event.id);
-    const remoteActorUriMap = await this.fetchRemoteActorUriMap(remoteEventIds);
+    const remoteSourceActorMap = await this.fetchRemoteSourceActorMap(remoteEventIds);
 
-    await resolveSourceCalendars(repostContexts, remoteActorUriMap);
+    await resolveSourceCalendars(repostContexts, remoteSourceActorMap);
 
     return mappedInstances;
   }
@@ -579,8 +585,8 @@ export default class EventInstanceService {
       sourceCalendarUrlName: eventInstance.event?.calendar?.url_name,
     };
     const remoteEventIds = repostContext.eventCalendarId === null ? [instance.event.id] : [];
-    const remoteActorUriMap = await this.fetchRemoteActorUriMap(remoteEventIds);
-    await resolveSourceCalendars([repostContext], remoteActorUriMap);
+    const remoteSourceActorMap = await this.fetchRemoteSourceActorMap(remoteEventIds);
+    await resolveSourceCalendars([repostContext], remoteSourceActorMap);
 
     return instance;
   }
@@ -870,8 +876,8 @@ export default class EventInstanceService {
       sourceCalendarUrlName: eventEntity.calendar?.url_name,
     };
     const remoteEventIds = repostContext.eventCalendarId === null ? [instance.event.id] : [];
-    const remoteActorUriMap = await this.fetchRemoteActorUriMap(remoteEventIds);
-    await resolveSourceCalendars([repostContext], remoteActorUriMap);
+    const remoteSourceActorMap = await this.fetchRemoteSourceActorMap(remoteEventIds);
+    await resolveSourceCalendars([repostContext], remoteSourceActorMap);
 
     return instance;
   }
